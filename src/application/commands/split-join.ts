@@ -19,13 +19,7 @@ export interface TextCut {
   readonly to: number;
 }
 
-export interface MediaHalves {
-  readonly kind: "media-halves";
-  readonly first: string;
-  readonly second: string;
-}
-
-export type SplitAt = TextCut | MediaHalves;
+export type SplitAt = TextCut;
 
 const BOTH_VISUALS = "both scenes have a visual";
 
@@ -34,16 +28,10 @@ const VISUAL_CELLS: readonly string[] = Object.freeze([
   "visualText", "visualImage", "imageRef", "imageName", "imageLinks", "imageAnnotation", "moreImages"
 ]);
 const RANK: Readonly<Record<string, number>> = Object.freeze({ todo: 0, ready: 1, shot: 2 });
-const MEDIA = /<img|video-embed-card/;
-const OPEN_END = /(<br\s*\/?>|\s)$/i;
 const SPACE_END = /\s$/;
 
 export function textCut(from: number, to: number): TextCut {
   return Object.freeze({ kind: "text", from: from, to: to });
-}
-
-export function mediaHalves(first: string, second: string): MediaHalves {
-  return Object.freeze({ kind: "media-halves", first: first, second: second });
 }
 
 function rankOf(status: unknown): number {
@@ -62,7 +50,6 @@ export function cellHtml(rowId: string, field: string): (doc: DocumentView | nul
 }
 
 function halvesOf(at: SplitAt, html: string, ports: CellTextPorts): readonly [string, string] {
-  if (at.kind === "media-halves") return [at.first, at.second];
   const cell = ports.cells(html);
   const cut = clampRange(cell, at.from, at.to);
   const halves = splitCell(deleteRange(cell, cut.from, cut.to), cut.from);
@@ -124,7 +111,6 @@ export function bothScenesHaveVisual(intoId: string, plainText: JoinPorts["plain
 }
 
 function joinedAudio(a: string, b: string, ports: CellTextPorts): string {
-  if (MEDIA.test(a + b)) return a + ((a && b && !OPEN_END.test(a)) ? " " : "") + b;
   const ca = ports.cells(a), cb = ports.cells(b);
   const glue = cellLength(ca) && cellLength(cb) && !SPACE_END.test(projection(ca)) ? " " : "";
   return toHtml(joinCells(ca, cb, glue));

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
 import { changeSet } from "../../src/application/session/change-set.ts";
-import { CELL_TEXT_DERIVES, cellRuns, cellTextCommand, sanitisedMediaHtml } from "../../src/application/commands/cell-text.ts";
+import { CELL_TEXT_DERIVES, cellRuns, cellTextCommand } from "../../src/application/commands/cell-text.ts";
 import type { CellText } from "../../src/application/commands/cell-text.ts";
 import type { CellTextPorts } from "../../src/application/session/ports.ts";
 import { toHtml } from "../../src/core/text/html.ts";
@@ -53,10 +53,11 @@ const COMMENTED = html([run("Alpha "), run("bravo", { cmt: ["c1"] }), run(" delt
 const PLAIN = html([run("Every morning.")]);
 const BOLD = html([run("Alpha "), run("bravo", { b: true })]);
 const CARD = '<a class="video-embed-card" href="https://youtu.be/abc" contenteditable="false">Watch</a>';
+const VIDEO: Run = { atom: "video", href: "https://youtu.be/abc", host: "youtu.be", text: "", marks: {} };
 const LEGACY = "Every <b>morning</b>.";
 const MEDIA = "Hello " + CARD;
 decoded.set(LEGACY, normalizeCell([run("Every "), run("morning", { b: true }), run(".")]));
-decoded.set(MEDIA, normalizeCell([run("Hello ")]));
+decoded.set(MEDIA, normalizeCell([run("Hello "), VIDEO]));
 
 function fixture(): { title: string; docId: string; rows: Record<string, unknown>[]; comments: Record<string, unknown>[] } {
   return {
@@ -214,7 +215,7 @@ const REVIEW_TEXT_CHANGES: readonly [string, string, string, CellText][] = [
   ["a link", "r1", "audioText", cellRuns(normalizeCell([run("Every "), run("morning", { href: "https://example.com/" }), run(".")]))],
   ["a stage direction", "r1", "audioText", cellRuns(normalizeCell([run("Every morning.", { dir: true })]))],
   ["the same runs stored in another form, with no anchor change", "r5", "audioText", cellRuns(normalizeCell([run("Every "), run("morning", { b: true }), run(".")]))],
-  ["a cell that holds media, with a new anchor", "r1", "audioText", sanitisedMediaHtml('<span class="cmt-anchor" data-cmt="c9">Every</span> morning. ' + CARD)],
+  ["a cell that holds media, with a new anchor", "r1", "audioText", cellRuns(normalizeCell([run("Every", { cmt: ["c9"] }), run(" morning. "), VIDEO]))],
   ["a stored media cell whose card is gone, with a new anchor", "r6", "audioText", cellRuns(normalizeCell([run("Hello", { cmt: ["c9"] }), run(" ")]))],
   ["a field the scene does not have yet", "r3", "visualText", cellRuns([])]
 ];
@@ -252,20 +253,21 @@ test("with edit capability, every change the review check refuses is applied as 
     const h = opened();
     const out = runConfined(h.session, cellTextCommand(rowId, field, text, ports()));
     assert.equal(out.kind, "applied", why);
-    assert.equal(rowOf(h, rowId)?.[field], text.kind === "runs" ? toHtml(text.runs) : text.html, why);
+    assert.equal(rowOf(h, rowId)?.[field], toHtml(text.runs), why);
     assert.equal(rowOf(h, rowId)?.updatedBy, "Adam", why);
   });
 });
 
-test("a cell holding media stores its sanitised HTML as given, through the same command", () => {
+test("a cell holding media is runs like any other: it stores toHtml(runs) through the same command", () => {
   const h = opened();
   const p = ports();
-  const stored = "Hello <strong>there</strong> " + CARD;
-  const out = runConfined(h.session, cellTextCommand("r1", "audioText", sanitisedMediaHtml(stored), p));
+  const runs = normalizeCell([run("Hello "), run("there", { b: true }), run(" "), VIDEO]);
+  const out = runConfined(h.session, cellTextCommand("r1", "audioText", cellRuns(runs), p));
   assert.deepEqual(out, { kind: "applied", generation: 1, changes: textChanges("r1", "audioText") });
-  assert.equal(rowOf(h, "r1")?.audioText, stored);
+  assert.equal(rowOf(h, "r1")?.audioText, "Hello <strong>there</strong> " + toHtml([VIDEO]));
+  assert.match(String(rowOf(h, "r1")?.audioText), /<a class="video-embed-card" href="https:\/\/youtu.be\/abc"/);
   assert.deepEqual(p.decodes, [], "no comment anchor on either side: nothing decoded");
-  assert.deepEqual(runConfined(h.session, cellTextCommand("r1", "audioText", sanitisedMediaHtml(stored), p)), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, cellTextCommand("r1", "audioText", cellRuns(runs), p)), { kind: "noop" });
   assert.equal(h.session.generation(), 1);
 });
 
@@ -283,10 +285,9 @@ test("a cell edit that adds or drops a comment anchor reconciles in the transact
   assert.deepEqual(out, { kind: "applied", generation: 2, changes: textChanges("r2", "audioText", true) });
   assert.equal(reconciled, 1);
   assert.deepEqual(h.log.slice(-6), ["reconcile", "undo.record", "dirty:2", "draft:2", "save:2", "publish:edit"]);
-  const media = '<span class="cmt-anchor" data-cmt="c1">Alpha</span> ' + CARD;
-  decoded.set(media, normalizeCell([run("Alpha", { cmt: ["c1"] }), run(" ")]));
-  assert.equal(runConfined(h.session, cellTextCommand("r2", "audioText", sanitisedMediaHtml(media), p)).kind, "applied");
-  assert.equal(reconciled, 2, "a media cell's anchors are read through the cell port too");
+  const media = normalizeCell([run("Alpha", { cmt: ["c1"] }), run(" "), VIDEO]);
+  assert.equal(runConfined(h.session, cellTextCommand("r2", "audioText", cellRuns(media), p)).kind, "applied");
+  assert.equal(reconciled, 2, "a media cell's anchors are read from its runs too");
 });
 
 test("E3: a stamp port that throws fails the command and rolls the cell back, with no effects", () => {

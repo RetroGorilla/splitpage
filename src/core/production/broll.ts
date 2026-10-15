@@ -132,7 +132,7 @@ export function brollCellLines(cell: readonly Run[]): BrollLine[] {
   let pos = 0;
   cell.forEach(function (r) {
     if (r.atom) {
-      lastLine(lines).items.push({ atom: r, text: r.text, marks: r.marks, pos: pos });
+      if (r.atom === "broll") lastLine(lines).items.push({ atom: r, text: r.text, marks: r.marks, pos: pos });
       pos++;
       return;
     }

@@ -6,7 +6,7 @@ import type { ValidatedDocument } from "../core/document/validated.ts";
 import { syncCommentAnchors } from "../core/text/anchors.ts";
 import { systemClock } from "../adapters/identity/ids.ts";
 import { migrateRows } from "../js/02-state.js";
-import { cellOf } from "./richtext.ts";
+import { cellOf, scriptCellOf } from "./richtext.ts";
 import { createUndoAdapter, followLiveDocument, routeReplays, watchUndoAdoption } from "./undo-adapter.ts";
 
 export interface LegacyEffects {
@@ -41,7 +41,7 @@ export const sessionStamps: StampPorts = Object.freeze({
 export const sessionTextPorts: CellTextPorts = Object.freeze({
   clock: sessionStamps.clock,
   editor: sessionStamps.editor,
-  cells: function (html: string) { return cellOf(html); }
+  cells: function (html: string) { return scriptCellOf(html); }
 });
 
 let refreshRunner: (jobs: ReadonlySet<string>) => void = function () { missing("refresh"); };

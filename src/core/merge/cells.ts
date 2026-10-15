@@ -1,4 +1,4 @@
-import { FORMAT_MARKS, OBJ, cleanMarks, normalizeCell, orderedMarks, sameMarks } from "../text/runs.ts";
+import { FORMAT_MARKS, OBJ, atomId, cleanMarks, normalizeCell, orderedMarks, sameMarks } from "../text/runs.ts";
 import type { CellInput, Marks, Run } from "../text/runs.ts";
 import { explode, implode } from "../text/edits.ts";
 import type { AtomChar, Char, TextChar } from "../text/edits.ts";
@@ -16,7 +16,7 @@ function tokenize(chars: readonly Char[]): Token[] {
   let i = 0;
   while (i < chars.length) {
     const c = chars[i] as Char;
-    if (c.atom) { toks.push({ key: OBJ + c.atom.id, chars: [c] }); i++; continue; }
+    if (c.atom) { toks.push({ key: OBJ + atomId(c.atom), chars: [c] }); i++; continue; }
     if (/\s/.test(c.ch)) { toks.push({ key: c.ch, chars: [c] }); i++; continue; }
     let j = i;
     let key = "";
