@@ -17,7 +17,7 @@ import {
 import { deriveProductionIndex } from "../core/production/tags.ts";
 import { __init as initBroll, brollEntries, newBrollRecord, updateBrollBadge } from "../js/08c-broll.js";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
-import { brollEntries as readBrollEntries } from "../core/production/broll.ts";
+import { planBrollRecords } from "../core/production/broll.ts";
 import { seededHealRounds } from "./_heal-rounds.mjs";
 
 initBroll();
@@ -100,20 +100,24 @@ test("renaming a prop renames it on every shot that needs it, not only the first
   ]);
 });
 
-test("brollEntries with no argument repairs, as the badge counts through it; true reads only", () => {
+test("entry records the b-roll lines; brollEntries reads them and never writes, even when the records lag the script", () => {
   const s = load({
     rows: [row("r1", "Steam rises.", "B-roll: Steam<br>B-roll: The Pour")],
     brollShots: [shot("b_pour", "the pour")]
   });
-  assert.deepEqual(brollEntries(true).map((e) => e.name), ["Steam", "The Pour"]);
-  assert.deepEqual(s.brollShots.map((r) => [r.id, r.name]), [["b_pour", "the pour"]]);
-  brollEntries();
-  assert.deepEqual(s.brollShots.map((r) => r.name), ["The Pour", "Steam"]);
+  assert.deepEqual(s.brollShots.map((r) => [r.id, r.name]), [["b_pour", "The Pour"], [s.brollShots[1].id, "Steam"]]);
   assert.equal(s.brollShots[1].audioRef, "Steam rises.");
+  const recorded = JSON.stringify(s.brollShots);
+  assert.deepEqual(brollEntries().map((e) => e.name), ["Steam", "The Pour"]);
+  assert.equal(JSON.stringify(s.brollShots), recorded);
+  s.brollShots = [shot("b_pour", "the pour")];
+  assert.deepEqual(brollEntries().map((e) => e.name), ["Steam", "The Pour"]);
+  assert.deepEqual(s.brollShots, [shot("b_pour", "the pour")], "a read repaired the records");
 });
 
-test("drawing the b-roll badge counts the unshot shots and repairs the record as it does", () => {
+test("drawing the b-roll badge counts the unshot shots and writes nothing", () => {
   const s = load({ rows: [row("r1", "", "B-roll: Steam<br>B-roll: Hands<br>B-roll: Cup")], brollShots: [shot("b_cup", "cup", { status: "shot" })] });
+  assert.deepEqual(s.brollShots.map((r) => [r.name, r.status]), [["Cup", "shot"], ["Steam", "unshot"], ["Hands", "unshot"]]);
   const badge = document.createElement("span");
   badge.id = "broll-badge";
   badge.hidden = true;
@@ -122,7 +126,10 @@ test("drawing the b-roll badge counts the unshot shots and repairs the record as
     updateBrollBadge();
     assert.equal(badge.hidden, false);
     assert.equal(badge.textContent, "2");
-    assert.deepEqual(s.brollShots.map((r) => [r.name, r.status]), [["Cup", "shot"], ["Steam", "unshot"], ["Hands", "unshot"]]);
+    s.brollShots = [shot("b_cup", "cup", { status: "shot" })];
+    updateBrollBadge();
+    assert.equal(badge.textContent, "2");
+    assert.deepEqual(s.brollShots, [shot("b_cup", "cup", { status: "shot" })], "drawing the badge repaired the records");
   } finally {
     badge.remove();
   }
@@ -130,9 +137,10 @@ test("drawing the b-roll badge counts the unshot shots and repairs the record as
 
 test("a shot the core plan creates and one newBrollRecord stores serialise alike, keys in the same order", () => {
   const s = load({ rows: [row("r1", "Waves on the " + tag("location", "Pier") + ".", "B-roll: drone sweep<br>low and slow")] });
-  const read = readBrollEntries(s, productionReaders, countingIds(), htmlToPlainText, true);
-  assert.equal(read.plan.create.length, 1);
-  const planned = read.plan.create[0].shot;
+  s.brollShots = [];
+  const plan = planBrollRecords(s, productionReaders, countingIds(), htmlToPlainText, null);
+  assert.equal(plan.create.length, 1);
+  const planned = plan.create[0];
   const { id, name, desc, audioRef, location } = planned;
   const stored = newBrollRecord({ id, name, desc, audioRef, location });
   assert.equal(JSON.stringify(planned), JSON.stringify(stored));

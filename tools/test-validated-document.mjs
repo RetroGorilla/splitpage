@@ -21,7 +21,7 @@ const HEAD = [
   'import type { MergeDoc } from "../../src/core/merge/states.ts";',
   'import { migrateDocument, migrateRows } from "../../src/core/migrate.ts";',
   'import type { MigratePorts } from "../../src/core/migrate.ts";',
-  'import { brollEntries, planBrollAnchors } from "../../src/core/production/broll.ts";',
+  'import { brollEntries, planBrollAnchors, planBrollRecords } from "../../src/core/production/broll.ts";',
   'import type { BrollState } from "../../src/core/production/broll.ts";',
   'import type { ProductionReaders } from "../../src/core/production/ports.ts";',
   'import { deriveProductionIndex, planQuickAdd, planRegistryHealing } from "../../src/core/production/tags.ts";',
@@ -49,7 +49,8 @@ const CALLS = [
   { name: "deriveProductionIndex", call: "deriveProductionIndex(X, readers)", was: "TagState" },
   { name: "planRegistryHealing", call: "planRegistryHealing(X, readers)", was: "TagState" },
   { name: "planQuickAdd", call: 'planQuickAdd(X, readers, "")', was: "TagState" },
-  { name: "brollEntries", call: "brollEntries(X, readers, ids, plain, false)", was: "BrollState" },
+  { name: "brollEntries", call: "brollEntries(X, readers, ids, plain)", was: "BrollState" },
+  { name: "planBrollRecords", call: "planBrollRecords(X, readers, ids, plain, null)", was: "BrollState" },
   { name: "planBrollAnchors", call: "planBrollAnchors(X, readers, ids)", was: "BrollState" }
 ];
 

@@ -28,11 +28,13 @@ import {
   withoutLoneSurrogates
 } from "./document/text-policy.ts";
 import { normalizeSceneLength, rowStatusId } from "./document/timing.ts";
-import { brollCutRenames } from "./production/broll.ts";
+import { applyBrollRecords, brollCutRenames, planBrollRecords } from "./production/broll.ts";
+import type { BrollShot } from "./production/broll.ts";
 import type { ProductionReaders, ProductionRow } from "./production/ports.ts";
 import { TAG_FIELDS, collectTagsFromRows, cueCutRenames, missingRegistryTags, retagMarks } from "./production/tags.ts";
 import { syncCommentAnchors } from "./text/anchors.ts";
 import { toHtml } from "./text/html.ts";
+import { toPlainText } from "./text/projections.ts";
 import type { DecodeOptions } from "./text/ports.ts";
 import type { Run } from "./text/runs.ts";
 
@@ -306,6 +308,10 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     b.props = normalizeBrollProps(b.props, s.productionTags as TagRecord[]);
   });
   s.brollShots = (s.brollShots as Bag[]).filter(function (b) { return b.name; });
+  const readers = ports.readers;
+  applyBrollRecords(s.brollShots as BrollShot[], planBrollRecords(s as ValidatedDocument, readers, ids, function (html) {
+    return toPlainText(readers.cellOf(html || ""));
+  }, null));
 
   fields.forEach(function (f) {
     if (!f.normalize || !(f.key in s)) return;

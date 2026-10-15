@@ -21,8 +21,6 @@ import {
   readStash,
   setBaseState
 } from "./03-sync.js";
-import { healTagRegistry } from "./07-production-tags.js";
-import { brollEntries } from "./08c-broll.js";
 import { nowIso } from "./10-comments.js";
 import {
   clearDirty,
@@ -54,12 +52,6 @@ import { requestSave, saveRunning } from "../legacy/save-bridge.ts";
 import { autoSaveMay, autoSaveWhere } from "../application/save/autosave.ts";
 
 export var autoSaveEnabled;
-
-function settleDerivedRecords() {
-  if (!S.state) return;
-  healTagRegistry();
-  brollEntries();
-}
 
 function saveKind(opts) {
   if (opts.saveAs) return "saveAs";
@@ -127,7 +119,6 @@ async function writeDoc(opts, job) {
   var saveAs = !!opts.saveAs;
   var auto = !!opts.auto;
   if (!auto) resumeAutoSave();
-  settleDerivedRecords();
   S.saveButtonBusy = true;
   setSaveButtons("Saving…", true);
 

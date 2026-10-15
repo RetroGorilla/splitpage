@@ -10,7 +10,7 @@ import {
   registryKey, tagCategory, tagKey, tagOccurrences, tagStatus, tagStatusRank, tagsByCategory, tagsInField
 } from "../js/07-production-tags.js";
 import {
-  BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_STATUSES, BROLL_TEXT_MAX, __init as initBroll, anchorBrollInRows, brollEntries,
+  BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_STATUSES, BROLL_TEXT_MAX, __init as initBroll, anchorBrollInRows, brollEntries, derivedRecordsPlan,
   brollInCell, brollPropKey, brollShotsByProp, brollStatus, normalizeBrollProps
 } from "../js/08c-broll.js";
 import { __init as initHistory } from "../js/03a-history-store.js";
@@ -18,6 +18,7 @@ import { applyGearQuickAdd } from "../js/08-production-panels.js";
 import { LONG_DEMO } from "../js/_starters.js";
 import { assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, newTokens } from "./golden-helpers.mjs";
 import { startSaves } from "../legacy/save-bridge.ts";
+import { WHOLE_DOCUMENT } from "../application/session/change-set.ts";
 
 freezeClockAndRandom(0x70726f64);
 startSaves({
@@ -54,6 +55,7 @@ const shot = (id, name, extra) => Object.assign({
 
 function load(spec) {
   S.state = migrateRows(jsonCopy(spec));
+  S.state.brollShots = migrateRows(Object.assign(jsonCopy(spec), { rows: [] })).brollShots;
   return jsonCopy(S.state);
 }
 
@@ -95,7 +97,7 @@ function readAll() {
   const out = {
     entries: entriesView(productionEntries()),
     byCategory: categoriesView(tagsByCategory()),
-    brollRead: brollView(brollEntries(true)),
+    brollRead: brollView(brollEntries()),
     shotsByProp: jsonCopy(brollShotsByProp())
   };
   out.readsWroteNothing = JSON.stringify(S.state) === before;
@@ -109,13 +111,15 @@ function repairAll(out) {
   out.entriesAfterHeal = sameAsOr("entries", out.entries, entriesView(productionEntries()));
   out.healedAgain = healTagRegistry();
   const shotsBefore = jsonCopy(S.state.brollShots);
-  const repair = brollView(brollEntries(false));
+  const records = derivedRecordsPlan(S.state, WHOLE_DOCUMENT);
+  if (records) records.apply(S.state);
+  const repair = brollView(brollEntries());
   out.brollRepair = sameAsOr("brollRead", out.brollRead, repair);
   out.shotsAfterRepair = unchangedOr(shotsBefore, S.state.brollShots);
   const rowsBefore = jsonCopy(S.state.rows.map((r) => r.visualText));
   out.anchored = anchorBrollInRows(S.state.rows);
   out.visualAfterAnchoring = unchangedOr(rowsBefore, S.state.rows.map((r) => r.visualText));
-  out.brollAfterAnchoring = sameAsOr("brollRepair", repair, brollView(brollEntries(true)));
+  out.brollAfterAnchoring = sameAsOr("brollRepair", repair, brollView(brollEntries()));
   return out;
 }
 
@@ -486,7 +490,7 @@ SCENARIOS.push({
     };
     const input = load({ schema: 2, title: "Seeds", docId: "d" + "3".repeat(31) + "c", rows: [] });
     S.state.rows = seedRows();
-    out.seeds = brollEntries(true).map((e) => ({
+    out.seeds = brollEntries().map((e) => ({
       rowId: e.rowId, name: e.name, location: e.location, locationLength: e.location.length, audioRefLength: e.audioRef.length
     }));
     return masked(out, input);
