@@ -92,7 +92,6 @@
     {"rule":"cycle-edge","source":"src/js/05t-target.js","target":"src/js/14-export.js"},
     {"rule":"cycle-edge","source":"src/js/05v-video.js","target":"src/js/03-sync.js"},
     {"rule":"cycle-edge","source":"src/js/05v-video.js","target":"src/js/05-render.js"},
-    {"rule":"cycle-edge","source":"src/js/05v-video.js","target":"src/js/12-dirty-toast.js"},
     {"rule":"cycle-edge","source":"src/js/05w-annotate.js","target":"src/js/03-sync.js"},
     {"rule":"cycle-edge","source":"src/js/05w-annotate.js","target":"src/js/05-render.js"},
     {"rule":"cycle-edge","source":"src/js/05w-annotate.js","target":"src/js/05e-gallery-overlay.js"},

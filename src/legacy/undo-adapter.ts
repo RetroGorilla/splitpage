@@ -20,6 +20,8 @@ export function followLiveDocument(): void {
   trackDocument();
 }
 
-export function routeReplays(run: (replay: Replay, live: ValidatedDocument | null) => CommandOutcome, stamps: StampPorts): void {
-  routeUndoReplays(run, stamps);
+type ReplayRunner = (replay: Replay, live: ValidatedDocument | null) => CommandOutcome;
+
+export function routeReplays(run: ReplayRunner, stamps: StampPorts, amend: ReplayRunner): void {
+  routeUndoReplays(run, stamps, amend);
 }
