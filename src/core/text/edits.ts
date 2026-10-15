@@ -1,7 +1,7 @@
 import { cellLength, cleanMarks, cleanText, isDirRun, normalizeCell, projection } from "./runs.ts";
-import type { BrollRun, CellInput, MarkName, Marks, NormalizeOptions, Run } from "./runs.ts";
+import type { AtomRun, BrollRun, CellInput, MarkName, Marks, NormalizeOptions, Run } from "./runs.ts";
 
-export type AtomChar = { atom: BrollRun; ch?: undefined; marks?: undefined };
+export type AtomChar = { atom: AtomRun; ch?: undefined; marks?: undefined };
 
 export type TextChar = { atom?: undefined; ch: string; marks: Marks };
 

@@ -10,6 +10,7 @@ import { cacheSeal } from "./cache-freeze.ts";
 
 let shared: RichText | null = null;
 let readCell: CellReader | null = null;
+let readScriptCell: CellReader | null = null;
 
 function richText(): RichText {
   if (!shared) shared = createRichText({ DOMParser: DOMParser, images: registryImages, ids: randomIds });
@@ -51,4 +52,9 @@ export function fromHtml(html: unknown, opts?: DecodeOptions | null): Run[] {
 export function cellOf(html: unknown): Frozen<Run[]> {
   if (!readCell) readCell = richText().createCellReader(cacheSeal);
   return readCell(html);
+}
+
+export function scriptCellOf(html: unknown): Frozen<Run[]> {
+  if (!readScriptCell) readScriptCell = richText().createCellReader(cacheSeal, { media: true });
+  return readScriptCell(html);
 }

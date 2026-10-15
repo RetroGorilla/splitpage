@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
 import { changeSet } from "../../src/application/session/change-set.ts";
-import { bothScenesHaveVisual, cellHtml, joinScenesCommand, mediaHalves, splitSceneCommand, textCut } from "../../src/application/commands/split-join.ts";
+import { bothScenesHaveVisual, cellHtml, joinScenesCommand, splitSceneCommand, textCut } from "../../src/application/commands/split-join.ts";
 import type { JoinPorts } from "../../src/application/commands/split-join.ts";
 import { syncCommentAnchors } from "../../src/core/text/anchors.ts";
 import { clampRange } from "../../src/core/text/edits.ts";
@@ -21,9 +21,11 @@ const STAMP = "2026-10-08T12:00:00.000Z";
 const OLD = "2026-01-01T00:00:00.000Z";
 const LINKS = [{ href: "https://youtu.be/abc" }];
 const CARD = '<a class="video-embed-card" href="https://youtu.be/abc" contenteditable="false">Watch</a>';
+const VIDEO: Run = { atom: "video", href: "https://youtu.be/abc", host: "youtu.be", text: "", marks: {} };
+const STORED_CARD = toHtml([VIDEO]);
 
 const rt = createRichText({ DOMParser: jsdomParser(), images: createImageIngestion(function () { return null; }), ids: countingIds() });
-const cellsOf = rt.createCellReader(deepFreeze);
+const cellsOf = rt.createCellReader(deepFreeze, { media: true });
 
 function html(runs: readonly Run[]): string {
   return toHtml(normalizeCell(runs));
@@ -184,15 +186,23 @@ test("a cut never lands inside a surrogate pair", () => {
   assert.equal(rowOf(h, "n")?.audioText, "b");
 });
 
-test("a split of a cell holding media stores the two halves it is given, untouched", () => {
-  const h = opened();
+test("a split of a cell holding media cuts its runs: a card counts as one place and goes whole to one side", () => {
+  const mediaDoc = function (): Fixture {
+    const doc = fixture();
+    doc.rows[0] = { id: "r1", visualText: "Wide", audioText: "Before " + CARD + " after", status: "todo", updatedAt: OLD, updatedBy: "Sam" };
+    return doc;
+  };
+  const h = opened(mediaDoc);
   const p = ports();
-  const first = "Before ", second = "after " + CARD;
-  const out = runConfined(h.session, splitSceneCommand("r1", "audioText", mediaHalves(first, second), "m", p));
+  const out = runConfined(h.session, splitSceneCommand("r1", "audioText", textCut(8, 8), "m", p));
   assert.equal(out.kind, "applied");
-  assert.equal(rowOf(h, "r1")?.audioText, first);
-  assert.equal(rowOf(h, "m")?.audioText, second);
+  assert.equal(rowOf(h, "r1")?.audioText, "Before " + STORED_CARD);
+  assert.equal(rowOf(h, "m")?.audioText, " after");
   assert.deepEqual(h.log, COMMIT);
+  const again = opened(mediaDoc);
+  assert.equal(runConfined(again.session, splitSceneCommand("r1", "audioText", textCut(7, 7), "n", ports())).kind, "applied");
+  assert.equal(rowOf(again, "r1")?.audioText, "Before ");
+  assert.equal(rowOf(again, "n")?.audioText, STORED_CARD + " after");
 });
 
 test("E3: a scene that is gone, a field that is not a script field, and no document change nothing", () => {
@@ -335,13 +345,14 @@ test("a join glues a space inside a commented phrase the cut split, so the phras
   assert.equal(rowOf(h, "a")?.audioText, html([run("Alpha "), run("bra vo charlie", { cmt: ["c1"] }), run(" delta")]));
 });
 
-test("a join where either audio holds media concatenates the stored HTML, with a space unless the earlier one ends in a space or a line break", () => {
+test("a join where either audio holds media joins the runs, with a space unless the earlier one ends in a space or a line break", () => {
   const cases: [string, string, string][] = [
-    ["See", CARD, "See " + CARD],
-    ["See ", CARD, "See " + CARD],
-    ["See<br>", CARD, "See<br>" + CARD],
-    ["", CARD, CARD],
-    [CARD, "after", CARD + " after"]
+    ["See", CARD, "See " + STORED_CARD],
+    ["See ", CARD, "See " + STORED_CARD],
+    ["See<br>", CARD, "See<br>" + STORED_CARD],
+    ["", CARD, STORED_CARD],
+    [CARD, "after", STORED_CARD + " after"],
+    ["<strong>Bold </strong>", "<strong>more</strong> " + CARD, "<strong>Bold more</strong> " + STORED_CARD]
   ];
   cases.forEach(function (c) {
     const h = opened(() => joinOf(scene("a", c[0]), scene("b", c[1])));

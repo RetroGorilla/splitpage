@@ -1,7 +1,7 @@
 import { S } from "./_state.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
 import { findRowIndex, getEditorName } from "./03-sync.js";
-import { safeHref, safeId, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
+import { safeHref, safeId, storedHtmlFromDom } from "./04-richtext.js";
 import { syncCommentAnchors } from "./04c-doc-model.js";
 import { armDeleteButton, disarmDeleteButton, render, syncFieldFromDom } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
@@ -12,8 +12,8 @@ import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
 import { placeCaretAtTextOffset } from "./19-writer.js";
 import { makeId, nowIso } from "../adapters/identity/ids.ts";
-import { cellHtml, mediaHalves, splitSceneCommand, textCut } from "../application/commands/split-join.ts";
-import { onDocumentReplaced, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { splitSceneCommand, textCut } from "../application/commands/split-join.ts";
+import { onDocumentReplaced, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import {
   addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
@@ -58,23 +58,10 @@ export function splitRowFieldCore(cellEl) {
   var sel = cellSelection(cellEl);
   if (!sel) return null;
   breakUndoCoalescing();
-  var html = readSession(cellHtml(id, field)) || "";
-  var at = /<img|video-embed-card/.test(html) ? splitMediaCellInDom(cellEl) : textCut(sel.from, sel.to);
   var createdId = makeId();
-  var outcome = runCommand(splitSceneCommand(id, field, at, createdId, sessionTextPorts));
+  var outcome = runCommand(splitSceneCommand(id, field, textCut(sel.from, sel.to), createdId, sessionTextPorts));
   if (outcome.kind === "failed") throw outcome.error;
   return outcome.kind === "applied" || outcome.kind === "committed" ? { id: createdId, field: field } : null;
-}
-
-function splitMediaCellInDom(cellEl) {
-  var range = window.getSelection().getRangeAt(0);
-  if (!range.collapsed) range.deleteContents();
-  var tail = document.createRange();
-  tail.setStart(range.startContainer, range.startOffset);
-  tail.setEnd(cellEl, cellEl.childNodes.length);
-  var holder = document.createElement("div");
-  holder.appendChild(tail.extractContents());
-  return mediaHalves(sanitizeHtml(cellEl.innerHTML), sanitizeHtml(holder.innerHTML));
 }
 
 export function splitCellField(cellEl) {

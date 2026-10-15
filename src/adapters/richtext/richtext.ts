@@ -22,7 +22,7 @@ export interface RichText {
   inertBody: (html: unknown) => HTMLElement;
   sanitize: (html: unknown) => string;
   decode: (html: unknown, opts?: DecodeOptions | null) => Run[];
-  createCellReader: (seal: Seal) => CellReader;
+  createCellReader: (seal: Seal, opts?: DecodeOptions | null) => CellReader;
   storedHtmlFromDom: <T>(html: T) => T | string;
   htmlToMarkdown: (html: unknown) => string;
   videoCardElement: (href: string) => HTMLAnchorElement;
@@ -88,7 +88,7 @@ export function createRichText(ports: RichTextPorts): RichText {
     inertBody: inertBody,
     sanitize: sanitize,
     decode: decode,
-    createCellReader: function (seal) { return createCellReader(decode, seal); },
+    createCellReader: function (seal, opts) { return createCellReader(function (html) { return decode(html, opts); }, seal); },
     storedHtmlFromDom: storedHtmlFromDom,
     htmlToMarkdown: htmlToMarkdown,
     videoCardElement: cardElement,

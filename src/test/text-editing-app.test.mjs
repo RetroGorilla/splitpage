@@ -288,7 +288,7 @@ test("a keystroke in another cell starts a new entry, and so does coming back", 
   assert.equal(undoSizes().undo, 3);
 });
 
-test("a change to a media cell's stored HTML that leaves the runs alone dirties the document but records no entry", async () => {
+test("a change to a media cell's markup that leaves the runs alone stores nothing and records no entry", async () => {
   await open();
   const el = cellOf("r1", "audioText");
   const card = '<a class="video-embed-card" href="https://youtu.be/abc" contenteditable="false">Watch</a>';
@@ -296,17 +296,18 @@ test("a change to a media cell's stored HTML that leaves the runs alone dirties 
   input(el, "");
   await settle();
   const first = row("r1").audioText;
-  assert.match(first, /^Hello <strong>there<\/strong> <a class="video-embed-card"/, "a cell holding media is stored as sanitised HTML");
+  assert.match(first, /^Hello <strong>there<\/strong> <a class="video-embed-card"/, "a cell holding media is stored as the canonical form of its runs");
   assert.equal(undoSizes().undo, 1);
   const seq = S.editSeq;
+  const entry = lastUndoEntry();
   clock += 5000;
   el.innerHTML = "Hello <strong>the</strong><strong>re</strong> " + card;
   input(el, "");
-  assert.equal(row("r1").audioText, first.replace("<strong>there</strong>", "<strong>the</strong><strong>re</strong>"));
-  assert.equal(S.editSeq, seq + 1);
-  assert.equal(S.dirty, true);
+  assert.equal(row("r1").audioText, first, "the same runs are the same stored cell");
+  assert.equal(S.editSeq, seq);
   await settle();
   assert.equal(undoSizes().undo, 1, "five seconds later a real change would be an entry of its own");
+  assert.equal(lastUndoEntry(), entry);
   assert.equal(lastUndoEntry().steps[0].after, first, "and the last entry was not stretched over it");
 });
 

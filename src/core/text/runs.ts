@@ -1,5 +1,7 @@
 import { BROLL_MARKER_RE } from "../document/broll.ts";
+import { isSha256Hex, normalizeImageRef } from "../../../shared/blob-policy.js";
 import { hasLoneSurrogate, safeHref, withoutLoneSurrogates } from "../document/text-policy.ts";
+import type { StoredImageRef } from "../document/text-policy.ts";
 import type { TagName } from "../document/tags.ts";
 
 export const FORMAT_MARKS = Object.freeze(["hl", "b", "i", "u", "s"] as const);
@@ -27,9 +29,17 @@ export type TextRun = { atom?: undefined; text: string; marks: Marks };
 
 export type BrollRun = { atom: "broll"; id: string; text: string; marks: Marks };
 
-export type Run = TextRun | BrollRun;
+export type ImageRun = { atom: "image"; ref: StoredImageRef; text: ""; marks: Marks };
 
-export type RunInput = { atom?: unknown; id?: unknown; text?: unknown; marks?: unknown };
+export type VideoRun = { atom: "video"; href: string; host: string; text: ""; marks: Marks };
+
+export type MediaRun = ImageRun | VideoRun;
+
+export type AtomRun = BrollRun | MediaRun;
+
+export type Run = TextRun | AtomRun;
+
+export type RunInput = { atom?: unknown; id?: unknown; text?: unknown; marks?: unknown; ref?: unknown; href?: unknown; host?: unknown };
 
 export type CellInput = readonly (RunInput | null | undefined)[] | null | undefined;
 
@@ -59,6 +69,40 @@ function cellChars(t: unknown): string {
 
 export function cleanText(t: unknown): string {
   return withoutLoneSurrogates(cellChars(t));
+}
+
+export function isMediaRun(r: Run | null | undefined): r is MediaRun {
+  return !!r && (r.atom === "image" || r.atom === "video");
+}
+
+export function atomId(r: AtomRun): string {
+  if (r.atom === "broll") return r.id;
+  return r.atom === "image" ? "image:" + r.ref.sha256 : "video:" + r.href;
+}
+
+function imageRefIn(ref: unknown): StoredImageRef | null {
+  if (!ref || typeof ref !== "object") return null;
+  const full = normalizeImageRef(ref) as StoredImageRef | null;
+  if (full) return full;
+  const sha = (ref as { sha256?: unknown }).sha256;
+  return isSha256Hex(sha) ? { sha256: sha as string } : null;
+}
+
+function mediaRun(r: RunInput, opts: NormalizeOptions): MediaRun | null {
+  const marks = cleanMarks(r.marks, true);
+  if (opts.hasComment && marks.cmt) {
+    marks.cmt = marks.cmt.filter(opts.hasComment);
+    if (!marks.cmt.length) delete marks.cmt;
+  }
+  if (r.atom === "image") {
+    const ref = imageRefIn(r.ref);
+    return ref ? { atom: "image", ref: ref, text: "", marks: orderedMarks(marks) } : null;
+  }
+  const href = safeHref(r.href);
+  if (!href) return null;
+  delete marks.href;
+  const host = typeof r.host === "string" ? cleanText(r.host).replace(/\n/g, " ") : href;
+  return { atom: "video", href: href, host: host, text: "", marks: orderedMarks(marks) };
 }
 
 function holdsLoneSurrogate(r: Run): boolean {
@@ -122,6 +166,11 @@ export function normalizeCell(cell: CellInput, opts?: NormalizeOptions | null): 
   let runs: Run[] = [];
   (Array.isArray(cell) ? cell as readonly (RunInput | null | undefined)[] : []).forEach(function (r) {
     if (!r || typeof r !== "object") return;
+    if (r.atom === "image" || r.atom === "video") {
+      const media = mediaRun(r, opts);
+      if (media) runs.push(media);
+      return;
+    }
     if (r.atom === "broll") {
       const text = cleanText(r.text).replace(/\n/g, " ").trim();
       const id = String(r.id == null ? "" : r.id).replace(/[^A-Za-z0-9_-]/g, "");

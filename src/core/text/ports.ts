@@ -13,6 +13,7 @@ export type DecodedMedia = DecodedImage | DecodedVideo;
 export type DecodeOptions = NormalizeOptions & {
   tagId?: ((cat: string, name: string) => string) | null | undefined;
   onMedia?: ((media: DecodedMedia) => void) | null | undefined;
+  media?: boolean | undefined;
 };
 
 export type CellDecoder = (html: string) => Frozen<Run[]>;
