@@ -90,6 +90,7 @@ export interface DocumentSession {
   settle: (kind: AbsorbedKind) => void;
   run: (command: Command) => CommandOutcome;
   replay: (replay: Replay) => CommandOutcome;
+  amend: (amendment: Replay) => CommandOutcome;
   noteEdit: (changes?: ChangeSet) => void;
   refresh: (job: string) => void;
   subscribe: (listener: SessionListener) => () => void;
@@ -219,7 +220,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     reported(errors);
   }
 
-  function commit(kind: "edit" | "replay", changes: ChangeSet): { generation: number; errors: unknown[] } {
+  function commit(kind: "edit" | "replay" | "amend", changes: ChangeSet): { generation: number; errors: unknown[] } {
     generation++;
     const at = generation;
     const errors: unknown[] = [];
@@ -294,6 +295,10 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
   }
 
   function replay(task: Replay): CommandOutcome {
+    return replayAs("replay", task);
+  }
+
+  function replayAs(kind: "replay" | "amend", task: Replay): CommandOutcome {
     if (disposed) return { kind: "rejected", reason: DISPOSED };
     const doc = document;
     if (!doc) return { kind: "rejected", reason: NO_DOCUMENT };
@@ -306,10 +311,10 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     if (!plan) return { kind: "noop" };
     if ("refused" in plan) return { kind: "rejected", reason: plan.refused };
     if (isEmpty(plan.changes)) return { kind: "noop" };
-    return transact("replay", doc, plan.changes, plan.apply, plan.settle);
+    return transact(kind, doc, plan.changes, plan.apply, plan.settle);
   }
 
-  function transact(kind: "edit" | "replay", doc: ValidatedDocument, planned: ChangeSet, apply: (doc: ValidatedDocument) => void, settle: (() => void) | null): CommandOutcome {
+  function transact(kind: "edit" | "replay" | "amend", doc: ValidatedDocument, planned: ChangeSet, apply: (doc: ValidatedDocument) => void, settle: (() => void) | null): CommandOutcome {
     let signed: Plan | null;
     try {
       signed = ports.attribution.attribute(doc);
@@ -364,6 +369,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     settle: settle,
     run: run,
     replay: replay,
+    amend: function (task) { return replayAs("amend", task); },
     noteEdit: function (changes) {
       if (!disposed) commit("edit", changes || WHOLE_DOCUMENT);
     },
