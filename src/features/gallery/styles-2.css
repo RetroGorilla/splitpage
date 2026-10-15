@@ -1,0 +1,99 @@
+  .scene-gallery.is-mosaic {
+    display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: repeat(3, minmax(0, 1fr)); gap: 4px;
+    width: min(360px, 100%); height: 162px;
+    border: none; background: none; overflow: visible;
+  }
+  .scene-gallery-tile {
+    position: relative; display: block; width: 100%; height: 100%; min-height: 0; padding: 0; margin: 0;
+    border: 1px solid var(--border-strong); border-radius: 4px; overflow: hidden; background: var(--surface);
+    cursor: pointer; font: inherit; color: inherit;
+  }
+  .scene-gallery.is-mosaic .scene-gallery-tile.is-cover { grid-row: 1 / span 3; }
+  .scene-gallery.is-single .scene-gallery-tile { border: 0; border-radius: 0; height: auto; }
+  .scene-gallery-tile img { display: block; width: 100%; height: 100%; object-fit: cover; }
+  .scene-gallery.is-single .scene-gallery-tile img { height: auto; max-height: 160px; }
+  .scene-gallery-tile:focus-visible { outline: 2px solid var(--visual); outline-offset: 1px; }
+  .scene-gallery-placeholder { display: block; width: 100%; height: 100%; min-height: 72px; background: var(--surface-2); }
+  .scene-gallery.is-mosaic .scene-gallery-placeholder { min-height: 0; }
+  .scene-gallery-play {
+    position: absolute; left: 50%; top: 50%; width: 20px; height: 20px; margin: -10px 0 0 -10px;
+    border-radius: 50%; background: var(--media-scrim); pointer-events: none;
+  }
+  .scene-gallery-play::after {
+    content: ""; position: absolute; left: 50%; top: 50%; margin: -4px 0 0 -2.5px;
+    border-style: solid; border-width: 4px 0 4px 6.5px; border-color: transparent transparent transparent var(--white);
+  }
+  .scene-gallery-play.is-big { width: 28px; height: 28px; margin: -14px 0 0 -14px; }
+  .scene-gallery-play.is-big::after { margin: -5.5px 0 0 -3.5px; border-width: 5.5px 0 5.5px 9px; }
+  .scene-gallery-length {
+    position: absolute; right: 6px; bottom: 6px; display: flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 9px;
+    background: var(--media-scrim); color: var(--media-ink); font-family: var(--font-display); font-size: 11px; line-height: 1; font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .scene-gallery-tile.is-more::before {
+    content: ""; position: absolute; inset: 0; background: var(--media-more-scrim); z-index: 1;
+    transition: background var(--dur-fast) var(--ease-standard);
+  }
+  .scene-gallery-tile.is-more .scene-gallery-play { opacity: .55; }
+  .scene-gallery-tile.is-more:hover::before, .scene-gallery-tile.is-more:focus-visible::before { background: var(--media-more-hover-scrim); }
+  .scene-gallery-tile.is-more:hover { outline: 2px solid var(--visual); outline-offset: 1px; }
+  .scene-gallery-more-count {
+    position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center;
+    color: var(--media-ink); font-family: var(--font-display); font-size: 16px; line-height: 20px; font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .scene-gallery .image-thumb-actions { z-index: 3; }
+  .scene-gallery-caption { width: min(360px, 100%); margin-top: 2px; font-family: var(--font-body); font-size: 13px; line-height: 24px; color: var(--text-dim); }
+  .scene-gallery-line { display: flex; align-items: center; min-width: 0; height: 24px; }
+  .scene-gallery-host {
+    flex: none; width: 64px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-family: var(--font-display); font-size: 11px; line-height: 16px; font-weight: 500; color: var(--text-faint);
+  }
+  .scene-gallery-link {
+    min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--visual); text-decoration: none;
+    font: inherit; border: none; background: none; padding: 0; cursor: pointer; text-align: left;
+  }
+  .scene-gallery-link:hover { color: var(--text); }
+  .scene-gallery-link.is-file { color: var(--text-visual); }
+  .scene-gallery-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .scene-gallery-link-remove {
+    flex: none; border: none; background: none; color: var(--text-faint); cursor: pointer;
+    font-size: 13px; line-height: 1; padding: 0 4px; opacity: 0;
+  }
+  .scene-gallery-line:hover .scene-gallery-link-remove, .scene-gallery-link-remove:focus-visible { opacity: 1; }
+  .scene-gallery-more-videos {
+    height: 24px; padding: 0; font-family: var(--font-body); font-size: 13px; line-height: 24px; color: var(--text-dim); cursor: pointer;
+    background: none; border: 0; border-radius: 3px;
+  }
+  .scene-gallery-more-videos:hover { color: var(--text); }
+  .modal-panel.scene-gallery-panel {
+    display: flex; flex-direction: column;
+    max-width: 880px; padding: 0 0 14px;
+    background: var(--surface-2);
+    overflow-x: hidden;
+  }
+  .scene-gallery-head {
+    flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    min-height: 60px; padding: 0 14px 0 24px;
+  }
+  .scene-gallery-heading { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+  .scene-gallery-head h2 {
+    margin: 0; flex: none;
+    font-family: var(--font-body); font-size: 18px; line-height: 24px; font-weight: 700; letter-spacing: -0.005em;
+    color: var(--text);
+  }
+  .scene-gallery-summary {
+    margin: 0; min-width: 0;
+    font-family: var(--font-body); font-size: 13px; line-height: 16px; color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+  .scene-gallery-show-all { font: inherit; color: var(--visual); background: none; border: none; padding: 0; cursor: pointer; text-decoration: underline; }
+  .scene-gallery-show-all:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 2px; }
+  .scene-gallery-close {
+    flex: none; display: flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-sm);
+    background: transparent; color: var(--text-dim); cursor: pointer;
+  }
+  .scene-gallery-close:hover { background: var(--layer-hover, var(--hover)); color: var(--text); }
+  .scene-gallery-close:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }

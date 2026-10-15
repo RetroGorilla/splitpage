@@ -1,0 +1,37 @@
+  .btn-brand .brand-mark { display: block; flex: none; width: 22px; height: 22px; }
+  .btn-brand .brand-name {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 15px;
+    line-height: 20px;
+    letter-spacing: -0.005em;
+    color: var(--text);
+  }
+  .btn-brand .btn-chevron { margin-left: -4px; color: var(--text-dim); }
+  .btn-brand:hover .btn-chevron, .btn-brand[aria-expanded="true"] .btn-chevron { color: var(--text); }
+  .btn.btn-brand:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .topbar-rule { flex: none; width: 1px; height: 20px; background: var(--border); }
+  .doc-title {
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 15px;
+    line-height: 20px;
+    color: var(--text);
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    padding: 5px 6px;
+    margin: 0 -6px;
+    field-sizing: content;
+    min-width: 8ch;
+    max-width: 36ch;
+    flex: 0 100 auto;
+    text-overflow: ellipsis;
+  }
+  .doc-title:hover { border-color: var(--border); }
+  .doc-title:focus {
+    outline: none;
+    border-color: var(--visual);
+    background: var(--surface);
+    flex-shrink: 1;
+  }

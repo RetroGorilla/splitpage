@@ -1,0 +1,16 @@
+  .identity-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    margin-right: 6px;
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: var(--surface);
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .identity-chip:hover { border-color: var(--visual); color: var(--text); }

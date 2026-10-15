@@ -1,0 +1,2 @@
+    .scene-gallery-preview { position: relative; justify-content: center; margin: 0 12px; padding: 8px; }
+    .scene-gallery-preview-pic { width: 100%; max-width: min(640px, calc((88vh - 256px) * 16 / 9)); }

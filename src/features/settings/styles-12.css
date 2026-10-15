@@ -1,0 +1,33 @@
+  .target-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .target-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+  .target-preset, .target-clear {
+    height: 28px;
+    padding: 0 9px;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .target-preset { font-family: var(--font-display); font-variant-numeric: tabular-nums; }
+  .target-clear { align-self: flex-start; font-family: var(--font-body); color: var(--text-dim); }
+  .target-preset:hover:not(:disabled), .target-clear:hover:not(:disabled) { background: var(--hover); }
+  .target-preset[aria-pressed="true"] {
+    background: var(--text);
+    border-color: var(--text);
+    color: var(--bg);
+  }
+  .target-clear[aria-pressed="true"] { background: var(--hover); border-color: transparent; color: var(--text); }
+  #wpm-editor #target-input { flex: 1 1 auto; width: auto; min-width: 0; }
+  .target-preset:focus-visible, .target-clear:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 1px; }
+  .target-preset:disabled, .target-clear:disabled { cursor: default; opacity: 0.55; }
+  .target-note { margin: 0; font-size: 12px; color: var(--text-dim); }
+  .anchor-popover input[aria-invalid="true"] { border-color: var(--tally); box-shadow: 0 0 0 1px var(--tally); }

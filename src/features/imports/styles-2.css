@@ -1,0 +1,2 @@
+  .import-split-group { display: flex; gap: 14px; font-family: var(--font-body); font-size: 13px; color: var(--text-dim); }
+  .import-split-group label { display: flex; align-items: center; gap: 5px; cursor: pointer; }

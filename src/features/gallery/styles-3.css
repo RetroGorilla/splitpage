@@ -1,0 +1,10 @@
+  .scene-gallery-step {
+    flex: none; display: flex; align-items: center; justify-content: center;
+    width: 40px; height: 40px; padding: 0;
+    border: 1px solid var(--border-strong); border-radius: 50%;
+    background: transparent; color: var(--text); cursor: pointer;
+  }
+  .scene-gallery-step:hover:not(:disabled) { background: var(--hover); border-color: var(--text-faint); }
+  .scene-gallery-step:disabled { opacity: .35; cursor: default; }
+  .scene-gallery-step:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  .scene-gallery-step svg.is-flipped { transform: scaleX(-1); }

@@ -1,0 +1,14 @@
+    .menu-wrap .menu {
+      position: fixed;
+      top: auto;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: auto;
+      max-width: none;
+      max-height: 86vh;
+      border-radius: 14px 14px 0 0;
+      border-bottom: none;
+      padding-bottom: env(safe-area-inset-bottom);
+      transform-origin: bottom center;
+    }

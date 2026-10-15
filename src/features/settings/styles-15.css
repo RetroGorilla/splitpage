@@ -1,0 +1,22 @@
+    .length-status {
+      display: block;
+      grid-column: 5;
+      grid-row: 3;
+      justify-self: end;
+      margin: 0 0 -8px;
+      padding: 0 4px 8px 10px;
+      border: 0;
+      background: transparent;
+      color: var(--text-faint);
+      font-family: var(--font-body);
+      font-size: 12px;
+      line-height: 16px;
+      font-weight: 450;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+    .length-status .rd-length-total { font-weight: 500; color: var(--text-dim); }
+    .length-status:hover, .length-status:hover .rd-length-total { color: var(--text); }
+    .length-status:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; border-radius: var(--radius-sm); }
+    .length-status .rd-length-slot .rd-length-of { display: none; }

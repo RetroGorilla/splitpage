@@ -1,0 +1,8 @@
+  .writer {
+    position: fixed; inset: 0; z-index: 145;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+  }
+  .writer[hidden] { display: none; }
