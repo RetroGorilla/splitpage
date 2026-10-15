@@ -10,4 +10,3 @@
     .save-btn[data-state="ok"]::before { background: var(--ok); }
     .save-btn[data-state="pending"]::before { background: var(--audio); }
     .save-btn[data-state="warn"]::before { background: var(--danger); }
-  }

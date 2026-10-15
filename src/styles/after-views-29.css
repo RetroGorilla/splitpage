@@ -1,3 +1,5 @@
+  }
+
   @media (hover: none), (pointer: coarse) {
     #root { --script-floor: 16px; }
     .cell-editable { font-size: 16px; }
