@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, symlinkSync, unlin
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
-import { discover, runTests, parseArgs, nodeVersionWarning, SETS } from "./run-tests.mjs";
+import { discover, runTests, parseArgs, nodeVersionWarning, unsupportedNodeError, SETS } from "./run-tests.mjs";
 import { typecheck, CONFIGS } from "./typecheck.mjs";
 
 let passed = 0;
@@ -244,6 +244,35 @@ console.log("\nnodeVersionWarning():\n");
   const warning = nodeVersionWarning("v22.22.0", repo) ?? "";
   check("another version names both and nvm use", warning.includes("22.22.0") && warning.includes("22.22.2") && warning.includes("nvm use"), warning);
   rmSync(repo, { recursive: true, force: true });
+}
+
+console.log("\nunsupportedNodeError():\n");
+
+{
+  const repo = mkdtempSync(join(tmpdir(), "splitpage-engines-"));
+  eq("no package.json means no error", unsupportedNodeError("v22.22.0", repo), null);
+  writeFileSync(join(repo, "package.json"), JSON.stringify({ engines: { node: "^22.22.2 || ^24.15.0 || >=26.0.0" } }));
+  writeFileSync(join(repo, ".nvmrc"), "24.22.0\n");
+  for (const v of ["v22.22.2", "v22.30.0", "v24.15.0", "v24.22.0", "v26.0.0", "v27.1.0"]) eq(`${v} is inside the range`, unsupportedNodeError(v, repo), null);
+  for (const v of ["v22.22.0", "v22.21.9", "v23.5.0", "v24.14.1", "v25.9.0", "v20.19.0"]) {
+    const error = unsupportedNodeError(v, repo) ?? "";
+    check(`${v} is outside it, and the error names it, the range and the pinned version`, error.includes(v.slice(1)) && error.includes("^22.22.2 || ^24.15.0 || >=26.0.0") && error.includes("24.22.0"), error);
+  }
+  writeFileSync(join(repo, "package.json"), JSON.stringify({ engines: { node: "22.x || ^24.15.0" } }));
+  eq("a range it cannot read is not refused", unsupportedNodeError("v22.22.0", repo), null);
+  rmSync(repo, { recursive: true, force: true });
+}
+
+{
+  const spawned = [];
+  const errors = [];
+  const run = (opts) => runTests({ repo: REPO, sets: ["unit"], files: ["src/test/a.test.mjs"], spawn: (...a) => { spawned.push(a); return { status: 0 }; }, print: () => {}, printError: (m) => errors.push(m), ...opts });
+  eq("an unsupported Node lists the tests", run({ nodeError: "too old", listOnly: true }), 0);
+  eq("but refuses to run them, with exit 2", run({ nodeError: "too old" }), 2);
+  eq("before spawning any", spawned.length, 0);
+  check("and prints why", errors.includes("too old"), JSON.stringify(errors));
+  eq("a supported Node runs them", run({}), 0);
+  eq("by spawning the group", spawned.length, 1);
 }
 
 console.log("\ntypecheck():\n");
