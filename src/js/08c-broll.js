@@ -193,15 +193,16 @@ export function derivedRecordsPlan(doc, changes) {
   var tags = tagRecordsPlan();
   var shots = planBrollRecords(doc, productionReaders, randomIds, htmlToPlainText, unkeyedScope(changes));
   var fields = [];
-  if (tags) fields.push("productionTags");
+  if (tags && tags.apply) fields.push("productionTags");
   if (hasBrollRecordWork(shots)) fields.push("brollShots");
-  if (!fields.length) return null;
+  if (!fields.length && !tags) return null;
   return {
     fields: fields,
     apply: function (into) {
-      if (tags) tags();
+      if (tags && tags.apply) tags.apply();
       applyBrollRecords(into.brollShots, shots);
-    }
+    },
+    commit: tags ? tags.commit : undefined
   };
 }
 

@@ -231,11 +231,13 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     return { generation: at, errors: reported(errors) };
   }
 
-  function withRecords(doc: ValidatedDocument, changes: ChangeSet, kept: Restore[] | null): ChangeSet {
+  function withRecords(doc: ValidatedDocument, changes: ChangeSet, kept: Restore[], accepted: (() => void)[]): ChangeSet {
     const records = ports.reconcile.records;
     const plan: RecordsPlan | null = records ? records(doc, changes) : null;
-    if (!plan || !plan.fields.length) return changes;
-    if (kept) plan.fields.forEach(function (key) { kept.push(keepField(doc as unknown as Bag, key)); });
+    if (!plan) return changes;
+    if (plan.commit) accepted.push(plan.commit);
+    if (!plan.fields.length) return changes;
+    plan.fields.forEach(function (key) { kept.push(keepField(doc as unknown as Bag, key)); });
     plan.apply(doc);
     return combined(changes, changeSet({ docFields: plan.fields }));
   }
@@ -341,12 +343,14 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
       return { kind: "failed", error: error };
     }
     const unrecord: Restore[] = [];
+    const accepted: (() => void)[] = [];
     let unanchor: Restore | null = null;
     try {
-      if (kind === "edit") changes = withRecords(doc, changes, unrecord);
+      if (kind === "edit") changes = withRecords(doc, changes, unrecord, accepted);
       unanchor = needsReconciliation(changes) ? anchorPoint(doc) : null;
       if (unanchor) ports.reconcile.anchors(doc);
       if (settle) settle();
+      accepted.forEach(function (accept) { accept(); });
     } catch (error) {
       if (unanchor) unanchor();
       unrecord.reverse().forEach(function (back) { back(); });
@@ -389,7 +393,17 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
       const errors: unknown[] = [];
       if (document) {
         const doc = document;
-        attempt(errors, function () { noted = withRecords(doc, noted, null); });
+        attempt(errors, function () {
+          const unrecord: Restore[] = [];
+          const accepted: (() => void)[] = [];
+          try {
+            noted = withRecords(doc, noted, unrecord, accepted);
+          } catch (error) {
+            unrecord.reverse().forEach(function (back) { back(); });
+            throw error;
+          }
+          accepted.forEach(function (accept) { accept(); });
+        });
       }
       reported(errors);
       commit("edit", noted);
