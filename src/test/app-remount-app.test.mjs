@@ -93,6 +93,7 @@ const CONDITIONAL = {
 };
 
 const RESOURCE_ROWS = {
+  shortcuts: ["window keydown/B"],
   S13: ["#production-list click/C", "#production-list contextmenu/B", "#production-list pointercancel/B", "#production-list pointerdown/B", "#production-list pointermove/B", "#production-list pointerup/B"],
   S26: ["#production-panel change/B", "#production-panel click/B", "#production-panel focusout/B", "#production-panel input/B", "#production-panel keydown/B"],
   S27: ["#gear-panel change/B", "#gear-panel click/B", "#gear-panel focusout/B", "#gear-panel input/B", "#gear-panel keydown/B"],
@@ -106,7 +107,7 @@ const RESOURCE_ROWS = {
     ["dblclick/B", "mousedown/B", "touchstart/B"].map((ev) => `#${panel}-panel-resize-handle ${ev}`))
 };
 
-const { bootApp, closeApp } = await import("./_app-boot.mjs");
+const { bootApp, closeApp, rewireApp } = await import("./_app-boot.mjs");
 const { S } = await import("../js/_state.js");
 await bootApp();
 const app = await import("../bootstrap/app.ts");
@@ -122,13 +123,13 @@ after(() => {
 app.stopApp();
 const stopped = snapshot();
 const stoppedRoutes = rootRoutesTaken();
-app.startApp();
+app.startApp(await rewireApp());
 await S.initialStateReady;
 const first = minus(snapshot(), stopped);
 const firstRoutes = rootRoutesTaken();
 app.stopApp();
 const afterStop = minus(snapshot(), stopped);
-app.startApp();
+app.startApp(await rewireApp());
 await S.initialStateReady;
 const second = minus(snapshot(), stopped);
 

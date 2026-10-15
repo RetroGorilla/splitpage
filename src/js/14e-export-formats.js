@@ -207,9 +207,11 @@ var EXPORTERS = [
     build: function (ctx) { return product(htmlToPlainScript(ctx.doc)); } }
 ];
 
-export function registerBuiltInExporters() {
-  CARDS.forEach(function (card) { exportFormats.defineCard(card); });
-  EXPORTERS.forEach(function (exporter) { exportFormats.register(exporter); });
+export function registerBuiltInExporters(registry) {
+  var drops = [];
+  CARDS.forEach(function (card) { drops.push(registry.defineCard(card)); });
+  EXPORTERS.forEach(function (exporter) { drops.push(registry.register(exporter)); });
+  return function () {
+    while (drops.length) drops.pop()();
+  };
 }
-
-registerBuiltInExporters();
