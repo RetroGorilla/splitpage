@@ -758,53 +758,6 @@ export function toggleCardSelection(key) {
   renderProduction();
 }
 
-var touchPress = { timer: null, key: null, fired: false, x: 0, y: 0 };
-
-function cancelTouchPress() {
-  if (touchPress.timer) { clearTimeout(touchPress.timer); touchPress.timer = null; }
-}
-
-export function wireTouchSelection() {
-  var list = document.getElementById("production-list");
-  if (!list) return;
-
-  list.addEventListener("pointerdown", function (e) {
-    if (e.pointerType === "mouse" || reviewMode()) return;
-    var card = e.target.closest(".tag-entity");
-    if (!card) return;
-    if (e.target.closest(".tag-entity-detail, .tag-rename-input")) return;
-    touchPress.key = card.getAttribute("data-key");
-    touchPress.fired = false;
-    touchPress.x = e.clientX; touchPress.y = e.clientY;
-    cancelTouchPress();
-    touchPress.timer = setTimeout(function () {
-      touchPress.timer = null;
-      touchPress.fired = true;
-      toggleCardSelection(touchPress.key);
-      if (navigator.vibrate) navigator.vibrate(10);
-    }, 450);
-  });
-
-  list.addEventListener("pointermove", function (e) {
-    if (!touchPress.timer) return;
-    if (Math.abs(e.clientX - touchPress.x) > 10 || Math.abs(e.clientY - touchPress.y) > 10) cancelTouchPress();
-  });
-  list.addEventListener("pointerup", cancelTouchPress);
-  list.addEventListener("pointercancel", cancelTouchPress);
-
-  list.addEventListener("click", function (e) {
-    if (touchPress.fired) {
-      touchPress.fired = false;
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  }, true);
-
-  list.addEventListener("contextmenu", function (e) {
-    if (IS_TOUCH && e.target.closest(".tag-entity")) e.preventDefault();
-  });
-}
-
 export function handleSelectionClick(e, card) {
   if (reviewMode()) return false;
   var key = card.getAttribute("data-key");
