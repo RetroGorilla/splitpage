@@ -24,7 +24,7 @@ Final milestone 6 tree: `2b891f8`, the merge of #629 (the external review fixes)
 | Electron smoke, dev target | `595c2c0`: 974/974. `2d19032`: 971/972 on the first run (one group, flake), 974/974 on the second | passed |
 | `npm run verify` on Linux (Node 24.22.0) | clean on `595c2c0` (reviewer) and `2d19032` (author); frontend 170/170, tests 133/133, desktop 15/15, tools 17/17 | passed |
 | CI on the merge | push run for `9fcf363` (run 38791487677) succeeded | passed |
-| External review | Astra (Codex CLI), 2026-10-15: 1 blocker, 3 concerns | findings fixed in #629; no re-review ([below](#external-review)) |
+| External review | Astra (Codex CLI), 2026-10-15: 1 blocker, 3 concerns | findings 1 to 3 fixed in #629 and closed by Sol's re-review of the fixes (Codex CLI, 2026-10-15); finding 4 accepted ([below](#external-review)) |
 | Linux full browser run, native ARM64, packaged check | the packaged check returns only if packaging or runtime inputs change; Linux full run and ARM64 go to the 4.0 release gate | not run here |
 
 Two one-off failures occurred during the gate and are described under
@@ -216,6 +216,21 @@ the race matrix, the remount test and 14 browser suites.
 The review text is kept with the project's files and on the maintainer's
 machine; this table is the disposition.
 
+### Re-review of the fixes
+
+| | |
+| --- | --- |
+| Reviewer | Sol (Codex CLI), a read-only session that took no part in writing #629 |
+| Date | 2026-10-15 |
+| Scope | The three #629 fixes against external review findings 1 to 3, on an archive copy of the tree |
+| Verdict | All three findings closed; no open blocker or concern |
+
+Sol found that the 14 click-slot registrations (13 click slots and the tags-anchor mousedown), their dispatch order and the review gate running first are unchanged. `stopApp` now raises an `AggregateError` even for a single cleanup failure, and behaves as before when nothing throws. The accepted limitation (one feature's remaining cleanup is skipped when its own step throws) is acceptable because the router's unroutes only do Map operations.
+
+Two test nits are recorded as 4.x follow-ups: `app-stop-errors-app.test.mjs` injects only one shutdown failure, and `rows-drag-dispose-app.test.mjs` never creates drop markers, so marker removal is verified by reading the code.
+
+Limit: Sol ran the unit tests only (20 passed). The three app tests could not load `fake-indexeddb` in its sandbox, so its judgement that each new test fails without its fix is reasoned from the code. Linux and macOS were not run by Sol.
+
 ## Blockers for Adam
 
-None. Findings 1 to 3 are fixed in #629 and finding 4 was accepted by Adam on 2026-10-15. Astra has not re-reviewed the fixes.
+None. Findings 1 to 3 are fixed in #629 and finding 4 was accepted by Adam on 2026-10-15. Sol re-reviewed the fixes and closed all three findings ([Re-review of the fixes](#re-review-of-the-fixes)).
