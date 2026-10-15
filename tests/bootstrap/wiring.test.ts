@@ -15,7 +15,9 @@ import type { Wiring, WiringDeps } from "../../src/bootstrap/wiring.ts";
 import { appActions } from "../../src/legacy/app-actions.ts";
 import { exportFormats, installExportFormats } from "../../src/legacy/export-formats.ts";
 import { recoveryStarted } from "../../src/legacy/recovery-bridge.ts";
-import { savesStarted } from "../../src/legacy/save-bridge.ts";
+import { requestSave, savesStarted, savesWaiting } from "../../src/legacy/save-bridge.ts";
+import type { LegacySaveJob, LegacySavePorts } from "../../src/legacy/save-bridge.ts";
+import type { SaveOutcome, WriterResult } from "../../src/application/save/coordinator.ts";
 import {
   liveSession,
   onDocumentReplaced,
@@ -269,6 +271,55 @@ test("failed partial startup: each missing dependency is named and nothing is bu
   assert.equal(refused(() => wireLoose(undefined)).step, "dependencies");
 });
 
+test("failed partial startup: a port that is present but lacks a function is named and nothing is built", () => {
+  const methods: Record<keyof LegacyTransitionPorts, readonly string[]> = {
+    live: ["current", "assign"],
+    destination: ["set", "confirm"],
+    identity: ["mint", "writtenOut", "markWrittenOut"]
+  };
+  for (const [port, names] of Object.entries(methods) as [keyof LegacyTransitionPorts, readonly string[]][]) {
+    for (const method of names) {
+      const f = fakes();
+      const transitions = { ...f.deps.transitions, [port]: without(f.deps.transitions[port], method) };
+      const error = refused(() => wireLoose({ ...f.deps, transitions }));
+      assert.equal(error.step, "transitions");
+      assert.equal(error.message, "Wiring: the transitions dependency's " + port + " port has no " + method + " function");
+      assert.deepEqual(f.log, [], port + "." + method + ": nothing is built");
+      assert.deepEqual(started(), NOTHING, port + "." + method + ": no facade is started");
+    }
+  }
+  const f = fakes();
+  const empty = refused(() => wireLoose({ ...f.deps, transitions: { live: {}, destination: {}, identity: {} } }));
+  assert.equal(empty.message, "Wiring: the transitions dependency's live port has no current function", "empty port objects are refused");
+  assert.deepEqual(f.log, []);
+  assert.deepEqual(started(), NOTHING);
+});
+
+test("failed partial startup: a save factory that returns malformed ports fails the saves step, names the port and installs no save owner", () => {
+  const malformed: [string, (ports: LegacySavePorts) => unknown, string][] = [
+    ["nothing", () => undefined, "the saves dependency returned no save ports"],
+    ...(["write", "destination", "keyOf", "obsolete", "running"] as const).map((port): [string, (ports: LegacySavePorts) => unknown, string] =>
+      [port, (ports) => without(ports, port), "the saves dependency returned no " + port + " port"]),
+    ["write not a function", (ports) => ({ ...ports, write: 7 }), "the saves dependency returned no write port"],
+    ["ownership", (ports) => without(ports, "ownership"), "the saves dependency returned no ownership port"],
+    ...(["capture", "stillOwns"] as const).map((method): [string, (ports: LegacySavePorts) => unknown, string] =>
+      [method, (ports) => ({ ...ports, ownership: without(ports.ownership, method) }), "the saves dependency's ownership port has no " + method + " function"])
+  ];
+  for (const [what, spoil, message] of malformed) {
+    const f = fakes();
+    const saves = (ownership: Parameters<WiringDeps["saves"]>[0]): unknown => spoil(f.deps.saves(ownership));
+    const error = refused(() => wireLoose({ ...f.deps, saves }));
+    assert.equal(error.step, "saves", what);
+    assert.equal(error.message, "Wiring: the saves step failed", what);
+    assert.ok(error.cause instanceof WiringError, what + ": the cause is a WiringError");
+    assert.equal(error.cause.step, "saves", what);
+    assert.equal(error.cause.message, "Wiring: " + message, what);
+    assert.equal(savesStarted(), false, what + ": no save coordinator is installed");
+    assert.deepEqual(started(), NOTHING, what + ": every owner built before it is released");
+    assert.deepEqual(f.live, { exporters: 0, undo: 0 }, what);
+  }
+});
+
 test("failed partial startup: a step that throws undoes every step before it, in reverse, and names itself with the cause", () => {
   const boom = new Error("boom");
   const breakers: Record<(typeof WIRING_STEPS)[number], (f: Fakes) => { deps: WiringDeps; cleanup?: () => void; cause?: boolean }> = {
@@ -418,6 +469,92 @@ test("cleanup: wire and dispose three times leaves no timer or subscriber, empty
     assert.deepEqual(registries[1].cards(), []);
     assert.deepEqual(started(), NOTHING);
     assert.deepEqual(f.live, { exporters: 0, undo: 0 });
+  }
+});
+
+interface HeldSaves {
+  readonly calls: string[];
+  readonly jobs: LegacySaveJob[];
+  readonly finish: ((result: WriterResult) => void)[];
+  readonly saves: WiringDeps["saves"];
+}
+
+function heldSaves(name: string): HeldSaves {
+  const calls: string[] = [];
+  const jobs: LegacySaveJob[] = [];
+  const finish: ((result: WriterResult) => void)[] = [];
+  const call = (what: string): void => { calls.push(name + " " + what); };
+  const saves: WiringDeps["saves"] = (ownership) => ({
+    write: (job) => {
+      call("write");
+      jobs.push(job);
+      return new Promise<WriterResult>((resolve) => { finish.push(resolve); });
+    },
+    destination: () => { call("destination"); return NO_DOCUMENT; },
+    keyOf: () => { call("keyOf"); return { owner: null, name: "none" }; },
+    obsolete: () => { call("obsolete"); },
+    running: (on) => { call("running " + String(on)); },
+    ownership: {
+      capture: () => { call("capture"); return ownership.capture(); },
+      stillOwns: (ctx) => { call("stillOwns"); return ownership.stillOwns(ctx); }
+    }
+  });
+  return { calls, jobs, finish, saves };
+}
+
+function settled(promise: Promise<SaveOutcome>): Promise<SaveOutcome | "still pending"> {
+  return Promise.race([promise, new Promise<"still pending">((resolve) => { setTimeout(() => { resolve("still pending"); }, 200); })]);
+}
+
+for (const rewire of [false, true]) {
+  test("save teardown" + (rewire ? ", then a rewire" : "") + ": dispose settles the queued save, and the held write that finishes afterwards settles without calling any old or replacement owner", async () => {
+    const f = fakes();
+    const old = heldSaves("old");
+    const wiring = wireApp({ ...f.deps, saves: old.saves });
+    const active = requestSave({ kind: "save" });
+    const queued = requestSave({ kind: "saveAs" });
+    assert.equal(old.jobs.length, 1, "the first save is writing");
+    assert.equal(savesWaiting(), 1, "the second waits behind it");
+    const job = must(old.jobs[0]);
+    wiring.dispose();
+    assert.deepEqual(started(), NOTHING);
+    old.calls.length = 0;
+    assert.deepEqual(await settled(queued), { kind: "cancelled" }, "the queued save settles at dispose and never writes");
+    const fresh = heldSaves("new");
+    const replacement = rewire ? wireApp({ ...fakes().deps, saves: fresh.saves }) : null;
+    try {
+      assert.equal(job.owns(), false, "the held job no longer owns anything");
+      job.moved();
+      must(old.finish[0])({ kind: "saved" });
+      assert.deepEqual(await settled(active), { kind: "obsolete", here: false }, "the held save settles as landed but no longer this app's");
+      assert.deepEqual(old.calls, [], "nothing after dispose reaches the old ports");
+      assert.deepEqual(fresh.calls, [], "nothing from the old coordinator reaches the replacement");
+      assert.equal(old.jobs.length, 1, "the queued save was never written");
+      if (replacement) {
+        const next = requestSave({ kind: "save" });
+        assert.equal(fresh.jobs.length, 1, "the replacement writes its own save");
+        must(fresh.finish[0])({ kind: "saved" });
+        assert.equal((await settled(next) as SaveOutcome).kind, "saved", "the replacement's own save settles normally");
+        assert.deepEqual(old.calls, [], "the replacement's save reaches none of the old ports");
+      }
+    } finally {
+      replacement?.dispose();
+    }
+    assert.deepEqual(started(), NOTHING);
+  });
+}
+
+test("save teardown: a held write that fails or is cancelled after dispose settles with what the writer said", async () => {
+  for (const result of [{ kind: "failed", error: new Error("disk") }, { kind: "cancelled" }, { kind: "refused", reason: "read-only" }] as const) {
+    const f = fakes();
+    const held = heldSaves("held");
+    const wiring = wireApp({ ...f.deps, saves: held.saves });
+    const active = requestSave({ kind: "save" });
+    wiring.dispose();
+    held.calls.length = 0;
+    must(held.finish[0])(result);
+    assert.deepEqual(await settled(active), result, result.kind);
+    assert.deepEqual(held.calls, [], result.kind + ": nothing after dispose reaches the old ports");
   }
 });
 

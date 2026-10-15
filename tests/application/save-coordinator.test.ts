@@ -21,6 +21,7 @@ interface World {
   readonly pending: Pending[];
   readonly obsolete: { request: Request; here: boolean }[];
   readonly running: boolean[];
+  calls: number;
   readonly coordinator: SaveCoordinator<Request, string>;
 }
 
@@ -34,9 +35,11 @@ function world(): World {
     destination: place("file-a"),
     pending: [] as Pending[],
     obsolete: [] as { request: Request; here: boolean }[],
-    running: [] as boolean[]
+    running: [] as boolean[],
+    calls: 0
   } as World;
   function capture(): OperationContext {
+    w.calls++;
     return Object.freeze({
       epoch: w.epoch, docId: "d1", destination: w.destination, destinationGeneration: 0, generation: 0, connection: null, revision: null
     });
@@ -44,11 +47,12 @@ function world(): World {
   const coordinator = createSaveCoordinator<Request, string>({
     ownership: {
       capture: capture,
-      stillOwns: function (ctx) { return ctx.epoch === w.epoch && ctx.destination === w.destination; }
+      stillOwns: function (ctx) { w.calls++; return ctx.epoch === w.epoch && ctx.destination === w.destination; }
     },
     destination: {
-      current: function () { return w.destination; },
+      current: function () { w.calls++; return w.destination; },
       keyOf: function (identity): DestinationKey {
+        w.calls++;
         return { owner: "places", name: (identity as { name: string }).name };
       }
     },
@@ -60,8 +64,8 @@ function world(): World {
       }
     },
     report: {
-      obsolete: function (request, here) { w.obsolete.push({ request: request, here: here }); },
-      running: function (running) { w.running.push(running); }
+      obsolete: function (request, here) { w.calls++; w.obsolete.push({ request: request, here: here }); },
+      running: function (running) { w.calls++; w.running.push(running); }
     },
     join: function (pending, next) {
       if (pending.kind === "saveAs" || next.kind === "saveAs") return null;
@@ -251,4 +255,49 @@ test("a writer that answers nothing it can be judged by is a failure", async () 
   nth(w, 0).answer(undefined as unknown as WriterResult);
   const outcome = await done;
   assert.equal(outcome.kind, "failed");
+});
+
+test("stop: queued saves settle cancelled, a running write settles from its own answer, and nothing after the stop reaches a port", async () => {
+  const w = world();
+  const active = w.coordinator.request({ kind: "save" });
+  const queued = w.coordinator.request({ kind: "saveAs" });
+  const other = w.destination;
+  w.destination = place("file-b");
+  const elsewhere = w.coordinator.request({ kind: "save" });
+  assert.equal(w.pending.length, 2, "one writer per destination is running");
+  assert.equal(w.coordinator.waiting(), 1);
+  w.destination = other;
+  const job = nth(w, 0).job;
+  w.coordinator.stop();
+  w.calls = 0;
+  assert.deepEqual(await queued, { kind: "cancelled" });
+  assert.equal(w.coordinator.waiting(), 0);
+  assert.equal(job.owns(), false, "a stopped coordinator owns nothing");
+  job.moved();
+  assert.deepEqual(await w.coordinator.request({ kind: "save" }), { kind: "refused", reason: "The save coordinator is stopped" });
+  nth(w, 0).answer(SAVED);
+  nth(w, 1).answer({ kind: "failed", error: "disk" });
+  assert.deepEqual(await active, { kind: "obsolete", here: false }, "a write that lands after the stop is no longer this coordinator's to confirm");
+  assert.deepEqual(await elsewhere, { kind: "failed", error: "disk" });
+  await turns();
+  assert.equal(w.calls, 0, "no port was called after the stop");
+  assert.equal(w.pending.length, 2, "the queued save never wrote");
+  assert.deepEqual(w.obsolete, []);
+  assert.deepEqual(w.running, [true], "a stop does not report the controls idle through a released port");
+  w.coordinator.stop();
+});
+
+test("stop: a writer that rejects after the stop settles failed, and a stop with nothing running changes nothing a later stop would", async () => {
+  const w = world();
+  const active = w.coordinator.request({ kind: "save" });
+  w.coordinator.stop();
+  w.calls = 0;
+  const error = new Error("gone");
+  nth(w, 0).fail(error);
+  assert.deepEqual(await active, { kind: "failed", error: error });
+  assert.equal(w.calls, 0);
+  const idle = world();
+  idle.coordinator.stop();
+  idle.coordinator.stop();
+  assert.equal(idle.calls, 0, "stopping an idle coordinator calls no port");
 });

@@ -69,6 +69,7 @@ export interface SaveCoordinator<R, B> {
   readonly confirmBaseline: (baseline: B | null) => B | null;
   readonly confirmed: (identity?: unknown) => Confirmed<B>;
   readonly dirty: (identity?: unknown) => boolean;
+  readonly stop: () => void;
 }
 
 interface Entry<R> {
@@ -107,6 +108,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
   const held = new Map<unknown, Map<string, Held<B>>>();
   let changes = 0;
   let activeCount = 0;
+  let stopped = false;
 
   function keyNow(): DestinationKey {
     return ports.destination.keyOf(ports.destination.current());
@@ -160,6 +162,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
     if (result.kind === "failed") return "error" in result ? { kind: "failed", error: result.error } : { kind: "failed" };
     if (result.kind === "cancelled") return { kind: "cancelled" };
     if (result.kind === "refused") return { kind: "refused", reason: result.reason };
+    if (stopped) return { kind: "obsolete", here: false };
     const landed = ports.destination.keyOf(operation.destination);
     if (!ports.ownership.stillOwns(operation)) {
       const here = result.kind === "saved" && sameKey(landed, keyNow());
@@ -179,7 +182,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
   }
 
   function runNext(queue: Queue<R>): void {
-    if (queue.active) return;
+    if (queue.active || stopped) return;
     let entry = queue.entries.shift();
     const epoch = ports.ownership.capture().epoch;
     while (entry && entry.epoch !== epoch) {
@@ -200,8 +203,9 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
       request: current.request,
       generation: generation,
       operation: function () { return operation; },
-      owns: function () { return ports.ownership.stillOwns(operation); },
+      owns: function () { return !stopped && ports.ownership.stillOwns(operation); },
       moved: function () {
+        if (stopped) return;
         operation = ports.ownership.capture();
         follow(queue);
       }
@@ -217,13 +221,18 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
         function (error: unknown): SaveOutcome { return { kind: "failed", error: error }; })
       .then(function (outcome) {
         queue.active = false;
-        runNext(queue);
-        setRunning(-1);
+        if (stopped) {
+          activeCount -= 1;
+        } else {
+          runNext(queue);
+          setRunning(-1);
+        }
         current.settle(outcome);
       });
   }
 
   function request(next: R): Promise<SaveOutcome> {
+    if (stopped) return Promise.resolve({ kind: "refused", reason: "The save coordinator is stopped" });
     const queue = queueFor(keyNow());
     const epoch = ports.ownership.capture().epoch;
     for (const pending of queue.entries) {
@@ -239,6 +248,14 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
     queue.entries.push({ request: next, epoch: epoch, done: done, settle: settle });
     runNext(queue);
     return done;
+  }
+
+  function stop(): void {
+    if (stopped) return;
+    stopped = true;
+    for (const queue of queues.splice(0)) {
+      for (const entry of queue.entries.splice(0)) entry.settle({ kind: "cancelled" });
+    }
   }
 
   function confirmClean(): void {
@@ -275,6 +292,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
     confirmed: confirmed,
     dirty: function (identity?: unknown) {
       return changes > confirmed(identity).generation;
-    }
+    },
+    stop: stop
   });
 }
