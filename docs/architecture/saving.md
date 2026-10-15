@@ -6,7 +6,7 @@ The code lives in `src/application/session/operation.ts`, `src/application/trans
 
 ## 1. Purpose
 
-Three small owners, each created once and started once by `_entry.js`:
+Three small owners, each created once and started once by the wiring step (`wireApp` in `src/bootstrap/wiring.ts`, called by the legacy initializer shim `src/js/_entry.js`):
 
 | Owner | Question it answers | Created by |
 | --- | --- | --- |
@@ -14,7 +14,7 @@ Three small owners, each created once and started once by `_entry.js`:
 | Transitions | How does a different document, or a different place for the same one, become the live one? | `createTransitions(ports)` |
 | Save coordinator | In what order do saves to one destination run, and which completions count? | `createSaveCoordinator(ports)` |
 
-`_entry.js` calls `startSaves(legacySavePorts(...))` before the numbered `__init`s and `startTransitions(...)` after them. Before its start function has run, every accessor in the matching bridge throws ("not started yet"). `startRecovery` (4.17) follows the same pattern and builds its draft writer on the same operation context. Milestone 7 moves those calls into `src/bootstrap/`.
+`wireApp` calls `startSaves(legacySavePorts(...))`, then `startTransitions(...)`, then `startRecovery(draftRecoveryPorts())`, all before the numbered `__init`s (milestone 7.1; before it, the shim started the transitions and recovery after the `__init`s). Before its start function has run, every accessor in the matching bridge throws ("not started yet"). `startRecovery` (4.17) follows the same pattern and builds its draft writer on the same operation context. The wiring's `dispose()` calls the three stop functions in reverse order.
 
 Each start function returns a stop function that clears the bridge's state; tests use it. Starting twice throws.
 

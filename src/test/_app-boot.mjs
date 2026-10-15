@@ -120,7 +120,7 @@ export async function appWiringDeps() {
   };
 }
 
-export async function rewireApp() {
+export async function rewireApp(overrides) {
   const { wireApp } = await import("../bootstrap/wiring.ts");
-  return wireApp(await appWiringDeps());
+  return wireApp(Object.assign(await appWiringDeps(), overrides));
 }
