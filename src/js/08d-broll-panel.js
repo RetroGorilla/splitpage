@@ -1223,6 +1223,12 @@ export function mountBrollFeature() {
   return brollMount;
 }
 
+export function stopBrollFeature() {
+  var owner = brollMount;
+  brollMount = null;
+  if (owner) owner.dispose();
+}
+
 var pageView = { group: "location" };
 var pageReturnFocus = null;
 var pagePanelWasOpen = false;

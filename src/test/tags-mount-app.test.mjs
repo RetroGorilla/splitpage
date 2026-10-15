@@ -6,7 +6,7 @@ import { S } from "../js/_state.js";
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
-const { mountTagsFeature } = await import("../js/21-events.js");
+const { mountTagsFeature } = await import("../js/22b-production-wiring.js");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../js/05-render.js");
 const { openProductionPanel } = await import("../js/08-production-panels.js");

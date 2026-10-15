@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 
 await bootApp();
-const { mountPrompterVisibilityFeature } = await import("../js/21-events.js");
+const { mountPrompterVisibilityFeature } = await import("../js/22d-views-wiring.js");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 after(closeApp);
 
