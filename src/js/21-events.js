@@ -165,7 +165,7 @@ import {
   maybeCaptureBroll,
   scheduleBrollRefresh
 } from "./08c-broll.js";
-import { wireBrollPanel } from "./08d-broll-panel.js";
+import { mountBrollFeature } from "./08d-broll-panel.js";
 import {
   bulkTagOpen,
   closeBulkTag,
@@ -1195,7 +1195,7 @@ function init() {
   });
   document.getElementById("gear-quickadd-save").addEventListener("click", applyGearQuickAdd);
 
-  wireBrollPanel();
+  mountBrollFeature();
 
   document.getElementById("server-modal").addEventListener("click", function (e) {
     if (e.target.id === "server-modal") { closeServerPicker(); return; }
