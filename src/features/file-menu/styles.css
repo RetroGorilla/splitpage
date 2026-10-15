@@ -1,0 +1,14 @@
+  .btn.btn-quiet.btn-brand { gap: 8px; padding: 0 4px 0 6px; }
+  .topbar-left > .menu-wrap { margin-left: -6px; }
+  .btn-brand .brand-mark { display: block; flex: none; width: 22px; height: 22px; }
+  .btn-brand .brand-name {
+    font-family: var(--font-body);
+    font-weight: 700;
+    font-size: 15px;
+    line-height: 20px;
+    letter-spacing: -0.005em;
+    color: var(--text);
+  }
+  .btn-brand .btn-chevron { margin-left: -4px; color: var(--text-dim); }
+  .btn-brand:hover .btn-chevron, .btn-brand[aria-expanded="true"] .btn-chevron { color: var(--text); }
+  .btn.btn-brand:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }

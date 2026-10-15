@@ -10,4 +10,3 @@
   button.stat-chip:hover { color: var(--text); border-color: var(--text-dim); }
   .stat-chip[hidden] { display: none; }
   .stat-chip .stat-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); flex: none; }
-  #wpm-editor input { width: 72px; flex: none; }

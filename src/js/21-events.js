@@ -1,7 +1,13 @@
+import { mountNotices } from "../features/notices/mount.ts";
+import { mountPrompterVisibility, mountPrompterOpen, mountPrompter } from "../features/prompter/mount.ts";
+import { mountIdentity, mountServer, mountDrive } from "../features/settings/mount.ts";
+import { mountHistory } from "../features/history/mount.ts";
+import { mountSaveRecovery, mountConflicts, mountSave, mountFileMenu } from "../features/file-menu/mount.ts";
+import { mountImports, mountGdoc } from "../features/imports/mount.ts";
+import { mountWriterOpen, mountWriterNavigation, mountWriterClose } from "../features/writer/mount.ts";
+import { mountHistoryGallery } from "../features/gallery/mount.ts";
 import { mountFind } from "../features/find/mount.ts";
 import { mountTags } from "../features/tags/mount.ts";
-import { S } from "./_state.js";
-import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import { createReviewClickGate } from "../features/review/click-gate.ts";
 import { beginStartup } from "../bootstrap/startup.ts";
 import { whenDocumentReady } from "../bootstrap/startup/dom-ready.ts";
@@ -9,8 +15,6 @@ import { mountComments } from "../features/comments/mount.ts";
 import { mountComposition } from "../features/editing/composition.ts";
 import { editorBlur, mountEditorFocus } from "../features/editing/focus.ts";
 import { mountEditorToolbar } from "../features/editing/toolbar.ts";
-import { conn, importHome } from "./_home.js";
-import { suppressUnloadWarning } from "./00-prelude.js";
 import { mountClipboardRoutes } from "../features/clipboard/routes.ts";
 import { mountMediaRoutes } from "../features/media/routes.ts";
 import { mountMergeBanner } from "../features/merge/banner.ts";
@@ -20,6 +24,10 @@ import { mountTitleRoutes } from "../features/title/routes.ts";
 import { mountUndoRoutes, undoGesture } from "../features/undo/routes.ts";
 import { mountVideoPopover } from "../features/video/popover.ts";
 import { mountWriterRoutes } from "../features/writer/routes.ts";
+import { S } from "./_state.js";
+import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
+import { conn, importHome } from "./_home.js";
+import { suppressUnloadWarning } from "./00-prelude.js";
 import { cycleRowStatus } from "./01-scene-status.js";
 import {
   expandHiddenShotStrip,
@@ -210,6 +218,7 @@ import {
 } from "./10-comments.js";
 import {
   clearPendingFileRows,
+  captureImportPreview,
   closeGdocModal,
   closeImportModal,
   confirmGdocImport,
@@ -232,6 +241,7 @@ import {
 import {
   armDriveDelete,
   armServerDelete,
+  captureServerPicker,
   closeDriveModal,
   closeServerPicker,
   detectServer,
@@ -292,6 +302,7 @@ import {
 } from "./19-writer.js";
 import {
   acquireWakeLock,
+  disposePrompterView,
   applyPrompterSize,
   buildPrompterContent,
   closePrompter,
@@ -329,6 +340,268 @@ import {
 } from "./20g-drafts.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { liveSession, runCommand } from "../legacy/session-bridge.ts";
+
+var viewMounts = new Map();
+
+function replaceViewMount(key, mount) {
+  var previous = viewMounts.get(key);
+  if (previous) previous.dispose();
+  var owner = mount();
+  viewMounts.set(key, owner);
+  return owner;
+}
+
+function captureViewDocument() {
+  var context = captureOperation();
+  return function () { return stillOwns(context); };
+}
+
+export function mountNoticesFeature() {
+  return replaceViewMount("mountNotices", function () {
+    return mountNotices({ window: window, ports: {
+      loadUpdateStatus: loadUpdateStatus,
+      dismissUpdateNotice: dismissUpdateNotice,
+      renderDesktopAppNotice: renderDesktopAppNotice,
+      dismissDesktopAppNotice: dismissDesktopAppNotice
+    } });
+  });
+}
+
+export function mountPrompterVisibilityFeature() {
+  return replaceViewMount("mountPrompterVisibility", function () {
+    return mountPrompterVisibility({ window: window, ports: {
+      acquireWakeLock: function (active) {
+        var ownsDocument = captureViewDocument();
+        acquireWakeLock(function () { return active() && ownsDocument(); });
+      },
+      isOpen: function () { return S.prompterOpen; }
+    } });
+  });
+}
+
+export function mountIdentityFeature() {
+  return replaceViewMount("mountIdentity", function () {
+    return mountIdentity({ window: window, ports: {
+      promptForName: promptForName
+    } });
+  });
+}
+
+export function mountHistoryFeature() {
+  return replaceViewMount("mountHistory", function () {
+    return mountHistory({ window: window, ports: {
+      promptForWpm: promptForWpm,
+      closeHistoryPanel: closeHistoryPanel,
+      onRootClick: onRootClick
+    } });
+  });
+}
+
+export function mountServerFeature() {
+  return replaceViewMount("mountServer", function () {
+    return mountServer({ window: window, ports: {
+      closeServerPicker: closeServerPicker,
+      openServerDoc: openServerDoc,
+      armServerDelete: armServerDelete,
+      routeOpen: function (id) { return S.DESKTOP ? S.DESKTOP.routeOpen({ kind: "server", serverDocId: id, serverUrl: conn.serverUrl, token: conn.token, tunnel: conn.tunnel }).then(function (result) { return !!result && result.where === "this-tab"; }) : null; },
+      capture: function () {
+        var ownsDocument = captureViewDocument();
+        var ownsModal = captureServerPicker();
+        return function () { return ownsDocument() && ownsModal(); };
+      }
+    } });
+  });
+}
+
+export function mountDriveFeature() {
+  return replaceViewMount("mountDrive", function () {
+    return mountDrive({ window: window, ports: {
+      closeDriveModal: closeDriveModal,
+      driveSaveCredsFromForm: driveSaveCredsFromForm,
+      driveShowCredsForm: driveShowCredsForm,
+      driveConnect: driveConnect,
+      driveCrumbTo: driveCrumbTo,
+      driveOpenItem: driveOpenItem,
+      driveListCurrent: driveListCurrent,
+      toggleDriveNewFolder: toggleDriveNewFolder,
+      driveCreateFolder: driveCreateFolder,
+      driveSignIn: driveSignIn,
+      driveSignOut: driveSignOut,
+      driveStartRename: driveStartRename,
+      driveSaveRename: driveSaveRename,
+      driveCancelRename: driveCancelRename,
+      driveItemById: driveItemById,
+      armDriveDelete: armDriveDelete,
+      driveUploadFiles: driveUploadFiles
+    } });
+  });
+}
+
+export function mountSaveRecoveryFeature() {
+  return replaceViewMount("mountSaveRecovery", function () {
+    return mountSaveRecovery({ window: window, ports: {
+      hideResumeBanner: hideResumeBanner,
+      resumeFromHandle: resumeFromHandle,
+      showToast: showToast,
+      saveDoc: saveDoc,
+      exportAs: exportAs,
+      pendingHandle: function () { return pendingResumeHandle; },
+      capture: captureViewDocument
+    } });
+  });
+}
+
+export function mountConflictsFeature() {
+  return replaceViewMount("mountConflicts", function () {
+    return mountConflicts({ window: window, ports: {
+      closeFileConflict: closeFileConflict,
+      reloadProjectFromDisk: reloadProjectFromDisk,
+      reloadFileFromDisk: reloadFileFromDisk,
+      saveDoc: saveDoc,
+      saveBackToFile: saveBackToFile,
+      openMergeReview: openMergeReview,
+      cancelMergeReview: cancelMergeReview,
+      confirmFileMerge: confirmFileMerge,
+      importHome: importHome,
+      buildFileData: buildFileData,
+      deliverFile: deliverFile,
+      conflict: function () { return fileConflictCtx; },
+      capture: captureViewDocument
+    } });
+  });
+}
+
+export function mountPanelsFeature() {
+  return replaceViewMount("mountPanels", function () {
+    return { dispose: initSidePanelResizeHandles() };
+  });
+}
+
+export function mountSaveFeature() {
+  return replaceViewMount("mountSave", function () {
+    return mountSave({ window: window, ports: {
+      saveFromButton: saveFromButton,
+      updateSaveStatus: updateSaveStatus
+    } });
+  });
+}
+
+export function mountPrompterOpenFeature() {
+  return replaceViewMount("mountPrompterOpen", function () {
+    return mountPrompterOpen({ window: window, ports: {
+      runFromButton: runFromButton
+    } });
+  });
+}
+
+export function mountFileMenuFeature() {
+  return replaceViewMount("mountFileMenu", function () {
+    return mountFileMenu({ window: window, ports: {
+      toggleFileMenu: toggleFileMenu,
+      toggleSubmenu: toggleSubmenu,
+      handleFileMenuAction: handleFileMenuAction,
+      openProjectFile: openProjectFile
+    } });
+  });
+}
+
+export function mountImportsFeature() {
+  return replaceViewMount("mountImports", function () {
+    return mountImports({ window: window, ports: {
+      finishMarkdownRowChoice: finishMarkdownRowChoice,
+      closeImportModal: closeImportModal,
+      confirmImport: confirmImport,
+      clearPendingFileRows: clearPendingFileRows,
+      maybeAutoDetectTwoColumn: maybeAutoDetectTwoColumn,
+      updateImportPreview: updateImportPreview,
+      handleImportFile: handleImportFile,
+      touchMode: function () { S.importModeTouched = true; },
+      capture: function () {
+        var ownsDocument = captureViewDocument();
+        var ownsModal = captureImportPreview();
+        return function () { return ownsDocument() && ownsModal(); };
+      }
+    } });
+  });
+}
+
+export function mountGdocFeature() {
+  return replaceViewMount("mountGdoc", function () {
+    return mountGdoc({ window: window, ports: {
+      closeGdocModal: closeGdocModal,
+      confirmGdocImport: confirmGdocImport
+    } });
+  });
+}
+
+export function mountPrompterFeature() {
+  return replaceViewMount("mountPrompter", function () {
+    return mountPrompter({ window: window, ports: {
+      disposeRuntime: disposePrompterView,
+      closePrompter: closePrompter,
+      stopVoiceFollow: stopVoiceFollow,
+      startVoiceFollow: startVoiceFollow,
+      setPrompterPlaying: setPrompterPlaying,
+      setPrompterSpeed: setPrompterSpeed,
+      applyPrompterSize: applyPrompterSize,
+      stepPrompterSpeed: stepPrompterSpeed,
+      stepPrompterSize: stepPrompterSize,
+      updatePrompterStatus: updatePrompterStatus,
+      buildPrompterContent: buildPrompterContent,
+      updateVoiceAvailability: updateVoiceAvailability,
+      cueSceneForCurrentPosition: cueSceneForCurrentPosition,
+      updateSceneReadout: updateSceneReadout,
+      setPrompterMirror: setPrompterMirror,
+      setPrompterFlip: setPrompterFlip,
+      setPrompterSceneMode: setPrompterSceneMode,
+      stepScene: stepScene,
+      voiceActive: function () { return S.voiceFollowActive; },
+      playing: function () { return S.prompterPlaying; },
+      isOpen: function () { return S.prompterOpen; },
+      skipShot: function () { return S.prompterSkipShot; },
+      setSkipShot: function (value) { S.prompterSkipShot = value; },
+      mirror: function () { return prompterMirror; },
+      flip: function () { return prompterFlip; },
+      sceneMode: function () { return promptSceneMode; }
+    } });
+  });
+}
+
+export function mountWriterOpenFeature() {
+  return replaceViewMount("mountWriterOpen", function () {
+    return mountWriterOpen({ window: window, ports: {
+      runFromButton: runFromButton
+    } });
+  });
+}
+
+export function mountWriterNavigationFeature() {
+  return replaceViewMount("mountWriterNavigation", function () {
+    return mountWriterNavigation({ window: window, ports: {
+      jumpFromWriterToRow: jumpFromWriterToRow,
+      expandHiddenShotStrip: expandHiddenShotStrip,
+      saveFromButton: saveFromButton,
+      applyWriterSize: applyWriterSize
+    } });
+  });
+}
+
+export function mountWriterCloseFeature() {
+  return replaceViewMount("mountWriterClose", function () {
+    return mountWriterClose({ window: window, ports: {
+      closeWriter: closeWriter
+    } });
+  });
+}
+
+var historyGallery = null;
+
+export function mountHistoryGalleryFeature() {
+  historyGallery = replaceViewMount("mountHistoryGallery", function () {
+    return mountHistoryGallery({ restore: restoreSnapshotFromCard, open: openGalleryOverlay });
+  });
+  return historyGallery;
+}
 
 var find = null;
 
@@ -446,8 +719,7 @@ export function onRootClick(e) {
 
   if (tags && tags.click(e)) return;
 
-  var restoreSnapBtn = e.target.closest('[data-action="restore-snapshot"]');
-  if (restoreSnapBtn) { restoreSnapshotFromCard(restoreSnapBtn); return; }
+  if (historyGallery && historyGallery.restoreClick(e)) return;
 
   if (rowRoutes && rowRoutes.sceneClick(e)) return;
 
@@ -455,12 +727,7 @@ export function onRootClick(e) {
 
   if (mediaRoutes && mediaRoutes.pickerClick(e)) return;
 
-  var tile = e.target.closest('[data-action="gallery-open"], [data-action="gallery-open-videos"]');
-  if (tile) {
-    openGalleryOverlay(tile.getAttribute("data-id"), Number(tile.getAttribute("data-slot")) || 0,
-      tile.getAttribute("data-action") === "gallery-open-videos");
-    return;
-  }
+  if (historyGallery && historyGallery.galleryClick(e)) return;
 
   if (mediaRoutes && mediaRoutes.linkClick(e)) return;
 }
@@ -997,18 +1264,10 @@ function startupPorts() {
 
 function init() {
   startup = beginStartup(startupPorts());
-  loadUpdateStatus();
-  var updateDismiss = document.getElementById("update-bar-dismiss");
-  if (updateDismiss) updateDismiss.addEventListener("click", dismissUpdateNotice);
-
-  renderDesktopAppNotice();
-  var desktopAppDismiss = document.getElementById("desktop-app-bar-dismiss");
-  if (desktopAppDismiss) desktopAppDismiss.addEventListener("click", dismissDesktopAppNotice);
+  mountNoticesFeature();
   mountTagsFeature();
 
-  document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "visible" && S.prompterOpen) acquireWakeLock();
-  });
+  mountPrompterVisibilityFeature();
 
   S.initialStateReady = startup.openDocument();
 
@@ -1022,16 +1281,12 @@ function init() {
   }, true);
   mountRows(rowsEl);
   mountRowsEditing(rowsEl);
-  document.getElementById("identity-chip").addEventListener("click", promptForName);
+  mountIdentityFeature();
 
   mountFindFeature();
 
-  document.getElementById("runtime-chip").addEventListener("click", promptForWpm);
-  var lengthStatus = document.getElementById("length-status");
-  if (lengthStatus) lengthStatus.addEventListener("click", promptForWpm);
-
-  document.getElementById("history-close").addEventListener("click", closeHistoryPanel);
-  document.getElementById("history-panel").addEventListener("click", onRootClick);
+  mountHistoryGalleryFeature();
+  mountHistoryFeature();
 
   document.querySelector(".toolbar").addEventListener("mousedown", function (e) {
     if (e.target.closest(".btn")) e.preventDefault();
@@ -1039,99 +1294,11 @@ function init() {
 
   mountBrollFeature();
 
-  document.getElementById("server-modal").addEventListener("click", function (e) {
-    if (e.target.id === "server-modal") { closeServerPicker(); return; }
-    var openBtn = e.target.closest('[data-action="server-open"]');
-    if (openBtn) {
-      var sid = openBtn.getAttribute("data-id");
-      if (S.DESKTOP) {
-        S.DESKTOP.routeOpen({ kind: "server", serverDocId: sid, serverUrl: conn.serverUrl,
-                              token: conn.token, tunnel: conn.tunnel }).then(function (r) {
-          if (r && r.where === "this-tab") openServerDoc(sid); else closeServerPicker();
-        });
-      } else {
-        openServerDoc(sid);
-      }
-      return;
-    }
-    var delBtn = e.target.closest('[data-action="server-delete"]');
-    if (delBtn) { armServerDelete(delBtn, delBtn.getAttribute("data-id")); return; }
-  });
-  document.getElementById("server-close").addEventListener("click", closeServerPicker);
-  document.getElementById("server-cancel").addEventListener("click", closeServerPicker);
-  window.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !document.getElementById("server-modal").hidden) closeServerPicker();
-  });
+  mountServerFeature();
 
-  document.getElementById("drive-modal").addEventListener("click", function (e) {
-    if (e.target.id === "drive-modal") { closeDriveModal(); return; }
-    var t = e.target.closest("[data-action]");
-    if (!t) return;
-    var act = t.getAttribute("data-action");
-    var id = t.getAttribute("data-id");
-    if (act === "drive-save-creds") driveSaveCredsFromForm();
-    else if (act === "drive-edit-creds") driveShowCredsForm();
-    else if (act === "drive-connect") driveConnect(document.getElementById("drive-folder-input").value);
-    else if (act === "drive-crumb") driveCrumbTo(Number(t.getAttribute("data-index")));
-    else if (act === "drive-open-item") driveOpenItem(id);
-    else if (act === "drive-refresh") driveListCurrent();
-    else if (act === "drive-newfolder-toggle") toggleDriveNewFolder();
-    else if (act === "drive-newfolder-create") driveCreateFolder();
-    else if (act === "drive-newfolder-cancel") toggleDriveNewFolder(false);
-    else if (act === "drive-upload") document.getElementById("drive-upload-input").click();
-    else if (act === "drive-signin") driveSignIn();
-    else if (act === "drive-signout") driveSignOut();
-    else if (act === "drive-rename") driveStartRename(id);
-    else if (act === "drive-rename-save") driveSaveRename(id);
-    else if (act === "drive-rename-cancel") driveCancelRename();
-    else if (act === "drive-delete") { var it = driveItemById(id); if (it) armDriveDelete(t, it); }
-  });
-  document.getElementById("drive-close").addEventListener("click", closeDriveModal);
-  document.getElementById("drive-done").addEventListener("click", closeDriveModal);
-  document.getElementById("drive-folder-input").addEventListener("keydown", function (e) {
-    if (e.key === "Enter") { e.preventDefault(); driveConnect(e.target.value); }
-  });
-  document.getElementById("drive-newfolder-input").addEventListener("keydown", function (e) {
-    if (e.key === "Enter") { e.preventDefault(); driveCreateFolder(); }
-    else if (e.key === "Escape") { e.preventDefault(); toggleDriveNewFolder(false); }
-  });
-  ["drive-api-key", "drive-client-id"].forEach(function (id) {
-    document.getElementById(id).addEventListener("keydown", function (e) {
-      if (e.key === "Enter") { e.preventDefault(); driveSaveCredsFromForm(); }
-    });
-  });
-  document.getElementById("drive-upload-input").addEventListener("change", function (e) {
-    driveUploadFiles(e.target.files);
-    e.target.value = "";
-  });
-  window.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !document.getElementById("drive-modal").hidden) closeDriveModal();
-  });
+  mountDriveFeature();
 
-  document.getElementById("resume-continue").addEventListener("click", async function () {
-    var handle = pendingResumeHandle;
-    if (!handle) { hideResumeBanner(); return; }
-    try {
-      var perm = await handle.requestPermission({ mode: "readwrite" });
-      if (perm !== "granted") { hideResumeBanner(); return; }
-      await resumeFromHandle(handle);
-    } catch (e) {
-      showToast("Could not reopen that file.", "error");
-    }
-    hideResumeBanner();
-  });
-  document.getElementById("resume-dismiss").addEventListener("click", hideResumeBanner);
-
-  document.getElementById("save-error-dismiss").addEventListener("click", function () {
-    document.getElementById("save-error-banner").hidden = true;
-  });
-  document.getElementById("save-error-retry").addEventListener("click", function () {
-    document.getElementById("save-error-banner").hidden = true;
-    saveDoc();
-  });
-  document.getElementById("save-error-export").addEventListener("click", function () {
-    exportAs("md");
-  });
+  mountSaveRecoveryFeature();
 
   mountMergeBanner({
     window: window,
@@ -1147,44 +1314,10 @@ function init() {
     }
   });
 
-  document.getElementById("file-conflict-close").addEventListener("click", closeFileConflict);
-  document.getElementById("file-conflict-cancel").addEventListener("click", closeFileConflict);
-  document.getElementById("file-conflict-reload").addEventListener("click", function () {
-    if (fileConflictCtx && fileConflictCtx.kind === "project") reloadProjectFromDisk();
-    else reloadFileFromDisk();
-  });
-  document.getElementById("file-conflict-overwrite").addEventListener("click", function () {
-    var ctx = fileConflictCtx;
-    closeFileConflict();
-    if (ctx && ctx.kind === "project") saveDoc({ force: true });
-    else saveBackToFile({ force: true });
-  });
-  document.getElementById("file-conflict-merge").addEventListener("click", openMergeReview);
-  document.getElementById("merge-review-close").addEventListener("click", cancelMergeReview);
-  document.getElementById("merge-review-cancel").addEventListener("click", cancelMergeReview);
-  document.getElementById("merge-review-confirm").addEventListener("click", confirmFileMerge);
-  window.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !document.getElementById("merge-review-modal").hidden) {
-      e.preventDefault();
-      cancelMergeReview();
-    }
-  });
-
-  document.getElementById("file-conflict-copy").addEventListener("click", function () {
-    var ctx = fileConflictCtx;
-    closeFileConflict();
-    if (ctx && ctx.kind === "project") { saveDoc({ saveAs: true }); return; }
-    var imported = importHome();
-    if (!imported) return;
-    var base = imported.name.replace(/\.[^.]+$/, "");
-    var ext = (/\.([^.]+)$/.exec(imported.name) || ["", "md"])[1];
-    buildFileData(imported.format, base + " (copy)").then(function (built) {
-      deliverFile(base + " (copy)." + ext, built.data, { savedMsg: "Saved a separate copy" });
-    });
-  });
+  mountConflictsFeature();
 
   commentsMount.mountRoots();
-  initSidePanelResizeHandles();
+  mountPanelsFeature();
   commentsMount.mountControls();
   window.addEventListener("keydown", function (e) {
     if (e.key !== "Escape") return;
@@ -1202,157 +1335,18 @@ function init() {
 
   mountTitles();
 
-  document.getElementById("btn-save").addEventListener("click", saveFromButton);
-  document.getElementById("btn-save").addEventListener("mouseenter", updateSaveStatus);
-  document.getElementById("btn-save").addEventListener("focus", updateSaveStatus);
-  document.getElementById("wr-save-status").addEventListener("mouseenter", updateSaveStatus);
-  document.getElementById("btn-present").addEventListener("click", function () { runFromButton("present"); });
+  mountSaveFeature();
+  mountPrompterOpenFeature();
 
-  document.getElementById("btn-file").addEventListener("click", function (e) {
-    e.stopPropagation();
-    toggleFileMenu(undefined, { focusFirst: e.detail === 0 });
-  });
-  document.getElementById("file-menu").addEventListener("click", function (e) {
-    var parent = e.target.closest(".mi-parent");
-    if (parent) { toggleSubmenu(parent.getAttribute("data-submenu"), undefined, e.detail === 0); return; }
-    var item = e.target.closest("[data-file-action]");
-    if (item && !item.disabled) handleFileMenuAction(item.getAttribute("data-file-action"));
-  });
-  document.getElementById("file-menu-close").addEventListener("click", function (e) {
-    e.stopPropagation();
-    toggleFileMenu(false);
-  });
-  document.getElementById("file-menu-backdrop").addEventListener("click", function () {
-    toggleFileMenu(false);
-  });
-  document.addEventListener("click", function (e) {
-    if (!e.target.closest(".menu-wrap")) toggleFileMenu(false);
-  });
-  window.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !document.getElementById("file-menu").hidden) toggleFileMenu(false, { returnFocus: true });
-  });
-  document.getElementById("open-file-input").addEventListener("change", function (e) {
-    var file = e.target.files && e.target.files[0];
-    e.target.value = "";
-    if (file) openProjectFile(file, null);
-  });
+  mountFileMenuFeature();
 
-  document.getElementById("md-rows-keep").addEventListener("click", function () {
-    finishMarkdownRowChoice("keep");
-  });
-  document.getElementById("md-rows-table").addEventListener("click", function () {
-    finishMarkdownRowChoice("table");
-  });
-  window.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !document.getElementById("md-rows-modal").hidden) {
-      finishMarkdownRowChoice("keep");
-    }
-  });
+  mountImportsFeature();
 
-  document.getElementById("import-close").addEventListener("click", closeImportModal);
-  document.getElementById("import-cancel").addEventListener("click", closeImportModal);
-  document.getElementById("import-confirm").addEventListener("click", confirmImport);
-  var importPreviewDebounce = null;
-  document.getElementById("import-textarea").addEventListener("input", function (e) {
-    var value = e.target.value;
-    if (value) clearPendingFileRows();
-    clearTimeout(importPreviewDebounce);
-    importPreviewDebounce = setTimeout(function () {
-      maybeAutoDetectTwoColumn(value);
-      updateImportPreview();
-    }, 150);
-  });
-  document.querySelectorAll('input[name="import-split"]').forEach(function (r) {
-    r.addEventListener("change", function () {
-      S.importModeTouched = true;
-      updateImportPreview();
-    });
-  });
-  document.getElementById("import-choose-file").addEventListener("click", function () {
-    document.getElementById("import-file-input").click();
-  });
-  document.getElementById("import-file-input").addEventListener("change", function (e) {
-    var file = e.target.files && e.target.files[0];
-    if (file) handleImportFile(file);
-    e.target.value = "";
-  });
-  document.getElementById("import-modal").addEventListener("click", function (e) {
-    if (e.target.id === "import-modal") closeImportModal();
-  });
-  window.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !document.getElementById("import-modal").hidden) closeImportModal();
-  });
+  mountGdocFeature();
 
-  document.getElementById("gdoc-close").addEventListener("click", closeGdocModal);
-  document.getElementById("gdoc-cancel").addEventListener("click", closeGdocModal);
-  document.getElementById("gdoc-confirm").addEventListener("click", confirmGdocImport);
-  document.getElementById("gdoc-url-input").addEventListener("keydown", function (e) {
-    if (e.key === "Enter") confirmGdocImport();
-  });
-  document.getElementById("gdoc-modal").addEventListener("click", function (e) {
-    if (e.target.id === "gdoc-modal") closeGdocModal();
-  });
-  window.addEventListener("keydown", function (e) {
-    if (e.key === "Escape" && !document.getElementById("gdoc-modal").hidden) closeGdocModal();
-  });
+  mountPrompterFeature();
 
-  document.getElementById("pp-close").addEventListener("click", closePrompter);
-  document.getElementById("pp-voice").addEventListener("click", function () {
-    if (S.voiceFollowActive) stopVoiceFollow(); else startVoiceFollow();
-  });
-  document.getElementById("pp-play").addEventListener("click", function () { setPrompterPlaying(!S.prompterPlaying); });
-  document.getElementById("pp-speed").addEventListener("input", function (e) { setPrompterSpeed(Number(e.target.value)); });
-  document.getElementById("pp-size").addEventListener("input", applyPrompterSize);
-  document.getElementById("pp-speed-down").addEventListener("click", function () { stepPrompterSpeed(-1); });
-  document.getElementById("pp-speed-up").addEventListener("click", function () { stepPrompterSpeed(1); });
-  document.getElementById("pp-size-down").addEventListener("click", function () { stepPrompterSize(-1); });
-  document.getElementById("pp-size-up").addEventListener("click", function () { stepPrompterSize(1); });
-  document.getElementById("prompter-scroll").addEventListener("scroll", updatePrompterStatus, { passive: true });
-  window.addEventListener("resize", updatePrompterStatus);
-  document.getElementById("pp-skip-shot").addEventListener("click", function (e) {
-    S.prompterSkipShot = !S.prompterSkipShot;
-    e.currentTarget.classList.toggle("is-active", S.prompterSkipShot);
-    stopVoiceFollow();
-    setPrompterPlaying(false);
-    buildPrompterContent();
-    applyPrompterSize();
-    document.getElementById("prompter-scroll").scrollTop = 0;
-    updateVoiceAvailability();
-    if (promptSceneMode) cueSceneForCurrentPosition(); else updateSceneReadout();
-  });
-  document.getElementById("pp-mirror").addEventListener("click", function () {
-    setPrompterMirror(!prompterMirror);
-  });
-  document.getElementById("pp-flip").addEventListener("click", function () {
-    setPrompterFlip(!prompterFlip);
-  });
-  document.getElementById("pp-scene-mode").addEventListener("click", function () {
-    setPrompterSceneMode(!promptSceneMode);
-  });
-  document.getElementById("pp-scene-prev").addEventListener("click", function () { stepScene(-1); });
-  document.getElementById("pp-scene-next").addEventListener("click", function () { stepScene(1); });
-  document.getElementById("pp-fullscreen").addEventListener("click", function () {
-    var el = document.getElementById("prompter");
-    if (document.fullscreenElement) { document.exitFullscreen().catch(function () {}); }
-    else if (el.requestFullscreen) { el.requestFullscreen().catch(function () {}); }
-  });
-
-  window.addEventListener("keydown", function (e) {
-    if (!S.prompterOpen) return;
-    var target = e.target;
-    if (target && target.closest && !target.closest("#rows") && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))) return;
-    var chord = e.ctrlKey || e.metaKey || e.altKey;
-    if (e.key === "Escape") { closePrompter(); }
-    else if (e.key === " ") { if (!chord) { e.preventDefault(); setPrompterPlaying(!S.prompterPlaying); } }
-    else if (e.key === "ArrowUp") { if (!chord) e.preventDefault(); stepPrompterSpeed(1); }
-    else if (e.key === "ArrowDown") { if (!chord) e.preventDefault(); stepPrompterSpeed(-1); }
-    else if (!chord && (e.key === "m" || e.key === "M")) { e.preventDefault(); setPrompterMirror(!prompterMirror); }
-    else if (!chord && (e.key === "f" || e.key === "F")) { e.preventDefault(); setPrompterFlip(!prompterFlip); }
-    else if (e.key === "ArrowLeft") { if (!chord) e.preventDefault(); stepScene(-1); }
-    else if (e.key === "ArrowRight") { if (!chord) e.preventDefault(); stepScene(1); }
-  });
-
-  document.getElementById("btn-write").addEventListener("click", function () { runFromButton("write"); });
+  mountWriterOpenFeature();
 
   var writerDocEl = document.getElementById("writer-doc");
   undoRoutes = mountUndoRoutes({
@@ -1375,23 +1369,12 @@ function init() {
   mountFocusAndSelection(rowsEl, writerDocEl);
   mountScriptComposition([rowsEl, writerDocEl]);
   mountWriter(writerDocEl);
-  writerDocEl.addEventListener("click", function (e) {
-    var gutter = e.target.closest('[data-action="writer-jump"]');
-    if (gutter) { jumpFromWriterToRow(gutter.getAttribute("data-row")); return; }
-    var expandShotBtn = e.target.closest('[data-action="expand-hidden-shot"]');
-    if (expandShotBtn) expandHiddenShotStrip(expandShotBtn.getAttribute("data-ids"));
-  });
-
-  document.getElementById("wr-save").addEventListener("click", saveFromButton);
-
-  document.getElementById("wr-size").addEventListener("input", function (e) {
-    applyWriterSize(parseInt(e.target.value, 10), true);
-  });
+  mountWriterNavigationFeature();
 
   document.querySelector(".writer-bar").addEventListener("mousedown", function (e) {
     if (e.target.closest(".wr-fmt")) e.preventDefault();
   });
-  document.getElementById("wr-close").addEventListener("click", function () { closeWriter(); });
+  mountWriterCloseFeature();
 
   document.addEventListener("focusin", function (e) {
     if (!writerOpen || paintingScreen()) return;

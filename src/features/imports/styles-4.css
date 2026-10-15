@@ -1,0 +1,5 @@
+  .import-hint-new { display: none; }
+  #import-modal.is-new-document .import-hint-keep,
+  #import-modal.is-new-document .import-replace-toggle { display: none; }
+  #import-modal.is-new-document .import-hint-new { display: block; }
+  #import-modal.is-new-document .modal-footer-actions { margin-left: auto; }
