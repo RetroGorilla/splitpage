@@ -47,6 +47,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "text/ports.ts": await import("../../src/core/text/ports.ts"),
   "text/projections.ts": await import("../../src/core/text/projections.ts"),
   "text/runs.ts": await import("../../src/core/text/runs.ts"),
+  "text/selection.ts": await import("../../src/core/text/selection.ts"),
   "text/steps.ts": await import("../../src/core/text/steps.ts"),
   "text/tree.ts": await import("../../src/core/text/tree.ts")
 };
