@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
 import { changeSet } from "../../src/application/session/change-set.ts";
 import { CELL_TEXT_DERIVES, cellRuns, cellTextCommand } from "../../src/application/commands/cell-text.ts";
-import type { CellText } from "../../src/application/commands/cell-text.ts";
+import type { CellRecords, CellText } from "../../src/application/commands/cell-text.ts";
 import type { CellTextPorts } from "../../src/application/session/ports.ts";
 import { toHtml } from "../../src/core/text/html.ts";
 import { normalizeCell } from "../../src/core/text/runs.ts";
@@ -331,4 +331,74 @@ test("INV-06: a burst of keystrokes through the typing command runs each derivat
   assert.equal(h.refreshes.length, 3, "1,500 ms of steady typing: once at the 1,000 ms cap and once after the last key");
   h.refreshes.forEach(function (jobs) { assert.deepEqual(jobs, ["broll", "production"]); });
   assert.deepEqual(p.decodes, [], "and no keystroke decoded a cell to compare comment ids");
+});
+
+function records(h: ReturnType<typeof harness>): { tags: string[]; shots: string[] } {
+  return h.session.read(function (doc) {
+    return {
+      tags: (doc ? doc.productionTags : []).map(function (t) { return t ? t.cat + ":" + t.name : ""; }),
+      shots: (doc ? doc.brollShots : []).map(function (s) { return s.id + "<" + String(s.audioRef) + "@" + String(s.location); })
+    };
+  });
+}
+
+const MUG: CellRecords = { tags: [{ cat: "prop", name: "Mug" }] };
+const STEAM: CellRecords = { shots: [{ id: "bs1", audioRef: "Steam", location: "Kitchen" }] };
+
+test("6.5: the records an edit references are written by the same command, inside its transaction, and declared in its change set", () => {
+  const h = opened();
+  const out = runConfined(h.session, cellTextCommand("r1", "visualText", cellRuns([run("Mug and steam")]), ports(),
+    { tags: [{ cat: "prop", name: "Mug" }, { cat: "prop", name: " mug " }], shots: [{ id: "bs1", audioRef: "Steam", location: "Kitchen" }] }));
+  assert.equal(out.kind, "applied");
+  assert.deepEqual(out.kind === "applied" ? out.changes.docFields : null, ["productionTags", "brollShots"]);
+  assert.deepEqual(h.log, ["undo.record", "dirty:1", "draft:1", "save:1", "publish:edit"], "one generation, one undo record, one effect pass");
+  assert.deepEqual(records(h), { tags: ["prop:Mug"], shots: ["bs1<Steam@Kitchen"] }, "a name already being added is not added twice");
+  const shot = h.session.read(function (doc) { return doc ? JSON.parse(JSON.stringify(doc.brollShots[0])) as Record<string, unknown> : null; });
+  assert.deepEqual(shot, { id: "bs1", name: "", desc: "", status: "unshot", reshoot: false, notes: "", owner: "", audioRef: "Steam", location: "Kitchen", props: [], origin: "script" });
+});
+
+test("6.5: a record the document already holds is not written again and is not declared", () => {
+  const h = opened();
+  assert.equal(runConfined(h.session, cellTextCommand("r1", "visualText", cellRuns([run("Mug")]), ports(), { tags: MUG.tags, shots: STEAM.shots })).kind, "applied");
+  const out = runConfined(h.session, cellTextCommand("r1", "visualText", cellRuns([run("Mug again")]), ports(), { tags: [{ cat: "prop", name: "MUG" }], shots: STEAM.shots }));
+  assert.deepEqual(out, { kind: "applied", generation: 2, changes: textChanges("r1", "visualText") });
+  assert.deepEqual(records(h), { tags: ["prop:Mug"], shots: ["bs1<Steam@Kitchen"] });
+});
+
+test("6.5: an edit that changes no text writes none of its records", () => {
+  const h = opened();
+  const before = snapshot(h);
+  assert.deepEqual(runConfined(h.session, cellTextCommand("r1", "audioText", cellRuns(decoded.get(PLAIN) || []), ports(), { tags: MUG.tags, shots: STEAM.shots })), { kind: "noop" });
+  assert.deepEqual(runConfined(h.session, cellTextCommand("gone", "audioText", cellRuns([run("x")]), ports(), MUG)), { kind: "noop" });
+  assert.equal(snapshot(h), before);
+  assert.deepEqual(h.log, []);
+});
+
+test("6.5: without edit capability an edit that would add a record is refused, even when only its anchors differ", () => {
+  refusedInReview("r1", "visualText", cellRuns([run("Mug")]), "a text edit with a tag record");
+  const h = opened();
+  h.deny("review");
+  const before = snapshot(h);
+  const anchored = normalizeCell([run("Alpha "), run("bravo", { cmt: ["c1", "c2"] }), run(" delta")]);
+  assert.deepEqual(runConfined(h.session, cellTextCommand("r2", "audioText", cellRuns(anchored), ports("Reviewer"), STEAM)), { kind: "rejected", reason: "review" });
+  assert.deepEqual(runConfined(h.session, cellTextCommand("r2", "audioText", cellRuns(anchored), ports("Reviewer"), MUG)), { kind: "rejected", reason: "review" });
+  assert.equal(snapshot(h), before, "no record, no anchor");
+  assert.deepEqual(h.log, []);
+  assert.equal(runConfined(h.session, cellTextCommand("r2", "audioText", cellRuns(anchored), ports("Reviewer"))).kind, "applied", "the same anchor-only edit with no record is still allowed");
+});
+
+test("6.5: a command that fails after writing its records rolls them back with the text", () => {
+  const h = opened();
+  const before = snapshot(h);
+  const broken: CellTextPorts = {
+    clock: { nowIso: function () { return STAMP; } },
+    editor: { name: function () { throw new Error("no editor"); } },
+    cells: ports().cells
+  };
+  const out = runConfined(h.session, cellTextCommand("r1", "visualText", cellRuns([run("Mug")]), broken, { tags: MUG.tags, shots: STEAM.shots }));
+  assert.equal(out.kind, "failed");
+  assert.equal(snapshot(h), before, "the registry and the shot list are as they were");
+  assert.deepEqual(records(h), { tags: [], shots: [] });
+  assert.equal(h.session.generation(), 0);
+  assert.deepEqual(h.log, []);
 });

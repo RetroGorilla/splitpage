@@ -283,8 +283,7 @@ export function maybeCaptureBroll(e, cellEl) {
     if (projection(cell).slice(from, to) !== head.replace(/\u200B/g, "")) return null;
     var r = replaceWithBrollKey(cell, from, to, id, keyText);
     var row = brollRow(cellEl.getAttribute("data-id"));
-    newBrollRecord({ id: id, audioRef: seedRef(row), location: seedLocation(row) });
-    return { cell: r.cell, sel: { from: r.end, to: r.end } };
+    return { cell: r.cell, sel: { from: r.end, to: r.end }, records: { shots: [{ id: id, audioRef: seedRef(row), location: seedLocation(row) }] } };
   });
   scheduleBrollRefresh();
 }
