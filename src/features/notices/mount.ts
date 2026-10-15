@@ -1,4 +1,4 @@
-import { createViewLifetime } from "../view-lifetime.ts";
+import { createViewLifetime } from "./lifetime.ts";
 
 export interface NoticesPorts {
   readonly loadUpdateStatus: () => () => void;
