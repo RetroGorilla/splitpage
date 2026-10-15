@@ -190,7 +190,7 @@ route occupancy but not the release of every resource the 294 rows represent.
 | 1 | blocker | `src/features/rows/routes.ts:176`: disposal removes listeners but never clears the dragged row, markers or auto-scroll. Disposing during an edge drag leaves the animation in `06-rows.js:122` scrolling and updating the DOM, and a remount inherits `S.dragRowId` | Fix in a separate PR: PR and merge commit to be added | A held-animation disposal and remount case (to be added with the fix) |
 | 2 | concern | `src/features/routing/owned.ts:29`: unregister functions are recorded only after the whole registration callback returns, so a later slot that throws leaves earlier slots occupied and a retry fails. The existing failure test throws before registering anything | Fix in the same PR | A test where a later slot throws (to be added) |
 | 3 | concern | `src/bootstrap/app.ts:68`: draining stops at the first throwing disposer, so earlier mounts and startup listeners survive and `running` stays set (line 130 is skipped). Comment cleanup dereferences required DOM nodes without checking | Fix in the same PR: drain every disposer, clear state in `finally`, report collected failures | A test with a throwing disposer (to be added) |
-| 4 | concern | `milestone-6.md` records byte equality for the CSS splits, but the CSS evidence criteria require browser captures | Accepted as recorded: the comparator's byte-identical output on each mechanical split stands in for the captures, and the criteria text now says so | The comparator checks recorded in the 6.7 and 6.8 PRs |
+| 4 | concern | `milestone-6.md` records byte equality for the CSS splits, but the CSS evidence criteria require browser captures | Accepted by Adam on 2026-10-15 (19:15 UTC): the comparator's byte-identical output on each mechanical split stands in for the captures, and the criteria text now says so | The comparator checks recorded in the 6.7 and 6.8 PRs |
 
 The fix PR for findings 1 to 3: PR and merge commit to be added. This record
 stays a draft until it merges; then its counts and the push run result are
@@ -201,4 +201,4 @@ machine; this table is the disposition.
 
 ## Blockers for Adam
 
-The external review's blocker (finding 1) and two concerns (2, 3) are open until the fix PR merges. Finding 4 is accepted as recorded above.
+The external review's blocker (finding 1) and two concerns (2, 3) are open until the fix PR merges. Finding 4 was accepted by Adam on 2026-10-15.
