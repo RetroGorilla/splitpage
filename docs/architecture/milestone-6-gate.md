@@ -22,7 +22,7 @@ Final milestone 6 tree: `9fcf363`, the merge of #626 (6.9 PR 2, which deletes
 | Full Windows browser run, caches frozen (`SPLITPAGE_FREEZE_CACHES=1`) | `595c2c0`: 10587/10587 across 194 suites. Not repeated on `2d19032` | passed |
 | Electron smoke, dev target | `595c2c0`: 974/974. `2d19032`: 971/972 on the first run (one group, flake), 974/974 on the second | passed |
 | `npm run verify` on Linux (Node 24.22.0) | clean on `595c2c0` (reviewer) and `2d19032` (author); frontend 170/170, tests 133/133, desktop 15/15, tools 17/17 | passed |
-| CI on the merge | push run for `9fcf363` | see [below](#ci-on-the-closing-tree) |
+| CI on the merge | push run for `9fcf363` (run 38791487677) succeeded | passed |
 | External review | Astra (Codex CLI), 2026-10-15: 1 blocker, 3 concerns | **not passed yet**; fix PR pending ([below](#external-review)) |
 | Linux full browser run, native ARM64, packaged check | the packaged check returns only if packaging or runtime inputs change; Linux full run and ARM64 go to the 4.0 release gate | not run here |
 
@@ -163,9 +163,9 @@ These are the inputs to milestone 7, whose plan is in
 
 ## CI on the closing tree
 
-The push run for `9fcf363` on `4.0-development` (run 38791487677) was running,
-not cancelled, when this record was written. It is recorded here as in
-progress; the result is added before merge.
+The push run for `9fcf363` on `4.0-development` (run 38791487677) completed
+with success. It was not cancelled by the docs merges that followed (#628 merged
+as `51f30aa`; its own run, 38793635863, also succeeded).
 
 ## External review
 
