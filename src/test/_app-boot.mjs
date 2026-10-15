@@ -67,7 +67,8 @@ function stateDataText(html) {
 export async function bootApp(stateData, opts) {
   const { checksumText } = await import("../js/20b-onboarding.js");
   const page = read("../page.html").replace("{{VERSION}}", () => read("../../VERSION").trim());
-  const seedText = stateDataText(page.replace("{{SEED_STATE}}", () => SEED_TEXT));
+  const shipped = opts && opts.pristine && stateData !== undefined ? stateData : SEED_TEXT;
+  const seedText = stateDataText(page.replace("{{SEED_STATE}}", () => shipped));
   const check = seedText.length + "-" + checksumText(seedText);
   const filled = page
     .replace("{{SEED_CHECK}}", () => check)

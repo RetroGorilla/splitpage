@@ -3,7 +3,7 @@ import { sessionStarted, startSessionBridge } from "../legacy/session-bridge.ts"
 import { legacySessionPorts } from "../bootstrap/wiring.ts";
 
 export function startTestSession(deps) {
-  if (sessionStarted()) return null;
+  if (sessionStarted()) throw new Error("startTestSession: a session is already started, so the dependencies passed would be ignored");
   return startSessionBridge(legacySessionPorts(Object.assign({ entry: migrateRows }, deps)));
 }
 

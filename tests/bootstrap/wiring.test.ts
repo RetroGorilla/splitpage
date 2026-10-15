@@ -387,6 +387,17 @@ test("a session built by wireApp runs exactly the effects it was handed: a probe
   assert.deepEqual(started(), NOTHING);
 });
 
+test("session release: a session dispose that throws still runs the undo uninstalls", () => {
+  const f = fakes();
+  const stopFails = new Error("timer stop failed");
+  const wiring = wireApp({ ...f.deps, timers: { now: () => 0, start: () => 1, stop: () => { throw stopFails; } } });
+  requestRefresh("probe");
+  assert.deepEqual(f.live, { exporters: 1, undo: 2 });
+  assert.throws(() => wiring.dispose(), (error) => error instanceof AggregateError && error.errors.includes(stopFails));
+  assert.deepEqual(f.live, { exporters: 0, undo: 0 }, "the undo routing and adoption watch were uninstalled");
+  assert.deepEqual(started(), NOTHING);
+});
+
 test("cleanup: wire and dispose three times leaves no timer or subscriber, empty registries, and the same owners each time", () => {
   for (let round = 0; round < 3; round++) {
     const f = fakes();
@@ -674,4 +685,29 @@ test("INV-30: through the shim's real wiring, initializers and startup, the wiza
     ["desktop pristine", true, true],
     ["restore", true, false]
   ], "the pristine copies are the positive controls: the same boot path opens the wizard when nothing arrives");
+});
+
+interface InitialLoadReport {
+  readonly pristine: boolean;
+  readonly error: string | null;
+  readonly seedCheck: boolean | null;
+  readonly title: string | null;
+  readonly docIdIsTheFiles: boolean;
+  readonly writtenOut: boolean;
+}
+
+async function loadFresh(kind: "pristine" | "saved"): Promise<InitialLoadReport> {
+  const probe = fileURLToPath(new URL("../../src/test/_initial-load-probe.mjs", import.meta.url));
+  const { stdout } = await promisify(execFile)(process.execPath, [probe, kind], { cwd: fileURLToPath(new URL("../../", import.meta.url)), maxBuffer: 1 << 24 });
+  return JSON.parse(stdout.trim().split("\n").pop() ?? "") as InitialLoadReport;
+}
+
+test("the booted app's initial load gets the seed check through its port: a pristine copy of a saved page is a fresh document, the same page without the check opens as its file", { timeout: 120_000 }, async () => {
+  const [pristine, saved] = await Promise.all([loadFresh("pristine"), loadFresh("saved")]);
+  for (const report of [pristine, saved]) {
+    assert.equal(report.error, null);
+    assert.equal(report.title, "Saved", "both pages carry the same saved script");
+  }
+  assert.deepEqual([pristine.seedCheck, pristine.docIdIsTheFiles, pristine.writtenOut], [true, false, false], "a pristine copy is not the file it came from");
+  assert.deepEqual([saved.seedCheck, saved.docIdIsTheFiles, saved.writtenOut], [false, true, true], "a saved page opens as its file");
 });
