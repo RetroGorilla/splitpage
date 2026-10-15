@@ -9,7 +9,7 @@ import {
   videoLinkKey,
   videoLinkLabel
 } from "./02d-gallery.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
+import { findRowIndex } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";
 import {
   formatVideoLength,
@@ -21,12 +21,14 @@ import {
 import { embeddableVideo, embedRefusal, fetchThumbnailRecord, playerSrc, thumbnailsAllowed } from "./05v-video.js";
 import { openAnnotator, refreshAnnotator } from "./05w-annotate.js";
 import { hasSessionVideo, openGalleryLink, sessionVideoUrl } from "./06-rows.js";
-import { markDirty, showActionToast, showToast } from "./12-dirty-toast.js";
+import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, lastUndoEntry, undo } from "./12a-undo.js";
 import { reviewMode } from "./13-hosted.js";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
+import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { galleryCommand } from "../application/commands/gallery.ts";
 
 var view = null;
 var returnFocus = null;
@@ -333,13 +335,12 @@ function revealPicked(grid) {
 }
 
 export function galleryEdit(rowId, msg, fn) {
-  var got = rowOf(rowId);
-  if (!got) return false;
+  if (!rowOf(rowId)) return false;
   var before = lastUndoEntry();
   breakUndoCoalescing();
-  if (!fn(got.row)) return false;
-  stampRow(got.row);
-  markDirty();
+  var outcome = runCommand(galleryCommand(rowId, fn, sessionTextPorts));
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind !== "applied" && outcome.kind !== "committed") return false;
   render();
   announceGalleryEdit(msg, before);
   return true;
