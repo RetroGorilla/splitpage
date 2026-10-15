@@ -1,6 +1,0 @@
-  }
-  .row.just-merged { animation: row-merged var(--dur-highlight) var(--ease-standard); }
-  @keyframes row-merged {
-    0%, 70% { background: color-mix(in srgb, var(--ok) 18%, transparent); }
-    100% { background: transparent; }
-  }

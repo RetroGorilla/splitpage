@@ -1,9 +1,0 @@
-
-  .menu-foot {
-    flex: none;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2px;
-    padding: 4px;
-    border-top: 1px solid var(--border);
-  }

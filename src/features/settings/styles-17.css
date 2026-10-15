@@ -1,6 +1,0 @@
-  .modal-panel.settings-panel { max-height: calc(100vh - 20px); }
-  .settings-body { margin: 0 -14px; padding: 0 14px 4px; }
-  .settings-inline-control input[type="text"], .settings-inline-control input[type="number"] { font-size: 16px; }
-  .settings-inline-control input[type="text"].settings-wide { font-size: 16px; width: 100%; }
-  .settings-inline-control:has(.settings-wide) { width: 100%; }
-  .settings-inline-control input[type="range"] { width: 130px; }

@@ -378,30 +378,3 @@
     .rundown.is-lensed .rundown-ruler,
     .rundown.is-lensed .rundown-overlay { transition: none; }
   }
-
-  .comments-panel {
-    transition: transform var(--dur-enter) var(--ease-enter),
-                overlay var(--dur-enter) allow-discrete,
-                display var(--dur-enter) allow-discrete;
-  }
-  .comments-panel[hidden] {
-    transform: translateX(100%);
-    transition: transform var(--dur-exit) var(--ease-exit),
-                overlay var(--dur-exit) allow-discrete,
-                display var(--dur-exit) allow-discrete;
-  }
-  @starting-style {
-    .comments-panel:not([hidden]) { transform: translateX(100%); }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .comments-panel { transition: none; }
-    .comments-panel[hidden] { transform: translateX(0); }
-  }
-
-  @media (min-width: 1100px) {
-    #root {
-      transition: padding-right var(--dur-exit) var(--ease-exit);
-    }
-    body.panel-open #root {
-      transition: padding-right var(--dur-enter) var(--ease-enter);
-    }

@@ -1,3 +1,11 @@
   }
   @media (max-width: 760px) and (hover: none), (max-width: 760px) and (pointer: coarse) {
     #root { --script-visual-lh: 1.5; --script-audio-size: 17px; --script-audio-lh: 1.55; }
+    .writer { --wr-font: 17px; }
+  }
+
+  @media (hover: none) {
+    .image-thumb-actions { opacity: 1; }
+    .scene-gallery-link-remove { opacity: 1; }
+    .row-meta { opacity: 1; }
+    .row-grip { display: none; }

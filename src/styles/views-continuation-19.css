@@ -1,8 +1,0 @@
-  .scene-gallery-preview-caption {
-    flex: none; display: flex; flex-direction: column; align-items: center;
-    min-height: 24px; margin: 12px 24px 0;
-    font-family: var(--font-body); font-size: 13px; line-height: 24px; color: var(--text-visual);
-  }
-  .scene-gallery-preview-caption .scene-gallery-line { justify-content: center; gap: 8px; max-width: 100%; }
-  .scene-gallery-preview-caption .scene-gallery-host { width: auto; }
-  .scene-gallery-preview-caption .scene-gallery-line.is-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
