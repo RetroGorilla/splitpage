@@ -257,3 +257,26 @@ test("6.2: an ordinary edit after a replay still records once", () => {
   h.session.noteEdit(cellEdit("r1", "audioText"));
   assert.deepEqual(h.log, ["undo.record", "dirty:2", "draft:2", "save:2", "publish:edit"]);
 });
+
+test("6.3: an amendment advances the generation once, publishes once as an amendment and records no undo entry", () => {
+  const h = opened();
+  const stacks = history();
+  const changes = changeSet({ cells: [{ rowId: "r1", field: "audioText" }, { rowId: "r1", field: "updatedAt" }] });
+  const out = h.session.amend(undoAudio(stacks, "r1", "Every evening."));
+  assert.deepEqual(out, { kind: "applied", generation: 1, changes: changes });
+  assert.equal(audioOf(h, "r1"), "Every evening.");
+  assert.deepEqual(h.log, ["dirty:1", "draft:1", "save:1", "publish:amend"], "no undo.record: the amendment joins an existing entry");
+  assert.deepEqual([h.published[0]?.kind, h.published[0]?.generation], ["amend", 1]);
+});
+
+test("6.3: an amendment that fails before the commit is rolled back like a replay", () => {
+  const h = opened();
+  const before = textOf(h);
+  const stacks = history();
+  const out = h.session.amend(undoAudio(stacks, "r1", "x", { failSettle: true }));
+  assert.equal(out.kind, "failed");
+  assert.equal(textOf(h), before);
+  assert.equal(h.session.generation(), 0);
+  assert.deepEqual(h.published, []);
+  assert.deepEqual(stacks, { done: ["a"], undone: [] });
+});

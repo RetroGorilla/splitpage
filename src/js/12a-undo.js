@@ -701,7 +701,7 @@ var flushQueued = false;
 var applying = false;
 var commentsAreSent = function () { return false; };
 var hooks = { afterApply: null, onRefused: null, adopted: null };
-var replays = { run: replayUnwired, stamps: null };
+var replays = { run: replayUnwired, amend: replayUnwired, stamps: null };
 
 export function configureUndo(opts) {
   var was = { commentsAreSent: commentsAreSent, afterApply: hooks.afterApply, onRefused: hooks.onRefused };
@@ -716,8 +716,9 @@ export function configureUndo(opts) {
   };
 }
 
-export function routeUndoReplays(run, stamps) {
+export function routeUndoReplays(run, stamps, amend) {
   replays.run = run;
+  replays.amend = amend || run;
   replays.stamps = stamps;
 }
 
@@ -824,8 +825,9 @@ function replayTask(dir, seen) {
           stamp(live, p.steps);
         },
         settle: function () {
+          var next = clone(state);
           seen.result = p.finish();
-          base = clone(state);
+          base = next;
           tracked = state;
         }
       };
@@ -867,17 +869,48 @@ export function settleAfterApply() {
   base = clone(S.state);
 }
 
-export function foldIntoEdit(entry, touches, apply) {
+function foldTask(entry, touches, change) {
+  return {
+    name: "fold",
+    plan: function (state) {
+      function hits(e) { return e.steps.some(touches); }
+      var where = history.standing(entry, hits);
+      if (where.any && (!where.hit || where.later)) return { refused: "the edit it belongs to is no longer the latest about it" };
+      var draft = clone(state);
+      if (!change(draft)) return null;
+      var steps = diffStates(state, draft);
+      if (!steps.length) return null;
+      var planned = planStepsLive(state, steps);
+      if (!planned.ok) return { refused: planned.reason };
+      return {
+        changes: replayChanges(steps, planned),
+        apply: function (live) {
+          writePlanned(live, planned);
+          stamp(live, steps);
+        },
+        settle: function () {
+          var next;
+          try { next = applySteps(base, steps); } catch (e) { next = clone(state); }
+          if (where.any) history.amend(entry, steps.filter(function (s) { return !cosmetic(s); }));
+          base = next;
+        }
+      };
+    }
+  };
+}
+
+export function foldIntoEdit(entry, touches, change) {
   flushEdits();
   if (!S.state || S.state !== tracked || !base) return false;
-  function hits(e) { return e.steps.some(touches); }
-  var where = history.standing(entry, hits);
-  if (where.any && (!where.hit || where.later)) return false;
-  if (!apply(S.state)) return false;
-  var steps = diffStates(base, S.state);
-  if (where.any) history.amend(entry, steps.filter(function (s) { return !cosmetic(s); }));
-  try { base = applySteps(base, steps); } catch (e) { base = clone(S.state); }
-  return true;
+  var outcome;
+  applying = true;
+  try {
+    outcome = replays.amend(foldTask(entry, touches, change), S.state);
+  } finally {
+    applying = false;
+  }
+  if (outcome.kind === "failed") throw outcome.error;
+  return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
 export function undo() { return run("undo"); }
