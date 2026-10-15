@@ -108,7 +108,7 @@ merge record of #626 (comment 6200158176).
   INV-60 as `X22` in `m4-matrix-exports`) lives in the matrix and node test
   files from the [milestone 5 gate](milestone-5-gate.md#checks-added-by-574);
   those files pass inside the runs above.
-- Replay evidence for 6.2 and 6.3: the "As built" entries in milestone-6.md name the tests (`session-replay.test.ts`, `undo-replay-app.test.mjs`, `fold-into-edit-app.test.mjs`); the review comment on #596 records them passing.
+- Replay evidence for 6.2 and 6.3: the "As built" entries in milestone-6.md name the tests (`session-replay.test.ts`, `undo-replay-app.test.mjs`, `fold-into-edit-app.test.mjs`); the review comments on #596 and #598 record them passing.
 
 ## Windows runs
 
@@ -156,7 +156,7 @@ Counted in the repository at `2b891f8` (the same counts as at `9fcf363`; #629 ad
 | Modules `_entry.js` starts through `__init` | 69 (the other 10, including `22a` to `22f`, load only as imports) |
 | Bridge-style files in `src/legacy` | 23 files, 1,387 lines; four are the `*-bridge.ts` files (recovery, save, session, transition) |
 | Import statements from `legacy/` in `src/js` | 110, in 58 files |
-| Files under `src` and `tests` that reference the session bridge | 34 |
+| Test files that reference the session bridge | 34 |
 
 These are the inputs to milestone 7, whose plan is in
 [milestone-7.md](milestone-7.md). The review note on #626 (S2) records that
@@ -197,7 +197,7 @@ route occupancy but not the release of every resource the 294 rows represent.
 | 4 | concern | `milestone-6.md` records byte equality for the CSS splits, but the CSS evidence criteria require browser captures | Accepted by Adam on 2026-10-15 (19:15 UTC): the comparator's byte-identical output on each mechanical split stands in for the captures, and the criteria text now says so | The comparator checks recorded in the 6.7 and 6.8 PRs |
 
 The fix PR for findings 1 to 3 is #629 "M6: external review fixes", merged as
-`2b891f8` on 2026-10-15 after an independent review. Its merge record (comment
+`2b891f8` on 2026-10-15 after an independent review. Its review comment (comment
 6200755354 on #629) reports `npm run verify` clean, the race matrix with
 `SPLITPAGE_M4_GATE=1` at 181/181, the 294-row remount test at 4/4 and 14 browser
 suites passing. One limitation was noted and not fixed: a throwing cleanup step
@@ -206,7 +206,12 @@ throw there today.
 
 #629 changed code after the Windows runs above, which ran on `595c2c0` and
 `2d19032`. The Windows full runs and the Electron smoke were not repeated on
-`2b891f8`.
+`2b891f8`. That is acceptable for the same reason the milestone 5 record
+accepted its fix PR: #629 changes no preload, IPC or `desktop/` code; normal
+startup registers the same click slots in the same order (each registration is
+only wrapped so it can be rolled back); the other changes run only on stop,
+which production never calls; and #629's own CI and review ran `npm run verify`,
+the race matrix, the remount test and 14 browser suites.
 
 The review text is kept with the project's files and on the maintainer's
 machine; this table is the disposition.
