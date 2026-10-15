@@ -243,20 +243,24 @@ export function tagRecordsPlan() {
   if (!S.state) return null;
   var ix = productionIndex();
   var plan = planRegistryHealing(S.state, productionReaders, cueSnapshot, ix.core);
-  cueSnapshot = plan.cues;
-  if (!plan.count) return null;
-  return function () {
-    plan.retitle.forEach(function (r) { S.state.productionTags[r.at].name = r.name; });
-    addRegistryTags(plan.register);
-    adoptRegisteredIds(ix);
-    if (plan.retitle.length) prodIndex = null;
-    return plan.count;
+  return {
+    apply: plan.count ? function () {
+      plan.retitle.forEach(function (r) { S.state.productionTags[r.at].name = r.name; });
+      addRegistryTags(plan.register);
+      adoptRegisteredIds(ix);
+      if (plan.retitle.length) prodIndex = null;
+      return plan.count;
+    } : null,
+    commit: function () { cueSnapshot = plan.cues; }
   };
 }
 
 export function healTagRegistry() {
-  var apply = tagRecordsPlan();
-  return apply ? apply() : 0;
+  var plan = tagRecordsPlan();
+  if (!plan) return 0;
+  var count = plan.apply ? plan.apply() : 0;
+  plan.commit();
+  return count;
 }
 
 var cueSnapshot = null;

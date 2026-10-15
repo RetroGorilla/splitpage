@@ -46,6 +46,7 @@ export interface CapabilityPort {
 export interface RecordsPlan {
   readonly fields: readonly string[];
   readonly apply: (doc: ValidatedDocument) => void;
+  readonly commit?: (() => void) | undefined;
 }
 
 export interface ReconcilePort {
