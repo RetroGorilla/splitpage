@@ -462,7 +462,6 @@
     {"rule":"state-write","source":"src/js/05e-gallery-overlay.js","target":"global:S.pendingImageRowId"},
     {"rule":"state-write","source":"src/js/05f-rundown.js","target":"global:S.dragRowId"},
     {"rule":"state-write","source":"src/js/05g-scene-clip.js","target":"global:S.state.*"},
-    {"rule":"state-write","source":"src/js/05h-scene-select.js","target":"global:S.state.*"},
     {"rule":"state-write","source":"src/js/05t-target.js","target":"global:S.state.*"},
     {"rule":"state-write","source":"src/js/06-rows.js","target":"global:S.deleteArmId"},
     {"rule":"state-write","source":"src/js/06-rows.js","target":"global:S.deleteArmTimer"},
