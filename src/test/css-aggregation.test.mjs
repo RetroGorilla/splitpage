@@ -38,7 +38,9 @@ test("CSS aggregation preserves listed order, separators and single-file bytes",
     "src/features/tags/styles-touch-fields.css",
     "src/styles/after-tag-touch-fields.css",
     "src/features/tags/styles-touch-hint.css",
-    "src/styles/app-tail.css"
+    "src/styles/app-tail.css",
+    "src/features/broll/styles.css",
+    "src/styles/after-broll.css"
   ]);
   assert.equal(cssInputs[0], "src/app.css");
   assert.equal(appCss(), cssInputs.map((path) => readFileSync(new URL(path, repoUrl), "utf8")).join("\n"));
