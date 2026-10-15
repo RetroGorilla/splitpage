@@ -23,7 +23,7 @@ Final milestone 6 tree: `9fcf363`, the merge of #626 (6.9 PR 2, which deletes
 | Electron smoke, dev target | `595c2c0`: 974/974. `2d19032`: 971/972 on the first run (one group, flake), 974/974 on the second | passed |
 | `npm run verify` on Linux (Node 24.22.0) | clean on `595c2c0` (reviewer) and `2d19032` (author); frontend 170/170, tests 133/133, desktop 15/15, tools 17/17 | passed |
 | CI on the merge | push run for `9fcf363` | see [below](#ci-on-the-closing-tree) |
-| External review | Astra (Codex CLI) | **in progress**; filled in before merge ([below](#external-review)) |
+| External review | Astra (Codex CLI), 2026-10-15: 1 blocker, 3 concerns | **not passed yet**; fix PR pending ([below](#external-review)) |
 | Linux full browser run, native ARM64, packaged check | the packaged check returns only if packaging or runtime inputs change; Linux full run and ARM64 go to the 4.0 release gate | not run here |
 
 Two one-off failures occurred during the gate and are described under
@@ -169,11 +169,36 @@ progress; the result is added before merge.
 
 ## External review
 
-**In progress.** The external review of the milestone 6 implementation is being
-done by Astra (Codex CLI), an independent session that took no part in building
-or reviewing milestone 6. This section is filled in before this PR merges: the
-reviewer, scope, date, verdict, and a disposition table for each finding.
+| | |
+| --- | --- |
+| Reviewer | Astra (Codex CLI), an independent session that took no part in building or reviewing milestone 6 |
+| Scope | Read-only source review of the closing tree `9fcf363`: the "As built" sections, the rescope document, the plan, the review rules, `src/features/`, `src/bootstrap/`, `_entry.js`, the CSS split files, the `css-feature-balance` test and the remount test from #626 |
+| Date | 2026-10-15 |
+| Verdict | **Does not pass yet.** 1 blocker, 3 concerns |
+| Limits | No files changed and no tests ran. Historical byte equality and the closing-tree CI and race-matrix results were not independently verified |
+
+Astra confirmed the normal startup sequence, the staged comment and overlay
+ordering, the review gate running before all 13 click slots, b-roll as one
+ledger row with 19 listeners, the CSS aggregation (shared ordered aggregate,
+separators, missing, case and duplicate checks, fragment braces), and replay and
+amend using the session transaction boundary without recording ordinary undo
+entries. It notes that the remount test checks expanded registration counts and
+route occupancy but not the release of every resource the 294 rows represent.
+
+| # | Severity | Finding | Decision | Pinned by |
+| --- | --- | --- | --- | --- |
+| 1 | blocker | `src/features/rows/routes.ts:176`: disposal removes listeners but never clears the dragged row, markers or auto-scroll. Disposing during an edge drag leaves the animation in `06-rows.js:122` scrolling and updating the DOM, and a remount inherits `S.dragRowId` | Fix in a separate PR: PR and merge commit to be added | A held-animation disposal and remount case (to be added with the fix) |
+| 2 | concern | `src/features/routing/owned.ts:29`: unregister functions are recorded only after the whole registration callback returns, so a later slot that throws leaves earlier slots occupied and a retry fails. The existing failure test throws before registering anything | Fix in the same PR | A test where a later slot throws (to be added) |
+| 3 | concern | `src/bootstrap/app.ts:68`: draining stops at the first throwing disposer, so earlier mounts and startup listeners survive and `running` stays set (line 130 is skipped). Comment cleanup dereferences required DOM nodes without checking | Fix in the same PR: drain every disposer, clear state in `finally`, report collected failures | A test with a throwing disposer (to be added) |
+| 4 | concern | `milestone-6.md` records byte equality for the CSS splits, but the CSS evidence criteria require browser captures | Accepted as recorded: the comparator's byte-identical output on each mechanical split stands in for the captures, and the criteria text now says so | The comparator checks recorded in the 6.7 and 6.8 PRs |
+
+The fix PR for findings 1 to 3: PR and merge commit to be added. This record
+stays a draft until it merges; then its counts and the push run result are
+updated and the PR is marked ready.
+
+The review text is kept with the project's files and on the maintainer's
+machine; this table is the disposition.
 
 ## Blockers for Adam
 
-None found so far. The external review is the only open gate item.
+The external review's blocker (finding 1) and two concerns (2, 3) are open until the fix PR merges. Finding 4 is accepted as recorded above.
