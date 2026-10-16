@@ -13,7 +13,7 @@ check passed on 2026-10-16 (item 8). Rows 4a, 4b and 5 were checked on
 `9c39567` (the merge of M7 PR 1) on 2026-10-15. This sheet changes status only;
 it records no new requirement.
 
-`VERSION` says `4.0.0` on `4.0-development` (bumped by the release PR "Release: bump VERSION to 4.0.0"); the rows below that record `3.1.0` were run before the bump and keep that version.
+`VERSION` says `4.0.0` on `4.0-development` (bumped by the release PR "Release: bump VERSION to 4.0.0"); the rows below that record `3.1.0` were run before the bump and keep that version. Adam named the release "4.0 beta" on 2026-10-16, so the PR "Release: 4.0 beta version" set `VERSION` to `4.0.0-beta.1` (a prerelease, tag `v4.0.0-beta.1`); rows that record `4.0.0` were run before that change and keep that version.
 
 Status words: **done** (evidence linked), **in progress** (thread or PR named),
 **waiting on M7** (cannot be finished before milestone 7 closes; the evidence
@@ -114,7 +114,7 @@ they are not copied to the project's shared files. The cloud run's per-suite sum
 | Native ARM64 packaged check | **done** | Item 3c. |
 | Release candidate named in the release notes (shim, module count, bridges) | **done** | Item 7: `CHANGELOG.md` 4.0.0, "Remaining legacy code" (#642, `7d5f357`), measured at `7b7b430`. |
 | M7 gate (Windows full run, Electron dev smoke, gate record) | **done** | Runs and external review recorded in [milestone-7-gate.md](milestone-7-gate.md); closed on `89d309f` after Sol's re-check of #637. |
-| `VERSION` bump to 4.0 | **done** | PR "Release: bump VERSION to 4.0.0": `VERSION`, `desktop/package.json`, `desktop/package-lock.json` and the `sw.js` cache name are `4.0.0`; `node build.mjs --check` and `desktop/stage.mjs` pass. |
+| `VERSION` bump to 4.0 | **done** | PR "Release: bump VERSION to 4.0.0": `VERSION`, `desktop/package.json`, `desktop/package-lock.json` and the `sw.js` cache name are `4.0.0`; `node build.mjs --check` and `desktop/stage.mjs` pass. Then PR "Release: 4.0 beta version" set the same four to `4.0.0-beta.1`. |
 
 ## Known problems to carry into the release
 
