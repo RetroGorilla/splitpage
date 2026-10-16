@@ -151,7 +151,7 @@ Plan §7 asks the release to name the shim, the count of numbered modules it sti
 
 **The shim:** `src/js/_entry.js`, "the legacy initializer shim", 170 lines. It calls `wireApp` with the dependencies it imports from numbered modules, then starts 69 of the 79 numbered modules; ten load only as imports (`03c`, `14c`, `14d`, `14e` and `22a` to `22f`). Runtime cycle: one, 46 modules and 310 edges (7.2 removed `02b-doc-id.js → 20b-onboarding.js`). `S` assigners: 3 (`00-prelude.js`, `02b-doc-id.js`, `03-sync.js`).
 
-**The bridges:** 23 files under `src/legacy/`, 1,451 lines; 106 imports of them from 57 numbered modules and none from `_entry.js` (since 7.1 `src/bootstrap/wiring.ts` imports the ones it starts); 35 test files reference the session bridge. "Imported by" counts numbered modules (and the bootstrap files); the right column is what keeps the file alive.
+**The bridges:** 23 files under `src/legacy/`, 1,452 lines (1,451 when 7.2 merged; #636 added a line to `save-bridge.ts`); 106 imports of them from 57 numbered modules and none from `_entry.js` (since 7.1 `src/bootstrap/wiring.ts` imports the ones it starts); 35 test files reference the session bridge. "Imported by" counts numbered modules (and the bootstrap files); the right column is what keeps the file alive.
 
 | File | Lines | Imported by | Kept by |
 | --- | --- | --- | --- |
@@ -161,7 +161,7 @@ Plan §7 asks the release to name the shim, the count of numbered modules it sti
 | `app-actions.ts` | 43 | 14 numbered, `wiring.ts` | numbered modules invoking actions by id |
 | `document-ports.ts` | 42 | 7 numbered | state entry and format modules (`02`, `02b`, `03`, `07`, `14b`, `14c`, `15`) |
 | `plain-text.ts` | 7 | 6 numbered | `08c`, `14b`, `14c`, `15`, `18a`, `19` |
-| `save-bridge.ts` | 107 | 5 numbered, `wiring.ts`, `transition-bridge.ts` | `03`, `12`, `13`, `14`, `18` |
+| `save-bridge.ts` | 108 | 5 numbered, `wiring.ts`, `transition-bridge.ts` | `03`, `12`, `13`, `14`, `18` |
 | `export-formats.ts` | 28 | 4 numbered, `native-menu.ts`, `wiring.ts` | `14e`, `18`, `18c`, `18d` |
 | `review-wording.ts` | 1 | 4 numbered | `05h`, `06`, `13`, `19` |
 | `cache-freeze.ts` | 18 | 3 numbered, 2 bridges | `05f`, `07`, `14b` |
