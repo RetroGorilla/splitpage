@@ -1287,7 +1287,7 @@ async function writeToServer(job) {
           return transport.request("api/docs/" + encodeURIComponent(docId), { method: "PUT", body: put });
         }, true);
       });
-      if (home === op.destination) {
+      if (home === op.destination && job.alive()) {
         home.rev = body.rev;
         setBaseState(published, "saveToServer: what the server just accepted");
       } else {
