@@ -4,9 +4,69 @@ What changed for a person using Splitpage, newest first. The same entries
 appear in the app under **Help**. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions are in `VERSION`.
 
-## Unreleased
+## 4.0.0 — 2026-10-16
+
+4.0 rebuilds how Splitpage is put together and adds no new feature. Your 3.1
+scripts, `.splitpage` and Markdown files and shared-script servers work as
+before, and a 4.0 app and a 3.1 server work with each other either way.
+
+### Changed
+- A shared-script server now refuses a document whose state is not an object
+  (400 `bad-state` when creating or saving, 409 `no-state` for a comment) and
+  cuts names, comment quotes and titles by whole characters, not by UTF-16
+  units. Nothing else in the server differs from 3.1.
 
 ### Fixed
+- Saving and switching scripts: a save that failed or was cancelled after you
+  opened another script no longer changes that script's revision, and a save
+  that finishes after you reopen the same script no longer marks the reopened
+  one saved. Retry, Overwrite and Save a copy on the save-error banner, and
+  saving from the teleprompter, now wait for a save that is still writing
+  instead of starting a second one.
+- A save to a server now keeps to the server and sign-in it started with.
+  Pointing the tab at another server, or a changed sign-in, part-way through
+  no longer sends the rest of that save there. A publish that finishes after
+  you have moved the tab to another server, or after your sign-in changed,
+  now says so instead of saying nothing or claiming you opened another script.
+- A paste, drop, thumbnail or annotation that finishes after you opened
+  another script, or reopened the same one, is no longer written into it.
+  A paste or drop says the picture was not added. A delayed paste puts its
+  text where the paste began, not where the caret has since moved.
+- Restoring a version from history, or a draft, after the script was
+  replaced no longer overwrites the newer one. A draft restored onto a file
+  that has not changed since is no longer written to the file by autosave
+  before you save. A late draft write for the previous script no longer
+  deletes the current script's draft, and a Google Drive list that arrives
+  after you close the dialog no longer redraws it.
+- Exports are built from the script as it was when you chose them: edits, or
+  a changed clock setting, while an export is being prepared no longer change
+  it, and an edit made while a file is being written back is no longer
+  counted as written.
+- A file or server copy whose top level is not a script is treated as no
+  document, and a damaged or hand-edited file no longer stops a script
+  opening or merging: scenes, comments, people, tags and shots stored as
+  lists are dropped, names and reply times of the wrong type are ignored, and
+  a merge no longer saves its revision as blank.
+- If drawing the screen fails part-way, the previous picture stays instead of
+  a mix of old and new scenes.
+- Editing next to an emoji no longer splits it: no cell edit leaves half of
+  one, and tag and person names cut at their length limit no longer keep half
+  an emoji or end in a space. Titles and notes are cut by whole characters too.
+- A cancelled IME composition, and typing a letter then deleting it, no
+  longer leave an empty step in Undo. Ctrl+Z during a composition that is then
+  cancelled no longer drops real typing.
+- In review mode the writer refuses every edit with "Viewing only", and a
+  split or join in the writer refreshes the Production and B-roll panels.
+- At 1440 px with a long title focused, the search button and the identity
+  chip no longer overlap.
+- A tag name of only invisible characters is refused. Deleting a person
+  clears them as owner of their b-roll shots at once, not at the next load.
+  Gear quick add and tag suggestions handle names such as `constructor`.
+  Drawing the b-roll badge no longer creates or renames shots; they are made
+  when you create them.
+- Pasting deeply nested formatting around many links can no longer produce a
+  huge result: the extra markup is capped, and past the cap repeated
+  formatting is kept once and the inner links are unwrapped.
 - In the desktop app, some menu-bar commands ran behind an open dialog, the
   writer or Present. They now stop and say what to close first: Save and
   Save As… (Ctrl+S, Ctrl+Shift+S) while a dialog or the command menu is
@@ -86,6 +146,22 @@ appear in the app under **Help**. The format follows
   the next time it was saved, merged or pasted. The inner link now keeps its
   own address and the outer link continues around it, as when you set a link
   inside a link in the editor, and a video card inside a link stays a card.
+
+### For maintainers
+- The source moved from one set of numbered modules to owned folders:
+  `src/core` (document, text, merge and production rules), `src/application`
+  (session, commands, saving, recovery), `src/adapters`, `src/features`, and
+  `src/bootstrap`, which wires them at startup. Milestones 0 to 7 of
+  `docs/IMPLEMENTATION-PLAN.md` are closed; the composition root as build
+  entry, the remaining bridges and the `S` fields are 4.x work. Building and
+  testing need Node 24.22.0 (`.nvmrc`).
+- The legacy initializer shim is `src/js/_entry.js` (170 lines). It calls
+  `wireApp`, then starts 69 of the 79 numbered modules in `src/js`; ten load
+  only as imports. 23 bridge files remain under `src/legacy` (1,451 lines;
+  106 imports from 57 numbered modules). Each bridge is owned by the
+  integration owner until 4.x removes it with the legacy modules that keep it;
+  `docs/architecture/milestone-7.md#release-checklist-inputs` lists them one
+  by one. Counted at `53dff02`; see `docs/architecture/milestone-7-gate.md`.
 
 ## 3.1.0 — 2026-09-29
 
