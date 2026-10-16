@@ -621,7 +621,7 @@ changes are combined"). What building it settled:
 | `10-comments.js` | anchors from `cmt` marks; create/delete are steps |
 | `14-export.js`, `15-docx.js`, `16-csv.js`, `17-pdf.js`, `20d-formats.js` | read runs via `toPlainText` / `toMarkdown` / `toDocxRuns` (the `.md` project's table stays `htmlToMarkdown`, step 3) |
 | `20-teleprompter.js` | word spans from runs |
-| `21-events.js` | `beforeinput` / keydown routing (§5); paste via `fromHtml` |
+| `22a-editor-wiring.js` (with `src/features/editing/`) | `beforeinput` / keydown routing (§5); paste via `fromHtml` |
 | `server/server.js`, `shared/blob-policy.js` | unchanged (D2: HTML stays the stored format) |
 
 `execCommand` goes from 17 editing calls to none.
