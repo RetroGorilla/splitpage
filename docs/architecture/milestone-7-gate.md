@@ -25,7 +25,7 @@ below ran on `cbab324`; the Electron smoke ran on `53dff02`
 | Electron smoke, dev target | `53dff02`: 974/974, 0 skipped, first run. 971/972 on `cbab324` and earlier heads, a test race fixed by #633 ([below](#the-531-smoke-case)) | passed |
 | Windows x64 packaged check | not required: the build entry does not change and no packaging input moved | not required |
 | CI on the merges | push runs for `9c39567`, `cbab324` and `53dff02` succeeded ([below](#ci-on-the-closing-tree)) | passed |
-| External review | the 4.0 release review of milestones 5 and 7 (Astra, Codex CLI, on `53dff02`): 1 blocking and 1 should-fix finding for milestone 7, 1 should-fix for milestone 5; verdict no for both ([below](#external-review)) | finding 3 closed by #635 (`81ae567`); findings 1 and 2 only partly closed by #636 (`23b49a7`) per Sol's re-review, #637 is open ([below](#re-review-of-the-fixes)); M5 PDF check open |
+| External review | the 4.0 release review of milestones 5 and 7 (Astra, Codex CLI, on `53dff02`): 1 blocking and 1 should-fix finding for milestone 7, 1 should-fix for milestone 5; verdict no for both ([below](#external-review)) | finding 3 closed by #635 (`81ae567`); findings 1 and 2 only partly closed by #636 (`23b49a7`) per Sol's re-review, #637 (`89d309f`) fixes them, Sol re-check pending ([below](#re-review-of-the-fixes)); M5 PDF check open |
 | Linux full run, native ARM64, Docker, portable, 3.1 exchange | the 4.0 release gate; see [release-4.0-checklist.md](release-4.0-checklist.md) | not part of this gate |
 
 ## Pull requests
@@ -257,8 +257,8 @@ Windows full browser runs were not repeated after the fixes; they cover
 
 | # | Severity | Finding | Decision |
 | --- | --- | --- | --- |
-| R1 | blocking | A hosted save held across dispose and a rewire with the same home still reaches the replacement owner: `src/js/13-hosted.js:1290` updates `home.rev` and calls `setBaseState` before the `job.owns()` check at line 1296, so the baseline is forwarded through `confirmBaseline` (`src/js/03-sync.js:821`) into the replacement coordinator via `save-bridge.ts:93` | to be fixed in #637 "M7: late save lifetime check and remaining wiring validation" (open) |
-| R2 | should-fix | Validation is still incomplete: `src/bootstrap/wiring.ts:89` checks `timers` only as an object (`effects.ts:44` calls `timers.now` later), and `wiring.ts:223` does not validate the recovery factory's `desktop` function (`draft-store-desktop.ts:12` defers the call) | to be fixed in #637, which also validates four more dependencies its author found: the undo adapter, the key target, the action registry and the exporters' cleanup function |
+| R1 | blocking | A hosted save held across dispose and a rewire with the same home still reaches the replacement owner: `src/js/13-hosted.js:1290` updates `home.rev` and calls `setBaseState` before the `job.owns()` check at line 1296, so the baseline is forwarded through `confirmBaseline` (`src/js/03-sync.js:821`) into the replacement coordinator via `save-bridge.ts:93` | **Fixed** in #637, merged as `89d309f` on 2026-10-16 ([review](https://github.com/RetroGorilla/splitpage/pull/637#issuecomment-6205579612), no findings; [merge record](https://github.com/RetroGorilla/splitpage/pull/637#issuecomment-6205589973)); Sol re-check pending |
+| R2 | should-fix | Validation is still incomplete: `src/bootstrap/wiring.ts:89` checks `timers` only as an object (`effects.ts:44` calls `timers.now` later), and `wiring.ts:223` does not validate the recovery factory's `desktop` function (`draft-store-desktop.ts:12` defers the call) | **Fixed** in #637 (`89d309f`), which also validates four more dependencies its author found: the undo adapter, the key target, the action registry and the exporters' cleanup function; Sol re-check pending |
 
 Sol also confirmed the INV-30 probe gap closed: `20b-onboarding.js:361`
 keeps the auto-show promise and the probe awaits it instead of a fixed window.
@@ -302,7 +302,8 @@ machine; this section is the disposition.
 
 - Milestone 7 stays open. Sol's re-review of the fixes at `23b49a7` closed
   finding 3 (#635) but found findings 1 and 2 only partly closed by #636 (R1
-  blocking, R2 should-fix). #637 is open; milestone 7 closes when it merges
-  and Sol re-checks it.
+  blocking, R2 should-fix). #637 fixed both, merged as `89d309f`
+  (Electron smoke 974/974 on its head `cbcf9e3`); milestone 7 closes when
+  Sol's re-check of #637 passes.
 - Milestone 5's PDF check still needs a person to open the crafted and
   `LONG_DEMO` script PDFs; DOCX, XLSX and the round trips passed.
