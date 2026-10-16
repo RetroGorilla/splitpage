@@ -9,7 +9,7 @@ This ledger audits the 62 invariants in `HANDOFF.md` §5, one row each, under th
 - **practice**: a working habit or debugging advice, not product behaviour. It moves to contributor or skill notes.
 - **Milestone**: for absorb, the milestone that lands the replacement; for keep, the milestone that migrates the rule's owner; `4.x` for server and desktop internals (plan §8); `—` for practice.
 - **Tests**: unit tests are cited by path. Browser suites are cited by full filename and live in `.claude/skills/run-splitpage-app/tests/` (numeric prefixes are not unique). "none found" means a search of `src/test/`, the browser suites, `desktop/test/`, `tools/test-server.mjs` and `tools/test-update.mjs` found nothing that asserts the rule.
-- **Owner**: the target folder from plan §3. Feature folder names (`src/features/editor`, `src/features/overlays` and so on) are provisional; the plan fixes only `src/features/<feature>`.
+- **Owner**: the target folder from plan §3. The feature folders were provisional names until milestone 6 built them; rows now name the folders that exist under `src/features/` (`editing`, `tags`, `overlay` and the others).
 
 ## Summary
 
@@ -31,7 +31,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** Every change to a script cell is a document-model edit (`editCell()` at the selection, or the edits in `src/core/text/edits.ts`, which `04c-doc-model.js` re-exports), written back with `toHtml()`. No path edits cell HTML with a regex, and nothing uses `execCommand`, in script cells or in comment and reply boxes.
 - **Tests:** `src/test/doc-model.test.mjs`, `src/test/cell-edit.test.mjs`; browser `75-format-model.txt`, `76-tags-model.txt`, `77-clipboard-model.txt`, `78-split-join-model.txt`, `81-draft-edit.txt`; for the commands, `tests/application/cell-text.test.ts`, `split-join.test.ts` and `clipboard.test.ts` (every command test through `runConfined`, which fails on a write outside the declared change set). No test asserts that `execCommand` is absent from the source.
-- **Owner:** `src/core/text` (edits), `src/application` (commands), `src/features/editor` (bindings) · **Milestone:** 6 · **Class:** absorb
+- **Owner:** `src/core/text` (edits), `src/application` (commands), `src/features/editing` (bindings) · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** DocumentSession commands become the only write path (M3). Migrated editor features receive named operations and no writable document (M6; plan §6: "a view or selector never changes document content").
 - **As built (M3, part):** typing, split, join, paste and cut write the cell only through `cellTextCommand`, `splitSceneCommand`, `joinScenesCommand`, `pasteCommand` and `cutCommand` ([session.md](session.md#the-text-commands)). `editCell()` (formatting, shortcuts, tags, b-roll keys, Enter) still writes `row[field]`, stamps and calls `markDirty` itself (#452), and the scene paste and drop in `05g-scene-clip.js` is out of M3 (D10). The row stays open until M6.
 - **Acceptance:** the five suites pass on the migrated editor. A new architecture check finds no `document.execCommand` call and no `innerHTML` assignment to a `.cell-editable` under `src/features/`.
@@ -56,7 +56,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** Handlers shared by script cells and comment or reply boxes apply script-only behaviour (tag completion, row splitting, script shortcuts) only to script cells, which include the Writer's paragraphs. A comment box never triggers them.
 - **Tests:** none found. `81-draft-edit.txt` and `10-comments-panel.txt` exercise comment boxes under the shared handlers but assert nothing about the gate.
-- **Owner:** `src/features/editor`, `src/features/comments` · **Milestone:** 6 · **Class:** absorb
+- **Owner:** `src/features/editing`, `src/features/comments` · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** per-feature bindings with mount and dispose (M6). The script editor binds its handlers to its own cells and the comment composer binds its own, so no shared delegation has to check which kind of box it is in.
 - **Acceptance:** browser: script-only shortcuts in a comment box (Alt+Enter, Tab on a completion) leave rows, script and registry unchanged. `81-draft-edit.txt` passes.
 
@@ -108,7 +108,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** Clicking a control inside a breakdown card's head (status cycle, rename and others) runs that control's action and does not toggle the card's expansion.
 - **Tests:** partial. `12-gear.txt` clicks the status-cycle control and checks that the status changed, but does not assert that the card stayed collapsed. Nothing asserts the order of checks.
-- **Owner:** `src/features/production` · **Milestone:** 6 · **Class:** keep
+- **Owner:** `src/features/tags` · **Milestone:** 6 · **Class:** keep
 - **Replacement:** — (M6 preserves "priority among tag controls, modifier clicks, selection completion and drag types").
 - **Acceptance:** browser: in both the production and gear panels, clicking each control in a collapsed card's head runs its action and leaves `.is-expanded` unchanged.
 
@@ -116,7 +116,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** A Ctrl, Cmd or Shift click anywhere on a breakdown card, including on a control inside it, selects the card for bulk actions instead of running the control. In review mode it opens the card instead.
 - **Tests:** browser `02-production.txt` (Ctrl-click selects cards), `89-production-review-mode.txt` (review mode: a modifier-click opens the card and selects nothing). No test covers a modifier-click on a control inside a card.
-- **Owner:** `src/features/production` · **Milestone:** 6 · **Class:** keep
+- **Owner:** `src/features/tags` · **Milestone:** 6 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** both suites pass. New browser check: a Ctrl-click on a card's status control selects the card and leaves its status unchanged.
 
@@ -154,7 +154,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** Present, the Writer, Help, the tour, the setup wizard and the full-page shot list close every open side panel through one path, which clears `body.panel-open` and `#root`'s padding. Leaving these views reopens no panel, except that the shot list reopens B-roll if it was opened from there. The z-index order is: side panels 140, Writer and Present 145, modals 150, toasts 200.
 - **Tests:** browser `128-side-panels-modes.txt` (every panel against both modes), `150-mode-transitions.txt` (z-index 145), `96-broll-page.txt`, `61-transitions.txt`.
-- **Owner:** `src/features/overlays` · **Milestone:** 6 · **Class:** absorb
+- **Owner:** `src/features/overlay` · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** an overlay and focus owner (M6) that preserves panel closure and restoration and the stacking order. A new full-screen view or side panel registers with it.
 - **Acceptance:** `128-side-panels-modes.txt` passes. Every full-screen view closes a newly registered panel without edits to those views.
 
@@ -162,7 +162,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** The untagged-mention highlight, the tour and the tutorial only paint the page (for example with `CSS.highlights`). Until the user accepts an offer they wrap no span, leave the document clean and add no undo entry.
 - **Tests:** browser `07-untagged.txt` ("no wrapped span, no dirty flag"); `13-onboarding.txt` and `15-tutorial.txt` (both cite "invariant #17" and compare `#rows` byte for byte).
-- **Owner:** `src/features/untagged` and the tour and onboarding features · **Milestone:** 6 · **Class:** absorb
+- **Owner:** `src/features/tags` (the untagged prompt) and the tour and onboarding modules under `src/js/` · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** views and selectors receive read-only snapshots and named operations (M3; plan §6: "a view or selector never changes document content"). Accepting a hint is a command.
 - **Acceptance:** application test: running the untagged scan and the tour against a session leaves the edit generation, dirty state and undo stack unchanged. The three suites pass.
 - **As built (M3, part):** the session hands a view the live document only through `read(select)`, typed as a deep-readonly `DocumentView` ([session.md](session.md#1-purpose)); the compiler, not the runtime, stops a write. The untagged scan and the tour still run in legacy modules and do not go through a session, and the acceptance test above is not written. The row stays open until M6.
@@ -180,7 +180,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** While the Writer or Present is open, focus cannot leave it except to modals and toasts. Anything meant to show above it, such as `.tag-ghost-hint` at z-index 146, does.
 - **Tests:** partial. Browser `150-mode-transitions.txt` (z-index 145; a Writer that is fading out holds no focus). No test covers the `focusin` trap or the stacking of `.tag-ghost-hint`.
-- **Owner:** `src/features/overlays` · **Milestone:** 6 · **Class:** absorb
+- **Owner:** `src/features/overlay` · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** the overlay and focus owner (M6). Escape and Tab handling, focus containment and stacking are set when an overlay registers, not by per-view CSS and listeners.
 - **Acceptance:** browser: with the Writer open, Tab and focus moved programmatically to `#rows` both stay inside the Writer, while a modal and a toast stay reachable. The completion ghost draws above the Writer.
 
@@ -205,7 +205,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** To keep the caret in view, the app scrolls to the caret's own rectangle within the nearest scrolling ancestor, so the caret never ends up off-screen in a cell taller than the viewport.
 - **Tests:** browser `09-alt-enter-and-scroll.txt` (in a tall cell, the caret's rectangle is inside the viewport).
-- **Owner:** `src/features/editor` · **Milestone:** 6 · **Class:** keep
+- **Owner:** `src/js/22a-editor-wiring.js` (`nearestScrollAncestor` and the scroll that uses it; no feature folder owns it) · **Milestone:** 6 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** `09-alt-enter-and-scroll.txt` passes on the migrated editor.
 
@@ -229,7 +229,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** Every panel showing `tagEntityHtml()` cards gets their behaviour from one wiring (`wireTagEntityContainer()`). No panel adds its own handlers for these cards.
 - **Tests:** browser `12-gear.txt` (the Gear panel's cards work through the shared wiring), `89-production-review-mode.txt`.
-- **Owner:** `src/features/production` · **Milestone:** 6 · **Class:** absorb
+- **Owner:** `src/features/tags` · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** the tag-card view owns its bindings through mount and dispose (M6). A new panel mounts the card list instead of wiring events.
 - **Acceptance:** remount/dispose test: mounting the card list in a third container gives one handler set per container, and none remain after dispose.
 
@@ -237,7 +237,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** A quick-add box that tracks items whether or not the script mentions them adds a registry entry for each new line. When a line is removed, it deletes that entry only if the item is orphaned; an item still tagged in the script stays.
 - **Tests:** `tests/core/production/tags.test.ts` ("INV-26: the quick-add plan deletes an orphaned entry whose line went and keeps one still tagged in the script"); `tests/core/production/golden.test.ts` (the Gear quick add against `production-gear-quick-add`); browser `12-gear.txt` ("removing a line un-tracks it, UNLESS it's still tagged live").
-- **Owner:** `src/core/production` (reconciliation plan, `planQuickAdd`), `src/features/production` · **Milestone:** 2 · **Class:** keep
+- **Owner:** `src/core/production` (reconciliation plan, `planQuickAdd`), `src/js/08-production-panels.js` (the caller) · **Milestone:** 2 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** new unit test: for a removed line, the quick-add reconciliation plan deletes an orphaned entry and keeps a live-tagged one. `12-gear.txt` passes.
 
