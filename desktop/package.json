@@ -1,7 +1,7 @@
 {
   "name": "splitpage-desktop",
   "productName": "Splitpage",
-  "version": "4.0.0",
+  "version": "4.0.0-beta.1",
   "private": true,
   "license": "MIT",
   "description": "Splitpage as a standalone desktop app — own window, native menus and file associations, the same document server underneath for LAN sharing.",

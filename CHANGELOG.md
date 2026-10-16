@@ -4,9 +4,9 @@ What changed for a person using Splitpage, newest first. The same entries
 appear in the app under **Help**. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions are in `VERSION`.
 
-## 4.0.0 — 2026-10-16
+## 4.0.0-beta.1 — 2026-10-16
 
-4.0 rebuilds how Splitpage is put together and adds no new feature. Your 3.1
+This is the 4.0 beta. 4.0 rebuilds how Splitpage is put together and adds no new feature. Your 3.1
 scripts, `.splitpage` and Markdown files and shared-script servers work as
 before, and a 4.0 app and a 3.1 server work with each other either way.
 
