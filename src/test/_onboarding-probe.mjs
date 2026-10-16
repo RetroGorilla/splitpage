@@ -50,7 +50,8 @@ try {
 } catch (failure) {
   error = String((failure && failure.stack) || failure);
 }
-for (let i = 0; i < 25; i++) await settle();
+if (window.__onboarding) await window.__onboarding.autoShowDecided();
+await settle();
 const modal = document.getElementById("onboarding-modal");
 const report = {
   arrival,
