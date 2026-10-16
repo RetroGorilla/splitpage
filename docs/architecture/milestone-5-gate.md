@@ -115,6 +115,26 @@ and the build entry did not change); it was run anyway.
   pass in the runs above; the independent-viewer pass is not recorded here.
 - The Linux full run and native ARM64, which wait for the 4.0 release gate.
 
+## Viewer checks and round trips (amendment, 2026-10-15)
+
+Run on `53dff02` (the milestone 7 closing tree) on the maintainer's Windows PC
+after the 4.0 release review named the missing viewer pass
+([milestone 7 gate record](milestone-7-gate.md#external-review)). The six
+PDFs, the crafted DOCX and XLSX, `report.json` and the two check scripts are
+kept under `D:\vibecoding\.scratch\m5-viewer-check\` on that machine; the
+`LONG_DEMO` DOCX and XLSX were not kept.
+
+| Check | Result |
+| --- | --- |
+| DOCX (script and narration) and XLSX (script, breakdown, b-roll) of the golden "crafted" fixture and `LONG_DEMO` | **PASS**: every file opened in Word 16.0 and Excel 16.0 with no repair prompt. Crafted content compared with the fixture (scenes, tags, breakdown, b-roll, comments with a reply and resolved state; XLSX cell text matched). `LONG_DEMO` checked by page and word counts and sheet ranges only |
+| Project round trips (`.splitpage` and Markdown project, build then parse) | **PASS**: no structural differences; identical image SHA-256 for all three images; exporting left the live document unchanged |
+| Existing export tests | 79/79 on Node 24.22.0 |
+| PDF | **Open**: the PC has no PDF reader (no Acrobat, no LibreOffice). The six PDFs are structurally valid (`%PDF-1.4` header, `%%EOF`, page counts 4, 1, 1 for crafted and 10, 2, 1 for `LONG_DEMO`), and `crafted.pdf` loaded in Edge, confirmed by window title only. A person still has to open the crafted and `LONG_DEMO` script PDFs |
+
+Notes, not findings: Excel showed no pictures in any sheet (whether the
+exporter embeds any was not checked), and `crafted.pdf` has one embedded image
+object although the document has three images (not investigated).
+
 ## External review
 
 | | |

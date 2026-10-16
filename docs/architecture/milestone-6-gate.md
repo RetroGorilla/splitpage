@@ -146,6 +146,10 @@ The full output of the suite 66 failure is in comment 6198540626 on #626. The
 smoke failure output is in comment 6200149613. If either recurs, keep the full
 log and investigate.
 
+The smoke failure was later traced to a race in the test: the case read the
+new tab's preload bridge before the tab had loaded. #633 fixed it during the
+milestone 7 gate ([milestone 7 gate record](milestone-7-gate.md#the-531-smoke-case)).
+
 ## Shim status at `2b891f8`
 
 Counted in the repository at `2b891f8` (the same counts as at `9fcf363`; #629 added no module or bridge):
