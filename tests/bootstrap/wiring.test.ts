@@ -326,6 +326,69 @@ test("failed partial startup: a save factory that returns malformed ports fails 
   }
 });
 
+test("failed partial startup: a timers port, undo adapter or key target that lacks a method is named and nothing is built", () => {
+  const listeners = { addEventListener: () => {}, removeEventListener: () => {} };
+  const cases: [string, (f: Fakes) => unknown, string, string][] = [];
+  for (const method of ["now", "start", "stop"] as const) {
+    const spoil = (f: Fakes): object => ({ now: f.timers.now, start: f.timers.start, stop: f.timers.stop });
+    cases.push(["timers." + method, (f) => ({ ...f.deps, timers: without(spoil(f), method) }), "timers", "Wiring: the timers dependency has no " + method + " function"]);
+    cases.push(["timers." + method + " not a function", (f) => ({ ...f.deps, timers: { ...spoil(f), [method]: 7 } }), "timers", "Wiring: the timers dependency has no " + method + " function"]);
+  }
+  cases.push(["timers {}", (f) => ({ ...f.deps, timers: {} }), "timers", "Wiring: the timers dependency has no now function"]);
+  for (const method of ["adopt", "record", "absorbServer", "absorbReload"] as const) {
+    const undo = (f: Fakes): SessionUndoPorts => must(f.deps.undo);
+    cases.push(["undo.adapter." + method, (f) => ({ ...f.deps, undo: { ...undo(f), adapter: without(undo(f).adapter, method) } }), "undo", "Wiring: the undo dependency's adapter port has no " + method + " function"]);
+    cases.push(["undo.adapter." + method + " not a function", (f) => ({ ...f.deps, undo: { ...undo(f), adapter: { ...undo(f).adapter, [method]: 7 } } }), "undo", "Wiring: the undo dependency's adapter port has no " + method + " function"]);
+  }
+  for (const method of ["addEventListener", "removeEventListener"] as const) {
+    cases.push(["keyTarget." + method, (f) => ({ ...f.deps, keyTarget: without(listeners, method) }), "keyTarget", "Wiring: the keyTarget dependency has no " + method + " function"]);
+    cases.push(["keyTarget." + method + " not a function", (f) => ({ ...f.deps, keyTarget: { ...listeners, [method]: 7 } }), "keyTarget", "Wiring: the keyTarget dependency has no " + method + " function"]);
+  }
+  for (const [what, spoil, step, message] of cases) {
+    const f = fakes();
+    const error = refused(() => wireLoose(spoil(f)));
+    assert.equal(error.step, step, what);
+    assert.equal(error.message, message, what);
+    assert.deepEqual(f.log, [], what + ": nothing is built");
+    assert.deepEqual(started(), NOTHING, what + ": no facade is started");
+  }
+  const f = fakes();
+  const wiring = wireApp({ ...f.deps, keyTarget: listeners as unknown as EventTarget });
+  assert.deepEqual(started(), EVERYTHING, "a key target with both listener methods is accepted");
+  wiring.dispose();
+});
+
+test("failed partial startup: an actions, exporters or recovery factory that returns something malformed fails its step, names what is missing and leaves no owner", () => {
+  const registryMethods = ["register", "has", "shortcuts", "view", "list", "invoke", "presentRefusals"] as const;
+  const recoveryMethods = ["now", "desktop"] as const;
+  type Spoilt = [string, (f: Fakes) => WiringDeps | Record<string, unknown>, string, string];
+  const cases: Spoilt[] = [
+    ["actions nothing", (f) => ({ ...f.deps, actions: () => undefined }), "action registry", "the actions dependency returned no action registry"],
+    ...registryMethods.flatMap((method): Spoilt[] => [
+      ["actions " + method, (f) => ({ ...f.deps, actions: () => without(createActionRegistry(), method) }), "action registry", "the action registry has no " + method + " function"],
+      ["actions " + method + " not a function", (f) => ({ ...f.deps, actions: () => ({ ...createActionRegistry(), [method]: 7 }) }), "action registry", "the action registry has no " + method + " function"]
+    ]),
+    ["exporters nothing", (f) => ({ ...f.deps, exporters: () => undefined }), "built-in exporters", "the exporters dependency returned no function to remove them"],
+    ["exporters not a function", (f) => ({ ...f.deps, exporters: () => 7 }), "built-in exporters", "the exporters dependency returned no function to remove them"],
+    ["recovery nothing", (f) => ({ ...f.deps, recovery: () => undefined }), "recovery", "the recovery dependency returned no recovery ports"],
+    ...recoveryMethods.flatMap((method): Spoilt[] => [
+      ["recovery " + method, (f) => ({ ...f.deps, recovery: () => without(f.deps.recovery(), method) }), "recovery", "the recovery dependency returned no " + method + " function"],
+      ["recovery " + method + " not a function", (f) => ({ ...f.deps, recovery: () => ({ ...f.deps.recovery(), [method]: 7 }) }), "recovery", "the recovery dependency returned no " + method + " function"]
+    ])
+  ];
+  for (const [what, spoil, step, message] of cases) {
+    const f = fakes();
+    const error = refused(() => wireLoose(spoil(f)));
+    assert.equal(error.step, step, what);
+    assert.equal(error.message, "Wiring: the " + step + " step failed", what);
+    assert.ok(error.cause instanceof WiringError, what + ": the cause is a WiringError");
+    assert.equal(error.cause.step, step, what);
+    assert.equal(error.cause.message, "Wiring: " + message, what);
+    assert.deepEqual(started(), NOTHING, what + ": every owner built before it is released");
+    assert.deepEqual(f.live, { exporters: 0, undo: 0 }, what + ": the fakes' registrations are all released");
+  }
+});
+
 test("failed partial startup: a step that throws undoes every step before it, in reverse, and names itself with the cause", () => {
   const boom = new Error("boom");
   const breakers: Record<(typeof WIRING_STEPS)[number], (f: Fakes) => { deps: WiringDeps; cleanup?: () => void; cause?: boolean }> = {

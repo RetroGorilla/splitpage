@@ -4,7 +4,7 @@ import type { ExportRegistry } from "../application/export/registry.ts";
 import type { DocumentSession, DocumentView, Plan } from "../application/session/document-session.ts";
 import type { ChangeSet, SessionChange } from "../application/session/change-set.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
-import type { Capability, DocumentEntry, ReportPort, TimerPort } from "../application/session/ports.ts";
+import type { Capability, DocumentEntry, ReportPort, TimerPort, UndoPort } from "../application/session/ports.ts";
 import type { SaveOwnershipPort } from "../application/save/coordinator.ts";
 import { createAppActions, installAppActions } from "../legacy/app-actions.ts";
 import { installExportFormats } from "../legacy/export-formats.ts";
@@ -107,8 +107,44 @@ const UNDO_PORTS: readonly (keyof SessionUndoPorts)[] = ["adapter", "route", "wa
 
 const SESSION_EFFECTS: readonly (keyof SessionEffects)[] = ["dirty", "draft", "save", "edit", "attribute"];
 
+const TIMER_METHODS: readonly (keyof TimerPort)[] = ["now", "start", "stop"];
+
+const UNDO_ADAPTER_METHODS: readonly (keyof UndoPort)[] = ["adopt", "record", "absorbServer", "absorbReload"];
+
+const KEY_TARGET_METHODS: readonly (keyof EventTarget)[] = ["addEventListener", "removeEventListener"];
+
+const ACTION_REGISTRY_METHODS: readonly (keyof ActionRegistry)[] = ["register", "has", "shortcuts", "view", "list", "invoke", "presentRefusals"];
+
+const RECOVERY_METHODS: readonly (keyof LegacyRecoveryPorts)[] = ["now", "desktop"];
+
 function present(value: unknown, kind: "function" | "object"): boolean {
   return value !== null && typeof value === kind;
+}
+
+function lacking(given: unknown, methods: readonly string[]): string | null {
+  for (const method of methods) {
+    if (!present((given as Record<string, unknown>)[method], "function")) return method;
+  }
+  return null;
+}
+
+function checkedActions(registry: ActionRegistry | null | undefined): ActionRegistry {
+  if (!present(registry, "object")) throw new WiringError("action registry", "Wiring: the actions dependency returned no action registry");
+  const missing = lacking(registry, ACTION_REGISTRY_METHODS);
+  if (missing) throw new WiringError("action registry", "Wiring: the action registry has no " + missing + " function");
+  return registry as ActionRegistry;
+}
+
+function checkedExporters(drop: (() => void) | null | undefined): () => void {
+  if (!present(drop, "function")) throw new WiringError("built-in exporters", "Wiring: the exporters dependency returned no function to remove them");
+  return drop as () => void;
+}
+
+function checkedRecovery(ports: LegacyRecoveryPorts | null | undefined): LegacyRecoveryPorts {
+  if (!present(ports, "object")) throw new WiringError("recovery", "Wiring: the recovery dependency returned no recovery ports");
+  const missing = lacking(ports, RECOVERY_METHODS);
+  if (missing) throw new WiringError("recovery", "Wiring: the recovery dependency returned no " + missing + " function");
+  return ports as LegacyRecoveryPorts;
 }
 
 function checkedSaves(ports: LegacySavePorts | null | undefined): LegacySavePorts {
@@ -151,7 +187,15 @@ function validate(deps: WiringDeps | null | undefined): void {
     for (const port of UNDO_PORTS) {
       if (!present(deps.undo[port], port === "adapter" ? "object" : "function")) throw new WiringError("undo", "Wiring: the undo dependency has no " + port + " port");
     }
+    const missing = lacking(deps.undo.adapter, UNDO_ADAPTER_METHODS);
+    if (missing) throw new WiringError("undo", "Wiring: the undo dependency's adapter port has no " + missing + " function");
   }
+  if (deps.timers) {
+    const missing = lacking(deps.timers, TIMER_METHODS);
+    if (missing) throw new WiringError("timers", "Wiring: the timers dependency has no " + missing + " function");
+  }
+  const missingKey = lacking(deps.keyTarget, KEY_TARGET_METHODS);
+  if (missingKey) throw new WiringError("keyTarget", "Wiring: the keyTarget dependency has no " + missingKey + " function");
 }
 
 const SYSTEM_TIMERS: TimerPort = Object.freeze({
@@ -214,13 +258,13 @@ export function wireApp(deps: WiringDeps): Wiring {
       throw new WiringError(step, message, failures.length ? new AggregateError([error, ...failures], message) : error);
     }
   };
-  const actions = build("action registry", deps.actions ?? createAppActions, installAppActions);
+  const actions = build("action registry", () => checkedActions((deps.actions ?? createAppActions)()), installAppActions);
   const exports = build("export registry", () => createExportRegistry(), installExportFormats);
-  build("built-in exporters", () => deps.exporters(exports), (drop) => drop);
+  build("built-in exporters", () => checkedExporters(deps.exporters(exports)), (drop) => drop);
   build("session", () => startSessionBridge(legacySessionPorts(deps)), (stop) => stop);
   build("saves", () => startSaves(checkedSaves(deps.saves({ capture: captureOperation, stillOwns: stillOwns }))), (stop) => stop);
   build("transitions", () => startTransitions(deps.transitions), (stop) => stop);
-  build("recovery", () => startRecovery(deps.recovery()), (stop) => stop);
+  build("recovery", () => startRecovery(checkedRecovery(deps.recovery())), (stop) => stop);
   let disposed = false;
   const dispose = (): void => {
     if (disposed) return;
