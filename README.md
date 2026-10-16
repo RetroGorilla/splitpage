@@ -4,7 +4,8 @@ A two-column visual/audio script editor — pictures on one side, narration on
 the other — with a teleprompter, comments, and a production breakdown that
 tracks every prop, location, VFX shot and person in the script. It ships as
 one self-contained `index.html`, plus an optional Node launcher, a small
-document server for shared sessions, and an Electron desktop app for Windows.
+document server for shared sessions, and an Electron desktop app for Windows
+(x64 and native ARM64).
 
 This file is the **repo-facing** documentation: how to build it, how to cut a
 release, and what each file in the tree is for.
@@ -21,7 +22,28 @@ Developer notes — architecture, invariants, how to test — are
 report a security problem, [SECURITY.md](SECURITY.md); what changed in each
 release is in [CHANGELOG.md](CHANGELOG.md).
 
+## Version 4.0
+
+4.0 is a rebuild of the inside of Splitpage and adds no new feature: the code
+now lives in folders that each own one job, and saving and switching
+documents is safer. What changed for a person using it is in
+[CHANGELOG.md](CHANGELOG.md). Scripts, `.splitpage` and Markdown files and
+shared-script servers from 3.1 work unchanged, and a 4.0 app and a 3.1 server
+work with each other either way: 13 of 13 checks passed in each direction (see
+[the release checklist](docs/architecture/release-4.0-checklist.md)). What is
+still legacy is listed honestly in
+[the implementation plan](docs/IMPLEMENTATION-PLAN.md#8-follow-up-refactors-for-4x).
+
+Installers and the portable zip are on the
+[releases page](https://github.com/RetroGorilla/splitpage-releases/releases):
+`SplitpageDesktopSetup-<version>-x64.exe`, `...-arm64.exe` for Windows on ARM,
+and `splitpage-<version>.zip`. The installers are not code-signed, so Windows
+may warn on first run.
+
 ## Working on the code
+
+You need **Node 24.22.0** (the version in `.nvmrc`; CI uses it, and the test
+runner warns on any other and refuses one outside `package.json`'s `engines`).
 
 `index.html` is **generated, and it is not in the repository** — it is in
 `.gitignore`. A fresh clone has no `index.html` until you build one, which
@@ -33,10 +55,14 @@ node build.mjs           # write index.html, stamp sw.js with VERSION
 node build.mjs --check   # are both in step with src/ and VERSION?
 ```
 
-The source is `src/` — `page.html` (the shell), `app.css`,
-`seed-state.json` (the demo document) and the ES modules in `src/js/`, which
-esbuild bundles — plus `VERSION` and `docs/help.md`, which is rendered into
-the in-app Help page. Nothing else feeds the build.
+The source is `src/` — `page.html` (the shell), `app.css` and `styles/`,
+`seed-state.json` (the demo document), the folders that own one job each
+(`core/`, `application/`, `adapters/`, `features/`, `bootstrap/`, and
+`legacy/` for the bridges to the old modules) and the numbered ES modules in
+`src/js/` that are still legacy, which esbuild bundles — plus `VERSION` and
+`docs/help.md`, which is rendered into the in-app Help page. Nothing else
+feeds the build. Which folder may import which is
+[docs/architecture/dependencies.md](docs/architecture/dependencies.md).
 
 The build inlines everything into one self-contained page, and that is a
 requirement rather than a preference: saving writes this page's own HTML
@@ -87,8 +113,11 @@ node package.mjs              # dist/splitpage-<version>.zip — portable, ~165 
 `Compress-Archive`, so the same commit produces the same bytes on Windows and
 on a Linux CI box.
 
-For the desktop installers — including ARM64 — it's `cd desktop && npm run
-dist:win`; see [Desktop app](docs/help.md#desktop-app) and DEPLOY.md. On a portable copy
+For the desktop installers — x64 and native ARM64 — it's `cd desktop && npm
+run dist:win`; see [Desktop app](docs/help.md#desktop-app) and DEPLOY.md.
+Pushing a `v<version>` tag runs `.github/workflows/release.yml`, which builds
+all of it and opens a draft release on the releases page
+([DEPLOY.md §7](DEPLOY.md#7-publishing-a-release-to-the-mirror)). On a portable copy
 carrying both architectures' runtimes, `start.bat` picks the right one
 automatically.
 
@@ -152,10 +181,15 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
   Standalone HTML** possible, and what lets the app run straight off a USB
   stick); the only thing it fetches is the Google Fonts stylesheet, loaded so
   that a slow or unreachable font server cannot stop the app starting.
-- `src/` — the source. `page.html` (the shell), `app.css`,
-  `seed-state.json` (the demo document), and `js/` — the ES modules esbuild
-  bundles into the app's one inline script, in the boot order `js/_entry.js`
-  sets.
+- `src/` — the source. `page.html` (the shell), `app.css` and `styles/`,
+  `seed-state.json` (the demo document), `core/`, `application/`,
+  `adapters/`, `features/`, `bootstrap/` and `legacy/` (see above), and `js/`
+  — the remaining numbered ES modules esbuild bundles into the app's one inline
+  script, in the boot order the legacy initializer shim `js/_entry.js` sets.
+- `tests/` — unit tests for the owned folders; `src/test/` holds the older
+  ones and the browser suites' helpers. `tools/` — the gates and runners;
+  [docs/architecture/testing.md](docs/architecture/testing.md) says which to
+  run.
 - `docs/help.md` — the user guide, and a build input: `build.mjs` renders it
   into the in-app Help page. Editing it changes the app; editing this README
   does not.
