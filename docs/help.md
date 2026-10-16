@@ -12,8 +12,35 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 whoever opens it works on the same script, with nothing to install. On your
 own network you can also [host a shared session](#hosting-a-shared-session).
 
-## What's new since 3.1
+## What's new in 4.0
 
+- **No new features; sturdier saving.** 4.0 rebuilds the inside of
+  Splitpage. Your 3.1 scripts and files open as before, and a 4.0 app and a
+  3.1 server work with each other either way.
+- **Saving and switching scripts is safer.** A save, publish, paste, drop,
+  thumbnail, annotation, history restore or draft restore that finishes after
+  you opened or reopened another script no longer lands in it. A failed save
+  no longer changes the next script's revision, saves to one place wait for
+  each other, and a save keeps to the server and sign-in it started with. A
+  paste or drop that was too late says the picture was not added.
+- **Exports are built from the script as you chose them.** Edits made while an
+  export is prepared no longer change it.
+- **Damaged files open or merge instead of failing.** A file whose top level is
+  not a script counts as no document; odd scenes, comments, people, tags,
+  shots and reply times are dropped or ignored.
+- **Editing.** No edit leaves half an emoji; names cut at their limit keep
+  whole characters. A cancelled IME composition leaves no empty Undo step. In
+  review mode the writer refuses edits ("Viewing only"), and a split or join
+  in the writer refreshes Production and B-roll. If drawing the screen fails,
+  the previous picture stays.
+- **Production.** A tag name of only invisible characters is refused. Deleting
+  a person clears them as owner of their b-roll shots at once. Gear quick add
+  and tag suggestions handle names such as `constructor`. Drawing the b-roll
+  badge no longer creates or renames shots.
+- **Pasting deeply nested formatting around many links** can no longer
+  produce a huge result.
+- At 1440 px with a long title focused, the search button and the identity
+  chip no longer overlap.
 - In the desktop app, some menu-bar commands ran behind an open dialog, the
   writer or Present. They now stop and say what to close first: Save and
   Save As… (Ctrl+S, Ctrl+Shift+S) while a dialog or the command menu is
