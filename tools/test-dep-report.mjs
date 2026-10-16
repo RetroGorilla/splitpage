@@ -1193,6 +1193,18 @@ try {
   const moreWrites = attempt(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] + "S.state.rows.push(2);\n" });
   eq("one more write to an already recorded target fails", moreWrites.code, 1);
   eq("the per-file write count catches it", lines(moreWrites, "new state-write"), ["new state-write: src/js/00-a.js -> direct:S.state"]);
+  const stateRead = numberedFiles["src/js/00-a.js"] + "void S.state.rows.length;\n";
+  const writeGuarded = cliRepo({ ...numberedFiles, "src/js/00-a.js": stateRead });
+  eq("init records an existing write beside a state read", cli(writeGuarded, "--init").code, 0);
+  for (const [label, replacement] of [
+    ["postfix increment", "S.state.rows.length++"],
+    ["delete", "delete S.state.rows.length"],
+    ["multiline compound assignment", "S.state\n  .rows.length\n  += 1"]
+  ]) {
+    const mutation = attempt(writeGuarded, { "src/js/00-a.js": stateRead.replace("void S.state.rows.length", replacement) });
+    eq(`replacing a state read with ${label} fails`, mutation.code, 1);
+    eq(`the write ratchet catches ${label} without reference growth`, lines(mutation, "new "), ["new state-write: src/js/00-a.js -> direct:S.state"]);
+  }
   eq("prune refuses a rise in a count", (() => {
     writeFiles(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] + "S.state.rows.push(2);\n" });
     const code = cli(guarded, "--prune").code;
@@ -1202,6 +1214,39 @@ try {
   const moreNames = attempt(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"].replace("{ b }", "{ b, extra as notify }") });
   eq("a new name on an existing numbered link fails", moreNames.code, 1);
   eq("only the imported name is new, not the cycle edge", lines(moreNames, "new "), ["new loop-import: src/js/00-a.js:2 -> src/js/01-b.js#extra"]);
+  for (const [label, load] of [
+    ["dynamic import", 'await import("./01-b.mjs")'],
+    ["require", 'require("./01-b.mjs")']
+  ]) {
+    const loadedFiles = {
+      "src/js/00-a.mjs": `const { b } = ${load};\nexport const a = b;\n`,
+      "src/js/01-b.mjs": "export const b = 1;\nexport const extra = 2;\n"
+    };
+    const loaded = cliRepo(loadedFiles);
+    eq(`init records a numbered ${label}`, cli(loaded, "--init").code, 0);
+    const addedName = attempt(loaded, { "src/js/00-a.mjs": loadedFiles["src/js/00-a.mjs"].replace("{ b }", "{ b, extra: notify }") });
+    eq(`a new destructured name on an existing ${label} fails`, addedName.code, 1);
+    eq(`the ${label} names the imported export`, lines(addedName, "new "), ["new loop-import: src/js/00-a.mjs:1 -> src/js/01-b.mjs#extra"]);
+    for (const binding of ["namespace", "{ b, ...rest }", "{ [key]: b }"]) {
+      const unknown = attempt(loaded, { "src/js/00-a.mjs": `const ${binding} = ${load};\n` });
+      eq(`a numbered ${label} with ${binding} fails`, unknown.code, 1);
+      check(`the ${label} explains the unknown imported names for ${binding}`, unknown.err.includes("imported names cannot be determined statically; use explicit named destructuring"), unknown.err);
+    }
+    const beforeUnknown = readFileSync(join(loaded, "tools/dep-baseline.json"), "utf8");
+    writeFiles(loaded, { "src/js/00-a.mjs": `const namespace = ${load};\nimport * as other from "./01-b.mjs";\n` });
+    eq(`a wildcard cannot mask unknown ${label} names`, cli(loaded).code, 1);
+    eq(`accept refuses unknown ${label} names`, cli(loaded, "--accept", "unknown imported names").code, 1);
+    eq(`refusing unknown ${label} names preserves the baseline`, readFileSync(join(loaded, "tools/dep-baseline.json"), "utf8"), beforeUnknown);
+    const unknownInit = cliRepo({ ...loadedFiles, "src/js/00-a.mjs": `const namespace = ${load};\n` });
+    eq(`init refuses unknown ${label} names`, cli(unknownInit, "--init").code, 1);
+    eq(`init writes no baseline for unknown ${label} names`, existsSync(join(unknownInit, "tools/dep-baseline.json")), false);
+    const wildcard = cliRepo({ ...loadedFiles, "src/js/00-a.mjs": 'import * as known from "./01-b.mjs";\n' });
+    eq(`init records a wildcard before adding a ${label}`, cli(wildcard, "--init").code, 0);
+    writeFiles(wildcard, { "src/js/00-a.mjs": `const namespace = ${load};\nimport * as known from "./01-b.mjs";\n` });
+    const masked = cli(wildcard);
+    eq(`a baselined wildcard cannot accept unknown ${label} names`, masked.code, 1);
+    check(`the baselined wildcard still reports unknown ${label} names`, masked.err.includes("imported names cannot be determined statically"), masked.err);
+  }
   const measured = cli(guarded, "--legacy-metrics");
   eq("legacy metrics emits JSON and exits successfully", measured.code, 0);
   eq("legacy metrics reports the entire numeric exit table", JSON.parse(measured.out), {
@@ -1248,6 +1293,32 @@ eq("an unnumbered caller still gets a reference and direct-write ratchet", legac
   { rule: "legacy-state-refs", target: "global:S", count: 1 },
   { rule: "state-write", target: "direct:S.state", count: 1 }
 ]);
+
+for (const operator of ["=", "+=", "-=", "*=", "/=", "%=", "**=", "<<=", ">>=", ">>>=", "&=", "^=", "|=", "&&=", "||=", "??="]) {
+  const writes = legacyViolations(graph({ "src/legacy/example.ts": `S.state\n  .rows[0].length\n  ${operator} 1;\n` }));
+  eq(`the direct-write ratchet parses multiline ${operator}`, writes.find((v) => v.target === "direct:S.state")?.count, 1);
+}
+
+for (const [label, text, count] of [
+  ["each write on the same line", "S.state = {}; S.state.rows.push(1); S.state.rows.splice(0);\n", 3],
+  ["prefix and postfix updates", "++S.state.rows.length; --S.state.rows.length; S.state.rows.length++; S.state.rows.length--;\n", 4],
+  ["delete and wrapped element targets", 'delete S.state.rows[0]; (S["state"].rows[0].length) += 1;\n', 2],
+  ["the appendix mutating methods", ["push", "splice", "pop", "shift", "unshift", "sort"].map((m) => `S.state\n.rows\n.${m}\n(1);`).join("\n"), 6],
+  ["reads and methods outside the appendix", "S.state.rows.length; S.state.rows.reverse(); S.state.rows.fill(0); S.state.rows.copyWithin(0);\n", 0],
+  ["source text in strings", 'const example = "S.state.rows.length++";\n', 0]
+]) {
+  const writes = legacyViolations(graph({ "src/legacy/example.ts": text }));
+  eq(`the direct-write ratchet counts ${label}`, writes.find((v) => v.target === "direct:S.state")?.count ?? 0, count);
+}
+
+for (const [label, text, names] of [
+  ["nested dynamic bindings", 'const { b: { value }, default: run } = await import("./b.mjs");', ["b", "default"]],
+  ["a wrapped dynamic property", 'export const b = (await (import("./b.mjs"))).b;', ["b"]],
+  ["a literal require property", 'const b = require("./b.mjs")["b"];', ["b"]],
+  ["a promise callback", 'import("./b.mjs").then(({ b }) => b());', null]
+]) {
+  eq(`the load parser handles ${label}`, analyzeScript("src/js/00-a.mjs", text).imports[0]?.names, names);
+}
 
 {
   const modelGraph = graph({
