@@ -58,6 +58,7 @@ export function startSaves(ports: LegacySavePorts): () => void {
   started = mine;
   return function () {
     if (started === mine) started = null;
+    mine.stop();
   };
 }
 
