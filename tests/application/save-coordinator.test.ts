@@ -89,6 +89,10 @@ async function turns(): Promise<void> {
 
 const SAVED: WriterResult = { kind: "saved" };
 
+function settled<T>(promise: Promise<T>): Promise<T | "still pending"> {
+  return Promise.race([promise, new Promise<"still pending">((resolve) => { setTimeout(() => { resolve("still pending"); }, 200); })]);
+}
+
 test("a lone save hands its writer the captured context, is saved, and confirms the generation it captured", async () => {
   const w = world();
   w.coordinator.noteChange();
@@ -270,15 +274,15 @@ test("stop: queued saves settle cancelled, a running write settles from its own 
   const job = nth(w, 0).job;
   w.coordinator.stop();
   w.calls = 0;
-  assert.deepEqual(await queued, { kind: "cancelled" });
+  assert.deepEqual(await settled(queued), { kind: "cancelled" });
   assert.equal(w.coordinator.waiting(), 0);
   assert.equal(job.owns(), false, "a stopped coordinator owns nothing");
   job.moved();
-  assert.deepEqual(await w.coordinator.request({ kind: "save" }), { kind: "refused", reason: "The save coordinator is stopped" });
+  assert.deepEqual(await settled(w.coordinator.request({ kind: "save" })), { kind: "refused", reason: "The save coordinator is stopped" });
   nth(w, 0).answer(SAVED);
   nth(w, 1).answer({ kind: "failed", error: "disk" });
-  assert.deepEqual(await active, { kind: "obsolete", here: false }, "a write that lands after the stop is no longer this coordinator's to confirm");
-  assert.deepEqual(await elsewhere, { kind: "failed", error: "disk" });
+  assert.deepEqual(await settled(active), { kind: "obsolete", here: false }, "a write that lands after the stop is no longer this coordinator's to confirm");
+  assert.deepEqual(await settled(elsewhere), { kind: "failed", error: "disk" });
   await turns();
   assert.equal(w.calls, 0, "no port was called after the stop");
   assert.equal(w.pending.length, 2, "the queued save never wrote");
@@ -294,7 +298,7 @@ test("stop: a writer that rejects after the stop settles failed, and a stop with
   w.calls = 0;
   const error = new Error("gone");
   nth(w, 0).fail(error);
-  assert.deepEqual(await active, { kind: "failed", error: error });
+  assert.deepEqual(await settled(active), { kind: "failed", error: error });
   assert.equal(w.calls, 0);
   const idle = world();
   idle.coordinator.stop();
