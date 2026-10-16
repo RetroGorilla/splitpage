@@ -358,10 +358,11 @@ export function __init() {
 
   onFileMenuChoice(function () { closeOnboarding(); });
 
-  maybeAutoShowOnboarding();
+  var autoShowDecided = maybeAutoShowOnboarding();
 
   window.__onboarding = {
     seedCheckPasses: seedCheckPasses,
-    eligible: onboardEligibleForAutoShow
+    eligible: onboardEligibleForAutoShow,
+    autoShowDecided: function () { return autoShowDecided; }
   };
 }
