@@ -13,6 +13,11 @@ goto /index.html?newtab=1
 wait document.getElementById('newtab-page').hidden == false
 sleep 300
 expect innerWidth == 375
+# The "Want its own window" pitch shows for a Windows browser only
+# (20a-update.js desktopAppOffered). Made to look like Windows, as
+# 30-new-tab.txt does, so the checks below see the same page on every OS.
+eval (function(){ Object.defineProperty(navigator, 'userAgent', { configurable: true, get: function(){ return 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120'; } }); window.__newTab.refreshRecents(); return true; })()
+wait document.getElementById('newtab-desktop').hidden == false
 
 # --- nothing overflows sideways -------------------------------------------
 expect document.documentElement.scrollWidth <= innerWidth
