@@ -935,7 +935,7 @@ export function compareBaseline(violations, baseline) {
 }
 
 export function isNumbered(path) {
-  return /^src\/js\/[0-9][^/]*\.js$/.test(path);
+  return /^src\/js\/[0-9][^/]*$/.test(path) && isScript(path);
 }
 
 export function legacyMeasurements(text) {
