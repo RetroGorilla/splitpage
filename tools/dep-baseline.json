@@ -404,7 +404,6 @@
     {"rule":"state-write","source":"src/js/02b-doc-id.js","target":"global:S.state.*"},
     {"rule":"state-write","source":"src/js/03-sync.js","target":"global:S.baseState"},
     {"rule":"state-write","source":"src/js/03-sync.js","target":"global:S.lastMergeUndo"},
-    {"rule":"state-write","source":"src/js/03-sync.js","target":"global:S.state"},
     {"rule":"state-write","source":"src/js/03-sync.js","target":"global:S.state.*"},
     {"rule":"state-write","source":"src/js/05-render.js","target":"global:S.deleteArmId"},
     {"rule":"state-write","source":"src/js/05-render.js","target":"global:S.deleteCommentArmId"},

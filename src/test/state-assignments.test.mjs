@@ -27,8 +27,7 @@ const SRC = fileURLToPath(new URL("..", import.meta.url));
 const SITES = [
   "00-prelude.js#(anonymous)",
   "02b-doc-id.js#assign",
-  "02b-doc-id.js#loadInitialDocument",
-  "03-sync.js#adopt"
+  "02b-doc-id.js#loadInitialDocument"
 ];
 
 function sourceFiles(dir) {
@@ -118,7 +117,7 @@ function migrated(title) {
   return migrateRows(rawDoc(title));
 }
 
-test("there are four S.state assignments, in these functions", () => {
+test("there are three S.state assignments, in these functions", () => {
   assert.deepEqual(assignments().map((a) => a.site).sort(), SITES.slice().sort());
 });
 
@@ -141,22 +140,22 @@ test("02b adoptRestoredState, through the transition API's live-document port: a
   assert.equal(fixedPoint(S.state), true);
 });
 
-test("03-sync applyMerge's adopt, after a merge: a migrateRows fixed point", async () => {
+test("03-sync applyMerge's adopt, after a merge, through the live-document port: a migrateRows fixed point", async () => {
   const base = migrated("Merge");
   const mine = cloneState(base);
   const theirs = cloneState(base);
   mine.rows[0].audioText = "Mine.";
   theirs.rows[1].audioText = "Theirs.";
   const got = await drive(() => applyMerge({ base, mine, theirs, source: "stash", report: false }));
-  assert.equal(fixedPoint(only(got, "03-sync.js#adopt")), true);
+  assert.equal(fixedPoint(only(got, "02b-doc-id.js#assign")), true);
 });
 
-test("03-sync applyMerge's adopt, nothing to merge: theirs as handed over, migrated in place by the session as it enters", async () => {
+test("03-sync applyMerge's adopt, nothing to merge, through the live-document port: theirs as handed over, migrated in place by the session as it enters", async () => {
   const fromMigrated = await drive(() => applyMerge({ theirs: migrated("Same"), source: "stash", unchanged: true, report: false }));
-  assert.equal(fixedPoint(only(fromMigrated, "03-sync.js#adopt")), true);
+  assert.equal(fixedPoint(only(fromMigrated, "02b-doc-id.js#assign")), true);
   const raw = rawDoc("Raw");
   const fromRaw = await drive(() => applyMerge({ theirs: raw, source: "stash", unchanged: true, report: false }));
-  const value = only(fromRaw, "03-sync.js#adopt");
+  const value = only(fromRaw, "02b-doc-id.js#assign");
   assert.equal(fixedPoint(value), true, "the session's server update migrated the unchanged theirs before it was assigned");
   assert.equal(fixedPoint(raw), true, "in place: the very object handed over is now a migrateRows fixed point");
 });
