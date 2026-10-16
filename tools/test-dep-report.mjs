@@ -1169,6 +1169,22 @@ try {
   const newFile = attempt(guarded, { "src/js/02-new.js": "export const leaf = 1;\n" });
   eq("a new acyclic numbered file fails", newFile.code, 1);
   eq("the numbered file guard names it", lines(newFile, "new legacy-file"), ["new legacy-file: src/js/02-new.js -> src/js"]);
+  const newTsFile = attempt(guarded, { "src/js/99-growth.ts": "export const leaf = 1;\n" });
+  eq("a new acyclic numbered TypeScript file fails", newTsFile.code, 1);
+  eq("the numbered file guard names the TypeScript file", lines(newTsFile, "new legacy-file"), ["new legacy-file: src/js/99-growth.ts -> src/js"]);
+  const newMjsFile = attempt(guarded, { "src/js/99-growth.mjs": "export const leaf = 1;\n" });
+  eq("a new acyclic numbered mjs file fails", newMjsFile.code, 1);
+  eq("the numbered file guard names the mjs file", lines(newMjsFile, "new legacy-file"), ["new legacy-file: src/js/99-growth.mjs -> src/js"]);
+  const tsFiles = {
+    "src/js/00-a.ts": "export const a = 1;\n",
+    "src/js/01-b.ts": "export const b = 2;\n"
+  };
+  const tsGuarded = cliRepo(tsFiles);
+  eq("init records the numbered TypeScript fixture", cli(tsGuarded, "--init").code, 0);
+  eq("the numbered TypeScript fixture starts clean", cli(tsGuarded).code, 0);
+  const newTsImport = attempt(tsGuarded, { "src/js/00-a.ts": 'import { b } from "./01-b.ts";\n' + tsFiles["src/js/00-a.ts"] });
+  eq("a new acyclic import between numbered TypeScript files fails", newTsImport.code, 1);
+  eq("only the numbered TypeScript import is new", lines(newTsImport, "new "), ["new loop-import: src/js/00-a.ts:1 -> src/js/01-b.ts#b"]);
   const moreRefs = attempt(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] + "void S.dirty;\n" });
   eq("one more reference to an existing S field fails", moreRefs.code, 1);
   eq("the reference count guard names its file", lines(moreRefs, "new legacy-state-refs"), ["new legacy-state-refs: src/js/00-a.js -> global:S"]);
