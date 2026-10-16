@@ -151,7 +151,7 @@ Plan §7 asks the release to name the shim, the count of numbered modules it sti
 
 **The shim:** `src/js/_entry.js`, "the legacy initializer shim", 170 lines. It calls `wireApp` with the dependencies it imports from numbered modules, then starts 69 of the 79 numbered modules; ten load only as imports (`03c`, `14c`, `14d`, `14e` and `22a` to `22f`). Runtime cycle: one, 46 modules and 310 edges (7.2 removed `02b-doc-id.js → 20b-onboarding.js`). `S` assigners: 3 (`00-prelude.js`, `02b-doc-id.js`, `03-sync.js`).
 
-**The bridges:** 23 files under `src/legacy/`, 1,452 lines (1,451 when 7.2 merged; #636 added a line to `save-bridge.ts`); 106 imports of them from 57 numbered modules and none from `_entry.js` (since 7.1 `src/bootstrap/wiring.ts` imports the ones it starts); 35 test files reference the session bridge. "Imported by" counts numbered modules (and the bootstrap files); the right column is what keeps the file alive.
+**The bridges:** 23 files under `src/legacy/`, 1,452 lines (1,451 when 7.2 merged; #636 added a line to `save-bridge.ts`); 106 imports of them from 57 numbered modules and none from `_entry.js` (since 7.1 `src/bootstrap/wiring.ts` imports the ones it starts); 38 test files reference the session bridge. "Imported by" counts numbered modules (and the bootstrap files); the right column is what keeps the file alive.
 
 | File | Lines | Imported by | Kept by |
 | --- | --- | --- | --- |
