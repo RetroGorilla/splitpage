@@ -237,14 +237,12 @@ review (Astra, Codex CLI, 2026-10-15), applied by #628.
   requires representative DOCX, XLSX and PDF reader or viewer checks and
   recorded project round trips; [milestone-5-gate.md](milestone-5-gate.md)
   lists them under "Not run". Passing byte fixtures do not supply this
-  evidence. **In progress, viewer checks running.** Adam was asked on
-  2026-10-15 whether to run the checks on his PC now, with three options:
-  "Run now" (open the DOCX, XLSX and PDF exports in the viewers installed on
-  the PC and record the result), "Accept fixtures" (the byte-fixture tests
-  stay as the evidence and the gate record says the viewer checks were not
-  run) or "Defer" (the row stays open until before the 4.0 release). He has
-  not answered; work proceeds on the recommended option, "Run now", on
-  `53dff02`.
+  evidence. Run on Adam's PC at `53dff02` under the recommended option of
+  his decision card ("Run now"; the other options were "Accept fixtures" and
+  "Defer"): DOCX and XLSX pass in Word and Excel 16.0, the project round trips
+  pass, and the PDF check is **open** until a person opens the PDFs, since the
+  PC has no PDF reader. Details in
+  [milestone-5-gate.md](milestone-5-gate.md#viewer-checks-and-round-trips-amendment-2026-10-15).
 - Milestone 7's teardown and missing-dependency contracts, as findings 1 and 2
   show.
 - The review accepts the deferred composition-root switch, bridge retirement
@@ -273,5 +271,5 @@ machine; this section is the disposition.
 - The release review's verdict is no for both milestones. Milestone 7 closes
   when findings 1 and 2 and the wiring test gaps are fixed and re-reviewed;
   finding 3 closes with its own fix PR.
-- Milestone 5's reader and viewer checks are running on Adam's PC under the
-  recommended option; his answer to the decision is still open.
+- Milestone 5's PDF check needs a person to open the crafted and `LONG_DEMO`
+  script PDFs; DOCX, XLSX and the round trips passed.
