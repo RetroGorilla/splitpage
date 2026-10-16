@@ -171,7 +171,9 @@ export var LENS_REACH_SCENES = 3;
 export var LENS_RECENTER_MS = 400;
 export var LENS_SLOW_PX_MS = 0.12;
 export var LENS_FAST_PX_MS = 0.6;
-var LENS_GLIDE_MS = 70;
+var LENS_GLIDE_MS = 60;
+var LENS_EASE_MS = 90;
+var LENS_EASE_FLOOR = 0.08;
 
 function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
 
@@ -527,7 +529,9 @@ var lens = {
   last: 0,
   hold: false,
   holdAt: -1,
-  holdTimer: 0
+  holdTimer: 0,
+  easeAt: -1,
+  easeNext: false
 };
 var noHover = false;
 
@@ -635,7 +639,14 @@ function lensFrame(now) {
     lens.a = next.anchor;
   }
   var T = lensTarget();
-  var alpha = prefersReducedMotion() ? 1 : 1 - Math.exp(-dt / LENS_GLIDE_MS);
+  if (lens.easeNext) { lens.easeAt = now; lens.easeNext = false; }
+  var alpha = 1 - Math.exp(-dt / LENS_GLIDE_MS);
+  if (prefersReducedMotion()) alpha = 1;
+  else if (lens.easeAt >= 0) {
+    var u = (now - lens.easeAt) / LENS_EASE_MS;
+    if (u >= 1) lens.easeAt = -1;
+    else alpha *= Math.max(LENS_EASE_FLOOR, u * u * (3 - 2 * u));
+  }
   var moving = false;
   for (var i = 0; i < T.length; i++) {
     var d = T[i] - lens.Z[i];
@@ -659,6 +670,7 @@ function lensStart() {
   if (!lens.Z) {
     lens.Z = base.X.slice();
     lens.last = 0;
+    lens.easeNext = true;
   }
   var strip = stripEl();
   if (strip) strip.classList.add("is-lensed");
@@ -761,7 +773,7 @@ function lensOff(src) {
   lens.on = false;
   lens.src = null;
   lens.x = null;
-  if (lens.Z) lensKick();
+  if (lens.Z) { lens.easeNext = true; lensKick(); }
 }
 
 function readMinFlag() {
