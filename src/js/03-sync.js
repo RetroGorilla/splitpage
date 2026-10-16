@@ -17,6 +17,7 @@ import { withDocumentPorts } from "../legacy/document-ports.ts";
 import { fromHtml } from "../legacy/richtext.ts";
 import {
   adoptRestoredState,
+  liveDocumentPort,
   normalizeDocId,
   noteMergedDocId
 } from "./02b-doc-id.js";
@@ -792,7 +793,7 @@ var mergePorts = {
   adopt: function (kind, next, merged) {
     if (merged) next = noteMerged(kind, next);
     else next = kind === "recovery" ? noteRecovery(next) : noteServerUpdate(next);
-    S.state = next;
+    liveDocumentPort.assign(next);
     return next;
   },
   documentId: function (doc) { return doc.docId; },
