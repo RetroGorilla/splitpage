@@ -1,20 +1,36 @@
-import { S } from "./_state.js";
-import { escapeHtml, makeId } from "./02-state.js";
-import { breakdownRows } from "./08-production-panels.js";
-import { commentBodyText } from "./10-comments.js";
-import { cellOf, toPlainText } from "./04c-doc-model.js";
+import { breakdownRows, breakdownTable, brollTable, commentBodyText } from "./14c-export-projections.js";
 import { exportBrollScenes, exportComments, exportFacts, sceneFacts } from "./14b-export-kit.js";
+import { makeId } from "../adapters/identity/ids.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
+import { toPlainText } from "../core/text/projections.ts";
+import { cellOf } from "../legacy/richtext.ts";
 
 export function csvEscape(v) {
   var s = String(v == null ? "" : v);
   return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
 }
 
+export function buildBreakdownCsv(doc) {
+  var t = breakdownTable(doc);
+  var lines = [t.head.join(",")];
+  t.rows.forEach(function (r) { lines.push(r.cells.map(csvEscape).join(",")); });
+  if (lines.length === 1) lines.push(csvEscape("(nothing labelled yet)"));
+  return "﻿" + lines.join("\r\n");
+}
+
+export function buildBrollCsv(doc) {
+  var t = brollTable(doc);
+  var lines = [t.head.join(",")];
+  t.rows.forEach(function (r) { lines.push(r.cells.map(csvEscape).join(",")); });
+  if (lines.length === 1) lines.push(csvEscape("(no b-roll yet)"));
+  return "﻿" + lines.join("\r\n");
+}
+
 var CSV_HEAD = ["Scene", "Start", "Status", "Read", "Read set by hand", "Visual", "Audio", "Tags", "B-roll", "Open comments"];
 
-function sceneTagLists() {
+function sceneTagLists(doc) {
   var byScene = Object.create(null);
-  breakdownRows().forEach(function (r) {
+  breakdownRows(doc).forEach(function (r) {
     if (r.inScript === "no") return;
     r.scenes.forEach(function (n) {
       var i = Number(n) - 1;
@@ -30,9 +46,9 @@ function sceneTagLists() {
   return byScene;
 }
 
-function sceneBrollLists() {
+function sceneBrollLists(doc) {
   var byScene = Object.create(null);
-  exportBrollScenes().forEach(function (g) {
+  exportBrollScenes(doc).forEach(function (g) {
     if (!g.scene) return;
     byScene[Number(g.scene) - 1] = g.items.map(function (r) {
       return r.name + " (" + (r.shot ? "shot" : "to shoot") + (r.flagged ? ", flagged" : "") + ")";
@@ -43,12 +59,12 @@ function sceneBrollLists() {
 
 export var COMMENT_HEAD = ["No.", "Location", "Status", "Assigned to", "Author", "Date", "Quoted text", "Comment"];
 
-export function scriptTable() {
-  var facts = exportFacts();
-  var scenes = sceneFacts();
-  var tags = sceneTagLists();
-  var broll = sceneBrollLists();
-  var comments = exportComments({ pieces: true });
+export function scriptTable(doc) {
+  var facts = exportFacts(doc);
+  var scenes = sceneFacts(doc);
+  var tags = sceneTagLists(doc);
+  var broll = sceneBrollLists(doc);
+  var comments = exportComments(doc, { pieces: true });
   var open = Object.create(null);
   comments.forEach(function (c) {
     if (c.number && c.rowIndex >= 0) (open[c.rowIndex] = open[c.rowIndex] || []).push(c.number);
@@ -63,7 +79,7 @@ export function scriptTable() {
   }
 
   var out = { head: CSV_HEAD.slice(), scenes: [], summary: [], commentHead: COMMENT_HEAD.slice(), comments: [] };
-  S.state.rows.forEach(function (row, i) {
+  doc.scenes.forEach(function (row, i) {
     var f = scenes[i];
     out.scenes.push({ status: f.status.id, cells: [
       f.number,
@@ -101,8 +117,8 @@ export function scriptTable() {
   return out;
 }
 
-export function buildCsv() {
-  var t = scriptTable();
+export function buildCsv(doc) {
+  var t = scriptTable(doc);
   var line = function (cells) { return cells.map(csvEscape).join(","); };
   var lines = [t.head.join(",")];
   t.scenes.forEach(function (s) { lines.push(line(s.cells)); });

@@ -1,0 +1,225 @@
+[
+  {
+    "case": "79 characters",
+    "input": {
+      "length": 79,
+      "runs": [
+        [
+          "x",
+          79
+        ]
+      ]
+    },
+    "output": {
+      "length": 79,
+      "runs": [
+        [
+          "x",
+          79
+        ]
+      ]
+    }
+  },
+  {
+    "case": "80 characters, the limit",
+    "input": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "case": "81 characters",
+    "input": {
+      "length": 81,
+      "runs": [
+        [
+          "x",
+          81
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "case": "80 inside spaces: trimmed before the cut",
+    "input": {
+      "length": 82,
+      "runs": [
+        [
+          " ",
+          1
+        ],
+        [
+          "x",
+          80
+        ],
+        [
+          " ",
+          1
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "case": "an astral character across the cut",
+    "input": {
+      "length": 81,
+      "runs": [
+        [
+          "x",
+          79
+        ],
+        [
+          "\ud83d",
+          1
+        ],
+        [
+          "\ude00",
+          1
+        ]
+      ]
+    },
+    "output": {
+      "length": 81,
+      "runs": [
+        [
+          "x",
+          79
+        ],
+        [
+          "\ud83d",
+          1
+        ],
+        [
+          "\ude00",
+          1
+        ]
+      ]
+    }
+  },
+  {
+    "case": "markup stripped first",
+    "input": {
+      "length": 88,
+      "runs": [
+        [
+          "<",
+          1
+        ],
+        [
+          "b",
+          1
+        ],
+        [
+          ">",
+          1
+        ],
+        [
+          "x",
+          81
+        ],
+        [
+          "<",
+          1
+        ],
+        [
+          "/",
+          1
+        ],
+        [
+          "b",
+          1
+        ],
+        [
+          ">",
+          1
+        ]
+      ]
+    },
+    "output": {
+      "length": 80,
+      "runs": [
+        [
+          "x",
+          80
+        ]
+      ]
+    }
+  },
+  {
+    "case": "empty",
+    "input": "",
+    "output": "Anonymous"
+  },
+  {
+    "case": "spaces only",
+    "input": "   ",
+    "output": "Anonymous"
+  },
+  {
+    "case": "markup only",
+    "input": "<b></b>",
+    "output": "Anonymous"
+  },
+  {
+    "case": "controls only",
+    "input": "\u0001\u0002",
+    "output": "Anonymous"
+  },
+  {
+    "case": "0",
+    "input": 0,
+    "output": "0"
+  },
+  {
+    "case": "false",
+    "input": false,
+    "output": "Anonymous"
+  },
+  {
+    "case": "null",
+    "input": null,
+    "output": "Anonymous"
+  },
+  {
+    "case": "undefined",
+    "input": "<undefined>",
+    "output": "Anonymous"
+  },
+  {
+    "case": "the fallback itself",
+    "input": "Anonymous",
+    "output": "Anonymous"
+  }
+]

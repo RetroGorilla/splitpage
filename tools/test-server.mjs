@@ -6,6 +6,7 @@ import { createHash, createHmac, randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { cappedText } from "../src/core/document/text-policy.ts";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const SERVER = join(ROOT, "server", "server.js");
@@ -830,6 +831,18 @@ try {
       body.here.every((p) => p.field !== "nonsense"));
   }
   {
+    const grin = String.fromCodePoint(0x1F600);
+    const names = [
+      ["x".repeat(39) + grin + "y", "x".repeat(39) + grin], [grin.repeat(41), grin.repeat(40)],
+      ["x".repeat(39) + " y", "x".repeat(39)], ["\uD83DAnn\uDE00 ", "Ann"], ["x".repeat(39) + "\uD83D" + "yz", "x".repeat(39) + "y"]
+    ];
+    for (let i = 0; i < names.length; i++) await beat(editToken, { docId: "names-doc", id: "pn" + i, name: names[i][0] });
+    const body = await json(await beat(editToken, { docId: "names-doc", id: "pq" }));
+    const got = names.map((n, i) => ((body.here || []).find((p) => p.id === "pn" + i) || {}).name);
+    check("a presence name is cut at 40 by code point, with no half emoji (#434)",
+      JSON.stringify(got) === JSON.stringify(names.map((n) => n[1])), JSON.stringify(got));
+  }
+  {
     await beat(editToken, { docId: "shared-doc", id: "p4", name: "Ana", color: "#80bdfb" });
     await beat(editToken, { docId: "shared-doc", id: "p5", name: "Bo", color: "red;background:url(x)" });
     const body = await json(await beat(editToken, { docId: "shared-doc", id: "p3" }));
@@ -1091,6 +1104,13 @@ try {
     eq("...and the line moves with the document", head.rev, 2);
     eq("...including the title", head.title, "Head line, saved");
     eq("...and the scene count", head.rows, 1);
+    const grin = String.fromCodePoint(0x1F600);
+    const long = await fetch(sHead.base + "api/docs/" + made.id, {
+      method: "PUT", headers: auth,
+      body: JSON.stringify({ baseRev: 2, state: { title: "x".repeat(511) + grin + "y", rows: [] } })
+    });
+    eq("a save with a long title is 200", long.status, 200);
+    eq("...and the line cuts it at 512 by code point, keeping the emoji whole (#434)", headOfFile(file).title, "x".repeat(511) + grin);
     check("a save leaves no temp file behind",
       !readdirSync(sHead.dataDir).some((n) => n.endsWith(".tmp")),
       readdirSync(sHead.dataDir).join(", "));
@@ -1165,6 +1185,176 @@ try {
   eq("...and does not write one", readFileSync(path, "utf8"), before);
 } finally {
   sHeadRO.stop();
+}
+
+const NOT_DOCUMENTS = [
+  ["an empty array", []],
+  ["an array of scenes", [{ title: "Array script", rows: [{ id: "r1" }] }]],
+  ["null", null],
+  ["a number", 42],
+  ["a string", "Untitled Script"],
+  ["true", true],
+  ["false", false]
+];
+
+const sShape = await startServer({ JOIN_PIN: PIN, HOST: "127.0.0.1" });
+try {
+  const token = (await json(await fetch(sShape.base + "api/join", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pin: PIN })
+  }))).token;
+  const auth = { "Content-Type": "application/json", "x-splitpage-token": token };
+  const docFiles = () => readdirSync(sShape.dataDir).filter((n) => n.endsWith(".json")).sort().join(",");
+  const readAs = async (docId) => await fetch(sShape.base + "api/docs/" + docId, { headers: auth });
+
+  const made = await fetch(sShape.base + "api/docs", {
+    method: "POST", headers: auth,
+    body: JSON.stringify({ state: { title: "Shape check", rows: [{ id: "r1" }] } })
+  });
+  eq("a document that is an object is still created", made.status, 201);
+  const madeBody = await json(made);
+  eq("...at rev 1", madeBody && madeBody.rev, 1);
+  const file = join(sShape.dataDir, madeBody.id + ".json");
+  eq("...and stored as sent", JSON.parse(readFileSync(file, "utf8")).state.title, "Shape check");
+
+  const saved = await fetch(sShape.base + "api/docs/" + madeBody.id, {
+    method: "PUT", headers: auth,
+    body: JSON.stringify({ baseRev: 1, state: { title: "Shape check, saved", rows: [] } })
+  });
+  eq("a save of an object is still 200", saved.status, 200);
+  eq("...at the next rev", (await json(saved)).rev, 2);
+  eq("...and stored as sent", JSON.parse(readFileSync(file, "utf8")).state.title, "Shape check, saved");
+
+  for (const [label, state] of NOT_DOCUMENTS) {
+    {
+      const before = docFiles();
+      const res = await fetch(sShape.base + "api/docs", {
+        method: "POST", headers: auth, body: JSON.stringify({ state, title: "Not a document" })
+      });
+      eq("creating a document from " + label + " is 400", res.status, 400);
+      eq("...saying bad-state", (await json(res) || {}).error, "bad-state");
+      eq("...and stores nothing", docFiles(), before);
+    }
+    {
+      const before = readFileSync(file, "utf8");
+      const res = await fetch(sShape.base + "api/docs/" + madeBody.id, {
+        method: "PUT", headers: auth, body: JSON.stringify({ baseRev: 2, state })
+      });
+      eq("saving " + label + " over a document is 400", res.status, 400);
+      eq("...saying bad-state", (await json(res) || {}).error, "bad-state");
+      eq("...and leaves the stored document as it was", readFileSync(file, "utf8"), before);
+    }
+  }
+
+  {
+    const res = await fetch(sShape.base + "api/docs/" + madeBody.id, {
+      method: "PUT", headers: auth, body: JSON.stringify({ baseRev: 2, state: { title: "Still saves", rows: [] } })
+    });
+    eq("after all that the document still saves at the rev it had", res.status, 200);
+    eq("...moving on to the next one", (await json(res)).rev, 3);
+  }
+
+  for (const [label, state] of NOT_DOCUMENTS) {
+    const before = readFileSync(file, "utf8");
+    const res = await fetch(sShape.base + "api/docs/" + madeBody.id, {
+      method: "PUT", headers: auth, body: JSON.stringify({ baseRev: 1, state })
+    });
+    eq("a stale save of " + label + " is 400, not a conflict", res.status, 400);
+    eq("...saying bad-state", (await json(res) || {}).error, "bad-state");
+    eq("...and leaves the stored document as it was", readFileSync(file, "utf8"), before);
+  }
+
+  const stored = (id, state) => {
+    const path = join(sShape.dataDir, id + ".json");
+    writeFileSync(path, JSON.stringify({
+      id, rev: 4, state, updatedAt: "2026-01-01T00:00:00.000Z", updatedBy: "Host"
+    }));
+    return path;
+  };
+
+  {
+    const path = stored("stored-array", [{ title: "Array script" }]);
+    const res = await readAs("stored-array");
+    eq("an array stored before this check still reads", res.status, 200);
+    const body = await json(res);
+    check("...handing back the array as it is", Array.isArray(body && body.state) && body.state[0].title === "Array script",
+      JSON.stringify(body));
+    eq("...at its rev", body && body.rev, 4);
+
+    const list = await json(await fetch(sShape.base + "api/docs", { headers: auth }));
+    const row = (list.docs || []).find((d) => d.id === "stored-array");
+    eq("...the picker still lists it, as an untitled script", row && row.title, "Untitled Script");
+    eq("...with no scenes", row && row.rows, 0);
+    let head = null;
+    for (let i = 0; i < 40 && !head; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      try { head = headOfFile(path); } catch { head = null; }
+    }
+    check("...and gives it a head line as it does any old document", !!head);
+    check("...without changing what is stored", Array.isArray(JSON.parse(readFileSync(path, "utf8")).state) &&
+      JSON.parse(readFileSync(path, "utf8")).state[0].title === "Array script");
+
+    const stale = await fetch(sShape.base + "api/docs/stored-array", {
+      method: "PUT", headers: auth, body: JSON.stringify({ baseRev: 3, state: { title: "Late", rows: [] } })
+    });
+    eq("a stale save against it is still a conflict", stale.status, 409);
+    check("...handing back what is stored", Array.isArray((await json(stale) || {}).state));
+
+    const arrayOver = await fetch(sShape.base + "api/docs/stored-array", {
+      method: "PUT", headers: auth, body: JSON.stringify({ baseRev: 4, state: [] })
+    });
+    eq("saving another array over it is refused too", arrayOver.status, 400);
+
+    const fixed = await fetch(sShape.base + "api/docs/stored-array", {
+      method: "PUT", headers: auth, body: JSON.stringify({ baseRev: 4, state: { title: "Mended", rows: [] } })
+    });
+    eq("a save of an object at its rev replaces it", fixed.status, 200);
+    eq("...at the next rev", (await json(fixed)).rev, 5);
+    eq("...and the stored document is an object from then on",
+      JSON.parse(readFileSync(path, "utf8")).state.title, "Mended");
+
+    const doomed = stored("stored-array-doomed", [{ title: "Array script" }]);
+    const gone = await fetch(sShape.base + "api/docs/stored-array-doomed", { method: "DELETE", headers: auth });
+    eq("a document stored as an array can be deleted", gone.status, 200);
+    check("...and its file is gone", !existsSync(doomed));
+  }
+
+  const cmtUrl = (docId) => sShape.base + "api/docs/" + docId + "/comments";
+  const note = (id) => ({
+    id, rowId: "r1", field: "audioText", anchorId: id,
+    quotedText: "there", author: "Host", body: "a note", kind: "anchor"
+  });
+
+  for (const [label, state] of NOT_DOCUMENTS) {
+    const id = "stored-" + label.replace(/[^a-z]+/g, "-").replace(/^-|-$/g, "");
+    const path = stored(id, state);
+    const before = readFileSync(path, "utf8");
+    {
+      const res = await fetch(cmtUrl(id), {
+        method: "POST", headers: auth, body: JSON.stringify({ comment: note("k1") })
+      });
+      eq("a comment on a document stored as " + label + " is 409", res.status, 409);
+      eq("...saying no-state", (await json(res) || {}).error, "no-state");
+    }
+    {
+      const res = await fetch(cmtUrl(id), {
+        method: "POST", headers: auth,
+        body: JSON.stringify({ replyTo: "k1", reply: { id: "kr1", author: "Host", body: "and a reply" } })
+      });
+      eq("a reply on a document stored as " + label + " is 409", res.status, 409);
+      eq("...saying no-state", (await json(res) || {}).error, "no-state");
+    }
+    {
+      const res = await fetch(cmtUrl(id) + "/k1", {
+        method: "PATCH", headers: auth, body: JSON.stringify({ resolved: true })
+      });
+      eq("resolving a comment on a document stored as " + label + " is 409", res.status, 409);
+      eq("...saying no-state", (await json(res) || {}).error, "no-state");
+    }
+    eq("...and none of them writes to it", readFileSync(path, "utf8"), before);
+  }
+} finally {
+  sShape.stop();
 }
 
 const sCmt = await startServer({
@@ -1366,6 +1556,47 @@ try {
     eq("resolving a comment that is not there is 404", missing.status, 404);
     const nonsense = await patch(doc.id, editToken, "n1", { resolved: "yes" });
     eq("...and a resolve that is not a boolean is 400", nonsense.status, 400);
+  }
+
+  {
+    const grin = String.fromCodePoint(0x1F600);
+    const names = [
+      "a" + grin.repeat(50), "x".repeat(79) + grin + "y", "x".repeat(79) + " y", "  pad " + grin.repeat(90),
+      "x".repeat(79) + "\uD83D", "\uD83DAnn \uDE00", "<b>Bo</b>\u0001 " + grin, "\uD83D", "x".repeat(200)
+    ];
+    const want = names.map((n) => cappedText(n, 80) || "Anonymous");
+    const got = { author: [], assignee: [], reply: [], resolvedBy: [] };
+    for (let i = 0; i < names.length; i++) {
+      const id = "nm" + i;
+      const made = await json(await post(doc.id, editToken, { comment: note(id, { author: names[i], assignee: names[i] }) }));
+      got.author.push(made && made.comment.author);
+      got.assignee.push(made && (made.comment.assignee || "Anonymous"));
+      const replied = await json(await post(doc.id, editToken, { replyTo: id, reply: { id: "nr" + i, author: names[i], body: "r" } }));
+      got.reply.push(replied && replied.comment.replies[0].author);
+      const resolved = await json(await patch(doc.id, editToken, id, { resolved: true, by: names[i] }));
+      got.resolvedBy.push(resolved && (resolved.comment.resolvedBy || "Anonymous"));
+    }
+    for (const field of Object.keys(got)) {
+      check("a comment's " + field + " is cut by code point, the same as the app's cappedText (#344)",
+        JSON.stringify(got[field]) === JSON.stringify(want), JSON.stringify(got[field]));
+    }
+    const stored = (await readDocAs(doc.id, editToken)).state.comments.filter((c) => /^nm/.test(c.id));
+    check("...and stored that way", JSON.stringify(stored.map((c) => c.author)) === JSON.stringify(want));
+  }
+
+  {
+    const grin = String.fromCodePoint(0x1F600);
+    const quotes = [
+      ["x".repeat(1999) + grin + "y", "x".repeat(1999) + grin], [grin.repeat(2001), grin.repeat(2000)],
+      [" say\uD83D hi \uDE00", "say hi"], ["x".repeat(1998) + "\uD83D" + "yz", "x".repeat(1998) + "yz"], ["\uD83D", ""]
+    ];
+    const got = [];
+    for (let i = 0; i < quotes.length; i++) {
+      const made = await json(await post(doc.id, editToken, { comment: note("nq" + i, { quotedText: quotes[i][0] }) }));
+      got.push(made && made.comment.quotedText);
+    }
+    check("a comment's quoted text is cut at 2000 by code point, with no half emoji (#434)",
+      JSON.stringify(got) === JSON.stringify(quotes.map((q) => q[1])), JSON.stringify(got));
   }
 
   {

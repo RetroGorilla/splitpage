@@ -1,0 +1,3 @@
+open /index.html
+wait document.getElementById('rows').children.length > 1
+expect document.hasFocus() == true

@@ -1,25 +1,26 @@
 import { S } from "./_state.js";
 import { ROW_STATUSES, formatDuration, rowSeconds, rowStatus } from "./01-scene-status.js";
 import { revealRow } from "./01b-hide-shot.js";
-import { escapeHtml } from "./02-state.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { cssAttr, plainText, safeId } from "./04-richtext.js";
 import { pad2, render } from "./05-render.js";
 import {
   TAG_CATEGORIES,
   TAG_STATUSES,
+  addRegistryTags,
   bulkDeleteArmed,
   bulkTagRows,
   clearProductionSelection,
+  currentProductionIndex,
   deletePerson,
   deleteProductionTagEntry,
   disarmBulkDelete,
   findOrAddPerson,
-  healTagRegistry,
   nextTagStatus,
   normalizeTagName,
   personById,
   productionEntries,
+  productionReaders,
   productionSelection,
   pruneProductionSelection,
   registerProductionTag,
@@ -32,14 +33,17 @@ import {
   tagsByCategory,
   updateProductionBadge
 } from "./07-production-tags.js";
-import { brollShotsByProp } from "./08c-broll.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
-import { sceneFacts } from "./14b-export-kit.js";
-import { csvEscape } from "./16-csv.js";
+import { breakdownRows, breakdownTable } from "./14c-export-projections.js";
+import { idMap } from "../core/document/id-map.ts";
+import { cappedLongText, escapeHtml } from "../core/document/text-policy.ts";
+import { planQuickAdd } from "../core/production/tags.ts";
+
+export { breakdownRows, breakdownTable };
 
 export var IS_TOUCH;
 
@@ -138,28 +142,10 @@ function fillGearQuickAdd() {
 export function applyGearQuickAdd() {
   if (reviewBlocked()) return;
   var raw = document.getElementById("gear-quickadd-input").value || "";
-  var wanted = {}, order = [];
-  raw.split(/\r\n|\r|\n/).forEach(function (line) {
-    var name = plainText(line).trim().slice(0, 80);
-    if (!name) return;
-    var key = normalizeTagName(name);
-    if (wanted[key]) return;
-    wanted[key] = name;
-    order.push(key);
-  });
-
-  var removed = 0;
-  gearEntries().forEach(function (item) {
-    if (wanted[normalizeTagName(item.name)] !== undefined) return;
-    if (!item.orphaned) return;
-    if (deleteProductionTagEntry("gear", item.name)) removed++;
-  });
-
-  var added = 0;
-  order.forEach(function (key) {
-    if (!registryEntry("gear", wanted[key])) added++;
-    registerProductionTag("gear", wanted[key]);
-  });
+  var plan = planQuickAdd(S.state, productionReaders, raw, currentProductionIndex());
+  plan.remove.forEach(function (name) { deleteProductionTagEntry("gear", name); });
+  addRegistryTags(plan.register);
+  var added = plan.added, removed = plan.removed;
 
   if (!added && !removed) { fillGearQuickAdd(); return; }
   markDirty();
@@ -181,7 +167,7 @@ function joinSceneLinks(links) {
 }
 
 function sceneLinksHtml(item) {
-  var byRow = {}, order = [];
+  var byRow = idMap(), order = [];
   item.mentions.forEach(function (m) {
     var s = byRow[m.rowId];
     if (!s) { s = byRow[m.rowId] = { m: m, n: 0, visual: false, audio: false }; order.push(s); }
@@ -389,7 +375,7 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
         '<textarea class="tag-notes-input ev-field" id="' + notesId + '" data-key="' + k + '" rows="2" ' +
           (ro ? 'readonly placeholder="No notes">'
               : 'placeholder="Reference link, file path, spec, where it’s coming from…">') +
-          escapeHtml(item.notes) + '</textarea>' +
+          '\n' + escapeHtml(item.notes) + '</textarea>' +
       '</dd>' +
     '</dl>';
   if (!gear || ro) return dl;
@@ -458,7 +444,7 @@ function renderProductionByScene(all) {
 }
 
 function renderProductionByPerson(all) {
-  var buckets = {}, order = [];
+  var buckets = idMap(), order = [];
   function bucket(id, label) {
     if (!buckets[id]) { buckets[id] = { id: id, label: label, items: [] }; order.push(id); }
     return buckets[id];
@@ -655,9 +641,22 @@ function renderProductionList(entries) {
   }).join("");
 }
 
+var registeredByAction = false;
+
 function trackedEntry(item) {
-  healTagRegistry();
-  return registryEntry(item.cat.id, item.name);
+  var entry = registryEntry(item.cat.id, item.name);
+  if (entry) return entry;
+  registerProductionTag(item.cat.id, item.name);
+  entry = registryEntry(item.cat.id, item.name);
+  if (entry) registeredByAction = true;
+  return entry;
+}
+
+function noteRegistered() {
+  var was = registeredByAction;
+  registeredByAction = false;
+  if (was) markDirty();
+  return was;
 }
 
 function findTagByKey(key) {
@@ -759,53 +758,6 @@ export function toggleCardSelection(key) {
   renderProduction();
 }
 
-var touchPress = { timer: null, key: null, fired: false, x: 0, y: 0 };
-
-function cancelTouchPress() {
-  if (touchPress.timer) { clearTimeout(touchPress.timer); touchPress.timer = null; }
-}
-
-export function wireTouchSelection() {
-  var list = document.getElementById("production-list");
-  if (!list) return;
-
-  list.addEventListener("pointerdown", function (e) {
-    if (e.pointerType === "mouse" || reviewMode()) return;
-    var card = e.target.closest(".tag-entity");
-    if (!card) return;
-    if (e.target.closest(".tag-entity-detail, .tag-rename-input")) return;
-    touchPress.key = card.getAttribute("data-key");
-    touchPress.fired = false;
-    touchPress.x = e.clientX; touchPress.y = e.clientY;
-    cancelTouchPress();
-    touchPress.timer = setTimeout(function () {
-      touchPress.timer = null;
-      touchPress.fired = true;
-      toggleCardSelection(touchPress.key);
-      if (navigator.vibrate) navigator.vibrate(10);
-    }, 450);
-  });
-
-  list.addEventListener("pointermove", function (e) {
-    if (!touchPress.timer) return;
-    if (Math.abs(e.clientX - touchPress.x) > 10 || Math.abs(e.clientY - touchPress.y) > 10) cancelTouchPress();
-  });
-  list.addEventListener("pointerup", cancelTouchPress);
-  list.addEventListener("pointercancel", cancelTouchPress);
-
-  list.addEventListener("click", function (e) {
-    if (touchPress.fired) {
-      touchPress.fired = false;
-      e.preventDefault();
-      e.stopPropagation();
-    }
-  }, true);
-
-  list.addEventListener("contextmenu", function (e) {
-    if (IS_TOUCH && e.target.closest(".tag-entity")) e.preventDefault();
-  });
-}
-
 export function handleSelectionClick(e, card) {
   if (reviewMode()) return false;
   var key = card.getAttribute("data-key");
@@ -850,7 +802,8 @@ export function bulkSetOwner(personId) {
     entry.owner = owner;
     n++;
   });
-  if (!n) { renderProduction(); return; }
+  if (!n) { noteRegistered(); renderProduction(); return; }
+  registeredByAction = false;
   markDirty();
   renderProduction();
   queueAutoSave();
@@ -870,7 +823,8 @@ export function bulkSetStatus(statusId) {
     entry.status = want.id;
     n++;
   });
-  if (!n) { renderProduction(); return; }
+  if (!n) { noteRegistered(); renderProduction(); return; }
+  registeredByAction = false;
   markDirty();
   renderProduction();
   queueAutoSave();
@@ -982,8 +936,9 @@ export function setTagStatus(key, statusId) {
   var want = statusId === null
     ? nextTagStatus(entry.status)
     : (tagStatus(statusId) || TAG_STATUSES[0]).id;
-  if (entry.status === want) return;
+  if (entry.status === want) { noteRegistered(); return; }
   entry.status = want;
+  registeredByAction = false;
   markDirty();
   renderProduction();
   queueAutoSave();
@@ -995,6 +950,7 @@ export function setTagOwner(key, personId) {
   var entry = trackedEntry(item);
   if (!entry) return;
   entry.owner = personById(personId) ? personId : "";
+  registeredByAction = false;
   markDirty();
   renderProduction();
   queueAutoSave();
@@ -1005,9 +961,10 @@ export function setTagNotes(key, text) {
   if (!item) return;
   var entry = trackedEntry(item);
   if (!entry) return;
-  var clean = plainText(text).slice(0, 2000);
-  if (entry.notes === clean) return;
+  var clean = cappedLongText(plainText(text), 2000);
+  if (entry.notes === clean) { noteRegistered(); return; }
   entry.notes = clean;
+  registeredByAction = false;
   markDirty();
 }
 
@@ -1020,6 +977,7 @@ export function addPersonForTag(key) {
   var item = findTagByKey(key);
   var entry = item && trackedEntry(item);
   if (entry) entry.owner = id;
+  registeredByAction = false;
   markDirty();
   renderProduction();
   queueAutoSave();
@@ -1063,73 +1021,6 @@ export function saveTagRename(key) {
   } else {
     renderProduction();
   }
-}
-
-export function breakdownRows() {
-  var out = [];
-  var shotsFor = brollShotsByProp();
-  tagsByCategory().forEach(function (g) {
-    g.items.forEach(function (item) {
-      var scenes = [];
-      var seen = {};
-      item.mentions.forEach(function (m) {
-        if (seen[m.rowIndex]) return;
-        seen[m.rowIndex] = true;
-        scenes.push(pad2(m.rowIndex + 1));
-      });
-      var owner = personById(item.owner);
-      var st = tagStatus(item.status) || TAG_STATUSES[0];
-      out.push({
-        catId: g.cat.id,
-        category: g.cat.plural,
-        categoryLabel: g.cat.label,
-        name: item.name,
-        mentions: item.mentions.length,
-        owner: owner ? owner.name : "",
-        status: st.id,
-        statusLabel: st.label,
-        notes: item.notes || "",
-        inScript: item.orphaned ? "no" : "yes",
-        scenes: item.orphaned ? ["not in script"] : scenes,
-        broll: shotsFor[item.key] || []
-      });
-    });
-  });
-  return out;
-}
-
-export function breakdownTable() {
-  var starts = sceneFacts().map(function (f) { return f.start; });
-  var out = {
-    head: ["Category", "Item", "Status", "Assigned to", "Mentions", "Scenes", "In script", "Notes", "B-roll shots",
-           "First scene at", "Group"],
-    rows: []
-  };
-  breakdownRows().forEach(function (r) {
-    var first = r.inScript === "no" ? "" : (starts[Number(r.scenes[0]) - 1] || "");
-    out.rows.push({ catId: r.catId, status: r.status, cells: [
-      r.categoryLabel,
-      r.name,
-      r.statusLabel,
-      r.owner,
-      r.mentions,
-      r.scenes.join(" "),
-      r.inScript,
-      r.notes,
-      r.broll.join("; "),
-      first,
-      r.category
-    ] });
-  });
-  return out;
-}
-
-export function buildBreakdownCsv() {
-  var t = breakdownTable();
-  var lines = [t.head.join(",")];
-  t.rows.forEach(function (r) { lines.push(r.cells.map(csvEscape).join(",")); });
-  if (lines.length === 1) lines.push(csvEscape("(nothing labelled yet)"));
-  return "﻿" + lines.join("\r\n");
 }
 
 var openTagMenu = null;

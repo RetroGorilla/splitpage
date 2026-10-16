@@ -47,6 +47,12 @@ breakdown for props/locations/cast/VFX/sound.
   an ESM import binding is read-only, so they are properties of one exported
   object `S`. `src/js/_entry.js` is the bundle entry and the evaluation
   order.
+- **Seven edits go through `DocumentSession`** (milestone 3): scene length,
+  scene status, typing, split, join, cut and paste are commands in
+  `src/application/commands/`, run through `src/legacy/session-bridge.ts`.
+  Every other writer still assigns into `S.state` and calls `markDirty()`.
+  [docs/architecture/session.md](docs/architecture/session.md) describes the
+  session, the effect scheduler and the command shape as built.
 - **The shipped app must stay one self-contained file.** Save writes
   `"<!doctype html>" + document.documentElement.outerHTML` with the document
   spliced into `#state-data` (`buildPublishHtml`, `PAGE_SHELL`). That's why
@@ -86,29 +92,28 @@ the file you edit as well as the file that ships, and the build only stamps
 its cache name. Rebuild after a version bump and commit `sw.js`; CI fails if
 the committed copy's stamp has drifted from `VERSION`.
 
-Rebuild before testing any `src/` change, always:
+Rebuild (`node build.mjs`) before testing any `src/` change; a stale
+`index.html` looks exactly like a change that had no effect. Which tests a
+change needs, and when the full browser regression runs (milestone and
+release gates), is the table in
+[docs/architecture/testing.md](docs/architecture/testing.md#what-to-run-for-which-change);
+how to drive the suites, and their gotchas, is
+`.claude/skills/run-splitpage-app/SKILL.md`.
 
-```bash
-node build.mjs
-powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
-```
-
-The browser suite (`tests/01-core.txt` … `28-autosave.txt`, 16 retired)
-drives headless Edge over CDP. `-Only 22` runs one suite, `-Headed` shows the
-browser. Windows-only. Predates Google Drive, Google Doc import, two-column
-Markdown export, and the update/About box — hand- and Chromium-tested only.
-Full reference and gotchas: `.claude/skills/run-splitpage-app/SKILL.md`.
-`run-tests.ps1` mints its own 8-hex `$RunId` per run so two runs can share
-the machine without one's orphan-process sweep killing the other's browser.
+On Windows the suites run under `run-tests.ps1`, which drives headless Edge
+over CDP and mints its own 8-hex `$RunId` per run so two runs can share the
+machine without one's orphan-process sweep killing the other's browser.
 
 **Away from Windows**, `.claude/skills/run-splitpage-app/driver.mjs` is the
 same driver in Node — same `tests/*.txt`, same commands, same `RESULT:` line —
 so a `src/` change can be driven from the Linux cloud container, which has
-neither PowerShell nor Edge. One suite per invocation (`run-tests.ps1` is not
-ported):
+neither PowerShell nor Edge. `tools/run-suites.mjs` runs suites through it in
+parallel lanes, selected by a regex over full filenames; `driver.mjs --script`
+runs one:
 
 ```bash
 node build.mjs
+node tools/run-suites.mjs ../splitpage-runs/latest '^265-browser-drafts\.txt$'
 node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/01-core.txt
 ```
 
@@ -120,18 +125,21 @@ Windows result** — SKILL.md has the CA-pinning recipe that fixes it. Since
 asserted nothing at all, which is what lets CI gate on it; `driver.ps1` still
 only exits non-zero for a command that throws, so read its `RESULT:` line.
 
-**CI** (`.github/workflows/ci.yml`, #58) runs `npm run lint`, `node
-build.mjs`, `npm test`, `desktop/test/drafts.test.mjs`,
-`desktop/test/ipc-table.test.mjs`, `desktop/test/google-drive.test.mjs`, `tools/test-server.mjs`,
-`tools/test-update.mjs` and browser suites 01 and 52 on every pull request.
-A second job, `desktop-smoke`, runs `desktop/test/smoke.mjs --only-target
-dev` against an Xvfb display (#89) — that is where `main.js` and `preload.js`
-are actually executed, ~600 checks of it. It is its own job because it
-launches ~60 real Electron processes — 6.3 minutes on a Windows 11 x64
-machine, far longer on a slow shared runner — which is more than everything
-else together. It is not the
-full regression run — that is still `run-tests.ps1` on Windows, or
-`driver.mjs` one suite at a time here, plus the packaged targets.
+**CI** (`.github/workflows/ci.yml`, #58) runs the fast gates on every pull
+request: lint, types, the dependency and comment gates, the build and its
+`sw.js` stamp, every discovered unit, desktop and tool test
+(`npm run test:all`), and the smoke, CSP and persistence browser suites
+(`01-core.txt`, `52-csp.txt`, `265-browser-drafts.txt`).
+[docs/architecture/testing.md](docs/architecture/testing.md#ci) lists the
+jobs. A separate job, `desktop-smoke`, runs `desktop/test/smoke.mjs
+--only-target dev` against an Xvfb display (#89) on pushes to `main` — that
+is where `main.js` and `preload.js` are actually executed, ~600 checks of it.
+It is its own job because it launches ~60 real Electron processes — 6.3
+minutes on a Windows 11 x64 machine, far longer on a slow shared runner —
+which is more than everything else together. None of this is the full
+regression: every suite through `tools/run-suites.mjs` on Linux and
+`run-tests.ps1` on Windows, plus the packaged targets, runs at milestone and
+release gates.
 
 Since #80 CI also **produces** the app. It builds `index.html` and uploads
 it, with `sw.js`, `manifest.webmanifest`, the icons, `VERSION`, `server/`
@@ -142,14 +150,18 @@ run whose checks all passed.
 
 The owner's server does not use the artifact. `deploy.sh` pulls `main` and
 builds the root `Dockerfile`, which is two-stage: `npm ci` + `node build.mjs`
-in a `node:22-alpine` build stage, then only the built `index.html`/`sw.js`,
+in a `node:24-alpine` build stage, then only the built `index.html`/`sw.js`,
 the static files, `VERSION` and `server/` in the runtime stage. Docker is not
 on the Windows machine, so `.github/workflows/docker.yml` is where that image
 is really built: `bash -n` and shellcheck over `deploy.sh`, a legacy-builder
 `docker build`, then the container started as `99:100` with the settings
 `deploy.sh` insists on, checked through `/api/health` (VERSION, `links`,
 `linksPersist`), its own HEALTHCHECK and an owner sign-in that must survive a
-restart. It runs only when a deploy-relevant file changes (its `paths:`).
+restart. A second job in the same workflow, `prebuilt`, builds the app, copies
+only the artifact's files (the list `tools/artifact-files.mjs` reads from
+`ci.yml`) into an empty folder and builds and starts `Dockerfile.prebuilt`
+from there. The workflow runs only when a deploy-relevant file changes (its
+`paths:`).
 
 **`.githooks/` is gone** (#80). It held a pre-commit hook that did two jobs:
 it re-ran `build.mjs --check` against the staged tree so a commit could not
@@ -649,7 +661,10 @@ document. Only two operations change the row list: **`splitWriterRow()`**
 (Enter, via shared `splitRowFieldCore()`, §3.10) and **`mergeWriterRows()`**
 (Backspace/Delete at an edge; refuses when both rows have a visual; status
 accumulates by rank; the narration joined as models by `joinCells`, whose
-glue space stays inside a comment both sides are in). `caretAtEdge()` must not count empty inline wrappers —
+glue space stays inside a comment both sides are in). Both are views since
+milestone 3: they decide what the user asked, run `splitSceneCommand` or
+`joinScenesCommand` (`src/application/commands/split-join.ts`) through the
+session, and repaint. `caretAtEdge()` must not count empty inline wrappers —
 `Range.cloneContents()`'s empty `<strong></strong>` clone looked like
 content, blocking join on any scene starting with formatting.
 
@@ -669,10 +684,11 @@ original row. **`splitRowFieldCore(cellEl)`** is the shared core (reads
 `field` off `data-field`); `splitWriterRow()`/`splitCellField()` each add
 their own render/refocus. It splits the cell's model (#85): the caret as a
 model position (`cellSelection`), a selection deleted first, `splitCell`,
-each half written back with `toHtml`, the comments re-pointed by
-`syncCommentAnchors` (invariant #18) — one undo entry with the caller's
-`markDirty()`. A cell still holding a picture (pasted before design D7) is
-the one case still cut by a DOM range. Alt+Enter never reaches `onRootKeydown` inside the
+each half written back with `toHtml`, the comments re-pointed by the
+session's reconciliation (invariant #18) — one undo entry, written by
+`splitSceneCommand`, not by the caller. A cell still holding a picture
+(pasted before design D7) is the one case still cut by a DOM range
+(`splitMediaCellInDom`, which hands the two sanitised halves to the command). Alt+Enter never reaches `onRootKeydown` inside the
 writer (its capture handler treats every Enter as a split).
 
 `keepCaretInView(cellEl)` is a near-always-no-op scroll (only fires outside a
@@ -772,7 +788,8 @@ tabs**.
 - **The browser keeps drafts too, for server documents only** (PR #233 —
   a Collaborate guest has no desktop app). `20g-drafts.js` is one writer
   and one restore over a pluggable backend: `S.DESKTOP` → the bridge
-  above; otherwise `03d-drafts-idb.js` (IndexedDB `splitpage-drafts` v1:
+  above (`src/adapters/storage/draft-store-desktop.ts`); otherwise the IndexedDB
+  adapter `src/adapters/storage/draft-store-idb.ts` (`splitpage-drafts` v1:
   `meta` + `bodies`, keyPath `key`), live only while the page's document
   is on a server and not in review mode (`browserDraftTarget`). Same
   triggers, throttle, dedup, NEED_BASE handshake, blobs-first and backoff
@@ -1487,6 +1504,8 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
 
 ## 5. Invariants — break these and data goes quietly wrong
 
+Each rule below has a row in [docs/architecture/invariants.md](docs/architecture/invariants.md) (tests, 4.0 owner, milestone, and whether code will absorb it). Change the two together.
+
 1. **Edit with the Edit tool, one site at a time.** Never in-place regex
    substitution (`sed`/`perl -pi`) on `index.html` — no git to restore from.
 2. **Change a script cell through the document model, never by editing its
@@ -1501,14 +1520,9 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
 3. **Never touch text inside a tag** (§3.3): the model's edits keep a
    comment or link over all of a tag or none of it, and find/replace never
    matches inside one.
-4. **New top-level state field ⇒ update `migrateRows()` *and* `mergeStates()`**
-   (§3.2).
+4. Absorbed in milestone 2.5: see INV-04 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-04--every-top-level-field-survives-migration-and-merge).
 5. **Gate script-only behaviour on `isScriptCell()`** (§3.5).
-6. **Don't run document-wide scans per keystroke.** Wire expensive refreshes
-   through the one idle refresh (`scheduleIdleRefresh()` and its four
-   `schedule*()` wrappers, 180ms debounce, §3.16); `contentMemo()` keys on
-   the field's own HTML (never stale); the production index is derived once
-   per change (§3.4).
+6. Absorbed in milestone 3: see INV-06 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-06--no-document-wide-work-per-keystroke).
 7. **Repaint a row, don't re-render the document** for a single-row
    change: `renderRow(rowId)`, which repaints only the parts whose markup
    changed and never a field whose text did not (§3.16). `cycleRowStatus()`
@@ -1570,26 +1584,11 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     checks every panel against both modes. Writer and Present sit at
     `z-index: 145`, above panels (140), below modals (150) and toasts (200).
 17. **A hint about the document must never edit the document** (§3.8).
-18. **A comment's anchor is its `cmt` mark in the script; `rowId`/`field`
-    only say where that is, and one function keeps them saying it** (#85,
-    design §3.2). The mark is the `.cmt-anchor` span, and it moves with its
-    words because every path that moves words between rows moves them as
-    runs: a split (`splitRowFieldCore()`, `splitCell`), a join
-    (`mergeWriterRows()`, `joinCells`), a cut then paste
-    (05c-clipboard.js). Each then calls **`syncCommentAnchors(state)`**
-    (04c-doc-model.js) in the same undo entry, which points every comment
-    whose mark is somewhere at the first cell holding it, in document
-    order; a comment whose words are gone keeps what it had (detached).
-    `migrateRows()` calls it too, so every load and every merge — which
-    can bring one side's split against the other side's old `rowId` —
-    comes out in step. A new path that moves words between rows calls it;
-    nothing else may write a comment's `rowId`/`field` for an anchored
-    comment.
+18. Absorbed in milestone 3: see INV-18 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-18--a-comment-is-anchored-by-its-mark). A new path that moves words between rows is a session command that declares what it changes (`docs/architecture/session.md`); the scene-level paths of 05g, 05h and 06-rows still call `syncCommentAnchors(state)` themselves.
 19. **A full-screen overlay must own the focus and the stacking, not just
     the pixels.** `.tag-ghost-hint` raised to 146; a `focusin` trap on
     `#writer` lets modals/toasts through.
-20. **There are two Save buttons and one save state**, via
-    `setSaveButtons()`/`mirrorFileChipToWriter()`.
+20. Absorbed in milestone 4: see INV-20 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-20--two-save-buttons-one-save-state). Both Save buttons render one view from `saveStatus` (`src/application/save/status.ts`) through `setSaveButtons()`/`mirrorFileChipToWriter()`.
 21. **There is one place a field gets split, not two** (§3.10) —
     `splitRowFieldCore()`.
 22. **Scroll to the caret's own rect, never the cell's**, when the cell
@@ -1684,6 +1683,7 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     main's memory between a route-open and the new tab's boot. Collaborate's
     owner token and link keys follow the same rule — where each may live is
     #62.
+    Held in milestone 4: see INV-29 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-29--connection-secrets-never-persist-in-shared-places).
 30. **The first-run setup wizard may only appear over a genuinely pristine
     copy of the app.** `<meta name="splitpage-seed-check">` (stamped by
     `build.mjs`, checked by `seedCheckPasses()`) plus
@@ -1711,11 +1711,7 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     Never in the seed, `#state-data`, or Standalone HTML export.
     `SCHEMA_VERSION` deliberately not bumped for it. A missing id must fail
     as *unique*, never as *shared*.
-36. **The id follows the Save target, not the edit.** A fork happens only
-    on Save As, publish of an id already written out, or detached draft
-    recovery, and history copies only after the write succeeds. Restoring a
-    snapshot never changes the id. "Already open" is decided by path or
-    server doc id, never by `docId`.
+36. Absorbed in milestone 4: see INV-36 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-36--the-id-follows-the-save-target). The transition API is the only writer of `docId` (`docs/architecture/saving.md`); "already open" is still decided by path or server doc id, never by `docId`.
 37. **`sha256Hex` and `deriveDocId` are frozen.** Changing either
     re-identifies every legacy file and every duplicate-replacement id,
     splitting history on the next open.
@@ -1729,6 +1725,7 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
 39. **`pushSnapshot()` captures synchronously, and no save ever waits on
     history.** A restore overwrites the document only after its "Before
     restoring" backup is stored or an explicit second confirm.
+    Held in milestone 4: see INV-39 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-39--snapshots-are-captured-synchronously-saves-never-wait-on-history).
 40. **A crash draft is deleted only when its tab becomes clean, or on an
     explicit user decision** — never on crash, kill, renderer loss,
     session-end, quit, or restore. A discard writes a tombstone before
@@ -1739,10 +1736,12 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     plus the store's own bounds (30 days, 20 drafts, 64 MiB). A link turned
     off, a lapsed sign-in or a page too old never stops the writer; they
     stop saves, and a restore never saves.
+    Held in milestone 4: see INV-40 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-40--a-crash-draft-is-removed-only-when-clean-or-by-the-user).
 41. **Restoring a draft never writes the user's file by itself.**
     "Unchanged on disk" is decided by content, never mtime. The draft
     header is built only by main from allowlisted scalar fields; draft
     bodies are written with fsync and two generations.
+    Held in milestone 4: see INV-41 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-41--restoring-a-draft-never-writes-the-users-file).
 42. **Each tab is its own page, and the main process is the only authority
     on tab identity, unsaved state, and what is already open** (§3.13).
     Moving a tab moves its `WebContentsView`, never copies it.
@@ -1816,6 +1815,7 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     `noAutoSave`) calls `haltAutoSave()`, and only an explicit Save starts
     the automatic writes again (#41). A failed or conflicted automatic save
     halts too, rather than repeating a toast or a modal every two seconds.
+    Held in milestone 4: see INV-51 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-51--autosave-writes-only-where-the-user-sent-the-document-only-reviewed-work-only-when-on).
 52. **No durable record names a blob its store does not already hold
     durably** (#82). An image is uploaded (and fsynced) before anything
     that refers to it by sha is written; the list of what a record names
@@ -1833,17 +1833,9 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
       stash carries non-durable blobs as `data:` URIs; app-data import
       stores blobs before snapshots (#49); file writers inline everything
       (#31, #32). Capture stays synchronous (#39) — only the job awaits.
+    Held in milestone 4: see INV-52 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-52--no-durable-record-names-a-blob-its-store-lacks).
 
-53. **Every edit of the document ends in `markDirty()`, and nothing that is
-    not an edit is recorded as one** (#85, `12a-undo.js`). The undo stack
-    learns about an edit by diffing after `markDirty()`, so an edit path
-    needs no undo code of its own — and a change that is not somebody's
-    edit must say so, or Ctrl+Z will take it back: a new document is
-    picked up by `render()` (`trackDocument`), someone else's merge by
-    `noteRemoteChange()` (called in `applyMerge`), a reload in place by
-    `absorbRemoteChange()`, and what an undo's own repaint heals by
-    `settleAfterApply()`. On a server document, a change to the comments
-    is never recorded (design D5).
+53. Absorbed in milestone 3: see INV-53 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-53--every-edit-is-recorded-once-nothing-else-is-recorded). The seven session commands record themselves; every other edit path still ends in `markDirty()`, and a change that is not somebody's edit must say so (the ledger row lists how).
 54. **A b-roll key's id is one line's** (`docs/DOCUMENT-MODEL.md` §3.3):
     `state.brollShots` records are found by it, so two keys sharing one
     make two lines claim one shot. A path that brings a key into the
@@ -1879,8 +1871,8 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     same edit). The merge is a base-aware set per shot (`mergeBrollProps`,
     03-sync.js): both sides' additions kept, a removal kept unless the
     other side still has it and did not have it in the base. A pasted copy
-    of a shot's line gets none of them (`recordPastedBroll` makes a fresh
-    record), exactly as it gets none of the status, notes or owner. A new
+    of a shot's line gets none of them (`pasteCommand`'s `pastedShots`, and
+    `recordPastedBroll` for a scene paste, make a fresh record), exactly as it gets none of the status, notes or owner. A new
     field on a shot record needs `migrateRows`, `mergeBrollShots` (which
     clones a shot whole and folds the other side in field by field) and
     `newBrollRecord`; `state-fields.test.mjs` checks the record's keys
@@ -1954,6 +1946,7 @@ File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
     moment it is read. `link-off` forgets the key in the tab and on the
     device; Settings ▸ Collaboration ▸ Sign out forgets the owner's token
     for that server only.
+    Held in milestone 4: see INV-62 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-62--collaborate-credentials-stay-in-this-browser-per-server).
 ---
 
 ## 6. Map of the source
@@ -1975,18 +1968,17 @@ evaluation order via `_entry.js`):
 | `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
 | `03a-history-store.js` | per-document version history, the renderer's half (#83): the backend choice (desktop IPC client / `shared/history-store.js` over 03c's IndexedDB backend / over the memory backend), synchronous `captureSnapshot` + pending entries and their retry, `historyPersistRefs` (#52), holds, the panel's list and notice line, the legacy `splitpage-snapshots` → Older migration, export/import, `window.__historyTest` |
 | `03c-history-idb.js` | the browser's IndexedDB backend for `shared/history-store.js` (`splitpage-history` v3: `index` + `bodies`, one strict transaction per job; the v3 upgrade drops 2.1's v1 stores only when they hold no snapshot), `hashText` |
-| `03d-drafts-idb.js` | the browser's store for crash-safe drafts of server documents (PR #233): `createIdbDraftStore` (`splitpage-drafts` v1: `meta` + `bodies`; `put` with the NEED_BASE rule and `keepBase`, `get`, `list`, `remove(key, writerId)`, `claim`; every call resolves, `UNAVAILABLE` with no IndexedDB), pure `browserDraftKey`, `draftBaseOf` (origin + folder), `planDraftEviction` (30 days, 20, 64 MiB); `src/test/browser-drafts.test.mjs` |
 | `04-richtext.js` | `walkSanitize` (images in HTML become `<img data-blob>`, #82), `storedImageHtml`, `storedHtmlFromDom`, html→markdown (the `.md` project's table only), video link cards |
 | `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s reconcile, measures before and after in document space, animates what moved (§3.14) |
 | `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
 | `04c-doc-model.js` | the structured document model (#85): a cell as runs with marks, `fromHtml`/`toHtml`/`cellOf`, the readers (`toPlainText`, `toDocxRuns`, `toMarkdown`, …), edits, steps and `mergeCells` |
-| `05b-cell-edit.js` | `editCell` — one edit of a script cell through the model with the selection kept; `domToPos`/`posToDom` |
-| `05c-clipboard.js` | copy, cut, paste and drop in a script cell through the model; a cut comment moves with its words (D6); a pasted b-roll key gets an id of its own unless a cut moves it (invariant #54) |
+| `05b-cell-edit.js` | `editCell` — one edit of a script cell through the model with the selection kept (it still writes the cell and calls `markDirty` itself, #452); `openCellEdit`/`closeCellEdit`, the DOM half the cut and paste commands share; `domToPos`/`posToDom` |
+| `05c-clipboard.js` | copy, cut, paste and drop in a script cell: the view of `pasteCommand` and `cutCommand` (`src/application/commands/clipboard.ts`, run through the session; an attachments-only paste runs outside `openCellEdit` and `closeCellEdit`, between its own undo-grouping breaks); a cut comment moves with its words (D6); a pasted b-roll key gets an id of its own unless a cut moves it (invariant #54) |
 | `05d-draft-edit.js` | `editDraft` — one edit of a comment or reply draft through the model, its pictures and video cards carried as placeholder characters (`mediaTable`); the draft's own undo history and typing bursts; `pasteIntoDraft`, `appendDraftMedia` |
 | `12a-undo.js` | the one undo/redo stack: every edit recorded by diffing after `markDirty()`; remote merges forget what they touched; `foldIntoEdit` puts something the app finishes later (a pasted link's thumbnail, #141) into the edit's own entry, or nowhere when a later entry touches it |
-| `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync, rich-text commands (§3.16) |
+| `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync (`syncFieldFromDom`, the view of the typing command), rich-text commands (§3.16) |
 | `05g-scene-clip.js` | whole scenes on the clipboard (#204): the payload (`application/x-splitpage-scenes` JSON — the scenes and everything they name, comments, b-roll records, breakdown entries, owners, picture bytes up to `SCENE_BLOB_CAP`, 16 MiB, the rest by reference), the two-column table (the payload without bytes on its `data-splitpage-scenes` attribute) and labelled plain text; reading it back through `migrateRows`; `insertScenes` (fresh row/comment/reply ids, anchors renamed, a b-roll key's id kept only when free — invariant #54 — with its record, a live cut in the same document a move while none of its scenes are in it, so it follows undo) and `removeScenes` (comments re-pointed at words that stay) |
-| `05h-scene-select.js` | selecting whole scenes by dragging out of a script cell (#204): the gesture, the autoscroll, the highlight (a `<style>` keyed by row id, since `render()` resets row classes), Ctrl+C/X, Delete/Backspace, Esc, the right-click menu, New script from these scenes, `pasteScenesAt` (called from 21-events.js's paste), each change one undo entry; a server document's pasted comments a second, unrecorded step (design D5) |
+| `05h-scene-select.js` | selecting whole scenes by dragging out of a script cell (#204): the gesture, the autoscroll, the highlight (a `<style>` keyed by row id, since `render()` resets row classes), Ctrl+C/X, Delete/Backspace, Esc, the right-click menu, New script from these scenes, `pasteScenesAt` (called from the paste route wired in 22a-editor-wiring.js), each change one undo entry; a server document's pasted comments a second, unrecorded step (design D5) |
 | `05q-cell-reach.js` | a press anywhere in a script cell puts the caret at the end of its field (#182) |
 | `05r-read-time.js` | the rail's Read time as a button: setting and clearing a scene's length by hand (#179) |
 | `05s-script-zoom.js` | Ctrl + wheel / pinch / Ctrl + `+` `−` `0` zoom the script alone via `--script-scale` (#191) |
@@ -2030,9 +2022,9 @@ evaluation order via `_entry.js`):
 | `20i-topbar.js` | the header on scroll (`.is-condensed`: the rundown's ruler shed, played as FLIP, two thresholds and the scroll offset put back); the title's full text as its tooltip; and the toolbar's labels (PR #233): each panel toggle's, Collab's and Write's label width measured with a Range into `--label-w` (the CSS animates the label closing below 1300 / 1000 and a closed one opening on hover or focus, over its neighbours, with a negative margin of the same width — app.css "the toolbar's labels"), `--label-x` to carry an opening pill to a neighbour's edge, and `.is-label-open` for a pointer that isn't a touch |
 | `20j-newtab.js` | the New Tab page, a start screen since #144 ("On air" since #169: the clock band with the most recent script and Continue): its gate, the new documents (blank, a starter, a paste — `adoptNewDocument`), the drop zone, the desktop recents column (DESKTOP-RECENTS, issue #15) |
 | `20k-phone-bar.js` | the phone's bottom bar (#169, ≤760px): Script, Write and the panel tabs, each clicking its header button, with the header badges' counts mirrored |
-| `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (capture-phase on `#file-menu`, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Collaboration / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open; Collaboration is the server address (13b-collaborate.js's pref, not in the app-data bundle), whether this device is signed in there and Sign out; `openSettings({focus})` for the Collaborate dialog's Change the address… |
+| `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (the registry's `settings` action, src/legacy/help-actions.ts, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Collaboration / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open; Collaboration is the server address (13b-collaborate.js's pref, not in the app-data bundle), whether this device is signed in there and Sign out; `openSettings({focus})` for the Collaborate dialog's Change the address… |
 | `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed; and `LONG_DEMO` (#215), the 30-scene demo written by `tools/make-long-demo.mjs`, opened from the New Tab page's footer and the command menu (`openLongDemo`, 18b-file-menu.js) |
-| `21-events.js` | all event wiring, `init()` |
+| `22a-editor-wiring.js`, `22b-production-wiring.js`, `22c-comments-wiring.js`, `22d-views-wiring.js`, `22e-overlay-wiring.js`, `22f-startup-wiring.js` | event wiring: the ports each feature mount under `src/features/` is given, one file per area (editor, production, comments, views, overlays, startup); `_entry.js` calls `wireApp` and then starts the modules |
 
 **Desktop files** (optional; the web app runs without them):
 
@@ -2076,18 +2068,27 @@ own file retired the markers, and means editing the repo's README no longer
 rebuilds the app. An HTML comment left loose in `docs/help.md` now renders as
 visible text on the Help page — keep any inside a fenced code block.
 
-**File-menu items owned outside `18-local-files.js`'s `handleFileMenuAction()`:**
-`20c-help.js` and `20e-connect.js` each add a capture-phase listener on
-`#file-menu` matching only their own action. `20b-onboarding.js`'s listener
-matches *every* action and closes the wizard first, registering ahead of the
-other two (alphabetical order) — keeping only one full-screen modal open at
-a time (invariant #19). The wizard's own Escape/Tab handling listens in the
-bubble phase instead, since it can sit open, unnoticed, during an unrelated
-test.
+**Choosing a File menu item:** one click listener on `#file-menu`
+(`mountFileMenu` in `src/features/file-menu/mount.ts`, wired by `22d-views-wiring.js`) hands an enabled item's id to `handleFileMenuAction()`
+(`18-local-files.js`), which runs the `onFileMenuChoice()` listeners, closes
+the menu, remembers an export and invokes the action from the registry
+(`docs/architecture/actions.md`). Help, Servers, Tour and Set up are actions
+like the rest; the capture-phase listeners `20c-help.js`, `20e-connect.js`
+and `20b-onboarding.js` once added are gone. The setup wizard registers with
+`onFileMenuChoice()` and closes on *every* choice before the action is asked
+whether it can run, keeping only one full-screen modal open at a time
+(invariant #19); so a File menu command from the desktop app's native menu
+closes the wizard and runs where its shortcut is refused under the wizard,
+as in 3.1. The wizard's own Escape/Tab handling listens in the bubble phase
+instead, since it can sit open, unnoticed, during an unrelated test.
 
 Since #145 the menu is a dropdown (`18b-file-menu.js`), but every item is
-still one `<button data-file-action>` inside `#file-menu`, exactly once — the
-desktop native menu clicks them (`runDesktopMenuCommand`). What an item's
+still one `<button data-file-action>` inside `#file-menu`, exactly once. The
+desktop native menu no longer clicks them: `runDesktopMenuCommand` hands the
+command to `nativeMenuRunner()` (`src/legacy/native-menu.ts`), which runs a
+File menu item's action through `handleFileMenuAction(id, "native-menu")`,
+reading no rendered state; only a command it does not know (an export
+format) still clicks its item. What an item's
 state is lives on the button (`hidden`, `disabled`, the `.mi-why` second line
 through `setMenuItemReason`), and a label is rewritten through
 `setMenuItemLabel`, never the button's `textContent`, which would take its

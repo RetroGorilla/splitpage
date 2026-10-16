@@ -155,11 +155,12 @@ jsclick #menu-present-browser
 wait window.fakeP._prompterCalls === 4
 expect document.getElementById('file-menu').hidden === true
 wait (function(){ var t = document.querySelectorAll('.toast'); for (var i = 0; i < t.length; i++) if (t[i].textContent.indexOf('Opened in your browser') !== -1) return true; return false; })()
-# the native View menu item clicks that same button, so the two cannot drift
-eval (function(){ window.__clicked = 0; document.getElementById('menu-present-browser').addEventListener('click', function(){ window.__clicked++; }); return true; })()
+# the native View menu item runs the same action as that button, so the two
+# cannot drift: one more call, and the same toast
+eval (function(){ document.getElementById('toast-host').innerHTML = ''; return true; })()
 eval D.runMenuCommand('prompter-open-in-browser')
 wait window.fakeP._prompterCalls === 5
-expect window.__clicked === 1
+wait (function(){ var t = document.querySelectorAll('.toast'); for (var i = 0; i < t.length; i++) if (t[i].textContent.indexOf('Opened in your browser') !== -1) return true; return false; })()
 
 # --- an older bridge without the call keeps the honest disabled state -------
 eval (function(){ window.fakeOld = D.makeFakeBackend(); delete window.fakeOld.openPrompterInBrowser; D.setBackend(window.fakeOld); return true; })()

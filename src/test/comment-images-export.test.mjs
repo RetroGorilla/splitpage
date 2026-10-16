@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -7,9 +8,11 @@ import { migrateRows } from "../js/02-state.js";
 import { intern } from "../js/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { commentBodyText, commentEntries } from "../js/10-comments.js";
-import { toMarkdownDoc, toMarkdownTableDoc, zipRead } from "../js/14-export.js";
+import { zipRead } from "../adapters/formats/zip.ts";
+import { toMarkdownDoc, toMarkdownTableDoc } from "../js/14d-export-text.js";
 import { __init as initDocx, buildDocx } from "../js/15-docx.js";
 import { buildCsv } from "../js/16-csv.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 initTags();
 initStatus();
@@ -89,7 +92,7 @@ test("the .docx embeds a comment's and a reply's pictures in order, each part on
     { kind: "conflict", rowId: "r1", field: "visualImage", conflictField: "Visual image", imageValue: conflictPic.rec, body: "" },
     { rowId: "r1", body: "Look: <img class=\"comment-img\" data-blob=\"" + MISSING + "\"> there." }
   ]);
-  const { zip, rels, types, section, docPrIds } = await readDocx(buildDocx());
+  const { zip, rels, types, section, docPrIds } = await readDocx(buildDocx(...liveWithAssets()));
 
   assert.deepEqual(Object.values(rels).filter((t) => t.startsWith("media/")),
     ["media/image1.jpeg", "media/image2.png", "media/image3.jpeg", "media/image4.png"]);
@@ -126,7 +129,7 @@ function pngOrJpeg(p) {
 test("a .docx comment picture is at most 60% of the column, keeps its aspect and is never enlarged past 96 dpi", async () => {
   const big = pic(pngBytes(3000, 2000)), small = pic(jpegBytes(40, 30)), tall = pic(pngBytes(500, 4000));
   setDoc(null, [{ body: big.html, replies: [{ id: "rp", author: "Bob", body: big.html }] }, { body: small.html }, { body: tall.html }]);
-  const { section } = await readDocx(buildDocx());
+  const { section } = await readDocx(buildDocx(...liveWithAssets()));
   const imgs = section.filter((p) => p.img);
   assert.equal(imgs.length, 4);
   const [b, br, s, t] = imgs;
@@ -148,23 +151,23 @@ test("Markdown and CSV write \"[image]\" where a picture was, in reading order",
     { kind: "conflict", rowId: "r1", field: "visualImage", conflictField: "Visual image", imageValue: c.rec, body: "" },
     { rowId: "r1", body: "Missing <img class=\"comment-img\" data-blob=\"" + MISSING + "\">" }
   ]);
-  for (const md of [toMarkdownDoc(), toMarkdownTableDoc(null, { export: true }), toMarkdownTableDoc()]) {
+  for (const md of [toMarkdownDoc(exportDocumentOf(S.state)), toMarkdownTableDoc(exportDocumentOf(S.state), { export: true }), toMarkdownTableDoc(exportDocumentOf(S.state))]) {
     const tail = md.slice(md.indexOf("## Comments"));
     assert.ok(tail.includes("Before  \n[image]  \nafter"), tail);
     assert.ok(tail.includes("> ↳ **Bob** · ") && /\*\*Bob\*\* · [^\n]*: {2}\[image\]/.test(tail), tail);
     assert.ok(tail.includes("Missing  \n[image]"), tail);
     assert.ok(!tail.includes("_(empty)_"), tail);
   }
-  assert.ok(toMarkdownDoc().includes("**Scene 01 · Audio** — Ann"));
-  assert.ok(toMarkdownTableDoc().includes("**Row 01 · Audio** — Ann"));
+  assert.ok(toMarkdownDoc(exportDocumentOf(S.state)).includes("**Scene 01 · Audio** — Ann"));
+  assert.ok(toMarkdownTableDoc(exportDocumentOf(S.state)).includes("**Row 01 · Audio** — Ann"));
 
-  const csv = buildCsv();
+  const csv = buildCsv(liveDoc());
   assert.ok(csv.includes(',"Before\n[image]\nafter"'), csv);
   assert.ok(/,↳ Bob,[^\n]*,,\[image\]/.test(csv), csv);
   assert.equal(csv.split("\r\n").filter((l) => /,\[image\]$/.test(l)).length, 2, "the reply and the conflict card");
   assert.ok(csv.includes("\r\n,Scene 01 · Audio,Open,,Ann,"), csv);
 
-  const [one, conflict, missing] = commentEntries({ pieces: true });
+  const [one, conflict, missing] = commentEntries(exportDocumentOf(S.state), { pieces: true });
   assert.equal(commentBodyText(one), "Before\n[image]\nafter");
   assert.equal(commentBodyText(one.replies[0]), "[image]");
   assert.equal(commentBodyText(conflict), "[image]");
@@ -173,10 +176,10 @@ test("Markdown and CSV write \"[image]\" where a picture was, in reading order",
 
 test("a text-only comment reads exactly as its plain body", () => {
   setDoc(null, [{ body: "One&nbsp;<b>two</b><br>three", replies: [{ id: "rp", author: "Bob", body: "" }] }, { body: "" }]);
-  const [c, empty] = commentEntries({ pieces: true });
+  const [c, empty] = commentEntries(exportDocumentOf(S.state), { pieces: true });
   assert.equal(commentBodyText(c), c.body);
   assert.equal(commentBodyText(c.replies[0]), "");
   assert.equal(commentBodyText(empty), "");
-  const [plain] = commentEntries();
+  const [plain] = commentEntries(exportDocumentOf(S.state));
   assert.equal(commentBodyText(plain), plain.body);
 });

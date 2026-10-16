@@ -21,7 +21,7 @@ expect true
 
 # =============================================================================
 # applyStashedWork's NO-OVERRIDE path (the ordinary lapsed-stash reload,
-# 21-events.js init()) still consumes a real stash — the contrast case for
+# 22f-startup-wiring.js) still consumes a real stash — the contrast case for
 # the OVERRIDE path drafts uses, tested for real further down. Run through a
 # goto the same way 25-history-migration.txt does, and run it FIRST: a goto
 # after real DOM work reliably aborts the CDP socket (SKILL.md gotchas).

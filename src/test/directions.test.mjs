@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -14,7 +15,9 @@ import {
 import { clipboardOfCell } from "../js/05c-clipboard.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { replaceInHtml } from "../js/09-find-replace.js";
-import { strBytes, toMarkdownDoc, zipRead, zipWrite } from "../js/14-export.js";
+import { strBytes } from "../adapters/formats/bytes.ts";
+import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
+import { toMarkdownDoc } from "../js/14d-export-text.js";
 import {
   __init as initDocx, audioDirectionsHtml, buildDocx, buildNarrationDocx, buildNarrationText, docxToRows, narrationRows
 } from "../js/15-docx.js";
@@ -23,6 +26,7 @@ import { prompterSceneHtml } from "../js/20-teleprompter.js";
 import {
   applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject, parseSplitpageFile
 } from "../js/20d-formats.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 initTags();
 initSceneStatus();
@@ -242,14 +246,14 @@ function directionDoc() {
 
 test(".splitpage carries it as it is", () => {
   const s = directionDoc();
-  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(s)));
+  const back = migrateRows(parseSplitpageFile(buildSplitpageFile(exportDocumentOf(s))));
   assert.equal(back.rows[0].audioText, s.rows[0].audioText);
   assert.equal(back.rows[1].audioText, s.rows[1].audioText);
 });
 
 test(".md: the table shows ((beat)), an untouched file reopens unchanged, a hand edit keeps its directions", async () => {
   const s = directionDoc();
-  const md = withState(s, () => buildMarkdownProject(s));
+  const md = withState(s, () => buildMarkdownProject(exportDocumentOf(s)));
   assert.ok(md.includes("| Welcome back. ((beat)) Today, the kettle. |"), "the table cell");
   S.state = s;
   try {
@@ -266,14 +270,14 @@ test(".md: the table shows ((beat)), an untouched file reopens unchanged, a hand
 
 test("narration export: directions in by default, as (beat); left out when switched off", () => {
   withState(directionDoc(), () => {
-    assert.equal(buildNarrationText({ directions: true }),
+    assert.equal(buildNarrationText(liveDoc(), { directions: true }),
       "Directions\n\nWelcome back. (beat) Today, the kettle.\n\nPour it (slowly).\n");
-    assert.equal(buildNarrationText({ directions: false }),
+    assert.equal(buildNarrationText(liveDoc(), { directions: false }),
       "Directions\n\nWelcome back. Today, the kettle.\n\nPour it.\n");
     const only = migrateRows({ schema: 2, title: "O", rows: [{ id: "a", audioText: DIR("beat") }, { id: "b", audioText: "Said." }] });
     withState(only, () => {
-      assert.equal(narrationRows({ directions: true }).length, 2);
-      assert.equal(narrationRows({ directions: false }).length, 1, "a scene that is only a direction has no narration");
+      assert.equal(narrationRows(liveDoc(), { directions: true }).length, 2);
+      assert.equal(narrationRows(liveDoc(), { directions: false }).length, 1, "a scene that is only a direction has no narration");
     });
   });
 });
@@ -284,7 +288,7 @@ async function documentXml(bytes) {
 }
 
 test("narration .docx: a direction in its own style, or not there at all", async () => {
-  const [on, off] = withState(directionDoc(), () => [buildNarrationDocx({ directions: true }), buildNarrationDocx({ directions: false })]);
+  const [on, off] = withState(directionDoc(), () => [buildNarrationDocx(liveDoc(), { directions: true }), buildNarrationDocx(liveDoc(), { directions: false })]);
   const withDirs = await documentXml(on);
   assert.match(withDirs, /<w:rStyle w:val="SplitpageDirection"\/><w:i\/><w:color w:val="6B6A65"\/><\/w:rPr><w:t xml:space="preserve">\(<\/w:t>/);
   assert.ok(withDirs.includes(">beat<"));
@@ -295,7 +299,7 @@ test("narration .docx: a direction in its own style, or not there at all", async
 
 test("a Splitpage .docx reopens with its directions as directions; ((…)) in a Word file's Audio is one too", async () => {
   const s = directionDoc();
-  const bytes = withState(s, () => buildDocx());
+  const bytes = withState(s, () => buildDocx(...liveWithAssets()));
   const parsed = await docxToRows(new File([bytes], "script.docx"));
   assert.equal(parsed.rows[0].audioText, s.rows[0].audioText);
   assert.equal(parsed.rows[1].audioText, s.rows[1].audioText);
@@ -312,8 +316,8 @@ test("a Splitpage .docx reopens with its directions as directions; ((…)) in a 
 
 test("the other exports print it as (beat)", () => {
   withState(directionDoc(), () => {
-    assert.ok(toMarkdownDoc().includes("Welcome back. *(beat)* Today, the kettle."));
-    assert.ok(buildCsv().includes("Welcome back. (beat) Today, the kettle."));
+    assert.ok(toMarkdownDoc(exportDocumentOf(S.state)).includes("Welcome back. *(beat)* Today, the kettle."));
+    assert.ok(buildCsv(liveDoc()).includes("Welcome back. (beat) Today, the kettle."));
   });
 });
 

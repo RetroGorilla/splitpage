@@ -1,0 +1,589 @@
+# Menu commands behind a dialog, the writer, Present, the shot-list page or
+# the tour. The desktop app's native menu items and their accelerators reach
+# the page as one call, D.runMenuCommand (desktop/main.js sendMenuCommand,
+# 20f-desktop.js runDesktopMenuCommand), which runs the action through
+# nativeMenuRunner (src/legacy/native-menu.ts), or clicks the File menu item
+# of an export format. Each command is refused under what it would act
+# behind, with a toast that says why, instead of acting behind it (#273,
+# #274). When more than one is open the toast names the one in front: a
+# dialog. The in-page shortcuts refuse under the same things, silently. The
+# file pickers are replaced so nothing waits on a real one. __tidy() starts
+# each section clean, so a command that acted where it should not have fails
+# only its own checks.
+
+open
+viewport 1400 900
+eval (function(){ window.D = window.__desktopTest; window.__picked = []; window.showSaveFilePicker = function () { window.__picked.push('save'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.showOpenFilePicker = function () { window.__picked.push('open'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.__take = function () { var p = window.__picked.join(','); window.__picked = []; return p; }; window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__toasts = function () { var t = Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function (x) { return x.textContent; }).join('|'); document.getElementById('toast-host').innerHTML = ''; return t; }; window.__hide = function () { return localStorage.getItem('splitpage-hide-shot') || '0'; }; window.__run = function (cmd) { D.runMenuCommand(cmd); return true; }; window.__panels = function () { return ['production-panel', 'gear-panel', 'comments-panel', 'history-panel'].filter(__shown).join(','); }; window.__tidy = function () { if (__shown('export-modal')) document.getElementById('export-close').click(); if (__shown('cmdk')) document.getElementById('cmdk-close').click(); if (__shown('findbar')) document.getElementById('find-close').click(); [['production-panel', 'btn-production'], ['gear-panel', 'btn-gear'], ['comments-panel', 'btn-comments'], ['history-panel', 'history-close']].forEach(function (p) { if (__shown(p[0])) document.getElementById(p[1]).click(); }); window.__h0 = __hide(); __take(); __toasts(); return true; }; return !!(D && D.runMenuCommand); })()
+
+# --- with nothing open, each command acts -----------------------------------
+eval __tidy()
+eval __run('save')
+sleep 400
+expect __take() === 'save'
+eval __run('save-as')
+sleep 400
+expect __take() === 'save'
+eval __run('open')
+sleep 400
+expect __take() === 'open'
+eval __run('export')
+sleep 300
+expect __shown('export-modal')
+key Escape
+sleep 300
+expect !__shown('export-modal')
+eval __run('command-menu')
+sleep 300
+expect __shown('cmdk')
+key Escape
+sleep 200
+expect !__shown('cmdk')
+eval __run('find')
+sleep 300
+expect __shown('findbar')
+jsclick #find-close
+sleep 200
+expect !__shown('findbar')
+eval __run('toggle-hide-shot')
+sleep 200
+expect __hide() !== window.__h0
+eval __run('toggle-hide-shot')
+sleep 200
+expect __hide() === window.__h0
+eval __run('toggle-production')
+sleep 300
+expect __panels() === 'production-panel'
+eval __run('toggle-production')
+sleep 300
+expect __panels() === ''
+eval __run('history')
+sleep 300
+expect __panels() === 'history-panel'
+eval __tidy()
+expect __panels() === ''
+eval __run('export-md')
+sleep 400
+expect __toasts() === 'Exported untitled-script.md'
+eval __run('present')
+wait __shown('prompter')
+jsclick #pp-close
+wait !__shown('prompter')
+eval __run('write')
+wait __shown('writer')
+sleep 600
+jsclick #wr-close
+wait !__shown('writer')
+sleep 600
+expect __toasts().indexOf('first.') === -1
+
+# --- under a dialog: refused, and the toast says why --------------------------
+eval __run('about')
+sleep 300
+expect __shown('about-modal')
+eval __tidy()
+eval __run('save')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+eval __run('save-as')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+eval __run('open')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+eval __run('export')
+sleep 300
+expect !__shown('export-modal')
+expect __toasts() === 'Close the open dialog first.'
+eval __tidy()
+eval __run('command-menu')
+sleep 300
+expect !__shown('cmdk')
+expect __toasts() === 'Close the open dialog first.'
+eval __tidy()
+eval __run('find')
+sleep 300
+expect !__shown('findbar')
+expect __toasts() === 'Close the open dialog first.'
+eval __tidy()
+eval __run('toggle-hide-shot')
+sleep 200
+expect __hide() === window.__h0
+expect __toasts() === 'Close the open dialog first.'
+eval __tidy()
+eval __run('present')
+sleep 300
+expect !__shown('prompter')
+expect __toasts() === 'Close the open dialog first.'
+eval __run('write')
+sleep 300
+expect !__shown('writer')
+expect __toasts() === 'Close the open dialog first.'
+eval __run('toggle-production')
+sleep 200
+expect __toasts() === 'Close the open dialog first.'
+eval __run('toggle-gear')
+sleep 200
+expect __toasts() === 'Close the open dialog first.'
+eval __run('toggle-comments')
+sleep 200
+expect __toasts() === 'Close the open dialog first.'
+eval __run('history')
+sleep 300
+expect __toasts() === 'Close the open dialog first.'
+expect __panels() === ''
+eval __run('export-md')
+sleep 400
+expect __toasts() === 'Close the open dialog first.'
+eval __run('prompter-open-in-browser')
+sleep 300
+expect __toasts() === 'Close the open dialog first.'
+eval __run('server-publish')
+sleep 300
+expect __toasts() === 'Close the open dialog first.'
+eval __tidy()
+# a command its shortcut never refused still acts
+eval __run('toggle-rundown-min')
+sleep 200
+expect localStorage.getItem('splitpage-rundown-min') === '1'
+eval __run('toggle-rundown-min')
+sleep 200
+expect localStorage.getItem('splitpage-rundown-min') === '0'
+expect __toasts() === ''
+# the in-page shortcuts refuse here too, and say nothing
+key ctrl KeyS
+sleep 300
+key ctrl+shift KeyS
+sleep 300
+key ctrl KeyO
+sleep 300
+key ctrl KeyE
+sleep 200
+key ctrl KeyF
+sleep 200
+key ctrl KeyK
+sleep 200
+key ctrl+alt KeyH
+sleep 300
+expect __take() === ''
+expect !__shown('export-modal')
+expect !__shown('findbar')
+expect !__shown('cmdk')
+expect __hide() === window.__h0
+expect __toasts() === ''
+expect __shown('about-modal')
+jsclick #about-modal .modal-close
+sleep 300
+expect !__shown('about-modal')
+
+# --- the open command menu counts as a dialog for Save, Open and Export ------
+eval __tidy()
+eval __run('command-menu')
+sleep 300
+expect __shown('cmdk')
+eval __run('save')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+eval __run('save-as')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+eval __run('open')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+eval __run('export')
+sleep 300
+expect !__shown('export-modal')
+expect __toasts() === 'Close the open dialog first.'
+eval __run('present')
+sleep 300
+expect !__shown('prompter')
+expect __toasts() === 'Close the open dialog first.'
+eval __run('toggle-production')
+sleep 300
+expect __panels() === ''
+expect __toasts() === 'Close the open dialog first.'
+expect __shown('cmdk')
+eval __run('export-md')
+sleep 400
+expect __toasts() === 'Close the open dialog first.'
+expect __shown('cmdk')
+# ...but not for Hide shot scenes, Find or Search commands, whose shortcuts
+# act behind it
+eval __run('toggle-hide-shot')
+sleep 300
+expect __hide() !== window.__h0
+expect __toasts().indexOf('first.') === -1
+eval __run('toggle-hide-shot')
+sleep 300
+expect __hide() === window.__h0
+eval __toasts()
+eval __run('command-menu')
+sleep 300
+expect __toasts() === ''
+eval __tidy()
+eval __run('command-menu')
+sleep 300
+expect __shown('cmdk')
+eval __run('find')
+sleep 300
+expect __shown('findbar')
+expect __toasts() === ''
+eval __tidy()
+
+# --- under the writer: Open, Export, Search commands, Find, Present, the ------
+# --- panels and History are refused -----------------------------------------
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+sleep 600
+eval __tidy()
+eval __run('open')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the writer first.'
+eval __run('export')
+sleep 300
+expect !__shown('export-modal')
+expect __toasts() === 'Close the writer first.'
+eval __tidy()
+eval __run('command-menu')
+sleep 300
+expect !__shown('cmdk')
+expect __toasts() === 'Close the writer first.'
+eval __tidy()
+eval __run('find')
+sleep 300
+expect !__shown('findbar')
+expect __toasts() === 'Close the writer first.'
+eval __tidy()
+eval __run('present')
+sleep 300
+expect !__shown('prompter')
+expect __toasts() === 'Close the writer first.'
+eval __run('toggle-production')
+sleep 200
+expect __toasts() === 'Close the writer first.'
+eval __run('toggle-gear')
+sleep 200
+expect __toasts() === 'Close the writer first.'
+eval __run('toggle-comments')
+sleep 200
+expect __toasts() === 'Close the writer first.'
+eval __run('history')
+sleep 300
+expect __toasts() === 'Close the writer first.'
+expect __panels() === ''
+eval __tidy()
+# ...and Save, Save a copy and Hide shot scenes still act there
+eval __run('save')
+sleep 400
+expect __take() === 'save'
+eval __run('save-as')
+sleep 400
+expect __take() === 'save'
+eval __run('toggle-hide-shot')
+sleep 200
+expect __hide() !== window.__h0
+eval __run('toggle-hide-shot')
+sleep 200
+expect __hide() === window.__h0
+expect __toasts().indexOf('first.') === -1
+# a dialog over the writer: the toast names the dialog, and the writer's own
+# Save button is refused
+eval __run('about')
+sleep 300
+expect __shown('about-modal')
+eval __tidy()
+eval __run('command-menu')
+sleep 300
+expect !__shown('cmdk')
+expect __toasts() === 'Close the open dialog first.'
+eval __run('find')
+sleep 300
+expect !__shown('findbar')
+expect __toasts() === 'Close the open dialog first.'
+eval __run('open')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+eval __run('present')
+sleep 300
+expect !__shown('prompter')
+expect __toasts() === 'Close the open dialog first.'
+eval __tidy()
+jsclick #wr-save
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the open dialog first.'
+jsclick #about-modal .modal-close
+sleep 300
+expect !__shown('about-modal')
+eval __tidy()
+jsclick #wr-save
+sleep 400
+expect __take() === 'save'
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+sleep 600
+
+# --- under Present: Open, Export, Search commands, Find, Write, the panels ---
+# --- and History are refused -------------------------------------------------
+jsclick #btn-present
+wait !document.getElementById('prompter').hidden
+sleep 400
+eval __tidy()
+eval __run('open')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close Present first.'
+eval __run('export')
+sleep 300
+expect !__shown('export-modal')
+expect __toasts() === 'Close Present first.'
+eval __tidy()
+eval __run('command-menu')
+sleep 300
+expect !__shown('cmdk')
+expect __toasts() === 'Close Present first.'
+eval __tidy()
+eval __run('find')
+sleep 300
+expect !__shown('findbar')
+expect __toasts() === 'Close Present first.'
+eval __tidy()
+eval __run('write')
+sleep 300
+expect !__shown('writer')
+expect __toasts() === 'Close Present first.'
+eval __run('toggle-production')
+sleep 200
+expect __toasts() === 'Close Present first.'
+eval __run('toggle-gear')
+sleep 200
+expect __toasts() === 'Close Present first.'
+eval __run('toggle-comments')
+sleep 200
+expect __toasts() === 'Close Present first.'
+eval __run('history')
+sleep 300
+expect __toasts() === 'Close Present first.'
+expect __panels() === ''
+eval __tidy()
+# the in-page Ctrl+F refuses here too, and says nothing (since #309 it no
+# longer flips Present either)
+key ctrl KeyF
+sleep 200
+key ctrl KeyF
+sleep 200
+expect !__shown('findbar')
+expect __toasts() === ''
+eval __tidy()
+# ...and Save, Save a copy and Hide shot scenes still act there
+eval __run('save')
+sleep 400
+expect __take() === 'save'
+eval __run('save-as')
+sleep 400
+expect __take() === 'save'
+eval __run('toggle-hide-shot')
+sleep 200
+expect __hide() !== window.__h0
+eval __run('toggle-hide-shot')
+sleep 200
+expect __hide() === window.__h0
+expect __toasts().indexOf('first.') === -1
+# a dialog over Present: the toast names the dialog
+eval __run('about')
+sleep 300
+expect __shown('about-modal')
+eval __tidy()
+eval __run('command-menu')
+sleep 300
+expect !__shown('cmdk')
+expect __toasts() === 'Close the open dialog first.'
+eval __run('export')
+sleep 300
+expect !__shown('export-modal')
+expect __toasts() === 'Close the open dialog first.'
+eval __run('write')
+sleep 300
+expect !__shown('writer')
+expect __toasts() === 'Close the open dialog first.'
+jsclick #about-modal .modal-close
+sleep 300
+expect !__shown('about-modal')
+jsclick #pp-close
+wait document.getElementById('prompter').hidden
+sleep 300
+
+# --- on the shot-list page: what is refused under the writer is refused ------
+eval __tidy()
+jsclick #btn-broll
+wait __shown('broll-panel')
+jsclick #broll-open-page
+wait __shown('broll-page')
+sleep 300
+eval __tidy()
+eval __run('open')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Close the shot list first.'
+eval __run('export')
+sleep 300
+expect !__shown('export-modal')
+expect __toasts() === 'Close the shot list first.'
+eval __tidy()
+eval __run('command-menu')
+sleep 300
+expect !__shown('cmdk')
+expect __toasts() === 'Close the shot list first.'
+eval __tidy()
+eval __run('find')
+sleep 300
+expect !__shown('findbar')
+expect __toasts() === 'Close the shot list first.'
+eval __tidy()
+eval __run('present')
+sleep 300
+expect !__shown('prompter')
+expect __toasts() === 'Close the shot list first.'
+eval __run('write')
+sleep 300
+expect !__shown('writer')
+expect __toasts() === 'Close the shot list first.'
+eval __run('toggle-production')
+sleep 200
+expect __toasts() === 'Close the shot list first.'
+eval __run('history')
+sleep 300
+expect __toasts() === 'Close the shot list first.'
+expect __panels() === ''
+eval __tidy()
+# the in-page shortcuts refuse here too, and say nothing
+key ctrl KeyO
+sleep 300
+key ctrl KeyE
+sleep 200
+key ctrl KeyF
+sleep 200
+key ctrl KeyK
+sleep 200
+expect __take() === ''
+expect !__shown('export-modal')
+expect !__shown('findbar')
+expect !__shown('cmdk')
+expect __toasts() === ''
+expect __shown('broll-page')
+# ...and Save still acts there
+eval __run('save')
+sleep 400
+expect __take() === 'save'
+expect __toasts().indexOf('first.') === -1
+# a dialog over the shot list: the toast names the dialog
+eval __run('about')
+sleep 300
+expect __shown('about-modal')
+eval __tidy()
+eval __run('find')
+sleep 300
+expect !__shown('findbar')
+expect __toasts() === 'Close the open dialog first.'
+jsclick #about-modal .modal-close
+sleep 300
+expect !__shown('about-modal')
+jsclick #broll-page-close
+wait !__shown('broll-page')
+jsclick #broll-close
+wait !__shown('broll-panel')
+
+# --- during the tour: what opens in the page is refused ----------------------
+eval __tidy()
+eval __run('tour')
+sleep 400
+expect __shown('tour-overlay')
+eval __toasts()
+eval __run('command-menu')
+sleep 300
+expect !__shown('cmdk')
+expect __toasts() === 'Finish or skip the tour first.'
+eval __tidy()
+eval __run('open')
+sleep 400
+expect __take() === ''
+expect __toasts() === 'Finish or skip the tour first.'
+eval __run('export')
+sleep 300
+expect !__shown('export-modal')
+expect __toasts() === 'Finish or skip the tour first.'
+eval __tidy()
+eval __run('find')
+sleep 300
+expect !__shown('findbar')
+expect __toasts() === 'Finish or skip the tour first.'
+eval __tidy()
+eval __run('present')
+sleep 300
+expect !__shown('prompter')
+expect __toasts() === 'Finish or skip the tour first.'
+eval __run('write')
+sleep 300
+expect !__shown('writer')
+expect __toasts() === 'Finish or skip the tour first.'
+eval __run('toggle-comments')
+sleep 200
+expect __toasts() === 'Finish or skip the tour first.'
+eval __run('history')
+sleep 300
+expect __toasts() === 'Finish or skip the tour first.'
+expect __panels() === ''
+eval __tidy()
+# the in-page shortcuts refuse here too, and say nothing
+key ctrl KeyO
+sleep 300
+key ctrl KeyE
+sleep 200
+key ctrl KeyF
+sleep 200
+expect __take() === ''
+expect !__shown('export-modal')
+expect !__shown('findbar')
+expect __toasts() === ''
+expect __shown('tour-overlay')
+# ...and Save still acts there
+eval __run('save')
+sleep 400
+expect __take() === 'save'
+expect __toasts().indexOf('first.') === -1
+eval __tidy()
+jsclick #tour-skip
+sleep 300
+expect !__shown('tour-overlay')
+
+# --- the setup wizard closes itself first, an export format included ---------
+eval __tidy()
+eval __run('setup')
+wait __shown('onboarding-modal')
+eval __tidy()
+eval __run('export-md')
+wait !__shown('onboarding-modal')
+sleep 400
+expect __toasts() === 'Exported untitled-script.md'
+
+# --- with everything closed again, the commands act as before ----------------
+eval __tidy()
+eval __run('command-menu')
+sleep 300
+expect __shown('cmdk')
+key Escape
+sleep 200
+eval __run('open')
+sleep 400
+expect __take() === 'open'
+
+# nothing here edited the document
+expect document.getElementById('save-status').hidden
+expect document.getElementById('btn-save').textContent == Save

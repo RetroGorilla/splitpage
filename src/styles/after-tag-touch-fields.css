@@ -1,0 +1,3 @@
+  }
+  @media (max-width: 760px) and (hover: none), (max-width: 760px) and (pointer: coarse) {
+    #root { --script-visual-lh: 1.5; --script-audio-size: 17px; --script-audio-lh: 1.55; }

@@ -1,0 +1,412 @@
+{
+  "inputs": {
+    "base": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "One.",
+          "imageRef": {
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Two.",
+          "imageRef": {
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Three.",
+          "imageRef": {
+            "sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r4",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Four.",
+          "imageRef": {
+            "sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer",
+          "imageName": "four.png"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "mine": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "One.",
+          "imageRef": {
+            "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+            "width": 800,
+            "height": 600,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer",
+          "imageName": "mine.png",
+          "imageAnnotation": {
+            "imageRef": {
+              "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+              "width": 800,
+              "height": 600,
+              "mime": "image/png"
+            },
+            "marks": [
+              {
+                "kind": "pen",
+                "color": "#e5383b",
+                "width": 0.01,
+                "points": [
+                  0.1,
+                  0.1,
+                  0.25,
+                  0.3
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Two.",
+          "imageRef": {
+            "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Three.",
+          "imageRef": {
+            "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        },
+        {
+          "id": "r4",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Four.",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "theirs": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "One.",
+          "imageRef": {
+            "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Two.",
+          "imageRef": {
+            "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Three.",
+          "imageRef": {
+            "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        },
+        {
+          "id": "r4",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Four.",
+          "imageRef": {
+            "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+            "width": 640,
+            "height": 360,
+            "mime": "image/png"
+          },
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer",
+          "imageName": "four.png"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    }
+  },
+  "inputsUntouched": true,
+  "merged": {
+    "title": "Lighthouse",
+    "docId": "d11111111111111111111111111111111",
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "One.",
+        "imageRef": {
+          "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+          "width": 800,
+          "height": 600,
+          "mime": "image/png"
+        },
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor",
+        "imageName": "mine.png",
+        "imageAnnotation": {
+          "imageRef": {
+            "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            "width": 800,
+            "height": 600,
+            "mime": "image/png"
+          },
+          "marks": [
+            {
+              "kind": "pen",
+              "color": "#e5383b",
+              "width": 0.01,
+              "points": [
+                0.1,
+                0.1,
+                0.25,
+                0.3
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "id": "r2",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Two.",
+        "imageRef": {
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+          "width": 640,
+          "height": 360,
+          "mime": "image/png"
+        },
+        "updatedAt": "2026-02-06T11:00:00.000Z",
+        "updatedBy": "Their Writer"
+      },
+      {
+        "id": "r3",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Three.",
+        "imageRef": {
+          "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+          "width": 640,
+          "height": 360,
+          "mime": "image/png"
+        },
+        "updatedAt": "2026-02-06T11:00:00.000Z",
+        "updatedBy": "Their Writer"
+      },
+      {
+        "id": "r4",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Four.",
+        "imageRef": {
+          "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+          "width": 640,
+          "height": 360,
+          "mime": "image/png"
+        },
+        "updatedAt": "2026-02-06T11:00:00.000Z",
+        "updatedBy": "Their Writer",
+        "imageName": "four.png"
+      }
+    ],
+    "comments": [
+      {
+        "id": "<minted-comment-id-1>",
+        "rowId": "r3",
+        "field": "visualImage",
+        "imageValue": {
+          "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+          "width": 640,
+          "height": 360,
+          "mime": "image/png"
+        },
+        "anchorId": "<minted-comment-id-1>",
+        "quotedText": "",
+        "author": "Merge Editor",
+        "body": "<img class=\"comment-img\" data-blob=\"1111111111111111111111111111111111111111111111111111111111111111\" data-w=\"640\" data-h=\"360\" data-mime=\"image/png\">",
+        "resolved": false,
+        "createdAt": "2030-01-02T03:04:05.678Z",
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "kind": "conflict",
+        "conflictField": "Visual image",
+        "emptyValue": false,
+        "replies": [],
+        "resolvedBy": null,
+        "resolvedAt": null,
+        "assignee": ""
+      },
+      {
+        "id": "<minted-comment-id-2>",
+        "rowId": "r4",
+        "field": "visualImage",
+        "imageValue": null,
+        "anchorId": "<minted-comment-id-2>",
+        "quotedText": "",
+        "author": "Merge Editor",
+        "body": "",
+        "resolved": false,
+        "createdAt": "2030-01-02T03:04:05.678Z",
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "kind": "conflict",
+        "conflictField": "Visual image",
+        "emptyValue": true,
+        "replies": [],
+        "resolvedBy": null,
+        "resolvedAt": null,
+        "assignee": ""
+      }
+    ],
+    "people": [],
+    "productionTags": [],
+    "brollShots": [],
+    "wordsPerMinute": 150,
+    "rev": 5,
+    "lastEditedBy": "Base Writer",
+    "lastEditedAt": "2026-02-01T09:00:00.000Z",
+    "schema": 2
+  },
+  "conflicts": [
+    {
+      "rowId": "r3",
+      "field": "imageRef",
+      "mine": {
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "width": 640,
+        "height": 360,
+        "mime": "image/png"
+      },
+      "theirs": {
+        "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "width": 640,
+        "height": 360,
+        "mime": "image/png"
+      }
+    },
+    {
+      "rowId": "r4",
+      "field": "imageRef",
+      "mine": null,
+      "theirs": {
+        "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "width": 640,
+        "height": 360,
+        "mime": "image/png"
+      }
+    }
+  ],
+  "stats": {
+    "rowsFromThem": 3,
+    "rowsFromMe": 1,
+    "rowsAddedByMe": 0,
+    "rowsAddedByThem": 0
+  }
+}

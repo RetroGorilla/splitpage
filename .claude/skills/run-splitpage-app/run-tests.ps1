@@ -2,7 +2,6 @@
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File .claude/skills/run-splitpage-app/run-tests.ps1
 #   ... -Only 02            run just the suite whose filename starts with 02
-#   ... -Parallel 1         one suite at a time (default is 4 lanes)
 #   ... -Headed             watch it happen in a real Edge window (forces -Parallel 1)
 #   ... -Port 9601 -CdpPort 10201   pin the port bases instead of auto-picking
 #
@@ -23,16 +22,27 @@ param(
   [int]$Port = 0,
   [int]$CdpPort = 0,
   [int]$TimeoutSec = 180,
-  [int]$Parallel = 4,
+  [int]$Parallel,
   [switch]$Headed
 )
 
 $ErrorActionPreference = 'Stop'
+$FreezeCaches = $env:SPLITPAGE_FREEZE_CACHES -eq '1'
 $here  = $PSScriptRoot
 $tests = Join-Path $here 'tests'
 $logs  = Join-Path $env:TEMP 'splitpage-testlogs'
 New-Item -ItemType Directory -Force -Path $logs | Out-Null
+Remove-Item (Join-Path $logs 'digest.txt'), (Join-Path $logs 'verdicts.json') -ErrorAction SilentlyContinue
 if ($Headed) { $Parallel = 1 }
+elseif (-not $PSBoundParameters.ContainsKey('Parallel')) {
+  try {
+    $parentId = (Get-CimInstance Win32_Process -Filter "ProcessId = $PID").ParentProcessId
+    $otherRuns = @(Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'" |
+      Where-Object { $_.ProcessId -ne $PID -and $_.ProcessId -ne $parentId -and $_.CommandLine -match 'run-tests\.ps1' }).Count
+  } catch { $otherRuns = 0 }
+  $Parallel = [Math]::Floor([Environment]::ProcessorCount * 9 / 16 / ($otherRuns + 1))
+  if ($otherRuns) { Write-Host ("{0} other run-tests.ps1 run(s) on this machine; this run takes {1} lanes" -f $otherRuns, [Math]::Max(1, $Parallel)) }
+}
 if ($Parallel -lt 1) { $Parallel = 1 }
 
 # Start-Process returns Edge's launcher, which hands off to a process tree and
@@ -117,30 +127,41 @@ if ($autoPort -or $autoCdp) {
   Write-Host "auto-picked port bases: Port=$Port CdpPort=$CdpPort"
 }
 Write-Host ("running {0} suite(s), {1} at a time" -f $files.Count, $Parallel)
+if ($FreezeCaches) { Write-Host 'cache freezing on (SPLITPAGE_FREEZE_CACHES=1): every suite opens the app with freeze-caches=1' }
 
 # One lane record per suite. Lanes are started in file order as slots free
 # up; results are printed in the order lanes FINISH, each line prefixed with
 # the suite name so interleaving is never ambiguous.
-$lanes = @()
-$i = 0
-foreach ($f in $files) {
-  $i++
-  $lanes += [pscustomobject]@{
-    Index = $i; File = $f; Tag = ('{0}s{1:d2}' -f $RunId, $i)
+function New-Lane($f, [int]$n) {
+  return [pscustomobject]@{
+    Index = $n; File = $f; Tag = ('{0}s{1:d2}' -f $RunId, $n); Token = [guid]::NewGuid().ToString('N')
     Out = Join-Path $logs ($f.BaseName + '.out.txt')
     Err = Join-Path $logs ($f.BaseName + '.err.txt')
     Proc = $null; Watch = $null; Done = $false; DoneAt = $null; Reported = $false; TimedOut = $false
   }
 }
 
-function Start-Lane($lane) {
-  Remove-Item $lane.Out, $lane.Err -ErrorAction SilentlyContinue
+$lanes = @()
+$i = 0
+foreach ($f in $files) {
+  $i++
+  $lanes += New-Lane $f $i
+}
+
+function Get-DriverArgs($lane) {
   $a = @(
     '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"{0}"' -f (Join-Path $here 'driver.ps1')),
     '-Port', ($Port + $lane.Index), '-CdpPort', ($CdpPort + $lane.Index), '-Script', ('"{0}"' -f $lane.File.FullName),
-    '-RunId', $lane.Tag
+    '-ResultToken', $lane.Token, '-RunId', $lane.Tag
   )
   if ($Headed) { $a += '-Headed' }
+  if ($FreezeCaches) { $a += '-FreezeCaches' }
+  return ,$a
+}
+
+function Start-Lane($lane) {
+  Remove-Item $lane.Out, $lane.Err -ErrorAction SilentlyContinue
+  $a = Get-DriverArgs $lane
   Write-Host ("--- {0} (started)" -f $lane.File.Name)
   $lane.Proc = Start-Process powershell -ArgumentList $a -RedirectStandardOutput $lane.Out `
                -RedirectStandardError $lane.Err -PassThru -NoNewWindow
@@ -157,7 +178,7 @@ function Test-LaneFinished($lane) {
     if (((Get-Date) - $lane.DoneAt).TotalSeconds -ge 5) { try { $lane.Proc.Kill() } catch {}; return $true }
     return $false
   }
-  $resultSeen = (Test-Path $lane.Out) -and (Select-String -Path $lane.Out -Pattern '^RESULT:' -Quiet)
+  $resultSeen = (Test-Path $lane.Out) -and (Select-String -Path $lane.Out -Pattern ('^RESULT:.* \[run ' + [regex]::Escape($lane.Token) + '\]$') -Quiet)
   if ($resultSeen -or ($lane.Proc.HasExited -and $lane.Watch.Elapsed.TotalSeconds -gt 3)) {
     $lane.Done = $true; $lane.DoneAt = Get-Date
     return (Test-LaneFinished $lane)
@@ -171,21 +192,34 @@ function Test-LaneFinished($lane) {
 }
 
 $totalChecks = 0; $totalFail = 0; $suiteFail = 0
+$laneVerdicts = @()
+$notStarted = New-Object System.Collections.ArrayList
+
+function Count-FailedSuite {
+  $script:suiteFail++
+  $script:totalChecks++
+  $script:totalFail++
+}
 
 function Report-Lane($lane) {
   $name = $lane.File.Name
+  $c0 = $script:totalChecks; $f0 = $script:totalFail; $s0 = $script:suiteFail
   # Sweep this lane's own leftover browsers only (see Clear-SplitpageEdge).
   Clear-SplitpageEdge $lane.Tag
 
   if ($lane.TimedOut) {
     Write-Host ("--- {0}: TIMED OUT after {1}s" -f $name, $TimeoutSec) -ForegroundColor Red
-    $script:suiteFail++
+    Count-FailedSuite
+    $script:laneVerdicts += [pscustomobject]@{ name = [IO.Path]::GetFileNameWithoutExtension($name); failed = $true; timedOut = $true; checks = $script:totalChecks - $c0; failedChecks = $script:totalFail - $f0; result = $null }
     if (Test-Path $lane.Out) { Get-Content $lane.Out | Select-Object -Last 8 | ForEach-Object { Write-Host "    $_" } }
     return
   }
 
   $lines = @(Get-Content $lane.Out -ErrorAction SilentlyContinue)
-  $result = ($lines | Where-Object { $_ -match '^RESULT:' } | Select-Object -Last 1)
+  $tail = ' [run ' + $lane.Token + ']'
+  $result = ($lines | Where-Object { $_ -match '^RESULT:' -and $_.EndsWith($tail) } | Select-Object -Last 1)
+  if ($result) { $result = $result.Substring(0, $result.Length - $tail.Length) }
+  $driverResult = if ($result) { [string]$result } else { $null }
   $failed = ($result -match 'FAILED') -or (-not $result)
   Write-Host ("--- {0}" -f $name)
   foreach ($l in $lines) {
@@ -195,14 +229,30 @@ function Report-Lane($lane) {
     if ($l -cmatch '^FAIL')  { Write-Host "    $l" -ForegroundColor Red }
     elseif ($l -cmatch '^ *(expected|actual):') { Write-Host "    $l" -ForegroundColor Red }
     elseif ($l -cmatch '^ERROR') { Write-Host "    $l" -ForegroundColor Red }
+    elseif ($l -cmatch '^NOT STARTED') { Write-Host "    $l" -ForegroundColor Red }
   }
-  if ($result -match 'RESULT: (\d+)/(\d+)') {
-    $script:totalChecks += [int]$Matches[2]
-    $script:totalFail   += ([int]$Matches[2] - [int]$Matches[1])
+  if ($lines | Where-Object { $_ -cmatch '^NOT STARTED' }) { [void]$script:notStarted.Add($name) }
+  $counted = $false
+  $unreadable = 'unreadable RESULT line'
+  if ($result -match '^RESULT: (\d+)/(\d+)') {
+    $ran = [int]$Matches[2]; $ok = [int]$Matches[1]
+    if ($ran -eq 0) { $unreadable = 'no checks ran' }
+    elseif ($ok -gt $ran) { $unreadable = 'more passed than ran' }
+    else {
+      $script:totalChecks += $ran
+      $script:totalFail   += ($ran - $ok)
+      $counted = $true
+      if ($ok -lt $ran) { $failed = $true }
+    }
   }
   if (-not $result) { $result = 'RESULT: (driver exited without a RESULT line) FAILED' }
-  if ($failed) { $script:suiteFail++; Write-Host "    $result" -ForegroundColor Red }
+  elseif (-not $counted) { $failed = $true; $result = "$result ($unreadable, counted as one failed check)" }
+  if ($failed) {
+    if ($counted) { $script:suiteFail++ } else { Count-FailedSuite }
+    Write-Host "    $result" -ForegroundColor Red
+  }
   else { Write-Host "    $result" -ForegroundColor Green }
+  $script:laneVerdicts += [pscustomobject]@{ name = [IO.Path]::GetFileNameWithoutExtension($name); failed = ($script:suiteFail -gt $s0); timedOut = $false; checks = $script:totalChecks - $c0; failedChecks = $script:totalFail - $f0; result = $driverResult }
 }
 
 $pending = [System.Collections.Generic.Queue[object]]::new()
@@ -226,13 +276,38 @@ while ($pending.Count -gt 0 -or $active.Count -gt 0) {
 
 Clear-SplitpageEdge $RunId
 
-Write-Host ''
-$passed = $totalChecks - $totalFail
-if ($suiteFail -gt 0) {
-  Write-Host "FAILED - $passed/$totalChecks checks passed across $($files.Count) suite(s)" -ForegroundColor Red
+function Write-Verdict([int]$SuiteCount) {
+  Write-Host ''
+  $passed = $script:totalChecks - $script:totalFail
+  if ($FreezeCaches) { Write-Host 'caches were frozen (freeze-caches=1) for every suite' }
+  if ($script:suiteFail -gt 0) {
+    Write-Host "FAILED - $passed/$($script:totalChecks) checks passed across $SuiteCount suite(s), $($script:suiteFail) suite(s) failed" -ForegroundColor Red
+    if ($script:notStarted.Count -gt 0) {
+      Write-Host ("{0} suite(s) never started and count as failed: {1}" -f $script:notStarted.Count, ($script:notStarted -join ', ')) -ForegroundColor Red
+    }
+    Write-Host "logs: $logs"
+    return 1
+  }
+  Write-Host "ALL PASS - $passed/$($script:totalChecks) checks across $SuiteCount suite(s)" -ForegroundColor Green
   Write-Host "logs: $logs"
-  exit 1
+  return 0
 }
-Write-Host "ALL PASS - $passed/$totalChecks checks across $($files.Count) suite(s)" -ForegroundColor Green
-Write-Host "logs: $logs"
-exit 0
+
+function Write-Digest {
+  $digest = Join-Path $logs 'digest.txt'
+  $verdicts = Join-Path $logs 'verdicts.json'
+  $json = ConvertTo-Json -InputObject @{ timeoutSec = $TimeoutSec; suites = @($laneVerdicts) } -Compress -Depth 4
+  [IO.File]::WriteAllText($verdicts, $json, (New-Object System.Text.UTF8Encoding $false))
+  $module = Join-Path (Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $here))) 'tools\failure-digest.mjs'
+  $names = ($files | ForEach-Object { $_.BaseName }) -join ','
+  try {
+    & node $module --logs $logs --out $digest --suites $names --verdicts $verdicts
+    if ($LASTEXITCODE -ne 0) { Write-Host "digest not written: failure-digest.mjs exited with code $LASTEXITCODE (see stderr)" -ForegroundColor Yellow }
+  }
+  catch { Write-Host "digest not written: $($_.Exception.Message)" -ForegroundColor Yellow }
+  if (Test-Path $digest) { Write-Host $digest }
+}
+
+$code = Write-Verdict $files.Count
+Write-Digest
+exit $code

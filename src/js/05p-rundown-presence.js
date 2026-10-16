@@ -1,7 +1,8 @@
 import { S } from "./_state.js";
-import { pad2 } from "./05-render.js";
 import { goToScene, rundownEdge } from "./05f-rundown.js";
 import { presenceShown } from "./13a-presence.js";
+import { idMap } from "../core/document/id-map.ts";
+import { pad2 } from "../core/production/timing.ts";
 
 export var RUNDOWN_IDLE_MS = 60 * 1000;
 var DOT_PX = 10;
@@ -15,7 +16,7 @@ function rowSig(row) {
 }
 
 export function rundownPresenceActivity(prev, people, rowsById, mineRowId, now) {
-  var next = {};
+  var next = idMap();
   (people || []).forEach(function (p) {
     if (!p || !p.id) return;
     var where = String(p.rowId || "") + "/" + String(p.field || "");
@@ -34,9 +35,9 @@ export function rundownPresenceActivity(prev, people, rowsById, mineRowId, now) 
 }
 
 export function rundownPresenceGroups(people, rowIds, activity, now, idleMs) {
-  var at = {};
+  var at = idMap();
   (rowIds || []).forEach(function (id, i) { at[id] = i; });
-  var byRow = {};
+  var byRow = idMap();
   var out = [];
   (people || []).forEach(function (p) {
     if (!p || !p.rowId || !Object.prototype.hasOwnProperty.call(at, p.rowId)) return;
@@ -62,7 +63,7 @@ export function rundownDotXs(center, n, trackW, dot, step) {
   return out;
 }
 
-var activity = {};
+var activity = idMap();
 var lastKey = "";
 var groups = [];
 
@@ -129,14 +130,14 @@ export function paintRundownPresence(seen) {
   var people = presenceShown();
   var rows = S.state && S.state.rows ? S.state.rows : [];
   if (!people.length || !rows.length) {
-    activity = {};
+    activity = idMap();
     groups = [];
     if (lastKey !== "") { layer.innerHTML = ""; lastKey = ""; }
     return;
   }
   var now = Date.now();
   if (seen !== false) {
-    var byId = {};
+    var byId = idMap();
     rows.forEach(function (r) { byId[r.id] = r; });
     activity = rundownPresenceActivity(activity, people, byId, mineRowId(), now);
   }

@@ -38,7 +38,6 @@ export const S = {
   lastMergeUndo: undefined,
 
   undoApplying: false,
-  cellRepainting: false,
 
   pendingImageRowId: undefined,
 

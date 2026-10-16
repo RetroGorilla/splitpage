@@ -1,0 +1,181 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.R = window.__renderTest; var doc = {"schema": 2, "title": "IME", "rows": [{"id": "r1", "visualText": "Wide", "audioText": "Hello", "status": "todo"}, {"id": "r2", "visualText": "Close", "audioText": "Two words.", "status": "todo"}, {"id": "r3", "visualText": "", "audioText": "Third.", "status": "todo"}], "comments": []}; return F.openFile(new File([JSON.stringify(doc)], 'ime.splitpage', {lastModified: Date.now()}), null); })()
+wait document.querySelector('#rows .row[data-id="r3"]') && F.state().title === 'IME'
+eval (function(){ window.__cell = function(id, root){ return document.querySelector((root || '#rows') + ' .cell-editable[data-id="' + id + '"][data-field="audioText"]'); }; window.__live = function(id){ return F.state().rows.filter(function(r){ return r.id === id; })[0]; }; window.__ev = []; window.__watch = function(root){ ['keydown','compositionstart','compositionupdate','compositionend','beforeinput','input'].forEach(function(t){ document.querySelector(root).addEventListener(t, function(e){ window.__ev.push(t + (e.inputType ? ':' + e.inputType : '') + (e.isComposing ? ':composing' : '')); }, true); }); return true; }; window.__arm = function(id, root){ U.flush(); window.__ev = []; window.__u0 = U.sizes().undo; R.reset(); window.__node = window.__cell(id, root).firstChild; window.__el = window.__cell(id, root); return true; }; window.__same = function(id, root){ return window.__cell(id, root) === window.__el && window.__node.isConnected && window.__el.firstChild === window.__node; }; window.__caret = function(el){ var s = getSelection(); if (!s.rangeCount || !el.contains(s.anchorNode)) return -1; var r = document.createRange(); r.selectNodeContents(el); r.setEnd(s.anchorNode, s.anchorOffset); return r.toString().replace(/​/g, '').length; }; return __watch('#rows'); })()
+
+caret #rows .cell-editable[data-id="r1"][data-field="audioText"]
+eval __arm('r1')
+ime set か
+expect __live('r1').audioText === 'Helloか'
+expect __cell('r1').textContent === 'Helloか'
+expect __ev.join(',') === 'compositionstart,compositionupdate,beforeinput:insertCompositionText:composing,input:insertCompositionText:composing'
+ime set かな
+expect __live('r1').audioText === 'Helloかな'
+expect __cell('r1').textContent === 'Helloかな'
+expect __same('r1')
+expect R.counts().cellsPainted === 0 && R.counts().render === 0
+eval R.render()
+expect R.counts().render === 1 && R.counts().cellsPainted === 0
+expect __same('r1')
+expect document.activeElement === __cell('r1')
+expect __caret(__cell('r1')) === 7
+eval R.reset()
+ime commit かな
+expect __live('r1').audioText === 'Helloかな'
+expect __cell('r1').textContent === 'Helloかな'
+expect __ev.slice(-2).join(',') === 'input:insertCompositionText:composing,compositionend'
+expect __ev.filter(function(e){ return e.indexOf('keydown') === 0; }).length === 0
+expect __same('r1')
+expect __caret(__cell('r1')) === 7
+expect R.counts().cellsPainted === 0 && R.counts().render === 0
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 1
+key ctrl KeyZ
+expect __live('r1').audioText === 'Hello'
+expect __caret(__cell('r1')) === 5
+
+caret #rows .cell-editable[data-id="r2"][data-field="audioText"] start
+eval __arm('r2')
+ime set ka
+expect __live('r2').audioText === 'kaTwo words.'
+ime set kana
+expect __live('r2').audioText === 'kanaTwo words.'
+expect __caret(__cell('r2')) === 4
+ime commit かな
+expect __live('r2').audioText === 'かなTwo words.'
+expect __cell('r2').textContent === 'かなTwo words.'
+expect __caret(__cell('r2')) === 2
+expect R.counts().cellsPainted === 0 && R.counts().render === 0
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 1
+key ctrl KeyZ
+expect __live('r2').audioText === 'Two words.'
+
+caret #rows .cell-editable[data-id="r3"][data-field="audioText"]
+eval __arm('r3')
+ime set xy
+expect __live('r3').audioText === 'Third.xy'
+ime cancel
+expect __cell('r3').textContent === 'Third.'
+expect __live('r3').audioText === 'Third.'
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 0
+expect U.sizes().redo === 1
+expect __ev.slice(-1).join(',') === 'compositionend'
+
+caret #rows .cell-editable[data-id="r3"][data-field="audioText"]
+eval __arm('r3')
+ime set ね
+sleep 1100
+ime set ねこ
+sleep 1100
+ime cancel
+expect __live('r3').audioText === 'Third.'
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 0
+expect U.sizes().redo === 1
+key ctrl KeyZ
+expect __live('r3').audioText === 'Third.'
+expect __cell('r3').textContent === 'Third.'
+
+caret #rows .cell-editable[data-id="r3"][data-field="audioText"]
+eval __arm('r3')
+press x
+key Backspace
+expect __live('r3').audioText === 'Third.'
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 0
+
+caret #rows .cell-editable[data-id="r3"][data-field="audioText"]
+eval __arm('r3')
+ime set か
+ime commit か
+ime set ね
+sleep 1100
+ime set ねこ
+sleep 1100
+ime cancel
+expect __live('r3').audioText === 'Third.か'
+expect __cell('r3').textContent === 'Third.か'
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 1
+key ctrl KeyZ
+expect __live('r3').audioText === 'Third.'
+
+caret #rows .cell-editable[data-id="r3"][data-field="audioText"]
+eval __arm('r3')
+ime set か
+ime commit か
+sleep 1100
+eval document.execCommand('delete')
+expect __live('r3').audioText === 'Third.'
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 2
+key ctrl KeyZ
+expect __live('r3').audioText === 'Third.か'
+key ctrl KeyZ
+expect __live('r3').audioText === 'Third.'
+
+caret #rows .cell-editable[data-id="r3"][data-field="audioText"]
+eval __arm('r3')
+eval (function(){ var t = __cell('r3').firstChild; var r = document.createRange(); r.setStart(t, 3); r.setEnd(t, 6); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
+expect getSelection().toString() === 'rd.'
+ime set ね
+sleep 1100
+ime set ねこ
+sleep 1100
+ime cancel
+expect __live('r3').audioText === 'Thi'
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 1
+key ctrl KeyZ
+expect __live('r3').audioText === 'Third.'
+expect __cell('r3').textContent === 'Third.'
+key ctrl+shift KeyZ
+expect __live('r3').audioText === 'Thi'
+key ctrl KeyZ
+expect __live('r3').audioText === 'Third.'
+
+caret #rows .cell-editable[data-id="r1"][data-field="audioText"]
+eval __arm('r1')
+ime set か
+eval (function(){ var ev = new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', ctrlKey: true, isComposing: true, keyCode: 229, bubbles: true, cancelable: true }); __cell('r1').dispatchEvent(ev); window.__zPrevented = ev.defaultPrevented; return true; })()
+expect window.__zPrevented === true
+expect __live('r1').audioText === 'Hello' && __cell('r1').textContent === 'Hello'
+expect U.sizes().undo - window.__u0 === 0 && U.sizes().redo === 1
+ime commit か
+expect __live('r1').audioText === 'Helloか' && __cell('r1').textContent === 'Helloか'
+eval (function(){ U.flush(); var n = F.state().rows.length; var el = __cell('r1'); el.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' })); var ev = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', altKey: true, isComposing: true, keyCode: 229, bubbles: true, cancelable: true }); el.dispatchEvent(ev); el.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '' })); window.__splitWhileComposing = F.state().rows.length - n; return true; })()
+expect window.__splitWhileComposing === 1
+
+click #btn-write
+wait !document.getElementById('writer').hidden && document.querySelector('#writer-doc .wr-para[data-id="r3"]')
+eval __watch('#writer-doc')
+caret #writer-doc .wr-para[data-id="r3"]
+eval __arm('r3', '#writer-doc')
+ime set に
+expect __live('r3').audioText === 'Third.に'
+ime set にほん
+expect __live('r3').audioText === 'Third.にほん'
+expect __cell('r3', '#writer-doc').textContent === 'Third.にほん'
+expect __same('r3', '#writer-doc')
+ime commit 日本
+expect __live('r3').audioText === 'Third.日本'
+expect __cell('r3', '#writer-doc').textContent === 'Third.日本'
+expect __same('r3', '#writer-doc')
+expect __caret(__cell('r3', '#writer-doc')) === 8
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 1
+expect F.state().rows.length === 4
+sleep 1100
+eval __arm('r3', '#writer-doc')
+ime set ねこ
+expect __live('r3').audioText === 'Third.日本ねこ'
+ime cancel
+expect __live('r3').audioText === 'Third.日本'
+expect __cell('r3', '#writer-doc').textContent === 'Third.日本'
+eval U.flush()
+expect U.sizes().undo - window.__u0 === 0
+eval (function(){ U.flush(); var n = F.state().rows.length; var el = __cell('r3', '#writer-doc'); el.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '' })); var ev = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', isComposing: true, keyCode: 229, bubbles: true, cancelable: true }); el.dispatchEvent(ev); el.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '' })); window.__wsplitWhileComposing = F.state().rows.length - n; return true; })()
+expect window.__wsplitWhileComposing === 1

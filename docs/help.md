@@ -12,6 +12,115 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 whoever opens it works on the same script, with nothing to install. On your
 own network you can also [host a shared session](#hosting-a-shared-session).
 
+## What's new in the 4.0 beta
+
+- **No new features; sturdier saving.** 4.0 rebuilds the inside of
+  Splitpage. Your 3.1 scripts and files open as before, and a 4.0 app and a
+  3.1 server work with each other either way.
+- **Saving and switching scripts is safer.** A save, publish, paste, drop,
+  thumbnail, annotation, history restore or draft restore that finishes after
+  you opened or reopened another script no longer lands in it. A failed save
+  no longer changes the next script's revision, saves to one place wait for
+  each other, and a save keeps to the server and sign-in it started with. A
+  paste or drop that was too late says the picture was not added.
+- **Exports are built from the script as you chose them.** Edits made while an
+  export is prepared no longer change it.
+- **Damaged files open or merge instead of failing.** A file whose top level is
+  not a script counts as no document; odd scenes, comments, people, tags,
+  shots and reply times are dropped or ignored.
+- **Editing.** No edit leaves half an emoji; names cut at their limit keep
+  whole characters. A cancelled IME composition leaves no empty Undo step. In
+  review mode the writer refuses edits ("Viewing only"), and a split or join
+  in the writer refreshes Production and B-roll. If drawing the screen fails,
+  the previous picture stays.
+- **Production.** A tag name of only invisible characters is refused. Deleting
+  a person clears them as owner of their b-roll shots at once. Gear quick add
+  and tag suggestions handle names such as `constructor`. Drawing the b-roll
+  badge no longer creates or renames shots.
+- **Pasting deeply nested formatting around many links** can no longer
+  produce a huge result.
+- At 1440 px with a long title focused, the search button and the identity
+  chip no longer overlap.
+- In the desktop app, some menu-bar commands ran behind an open dialog, the
+  writer or Present. They now stop and say what to close first: Save and
+  Save As… (Ctrl+S, Ctrl+Shift+S) while a dialog or the command menu is
+  open; Open… (Ctrl+O) and Export… while either of those, the writer or
+  Present is; Find & replace while a dialog or the writer is; Hide shot
+  scenes (Ctrl+Alt+H) while a dialog is. Search Commands… already stopped
+  under a dialog, the writer, Present or the tour, and now says why too.
+- In the desktop app, more menu-bar commands ran behind the writer, Present,
+  the B-roll shot list page or the tour. They now stop and say what to close
+  first: Present, Write, Production (Ctrl+Alt+P), Gear, Comments
+  (Ctrl+Alt+C) and Version history… while a dialog, the command menu, the
+  writer, Present, the shot list or the tour is open (Present and Write not
+  for themselves); Open… (Ctrl+O), Export… (Ctrl+E), Search Commands…
+  (Ctrl+K) and Find & replace (Ctrl+F) also while the shot list or the tour
+  is, and Find & replace while Present is; Save to file, Put this script on
+  the server, Present in Browser (Ctrl+Shift+P), Use Chromium Speech
+  Recognition and each File ▸ Export format while a dialog or the command
+  menu is.
+- In the desktop app, a menu-bar command that opens a dialog opened it
+  underneath the tour, or on top of a dialog that was already open. About
+  Splitpage, Settings…, Servers…, Collaborate…, Paste a script…, Import from
+  Google Doc link…, Google Drive files…, Open from the server…, Set up
+  Splitpage… and Tagging reference now stop and say what to close first while
+  the tour or a dialog is open. User guide… (F1) still opens during the
+  tour, but not over another dialog.
+- Ctrl+Z right after opening writer mode closes writer instead of undoing a
+  change hidden behind it in the split view. Ctrl+Shift+Z brings writer back.
+- Merging two versions of a script could drop, duplicate or keep a deleted
+  scene, comment, crew member, breakdown entry or b-roll shot whose id was a
+  special word such as `constructor` or `__proto__`, and could blank a
+  scene's text. Only a hand-edited or damaged file has such ids. They now
+  merge like any other, and files that have them open unchanged.
+- A scene, comment or person whose id was a special word such as
+  `constructor` also tripped up undo, Hide shot scenes, comments, Find and
+  the Production panel: undoing the delete of such a scene could fail, and
+  such a shot scene never hid. They now behave like any other.
+- When a merge found that you and someone else had both added the same
+  person, the production items and b-roll shots you had given that person
+  came out unassigned. They now keep that person as their owner.
+- Commenting a b-roll key's line no longer moves the comment off the key or
+  gives the shot a new id.
+- Words marked as both a comment and a production tag or b-roll key in one
+  piece of markup, as a script or paste from elsewhere can carry them, kept
+  the tag or key but lost the comment's highlight, leaving its card "No
+  longer in script". Both are now kept.
+- A comment on a stage direction or a sound cue, in a script or paste that
+  carries both marks on the same words in one piece of markup, kept the
+  comment but lost the direction or cue mark. Both are now kept.
+- Markdown export wrote `[text](null)` for a link with no address. It now
+  writes the text alone.
+- Deleting one SFX: or Music: cue and editing another in the same cell at
+  once could hand the deleted cue's Production item, with its status and
+  notes, to the edited cue, and leave the edited cue's own item "Not in
+  script". The edited cue now keeps its own item when its new words are
+  close to its old ones and to no other cue that went. When that can't be
+  told, it gets a new item at Needed and both old items stay, "Not in
+  script", rather than the wrong one being renamed.
+- Fixed: when one edit to a cell's sound cues lost a cue, added another and
+  changed a third, the changed cue's item could be renamed to the wrong name.
+  Cues are now matched to their old names by how alike they are, and when
+  that is unclear they get a new item instead. Find-and-replace across
+  several cues in one cell no longer renames their items.
+- Saving while a script was still opening, with **Save** in the header or in
+  the desktop app's menu bar (Ctrl+S), did nothing and reported an error in
+  the background. It now says "Still loading…", as the File menu's commands
+  already did.
+- In Present, Ctrl+F, Ctrl+M, Alt+F and the like flipped or mirrored the
+  text, and Ctrl, Cmd or Alt with Space still played or paused it. M, F and
+  Space now do nothing in Present while Ctrl, Cmd or Alt is held, none of
+  Present's keys act while you type in a field such as the Find box, and
+  pressing M or F with the caret still in a script cell no longer types the
+  letter into it.
+- An emoji no longer breaks in two when a tag name cut inside it is tagged
+  with "Tag all mentions", or when text is pasted, cut or split at a
+  position inside it.
+- Pasted or imported text with a link inside another link could lose text
+  the next time it was saved, merged or pasted. The inner link now keeps its
+  own address and the outer link continues around it, as when you set a link
+  inside a link in the editor, and a video card inside a link stays a card.
+
 ## What's new in 3.1
 
 - **Collaborate.** **Collab** in the header (or **File ▸ Collaborate…**)

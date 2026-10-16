@@ -1,142 +1,57 @@
 import { S } from "./_state.js";
 import { armShotHideGrace, clearShotHideGrace, hideShotScenes } from "./01b-hide-shot.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
-import { pad2, paintRowTimes, render, renderRow } from "./05-render.js";
+import { paintRowTimes, render, renderRow } from "./05-render.js";
 import { renderRundown, setRundownExtraSeconds } from "./05f-rundown.js";
 import { paintTargetOverlay } from "./05t-target.js";
-import { cellOf, spokenText } from "./04c-doc-model.js";
-import { contentMemo, scheduleProductionRefresh } from "./07-production-tags.js";
-import { markDirty } from "./12-dirty-toast.js";
-import { queueAutoSave } from "./14-export.js";
+import { productionReaders } from "./07-production-tags.js";
+import { showToast } from "./12-dirty-toast.js";
+import { sceneStatus, sceneStatusCommand, shotGrace } from "../application/commands/scene-status.ts";
+import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
+import { REVIEW_ONLY, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
+import {
+  DEFAULT_WPM,
+  SCENE_LENGTH_MAX,
+  hasSetLength,
+  normalizeSceneLength,
+  normalizeTargetLength,
+  parseSceneLength,
+  targetLengthOf
+} from "../core/document/timing.ts";
+import {
+  estimatedSeconds as estimatedSecondsIn,
+  formatDuration,
+  formatTimecode,
+  rowSeconds as rowSecondsIn,
+  targetClock,
+  totalSeconds as totalSecondsIn
+} from "../core/production/timing.ts";
+export {
+  DEFAULT_WPM,
+  ROW_STATUSES,
+  SCENE_LENGTH_MAX,
+  formatDuration,
+  formatTimecode,
+  hasSetLength,
+  normalizeSceneLength,
+  normalizeTargetLength,
+  parseSceneLength,
+  rowStatus,
+  targetClock,
+  targetLengthOf
+};
 
 export var wordCount;
 
-export var ROW_STATUSES = [
-  { id: "todo",  label: "To do", cls: "is-open", color: "var(--text-faint)" },
-  { id: "ready", label: "Ready", cls: "is-half", color: "var(--audio)" },
-  { id: "shot",  label: "Shot",  cls: "",        color: "var(--text)" }
-];
-
-export function rowStatus(id) {
-  for (var i = 0; i < ROW_STATUSES.length; i++) {
-    if (ROW_STATUSES[i].id === id) return ROW_STATUSES[i];
-  }
-  return null;
-}
-
-function nextRowStatus(id) {
-  for (var i = 0; i < ROW_STATUSES.length; i++) {
-    if (ROW_STATUSES[i].id === id) return ROW_STATUSES[(i + 1) % ROW_STATUSES.length].id;
-  }
-  return ROW_STATUSES[0].id;
-}
-
-export var DEFAULT_WPM = 150;
-
-export var SCENE_LENGTH_MAX = 24 * 3600;
-
 export function estimatedSeconds(row) {
-  var wpm = (S.state && S.state.wordsPerMinute) || DEFAULT_WPM;
-  return wordCount(row.audioText) / wpm * 60;
-}
-
-export function hasSetLength(row) {
-  return !!row && typeof row.lengthSeconds === "number" && isFinite(row.lengthSeconds) &&
-    row.lengthSeconds >= 0 && row.lengthSeconds <= SCENE_LENGTH_MAX;
+  return estimatedSecondsIn(row, S.state, productionReaders);
 }
 
 export function rowSeconds(row) {
-  return hasSetLength(row) ? row.lengthSeconds : estimatedSeconds(row);
-}
-
-export function normalizeSceneLength(v) {
-  if (typeof v !== "number" || !isFinite(v) || v < 0 || v > SCENE_LENGTH_MAX) return undefined;
-  return Math.round(v);
-}
-
-var LENGTH_UNITS = { h: 3600, m: 60, s: 1 };
-
-function lengthUnit(word) {
-  if (!word) return "";
-  if (/^(h|hr|hrs|hour|hours)$/.test(word)) return "h";
-  if (/^(m|min|mins|minute|minutes)$/.test(word)) return "m";
-  if (/^(s|sec|secs|second|seconds)$/.test(word)) return "s";
-  return null;
-}
-
-export function parseSceneLength(text) {
-  var s = String(text == null ? "" : text).trim().toLowerCase();
-  if (!s) return null;
-  var total;
-  var clock = /^(\d+):([0-5]\d)(?::([0-5]\d))?$/.exec(s);
-  if (clock) {
-    total = clock[3] != null
-      ? (+clock[1]) * 3600 + (+clock[2]) * 60 + (+clock[3])
-      : (+clock[1]) * 60 + (+clock[2]);
-  } else {
-    var re = /(\d+(?:\.\d+)?|\.\d+)\s*([a-z]*)\s*/g;
-    var pos = 0, m, last = "", order = ["h", "m", "s"], parts = 0;
-    total = 0;
-    while (pos < s.length) {
-      re.lastIndex = pos;
-      m = re.exec(s);
-      if (!m || m.index !== pos) return NaN;
-      pos = re.lastIndex;
-      var unit = lengthUnit(m[2]);
-      if (unit === null) return NaN;
-      if (!unit) {
-        if (!parts) unit = "s";
-        else if (last === "m") unit = "s";
-        else if (last === "h") unit = "m";
-        else return NaN;
-        if (pos < s.length) return NaN;
-      }
-      if (last && order.indexOf(unit) <= order.indexOf(last)) return NaN;
-      total += parseFloat(m[1]) * LENGTH_UNITS[unit];
-      last = unit;
-      parts++;
-    }
-    if (!parts) return NaN;
-  }
-  total = Math.round(total);
-  if (!isFinite(total) || total < 0 || total > SCENE_LENGTH_MAX) return NaN;
-  return total;
+  return rowSecondsIn(row, S.state, productionReaders);
 }
 
 export function totalSeconds() {
-  return S.state.rows.reduce(function (n, r) { return n + rowSeconds(r); }, 0);
-}
-
-export function normalizeTargetLength(v) {
-  if (typeof v !== "number" || !isFinite(v)) return undefined;
-  var whole = Math.round(v);
-  return whole >= 1 && whole <= SCENE_LENGTH_MAX ? whole : undefined;
-}
-
-export function targetLengthOf(s) {
-  var v = s ? normalizeTargetLength(s.targetSeconds) : undefined;
-  return v === undefined ? null : v;
-}
-
-export function targetClock(total, target) {
-  var diff = Math.round(target) - Math.max(0, Math.round(total));
-  return {
-    target: formatDuration(target),
-    delta: formatDuration(Math.abs(diff)),
-    over: diff < 0
-  };
-}
-
-export function formatDuration(sec) {
-  var whole = Math.max(0, Math.round(sec));
-  var h = Math.floor(whole / 3600), m = Math.floor((whole % 3600) / 60), s = whole % 60;
-  return h ? (h + ":" + pad2(m) + ":" + pad2(s)) : (m + ":" + pad2(s));
-}
-
-export function formatTimecode(sec) {
-  var whole = Math.max(0, Math.round(sec));
-  var h = Math.floor(whole / 3600), m = Math.floor((whole % 3600) / 60), s = whole % 60;
-  return (h ? h + ":" : "") + pad2(m) + ":" + pad2(s);
+  return totalSecondsIn(S.state, productionReaders);
 }
 
 var LENGTH_TITLE = "The script's read time, from the Audio column — click to set your reading speed or a target length";
@@ -191,27 +106,23 @@ export function updateScriptStats() {
   text.textContent = shot + "/" + S.state.rows.length + " shot";
 }
 
+var STATUS_REVIEW_REFUSAL = "This is a review copy — comment on a scene instead of changing its status.";
+
 export function cycleRowStatus(rowId) {
-  var idx = findRowIndex(rowId);
-  if (idx === -1) return;
-  var row = S.state.rows[idx];
-  var wasShot = row.status === "shot";
-  row.status = nextRowStatus(row.status);
-  stampRow(row);
-  markDirty();
+  var before = readSession(sceneStatus(rowId));
+  var outcome = runCommand(sceneStatusCommand(rowId, sessionStamps));
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind === "rejected" && outcome.reason === REVIEW_ONLY) showToast(STATUS_REVIEW_REFUSAL, "warn");
+  if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
   if (hideShotScenes) {
-    if (!wasShot && row.status === "shot") armShotHideGrace(row.id);
-    else if (wasShot && row.status !== "shot") clearShotHideGrace(row.id);
+    var grace = shotGrace(before, readSession(sceneStatus(rowId)));
+    if (grace === "arm") armShotHideGrace(rowId);
+    else if (grace === "clear") clearShotHideGrace(rowId);
   }
-  if (!renderRow(row.id)) render();
+  if (!renderRow(rowId)) render();
   updateScriptStats();
-  scheduleProductionRefresh();
-  queueAutoSave();
 }
 
 export function __init() {
-  wordCount = contentMemo(function (html) {
-    var text = spokenText(cellOf(html));
-    return text ? text.split(/\s+/).filter(Boolean).length : 0;
-  });
+  wordCount = productionReaders.wordCount;
 }

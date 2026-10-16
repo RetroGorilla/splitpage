@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { writePref } from "./00p-prefs.js";
-import { fileHome, home, restoreHome, setHome } from "./_home.js";
+import { fileHome, home, restoreHome, serverOf, setHome } from "./_home.js";
 import { rememberLastFileHandle } from "./00-prelude.js";
 import { migrateRows } from "./02-state.js";
 import {
@@ -9,15 +9,7 @@ import {
   normalizeDocId,
   syncDocIdentity
 } from "./02b-doc-id.js";
-import {
-  ensureBytes,
-  has as hasBlob,
-  rowImage,
-  rowImageBytes,
-  rowImageDataUrl,
-  rowImageKey
-} from "./02c-blobs.js";
-import { morePictureRefs, pictureBytes, rowVideoLinks, videoLinkLabel } from "./02d-gallery.js";
+import { ensureBytes } from "./02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import {
   RELOAD_GUARD_KEY,
@@ -29,13 +21,7 @@ import {
   readStash,
   setBaseState
 } from "./03-sync.js";
-import { htmlToMarkdown, inertBody } from "./04-richtext.js";
-import { cellOf, toMarkdown } from "./04c-doc-model.js";
-import { pad2 } from "./05-render.js";
-import { healTagRegistry } from "./07-production-tags.js";
-import { breakdownRows } from "./08-production-panels.js";
-import { brollEntries } from "./08c-broll.js";
-import { commentBodyText, commentEntries, nowIso } from "./10-comments.js";
+import { nowIso } from "./10-comments.js";
 import {
   clearDirty,
   noteSaveStatus,
@@ -50,52 +36,136 @@ import {
   saveToServer,
   serverSessionExpired
 } from "./13-hosted.js";
-import {
-  breakdownGroups,
-  brollSummaryText,
-  commentNumbers,
-  exportBrollScenes,
-  exportComments,
-  exportFacts,
-  exportSummaryParts,
-  sceneFacts
-} from "./14b-export-kit.js";
+import { captureExportDocument } from "./14b-export-kit.js";
 import {
   checkFileConflict,
   deliverFile,
   fileKindFromName,
   showFileConflict,
-  updateFileChip
+  updateFileChip,
+  writeBackToFile
 } from "./18-local-files.js";
 import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./20d-formats.js";
 import { makeDesktopHandle } from "./20f-desktop.js";
+import { existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
+import { requestSave, saveRunning } from "../legacy/save-bridge.ts";
+import { autoSaveMay, autoSaveWhere } from "../application/save/autosave.ts";
 
 export var autoSaveEnabled;
 
-function settleDerivedRecords() {
-  if (!S.state) return;
-  healTagRegistry();
-  brollEntries();
+function saveKind(opts) {
+  if (opts.saveAs) return "saveAs";
+  if (opts.force) return "force";
+  return opts.auto ? "auto" : "save";
 }
 
-export async function saveDoc(opts) {
+export function saveDoc(opts) {
+  opts = opts || {};
+  if (!opts.auto) resumeAutoSave();
+  return requestSave({ kind: saveKind(opts) }).then(function () {});
+}
+
+var SAVED = Object.freeze({ kind: "saved" });
+var COPIED = Object.freeze({ kind: "copied" });
+var CANCELLED = Object.freeze({ kind: "cancelled" });
+var FAILED = Object.freeze({ kind: "failed" });
+var CONFLICTED = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
+var NOT_AUTOSAVING = Object.freeze({ kind: "refused", reason: "Autosave is off, paused, has nowhere to write or nothing to write" });
+
+function finishWriting() {
+  S.saveButtonBusy = false;
+  setSaveButtons(S.dirty ? "Save •" : "Save", false);
+}
+
+function saveDialogs(slug) {
+  return {
+    desktop: S.DESKTOP ? function () {
+      return S.DESKTOP.saveFileDialog({
+        suggestedName: slug + ".md",
+        filters: [
+          { name: "Markdown script", extensions: ["md"] },
+          { name: "Splitpage script", extensions: ["splitpage"] }
+        ]
+      }).then(function (picked) { return picked ? makeDesktopHandle(picked) : null; });
+    } : null,
+    browser: window.showSaveFilePicker ? function () {
+      return window.showSaveFilePicker({
+        suggestedName: slug + ".md",
+        types: [
+          { description: "Markdown script", accept: { "text/markdown": [".md"] } },
+          { description: "Splitpage script", accept: { "application/json": [".splitpage"] } }
+        ]
+      });
+    } : null
+  };
+}
+
+function confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted, landed) {
+  var stamp = captured.document;
+  S.state.rev = stamp.rev;
+  S.state.lastEditedBy = stamp.lastEditedBy;
+  S.state.lastEditedAt = stamp.lastEditedAt;
+  if (!copyOfHosted) setBaseState(published, "saveDoc: the bytes just written");
+  if (landed) {
+    landed.home.diskBase = published;
+    if (landed.lastModified !== null) landed.home.lastModified = landed.lastModified;
+  }
+  adoptSavedCopyDocId(forkDocId, docIdAtSave, true);
+  if (!copyOfHosted && S.editSeq === seqAtSave) clearDirty();
+}
+
+async function writeDoc(opts, job) {
   opts = opts || {};
   var saveAs = !!opts.saveAs;
   var auto = !!opts.auto;
   if (!auto) resumeAutoSave();
-  var forkDocId = (opts.saveAs && S.docIdWrittenOut) ? mintDocId() : null;
+  S.saveButtonBusy = true;
+  setSaveButtons("Saving…", true);
+
+  if (onServerDoc() && !saveAs) {
+    try {
+      var sentToServer = await saveToServer(job);
+      if (auto && sentToServer === false) {
+        haltAutoSave("Autosave is paused — the last save to the server did not go through. " +
+                     "Press Save to try again.");
+      }
+    } finally {
+      finishWriting();
+    }
+    return sentToServer === false ? FAILED : SAVED;
+  }
+
+  var converting = !saveAs && home.kind === "file" && home.format === "html";
+  if (converting) {
+    saveAs = true;
+    showToast("Older .html projects are saved as Markdown from now on — choose where to keep it.", "ok");
+  }
+
+  var forkDocId = (saveAs && opts.saveAs && S.docIdWrittenOut) ? mintDocId() : null;
   var docIdAtSave = S.state.docId;
+  var homeAtSave = home;
+  var copyOfHosted = homeAtSave.kind === "server";
+  var captured = captureExportDocument({
+    docId: forkDocId,
+    stamp: { rev: (S.state.rev || 0) + 1, lastEditedBy: getEditorName(), lastEditedAt: nowIso() }
+  });
+  var published = cloneState(captured.document);
+  var seqAtSave = S.editSeq;
+  var slug = slugify(published.title);
+  var reusing = !saveAs && fileHome() ? fileHome() : null;
+  var kind = saveAs ? "md" : ((reusing && reusing.format) || "md");
   var prevHome = null;
   var retarget = null;
   var pickedFor = null;
   var wrote = false;
-  var copyOfHosted = home.kind === "server";
+
   function retargetTo(handle, k) {
-    if (S.state.docId !== docIdAtSave) return;
+    if (!job.owns()) return;
     if (home.kind === "server") { pickedFor = home; return; }
     prevHome = home;
     retarget = setHome("file", { handle: handle, format: k, name: handle.name });
     pickedFor = retarget;
+    job.moved();
     if (prevHome.kind === "import") updateFileChip();
   }
   function undoRetarget() {
@@ -105,148 +175,78 @@ export async function saveDoc(opts) {
     }
     retarget = null;
   }
-  settleDerivedRecords();
-  S.saveButtonBusy = true;
-  setSaveButtons("Saving…", true);
 
-  if (onServerDoc() && !saveAs) {
-    try {
-      var sentToServer = await saveToServer();
-      if (auto && sentToServer === false) {
-        haltAutoSave("Autosave is paused — the last save to the server did not go through. " +
-                     "Press Save to try again.");
-      }
-    } finally {
-      S.saveButtonBusy = false;
-      setSaveButtons(S.dirty ? "Save •" : "Save", false);
-    }
-    return;
-  }
-
-  var converting = !saveAs && home.kind === "file" && home.format === "html";
-  if (converting) {
-    saveAs = true;
-    showToast("Older .html projects are saved as Markdown from now on — choose where to keep it.", "ok");
-  }
-
-  S.state.rev = (S.state.rev || 0) + 1;
-  S.state.lastEditedBy = getEditorName();
-  S.state.lastEditedAt = nowIso();
-  var published = cloneState(S.state);
-  if (forkDocId) published.docId = forkDocId;
-  var seqAtSave = S.editSeq;
-  var slug = slugify(published.title);
-  var targetHandle = saveAs || !fileHome() ? null : fileHome().handle;
-  var kind = saveAs ? "md" : ((fileHome() && fileHome().format) || "md");
-
-  var reusingHandle = !!targetHandle;
-
+  var written;
   try {
-    if (!targetHandle && S.DESKTOP) {
-      var pickedDesktop = await S.DESKTOP.saveFileDialog({
-        suggestedName: slug + ".md",
-        filters: [
-          { name: "Markdown script", extensions: ["md"] },
-          { name: "Splitpage script", extensions: ["splitpage"] }
-        ]
-      });
-      if (!pickedDesktop) {
-        S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
-        S.saveButtonBusy = false;
-        setSaveButtons(S.dirty ? "Save •" : "Save", false);
-        return;
-      }
-      targetHandle = makeDesktopHandle(pickedDesktop);
-      kind = fileKindFromName(pickedDesktop.name) === "splitpage" ? "splitpage" : "md";
-      retargetTo(targetHandle, kind);
-    } else if (!targetHandle && window.showSaveFilePicker) {
-      targetHandle = await window.showSaveFilePicker({
-        suggestedName: slug + ".md",
-        types: [
-          { description: "Markdown script", accept: { "text/markdown": [".md"] } },
-          { description: "Splitpage script", accept: { "application/json": [".splitpage"] } }
-        ]
-      });
-      kind = fileKindFromName(targetHandle.name) === "splitpage" ? "splitpage" : "md";
-      retargetTo(targetHandle, kind);
+    var target = reusing ? existingTarget(reusing.handle) : await pickTarget(saveDialogs(slug));
+    if (target.kind === "cancelled") return CANCELLED;
+    if (target.kind === "handle" && target.picked) {
+      kind = fileKindFromName(target.handle.name) === "splitpage" ? "splitpage" : "md";
+      retargetTo(target.handle, kind);
     }
 
-    if (reusingHandle && !opts.force) {
-      var check = await checkFileConflict(targetHandle, home.lastModified);
+    if (reusing && !opts.force) {
+      var check = await checkFileConflict(reusing.handle, homeAtSave.lastModified);
       if (!check.ok) {
-        if (auto) haltAutoSave("Autosave is paused — " + targetHandle.name +
+        if (auto) haltAutoSave("Autosave is paused — " + reusing.handle.name +
                                " changed on disk since it was opened. Press Save to sort it out.");
-        else showFileConflict(targetHandle.name, check.current, { kind: "project" });
-        S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
-        S.saveButtonBusy = false;
-        setSaveButtons(S.dirty ? "Save •" : "Save", false);
-        return;
+        else showFileConflict(reusing.handle.name, check.current, { kind: "project" });
+        return CONFLICTED;
       }
     }
 
     await ensureBytes(refsIn(published));
-    var imagesLeftOut = fileImagesMissing(published).length;
+    var imagesLeftOut = fileImagesMissing(captured).length;
 
     var filename = slug + (kind === "splitpage" ? ".splitpage" : ".md");
     var body;
     try {
-      body = kind === "splitpage" ? buildSplitpageFile(published) : buildMarkdownProject(published);
+      body = kind === "splitpage" ? buildSplitpageFile(captured) : buildMarkdownProject(captured);
     } catch (e) {
       showToast("Could not prepare the file to save.", "error");
-      S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
-      undoRetarget();
-      S.saveButtonBusy = false;
-      setSaveButtons(S.dirty ? "Save •" : "Save", false);
-      return;
+      return FAILED;
     }
 
-    if (targetHandle) {
-      var writable = await targetHandle.createWritable();
-      await writable.write(body);
-      await writable.close();
+    if (target.kind === "handle") {
+      var handle = target.handle;
+      var landedOn = await writeToHandle(handle, body);
       wrote = true;
-      var stillOurs = S.state.docId === docIdAtSave;
-      var homeAtWrite = fileHome() && fileHome().handle === targetHandle ? home : null;
-      if (stillOurs && !copyOfHosted) setBaseState(published, "saveDoc: the bytes just written to the file");
-      if (pickedFor && home === pickedFor) rememberLastFileHandle(targetHandle);
-      adoptSavedCopyDocId(forkDocId, docIdAtSave);
-      var docIdAfterSave = S.state.docId;
-      if (homeAtWrite && stillOurs) homeAtWrite.diskBase = published;
-      try {
-        var afterFile = await targetHandle.getFile();
-        if (homeAtWrite && home === homeAtWrite) homeAtWrite.lastModified = afterFile.lastModified;
-      } catch (e) { }
-      if (stillOurs && !copyOfHosted && S.state.docId === docIdAfterSave && S.editSeq === seqAtSave) clearDirty();
-      if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + targetHandle.name, "ok");
+      if (job.owns()) {
+        var landedHome = fileHome() && fileHome().handle === handle ? home : null;
+        confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted,
+          landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null);
+        if (forkDocId) job.moved();
+      } else adoptSavedCopyDocId(forkDocId, docIdAtSave, false);
+      if (pickedFor && home === pickedFor) rememberLastFileHandle(handle);
+      if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
       else noteSaveStatus();
-      warnImagesLeftOut(imagesLeftOut, targetHandle.name);
+      warnImagesLeftOut(imagesLeftOut, handle.name);
+      written = copyOfHosted ? COPIED : SAVED;
     } else {
       var ok = await deliverFile(filename, body, { savedMsg: "Downloaded " + filename });
-      if (ok) {
-        wrote = true;
-        var downloadedOurs = S.state.docId === docIdAtSave;
-        if (downloadedOurs && !copyOfHosted) setBaseState(published, "saveDoc: the copy just downloaded");
-        adoptSavedCopyDocId(forkDocId, docIdAtSave);
-        if (downloadedOurs && !copyOfHosted && S.editSeq === seqAtSave) clearDirty();
-        warnImagesLeftOut(imagesLeftOut, filename);
-      } else {
-        S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
-      }
+      if (!ok) return CANCELLED;
+      wrote = true;
+      if (job.owns()) {
+        confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted, null);
+        if (forkDocId) job.moved();
+      } else adoptSavedCopyDocId(forkDocId, docIdAtSave, false);
+      warnImagesLeftOut(imagesLeftOut, filename);
+      written = copyOfHosted ? COPIED : SAVED;
     }
   } catch (err) {
-    if (err && err.name === "AbortError") {
-      S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
+    if (isAbort(err)) {
+      written = CANCELLED;
     } else {
       var why = err && err.message ? err.message : "please try again";
       showToast("Could not save — " + why + ".", "error");
       if (auto) haltAutoSave("Autosave is paused — the last save failed (" + why + "). Press Save to try again.");
-      S.state.rev = Math.max(0, (S.state.rev || 1) - 1);
+      written = { kind: "failed", error: err };
     }
   } finally {
     undoRetarget();
-    S.saveButtonBusy = false;
-    setSaveButtons(S.dirty ? "Save •" : "Save", false);
+    finishWriting();
   }
+  return written;
 }
 
 export function warnImagesLeftOut(n, name) {
@@ -255,14 +255,11 @@ export function warnImagesLeftOut(n, name) {
     " — the picture" + (n === 1 ? " was" : "s were") + " not available on this computer.", "warn");
 }
 
-function adoptSavedCopyDocId(forkDocId, docIdAtSave) {
+function adoptSavedCopyDocId(forkDocId, docIdAtSave, owned) {
   forkDocId = normalizeDocId(forkDocId);
-  var sameDocument = !!S.state && S.state.docId === docIdAtSave;
-  if (forkDocId) {
-    if (sameDocument && !onServerDoc()) S.state.docId = forkDocId;
-    copyDocHistorySafe(docIdAtSave, forkDocId);
-  }
-  if (!sameDocument) return;
+  if (forkDocId) copyDocHistorySafe(docIdAtSave, forkDocId);
+  if (!owned) return;
+  if (forkDocId && !onServerDoc()) S.state.docId = forkDocId;
   S.docIdWrittenOut = true;
   syncDocIdentity();
 }
@@ -286,7 +283,7 @@ export function applyStashedWork(loaded, override, apply) {
     var out = applyMerge(Object.assign(
       { theirs: loaded, source: "stash", mergeOnly: !apply }, extra, apply || {}
     ));
-    function answer(o) { return { state: o.state, report: o.result, snapshot: o.snapshot }; }
+    function answer(o) { return { state: o.state, report: o.result, snapshot: o.snapshot, replaced: !!o.replaced }; }
     return out && typeof out.then === "function" ? out.then(answer) : answer(out);
   }
 
@@ -314,12 +311,17 @@ function readAutoSavePref() {
 }
 
 export function autoSaveTarget() {
-  if (serverSessionExpired || (linkTurnedOff && onServerDoc())) return null;
-  if (onServerDoc()) return "server";
   var file = fileHome();
-  if (!file || !file.handle) return null;
-  if (file.format === "html") return null;
-  return "file";
+  return autoSaveWhere({
+    onServer: onServerDoc(),
+    signedOut: !!serverSessionExpired,
+    linkOff: !!linkTurnedOff,
+    file: file ? { handle: file.handle, format: file.format || null } : null
+  });
+}
+
+function autoSaveAllowed() {
+  return autoSaveMay({ on: !!autoSaveEnabled, halted: autoSaveHalt, target: autoSaveTarget() });
 }
 
 export function setAutoSaveEnabled(on) {
@@ -346,9 +348,8 @@ export function updateAutoSaveMenu() {
 }
 
 export function scheduleAutoSave() {
-  if (!autoSaveEnabled || autoSaveHalt) return;
+  if (!autoSaveAllowed()) return;
   var target = autoSaveTarget();
-  if (!target) return;
   if (autoSaveIdleTimer) clearTimeout(autoSaveIdleTimer);
   autoSaveIdleTimer = setTimeout(runAutoSaveTimer, autoSaveIdleFor(target));
   if (!autoSaveMaxTimer) autoSaveMaxTimer = setTimeout(runAutoSaveTimer, autoSaveTiming.max);
@@ -385,23 +386,82 @@ export function resumeAutoSave() {
   updateFileChip();
 }
 
-var saveInFlight = false;
-var saveQueued = false;
+var autoSaveWriting = false;
 export function queueAutoSave() {
-  if (!autoSaveEnabled) return;
-  if (!autoSaveTarget()) return;
-  if (autoSaveHalt) return;
+  if (!autoSaveAllowed()) return;
   clearAutoSaveTimers();
-  if (saveInFlight) { saveQueued = true; return; }
-  if (S.saveButtonBusy) { scheduleAutoSave(); return; }
-  saveInFlight = true;
-  Promise.resolve()
-    .then(function () { return saveDoc({ auto: true }); })
-    .catch(function () {})
-    .then(function () {
-      saveInFlight = false;
-      if (saveQueued) { saveQueued = false; queueAutoSave(); }
-    });
+  if (saveRunning() && !autoSaveWriting) { scheduleAutoSave(); return; }
+  Promise.resolve().then(function () { return requestSave({ kind: "autosave" }); }).catch(function () {});
+}
+
+function writeAutoSave(job) {
+  if (!autoSaveAllowed() || !S.dirty) return Promise.resolve(NOT_AUTOSAVING);
+  autoSaveWriting = true;
+  return writeDoc({ auto: true }, job).then(function (result) {
+    autoSaveWriting = false;
+    return result;
+  }, function (error) {
+    autoSaveWriting = false;
+    throw error;
+  });
+}
+
+function writeQueued(job) {
+  var kind = job.request.kind;
+  if (kind === "autosave") return writeAutoSave(job);
+  if (kind === "writeback" || kind === "writebackForce") return writeBackToFile(job);
+  if (kind === "server") {
+    return saveToServer(job).then(function (sent) { return sent === false ? FAILED : SAVED; });
+  }
+  return writeDoc({ auto: kind === "auto", force: kind === "force", saveAs: kind === "saveAs" }, job);
+}
+
+var NO_DESTINATION_KEY = Object.freeze({});
+
+export function destinationKeyOf(h) {
+  if (!h || h.kind === "none") return { owner: NO_DESTINATION_KEY, name: "none" };
+  if (h.kind === "server") return { owner: serverOf(h.conn) || h, name: "doc:" + String(h.id) };
+  var handle = h.handle;
+  if (handle && handle._desktopId) return { owner: "desktop:" + String(handle._desktopId), name: "handle" };
+  if (handle) return { owner: handle, name: "handle" };
+  return { owner: h, name: h.kind };
+}
+
+function reportObsoleteSave(request, here) {
+  if (!here || home.kind === "server" || !S.state) return;
+  showToast(obsoleteSaveText(S.state.title), "warn");
+}
+
+export function obsoleteSaveText(title) {
+  return "An earlier save of “" + (title || "Untitled Script") + "” finished after you reopened it. Your open copy is unchanged.";
+}
+
+function showSaveRunning(running) {
+  S.saveButtonBusy = running;
+  setSaveButtons();
+}
+
+function saveOwnership(ownership) {
+  return {
+    capture: ownership.capture,
+    stillOwns: function (ctx) {
+      if (ownership.stillOwns(ctx)) return true;
+      if (ctx.destination && ctx.destination.kind === "server") return false;
+      var now = ownership.capture();
+      return now.epoch === ctx.epoch && now.docId === ctx.docId && now.destination === ctx.destination;
+    }
+  };
+}
+
+export function legacySavePorts(ownership) {
+  return {
+    write: writeQueued,
+    destination: function () { return home; },
+    keyOf: destinationKeyOf,
+    obsolete: reportObsoleteSave,
+    running: showSaveRunning,
+    ownership: saveOwnership(ownership)
+  };
 }
 
 export function slugify(s) {
@@ -410,500 +470,6 @@ export function slugify(s) {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "splitpage";
-}
-
-function mdCell(value) {
-  return String(value == null ? "" : value)
-    .replace(/\|/g, "\\|")
-    .replace(/\r\n|\r|\n/g, " ");
-}
-
-function appendMarkdownTail(lines, opts) {
-  if (opts && opts.export) { appendExportTail(lines); return; }
-  var breakdown = breakdownRows();
-  if (breakdown.length) {
-    lines.push("## Production breakdown");
-    lines.push("");
-    lines.push("| Category | Item | Status | Assigned to | Mentions | Scenes | Notes |");
-    lines.push("| --- | --- | --- | --- | --- | --- | --- |");
-    breakdown.forEach(function (r) {
-      lines.push("| " + [r.categoryLabel, r.name, r.statusLabel, r.owner, r.mentions,
-                         r.scenes.join(", "), r.notes].map(mdCell).join(" | ") + " |");
-    });
-    lines.push("");
-  }
-
-  var comments = commentEntries({ pieces: true });
-  if (comments.length) {
-    lines.push("## Comments");
-    lines.push("");
-    comments.forEach(function (c) {
-      lines.push("**" + c.location + "**" +
-                 (c.resolved ? " _(resolved" + (c.resolvedBy ? " by " + c.resolvedBy : "") + ")_" : "") +
-                 (c.assignee ? " _(assigned to " + c.assignee + ")_" : "") +
-                 " — " + c.author + (c.when ? " · " + c.when : ""));
-      lines.push("");
-      if (c.quoted) {
-        lines.push("> " + c.quoted.split(/\r\n|\r|\n/).join("  \n> "));
-        lines.push("");
-      }
-      lines.push((commentBodyText(c) || "_(empty)_").split(/\r\n|\r|\n/).join("  \n"));
-      c.replies.forEach(function (rp) {
-        lines.push("");
-        lines.push("> ↳ **" + rp.author + "**" + (rp.when ? " · " + rp.when : "") + ":  " +
-                   (commentBodyText(rp) || "_(empty)_").split(/\r\n|\r|\n/).join("  \n> "));
-      });
-      lines.push("");
-      lines.push("---");
-      lines.push("");
-    });
-  }
-}
-
-export function exportMetaLine(facts) {
-  facts = facts || exportFacts();
-  return exportSummaryParts(facts).concat(facts.date).join(" · ");
-}
-
-function mdSceneFactsLine(f) {
-  return "**" + f.status.label + "** · Read " + f.read + (f.readSet ? ", set by hand" : "");
-}
-
-function mdReadCell(f) {
-  return f.read + (f.readSet ? ", set by hand" : "");
-}
-
-function mdMarkerRun(numbers, marks) {
-  return {
-    text: numbers.map(function (n) { return "<sup>" + n + "</sup>"; }).join(""),
-    marks: marks
-  };
-}
-
-function markdownWithMarkers(html, nums) {
-  var cell = cellOf(html);
-  if (!cell.some(function (r) { return r.marks && r.marks.cmt; })) return toMarkdown(cell);
-  var out = [];
-  cell.forEach(function (r, i) {
-    var ids = r.marks && r.marks.cmt;
-    var next = cell[i + 1];
-    var nextIds = (next && next.marks && next.marks.cmt) || [];
-    var ending = (ids || []).filter(function (id) { return nextIds.indexOf(id) === -1 && nums[id]; })
-      .map(function (id) { return nums[id]; })
-      .sort(function (a, b) { return a - b; });
-    if (!ending.length) { out.push(r); return; }
-    var own = {};
-    Object.keys(r.marks).forEach(function (k) { if (k !== "cmt") own[k] = r.marks[k]; });
-    var tail = r.atom ? null : /\s+$/.exec(r.text);
-    if (tail && tail.index > 0) {
-      out.push({ text: r.text.slice(0, tail.index), marks: r.marks });
-      out.push(mdMarkerRun(ending, own));
-      out.push({ text: tail[0], marks: r.marks });
-      return;
-    }
-    out.push(r);
-    var carried = {};
-    Object.keys(own).forEach(function (k) {
-      if (k !== "tag" && next && !next.atom && next.marks && next.marks[k] === own[k]) carried[k] = own[k];
-    });
-    out.push(mdMarkerRun(ending, carried));
-  });
-  return toMarkdown(out);
-}
-
-function mdHardBreaks(md) {
-  return md.replace(/([^\n])\n(?=[^\n])/g, "$1  \n");
-}
-
-function mdLine(value) {
-  return String(value == null ? "" : value).replace(/\s*(\r\n|\r|\n)\s*/g, " ").trim();
-}
-
-function mdBrollTask(r) {
-  var parts = [];
-  if (r.location) parts.push(mdLine(r.location));
-  if (r.owner) parts.push(mdLine(r.owner));
-  if (r.props.length) parts.push("Props: " + r.props.map(mdLine).join(", "));
-  if (r.flagged) parts.push("**Flagged**");
-  if (r.note) parts.push("Note: " + mdLine(r.note));
-  return "- [" + (r.shot ? "x" : " ") + "] " + mdLine(r.name) + (parts.length ? " — " + parts.join(" · ") : "");
-}
-
-function appendExportTail(lines) {
-  var groups = breakdownGroups();
-  if (groups.length) {
-    lines.push("## Production breakdown");
-    lines.push("");
-    groups.forEach(function (g) {
-      lines.push("### " + g.label + " (" + g.items.length + ")");
-      lines.push("");
-      lines.push("| Item | Status | Scenes | Assigned to | Notes |");
-      lines.push("| --- | --- | --- | --- | --- |");
-      g.items.forEach(function (r) {
-        lines.push("| " + [r.name, r.statusLabel, r.scenes.join(", "), r.owner || "—", r.notes].map(mdCell).join(" | ") + " |");
-      });
-      lines.push("");
-    });
-  }
-
-  var broll = exportBrollScenes();
-  if (broll.length) {
-    lines.push("## B-roll shot list");
-    lines.push("");
-    lines.push("_" + brollSummaryText(broll) + "_");
-    lines.push("");
-    broll.forEach(function (g) {
-      lines.push("**" + g.label + "**" + (g.start ? " · " + g.start : "") + " · " + g.done + "/" + g.total + " shot");
-      lines.push("");
-      g.items.forEach(function (r) { lines.push(mdBrollTask(r)); });
-      lines.push("");
-    });
-  }
-
-  var comments = exportComments({ pieces: true });
-  if (comments.length) {
-    lines.push("## Comments");
-    lines.push("");
-    comments.forEach(function (c) {
-      lines.push("**" + (c.number ? c.number + " · " : "") + c.where + "**" +
-                 (c.resolved ? " _(resolved" + (c.resolvedBy ? " by " + c.resolvedBy : "") + ")_" : "") +
-                 (c.assignee ? " _(assigned to " + c.assignee + ")_" : "") +
-                 " — " + c.author + (c.when ? " · " + c.when : ""));
-      lines.push("");
-      if (c.quoted) {
-        lines.push("> " + c.quoted.split(/\r\n|\r|\n/).join("  \n> "));
-        lines.push("");
-      }
-      lines.push((commentBodyText(c) || "_(empty)_").split(/\r\n|\r|\n/).join("  \n"));
-      c.replies.forEach(function (rp) {
-        lines.push("");
-        lines.push("> ↳ **" + rp.author + "**" + (rp.when ? " · " + rp.when : "") + ":  " +
-                   (commentBodyText(rp) || "_(empty)_").split(/\r\n|\r|\n/).join("  \n> "));
-      });
-      lines.push("");
-      lines.push("---");
-      lines.push("");
-    });
-  }
-}
-
-function dataUrlImageExt(dataUrl) {
-  var m = /^data:image\/([a-z0-9.+-]+)/i.exec(dataUrl || "");
-  var t = m ? m[1].toLowerCase() : "jpeg";
-  if (t === "jpeg") return "jpg";
-  if (t === "svg+xml") return "svg";
-  return t;
-}
-
-function markdownImagePath(row, i) {
-  var img = rowImage(row);
-  return "images/scene-" + pad2(i + 1) + "." + dataUrlImageExt(img && img.ref ? "data:" + img.ref.mime : img && img.dataUrl);
-}
-
-function markdownHasPicture(row) {
-  var img = rowImage(row);
-  return !!img && (!!img.dataUrl || hasBlob(img.ref.sha256));
-}
-
-function markdownMorePictures(row, i) {
-  var out = [];
-  morePictureRefs(row).forEach(function (ref, k) {
-    var pic = pictureBytes(ref);
-    if (!pic) return;
-    out.push({ path: "images/scene-" + pad2(i + 1) + "-" + (k + 2) + "." + dataUrlImageExt("data:" + ref.mime), bytes: pic.bytes });
-  });
-  return out;
-}
-
-export function markdownExportImages() {
-  var out = [];
-  S.state.rows.forEach(function (row, i) {
-    var pic = rowImage(row) && rowImageBytes(row);
-    if (pic) out.push({ path: markdownImagePath(row, i), bytes: pic.bytes });
-    out = out.concat(markdownMorePictures(row, i));
-  });
-  return out;
-}
-
-export function toMarkdownDoc(opts) {
-  var limit = opts && opts.scenes;
-  var facts = exportFacts();
-  var scenes = sceneFacts();
-  var nums = commentNumbers();
-  var lines = [];
-  lines.push("# " + facts.title);
-  lines.push("");
-  if (!S.state.rows.length) {
-    lines.push("_No scenes yet._");
-    lines.push("");
-  } else {
-    lines.push("_" + exportMetaLine(facts) + "_");
-    lines.push("");
-  }
-  (limit ? S.state.rows.slice(0, limit) : S.state.rows).forEach(function (row, i) {
-    lines.push("### Scene " + scenes[i].number + " · " + scenes[i].start);
-    lines.push("");
-    lines.push(mdSceneFactsLine(scenes[i]));
-    lines.push("");
-    if (markdownHasPicture(row)) {
-      lines.push("![visual for scene " + pad2(i + 1) + "](" + markdownImagePath(row, i) + ")");
-      lines.push("");
-    }
-    var more = markdownMorePictures(row, i);
-    more.forEach(function (m, k) {
-      lines.push("![visual " + (k + 2) + " for scene " + pad2(i + 1) + "](" + m.path + ")");
-      lines.push("");
-    });
-    var vlinks = rowVideoLinks(row);
-    vlinks.forEach(function (l) {
-      lines.push(l.href
-        ? "▶ [" + videoLinkLabel(l).replace(/([[\]()])/g, "\\$1") + "](" + l.href.replace(/[()\s]/g, encodeURIComponent) + ")"
-        : "▶ " + l.name.replace(/([\\`*_[\]<>])/g, "\\$1") + " _(video file)_");
-    });
-    if (vlinks.length) lines.push("");
-    var vmd = mdHardBreaks(markdownWithMarkers(row.visualText, nums));
-    if (vmd) {
-      lines.push("*Visual —* " + vmd);
-      lines.push("");
-    }
-    var amd = mdHardBreaks(markdownWithMarkers(row.audioText, nums));
-    if (amd) {
-      lines.push(amd);
-      lines.push("");
-    } else if (!vmd && !markdownHasPicture(row) && !more.length && !vlinks.length) {
-      lines.push("_(blank scene)_");
-      lines.push("");
-    }
-    lines.push("---");
-    lines.push("");
-  });
-  if (!limit) appendMarkdownTail(lines, { export: true });
-  return lines.join("\n");
-}
-
-function mdRichTableCell(md) {
-  return String(md || "").replace(/\|/g, "\\|").replace(/\r\n|\r|\n/g, "<br>");
-}
-
-export function mdSceneCellSource(row, i, model) {
-  var toMd = model ? function (html) { return toMarkdown(cellOf(html)); } : htmlToMarkdown;
-  var text = toMd(row.visualText);
-  var visual = text;
-  var image = rowImageDataUrl(row);
-  if (image) {
-    visual = "![visual for scene " + pad2(i + 1) + "](" + image + ")" + (visual ? "<br>" + visual : "");
-  }
-  return {
-    visual: String(visual).replace(/\r\n|\r|\n/g, "<br>").trim(),
-    visualText: String(text).replace(/\r\n|\r|\n/g, "<br>").trim(),
-    image: image ? rowImageKey(row) : null,
-    audio: String(toMd(row.audioText)).replace(/\r\n|\r|\n/g, "<br>").trim()
-  };
-}
-
-export function toMarkdownTableDoc(s, opts) {
-  s = s || S.state;
-  var exporting = !!(opts && opts.export);
-  var limit = exporting && opts.scenes;
-  var lines = [];
-  lines.push("# " + (s.title || "Untitled Script"));
-  lines.push("");
-  if (exporting && s.rows.length) {
-    lines.push("_" + exportMetaLine() + "_");
-    lines.push("");
-  }
-  if (!s.rows.length) {
-    lines.push(exporting ? "_No scenes yet._" : "_No rows yet._");
-  } else if (exporting) {
-    var scenes = sceneFacts();
-    lines.push("| # | Start | Status | Visual | Audio | Read |");
-    lines.push("| --- | --- | --- | --- | --- | --- |");
-    (limit ? s.rows.slice(0, limit) : s.rows).forEach(function (row, i) {
-      var cell = mdSceneCellSource(row, i);
-      lines.push("| " + [scenes[i].number, scenes[i].start, scenes[i].status.label].join(" | ") + " | " +
-                 mdRichTableCell(cell.visual) + " | " + mdRichTableCell(cell.audio) + " | " +
-                 mdReadCell(scenes[i]) + " |");
-    });
-  } else {
-    lines.push("| # | Visual | Audio | Status |");
-    lines.push("| --- | --- | --- | --- |");
-    s.rows.forEach(function (row, i) {
-      var cell = mdSceneCellSource(row, i);
-      lines.push("| " + pad2(i + 1) + " | " + mdRichTableCell(cell.visual) + " | " +
-                 mdRichTableCell(cell.audio) + " | " + (row.status || "todo") + " |");
-    });
-  }
-  lines.push("");
-  if (!limit) appendMarkdownTail(lines, { export: exporting });
-  return lines.join("\n");
-}
-
-export function strBytes(s) { return new TextEncoder().encode(s); }
-
-export function latin1Bytes(s) {
-  var out = new Uint8Array(s.length);
-  for (var i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) & 0xff;
-  return out;
-}
-
-export function concatBytes(chunks) {
-  var total = 0, i;
-  for (i = 0; i < chunks.length; i++) total += chunks[i].length;
-  var out = new Uint8Array(total), at = 0;
-  for (i = 0; i < chunks.length; i++) { out.set(chunks[i], at); at += chunks[i].length; }
-  return out;
-}
-
-var CRC_TABLE = null;
-function crc32(bytes) {
-  if (!CRC_TABLE) {
-    CRC_TABLE = new Uint32Array(256);
-    for (var n = 0; n < 256; n++) {
-      var c = n;
-      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
-      CRC_TABLE[n] = c >>> 0;
-    }
-  }
-  var crc = 0xFFFFFFFF;
-  for (var i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
-  return (crc ^ 0xFFFFFFFF) >>> 0;
-}
-
-function u16(n) { return new Uint8Array([n & 0xff, (n >>> 8) & 0xff]); }
-function u32(n) { return new Uint8Array([n & 0xff, (n >>> 8) & 0xff, (n >>> 16) & 0xff, (n >>> 24) & 0xff]); }
-
-export function zipWrite(entries) {
-  var now = new Date();
-  var dosTime = ((now.getHours() & 0x1f) << 11) | ((now.getMinutes() & 0x3f) << 5) | ((now.getSeconds() / 2) & 0x1f);
-  var dosDate = (((now.getFullYear() - 1980) & 0x7f) << 9) | (((now.getMonth() + 1) & 0xf) << 5) | (now.getDate() & 0x1f);
-
-  var local = [], central = [], offset = 0;
-  entries.forEach(function (e) {
-    var nameB = strBytes(e.name);
-    var crc = crc32(e.data);
-    var lh = concatBytes([
-      u32(0x04034b50), u16(20), u16(0), u16(0), u16(dosTime), u16(dosDate),
-      u32(crc), u32(e.data.length), u32(e.data.length), u16(nameB.length), u16(0), nameB
-    ]);
-    local.push(lh, e.data);
-    central.push(concatBytes([
-      u32(0x02014b50), u16(20), u16(20), u16(0), u16(0), u16(dosTime), u16(dosDate),
-      u32(crc), u32(e.data.length), u32(e.data.length),
-      u16(nameB.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(offset), nameB
-    ]));
-    offset += lh.length + e.data.length;
-  });
-
-  var cd = concatBytes(central);
-  var eocd = concatBytes([
-    u32(0x06054b50), u16(0), u16(0), u16(entries.length), u16(entries.length),
-    u32(cd.length), u32(offset), u16(0)
-  ]);
-  return concatBytes([concatBytes(local), cd, eocd]);
-}
-
-async function inflateRaw(bytes) {
-  if (typeof DecompressionStream === "undefined") throw new Error("no-decompression-stream");
-  var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
-  var buf = await new Response(stream).arrayBuffer();
-  return new Uint8Array(buf);
-}
-
-export async function zipRead(arrayBuffer) {
-  var bytes = new Uint8Array(arrayBuffer);
-  var dv = new DataView(arrayBuffer);
-
-  var eocd = -1;
-  for (var i = bytes.length - 22; i >= 0 && i >= bytes.length - 22 - 65535; i--) {
-    if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
-  }
-  if (eocd === -1) throw new Error("not-a-zip");
-
-  var count = dv.getUint16(eocd + 10, true);
-  var cdOffset = dv.getUint32(eocd + 16, true);
-  var files = {};
-  var p = cdOffset;
-
-  for (var n = 0; n < count; n++) {
-    if (dv.getUint32(p, true) !== 0x02014b50) break;
-    var method = dv.getUint16(p + 10, true);
-    var compSize = dv.getUint32(p + 20, true);
-    var nameLen = dv.getUint16(p + 28, true);
-    var extraLen = dv.getUint16(p + 30, true);
-    var commentLen = dv.getUint16(p + 32, true);
-    var localOff = dv.getUint32(p + 42, true);
-    var name = new TextDecoder().decode(bytes.subarray(p + 46, p + 46 + nameLen));
-
-    var lNameLen = dv.getUint16(localOff + 26, true);
-    var lExtraLen = dv.getUint16(localOff + 28, true);
-    var dataStart = localOff + 30 + lNameLen + lExtraLen;
-    var raw = bytes.subarray(dataStart, dataStart + compSize);
-    files[name] = { method: method, raw: raw };
-    p += 46 + nameLen + extraLen + commentLen;
-  }
-
-  return {
-    async get(name) {
-      var f = files[name];
-      if (!f) return null;
-      return f.method === 0 ? f.raw : await inflateRaw(f.raw);
-    },
-    names: Object.keys(files)
-  };
-}
-
-export function htmlToPlainText(html) {
-  if (!html) return "";
-  var c = inertBody(String(html).replace(/<br\s*\/?>/gi, "\n"));
-  return (c.textContent || "").replace(/\u00A0/g, " ").trim();
-}
-
-export function xmlEscape(s) {
-  return String(s == null ? "" : s)
-    /* eslint-disable-next-line no-control-regex -- see the line above. */
-    .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "")
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;").replace(/'/g, "&apos;");
-}
-
-export var TAG_PRINT_COLORS = {
-  prop: "764AA2",
-  location: "2A7449",
-  cast: "A53C75",
-  vfx: "5E6C00",
-  sound: "AB413E",
-  gear: "44693C"
-};
-
-export function tagPrintColor(catId) {
-  return Object.prototype.hasOwnProperty.call(TAG_PRINT_COLORS, catId) ? TAG_PRINT_COLORS[catId] : null;
-}
-
-export function htmlToRuns(html) {
-  var container = inertBody(html);
-  var runs = [];
-  (function walk(node, fmt) {
-    Array.prototype.forEach.call(node.childNodes, function (child) {
-      if (child.nodeType === 3) {
-        var t = (child.nodeValue || "").replace(/\u00A0/g, " ");
-        if (t) runs.push({ text: t, b: fmt.b, i: fmt.i, u: fmt.u, s: fmt.s, mark: fmt.mark, href: fmt.href });
-        return;
-      }
-      if (child.nodeType !== 1) return;
-      var tag = child.tagName;
-      if (tag === "BR") { runs.push({ text: "\n" }); return; }
-      var next = {
-        b: fmt.b || tag === "STRONG" || tag === "B",
-        i: fmt.i || tag === "EM" || tag === "I",
-        u: fmt.u || tag === "U",
-        s: fmt.s || tag === "S" || tag === "STRIKE" || tag === "DEL",
-        mark: fmt.mark || tag === "MARK",
-        href: tag === "A" ? (child.getAttribute("href") || fmt.href) : fmt.href
-      };
-      walk(child, next);
-    });
-  })(container, { b: false, i: false, u: false, s: false, mark: false, href: null });
-  return runs;
 }
 
 export function __init() {

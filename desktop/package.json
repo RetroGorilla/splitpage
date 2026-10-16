@@ -1,7 +1,7 @@
 {
   "name": "splitpage-desktop",
   "productName": "Splitpage",
-  "version": "3.1.0",
+  "version": "4.0.0-beta.1",
   "private": true,
   "license": "MIT",
   "description": "Splitpage as a standalone desktop app — own window, native menus and file associations, the same document server underneath for LAN sharing.",
@@ -13,20 +13,22 @@
     "dist": "node stage.mjs && electron-builder --config electron-builder.yml",
     "dist:win": "node stage.mjs && electron-builder --config electron-builder.yml --win --x64 --arm64 && node verify-dist.mjs --arch both",
     "verify-dist": "node verify-dist.mjs --arch both",
-    "test": "node test/ipc-table.test.mjs && node test/spellcheck-menu.test.mjs && node test/drafts.test.mjs && node test/blob-store.test.mjs && node test/history-fs-backend.test.mjs && node test/prompter-share.test.mjs && node test/chromium-browsers.test.mjs && node test/google-drive.test.mjs && node test/smoke.mjs && node test/tabstrip-width.mjs",
+    "test": "node test/ipc-table.test.mjs && node test/spellcheck-menu.test.mjs && node test/drafts.test.mjs && node test/blob-store.test.mjs && node test/history-fs-backend.test.mjs && node test/prompter-share.test.mjs && node test/bind-host.test.mjs && node test/close-keep.test.mjs && node test/quit-watchdog.test.mjs && node test/chromium-browsers.test.mjs && node test/google-drive.test.mjs && node test/smoke.mjs",
     "test:ipc-table": "node test/ipc-table.test.mjs",
     "test:spellcheck-menu": "node test/spellcheck-menu.test.mjs",
     "test:blob-store": "node test/blob-store.test.mjs",
     "test:history-fs-backend": "node test/history-fs-backend.test.mjs",
     "test:prompter-share": "node test/prompter-share.test.mjs",
+    "test:bind-host": "node test/bind-host.test.mjs",
+    "test:close-keep": "node test/close-keep.test.mjs",
+    "test:quit-watchdog": "node test/quit-watchdog.test.mjs",
     "test:chromium-browsers": "node test/chromium-browsers.test.mjs",
     "test:google-drive": "node test/google-drive.test.mjs",
-    "test:tabstrip-width": "node test/tabstrip-width.mjs",
     "test:verify-dist-payload": "node test/verify-dist-payload.test.mjs",
     "test:voice-grace": "node test/voice-grace.test.mjs"
   },
   "devDependencies": {
-    "electron": "^44.3.0",
+    "electron": "^44.4.5",
     "electron-builder": "^26.15.3"
   }
 }

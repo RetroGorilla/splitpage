@@ -1,0 +1,3767 @@
+[
+  {
+    "fn": "brollShots",
+    "case": "fields only my side set fill their empty ones",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "mine",
+        "owner": "p1",
+        "audioRef": "Mine audio.",
+        "location": "Quay",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "mine",
+        "owner": "p1",
+        "audioRef": "Mine audio.",
+        "location": "Quay",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "fields their side set are kept over mine",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "mine",
+        "owner": "p1",
+        "audioRef": "Mine audio.",
+        "location": "Quay",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "theirs",
+        "owner": "p2",
+        "audioRef": "Their audio.",
+        "location": "Pier",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "theirs",
+        "owner": "p2",
+        "audioRef": "Their audio.",
+        "location": "Pier",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "fields only their side set are kept",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "theirs",
+        "owner": "p2",
+        "audioRef": "Their audio.",
+        "location": "Pier",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "theirs",
+        "owner": "p2",
+        "audioRef": "Their audio.",
+        "location": "Pier",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "shot on my side wins over unshot on theirs",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "shot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "shot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "shot on their side stays shot",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "shot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "shot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "unshot on my side never undoes their shot",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "shot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "shot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "shot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "statuses neither side knows",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "bogus",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "later",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "later",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "flagged on my side wins",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": true,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": true,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "flagged on their side stays flagged",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": true,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": true,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "unflagged on my side never clears their flag",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": true,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": true,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": true,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "a flag my side holds as a string",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": "yes",
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": true,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "name, description and origin follow their side",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Gulls",
+        "desc": "base",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Gulls at dawn",
+        "desc": "mine",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "list"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Gulls",
+        "desc": "base",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Gulls",
+        "desc": "base",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "a shot only I added and one only they added",
+    "base": [],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "bM",
+        "name": "Shot bM",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "bT",
+        "name": "Shot bT",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "bT",
+        "name": "Shot bT",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "bM",
+        "name": "Shot bM",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "a shot I deleted that they left alone goes",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b2",
+        "name": "Shot b2",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b2",
+        "name": "Shot b2",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "a shot I deleted that they edited stays",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b2",
+        "name": "Shot b2",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b2",
+        "name": "Shot b2",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "theirs",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b2",
+        "name": "Shot b2",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "theirs",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "a shot they deleted that I left alone goes",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b2",
+        "name": "Shot b2",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b2",
+        "name": "Shot b2",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "a shot they deleted that I edited stays, after theirs",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b2",
+        "name": "Shot b2",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b3",
+        "name": "Shot b3",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b2",
+        "name": "Shot b2",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "mine",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b3",
+        "name": "Shot b3",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b3",
+        "name": "Shot b3",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b3",
+        "name": "Shot b3",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b2",
+        "name": "Shot b2",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "mine",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "a shot both deleted goes",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b2",
+        "name": "Shot b2",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "with no ancestor nothing is a delete",
+    "base": null,
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b2",
+        "name": "Shot b2",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b2",
+        "name": "Shot b2",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "an empty ancestor list deletes nothing",
+    "base": [],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "a repeated id: their first copy wins and my copies fill it in turn",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "first mine",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "shot",
+        "reshoot": false,
+        "notes": "second mine",
+        "owner": "p1",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Their first",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "id": "b1",
+        "name": "Their second",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "dup",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Their first",
+        "desc": "",
+        "status": "shot",
+        "reshoot": false,
+        "notes": "first mine",
+        "owner": "p1",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "a repeated id in the ancestor: its first copy is the one compared",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          }
+        ],
+        "origin": "script"
+      },
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          },
+          {
+            "id": "t_ladder",
+            "name": "Ladder"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          },
+          {
+            "id": "t_ladder",
+            "name": "Ladder"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          },
+          {
+            "id": "t_ladder",
+            "name": "Ladder"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "entries with no id, and holes, are skipped",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      null,
+      {
+        "id": "",
+        "name": "Shot ",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      {
+        "name": "no id"
+      },
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      },
+      null,
+      {
+        "id": "",
+        "name": "blank"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "props: an addition on each side",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          },
+          {
+            "id": "t_ladder",
+            "name": "Ladder"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          },
+          {
+            "id": "t_tripod",
+            "name": "Tripod"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          },
+          {
+            "id": "t_tripod",
+            "name": "Tripod"
+          },
+          {
+            "id": "t_ladder",
+            "name": "Ladder"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "props: a removal on each side",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          },
+          {
+            "id": "t_ladder",
+            "name": "Ladder"
+          },
+          {
+            "id": "t_tripod",
+            "name": "Tripod"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_ladder",
+            "name": "Ladder"
+          },
+          {
+            "id": "t_tripod",
+            "name": "Tripod"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          },
+          {
+            "id": "t_ladder",
+            "name": "Ladder"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_ladder",
+            "name": "Ladder"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "props: an ancestor with no list removes nothing",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "props: my copy with no list",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "mine",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "mine",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "props: a name-only prop beside an id'd one",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "",
+            "name": "kettle"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "",
+            "name": "kettle"
+          },
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "props: repeated, nameless and broken props",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          },
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          },
+          {
+            "id": "t_x"
+          },
+          null,
+          "Kettle"
+        ],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "",
+            "name": "Lamp"
+          },
+          {
+            "id": "",
+            "name": "lamp "
+          },
+          7
+        ],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "",
+            "name": "Lamp"
+          },
+          {
+            "id": "t_kettle",
+            "name": "Kettle"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "brollShots",
+    "case": "props: the merged list is capped",
+    "base": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "mine": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "",
+            "name": "Mine 1"
+          },
+          {
+            "id": "",
+            "name": "Mine 2"
+          },
+          {
+            "id": "",
+            "name": "Mine 3"
+          },
+          {
+            "id": "",
+            "name": "Mine 4"
+          },
+          {
+            "id": "",
+            "name": "Mine 5"
+          },
+          {
+            "id": "",
+            "name": "Mine 6"
+          },
+          {
+            "id": "",
+            "name": "Mine 7"
+          },
+          {
+            "id": "",
+            "name": "Mine 8"
+          },
+          {
+            "id": "",
+            "name": "Mine 9"
+          },
+          {
+            "id": "",
+            "name": "Mine 10"
+          },
+          {
+            "id": "",
+            "name": "Mine 11"
+          },
+          {
+            "id": "",
+            "name": "Mine 12"
+          },
+          {
+            "id": "",
+            "name": "Mine 13"
+          },
+          {
+            "id": "",
+            "name": "Mine 14"
+          },
+          {
+            "id": "",
+            "name": "Mine 15"
+          },
+          {
+            "id": "",
+            "name": "Mine 16"
+          },
+          {
+            "id": "",
+            "name": "Mine 17"
+          },
+          {
+            "id": "",
+            "name": "Mine 18"
+          },
+          {
+            "id": "",
+            "name": "Mine 19"
+          },
+          {
+            "id": "",
+            "name": "Mine 20"
+          },
+          {
+            "id": "",
+            "name": "Mine 21"
+          },
+          {
+            "id": "",
+            "name": "Mine 22"
+          },
+          {
+            "id": "",
+            "name": "Mine 23"
+          },
+          {
+            "id": "",
+            "name": "Mine 24"
+          },
+          {
+            "id": "",
+            "name": "Mine 25"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "",
+            "name": "Their 1"
+          },
+          {
+            "id": "",
+            "name": "Their 2"
+          },
+          {
+            "id": "",
+            "name": "Their 3"
+          },
+          {
+            "id": "",
+            "name": "Their 4"
+          },
+          {
+            "id": "",
+            "name": "Their 5"
+          },
+          {
+            "id": "",
+            "name": "Their 6"
+          },
+          {
+            "id": "",
+            "name": "Their 7"
+          },
+          {
+            "id": "",
+            "name": "Their 8"
+          },
+          {
+            "id": "",
+            "name": "Their 9"
+          },
+          {
+            "id": "",
+            "name": "Their 10"
+          },
+          {
+            "id": "",
+            "name": "Their 11"
+          },
+          {
+            "id": "",
+            "name": "Their 12"
+          },
+          {
+            "id": "",
+            "name": "Their 13"
+          },
+          {
+            "id": "",
+            "name": "Their 14"
+          },
+          {
+            "id": "",
+            "name": "Their 15"
+          },
+          {
+            "id": "",
+            "name": "Their 16"
+          },
+          {
+            "id": "",
+            "name": "Their 17"
+          },
+          {
+            "id": "",
+            "name": "Their 18"
+          },
+          {
+            "id": "",
+            "name": "Their 19"
+          },
+          {
+            "id": "",
+            "name": "Their 20"
+          },
+          {
+            "id": "",
+            "name": "Their 21"
+          },
+          {
+            "id": "",
+            "name": "Their 22"
+          },
+          {
+            "id": "",
+            "name": "Their 23"
+          },
+          {
+            "id": "",
+            "name": "Their 24"
+          },
+          {
+            "id": "",
+            "name": "Their 25"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "out": [
+      {
+        "id": "b1",
+        "name": "Shot b1",
+        "desc": "",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "",
+        "location": "",
+        "props": [
+          {
+            "id": "",
+            "name": "Their 1"
+          },
+          {
+            "id": "",
+            "name": "Their 2"
+          },
+          {
+            "id": "",
+            "name": "Their 3"
+          },
+          {
+            "id": "",
+            "name": "Their 4"
+          },
+          {
+            "id": "",
+            "name": "Their 5"
+          },
+          {
+            "id": "",
+            "name": "Their 6"
+          },
+          {
+            "id": "",
+            "name": "Their 7"
+          },
+          {
+            "id": "",
+            "name": "Their 8"
+          },
+          {
+            "id": "",
+            "name": "Their 9"
+          },
+          {
+            "id": "",
+            "name": "Their 10"
+          },
+          {
+            "id": "",
+            "name": "Their 11"
+          },
+          {
+            "id": "",
+            "name": "Their 12"
+          },
+          {
+            "id": "",
+            "name": "Their 13"
+          },
+          {
+            "id": "",
+            "name": "Their 14"
+          },
+          {
+            "id": "",
+            "name": "Their 15"
+          },
+          {
+            "id": "",
+            "name": "Their 16"
+          },
+          {
+            "id": "",
+            "name": "Their 17"
+          },
+          {
+            "id": "",
+            "name": "Their 18"
+          },
+          {
+            "id": "",
+            "name": "Their 19"
+          },
+          {
+            "id": "",
+            "name": "Their 20"
+          },
+          {
+            "id": "",
+            "name": "Their 21"
+          },
+          {
+            "id": "",
+            "name": "Their 22"
+          },
+          {
+            "id": "",
+            "name": "Their 23"
+          },
+          {
+            "id": "",
+            "name": "Their 24"
+          },
+          {
+            "id": "",
+            "name": "Their 25"
+          },
+          {
+            "id": "",
+            "name": "Mine 1"
+          },
+          {
+            "id": "",
+            "name": "Mine 2"
+          },
+          {
+            "id": "",
+            "name": "Mine 3"
+          },
+          {
+            "id": "",
+            "name": "Mine 4"
+          },
+          {
+            "id": "",
+            "name": "Mine 5"
+          },
+          {
+            "id": "",
+            "name": "Mine 6"
+          },
+          {
+            "id": "",
+            "name": "Mine 7"
+          },
+          {
+            "id": "",
+            "name": "Mine 8"
+          },
+          {
+            "id": "",
+            "name": "Mine 9"
+          },
+          {
+            "id": "",
+            "name": "Mine 10"
+          },
+          {
+            "id": "",
+            "name": "Mine 11"
+          },
+          {
+            "id": "",
+            "name": "Mine 12"
+          },
+          {
+            "id": "",
+            "name": "Mine 13"
+          },
+          {
+            "id": "",
+            "name": "Mine 14"
+          },
+          {
+            "id": "",
+            "name": "Mine 15"
+          }
+        ],
+        "origin": "script"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "productionTags",
+    "case": "names and categories changed on my side only, their side only, and both",
+    "base": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "Alpha",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_b",
+        "cat": "prop",
+        "name": "Beta",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_c",
+        "cat": "prop",
+        "name": "Gamma",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "mine": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "Alpha mine",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_b",
+        "cat": "prop",
+        "name": "Beta",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_c",
+        "cat": "gear",
+        "name": "Gamma mine",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "Alpha",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_b",
+        "cat": "location",
+        "name": "Beta theirs",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_c",
+        "cat": "vfx",
+        "name": "Gamma theirs",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "out": [
+      {
+        "cat": "prop",
+        "name": "Alpha mine",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_a"
+      },
+      {
+        "cat": "location",
+        "name": "Beta theirs",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_b"
+      },
+      {
+        "cat": "vfx",
+        "name": "Gamma theirs",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_c"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "productionTags",
+    "case": "owner and notes come from my side only where theirs are empty",
+    "base": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "Alpha",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_b",
+        "cat": "prop",
+        "name": "Beta",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_c",
+        "cat": "prop",
+        "name": "Gamma",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "mine": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "Alpha",
+        "owner": "p1",
+        "notes": "mine",
+        "status": "needed"
+      },
+      {
+        "id": "t_b",
+        "cat": "prop",
+        "name": "Beta",
+        "owner": "p1",
+        "notes": "mine",
+        "status": "needed"
+      },
+      {
+        "id": "t_c",
+        "cat": "prop",
+        "name": "Gamma",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "Alpha",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_b",
+        "cat": "prop",
+        "name": "Beta",
+        "owner": "p2",
+        "notes": "theirs",
+        "status": "needed"
+      },
+      {
+        "id": "t_c",
+        "cat": "prop",
+        "name": "Gamma",
+        "owner": "p2",
+        "notes": "theirs",
+        "status": "needed"
+      }
+    ],
+    "out": [
+      {
+        "cat": "prop",
+        "name": "Alpha",
+        "owner": "p1",
+        "notes": "mine",
+        "status": "needed",
+        "id": "t_a"
+      },
+      {
+        "cat": "prop",
+        "name": "Beta",
+        "owner": "p2",
+        "notes": "theirs",
+        "status": "needed",
+        "id": "t_b"
+      },
+      {
+        "cat": "prop",
+        "name": "Gamma",
+        "owner": "p2",
+        "notes": "theirs",
+        "status": "needed",
+        "id": "t_c"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "productionTags",
+    "case": "a status my side moved further along raises theirs; a lower or unknown one does not",
+    "base": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_b",
+        "cat": "prop",
+        "name": "B",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_c",
+        "cat": "prop",
+        "name": "C",
+        "owner": "",
+        "notes": "",
+        "status": "have"
+      },
+      {
+        "id": "t_d",
+        "cat": "prop",
+        "name": "D",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_e",
+        "cat": "prop",
+        "name": "E",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_f",
+        "cat": "prop",
+        "name": "F",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "mine": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "have"
+      },
+      {
+        "id": "t_b",
+        "cat": "prop",
+        "name": "B",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_c",
+        "cat": "prop",
+        "name": "C",
+        "owner": "",
+        "notes": "",
+        "status": "returned"
+      },
+      {
+        "id": "t_d",
+        "cat": "prop",
+        "name": "D",
+        "owner": "",
+        "notes": "",
+        "status": "bogus"
+      },
+      {
+        "id": "t_e",
+        "cat": "prop",
+        "name": "E",
+        "owner": "",
+        "notes": "",
+        "status": "sourcing"
+      },
+      {
+        "id": "t_f",
+        "cat": "prop",
+        "name": "F",
+        "owner": "",
+        "notes": "",
+        "status": "bogus"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_b",
+        "cat": "prop",
+        "name": "B",
+        "owner": "",
+        "notes": "",
+        "status": "sourcing"
+      },
+      {
+        "id": "t_c",
+        "cat": "prop",
+        "name": "C",
+        "owner": "",
+        "notes": "",
+        "status": "have"
+      },
+      {
+        "id": "t_d",
+        "cat": "prop",
+        "name": "D",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_e",
+        "cat": "prop",
+        "name": "E",
+        "owner": "",
+        "notes": "",
+        "status": "bogus"
+      },
+      {
+        "id": "t_f",
+        "cat": "prop",
+        "name": "F",
+        "owner": "",
+        "notes": "",
+        "status": "later"
+      }
+    ],
+    "out": [
+      {
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "have",
+        "id": "t_a"
+      },
+      {
+        "cat": "prop",
+        "name": "B",
+        "owner": "",
+        "notes": "",
+        "status": "sourcing",
+        "id": "t_b"
+      },
+      {
+        "cat": "prop",
+        "name": "C",
+        "owner": "",
+        "notes": "",
+        "status": "returned",
+        "id": "t_c"
+      },
+      {
+        "cat": "prop",
+        "name": "D",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_d"
+      },
+      {
+        "cat": "prop",
+        "name": "E",
+        "owner": "",
+        "notes": "",
+        "status": "sourcing",
+        "id": "t_e"
+      },
+      {
+        "cat": "prop",
+        "name": "F",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_f"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "productionTags",
+    "case": "entries without ids line up by category and name",
+    "base": [
+      {
+        "cat": "prop",
+        "name": "Kettle",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "mine": [
+      {
+        "cat": "prop",
+        "name": "kettle",
+        "owner": "",
+        "notes": "mine",
+        "status": "sourcing"
+      }
+    ],
+    "theirs": [
+      {
+        "cat": "prop",
+        "name": "KETTLE",
+        "owner": "p2",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "out": [
+      {
+        "cat": "prop",
+        "name": "KETTLE",
+        "owner": "p2",
+        "notes": "mine",
+        "status": "sourcing"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "productionTags",
+    "case": "an id on one side and none on the other: one entry, the first one's, filled from the other",
+    "base": [],
+    "mine": [
+      {
+        "id": "t_k",
+        "cat": "prop",
+        "name": "Kettle",
+        "owner": "p1",
+        "notes": "",
+        "status": "returned"
+      }
+    ],
+    "theirs": [
+      {
+        "cat": "prop",
+        "name": "kettle",
+        "owner": "",
+        "notes": "theirs",
+        "status": "needed"
+      }
+    ],
+    "out": [
+      {
+        "cat": "prop",
+        "name": "kettle",
+        "owner": "p1",
+        "notes": "theirs",
+        "status": "returned"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "productionTags",
+    "case": "two ids for one name in their list: the first keeps its id and takes the rest",
+    "base": [],
+    "mine": [],
+    "theirs": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "Ladder",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_b",
+        "cat": "prop",
+        "name": "ladder",
+        "owner": "p2",
+        "notes": "b",
+        "status": "have"
+      }
+    ],
+    "out": [
+      {
+        "cat": "prop",
+        "name": "Ladder",
+        "owner": "p2",
+        "notes": "b",
+        "status": "have",
+        "id": "t_a"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "productionTags",
+    "case": "a repeated id: their first copy wins and my copies fill it in turn",
+    "base": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "One",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "mine": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "One",
+        "owner": "",
+        "notes": "first mine",
+        "status": "needed"
+      },
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "One",
+        "owner": "p1",
+        "notes": "second mine",
+        "status": "have"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "One",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "Two",
+        "owner": "p2",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "out": [
+      {
+        "cat": "prop",
+        "name": "One",
+        "owner": "p1",
+        "notes": "first mine",
+        "status": "have",
+        "id": "t_a"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "productionTags",
+    "case": "a tag I deleted that they left alone goes; one they edited stays",
+    "base": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_b",
+        "cat": "prop",
+        "name": "B",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "mine": [],
+    "theirs": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_b",
+        "cat": "prop",
+        "name": "B",
+        "owner": "",
+        "notes": "edited",
+        "status": "needed"
+      }
+    ],
+    "out": [
+      {
+        "cat": "prop",
+        "name": "B",
+        "owner": "",
+        "notes": "edited",
+        "status": "needed",
+        "id": "t_b"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "productionTags",
+    "case": "a tag they deleted that I left alone goes; one I edited stays",
+    "base": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_b",
+        "cat": "prop",
+        "name": "B",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "mine": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_b",
+        "cat": "prop",
+        "name": "B",
+        "owner": "",
+        "notes": "edited",
+        "status": "needed"
+      }
+    ],
+    "theirs": [],
+    "out": [
+      {
+        "cat": "prop",
+        "name": "B",
+        "owner": "",
+        "notes": "edited",
+        "status": "needed",
+        "id": "t_b"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "productionTags",
+    "case": "a tag both deleted goes, and each side's addition lands",
+    "base": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "mine": [
+      {
+        "id": "t_m",
+        "cat": "prop",
+        "name": "Mine",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "t_t",
+        "cat": "prop",
+        "name": "Theirs",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "out": [
+      {
+        "cat": "prop",
+        "name": "Theirs",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_t"
+      },
+      {
+        "cat": "prop",
+        "name": "Mine",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_m"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "productionTags",
+    "case": "with no ancestor nothing is a delete",
+    "base": null,
+    "mine": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "theirs": [],
+    "out": [
+      {
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_a"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "productionTags",
+    "case": "nameless entries and holes are skipped",
+    "base": [
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "mine": [
+      null,
+      {
+        "id": "t_x",
+        "cat": "prop",
+        "name": "",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "theirs": [
+      {
+        "cat": "prop"
+      },
+      {
+        "id": "t_a",
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "out": [
+      {
+        "cat": "prop",
+        "name": "A",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_a"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "people",
+    "case": "an addition, a delete and a rename on each side",
+    "base": [
+      {
+        "id": "p1",
+        "name": "Sam"
+      },
+      {
+        "id": "p2",
+        "name": "Ada"
+      },
+      {
+        "id": "p3",
+        "name": "Cy"
+      },
+      {
+        "id": "p4",
+        "name": "Dee"
+      }
+    ],
+    "mine": [
+      {
+        "id": "p1",
+        "name": "Sam"
+      },
+      {
+        "id": "p3",
+        "name": "Cyril"
+      },
+      {
+        "id": "p4",
+        "name": "Dee"
+      },
+      {
+        "id": "p5",
+        "name": "Bo"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "p1",
+        "name": "Sam"
+      },
+      {
+        "id": "p2",
+        "name": "Ada"
+      },
+      {
+        "id": "p3",
+        "name": "Cy"
+      },
+      {
+        "id": "p6",
+        "name": "Eve"
+      }
+    ],
+    "out": [
+      {
+        "id": "p1",
+        "name": "Sam"
+      },
+      {
+        "id": "p6",
+        "name": "Eve"
+      },
+      {
+        "id": "p3",
+        "name": "Cyril"
+      },
+      {
+        "id": "p5",
+        "name": "Bo"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "people",
+    "case": "one name added on both sides under different ids",
+    "base": [],
+    "mine": [
+      {
+        "id": "p1",
+        "name": "Bo"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "p2",
+        "name": "bo "
+      }
+    ],
+    "out": [
+      {
+        "id": "p2",
+        "name": "bo "
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "people",
+    "case": "one id renamed on my side",
+    "base": [
+      {
+        "id": "p1",
+        "name": "Sam"
+      }
+    ],
+    "mine": [
+      {
+        "id": "p1",
+        "name": "Samuel"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "p1",
+        "name": "Sam"
+      }
+    ],
+    "out": [
+      {
+        "id": "p1",
+        "name": "Samuel"
+      }
+    ],
+    "inputsUntouched": true
+  },
+  {
+    "fn": "people",
+    "case": "nameless entries and holes are skipped",
+    "base": [],
+    "mine": [
+      null,
+      {
+        "id": "p9",
+        "name": ""
+      },
+      {
+        "id": "p1",
+        "name": "Sam"
+      }
+    ],
+    "theirs": [
+      {
+        "id": "p1",
+        "name": "Sam"
+      },
+      {}
+    ],
+    "out": [
+      {
+        "id": "p1",
+        "name": "Sam"
+      }
+    ],
+    "inputsUntouched": true
+  }
+]

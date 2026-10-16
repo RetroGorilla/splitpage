@@ -1,47 +1,38 @@
-import { S } from "./_state.js";
-import { readPref, writePref } from "./00p-prefs.js";
-import { DEFAULT_WPM, formatDuration, wordCount } from "./01-scene-status.js";
-import { escapeHtml, makeId } from "./02-state.js";
-import { bytesForSync, internDataUrl, queuePersist, rowImage, rowImageBytes } from "./02c-blobs.js";
-import { morePictureRefs, pictureBytes, rowVideoLinks } from "./02d-gallery.js";
+import { internDataUrl, queuePersist, rowImage } from "./02c-blobs.js";
+import { morePictureRefs, rowVideoLinks } from "./02d-gallery.js";
 import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
-import { inertBody, safeHref } from "./04-richtext.js";
-import {
-  OMIT_CLOSES,
-  cellLength,
-  cellOf,
-  fromHtml,
-  importCues,
-  importDirections,
-  setMark,
-  flattenCues,
-  toDocxRuns,
-  toHtml,
-  toPlainText,
-  withoutCues
-} from "./04c-doc-model.js";
-import { pad2 } from "./05-render.js";
-import {
-  htmlToPlainText,
-  strBytes,
-  xmlEscape,
-  zipRead,
-  zipWrite
-} from "./14-export.js";
 import {
   PRINT_COLORS,
   STATUS_PRINT,
   TAG_STATUS_PRINT,
   breakdownGroups,
   brollSummaryText,
-  commentNumbers,
+  capturedPicture,
+  capturedRowPicture,
   exportBrollScenes,
+  exportDay,
   exportComments,
   exportFacts,
   exportRuns,
   exportSummaryParts,
   sceneFacts
 } from "./14b-export-kit.js";
+import { strBytes } from "../adapters/formats/bytes.ts";
+import { xmlEscape } from "../adapters/formats/xml.ts";
+import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
+import { makeId } from "../adapters/identity/ids.ts";
+import { escapeHtml, safeHref, unitSafePrefix } from "../core/document/text-policy.ts";
+import { DEFAULT_WPM } from "../core/document/timing.ts";
+import { formatDuration, pad2 } from "../core/production/timing.ts";
+import { flattenCues, importCues, withoutCues } from "../core/text/cues.ts";
+import { importDirections } from "../core/text/directions.ts";
+import { setMark } from "../core/text/edits.ts";
+import { toHtml } from "../core/text/html.ts";
+import { OMIT_CLOSES, toDocxRuns, toPlainText } from "../core/text/projections.ts";
+import { cellLength } from "../core/text/runs.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
+import { htmlToPlainText } from "../legacy/plain-text.ts";
+import { cellOf, fromHtml, inertBody } from "../legacy/richtext.ts";
 
 var DOCX_CATEGORY_DOT = "● ";
 
@@ -349,9 +340,9 @@ function sceneLineEstimate(row) {
   return Math.max(lines(row.visualText) + pics * 8, lines(row.audioText));
 }
 
-function commentOpenness() {
+function commentOpenness(doc) {
   var out = Object.create(null);
-  (S.state.comments || []).forEach(function (c) { if (c && c.id) out[c.id] = !c.resolved; });
+  (doc.comments || []).forEach(function (c) { if (c && c.id) out[c.id] = !c.resolved; });
   return out;
 }
 
@@ -393,7 +384,7 @@ var BREAKDOWN_HEAD_WORDS = ["Item", "Status", "Scenes", "Assigned to", "Notes"];
 var FLAG_COLOR = "C4302A";
 var SHOT_INDENT = 400;
 
-export function buildDocx() {
+export function buildDocx(doc, assets) {
   var media = [];
   var links = [];
   var rels = {
@@ -410,7 +401,7 @@ export function buildDocx() {
 
   var pictureParts = {};
 
-  var facts = exportFacts();
+  var facts = exportFacts(doc);
   var body = titleParaXml(facts.title) + metaParaXml(exportSummaryParts(facts).concat(facts.date).join(" · "));
 
   var rowsXml = "";
@@ -421,12 +412,12 @@ export function buildDocx() {
     headCellXml("Read", COL_READ, null, { jc: "right", mar: { right: 0 } }) +
     "</w:tr>";
 
-  var scenes = sceneFacts();
-  var ann = { nums: commentNumbers(), open: commentOpenness() };
+  var scenes = sceneFacts(doc);
+  var ann = { nums: doc.commentNumbers, open: commentOpenness(doc) };
   var maxW = (COL_VISUAL - 200) * 635;
-  S.state.rows.forEach(function (row, idx) {
+  doc.scenes.forEach(function (row, idx) {
     var visual = "";
-    var pic = rowImage(row) && rowImageBytes(row);
+    var pic = rowImage(row) && capturedRowPicture(assets, row);
     if (pic) {
       try {
         var bytes = pic.bytes;
@@ -439,7 +430,7 @@ export function buildDocx() {
       } catch (e) { }
     }
     morePictureRefs(row).forEach(function (ref) {
-      var more = pictureBytes(ref);
+      var more = capturedPicture(assets, ref);
       if (!more) return;
       try {
         var mdim = safeAspect({ w: more.width, h: more.height });
@@ -459,7 +450,7 @@ export function buildDocx() {
 
   body += tableXml([COL_SCENE, COL_VISUAL, COL_AUDIO, COL_READ], rowsXml);
   var appendix = 0;
-  var groups = breakdownGroups();
+  var groups = breakdownGroups(doc);
   if (groups.length) {
     var itemCount = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
     body += headingParaXml("Production breakdown", !appendix++) +
@@ -514,7 +505,7 @@ export function buildDocx() {
     body += tableXml(bCols, bRows);
   }
 
-  var shots = exportBrollScenes();
+  var shots = exportBrollScenes(doc);
   if (shots.length) {
     body += headingParaXml("B-roll shot list", !appendix++) + metaParaXml(brollSummaryText(shots));
     shots.forEach(function (g) {
@@ -548,7 +539,7 @@ export function buildDocx() {
     });
   }
 
-  var comments = exportComments({ pieces: true });
+  var comments = exportComments(doc, { pieces: true });
   if (comments.length) {
     var openCount = comments.filter(function (c) { return !c.resolved; }).length;
     body += headingParaXml("Comments", !appendix) +
@@ -562,7 +553,8 @@ export function buildDocx() {
       var img = pictureParts[sha];
       if (img === undefined) {
         img = null;
-        var bytes = bytesForSync(sha);
+        var held = assets ? assets.picture(sha) : null;
+        var bytes = held && held.bytes;
         var mime = bytes && sniffImageMime(bytes);
         var dims = mime && imageDims(bytes);
         if (dims && dims.width > 0 && dims.height > 0) {
@@ -618,7 +610,7 @@ export function buildDocx() {
     });
   }
 
-  return packDocx(body, links, media);
+  return packDocx(doc, body, links, media);
 }
 
 var THEME_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
@@ -678,7 +670,7 @@ function footerXml(title) {
       "<w:r>" + rPr + '<w:fldChar w:fldCharType="separate"/></w:r>' + t("1") +
       "<w:r>" + rPr + '<w:fldChar w:fldCharType="end"/></w:r>';
   };
-  if (title.length > FOOTER_TITLE_MAX) title = title.slice(0, FOOTER_TITLE_MAX - 1).replace(/\s+$/, "") + "…";
+  if (title.length > FOOTER_TITLE_MAX) title = unitSafePrefix(title, FOOTER_TITLE_MAX - 1).replace(/\s+$/, "") + "…";
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
     '<w:p><w:pPr><w:pBdr><w:top w:val="single" w:sz="4" w:space="6" w:color="' + PRINT_COLORS.border + '"/></w:pBdr>' +
@@ -687,8 +679,7 @@ function footerXml(title) {
     "</w:p></w:ftr>";
 }
 
-function corePropsXml(title) {
-  var d = new Date();
+function corePropsXml(title, d) {
   var day = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T00:00:00Z";
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"' +
@@ -712,8 +703,9 @@ var SETTINGS_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat>' +
   "</w:settings>";
 
-function packDocx(body, links, media) {
-  var title = S.state.title || "Untitled Script";
+function packDocx(doc, body, links, media) {
+  var title = doc.title || "Untitled Script";
+  var day = exportDay(doc);
   body += '<w:sectPr><w:footerReference w:type="default" r:id="rIdFooter1"/>' +
     '<w:pgSz w:w="12240" w:h="15840"/>' +
     '<w:pgMar w:top="1260" w:right="1080" w:bottom="1260" w:left="1080" w:header="720" w:footer="600" w:gutter="0"/></w:sectPr>';
@@ -772,7 +764,7 @@ function packDocx(body, links, media) {
       '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>' +
       '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>' +
       '</Relationships>') },
-    { name: "docProps/core.xml", data: strBytes(corePropsXml(title)) },
+    { name: "docProps/core.xml", data: strBytes(corePropsXml(title, day)) },
     { name: "docProps/app.xml", data: strBytes(APP_PROPS_XML) },
     { name: "word/document.xml", data: strBytes(documentXml) },
     { name: "word/styles.xml", data: strBytes(STYLES_XML) },
@@ -785,33 +777,22 @@ function packDocx(body, links, media) {
     entries.push({ name: "word/media/image" + (idx + 1) + "." + m.ext, data: m.bytes });
   });
 
-  return zipWrite(entries);
-}
-
-export var NARRATION_DIRECTIONS_KEY = "splitpage-export-directions";
-
-export function narrationIncludesDirections() {
-  return readPref(NARRATION_DIRECTIONS_KEY) !== "0";
-}
-
-export function setNarrationIncludesDirections(on) {
-  writePref(NARRATION_DIRECTIONS_KEY, on ? null : "0");
+  return zipWrite(entries, day);
 }
 
 function narrationTextOpts(opts) {
-  var include = opts && typeof opts.directions === "boolean" ? opts.directions : narrationIncludesDirections();
-  return include ? { cues: "omit" } : { directions: "omit", cues: "omit" };
+  return opts && opts.directions === false ? { directions: "omit", cues: "omit" } : { cues: "omit" };
 }
 
-export function narrationRows(opts) {
+export function narrationRows(doc, opts) {
   var t = narrationTextOpts(opts);
-  return S.state.rows.filter(function (row) { return toPlainText(cellOf(row.audioText), t); });
+  return doc.scenes.filter(function (row) { return toPlainText(cellOf(row.audioText), t); });
 }
 
-export function buildNarrationText(opts) {
+export function buildNarrationText(doc, opts) {
   var t = narrationTextOpts(opts);
-  var out = [S.state.title || "Untitled Script", ""];
-  narrationRows(opts).forEach(function (row) {
+  var out = [doc.title || "Untitled Script", ""];
+  narrationRows(doc, opts).forEach(function (row) {
     out.push(toPlainText(cellOf(row.audioText), t).replace(/\n[ \t]*(\n[ \t]*)+/g, "\n"));
     out.push("");
   });
@@ -826,20 +807,20 @@ function groupDigits(n) {
   return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-export function buildNarrationDocx(opts) {
+export function buildNarrationDocx(doc, opts) {
   var t = narrationTextOpts(opts);
   var links = [];
   var rels = { addLink: function (href) { links.push(href); return "rIdL" + links.length; } };
-  var rows = narrationRows(opts);
-  var words = rows.reduce(function (n, row) { return n + wordCount(row.audioText); }, 0);
-  var wpm = S.state.wordsPerMinute || DEFAULT_WPM;
+  var rows = narrationRows(doc, opts);
+  var words = rows.reduce(function (n, row) { return n + productionReaders.wordCount(row.audioText); }, 0);
+  var wpm = doc.document.wordsPerMinute || DEFAULT_WPM;
 
-  var body = titleParaXml(S.state.title || "Untitled Script") +
+  var body = titleParaXml(doc.title || "Untitled Script") +
     metaParaXml(["Narration", plural(rows.length, "scene"), groupDigits(words) + (words === 1 ? " word" : " words"),
       "about " + formatDuration(words / wpm * 60) + " at " + wpm + " wpm"].join(" · "));
 
   rows.forEach(function (row) {
-    var number = pad2(S.state.rows.indexOf(row) + 1);
+    var number = pad2(doc.scenes.indexOf(row) + 1);
     body += docxRunsXml(row.audioText, rels, Object.assign({
       pPr: '<w:pStyle w:val="' + NARRATION_STYLE + '"/><w:ind w:left="0" w:hanging="' + SCENE_NO_HANG + '"/>',
       lead: '<w:r><w:rPr><w:rStyle w:val="' + SCENE_NO_STYLE + '"/><w:color w:val="' + PRINT_COLORS.faint + '"/><w:sz w:val="16"/></w:rPr>' +
@@ -847,7 +828,7 @@ export function buildNarrationDocx(opts) {
     }, t));
   });
 
-  return packDocx(body, links, []);
+  return packDocx(doc, body, links, []);
 }
 
 var W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";

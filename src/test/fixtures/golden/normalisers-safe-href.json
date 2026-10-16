@@ -1,0 +1,144 @@
+[
+  {
+    "case": "https",
+    "input": "https://e.x/a?b=1",
+    "output": "https://e.x/a?b=1"
+  },
+  {
+    "case": "http",
+    "input": "http://e.x/",
+    "output": "http://e.x/"
+  },
+  {
+    "case": "upper-case scheme",
+    "input": "HTTPS://E.X/",
+    "output": "HTTPS://E.X/"
+  },
+  {
+    "case": "the scheme alone",
+    "input": "https://",
+    "output": "https://"
+  },
+  {
+    "case": "one slash",
+    "input": "http:/e.x",
+    "output": null
+  },
+  {
+    "case": "no slashes",
+    "input": "https:e.x",
+    "output": null
+  },
+  {
+    "case": "spaces around are trimmed",
+    "input": "  https://e.x/  ",
+    "output": "https://e.x/"
+  },
+  {
+    "case": "a tab and a newline around are trimmed",
+    "input": "\t\nhttps://e.x/\n",
+    "output": "https://e.x/"
+  },
+  {
+    "case": "NBSP around is trimmed",
+    "input": " https://e.x/",
+    "output": "https://e.x/"
+  },
+  {
+    "case": "a zero-width space before is not",
+    "input": "​https://e.x/",
+    "output": null
+  },
+  {
+    "case": "mailto",
+    "input": "mailto:a@e.x",
+    "output": "mailto:a@e.x"
+  },
+  {
+    "case": "mailto after spaces",
+    "input": "  mailto:a@e.x",
+    "output": "mailto:a@e.x"
+  },
+  {
+    "case": "MAILTO in capitals",
+    "input": "MAILTO:a@e.x",
+    "output": null
+  },
+  {
+    "case": "javascript",
+    "input": "javascript:alert(1)",
+    "output": null
+  },
+  {
+    "case": "JavaScript with a NUL inside",
+    "input": "java\u0000script:alert(1)",
+    "output": null
+  },
+  {
+    "case": "javascript after spaces",
+    "input": "  javascript:alert(1)",
+    "output": null
+  },
+  {
+    "case": "vbscript",
+    "input": "vbscript:x",
+    "output": null
+  },
+  {
+    "case": "data",
+    "input": "data:text/html,x",
+    "output": null
+  },
+  {
+    "case": "DATA in capitals after a space",
+    "input": " DATA:x",
+    "output": null
+  },
+  {
+    "case": "ftp",
+    "input": "ftp://e.x/",
+    "output": null
+  },
+  {
+    "case": "protocol-relative",
+    "input": "//e.x/",
+    "output": null
+  },
+  {
+    "case": "a path",
+    "input": "/x",
+    "output": null
+  },
+  {
+    "case": "a fragment",
+    "input": "#x",
+    "output": null
+  },
+  {
+    "case": "empty",
+    "input": "",
+    "output": null
+  },
+  {
+    "case": "null",
+    "input": null,
+    "output": null
+  },
+  {
+    "case": "undefined",
+    "input": "<undefined>",
+    "output": null
+  },
+  {
+    "case": "a number",
+    "input": 5,
+    "output": null
+  },
+  {
+    "case": "an object",
+    "input": {
+      "toString": "<function>"
+    },
+    "output": null
+  }
+]

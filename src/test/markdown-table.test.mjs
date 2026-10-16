@@ -7,8 +7,9 @@ import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { detectTwoColumnFormat, parseImportRows, parseMarkdownTable } from "../js/11-import.js";
 import { cellOf, toMarkdown } from "../js/04c-doc-model.js";
-import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "../js/14-export.js";
+import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "../js/14d-export-text.js";
 import { LONG_DEMO } from "../js/_starters.js";
+import { exportDocumentOf, exportFacts } from "../js/14b-export-kit.js";
 
 initTags();
 initStatus();
@@ -137,7 +138,7 @@ test("a Two columns export reads back as its scenes only, not its breakdown or c
     comments: [{ id: "c1", rowId: "r1", field: "audioText", author: "Ann", body: "a | b | c",
       createdAt: "2026-09-01T10:00:00Z", replies: [] }]
   });
-  const md = toMarkdownTableDoc();
+  const md = toMarkdownTableDoc(exportDocumentOf(S.state));
   assert.match(md, /## Production breakdown/);
   assert.match(md, /## Comments/);
   const expected = [["Wide explosion", "Hello there."], ["Close on the mug", "Coffee time."]];
@@ -154,7 +155,7 @@ test("someone else's table keeps what follows its own Comments heading", () => {
 test("the stacked Markdown export of the long demo reads back as its 30 scenes", () => {
   S.state = migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)));
   const orig = S.state.rows;
-  const md = toMarkdownDoc();
+  const md = toMarkdownDoc(exportDocumentOf(S.state));
   assert.match(md, /## Production breakdown/);
   assert.match(md, /## Comments/);
   assert.equal(detectTwoColumnFormat(md), "stacked");
@@ -176,7 +177,7 @@ test("a stacked export's blank scene, video link and multi-line cells", () => {
       { id: "r3", visualText: "", audioText: "Just audio.", status: "todo" }
     ]
   });
-  const md = toMarkdownDoc();
+  const md = toMarkdownDoc(exportDocumentOf(S.state));
   assert.deepEqual(cells(parseImportRows(md, "twocolumn")), [
     ["Wide\nthen close", "Hello **there**.\n\nSecond para."],
     ["", ""],
@@ -193,10 +194,10 @@ const demo = () => { S.state = migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.s
 
 test("the stacked export of the long demo: meta line, scene headings, status and read time", () => {
   demo();
-  const md = toMarkdownDoc();
+  const md = toMarkdownDoc(exportDocumentOf(S.state));
   const lines = md.split("\n");
   assert.equal(lines[0], "# " + LONG_DEMO.state.title);
-  assert.equal(lines[2], "_" + exportMetaLine() + "_");
+  assert.equal(lines[2], "_" + exportMetaLine(exportFacts(exportDocumentOf(S.state))) + "_");
   assert.match(lines[2], /^_30 scenes · 9:44 running time · Target 9:00 · 0:44 over · 13 of 30 shot · .*2026_$/);
   assert.ok(md.includes("### Scene 01 · 00:00\n\n**Shot** · Read 0:10\n\n*Visual —* Cold open"));
   assert.ok(md.includes("### Scene 04 · 01:03\n\n**Shot** · Read 0:37\n"));
@@ -211,7 +212,7 @@ test("the stacked export of the long demo: meta line, scene headings, status and
 
 test("the stacked export numbers each open thread after its words, and a resolved one not at all", () => {
   demo();
-  const md = toMarkdownDoc();
+  const md = toMarkdownDoc(exportDocumentOf(S.state));
   assert.ok(md.includes("really, really don't.<sup>1</sup> This one"), "scene 03");
   assert.ok(md.includes("Buy two.<sup>2</sup>\n"), "scene 18");
   assert.ok(md.includes("nothing left to show you.<sup>3</sup>\n"), "scene 24");
@@ -228,7 +229,7 @@ test("the stacked export numbers each open thread after its words, and a resolve
 
 test("the export tail: the breakdown by category, the b-roll shot list as task lists, then the comments", () => {
   demo();
-  for (const md of [toMarkdownDoc(), toMarkdownTableDoc(null, { export: true })]) {
+  for (const md of [toMarkdownDoc(exportDocumentOf(S.state)), toMarkdownTableDoc(exportDocumentOf(S.state), { export: true })]) {
     const at = (s) => md.indexOf(s);
     assert.ok(at("## Production breakdown") < at("## B-roll shot list") && at("## B-roll shot list") < at("## Comments"));
     const bd = md.slice(at("## Production breakdown"), at("## B-roll shot list"));
@@ -254,7 +255,7 @@ test("the export tail: the breakdown by category, the b-roll shot list as task l
 
 test("the new stacked export reads back as exactly its scenes, and nothing round them", () => {
   const s = demo();
-  const md = toMarkdownDoc();
+  const md = toMarkdownDoc(exportDocumentOf(S.state));
   assert.equal(detectTwoColumnFormat(md), "stacked");
   const out = parseImportRows(md, "twocolumn");
   assert.equal(out.length, 30);
@@ -280,7 +281,7 @@ test("a thread's marker sits outside a mark that ends with it, inside one that g
     }))
   });
   S.state = doc;
-  const md = toMarkdownDoc();
+  const md = toMarkdownDoc(exportDocumentOf(S.state));
   assert.ok(md.includes("**Bold words<sup>1</sup> run on** and *end here*<sup>2</sup>. Then trailing<sup>3</sup> space."), md);
   assert.ok(md.includes("*Visual —* Look one two<sup>4</sup><sup>5</sup> [1] stays"), md);
   assert.ok(md.includes("Say (1) and gone too."), "resolved: no marker");
@@ -317,9 +318,9 @@ test("a stacked export written before #169's look still reads back as its scenes
 
 test("the two-column export: the meta line and the gutter's columns, reopened as its scenes", () => {
   const s = demo();
-  const md = toMarkdownTableDoc(null, { export: true });
+  const md = toMarkdownTableDoc(exportDocumentOf(S.state), { export: true });
   const lines = md.split("\n");
-  assert.equal(lines[2], "_" + exportMetaLine() + "_");
+  assert.equal(lines[2], "_" + exportMetaLine(exportFacts(exportDocumentOf(S.state))) + "_");
   assert.equal(lines[4], "| # | Start | Status | Visual | Audio | Read |");
   assert.ok(lines[6].startsWith("| 01 | 00:00 | Shot | Cold open, macro:"));
   assert.ok(lines[6].endsWith(" | 0:10 |"));
@@ -327,7 +328,7 @@ test("the two-column export: the meta line and the gutter's columns, reopened as
   assert.equal(detectTwoColumnFormat(md), "table");
   const out = parseImportRows(md, "twocolumn");
   assert.equal(out.length, 30);
-  const project = parseMarkdownTable(toMarkdownTableDoc());
+  const project = parseMarkdownTable(toMarkdownTableDoc(exportDocumentOf(S.state)));
   assert.deepEqual(cells(out), cells(project));
   assert.equal(out[12].statusText, "To do");
   assert.equal(s.rows.length, 30);
@@ -342,7 +343,7 @@ test("a tail that opens on the b-roll list ends the script too, in either shape"
     ],
     brollShots: [{ id: "b1", name: "gulls over the nets", status: "shot" }]
   });
-  const stacked = toMarkdownDoc(), table = toMarkdownTableDoc(null, { export: true });
+  const stacked = toMarkdownDoc(exportDocumentOf(S.state)), table = toMarkdownTableDoc(exportDocumentOf(S.state), { export: true });
   for (const md of [stacked, table]) {
     assert.ok(!md.includes("## Production breakdown") && !md.includes("## Comments"));
     assert.ok(md.includes("## B-roll shot list\n\n_1 of 1 shot_\n\n**Scene 01** · 00:00 · 1/1 shot\n\n- [x] gulls over the nets\n"), md);
@@ -352,13 +353,13 @@ test("a tail that opens on the b-roll list ends the script too, in either shape"
 
 test("a script with no target, tags, b-roll or comments: the meta line says less, the tail is absent", () => {
   S.state = migrateRows({ schema: 2, title: "Plain", rows: [{ id: "r0", visualText: "Wide", audioText: "Hello there.", status: "ready" }] });
-  const md = toMarkdownDoc();
+  const md = toMarkdownDoc(exportDocumentOf(S.state));
   assert.match(md, /^# Plain\n\n_1 scene · 0:0\d running time · 0 of 1 shot · [^_\n]+_\n\n### Scene 01 · 00:00\n\n\*\*Ready\*\* · Read 0:0\d\n\n\*Visual —\* Wide\n\nHello there\.\n\n---\n$/);
   assert.ok(!/^## /m.test(md));
-  const table = toMarkdownTableDoc(null, { export: true });
+  const table = toMarkdownTableDoc(exportDocumentOf(S.state), { export: true });
   assert.ok(!/^## /m.test(table) && !/Target/.test(table));
   S.state = migrateRows({ schema: 2, title: "Empty", rows: [] });
-  assert.equal(toMarkdownDoc(), "# Empty\n\n_No scenes yet._\n");
-  assert.equal(toMarkdownTableDoc(null, { export: true }), "# Empty\n\n_No scenes yet._\n");
-  assert.equal(toMarkdownTableDoc(), "# Empty\n\n_No rows yet._\n", "the project's table, as it always was");
+  assert.equal(toMarkdownDoc(exportDocumentOf(S.state)), "# Empty\n\n_No scenes yet._\n");
+  assert.equal(toMarkdownTableDoc(exportDocumentOf(S.state), { export: true }), "# Empty\n\n_No scenes yet._\n");
+  assert.equal(toMarkdownTableDoc(exportDocumentOf(S.state)), "# Empty\n\n_No rows yet._\n", "the project's table, as it always was");
 });

@@ -1,0 +1,252 @@
+{
+  "inputs": {
+    "base": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "One.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "constructor",
+          "status": "todo",
+          "visualText": "Visual constructor.",
+          "audioText": "Row constructor.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "__proto__",
+          "status": "todo",
+          "visualText": "Visual __proto__.",
+          "audioText": "Row __proto__.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "toString",
+          "status": "todo",
+          "visualText": "Visual toString.",
+          "audioText": "Row toString.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "hasOwnProperty",
+          "status": "todo",
+          "visualText": "Visual hasOwnProperty.",
+          "audioText": "Row hasOwnProperty.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "mine": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "One.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "constructor",
+          "status": "todo",
+          "visualText": "Visual constructor.",
+          "audioText": "Row constructor, mine.",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        },
+        {
+          "id": "__proto__",
+          "status": "todo",
+          "visualText": "Visual __proto__.",
+          "audioText": "Row __proto__, mine.",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        },
+        {
+          "id": "toString",
+          "status": "todo",
+          "visualText": "Visual toString.",
+          "audioText": "Row toString, mine.",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        },
+        {
+          "id": "hasOwnProperty",
+          "status": "todo",
+          "visualText": "Visual hasOwnProperty.",
+          "audioText": "Row hasOwnProperty, mine.",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "theirs": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "One.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "constructor",
+          "status": "todo",
+          "visualText": "Visual constructor, theirs.",
+          "audioText": "Row constructor.",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        },
+        {
+          "id": "__proto__",
+          "status": "todo",
+          "visualText": "Visual __proto__, theirs.",
+          "audioText": "Row __proto__.",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        },
+        {
+          "id": "toString",
+          "status": "todo",
+          "visualText": "Visual toString, theirs.",
+          "audioText": "Row toString.",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        },
+        {
+          "id": "hasOwnProperty",
+          "status": "todo",
+          "visualText": "Visual hasOwnProperty, theirs.",
+          "audioText": "Row hasOwnProperty.",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    }
+  },
+  "inputsUntouched": true,
+  "merged": {
+    "title": "Lighthouse",
+    "docId": "d11111111111111111111111111111111",
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "One.",
+        "imageRef": null,
+        "updatedAt": "2026-02-01T09:00:00.000Z",
+        "updatedBy": "Base Writer"
+      },
+      {
+        "id": "constructor",
+        "status": "todo",
+        "visualText": "Visual constructor, theirs.",
+        "audioText": "Row constructor, mine.",
+        "imageRef": null,
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor"
+      },
+      {
+        "id": "__proto__",
+        "status": "todo",
+        "visualText": "Visual __proto__, theirs.",
+        "audioText": "Row __proto__, mine.",
+        "imageRef": null,
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor"
+      },
+      {
+        "id": "toString",
+        "status": "todo",
+        "visualText": "Visual toString, theirs.",
+        "audioText": "Row toString, mine.",
+        "imageRef": null,
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor"
+      },
+      {
+        "id": "hasOwnProperty",
+        "status": "todo",
+        "visualText": "Visual hasOwnProperty, theirs.",
+        "audioText": "Row hasOwnProperty, mine.",
+        "imageRef": null,
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor"
+      }
+    ],
+    "comments": [],
+    "people": [],
+    "productionTags": [],
+    "brollShots": [],
+    "wordsPerMinute": 150,
+    "rev": 5,
+    "lastEditedBy": "Base Writer",
+    "lastEditedAt": "2026-02-01T09:00:00.000Z",
+    "schema": 2
+  },
+  "conflicts": [],
+  "stats": {
+    "rowsFromThem": 0,
+    "rowsFromMe": 4,
+    "rowsAddedByMe": 0,
+    "rowsAddedByThem": 0
+  }
+}

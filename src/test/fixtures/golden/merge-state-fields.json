@@ -1,0 +1,86 @@
+[
+  {
+    "key": "title",
+    "merge": "title",
+    "default": "",
+    "listMerger": false
+  },
+  {
+    "key": "docId",
+    "merge": "doc-id",
+    "default": null,
+    "listMerger": false
+  },
+  {
+    "key": "rows",
+    "merge": "rows",
+    "default": [],
+    "listMerger": false
+  },
+  {
+    "key": "comments",
+    "merge": "comments",
+    "default": [],
+    "listMerger": false
+  },
+  {
+    "key": "people",
+    "merge": "list-union-with-base",
+    "default": [],
+    "listMerger": true
+  },
+  {
+    "key": "productionTags",
+    "merge": "list-union-with-base",
+    "default": [],
+    "listMerger": true
+  },
+  {
+    "key": "brollShots",
+    "merge": "list-union-with-base",
+    "default": [],
+    "listMerger": true
+  },
+  {
+    "key": "wordsPerMinute",
+    "merge": "changed-side-wins",
+    "default": 150,
+    "listMerger": false
+  },
+  {
+    "key": "rev",
+    "merge": "max-plus-one",
+    "default": 0,
+    "listMerger": false
+  },
+  {
+    "key": "lastEditedBy",
+    "merge": "theirs-wins",
+    "default": null,
+    "listMerger": false
+  },
+  {
+    "key": "lastEditedAt",
+    "merge": "theirs-wins",
+    "default": null,
+    "listMerger": false
+  },
+  {
+    "key": "personColors",
+    "merge": "person-colors",
+    "default": null,
+    "listMerger": false
+  },
+  {
+    "key": "targetSeconds",
+    "merge": "target-length",
+    "default": null,
+    "listMerger": false
+  },
+  {
+    "key": "schema",
+    "merge": "constant",
+    "default": null,
+    "listMerger": false
+  }
+]

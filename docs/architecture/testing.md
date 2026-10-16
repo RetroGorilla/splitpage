@@ -1,0 +1,573 @@
+# Local verification
+
+Every check is a script first; CI calls the same scripts. `npm run verify`
+runs the fast gates in the order CI does.
+
+| Command | What it runs |
+| --- | --- |
+| `npm run lint` | eslint over every source tree, `.ts` included; any warning fails |
+| `npm run typecheck` | `tsc` rules for each `tsconfig.*.json`; fails on a `.ts` file no config covers, and on a cast to the validated document brand ([below](#the-validated-document-brand)) |
+| `npm run check:deps` | Layer, platform and cycle rules ([dependencies.md](dependencies.md)) |
+| `npm run check:comments` | The no-comment gate ([dependencies.md](dependencies.md#comment-gate)) |
+| `node build.mjs` | Builds `index.html` and stamps `sw.js` |
+| `npm test` | Unit tests: `src/test/`, TypeScript tests beside source, `tests/` |
+| `npm run test:desktop` | `desktop/test/*.test.mjs` |
+| `npm run test:tools` | `tools/test-*.mjs` (server, updater, suite runner, gates, discovery, CI change classes, the artifact's file list, each tool's entry check) |
+| `npm run test:all` | All three sets |
+| `npm run verify` | lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp (`git diff --exit-code -- sw.js` after the build, as CI does), test:all |
+
+The full browser regression and the desktop smoke run by hand at milestone
+and release gates: `node tools/run-suites.mjs <out-dir> [regex]` on
+Linux/macOS, `run-tests.ps1` on Windows, `node desktop/test/smoke.mjs` for
+Electron. How to drive the browser suites is in
+[the run-splitpage-app skill](../../.claude/skills/run-splitpage-app/SKILL.md).
+
+## What to run for which change
+
+While a pull request is being written, run the focused checks for what it
+touches. CI then runs every fast gate on every pull request: lint, types, the
+dependency and comment gates, the build, every discovered unit, desktop and
+tool test, and the smoke, CSP and persistence browser suites. CI never
+narrows to the test files a change touched; `--only` is a local tool.
+
+| Change | Run while working |
+| --- | --- |
+| A pure rule in one feature or core policy | Its unit tests (`npm test -- --only <folder>`), `npm run typecheck`, `npm run lint`, `npm run check:deps`, `npm run check:comments` |
+| A feature's controller, view or bindings | The feature's tests, and the browser suites for its real input, focus and selection |
+| A public application contract (session, commands, actions, ports) | Its contract tests and the tests of every caller |
+| Saving, recovery, permissions or session transitions | The race tests, and the persistence and permission suites for that path (for example `28-autosave.txt`, `19-save-conflict.txt`, `249-save-as-hosted.txt`, `265-browser-drafts.txt`, the collaboration suites `26[0-4]-collaborate-*.txt`) |
+| Serialization, merge, undo or text operations | The fixtures and contract tests (`formats`, `merge-states`, `draft-edit` and their kin), and the editing and export suite families |
+| A script-cell command (`cell-text.ts`, `split-join.ts`, `clipboard.ts`), or the views that call them (`syncFieldFromDom`, `splitRowFieldCore`, `mergeWriterRows`, `pasteIntoCell`, `copyFromCell`) | The command's application test (`tests/application/`, every command test through `runConfined`) and its booted-app test (`src/test/cell-text-app`, `split-join-app`, `cut-paste-app`, `text-editing-app`), then the text-command suite set of [milestone-3.md](milestone-3.md#the-text-command-suite-set), run plain and with `SPLITPAGE_FREEZE_CACHES=1`. A change to 12a's grouping also runs `src/test/undo.test.mjs`. Add 186 when the change reaches picture-or-video paste or its dirty marking |
+| The rich-text sanitiser (`src/adapters/richtext/sanitize.ts`) | `tests/adapters/richtext/*.test.ts`, then browser suites 01, 69, 77, 80, 81, 86, 92, 155 and both 280 suites (the set #413 ran) |
+| A cache or a caller of one (`contentMemo`, the production readers, `cellOf`, 07's index) | Its unit tests, `production-frozen.test.mjs`, and the suites that read through it with `SPLITPAGE_FREEZE_CACHES=1` set ([Frozen caches](#frozen-caches)) |
+| Bootstrap, tooling, bundling or distribution | `npm run verify`, the broader integration suites, and the package or platform checks the change reaches (the Docker workflow, `node package.mjs`, `desktop/verify-dist.mjs`) |
+| Closing a milestone, cutting a release | The recorded full gates of plan section 4: every suite through `run-tests.ps1` on Windows, and through `tools/run-suites.mjs` on Linux for the 4.0 release, the Electron smoke, the Windows x64 packaged check, and the native ARM64 packaged check for the 4.0 release; `summary.txt` and the logs attached to the closing pull request |
+
+`npm run verify` before pushing is cheap and runs CI's fast gate apart from
+the browser suites. Its `sw.js`
+check compares the stamped file with the one git has, so an edit to `sw.js`
+you have not staged or committed fails it; `git add sw.js` settles that.
+
+`node tools/perf-record.mjs [report.md]` drives the built app in headless
+Chromium and records typing, new-scene, bulk delete/undo and export timings on
+the seed and the long demo, with the machine, browser and font it ran under.
+It also times an image-heavy case (ten fresh 1 MiB pictures in comment bodies:
+open, load from IndexedDB, and a hosted merge of two sides that each add ten);
+`--only short,long,images` picks fixtures, and `PERF_PORT_BASE` moves its two
+ports. The tool measures the build of the repo it lives in, so a run on an
+older commit copies `tools/perf-record.mjs` into a checkout of it and builds
+there. [performance-record.md](performance-record.md) is the 4.0 starting
+point; compare a later run only under the same conditions.
+
+Every `run-tests.ps1` run ends by writing `digest.txt` beside the suite logs
+and printing its path as the last line. Read the digest before any log: it has
+the overall result, then for each failing suite the failing checks with 5 lines
+of context and the exception text, the retries, and the de-duplicated warnings.
+A suite that ran 0 checks counts as a failure. A section is cut at about 60
+lines with a pointer to the full log, so a green run is a few lines and a red
+run stays small. The logic is `tools/failure-digest.mjs`, tested by
+`tools/test-failure-digest.mjs`.
+
+## Frozen caches
+
+A cache owns what it stores and hands the same value to every caller. A
+caller that needs to change it copies it first. Return types are `readonly`
+all the way down (`Frozen<T>` in `src/core/document/freeze.ts`), so a write
+from TypeScript is a type error. A write from legacy JavaScript is caught only
+under the test-only freeze flag (milestone 3, decisions D2 and D3).
+
+- **The switch.** `src/legacy/cache-freeze.ts` reads the page's query once,
+  when the bundle starts: `freeze-caches=1`, and nothing else, makes
+  `cacheSeal` core's `deepLock`; otherwise it is `noFreeze`, which hands the
+  value back untouched, so a build without the flag behaves and saves exactly
+  as before. It works in any build, like `?teleprompter=1`.
+- **Why `deepLock` and not `Object.freeze`.** The bundle is an IIFE with no
+  `"use strict"`, so the app runs in sloppy mode, where an assignment, a
+  `delete` or a `length` write into a frozen object is dropped without a
+  throw; only built-in methods such as `push` throw. `deepLock` hands out a
+  frozen copy of the value behind a `Proxy` whose `set`, `deleteProperty`,
+  `defineProperty` (unless the definition changes nothing) and
+  `setPrototypeOf` traps throw a `TypeError` in any mode. Nested objects and
+  arrays are locked the same way. Each value is locked once and the lock is
+  kept in a `WeakMap`, so every read gives the same object, a shared part
+  stays shared, `Array.isArray`, `JSON.stringify`, spreading and `slice` work
+  as on the value, and `Object.isFrozen` is true. It locks a copy, so the
+  objects the value was built from stay writable: 07's entries point at a
+  locked copy of the shared tag category, and `TAG_CATEGORIES` itself is never
+  frozen. Only arrays and plain objects are locked; anything else (a `Date`, a
+  `Map`) is handed out as it is. A lock is a snapshot: it is made when the
+  cache stores the value, and a later change to the original does not show
+  through it. A locked value is a `Proxy`, so `structuredClone` and
+  `postMessage` refuse it with a `DataCloneError`; a caller that needs to clone
+  one copies it first (`JSON.parse(JSON.stringify(value))`, `slice`). Core and
+  adapter unit tests run as strict modules, so they use the plainer
+  `deepFreeze`.
+- **The runs.** `SPLITPAGE_FREEZE_CACHES=1` makes `run-tests.ps1`,
+  `driver.ps1`, `driver.mjs` and `tools/run-suites.mjs` add the flag to every
+  page a suite opens with `open` or `goto`, and set
+  `window.__splitpageFreezeRun` on every page the driver's browser loads. In
+  that mode each driver ends every suite that asserted anything with one more
+  check: no uncaught page exception was a write into a locked value
+  (`Cannot assign to read only property`, `Cannot delete property`,
+  `Cannot define property`, `object is not extensible` and their kin). The
+  run-splitpage-app skill shows the commands. A milestone gate runs the full
+  regression with and without it (D4).
+- **What it costs.** Locking copies each value once, when the cache stores it;
+  without the flag nothing runs. `node tools/perf-record.mjs` run back to back
+  with `SPLITPAGE_FREEZE_CACHES=1` and without it, on the 32-thread Windows
+  workstation (2026-10-07, #385): typing p50/p95 4.3/10.1 ms locked against
+  4.3/15 ms plain on the seed, 6.1/13.3 against 5.8/14.1 on the long demo,
+  no long tasks in either. The freeze run stays usable for every suite.
+- **The caches.** Each one seals a value once, when it stores it:
+  - `contentMemo` (`memo.ts`) takes the seal as its second argument, so every
+    memo does: the production readers (`readers.ts`: `tagsInField`,
+    `cueNamesInField`, `brollInField`, `brollPropsInField`, `wordCount`) and
+    the rundown's scene snippet (`05f-rundown.js`);
+  - the rich-text adapter's cell reader (`decode.ts`,
+    `createCellReader(decode, seal)`), which is `cellOf`; `CellReader` returns
+    `Frozen<Run[]>`, and a run's comment ids are `readonly string[]`;
+  - 07's production index: `currentProductionIndex()` and the entries
+    `productionEntries()` presents. The array `productionEntries()` returns is
+    the caller's own copy; its entries are shared.
+- **Only the owner replaces the index; nothing writes into one handed out.**
+  `refreshedProductionIndex` (core) returns the index it was given when
+  nothing it reads changed, a new index with a new row signature after a
+  prose edit, or `null` when the index must be derived again. A heal builds a
+  new index and new entries with the minted ids, equal to a fresh derivation
+  of the healed document: a name the registry refuses stays in
+  `unregistered`, after the names the heal took in, and the next heal counts
+  nothing and keeps the index (#377).
+- **The writers freezing met**, each fixed rather than excepted (none is left
+  as an exception):
+  1. A heal wrote the minted ids into the entries it had already handed out.
+     Now an entry handed out before a heal keeps the id it was handed out
+     with, and the next `productionEntries()` has the new ids. No caller
+     holds entries across a heal: the idle refresh heals, then draws from a
+     fresh read. Pinned on purpose by `production-index.test.mjs` (the first
+     test) and the #326 tests in `production-shims.test.mjs`, which flipped in
+     the same pull request.
+  2. A heal reassigned the cached index's `unregistered` and `tagSig`.
+  3. A heal wrote the minted ids into the cached core entries.
+  4. `productionIndexFresh` wrote the new HTML and tags into the cached row
+     signature on every prose edit; it is now `refreshedProductionIndex`.
+
+  `src/test/production-frozen.test.mjs` runs 07 with the flag set: every
+  cache's value is frozen all the way down and a write into it throws a
+  `TypeError`, from strict code and from sloppy code (functions compiled
+  with `node:vm`); prose edits, a heal and 80 seeded heal-edit-heal rounds
+  (`_heal-rounds.mjs`, shared with the plain #326 test) throw nothing, and
+  both views equal a fresh derivation. Against the base's 07 with only the
+  seal added, the prose edit and the heals throw. The core and adapter tests
+  build their readers with `deepFreeze`, and each cache's own test writes
+  into its value and expects a `TypeError`. `tests/core/document/freeze.test.ts`
+  shows a sloppy write into a `deepFreeze`d value being lost and every kind
+  of write into a `deepLock`ed one throwing. In the browser,
+  `380-frozen-caches.txt` checks that the page's query carries the flag
+  exactly when the driver says it is a freeze run, that the cell reader, two
+  readers and the index are frozen exactly then, and that the bundle's own
+  sloppy code (`window.__cacheTest.writes()`) gets a `TypeError` from an
+  assignment, a `delete`, a `length` write and a `defineProperty` into a
+  cached value exactly then.
+- **Merge inputs.** `src/test/merge-inputs.test.mjs` deep-freezes `base`,
+  `mine` and `theirs` with the same `deepFreeze`, runs every merge golden case
+  and a seeded corpus of 1,400 cases through `mergeStates`, and requires no
+  throw and no object in `merged` that an input can reach (#303).
+- **What the freeze run does not catch.**
+  - A write inside a `try` that swallows the `TypeError`, or into a promise
+    whose rejection the app handles: the drivers see only uncaught
+    exceptions. The unit tests above cover the index and the readers
+    directly.
+  - A write into a value no cache handed out: the document, `S`, a copy a
+    caller made. Freezing guards only what the caches listed above store.
+  - A write into an object that is not an array or a plain object.
+  - Pages that run without the flag, so nothing is locked on them: a `goto`
+    or `open` to an absolute `http(s)://` URL, which the drivers leave as
+    written; windows and tabs the app opens itself (the teleprompter pop-out,
+    a new browser tab); a page reached by the app's or a suite's own
+    navigation that drops the query (`53-service-worker.txt` reloads the bare
+    page with `location.replace` before it checks the service worker's
+    write-back, because the worker caches no page that has a query, so the
+    rest of 53 runs unlocked).
+  - A suite that asserts nothing: the drivers leave the extra check out, so
+    it still reports `0/0` with the "proved nothing" warning and fails, as in
+    a plain run.
+
+## Golden fixtures
+
+Characterisation tests named `src/test/<name>-golden.test.mjs` compare
+today's behaviour with JSON fixtures committed under
+`src/test/fixtures/golden/`. A test never writes its fixture: a mismatch is a
+behaviour change to explain, not a file to refresh. When a change is meant to
+alter pinned behaviour, regenerate on purpose and review the fixture diff in
+the pull request:
+
+```
+node src/test/golden-helpers.mjs --update richtext
+node src/test/golden-helpers.mjs --update richtext,migrate
+node src/test/golden-helpers.mjs --update all
+```
+
+The command runs the named golden tests with `GOLDEN_UPDATE` set to those
+names, and a golden test writes its fixture only when that variable names it
+(or `all`). `tools/run-tests.mjs`, and with it `npm test` and
+`npm run verify`, exits 2 while `GOLDEN_UPDATE` is set at all, so a variable
+left in a shell cannot rewrite every fixture and pass; the helper starts
+`node --test` itself and is not affected.
+
+Goldens are regenerated only on `4.0-development`, in a commit of their own
+that changes nothing else, and never inside a lane that moves code: such a
+lane keeps every golden passing unchanged.
+
+Fixtures are compared as JSON text, so key order counts. Values that differ
+from run to run are masked in one of two ways.
+
+- `richtext` and `migrate` (`createIdMasker`) do not fix the clock or the
+  random source. An id minted by `makeId` appears as
+  `{minted:<prefix>:<n>}`, numbered per prefix by first appearance (a reused
+  id keeps its number), and a random docId as `{minted:docId}`. Only a value
+  in the exact minting format is masked: the prefix, at most seven random
+  base-36 digits, and an eight-digit base-36 time stamp that falls within the
+  run. A separate test in each file collects every id the outputs add (those
+  the input did not carry, as written or as `safeId` cleans them), requires
+  each to have that format and to be masked, and requires every masked value
+  to be one of them.
+- `merge` and `production` (`maskTokens`) run with the clock fixed at
+  `FIXED_ISO` and `Math.random` seeded, and replace tokens that are new in the
+  output (conflict-card ids, minted b-roll shot ids, a minted docId) with
+  `<label-n>`, numbered by where each first appears in the serialised output.
+  The format check is loose: `^c[0-9a-z]+$`, `^bs[0-9a-z]+$` (production
+  first finds shot ids with `bs[0-9a-z]{6,}`) and `^d[0-9a-f]{32}$`, with no
+  upper length and no time stamp. Because the numbering
+  follows position in the output rather than the order of minting, which id
+  was minted first is not observable.
+
+| Golden | Pins |
+| --- | --- |
+| `richtext` | `sanitizeHtml`, `fromHtml` and its media, `toHtml(fromHtml(x))`, `htmlToMarkdown`, `storedHtmlFromDom` and video-card HTML over a corpus; asserts INV-10 and that `toHtml` output is already in stored form |
+| `migrate` | `migrateRows`/`migrateDocument` JSON, the registry's records, the shas queued for persistence (through `setBackend`), idempotence and docIds, including a file saved before the tag registry; the file runs in its own process, so the registry starts empty |
+| `normalisers` | One table per normaliser that moves to core (`normalisers-<table>.json`), every case at a limit, one past it and one short of it: people names, the `migrateRows` field limits, `plainText`'s control characters, `plainName`, `safeId`, `safeHref`, `safeImageSrc`, the image size attributes, `DIRECTION_MAX` and `importDirections`, `normalizePersonColors`, `withPageHead`, scene and target lengths, gallery limits and b-roll props. Long repetitive strings are stored as runs, long lists and maps as a count with their first and last entries |
+| `merge` | `mergeStates` over 66 cases, one fixture each (`merge-<case>.json`), each storing its three inputs and the result: every `STATE_FIELDS` key changed by each side, rows, text and conflict cards, comments, tags, b-roll, people, colours, gallery, docIds. Built inputs must match the stored ones as exact text. Also every branch of the list mergers (`merge-list-mergers`), a field with no strategy throwing, and ids that are `Object.prototype` names (`merge-prototype-ids-*`: merged like any other id since #278). The clock is fixed at `FIXED_ISO` and `Math.random` is seeded; conflict-card ids are masked after their shape is checked |
+| `production` | `productionEntries` and `brollEntries` reads, the records plan (`derivedRecordsPlan`, with `healTagRegistry` as its tag half) and cue retitling, over the long demo (as shipped, registry emptied, shots dropped) and crafted documents; reads are asserted not to change the document. Also the tag and b-roll limits and status cycles (`production-limits`) and the Gear panel's quick add (`production-gear-quick-add`) |
+| `exports` | The bytes of the project and text writers over five documents (`exports-<name>.json`, M5): the `.splitpage` file, the Markdown project, the standalone HTML's state data, title and description, the Markdown export, its three-scene preview and table form, the images it writes and the export facts, each as a digest, with the clock fixed and the date format pinned to UTC |
+| `undo` | Which `STATE_FIELDS` keys an edit records as an undo entry (`undo-state-fields`), so a list derived from field policies must equal today's `SKIP_DOC_KEYS` |
+
+A fixture's name starts with its golden (`merge-…`, `production-…`,
+`normalisers-…`), and `--update merge` rewrites only those. The merge,
+production and normalisers updates write only fixtures whose text changed; a
+fixture left without a case fails the fixture-set test, so remove it by hand.
+
+`sha256-utf8.test.mjs` has no fixture: `node:crypto` is its oracle for
+`sha256Hex`, lone surrogates and megabyte strings included. Since 2.1a the
+function is core's (`src/core/document/ids.ts`), which always encodes UTF-8 by
+hand into a `Uint8Array` because `TextEncoder` is a platform global core may
+not use; the test checks the encoder's bytes against `TextEncoder`'s, the hash
+with `TextEncoder` present and removed, and that `02b-doc-id.js` hands out the
+core function.
+
+## Test discovery
+
+`tools/run-tests.mjs` finds tests by path, prints every file it found, runs
+them, and prints how many ran in each group.
+
+| Group | Files | Runner | Must be non-empty |
+| --- | --- | --- | --- |
+| `frontend` | `src/test/*.test.mjs` | `node --test` | always |
+| `source` | `*.test.{ts,mts,cts,js,mjs,cjs}` under `src/`, outside `src/test/` | `node --test` | once a migrated area (below) holds TypeScript source and its `tests/` folder has no test |
+| `tests` | `tests/**/*.test.*` | `node --test` | once `tests/` holds TypeScript |
+| `desktop` | `desktop/test/*.test.mjs` | `node <file>`, one at a time | always |
+| `tools` | `tools/test-*.mjs` | `node <file>`, one at a time | always |
+
+A file named like a test that no group runs (`src/test/x.test.ts`,
+`server/x.test.mjs`) fails the run, as does a file two groups claim.
+
+Every migrated area that holds TypeScript source (declaration files aside)
+needs at least one test, beside its source (anywhere inside the area) or in
+its `tests/` folder; a unit run names each area that has none and fails. A
+test in one area's folder does not cover another.
+
+| Area | Its `tests/` folder |
+| --- | --- |
+| each `src/core/<folder>` | `tests/core/<folder>` |
+| files directly in `src/core` | directly in `tests/core`, or directly in `src/core` |
+| `src/application` | `tests/application` |
+| `src/contracts` | `tests/contracts` |
+| `src/adapters` | `tests/adapters` |
+| each `src/features/<folder>` | `tests/features/<folder>` |
+| files directly in `src/features` | directly in `tests/features`, or directly in `src/features` |
+| `src/bootstrap` | `tests/bootstrap` |
+| `src/legacy` | `tests/legacy` |
+
+`node tools/run-tests.mjs --list [unit|desktop|tools|all]` prints discovery
+without running anything.
+
+`--only <path-or-substring>` narrows a run to the discovered files whose path
+contains it (repeatable; `\` and `/` alike): `npm test -- --only
+src/test/formats`, `npm run test:all -- --only tools/test-comment-gate`.
+Discovery and its orphan, overlap and empty-group checks still run over
+everything, the selected files are listed, and the run says it is not the
+full gate. A filter that matches nothing exits 2. It is for local feedback
+only; CI always runs `npm run test:all` unfiltered.
+
+`tools/test-run-tests.mjs` links the repository's `node_modules` into a
+temporary repository to type-check it. On Windows the link is a directory
+junction, which needs neither administrator rights nor Developer Mode. If the
+link still cannot be made on a Windows workstation, the typecheck cases print
+`SKIP` with the reason and the summary counts them as skipped, not passed.
+Anywhere else, and on Windows when `CI` is set, a link that cannot be made
+fails the run.
+
+A tool runs its command only when it is the script Node was started with,
+which `isMain` in `tools/main-module.mjs` decides by comparing the real paths
+of both, so a checkout reached through a junction or symlink still runs the
+gates instead of exiting 0 having done nothing. `update.mjs` makes the same
+comparison itself, because it ships in the release zip without `tools/`.
+`tools/test-main-module.mjs` starts every tool and the updater through such a
+link, with the same skip rule.
+
+## Running mutants in parallel
+
+[review.md](review.md) asks for mutation testing on new core policy: plant
+deliberate bugs ("mutants") in a scratch copy and check that the tests fail.
+`tools/mutants.mjs` does the copying, the editing and the test runs, several
+mutants at a time.
+
+```
+npm run mutants -- tools/mutants-example.json
+npm run mutants -- my-mutants.json --concurrency 2 --timeout 120
+```
+
+The file is a JSON array of mutants, or an object with a `mutants` array and a
+shared `tests` list. Each mutant has:
+
+| Field | Meaning |
+| --- | --- |
+| `label` | A short unique name, shown in the table |
+| `file` | The file to change, relative to the repository root |
+| `find` | The exact text to replace; it must occur once in the file |
+| `replace` | The text to put there; it must differ from `find` |
+| `tests` | Optional. Paths or substrings that pick the unit tests to run, as for `--only` in `tools/run-tests.mjs`. Falls back to the file's shared `tests`, then to every unit test |
+
+For each mutant the script copies the repository's files (the ones git lists,
+tracked or not ignored, so no `.git` and no nested `node_modules`) into its own
+temporary folder, links the root `node_modules` rather than copying it, applies
+the one edit there, and runs the chosen unit tests through
+`tools/run-tests.mjs`. Your working tree is never touched. A mutant is
+**caught** when the tests fail or run past the timeout, and **survived** when
+they pass. A timed-out mutant's whole process tree is killed, and so is every running mutant's (with the scratch copies removed) when you stop the run with Ctrl+C. A mutant whose `find` text
+is missing or ambiguous, or whose `file` is outside the repository or under
+`node_modules`, is reported as an error and makes the exit code 2.
+
+First the script runs the unmutated copy and stops if its tests fail, because
+every mutant would then look caught. `--no-baseline` skips that run.
+
+| Flag | Default |
+| --- | --- |
+| `--concurrency N` | CPU count minus one |
+| `--timeout SECONDS` | 300 per mutant |
+| `--keep` | Delete the scratch copies when done; this keeps them for inspection |
+
+The output is a table of label, result and duration, then the line to paste
+into the review record, for example `Mutants caught: 4/6`. Each survivor needs
+either a new test or a recorded reason it was accepted. A change that cannot
+alter behavior (an *equivalent* mutant) is a valid reason. The example file
+has two: `href-blocks-data` and `href-allows-vbscript` remove a check that the
+final scheme test makes redundant.
+
+## TypeScript
+
+Node runs `.ts` files directly by stripping types; it does not read
+`tsconfig.json` and does not type-check. `npm run typecheck` is the type gate.
+
+| Config | Covers | Environment |
+| --- | --- | --- |
+| `tsconfig.core.json` | `src/core`, `src/application`, `src/contracts` | ES2023 only: no DOM, no Node |
+| `tsconfig.web.json` | `src/adapters`, `src/features`, `src/bootstrap`, `src/legacy` | ES2023 and DOM |
+| `tsconfig.test.json` | `src/**/*.test.ts`, `tests/` | ES2023, DOM and Node |
+
+All three extend `tsconfig.base.json`: `strict`, `noUncheckedIndexedAccess`,
+`exactOptionalPropertyTypes`, `forceConsistentCasingInFileNames`,
+`erasableSyntaxOnly`, `verbatimModuleSyntax`, NodeNext modules and no emit.
+Import with the `.ts` extension and `import type` for types; path aliases are
+not used because Node would not resolve them.
+
+`types/json.d.ts`, in all three configs, makes `JSON.parse` return `unknown`
+instead of `any`, so a parsed value is checked or asserted before it reaches a
+typed parameter.
+
+### The validated document brand
+
+`ValidatedDocument` (`src/core/document/validated.ts`) is the document shape
+plus a type-only brand keyed by an unexported `unique symbol`. Only
+`src/core/migrate.ts` produces it: `migrateRows` and `migrateDocument`, and
+through them `mergeStates`. `mergeStates`, `mergeStateFields`,
+`syncCommentAnchors`, `deriveProductionIndex`, `planRegistryHealing`,
+`planQuickAdd`, `brollEntries` and `planBrollAnchors` take only that type. The
+brand changes no bytes; `checkJs` is off, so it constrains `.ts` callers only.
+
+A type carries the brand when the brand's property or its `unique symbol` key
+is reachable from it, directly or through an alias, a union, an intersection,
+an array, a property, a type argument, a constraint, a return type or an index
+signature. A top-level `never` counts too, because `never` is assignable to
+every type; a `never` nested inside another type does not, so the rule checks
+where a nested `never` comes out instead. The typecheck refuses, in every
+`.ts` file but `migrate.ts`:
+- a type assertion to such a type, unless the value already has that type
+  (this covers `as never`), and an assertion to a library container of
+  `never` (`never[]`, `Promise<never>`, `Set<never>`);
+- a property or element access whose declared type is `never` on a value that
+  is not `never` (`({ v: raw } as { v: never }).v`, `([raw] as [never])[0]`),
+  and a call through a signature written inside a cast that returns `never`
+  (`(f as () => never)()`). `fail()` and `assertNever(x)` pass;
+- a type predicate to such a type, unless it only strips `null` and
+  `undefined` from a parameter that already carries the brand
+  (`(d): d is ValidatedDocument => d !== null` over `ValidatedDocument | null`
+  passes; over `ValidatedDocument | DocumentShape` or `ValidatedDocument |
+  string` it is refused);
+- a call to a function declared outside the default library whose
+  instantiated return type or predicate carries the brand when its declared
+  one does not, and no argument or receiver supplies it: a generic helper
+  that would launder a cast. `jsonCopy(doc)` passes, and library calls and
+  every `new` are not checked, so empty containers (`new Map<string,
+  ValidatedDocument>()`), `new Promise<ValidatedDocument>(…)` and a generic
+  `new Store<ValidatedDocument>()` pass;
+- a function signature with no body that returns such a type;
+- a variable or class property of such a type that is ambient (`declare` or a
+  declaration file) or definitely assigned (`!:`). This is a decision: a
+  field that holds a document is typed `ValidatedDocument | null`, or is set
+  in the constructor, not declared `doc!: ValidatedDocument`;
+- an interface or type member of such a type in an ambient context, such as
+  `declare global { interface JSON { … } }`. Ordinary port interfaces pass.
+  Every `.ts` file here is a module, so an interface outside `declare global`
+  is local and cannot augment a global.
+
+The rule is `tools/brand-casts.mjs`, tested by `tools/test-brand-casts.mjs`.
+It sits in the typecheck, not in eslint or the dependency gate, because only
+the type checker sees through aliases and indirect forms. Two eslint rules
+back it on `.ts` files: `@typescript-eslint/no-unnecessary-type-parameters`
+refuses a helper such as `launder<T>(v: unknown): T` where it is written, and
+`@typescript-eslint/method-signature-style: property` makes interface members
+function properties, so they are checked contravariantly and an
+implementation cannot narrow a parameter to the brand. `types/*.d.ts` is
+exempt from the second, since `JSON.parse` there must merge with the
+library's method.
+
+What the rule does not refuse, each shown as a known gap in
+`tools/test-brand-casts.mjs`:
+- a generic class whose member casts to its own type parameter, since `new`
+  is not checked: `new Box<ValidatedDocument>().value`, a subclass
+  (`class DocBox extends Base<ValidatedDocument> {}`, then `new
+  DocBox(raw).v`), or a contextually typed `const g: G<ValidatedDocument> =
+  new G(raw)`;
+- a `never` that comes out somewhere the rule does not look, such as a
+  computed element key or a signature declared in a type alias and cast to;
+- a `never` taken out by destructuring: `const { v } = { v: raw } as { v:
+  never }`, then `use(v)`, type-checks and is not refused, because the rule
+  checks property and element accesses and not binding patterns. Found in
+  milestone 3 by a one-off check against the rule; it is not yet a fixture in
+  `tools/test-brand-casts.mjs`;
+- a laundering call given any branded argument or receiver, which exempts it
+  (`pick<ValidatedDocument>(doc, raw)`);
+- a class method override that narrows its parameter to the brand
+  (`override take(d: ValidatedDocument)`), called through the base type:
+  method parameters stay bivariant in classes.
+
+A value typed `any` is assignable to the brand without any cast, and `any`
+still reaches authored code: `Object.create(null)`, `Reflect.get` on an
+untyped receiver, `Array.isArray` narrowing an `unknown`, and any call into
+legacy `.js`, whose functions are untyped because `checkJs` is off.
+`@typescript-eslint/no-explicit-any` and the `JSON.parse` declaration close
+the explicit sources only. eslint runs the type-aware
+`@typescript-eslint/no-unsafe-argument` and `no-unsafe-return` on `.ts`
+files, so an `any` passed to a guarded function or returned as one is
+refused. An `any` assigned to a variable annotated with the brand still
+passes: `no-unsafe-assignment` would refuse 31 existing assignments, mostly
+`Object.create(null)` maps, and is not on.
+`tools/test-validated-document.mjs` compiles a call to each guarded function
+with an object literal, a `JSON.parse` result and one asserted to the
+unbranded shape, under each of the three tsconfigs, and expects a type error
+for each.
+
+Tests get a branded document from `migrateRows` with fake ports.
+`migratedThenSet` in `tests/core/migrate-ports.ts` migrates a copy of a fixture
+and then sets the fixture's own fields back, the way the app edits a live
+document, so a test of an unregistered tag or a malformed registry keeps its
+input.
+
+eslint applies `typescript-eslint`'s strict rules to `.ts` files and
+refuses inline `eslint-disable` directives in the migrated folders and
+`tests/`.
+
+TypeScript is pinned at 6.0.3, not 7. TypeScript 7's npm package exposes its
+compiler API only under `typescript/unstable/*`, which `tools/source-scan.mjs`,
+`tools/dep-report.mjs` and `tools/typecheck.mjs` call, and typescript-eslint
+8.71 supports TypeScript below 6.1. Move to 7 when both have changed.
+
+Supported Node versions are 22 (from 22.22.2), 24 (from 24.15.0) and 26 and later, per
+`package.json`'s `engines`; `.nvmrc` pins Node 24.22.0, the one used locally and in CI.
+Run `nvm use` before `npm run verify`: on Node 22.22.0, `TextDecoder("latin1")`
+decodes bytes `0x85`, `0x93` and `0x94` as C1 control characters instead of
+`…`, `“` and `”`, so `list-pdfs.test.mjs` and `pdf-script.test.mjs` fail there
+and pass on 22.22.2 and later and on Node 24. `tools/run-tests.mjs` prints a warning,
+and still runs, when `process.version` differs from `.nvmrc` but is inside `engines`.
+Outside `engines` it lists the tests but refuses to run them, exiting 2 with the
+range and the pinned version, so an unsupported runtime is not reported as failing
+tests. The Linux cloud containers ship Node 22.22.0, which is outside the range:
+there, install the pinned Node first (for example the
+`node-v24.22.0-linux-x64.tar.xz` build from nodejs.org, put on `PATH`).
+
+Browser suites on Linux: `driver.mjs` starts Chromium with a mouse's hover and
+pointer settings off Windows (headless Chromium there otherwise reports
+`hover: none`, which keeps the rundown lens from opening in suite 102), and
+sends the touch-emulation call only to start or undo a `mobile` viewport.
+Suite 38 sets a Windows user agent because the "Want its own window" pitch it
+measures is shown to Windows browsers only.
+
+## CI
+
+`.github/workflows/ci.yml` runs on every pull request to `main` or
+`4.0-development` and every push to either branch. Its jobs call the scripts
+above and nothing else.
+
+| Job | Runs |
+| --- | --- |
+| `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? |
+| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, test:all, then through `tools/run-suites.mjs` the smoke and CSP suites (`01-core.txt`, `52-csp.txt`) and the persistence suite (`265-browser-drafts.txt`); uploads the built app |
+| `gate` | Passes when `checks` passed, or when the change was prose only and it was skipped |
+| `desktop-smoke` | Electron dev-target smoke, on pushes to `main` only |
+
+The persistence suite costs little: on its first hosted run (PR #270,
+`ubuntu-latest`, 30 September 2026) `265-browser-drafts.txt` passed 80 of 80
+checks in 8.0 s, from the runner's start line to its `ALL PASS`; the step
+running `01-core.txt` and `52-csp.txt` on two lanes took 7 s.
+
+CI runs on the maintainer's self-hosted runners (repository variable
+`CI_RUNNER`). When runs are queued there, add the label `ci-github` to the
+pull request and its jobs run on GitHub's runners instead; no other run
+moves. Adding the label does not rerun CI: push to the pull request after
+labelling it, because a run reads the labels from the moment it started. First compare the queue with the median recent run time (about
+3 to 6 minutes in October 2026) and wait if the run in front is nearly done. Remove the
+label once the pull request is green. Never change `CI_RUNNER` for this.
+
+`gate` is the one check to mark required in branch protection: a
+prose-only pull request completes it without waiting on the others. Prose
+means Markdown other than `docs/help.md` (the build renders it into the app),
+`.claude/handoff/`, `CODEOWNERS` and `LICENSE`. The issue templates' YAML is
+not prose: the comment gate reads it, so a change to it runs the checks.
+`tools/test-ci-changes.mjs` fails if any file the comment gate reads would be
+classed as prose.
+
+`.github/workflows/docker.yml` runs when a Docker build input changes; its
+path filters list every file either Dockerfile copies. Job `image` builds the
+root `Dockerfile` from the checkout and starts it the way `deploy.sh` does.
+Job `prebuilt` runs `npm ci` and `node build.mjs`, copies the files of the
+`splitpage-app` artifact into an empty folder (`tools/artifact-files.mjs`,
+which reads the list from `ci.yml`), builds `Dockerfile.prebuilt`
+there, starts it and checks `/api/health`'s version, `/` and `/sw.js` against
+`VERSION` and its HEALTHCHECK. `.github/workflows/release.yml` builds the
+Windows installers from a tag. [ci.md](ci.md) explains the settings in these
+files that the files themselves cannot.
+
+The full browser regression, the Windows runs and the packaged x64 check
+are local milestone and release gates; the Linux full run and the packaged
+ARM64 check are local gates at the 4.0 release only (plan section 4). Pull requests from forks must never reach the self-hosted runners
+([ci.md](ci.md)).

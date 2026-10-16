@@ -1,0 +1,312 @@
+[
+  {
+    "case": "U+0000",
+    "input": "a\u0000b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0001",
+    "input": "a\u0001b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0002",
+    "input": "a\u0002b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0003",
+    "input": "a\u0003b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0004",
+    "input": "a\u0004b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0005",
+    "input": "a\u0005b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0006",
+    "input": "a\u0006b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0007",
+    "input": "a\u0007b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0008",
+    "input": "a\bb",
+    "output": "ab"
+  },
+  {
+    "case": "U+0009",
+    "input": "a\tb",
+    "output": "a\tb"
+  },
+  {
+    "case": "U+000A",
+    "input": "a\nb",
+    "output": "a\nb"
+  },
+  {
+    "case": "U+000B",
+    "input": "a\u000bb",
+    "output": "ab"
+  },
+  {
+    "case": "U+000C",
+    "input": "a\fb",
+    "output": "ab"
+  },
+  {
+    "case": "U+000D",
+    "input": "a\rb",
+    "output": "a\rb"
+  },
+  {
+    "case": "U+000E",
+    "input": "a\u000eb",
+    "output": "ab"
+  },
+  {
+    "case": "U+000F",
+    "input": "a\u000fb",
+    "output": "ab"
+  },
+  {
+    "case": "U+0010",
+    "input": "a\u0010b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0011",
+    "input": "a\u0011b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0012",
+    "input": "a\u0012b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0013",
+    "input": "a\u0013b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0014",
+    "input": "a\u0014b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0015",
+    "input": "a\u0015b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0016",
+    "input": "a\u0016b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0017",
+    "input": "a\u0017b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0018",
+    "input": "a\u0018b",
+    "output": "ab"
+  },
+  {
+    "case": "U+0019",
+    "input": "a\u0019b",
+    "output": "ab"
+  },
+  {
+    "case": "U+001A",
+    "input": "a\u001ab",
+    "output": "ab"
+  },
+  {
+    "case": "U+001B",
+    "input": "a\u001bb",
+    "output": "ab"
+  },
+  {
+    "case": "U+001C",
+    "input": "a\u001cb",
+    "output": "ab"
+  },
+  {
+    "case": "U+001D",
+    "input": "a\u001db",
+    "output": "ab"
+  },
+  {
+    "case": "U+001E",
+    "input": "a\u001eb",
+    "output": "ab"
+  },
+  {
+    "case": "U+001F",
+    "input": "a\u001fb",
+    "output": "ab"
+  },
+  {
+    "case": "U+007F",
+    "input": "ab",
+    "output": "ab"
+  },
+  {
+    "case": "U+0085 is kept",
+    "input": "ab",
+    "output": "ab"
+  },
+  {
+    "case": "U+00A0 is kept",
+    "input": "a b",
+    "output": "a b"
+  },
+  {
+    "case": "U+200B is kept",
+    "input": "a​b",
+    "output": "a​b"
+  },
+  {
+    "case": "U+200C is kept",
+    "input": "a‌b",
+    "output": "a‌b"
+  },
+  {
+    "case": "U+200D is kept",
+    "input": "a‍b",
+    "output": "a‍b"
+  },
+  {
+    "case": "U+2028 is kept",
+    "input": "a b",
+    "output": "a b"
+  },
+  {
+    "case": "U+2029 is kept",
+    "input": "a b",
+    "output": "a b"
+  },
+  {
+    "case": "U+2060 is kept",
+    "input": "a⁠b",
+    "output": "a⁠b"
+  },
+  {
+    "case": "U+FEFF is kept",
+    "input": "a﻿b",
+    "output": "a﻿b"
+  },
+  {
+    "case": "U+FFFC is kept",
+    "input": "a￼b",
+    "output": "a￼b"
+  },
+  {
+    "case": "a tag",
+    "input": "<b>x</b>",
+    "output": "x"
+  },
+  {
+    "case": "a lone <",
+    "input": "a<b",
+    "output": "a<b"
+  },
+  {
+    "case": "< and > around text",
+    "input": "a < b > c",
+    "output": "a  c"
+  },
+  {
+    "case": "empty brackets",
+    "input": "<>x",
+    "output": "x"
+  },
+  {
+    "case": "doubled brackets",
+    "input": "<<b>>x",
+    "output": ">x"
+  },
+  {
+    "case": "a lone >",
+    "input": "a>b",
+    "output": "a>b"
+  },
+  {
+    "case": "a comment",
+    "input": "<!-- c -->x",
+    "output": "x"
+  },
+  {
+    "case": "a script's text is kept",
+    "input": "<script>alert(1)</script>",
+    "output": "alert(1)"
+  },
+  {
+    "case": "a tag across a newline",
+    "input": "<a\nhref='x'>y</a>",
+    "output": "y"
+  },
+  {
+    "case": "entities are left alone",
+    "input": "&lt;b&gt; &amp;",
+    "output": "&lt;b&gt; &amp;"
+  },
+  {
+    "case": "controls inside a tag",
+    "input": "\u0000<b>\u0001</b>",
+    "output": ""
+  },
+  {
+    "case": "null",
+    "input": null,
+    "output": ""
+  },
+  {
+    "case": "undefined",
+    "input": "<undefined>",
+    "output": ""
+  },
+  {
+    "case": "0",
+    "input": 0,
+    "output": "0"
+  },
+  {
+    "case": "false",
+    "input": false,
+    "output": ""
+  },
+  {
+    "case": "NaN",
+    "input": "<NaN>",
+    "output": "NaN"
+  },
+  {
+    "case": "an array",
+    "input": [
+      1,
+      "<b>2</b>"
+    ],
+    "output": ""
+  },
+  {
+    "case": "an object",
+    "input": {
+      "a": 1
+    },
+    "output": ""
+  }
+]

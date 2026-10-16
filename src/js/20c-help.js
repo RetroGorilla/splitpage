@@ -1,7 +1,8 @@
 import { S } from "./_state.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
-import { showToast } from "./12-dirty-toast.js";
-import { toggleFileMenu } from "./18b-file-menu.js";
+import { showActionToast, showToast } from "./12-dirty-toast.js";
+import { appActions } from "../legacy/app-actions.ts";
+import { handTourPauseTo } from "../legacy/tour-pause.ts";
 
 function scrollHelpTo(id) {
   var body = document.getElementById("help-body");
@@ -123,6 +124,13 @@ var tourStepIndex = -1;
 var tourResizeHandler = null;
 var tourTaggingHelpWasHidden = true;
 var tourSuspendedAt = -1;
+var tourInterruptedAt = -1;
+var tourResumeFrom = -1;
+var tourPausedToast = null;
+
+export function tourShowing() {
+  return tourStepIndex >= 0;
+}
 
 function markTourDone() {
   try { localStorage.setItem(TOUR_DONE_KEY, "1"); } catch (e) {}
@@ -203,7 +211,48 @@ function renderTourStep() {
   positionTourStep();
 }
 
+function dismissPausedToast() {
+  var el = tourPausedToast;
+  tourPausedToast = null;
+  if (el) el.dismiss();
+}
+
+function interruptTour() {
+  dismissPausedToast();
+  var at = tourStepIndex >= 0 ? tourStepIndex : tourSuspendedAt;
+  if (at < 0) return;
+  tourInterruptedAt = at;
+  tourSuspendedAt = -1;
+  tourStepIndex = -1;
+  var overlay = document.getElementById("tour-overlay");
+  if (overlay) overlay.hidden = true;
+  var taggingHelp = document.getElementById("tagging-help");
+  if (taggingHelp) taggingHelp.hidden = tourTaggingHelpWasHidden;
+}
+
+function resumePausedTour() {
+  tourPausedToast = null;
+  tourResumeFrom = tourInterruptedAt;
+  var outcome = appActions.invoke("tour", "button");
+  tourResumeFrom = -1;
+  if (outcome.kind !== "ran") offerTourResume();
+}
+
+function offerTourResume() {
+  if (tourInterruptedAt < 0) return;
+  dismissPausedToast();
+  var el = showActionToast("The tour was paused.", "", "Resume tour", resumePausedTour, true);
+  tourPausedToast = el;
+  el.addEventListener("click", function () {
+    if (tourPausedToast !== el) return;
+    tourPausedToast = null;
+    tourInterruptedAt = -1;
+  });
+}
+
 export function startTour() {
+  var from = tourResumeFrom;
+  tourResumeFrom = -1;
   if (!S.state) {
     if (typeof showToast === "function") showToast("Still loading…", "warn");
     return;
@@ -212,11 +261,13 @@ export function startTour() {
   if (!overlay) return;
   closeAllSidePanels();
   tourSuspendedAt = -1;
+  tourInterruptedAt = -1;
+  dismissPausedToast();
   closeHelp();
   var taggingHelp = document.getElementById("tagging-help");
   tourTaggingHelpWasHidden = taggingHelp ? taggingHelp.hidden : true;
 
-  tourStepIndex = 0;
+  tourStepIndex = from >= 0 ? from : 0;
   overlay.hidden = false;
   renderTourStep();
 
@@ -247,6 +298,7 @@ function tourBack() {
 }
 
 export function __init() {
+  handTourPauseTo({ interrupt: interruptTour, offerResume: offerTourResume });
   injectTaggingHelpGuideLink();
 
   (function wireHelpModal() {
@@ -280,19 +332,6 @@ export function __init() {
       var target = document.getElementById("help-close");
       if (target) target.focus();
     });
-  })();
-
-  (function wireHelpFileMenuItems() {
-    var menu = document.getElementById("file-menu");
-    if (!menu) return;
-    menu.addEventListener("click", function (e) {
-      var item = e.target.closest('[data-file-action="help"], [data-file-action="tour"]');
-      if (!item) return;
-      e.stopPropagation();
-      if (typeof toggleFileMenu === "function") toggleFileMenu(false);
-      if (item.getAttribute("data-file-action") === "help") openHelp();
-      else startTour();
-    }, true);
   })();
 
   (function wireTour() {

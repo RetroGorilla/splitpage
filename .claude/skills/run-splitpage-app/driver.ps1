@@ -24,10 +24,13 @@ param(
   # run-tests.ps1's Clear-SplitpageEdge. Minted below when absent so a
   # standalone driver.ps1 (ad-hoc, or the join-PIN walkthrough in SKILL.md)
   # still gets its own scope instead of an empty/shared one.
-  [string]$RunId
+  [string]$RunId,
+  [string]$ResultToken,
+  [switch]$FreezeCaches
 )
 
 $ErrorActionPreference = 'Stop'
+if ($env:SPLITPAGE_FREEZE_CACHES -eq '1') { $FreezeCaches = [switch]$true }
 if (-not $Root)    { $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path }
 if (-not $ShotDir) { $ShotDir = Join-Path $env:TEMP 'splitpage-shots' }
 if (-not $RunId)   { $RunId = [guid]::NewGuid().ToString('N').Substring(0, 8) }
@@ -35,15 +38,37 @@ New-Item -ItemType Directory -Force -Path $ShotDir | Out-Null
 
 function Log($m)  { [Console]::Error.WriteLine("[driver] $m") }
 function Out1($m) { [Console]::Out.WriteLine($m) }
+if ($FreezeCaches) { Log 'cache freezing on: every page opened here gets freeze-caches=1' }
 
 # ---------------------------------------------------------------- static server
 # Own HttpListener rather than start.ps1: start.ps1 also does Start-Process on
 # the URL, which pops a real Edge window on the user's desktop.
 $script:ServerPs = $null
-function Start-Server {
-  if ($script:ServerPs) { return }
+$ServerAttempts = 3
+
+function Get-FreePort {
+  $l = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+  try { $l.Start(); return ([System.Net.IPEndPoint]$l.LocalEndpoint).Port } finally { $l.Stop() }
+}
+
+function Stop-ServerAttempt {
+  if (-not $script:ServerPs) { return }
+  try { $null = $script:ServerPs.BeginStop($null, $null) } catch {}
+  $script:ServerPs = $null
+}
+
+function Get-ServerFailure {
+  $ps = $script:ServerPs
+  if ($ps.InvocationStateInfo.State -eq 'Running') { return $null }
+  $why = @($ps.Streams.Error | ForEach-Object { $_.ToString() })
+  if (-not $why.Count -and $ps.InvocationStateInfo.Reason) { $why = @($ps.InvocationStateInfo.Reason.Message) }
+  if (-not $why.Count) { $why = @("the listener stopped (" + $ps.InvocationStateInfo.State + ")") }
+  return ($why -join ' ')
+}
+
+function Start-ServerOnce {
   $sb = {
-    param($root, $port)
+    param($root, $port, $ready)
     $mime = @{
       '.html' = 'text/html; charset=utf-8'; '.js' = 'text/javascript; charset=utf-8'
       '.json' = 'application/json; charset=utf-8'; '.webmanifest' = 'application/manifest+json; charset=utf-8'
@@ -53,6 +78,7 @@ function Start-Server {
     $l = New-Object System.Net.HttpListener
     $l.Prefixes.Add("http://localhost:$port/")
     $l.Start()
+    $ready.up = $true
     while ($l.IsListening) {
       $ctx = $l.GetContext()
       $res = $ctx.Response
@@ -74,14 +100,52 @@ function Start-Server {
       } catch { $res.StatusCode = 500 } finally { $res.OutputStream.Close() }
     }
   }
+  $ready = [hashtable]::Synchronized(@{ up = $false })
   $script:ServerPs = [PowerShell]::Create()
-  $null = $script:ServerPs.AddScript($sb).AddArgument($Root).AddArgument($Port)
+  $null = $script:ServerPs.AddScript($sb).AddArgument($Root).AddArgument($Port).AddArgument($ready)
   $null = $script:ServerPs.BeginInvoke()
-  for ($i = 0; $i -lt 40; $i++) {
-    try { $null = Invoke-WebRequest "http://localhost:$Port/index.html" -UseBasicParsing -TimeoutSec 2
-          Log "server up on http://localhost:$Port/ (root $Root)"; return } catch { Start-Sleep -Milliseconds 250 }
+  $clock = [Diagnostics.Stopwatch]::StartNew()
+  $lastProbe = 'none'
+  while ($clock.Elapsed.TotalSeconds -lt 20) {
+    $failure = Get-ServerFailure
+    if ($failure) { return [pscustomobject]@{ Reason = $failure; Retry = $true } }
+    if (-not $ready.up) { Start-Sleep -Milliseconds 50; continue }
+    try {
+      $null = Invoke-WebRequest "http://localhost:$Port/index.html" -UseBasicParsing -TimeoutSec 2
+      $failure = Get-ServerFailure
+      if ($failure) { return [pscustomobject]@{ Reason = $failure; Retry = $true } }
+      Log "server up on http://localhost:$Port/ (root $Root)"
+      return $null
+    } catch {
+      $lastProbe = $_.Exception.Message
+      $response = $_.Exception.Response
+      if ($response) {
+        return [pscustomobject]@{ Reason = ("the listener answered HTTP " + [int]$response.StatusCode + " for /index.html (is index.html built in $Root?)"); Retry = $false }
+      }
+      Start-Sleep -Milliseconds 250
+    }
   }
-  throw "static server did not come up on port $Port (port already in use?)"
+  $why = if ($ready.up) { "no answer from the listener in 20s (last probe: $lastProbe)" } else { "the listener did not start in 20s" }
+  return [pscustomobject]@{ Reason = $why; Retry = $true }
+}
+
+function Start-Server {
+  if ($script:ServerPs) { return }
+  $reasons = @()
+  $retryable = $true
+  for ($attempt = 1; $attempt -le $ServerAttempts -and $retryable; $attempt++) {
+    if ($attempt -gt 1) { $script:Port = Get-FreePort }
+    $failed = Start-ServerOnce
+    if (-not $failed) { return }
+    $retryable = $failed.Retry
+    $reasons += "port ${Port}: $($failed.Reason)"
+    Log "static server attempt $attempt of $ServerAttempts failed: port ${Port}: $($failed.Reason)"
+    Stop-ServerAttempt
+  }
+  $tried = if ($retryable) { "after $ServerAttempts attempts" } else { "on port $Port" }
+  $e = New-Object System.Exception ("static server did not come up $tried (" + ($reasons -join '; ') + ")")
+  $e.Data['notStarted'] = $true
+  throw $e
 }
 
 # ------------------------------------------------------------------------ edge
@@ -141,6 +205,7 @@ function Connect-Cdp {
   Log 'cdp connected'
   $null = Send-Cdp 'Page.enable'
   $null = Send-Cdp 'Runtime.enable'
+  $null = Send-Cdp 'Emulation.setFocusEmulationEnabled' @{ enabled = $true }
   # Every suite runs in the light theme, whatever the machine's own (#169).
   # Headless Edge takes prefers-color-scheme from Windows, so on a PC set to
   # dark mode the app drew its dark palette and every suite that reads a
@@ -174,6 +239,7 @@ if (!/[?&]wizard=1(&|$)/.test(location.search)) {
 if (!/[?&]newtab=1(&|$)/.test(location.search)) { window.__splitpageNoNewTab = true; }
 window.__splitpageNoRemote = true;
 '@ }
+  if ($FreezeCaches) { $null = Send-Cdp 'Page.addScriptToEvaluateOnNewDocument' @{ source = 'window.__splitpageFreezeRun = true;' } }
   $null = Send-Cdp 'Log.enable'
 }
 
@@ -279,10 +345,20 @@ function Wait-For([string]$Expr, [int]$TimeoutMs = 15000) {
   throw "timed out after ${TimeoutMs}ms waiting for: $Expr"
 }
 
+function Add-FreezeFlag([string]$Url) {
+  $hash = $Url.IndexOf('#')
+  $head = if ($hash -ge 0) { $Url.Substring(0, $hash) } else { $Url }
+  $tail = if ($hash -ge 0) { $Url.Substring($hash) } else { '' }
+  if ($head -match '[?&]freeze-caches=') { return $Url }
+  $sep = if ($head.Contains('?')) { '&' } else { '?' }
+  return "$head${sep}freeze-caches=1$tail"
+}
+
 function Go([string]$Target) {
   $url = if ($Target -match '^https?://') { $Target }
          elseif ($Target -match '^/')     { "http://localhost:$Port$Target" }
          else                             { "http://localhost:$Port/$Target" }
+  if ($FreezeCaches -and $Target -notmatch '^https?://') { $url = Add-FreezeFlag $url }
   $null = Send-Cdp 'Page.navigate' @{ url = $url }
   Wait-For 'document.readyState === "complete"' 30000 | Out-Null
   Out1 "at $url"
@@ -411,6 +487,18 @@ function Press-Chars([string]$Text) {
     $null = Send-Cdp 'Input.dispatchKeyEvent' @{ type = 'keyUp'; key = $s }
   }
   Out1 "pressed $($Text.Length) chars"
+}
+
+function Ime-Input([string]$Rest) {
+  if ($Rest -notmatch '^(set|commit|cancel)(?: (.*))?$') { throw 'ime needs: set <text> | commit <text> | cancel' }
+  $what = $Matches[1]
+  $text = if ($null -ne $Matches[2]) { $Matches[2] } else { '' }
+  switch ($what) {
+    'set'    { $null = Send-Cdp 'Input.imeSetComposition' @{ text = $text; selectionStart = $text.Length; selectionEnd = $text.Length } }
+    'commit' { $null = Send-Cdp 'Input.insertText' @{ text = $text } }
+    'cancel' { $null = Send-Cdp 'Input.imeSetComposition' @{ text = ''; selectionStart = 0; selectionEnd = 0 } }
+  }
+  Out1 "ime $what $($text.Length) chars"
 }
 
 $KeyMap = @{
@@ -549,6 +637,7 @@ function Invoke-Line([string]$line) {
     'caret'   { if ($rest -match '^(.*)\s+start$') { Set-Caret $Matches[1] 'start' } else { Set-Caret $rest 'end' } }
     'type'    { Type-Text $rest }
     'press'   { Press-Chars $rest }
+    'ime'     { Ime-Input $rest }
     'key'     { $p = $rest -split '\s+'
                 if ($p.Count -ge 2) { Press-Key $p[1] $p[0].ToLower() } else { Press-Key $p[0] } }
     'text'    { $e = Resolve-Sel $rest
@@ -565,6 +654,39 @@ function Invoke-Line([string]$line) {
   return $true
 }
 
+function Report-Error($ex) {
+  $script:Failures++
+  if ($ex.Data['notStarted']) {
+    $script:Checks++
+    Out1 "NOT STARTED: $($ex.Message)"
+    return $true
+  }
+  Out1 "ERROR: $($ex.Message)"
+  return $false
+}
+
+function Test-FrozenWrites {
+  $script:Checks++
+  $pattern = 'Cannot assign to read only property|object is not extensible|Cannot add property|Cannot delete property|Cannot define property'
+  $hits = @($script:Console | Where-Object { $_ -like 'exception: *' -and $_ -match $pattern })
+  if ($hits.Count -eq 0) { Out1 'PASS no write into a frozen cache value threw'; return }
+  $script:Failures++
+  Out1 'FAIL a write into a frozen cache value threw'
+  $hits | Select-Object -First 5 | ForEach-Object { Out1 "     $_" }
+}
+
+function Get-ResultLine {
+  # Built in pieces on purpose: PS 5.1 cannot parse a double-quoted string
+  # inside a $() subexpression inside another double-quoted string. Kept
+  # ASCII-only too, since this file is read without a BOM.
+  $total = [Math]::Max($script:Checks, $script:Failures)
+  $passed = $total - $script:Failures
+  $summary = "RESULT: $passed/$total checks passed"
+  if ($script:Failures -gt 0) { $summary = $summary + " - $($script:Failures) FAILED" }
+  if ($ResultToken) { $summary = $summary + " [run $ResultToken]" }
+  return $summary
+}
+
 $exit = 0
 try {
   if ($Script) {
@@ -576,28 +698,26 @@ try {
     $scriptText = [System.Text.Encoding]::UTF8.GetString([IO.File]::ReadAllBytes((Resolve-Path -LiteralPath $Script)))
     foreach ($line in ($scriptText -split "`r?`n")) {
       try { if (-not (Invoke-Line $line)) { break } }
-      catch { Out1 "ERROR: $($_.Exception.Message)"; $script:Failures++; $exit = 1 }
+      catch { $exit = 1; if (Report-Error $_.Exception) { break } }
     }
   } else {
     while ($true) {
       $line = [Console]::In.ReadLine()
       if ($null -eq $line) { break }
       try { if (-not (Invoke-Line $line)) { break } }
-      catch { Out1 "ERROR: $($_.Exception.Message)"; $script:Failures++; $exit = 1 }
+      catch { $exit = 1; if (Report-Error $_.Exception) { break } }
     }
   }
   # A run that asserted nothing is a run that proved nothing.
   if ($script:Checks -eq 0 -and $script:Failures -eq 0) {
     Out1 'WARNING: no expect/wait assertions ran - this proved nothing.'
   }
-  # Built in pieces on purpose: PS 5.1 cannot parse a double-quoted string
-  # inside a $() subexpression inside another double-quoted string. Kept
-  # ASCII-only too, since this file is read without a BOM.
-  $passed = $script:Checks - $script:Failures
-  $summary = "RESULT: $passed/$($script:Checks) checks passed"
-  if ($script:Failures -gt 0) { $summary = $summary + " - $($script:Failures) FAILED" }
+  if ($FreezeCaches -and $script:Ws -and ($script:Checks -gt 0 -or $script:Failures -gt 0)) {
+    try { $null = Invoke-Js '0' } catch {}
+    Test-FrozenWrites
+  }
   Out1 ''
-  Out1 $summary
+  Out1 (Get-ResultLine)
 } finally {
   if ($script:Ws) { try { $script:Ws.Dispose() } catch {} }
   if ($script:EdgeProc) { try { Stop-Process -Id $script:EdgeProc.Id -Force -ErrorAction SilentlyContinue } catch {} }

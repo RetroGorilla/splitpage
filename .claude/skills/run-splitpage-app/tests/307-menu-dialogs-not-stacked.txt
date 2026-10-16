@@ -1,0 +1,206 @@
+# Desktop menu commands that open a dialog, during the tour and over another
+# dialog (#307). The tour sits above dialogs, so a dialog opened during it
+# opened underneath it; and a second dialog opened over the first. Each such
+# command is now refused there with a toast that says what to close first
+# (the action's availability, OPENS_A_DIALOG in src/legacy/screen.ts). Help
+# still opens during the tour, which it suspends, but not over a dialog. The
+# setup wizard still closes itself when a File menu item is chosen, so a
+# command chosen over it runs. __dialogs() lists the open dialogs, and
+# __tidy() clears the toasts.
+
+open
+viewport 1400 900
+eval (function(){ window.D = window.__desktopTest; window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__dialogs = function () { return Array.prototype.map.call(document.querySelectorAll('.modal-backdrop:not([hidden])'), function (m) { return m.id; }).sort().join(','); }; window.__toasts = function () { var t = Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function (x) { return x.textContent; }).join('|'); document.getElementById('toast-host').innerHTML = ''; return t; }; window.__run = function (cmd) { D.runMenuCommand(cmd); return true; }; window.__tidy = function () { __toasts(); return true; }; return !!(D && D.runMenuCommand); })()
+
+# --- with nothing open, each command opens its dialog ------------------------
+eval __tidy()
+eval __run('about')
+wait __shown('about-modal')
+key Escape
+wait __dialogs() === ''
+eval __run('settings')
+wait __shown('settings-modal')
+key Escape
+wait __dialogs() === ''
+eval __run('servers')
+wait __shown('connect-modal')
+key Escape
+wait __dialogs() === ''
+eval __run('paste')
+wait __shown('import-modal')
+jsclick #import-modal .modal-close
+wait __dialogs() === ''
+eval __run('gdoc-import')
+wait __shown('gdoc-modal')
+jsclick #gdoc-modal .modal-close
+wait __dialogs() === ''
+eval __run('setup')
+wait __shown('onboarding-modal')
+key Escape
+wait __dialogs() === ''
+eval __run('help')
+wait __shown('help-modal')
+key Escape
+wait __dialogs() === ''
+eval __run('tagging-help')
+wait __shown('tagging-help')
+jsclick #tagging-help-dismiss
+wait !__shown('tagging-help')
+sleep 300
+expect __toasts().indexOf('first.') === -1
+
+# --- during the tour: refused, and the toast says why --------------------------
+eval __run('tour')
+wait __shown('tour-overlay')
+eval __tidy()
+eval __run('about')
+sleep 300
+expect __dialogs() === ''
+expect __toasts() === 'Finish or skip the tour first.'
+eval __run('settings')
+sleep 300
+expect __dialogs() === ''
+expect __toasts() === 'Finish or skip the tour first.'
+eval __run('servers')
+sleep 300
+expect __dialogs() === ''
+expect __toasts() === 'Finish or skip the tour first.'
+eval __run('collaborate')
+sleep 300
+expect __dialogs() === ''
+expect __toasts() === 'Finish or skip the tour first.'
+eval __run('paste')
+sleep 300
+expect __dialogs() === ''
+expect __toasts() === 'Finish or skip the tour first.'
+eval __run('gdoc-import')
+sleep 300
+expect __dialogs() === ''
+expect __toasts() === 'Finish or skip the tour first.'
+eval __run('drive-open')
+sleep 300
+expect __dialogs() === ''
+expect __toasts() === 'Finish or skip the tour first.'
+eval __run('server-open')
+sleep 300
+expect __dialogs() === ''
+expect __toasts() === 'Finish or skip the tour first.'
+eval __run('setup')
+sleep 300
+expect __dialogs() === ''
+expect __toasts() === 'Finish or skip the tour first.'
+eval __run('tagging-help')
+sleep 300
+expect !__shown('tagging-help')
+expect __toasts() === 'Finish or skip the tour first.'
+expect __shown('tour-overlay')
+# ...but Help still opens, and puts the tour aside until it closes
+eval __run('help')
+wait __shown('help-modal')
+expect !__shown('tour-overlay')
+expect __toasts() === ''
+jsclick #help-close
+wait !__shown('help-modal')
+wait __shown('tour-overlay')
+jsclick #tour-skip
+wait !__shown('tour-overlay')
+
+# --- over another dialog: refused, and the toast names the open dialog --------
+eval __run('about')
+wait __shown('about-modal')
+eval __tidy()
+eval __run('settings')
+sleep 300
+expect __dialogs() === 'about-modal'
+expect __toasts() === 'Close the open dialog first.'
+eval __run('servers')
+sleep 300
+expect __dialogs() === 'about-modal'
+expect __toasts() === 'Close the open dialog first.'
+eval __run('collaborate')
+sleep 300
+expect __dialogs() === 'about-modal'
+expect __toasts() === 'Close the open dialog first.'
+eval __run('paste')
+sleep 300
+expect __dialogs() === 'about-modal'
+expect __toasts() === 'Close the open dialog first.'
+eval __run('gdoc-import')
+sleep 300
+expect __dialogs() === 'about-modal'
+expect __toasts() === 'Close the open dialog first.'
+eval __run('drive-open')
+sleep 300
+expect __dialogs() === 'about-modal'
+expect __toasts() === 'Close the open dialog first.'
+eval __run('server-open')
+sleep 300
+expect __dialogs() === 'about-modal'
+expect __toasts() === 'Close the open dialog first.'
+eval __run('setup')
+sleep 300
+expect __dialogs() === 'about-modal'
+expect __toasts() === 'Close the open dialog first.'
+eval __run('help')
+sleep 300
+expect __dialogs() === 'about-modal'
+expect __toasts() === 'Close the open dialog first.'
+eval __run('tagging-help')
+sleep 300
+expect !__shown('tagging-help')
+expect __toasts() === 'Close the open dialog first.'
+key Escape
+wait __dialogs() === ''
+eval __run('settings')
+wait __shown('settings-modal')
+eval __tidy()
+eval __run('about')
+sleep 300
+expect __dialogs() === 'settings-modal'
+expect __toasts() === 'Close the open dialog first.'
+key Escape
+wait __dialogs() === ''
+
+eval __run('about')
+wait __shown('about-modal')
+eval __tidy()
+eval __run('tour')
+sleep 300
+expect __dialogs() === 'about-modal'
+expect !__shown('tour-overlay')
+expect __toasts() === 'Close the open dialog first.'
+key Escape
+wait __dialogs() === ''
+eval __run('settings')
+wait __shown('settings-modal')
+eval __tidy()
+eval __run('tour')
+sleep 300
+expect __dialogs() === 'settings-modal'
+expect !__shown('tour-overlay')
+expect __toasts() === 'Close the open dialog first.'
+key Escape
+wait __dialogs() === ''
+eval __run('tour')
+wait __shown('tour-overlay')
+expect __toasts() === ''
+jsclick #tour-skip
+wait !__shown('tour-overlay')
+
+# --- the setup wizard closes itself first, as before --------------------------
+eval __run('setup')
+wait __shown('onboarding-modal')
+eval __tidy()
+eval __run('about')
+wait __shown('about-modal')
+expect __dialogs() === 'about-modal'
+expect __toasts() === ''
+key Escape
+wait __dialogs() === ''
+
+# --- with everything closed again, the commands act as before ----------------
+eval __run('about')
+wait __shown('about-modal')
+key Escape
+wait __dialogs() === ''
+expect __toasts() === ''

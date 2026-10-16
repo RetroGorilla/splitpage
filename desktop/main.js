@@ -11,9 +11,12 @@ const crypto = require("node:crypto");
 const os = require("node:os");
 const net_ = require("node:net");
 const { spawn } = require("node:child_process");
-const { createDraftStore, writeFileDurableSync, MAX_BODY_BYTES } = require("./drafts");
+const { createDraftStore, restoreDoneAction, writeFileDurableSync, MAX_BODY_BYTES } = require("./drafts");
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { createGoogleDrive } = require("./google-drive");
+const { documentServerHost } = require("./bind-host");
+const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
+const { createQuitWatchdog } = require("./quit-watchdog");
 const { createVoiceHelper } = require("./voice-helper");
 const { findChromiumBrowsers, launchChromiumBrowser, chromiumBrowserName } = require("./chromium-browsers");
 const {
@@ -232,6 +235,8 @@ function pathKey(absPath) {
 
 let lastFocusedWindowId = null;
 let quitConfirmed = false;
+let quitKeepingDrafts = false;
+const sessionEndKeep = { holder: "session-end" };
 let hostingConfirmed = false;
 let sessionWritesFrozen = false;
 let sessionEnding = false;
@@ -387,6 +392,32 @@ function tabIsUnsaved(tab) {
   return !!(tab && !tab.crashedNotReloaded && (tab.dirty || draftsIsHeld(tab.id)));
 }
 
+function tabHasFile(tab) {
+  if (!tab || tab.crashedNotReloaded || !tab.source || tab.source.kind !== "file") return false;
+  const absPath = tab.source.absPath;
+  return typeof absPath === "string" && !!absPath;
+}
+
+const TEST_CLOSE_STAT_DELAY_MS = TEST_MODE ? Number(process.env.SPLITPAGE_TEST_CLOSE_STAT_DELAY_MS) || 0 : 0;
+
+function closeCheckStat(p) {
+  if (TEST_CLOSE_STAT_DELAY_MS > 0) return new Promise((r) => setTimeout(r, TEST_CLOSE_STAT_DELAY_MS)).then(() => fsp.stat(p));
+  return fsp.stat(p);
+}
+
+function tabFileGone(tab) {
+  if (!tabHasFile(tab)) return Promise.resolve(false);
+  return checkFileGone(closeCheckStat, tab.source.absPath, FILE_CHECK_TIMEOUT_MS);
+}
+
+function keepDraftsOfGoneFiles(goneTabs, holder) {
+  return Promise.all(goneTabs.map((tab) => {
+    holdKeep(tab, holder);
+    return requestDraftFlush(tab, DRAFT_FLUSH_BUDGET_MS, true)
+      .then((result) => (copyKept(result, draftsHasDraft(tab.id)) ? null : tab));
+  })).then((unkept) => unkept.filter(Boolean));
+}
+
 const DRAFT_ORIGIN_KINDS = new Set(["untitled", "file", "server", "import"]);
 const DRAFT_FILE_KINDS = new Set(["md", "html", "splitpage"]);
 const DRAFT_NAME_MAX = 300;
@@ -446,7 +477,7 @@ function draftBodyTooLarge(str) {
   return Buffer.byteLength(str, "utf8") > MAX_BODY_BYTES;
 }
 
-function requestDraftFlush(tab, budgetMs) {
+function requestDraftFlush(tab, budgetMs, keep) {
   return new Promise((resolve) => {
     if (!tab || !tab.view || tab.view.webContents.isDestroyed()) { resolve({ ok: false, code: "NO_TAB" }); return; }
     const reqId = ++draftFlushReqId;
@@ -458,7 +489,7 @@ function requestDraftFlush(tab, budgetMs) {
       resolve(result);
     });
     try {
-      tab.view.webContents.send("splitpage:draft-flush", reqId);
+      tab.view.webContents.send("splitpage:draft-flush", reqId, keep === true);
     } catch {
       pendingDraftFlushes.delete(reqId);
       clearTimeout(timer);
@@ -985,7 +1016,7 @@ async function waitForHealth(port, tries = 120) {
 }
 
 async function startDocumentServer() {
-  const host = HOSTING ? "0.0.0.0" : "127.0.0.1";
+  const host = documentServerHost({ hosting: HOSTING, testMode: TEST_MODE });
   const port = await findFreePort(WANTED_PORT, host);
   if (port == null) {
     const message = `Ports ${WANTED_PORT}-${WANTED_PORT + 20} are all busy. Try --port with something else.`;
@@ -1361,6 +1392,7 @@ function downloadUpdate() {
 
 let installOnQuit = false;
 let installQuitWatcher = null;
+let installQuitWatchdog = null;
 
 function startInstallerNow() {
   try {
@@ -1393,13 +1425,15 @@ function runUpdateInstaller() {
     const done = (value) => { if (!settled) { settled = true; resolve(value); } };
     installQuitWatcher = done;
     app.quit();
-    setTimeout(() => {
+    if (installQuitWatchdog) installQuitWatchdog.stop();
+    installQuitWatchdog = createQuitWatchdog(3000, () => quitKeepingDrafts, () => {
+      installQuitWatchdog = null;
       if (settled) return;
       installOnQuit = false;
       installQuitWatcher = null;
       setDownloadState({ state: "ready" });
       done({ ok: false, error: "quit-cancelled" });
-    }, 3000);
+    });
   });
 }
 
@@ -1882,26 +1916,39 @@ function createTabWindow(restoreSpec) {
       return;
     }
     if (closeConfirmedWindows.has(win)) return;
+    if (rec.closeKeepingDrafts) { event.preventDefault(); return; }
 
-    const isLastWindow = liveWindows().length <= 1;
+    const lastWhenAsked = liveWindows().length <= 1;
 
-    if (HOSTING && isLastWindow && !hostingConfirmed) {
+    if (HOSTING && lastWhenAsked && !hostingConfirmed) {
       if (!askHostingPrompt(win)) { event.preventDefault(); return; }
     }
 
-    const unsaved = unsavedTabsOf(rec.tabIds);
-    if (unsaved.length) {
-      const decision = buildUnsavedDialog(unsaved, "Close window", win);
-      if (decision === "cancel") { event.preventDefault(); return; }
-      if (decision === "review") { reviewFirstUnsaved(unsaved); event.preventDefault(); return; }
+    const tabIds = rec.tabIds.slice();
+    const confirmClose = (closing) => {
+      const othersOpen = liveWindows().some((w) => w.win !== win);
+      const { freezeSession, confirmHosting } = lastWindowClose(lastWhenAsked, othersOpen, HOSTING);
+      settleDraftsForClose(closing, true, "close-without-saving");
+      if (confirmHosting) hostingConfirmed = true;
+      if (freezeSession) sessionWritesFrozen = true;
+      closeConfirmedWindows.add(win);
+    };
+
+    if (!tabIds.some((id) => tabHasFile(tabs.get(id)))) {
+      if (askAboutUnsaved(unsavedTabsOf(tabIds, []), "Close window", win) !== "discard") { event.preventDefault(); return; }
+      confirmClose(tabIds);
+      return;
     }
 
-    settleDraftsForClose(rec.tabIds, true, "close-without-saving");
-    if (HOSTING && isLastWindow) hostingConfirmed = true;
-
-    if (isLastWindow) sessionWritesFrozen = true;
-
-    closeConfirmedWindows.add(win);
+    event.preventDefault();
+    rec.closeKeepingDrafts = true;
+    const parent = () => (win.isDestroyed() ? undefined : win);
+    askBeforeClosing(() => rec.tabIds.slice(), "Close window", parent, () => !quitKeepingDrafts && !quitConfirmed && !sessionEnding).then(({ answer, tabIds: closing }) => {
+      rec.closeKeepingDrafts = false;
+      if (answer !== "discard" || win.isDestroyed()) return;
+      confirmClose(closing);
+      win.close();
+    });
   });
 
   win.on("session-end", () => {
@@ -1912,7 +1959,14 @@ function createTabWindow(restoreSpec) {
     const flushes = [];
     for (const tab of tabs.values()) {
       if (tab.view.webContents.isDestroyed()) continue;
-      flushes.push(requestDraftFlush(tab, DRAFT_FLUSH_BUDGET_MS));
+      if (tab.dirty || !tabHasFile(tab)) {
+        flushes.push(requestDraftFlush(tab, DRAFT_FLUSH_BUDGET_MS));
+        continue;
+      }
+      flushes.push(tabFileGone(tab).then((gone) => {
+        if (gone) holdKeep(tab, sessionEndKeep);
+        return requestDraftFlush(tab, DRAFT_FLUSH_BUDGET_MS, gone);
+      }));
     }
     Promise.all(flushes).then((results) => {
       if (!TEST_MODE) return;
@@ -2475,11 +2529,33 @@ function liveWindows() {
   return [...windowsById.values()].filter((w) => w.win && !w.win.isDestroyed());
 }
 
-function unsavedTabsOf(tabIds) {
+function goneFileTabsOf(tabIds) {
+  const fileTabs = tabIds.map((id) => tabs.get(id)).filter(tabHasFile);
+  return Promise.all(fileTabs.map(tabFileGone))
+    .then((gone) => fileTabs.filter((tab, i) => gone[i] && tabs.get(tab.id) === tab));
+}
+
+function askAboutUnsaved(list, verb, parentWin) {
+  if (!list.length) return "discard";
+  const decision = buildUnsavedDialog(list, verb, parentWin);
+  if (decision === "review") reviewFirstUnsaved(list);
+  return decision;
+}
+
+function reportCloseCheckFailure(verb, err) {
+  console.error(`[splitpage] close check failed (${verb}): ${(err && err.stack) || err}`);
+}
+
+function askBeforeClosing(tabIdsNow, verb, parentOf, stillWanted) {
+  const io = { tabs, goneFileTabsOf, unsavedTabsOf, askAboutUnsaved, keepDraftsOfGoneFiles, report: reportCloseCheckFailure };
+  return runCloseCheck(io, tabIdsNow, verb, parentOf, stillWanted);
+}
+
+function unsavedTabsOf(tabIds, gone) {
   const out = [];
   for (const id of tabIds) {
     const tab = tabs.get(id);
-    if (tabIsUnsaved(tab)) out.push(tab);
+    if (tabIsUnsaved(tab) || (tab && gone.includes(tab))) out.push(tab);
   }
   return out;
 }
@@ -2501,10 +2577,12 @@ function unsavedTitles(list) {
 }
 
 function buildUnsavedDialog(list, verb, parentWin) {
+  if (TEST_MODE) process.stderr.write(`[splitpage] test question (${verb}): ${JSON.stringify(list.map((tab) => tab.id))}\n`);
   const answer = consumeTestDialogAnswer();
   if (answer === "confirm") return "discard";
   if (answer === "cancel") return "cancel";
   if (answer === "review") return "review";
+  if (answer === "throw") throw new Error("test: the unsaved-changes question failed");
 
   if (list.length === 1) {
     const choice = dialog.showMessageBoxSync(parentWin, {
@@ -2562,7 +2640,7 @@ function settleDraftsForClose(tabIds, discardUnsaved, reason) {
   for (const id of tabIds) {
     const tab = tabs.get(id);
     if (!tab) continue;
-    if (tab.crashedNotReloaded) continue;
+    if (tab.crashedNotReloaded || tab.keepDraftOnClose) continue;
     if (tabIsUnsaved(tab)) unsaved.push(id); else clean.push(id);
   }
   if (discardUnsaved && unsaved.length) draftsDiscardForUserDecision(unsaved, reason);
@@ -2577,13 +2655,25 @@ function requestCloseTab(tabId) {
     if (!w.win.isDestroyed()) w.win.close();
     return;
   }
-  if (tabIsUnsaved(tab)) {
-    const decision = buildUnsavedDialog([tab], "Close tab", w ? w.win : undefined);
-    if (decision === "cancel") return;
-    if (decision === "review") { reviewFirstUnsaved([tab]); return; }
+  if (tab.closeKeepingDraft) return;
+  const parent = () => (w && !w.win.isDestroyed() ? w.win : undefined);
+  const close = () => {
+    settleDraftsForClose([tabId], true, "leave-without-saving");
+    destroyTabView(tabId);
+  };
+  if (!tabHasFile(tab)) {
+    if (askAboutUnsaved(unsavedTabsOf([tabId], []), "Close tab", parent()) === "discard") close();
+    return;
   }
-  settleDraftsForClose([tabId], true, "leave-without-saving");
-  destroyTabView(tabId);
+  tab.closeKeepingDraft = true;
+  const windowClosing = () => {
+    const home = windowsById.get(tab.windowId);
+    return !!(home && home.closeKeepingDrafts);
+  };
+  askBeforeClosing(() => [tabId], "Close tab", parent, () => !quitKeepingDrafts && !quitConfirmed && !sessionEnding && !windowClosing()).then(({ answer }) => {
+    tab.closeKeepingDraft = false;
+    if (answer === "discard" && tabs.get(tabId) === tab) close();
+  });
 }
 
 function cycleTab(windowId, delta) {
@@ -3447,6 +3537,7 @@ function registerIpc() {
     if (!draftStore) return DRAFT_STORE_DOWN;
     const seq = draftFiniteNumber(payload && payload.seq);
     if (seq === null) return { ok: false, code: "BAD_PAYLOAD" };
+    if (tab.keepDraftOnClose) return { ok: false, code: "HELD" };
     return await draftStore.discardClean(tab.id, seq);
   });
 
@@ -3487,11 +3578,14 @@ function registerIpc() {
     const tab = tabOf(event);
     if (!tab || !draftStore) return;
     const outcome = payload && typeof payload.outcome === "string" ? payload.outcome : "";
-    if (outcome === "failed") {
+    const action = restoreDoneAction(outcome);
+    if (action === "open") {
       flushPendingPayload(tab, { force: true });
       return;
     }
-    try { draftStore.release(tab.id); } catch { }
+    if (action === "release") {
+      try { draftStore.release(tab.id); } catch { }
+    }
     tab.pendingPayload = null;
   });
 
@@ -3749,6 +3843,9 @@ function registerIpc() {
         }
         case "listTargets":
           return listTargets();
+        case "sessionEnd":
+          for (const w of liveWindows()) w.win.emit("session-end", { reasons: ["logoff"], preventDefault() {} });
+          return true;
         case "externalOpens":
           return testExternalOpens.slice();
         case "chromiumLaunches":
@@ -3863,6 +3960,7 @@ app.whenReady().then(async () => {
 app.on("before-quit", (event) => {
   if (sessionEnding) return;
   if (quitConfirmed) return;
+  if (quitKeepingDrafts) { event.preventDefault(); return; }
 
   if (HOSTING && !hostingConfirmed) {
     const w = windowsById.get(lastFocusedWindowId) || firstWindowRecord();
@@ -3873,24 +3971,43 @@ app.on("before-quit", (event) => {
   }
 
   const tabIds = allTabsInOrder();
-  const unsaved = unsavedTabsOf(tabIds);
-  if (unsaved.length) {
-    const w = windowsById.get(unsaved[0].windowId);
-    const decision = buildUnsavedDialog(unsaved, "Quit", w && !w.win.isDestroyed() ? w.win : undefined);
-    if (decision === "cancel" || decision === "review") {
-      if (decision === "review") reviewFirstUnsaved(unsaved);
-      quitConfirmed = false;
-      hostingConfirmed = false;
-      sessionWritesFrozen = false;
+  const parentOf = (list) => {
+    const w = list.length ? windowsById.get(list[0].windowId) : null;
+    return w && !w.win.isDestroyed() ? w.win : undefined;
+  };
+  const stayOpen = () => {
+    quitConfirmed = false;
+    hostingConfirmed = false;
+    sessionWritesFrozen = false;
+  };
+  const confirmQuit = (quitting) => {
+    settleDraftsForClose(quitting, true, "quit-without-saving");
+    if (HOSTING) hostingConfirmed = true;
+    quitConfirmed = true;
+    sessionWritesFrozen = true;
+  };
+
+  if (!tabIds.some((id) => tabHasFile(tabs.get(id)))) {
+    const unsaved = unsavedTabsOf(tabIds, []);
+    if (askAboutUnsaved(unsaved, "Quit", parentOf(unsaved)) !== "discard") {
+      stayOpen();
       event.preventDefault();
       return;
     }
+    confirmQuit(tabIds);
+    return;
   }
 
-  settleDraftsForClose(tabIds, true, "quit-without-saving");
-  if (HOSTING) hostingConfirmed = true;
-  quitConfirmed = true;
-  sessionWritesFrozen = true;
+  event.preventDefault();
+  quitKeepingDrafts = true;
+  askBeforeClosing(allTabsInOrder, "Quit", parentOf, () => !sessionEnding).then(({ answer, tabIds: quitting }) => {
+    quitKeepingDrafts = false;
+    if (installQuitWatchdog) installQuitWatchdog.restart();
+    if (sessionEnding) return;
+    if (answer !== "discard") { stayOpen(); return; }
+    confirmQuit(quitting);
+    app.quit();
+  });
 });
 
 app.on("window-all-closed", () => {
@@ -3901,6 +4018,7 @@ app.on("will-quit", () => {
   if (installOnQuit) {
     installOnQuit = false;
     const started = startInstallerNow();
+    if (installQuitWatchdog) { installQuitWatchdog.stop(); installQuitWatchdog = null; }
     if (installQuitWatcher) {
       installQuitWatcher(started.ok ? { ok: true, quitting: true } : started);
       installQuitWatcher = null;

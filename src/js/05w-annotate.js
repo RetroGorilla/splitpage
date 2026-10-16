@@ -1,11 +1,13 @@
 import { S } from "./_state.js";
 import { ensureBytes, intern, persist, urlForSync } from "./02c-blobs.js";
-import { ANNOTATION_COLORS, annotateGallerySlot, normalizeMarks, rowSlots, slotOriginal } from "./02d-gallery.js";
 import { findRowIndex } from "./03-sync.js";
 import { slotPoster } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
 import { showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
+import { ANNOTATION_COLORS, annotateGallerySlot, normalizeMarks, rowSlots, slotOriginal } from "../core/document/gallery.ts";
+import { cappedLongText, codePointPrefix } from "../core/document/text-policy.ts";
+import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 
 var COLOR_NAMES = ["Red", "Yellow", "Green", "Blue", "Black", "White"];
 var SIZES = {
@@ -528,7 +530,9 @@ function commitText() {
   if (!ed || !ed.text) return;
   var t = ed.text;
   var box = textBoxEl();
-  var text = box ? box.value.replace(/\r\n?/g, "\n").slice(0, MAX_TEXT).replace(/\s+$/, "") : "";
+  var raw = box ? box.value.replace(/\r\n?/g, "\n") : "";
+  var cut = cappedLongText(raw, MAX_TEXT);
+  var text = (cut.trim() ? cut : codePointPrefix(raw, MAX_TEXT)).replace(/\s+$/, "");
   ed.text = null;
   if (box) box.parentNode.removeChild(box);
   var had = t.index >= 0 ? ed.marks[t.index] : null;
@@ -658,12 +662,18 @@ function done() {
   if (locate() === -1) { lost(); return; }
   if (!marks.length) { save(null, marks); return; }
   var mine = ed;
+  var ctx = captureOperation();
   ed.saving = true;
   setStatus("Saving…");
   paintTools();
   flatten(marks).then(function (rec) {
     if (ed !== mine) return;
     ed.saving = false;
+    if (!stillOwns(ctx)) {
+      closeAnnotator();
+      showToast("The annotations were not saved because the script changed.", "warn");
+      return;
+    }
     paintTools();
     if (!rec) { showToast("Could not save the annotated picture — it may be too large for this browser.", "warn"); return; }
     save(rec, marks);

@@ -1,0 +1,146 @@
+[
+  {
+    "case": "letters and digits",
+    "input": [
+      "c1",
+      "c"
+    ],
+    "output": "c1"
+  },
+  {
+    "case": "hyphen and underscore are kept",
+    "input": [
+      "c-1_x",
+      "c"
+    ],
+    "output": "c-1_x"
+  },
+  {
+    "case": "a dot, a space, a quote and a slash go",
+    "input": [
+      "c.1 \"2/3",
+      "c"
+    ],
+    "output": "c123"
+  },
+  {
+    "case": "non-ASCII letters go",
+    "input": [
+      "é1😀",
+      "c"
+    ],
+    "output": "1"
+  },
+  {
+    "case": "a control character goes",
+    "input": [
+      "\u0000c1",
+      "c"
+    ],
+    "output": "c1"
+  },
+  {
+    "case": "no length limit",
+    "input": [
+      {
+        "length": 300,
+        "runs": [
+          [
+            "a",
+            300
+          ]
+        ]
+      },
+      "c"
+    ],
+    "output": {
+      "length": 300,
+      "runs": [
+        [
+          "a",
+          300
+        ]
+      ]
+    }
+  },
+  {
+    "case": "__proto__ survives",
+    "input": [
+      "__proto__",
+      "c"
+    ],
+    "output": "__proto__"
+  },
+  {
+    "case": "constructor survives",
+    "input": [
+      "constructor",
+      "c"
+    ],
+    "output": "constructor"
+  },
+  {
+    "case": "a lone hyphen survives",
+    "input": [
+      "-",
+      "c"
+    ],
+    "output": "-"
+  },
+  {
+    "case": "the number 0",
+    "input": [
+      0,
+      "c"
+    ],
+    "output": "0"
+  },
+  {
+    "case": "false",
+    "input": [
+      false,
+      "c"
+    ],
+    "output": "{minted:c}"
+  },
+  {
+    "case": "empty: minted with the prefix",
+    "input": [
+      "",
+      "c"
+    ],
+    "output": "{minted:c}"
+  },
+  {
+    "case": "only dropped characters: minted",
+    "input": [
+      "!!!",
+      "bs"
+    ],
+    "output": "{minted:bs}"
+  },
+  {
+    "case": "null: minted",
+    "input": [
+      null,
+      "rp"
+    ],
+    "output": "{minted:rp}"
+  },
+  {
+    "case": "undefined: minted",
+    "input": [
+      "<undefined>",
+      "p"
+    ],
+    "output": "{minted:p}"
+  },
+  {
+    "case": "no prefix: minted with r",
+    "input": [
+      "",
+      "<undefined>"
+    ],
+    "output": "{minted:r}"
+  }
+]

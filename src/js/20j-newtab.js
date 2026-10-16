@@ -1,12 +1,12 @@
 import { S } from "./_state.js";
 import { readDefaultWpm } from "./00p-prefs.js";
-import { home, setHome } from "./_home.js";
+import { home } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
 import { DEFAULT_WPM, formatDuration, wordCount } from "./01-scene-status.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
-import { cloneState, setBaseState, updateIdentityChip } from "./03-sync.js";
-import { render } from "./05-render.js";
+import { updateIdentityChip } from "./03-sync.js";
+import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { openGdocModal, openImportModal } from "./11-import.js";
 import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
@@ -14,11 +14,11 @@ import { arrivingOnLink } from "./13-hosted.js";
 import { fileKindFromName, openLocalFile, openProjectFile, updateFileChip } from "./18-local-files.js";
 import { desktopAppUrl, desktopAppOffered } from "./20a-update.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
-import { startTour } from "./20c-help.js";
-import { openServersDialog } from "./20e-connect.js";
 import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
 import { draftRestorePending } from "./20g-drafts.js";
 import { STARTERS, starterById } from "./_starters.js";
+import { appActions } from "../legacy/app-actions.ts";
+import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
 
 var newTabPageShown = false;
 
@@ -73,13 +73,11 @@ function starterDocumentState(id) {
 }
 
 function adoptNewDocument(next, reason) {
-  S.state = next;
-  setBaseState(cloneState(S.state), reason);
-  S.docIdWrittenOut = false;
-  if (home.kind === "file" || home.kind === "import") setHome("none");
+  var leaves = home.kind === "file" || home.kind === "import";
+  documentTransitions().startNew({ from: { document: next }, reason: reason, destination: leaves ? NO_DESTINATION : undefined });
   clearDirty();
   resetProductionPanelState();
-  render();
+  renderAbsorbed();
   updateFileChip();
   updateIdentityChip();
   updateSaveStatus();
@@ -109,9 +107,10 @@ function startStarterScript(id) {
 
 function openPasteAsNewDocument() {
   openImportModal({
-    intoNewDocument: function (rows) {
-      adoptNewDocument(migrateRows({ schema: SCHEMA_VERSION, title: "Untitled Script", rows: rows }),
-        "newtab paste: a new document from pasted text");
+    intoNewDocument: function (rows, scan) {
+      var next = migrateRows({ schema: SCHEMA_VERSION, title: "Untitled Script", rows: rows });
+      scan(next);
+      adoptNewDocument(next, "newtab paste: a new document from pasted text");
     }
   });
 }
@@ -337,11 +336,11 @@ export function __init() {
       else if (action === "starter") startStarterScript(target.getAttribute("data-starter"));
       else if (action === "long-demo") startStarterScript("long-demo");
       else if (action === "open") newTabOpenFile();
-      else if (action === "join") openServersDialog();
+      else if (action === "join") appActions.invoke("servers", "button");
       else if (action === "paste") openPasteAsNewDocument();
       else if (action === "gdoc") openGdocModal();
       else if (action === "dismiss") closeNewTabPage();
-      else if (action === "tour") { closeNewTabPage(); startTour(); }
+      else if (action === "tour") { closeNewTabPage(); appActions.invoke("tour", "button"); }
       else if (action === "open-recent") openRecent(target.getAttribute("data-file-id"));
       else if (action === "forget-recent") forgetRecent(target.getAttribute("data-file-id"));
       else if (action === "clear-recents") clearRecents();

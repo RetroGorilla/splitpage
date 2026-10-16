@@ -1,0 +1,47 @@
+{
+  "splitpage": {
+    "bytes": 5607,
+    "sha256": "92dcd3593ab341221b3e13d32a6d9589ee36694ebb821d81d73271764047b1a0"
+  },
+  "markdownProject": {
+    "bytes": 7769,
+    "sha256": "dd7ed0f50dceb7f2ea73fcd0c0d261d11dbca606b9d599c3e4e0c1761dbae5df"
+  },
+  "standaloneHtml": {
+    "stateData": {
+      "bytes": 4533,
+      "sha256": "077fd1a8a77c717ac67c0802c828ff7453a0307f73e397956dfec784b588dffe"
+    },
+    "title": "Keepwarm Travel Mug — 30s — SplitShare",
+    "description": "6 scenes · 0:32 running time · 0 of 6 shot · October 13, 2026"
+  },
+  "markdownExport": {
+    "bytes": 2793,
+    "sha256": "ccc86b86bd120fae8c878ffff783dce2d34795c77a6065098fd28e11f47d63fc"
+  },
+  "markdownExportPreview": {
+    "bytes": 954,
+    "sha256": "60ff42258cd7b7a89f9d249de3daf3296cabc250db4a2b62b51d6609576b601f"
+  },
+  "markdownTableExport": {
+    "bytes": 2686,
+    "sha256": "2c2cb046dd799b286b3dbff94bb33c69b6f7db45c3fa01196df62eb867bf1ec8"
+  },
+  "markdownImages": [],
+  "facts": {
+    "title": "Keepwarm Travel Mug — 30s",
+    "scenes": 6,
+    "seconds": 32.4,
+    "runtime": "0:32",
+    "target": null,
+    "status": {
+      "todo": 4,
+      "ready": 2,
+      "shot": 0
+    },
+    "words": 81,
+    "wpm": 150,
+    "exportedAt": "2026-10-13T17:30:00.000Z",
+    "date": "October 13, 2026"
+  }
+}

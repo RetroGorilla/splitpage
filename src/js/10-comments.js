@@ -1,9 +1,9 @@
+import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { S } from "./_state.js";
 import { formatClock, formatDateClock } from "./00p-prefs.js";
 import { revealRow } from "./01b-hide-shot.js";
-import { escapeHtml, makeId } from "./02-state.js";
 import { blobImgHtml } from "./02c-blobs.js";
-import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
+import { normalizeImageRef } from "../../shared/blob-policy.js";
 import {
   findRowIndex,
   getEditorName,
@@ -21,11 +21,23 @@ import {
 } from "./04-richtext.js";
 import { editableCellHtml, pad2, render } from "./05-render.js";
 import { resetDraftHistory } from "./05d-draft-edit.js";
-import { normalizeTagName } from "./07-production-tags.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
-import { htmlToPlainText, queueAutoSave, resumeAutoSave } from "./14-export.js";
+import { queueAutoSave, resumeAutoSave } from "./14-export.js";
+import { commentBodyText, commentEntries, formatTimestampAbsolute } from "./14c-export-projections.js";
+import { makeId, nowIso } from "../adapters/identity/ids.ts";
+import {
+  commentMatchesFilterMode,
+  commentMatchesAssigneeFilter as matchesAssignee,
+  commentRecentOrder,
+  compareCommentPositions
+} from "../core/document/comments.ts";
+import { idMap } from "../core/document/id-map.ts";
+import { normalizeTagName } from "../core/document/tags.ts";
+import { EDITOR_NAME_MAX, normalizeEditorName } from "../core/document/fields.ts";
+import { cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
+export { commentBodyText, commentEntries, nowIso };
 
 var commentFilter;
 
@@ -155,18 +167,93 @@ function initTaggingHelp() {
 
 export var COMMENT_NAME_KEY = "splitpage-comment-author";
 var pendingComment = null;
-var expandedReplyIds = {};
-var replyDrafts = {};
+var composerVersion = 0;
+var bindingsVersion = 0;
+var commentTimers = new Set();
+
+function ownsDocument(operation) {
+  return stillOwns(Object.assign({}, operation, { connection: captureOperation().connection }));
+}
+
+function commentTimer(fn, delay) {
+  var version = bindingsVersion;
+  var operation = captureOperation();
+  var timer = setTimeout(function () {
+    if (version !== bindingsVersion) return;
+    commentTimers.delete(timer);
+    if (ownsDocument(operation)) fn();
+  }, delay);
+  commentTimers.add(timer);
+  return timer;
+}
+
+export function captureCommentComposer() {
+  var operation = captureOperation();
+  var version = composerVersion;
+  var modal = document.getElementById("comment-modal");
+  var body = document.getElementById("comment-body-editable");
+  return function () {
+    if (!ownsDocument(operation) || version !== composerVersion) return null;
+    var liveModal = document.getElementById("comment-modal");
+    var liveBody = document.getElementById("comment-body-editable");
+    return liveModal === modal && liveBody === body && liveModal && !liveModal.hidden ? liveBody : null;
+  };
+}
+
+export function resetCommentBindings() {
+  bindingsVersion++;
+  composerVersion++;
+  commentTimers.forEach(function (timer) { clearTimeout(timer); });
+  commentTimers.clear();
+  clearTimeout(deleteCommentArmTimer);
+  deleteCommentArmTimer = null;
+  S.deleteCommentArmId = null;
+  closeCommentMenu(false);
+  pendingComment = null;
+  expandedReplyIds = idMap();
+  replyDrafts = idMap();
+  document.getElementById("comment-modal").hidden = true;
+  closeCommentsPanel();
+  closeFieldPopovers(document.getElementById("comment-modal"));
+  var body = document.getElementById("comment-body-editable");
+  body.innerHTML = "";
+  resetDraftHistory(body);
+}
+
+var expandedReplyIds = idMap();
+var replyDrafts = idMap();
 S.deleteCommentArmId = null;
 export var deleteCommentArmTimer = null;
 
-export function nowIso() { return new Date().toISOString(); }
-
+export var AUTHOR_NAME_FIELDS = "#settings-name, #comment-name, .reply-name-input, #identity-input, #guest-name";
+export function cleanAuthorName(name) {
+  return normalizeEditorName(name) || "";
+}
+var EMOJI_PART = /[\p{Extended_Pictographic}\p{Regional_Indicator}⃣]/u;
+function wholeEmojiCut(value, at) {
+  if (typeof Intl === "undefined" || typeof Intl.Segmenter !== "function") return at;
+  var seg = new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(value).containing(at);
+  return seg && seg.index < at && EMOJI_PART.test(seg.segment) ? seg.index : at;
+}
+export function limitAuthorNameField(field) {
+  var value = field.value;
+  var excess = Array.from(value).length - EDITOR_NAME_MAX;
+  if (excess <= 0) return;
+  var caret = field.selectionStart;
+  var head = typeof caret === "number" && caret === field.selectionEnd ? Array.from(value.slice(0, caret)) : [];
+  if (head.length < excess) {
+    field.value = value.slice(0, wholeEmojiCut(value, codePointPrefix(value, EDITOR_NAME_MAX).length));
+    return;
+  }
+  var cut = wholeEmojiCut(value, head.slice(0, head.length - excess).join("").length);
+  field.value = value.slice(0, cut) + value.slice(caret);
+  field.setSelectionRange(cut, cut);
+}
 export function getSavedAuthorName() {
-  try { return localStorage.getItem(COMMENT_NAME_KEY) || ""; } catch (e) { return ""; }
+  try { return cleanAuthorName(localStorage.getItem(COMMENT_NAME_KEY)); } catch (e) { return ""; }
 }
 export function saveAuthorName(name) {
-  try { localStorage.setItem(COMMENT_NAME_KEY, name); } catch (e) {}
+  try { localStorage.setItem(COMMENT_NAME_KEY, cleanAuthorName(name)); } catch (e) {}
 }
 
 export var COMMENTS_SORT_KEY = "splitpage-comments-sort";
@@ -217,23 +304,12 @@ export function setCommentAssigneeFilter(value) {
   captureReplyDrafts();
   renderComments();
 }
-function commentMatchesFilterMode(c, mode) {
-  if (mode === "resolved") return !!c.resolved;
-  if (mode === "all") return true;
-  return !c.resolved;
-}
 function commentMatchesAssigneeFilter(c, assignee) {
-  if (!assignee) return true;
-  if (assignee === "__unassigned__") return !c.assignee;
-  if (assignee === "me") {
-    var me = normalizeTagName(getSavedAuthorName());
-    return !!me && normalizeTagName(c.assignee || "") === me;
-  }
-  return normalizeTagName(c.assignee || "") === normalizeTagName(assignee);
+  return matchesAssignee(c, assignee, getSavedAuthorName);
 }
 
 function commentAssigneeCandidates() {
-  var seen = {}, out = [];
+  var seen = idMap(), out = [];
   function add(name) {
     var clean = plainText(name || "").trim();
     if (!clean || clean === "Anonymous") return;
@@ -255,7 +331,7 @@ export function setCommentAssignee(id, name) {
   var idx = findCommentIndex(id);
   if (idx === -1) return;
   if (reviewBlocked()) { renderComments(); return; }
-  S.state.comments[idx].assignee = plainText(name || "").trim().slice(0, 80);
+  S.state.comments[idx].assignee = cappedText(name || "", 80);
   S.state.comments[idx].updatedAt = nowIso();
   markDirty();
   render();
@@ -357,14 +433,6 @@ function formatRelativeTime(iso) {
   } catch (e) { return ""; }
 }
 
-function findAnchorLocationLabel(rowId, field) {
-  if (field === "title") return "Document title";
-  var idx = findRowIndex(rowId);
-  var rowLabel = idx === -1 ? "Deleted row" : ("Row " + pad2(idx + 1));
-  var fieldLabel = field === "audioText" ? "Audio" : "Visual";
-  return rowLabel + " · " + fieldLabel;
-}
-
 function commentLocationHtml(rowId, field) {
   if (field === "title") return "Document title";
   var idx = findRowIndex(rowId);
@@ -399,108 +467,8 @@ function commentTimeHtml(iso, cls) {
     escapeHtml(formatTimestampAbsolute(iso)) + '">' + escapeHtml(formatRelativeTime(iso)) + '</time>';
 }
 
-function formatTimestampAbsolute(iso) {
-  try {
-    var d = new Date(iso);
-    if (isNaN(d.getTime())) return "";
-    return formatDateClock(d, { year: true });
-  } catch (e) { return ""; }
-}
-
 function commentPositionCompare(a, b) {
-  var ai = findRowIndex(a.rowId); if (ai === -1) ai = Infinity;
-  var bi = findRowIndex(b.rowId); if (bi === -1) bi = Infinity;
-  if (ai !== bi) return ai - bi;
-  var af = a.field === "audioText" ? 1 : 0, bf = b.field === "audioText" ? 1 : 0;
-  if (af !== bf) return af - bf;
-  return String(a.createdAt || "").localeCompare(String(b.createdAt || ""));
-}
-
-function commentLastActivity(c) {
-  var t = c.createdAt || "";
-  (c.replies || []).forEach(function (r) {
-    if ((r.createdAt || "") > t) t = r.createdAt;
-  });
-  return t;
-}
-
-export function commentEntries(opts) {
-  var pieces = !!(opts && opts.pieces);
-  var list = (S.state.comments || []).slice();
-  list.sort(commentPositionCompare);
-  return list.map(function (c) {
-    var entry = {
-      id: c.id,
-      rowIndex: c.field === "title" ? -1 : findRowIndex(c.rowId),
-      field: c.field,
-      location: findAnchorLocationLabel(c.rowId, c.field),
-      author: c.author || "Anonymous",
-      body: htmlToPlainText(c.body),
-      quoted: c.quotedText || "",
-      resolved: !!c.resolved,
-      resolvedBy: c.resolved ? (c.resolvedBy || "") : "",
-      assignee: c.assignee || "",
-      when: formatTimestampAbsolute(c.createdAt),
-      replies: (c.replies || []).map(function (rp) {
-        var reply = {
-          author: rp.author || "Anonymous",
-          body: htmlToPlainText(rp.body),
-          when: formatTimestampAbsolute(rp.createdAt)
-        };
-        if (pieces) reply.pieces = bodyPieces(rp.body);
-        return reply;
-      })
-    };
-    if (pieces) entry.pieces = commentBodyPieces(c);
-    return entry;
-  });
-}
-
-export function bodyPieces(html) {
-  var out = [];
-  if (!html) return out;
-  var root = inertBody(String(html).replace(/<br\s*\/?>/gi, "\n"));
-  if (!root.querySelector("img[data-blob]")) {
-    var only = htmlToPlainText(html);
-    if (only) out.push({ text: only });
-    return out;
-  }
-  var buf = "";
-  function flush() {
-    var t = buf.replace(/\u00A0/g, " ").trim();
-    if (t) out.push({ text: t });
-    buf = "";
-  }
-  (function walk(node) {
-    Array.prototype.forEach.call(node.childNodes, function (child) {
-      if (child.nodeType === 3) { buf += child.nodeValue || ""; return; }
-      if (child.nodeType !== 1) return;
-      if (child.tagName === "IMG") {
-        var sha = child.getAttribute("data-blob");
-        if (isSha256Hex(sha)) { flush(); out.push({ image: sha }); }
-        return;
-      }
-      walk(child);
-    });
-  })(root);
-  flush();
-  return out;
-}
-
-function commentBodyPieces(c) {
-  if (c.kind === "conflict" && c.field === "visualImage") {
-    var ref = normalizeImageRef(c.imageValue);
-    return ref ? [{ image: ref.sha256 }] : [];
-  }
-  return bodyPieces(c.body);
-}
-
-export var COMMENT_IMAGE_TEXT = "[image]";
-
-export function commentBodyText(entry) {
-  var pieces = (entry && entry.pieces) || [];
-  if (!pieces.some(function (p) { return p.image; })) return entry.body;
-  return pieces.map(function (p) { return p.image ? COMMENT_IMAGE_TEXT : p.text; }).join("\n");
+  return compareCommentPositions(a, b, findRowIndex);
 }
 
 function anchorTextFromState(cmtId) {
@@ -535,7 +503,7 @@ function unwrapAnchorInState(rowId, field, cmtId) {
 }
 
 export function syncAnchorResolvedClasses() {
-  var resolvedIds = {};
+  var resolvedIds = idMap();
   S.state.comments.forEach(function (c) { if (c.resolved) resolvedIds[c.id] = true; });
   document.querySelectorAll("#rows .cmt-anchor").forEach(function (el) {
     var id = el.getAttribute("data-cmt");
@@ -559,6 +527,7 @@ function closeFieldPopovers(root) {
 }
 
 export function openCommentComposer(ctx) {
+  composerVersion++;
   pendingComment = ctx;
   S.savedRange = null;
   S.savedRangeCell = null;
@@ -571,10 +540,12 @@ export function openCommentComposer(ctx) {
   bodyEl.innerHTML = "";
   resetDraftHistory(bodyEl);
   document.getElementById("comment-modal").hidden = false;
-  setTimeout(function () { bodyEl.focus(); }, 0);
+  var resolveComposer = captureCommentComposer();
+  commentTimer(function () { var body = resolveComposer(); if (body) body.focus(); }, 0);
 }
 
 export function closeCommentComposer(cancelled) {
+  composerVersion++;
   document.getElementById("comment-modal").hidden = true;
   if (cancelled && pendingComment) {
     unwrapAnchorInState(pendingComment.rowId, pendingComment.field, pendingComment.id);
@@ -592,7 +563,7 @@ export function closeCommentComposer(cancelled) {
 export function postComment() {
   if (!pendingComment) return;
   var nameInput = document.getElementById("comment-name");
-  var author = (nameInput.value || "").trim() || "Anonymous";
+  var author = cleanAuthorName(nameInput.value) || "Anonymous";
   saveAuthorName(author);
   var bodyEl = document.getElementById("comment-body-editable");
   var bodyHtml = sanitizeHtml(bodyEl.innerHTML);
@@ -620,6 +591,7 @@ export function postComment() {
   });
   markDirty();
   document.getElementById("comment-modal").hidden = true;
+  composerVersion++;
   pendingComment = null;
   bodyEl.innerHTML = "";
   resetDraftHistory(bodyEl);
@@ -685,7 +657,7 @@ export function armDeleteComment(btn, id) {
   }
   S.deleteCommentArmId = id;
   clearTimeout(deleteCommentArmTimer);
-  deleteCommentArmTimer = setTimeout(function () {
+  deleteCommentArmTimer = commentTimer(function () {
     S.deleteCommentArmId = null;
     renderComments();
   }, 2800);
@@ -711,7 +683,7 @@ export function postReply(id) {
   if (!card) return;
   var nameInput = card.querySelector(".reply-name-input");
   var bodyEl = card.querySelector(".cell-editable");
-  var author = (nameInput.value || "").trim() || "Anonymous";
+  var author = cleanAuthorName(nameInput.value) || "Anonymous";
   saveAuthorName(author);
   var bodyHtml = sanitizeHtml(bodyEl.innerHTML);
   if (!bodyEl.textContent.trim()) {
@@ -758,7 +730,9 @@ export function jumpToComment(cmtId) {
     renderComments();
   }
   openCommentsPanel();
-  setTimeout(function () {
+  var panel = document.getElementById("comments-panel");
+  commentTimer(function () {
+    if (document.getElementById("comments-panel") !== panel) return;
     var card = document.querySelector('.comment-card[data-id="' + safeId(cmtId, "c") + '"]');
     if (!card) return;
     card.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -1072,9 +1046,7 @@ export function renderComments() {
   var items = S.state.comments.filter(function (c) {
     return commentMatchesFilterMode(c, commentFilter.mode) && commentMatchesAssigneeFilter(c, commentFilter.assignee);
   });
-  items = items.slice().sort(S.commentSortMode === "recent"
-    ? function (a, b) { return commentLastActivity(b).localeCompare(commentLastActivity(a)); }
-    : commentPositionCompare);
+  items = items.slice().sort(S.commentSortMode === "recent" ? commentRecentOrder : commentPositionCompare);
   if (!items.length) {
     listEl.innerHTML = '<div class="comments-empty">' + (S.state.comments.length ? "No comments match this filter." : "No comments yet.") + '</div>' +
       COMMENTS_HINT_HTML;

@@ -1,0 +1,391 @@
+{
+  "input": {
+    "schema": 2,
+    "title": "Gear",
+    "docId": "d4444444444444444444444444444444c",
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "Wide on <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"Tripod\" contenteditable=\"false\">the tripod</span> and <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"Slider\" contenteditable=\"false\">Slider</span>",
+        "audioText": "",
+        "imageRef": null,
+        "updatedAt": "2026-03-01T09:00:00.000Z",
+        "updatedBy": "Sam"
+      }
+    ],
+    "productionTags": [
+      {
+        "id": "t_tripod",
+        "cat": "gear",
+        "name": "Tripod",
+        "owner": "",
+        "notes": "",
+        "status": "have"
+      },
+      {
+        "id": "t_slider",
+        "cat": "gear",
+        "name": "Slider",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_oldlens",
+        "cat": "gear",
+        "name": "Old lens",
+        "owner": "",
+        "notes": "sold",
+        "status": "needed"
+      },
+      {
+        "id": "t_gimbal",
+        "cat": "gear",
+        "name": "Gimbal",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_ctor",
+        "cat": "gear",
+        "name": "constructor",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_proto",
+        "cat": "gear",
+        "name": "__proto__",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      },
+      {
+        "id": "t_kettle",
+        "cat": "prop",
+        "name": "Kettle",
+        "owner": "",
+        "notes": "",
+        "status": "needed"
+      }
+    ],
+    "comments": [],
+    "people": [],
+    "brollShots": [],
+    "wordsPerMinute": 150,
+    "rev": 0
+  },
+  "steps": [
+    {
+      "step": "a list with every kind of line, CRLF",
+      "typed": "tripod\r\n  Lav mic  \r\nGimbal\r\nconstructor\r\n__proto__\r\ntoString\r\nhasOwnProperty\r\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\r\n<b>Boom</b> pole\r\n\r\n   \r\nLav Mic",
+      "gear": [
+        [
+          "t_tripod",
+          "Tripod",
+          "have",
+          ""
+        ],
+        [
+          "t_slider",
+          "Slider",
+          "needed",
+          ""
+        ],
+        [
+          "t_gimbal",
+          "Gimbal",
+          "needed",
+          ""
+        ],
+        [
+          "t_ctor",
+          "constructor",
+          "needed",
+          ""
+        ],
+        [
+          "t_proto",
+          "__proto__",
+          "needed",
+          ""
+        ],
+        [
+          "t_nzo4b69nw035",
+          "Lav mic",
+          "needed",
+          ""
+        ],
+        [
+          "t_obtw56d24pz7",
+          "toString",
+          "needed",
+          ""
+        ],
+        [
+          "t_yh03hb1wkejdc",
+          "hasOwnProperty",
+          "needed",
+          ""
+        ],
+        [
+          "t_ri0v0q1bwhks0",
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "needed",
+          ""
+        ],
+        [
+          "t_kthr2dwqiubw",
+          "Boom pole",
+          "needed",
+          ""
+        ]
+      ],
+      "otherTagsUntouched": true,
+      "toasts": [
+        "Gear list updated — added 5, removed 1."
+      ],
+      "boxAfter": "__proto__\nBoom pole\nconstructor\nGimbal\nhasOwnProperty\nLav mic\nSlider\ntoString\nTripod\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "dirty": true,
+      "personColors": null
+    },
+    {
+      "step": "the same list again, LF",
+      "typed": "tripod\n  Lav mic  \nGimbal\nconstructor\n__proto__\ntoString\nhasOwnProperty\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\n<b>Boom</b> pole\n\n   \nLav Mic",
+      "gear": [
+        [
+          "t_tripod",
+          "Tripod",
+          "have",
+          ""
+        ],
+        [
+          "t_slider",
+          "Slider",
+          "needed",
+          ""
+        ],
+        [
+          "t_gimbal",
+          "Gimbal",
+          "needed",
+          ""
+        ],
+        [
+          "t_ctor",
+          "constructor",
+          "needed",
+          ""
+        ],
+        [
+          "t_proto",
+          "__proto__",
+          "needed",
+          ""
+        ],
+        [
+          "t_nzo4b69nw035",
+          "Lav mic",
+          "needed",
+          ""
+        ],
+        [
+          "t_obtw56d24pz7",
+          "toString",
+          "needed",
+          ""
+        ],
+        [
+          "t_yh03hb1wkejdc",
+          "hasOwnProperty",
+          "needed",
+          ""
+        ],
+        [
+          "t_ri0v0q1bwhks0",
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "needed",
+          ""
+        ],
+        [
+          "t_kthr2dwqiubw",
+          "Boom pole",
+          "needed",
+          ""
+        ]
+      ],
+      "otherTagsUntouched": true,
+      "toasts": [],
+      "boxAfter": "__proto__\nBoom pole\nconstructor\nGimbal\nhasOwnProperty\nLav mic\nSlider\ntoString\nTripod\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "dirty": false,
+      "personColors": null
+    },
+    {
+      "step": "the same list, CR",
+      "typed": "tripod\r  Lav mic  \rGimbal\rconstructor\r__proto__\rtoString\rhasOwnProperty\rxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\r<b>Boom</b> pole\r\r   \rLav Mic",
+      "gear": [
+        [
+          "t_tripod",
+          "Tripod",
+          "have",
+          ""
+        ],
+        [
+          "t_slider",
+          "Slider",
+          "needed",
+          ""
+        ],
+        [
+          "t_gimbal",
+          "Gimbal",
+          "needed",
+          ""
+        ],
+        [
+          "t_ctor",
+          "constructor",
+          "needed",
+          ""
+        ],
+        [
+          "t_proto",
+          "__proto__",
+          "needed",
+          ""
+        ],
+        [
+          "t_nzo4b69nw035",
+          "Lav mic",
+          "needed",
+          ""
+        ],
+        [
+          "t_obtw56d24pz7",
+          "toString",
+          "needed",
+          ""
+        ],
+        [
+          "t_yh03hb1wkejdc",
+          "hasOwnProperty",
+          "needed",
+          ""
+        ],
+        [
+          "t_ri0v0q1bwhks0",
+          "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+          "needed",
+          ""
+        ],
+        [
+          "t_kthr2dwqiubw",
+          "Boom pole",
+          "needed",
+          ""
+        ]
+      ],
+      "otherTagsUntouched": true,
+      "toasts": [],
+      "boxAfter": "__proto__\nBoom pole\nconstructor\nGimbal\nhasOwnProperty\nLav mic\nSlider\ntoString\nTripod\nxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "dirty": false,
+      "personColors": null
+    },
+    {
+      "step": "a list leaving out everything not in the script",
+      "typed": "Tripod\nSlider",
+      "gear": [
+        [
+          "t_tripod",
+          "Tripod",
+          "have",
+          ""
+        ],
+        [
+          "t_slider",
+          "Slider",
+          "needed",
+          ""
+        ]
+      ],
+      "otherTagsUntouched": true,
+      "toasts": [
+        "Gear list updated — removed 8."
+      ],
+      "boxAfter": "Slider\nTripod",
+      "dirty": true,
+      "personColors": null
+    },
+    {
+      "step": "lines named after Object's own properties, none tracked yet",
+      "typed": "constructor\n__proto__\nTripod\ntoString",
+      "gear": [
+        [
+          "t_tripod",
+          "Tripod",
+          "needed",
+          ""
+        ],
+        [
+          "t_1rp7c7b0vrp0",
+          "Slider",
+          "needed",
+          ""
+        ],
+        [
+          "t_a30syj8irqu",
+          "constructor",
+          "needed",
+          ""
+        ],
+        [
+          "t_51yo2kb6x097",
+          "__proto__",
+          "needed",
+          ""
+        ],
+        [
+          "t_obtw56d24pz7",
+          "toString",
+          "needed",
+          ""
+        ]
+      ],
+      "otherTagsUntouched": true,
+      "toasts": [
+        "Gear list updated — added 3, removed 1."
+      ],
+      "boxAfter": "__proto__\nconstructor\nSlider\ntoString\nTripod",
+      "dirty": true,
+      "personColors": null
+    },
+    {
+      "step": "an empty list",
+      "typed": "",
+      "gear": [
+        [
+          "t_tripod",
+          "Tripod",
+          "needed",
+          ""
+        ],
+        [
+          "t_1rp7c7b0vrp0",
+          "Slider",
+          "needed",
+          ""
+        ]
+      ],
+      "otherTagsUntouched": true,
+      "toasts": [
+        "Gear list updated — removed 3."
+      ],
+      "boxAfter": "Slider\nTripod",
+      "dirty": true,
+      "personColors": null
+    }
+  ]
+}

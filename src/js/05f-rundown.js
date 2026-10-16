@@ -1,15 +1,18 @@
 import { S } from "./_state.js";
 import { ROW_STATUSES, formatDuration, rowSeconds, rowStatus } from "./01-scene-status.js";
 import { revealRow } from "./01b-hide-shot.js";
-import { escapeHtml } from "./02-state.js";
 import { findRowIndex } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";
-import { cellOf, toPlainText } from "./04c-doc-model.js";
-import { pad2 } from "./05-render.js";
 import { clearDropMarkers, moveRowTo } from "./06-rows.js";
-import { contentMemo } from "./07-production-tags.js";
 import { brollCountInRow } from "./08c-broll.js";
 import { reviewMode } from "./13-hosted.js";
+import { contentMemo } from "../core/document/memo.ts";
+import { escapeHtml, unitSafePrefix } from "../core/document/text-policy.ts";
+import { pad2 } from "../core/production/timing.ts";
+import { toPlainText } from "../core/text/projections.ts";
+import { appActions } from "../legacy/app-actions.ts";
+import { cacheSeal } from "../legacy/cache-freeze.ts";
+import { cellOf } from "../legacy/richtext.ts";
 
 export var RUNDOWN_TAIL_SECONDS = 10;
 var BLOCK_GAP_PX = 2;
@@ -347,8 +350,8 @@ function sceneSnippet(row) {
   if (!snippetOf) {
     snippetOf = contentMemo(function (html) {
       var text = toPlainText(cellOf(html)).replace(/\s+/g, " ").trim();
-      return text.length > 90 ? text.slice(0, 90) : text;
-    });
+      return unitSafePrefix(text, 90);
+    }, cacheSeal);
   }
   return snippetOf(row.audioText || "") || snippetOf(row.visualText || "");
 }
@@ -970,7 +973,7 @@ export function __init() {
   minimized = readMinFlag();
   var toggle = ensureToggle(strip);
   updateRundownMinControls();
-  toggle.addEventListener("click", function () { toggleRundownMinimized(); });
+  toggle.addEventListener("click", function () { appActions.invoke("toggle-rundown-min", "button"); });
   document.addEventListener("splitpage:pref", function (e) {
     var d = e && e.detail;
     if (!d || d.key !== MIN_KEY) return;

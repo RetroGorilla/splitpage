@@ -1,0 +1,18 @@
+  .modal-footer {
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
+    margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border);
+  }
+  :where(.modal-panel, .tour-card) .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: 32px; padding: 0 14px;
+    font-size: 14px; line-height: 20px;
+  }
+  :where(.modal-panel, .tour-card) .btn:where(:not(.btn-accent)) {
+    background: transparent;
+    border-color: var(--border-strong);
+  }
+  :where(.modal-panel, .tour-card) .btn:where(:not(.btn-accent)):where(:hover:not(:disabled)) {
+    background: var(--layer-hover, var(--hover));
+    border-color: var(--text-faint);
+  }
+  :where(.modal-panel, .tour-card) .btn-accent { font-weight: 600; }

@@ -1,0 +1,177 @@
+# The surfaces the action registry takes over last (4.0 milestone 1): the
+# Settings dialog's buttons, the setup wizard's links, and the desktop app's
+# native menu. Each does what it did in 3.1: Settings' Tour, Tagging
+# reference, Servers, Google Drive and Export app data close Settings and open
+# the same thing the File menu does; the wizard's Servers and Help links close
+# the wizard first; a native header command (Comments, Production, Gear,
+# Present) closes an open File menu and does what its button does; a native
+# File menu command closes the wizard before it is checked, so the native
+# Open runs where Ctrl+O is refused; and a native command whose File menu
+# item is greyed out does nothing and says nothing. Passes against the code
+# before the registry (4.0-development 47c0309) and after it.
+
+open
+viewport 1400 900
+eval (function(){ window.T = window.__settingsTest; window.D = window.__desktopTest; window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__toasts = function () { var t = Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function (x) { return x.textContent; }).join('|'); document.getElementById('toast-host').innerHTML = ''; return t; }; window.__files = []; var r = URL.createObjectURL.bind(URL); URL.createObjectURL = function (b) { window.__files.push({ blob: b, name: null }); return r(b); }; var c = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { if (this.download) { var f = window.__files[window.__files.length - 1]; if (f && !f.name) f.name = this.download; return; } return c.apply(this, arguments); }; localStorage.setItem('splitpage-tour-done', '1'); return true; })()
+
+# --- Settings: Take the tour again ---------------------------------------------
+eval T.open(); true
+sleep 300
+expect T.isOpen() === true
+jsclick #settings-modal [data-settings-action="tour"]
+sleep 400
+expect T.isOpen() === false
+expect __shown('tour-overlay')
+expect localStorage.getItem('splitpage-tour-done') === null
+jsclick #tour-skip
+sleep 300
+expect !__shown('tour-overlay')
+
+# --- Settings: Show the tagging reference --------------------------------------
+eval T.open(); true
+sleep 300
+jsclick #settings-modal [data-settings-action="tagging-help"]
+sleep 300
+expect T.isOpen() === false
+expect __shown('tagging-help')
+key Escape
+sleep 300
+expect !__shown('tagging-help')
+
+# --- Settings: Servers… and Google Drive… --------------------------------------
+eval T.open(); true
+sleep 300
+jsclick #settings-modal [data-settings-action="servers"]
+sleep 300
+expect T.isOpen() === false
+expect __shown('connect-modal')
+key Escape
+sleep 300
+expect !__shown('connect-modal')
+eval T.open(); true
+sleep 300
+jsclick #settings-modal [data-settings-action="drive"]
+wait __shown('drive-modal')
+expect T.isOpen() === false
+key Escape
+wait !__shown('drive-modal')
+
+# --- Settings: Export app data… -------------------------------------------------
+eval T.open(); true
+sleep 300
+eval window.__files = []; true
+jsclick #settings-modal [data-settings-action="export-app-data"]
+wait window.__files.length === 1
+expect T.isOpen() === false
+wait !!window.__files[0].name
+expect /\.json$/.test(window.__files[0].name)
+
+# --- the setup wizard's Servers and Help links ------------------------------------
+jsclick #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="setup"]
+wait __shown('onboarding-modal')
+jsclick #onboarding-modal [data-onboard-action="open-servers"]
+sleep 300
+expect !__shown('onboarding-modal')
+expect __shown('connect-modal')
+key Escape
+sleep 300
+expect !__shown('connect-modal')
+jsclick #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="setup"]
+wait __shown('onboarding-modal')
+jsclick #onboarding-modal [data-onboard-action="open-help"]
+sleep 300
+expect !__shown('onboarding-modal')
+expect __shown('help-modal')
+key Escape
+sleep 300
+expect !__shown('help-modal')
+
+# --- the native menu: a header command closes an open File menu ---------------
+click #btn-file
+sleep 200
+expect !document.getElementById('file-menu').hidden
+eval D.runMenuCommand('toggle-comments'); true
+sleep 300
+expect document.getElementById('file-menu').hidden
+expect __shown('comments-panel')
+eval D.runMenuCommand('toggle-comments'); true
+sleep 300
+expect !__shown('comments-panel')
+
+# --- the native menu: Production, Gear and Present act as their buttons do -----
+click #btn-file
+sleep 200
+expect !document.getElementById('file-menu').hidden
+eval D.runMenuCommand('toggle-production'); true
+sleep 300
+expect document.getElementById('file-menu').hidden
+expect __shown('production-panel')
+eval D.runMenuCommand('toggle-production'); true
+sleep 300
+expect !__shown('production-panel')
+eval D.runMenuCommand('toggle-gear'); true
+sleep 300
+expect __shown('gear-panel')
+eval D.runMenuCommand('toggle-gear'); true
+sleep 300
+expect !__shown('gear-panel')
+click #btn-file
+sleep 200
+eval D.runMenuCommand('present'); true
+wait __shown('prompter')
+expect document.getElementById('file-menu').hidden
+sleep 600
+jsclick #pp-close
+wait !__shown('prompter')
+sleep 600
+
+# --- the native menu: a File menu command closes the setup wizard first -------
+# The wizard closes before the command is checked, so the native Open, which
+# the open wizard would refuse, closes it and asks for a file, while Ctrl+O
+# under the wizard is refused.
+eval (function(){ window.__picked = []; window.showOpenFilePicker = function () { window.__picked.push('open'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; return true; })()
+jsclick #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="setup"]
+wait __shown('onboarding-modal')
+key ctrl KeyO
+sleep 300
+expect __shown('onboarding-modal')
+expect window.__picked.join(',') === ''
+eval D.runMenuCommand('open'); true
+sleep 400
+expect !__shown('onboarding-modal')
+expect window.__picked.join(',') === 'open'
+jsclick #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="setup"]
+wait __shown('onboarding-modal')
+eval D.runMenuCommand('history'); true
+sleep 300
+expect !__shown('onboarding-modal')
+expect __shown('history-panel')
+jsclick #history-close
+sleep 200
+expect !__shown('history-panel')
+
+# --- the native menu: a greyed-out item does nothing and says nothing ---------
+eval (function(){ window.__fetchWas = window.fetch; window.fetch = function(){ return new Promise(function(){}); }; window.__hostedTest.setSession({ role: 'edit', docId: 'srv-doc' }); var m = window.__shareTest.mode(); m.readOnly = true; window.__shareTest.updateMenu(); return true; })()
+sleep 300
+expect document.getElementById('menu-collaborate').disabled === true
+expect document.getElementById('menu-server-new').disabled === true
+eval __toasts()
+eval D.runMenuCommand('collaborate'); true
+sleep 300
+expect !__shown('collab-modal')
+eval D.runMenuCommand('server-publish'); true
+sleep 300
+expect __toasts() === ''
+eval (function(){ var m = window.__shareTest.mode(); m.readOnly = false; window.__hostedTest.setSession({ role: 'edit', docId: null }); m.available = false; window.__shareTest.updateMenu(); window.fetch = window.__fetchWas; return true; })()
+sleep 300
+
+# nothing here edited the document
+expect document.getElementById('btn-save').textContent == Save

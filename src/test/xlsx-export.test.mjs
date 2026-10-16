@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -7,8 +8,9 @@ import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { breakdownTable } from "../js/08-production-panels.js";
 import { brollTable } from "../js/08d-broll-panel.js";
-import { TAG_PRINT_COLORS, zipRead } from "../js/14-export.js";
-import { PRINT_COLORS } from "../js/14b-export-kit.js";
+import { zipRead } from "../adapters/formats/zip.ts";
+import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
+import { PRINT_COLORS, exportDocumentOf } from "../js/14b-export-kit.js";
 import { scriptTable } from "../js/16-csv.js";
 import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx, colName } from "../js/16b-xlsx.js";
 import { LONG_DEMO } from "../js/_starters.js";
@@ -75,7 +77,7 @@ test("colName counts like Excel", () => {
 
 test("the script's workbook: a sheet per part, each cell the .csv's", async () => {
   demo();
-  const book = await open(buildScriptXlsx());
+  const book = await open(buildScriptXlsx(liveDoc()));
   assert.deepEqual(book.sheets.map((s) => s.name), ["Script", "Comments", "Breakdown", "B-roll"]);
   for (const part of ["[Content_Types].xml", "_rels/.rels", "docProps/core.xml", "docProps/app.xml", "xl/workbook.xml",
     "xl/_rels/workbook.xml.rels", "xl/styles.xml", "xl/sharedStrings.xml"]) assert.ok(book.names.includes(part), part);
@@ -83,7 +85,7 @@ test("the script's workbook: a sheet per part, each cell the .csv's", async () =
   assert.ok(book.text("docProps/core.xml").includes("<dc:title>" + S.state.title + "</dc:title>"));
   assert.ok(/T00:00:00Z/.test(book.text("docProps/core.xml")), "stamped with the day only");
 
-  const t = scriptTable();
+  const t = scriptTable(liveDoc());
   const script = book.sheets[0];
   assert.deepEqual(script.rows[0], t.head.concat(["Notes"]));
   const want = t.scenes.map((s) => s.cells).concat(t.summary).map((r) => pad(r, 11));
@@ -97,10 +99,10 @@ test("the script's workbook: a sheet per part, each cell the .csv's", async () =
   assert.deepEqual(comments.rows[0], t.commentHead);
   assert.deepEqual(asText(comments.rows.slice(1)), asText(t.comments.map((c) => c.cells)));
 
-  const bd = breakdownTable();
+  const bd = breakdownTable(exportDocumentOf(S.state));
   assert.deepEqual(asText(book.sheets[2].rows.slice(1)), asText(bd.rows.map((r) => r.cells)));
   assert.equal(typeof book.sheets[2].rows[1][4], "number");
-  const br = brollTable();
+  const br = brollTable(liveDoc());
   const opening = (s) => { s = String(s); return s.length <= 90 ? s : null; };
   book.sheets[3].rows.slice(1).forEach((row, i) => {
     const want = br.rows[i].cells;
@@ -116,7 +118,7 @@ test("the script's workbook: a sheet per part, each cell the .csv's", async () =
 
 test("clean to read: widths, wrapping, the heading frozen, filtered and printed on every page", async () => {
   demo();
-  const book = await open(buildScriptXlsx());
+  const book = await open(buildScriptXlsx(liveDoc()));
   const [script, comments, breakdown, broll] = book.sheets;
   assert.deepEqual(widths(script), [7, 9, 10, 8, 9, 46, 60, 32, 30, 11, 40]);
   assert.deepEqual(widths(comments), [6, 20, 18, 16, 18, 20, 36, 60]);
@@ -157,25 +159,38 @@ test("clean to read: widths, wrapping, the heading frozen, filtered and printed 
 
 test("the breakdown's and the shot list's own workbooks, and empty ones", async () => {
   demo();
-  const bd = await open(buildBreakdownXlsx());
+  const bd = await open(buildBreakdownXlsx(liveDoc()));
   assert.deepEqual(bd.sheets.map((s) => s.name), ["Breakdown"]);
-  assert.deepEqual(bd.sheets[0].rows[0], breakdownTable().head);
-  const br = await open(buildBrollXlsx());
+  assert.deepEqual(bd.sheets[0].rows[0], breakdownTable(exportDocumentOf(S.state)).head);
+  const br = await open(buildBrollXlsx(liveDoc()));
   assert.deepEqual(br.sheets.map((s) => s.name), ["B-roll"]);
-  assert.equal(br.sheets[0].rows.length, brollTable().rows.length + 1);
+  assert.equal(br.sheets[0].rows.length, brollTable(liveDoc()).rows.length + 1);
 
   S.state = migrateRows({ schema: 2, title: "Bare", comments: [], rows: [{ id: "r1", visualText: "Wide", audioText: "Hello.", status: "todo" }] });
-  const bare = await open(buildScriptXlsx());
+  const bare = await open(buildScriptXlsx(liveDoc()));
   assert.deepEqual(bare.sheets.map((s) => s.name), ["Script"], "no comments, tags or b-roll: just the script");
-  assert.deepEqual((await open(buildBreakdownXlsx())).sheets[0].rows[1][0], "(nothing labelled yet)");
-  assert.deepEqual((await open(buildBrollXlsx())).sheets[0].rows[1][0], "(no b-roll yet)");
+  assert.deepEqual((await open(buildBreakdownXlsx(liveDoc()))).sheets[0].rows[1][0], "(nothing labelled yet)");
+  assert.deepEqual((await open(buildBrollXlsx(liveDoc()))).sheets[0].rows[1][0], "(no b-roll yet)");
+});
+
+test("a cell cut at Excel's limit and a shortened Cuts against never end in half an emoji (#434)", async () => {
+  const grin = String.fromCodePoint(0x1F600);
+  S.state = migrateRows({ schema: 2, title: "Cuts", comments: [], rows: [
+    { id: "r1", visualText: '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> Pier', audioText: "x".repeat(32765) + grin + "yy", status: "todo" }
+  ], brollShots: [{ id: "bs1", name: "Pier", audioRef: "x".repeat(89) + grin + "y", origin: "script" }] });
+  const book = await open(buildScriptXlsx(liveDoc()));
+  const script = book.sheets[0].rows[1].find((c) => typeof c === "string" && c.length > 30000);
+  assert.equal(script, "x".repeat(32765) + "…");
+  const broll = book.sheets.find((s) => s.name === "B-roll");
+  assert.equal(broll.rows[1][6], "x".repeat(89) + "…");
+  assert.ok(!book.text("xl/sharedStrings.xml").includes("�"));
 });
 
 test("awkward text survives: markup characters, line breaks, spaces at the ends, controls", async () => {
   S.state = migrateRows({ schema: 2, title: "Tom & Jerry's <cut>", comments: [], rows: [
     { id: "r1", visualText: "A &lt;b&gt; &amp; C<br>second line", audioText: "  padded  ", status: "ready" }
   ] });
-  const book = await open(buildScriptXlsx());
+  const book = await open(buildScriptXlsx(liveDoc()));
   const row = book.sheets[0].rows[1];
   assert.equal(row[5], "A <b> & C\nsecond line");
   assert.equal(row[2], "Ready");
@@ -183,8 +198,42 @@ test("awkward text survives: markup characters, line breaks, spaces at the ends,
   assert.equal(book.xml("docProps/core.xml").getElementsByTagName("dc:title")[0].textContent, S.state.title);
 });
 
+function withClock(next, run) {
+  const RealDate = globalThis.Date;
+  class StubDate extends RealDate {
+    constructor(...args) {
+      if (args.length) super(...args);
+      else super(next());
+    }
+    static now() { return next(); }
+  }
+  globalThis.Date = StubDate;
+  try {
+    return run();
+  } finally {
+    globalThis.Date = RealDate;
+  }
+}
+
+const NOON = new Date(2030, 0, 2, 12, 0, 0).getTime();
+
 test("two exports of one script are the same bytes", () => {
   demo();
-  assert.deepEqual(buildScriptXlsx(), buildScriptXlsx());
-  assert.deepEqual(buildBreakdownXlsx(), buildBreakdownXlsx());
+  withClock(() => NOON, () => {
+    assert.deepEqual(buildScriptXlsx(liveDoc()), buildScriptXlsx(liveDoc()));
+    assert.deepEqual(buildBreakdownXlsx(liveDoc()), buildBreakdownXlsx(liveDoc()));
+    assert.deepEqual(buildBrollXlsx(liveDoc()), buildBrollXlsx(liveDoc()));
+  });
+});
+
+test("exports captured either side of a two-second boundary are the same bytes; the zip carries the captured day", () => {
+  demo();
+  let t = NOON;
+  const ticking = () => { const at = t; t += 2000; return at; };
+  const [a, b] = withClock(ticking, () => [buildScriptXlsx(liveDoc()), buildScriptXlsx(liveDoc())]);
+  assert.deepEqual(a, b);
+  const view = new DataView(a.buffer, a.byteOffset, a.byteLength);
+  assert.equal(view.getUint32(0, true), 0x04034b50);
+  assert.equal(view.getUint16(10, true), 0, "the entry time is midnight");
+  assert.equal(view.getUint16(12, true), ((2030 - 1980) << 9) | (1 << 5) | 2, "the entry date is the captured day");
 });

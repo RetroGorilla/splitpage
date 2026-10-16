@@ -1,3 +1,13 @@
+import {
+  PERSON_COLORS,
+  lookupByName,
+  mergePersonColors,
+  normalizePersonColors,
+  paletteColor,
+  personKey
+} from "../core/document/person-colors.ts";
+export { PERSON_COLORS, mergePersonColors, normalizePersonColors, paletteColor, personKey };
+
 export var PREF_EVENT = "splitpage:pref";
 
 export var CLOCK_KEY = "splitpage-clock";
@@ -138,17 +148,7 @@ export function readDefaultWpm() {
   return isFinite(n) && n >= 60 && n <= 400 ? n : 150;
 }
 
-export var PERSON_COLORS = [
-  "#80BDFB", "#F9B64F", "#CBA1FA", "#73D4AC",
-  "#F89DC9", "#C8DE63", "#EF958E", "#64D1D7"
-];
 export var PERSON_COLOR_NAMES = ["Blue", "Amber", "Violet", "Green", "Pink", "Lime", "Coral", "Teal"];
-
-export function paletteColor(value) {
-  if (typeof value !== "string") return "";
-  var up = value.trim().toUpperCase();
-  return PERSON_COLORS.indexOf(up) === -1 ? "" : up;
-}
 
 export function readMyColor() {
   return paletteColor(readPref(PERSON_COLOR_KEY));
@@ -159,64 +159,6 @@ export function hashedPersonColor(seed) {
   var hash = 0;
   for (var i = 0; i < seed.length; i++) hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
   return PERSON_COLORS[Math.abs(hash) % PERSON_COLORS.length];
-}
-
-export function personKey(name) {
-  return String(name == null ? "" : name).trim().toLowerCase();
-}
-
-var PERSON_NAME_MAX = 80;
-var PERSON_MAP_MAX = 200;
-
-export function normalizePersonColors(raw) {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  var out = {}, seen = Object.create(null), n = 0;
-  Object.keys(raw).forEach(function (name) {
-    if (n >= PERSON_MAP_MAX) return;
-    /* eslint-disable-next-line no-control-regex -- stripping them is the job. */
-    var clean = String(name).replace(/[\x00-\x1f\x7f]/g, "").trim().slice(0, PERSON_NAME_MAX);
-    var color = paletteColor(raw[name]);
-    if (!clean || !color || clean === "__proto__" || clean === "constructor" || clean === "prototype") return;
-    var key = personKey(clean);
-    if (seen[key]) return;
-    seen[key] = true;
-    out[clean] = color;
-    n++;
-  });
-  return n ? out : null;
-}
-
-function lookupByName(map, name) {
-  if (!map) return "";
-  if (Object.prototype.hasOwnProperty.call(map, name)) return paletteColor(map[name]);
-  var key = personKey(name);
-  var hit = "";
-  Object.keys(map).some(function (k) {
-    if (personKey(k) !== key) return false;
-    hit = paletteColor(map[k]);
-    return true;
-  });
-  return hit;
-}
-
-export function mergePersonColors(base, mine, theirs) {
-  base = normalizePersonColors(base) || {};
-  mine = normalizePersonColors(mine) || {};
-  theirs = normalizePersonColors(theirs) || {};
-  var out = {}, taken = Object.create(null);
-  function put(name, color) {
-    var key = personKey(name);
-    if (taken[key]) return;
-    taken[key] = true;
-    out[name] = color;
-  }
-  Object.keys(mine).forEach(function (name) {
-    var m = mine[name], t = lookupByName(theirs, name), b = lookupByName(base, name);
-    put(name, t && m === b ? t : m);
-  });
-  Object.keys(theirs).forEach(function (name) { put(name, theirs[name]); });
-  Object.keys(base).forEach(function (name) { put(name, base[name]); });
-  return normalizePersonColors(out);
 }
 
 export function resolvePersonColor(name, ctx) {

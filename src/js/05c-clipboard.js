@@ -1,30 +1,32 @@
-import { S } from "./_state.js";
-import { makeId } from "./02-state.js";
-import { randomHexBytes } from "./02b-doc-id.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
-import { addGalleryPicture, addGalleryVideo } from "./02d-gallery.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
-import { imageRefOf, inertBody, safeHref, storedHtmlFromDom } from "./04-richtext.js";
+import { findRowIndex } from "./03-sync.js";
 import {
   cellLength,
   cellOf,
   commentIds,
-  deleteRange,
-  flattenCues,
   flattenDirections,
   fromHtml,
-  insertText,
-  joinCells,
   normalizeCell,
   projection,
   sliceCell,
-  syncCommentAnchors,
   toHtml
 } from "./04c-doc-model.js";
-import { cellSelection, editCell } from "./05b-cell-edit.js";
-import { recordPastedBroll } from "./08c-broll.js";
-import { markDirty } from "./12-dirty-toast.js";
+import { cellSelection, closeCellEdit, openCellEdit } from "./05b-cell-edit.js";
+import { brollSeedOf } from "./08c-broll.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
+import { makeId, randomHexBytes, randomIds } from "../adapters/identity/ids.ts";
+import {
+  attachToGallery,
+  cutCommand,
+  freshBrollIds as freshIds,
+  pasteCommand,
+  takenBrollIds
+} from "../application/commands/clipboard.ts";
+import { safeHref } from "../core/document/text-policy.ts";
+import { imageRefOf, inertBody, storedHtmlFromDom } from "../legacy/richtext.ts";
+import { readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+
+export { attachToGallery };
 
 var CUT_ATTR = "data-splitpage-cut";
 
@@ -166,62 +168,22 @@ export function cellFromClipboard(html, text, opts) {
   return { cell: normalizeCell([{ text: t, marks: {} }]), text: t, media: media, lost: lost, attach: attach, fromCut: false, comments: [] };
 }
 
-export function attachToGallery(row, attach) {
-  var out = { pictures: 0, videos: 0, links: [] };
-  attach.forEach(function (item) {
-    if (item.kind === "image") {
-      addGalleryPicture(row, item.ref, item.name);
-      out.pictures++;
-      return;
-    }
-    var link = item.kind === "video" ? { href: item.href } : { name: item.name, size: item.size, duration: item.duration };
-    if (addGalleryVideo(row, link, item.poster || null) !== -1) {
-      out.videos++;
-      if (link.href) out.links.push(link.href);
-    }
-  });
-  return out;
-}
-
 export function brollIdsTaken(state, rowId, field, rest, fromCut) {
-  var taken = Object.create(null);
-  function keysOf(cell) {
-    cell.forEach(function (r) { if (r.atom && r.id) taken[r.id] = true; });
-  }
-  (state.rows || []).forEach(function (row) {
-    ["visualText", "audioText"].forEach(function (f) {
-      if (row.id === rowId && f === field && rest) keysOf(rest);
-      else keysOf(cellOf(row[f] || ""));
-    });
-  });
-  if (!fromCut) {
-    (state.brollShots || []).forEach(function (rec) { if (rec && rec.id) taken[rec.id] = true; });
-  }
-  return taken;
+  return takenBrollIds(state, rowId, field, rest, fromCut, cellOf);
 }
 
 export function freshBrollIds(cell, taken, mint) {
-  mint = mint || function () { return makeId("bs"); };
-  var used = Object.create(null);
-  var minted = [];
-  var out = cell.map(function (r) {
-    if (!r.atom) return r;
-    var id = r.id;
-    if (!id || taken[id] || used[id]) {
-      var guard = 0;
-      do { id = mint(); } while ((taken[id] || used[id]) && ++guard < 100);
-      minted.push(id);
-    }
-    used[id] = true;
-    return id === r.id ? r : Object.assign({}, r, { id: id });
-  });
-  return { cell: out, minted: minted };
+  return freshIds(cell, taken, mint || function () { return makeId("bs"); });
 }
 
-function brollKeyIds(cell) {
-  var ids = [];
-  cell.forEach(function (r) { if (r.atom && r.id) ids.push(r.id); });
-  return ids;
+function clipboardPorts() {
+  return {
+    clock: sessionTextPorts.clock,
+    editor: sessionTextPorts.editor,
+    cells: sessionTextPorts.cells,
+    ids: randomIds,
+    brollSeed: brollSeedOf
+  };
 }
 
 var cutNonce = null;
@@ -230,9 +192,26 @@ function isTextField(field) {
   return field === "visualText" || field === "audioText";
 }
 
+function holdsDocument() {
+  return readSession(function (doc) { return !!doc; });
+}
+
 function commentAnchoredAs(id) {
-  return !!S.state && (S.state.comments || []).some(function (c) {
-    return c.kind !== "conflict" && (c.anchorId || c.id) === id;
+  return readSession(function (doc) {
+    return !!doc && (doc.comments || []).some(function (c) {
+      return c.kind !== "conflict" && (c.anchorId || c.id) === id;
+    });
+  });
+}
+
+function anchoredInText(id, target) {
+  return readSession(function (doc) {
+    return !!doc && doc.rows.some(function (row) {
+      return ["visualText", "audioText"].some(function (field) {
+        var cell = target.rowId === row.id && target.field === field ? target.rest : cellOf(typeof row[field] === "string" ? row[field] : "");
+        return commentIds(cell).indexOf(id) !== -1;
+      });
+    });
   });
 }
 
@@ -242,10 +221,18 @@ function liveCellHtml(cellEl) {
   return storedHtmlFromDom(html);
 }
 
+function outsideSelection(cellEl) {
+  var cell = fromHtml(liveCellHtml(cellEl));
+  var sel = cellSelection(cellEl);
+  if (!sel) return cell;
+  var len = cellLength(cell);
+  return sliceCell(cell, 0, Math.min(sel.from, len)).concat(sliceCell(cell, Math.min(sel.to, len), len));
+}
+
 export function copyFromCell(e, cellEl, cut, readOnly) {
   var cd = e.clipboardData;
   var field = cellEl.getAttribute("data-field");
-  if (!cd || !S.state || !isTextField(field) || findRowIndex(cellEl.getAttribute("data-id")) === -1) return false;
+  if (!cd || !holdsDocument() || !isTextField(field) || findRowIndex(cellEl.getAttribute("data-id")) === -1) return false;
   var html = liveCellHtml(cellEl);
   if (/<img|video-embed-card/.test(html)) return false;
   var sel = cellSelection(cellEl);
@@ -257,70 +244,82 @@ export function copyFromCell(e, cellEl, cut, readOnly) {
   cd.setData("text/plain", out.text);
   e.preventDefault();
   if (!moving) return true;
+  cutSelection(cellEl);
   cutNonce = nonce;
-  editCell(cellEl, function (cell, s) {
-    if (!s || s.from === s.to) return null;
-    return { cell: deleteRange(cell, s.from, s.to), sel: { from: s.from, to: s.from } };
-  });
   return true;
+}
+
+function storedField(rowId, field) {
+  return readSession(function (doc) {
+    var row = doc && doc.rows.find(function (r) { return r.id === rowId; });
+    return row && row[field] ? row[field] : "";
+  });
+}
+
+function caretOf(caret) {
+  return caret === null ? null : { from: caret, to: caret };
+}
+
+function cutSelection(cellEl) {
+  var open = openCellEdit(cellEl);
+  if (!open || !open.sel || open.sel.from === open.sel.to) return;
+  var cut = cutCommand(open.rowId, open.field, open.sel, clipboardPorts());
+  var outcome = runCommand(cut.command);
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind === "rejected") return;
+  closeCellEdit(cellEl, storedField(open.rowId, open.field), caretOf(cut.report().caret));
+}
+
+function pasteRequest(rowId, field, range, pasted, got, attach) {
+  return { rowId: rowId, field: field, range: range, pasted: pasted, fromCut: got.fromCut, comments: got.comments, attach: attach };
 }
 
 export function pasteIntoCell(cellEl, html, text, extra) {
   extra = extra || {};
-  var got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: commentAnchoredAs, skipImages: !!extra.skipImages });
+  var target = null;
+  var hasComment = function (id) {
+    if (!commentAnchoredAs(id)) return false;
+    if (!target) target = { rowId: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field"), rest: outsideSelection(cellEl) };
+    return !anchoredInText(id, target);
+  };
+  var got = cellFromClipboard(html, text, { nonce: cutNonce, hasComment: hasComment, skipImages: !!extra.skipImages });
   var attach = (extra.attach || []).slice();
   got.attach.forEach(function (item) { addAttachment(attach, item); });
   var rowId = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var result = { done: true, cellEl: cellEl, media: got.media, lost: got.lost, attached: null,
                  rowIndex: findRowIndex(rowId), field: field, movedComments: false };
-  function attachAll() {
-    var row = S.state.rows[findRowIndex(rowId)];
-    if (!row || !attach.length) return;
-    var got2 = attachToGallery(row, attach);
-    if (!got2.pictures && !got2.videos) return;
-    stampRow(row);
-    result.attached = got2;
-  }
   if (!cellLength(got.cell)) {
     if (!attach.length || result.rowIndex === -1) return result;
     breakUndoCoalescing();
-    attachAll();
-    markDirty();
+    var gallery = pasteCommand(pasteRequest(rowId, field, null, null, got, attach), clipboardPorts());
+    var galleryOutcome = runCommand(gallery.command);
+    if (galleryOutcome.kind === "failed") throw galleryOutcome.error;
+    result.attached = gallery.report().attached;
     flushEdits();
     breakUndoCoalescing();
     return result;
   }
-  var fresh = editCell(cellEl, function (cell, sel) {
-    var from = sel ? sel.from : cellLength(cell);
-    var rest = sel ? deleteRange(cell, sel.from, sel.to) : cell;
-    var piece = got.text !== null ? got.cell
-      : freshBrollIds(got.cell, brollIdsTaken(S.state, rowId, field, rest, got.fromCut)).cell;
-    if (field === "visualText") piece = flattenDirections(piece);
-    if (field === "visualText") piece = flattenCues(piece);
-    var next = got.text !== null
-      ? insertText(rest, from, got.text)
-      : joinCells(joinCells(sliceCell(rest, 0, from), piece), sliceCell(rest, from));
-    if (field === "visualText") recordPastedBroll(rowId, next, brollKeyIds(piece));
-    var at = from + cellLength(next) - cellLength(rest);
-    var also = null;
-    if (got.fromCut || attach.length) {
-      also = function () {
-        if (got.fromCut) {
-          cutNonce = null;
-          if (got.comments.length) syncCommentAnchors(S.state);
-          result.movedComments = got.comments.length > 0;
-        }
-        attachAll();
-      };
-    }
-    return { cell: next, sel: { from: at, to: at }, also: also };
-  });
-  if (!fresh) {
+  var open = openCellEdit(cellEl);
+  if (!open) {
     result.done = false;
     return result;
   }
-  result.cellEl = fresh;
+  var pasted = got.text !== null ? { kind: "text", text: got.text } : { kind: "cell", runs: got.cell };
+  var paste = pasteCommand(pasteRequest(rowId, field, open.sel, pasted, got, attach), clipboardPorts());
+  var outcome = runCommand(paste.command);
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind === "rejected") {
+    result.done = false;
+    return result;
+  }
+  if (got.fromCut) {
+    cutNonce = null;
+    result.movedComments = got.comments.length > 0;
+  }
+  var report = paste.report();
+  result.attached = report.attached;
+  result.cellEl = closeCellEdit(cellEl, storedField(rowId, field), caretOf(report.caret));
   return result;
 }
 

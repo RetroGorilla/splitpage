@@ -10,36 +10,16 @@ import {
   updateScriptStats
 } from "./01-scene-status.js";
 import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
-import { escapeHtml, makeId } from "./02-state.js";
 import { blobImgHtml } from "./02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "./02d-gallery.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
+import { findRowIndex } from "./03-sync.js";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
-import {
-  breakLine,
-  cellLength,
-  cueShortcut,
-  directionRangeAt,
-  directionShortcut,
-  directionToggleRange,
-  fromHtml,
-  insertText,
-  insideDirection,
-  markThroughout,
-  projection,
-  setMark,
-  toHtml,
-  toggleDirection,
-  toggleMark,
-  typingMarks
-} from "./04c-doc-model.js";
-import { cellSelection, editCell } from "./05b-cell-edit.js";
+import { cellSelection, editCell, notePaintedEpoch, placeEditorSelection, rememberCellSelection } from "./05b-cell-edit.js";
 import { refreshGalleryOverlay } from "./05e-gallery-overlay.js";
 import { appendDraftMedia, draftModel, editDraft, isDraftBox } from "./05d-draft-edit.js";
 import { trackDocument } from "./12a-undo.js";
 import { rowMotionKey, withRowMotion } from "./04a-row-motion.js";
 import {
-  healTagRegistry,
   openTagComposer,
   productionIndexStats,
   resetProductionIndexStats,
@@ -58,12 +38,35 @@ import {
   syncAnchorResolvedClasses,
   updateCommentsCount
 } from "./10-comments.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
 import { paintPresence, personColor } from "./13a-presence.js";
-import { renderWriter, writerOpen } from "./19-writer.js";
+import { drawWriter, paintWriterDraw, writerOpen } from "./19-writer.js";
+import { videoHostLabel } from "../adapters/formats/video-host.ts";
+import { makeId } from "../adapters/identity/ids.ts";
+import { idMap } from "../core/document/id-map.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
+import { pad2 } from "../core/production/timing.ts";
+import { cueShortcut } from "../core/text/cues.ts";
+import { directionRangeAt, directionShortcut, directionToggleRange, toggleDirection } from "../core/text/directions.ts";
+import {
+  breakLine,
+  clamp,
+  insertText,
+  insideDirection,
+  markThroughout,
+  setMark,
+  toggleMark,
+  typingMarks
+} from "../core/text/edits.ts";
+import { cellLength, projection } from "../core/text/runs.ts";
+import { cellRuns, cellTextCommand } from "../application/commands/cell-text.ts";
+import { fromHtml } from "../legacy/richtext.ts";
+import { createPaintGuard } from "../application/editing/paint-guard.ts";
+import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 
-export function pad2(n) { return n < 10 ? "0" + n : "" + n; }
+export { notePaintedEpoch, placeEditorSelection, rememberCellSelection };
+export { pad2 };
 
 var LINK_POPOVER_HTML =
   '<div class="link-popover" hidden>' +
@@ -199,7 +202,7 @@ function rowGutterHtml(row, index, review) {
 export function paintRowTimes() {
   var rowsEl = document.getElementById("rows");
   if (!rowsEl || !S.state) return;
-  var byId = {};
+  var byId = idMap();
   for (var c = rowsEl.firstElementChild; c; c = c.nextElementSibling) {
     if (c.classList.contains("row")) byId[c.getAttribute("data-id")] = c;
   }
@@ -272,17 +275,6 @@ export function gallerySlotPictureHtml(slot) {
 
 export function galleryBadgeHtml(big) {
   return '<span class="scene-gallery-play' + (big ? ' is-big' : '') + '" aria-hidden="true"></span>';
-}
-
-export function videoHostLabel(l) {
-  if (!l.href) return "File";
-  var host;
-  try { host = new URL(l.href).hostname.replace(/^www\./i, "").toLowerCase(); } catch (e) { return "Link"; }
-  var known = { "youtube.com": "YouTube", "youtu.be": "YouTube", "youtube-nocookie.com": "YouTube", "vimeo.com": "Vimeo",
-    "player.vimeo.com": "Vimeo", "loom.com": "Loom", "dailymotion.com": "Dailymotion", "dai.ly": "Dailymotion",
-    "twitch.tv": "Twitch", "tiktok.com": "TikTok", "wistia.com": "Wistia", "frame.io": "Frame.io", "vidyard.com": "Vidyard",
-    "streamable.com": "Streamable" };
-  return known[host] || host;
 }
 
 function galleryTileHtml(row, slots, i, kind) {
@@ -426,7 +418,6 @@ function newRowEl(row, index) {
   var el = nodeFromHtml(rowHtmlFromParts(row, p));
   el[ROW_SIG] = p;
   el.querySelectorAll(".cell-editable").forEach(ensureTrailingCaretSpot);
-  cellsPainted += 2;
   return el;
 }
 
@@ -442,7 +433,7 @@ function resetRowShell(rowEl, cls) {
   if (ac && ac.className !== "cell audio-cell") ac.className = "cell audio-cell";
 }
 
-function paintRow(rowEl, row, index) {
+function planRowPatch(rowEl, row, index) {
   var sig = rowEl[ROW_SIG];
   if (!sig) return null;
   var p = rowParts(row, index);
@@ -452,41 +443,62 @@ function paintRow(rowEl, row, index) {
     if (sig[k] === p[k]) continue;
     var old = rowPartEl(rowEl, k);
     if (!old) return null;
-    parts.push({ key: k, el: old });
+    var fresh = nodeFromHtml(p[k]);
+    if (k === "visualText" || k === "audioText") ensureTrailingCaretSpot(fresh.querySelector(".cell-editable"));
+    parts.push({ key: k, el: old, fresh: fresh });
   }
-  resetRowShell(rowEl, p.cls);
-  parts.forEach(function (part) {
+  return { p: p, parts: parts };
+}
+
+function commitRowPatch(rowEl, patch) {
+  resetRowShell(rowEl, patch.p.cls);
+  patch.parts.forEach(function (part) {
     var active = document.activeElement;
     var action = active && active !== part.el && part.el.contains(active) &&
       active.getAttribute && active.getAttribute("data-action");
-    var fresh = nodeFromHtml(p[part.key]);
-    part.el.parentNode.replaceChild(fresh, part.el);
+    part.el.parentNode.replaceChild(part.fresh, part.el);
     if (part.key === "visualText" || part.key === "audioText") {
-      ensureTrailingCaretSpot(fresh.querySelector(".cell-editable"));
       cellsPainted++;
-    } else if (action) {
-      var again = fresh.querySelector('[data-action="' + cssAttr(action) + '"]');
+    } else if (action && !writerOpen) {
+      var again = part.fresh.querySelector('[data-action="' + cssAttr(action) + '"]');
       if (again) again.focus({ preventScroll: true });
     }
   });
-  rowEl[ROW_SIG] = p;
-  if (parts.length) rowsPainted++;
-  return parts.length > 0;
+  rowEl[ROW_SIG] = patch.p;
+  if (patch.parts.length) rowsPainted++;
+  return patch.parts.length > 0;
 }
 
+var paintGuard = createPaintGuard();
+
+export var whilePainting = paintGuard.whilePainting;
+
+export var afterThisPaint = paintGuard.afterThisPaint;
+
 export function renderRow(rowId) {
+  return whilePainting(function () { return paintOneRow(rowId); });
+}
+
+function paintOneRow(rowId) {
   if (!S.state) return false;
   var idx = findRowIndex(rowId);
   var rowsEl = document.getElementById("rows");
   if (idx === -1 || !rowsEl) return false;
   var rowEl = rowsEl.querySelector(':scope > .row[data-id="' + cssAttr(rowId) + '"]');
   if (!rowEl) return false;
-  var touched = paintRow(rowEl, S.state.rows[idx], idx);
-  if (touched === null) {
-    rowsEl.replaceChild(newRowEl(S.state.rows[idx], idx), rowEl);
+  var patch = planRowPatch(rowEl, S.state.rows[idx], idx);
+  var whole = patch ? null : newRowEl(S.state.rows[idx], idx);
+  var active = document.activeElement;
+  var heldCell = active && active.classList && active.classList.contains("cell-editable") && rowEl.contains(active) &&
+    rememberCellSelection(active) ? active : null;
+  var touched = true;
+  if (patch) touched = commitRowPatch(rowEl, patch);
+  else {
+    rowsEl.replaceChild(whole, rowEl);
     rowsPainted++;
-    touched = true;
+    cellsPainted += 2;
   }
+  if (heldCell && !heldCell.isConnected) placeEditorSelection(rowsEl);
   if (touched) paintPresence();
   if (touched) paintRowTimes();
   if (touched) refreshGalleryOverlay();
@@ -524,33 +536,48 @@ var EMPTY_ROWS_HTML =
     '<button class="btn btn-accent" type="button" data-action="add-row">+ Add your first row</button>' +
   '</div>';
 
-function reconcileRows(rowsEl, pinned) {
-  if (!S.state.rows.length) {
-    rowsEl.innerHTML = EMPTY_ROWS_HTML;
-    return;
-  }
-  var items = rowGroupItems(S.state.rows);
+function planRows(rowsEl) {
+  if (!S.state.rows.length) return { empty: true };
   var existing = new Map();
+  var drop = [];
   Array.prototype.slice.call(rowsEl.children).forEach(function (el) {
     var key = rowMotionKey(el);
     var reusable = key && !existing.has(key) && (key.indexOf("strip:") === 0 || el[ROW_SIG]);
     if (reusable) existing.set(key, el);
-    else rowsEl.removeChild(el);
+    else drop.push(el);
   });
 
-  var nodes = items.map(function (item) {
+  var steps = rowGroupItems(S.state.rows).map(function (item) {
     var key = item.strip ? "strip:" + item.strip.join(",") : "row:" + item.row.id;
     var el = existing.get(key);
     if (el) {
       existing.delete(key);
-      if (item.strip || paintRow(el, item.row, item.index) !== null) return el;
-      rowsEl.removeChild(el);
+      if (item.strip) return { node: el };
+      var patch = planRowPatch(el, item.row, item.index);
+      if (patch) return { node: el, patch: patch };
+      drop.push(el);
     }
-    if (item.strip) return nodeFromHtml(hiddenShotStripHtml(item.strip));
-    rowsPainted++;
-    return newRowEl(item.row, item.index);
+    if (item.strip) return { node: nodeFromHtml(hiddenShotStripHtml(item.strip)) };
+    return { node: newRowEl(item.row, item.index), added: true };
   });
-  existing.forEach(function (el) { rowsEl.removeChild(el); });
+  existing.forEach(function (el) { drop.push(el); });
+  return { steps: steps, drop: drop };
+}
+
+function commitRows(rowsEl, plan, pinned) {
+  if (plan.empty) {
+    rowsEl.innerHTML = EMPTY_ROWS_HTML;
+    return;
+  }
+  plan.drop.forEach(function (el) { if (el.parentNode === rowsEl) rowsEl.removeChild(el); });
+  var nodes = plan.steps.map(function (step) {
+    if (step.patch) commitRowPatch(step.node, step.patch);
+    if (step.added) {
+      rowsPainted++;
+      cellsPainted += 2;
+    }
+    return step.node;
+  });
 
   var at = new Map();
   for (var c = 0; c < rowsEl.children.length; c++) at.set(rowsEl.children[c], c);
@@ -579,22 +606,20 @@ function reconcileRows(rowsEl, pinned) {
 
 function captureRenderFocus(rowsEl) {
   var active = document.activeElement;
-  if (!active || !active.classList) return null;
+  if (!active || !active.classList || !rowsEl || !rowsEl.contains(active)) return null;
   var out = { cell: null, id: null, field: null, rowEl: null, sel: null };
   if (active.classList.contains("cell-editable")) {
     out.cell = active;
     out.id = active.getAttribute("data-id");
     out.field = active.getAttribute("data-field");
   }
-  if (rowsEl && rowsEl.contains(active)) {
-    var rowEl = active.closest(".row");
-    if (rowEl && rowEl.parentNode === rowsEl) out.rowEl = rowEl;
-    var sel = window.getSelection();
-    if (out.cell && sel && sel.rangeCount) {
-      var r = sel.getRangeAt(0);
-      if (active.contains(r.startContainer) && active.contains(r.endContainer)) {
-        out.sel = { sc: r.startContainer, so: r.startOffset, ec: r.endContainer, eo: r.endOffset };
-      }
+  var rowEl = active.closest(".row");
+  if (rowEl && rowEl.parentNode === rowsEl) out.rowEl = rowEl;
+  var sel = window.getSelection();
+  if (out.cell && sel && sel.rangeCount) {
+    var r = sel.getRangeAt(0);
+    if (active.contains(r.startContainer) && active.contains(r.endContainer)) {
+      out.sel = { sc: r.startContainer, so: r.startOffset, ec: r.endContainer, eo: r.endOffset };
     }
   }
   return (out.cell || out.rowEl) ? out : null;
@@ -617,19 +642,7 @@ function restoreRenderFocus(rowsEl, f) {
     }
     return;
   }
-  var cellEl = rowsEl.querySelector(
-    '.cell-editable[data-id="' + cssAttr(f.id) + '"][data-field="' + cssAttr(f.field) + '"]');
-  if (cellEl) {
-    cellEl.focus();
-    try {
-      var range = document.createRange();
-      range.selectNodeContents(cellEl);
-      range.collapse(false);
-      var sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-    } catch (e) {}
-  }
+  placeEditorSelection(rowsEl);
 }
 
 function resetTransientUiState() {
@@ -653,31 +666,43 @@ export function syncPageTitle() {
 }
 
 export function render() {
+  whilePainting(paintAll);
+}
+
+export function paintingScreen() {
+  return paintGuard.painting();
+}
+
+function paintAll() {
   trackDocument();
   if (!S.state) return;
   renderCalls++;
-  resetTransientUiState();
   var rowsEl = document.getElementById("rows");
-  var focus = captureRenderFocus(rowsEl);
+  var plan = planRows(rowsEl);
+  var title = S.state.title || "";
+  var writerDraw = writerOpen ? drawWriter() : null;
 
+  resetTransientUiState();
+  var focus = captureRenderFocus(rowsEl);
+  if (focus && focus.cell) rememberCellSelection(focus.cell);
   withRowMotion(rowsEl, function () {
-    reconcileRows(rowsEl, focus && focus.rowEl);
+    commitRows(rowsEl, plan, focus && focus.rowEl);
   });
-  restoreRenderFocus(rowsEl, focus);
+  notePaintedEpoch(rowsEl);
+  if (!writerOpen) restoreRenderFocus(rowsEl, focus);
 
   var titleInput = document.getElementById("doc-title");
-  if (document.activeElement !== titleInput) titleInput.value = S.state.title || "";
+  if (document.activeElement !== titleInput) titleInput.value = title;
+  if (writerDraw) paintWriterDraw(writerDraw);
   syncPageTitle();
   syncAnchorResolvedClasses();
   updateScriptStats();
   updateCommentsCount();
-  healTagRegistry();
   updateTagBadges();
   scheduleBrollRefresh();
   renderProduction();
   captureReplyDrafts();
   renderComments();
-  if (writerOpen) renderWriter();
   scheduleUntaggedScan();
   paintPresence();
   refreshGalleryOverlay();
@@ -687,20 +712,117 @@ export function render() {
   }
 }
 
+var REDRAW_FAILED = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
+var FIRST_DRAW_FAILED = "Could not draw the script. Nothing was lost — press Redraw before you start editing.";
+var redrawToast = null;
+var screenStale = false;
+var staleFocus = null;
+var STALE_PARTS = "#rows, .add-row-bar, #doc-title, #writer-title, #writer-doc, #writer .wr-fmt, " +
+  "#replace-input, #find-replace, #find-replace-all, #find-tag-go, #tag-ghost, #tag-suggest";
+var STALE_EVENTS = ["keydown", "beforeinput", "input", "paste", "cut", "drop", "dragstart",
+  "compositionstart", "pointerdown", "mousedown", "click"];
+
+function offerRedraw(failed) {
+  if (redrawToast && redrawToast.isConnected && !redrawToast.classList.contains("is-leaving")) return;
+  redrawToast = showActionToast(failed, "error", "Redraw", function () { absorbRender(failed); }, true);
+  redrawToast.removeEventListener("click", redrawToast.dismiss);
+  redrawToast.removeAttribute("title");
+  redrawToast.classList.add("is-held");
+  redrawToast.setAttribute("role", "alert");
+}
+
+function focusPlace(el) {
+  var cellEl = el.closest(".cell-editable[data-id][data-field]");
+  if (!cellEl) return el.id ? { id: el.id } : null;
+  return { row: cellEl.getAttribute("data-id"), field: cellEl.getAttribute("data-field") };
+}
+
+function markStaleParts(on) {
+  document.querySelectorAll(STALE_PARTS).forEach(function (el) {
+    el.toggleAttribute("inert", on);
+    el.classList.toggle("is-stale-part", on);
+  });
+}
+
+function holdStaleScreen(failed) {
+  var active = document.activeElement;
+  var inPart = !!(active && active.closest && active.closest(STALE_PARTS));
+  var onRedraw = !!(redrawToast && active && redrawToast.contains(active));
+  if (!screenStale && inPart) staleFocus = focusPlace(active);
+  screenStale = true;
+  document.body.classList.add("is-stale-screen");
+  markStaleParts(true);
+  offerRedraw(failed);
+  if (inPart || onRedraw) redrawToast.querySelector(".toast-action").focus();
+}
+
+function releaseStaleScreen() {
+  if (!screenStale) return;
+  screenStale = false;
+  document.body.classList.remove("is-stale-screen");
+  markStaleParts(false);
+  var place = staleFocus;
+  staleFocus = null;
+  var active = document.activeElement;
+  if (!place || (active && active !== document.body && !(redrawToast && redrawToast.contains(active)))) return;
+  var target = place.id ? document.getElementById(place.id) : document.querySelector(
+    '#rows .cell-editable[data-id="' + cssAttr(place.row) + '"][data-field="' + cssAttr(place.field) + '"]');
+  if (!target) return;
+  target.focus();
+  if (place.id || document.activeElement !== target) return;
+  var end = window.getSelection();
+  var caret = document.createRange();
+  caret.selectNodeContents(target);
+  caret.collapse(false);
+  end.removeAllRanges();
+  end.addRange(caret);
+}
+
+function refuseOnStaleScreen(e) {
+  if (!screenStale) return;
+  var t = e.target;
+  if (!(t && t.closest && t.closest(STALE_PARTS))) return;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+}
+
+export function screenIsStale() {
+  return screenStale;
+}
+
+function absorbRender(failed) {
+  try {
+    render();
+    releaseStaleScreen();
+    if (redrawToast && redrawToast.isConnected) redrawToast.dismiss();
+    return true;
+  } catch (e) {
+    if (window.console) console.error(e);
+    holdStaleScreen(failed);
+    return false;
+  }
+}
+
+export function renderAbsorbed() {
+  return absorbRender(REDRAW_FAILED);
+}
+
+export function renderFirstDraw() {
+  return absorbRender(FIRST_DRAW_FAILED);
+}
+
+var SCRIPT_CELL = Object.freeze({ media: true });
+
 export function syncFieldFromDom(cellEl) {
-  if (!cellEl.isConnected || S.undoApplying || S.cellRepainting) return;
+  if (!cellEl.isConnected || S.undoApplying || screenStale) return;
   var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var idx = findRowIndex(id);
   if (idx !== -1) {
     var html = cellEl.innerHTML.indexOf("\u200B") === -1 ? cellEl.innerHTML : cellEl.innerHTML.replace(/\u200B/g, "");
     html = storedHtmlFromDom(html);
-    html = /<img|video-embed-card/.test(html) ? sanitizeHtml(html) : toHtml(fromHtml(html));
-    if (S.state.rows[idx][field] !== html) {
-      S.state.rows[idx][field] = html;
-      stampRow(S.state.rows[idx]);
-      markDirty();
-    }
+    var outcome = runCommand(cellTextCommand(id, field, cellRuns(fromHtml(html, SCRIPT_CELL)), sessionTextPorts));
+    if (outcome.kind === "failed") throw outcome.error;
     noteFieldPainted(cellEl, field, S.state.rows[idx]);
   }
 }
@@ -753,10 +875,11 @@ export function typePendingMarks(cellEl, text) {
   var typed = false;
   var fresh = throughModel(cellEl, function (cell, sel) {
     if (!sel || sel.from !== sel.to || !pendingAt(cellEl, sel.from)) return null;
-    var after = projection(cell).charAt(sel.from);
+    var from = clamp(cell, sel.from);
+    var after = projection(cell).charAt(from);
     var t = / $/.test(text) && (after === "" || after === "\n") ? text.slice(0, -1) + " " : text;
-    var next = insertText(cell, sel.from, t, marksForTyping(cellEl, cell, sel.from));
-    var at = sel.from + cellLength(next) - cellLength(cell);
+    var next = insertText(cell, from, t, marksForTyping(cellEl, cell, from));
+    var at = from + cellLength(next) - cellLength(cell);
     typed = true;
     return { cell: next, sel: { from: at, to: at } };
   });
@@ -857,10 +980,11 @@ export function typeAtDirectionEdge(cellEl, text) {
   var typed = false;
   var fresh = throughModel(cellEl, function (cell, sel) {
     if (!sel || sel.from !== sel.to || insideDirection(cell, sel.from)) return null;
-    var after = projection(cell).charAt(sel.from);
+    var from = clamp(cell, sel.from);
+    var after = projection(cell).charAt(from);
     var t = / $/.test(text) && (after === "" || after === "\n") ? text.slice(0, -1) + " " : text;
-    var next = insertText(cell, sel.from, t, marksForTyping(cellEl, cell, sel.from));
-    var at = sel.from + cellLength(next) - cellLength(cell);
+    var next = insertText(cell, from, t, marksForTyping(cellEl, cell, from));
+    var at = from + cellLength(next) - cellLength(cell);
     typed = true;
     return { cell: next, sel: { from: at, to: at } };
   });
@@ -1118,4 +1242,5 @@ export function __init() {
       resetProductionIndexStats();
     }
   };
+  STALE_EVENTS.forEach(function (type) { window.addEventListener(type, refuseOnStaleScreen, true); });
 }

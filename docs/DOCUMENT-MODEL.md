@@ -182,13 +182,17 @@ Invariant #18 goes away.
 **Built:** that function is `syncCommentAnchors(state)` (04c): every
 comment marked somewhere points at the first cell holding its mark, in
 document order (row by row, visual before audio); one marked nowhere keeps
-what it had. Split, join and a cut-then-paste call it in their own undo
-entry, and `migrateRows` calls it, so every load and merge comes out in
-step. HANDOFF invariant #18 now says this.
+what it had. Split, join and a cut-then-paste are session commands whose
+transaction runs it after they write, in the same undo entry
+(`docs/architecture/session.md`), and `migrateRows` calls it, so every load
+and merge comes out in step. HANDOFF invariant #18 is now a pointer to the
+ledger's INV-18.
 
 - Splitting a row moves the runs, and their marks move with them. Joining
-  rows does the same. **Built:** `splitRowFieldCore` (06-rows.js) is
-  `splitCell` at the caret; `mergeWriterRows` (19-writer.js) is
+  rows does the same. **Built:** `splitSceneCommand`
+  (`src/application/commands/split-join.ts`, run by `splitRowFieldCore` in
+  06-rows.js) is `splitCell` at the caret; `joinScenesCommand` (the same
+  file, run by `mergeWriterRows` in 19-writer.js) is
   `joinCells`, whose glue space carries a comment (or link) the text on
   both sides of it is in, so a phrase a split cut in two is one anchor
   again when joined back.
@@ -202,7 +206,8 @@ step. HANDOFF invariant #18 now says this.
   has; the paste spends the nonce, so a second paste of the same cut, a
   drag, another tab's cut or another app brings words only. The moved
   comment's `rowId`/`field` follow it to the pasted cell in the same undo
-  entry as the paste (`editCell`'s `also`).
+  entry as the paste (the paste command's reconciliation, `pasteCommand` in
+  `src/application/commands/clipboard.ts`).
 - Deleting all of a comment's text leaves the comment **detached**
   (`anchor: null`). It still shows in the panel with its quoted text, which
   is today's behaviour for a lost anchor.
@@ -227,8 +232,10 @@ is special. **It is the only atom.**
   typed key's is, and nothing of the copied shot's status, notes, owner or
   location comes with it. Split and join move a key rather than copy it,
   and import brings only plain-text markers, which the anchoring pass keys.
-  **Built:** `freshBrollIds` / `brollIdsTaken` (05c-clipboard.js),
-  `recordPastedBroll` (08c-broll.js). A document that already has two keys
+  **Built:** `freshBrollIds` / `takenBrollIds` and `pastedShots`
+  (`src/application/commands/clipboard.ts`; 05c-clipboard.js keeps thin
+  wrappers), and `recordPastedBroll` (08c-broll.js) for a scene paste
+  (05g-scene-clip.js). A document that already has two keys
   with one id (pasted by an older version) is healed by the anchoring
   pass: the list reads the second as unanchored, a name match never takes
   a record a key further down still holds, and the pass gives the second
@@ -239,7 +246,8 @@ is special. **It is the only atom.**
 
 - **Pasting.** A paste or a drop into a cell never puts them in it. Since
   #135 each one goes into the scene's **gallery** — its Image section — in
-  the same undo entry as the pasted words (editCell's `also`): a picture
+  the same undo entry as the pasted words (the paste command's gallery
+  effect): a picture
   (by its blob ref) is added after the ones there, and so is each video,
   as an item of its own: its link marked `poster`, with a thumbnail (a
   video file's first frame) or none (a placeholder). A link on a video host, a `<video>` and a
@@ -260,8 +268,8 @@ is special. **It is the only atom.**
     real save.
   - Nothing is lost: version history still has the original.
   - **Built:** paste and drop go through `fromHtml` with pictures and video
-    cards taken out first and put in the scene's gallery (`pasteIntoCell`,
-    `attachToGallery`, 05c-clipboard.js, #135), with a "Picture added to scene N" toast
+    cards taken out first and put in the scene's gallery (`pasteIntoCell`
+    in 05c-clipboard.js, `attachToGallery` in `clipboard.ts`, #135), with a "Picture added to scene N" toast
     whose Undo takes back that paste's entry while it is still the last.
     `migrateRows` (02-state.js, `moveMediaOutOfCell`) does the move: the
     comment is by "Splitpage", dated the row's `updatedAt`, with an empty
@@ -279,8 +287,12 @@ is special. **It is the only atom.**
 
 ## 4. Operations
 
-Nothing outside one module writes a cell. `src/js/04c-doc-model.js`
-(pure, unit-tested under `node --test` like the other pure cores) exports:
+Nothing outside the document model writes a cell. Its pure operations live
+in `src/core/text/` (typed, and unit-tested under `node --test` without a
+DOM): the edits in `edits.ts`, `toHtml` in `html.ts`, the readers in
+`projections.ts`, the steps in `steps.ts`, and `mergeCells` in
+`src/core/merge/cells.ts`. `src/js/04c-doc-model.js` exports all of them,
+with `fromHtml` and `cellOf`, which still decode through the sanitiser:
 
 - **Constructors and converters**
   - `fromHtml(html)` parses a sanitised HTML cell into runs. This is the
@@ -432,6 +444,43 @@ One stack per tab, of step lists (§4). What counts as one entry:
 
 - **Typing** coalesces into one entry per word or per pause of 1 s, split
   also by caret jumps and by switching cells.
+- A typing entry that coalesces back to where it began (the same runs) is
+  dropped, so typing a letter and deleting it leaves no entry. A cancelled
+  IME composition drops every entry it made in its cell, however long its
+  updates took, whether `compositionend` comes before or after the input
+  that reverts the cell, as long as the cancel leaves the cell as it was at
+  `compositionstart`; if its first update joined earlier typing, that
+  typing keeps its own entry as it was (#380, PR #427). A slow composition
+  that replaced a selection and is cancelled in a browser that doesn't put
+  the selection back, such as Chromium, leaves one entry from the cell as
+  it was at `compositionstart` to the cell after the cancel, so one Ctrl+Z
+  brings the selection back and no step shows the cancelled text (#436). A
+  fast one, whose updates all coalesced, is one typing entry as before. If
+  the composition's first update put the cell back where the typing just
+  before it began, so that typing's entry dropped, the cancel puts that
+  entry back under its own step (PR #448). An input with no key of its own
+  after a cancel, such as a spelling fix or a drop, is its own entry. An
+  undo or redo during the composition that moves an entry from before
+  `compositionstart` makes the cell as it leaves it the new start, but the
+  render ends the composition, so no later cancel in the app works from
+  there; an undo of typing that the composition's
+  first update joined puts that typing on redo without the composition's
+  text (#446, PR #448). Known limitations: an undo or redo of the
+  composition's own updates during it, then a cancel, can give back a redo
+  that shows the cancelled text (#459); and if a co-editor's change reaches
+  the cell during the composition, the cancel keeps its entries as they
+  were made, so they can show the cancelled text. Only a browser whose
+  composition survives Ctrl+Z can reach the first; Chromium ends it first.
+  Typing that leaves a real step clears redo. Typing that leaves no entry
+  this way gives back only the redo that this same typing cleared, even
+  when that typing was undone or redone in between. Redo that earlier
+  typing cleared stays cleared: if a typed step was undone and a later
+  typing then drops, Ctrl+Y redoes that step and stops, because the
+  change undone before it belongs to a history without it. Known
+  limitation: if only part of the typing was undone before it drops (a
+  word-start entry, or a slow composition's later update), the redo from
+  before the typing does not come back, as it did before drops gave any
+  redo back.
 - Every intercepted action is one entry:
   - a paste
   - a format
@@ -501,7 +550,9 @@ word edit on the other merges cleanly. The on-disk merge review
 can no longer disagree.
 
 **Built (step 6).** `mergeTextField(base, mine, theirs, ctx)` in
-`03-sync.js` is the one decision, returning `{html, outcome}` with outcome
+`src/core/merge/text-field.ts` (re-exported by `03-sync.js`, and reading
+cells through the decoder its context carries) is the one decision,
+returning `{html, outcome}` with outcome
 `same`, `mine`, `theirs`, `merged` or `conflict`; `mergeRow` and the
 on-disk review both call it (the review labels `merged` "both sets of
 changes are combined"). What building it settled:
@@ -570,7 +621,7 @@ changes are combined"). What building it settled:
 | `10-comments.js` | anchors from `cmt` marks; create/delete are steps |
 | `14-export.js`, `15-docx.js`, `16-csv.js`, `17-pdf.js`, `20d-formats.js` | read runs via `toPlainText` / `toMarkdown` / `toDocxRuns` (the `.md` project's table stays `htmlToMarkdown`, step 3) |
 | `20-teleprompter.js` | word spans from runs |
-| `21-events.js` | `beforeinput` / keydown routing (§5); paste via `fromHtml` |
+| `22a-editor-wiring.js` (with `src/features/editing/`) | `beforeinput` / keydown routing (§5); paste via `fromHtml` |
 | `server/server.js`, `shared/blob-policy.js` | unchanged (D2: HTML stays the stored format) |
 
 `execCommand` goes from 17 editing calls to none.

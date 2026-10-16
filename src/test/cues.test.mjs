@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -13,7 +14,7 @@ import {
 import {
   __init as initTags, healTagRegistry, productionEntries, removeTag, renameTag, tagsInField
 } from "../js/07-production-tags.js";
-import { zipRead } from "../js/14-export.js";
+import { zipRead } from "../adapters/formats/zip.ts";
 import { __init as initDocx, audioDirectionsHtml, buildDocx, buildNarrationText } from "../js/15-docx.js";
 import { prompterSceneHtml, trimPrompterCell } from "../js/20-teleprompter.js";
 
@@ -218,6 +219,47 @@ test("an edited cue leaves the item alone while its old name is still in the scr
   });
 });
 
+function twoCueDoc() {
+  return migrateRows({ schema: 2, title: "Two cues", wordsPerMinute: 150, rows: [
+    { id: "r1", visualText: "", audioText: CUE("SFX: door slam") + "<br>Then.<br>" + CUE("SFX: kettle whistle") },
+    { id: "r2", visualText: "", audioText: CUE("Music: theme") }
+  ] });
+}
+const soundItems = (s) => s.productionTags.filter((t) => t.cat === "sound").map((t) => t.name + "/" + t.status).sort();
+
+test("one cue deleted and another edited in the same cell: the edited one keeps its item, with its status, notes and id (#282)", () => {
+  for (const [label, edited, keep, gone, newName] of [
+    ["the first deleted, the second edited", "Then.<br>" + CUE("SFX: kettle whistling"), "kettle whistle", "door slam", "kettle whistling"],
+    ["the first edited, the second deleted", CUE("SFX: door slams") + "<br>Then.", "door slam", "kettle whistle", "door slams"]
+  ]) {
+    const s = twoCueDoc();
+    withState(s, () => {
+      healTagRegistry();
+      const kept = s.productionTags.find((t) => t.name === keep);
+      Object.assign(kept, { status: "have", notes: "the good take" });
+      s.productionTags.find((t) => t.name === gone).status = "ordered";
+      s.rows[0].audioText = edited;
+      healTagRegistry();
+      assert.deepEqual(soundItems(s), [gone + "/ordered", newName + "/have", "theme/needed"].sort(), label);
+      const e = s.productionTags.find((t) => t.name === newName);
+      assert.equal(e.id, kept.id, label + ": the same entry");
+      assert.equal(e.notes, "the good take", label);
+      assert.deepEqual(productionEntries().filter((x) => x.orphaned).map((x) => x.name), [gone], label);
+    });
+  }
+});
+
+test("both cues in a cell edited at once: each keeps its own item, by its line", () => {
+  const s = twoCueDoc();
+  withState(s, () => {
+    healTagRegistry();
+    s.productionTags.find((t) => t.name === "door slam").status = "have";
+    s.rows[0].audioText = CUE("SFX: door slams") + "<br>Then.<br>" + CUE("SFX: kettle whistles");
+    healTagRegistry();
+    assert.deepEqual(soundItems(s), ["door slams/have", "kettle whistles/needed", "theme/needed"]);
+  });
+});
+
 test("renaming the item rewrites the cue's words; removing it makes the line plain words", () => {
   const s = cueDoc();
   withState(s, () => {
@@ -251,13 +293,13 @@ test("a tag or a direction on a cue line is not part of its name, and a rename l
 
 test("narration export leaves cues out, directions or not", () => {
   withState(cueDoc(), () => {
-    assert.equal(buildNarrationText({ directions: true }), "Cues\n\nWelcome back.\nToday, the kettle.\n");
-    assert.equal(buildNarrationText({ directions: false }), "Cues\n\nWelcome back.\nToday, the kettle.\n");
+    assert.equal(buildNarrationText(liveDoc(), { directions: true }), "Cues\n\nWelcome back.\nToday, the kettle.\n");
+    assert.equal(buildNarrationText(liveDoc(), { directions: false }), "Cues\n\nWelcome back.\nToday, the kettle.\n");
   });
 });
 
 test("the script .docx writes a cue in its own style, small and in the Music/SFX colour", async () => {
-  const bytes = await withState(cueDoc(), () => buildDocx());
+  const bytes = await withState(cueDoc(), () => buildDocx(...liveWithAssets()));
   const zip = await zipRead(bytes.buffer ? bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) : bytes);
   const xml = new TextDecoder().decode(await zip.get("word/document.xml"));
   assert.match(xml, /<w:rStyle w:val="SplitpageCue"\/><w:color w:val="AB413E"\/><w:sz w:val="18"\/><\/w:rPr><w:t xml:space="preserve">SFX: door slam<\/w:t>/);

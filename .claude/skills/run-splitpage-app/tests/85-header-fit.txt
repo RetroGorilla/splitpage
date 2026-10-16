@@ -124,10 +124,26 @@ sleep 100
 expect window.__d().activeElement.id == doc-title
 expect window.__d().getElementById('doc-title').value === 'The Long Road Home: Episode Four of the Documentary Series!!'
 # editing, it is the facts that give way — your name still stays
+eval window.__check(761)
+expect window.__last === ''
+eval window.__check(800)
+expect window.__last === ''
+eval window.__check(900)
+expect window.__last === ''
+eval window.__check(1000)
+expect window.__last === ''
+eval window.__check(1100)
+expect window.__last === ''
+eval window.__check(1240)
+expect window.__last === ''
+eval window.__check(1280)
+expect window.__last === ''
 eval window.__check(1440)
 expect window.__last === ''
+eval window.__check(1920)
+expect window.__last === ''
 eval window.__d().getElementById('doc-title').blur()
-# a real click on your name reaches it (21-events.js opens the name box)
+# a real click on your name reaches it (src/features/settings/mount.ts opens the name box)
 eval (function(){ var W=window; W.__nameClicks=0; W.__d().getElementById('identity-chip').addEventListener('click', function(){ W.__nameClicks++; }); var c=W.__d().getElementById('identity-chip').getBoundingClientRect(); return JSON.stringify([c.left,c.top,c.width,c.height]); })()
 eval (function(){ var d=window.__d(); var c=d.getElementById('identity-chip').getBoundingClientRect(); var el=d.elementFromPoint(c.left+c.width/2, c.top+c.height/2); el.click(); return window.__nameClicks; })()
 expect window.__nameClicks === 1
@@ -278,5 +294,56 @@ expect window.__d().getElementById('btn-command').getBoundingClientRect().right 
 expect Math.round(window.__d().getElementById('btn-file').getBoundingClientRect().width) == 44
 expect window.__d().querySelector('#btn-file .brand-mark').getBoundingClientRect().width === 0
 expect window.__d().documentElement.scrollWidth <= window.__d().documentElement.clientWidth
+
+eval window.__at(1440)
+eval (function(){ var w=window.__w(); var rows=[]; for(var i=0;i<12;i++) rows.push({id:'r'+i, visualText:'Visual '+i+' [tripod]', audioText:'Scene '+i+' a few words of narration', status:i%3===0?'shot':i%3===1?'ready':'todo'}); w.__splitpageFormats.openFile(new w.File([JSON.stringify({schema:2,title:'The Long Road Home: Episode Four of the Documentary Series!!',rows:rows})],'The Long Road Home.splitpage')); var d=window.__d().getElementById('desktop-app-bar-dismiss'); if(d) d.click(); return true; })()
+sleep 800
+eval (function(){ var d=window.__d(); d.getElementById('review-chip').hidden=false; d.getElementById('file-chip').hidden=false; d.getElementById('file-chip-name').textContent='The Long Road Home.splitpage'; d.getElementById('file-chip-state').textContent='· unsaved changes'; return true; })()
+expect window.__d().getElementById('doc-title').value === 'The Long Road Home: Episode Four of the Documentary Series!!'
+expect !window.__d().getElementById('file-chip').hidden
+expect !window.__d().getElementById('progress-chip').hidden
+expect window.__boxes().filter(function(b){ return b.k.indexOf('fact') === 0; }).length === 4
+eval window.__d().getElementById('doc-title').blur()
+sleep 300
+eval window.__check(761)
+expect window.__last === ''
+eval window.__check(800)
+expect window.__last === ''
+eval window.__check(900)
+expect window.__last === ''
+eval window.__check(1000)
+expect window.__last === ''
+eval window.__check(1100)
+expect window.__last === ''
+eval window.__check(1240)
+expect window.__last === ''
+eval window.__check(1280)
+expect window.__last === ''
+eval window.__check(1440)
+expect window.__last === ''
+eval window.__check(1920)
+expect window.__last === ''
+eval (function(){ var t=window.__d().getElementById('doc-title'); t.focus(); t.setSelectionRange(60,60); return true; })()
+sleep 100
+expect window.__d().activeElement.id === 'doc-title'
+eval window.__check(761)
+expect window.__last === ''
+eval window.__check(800)
+expect window.__last === ''
+eval window.__check(900)
+expect window.__last === ''
+eval window.__check(1000)
+expect window.__last === ''
+eval window.__check(1100)
+expect window.__last === ''
+eval window.__check(1240)
+expect window.__last === ''
+eval window.__check(1280)
+expect window.__last === ''
+eval window.__check(1440)
+expect window.__last === ''
+eval window.__check(1920)
+expect window.__last === ''
+eval window.__d().getElementById('doc-title').blur()
 
 quit
