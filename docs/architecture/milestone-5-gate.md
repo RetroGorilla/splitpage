@@ -129,11 +129,18 @@ kept under `D:\vibecoding\.scratch\m5-viewer-check\` on that machine; the
 | DOCX (script and narration) and XLSX (script, breakdown, b-roll) of the golden "crafted" fixture and `LONG_DEMO` | **PASS**: every file opened in Word 16.0 and Excel 16.0 with no repair prompt. Crafted content compared with the fixture (scenes, tags, breakdown, b-roll, comments with a reply and resolved state; XLSX cell text matched). `LONG_DEMO` checked by page and word counts and sheet ranges only |
 | Project round trips (`.splitpage` and Markdown project, build then parse) | **PASS**: no structural differences; identical image SHA-256 for all three images; exporting left the live document unchanged |
 | Existing export tests | 79/79 on Node 24.22.0 |
-| PDF | **Open**: the PC has no PDF reader (no Acrobat, no LibreOffice). The six PDFs are structurally valid (`%PDF-1.4` header, `%%EOF`, page counts 4, 1, 1 for crafted and 10, 2, 1 for `LONG_DEMO`), and `crafted.pdf` loaded in Edge, confirmed by window title only. A person still has to open the crafted and `LONG_DEMO` script PDFs |
+| PDF | **Open at the time (superseded, see the 2026-10-16 note below)**: the PC has no PDF reader (no Acrobat, no LibreOffice). The six PDFs are structurally valid (`%PDF-1.4` header, `%%EOF`, page counts 4, 1, 1 for crafted and 10, 2, 1 for `LONG_DEMO`), and `crafted.pdf` loaded in Edge, confirmed by window title only. A person still has to open the crafted and `LONG_DEMO` script PDFs |
 
 Notes, not findings: Excel showed no pictures in any sheet (whether the
 exporter embeds any was not checked), and `crafted.pdf` has one embedded image
-object although the document has three images (not investigated).
+object although the document has three images (not investigated here; see the
+next note).
+
+### PDF viewer check result (amendment, 2026-10-16)
+
+**PASS.** The six PDFs above came from the Node test harness (jsdom), which has no canvas, so the exporter's PNG and GIF to JPEG conversion silently dropped the PNG scene image and the GIF comment image. The only image object left was the fixture's 23-byte JPEG stub (the single object noted above). Their page counts and layout were fine (crafted script 4 pages, `LONG_DEMO` 10), but they are not evidence for images.
+
+The export was re-run in a real browser (Chromium) at `89d309f` with three scene pictures (PNG, JPEG, PNG) and one comment picture (PNG). The PDF had four embedded images, all placed on pages, verified with `pdfimages` and by rendering the pages. Adam opened that PDF on 2026-10-16 and confirmed the pictures show. The browser suite `tests/65-blobs.txt` also asserts that PNG and WebP pictures reach the PDF as JPEG streams.
 
 ## External review
 
