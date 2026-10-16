@@ -401,7 +401,7 @@ Keep expected operational failures and missing execution environments visible. C
 
 ## 8. Follow-up refactors for 4.x
 
-The 4.1 plan for the three places where 4.0 fell short of this plan (the legacy layer's size, the wiring files that replaced `21-events.js`, and the third `S.state` assigner) is [legacy-reduction.md](architecture/legacy-reduction.md).
+The 4.1 plan for the places where 4.0 fell short of this plan (the legacy layer's size, the import loop, the wiring files that replaced `21-events.js`, and the third `S.state` assigner) is [legacy-reduction.md](architecture/legacy-reduction.md). It also deletes `S` (Adam, 2026-10-16), which replaces item 3 below.
 
 ### Frontend bootstrap
 
