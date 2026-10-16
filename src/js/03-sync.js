@@ -1,15 +1,22 @@
 import { S } from "./_state.js";
-import { SCHEMA_VERSION } from "./00-prelude.js";
-import { PERSON_COLORS, PERSON_COLOR_NAMES, formatClock, mergePersonColors, readMyColor, writePref, PERSON_COLOR_KEY } from "./00p-prefs.js";
-import { DEFAULT_WPM, hasSetLength, targetLengthOf } from "./01-scene-status.js";
-import { STATE_FIELDS, escapeHtml, makeId, migrateRows } from "./02-state.js";
+import { setHome } from "./_home.js";
+import { PERSON_COLORS, PERSON_COLOR_NAMES, formatClock, readMyColor, writePref, PERSON_COLOR_KEY } from "./00p-prefs.js";
+import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, isDurableSync } from "./02c-blobs.js";
-import { galleryFieldKey, mergeGalleryField } from "./02d-gallery.js";
-import { noteRemoteChange } from "./12a-undo.js";
-import { isSha256Hex, normalizeImageRef, refsIn } from "../../shared/blob-policy.js";
+import { noteMerged, noteRecovery, noteServerUpdate } from "../legacy/session-bridge.ts";
+import { applyIncomingMerge } from "../application/session/apply-merge.ts";
+import { mergeIncoming } from "../application/session/merge-incoming.ts";
+import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
+import { randomIds, systemClock } from "../adapters/identity/ids.ts";
+import { DEFAULT_WPM } from "../core/document/timing.ts";
+import { mergeStates as mergeStatesWith } from "../core/merge-states.ts";
+import { isDocumentObject } from "../core/migrate.ts";
+import { byId } from "../core/merge/rows.ts";
+import { textMergeContext as coreTextMergeContext } from "../core/merge/text-field.ts";
+import { withDocumentPorts } from "../legacy/document-ports.ts";
+import { fromHtml } from "../legacy/richtext.ts";
 import {
   adoptRestoredState,
-  mergedDocId,
   normalizeDocId,
   noteMergedDocId
 } from "./02b-doc-id.js";
@@ -27,32 +34,28 @@ import {
   readSidePanelWidth,
   sidePanelOpening
 } from "./03b-side-panels.js";
-import { safeId, storedImageHtml } from "./04-richtext.js";
-import { fromHtml, mergeCells, sameCell, toHtml } from "./04c-doc-model.js";
-import { render } from "./05-render.js";
+import { safeId } from "./04-richtext.js";
+import { render, renderAbsorbed } from "./05-render.js";
 import { targetSectionHtml, wireTargetSection } from "./05t-target.js";
-import { BROLL_PROPS_MAX, brollPropKey } from "./08c-broll.js";
-import {
-  TAG_STATUSES,
-  ensureTagIds,
-  normalizeTagName,
-  registryKey,
-  registryTagHooks,
-  resetProductionPanelState,
-  tagStatus,
-  tagStatusRank
-} from "./07-production-tags.js";
+import { resetProductionPanelState } from "./07-production-tags.js";
 import {
   formatTimestamp,
   getSavedAuthorName,
   nowIso,
   saveAuthorName
 } from "./10-comments.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { markAbsorbedDirty, markDirty, showToast } from "./12-dirty-toast.js";
 import { driveFormatSize, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { haltAutoSave, queueAutoSave } from "./14-export.js";
 import { updateFileChip } from "./18-local-files.js";
+import { confirmBaseline } from "../legacy/save-bridge.ts";
+import { captureRestore, stillRestoring } from "../legacy/recovery-bridge.ts";
+export { GALLERY_FIELDS, ROW_FIELDS } from "../core/document/fields.ts";
+export { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
+export { byId, rowContentEqual, rowFieldKey } from "../core/merge/rows.ts";
+export { mergeTargetLength } from "../core/merge/scalars.ts";
+export { mergeTextField } from "../core/merge/text-field.ts";
 
 var STASH_KEY = "splitpage-conflict-stash";
 export var SNAPSHOT_KEY = "splitpage-snapshots";
@@ -91,7 +94,8 @@ async function restoreSnapshot(id, opts) {
   if (!S.state) return "missing";
   restoreInFlight = true;
   var docIdAtStart = S.state.docId;
-  var moved = function () { return !S.state || S.state.docId !== docIdAtStart; };
+  var ctx = captureRestore();
+  var moved = function () { return !S.state || !stillRestoring(ctx); };
   var releaseHold = historyNoop;
   try {
     releaseHold = protectHistorySnapshot({ docId: opts.older ? null : docIdAtStart, older: !!opts.older, id: id });
@@ -119,8 +123,8 @@ async function restoreSnapshot(id, opts) {
 
     adoptRestoredState(parsed);
     resetProductionPanelState();
-    markDirty();
-    render();
+    markAbsorbedDirty("recovery");
+    renderAbsorbed();
     closeHistoryPanel();
     showToast(opts.restoredText || "Restored the version from " + formatTimestamp(snap.meta && snap.meta.at), "ok");
     if (!opts.local) queueAutoSave();
@@ -196,498 +200,21 @@ export function restoreSnapshotFromCard(btn) {
   });
 }
 
-export function byId(list) {
-  var map = {};
-  (list || []).forEach(function (item) { map[item.id] = item; });
-  return map;
-}
-
-export var ROW_FIELDS = ["visualText", "imageRef", "audioText", "imageLinks", "moreImages"];
-
-export var GALLERY_FIELDS = { imageLinks: true, moreImages: true };
-
-export function rowFieldKey(row, f) {
-  if (!row) return null;
-  if (GALLERY_FIELDS[f]) return galleryFieldKey(row, f);
-  if (f === "imageRef") {
-    var r = row.imageRef;
-    return r && typeof r === "object" && typeof r.sha256 === "string" ? r.sha256 : null;
-  }
-  return row[f] || null;
-}
-
-export function rowContentEqual(a, b) {
-  if (!a || !b) return false;
-  return ROW_FIELDS.every(function (f) { return rowFieldKey(a, f) === rowFieldKey(b, f); }) &&
-    setLengthOf(a) === setLengthOf(b);
-}
-
-function setLengthOf(row) {
-  return hasSetLength(row) ? row.lengthSeconds : null;
-}
-
-function commentContentEqual(a, b) {
-  if (!a || !b) return false;
-  if ((a.body || "") !== (b.body || "")) return false;
-  if (!!a.resolved !== !!b.resolved) return false;
-  if ((a.assignee || "") !== (b.assignee || "")) return false;
-  if (JSON.stringify(a.replies || []) !== JSON.stringify(b.replies || [])) return false;
-  return true;
-}
-
-function tagHooksFor(tags) {
-  var list = tags || [];
-  if (list.some(function (t) { return t && !t.id; })) {
-    list = list.map(function (t) { return t && Object.assign({}, t); });
-    ensureTagIds(list);
-  }
-  return registryTagHooks(list);
-}
-
-function registryRenamed(sideTags, mergedTags) {
-  var merged = {};
-  (mergedTags || []).forEach(function (t) { if (t && t.id) merged[t.id] = t; });
-  return (sideTags || []).some(function (t) {
-    var m = t && t.id && merged[t.id];
-    return !!m && (m.cat !== t.cat || m.name !== t.name);
-  });
-}
-
 export function textMergeContext(base, mine, theirs, mergedTags) {
-  var baseTags = base && base.productionTags;
-  if (mergedTags === undefined) mergedTags = mergeProductionTags(baseTags, mine.productionTags, theirs.productionTags);
-  var hb = tagHooksFor(baseTags), hm = tagHooksFor(mine.productionTags), ht = tagHooksFor(theirs.productionTags);
-  var hout = registryTagHooks(mergedTags);
-  return {
-    hasBase: !!base,
-    base: hb,
-    mine: hm,
-    theirs: ht,
-    out: {
-      tagId: hout.tagId,
-      tagOf: function (id) { return hout.tagOf(id) || ht.tagOf(id) || hm.tagOf(id) || hb.tagOf(id); }
-    },
-    refit: {
-      mine: registryRenamed(mine.productionTags, mergedTags),
-      theirs: registryRenamed(theirs.productionTags, mergedTags)
-    }
-  };
-}
-
-function readCell(html, hooks) {
-  var media = false;
-  var cell = fromHtml(html, { tagId: hooks.tagId, onMedia: function () { media = true; } });
-  return { cell: cell, media: media };
-}
-
-function refitCell(html, side, ctx) {
-  if (!ctx.refit[side] || html.indexOf("tag-anchor") === -1) return html;
-  var cell = fromHtml(html, { tagId: ctx[side].tagId });
-  if (sameCell(fromHtml(html, { tagId: ctx.out.tagId }), cell)) return html;
-  return toHtml(cell, { tagOf: ctx.out.tagOf });
-}
-
-export function mergeTextField(base, mine, theirs, ctx) {
-  var bv = base == null ? "" : String(base), mv = mine == null ? "" : String(mine), tv = theirs == null ? "" : String(theirs);
-  var hasBase = ctx.hasBase && base !== undefined;
-  if (mv === tv) return { html: refitCell(tv, "theirs", ctx), outcome: "same" };
-
-  var M = readCell(mv, ctx.mine), T = readCell(tv, ctx.theirs);
-  var B = !hasBase ? null : bv === mv ? M : bv === tv ? T : readCell(bv, ctx.base);
-  if (M.media || T.media || (B && B.media)) {
-    if (hasBase && mv === bv) return { html: tv, outcome: "theirs" };
-    if (hasBase && tv === bv) return { html: mv, outcome: "mine" };
-    return { html: tv, outcome: "conflict" };
-  }
-  if (sameCell(M.cell, T.cell)) return { html: refitCell(tv, "theirs", ctx), outcome: "same" };
-  if (!hasBase) return { html: refitCell(tv, "theirs", ctx), outcome: "conflict" };
-
-  var mineChanged = mv !== bv && !sameCell(M.cell, B.cell);
-  var theirsChanged = tv !== bv && !sameCell(T.cell, B.cell);
-  if (!mineChanged) return { html: refitCell(tv, "theirs", ctx), outcome: "theirs" };
-  if (!theirsChanged) return { html: refitCell(mv, "mine", ctx), outcome: "mine" };
-
-  var r = mergeCells(B.cell, M.cell, T.cell);
-  if (r.conflict) return { html: refitCell(tv, "theirs", ctx), outcome: "conflict" };
-  var res = sameCell(r.cell, T.cell) ? { html: refitCell(tv, "theirs", ctx), outcome: "theirs" }
-    : sameCell(r.cell, M.cell) ? { html: refitCell(mv, "mine", ctx), outcome: "mine" }
-    : { html: toHtml(r.cell, { tagOf: ctx.out.tagOf }), outcome: "merged" };
-  if (!r.markConflicts) return res;
-  return { html: res.html, outcome: "conflict", marks: true, withMine: res.outcome !== "theirs" };
+  return coreTextMergeContext(fromHtml, base, mine, theirs, mergedTags);
 }
 
 export function mergeStates(base, mine, theirs) {
-  var conflicts = [];
-  var stats = { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 };
-
-  var baseRows = byId(base && base.rows), mineRows = byId(mine.rows), theirRows = byId(theirs.rows);
-  var merged = [];
-  var placed = {};
-
-  var tagField = STATE_FIELDS.filter(function (f) { return f.key === "productionTags"; })[0];
-  var mergedTags = tagField.mergeList(base && base.productionTags, mine.productionTags, theirs.productionTags);
-  var textCtx = textMergeContext(base, mine, theirs, mergedTags);
-
-  function mergeRow(b, m, t) {
-    var out = JSON.parse(JSON.stringify(t));
-    var tookMine = false, tookTheirs = false;
-    ROW_FIELDS.forEach(function (f) {
-      if (GALLERY_FIELDS[f]) {
-        if (galleryFieldKey(m, f) === galleryFieldKey(t, f)) return;
-        var g = mergeGalleryField(f, b, m, t);
-        var probe = {};
-        probe[f] = g;
-        var gk = galleryFieldKey(probe, f);
-        if (gk !== galleryFieldKey(t, f)) {
-          if (g) out[f] = g; else delete out[f];
-          tookMine = true;
-        }
-        if (gk !== galleryFieldKey(m, f)) tookTheirs = true;
-        return;
-      }
-      if (f !== "imageRef") {
-        var r = mergeTextField(b ? (b[f] == null ? "" : b[f]) : undefined, m[f], t[f], textCtx);
-        if (r.html !== (t[f] == null ? "" : String(t[f]))) out[f] = r.html;
-        if (r.outcome === "mine" || r.outcome === "merged" || r.withMine) tookMine = true;
-        if (r.outcome === "theirs" || r.outcome === "merged" || r.outcome === "conflict") tookTheirs = true;
-        if (r.outcome === "conflict") conflicts.push({ rowId: t.id, field: f, mine: m[f] || null, theirs: t[f] || null });
-        return;
-      }
-      var mv = rowFieldKey(m, f), tv = rowFieldKey(t, f), bv = b ? rowFieldKey(b, f) : null;
-      if (mv === tv) return;
-      if (b && mv === bv) { tookTheirs = true; return; }
-      if (b && tv === bv) {
-        out[f] = m[f] == null ? null : JSON.parse(JSON.stringify(m[f]));
-        if (m.imageName) out.imageName = m.imageName; else delete out.imageName;
-        if (m.imageAnnotation) out.imageAnnotation = JSON.parse(JSON.stringify(m.imageAnnotation));
-        else delete out.imageAnnotation;
-        tookMine = true;
-        return;
-      }
-      tookTheirs = true;
-      conflicts.push({ rowId: t.id, field: f, mine: m[f] || null, theirs: t[f] || null });
-    });
-    var rank = { todo: 0, ready: 1, shot: 2 };
-    out.status = (rank[m.status] || 0) >= (rank[t.status] || 0) ? m.status : t.status;
-    var ml = setLengthOf(m), tl = setLengthOf(t), bl = b ? setLengthOf(b) : null;
-    if (ml !== tl) {
-      var useMine = b ? (tl === bl) : (tl === null);
-      var len = useMine ? ml : tl;
-      if (len === null) delete out.lengthSeconds; else out.lengthSeconds = len;
-      if (useMine) tookMine = true; else tookTheirs = true;
-    }
-    if (tookMine) {
-      out.updatedAt = nowIso();
-      out.updatedBy = getEditorName();
-      stats.rowsFromMe++;
-    } else if (b ? tookTheirs : !rowContentEqual({}, t)) {
-      stats.rowsFromThem++;
-    }
-    return out;
-  }
-
-  theirs.rows.forEach(function (t) {
-    var b = baseRows[t.id], m = mineRows[t.id];
-    if (!m) {
-      if (b && rowContentEqual(b, t)) return;
-      merged.push(JSON.parse(JSON.stringify(t)));
-      placed[t.id] = true;
-      return;
-    }
-    merged.push(mergeRow(b, m, t));
-    placed[t.id] = true;
-  });
-
-  mine.rows.forEach(function (m, idxInMine) {
-    if (placed[m.id] || theirRows[m.id]) return;
-    var b = baseRows[m.id];
-    if (b && rowContentEqual(b, m)) return;
-    if (!b) stats.rowsAddedByMe++;
-    var anchorIdx = -1;
-    for (var k = idxInMine - 1; k >= 0; k--) {
-      var prevId = mine.rows[k].id;
-      for (var j = 0; j < merged.length; j++) {
-        if (merged[j].id === prevId) { anchorIdx = j; break; }
-      }
-      if (anchorIdx !== -1) break;
-    }
-    var copy = JSON.parse(JSON.stringify(m));
-    if (anchorIdx === -1) merged.unshift(copy);
-    else merged.splice(anchorIdx + 1, 0, copy);
-    placed[m.id] = true;
-  });
-
-  theirs.rows.forEach(function (t) { if (!baseRows[t.id] && !mineRows[t.id]) stats.rowsAddedByThem++; });
-
-  var baseC = byId(base && base.comments), mineC = byId(mine.comments), theirC = byId(theirs.comments);
-  var mergedComments = [];
-  var seen = {};
-  function newer(a, b2) {
-    return (a.updatedAt || a.createdAt || "") >= (b2.updatedAt || b2.createdAt || "") ? a : b2;
-  }
-  Object.keys(theirC).concat(Object.keys(mineC)).forEach(function (id) {
-    if (seen[id]) return;
-    seen[id] = true;
-    var m = mineC[id], t = theirC[id], b = baseC[id];
-    var pick;
-    if (m && t) {
-      pick = JSON.parse(JSON.stringify(newer(m, t)));
-      pick.resolved = !!(m.resolved || t.resolved);
-      if (m.resolved && t.resolved) {
-        if ((t.resolvedAt || "") >= (m.resolvedAt || "")) {
-          pick.resolvedBy = t.resolvedBy || null; pick.resolvedAt = t.resolvedAt || null;
-        } else {
-          pick.resolvedBy = m.resolvedBy || null; pick.resolvedAt = m.resolvedAt || null;
-        }
-      } else if (m.resolved) {
-        pick.resolvedBy = m.resolvedBy || null; pick.resolvedAt = m.resolvedAt || null;
-      } else if (t.resolved) {
-        pick.resolvedBy = t.resolvedBy || null; pick.resolvedAt = t.resolvedAt || null;
-      } else {
-        pick.resolvedBy = null; pick.resolvedAt = null;
-      }
-      if (!pick.assignee) pick.assignee = m.assignee || t.assignee || "";
-    }
-    else if (t && !m) { if (b && commentContentEqual(b, t)) return; pick = JSON.parse(JSON.stringify(t)); }
-    else { if (b && commentContentEqual(b, m)) return; pick = JSON.parse(JSON.stringify(m)); }
-    if (m && t) {
-      var replies = byId(m.replies);
-      (t.replies || []).forEach(function (r) { replies[r.id] = r; });
-      pick.replies = Object.keys(replies).map(function (k) { return replies[k]; })
-        .sort(function (x, y) { return (x.createdAt || "").localeCompare(y.createdAt || ""); });
-    }
-    mergedComments.push(pick);
-  });
-
-  var mergedTitle = theirs.title;
-  if (base && mine.title !== base.title && theirs.title === base.title) {
-    mergedTitle = mine.title;
-  } else if (mine.title !== theirs.title && (!base || (mine.title !== base.title && theirs.title !== base.title))) {
-    if (mine.title) conflicts.push({ rowId: null, field: "title", mine: mine.title, theirs: theirs.title });
-  }
-
-  conflicts.forEach(function (c) {
-    var image = c.field === "imageRef";
-    var label = c.field === "audioText" ? "Audio" : c.field === "visualText" ? "Visual" :
-      c.field === "title" ? "Title" : "Visual image";
-    var isEmpty = !c.mine;
-    var bodyHtml = image ? storedImageHtml(c.mine)
-      : c.field === "title" ? escapeHtml(c.mine || "")
-      : (c.mine || "");
-    mergedComments.push({
-      id: makeId("c"),
-      rowId: c.rowId,
-      field: image ? "visualImage" : c.field,
-      imageValue: image ? (normalizeImageRef(c.mine) || null) : undefined,
-      anchorId: null,
-      quotedText: "",
-      author: getEditorName(),
-      body: bodyHtml,
-      resolved: false,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
-      kind: "conflict",
-      conflictField: label,
-      emptyValue: isEmpty,
-      titleValue: c.field === "title" ? (c.mine || "") : undefined,
-      replies: []
+  return withDocumentPorts(STATE_FIELDS, function (migrate) {
+    return mergeStatesWith(base, mine, theirs, {
+      decode: fromHtml,
+      ids: randomIds,
+      clock: systemClock,
+      editor: getEditorName,
+      fields: STATE_FIELDS,
+      migrate: migrate
     });
   });
-
-  var out = {};
-  STATE_FIELDS.forEach(function (f) {
-    switch (f.merge) {
-      case "title":    out[f.key] = mergedTitle; break;
-      case "doc-id":   out[f.key] = mergedDocId(base, mine, theirs); break;
-      case "rows":     out[f.key] = merged; break;
-      case "comments": out[f.key] = mergedComments; break;
-      case "list-union-with-base":
-        out[f.key] = f === tagField ? mergedTags : f.mergeList(base && base[f.key], mine[f.key], theirs[f.key]); break;
-      case "changed-side-wins":
-        out[f.key] = mergeChangedSideWins(f, base, mine, theirs); break;
-      case "max-plus-one":
-        out[f.key] = Math.max(theirs[f.key] || 0, mine[f.key] || 0) + 1; break;
-      case "theirs-wins":
-        out[f.key] = theirs[f.key] || mine[f.key] || null; break;
-      case "constant": out[f.key] = SCHEMA_VERSION; break;
-      case "person-colors":
-        var pc = mergePersonColors(base && base[f.key], mine[f.key], theirs[f.key]);
-        if (pc) out[f.key] = pc;
-        break;
-      case "target-length":
-        var tl = mergeTargetLength(base, mine, theirs);
-        if (tl !== null) out[f.key] = tl;
-        break;
-      default: throw new Error("no merge strategy for state field " + f.key);
-    }
-  });
-
-  return {
-    merged: migrateRows(out),
-    conflicts: conflicts,
-    stats: stats
-  };
-}
-
-function droppedListKeys(baseList, mineList, theirList, keyOf, fingerprint) {
-  var dropped = {};
-  if (!baseList || !baseList.length) return dropped;
-  var mineBy = {}, theirBy = {};
-  (mineList || []).forEach(function (e) { var k = e && keyOf(e); if (k) mineBy[k] = e; });
-  (theirList || []).forEach(function (e) { var k = e && keyOf(e); if (k) theirBy[k] = e; });
-  baseList.forEach(function (e) {
-    var k = e && keyOf(e);
-    if (!k) return;
-    var m = mineBy[k], t = theirBy[k];
-    if (m && t) return;
-    if (!m && !t) return;
-    if (fingerprint(m || t) === fingerprint(e)) dropped[k] = true;
-  });
-  return dropped;
-}
-
-export function mergePeople(basePeople, minePeople, theirPeople) {
-  var personKey = function (p) { return p.name ? normalizeTagName(p.name) : ""; };
-  var dropped = droppedListKeys(basePeople, minePeople, theirPeople, personKey, personKey);
-  var out = [], seenId = {}, seenName = {};
-  (theirPeople || []).concat(minePeople || []).forEach(function (p) {
-    if (!p || !p.name) return;
-    var norm = normalizeTagName(p.name);
-    if (dropped[norm]) return;
-    if (seenId[p.id] || seenName[norm]) return;
-    seenId[p.id] = true;
-    seenName[norm] = true;
-    out.push({ id: p.id, name: p.name });
-  });
-  return out;
-}
-
-export function mergeProductionTags(baseTags, mineTags, theirTags) {
-  var idOf = function (t) { return t.id || (t.name ? "key:" + registryKey(t.cat, t.name) : ""); };
-  var tagPrint = function (t) {
-    return JSON.stringify([t.cat || "", t.name || "", t.owner || "", t.notes || "",
-                           (tagStatus(t.status) || TAG_STATUSES[0]).id]);
-  };
-  var dropped = droppedListKeys(baseTags, mineTags, theirTags, idOf, tagPrint);
-  var baseById = {};
-  (baseTags || []).forEach(function (t) { if (t && t.name) baseById[idOf(t)] = t; });
-  var out = [], byId = {};
-  function entryOf(t) {
-    var e = { cat: t.cat, name: t.name, owner: t.owner || "", notes: t.notes || "",
-              status: (tagStatus(t.status) || TAG_STATUSES[0]).id };
-    if (t.id) e.id = t.id;
-    return e;
-  }
-  (theirTags || []).forEach(function (t) {
-    if (!t || !t.name) return;
-    var k = idOf(t);
-    if (dropped[k] || byId[k]) return;
-    byId[k] = entryOf(t);
-    out.push(byId[k]);
-  });
-  (mineTags || []).forEach(function (t) {
-    if (!t || !t.name) return;
-    var k = idOf(t);
-    if (dropped[k]) return;
-    var existing = byId[k];
-    if (!existing) {
-      byId[k] = entryOf(t);
-      out.push(byId[k]);
-      return;
-    }
-    var b = baseById[k];
-    if (b && existing.name === b.name && t.name !== b.name) existing.name = t.name;
-    if (b && existing.cat === b.cat && t.cat !== b.cat) existing.cat = t.cat;
-    if (!existing.owner && t.owner) existing.owner = t.owner;
-    if (!existing.notes && t.notes) existing.notes = t.notes;
-    if (tagStatusRank(t.status) > tagStatusRank(existing.status)) {
-      existing.status = (tagStatus(t.status) || TAG_STATUSES[0]).id;
-    }
-  });
-  var byKey = {};
-  return out.filter(function (e) {
-    var key = registryKey(e.cat, e.name);
-    var first = byKey[key];
-    if (!first) { byKey[key] = e; return true; }
-    if (!first.owner && e.owner) first.owner = e.owner;
-    if (!first.notes && e.notes) first.notes = e.notes;
-    if (tagStatusRank(e.status) > tagStatusRank(first.status)) first.status = e.status;
-    return false;
-  });
-}
-
-export function mergeBrollShots(baseShots, mineShots, theirShots) {
-  var shotKey = function (b) { return b.id || ""; };
-  var shotPrint = function (b) {
-    return JSON.stringify(Object.keys(b).filter(function (k) { return k !== "id"; }).sort()
-      .map(function (k) { return [k, b[k]]; }));
-  };
-  var dropped = droppedListKeys(baseShots, mineShots, theirShots, shotKey, shotPrint);
-  var baseById = {};
-  (baseShots || []).forEach(function (b) { if (b && b.id && !baseById[b.id]) baseById[b.id] = b; });
-  var out = [], byId = {};
-  (theirShots || []).forEach(function (b) {
-    if (!b || !b.id || byId[b.id] || dropped[b.id]) return;
-    byId[b.id] = cloneState(b);
-    out.push(byId[b.id]);
-  });
-  (mineShots || []).forEach(function (b) {
-    if (!b || !b.id || dropped[b.id]) return;
-    var existing = byId[b.id];
-    if (!existing) { byId[b.id] = cloneState(b); out.push(byId[b.id]); return; }
-    if (!existing.owner && b.owner) existing.owner = b.owner;
-    if (!existing.notes && b.notes) existing.notes = b.notes;
-    if (!existing.audioRef && b.audioRef) existing.audioRef = b.audioRef;
-    if (!existing.location && b.location) existing.location = b.location;
-    if (b.status === "shot") existing.status = "shot";
-    if (b.reshoot) existing.reshoot = true;
-    var base = baseById[b.id];
-    existing.props = mergeBrollProps(base ? base.props : null, b.props, existing.props);
-  });
-  return out;
-}
-
-function mergeBrollProps(baseProps, mineProps, theirProps) {
-  function keyed(list) {
-    var by = {}, order = [];
-    (Array.isArray(list) ? list : []).forEach(function (p) {
-      if (!p || typeof p !== "object" || !p.name) return;
-      var k = brollPropKey(p.id, p.name);
-      if (by[k]) return;
-      by[k] = p;
-      order.push(k);
-    });
-    return { by: by, order: order };
-  }
-  var base = keyed(baseProps), mine = keyed(mineProps), theirs = keyed(theirProps);
-  var hasBase = Array.isArray(baseProps);
-  var out = [];
-  function keep(k) {
-    var inMine = !!mine.by[k], inTheirs = !!theirs.by[k], inBase = !!base.by[k];
-    if (inMine && inTheirs) return true;
-    return !hasBase || !inBase;
-  }
-  theirs.order.forEach(function (k) {
-    if (keep(k)) out.push({ id: theirs.by[k].id || "", name: theirs.by[k].name });
-  });
-  mine.order.forEach(function (k) {
-    if (!theirs.by[k] && keep(k)) out.push({ id: mine.by[k].id || "", name: mine.by[k].name });
-  });
-  return out.slice(0, BROLL_PROPS_MAX);
-}
-
-function mergeChangedSideWins(f, base, mine, theirs) {
-  var m = mine[f.key], t = theirs[f.key];
-  var fallback = f.def ? f.def() : null;
-  if (base && t === base[f.key] && m !== base[f.key]) return m || fallback;
-  return t || m || fallback;
-}
-
-export function mergeTargetLength(base, mine, theirs) {
-  var m = targetLengthOf(mine), t = targetLengthOf(theirs);
-  if (m === t) return t;
-  if (base) return t === targetLengthOf(base) ? m : t;
-  return t !== null ? t : m;
 }
 
 function stashBlobsFor(docs) {
@@ -1227,54 +754,23 @@ export async function renderHistory() {
 }
 
 S.lastMergeUndo = null;
-var undoArmed = false;
-var undoArmTimer = null;
-var undoMergeForceFor = null;
+var mergeBanner = null;
 
-var UNDO_SAVED_NOTE = "Undo merge puts your version back here; the next save replaces the merged copy on the server.";
-var UNDO_SAVED_TITLE = "Go back to the version you were saving, before someone else's changes were merged into it. " +
-  "It stays unsaved until the next save, which replaces the merged copy on the server. Recoverable from Version history.";
-var undoTitleDefault = null;
+export function installMergeBanner(banner) {
+  mergeBanner = banner;
+  return function () { if (mergeBanner === banner) mergeBanner = null; };
+}
+
+export function toastLastEditor(loaded) {
+  if (loaded.lastEditedBy && loaded.lastEditedBy !== getEditorName()) {
+    showToast("Opened the latest version — last edited by " + loaded.lastEditedBy, "ok");
+  }
+}
 
 export function reportMerge(result, opts) {
   opts = opts || {};
-  var s = result.stats;
-  var bits = [];
-  if (s.rowsFromMe) bits.push(s.rowsFromMe + " row" + (s.rowsFromMe === 1 ? "" : "s") + " you edited");
-  if (s.rowsAddedByMe) bits.push(s.rowsAddedByMe + " row" + (s.rowsAddedByMe === 1 ? "" : "s") + " you added");
-  if (s.rowsFromThem) bits.push(s.rowsFromThem + " changed by someone else");
-  if (s.rowsAddedByThem) bits.push(s.rowsAddedByThem + " added by someone else");
-
-  if (!bits.length && !result.conflicts.length) {
-    if (!opts.alreadySaved) { markDirty(); noteMergeAutoSave(opts); }
-    return;
-  }
-
-  var summary = bits.length ? "Kept " + bits.join(", ") + "." : "Nothing was lost.";
-  if (result.conflicts.length) {
-    summary += " " + result.conflicts.length + " edit" + (result.conflicts.length === 1 ? " was" : "s were") +
-      " changed on both sides — your version is saved as a comment.";
-  }
-
-  var undoBtn = document.getElementById("merge-undo");
-  if (undoTitleDefault === null) undoTitleDefault = undoBtn.title;
-  var offerUndo = opts.undo !== false && !!S.lastMergeUndo;
-  undoBtn.hidden = !offerUndo;
-  undoBtn.title = opts.undo === "saved" ? UNDO_SAVED_TITLE : undoTitleDefault;
-  if (offerUndo && opts.undo === "saved") summary += " " + UNDO_SAVED_NOTE;
-
-  document.getElementById("merge-summary").textContent = " " + summary;
-  document.getElementById("merge-review").hidden = !result.conflicts.length;
-  var banner = document.getElementById("merge-banner");
-  banner.classList.toggle("notice-warn", !!result.conflicts.length);
-  banner.hidden = false;
-
-  result.conflicts.forEach(function (c) {
-    var el = document.querySelector('#rows .row[data-id="' + safeId(c.rowId, "r") + '"]');
-    if (el) el.classList.add("just-merged");
-  });
-
-  if (!opts.alreadySaved) { markDirty(); noteMergeAutoSave(opts); }
+  if (mergeBanner) mergeBanner.show(result, { undo: opts.undo });
+  if (!opts.alreadySaved) { markAbsorbedDirty(opts.kind || "server"); noteMergeAutoSave(opts); }
 }
 
 function noteMergeAutoSave(opts) {
@@ -1283,125 +779,60 @@ function noteMergeAutoSave(opts) {
                "Press Save once you have looked them over.");
 }
 
-var UNDO_LABELS = {
-  "server-conflict": "Before merging in someone else's changes",
-  "server-resume": "Before merging your recovered changes",
-  "stash": "Before merging your unsaved changes"
+var mergePorts = {
+  isDocument: function (raw) { return isDocumentObject(raw); },
+  merge: function (input) {
+    return mergeIncoming(input, isDocumentObject, {
+      entry: function (raw, lines) { return migrateRows(cloneState(raw), lines); },
+      merge: mergeStates
+    });
+  },
+  snapshot: function (label, doc) { return pushSnapshot(label, doc); },
+  current: function () { return S.state; },
+  adopt: function (kind, next, merged) {
+    if (merged) next = noteMerged(kind, next);
+    else next = kind === "recovery" ? noteRecovery(next) : noteServerUpdate(next);
+    S.state = next;
+    return next;
+  },
+  documentId: function (doc) { return doc.docId; },
+  noteHistoryFrom: function (prevDocId) { noteMergedDocId(prevDocId); },
+  armUndo: function (record) { S.lastMergeUndo = record; },
+  setBase: function (next, why) { setBaseState(next, why); },
+  capture: function () { return captureRestore(); },
+  stillOwns: function (ctx) { return stillRestoring(ctx); },
+  view: {
+    redraw: function () { renderAbsorbed(); },
+    chips: function () { updateIdentityChip(); updateFileChip(); },
+    report: function (result, opts) { reportMerge(result, opts); },
+    absorbedDirty: function (kind) { markAbsorbedDirty(kind); },
+    toast: function (text, tone, sticky) { showToast(text, tone, sticky); }
+  }
 };
 
 export function applyMerge(opts) {
-  opts = opts || {};
-  var result = null;
-  var snap = null;
-
-  if (!opts.unchanged) {
-    if (opts.undoPoint) snap = pushSnapshot(UNDO_LABELS[opts.source], opts.undoPoint);
-    if (opts.keepLabel) pushSnapshot(opts.keepLabel, opts.mine);
-    result = mergeStates(
-      opts.base ? migrateRows(cloneState(opts.base)) : null,
-      migrateRows(cloneState(opts.mine)),
-      opts.theirs
-    );
-  }
-  var next = result ? result.merged : opts.theirs;
-
-  function armUndoPoint(docId) {
-    if (!opts.undoPoint) return;
-    S.lastMergeUndo = snap ? { id: snap.id, docId: docId, source: opts.source } : null;
-  }
-
-  if (opts.mergeOnly) {
-    armUndoPoint(snap && snap.docId);
-    return { state: next, result: result, snapshot: snap };
-  }
-
-  function adopt() {
-    noteRemoteChange(next);
-    S.state = next;
-    if (opts.historyFrom) noteMergedDocId(opts.historyFrom);
-    armUndoPoint(S.state.docId);
-    if (opts.newBase !== undefined) {
-      baseStateWhy = "merge: " + (opts.source || "");
-      S.baseState = typeof opts.newBase === "function" ? opts.newBase() : opts.newBase;
-    }
-    render();
-    if (opts.chips) { updateIdentityChip(); updateFileChip(); }
-    if (result) {
-      if (opts.report !== false) reportMerge(result, { noAutoSave: !!opts.noAutoSave });
-    } else if (opts.report !== false) {
-      markDirty();
-    }
-    if (opts.toast) {
-      var said = typeof opts.toast.text === "function" ? opts.toast.text() : opts.toast.text;
-      if (said) showToast(said, opts.toast.tone || "ok", !!opts.toast.sticky);
-    }
-    return { state: next, result: result, snapshot: snap };
-  }
-
-  if (!opts.awaitUndoPoint) return adopt();
-  var written = snap && snap.done ? snap.done : null;
-  return Promise.resolve(written).then(null, function () {}).then(adopt);
+  return applyIncomingMerge(opts || {}, mergePorts);
 }
 
 var baseStateWhy = "";
 
 export function setBaseState(next, why) {
   baseStateWhy = String(why || "");
-  S.baseState = next;
+  S.baseState = confirmBaseline(next);
   return next;
 }
+
+export var documentDestinationPort = Object.freeze({
+  set: function (destination) { setHome(destination.kind, destination.fields); },
+  confirm: function (baseline, why) { setBaseState(baseline ? cloneState(baseline) : null, why); }
+});
 
 export function baseStateReason() {
   return baseStateWhy;
 }
 
-var UNDO_CONFIRM = { "server-conflict": "Drop their changes?" };
-var UNDO_LOCAL = { "server-conflict": true };
-var UNDO_RESTORED = {
-  "server-conflict": "Your version is back, unsaved. The next save replaces the merged copy on the server."
-};
-
-export function undoMerge(btn) {
-  if (!S.lastMergeUndo) { showToast("No merge snapshot to undo.", "warn"); return; }
-  if (!S.state || S.lastMergeUndo.docId !== S.state.docId) {
-    showToast("That merge belongs to a different document, so there is nothing to undo here.", "warn");
-    return;
-  }
-  if (undoArmed) {
-    clearTimeout(undoArmTimer);
-    undoArmed = false;
-    btn.textContent = "Undo merge";
-    btn.classList.remove("armed");
-    var undo = S.lastMergeUndo;
-    var force = undoMergeForceFor === undo;
-    undoMergeForceFor = null;
-    restoreSnapshot(undo.id, {
-      force: force,
-      local: !!UNDO_LOCAL[undo.source],
-      restoredText: UNDO_RESTORED[undo.source]
-    }).then(function (r) {
-      if (r === "no-backup") {
-        undoMergeForceFor = undo;
-        showToast("Could not keep a backup of your current version. Undo the merge again to discard your edits anyway.", "warn");
-      } else if (r === "missing") {
-        showToast("The snapshot from before the merge is no longer in the history.", "warn");
-      } else if (r === "corrupt") {
-        showToast("The snapshot from before the merge could not be read, so nothing was undone.", "warn");
-      } else if (r === "changed") {
-        showToast("A different document was opened while undoing, so nothing was undone.", "warn");
-      }
-    }, function (e) { if (window.console) console.error(e); });
-    return;
-  }
-  undoArmed = true;
-  btn.textContent = UNDO_CONFIRM[S.lastMergeUndo.source] || "Discard my edits?";
-  btn.classList.add("armed");
-  clearTimeout(undoArmTimer);
-  undoArmTimer = setTimeout(function () {
-    undoArmed = false;
-    btn.textContent = "Undo merge";
-    btn.classList.remove("armed");
-  }, 3000);
+export function restoreMergeSnapshot(id, request) {
+  return restoreSnapshot(id, request);
 }
 
 export function findRowIndex(id) {

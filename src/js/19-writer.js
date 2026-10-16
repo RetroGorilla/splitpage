@@ -2,9 +2,7 @@ import { S } from "./_state.js";
 import { writePref } from "./00p-prefs.js";
 import { formatDuration, totalSeconds, wordCount } from "./01-scene-status.js";
 import { renderRowGroups } from "./01b-hide-shot.js";
-import { escapeHtml } from "./02-state.js";
-import { gallerySize, rowSlots, setRowSlots } from "./02d-gallery.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
+import { findRowIndex } from "./03-sync.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import {
   cssAttr,
@@ -12,27 +10,37 @@ import {
   sanitizeHtml,
   storedHtmlFromDom
 } from "./04-richtext.js";
-import { cellLength, fromHtml, joinCells, projection, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
 import {
   cellFormatState,
   editableCellHtml,
+  notePaintedEpoch,
   pad2,
-  render,
+  placeEditorSelection,
+  rememberCellSelection,
+  renderAbsorbed,
   syncFieldFromDom,
   toggleCellDirection,
-  toggleCellFormat
+  toggleCellFormat,
+  whilePainting
 } from "./05-render.js";
 import { splitRowFieldCore } from "./06-rows.js";
 import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
 import { closeFindBar, findOpen } from "./09-find-replace.js";
 import { truncateForPreview } from "./11-import.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
-import { breakUndoCoalescing } from "./12a-undo.js";
-import { htmlToPlainText } from "./14-export.js";
+import { showToast } from "./12-dirty-toast.js";
+import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "./12a-undo.js";
 import { mirrorFileChipToWriter } from "./18-local-files.js";
+import { bothScenesHaveVisual, joinScenesCommand } from "../application/commands/split-join.ts";
+import { htmlToPlainText } from "../legacy/plain-text.ts";
+import { VIEWING_ONLY } from "../legacy/review-wording.ts";
+import { editAllowed, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { gallerySize } from "../core/document/gallery.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
 
 export var writerOpen = false;
 var writerGutterMode = "visuals";
+var writerUndoMark = 0;
+var reopenOnRedo = null;
 S.writerLastCell = null;
 
 function writerBlockHtml(row, i) {
@@ -55,37 +63,47 @@ function writerBlockHtml(row, i) {
         rowId: row.id,
         field: "audioText",
         value: row.audioText,
-        placeholder: "Write what gets said…"
+        placeholder: "Write what gets said…",
+        readOnly: !editAllowed()
       }) +
     '</div>';
 }
 
-function writerCaretState() {
-  var active = document.activeElement;
-  if (!writerOpen || !active || !active.classList || !active.classList.contains("wr-para")) return null;
-  var sel = window.getSelection();
-  if (!sel.rangeCount) return null;
-  var range = sel.getRangeAt(0);
-  if (!active.contains(range.startContainer)) return null;
-  var probe = document.createRange();
-  probe.selectNodeContents(active);
-  probe.setEnd(range.startContainer, range.startOffset);
-  return { id: active.getAttribute("data-id"), offset: probe.toString().length };
+export function renderWriter() {
+  whilePainting(function () { paintWriterDraw(drawWriter()); });
 }
 
-export function renderWriter() {
+export function drawWriter() {
+  return {
+    title: S.state.title || "",
+    readOnly: !editAllowed(),
+    html: S.state.rows.length ? renderRowGroups(S.state.rows, writerBlockHtml) : null
+  };
+}
+
+export function paintWriterDraw(draw) {
   var doc = document.getElementById("writer-doc");
-  var caret = writerCaretState();
+  var active = document.activeElement;
+  var caret = writerOpen && active && active.classList && active.classList.contains("wr-para") && doc.contains(active)
+    ? rememberCellSelection(active) : null;
   var titleEl = document.getElementById("writer-title");
-  if (document.activeElement !== titleEl) titleEl.value = S.state.title || "";
-  if (!S.state.rows.length) {
+  if (document.activeElement !== titleEl) titleEl.value = draw.title;
+  titleEl.readOnly = draw.readOnly;
+  if (draw.html === null) {
     doc.innerHTML = '<div class="writer-empty">Nothing to write into yet — close this and add a scene.</div>';
   } else {
-    doc.innerHTML = renderRowGroups(S.state.rows, writerBlockHtml);
+    doc.innerHTML = draw.html;
     doc.querySelectorAll(".wr-para").forEach(ensureTrailingCaretSpot);
   }
+  notePaintedEpoch(doc);
   S.writerLastCell = null;
-  if (caret) focusWriterBlock(caret.id, caret.offset);
+  if (caret) {
+    var placed = placeEditorSelection(doc);
+    if (placed) {
+      S.writerLastCell = placed;
+      placed.scrollIntoView({ block: "nearest" });
+    }
+  }
   updateWriterStats();
 }
 
@@ -171,18 +189,15 @@ function caretAtEdge(cellEl, range, edge) {
 function splitWriterRow(cellEl) {
   var res = splitRowFieldCore(cellEl);
   if (!res) return;
-  markDirty();
   renderWriter();
-  focusWriterBlock(res.created.id, 0);
+  focusWriterBlock(res.id, 0);
 }
 
 function mergeWriterRows(intoIdx) {
   var prev = S.state.rows[intoIdx];
   var cur = S.state.rows[intoIdx + 1];
   if (!prev || !cur) return;
-  var prevHasVisual = !!(htmlToPlainText(prev.visualText) || gallerySize(prev));
-  var curHasVisual = !!(htmlToPlainText(cur.visualText) || gallerySize(cur));
-  if (prevHasVisual && curHasVisual) {
+  if (readSession(bothScenesHaveVisual(prev.id, htmlToPlainText))) {
     showToast("Both scenes have a visual — join them in the split view, so you can pick which one to keep.", "warn");
     return;
   }
@@ -191,24 +206,10 @@ function mergeWriterRows(intoIdx) {
   var joinAt = prevEl ? prevEl.textContent.length : 0;
 
   breakUndoCoalescing();
-  var a = prev.audioText || "", b = cur.audioText || "";
-  if (/<img|video-embed-card/.test(a + b)) {
-    prev.audioText = a + ((a && b && !/(<br\s*\/?>|\s)$/i.test(a)) ? " " : "") + b;
-  } else {
-    var ca = fromHtml(a), cb = fromHtml(b);
-    var glue = cellLength(ca) && cellLength(cb) && !/\s$/.test(projection(ca)) ? " " : "";
-    prev.audioText = toHtml(joinCells(ca, cb, glue));
-  }
-  if (curHasVisual) {
-    prev.visualText = cur.visualText;
-    setRowSlots(prev, rowSlots(cur));
-  }
-  var rank = { todo: 0, ready: 1, shot: 2 };
-  if ((rank[cur.status] || 0) > (rank[prev.status] || 0)) prev.status = cur.status;
-  stampRow(prev);
-  S.state.rows.splice(intoIdx + 1, 1);
-  syncCommentAnchors(S.state);
-  markDirty();
+  var ports = Object.assign({}, sessionTextPorts, { plainText: htmlToPlainText });
+  var outcome = runCommand(joinScenesCommand(prev.id, ports));
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
   renderWriter();
   focusWriterBlock(prev.id, joinAt);
 }
@@ -309,8 +310,10 @@ export function cycleWriterGutter() {
   setWriterGutter(WRITER_GUTTER_MODES[(i + 1) % WRITER_GUTTER_MODES.length]);
 }
 
-export function openWriter() {
+export function openWriter(keepMark) {
   var el = document.getElementById("writer");
+  writerUndoMark = keepMark == null ? undoMark() : keepMark;
+  reopenOnRedo = null;
   closeAllSidePanels();
   if (findOpen) closeFindBar();
   document.getElementById("writer-title").value = S.state.title || "";
@@ -347,7 +350,28 @@ export function closeWriter() {
   writerOpen = false;
   S.writerLastCell = null;
   hideTagGhost();
-  render();
+  renderAbsorbed();
+}
+
+export function writerUndoStep(dir) {
+  if (writerOpen) {
+    if (dir === "redo") {
+      var next = nextRedoEntry();
+      return !next || next.n <= writerUndoMark;
+    }
+    var top = lastUndoEntry();
+    if (top && top.n > writerUndoMark) return false;
+    var mark = writerUndoMark;
+    closeWriter();
+    reopenOnRedo = { top: lastUndoEntry(), mark: mark, lifetime: undoLifetime(), serial: undoSerial() };
+    return true;
+  }
+  var pending = reopenOnRedo;
+  reopenOnRedo = null;
+  if (!pending || dir !== "redo") return false;
+  if (undoLifetime() !== pending.lifetime || lastUndoEntry() !== pending.top || undoSerial() !== pending.serial) return false;
+  openWriter(pending.mark);
+  return true;
 }
 
 export function jumpFromWriterToRow(rowId) {
@@ -360,4 +384,46 @@ export function jumpFromWriterToRow(rowId) {
   target.classList.add("just-merged");
 }
 
-export function __init() {}
+var REFUSAL_BURST_MS = 2000;
+var EDIT_CHORDS = ["z", "y", "b", "i", "u"];
+var GUARDED_EVENTS = ["keydown", "beforeinput", "input", "paste", "cut", "click"];
+var lastRefusalAt = 0;
+
+function refuseWriterEdit() {
+  var now = Date.now();
+  if (now - lastRefusalAt > REFUSAL_BURST_MS) showToast(VIEWING_ONLY, "warn");
+  lastRefusalAt = now;
+}
+
+function isEditKey(e) {
+  var name = String(e.key || "");
+  var chord = e.ctrlKey || e.metaKey;
+  if (name === "Enter" || name === "Backspace" || name === "Delete") return true;
+  if (chord) return EDIT_CHORDS.indexOf(name.toLowerCase()) !== -1;
+  if (e.altKey) return name === "ArrowUp" || name === "ArrowDown";
+  return name.length === 1 && name !== " ";
+}
+
+function attemptsEdit(e) {
+  var target = e.target;
+  if (!target || !target.closest) return false;
+  if (e.type === "click") return !!target.closest(".wr-fmt");
+  if (!target.closest(".wr-para") && target.id !== "writer-title") return false;
+  return e.type !== "keydown" || isEditKey(e);
+}
+
+function guardWriterEdit(e) {
+  if (editAllowed() || !attemptsEdit(e)) return;
+  e.preventDefault();
+  e.stopPropagation();
+  refuseWriterEdit();
+  if (e.type === "input") {
+    renderWriter();
+    document.getElementById("writer-title").value = S.state.title || "";
+  }
+}
+
+export function __init() {
+  var root = document.getElementById("writer");
+  GUARDED_EVENTS.forEach(function (type) { root.addEventListener(type, guardWriterEdit, true); });
+}

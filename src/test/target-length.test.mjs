@@ -21,6 +21,7 @@ import {
   parseMarkdownProject,
   parseSplitpageFile
 } from "../js/20d-formats.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 initTags();
 initSceneStatus();
@@ -123,22 +124,22 @@ test("an older file has no target and gains no key", () => {
 
 test(".splitpage carries it, and a file without one stays without", () => {
   const s = doc({ targetSeconds: 180 });
-  const text = buildSplitpageFile(s);
+  const text = buildSplitpageFile(exportDocumentOf(s));
   assert.equal(JSON.parse(text).targetSeconds, 180);
   assert.equal(migrateRows(parseSplitpageFile(text)).targetSeconds, 180);
-  const none = buildSplitpageFile(doc());
+  const none = buildSplitpageFile(exportDocumentOf(doc()));
   assert.ok(!("targetSeconds" in JSON.parse(none)));
   assert.ok(none.indexOf("targetSeconds") === -1);
 });
 
 test("the .md data block carries it and reads it back; the table does not show it", async () => {
   const s = doc({ targetSeconds: 300 });
-  const md = withState(s, buildMarkdownProject);
+  const md = withState(s, (v) => buildMarkdownProject(exportDocumentOf(v)));
   const tableHalf = md.split(/^~{4,}splitpage/m)[0];
   assert.ok(tableHalf.indexOf("5:00") === -1 && tableHalf.indexOf("targetSeconds") === -1);
   const back = await withState(clone(s), () => applyMarkdownProject(parseMarkdownProject(md), { noAsk: true }));
   assert.equal((back.state || back).targetSeconds, 300);
-  const plain = withState(doc(), buildMarkdownProject);
+  const plain = withState(doc(), (v) => buildMarkdownProject(exportDocumentOf(v)));
   const backPlain = await withState(doc(), () => applyMarkdownProject(parseMarkdownProject(plain), { noAsk: true }));
   assert.ok(!("targetSeconds" in (backPlain.state || backPlain)));
 });

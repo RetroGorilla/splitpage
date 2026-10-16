@@ -1,21 +1,28 @@
 import { S } from "./_state.js";
-import { conn, fileHome, home, importHome, setHome } from "./_home.js";
-import { SCHEMA_VERSION } from "./00-prelude.js";
+import { conn, fileHome, home, importHome, stillOnServer } from "./_home.js";
 import { migrateRows } from "./02-state.js";
 import { inlineStateJson, persist } from "./02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import {
   copyDocHistorySafe,
-  mintDocId,
   normalizeDocId,
   syncDocIdentity
 } from "./02b-doc-id.js";
-import { cloneState, setBaseState, updateIdentityChip } from "./03-sync.js";
-import { render } from "./05-render.js";
+import { cloneState, updateIdentityChip } from "./03-sync.js";
+import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
 import { onServerDoc, reviewMode } from "./13-hosted.js";
-import { browserDraftKey, createIdbDraftStore, draftBaseOf } from "./03d-drafts-idb.js";
+import { DRAFT_LIMITS, browserDraftKey, draftBaseOf } from "../adapters/storage/draft-store-idb.ts";
+import {
+  browserDrafts,
+  captureRestore,
+  desktopDrafts,
+  recoveryStarted,
+  stillRestoring,
+  useBrowserDraftFactory
+} from "../legacy/recovery-bridge.ts";
+import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
 import { applyStashedWork } from "./14-export.js";
 import {
   adoptProjectState,
@@ -23,6 +30,8 @@ import {
   updateFileChip
 } from "./18-local-files.js";
 import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
+import { SCHEMA_VERSION } from "../core/document/fields.ts";
+import { createCaptureSchedule } from "../application/recovery/capture-schedule.ts";
 
 export var draftRestorePending;
 var draftOnDisk;
@@ -38,21 +47,24 @@ var draftTiming = {
   serverWait: 20000
 };
 
+var draftSchedule = createCaptureSchedule({
+  timing: function () { return draftTiming; },
+  timers: {
+    set: function (run, ms) { return setTimeout(run, ms); },
+    clear: function (handle) { clearTimeout(handle); }
+  },
+  capture: function () { captureAndSendDraft(); }
+});
+
 var draftSeq = 0;
-var draftIdleTimer = null;
-var draftMaxTimer = null;
-var draftBackoffTimer = null;
 var draftInFlight = null;
-var draftChangePending = false;
-var draftSlow = false;
 var draftStopped = false;
-var draftBackoffMs = 0;
 var draftPausedReason = "";
 var draftPausedToast = null;
 var draftSentEditSeq = -1;
 var draftSentBase = {};
 var draftSentSignature = "";
-var draftStats = { writes: 0, failures: 0, discards: 0, lastCode: null };
+var draftStats = { writes: 0, failures: 0, discards: 0, obsolete: 0, lastCode: null };
 
 var draftPendingFor = null;
 var draftServerSettle = null;
@@ -65,14 +77,27 @@ var browserWriterId = (function () {
   return Array.prototype.map.call(bytes, function (b) { return (b < 16 ? "0" : "") + b.toString(16); }).join("");
 })();
 var BROWSER_DRAFT_LOCK = "splitpage-draft-writer-";
-var browserStore = null;
 var browserDraftsOff = false;
-var browserKeyOnDisk = null;
 var browserCopyOf = null;
 
+export function draftRecoveryPorts() {
+  var factory;
+  try { factory = window.indexedDB || null; } catch (e) { factory = null; }
+  return {
+    indexedDB: factory,
+    limits: DRAFT_LIMITS,
+    now: function () { return Date.now(); },
+    writerId: browserWriterId,
+    desktop: function () { return S.DESKTOP; }
+  };
+}
+
 function browserDraftStore() {
-  if (!browserStore) browserStore = createIdbDraftStore();
-  return browserStore;
+  return browserDrafts().store;
+}
+
+function browserKeyOnDisk() {
+  return recoveryStarted() ? browserDrafts().writer.tracked() : null;
 }
 
 function browserDraftTarget() {
@@ -88,59 +113,51 @@ function browserDraftTarget() {
   return null;
 }
 
-function browserWriteDraft(payload) {
-  var server = payload.server;
+function browserDraftCapture(server) {
   var base = server ? draftBaseOf(server.base, location.href) : "";
-  if (!server || !base || !server.docId) return Promise.resolve({ ok: false, code: "UNAVAILABLE" });
-  var key = browserDraftKey(base, server.docId);
-  var before = browserKeyOnDisk;
-  return browserDraftStore().put({
-    key: key,
-    base: base,
+  if (!server || !base || !server.docId) return null;
+  return { base: base, draft: browserDrafts().writer.capture(browserDraftKey(base, server.docId)) };
+}
+
+function browserWriteDraft(payload, captured) {
+  var server = payload.server;
+  if (!captured) return Promise.resolve({ ok: false, code: "UNAVAILABLE" });
+  return browserDrafts().writer.write(captured.draft, {
+    base: captured.base,
     docId: String(server.docId),
     rev: server.rev || 0,
     title: payload.title,
-    writerId: browserWriterId,
     editSeq: payload.editSeq,
     schema: payload.schema,
     docIdWrittenOut: payload.docIdWrittenOut,
     stateJson: payload.stateJson,
     baseJson: server.copy ? null : payload.baseJson
-  }, { keepBase: !!server.copy }).then(function (r) {
-    if (r && r.ok) {
-      browserKeyOnDisk = key;
-      if (before && before !== key) browserDraftStore().remove(before, browserWriterId);
-    }
-    return r;
-  });
+  }, { keepBase: !!server.copy });
 }
 
 function browserDiscardDraft() {
-  var key = browserKeyOnDisk;
-  browserKeyOnDisk = null;
-  if (!key) return Promise.resolve({ ok: true });
-  return browserDraftStore().remove(key, browserWriterId).then(function () { return { ok: true }; });
+  return browserDrafts().writer.discard().then(function () { return { ok: true }; });
 }
 
-function draftBackendWrite(payload) {
-  if (S.DESKTOP) return S.DESKTOP.writeDraft(payload);
-  return browserWriteDraft(payload);
+function draftBackendWrite(payload, captured) {
+  if (S.DESKTOP) return desktopDrafts().write(payload);
+  return browserWriteDraft(payload, captured);
 }
 
 function draftBackendCanDiscard() {
-  if (S.DESKTOP) return typeof S.DESKTOP.discardDraft === "function";
-  return !!browserKeyOnDisk;
+  if (S.DESKTOP) return desktopDrafts().canDiscard();
+  return !!browserKeyOnDisk();
 }
 
 function draftBackendDiscard(seq) {
-  if (S.DESKTOP) return S.DESKTOP.discardDraft(seq);
+  if (S.DESKTOP) return desktopDrafts().discard(seq);
   return browserDiscardDraft();
 }
 
 function draftWriterLive() {
   if (draftStopped) return false;
   if (S.DESKTOP) return typeof S.DESKTOP.writeDraft === "function";
-  return !browserDraftsOff && (!!browserKeyOnDisk || !!browserDraftTarget());
+  return !browserDraftsOff && (!!browserKeyOnDisk() || !!browserDraftTarget());
 }
 
 var browserLockRelease = null;
@@ -178,27 +195,7 @@ function browserWriterIsLive(writerId) {
 
 export function noteDraftChange() {
   if (!draftWriterLive()) return;
-  draftChangePending = true;
-  if (draftBackoffTimer) return;
-  scheduleDraftCapture();
-}
-
-function scheduleDraftCapture() {
-  var idle = draftSlow ? draftTiming.slow : draftTiming.idle;
-  var max = draftSlow ? draftTiming.slow : draftTiming.max;
-  if (draftIdleTimer) clearTimeout(draftIdleTimer);
-  draftIdleTimer = setTimeout(runDraftTimer, idle);
-  if (!draftMaxTimer) draftMaxTimer = setTimeout(runDraftTimer, max);
-}
-
-function clearDraftTimers() {
-  if (draftIdleTimer) { clearTimeout(draftIdleTimer); draftIdleTimer = null; }
-  if (draftMaxTimer) { clearTimeout(draftMaxTimer); draftMaxTimer = null; }
-}
-
-function runDraftTimer() {
-  clearDraftTimers();
-  captureAndSendDraft();
+  draftSchedule.noteChange();
 }
 
 function draftOriginOf() {
@@ -246,14 +243,15 @@ function draftOriginSignature(origin) {
   ].join("|");
 }
 
-function captureAndSendDraft() {
-  clearDraftTimers();
+function captureAndSendDraft(keepClean) {
+  draftSchedule.cancel();
   if (!draftWriterLive() || !S.state) return Promise.resolve(null);
-  if (draftRestorePending) { draftChangePending = true; return Promise.resolve(null); }
-  if (draftInFlight) { draftChangePending = true; return draftInFlight; }
+  if (draftRestorePending) { draftSchedule.keepPending(); return Promise.resolve(null); }
+  if (draftInFlight) { draftSchedule.keepPending(); return draftInFlight; }
 
-  if (!S.dirty) {
-    draftChangePending = false;
+  var keepCleanFile = !S.dirty && keepClean === true && !!S.DESKTOP && draftOriginOf().kind === "file";
+  if (!S.dirty && !keepCleanFile) {
+    draftSchedule.dropPending();
     if (!draftOnDisk || !draftBackendCanDiscard()) return Promise.resolve(null);
     var discardSeq = ++draftSeq;
     draftOnDisk = false;
@@ -271,12 +269,13 @@ function captureAndSendDraft() {
 
   var origin = draftOriginOf();
   if (!S.DESKTOP && origin.kind !== "server") {
-    draftChangePending = false;
+    draftSchedule.dropPending();
     return Promise.resolve(null);
   }
   var signature = draftOriginSignature(origin);
-  if (S.editSeq === draftSentEditSeq && draftSentBase === S.baseState && signature === draftSentSignature) {
-    draftChangePending = false;
+  if ((draftOnDisk || !keepCleanFile) &&
+      S.editSeq === draftSentEditSeq && draftSentBase === S.baseState && signature === draftSentSignature) {
+    draftSchedule.dropPending();
     return Promise.resolve(null);
   }
 
@@ -290,7 +289,7 @@ function captureAndSendDraft() {
     return Promise.resolve({ ok: false, code: "TOO_LARGE" });
   }
   var elapsed = Date.now() - startedAt;
-  draftSlow = stateJson.length > draftTiming.largeBytes || elapsed > draftTiming.slowStringifyMs;
+  draftSchedule.setSlow(stateJson.length > draftTiming.largeBytes || elapsed > draftTiming.slowStringifyMs);
 
   var editSeqAtCapture = S.editSeq;
   var baseAtCapture = S.baseState;
@@ -322,12 +321,14 @@ function captureAndSendDraft() {
     baseJson: sendBase ? baseTextFor() : null
   };
 
+  var captured = S.DESKTOP ? null : browserDraftCapture(origin.server);
+
   var draftRefs = refsIn(S.state);
   if (sendBase && baseAtCapture) {
     refsIn(baseAtCapture).forEach(function (sha) { if (draftRefs.indexOf(sha) === -1) draftRefs.push(sha); });
   }
 
-  draftChangePending = false;
+  draftSchedule.dropPending();
   var sent = draftRefs.length
     ? persist(draftRefs).then(function (failed) {
         if (failed.length) {
@@ -336,19 +337,24 @@ function captureAndSendDraft() {
           if (baseTextCache !== null) baseTextCache = inlineStateJson(baseTextCache, failed);
           if (payload.baseJson) payload.baseJson = baseTextCache;
         }
-        return sendDraftPayload(payload, baseTextFor, false);
+        return sendDraftPayload(payload, captured, baseTextFor, false);
       })
-    : sendDraftPayload(payload, baseTextFor, false);
+    : sendDraftPayload(payload, captured, baseTextFor, false);
   draftInFlight = sent.then(function (r) {
     draftInFlight = null;
     if (r && r.ok) {
       draftStats.writes++;
       draftStats.lastCode = null;
-      draftOnDisk = true;
-      draftSentEditSeq = editSeqAtCapture;
-      draftSentBase = baseAtCapture;
-      draftSentSignature = signature;
-      draftBackoffMs = 0;
+      if (r.obsolete) {
+        draftStats.obsolete++;
+        draftSchedule.keepPending();
+      } else {
+        draftOnDisk = true;
+        draftSentEditSeq = editSeqAtCapture;
+        draftSentBase = baseAtCapture;
+        draftSentSignature = signature;
+      }
+      draftSchedule.landed();
       if (draftPausedReason) {
         draftPausedReason = "";
         clearDraftPausedToast();
@@ -357,7 +363,7 @@ function captureAndSendDraft() {
     } else {
       noteDraftWriteRefused((r && r.code) || "error");
     }
-    if (draftChangePending && !draftBackoffTimer) scheduleDraftCapture();
+    draftSchedule.resume();
     return r;
   }, function (err) {
     draftInFlight = null;
@@ -368,16 +374,16 @@ function captureAndSendDraft() {
   return draftInFlight;
 }
 
-function sendDraftPayload(payload, baseTextFor, retriedWithBase) {
+function sendDraftPayload(payload, captured, baseTextFor, retriedWithBase) {
   return Promise.resolve().then(function () {
-    return draftBackendWrite(payload);
+    return draftBackendWrite(payload, captured);
   }).then(function (r) {
     if (r && r.ok === false && r.code === "NEED_BASE" && !retriedWithBase) {
       var again = {};
       for (var k in payload) { if (Object.prototype.hasOwnProperty.call(payload, k)) again[k] = payload[k]; }
       again.seq = ++draftSeq;
       again.baseJson = baseTextFor();
-      return sendDraftPayload(again, baseTextFor, true);
+      return sendDraftPayload(again, captured, baseTextFor, true);
     }
     return r;
   });
@@ -419,27 +425,20 @@ function noteDraftWriteRefused(code) {
   if (code !== "HELD") draftStats.failures++;
 
   if (code === "DISCARDED" || code === "NO_TAB") { draftStopped = true; return; }
-  if (code === "UNAVAILABLE" && !S.DESKTOP) { browserDraftsOff = true; draftChangePending = false; return; }
+  if (code === "UNAVAILABLE" && !S.DESKTOP) { browserDraftsOff = true; draftSchedule.dropPending(); return; }
 
   if (code !== "STALE_SEQ") showDraftPaused(code);
 
-  draftChangePending = true;
-  draftBackoffMs = draftBackoffMs
-    ? Math.min(draftBackoffMs * 2, draftTiming.backoffMax)
-    : draftTiming.backoffMin;
-  if (draftBackoffTimer) clearTimeout(draftBackoffTimer);
-  draftBackoffTimer = setTimeout(function () {
-    draftBackoffTimer = null;
-    captureAndSendDraft();
-  }, draftBackoffMs);
+  draftSchedule.refused();
 }
 
-export function flushDraftNow() {
+export function flushDraftNow(opts) {
   if (!draftWriterLive()) return Promise.resolve({ ok: true });
-  clearDraftTimers();
-  if (draftBackoffTimer) { clearTimeout(draftBackoffTimer); draftBackoffTimer = null; }
+  var keepClean = !!(opts && opts.keep === true);
+  draftSchedule.cancel();
+  draftSchedule.cancelRetry();
   return Promise.resolve(draftInFlight).then(function () {
-    return captureAndSendDraft();
+    return captureAndSendDraft(keepClean);
   }).then(function (r) {
     return r || { ok: true };
   }, function (err) {
@@ -548,23 +547,21 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
   var origin = t.header.origin || {};
   var wasUntitled = origin.kind === "untitled";
 
-  if (!wasUntitled) {
-    var fromId = normalizeDocId(mine.docId);
-    var newId = mintDocId();
-    mine.docId = newId;
-    copyDocHistorySafe(fromId, newId);
-  }
-
-  S.state = mine;
-  setBaseState(null, "recoverDraftAsUnsavedCopy: a copy with no home has no ancestor");
-  setHome("none");
+  var arrived = documentTransitions().recover({
+    from: { document: mine },
+    reason: "recoverDraftAsUnsavedCopy: a copy with no home has no ancestor",
+    destination: NO_DESTINATION,
+    baseline: null,
+    detached: !wasUntitled,
+    writtenOut: wasUntitled ? !!t.header.docIdWrittenOut : false
+  });
+  if (arrived.forkedFrom) copyDocHistorySafe(arrived.forkedFrom, arrived.document.docId);
   resetProductionPanelState();
-  S.docIdWrittenOut = wasUntitled ? !!t.header.docIdWrittenOut : false;
-  render();
+  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   syncDocIdentity();
-  markDirty();
+  markAbsorbedDirty("recovery");
   showToast(reasonText, "warn", true);
   return true;
 }
@@ -673,6 +670,7 @@ async function restoreServerDraft(t, mine, origin) {
   hideDraftPendingBanner();
   if (outcome === "server-resumed") return "server-resumed";
   if (outcome === "server-copy") return "server-copy";
+  if (outcome === "replaced") return keptForNextLaunch();
   S.draftServerResume = null;
   recoverDraftAsUnsavedCopy(t,
     "“" + title + "” is no longer on the server — the changes recovered from the last session are " +
@@ -680,7 +678,13 @@ async function restoreServerDraft(t, mine, origin) {
   return "server-copy";
 }
 
-async function restoreFileDraft(t, mine, base, origin) {
+function keptForNextLaunch() {
+  showToast("Another script was opened while the changes from the last session were being restored — " +
+    "they have been kept for the next launch.", "warn", true);
+  return "kept";
+}
+
+async function restoreFileDraft(t, mine, base, origin, ctx) {
   var title = draftTitleOf(mine, origin.fileName);
   var missingName = origin.fileName || title;
 
@@ -698,6 +702,7 @@ async function restoreFileDraft(t, mine, base, origin) {
   var file;
   try { file = await handle.getFile(); } catch (e) { file = null; }
   var parsed = file ? await parseProjectFileState(file) : null;
+  if (!stillRestoring(ctx)) return keptForNextLaunch();
   if (!parsed || parsed.error) {
     recoverDraftAsUnsavedCopy(t,
       "The file these recovered changes belong to (" + missingName + ") could not be read — they " +
@@ -725,19 +730,19 @@ async function restoreFileDraft(t, mine, base, origin) {
   }
 
   if (sameDocContent(base, disk)) {
-    S.state = mine;
-    setBaseState(diskCopy, "restoreFileDraft: the file, untouched since the draft's own base");
-    render();
+    documentTransitions().restore({ from: { document: mine } });
+    renderAbsorbed();
     updateIdentityChip();
     updateFileChip();
     S.docIdWrittenOut = !!t.header.docIdWrittenOut;
-    markDirty();
+    markAbsorbedDirty("recovery");
     showToast("Restored your unsaved changes to " + (S.state.title || file.name) +
       (draftWhenText(t) ? " " + draftWhenText(t) : ""), "ok", true);
     return "applied";
   }
 
-  await applyStashedWork(disk, { base: base, mine: mine }, {
+  var merged = await applyStashedWork(disk, { base: base, mine: mine }, {
+    recovery: true,
     awaitUndoPoint: true,
     keepLabel: "Your unsaved changes, recovered",
     newBase: diskCopy,
@@ -751,21 +756,26 @@ async function restoreFileDraft(t, mine, base, origin) {
       sticky: true
     }
   });
+  if (merged && merged.replaced) return keptForNextLaunch();
   S.docIdWrittenOut = !!t.header.docIdWrittenOut;
   return "merged";
 }
 
 function adoptUntitledDraft(t, mine, base) {
-  S.state = mine;
-  setBaseState(base || null, "adoptUntitledDraft: the draft's own base, if it had one");
-  setHome("none");
+  documentTransitions().recover({
+    from: { document: mine },
+    reason: "adoptUntitledDraft: the draft's own base, if it had one",
+    destination: NO_DESTINATION,
+    baseline: base || null,
+    detached: false,
+    writtenOut: !!t.header.docIdWrittenOut
+  });
   resetProductionPanelState();
-  S.docIdWrittenOut = !!t.header.docIdWrittenOut;
-  render();
+  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   syncDocIdentity();
-  markDirty();
+  markAbsorbedDirty("recovery");
   showToast("Restored your unsaved script" + (draftWhenText(t) ? " " + draftWhenText(t) : "") +
     " — it has never been saved, so save it somewhere.", "warn", true);
   return "applied";
@@ -793,9 +803,10 @@ async function runDraftRestore(t) {
   }
   var base = t.baseJson ? draftMigrate(t.baseJson) : null;
   var origin = t.header.origin || { kind: "untitled" };
+  var ctx = captureRestore();
 
   if (origin.kind === "server") return await restoreServerDraft(t, mine, origin);
-  if (origin.kind === "file") return await restoreFileDraft(t, mine, base, origin);
+  if (origin.kind === "file") return await restoreFileDraft(t, mine, base, origin, ctx);
   if (origin.kind === "import") {
     recoverDraftAsUnsavedCopy(t,
       "Your unsaved changes to " + (origin.importName || "an imported file") + " were recovered. " +
@@ -830,11 +841,8 @@ function browserDraftRestoreDone(t, outcome) {
       ? { key: key, docId: S.state.docId, server: { base: server.base, docId: server.docId, rev: server.rev } }
       : null;
   }
-  var left = browserKeyOnDisk;
-  if (left && left !== key) browserDraftStore().remove(left, browserWriterId);
-  browserKeyOnDisk = key;
   draftOnDisk = true;
-  browserDraftStore().claim(key, browserWriterId);
+  browserDrafts().writer.take(key);
 }
 
 export function armBrowserServerDraft(docId) {
@@ -847,7 +855,7 @@ export function armBrowserServerDraft(docId) {
   return browserDraftStore().get(key).then(function (rec) {
     if (!rec) return false;
     return browserWriterIsLive(rec.writerId).then(function (live) {
-      if (live || via !== conn || draftRestorePending || S.draftServerResume) return false;
+      if (live || !stillOnServer(via) || draftRestorePending || S.draftServerResume) return false;
       var t = takenFromBrowserDraft(rec, key);
       armServerDraftResume(t);
       if (!S.draftServerResume) return false;
@@ -891,6 +899,12 @@ export function offerBrowserDraftAfterLinkOff(docId) {
     noteDraftChange();
     return ok;
   }).then(null, function () { return false; });
+}
+
+export function desktopDraftTaker() {
+  var desktop = S.DESKTOP;
+  if (!(desktop && draftRestorePending && typeof desktop.takeDraft === "function")) return null;
+  return function () { return desktop.takeDraft(); };
 }
 
 export async function applyTakenDraft(t) {
@@ -941,13 +955,14 @@ export function __init() {
           writes: draftStats.writes,
           failures: draftStats.failures,
           discards: draftStats.discards,
+          obsolete: draftStats.obsolete,
           lastCode: draftStats.lastCode,
           paused: !!draftPausedReason,
           pausedReason: draftPausedReason,
-          pending: draftChangePending,
+          pending: draftSchedule.pending(),
           onDisk: draftOnDisk,
           stopped: draftStopped,
-          slow: draftSlow,
+          slow: draftSchedule.slow(),
           restorePending: draftRestorePending
         };
       },
@@ -981,11 +996,11 @@ export function __init() {
         writerId: function () { return browserWriterId; },
         status: function () {
           var target = browserDraftTarget();
-          return { off: browserDraftsOff, keyOnDisk: browserKeyOnDisk, copy: !!browserCopyOf,
+          return { off: browserDraftsOff, keyOnDisk: browserKeyOnDisk(), copy: !!browserCopyOf,
                    target: target ? { docId: target.docId, copy: target.copy } : null };
         },
         useIndexedDB: function (factory) {
-          browserStore = createIdbDraftStore({ indexedDB: factory });
+          useBrowserDraftFactory(factory);
           browserDraftsOff = false;
         }
       }

@@ -1,0 +1,136 @@
+{
+  "inputs": {
+    "base": {
+      "schema": 2,
+      "title": "Base title",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Hello there.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "mine": {
+      "schema": 2,
+      "title": "Fish & Chips <3",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Hello there.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "theirs": {
+      "schema": 2,
+      "title": "Their title",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Hello there.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    }
+  },
+  "inputsUntouched": true,
+  "merged": {
+    "title": "Their title",
+    "docId": "d11111111111111111111111111111111",
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Hello there.",
+        "imageRef": null,
+        "updatedAt": "2026-02-01T09:00:00.000Z",
+        "updatedBy": "Base Writer"
+      }
+    ],
+    "comments": [
+      {
+        "id": "<minted-comment-id-1>",
+        "rowId": null,
+        "field": "title",
+        "anchorId": null,
+        "quotedText": "",
+        "author": "Merge Editor",
+        "body": "Fish &amp; Chips &lt;3",
+        "resolved": false,
+        "createdAt": "2030-01-02T03:04:05.678Z",
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "kind": "conflict",
+        "conflictField": "Title",
+        "emptyValue": false,
+        "titleValue": "Fish & Chips <3",
+        "replies": [],
+        "resolvedBy": null,
+        "resolvedAt": null,
+        "assignee": ""
+      }
+    ],
+    "people": [],
+    "productionTags": [],
+    "brollShots": [],
+    "wordsPerMinute": 150,
+    "rev": 5,
+    "lastEditedBy": "Base Writer",
+    "lastEditedAt": "2026-02-01T09:00:00.000Z",
+    "schema": 2
+  },
+  "conflicts": [
+    {
+      "rowId": null,
+      "field": "title",
+      "mine": "Fish & Chips <3",
+      "theirs": "Their title"
+    }
+  ],
+  "stats": {
+    "rowsFromThem": 0,
+    "rowsFromMe": 0,
+    "rowsAddedByMe": 0,
+    "rowsAddedByThem": 0
+  }
+}

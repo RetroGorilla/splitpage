@@ -1,0 +1,161 @@
+# Export, Search commands and Find from every surface (4.0 milestone 1): the
+# File menu, the command menu, the shortcut and the header button do the same
+# thing, and each is refused under the Writer and under a dialog. Written
+# before the three moved onto the action registry; the section on the open
+# command menu was added with the move.
+
+open
+viewport 1400 900
+eval (function(){ window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; return true; })()
+
+# --- Export: shortcut, File menu, command menu -----------------------------
+key ctrl KeyE
+sleep 300
+expect __shown('export-modal')
+key Escape
+sleep 300
+expect !__shown('export-modal')
+
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="export"]
+sleep 300
+expect __shown('export-modal')
+expect document.getElementById('file-menu').hidden
+key Escape
+sleep 300
+
+key ctrl KeyK
+sleep 200
+type export…
+sleep 200
+eval (function(){ var it = document.querySelector('#cmdk-list .cmdk-item[data-cmd="export"]'); if (it) it.click(); return !!it; })()
+sleep 300
+expect __shown('export-modal')
+expect !__shown('cmdk')
+key Escape
+sleep 300
+expect !__shown('export-modal')
+
+# with the File menu open, the shortcut closes it and opens the dialog
+click #btn-file
+sleep 200
+key ctrl KeyE
+sleep 300
+expect __shown('export-modal')
+expect document.getElementById('file-menu').hidden
+key Escape
+sleep 300
+
+# --- Search commands: shortcut toggles, File menu, header button ------------
+key ctrl KeyK
+sleep 200
+expect __shown('cmdk')
+key ctrl KeyK
+sleep 200
+expect !__shown('cmdk')
+
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="command-menu"]
+sleep 300
+expect __shown('cmdk')
+expect document.getElementById('file-menu').hidden
+key Escape
+sleep 200
+expect !__shown('cmdk')
+
+jsclick #btn-command
+sleep 300
+expect __shown('cmdk')
+key Escape
+sleep 200
+
+# --- Find: shortcut, again (keeps it open), File menu, command menu ---------
+key ctrl KeyF
+sleep 200
+expect __shown('findbar')
+expect document.activeElement.id == find-input
+caret #rows .row .audio-cell .cell-editable
+sleep 200
+expect document.activeElement === document.querySelector('#rows .row .audio-cell .cell-editable')
+key ctrl KeyF
+sleep 200
+expect __shown('findbar')
+expect document.activeElement.id == find-input
+key Escape
+sleep 200
+expect !__shown('findbar')
+
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="find"]
+sleep 300
+expect __shown('findbar')
+expect document.getElementById('file-menu').hidden
+key Escape
+sleep 200
+
+key ctrl KeyK
+sleep 200
+type find
+sleep 200
+eval (function(){ var it = document.querySelector('#cmdk-list .cmdk-item[data-cmd="find"]'); if (it) it.click(); return !!it; })()
+sleep 300
+expect __shown('findbar')
+key Escape
+sleep 200
+expect !__shown('findbar')
+
+# --- behind the open command menu Export does nothing; Ctrl+K closes it ------
+# (Find and Hide shot scenes still answer there: 278-commands-as-before.txt)
+key ctrl KeyK
+sleep 200
+expect __shown('cmdk')
+key ctrl KeyE
+sleep 200
+expect !__shown('export-modal')
+expect __shown('cmdk')
+key ctrl KeyK
+sleep 200
+expect !__shown('cmdk')
+
+# --- refused under a dialog --------------------------------------------------
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="about"]
+sleep 300
+expect !!document.querySelector('.modal-backdrop:not([hidden])')
+key ctrl KeyF
+sleep 200
+expect !__shown('findbar')
+key ctrl KeyK
+sleep 200
+expect !__shown('cmdk')
+key ctrl KeyE
+sleep 200
+expect !__shown('export-modal')
+key Escape
+sleep 300
+expect !document.querySelector('.modal-backdrop:not([hidden])')
+
+# --- refused under the Writer --------------------------------------------------
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+sleep 600
+key ctrl KeyE
+sleep 300
+expect !__shown('export-modal')
+key ctrl KeyK
+sleep 200
+expect !__shown('cmdk')
+key ctrl KeyF
+sleep 200
+expect !__shown('findbar')
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+sleep 600
+
+# nothing here edited the document
+expect document.getElementById('save-status').hidden
+expect document.getElementById('btn-save').textContent == Save

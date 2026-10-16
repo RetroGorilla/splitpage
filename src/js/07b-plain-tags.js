@@ -1,15 +1,16 @@
-import { escapeHtml } from "./02-state.js";
-import { storedHtmlFromDom } from "./04-richtext.js";
-import { fromHtml, namedTagId, projection, replaceText, replaceWithTag } from "./04c-doc-model.js";
 import { cellSelection, domToPos, editCell, setCellSelection } from "./05b-cell-edit.js";
 import {
+  isBlankTagName,
   isInsideTagOrLink,
-  registerProductionTag,
   registryEntry,
   tagCategory,
   updateTagBadges
 } from "./07-production-tags.js";
 import { renderProduction } from "./08-production-panels.js";
+import { cappedName, escapeHtml } from "../core/document/text-policy.ts";
+import { replaceText, replaceWithTag } from "../core/text/edits.ts";
+import { namedTagId, projection } from "../core/text/runs.ts";
+import { fromHtml, storedHtmlFromDom } from "../legacy/richtext.ts";
 
 export var PLAIN_TAG_KEYWORDS = {
   prop: "prop",
@@ -43,10 +44,10 @@ export function matchPlainTagKeyword(before) {
 export function plainTagPhrase(typed) {
   var s = String(typed == null ? "" : typed).replace(ZWSP_RE, "");
   var text = s.trim();
-  if (!text) return null;
+  if (isBlankTagName(text)) return null;
   var lead = s.length - s.replace(/^\s+/, "").length;
   var trail = s.length - s.replace(/\s+$/, "").length;
-  var name = text.replace(/\s+/g, " ").slice(0, NAME_MAX).trim();
+  var name = cappedName(text.replace(/\s+/g, " "), NAME_MAX);
   return { lead: lead, text: text, trail: trail, name: name };
 }
 
@@ -238,8 +239,7 @@ export function closePlainTag() {
     if (projection(cell).slice(from, to) !== o.keyword + typed.replace(ZWSP_RE, "")) return null;
     var res = applyPlainTag(cell, from, to, o.cat, name);
     if (!res) return null;
-    registerProductionTag(o.cat, res.name);
-    return { cell: res.cell, sel: { from: res.caret, to: res.caret } };
+    return { cell: res.cell, sel: { from: res.caret, to: res.caret }, records: { tags: [{ cat: o.cat, name: res.name }] } };
   });
   if (!done) { unwrap(o); return true; }
   updateTagBadges();

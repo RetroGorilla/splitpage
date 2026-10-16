@@ -1,0 +1,130 @@
+# Ctrl+Z in writer mode stays on screen (#263).
+#
+# Opening writer is itself an undo step: edits made in writer undo first,
+# then the next Ctrl+Z closes writer instead of undoing a split-view edit
+# hidden behind it. Redo straight after reopens writer, then redoes its edits.
+
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval (function(){ window.U = window.__undoTest; window.F = window.__splitpageFormats; window.aud = function (i) { return F.state().rows[i].audioText; }; return true; })()
+
+# --- an edit in the split view, before writer opens --------------------------
+eval (function(){ var c = document.querySelector('#rows .row .audio-cell .cell-editable'); c.focus(); var r = document.createRange(); r.selectNodeContents(c); r.collapse(false); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
+press  splitword
+sleep 300
+expect aud(0).indexOf('splitword') !== -1
+eval window.__split = aud(0)
+
+# --- Ctrl+Z straight after opening closes writer, and leaves the edit ---------
+click #btn-write
+sleep 700
+expect !document.getElementById('writer').hidden
+key ctrl KeyZ
+sleep 300
+expect document.getElementById('writer').hidden
+expect aud(0) === window.__split
+
+# redo reopens it
+key ctrl+shift KeyZ
+sleep 500
+expect !document.getElementById('writer').hidden
+expect aud(0) === window.__split
+
+# --- writer edits undo first, then writer closes -------------------------------
+caret #writer-doc .wr-para
+press  writerword
+sleep 1200
+expect aud(0).indexOf('writerword') !== -1
+key ctrl KeyZ
+sleep 300
+expect !document.getElementById('writer').hidden
+expect aud(0).indexOf('writerword') === -1
+key ctrl KeyZ
+sleep 300
+key ctrl KeyZ
+sleep 300
+expect document.getElementById('writer').hidden
+expect aud(0) === window.__split
+
+# redo: writer comes back first, then its edit, on screen
+key ctrl+shift KeyZ
+sleep 500
+expect !document.getElementById('writer').hidden
+expect aud(0).indexOf('writerword') === -1
+key ctrl KeyY
+sleep 300
+key ctrl KeyY
+sleep 300
+expect aud(0).indexOf('writerword') !== -1
+
+# --- closing writer by hand: the split view's undo is its own again -----------
+click #wr-close
+sleep 400
+expect document.getElementById('writer').hidden
+key ctrl KeyZ
+sleep 300
+key ctrl KeyZ
+sleep 300
+expect document.getElementById('writer').hidden
+expect aud(0).indexOf('writerword') === -1
+
+# --- a new split-view edit after an undo-close means redo is a plain redo ------
+click #btn-write
+sleep 700
+key ctrl KeyZ
+sleep 300
+expect document.getElementById('writer').hidden
+eval (function(){ var c = document.querySelector('#rows .row .audio-cell .cell-editable'); c.focus(); var r = document.createRange(); r.selectNodeContents(c); r.collapse(false); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return true; })()
+press  later
+sleep 300
+key ctrl+shift KeyZ
+sleep 300
+expect document.getElementById('writer').hidden
+expect aud(0).indexOf('later') !== -1
+
+# --- redo reopens writer only in the script it was closed in -----------------
+# A new script has nothing to undo, so Ctrl+Z closes writer at once and Ctrl+Y
+# brings it back. Once another script is open, or the same one is opened
+# again, that redo belongs to a history that is gone: writer stays closed.
+eval (function(){ window.__doc = F.state(); window.__id = __doc.docId; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="new"]
+wait F.state() !== __doc && F.state().docId !== __id && F.state().rows.length === 1
+expect U.sizes().undo === 0 && U.sizes().redo === 0
+click #btn-write
+wait !document.getElementById('writer').hidden
+key ctrl KeyZ
+wait document.getElementById('writer').hidden
+key ctrl KeyY
+wait !document.getElementById('writer').hidden
+
+# another script: File > New after writer was closed by Ctrl+Z
+key ctrl KeyZ
+wait document.getElementById('writer').hidden
+eval (function(){ window.__doc = F.state(); window.__id = __doc.docId; return true; })()
+jsclick #btn-file
+jsclick #file-menu [data-file-action="new"]
+wait F.state() !== __doc && F.state().docId !== __id && F.state().rows.length === 1
+eval (function(){ window.__json = JSON.stringify(F.state()); return true; })()
+key ctrl KeyY
+sleep 500
+expect document.getElementById('writer').hidden
+expect JSON.stringify(F.state()) === __json
+expect U.sizes().undo === 0 && U.sizes().redo === 0
+
+# the same script opened again, same document id
+click #btn-write
+wait !document.getElementById('writer').hidden
+key ctrl KeyZ
+wait document.getElementById('writer').hidden
+eval (function(){ window.__doc = F.state(); window.__id = __doc.docId; F.openFile(new File([F.buildSplitpage()], 'again.splitpage')); return true; })()
+wait F.state() !== __doc && F.docFile().kind === 'splitpage'
+expect F.state().docId === __id
+eval (function(){ window.__json = JSON.stringify(F.state()); return true; })()
+key ctrl KeyY
+sleep 500
+expect document.getElementById('writer').hidden
+expect JSON.stringify(F.state()) === __json
+expect U.sizes().undo === 0 && U.sizes().redo === 0
+
+quit

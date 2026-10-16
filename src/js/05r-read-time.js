@@ -1,4 +1,3 @@
-import { S } from "./_state.js";
 import {
   estimatedSeconds,
   formatDuration,
@@ -7,46 +6,43 @@ import {
   rowSeconds,
   updateScriptStats
 } from "./01-scene-status.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";
-import { render, renderRow } from "./05-render.js";
-import { scheduleProductionRefresh } from "./07-production-tags.js";
-import { scheduleBrollRefresh } from "./08c-broll.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { afterThisPaint, render, renderRow } from "./05-render.js";
+import { showToast } from "./12-dirty-toast.js";
 import { redo, undo } from "./12a-undo.js";
 import { reviewMode } from "./13-hosted.js";
-import { queueAutoSave } from "./14-export.js";
+import { sceneAt, sceneLengthCommand } from "../application/commands/scene-length.ts";
+import { REVIEW_ONLY, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
+
+var REVIEW_REFUSAL = "This is a review copy — comment on a scene instead of changing its length.";
 
 var editing = null;
 
 export function readTimeEditing() { return editing ? editing.rowId : null; }
 
+function applySceneLength(rowId, seconds) {
+  var outcome = runCommand(sceneLengthCommand(rowId, seconds, sessionStamps));
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind === "rejected" && outcome.reason === REVIEW_ONLY) showToast(REVIEW_REFUSAL, "warn");
+  return outcome.kind === "applied" || outcome.kind === "committed";
+}
+
 export function setSceneLength(rowId, seconds) {
-  if (!S.state || reviewMode()) return false;
-  var idx = findRowIndex(rowId);
-  if (idx === -1) return false;
-  var row = S.state.rows[idx];
-  var before = hasSetLength(row) ? row.lengthSeconds : null;
-  var after = seconds == null ? null : seconds;
-  if (before === after) return false;
-  if (after === null) delete row.lengthSeconds; else row.lengthSeconds = after;
-  stampRow(row);
-  markDirty();
-  if (!renderRow(row.id)) render();
+  if (!applySceneLength(rowId, seconds)) return false;
+  if (!renderRow(rowId)) render();
   updateScriptStats();
-  scheduleProductionRefresh();
-  scheduleBrollRefresh();
-  queueAutoSave();
   return true;
 }
 
 export function openReadTimeEditor(btn) {
-  if (!btn || !S.state || reviewMode()) return;
+  if (!btn) return;
+  if (reviewMode()) { showToast(REVIEW_REFUSAL, "warn"); return; }
   var rowId = btn.getAttribute("data-id");
-  var idx = findRowIndex(rowId);
-  if (idx === -1) return;
+  var scene = readSession(sceneAt(rowId));
+  if (!scene) return;
   closeReadTimeEditor(false);
-  var row = S.state.rows[idx];
+  var row = scene.row;
+  var idx = scene.index;
   var wasSet = hasSetLength(row);
   var prefill = wasSet || rowSeconds(row) >= 0.5 ? formatDuration(rowSeconds(row)) : "";
   var input = document.createElement("input");
@@ -90,7 +86,10 @@ export function closeReadTimeEditor(commit, fromBlur) {
       } else {
         editing = null;
         teardown(ed);
-        setSceneLength(ed.rowId, secs);
+        afterThisPaint(
+          function () { setSceneLength(ed.rowId, secs); },
+          function () { applySceneLength(ed.rowId, secs); }
+        );
         refocus(ed, !fromBlur);
         return true;
       }
@@ -146,7 +145,7 @@ export function __init() {
   });
   rowsEl.addEventListener("click", function (e) {
     var btn = e.target.closest && e.target.closest(".row-read");
-    if (!btn || btn.getAttribute("aria-disabled") === "true") return;
+    if (!btn) return;
     e.preventDefault();
     openReadTimeEditor(btn);
   });

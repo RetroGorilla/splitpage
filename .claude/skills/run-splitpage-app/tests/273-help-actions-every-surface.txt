@@ -1,0 +1,129 @@
+# The Help group from the File menu and the command menu (4.0 milestone 1):
+# Settings, Servers, Help, Tour, Set up, About and the tagging reference open
+# the same thing from either surface and close the File menu. Written before
+# they moved onto the action registry, and kept unchanged after.
+
+open
+viewport 1400 900
+eval (function(){ window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__run = function (id) { var it = document.querySelector('#cmdk-list .cmdk-item[data-cmd="' + id + '"]'); if (it) it.click(); return !!it; }; return true; })()
+
+# --- Settings ----------------------------------------------------------------
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="settings"]
+wait __shown('settings-modal')
+expect document.getElementById('file-menu').hidden
+key Escape
+wait !__shown('settings-modal')
+key ctrl KeyK
+sleep 200
+type settings
+sleep 200
+eval __run('settings')
+wait __shown('settings-modal')
+key Escape
+wait !__shown('settings-modal')
+
+# --- Servers -----------------------------------------------------------------
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="servers"]
+wait __shown('connect-modal')
+expect document.getElementById('file-menu').hidden
+key Escape
+wait !__shown('connect-modal')
+key ctrl KeyK
+sleep 200
+type servers
+sleep 200
+eval __run('servers')
+wait __shown('connect-modal')
+key Escape
+wait !__shown('connect-modal')
+
+# --- Help --------------------------------------------------------------------
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="help"]
+wait __shown('help-modal')
+expect document.getElementById('file-menu').hidden
+key Escape
+wait !__shown('help-modal')
+key ctrl KeyK
+sleep 200
+type help
+sleep 200
+eval __run('help')
+wait __shown('help-modal')
+key Escape
+wait !__shown('help-modal')
+
+# --- Tour --------------------------------------------------------------------
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="tour"]
+wait __shown('tour-overlay')
+expect document.getElementById('file-menu').hidden
+key Escape
+wait !__shown('tour-overlay')
+key ctrl KeyK
+sleep 200
+type tour
+sleep 200
+eval __run('tour')
+wait __shown('tour-overlay')
+key Escape
+wait !__shown('tour-overlay')
+
+# --- Set up ------------------------------------------------------------------
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="setup"]
+wait __shown('onboarding-modal')
+expect document.getElementById('file-menu').hidden
+key Escape
+wait !__shown('onboarding-modal')
+key ctrl KeyK
+sleep 200
+type set up
+sleep 200
+eval __run('setup')
+wait __shown('onboarding-modal')
+key Escape
+wait !__shown('onboarding-modal')
+
+# --- About -------------------------------------------------------------------
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="about"]
+wait __shown('about-modal')
+expect document.getElementById('file-menu').hidden
+key Escape
+wait !__shown('about-modal')
+key ctrl KeyK
+sleep 200
+type about
+sleep 200
+eval __run('about')
+wait __shown('about-modal')
+key Escape
+wait !__shown('about-modal')
+
+# --- Tagging reference -----------------------------------------------------------
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="tagging-help"]
+wait __shown('tagging-help')
+expect document.getElementById('file-menu').hidden
+key Escape
+wait !__shown('tagging-help')
+key ctrl KeyK
+sleep 200
+type tagging
+sleep 200
+eval __run('tagging-help')
+wait __shown('tagging-help')
+key Escape
+wait !__shown('tagging-help')
+
+expect document.getElementById('btn-save').textContent == Save

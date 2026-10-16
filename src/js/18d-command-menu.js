@@ -1,21 +1,18 @@
-import { S } from "./_state.js";
-import { escapeHtml } from "./02-state.js";
-import { promptForTarget } from "./03-sync.js";
-import { reviewMode } from "./13-hosted.js";
 import {
   IS_MAC,
   fileMenuOpen,
   keyChipWords,
   keyChipsHtml,
-  keysWorkHere,
-  menuItemReason,
-  modalIsOpen,
   refreshFileMenu,
-  openLongDemo,
   toggleFileMenu
 } from "./18b-file-menu.js";
-import { EXPORT_ACTION_NAMES, exportActionReason, runExportAction } from "./18c-export-dialog.js";
-import { writerOpen } from "./19-writer.js";
+import { exportActionName, exportActionReason } from "./18c-export-dialog.js";
+import { runExportAction } from "./18-local-files.js";
+import { placeEditorSelection, rememberCellSelection } from "./05b-cell-edit.js";
+import { escapeHtml } from "../core/document/text-policy.ts";
+import { appActions } from "../legacy/app-actions.ts";
+import { exportFormats } from "../legacy/export-formats.ts";
+import { askingFromLauncher, launcherShown } from "../legacy/screen.ts";
 
 var RECENT_KEY = "splitpage-recent-commands";
 var RECENT_MAX = 5;
@@ -23,150 +20,60 @@ var GROUP_ORDER = ["Recent", "Tags", "File", "Share", "Export", "View", "This do
 
 function el(id) { return document.getElementById(id); }
 
-function menuButton(action) {
-  return document.querySelector('#file-menu [data-file-action="' + action + '"]');
+var OWN_ACTION = "command-menu";
+
+var LIST_BEFORE_EXPORTS = [
+  "save", "save-as", "save-back", "autosave", "new", "open", "server-open", "paste", "gdoc-import", "drive-open",
+  "collaborate", "server-publish", "servers", "export"
+];
+
+var LIST_AFTER_EXPORTS = [
+  "panel-production", "panel-gear", "panel-broll", "panel-comments", "write", "present",
+  "history", "find", "toggle-hide-shot", "toggle-rundown-min", "set-target",
+  "prompter-open-in-browser", "prompter-open-in-chromium",
+  "settings", "help", "tour", "long-demo", "setup", "about", "tagging-help", "export-app-data", "import-app-data"
+];
+
+function listOrder() {
+  return LIST_BEFORE_EXPORTS.concat(exportFormats.exporters().map(function (e) { return e.action; }), LIST_AFTER_EXPORTS);
 }
 
-function fromMenu(action, group, words, label) {
+function exportEntry(exporter) {
+  var action = exporter.action;
+  var why = exportActionReason(action);
   return {
-    id: action,
-    group: group,
-    words: words || "",
-    read: function () {
-      var btn = menuButton(action);
-      if (!btn || btn.hidden) return null;
-      if (action === "save-back" && btn.disabled) return null;
-      var use = btn.querySelector(".mi-icon use");
-      var lab = btn.querySelector(".mi-label");
-      return {
-        label: label || (lab ? lab.textContent : btn.textContent),
-        icon: use ? use.getAttribute("href").slice(1) : "i-file",
-        keys: btn.hasAttribute("data-keys") && keysWorkHere(btn) ? btn.getAttribute("data-keys") : "",
-        why: btn.disabled ? (menuItemReason(btn) || btn.title || "Not available right now") : menuItemReason(btn),
-        disabled: btn.disabled,
-        state: btn.getAttribute("role") === "menuitemcheckbox"
-          ? (btn.getAttribute("aria-checked") === "true" ? "On" : "Off") : ""
-      };
-    },
-    run: function () {
-      var btn = menuButton(action);
-      if (btn && !btn.disabled) btn.click();
+    cmd: { id: action, group: "Export", words: "export download " + (exporter.words || ""), run: function () { runExportAction(action); } },
+    view: { label: "Export as " + exportActionName(action), icon: "i-export", keys: "", why: why, disabled: !!why, state: "" }
+  };
+}
+
+function actionEntry(view) {
+  return {
+    cmd: { id: view.id, group: view.group, words: view.words, run: function () { appActions.invoke(view.id, "command-menu"); } },
+    view: {
+      label: view.label,
+      icon: view.icon || "i-file",
+      keys: view.keys.length ? view.keys[0] : "",
+      why: view.enabled ? "" : view.reason,
+      disabled: !view.enabled,
+      state: view.checked === null ? "" : (view.checked ? "On" : "Off")
     }
   };
 }
 
-function fromExport(action, words) {
-  return {
-    id: action,
-    group: "Export",
-    words: "export download " + words,
-    read: function () {
-      var why = exportActionReason(action);
-      return { label: "Export as " + EXPORT_ACTION_NAMES[action], icon: "i-export", keys: "",
-               why: why, disabled: !!why, state: "" };
-    },
-    run: function () { runExportAction(action); }
-  };
+function listRank(id, order) {
+  var at = order.indexOf(id);
+  return at === -1 ? order.length : at;
 }
 
-function fromButton(id, btnId, group, label, icon, words, keys, blockedWhy) {
-  return {
-    id: id,
-    group: group,
-    words: words,
-    read: function () {
-      var btn = el(btnId);
-      if (!btn || btn.hidden) return null;
-      var why = blockedWhy ? blockedWhy() : "";
-      return { label: label, icon: icon, keys: keys || "", why: why, disabled: !!why || btn.disabled, state: "" };
-    },
-    run: function () {
-      var btn = el(btnId);
-      if (btn && !btn.disabled) btn.click();
-    }
-  };
-}
-
-var COMMANDS = null;
-
-function commands() {
-  if (COMMANDS) return COMMANDS;
-  var viewing = function () {
-    return reviewMode() ? "Viewing only — the writer changes the script" : "";
-  };
-  COMMANDS = [
-    fromButton("save", "btn-save", "File", "Save", "i-save", "store keep write disk", "mod+s"),
-    fromMenu("save-as", "File", "save as duplicate copy another file"),
-    fromMenu("save-back", "File", "write back original docx csv txt"),
-    fromMenu("autosave", "File", "automatic save saving"),
-    fromMenu("new", "File", "blank empty create start fresh document"),
-    fromMenu("open", "File", "load file document project md splitpage docx"),
-    fromMenu("server-open", "File", "server hosted shared documents"),
-    fromMenu("paste", "File", "import revised draft text", "Import: paste a script…"),
-    fromMenu("gdoc-import", "File", "import google docs link url", "Import: Google Doc link…"),
-    fromMenu("drive-open", "File", "import google drive cloud files", "Import: Google Drive…"),
-    fromMenu("collaborate", "Share", "collaborate share invite link url people live together send edit comment publish"),
-    fromMenu("server-publish", "Share", "publish upload server hosted"),
-    fromMenu("servers", "Share", "server connect bookmark address pin join"),
-    fromMenu("export", "Export", "download save as format dialog"),
-    fromExport("export-pdf", "pdf print"),
-    fromExport("export-docx", "word docx document google docs"),
-    fromExport("export-md", "markdown md text stacked"),
-    fromExport("export-md-table", "markdown md table two columns side by side"),
-    fromExport("export-xlsx", "excel xlsx spreadsheet workbook sheets numbers table"),
-    fromExport("export-csv", "spreadsheet csv excel sheets table"),
-    fromExport("export-html", "splitshare share standalone page html web browser send any device app"),
-    fromExport("export-narration-docx", "narration voice over voiceover audio artist word docx"),
-    fromExport("export-narration-txt", "narration voice over voiceover audio artist text txt"),
-    fromExport("export-breakdown-xlsx", "breakdown excel xlsx spreadsheet workbook tags props locations cast list"),
-    fromExport("export-breakdown", "breakdown csv tags props locations cast list"),
-    fromExport("export-packing-gear", "packing list checklist gear equipment kit pdf"),
-    fromExport("export-packing-prop", "packing list checklist props prop pdf"),
-    fromExport("export-broll-pdf", "b-roll broll shot list shots second unit print pdf landscape"),
-    fromExport("export-broll-xlsx", "b-roll broll shot list shots excel xlsx spreadsheet workbook sheets"),
-    fromExport("export-broll-csv", "b-roll broll shot list shots spreadsheet csv excel sheets"),
-    fromButton("panel-production", "btn-production", "View", "Production panel", "i-panel",
-      "breakdown tags props locations cast show hide toggle"),
-    fromButton("panel-gear", "btn-gear", "View", "Gear panel", "i-panel", "gear equipment kit camera show hide toggle"),
-    fromButton("panel-broll", "btn-broll", "View", "B-roll panel", "i-panel", "broll b roll shots cutaways show hide toggle"),
-    fromButton("panel-comments", "btn-comments", "View", "Comments panel", "i-panel", "comments notes review feedback show hide toggle"),
-    fromButton("write", "btn-write", "View", "Write", "i-pen", "writer narration word processor audio column", "", viewing),
-    fromButton("present", "btn-present", "View", "Present", "i-play", "teleprompter prompter autocue read play"),
-    fromMenu("history", "This document", "versions restore snapshot backup older undo"),
-    fromMenu("find", "This document", "search replace look for"),
-    fromMenu("toggle-hide-shot", "This document", "collapse done finished filter shot scenes"),
-    fromMenu("toggle-rundown-min", "This document", "rundown strip timeline minimize collapse thin bar more room"),
-    {
-      id: "set-target",
-      group: "This document",
-      words: "target length goal duration aim runtime running time clock back timing over under minutes",
-      read: function () {
-        var why = reviewMode() ? "Viewing only — the writer sets the target" : "";
-        return { label: "Set target length…", icon: "i-clock", keys: "", why: why, disabled: !!why, state: "" };
-      },
-      run: function () { promptForTarget(); }
-    },
-    fromMenu("prompter-open-in-browser", "This document", "teleprompter browser follow my voice present"),
-    fromMenu("prompter-open-in-chromium", "This document", "teleprompter chrome edge chromium speech recognition voice"),
-    fromMenu("settings", "Help", "settings preferences options theme dark light mode clock 12 24 hour colour color name zoom", "Settings"),
-    fromMenu("help", "Help", "guide manual docs user guide how", "Help"),
-    fromMenu("tour", "Help", "tutorial walkthrough introduction", "Take the tour"),
-    {
-      id: "long-demo",
-      group: "Help",
-      words: "demo example sample long thirty 30 scenes test try every feature",
-      read: function () {
-        return { label: "Open the long demo (30 scenes)", icon: "i-file-plus", keys: "", why: "", disabled: false, state: "" };
-      },
-      run: function () { openLongDemo(); }
-    },
-    fromMenu("setup", "Help", "setup settings wizard install", "Set up Splitpage…"),
-    fromMenu("about", "Help", "version about", "About Splitpage"),
-    fromMenu("tagging-help", "Tags", "tags tagging reference shortcuts brackets help"),
-    fromMenu("export-app-data", "Help", "backup move desktop app data history bookmarks"),
-    fromMenu("import-app-data", "Help", "restore move desktop app data history bookmarks")
-  ];
-  return COMMANDS;
+function listedEntries() {
+  var views = askingFromLauncher(function () { return appActions.list(); });
+  var entries = views.filter(function (v) { return v.visible && v.id !== OWN_ACTION; }).map(actionEntry)
+    .concat(exportFormats.exporters().map(exportEntry));
+  var order = listOrder();
+  return entries.map(function (entry, i) { return { entry: entry, at: i }; })
+    .sort(function (a, b) { return (listRank(a.entry.cmd.id, order) - listRank(b.entry.cmd.id, order)) || (a.at - b.at); })
+    .map(function (x) { return x.entry; });
 }
 
 function recentIds() {
@@ -203,11 +110,9 @@ function scoreFor(view, cmd, terms) {
 export function commandResults(query) {
   var q = String(query || "").trim().toLowerCase();
   var terms = q.split(/\s+/).filter(Boolean);
-  var all = [];
-  commands().forEach(function (cmd, i) {
-    var view = cmd.read();
-    if (view) all.push({ cmd: cmd, view: view, order: i });
-  });
+  var all = listedEntries().map(function (entry, i) { return { cmd: entry.cmd, view: entry.view, order: i }; });
+  var groupOrder = GROUP_ORDER.slice();
+  all.forEach(function (it) { if (groupOrder.indexOf(it.cmd.group) === -1) groupOrder.push(it.cmd.group); });
   var groups = {};
   var put = function (g, item) { (groups[g] = groups[g] || []).push(item); };
   if (!terms.length) {
@@ -225,10 +130,10 @@ export function commandResults(query) {
       groups[g].sort(function (a, b) { return (b.score - a.score) || (a.order - b.order); });
     });
   }
-  var out = GROUP_ORDER.filter(function (g) { return groups[g]; }).map(function (g) { return { group: g, items: groups[g] }; });
+  var out = groupOrder.filter(function (g) { return groups[g]; }).map(function (g) { return { group: g, items: groups[g] }; });
   if (terms.length) {
     var best = function (g) { return Math.max.apply(null, g.items.map(function (it) { return it.score; })); };
-    out.sort(function (a, b) { return best(b) - best(a) || GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group); });
+    out.sort(function (a, b) { return best(b) - best(a) || groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group); });
   }
   return out;
 }
@@ -322,28 +227,19 @@ function move(delta) {
 }
 
 export function commandMenuOpen() {
-  var m = el("cmdk");
-  return !!m && !m.hidden;
-}
-
-function blockedNow() {
-  if (!S.state) return "loading";
-  if (S.prompterOpen) return "prompter";
-  if (writerOpen) return "writer";
-  if (modalIsOpen()) return "modal";
-  var tour = el("tour-overlay");
-  if (tour && !tour.hidden) return "tour";
-  return "";
+  return launcherShown();
 }
 
 export function openCommandMenu() {
-  if (commandMenuOpen() || blockedNow()) return false;
+  if (commandMenuOpen()) return false;
   if (fileMenuOpen()) toggleFileMenu(false);
   var ae = document.activeElement;
   var range = null;
   var sel = window.getSelection && window.getSelection();
   if (ae && ae.isContentEditable && sel && sel.rangeCount && ae.contains(sel.anchorNode)) range = sel.getRangeAt(0).cloneRange();
-  returnFocus = ae && ae !== document.body ? { el: ae, range: range } : null;
+  var surface = ae && ae.closest ? ae.closest("#rows, #writer-doc") : null;
+  var editor = surface && rememberCellSelection(ae) ? surface.id : null;
+  returnFocus = ae && ae !== document.body ? { el: ae, range: range, editor: editor } : null;
   refreshFileMenu();
   var modal = el("cmdk");
   var input = el("cmdk-input");
@@ -363,7 +259,11 @@ export function closeCommandMenu(restore) {
   active = -1;
   var back = returnFocus;
   returnFocus = null;
-  if (restore === false || !back || !document.contains(back.el)) return;
+  if (restore === false || !back) return;
+  if (!document.contains(back.el)) {
+    if (back.editor) placeEditorSelection(document.getElementById(back.editor));
+    return;
+  }
   back.el.focus({ preventScroll: true });
   if (back.range) {
     try {
@@ -421,18 +321,8 @@ export function __init() {
   var trigger = el("btn-command");
   if (trigger) {
     trigger.title = "Search or run a command (" + keyChipWords("mod+k").join(IS_MAC ? "" : "+") + ")";
-    trigger.addEventListener("click", function () { openCommandMenu(); });
+    trigger.addEventListener("click", function () { appActions.invoke("command-menu", "button"); });
   }
-
-  window.addEventListener("keydown", function (e) {
-    if (e.defaultPrevented || e.isComposing) return;
-    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey) return;
-    if (String(e.key || "").toLowerCase() !== "k") return;
-    if (commandMenuOpen()) { e.preventDefault(); closeCommandMenu(); return; }
-    if (blockedNow()) return;
-    e.preventDefault();
-    openCommandMenu();
-  });
 
   window.__commandTest = {
     results: function (q) {

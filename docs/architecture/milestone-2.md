@@ -1,0 +1,420 @@
+# Milestone 2: pure policies and document/text/merge operations
+
+This is the working plan for milestone 2 of [the implementation plan](../IMPLEMENTATION-PLAN.md#2--extract-pure-policies-and-documenttextmerge-operations). It was derived from the source at `4.0-development` d18adde, and it names functions rather than lines; the two line numbers it does cite are at that commit.
+
+## What moves, and what cannot yet
+
+Three kinds of function:
+
+- Pure: no DOM, no `S`, no time, IDs or platform.
+- Pure apart from an injectable dependency: a parser, the clock, ID minting, the blob registry.
+- Tied to the DOM, `S` or effects.
+
+| Module | Moves to core (pure, or behind a port) | Stays legacy for now |
+| --- | --- | --- |
+| `02-state.js` | `escapeHtml`, `legacyMdToHtml`, `mediaCommentId`, `missingStateFields`, `STATE_FIELDS` (without callbacks), `migrateRows` (with ports) | `defaultState`, `loadInitialState` (moves to `02b-doc-id.js`), `buildPublishHtml` |
+| `02b-doc-id.js` | `sha256Bytes`/`sha256Hex` (manual UTF-8; `TextEncoder` is banned in core), `deriveDocId`, `docIdEmbeddedIn`, `mergedDocId`, `withPageHead`, `migrateDocument` (core root) | `mintDocId`/`randomHexBytes` go to `adapters/identity`; BroadcastChannel, history copy and identity sync stay |
+| `02c-blobs.js` | base64 helpers, `rowImage*`, the pure data-URL decode | The registry and persistence (an M4 store adapter) |
+| `02d-gallery.js` | normalisers, slot read models and operations, merge helpers | Interning in `migrateGallery`/`normalizeGalleryItem` becomes a port call |
+| `03-sync.js` | `cloneState`, row and field equality, every `merge*` list/scalar merger, `mergeTextField`, `mergeStates` (core root) | Snapshots, stash, history panel, `applyMerge`, `stampRow` (clock and editor) |
+| `04-richtext.js` | `safeImageSrc`, `safeHref`, `plainText`, `plainName`, `safeId`, `storedImageHtml` (as a string) | `inertBody`, `sanitizeHtml`, `storedHtmlFromDom`, `htmlToMarkdown`, `buildVideoCardEl` go to `adapters/richtext` |
+| `04c-doc-model.js` | Everything except decoding: runs, `toHtml` (a pure encoder), projections, edits, cues, steps, `mergeCells`, anchors | `fromHtml`/`cellOf` decode through the rich-text adapter |
+| `07-production-tags.js` | Status/category ids and ranks, `normalizeTagName`, registry keys, tag ids, `contentMemo`, the readers, `collectTagsFromRows`, `missingRegistryTags`, `tagOccurrences`, the healing and quick-add *plans* | Presentation (labels, colours, icons), the `S` mutators, DOM retagging of cells that hold media, the idle refresh |
+| `08c-broll.js` | To `core/document/broll.ts`: status ids, limits, the marker regex and the prop policy (`normalizeBrollProps`, `brollPropKey`). To `core/production/broll.ts`, because they need core/text: the cell line readers (they call `tagNameOf`), the anchor edits (`insertBrollKey`, `deleteRange`) and the `brollEntries` read model returning a plan | Capture, record writes (apply the plan), badges, the DOM path for media cells |
+| `01-scene-status.js`, `00p-prefs.js` | Scene-length and target-length normalisers, person colours | Rendering |
+
+What `fromHtml` and `toHtml` actually need:
+- `fromHtml` needs a parser twice: it sanitises, then parses again. It also needs the sanitiser's images, IDs and tag categories. So decoding and sanitising move to the adapter.
+- `toHtml` needs only `normalizeCell`, the default `tagOf` and escaping, so it stays in core as a projection.
+
+Persisted content stays HTML. Core functions that decode today receive the decoder through a port.
+
+## Target layout
+
+`tools/dep-report.mjs`'s `CORE_DEPENDENCIES` sets the order: `document` ← `text` ← `merge`/`production`, and core/merge may not import core/production. `migrateRows` needs text, production and the sanitiser, and `mergeStates` ends by calling it. So both are composed at the core root, which may import every core folder.
+
+- `src/core/document/`: `ports.ts`, `text-policy.ts`, `ids.ts`, `tags.ts`, `broll.ts`, `timing.ts`, `person-colors.ts`, `media.ts`, `gallery.ts`, `memo.ts`, `fields.ts`, `comments.ts`. Its `broll.ts` holds only what needs nothing from core/text: status ids, limits, the marker regex and the prop policy.
+- `src/core/text/`: `runs.ts`, `edits.ts`, `directions.ts`, `cues.ts`, `tree.ts`, `html.ts` (`toHtml`), `projections.ts`, `steps.ts`, `anchors.ts`, `ports.ts` (`CellDecoder`).
+- `src/core/merge/`: `cells.ts`, `text-field.ts`, `lists.ts`, `rows.ts`, `gallery.ts`, `scalars.ts`, `states.ts` (`mergeStateFields`).
+- `src/core/production/`: `readers.ts`, `tags.ts`, `broll.ts`, `timing.ts`. Its `broll.ts` takes the parts of 08c that depend on core/text: the cell line readers, the anchor edits and the `brollEntries` plan.
+- `src/core/migrate.ts` and `src/core/merge-states.ts` (core root).
+- `src/adapters/richtext/`: `createRichText({ DOMParser, images, ids })`. It builds nodes through `body.ownerDocument`, never the global `document`.
+- `src/adapters/identity/ids.ts`: `makeId`, `randomHexBytes`, `mintDocId`, `nowIso`.
+- `src/legacy/richtext.ts` and `src/legacy/document-ports.ts`: the adapter composed with `02c-blobs.js`, interning then queueing persistence in today's order.
+
+**Ports.**
+- `IdSource { id(prefix), docId() }`.
+- `ImageSource { known(sha), fromDataUrl(url) }`.
+- `Clock { nowIso() }`.
+- `CellDecoder`.
+
+**Image ingestion is an explicit effect.** Core decodes data URLs purely. `createImageIngestion` records what is pending, and its `known()` checks the pending set first. A legacy conflict card's picture is found later in the same pass today, and this keeps that. The caller then interns the pending bytes and queues persistence.
+
+**Ingestion order that lane 2.5 must keep.** In `migrateRows`, a comment's `c.body = sanitizeHtml(c.body)` (02-state.js line 213) runs before the image conflict card looks its picture up with `recordFor` (line 221). Sanitising interns the body's data-URL picture, so the lookup finds it in the same pass, even in a fresh process with an empty registry. `core/migrate.ts` must decode and record a comment body's pictures before it resolves that comment's `imageValue`, and resolve it through `known()`, which sees the pending set.
+
+**One field policy source.** Each `STATE_FIELDS` entry is `{ key, def?, normalize?, merge: StrategyId, undo: boolean }`, with no callbacks into UI modules. Merge strategies come from a table typed `Record<StrategyId, …>`, so a field with no strategy is a compile error. `12a-undo.js`'s skip list is derived from `undo`. A test adds a field and checks that it survives `migrateRows`, `mergeStates` and a `.splitpage` round trip without any other edit (INV-04).
+
+## Mechanics
+
+- **Shims keep callers unchanged.** The legacy modules re-export from core and the adapters, or wrap them with legacy ports. Only three callers change:
+  - `21-events.js` imports `loadInitialState` from `02b-doc-id.js`;
+  - `08-production-panels.js` applies the quick-add plan;
+  - `02-state.js` keeps `STATE_FIELDS` with each `mergeList` reattached from the core table, so `12a-undo.js` and `state-fields.test.mjs` don't change.
+- **Bundling.** esbuild bundles `.ts` imported from `src/js` with an explicit `.ts` extension, as `_entry.js` already does for `src/legacy/*.ts`. Node 22.22+ strips types natively, so `src/test/*.test.mjs` keep testing through the shims.
+- **New tests.** They go in `tests/core/<area>/`, `tests/core/` for the root files, and `tests/adapters/<area>/`, as the per-area rule requires.
+  - Core tests never load `src/test/_dom.mjs`. They decode through maps built with `toHtml`, or through the adapter with an injected parser.
+  - `tests/core/environment.test.ts` imports every script under `src/core`, whatever its extension, checks that loading them adds no globals, and runs core's policies in a process that loads no DOM. Keeping platform globals, the clock and `Math.random` out of core is the dependency gate's job.
+- **Shared policies.** `shared/*.js` stay CommonJS and remain the single source. Confirm that `tsc` with NodeNext accepts named imports from them before relying on it.
+- **Lint.** Core files with control-character regexes get a file-scoped rule in `eslint.config.mjs`; no inline disables.
+- **Dependency baseline.**
+  - Expected: 594 → about 433 cycle edges, plus 02-state's `S` import and its `docIdWrittenOut` write.
+  - One accepted new edge, `02b-doc-id.js → 20b-onboarding.js`, from moving `loadInitialState`, with its reason.
+- **Sequencing trap.** `02c-blobs.js` must stop importing `04-richtext.js` and `02b-doc-id.js` before `src/legacy/richtext.ts` imports `02c-blobs.js`. Otherwise there is a cycle through a migrated folder, which the gate refuses outright.
+
+## PRs, in order
+
+| PR | Content | Depends on | Runs in parallel with |
+| --- | --- | --- | --- |
+| 2.0 | Characterisation tests and golden fixtures (no source change) | — | — |
+| 2.1a | `core/document` part 1 (`ports`, `text-policy`, `ids`, `tags`, `broll`, `memo`) and `adapters/identity`; shims in 04, 02c, 02b, 07, 08c. Takes 02c, 02d, 04 and 04c out of the cycle | 2.0 | — |
+| 2.1b | `core/document` part 2 (`fields`, `timing`, `person-colors`, `media`, `gallery`, `comments`) | 2.1a | 2.2 |
+| 2.2 | `core/text` and `core/merge/cells.ts` | 2.1a | 2.1b |
+| 2.3 | `core/merge` (all but `cells.ts`) | 2.2 | 2.4, 2.6 |
+| 2.4 | `adapters/richtext` and `legacy/richtext.ts` | 2.2 | 2.3, 2.6 |
+| 2.6 | `core/production` | 2.2 | 2.3, 2.4 |
+| 2.5 | `core/migrate.ts`, `core/merge-states.ts`, `legacy/document-ports.ts`; 02-state becomes a shim | 2.3, 2.4, 2.6 | — |
+| 2.7 | Docs, invariant rows, metrics, performance record, and the full Windows regression (the milestone gate; Linux waits for the 4.0 release gate) | 2.5 | — |
+
+Each PR names its impacted browser suites and runs them along with `npm run verify`. Lanes run `--prune` after merging the base.
+
+## 2.1a as built
+
+- **`src/core/document/`.**
+  - `ports.ts`: `ImageRef`, `IdSource`, `ImageSource`, `Clock`.
+  - `text-policy.ts`: `safeImageSrc`, `safeHref`, `plainText`, `plainName`, `safeId(id, prefix, ids)` and `storedImageHtml`, which builds the tag as a string.
+  - `ids.ts`: `utf8Bytes`, `sha256Bytes`, `sha256Hex`, `deriveDocId`, `docIdEmbeddedIn`, `mergedDocId`.
+  - `tags.ts`: the category and status ids, `tagCategoryId`, `tagStatusId`, `tagStatusRank`, `nextTagStatus`, `normalizeTagName`, `tagKey`, `registryKey`, `isTagId`, `mintTagId`, `ensureTagIds` and `registryTagHooks` (pure, and core/merge needs it).
+  - `broll.ts`: the status ids, `brollStatusId`, `BROLL_MARKER_RE`, `BROLL_CLOSERS`, the limits, `normalizeBrollProps`, `brollPropKey`.
+  - `memo.ts`: `contentMemo`.
+- **`src/adapters/identity/ids.ts`.** `makeId`, `randomHexBytes`, `mintDocId`, `nowIso`, and `randomIds` and `systemClock`, which implement `IdSource` and `Clock`.
+- **Shims.**
+  - `04-richtext.js`, `02b-doc-id.js`, `07-production-tags.js` and `08c-broll.js` re-export what moved. `04-richtext.js`'s `safeId` passes `randomIds`.
+  - `02c-blobs.js`, `04-richtext.js` and `04c-doc-model.js` import from core and the adapter instead of from modules in the cycle. That takes 02c, 02d, 04 and 04c out of it: 60 modules become 56, and 102 `cycle-edge` entries were pruned, none added.
+  - `07` builds `TAG_CATEGORIES` and `TAG_STATUSES`, and `08c` builds `BROLL_STATUSES`, from the core ids; their labels, colours and icons are keyed by id.
+  - `02-state.js`'s `makeId` and `10-comments.js`'s `nowIso` re-export the adapter's, so each has one implementation.
+- **Control characters.** `safeHref` strips C0 controls and the space before it looks for a scheme, because a browser resolves `java\0script:` as `javascript:`. `plainText` drops the C0 controls other than tab, line feed and carriage return, which a plain-text field must not carry. So `eslint.config.mjs` turns `no-control-regex` off for `src/core/document/text-policy.ts` alone.
+- **Hashing.** The app's `sha256Hex` is now core's, which always encodes UTF-8 by hand; `sha256-utf8.test.mjs` shows its bytes are `TextEncoder`'s.
+- **Left for 2.1b.**
+  - `withPageHead`: it needs `escapeHtml`, which stays in `02-state.js` until that module's pure parts move, and no file in the layout names it.
+  - `mediaCommentId`.
+  - 02c's base64 helpers, `rowImage*` and the data-URL decode, which go to `media.ts`.
+
+## 2.1b as built
+
+- **`src/core/document/`, new files.**
+  - `fields.ts`: `SCHEMA_VERSION`; `STRATEGY_IDS` and the `StrategyId` type; `STATE_FIELDS` as data, each `{ key, def?, normalize?, merge, undo }`; `ROW_FIELDS`, `GALLERY_FIELDS`; `missingStateFields(state, fields)`, which checks the table it is given, core's by default. The tables and the table's entries are frozen at run time.
+  - `timing.ts`: the row status ids, `rowStatusId`, `nextRowStatus`, `DEFAULT_WPM`, `SCENE_LENGTH_MAX`, `hasSetLength`, `normalizeSceneLength`, `parseSceneLength`, `normalizeTargetLength`, `targetLengthOf`.
+  - `person-colors.ts`: the palette, `paletteColor`, `personKey`, `normalizePersonColors` with its `__proto__`/`constructor`/`prototype` guard, `lookupByName`, `mergePersonColors`.
+  - `media.ts`: the base64 helpers; `imageRecordOf` (sniffed type, size and hash of some bytes), `imageDataUrlBytes` and `decodeImageDataUrl`; `createImageIngestion`; `rowImage`, `rowImageKey`, `rowImageShas`; `mediaComments`, which is `moveMediaOutOfCell` after decoding.
+  - `gallery.ts`: the normalisers, slot read models and slot operations, `mergeGalleryField` and `galleryFieldKey`. `migrateGallery(row, images)` takes an `ImageSource`.
+  - `comments.ts`: the filter predicates, `compareCommentPositions(a, b, rowIndex)` and `commentRecentOrder`.
+- **Additions.** `text-policy.ts` gains `escapeHtml` and `legacyMdToHtml`; `ids.ts` gains `mediaCommentId` and `withPageHead`.
+- **Shims.**
+  - `02-state.js` re-exports `escapeHtml`, `legacyMdToHtml` and `mediaCommentId`. Its `STATE_FIELDS` is core's table copied entry by entry into a writable array, with `mergeList` attached for `people`, `productionTags` and `brollShots` exactly as before, so `12a-undo.js`, `03-sync.js` and `state-fields.test.mjs` are unchanged. The entries also carry `undo`. Its `missingStateFields` passes that same array to core's, so a field added to it is filled in by `migrateRows` and reported missing alike, as when everything read one array.
+  - `01-scene-status.js` and `00p-prefs.js` re-export what moved. `ROW_STATUSES` is built from the core ids, with labels, classes and colours keyed by id, as 2.1a did for tags.
+  - `02c-blobs.js` re-exports the `rowImage*` helpers and interns through `imageRecordOf` and `imageDataUrlBytes`. It exports `registryImages`, the legacy `ImageSource`: `known` is `recordFor`, and `fromDataUrl` interns, then queues persistence.
+  - `02d-gallery.js` re-exports the gallery and passes `registryImages` to `migrateGallery`. `pictureBytes`, `videoLinkText` and `videoLinkLabel` stay: the first reads the registry, the others are display text.
+  - `02-state.js`'s `moveMediaOutOfCell` still decodes and re-encodes the cell, then calls `mediaComments` with `registryImages` and a function that returns the video card's HTML, which needs the DOM until 2.4.
+  - `02b-doc-id.js` re-exports `withPageHead`, and `00-prelude.js` re-exports `SCHEMA_VERSION`.
+  - `10-comments.js` uses the core predicates and orders. `commentPositionCompare` is still a function declaration, so it stays hoisted; it passes `findRowIndex` to `compareCommentPositions`.
+- **`undo`.** `undo: true` means an edit to the field is recorded as a `docField` step. `rows` is `false`: an edit to a scene is recorded row by row, not as a document field. So the keys with `undo: false` are exactly `SKIP_DOC_KEYS` in `12a-undo.js`. `tests/core/document/fields.test.ts` checks the flags against the undo golden. 2.3 derives the skip list.
+- **`normalize`.** The type has it, but no entry sets it yet. `migrateRows` normalises each field differently: `personColors` is removed when the normaliser returns `null`, `targetSeconds` when it returns `undefined`, and `wordsPerMinute` falls back to the default. 2.5 decides the contract when it composes the migration.
+- **Image ingestion.** `createImageIngestion(known)` decodes data URLs purely. `pending()` lists every picture decoded in the pass once, in the order first met, including those the registry already holds, because the legacy path queues persistence for each of them. `known()` checks the pending set before the registry. Like `fromDataUrl` and `known`, `pending()` hands out copies of the references and bytes, so a caller cannot change what ingestion holds. Nothing calls it yet; 2.5 wires it.
+- **Copies until 2.3.** `03-sync.js` keeps its own `ROW_FIELDS` and `GALLERY_FIELDS`, and `12a-undo.js` its own `SKIP_DOC_KEYS`, until 2.3 imports core's. `src/test/state-field-tables.test.mjs` fails if they drift: it compares the first two through `03-sync.js`'s exports, and reads the skip list through `changedBetween`.
+- **Comments.** `commentMatchesAssigneeFilter` takes the saved author name as a function, so it is still read only for the "me" filter. The filter modes and their stored preference stay in `10-comments.js`.
+- **Control characters.** `eslint.config.mjs` also turns `no-control-regex` off for `gallery.ts`, `media.ts` and `person-colors.ts`. Five inline disables left the comment baseline with the code they covered.
+- **Dependency baseline.** No entry was added or removed. Frontend modules went from 100 to 106 and migrated modules from 23 to 29. The cycle stayed at 56 modules and 492 edges, `S` importers at 57 and `S` writers at 34: every shim this step owns still imports other modules in the cycle.
+- **Left for later.** 33 imports in `src/js` name only functions that now live in core or the identity adapter, mostly `escapeHtml` and `makeId` from `02-state.js`. Pointed there instead, in a scratch copy, they removed 31 cycle edges (492 to 461) and took `03c-history-idb.js` out of the cycle (56 to 55 modules). They are spread over 31 modules, including `03-sync.js`, `07-production-tags.js` and `08c-broll.js`, which other lanes own, so this step leaves them for a later one.
+  - Done in 2.7: 2.7a (#310) re-pointed them, with the ones 2.2 to 2.6 added, in every module the other lanes did not own, and the closing step re-pointed the rest. See [2.7 as built](#27-as-built).
+
+## 2.2 as built
+
+- **`src/core/text/`.** Imports run one way. `edits` imports `runs`; `directions` and `cues` import both; `tree` imports `runs`, and `html` imports `tree`; `projections` imports `runs`, `cues` and `tree`. `steps.ts` imports nothing. `ports.ts` imports types from `runs.ts`, and `anchors.ts` imports `commentIds` from `runs.ts` and the `CellDecoder` type from `ports.ts`.
+  - `runs.ts`: the run and mark types, `normalizeCell` with `cleanText`, `cleanMarks` and `settleCues`, `CUE_LINE_RE`, the default tag ids (`tagNameOf`, `namedTagId`), `projection`, `cellLength`, `commentIds`, `tagIds` and `sameCell`.
+  - `edits.ts`: the character model (`explode`, `implode`, `clamp`) and every edit, `typingMarks` and `insideDirection` among them.
+  - `directions.ts`: `DIRECTION_MAX`, and the direction range, toggle, `((…))` shortcut, import and flatten.
+  - `cues.ts`: `cueLines`, `cuesInCell`, `withoutCues`, and the cue shortcut, import, edit and flatten.
+  - `tree.ts`: the element tree that `toHtml` and `toDocxRuns` both walk. `html.ts`: `toHtml`.
+  - `projections.ts`: `toPlainText`, `spokenText`, `OMIT_CLOSES`, `toMarkdown` and `toDocxRuns`.
+  - `steps.ts`: `applySteps`, `invertSteps` and `touchedCells`.
+  - `anchors.ts`: `syncCommentAnchors(state, cellOf)`. `ports.ts`: `CellDecoder`, and `DecodeOptions` with the media `fromHtml` reports.
+- **`src/core/merge/cells.ts`.** `mergeCells` and `mergeMarks`, over `explode` and `implode` from core/text.
+- **Where the split differs from the plan's order.** `normalizeCell` ends with `settleCues`, so `CUE_LINE_RE` and the cue-run test live in `runs.ts`. `typingMarks`, which `insertText`, `replaceText` and `breakLine` call, needs `insideDirection`, so that stays in `edits.ts`. `projection` and `cellLength` are in `runs.ts` because every position is clamped to them.
+- **Shim.** `04c-doc-model.js` re-exports the 52 names that moved and keeps `fromHtml`, `cellOf` and `syncCommentAnchors(state)`, which hands `cellOf` to core. Its 56 exports are the same names as before, so none of the 25 importers changed. It takes `normalizeCell` and the default tag id from core and no longer imports `safeHref`; core reads it from `text-policy.ts`.
+- **Translation.** `var` became `let` and `const` as in 2.1a. A `delete` through a computed key is `Reflect.deleteProperty`, because typescript-eslint's strict rules refuse a dynamic `delete`, and `push.apply` is a spread. The source keeps 04c's escapes, and its two literal U+FFFC characters in the direction patterns.
+- **Lint.** `eslint.config.mjs` turns `no-control-regex` off for `src/core/text/runs.ts` alone, for `cleanText`. 04c's inline disable went with the function, so the comment baseline loses that entry.
+- **Dependencies.** No baseline change: 04c had already left the cycle in 2.1a, and `--prune` found nothing. `--metrics` counts 11 more frontend modules (100 to 111) and 11 more migrated ones (23 to 34); the cycle (56 modules, 492 edges) and every `S` figure are unchanged.
+- **Invariants.** INV-02 names `src/core/text/edits.ts` as where the edits live, and INV-18 puts `syncCommentAnchors` in `src/core/text`, not `src/core/document`.
+- **Tests.** `tests/core/text/` and `tests/core/merge/` run without a DOM. They build cells from runs, and `anchors.test.ts` decodes through a map from `toHtml` output to cells. They cover b-roll keys and tags as units, comments over keys, Unicode (astral characters, combining marks, ZWJ sequences, U+FFFC never entering text), step inversion over seeded random edits, `mergeCells` and `mergeMarks`, and the cue and direction edges.
+- **Review follow-ups.** Core tests now pin the Markdown rule of three and its exception for two runs that are both multiples of three, NBSP in the gap a left-out direction leaves, that `applySteps` and `invertSteps` copy every value they take from a step, `replaceText` keeping the first replaced character's marks, and a blank line dropping Markdown marks. `FORMAT_MARKS`, which `cleanMarks`, the tree and the merge all read, is frozen.
+- **Found, not fixed.**
+  - Positions count UTF-16 code units, so an edit inside a surrogate pair splits it.
+  - `applySteps` compares rows as JSON, so key order counts. An inverse step that restores a removed row field puts it last, and the inverse `deleteRow` of that row is then refused. A test pins this, so a fix shows up as a deliberate change. `12a-undo.js` uses `applySteps` only to move its base forward, and falls back to a copy of the state.
+  - A cue line split before its colon leaves neither half reading as a cue, so both lose the mark, and joining them does not bring it back. Split after the colon, the left half keeps the cue and a join restores it on the whole line.
+- **Left for 2.7.** `09-find-replace.js` keeps a baselined lint comment saying `cleanText()` lives in `04c-doc-model.js`. It is now in `src/core/text/runs.ts`, but the comment gate allows no new comment text, so the pointer changes when that comment's rule moves to configuration.
+  - Done in 2.7: `eslint.config.mjs` turns `no-control-regex` off for `src/js/09-find-replace.js`, beside `src/core/text/runs.ts`, and both disable comments are gone. See [2.7 as built](#27-as-built).
+
+## 2.3 as built
+
+- **`src/core/merge/`, new files.** Inside the folder, imports run one way: `text-field` imports `lists` and `cells`; `rows` imports `text-field`; `scalars` imports a type from `rows`; `states` imports `lists`, `rows`, `scalars` and `text-field`. `lists` imports nothing from core/merge or core/text, only core/document.
+  - `text-field.ts`: `textMergeContext(decode, base, mine, theirs, mergedTags?)` and `mergeTextField(base, mine, theirs, ctx)`. The context carries the decoder as `ctx.decode`, so `mergeTextField` keeps its four arguments and `18a-local-merge.js` calls it unchanged.
+  - `lists.ts`: `mergePeople`, `mergeProductionTags`, `mergeBrollShots`, `mergeBrollProps` and `LIST_MERGERS`, which is frozen and keyed by the three `list-union-with-base` fields: `people`, `productionTags`, `brollShots`. `mergeBrollProps` merges a shot's `props` inside `mergeBrollShots`; no state field holds props, so it is exported but not in the table.
+  - `rows.ts`: `byId`, `rowFieldKey`, `rowContentEqual`, `commentContentEqual`, `mergeRows` (with `mergeRow` inside it, as before), `mergeComments` and `conflictComment`, which builds one conflict card from the `ids`, `clock` and `editor` ports.
+  - `scalars.ts`: `mergeTitle`, which pushes the title conflict as before, `mergeChangedSideWins`, `mergeMaxPlusOne`, `mergeTheirsWins` and `mergeTargetLength`.
+  - `states.ts`: `mergeStateFields(base, mine, theirs, { decode, ids, clock, editor, fields? })` returns `{ merged, conflicts, stats }`, with `merged` not yet migrated. The strategies are a table typed `Record<StrategyId, FieldStrategy>`, so a missing strategy is a compile error. A strategy the table does not hold as its own property still throws `no merge strategy for state field <key>`, so `constructor` or `__proto__` as a strategy throws, as the `switch` did. `fields` defaults to core's `STATE_FIELDS`.
+  - No `gallery.ts`: `mergeGalleryField` and `galleryFieldKey` were already in `core/document/gallery.ts`, and `mergeRow` calls them in the same ten lines as before.
+- **The merge's decoder port.** `text-field.ts` exports `MergeDecoder`, `(html, opts: DecodeOptions) => readonly Run[]`. The merge decodes each side with that side's `tagId`, and must hear `onMedia`: a cell holding a picture is never merged word by word. `CellDecoder` stays the options-free reader `anchors.ts` takes, so the two contracts have different names.
+  - TypeScript accepts a function that declares fewer parameters, so the type cannot stop a cached reader such as `cellOf` or `createCellReader()` being wired in as `decode`. If one were, a merge where mine adds a picture and theirs changes a word would keep theirs with no conflict and silently drop mine's picture.
+  - So the guard is a contract test. `tests/core/merge/decoder-contract.ts` checks that a decoder reports the picture through `onMedia`, maps a tag through `tagId`, and turns that picture-beside-a-word merge into a conflict. The adapter's `decode` and `04c-doc-model.js`'s `fromHtml`, which `03-sync.js` passes, meet it; the adapter's cell reader, `cellOf` and an options-ignoring fake fail all three clauses. `src/test/merge-decoder.test.mjs` also runs that merge through `mergeStates`.
+- **List mergers.** The `list-union-with-base` strategy finds its merger in `LIST_MERGERS` by the field's key, not through `f.mergeList`. `02-state.js` attaches the same functions, so the result is the same for every table the app has.
+- **Translation.** It stays literal: `{}` maps, so ids named like `Object.prototype` members behave as before (#278); the same `||` defaults; the same order of work (tags, rows, comments, title, conflict cards, field loop), and so the same order of clock, editor and id calls. `(tagStatus(x) || TAG_STATUSES[0]).id` became `tagStatusId(x) || TAG_STATUS_IDS[0]`: the same list in the same order. The mergers' `cloneState` calls became a local JSON copy, `var` became `let` and `const`, and `delete out[f]` became `Reflect.deleteProperty`.
+- **`cloneState` stays.** The plan's table moves it to core, but the merge no longer calls it, and the ten legacy modules that do import it from `03-sync.js`, so it stays there.
+- **Shims.**
+  - `03-sync.js` keeps `mergeStates`, which calls `mergeStateFields` with legacy ports, then `migrateRows`, as before. The ports are `fromHtml` from `04c-doc-model.js`, `randomIds` (whose `id` is the `makeId` that `02-state.js` re-exports), `systemClock` (the `nowIso` that `10-comments.js` re-exports), `getEditorName`, and `02-state.js`'s `STATE_FIELDS`. That last one keeps a probe pushed onto the legacy table in the merge, as the merge golden's throwing test needs. Its `textMergeContext(base, mine, theirs, mergedTags)` passes `fromHtml`.
+  - `03-sync.js` re-exports `byId`, `rowFieldKey`, `rowContentEqual`, `mergeTextField`, the three list mergers and `mergeTargetLength` from core, and `ROW_FIELDS` and `GALLERY_FIELDS` from `core/document/fields.ts`, so its copies are gone. It exports the same names as before, so no importer changed. It no longer imports `00-prelude.js`, `02d-gallery.js` or `08c-broll.js`, or the names only the merge used from the modules it still imports.
+  - `02-state.js` attaches `mergeList` from core's `LIST_MERGERS` and no longer imports `03-sync.js`.
+  - `12a-undo.js` builds `SKIP_DOC_KEYS` from the `undo: false` entries of core's `STATE_FIELDS` when it loads. It reads core's table, not `02-state.js`'s copy, because core is outside the cycle and so has always loaded by then.
+- **The drift test.** `src/test/state-field-tables.test.mjs` now checks the shims rather than copies: `03-sync.js`'s `ROW_FIELDS` and `GALLERY_FIELDS` are core's objects, each `mergeList` in `02-state.js` is core's `LIST_MERGERS` entry, and `changedBetween` still skips exactly the `undo: false` fields.
+- **Tests.** `tests/core/merge/` runs without a DOM. `fakes.ts` holds a decoder that maps `toHtml` output back to cells, maps default tag ids through `tagId` and reports media for cells marked as holding it, plus counting ids, a fixed clock and a fixed editor. The tests cover:
+  - every strategy over one three-way merge, with keys in table order, and person colours and a target length that no side has leaving no key;
+  - a deterministic merge with fake ports, conflict cards included, and the ports as the only source of time, ids and the editor's name;
+  - an unknown strategy throwing, prototype names included;
+  - INV-04: a copy of the table with added fields, one for each per-key strategy, merging with no other edit;
+  - `LIST_MERGERS` reproducing all 46 stored list-merger golden cases, key order included;
+  - text outcomes, mark conflicts, media cells, tag refits and which cells are decoded;
+  - row placement, deletes, stamps, pictures, status, length, gallery lists, comments and conflict cards;
+  - today's prototype-id collisions in rows, comments, replies, people, tags and shots.
+- **Dependencies.** `--prune` removed two `cycle-edge` entries, `02-state.js → 03-sync.js` and `03-sync.js → 08c-broll.js`; nothing was accepted. `--metrics`: frontend modules 117 to 122, migrated modules 40 to 45, runtime cycle edges 492 to 490. The cycle stays at 56 modules, and `S` importers (57), `S.state` assigners (9) and `S` writers (34) are unchanged. After merging 2.4 (7161a47), `--prune` found nothing more: 127 frontend modules, 50 migrated, 490 cycle edges.
+- **Review follow-ups (PR #288).**
+  - The decoder port and its contract test, above.
+  - Seven mutants survived the first tests; a core test now kills each, checked by applying the mutant: a second registry entry for one name must not overwrite the first's notes; a theirs cell that is `null` or missing must not come back as `""`; an equal status rank keeps mine, and an unknown status ranks as `todo` (pinned on core's output, before migration); an `updatedAt` tie between two copies of a comment keeps mine (`newer(m, t)` returns its first argument on a tie, before and after the move); an `undefined` base cell is no base, so one row id added on both sides, with mine's cell empty, is a conflict; a tag whose category alone changed is refitted; a tag the merged registry dropped is named from theirs before mine, then the base.
+  - Reply aliasing is pinned, and left for 2.5 below.
+  - `src/test/state-fields.test.mjs` still checks that every `list-union-with-base` entry in `02-state.js`'s table has a `mergeList`. The merge no longer calls `mergeList`, but `12a-undo.js` does: when a list field changed after the edit being undone, `applyStepsLive` merges through it instead of refusing. And because `02-state.js` attaches it from `LIST_MERGERS`, the same check means the merge finds a merger for every list field in the legacy table. So it stays as it is.
+- **Found, not fixed.**
+  - A `list-union-with-base` field with no entry in `LIST_MERGERS` throws a `TypeError`, not the "no merge strategy" error. That is as before, when its `mergeList` was missing.
+  - A table without a `productionTags` field throws, because the text merge needs the merged registry. That is also as before.
+  - For a row whose id is an `Object.prototype` name and that one side lacks, `mergeRow` reads that side's row as the inherited member, and the merged row's `status` can come out `undefined` until `migrateRows` resets it. This is part of #278.
+- **Left for 2.5.**
+  - INV-04's test here covers the merge only. The same added field surviving `migrateRows` and a `.splitpage` round trip comes when `core/migrate.ts` and `core/merge-states.ts` compose them at the core root.
+  - **Reply aliasing: 2.5 must change this.** For a comment both sides hold, `mergeComments` puts the input reply objects into its output by reference, not copies. `migrateRows` then writes into them (`id`, `body`, `author`), so `mergeStates` changes its own `mine` and `theirs` arguments. The review's fuzzing saw it in 2,830 of 25,000 cases, the same on the code before the move, so 2.3 keeps it. When `core/merge-states.ts` composes migrate and merge, the merge must clone the replies, or the migration must stop mutating its input. Two tests pin today's behaviour and must change on purpose then: `tests/core/merge/rows.test.ts` ("the input objects themselves, not copies") and `src/test/merge-states.test.mjs` ("pinned until 2.5").
+
+## 2.4 as built
+
+- **`src/adapters/richtext/`.** `createRichText({ DOMParser, images, ids })` takes a `DOMParser` constructor and core/document's `ImageSource` and `IdSource`; no new port type was needed. It returns `inertBody`, `sanitize`, `decode` (`fromHtml`), `createCellReader`, `storedHtmlFromDom`, `htmlToMarkdown`, `videoCardElement`, `videoCardHtml` and `imageRefOf`. Every node is built through the parsed body's `ownerDocument`. The only platform global it names is `URL`, for the video card's host.
+  - `sanitize.ts`: `walkSanitize`, `imageRefOf`, the stored image element and the video card. `imageRefOf` asks `images.known(sha)` for a valid `data-blob` and `images.fromDataUrl(src)` for a safe data URL, so interning then queueing persistence is the port's job. Ids go through core's `safeId(id, prefix, ids)`. Lookups, ingestion and minting happen in document order, as before.
+  - `decode.ts`: the walk over sanitised HTML, ending in `normalizeCell(runs, opts)`, and `createCellReader(decode)`. That is `cellOf`'s cache: a `Map` cleared whole when, before a new entry, it holds more than 2,000,000 characters. Each reader has its own cache.
+  - `markdown.ts`: the Markdown walk. `richtext.ts`: the factory.
+- **One stored image tag.** `text-policy.ts` gains `StoredImageRef` (an `ImageRef` whose size and type may be missing) and `storedImageAttributes(ref)`: `class`, `data-blob`, then `data-w`, `data-h` and `data-mime` only when all three are set. It now exports `storedImageMarkup`, which writes the tag from that list, and the adapter sets the same list with `setAttribute`.
+  - The adapter does not parse core's string, so a record a port returns is escaped by the DOM rather than spliced into markup. A test hands back a `mime` holding `" onerror="` and finds no new attribute.
+  - `mediaComments`' tag for a picture known only by its sha is `storedImageMarkup({ sha256 })`, not a third copy.
+  - The bytes are unchanged; the richtext and migrate goldens pass as they were.
+- **`src/legacy/richtext.ts`.** It composes the adapter with the page's `DOMParser`, `registryImages` from `02c-blobs.js` and `randomIds`. It builds the adapter on first use, so the `DOMParser` global is read when something is first parsed, as `inertBody` read it before. It exports `inertBody`, `sanitizeHtml`, `imageRefOf`, `storedHtmlFromDom`, `htmlToMarkdown`, `buildVideoCardEl`, `videoCardHtml`, `fromHtml` and `cellOf`.
+- **Shims.**
+  - `04-richtext.js` re-exports the first six. It keeps `safeId` (with `randomIds`), `cssAttr` and `ensureTrailingCaretSpot`. The last appends a caret text node to a live cell through the page's `document`; it is editor code, not sanitising, and moves with the editor in milestone 6.
+  - `04c-doc-model.js` re-exports `fromHtml` and `cellOf`, keeps `syncCommentAnchors(state)`, and no longer imports `04-richtext.js`.
+  - No importer of either module changed.
+- **Where nodes live.** The sanitiser builds its output in the parser's inert document instead of the page's, and `buildVideoCardEl` builds its card in an inert document the adapter parses on its first card and reuses. Every caller of `buildVideoCardEl` (`05-render.js`, `02-state.js`, the golden) only reads its `outerHTML`.
+- **Import graph.**
+  - `04-richtext.js` no longer imports `02c-blobs.js`, `shared/blob-policy.js`, or core's `broll.ts` and `tags.ts`.
+  - `04c-doc-model.js` no longer imports 04.
+  - Both import `src/legacy/richtext.ts`, which imports the two adapters and `02c-blobs.js`; 02c imports only core and shared. So neither 04 nor 04c gains an edge back into the legacy cycle, and no cycle runs through a migrated folder.
+- **Dependencies.** No baseline change: `--prune` found nothing, and nothing was accepted. `--metrics` counts 5 more frontend modules (117 to 122) and 5 more migrated ones (40 to 45). The cycle (56 modules, 492 edges) and every `S` figure are unchanged.
+- **Translation.**
+  - `Array.prototype.slice.call` and `forEach.call` over node lists became `Array.from` and `NodeList.forEach`, and a text node's value is read as `data`.
+  - `parseInt(weight, 10)` became `parseInt(String(weight), 10)`, still `NaN` for a missing style, and an unused `catch` binding went.
+  - `STORED_IMG_ATTRS` stays a `{}` map. Sanitised output always carries both attributes of a tag anchor, so the decoder hands them to `tagId` as strings.
+- **Tests.**
+  - `tests/adapters/richtext/` builds the adapter with jsdom's `DOMParser` in a process with no DOM globals. The parser comes from `jsdom.mjs`, because jsdom has no types.
+  - `golden.test.ts` replays the 83 cases and 11 video cards of `richtext-golden.json` byte for byte. Its fake `ImageSource` holds the golden's known picture and decodes data URLs with core, and its fake `IdSource`'s ids are masked as the golden masks minted ones. It asserts INV-10, that `toHtml(decode(x))` is in stored form, that decoding asks the ports exactly what sanitising asks, in the same order, and that Markdown and stored-form reads ask nothing.
+  - `ports.test.ts` pins the order of lookups, ingestion and minting, a dropped picture, a bad `data-blob` falling back to its `src`, the decode options, the cell reader's cache and eviction at the budget, and the video card.
+  - `tests/legacy/richtext.test.ts`: 04 and 04c hand out the bridge's functions; the bridge parses with the page's `DOMParser`; a pasted picture is interned at once and persisted after; a held `data-blob` takes the registry's record; minted ids are `makeId`'s; `cellOf` keeps what it read.
+  - `tests/core/document/text-policy.test.ts` checks the attribute list and the markup. INV-10's tests name the adapter's.
+  - Browser suites, all passing: `01-core` (20), `10-comments-panel` (17), `20-comment-drift` (43), `52-csp` (22), `65-blobs` (49), `66-hosted-blobs` (84), `68-images` (31), `69-html-images` (54), `77-clipboard-model` (51), `86-gdocs-paste-bold` (5), `92-paste-into-gallery` (102), `160-gallery-video` (127). The bundle has no `eval` or `new Function`.
+- **Found, not fixed.** `storedHtmlFromDom` keeps an image attribute named `constructor` or `__proto__`, because `STORED_IMG_ATTRS` is a `{}` map. HTML lower-cases attribute names, so no other `Object.prototype` name matches. Neither can carry script, and sanitising drops both.
+- **Review follow-ups (PR #287).**
+  - `storedImageMarkup`, now exported, escapes every attribute value with `escapeHtml`, so a record nobody validated cannot open an attribute through its `sha256`, `width`, `height` or `mime`. A valid record's values need no escaping, so every stored tag and golden is unchanged. Core tests put `"`, `<`, `&` and `'` in each field; an adapter test parses the markup back to exactly its five attributes.
+  - `tests/adapters/richtext/stored-form.test.ts` pins `storedHtmlFromDom`'s allow-list: event handlers in odd capitalisation and quoting, twenty other attributes, and pictures nested in other markup. A mutant that kept `on*` attributes passed every test before; it fails all three now.
+  - Video cards come from one inert document per adapter instead of a fresh parse per card.
+  - Two quirks of stored form, neither reachable from a cell: `storedHtmlFromDom` looks for `data-blob` case-sensitively before parsing, so markup spelling it `DATA-BLOB` passes through untouched, and an `is` attribute removed from a picture comes back on serialisation, because the DOM writes an element's `is` value out. Every caller passes a live cell's `innerHTML`, which writes attribute names in lower case, and the sanitiser builds fresh elements that have no `is` value.
+- **Left for 2.5.** `02-state.js`'s `moveMediaOutOfCell` still makes the video card's HTML with `buildVideoCardEl(href).outerHTML`; the bridge's `videoCardHtml` is the same string. INV-10's acceptance also asks for a check that no module outside the adapter builds cells from HTML; it is not written yet.
+
+## 2.6 as built
+
+- **`src/core/production/`.** Imports run one way: `ports.ts` holds types only; `tags.ts` imports it; `broll.ts` imports `tags.ts`; `readers.ts` imports `broll.ts`; `timing.ts` imports `ports.ts`. Outside the folder they import core/document and core/text only.
+  - `ports.ts`: `ProductionReaders` (the decoder and the memoised field readers), `FieldTag`, `BrollItem`, `FieldText` (a field's plain text) and `ProductionRow`. It exists because `broll.ts` needs the readers' type and `readers.ts` needs `brollInCell`, and a type-only cycle through core fails the gate.
+  - `readers.ts`: `createProductionReaders(cellOf)` returns `cellOf` itself and `tagsInField`, `cueNamesInField`, `brollInField`, `brollPropsInField` and `wordCount`. Each is a `contentMemo`, so each keeps the two-million-character budget, and each decodes through the injected `cellOf`.
+  - `tags.ts`: `TAG_FIELDS`; the registry lookups `registryIndex`, `registryEntry` and `newRegistryTag`; `collectTagsFromRows` (groups carry `catId`) and `missingRegistryTags`; the index (`deriveProductionIndex`, `productionIndexFresh`, `registrySignature`); `snapshotCues`, `planRegistryHealing` and `planQuickAdd`; `tagOccurrences`, `holdsMedia`, `tagFieldOccurrences`, `bulkTagCell` and `retagCell`.
+  - `broll.ts`: the cell line readers (`brollCellLines`, `brollInCell`, `brollPropsInCell`, `brollMarkerLines`), `collectBrollFromRows`, the seeds (`brollSeedRef`, `brollSeedLocation`), the read model `brollEntries`, `brollLineKey`, `planBrollAnchors`, the anchor edits (`brollAnchorTodo`, `anchorBrollCell`), `brollPropsRenamed` and `brollSortedForList`.
+  - `timing.ts`: `pad2`, `estimatedSeconds`, `rowSeconds`, `totalSeconds`, `formatDuration`, `formatTimecode` and `targetClock`. The last three are pure and sat beside the others in `01-scene-status.js`, so they moved too.
+- **The plans, and how the legacy code applies them.** Every plan reads the state it is given and writes nothing; the shim applies it to `S.state` with the writes the legacy code made.
+  - **Error paths.** The legacy code wrote as it went, so an exception part way through left the writes made before it. A plan that throws now leaves the state as it was. `migrateRows` normalises the rows, the registry and the shots these functions read when a document loads, so no loaded document reaches such an exception and the difference cannot be seen.
+  - **Healing.** `planRegistryHealing(state, readers, cues?, index?)` returns `{ cues, count, retitle: [{ at, from, name }], register }`. It works on a copy of the registry: retitles first, as `retitleEditedCues` did, then each unregistered tag through `newRegistryTag`, which mints against the registry as it stands at that point, so the ids and their order are the legacy ones. `healTagRegistry` keeps the cue snapshot, renames by index, pushes the records, patches the cached entries' ids, refreshes the tag signature and drops the cache after a retitle, as before.
+  - **B-roll.** `brollEntries(state, readers, ids, plainTextOf, repair)` returns `{ entries, plan: { create: [{ entry, shot }], rename: [{ at, name, desc }] } }`. The entry of a line with no shot holds the seed `brollEntries(true)` always showed; `create` holds the shot `newBrollRecord` would have stored, in its key order. `brollEntries()` and `brollEntries(false)` pass `repair` as `true`, push the created shots, point their entries at them and rename by index; `brollEntries(true)` passes `false` and applies nothing.
+  - **Ids.** A line with no key id draws its shot's id, as before. With `repair` set, each created shot then draws one more id after its seeds and stores none of it: `newBrollRecord` drew that id and overwrote it with the line's, and every later id depends on the draw. `src/test/broll-id-sequence.test.mjs` pins the minted ids unmasked under the seeded random source; it passes on the code before the move (25b4ca3). `rename` lists only shots whose name or description changes; the legacy code wrote both fields of every matched shot, the same values for the others.
+  - **Anchoring.** `planBrollAnchors(state, readers, ids)` is the legacy id map (`rowId` and ordinal to an id), minting in the same order. `anchorBrollInRows` keeps the declined rows and the row loop, and for each row takes `brollAnchorTodo`, then either the DOM path (a cell holding media) or `anchorBrollCell`.
+  - **Props rename.** `brollPropsRenamed(state, fromId, oldName, toId, toName)` returns `[{ at, props }]`, each list normalised against the registry; `08c-broll.js` assigns them. The legacy code renamed the prop objects in place before normalising, which builds new objects anyway, so the stored props are the same.
+  - **Quick add.** `planQuickAdd(state, readers, raw, index?)` returns `{ remove, register, added, removed }`. Its `wanted` map was a plain object, so a line whose key was `constructor` or `__proto__` was skipped and an entry under such a key kept, as the golden pinned; #399 made it an `idMap`. `applyGearQuickAdd` deletes each name through `deleteProductionTagEntry` and pushes the records through the new `addRegistryTags` in `07-production-tags.js`, so `08-production-panels.js` still writes no member of `S` itself.
+- **Shims.**
+  - `07-production-tags.js` builds the one `productionReaders` from `04c`'s `cellOf`. `tagsInField`, the b-roll readers in `08c-broll.js` and `01-scene-status.js`'s `wordCount` are its memos, so each memo still exists once.
+  - `collectTagsFromRows` maps each group's `catId` back to the category object for `02-state.js` and `05g-scene-clip.js`. The index cache holds core's index and the entries presented with the category object, in the legacy key order; `productionEntries()` is unchanged. `registryEntry` and `registerProductionTag` delegate to core.
+  - `01-scene-status.js` re-exports `formatDuration`, `formatTimecode` and `targetClock`, and passes `S.state` and the readers to the read-time functions. `05-render.js` re-exports `pad2`.
+  - Every export of `07`, `08c`, `01` and `05` keeps its name. `07` adds `productionReaders`, `currentProductionIndex` (the cached index, for the quick-add plan) and `addRegistryTags`.
+- **Legacy behind a bridge.**
+  - Cells holding media: `bulkTagCell` and `tagFieldOccurrences` take a `MediaTagWriter` as their last argument, and `07` passes `wrapTagInHtml` (inert body, `domRangeFor`, sanitiser). `retagCell` covers cells without media; `eachTaggedField` still sends a cell holding media to `retagInHtml`. Anchoring and `renameBrollInScript` keep their DOM paths for such cells.
+  - A shot's seed reference is the scene's audio through `14-export.js`'s `htmlToPlainText`, passed in as `FieldText`.
+  - Capture (`maybeCaptureBroll`), pasted shots (`recordPastedBroll`), `newBrollRecord`, the `S` mutators, labels, colours and icons, `tagsByCategory` and the idle refresh stay in `07` and `08c`.
+- **Found, not changed.**
+  - #282: cue retitling pairs the names that went and came by position in the cell. A core test pins it.
+  - Reads that repair: the b-roll badge counts through `brollEntries()` with no argument, so drawing it creates and renames shots; `14-export.js`'s `settleDerivedRecords` heals and repairs before a save. Both apply the plans exactly as before.
+  - A b-roll key carrying a comment reads as a typed marker with no id, and anchoring replaces it with a fresh key that drops the comment. A core test pins it.
+  - After a heal, `currentProductionIndex()` keeps the ids its entries were derived with (`null` for a tag the heal registered), while `productionEntries()` shows the minted ones: `healTagRegistry` patches the presented entries, as it patched the only cache before. The quick-add plan, its one caller, reads names and `orphaned`, not ids, so nothing sees it yet. `src/test/production-shims.test.mjs` pins it.
+- **Tests.** `tests/core/production/` runs without a DOM. `readers`, `tags`, `broll` and `timing` build cells with core/text and decode through a map from `toHtml` output, as `anchors.test.ts` does. They cover the plan contents for healing, b-roll creation and renaming, anchoring and quick add; INV-26 (the quick-add plan deletes an orphaned entry and keeps one still tagged); INV-54 (a repeated key gets its own id, a typed line never takes a shot a keyed line further down holds); INV-56 (props on a shot's lines are read, hand-added ones kept by registry id, a rename planned by id and by name, a created shot stores none). `golden.test.ts` reads the long demo and the crafted documents with a small stored-HTML reader that checks every cell against `toHtml`, the three cells `heal-crafted` writes raw aside; it applies each plan as the shims do and compares the result with the `production` fixtures for the long demo (as shipped, registry emptied, shots dropped), `broll-crafted`, `heal-crafted`, `cue-retitle` and `gear-quick-add`, as JSON text, so key order counts. The shims import `S` and the DOM, so the test applies the plans itself. Two deliberate faults in the plans each failed both these tests and the legacy golden.
+- **Review follow-ups (PR #289).**
+  - The discarded id draw is back; see **Ids** above.
+  - Four of the review's mutants survived the first tests, and it asked for a test of a fifth; with the restored draw that makes six. A test now kills each, checked by applying it in a scratch copy: `08c`'s props rename applying only the first shot's change (`production-shims`); `brollEntries()` with no argument no longer repairing, which is what the badge calls (`production-shims`, `broll-id-sequence`); `registerProductionTag` pushing a name the registry already holds (`production-shims`); `planBrollAnchors` not claiming a matched shot, so two typed lines of one name get the same key (core `broll`); a renamed prop dropping its own id when no new one is given (core `broll`); and the repair not drawing the extra id (`broll-id-sequence`, core `broll`).
+  - There are two shot builders, `newBrollRecord` and core's `newBrollShot`. `production-shims` checks that a shot from each serialises to the same text, and INV-56 names both.
+- **Dependencies.** No baseline change: `--prune` found nothing and no entry was accepted. `--metrics`, after merging 2.3 and 2.4: frontend modules 127 to 132, migrated modules 50 to 55; the cycle (56 modules, 490 edges), `S` importers (57), `S.state` assigners (9) and `S` writers (34) are unchanged. `07` and `08c` stay in the cycle: they still import `S`, `03-sync.js`, `05-render.js`, `05b-cell-edit.js` and the panels for their mutators and DOM work, and `08c` still imports `14-export.js` for `htmlToPlainText`.
+
+## 2.5 as built
+
+- **`src/core/migrate.ts`.** `migrateRows(doc, ports)` and `migrateDocument(raw, origin, ports)`, translated line for line from `02-state.js` and `02b-doc-id.js`: the same order of work, so the same order of id draws, image lookups and ingestion; the same `||` defaults; in-place writes with `delete` for removed keys, so key order is unchanged. `MigratePorts` is `{ images, sanitize, decode, videoCardHtml, readers, ids, fields? }`:
+  - `images` is the pass's `ImageSource`: legacy `visualImage` pictures, gallery items and annotations go in through `fromDataUrl`, and the conflict card and `mediaComments` look pictures up through `known`.
+  - `sanitize`, `decode` and `videoCardHtml` are the rich-text adapter, built over that same `images`. `moveMediaOutOfCell` moved in as a private function; it uses the port's `videoCardHtml`, the bridge's string, instead of `buildVideoCardEl(href).outerHTML` (2.4's "left for 2.5").
+  - `readers` is a `ProductionReaders`: `collectTagsFromRows` and `missingRegistryTags` take it, and `syncCommentAnchors` reads cells through its `cellOf`.
+  - `ids` mints row, comment, reply, person and shot ids through `safeId` and the docId through `docId()`.
+  - `fields` is the table, core's `STATE_FIELDS` by default.
+  - The legacy lookups became the core ids they wrapped: `rowStatus(x) ?` is `rowStatusId(x) ?`, `(tagCategory(x) || TAG_CATEGORIES[0]).id` is `tagCategoryId(x) || TAG_CATEGORY_IDS[0]`, and the same for tag and shot statuses. 07's `collectTagsFromRows` mapped each group's `catId` to the category object and 02-state read `.id` back, so core reads `catId`.
+- **The ingestion order.** A comment's body goes through `sanitize` before the conflict card's `/data-blob/` lookup, and the lookup is `images.known`, which sees the pass's pending set first. So a conflict card's picture used nowhere else is found in the same pass from an empty registry, as before. `tests/core/migrate.test.ts` checks the order through the ports' log; the migrate golden checks it end to end.
+- **`src/core/merge-states.ts`.** `mergeStates(base, mine, theirs, ports)` is `mergeStateFields` and then `migrateRows` with `ports.migrate`, and with the merge's own `fields`, so one table drives both halves whatever the migrate ports carry.
+- **The `normalize` contract.** `normalize(value)` returns the value to store; `undefined` removes the key. `migrateRows` calls it once per pass for each entry that has one and whose key the document holds once defaults are filled, in table order, at the point where the three hand-written blocks ran (after b-roll shots, before `title`, `rev`, `docId` and `schema`). A field without a default that the document lacks is never normalised and never added.
+  - `wordsPerMinute`: `normalizeWordsPerMinute`, new in `core/document/timing.ts`: `Number(v)`, rounded when 60 to 400, else `DEFAULT_WPM`. It has a default, so it is always present by then, as the unconditional assignment assumed.
+  - `personColors`: `normalizePersonColors(v) || undefined`, so a map that cleans to nothing goes.
+  - `targetSeconds`: `normalizeTargetLength`, which already returns `undefined` for anything out of range.
+  - Byte-identical for the app's two tables (core's, and `02-state.js`'s copy, which carries `normalize`): the three run in the same relative order, each reads only its own value, an assignment to a present key keeps its place, and removal is a `delete` as before. Only a table that left one of them out would now leave its key alone, where the old code always normalised it.
+- **`src/legacy/document-ports.ts`.** `withDocumentPorts(fields, pass)` builds the ports for one pass: `createImageIngestion(recordFor)`, a rich-text adapter over it with the page's `DOMParser` and `randomIds` (built on first use, so `DOMParser` is read when something is first parsed, as before), `randomIds`, the given table and `productionReaders`. When the pass ends, in a `finally` so a pass that throws keeps what it decoded too, it interns each pending picture's bytes, then queues persistence for all of them in the order first met.
+  - The legacy path interned and queued each picture as it met it. The registry gains the same entries in the same order, persistence is queued in the same order with the same shas, and nothing reads the registry in between: within the pass every lookup goes through `known`, and row cells hold no pictures once `moveMediaOutOfCell` has run, so the cached `cellOf` the readers use never meets one.
+  - It also owns the one `productionReaders` (over `legacy/richtext.ts`'s `cellOf`), which `07-production-tags.js` now re-exports. So each memo still exists once, and the document ports need no import of 07, which is in the cycle.
+- **Shims.**
+  - `02-state.js` keeps `STATE_FIELDS` (2.1b's thawed copy with `mergeList`), `missingStateFields`, `buildPublishHtml` and `defaultState`, now exported. Its `migrateRows(s)` is core's inside `withDocumentPorts(STATE_FIELDS, …)`. It imports only `00-prelude.js` (for `PAGE_SHELL`), core, the identity adapter and the document ports: no longer `S`, 01, 02b, 02c, 02d, 04, 04c, 07, 08c or 20b.
+  - `02b-doc-id.js`'s `migrateDocument(raw, origin)` is core's inside the same ports with `02-state.js`'s table. `loadInitialState` moved here unchanged, and `21-events.js` imports it from here, the one importer that changed.
+  - `03-sync.js`'s `mergeStates(base, mine, theirs)` is core's inside `withDocumentPorts(STATE_FIELDS, …)`, with the 2.3 merge ports (`fromHtml`, `randomIds`, `systemClock`, `getEditorName`, `STATE_FIELDS`).
+  - Every other export of the four modules keeps its name; 02-state lost `loadInitialState` and gained `defaultState`.
+- **Sequencing trap.** `02c-blobs.js` still imports only core and shared, so `legacy/document-ports.ts` → 02c closes no cycle.
+- **Dependencies.** `02-state.js` and `12a-undo.js` left the cycle; 12a reached it only through 02-state. `--accept` recorded the one new edge, `02b-doc-id.js → 20b-onboarding.js` (`seedCheckPasses`), with its reason, and `--prune` removed 61 entries: 59 `cycle-edge`, and 02-state's `state-import` and its `S.docIdWrittenOut` `state-write`. `--metrics`, before → after (on 4.0-development efaeb6c with 2.6 merged in): frontend modules 132 → 135, migrated modules 55 → 58, largest cycle 56 → 54 modules, runtime cycle edges 490 → 432, `S` importers 57 → 56, `S` writers 34 → 33 (`stateFieldWriters` 27 → 26), `S.state` assigners 9.
+- **Tests.**
+  - `tests/core/migrate.test.ts`, over fake ports in `tests/core/migrate-ports.ts`: the conflict card's picture found from the pending set, and only through the ports; in-place change and key order; `hadTagRegistry` read before defaults (a file saved before the registry derives `[cat, name, status, owner, notes, id]`, one with an empty or `undefined` registry appends `[cat, name, owner, notes, status, id]`); the `normalize` contract, field by field and from the table; ids and the docId from the port, in today's order; pictures and video cards moved to comments once; schema 1 Markdown; odd shapes; `migrateDocument`'s origins; a migrated document as a fixed point.
+  - `tests/core/merge-states.test.ts`: INV-04 (an added field with a default, a normaliser and a strategy survives `migrateRows`, `mergeStates` and a JSON round trip); the merge's table wins; a missing strategy throws before anything is migrated; conflict cards and pictures migrated in the same pass; today's reply aliasing.
+  - `tests/legacy/document-ports.test.ts`: a pass interns then persists in first-met order, and does so when it throws; a save straight after a load finds every picture the load decoded; 07's readers are the ports'; one legacy table for 02-state, 02b and 03-sync; `loadInitialState` in 02b for a saved, a pristine, an unsaved and a broken page.
+  - `src/test/state-fields.test.mjs` gains the app-level INV-04 test through `02-state.js`'s table and the real `.splitpage` codec. `tests/core/document/` covers `normalizeWordsPerMinute` and the three `normalize` entries.
+- **Verification.**
+  - Every golden passes unchanged: `migrate`, `merge`, `richtext`, `normalisers`, `production`, `undo`.
+  - Differential fuzz, old against new, in one process with `Math.random`, the clock and `crypto.getRandomValues` seeded per case: 14,000 seeded cases built from every document in the golden fixtures and the starters, mutated at random (values from the fixtures' strings, fresh and known pictures as data URLs and `data-blob` tags, video cards, conflict cards, prototype-named ids, odd numbers, removed and added keys). 6,000 against `efaeb6c` (2,728 `migrateRows`, 899 `migrateDocument`, 2,373 `mergeStates`), 4,000 against the pre-2.5 merge with 2.6 (1,806, 573, 1,621) and 4,000 against 2.6 after its review round, `8e424c5` (1,772, 602, 1,626), the last on the final tree. Ids are compared unmasked, so a missing or extra draw shows. Every case matched as JSON text: the output, the inputs after the call, the error when both threw (231, 156 and 171 merges of unmigrated sides), the shas persisted and whether each was interned when written, the registry's membership over every generated picture, and the next random draw. No failing seed, so none became a regression test.
+  - Mutation testing in a scratch worktree, against the unit tests of every area the change touches: 65 mutants over `migrate.ts`, `merge-states.ts`, `document-ports.ts`, the `normalize` entries, `normalizeWordsPerMinute` and the four shims. The first run killed 63. The two survivors were real gaps, each now closed by a test that kills it: an ingestion blind to the registry (a conflict card naming a picture the registry holds but the pass did not decode lost its record), and `loadInitialState` no longer treating a page with `lastEditedBy` but no `rev` as a saved file. 65 of 65 are killed.
+  - The full Windows browser regression, before and after merging 2.6's review round (`d072696`): 181 suites, 9,574 of 9,574 checks, both times.
+- **Found, not changed.**
+  - Reply aliasing (#303). 2.3 left it for 2.5 to change: for a comment both sides hold, `mergeComments` puts the input reply objects into its output, and `migrateRows` then writes into them, so `mergeStates` changes its own `mine` and `theirs`. 2.5 keeps it: it predates the move, and changing it here would also change what the differential test compares. It is fixed on 4.0 after milestone 2 (there are no 3.1.x releases before 4.0). Both pinned tests stay, renamed, and `tests/core/merge-states.test.ts` pins it on core.
+  - `mergeStates` throws a `TypeError` (#304) when an unmigrated side holds a list that is not an array (`(theirTags || []).forEach is not a function`, `theirs.rows.forEach …`) or a shot or comment that is a string. The fuzz saw it on both sides alike. The app migrates `mine` and `base` before merging; `theirs` arrives from a server or a file. It is fixed on 4.0 after milestone 2.
+- **Left for 2.7.** INV-10's check that no module outside the adapter builds cells from HTML. `cloneState` stays in `03-sync.js`, as 2.3 decided.
+  - 2.7 did not write the INV-10 check; it stays open (see 2.7 as built). `cloneState` stayed in `03-sync.js`.
+
+## 2.7 as built
+
+2.7 closed the milestone in two parts: 2.7a (#310) ran early, between 2.6 and 2.5, and the closing step ran after 2.5. Neither changes behaviour or any core, adapter or legacy `.ts` file.
+
+- **2.7a (#310): re-pointing.** 71 imports in 41 `src/js` modules named only names that a legacy shim re-exports unchanged from `src/core`, `src/adapters/identity` or `src/legacy/richtext.ts`. Each now imports from the file the shim takes the name from, with an explicit `.ts` extension, as the shims themselves do. Cycle edges went from 490 to 450 (`--prune` removed 40 `cycle-edge` entries, none was added), the largest cycle from 56 to 55 modules (`03c-history-idb.js` left it) and every `S` figure stayed.
+  - An import was re-pointed only when every name in it is a plain re-export, either `export { x } from` or an `import { x }` followed by `export { x }`.
+  - It skipped the files that 2.5 was rewriting (`02-state.js`, `02b-doc-id.js`, `03-sync.js`, `07-production-tags.js`, `21-events.js`), and left the rest for this step.
+- **The closing step: the rest.** After 2.5, the search (`analyze2.mjs`, which resolves each imported name through the shims to its first non-shim origin) found five more imports, in the three files 2.5 had held back:
+  - `02b-doc-id.js`: `plainText` now from `core/document/text-policy.ts`;
+  - `03-sync.js`: `DEFAULT_WPM` from `core/document/timing.ts` and `fromHtml` from `legacy/richtext.ts`;
+  - `07-production-tags.js`: `makeId` from the identity adapter, `escapeHtml` from `text-policy.ts`, `replaceWithTag` from `core/text/edits.ts`, `namedTagId` and `projection` from `core/text/runs.ts`, and `cellOf` from `legacy/richtext.ts`.
+
+  `--prune` removed one `cycle-edge` entry and none was added: edges 416 to 415, the cycle still 53 modules. Re-exports that 2.5 added to `02-state.js`, `02b-doc-id.js` and `03-sync.js` gave no other candidate.
+- **Wrappers stay.** `04-richtext.js`'s `safeId` (it passes `randomIds`), `02d-gallery.js`'s `migrateGallery` (it passes `registryImages`) and `04c-doc-model.js`'s `syncCommentAnchors(state)` (it passes `cellOf`) are not plain re-exports, so no import of them was changed.
+- **Imports left as they are.**
+  - **Mixed imports.** 75 imports in 33 modules sit beside names the shim defines itself (for example `render` from `05-render.js` next to `pad2`, or `ROW_STATUSES` from `01-scene-status.js` next to `formatDuration`). Splitting one would keep its edge to the shim and add a second import, so they are not split. By shim: `04-richtext.js` 12, `01-scene-status.js` 11, `07-production-tags.js` 8, `02-state.js` 7, `02b-doc-id.js` 7, `02d-gallery.js` 6, `05-render.js` 5, `04c-doc-model.js` 4, and 3 or fewer each for `10-comments.js`, `08c-broll.js`, `02c-blobs.js`, `00-prelude.js`, `00p-prefs.js`, `03a-history-store.js` and `03-sync.js`.
+  - **Origin in `shared/`.** `03a-history-store.js` and `18a-local-merge.js` import `normalizeDocId` through `02b-doc-id.js`, which re-exports it from `shared/doc-id-policy.js`; `03a-history-store.js` also takes `mintDocId` and `sha256Bytes` that way. `shared/` is not core or an adapter, and these are the only imports of plain re-exports whose origin is not, so they are left.
+- **The `09-find-replace.js` pointer.** It carried two baselined `eslint-disable-next-line no-control-regex` comments; the first said `cleanText()` lives in `04c-doc-model.js`. The comment gate allows no new comment text, so the pointer could not be reworded. `eslint.config.mjs` now turns `no-control-regex` off for that file, as it does for `src/core/text/runs.ts` and the other core files with control-character patterns, and both comments are gone. `--prune` on the comment baseline removed the two entries, and no comment text was added. The rule is off for the whole file rather than for two lines; those two patterns are the only ones in it that name control characters.
+- **Invariants.** The ledger rows that cite code that moved say where it lives now: INV-10 (the decoder and what its dependency check still lacks), INV-14 (category ids in `core/document/tags.ts`, presentation in `07-production-tags.js`) and INV-24 (`compareCommentPositions` in `core/document/comments.ts`, behind `commentPositionCompare()`). INV-02, INV-04, INV-18, INV-26 and INV-56 were corrected by 2.2, 2.5 and 2.6.
+- **Performance.** `node tools/perf-record.mjs` was run once more, on Windows; the record is the "After milestone 2" section of [performance-record.md](performance-record.md). No long task fired in any case. The Linux starting-point record is kept as it was; the two machines differ, so the numbers are not compared with each other.
+- **Gate evidence.** The milestone's gate evidence (the full Windows browser regression on the merged tree, the Electron smoke and the packaged checks, with their counts and SHAs) is recorded in a separate milestone 2 gate record, written after this PR merges: [milestone-2-gate.md](milestone-2-gate.md).
+- **Left open.**
+  - INV-10's dependency check: no module outside `src/adapters/richtext/` builds cells from HTML. It is not written.
+  - #303 (reply aliasing in `mergeStates`) and #304 (a `TypeError` on a malformed unmigrated side), which 2.5 found, and the pinned bugs listed under Risks, are fixed on 4.0 after the milestone closes, each in its own PR.
+  - The rest of plan section 4's milestone gate is not part of this step: the real Electron smoke, the Windows x64 packaged check (the native ARM64 one waits for the 4.0 release gate), and the external review of the integrated milestone.
+  - After 2.7: [the gate record](milestone-2-gate.md) holds those runs and the external review. INV-10's check is filed as #327. The dispositions of every pinned and deferred defect are in [pinned-defects.md](pinned-defects.md).
+
+## Milestone 2 outcome
+
+Measured with `node tools/dep-report.mjs --metrics`, at d18adde, where the plan above was derived (the tree 2.0 started from), and at the head of the closing PR.
+
+| | Start (d18adde) | End (closing PR) |
+| --- | --- | --- |
+| Frontend modules | 93 | 135 |
+| Migrated modules | 16 | 58 |
+| Largest runtime import cycle (modules) | 60 | 53 |
+| Runtime cycle edges | 594 | 415 |
+| `S` importers | 57 | 56 |
+| `S` writers | 34 | 33 |
+| `S` field writers | 27 | 26 |
+| `S.state` assigners | 9 | 9 |
+| `S` bridges | 0 | 0 |
+| Dependency baseline entries | 820 | 639 |
+
+- **Against the plan's expectation.** The plan expected 594 to fall to about 433 cycle edges. 2.5 measured 432 on its own base (2.1a to 2.6 without 2.7a), so the expectation held. Merged with 2.7a's re-pointing, 4.0-development reached 416, and the closing step took it to 415, 18 below the plan's figure. The expectation also named 02-state's `S` import and its `docIdWrittenOut` write: both are gone (2.5 pruned them), so `S` importers fell by one and `S` writers by one.
+- **The steps, in merge order.** Cycle edges on 4.0-development: 594, 492 (#284, 2.1a), 490 (#288, 2.3), 450 (#310, 2.7a), 416 (#301, 2.5), 415 (the closing step). The cycle's size: 60 modules, 56 (2.1a), 55 (2.7a), 53 (2.5). 2.5 measured 432 edges and 54 modules on its own base (efaeb6c with 2.6 merged in), before 2.7a's re-pointing was under it.
+- **`S` stays.** As the plan said, `S` access barely moves in this milestone. It falls in milestones 3 to 6, and `S.state` is still assigned by the same nine modules.
+
+## Characterisation (2.0)
+
+Fixtures are generated once from the current code and committed. Tests compare against the committed files and never regenerate them; a separate, documented command does that, and `npm test` refuses to run while `GOLDEN_UPDATE` is set. Goldens are regenerated only on `4.0-development`, in a dedicated commit that changes nothing else, never inside a lane that moves code: a moving lane keeps every golden passing unchanged.
+
+- **`richtext-golden`:** `sanitizeHtml`, `fromHtml`, `toHtml(fromHtml)`, `htmlToMarkdown`, `storedHtmlFromDom` and video-card HTML, over a corpus:
+  - pasted HTML: style spans, `b` with normal weight, empty blocks;
+  - invalid tag categories and b-roll markers;
+  - `cmt-anchor` spans with no id (minted ids are masked);
+  - images: png/jpeg/gif/webp/svg data URLs, bad base64, and known/unknown/bad `data-blob`;
+  - `javascript:` and `data:` links;
+  - astral characters, NBSP, U+FFFC, U+200B, CRLF.
+- **`migrate-golden`:** run in a fresh process, so the registry starts empty.
+  - Inputs: schema-1 documents; inline images in cells, comments, replies, conflict cards, `visualImage`, gallery items and annotations; video cards in cells; a schema 2 document with tag anchors and no `productionTags` key, whose derived entries pin the `hadTagRegistry` order.
+  - Asserts: the JSON (ids masked), key order, the registry's shas, the shas queued for persistence, and idempotence.
+  - The conflict-card picture is used nowhere else in its document, so the golden shows it is found within one pass from an empty registry, by the ingestion order above. (`migrate-rows.test.mjs` does not depend on earlier tests for this either: its body is sanitised, and the picture interned, before the lookup.)
+- **`normalisers-golden`:** one table per normaliser that moves, with every case at a limit, one past it and one short of it: people names, the `migrateRows` field limits, `plainText`'s control characters, `plainName`, `safeId`, `safeHref`, `safeImageSrc`, the image size attributes, `DIRECTION_MAX`, `normalizePersonColors` and its name guard, `withPageHead`, scene and target lengths, gallery limits and b-roll props.
+- **`merge-golden`:** `mergeStates` fixtures with ids and timestamps masked, including the fields `12a-undo.js` skips.
+- **`production-golden`:** `productionEntries`, `brollEntries` (read and repair), the records that `healTagRegistry` writes, and cue retitling (today only browser suite 241 covers it).
+- **`sha256-utf8`:** `sha256Hex` over `TextEncoder` and over the hand-written UTF-8 encoder (with `TextEncoder` removed) equals `node:crypto`, lone surrogates included; it is the oracle for 2.1a's manual encoder.
+
+## Risks
+
+- **Key order and in-place mutation.** `migrateRows` mutates and returns the same object, and key order sets the `.splitpage` and `.md` bytes. Don't rebuild objects, and don't delete and re-add keys. `hadTagRegistry` is read before defaults are filled in.
+- **Identity.** Keep the #82 seed order and the frozen SHA vectors, and write the manual encoder into a `Uint8Array`. The sanitiser mints ids for anchor and b-roll key spans that lack them.
+- **Translate literally.** Keep `{}` maps, `||` defaults and `var` semantics, and keep the throwing default of the merge strategy switch.
+- **Latent defect found, not fixed during the move.** Ids like `__proto__` or `constructor` survive `safeId` and collide in the id maps (#278). It is fixed on 4.0 after the move, in core.
+- **Pinned bugs after the milestone.** #274, #276, #278, #280–#283 and #290 are fixed on 4.0 once milestone 2 closes, each in the module that now owns the code, with the goldens that pin it regenerated in a dedicated commit. The closed 3.1.x branches hold the fixes and their fail-first tests to port from. [pinned-defects.md](pinned-defects.md) gives each of these, and every "Found, not changed" item above, an issue (where it will be fixed), the test that pins it, its owner and its disposition.
+
+**What stays legacy behind a documented bridge after this milestone:**
+- DOM edits of cells that hold media;
+- the blob registry;
+- `getEditorName`;
+- render-time repairs, which apply core plans until M6;
+- `loadInitialState` and `standaloneHtmlFor`.
+
+## Where the plan's wording does not fit the code
+
+1. Only decoding and sanitising move to the HTML adapter. `toHtml` uses no DOM and core/merge needs it, so encoding stays in core. INV-10 (the sanitiser's fixed point) still holds.
+2. `migrateRows` and `mergeStates` are composed at the core root, because `CORE_DEPENDENCIES` keeps merge and production apart.
+3. "Separate ingestion" becomes a port with pure decoding and a pending list, not a second pass.
+4. The export comment read model needs HTML-to-text and date formatting, which the invariant ledger assigns to milestone 5. This milestone moves comment anchors, ordering and filters.
+5. Statuses and categories move down as ids and ranks. Labels, colours and icons stay in presentation.
+6. The `S` metrics barely move in this milestone; its gain is in cycle edges. `S` access falls in milestones 3 to 6.

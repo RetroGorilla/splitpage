@@ -1,0 +1,623 @@
+[
+  {
+    "case": "199 characters inside",
+    "input": [
+      [
+        {
+          "text": {
+            "length": 203,
+            "runs": [
+              [
+                "(",
+                2
+              ],
+              [
+                "a",
+                199
+              ],
+              [
+                ")",
+                2
+              ]
+            ]
+          },
+          "marks": {}
+        }
+      ]
+    ],
+    "output": {
+      "cell": [
+        {
+          "text": {
+            "length": 199,
+            "runs": [
+              [
+                "a",
+                199
+              ]
+            ]
+          },
+          "marks": {
+            "dir": true
+          }
+        }
+      ],
+      "end": 199
+    }
+  },
+  {
+    "case": "200 characters inside, the limit",
+    "input": [
+      [
+        {
+          "text": {
+            "length": 204,
+            "runs": [
+              [
+                "(",
+                2
+              ],
+              [
+                "a",
+                200
+              ],
+              [
+                ")",
+                2
+              ]
+            ]
+          },
+          "marks": {}
+        }
+      ]
+    ],
+    "output": {
+      "cell": [
+        {
+          "text": {
+            "length": 200,
+            "runs": [
+              [
+                "a",
+                200
+              ]
+            ]
+          },
+          "marks": {
+            "dir": true
+          }
+        }
+      ],
+      "end": 200
+    }
+  },
+  {
+    "case": "201 characters inside",
+    "input": [
+      [
+        {
+          "text": {
+            "length": 205,
+            "runs": [
+              [
+                "(",
+                2
+              ],
+              [
+                "a",
+                201
+              ],
+              [
+                ")",
+                2
+              ]
+            ]
+          },
+          "marks": {}
+        }
+      ]
+    ],
+    "output": null
+  },
+  {
+    "case": "one character",
+    "input": [
+      [
+        {
+          "text": "((a))",
+          "marks": {}
+        }
+      ]
+    ],
+    "output": {
+      "cell": [
+        {
+          "text": "a",
+          "marks": {
+            "dir": true
+          }
+        }
+      ],
+      "end": 1
+    }
+  },
+  {
+    "case": "shorter than five",
+    "input": [
+      [
+        {
+          "text": "(())",
+          "marks": {}
+        }
+      ]
+    ],
+    "output": null
+  },
+  {
+    "case": "spaces only inside",
+    "input": [
+      [
+        {
+          "text": "((   ))",
+          "marks": {}
+        }
+      ]
+    ],
+    "output": null
+  },
+  {
+    "case": "spaces around the words",
+    "input": [
+      [
+        {
+          "text": "((  a b  ))",
+          "marks": {}
+        }
+      ]
+    ],
+    "output": {
+      "cell": [
+        {
+          "text": "  ",
+          "marks": {}
+        },
+        {
+          "text": "a b",
+          "marks": {
+            "dir": true
+          }
+        },
+        {
+          "text": "  ",
+          "marks": {}
+        }
+      ],
+      "end": 7
+    }
+  },
+  {
+    "case": "text before and after",
+    "input": [
+      [
+        {
+          "text": "say ((beat)) now",
+          "marks": {}
+        }
+      ],
+      12
+    ],
+    "output": {
+      "cell": [
+        {
+          "text": "say ",
+          "marks": {}
+        },
+        {
+          "text": "beat",
+          "marks": {
+            "dir": true
+          }
+        },
+        {
+          "text": " now",
+          "marks": {}
+        }
+      ],
+      "end": 8
+    }
+  },
+  {
+    "case": "not right after the closing brackets",
+    "input": [
+      [
+        {
+          "text": "say ((beat)) now",
+          "marks": {}
+        }
+      ],
+      13
+    ],
+    "output": null
+  },
+  {
+    "case": "no opening brackets",
+    "input": [
+      [
+        {
+          "text": "say beat))",
+          "marks": {}
+        }
+      ]
+    ],
+    "output": null
+  },
+  {
+    "case": "a bracket inside",
+    "input": [
+      [
+        {
+          "text": "((a(b))",
+          "marks": {}
+        }
+      ]
+    ],
+    "output": null
+  },
+  {
+    "case": "a newline inside",
+    "input": [
+      [
+        {
+          "text": "((a\nb))",
+          "marks": {}
+        }
+      ]
+    ],
+    "output": null
+  },
+  {
+    "case": "three opening brackets",
+    "input": [
+      [
+        {
+          "text": "(((a))",
+          "marks": {}
+        }
+      ]
+    ],
+    "output": {
+      "cell": [
+        {
+          "text": "(",
+          "marks": {}
+        },
+        {
+          "text": "a",
+          "marks": {
+            "dir": true
+          }
+        }
+      ],
+      "end": 2
+    }
+  },
+  {
+    "case": "already a direction inside",
+    "input": [
+      [
+        {
+          "text": "((",
+          "marks": {}
+        },
+        {
+          "text": "a",
+          "marks": {
+            "dir": true
+          }
+        },
+        {
+          "text": "))",
+          "marks": {}
+        }
+      ]
+    ],
+    "output": null
+  },
+  {
+    "case": "a b-roll key inside",
+    "input": [
+      [
+        {
+          "text": "((a ",
+          "marks": {}
+        },
+        {
+          "atom": "broll",
+          "id": "k1",
+          "text": "B-roll:",
+          "marks": {}
+        },
+        {
+          "text": " b))",
+          "marks": {}
+        }
+      ]
+    ],
+    "output": null
+  },
+  {
+    "case": "a tag on the inner words",
+    "input": [
+      [
+        {
+          "text": "((",
+          "marks": {}
+        },
+        {
+          "text": "mug",
+          "marks": {
+            "tag": "t:prop:Mug"
+          }
+        },
+        {
+          "text": "))",
+          "marks": {}
+        }
+      ]
+    ],
+    "output": {
+      "cell": [
+        {
+          "text": "mug",
+          "marks": {
+            "dir": true,
+            "tag": "t:prop:Mug"
+          }
+        }
+      ],
+      "end": 3
+    }
+  },
+  {
+    "case": "a tag on a bracket",
+    "input": [
+      [
+        {
+          "text": "((",
+          "marks": {
+            "tag": "t:prop:Mug"
+          }
+        },
+        {
+          "text": "mug))",
+          "marks": {}
+        }
+      ]
+    ],
+    "output": null
+  },
+  {
+    "case": "the last of two",
+    "input": [
+      [
+        {
+          "text": "((a)) ((b))",
+          "marks": {}
+        }
+      ]
+    ],
+    "output": {
+      "cell": [
+        {
+          "text": "((a)) ",
+          "marks": {}
+        },
+        {
+          "text": "b",
+          "marks": {
+            "dir": true
+          }
+        }
+      ],
+      "end": 7
+    }
+  },
+  {
+    "case": "200 characters, typed as text",
+    "input": [
+      {
+        "text": {
+          "length": 204,
+          "runs": [
+            [
+              "(",
+              2
+            ],
+            [
+              "a",
+              200
+            ],
+            [
+              ")",
+              2
+            ]
+          ]
+        },
+        "marks": {}
+      }
+    ],
+    "output": [
+      {
+        "text": {
+          "length": 200,
+          "runs": [
+            [
+              "a",
+              200
+            ]
+          ]
+        },
+        "marks": {
+          "dir": true
+        }
+      }
+    ]
+  },
+  {
+    "case": "201 characters, typed as text",
+    "input": [
+      {
+        "text": {
+          "length": 205,
+          "runs": [
+            [
+              "(",
+              2
+            ],
+            [
+              "a",
+              201
+            ],
+            [
+              ")",
+              2
+            ]
+          ]
+        },
+        "marks": {}
+      }
+    ],
+    "output": [
+      {
+        "text": {
+          "length": 205,
+          "runs": [
+            [
+              "(",
+              2
+            ],
+            [
+              "a",
+              201
+            ],
+            [
+              ")",
+              2
+            ]
+          ]
+        },
+        "marks": {}
+      }
+    ]
+  },
+  {
+    "case": "two in one cell",
+    "input": [
+      {
+        "text": "x ((a)) y ((b))",
+        "marks": {}
+      }
+    ],
+    "output": [
+      {
+        "text": "x ",
+        "marks": {}
+      },
+      {
+        "text": "a",
+        "marks": {
+          "dir": true
+        }
+      },
+      {
+        "text": " y ",
+        "marks": {}
+      },
+      {
+        "text": "b",
+        "marks": {
+          "dir": true
+        }
+      }
+    ]
+  },
+  {
+    "case": "brackets already marked as a direction",
+    "input": [
+      {
+        "text": "say ",
+        "marks": {}
+      },
+      {
+        "text": "(beat)",
+        "marks": {
+          "dir": true
+        }
+      },
+      {
+        "text": " now",
+        "marks": {}
+      }
+    ],
+    "output": [
+      {
+        "text": "say ",
+        "marks": {}
+      },
+      {
+        "text": "beat",
+        "marks": {
+          "dir": true
+        }
+      },
+      {
+        "text": " now",
+        "marks": {}
+      }
+    ]
+  },
+  {
+    "case": "two brackets marked as a direction",
+    "input": [
+      {
+        "text": "()",
+        "marks": {
+          "dir": true
+        }
+      }
+    ],
+    "output": [
+      {
+        "text": "()",
+        "marks": {
+          "dir": true
+        }
+      }
+    ]
+  },
+  {
+    "case": "nested brackets",
+    "input": [
+      {
+        "text": "(((a)))",
+        "marks": {}
+      }
+    ],
+    "output": [
+      {
+        "text": "(",
+        "marks": {}
+      },
+      {
+        "text": "a",
+        "marks": {
+          "dir": true
+        }
+      },
+      {
+        "text": ")",
+        "marks": {}
+      }
+    ]
+  }
+]

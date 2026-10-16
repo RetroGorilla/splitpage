@@ -1,0 +1,76 @@
+  .gear-quickadd {
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border);
+    flex: none;
+  }
+  .gear-quickadd label {
+    display: block;
+    font-family: var(--font-body); font-size: 13px; font-weight: 500;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .gear-quickadd textarea {
+    width: 100%;
+    font-family: var(--font-body); font-size: 13px; line-height: 1.5;
+    padding: 8px 9px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg); color: var(--text);
+    resize: vertical;
+  }
+  .gear-quickadd textarea:focus { outline: none; border-color: var(--visual); }
+  .gear-quickadd-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    margin-top: 8px;
+  }
+  .gear-quickadd-hint { font-size: 11px; color: var(--text-faint); line-height: 1.4; }
+  #gear-quickadd-save {
+    flex: none;
+    font-family: var(--font-body); font-size: 13px; font-weight: 500;
+    border: 1px solid var(--visual); background: var(--visual-soft); color: var(--visual);
+    border-radius: 5px; padding: 7px 12px; cursor: pointer;
+  }
+  #gear-quickadd-save:hover { background: var(--visual); color: var(--accent-contrast); }
+  #gear-panel .gear-quickadd {
+    display: flex; flex-direction: column; gap: 8px;
+    padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border); border-bottom: 0;
+  }
+  body.is-review #gear-panel .gear-quickadd { display: none; }
+  #gear-panel .gear-quickadd label {
+    margin: 0;
+    font-size: 12.5px; line-height: 16px; font-weight: 450; color: var(--text-faint);
+  }
+  #gear-panel .gear-quickadd textarea {
+    display: block; height: 76px; margin: 0; padding: 8px 12px;
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    background: var(--bg); color: var(--text);
+    font-size: 14px; line-height: 20px;
+    resize: none;
+  }
+  #gear-panel .gear-quickadd textarea::placeholder { color: var(--text-faint); opacity: 1; }
+  #gear-panel .gear-quickadd textarea:hover, #gear-panel .gear-quickadd textarea:focus { border-color: var(--text-faint); }
+  #gear-panel .gear-quickadd textarea:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+  #gear-panel .gear-quickadd-row { align-items: flex-start; gap: 16px; margin: 0; }
+  #gear-panel .gear-quickadd-hint { flex: 1; min-width: 0; padding-top: 8px; font-size: 12.5px; line-height: 16px; }
+  #gear-panel #gear-quickadd-save {
+    height: 32px; margin-right: -8px; padding: 0 8px;
+    border: 0; border-radius: var(--radius-sm); background: transparent;
+    color: var(--text); font-size: 14px; line-height: 20px; font-weight: 450;
+  }
+  #gear-panel #gear-quickadd-save:hover { background: var(--hover); color: var(--text); }
+  .gear-head-title { display: flex; align-items: baseline; gap: 12px; min-width: 0; white-space: nowrap; }
+  .gear-head-count { font-size: 13px; line-height: 16px; color: var(--text-faint); }
+  .gear-head-count[hidden] { display: none; }
+  .gear-head-count .panel-count { font-size: inherit; }
+  .gear-packing-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 32px; margin-right: -8px; padding: 0 8px;
+    border: 0; border-radius: var(--radius-sm); background: transparent;
+    color: var(--text-faint); font-family: var(--font-body); font-size: 14px; line-height: 20px; font-weight: 450;
+    white-space: nowrap; cursor: pointer;
+  }
+  .gear-packing-btn:hover { background: var(--hover); color: var(--text); }
+  .gear-packing-btn svg {
+    width: 16px; height: 16px; flex: none;
+    fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+  }

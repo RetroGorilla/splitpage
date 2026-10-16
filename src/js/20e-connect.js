@@ -1,6 +1,5 @@
 import { S } from "./_state.js";
 import { conn, home, setHome } from "./_home.js";
-import { escapeHtml } from "./02-state.js";
 import { render } from "./05-render.js";
 import { showToast } from "./12-dirty-toast.js";
 import {
@@ -12,10 +11,12 @@ import {
   pointTabAt,
   setServerToken
 } from "./13-hosted.js";
-import { openCollaborate } from "./13b-collaborate.js";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
-import { setMenuItemLabel, toggleFileMenu } from "./18b-file-menu.js";
+import { setMenuItemLabel } from "./18b-file-menu.js";
 import { renderDesktopShareInfo } from "./20f-desktop.js";
+import { escapeHtml } from "../core/document/text-policy.ts";
+import { appActions } from "../legacy/app-actions.ts";
+import { interruptTourForDialog, offerTourResumeAfterDialog } from "../legacy/tour-pause.ts";
 
 export var SERVER_BOOKMARKS_KEY = "splitpage-server-bookmarks";
 
@@ -53,12 +54,16 @@ function bookmarkById(id) {
   return null;
 }
 
+export function serversMenuLabel() {
+  if (!conn.serverUrl) return "Servers…";
+  var known = S.serverBookmarks.filter(function (b) { return b.url === conn.serverUrl; })[0];
+  return "Servers… (" + (known ? known.name : shortHost(conn.serverUrl)) + ")";
+}
+
 export function updateConnectMenu() {
   var item = document.getElementById("menu-servers");
   if (!item) return;
-  if (!conn.serverUrl) { setMenuItemLabel(item, "Servers…"); return; }
-  var known = S.serverBookmarks.filter(function (b) { return b.url === conn.serverUrl; })[0];
-  setMenuItemLabel(item, "Servers… (" + (known ? known.name : shortHost(conn.serverUrl)) + ")");
+  setMenuItemLabel(item, serversMenuLabel());
 }
 
 export function shortHost(url) {
@@ -69,6 +74,7 @@ export function openPinDialog(opts) {
   opts = opts || {};
   var modal = document.getElementById("pin-modal");
   if (!modal) return;
+  interruptTourForDialog();
   pinRequest = {
     base: opts.base === undefined ? conn.serverUrl : opts.base,
     onDone: opts.onDone || null
@@ -78,14 +84,37 @@ export function openPinDialog(opts) {
   var input = document.getElementById("pin-input");
   input.value = "";
   setPinError("");
+  placeAfter(modal, document.getElementById("connect-modal"));
   modal.hidden = false;
   input.focus();
 }
 
+function placeAfter(modal, other) {
+  if (!other || other.parentNode !== modal.parentNode) return;
+  if (other.compareDocumentPosition(modal) & Node.DOCUMENT_POSITION_PRECEDING) other.after(modal);
+}
+
+function frontmostOf(ids) {
+  var open = ids.map(function (id) { return document.getElementById(id); })
+    .filter(function (m) { return m && !m.hidden; });
+  return open.reduce(function (front, m) {
+    return front && (front.compareDocumentPosition(m) & Node.DOCUMENT_POSITION_PRECEDING) ? front : m;
+  }, null);
+}
+
 function closePinDialog() {
   var modal = document.getElementById("pin-modal");
+  var wasOpen = !!modal && !modal.hidden;
   if (modal) modal.hidden = true;
   pinRequest = null;
+  if (wasOpen) offerTourResumeAfterDialog();
+}
+
+function closePinDialogForAnotherServer() {
+  var modal = document.getElementById("pin-modal");
+  if (!modal || modal.hidden || !pinRequest) return;
+  if (normalizeServerBase(pinRequest.base) === conn.serverUrl) return;
+  closePinDialog();
 }
 
 function setPinError(message) {
@@ -176,6 +205,7 @@ export function openServersDialog() {
   sshShownFor = null;
   document.getElementById("connect-ssh-out").hidden = true;
   setConnectError("");
+  placeAfter(modal, document.getElementById("pin-modal"));
   modal.hidden = false;
   renderConnect();
   renderReviewLink();
@@ -185,6 +215,8 @@ export function openServersDialog() {
 function closeServersDialog() {
   var modal = document.getElementById("connect-modal");
   if (modal) modal.hidden = true;
+  var pin = document.getElementById("pin-modal");
+  if (pin && !pin.hidden) document.getElementById("pin-input").focus();
 }
 
 function setConnectError(message) {
@@ -354,6 +386,7 @@ async function useServer(bookmark, opts) {
   } catch (e) {
     pointTabAt(bookmark.url, { token: opts.token, makeDefault: true });
   }
+  closePinDialogForAnotherServer();
   if (opts.token) setServerToken(opts.token, !!opts.remember);
   updateConnectMenu();
   renderConnect();
@@ -404,6 +437,7 @@ async function backToThisCopy() {
   S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
                  reviewAvailable: false, version: null };
   pointTabAt("", { makeDefault: true });
+  closePinDialogForAnotherServer();
   updateConnectMenu();
   await detectServer();
   applyReviewMode();
@@ -492,17 +526,6 @@ export function __init() {
   loadBookmarks();
 
   (function wireConnectUi() {
-    var menu = document.getElementById("file-menu");
-    if (menu) {
-      menu.addEventListener("click", function (e) {
-        var item = e.target.closest("[data-file-action]");
-        if (!item || item.disabled) return;
-        if (item.getAttribute("data-file-action") !== "servers") return;
-        e.stopPropagation();
-        toggleFileMenu(false);
-        openServersDialog();
-      }, true);
-    }
 
     var pinModal = document.getElementById("pin-modal");
     if (pinModal) {
@@ -540,7 +563,7 @@ export function __init() {
         else if (action === "ssh-copy") copySshCommand();
         else if (action === "ssh-save") saveSshCmd();
         else if (action === "review-copy") copyReviewLink();
-        else if (action === "collaborate") { closeServersDialog(); openCollaborate(); }
+        else if (action === "collaborate") { closeServersDialog(); appActions.invoke("collaborate", "button"); }
         else if (action === "back") backToThisCopy();
       });
       var sshToggle = document.getElementById("connect-ssh-toggle");
@@ -553,10 +576,11 @@ export function __init() {
 
     window.addEventListener("keydown", function (e) {
       if (e.key !== "Escape") return;
-      var pin = document.getElementById("pin-modal");
-      if (pin && !pin.hidden) { e.stopPropagation(); closePinDialog(); return; }
-      var connect = document.getElementById("connect-modal");
-      if (connect && !connect.hidden) { e.stopPropagation(); closeServersDialog(); }
+      var front = frontmostOf(["pin-modal", "connect-modal"]);
+      if (!front) return;
+      e.stopPropagation();
+      if (front.id === "pin-modal") closePinDialog();
+      else closeServersDialog();
     }, true);
   })();
 

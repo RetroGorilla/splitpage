@@ -1,0 +1,216 @@
+{
+  "inputs": {
+    "base": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "the cat sat on the mat",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "a quick brown fox",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "one two three",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r4",
+          "status": "todo",
+          "visualText": "Line one<br>Line two<br>Line three",
+          "audioText": "",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "mine": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "the dog sat on the mat",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "a <strong>quick</strong> brown fox",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "one <strong>two</strong> three",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        },
+        {
+          "id": "r4",
+          "status": "todo",
+          "visualText": "Line one, mine<br>Line two<br>Line three",
+          "audioText": "",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "theirs": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "the cat sat on the rug",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "a quick brown dog",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "one <em>two</em> three",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        },
+        {
+          "id": "r4",
+          "status": "todo",
+          "visualText": "Line one<br>Line two<br>Line three, theirs",
+          "audioText": "",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        }
+      ],
+      "comments": [],
+      "people": [],
+      "productionTags": [],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    }
+  },
+  "inputsUntouched": true,
+  "merged": {
+    "title": "Lighthouse",
+    "docId": "d11111111111111111111111111111111",
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "the dog sat on the rug",
+        "imageRef": null,
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor"
+      },
+      {
+        "id": "r2",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "a <strong>quick</strong> brown dog",
+        "imageRef": null,
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor"
+      },
+      {
+        "id": "r3",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "one <strong><em>two</em></strong> three",
+        "imageRef": null,
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor"
+      },
+      {
+        "id": "r4",
+        "status": "todo",
+        "visualText": "Line one, mine<br>Line two<br>Line three, theirs",
+        "audioText": "",
+        "imageRef": null,
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor"
+      }
+    ],
+    "comments": [],
+    "people": [],
+    "productionTags": [],
+    "brollShots": [],
+    "wordsPerMinute": 150,
+    "rev": 5,
+    "lastEditedBy": "Base Writer",
+    "lastEditedAt": "2026-02-01T09:00:00.000Z",
+    "schema": 2
+  },
+  "conflicts": [],
+  "stats": {
+    "rowsFromThem": 0,
+    "rowsFromMe": 4,
+    "rowsAddedByMe": 0,
+    "rowsAddedByThem": 0
+  }
+}

@@ -1,0 +1,126 @@
+# One action, every surface (4.0 milestone 1): Hide shot scenes, Minimise the
+# rundown and Version history do the same thing from the File menu, the
+# command menu, their shortcut and their own button, and are refused the same
+# way where they are not allowed. Written before the three moved onto the
+# action registry, and kept unchanged after.
+
+open
+viewport 1400 900
+eval (function(){ localStorage.removeItem('splitpage-hide-shot'); localStorage.removeItem('splitpage-rundown-min'); window.C = window.__commandTest; window.__cmd = function (q, id) { var hit = null; C.results(q).forEach(function (g) { g.items.forEach(function (it) { if (it.id === id) hit = it; }); }); return hit; }; window.__toasts = function () { return Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function (t) { return t.textContent; }).join('|'); }; window.__clearToasts = function () { document.getElementById('toast-host').innerHTML = ''; return true; }; return true; })()
+
+# --- what the command menu says about each ---------------------------------
+expect __cmd('hide shot', 'toggle-hide-shot').label == Hide shot scenes
+expect __cmd('hide shot', 'toggle-hide-shot').disabled == false
+expect __cmd('minimise rundown', 'toggle-rundown-min').label == Minimise the rundown
+expect __cmd('version history', 'history').label == Version history…
+expect __cmd('version history', 'history').disabled == false
+
+key ctrl KeyK
+sleep 200
+type hide shot
+sleep 200
+expect Array.prototype.map.call(document.querySelectorAll('#cmdk-list .cmdk-item[data-cmd="toggle-hide-shot"] .cmdk-keys kbd'), function(k){return k.textContent;}).join('+') === 'Ctrl+Alt+H'
+expect document.querySelector('#cmdk-list .cmdk-item[data-cmd="toggle-hide-shot"]').textContent.indexOf('Off') !== -1
+key Escape
+sleep 200
+
+# --- Hide shot scenes: shortcut, File menu, command menu -------------------
+eval __clearToasts()
+key ctrl+alt KeyH
+sleep 200
+expect localStorage.getItem('splitpage-hide-shot') == 1
+expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') == true
+expect __toasts().indexOf('Hiding shot scenes') !== -1
+
+eval __clearToasts()
+click #btn-file
+sleep 200
+jsclick #menu-hide-shot
+sleep 200
+expect localStorage.getItem('splitpage-hide-shot') == 0
+expect document.getElementById('menu-hide-shot').getAttribute('aria-checked') == false
+expect !document.getElementById('file-menu').hidden
+expect __toasts().indexOf('Showing every scene again.') !== -1
+jsclick #file-menu-close
+sleep 200
+
+eval __clearToasts()
+key ctrl KeyK
+sleep 200
+type hide shot
+sleep 200
+key Enter
+sleep 300
+expect document.getElementById('cmdk').hidden
+expect localStorage.getItem('splitpage-hide-shot') == 1
+expect __toasts().indexOf('Hiding shot scenes') !== -1
+expect __cmd('hide shot', 'toggle-hide-shot').disabled == false
+
+# refused with a dialog open: the shortcut does nothing
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="about"]
+sleep 300
+expect !!document.querySelector('.modal-backdrop:not([hidden])')
+key ctrl+alt KeyH
+sleep 200
+expect localStorage.getItem('splitpage-hide-shot') == 1
+key Escape
+sleep 300
+expect !document.querySelector('.modal-backdrop:not([hidden])')
+key ctrl+alt KeyH
+sleep 200
+expect localStorage.getItem('splitpage-hide-shot') == 0
+
+# --- Minimise the rundown: its own button, File menu, command menu ---------
+expect !document.querySelector('.rundown-toggle').closest('.is-min')
+jsclick .rundown-toggle
+sleep 200
+expect localStorage.getItem('splitpage-rundown-min') == 1
+expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == true
+
+click #btn-file
+sleep 200
+jsclick #menu-rundown-min
+sleep 200
+expect localStorage.getItem('splitpage-rundown-min') == 0
+expect document.getElementById('menu-rundown-min').getAttribute('aria-checked') == false
+expect !document.getElementById('file-menu').hidden
+jsclick #file-menu-close
+sleep 200
+
+key ctrl KeyK
+sleep 200
+type minimise rundown
+sleep 200
+key Enter
+sleep 300
+expect localStorage.getItem('splitpage-rundown-min') == 1
+jsclick .rundown-toggle
+sleep 200
+expect localStorage.getItem('splitpage-rundown-min') == 0
+
+# --- Version history: File menu, command menu ------------------------------
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="history"]
+sleep 300
+expect document.getElementById('file-menu').hidden
+expect !document.getElementById('history-panel').hidden
+jsclick #history-close
+sleep 200
+expect document.getElementById('history-panel').hidden
+
+key ctrl KeyK
+sleep 200
+type version history
+sleep 200
+key Enter
+sleep 300
+expect !document.getElementById('history-panel').hidden
+jsclick #history-close
+sleep 200
+
+# none of it touched the document
+expect document.getElementById('save-status').hidden
+expect document.getElementById('btn-save').textContent == Save

@@ -1,4 +1,5 @@
 import { S } from "./_state.js";
+import { authorityOf, isLinkGuest as guestAuthority, isReviewer } from "../application/collaboration/authority.ts";
 import {
   conn,
   home,
@@ -6,7 +7,9 @@ import {
   normalizeServerUrl,
   serverHomeId,
   setConnection,
+  serverOf,
   setHome,
+  stillOnServer,
   updateConnection
 } from "./_home.js";
 import { escapeHtml, migrateRows } from "./02-state.js";
@@ -41,7 +44,7 @@ import {
 } from "./02c-blobs.js";
 import { cssAttr, inertBody } from "./04-richtext.js";
 import { withBusyBar } from "./04b-busy.js";
-import { render } from "./05-render.js";
+import { render, renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import {
   captureReplyDrafts,
@@ -53,7 +56,10 @@ import {
 } from "./10-comments.js";
 import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { maybeAskGuestName, parseLinkFragment, updateCollaborateMenu } from "./13b-collaborate.js";
-import { scheduleAutoSave } from "./14-export.js";
+import { saveDoc, scheduleAutoSave } from "./14-export.js";
+import { requestSave } from "../legacy/save-bridge.ts";
+import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
+import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import {
   joinServer,
@@ -67,6 +73,9 @@ import { setMenuItemReason } from "./18b-file-menu.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { armBrowserServerDraft, offerBrowserDraftAfterLinkOff } from "./20g-drafts.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
+import { idMap } from "../core/document/id-map.ts";
+import { VIEWING_ONLY } from "../legacy/review-wording.ts";
+import { isDocumentObject } from "../core/migrate.ts";
 
 var sharedDocId;
 
@@ -92,15 +101,10 @@ var serverDocs = [];
 export function onServerDoc() { return home.kind === "server"; }
 
 export function reviewMode() {
-  var c = homeConn();
-  return !!c && c.role === "review";
+  return isReviewer(authorityOf(homeConn()));
 }
 
-function ApiError(code, message) {
-  var e = new Error(message || code);
-  e.code = code;
-  return e;
-}
+var ApiError = apiError;
 
 export var normalizeServerBase = normalizeServerUrl;
 
@@ -208,8 +212,7 @@ export function pointTabAt(serverUrl, opts) {
 }
 
 export function apiUrl(path) {
-  var rel = String(path || "").replace(/^\/+/, "");
-  return conn.serverUrl ? conn.serverUrl + rel : rel;
+  return serverTransport(conn).url(path);
 }
 
 export function setServerToken(token, remember) {
@@ -302,133 +305,91 @@ export function arrivingOnLink() {
 }
 
 export function isLinkGuest() {
-  return !!conn.scope;
+  return guestAuthority(authorityOf(conn));
 }
 
 function holdsOwnerSignIn() {
   return !!conn.token && conn.token === rememberedTokenFor(conn.serverUrl);
 }
 
-var CLIENT_HEADER = "x-splitpage-client";
-var CLIENT_GENERATION = "2";
 var serverCaps = new WeakMap();
 
 function capsOf(c) {
-  return (c && serverCaps.get(c)) || { blobs: false, noClientHeader: false, known: false };
+  var server = serverOf(c);
+  return (server && serverCaps.get(server)) || { blobs: false, noClientHeader: false, known: false };
 }
 
 function noteCaps(c, health, noClientHeader) {
-  serverCaps.set(c, {
+  var server = serverOf(c);
+  if (!server) return;
+  serverCaps.set(server, {
     blobs: !!(health && Number(health.blobs) >= 1),
     noClientHeader: !!noClientHeader,
     known: true
   });
 }
 
-function serverTakesBlobs() {
-  return capsOf(conn).blobs;
+function sendFetch(url, init) {
+  return fetch(url, init);
 }
 
-function clientHeaders(headers, opts) {
-  var other = !!(opts && opts.base !== undefined);
-  var token = opts && opts.token !== undefined ? opts.token : conn.token;
-  if (token) headers["x-splitpage-token"] = token;
-  if (!(opts && opts.noClientHeader) && (other || !capsOf(conn).noClientHeader)) headers[CLIENT_HEADER] = CLIENT_GENERATION;
-  return headers;
+export function serverTransport(c, token) {
+  var held = token === undefined ? c : { serverUrl: c.serverUrl, token: token };
+  return createServerTransport(held, {
+    fetch: sendFetch,
+    caps: function () { return capsOf(c); }
+  });
 }
 
-export async function apiFetch(path, opts) {
+function otherServerTransport(base, token) {
+  return createServerTransport({ serverUrl: normalizeServerUrl(base), token: token }, {
+    fetch: sendFetch,
+    caps: function () { return { blobs: false, noClientHeader: false }; }
+  });
+}
+
+export function apiFetch(path, opts) {
   opts = opts || {};
-  var headers = opts.raw
-    ? { "Content-Type": opts.contentType || "application/octet-stream", "Accept": "application/json" }
-    : opts.body
-      ? { "Content-Type": "application/json", "Accept": "application/json" }
-      : { "Accept": "application/json" };
-  clientHeaders(headers, opts);
-  var base = opts.base !== undefined ? normalizeServerUrl(opts.base) : conn.serverUrl;
-  var rel = String(path || "").replace(/^\/+/, "");
-  var res;
-  try {
-    res = await fetch(base ? base + rel : rel, {
-      method: opts.method || "GET",
-      headers: headers,
-      body: opts.raw ? opts.raw : opts.body ? JSON.stringify(opts.body) : undefined,
-      credentials: base ? "omit" : "same-origin",
-      cache: "no-store"
-    });
-  } catch (e) {
-    throw ApiError("offline", "no answer from the server");
-  }
-
-  var ctype = res.headers.get("content-type") || "";
-  if (opts.raw && res.status === 413) throw ApiError("blob-too-large", "too-large");
-  if (res.redirected || (!ctype.includes("application/json") && res.status !== 204)) {
-    throw ApiError("auth", "signed out");
-  }
-  if (res.status === 401 || res.status === 403) {
-    var body403 = await res.json().catch(function () { return null; });
-    if (body403 && body403.error === "read-only") throw ApiError("read-only", "read-only");
-    if (body403 && body403.error === "review-only") {
-      var e403 = ApiError("review-only", "this link can comment, but not change the script");
-      e403.detail = body403.detail || "";
-      throw e403;
-    }
-    if (body403 && (body403.error === "pin-required" || body403.error === "bad-pin")) {
-      throw ApiError("pin", "this server asks for a join PIN");
-    }
-    if (body403 && body403.error === "link-off") throw ApiError("link-off", "the owner turned off this link");
-    if (body403 && body403.error === "owner-only") throw ApiError("owner-only", "only the script's owner can do that");
-    if (body403 && body403.error === "wrong-document") {
-      throw ApiError("wrong-document", "this link opens a different script");
-    }
-    throw ApiError("auth", "signed out");
-  }
-  if (res.status === 410) {
-    var body410 = await res.json().catch(function () { return null; });
-    if (body410 && body410.error === "link-off") throw ApiError("link-off", "the owner turned off this link");
-    var gone = ApiError("410", (body410 && body410.error) || "HTTP 410");
-    gone.payload = body410;
-    throw gone;
-  }
-  if (res.status === 429) {
-    var body429 = await res.json().catch(function () { return null; });
-    if (body429 && body429.error === "too-many-attempts") {
-      throw ApiError("pin-blocked", "too many wrong codes — wait a minute and try again");
-    }
-    if (body429 && body429.error === "review-budget") {
-      throw ApiError("review-budget", "this link's image allowance is used up for now");
-    }
-  }
-  if (res.status === 426) throw ApiError("client-too-old", "this page is out of date");
-
-  var body = res.status === 204 ? null : await res.json().catch(function () { return null; });
-  if (res.status === 409) { var c = ApiError("conflict"); c.payload = body; throw c; }
-  if (res.status === 404 && body && body.error === "not-found") throw ApiError("not-found");
-  if (res.status === 422 && body && body.error === "missing-blobs") {
-    var mb = ApiError("missing-blobs", "an image in it is not on the server");
-    mb.payload = body;
-    throw mb;
-  }
-  if (opts.raw && res.status === 415) throw ApiError("blob-unsupported", (body && body.error) || "unsupported-type");
-  if (!res.ok) {
-    var ge = ApiError(String(res.status), (body && body.error) || ("HTTP " + res.status));
-    ge.payload = body;
-    throw ge;
-  }
-  return body;
+  var token = opts.token !== undefined ? opts.token : conn.token;
+  var transport;
+  if (opts.base !== undefined) transport = otherServerTransport(opts.base, token);
+  else transport = serverTransport(conn, token);
+  return transport.request(path, opts);
 }
 
 export var SERVER_RESUME_KEY = "splitpage-server-resume";
 
 S.draftServerResume = null;
 
+var resumeKeyOwner = null;
+
+function ownResumeKey(raw) {
+  resumeKeyOwner = { raw: raw, op: captureOperation() };
+}
+
+function dropResumeKey() {
+  resumeKeyOwner = null;
+  try { sessionStorage.removeItem(SERVER_RESUME_KEY); } catch (e) {}
+}
+
+function keptServerResume() {
+  var raw;
+  try { raw = sessionStorage.getItem(SERVER_RESUME_KEY); } catch (e) { return null; }
+  if (!raw) { resumeKeyOwner = null; return null; }
+  if (!resumeKeyOwner || resumeKeyOwner.raw !== raw) ownResumeKey(raw);
+  else if (!sameDocumentAs(resumeKeyOwner.op)) return null;
+  try { return JSON.parse(raw); } catch (e) { return null; }
+}
+
 function stashForReload() {
   var stashed = false;
   if (onServerDoc()) {
     try {
-      sessionStorage.setItem(SERVER_RESUME_KEY, JSON.stringify({ id: home.id, rev: home.rev }));
+      var raw = JSON.stringify({ id: home.id, rev: home.rev });
+      sessionStorage.setItem(SERVER_RESUME_KEY, raw);
       stashed = stashLocalWork();
-      if (!stashed) sessionStorage.removeItem(SERVER_RESUME_KEY);
+      if (stashed) ownResumeKey(raw);
+      else dropResumeKey();
     } catch (e) { stashed = false; }
   }
   return stashed;
@@ -472,10 +433,7 @@ function flagLinkOff(kind) {
   }
   stashForReload();
   forgetLinkKey(conn.serverUrl);
-  var saveCopy = function () {
-    var item = document.querySelector('#file-menu [data-file-action="save-as"]');
-    if (item && !item.disabled) item.click();
-  };
+  var saveCopy = function () { saveDoc({ saveAs: true }); };
   showActionToast(kind === "gone"
     ? "This link no longer works — ask whoever sent it for a new one. Your changes can't be saved to it any more."
     : "The owner turned off this link. Your changes can't be saved to it any more.",
@@ -491,27 +449,38 @@ function offerDraftAfterLinkOff() {
   offerBrowserDraftAfterLinkOff(conn.scope || sharedDocId || linkDocId || "");
 }
 
+function pendingServerResume() {
+  var override = S.draftServerResume;
+  if (override) return { id: override.id, rev: override.rev || 0 };
+  return keptServerResume();
+}
+
+function sameDocumentAs(op) {
+  var now = captureOperation();
+  return now.epoch === op.epoch && now.docId === op.docId && now.destination === op.destination;
+}
+
 async function resumeServerDoc() {
   var override = S.draftServerResume;
-  var pending;
-  if (override) {
-    pending = { id: override.id, rev: override.rev || 0 };
-  } else {
-    try {
-      var raw = sessionStorage.getItem(SERVER_RESUME_KEY);
-      pending = raw ? JSON.parse(raw) : null;
-    } catch (e) { pending = null; }
-  }
+  var pending = pendingServerResume();
   if (!pending || !pending.id) return false;
 
   var seqAtStart = S.editSeq;
   var stateAtStart = S.state ? cloneState(S.state) : null;
+  var op = captureOperation();
 
   var body;
   var via = conn;
   try {
     body = await apiFetch("api/docs/" + encodeURIComponent(pending.id));
-    if (via !== conn) return false;
+    if (!stillOnServer(via)) return false;
+    if (!sameDocumentAs(op)) {
+      if (override) {
+        S.draftServerResume = null;
+        try { override.onDone("replaced"); } catch (e) {}
+      }
+      return "replaced";
+    }
     forgetRemoteMisses();
   } catch (err) {
     if (override && err && err.code === "not-found") {
@@ -520,6 +489,7 @@ async function resumeServerDoc() {
     }
     return false;
   }
+  if (!body || !isDocumentObject(body.state)) { showToast("That document is empty.", "warn"); return "empty"; }
   if (override) {
     S.draftServerResume = null;
     var samePending;
@@ -528,11 +498,11 @@ async function resumeServerDoc() {
       samePending = rawPending ? JSON.parse(rawPending) : null;
     } catch (e) { samePending = null; }
     if (samePending && samePending.id === pending.id) {
-      try { sessionStorage.removeItem(SERVER_RESUME_KEY); } catch (e) {}
+      dropResumeKey();
       clearStash();
     }
   } else {
-    try { sessionStorage.removeItem(SERVER_RESUME_KEY); } catch (e) {}
+    dropResumeKey();
   }
 
   var stash = override || readStash();
@@ -571,10 +541,13 @@ async function resumeServerDoc() {
       if (override) { try { override.onDone("server-resumed"); } catch (e) {} }
       return true;
     }
-    S.state = theirs;
-    setBaseState(cloneState(S.state), "resumeServerDoc: reopened as the server has it, nothing to merge");
+    documentTransitions().open({
+      from: { document: theirs },
+      reason: "resumeServerDoc: reopened as the server has it, nothing to merge",
+      writtenOut: true
+    });
     clearDirty();
-    render();
+    renderAbsorbed();
     updateIdentityChip();
     updateFileChip();
     showToast("Signed back in — reopened " + (S.state.title || body.id), "ok");
@@ -695,13 +668,13 @@ export async function detectServer() {
   var probing = conn;
   try {
     var health = await probeHealth(probing);
-    if (probing !== conn) return;
+    if (!stillOnServer(probing)) return;
     applyHealth(health);
   } catch (e) {
-    if (probing !== conn) return;
+    if (!stillOnServer(probing)) return;
     S.serverMode.available = false;
   }
-  if (probing !== conn) return;
+  if (!stillOnServer(probing)) return;
   S.serverMode.checked = true;
   updateConnectMenu();
   updateServerMenu();
@@ -725,7 +698,7 @@ export async function detectServer() {
     var reason = null;
     if (useKey) {
       var r = await joinWithLinkKey();
-      if (probing !== conn) return;
+      if (!stillOnServer(probing)) return;
       if (r === "ok") { finishServerDetect(); return; }
       if (r === "off") { updateServerMenu(); return; }
       if (r === "gone") reason = "This link no longer works — ask whoever sent it for a new one. " +
@@ -758,7 +731,7 @@ async function joinWithLinkKey() {
   var key = linkKey;
   var via = conn;
   var joined = await joinServer(conn.serverUrl, null, key);
-  if (via !== conn) return "moved";
+  if (!stillOnServer(via)) return "moved";
   if (joined && joined.ok) {
     linkKeyFresh = false;
     setLinkToken(joined.token);
@@ -786,12 +759,12 @@ async function probeHealth(probing) {
   try {
     health = await apiFetch("api/health");
   } catch (e) {
-    if (!(e && e.code === "offline" && probing.serverUrl) || probing !== conn) throw e;
+    if (!(e && e.code === "offline" && probing.serverUrl) || !stillOnServer(probing)) throw e;
     health = await apiFetch("api/health", { noClientHeader: true });
-    if (probing === conn) noteCaps(probing, health, !(health && Number(health.blobs) >= 1));
+    if (stillOnServer(probing)) noteCaps(probing, health, !(health && Number(health.blobs) >= 1));
     return health;
   }
-  if (probing === conn) noteCaps(probing, health, false);
+  if (stillOnServer(probing)) noteCaps(probing, health, false);
   return health;
 }
 
@@ -799,7 +772,7 @@ export async function finishServerDetect() {
   var asking = conn;
   try {
     var me = await apiFetch("api/me");
-    if (asking !== conn) return;
+    if (!stillOnServer(asking)) return;
     serverIdentity = me;
     var role = (serverIdentity && serverIdentity.role) === "review" ? "review" : "edit";
     var scope = serverIdentity && typeof serverIdentity.scope === "string" ? serverIdentity.scope
@@ -811,13 +784,13 @@ export async function finishServerDetect() {
       updateIdentityChip();
     }
   } catch (e) {
-    if (asking !== conn) return;
+    if (!stillOnServer(asking)) return;
     if (e && e.code === "link-off") { flagLinkOff("off"); updateServerMenu(); return; }
     if (e && e.code === "pin" && linkKey && !linkTurnedOff) {
       updateConnection({ token: "", role: "", scope: "" });
       saveTabServer();
       var again = await joinWithLinkKey();
-      if (asking !== conn) return;
+      if (!stillOnServer(asking)) return;
       if (again === "ok") { finishServerDetect(); return; }
       if (again === "gone" || again === "none") flagLinkOff("gone");
       updateServerMenu();
@@ -830,30 +803,42 @@ export async function finishServerDetect() {
   var draftFor = S.DESKTOP ? "" : (conn.scope || sharedDocId || linkDocId || "");
   (draftFor ? armBrowserServerDraft(draftFor) : Promise.resolve(false)).then(function () {
     return resumeServerDoc().then(function (resumed) {
-      if (!resumed) openSharedDocFromLink();
-    }, function () { openSharedDocFromLink(); });
+      if (resumed === true || resumed === "replaced") return;
+      var refused = resumed === "empty" ? pendingServerResume() : null;
+      openSharedDocFromLink(refused ? refused.id : "");
+    }, function () { openSharedDocFromLink(""); });
   });
 }
 
-export function updateServerMenu() {
-  ["menu-server-open", "menu-server-new"].forEach(function (id) {
-    var el = document.getElementById(id);
-    if (el) el.hidden = !S.serverMode.available;
-  });
+export function serverOpenItemState() {
   var guest = isLinkGuest();
-  var openBtn = document.getElementById("menu-server-open");
-  if (openBtn) {
-    openBtn.disabled = guest;
-    setMenuItemReason(openBtn, guest ? "Your link opens this one script" : "");
-  }
-  var newBtn = document.getElementById("menu-server-new");
-  if (newBtn) {
-    newBtn.disabled = S.serverMode.readOnly || conn.role === "review" || guest;
-    setMenuItemReason(newBtn, !newBtn.disabled ? ""
+  return { hidden: !S.serverMode.available, disabled: guest, reason: guest ? "Your link opens this one script" : "" };
+}
+
+export function serverPublishItemState() {
+  var guest = isLinkGuest();
+  var disabled = !!(S.serverMode.readOnly || conn.role === "review" || guest);
+  return {
+    hidden: !S.serverMode.available,
+    disabled: disabled,
+    reason: !disabled ? ""
       : guest ? "Your link opens this one script"
       : conn.role === "review" ? "Viewing only — publishing needs the editing code"
-      : "This server is read-only");
-  }
+      : "This server is read-only"
+  };
+}
+
+function paintServerItem(id, state) {
+  var el = document.getElementById(id);
+  if (!el) return;
+  el.hidden = state.hidden;
+  el.disabled = state.disabled;
+  setMenuItemReason(el, state.reason);
+}
+
+export function updateServerMenu() {
+  paintServerItem("menu-server-open", serverOpenItemState());
+  paintServerItem("menu-server-new", serverPublishItemState());
   updateCollaborateMenu();
 }
 
@@ -866,14 +851,16 @@ export function applyReviewMode() {
   if (title) title.readOnly = on;
 }
 
+export { VIEWING_ONLY };
+
 export function reviewBlocked() {
   if (!reviewMode()) return false;
-  showToast("Viewing only — you can comment on this script, but not change it.", "warn");
+  showToast(VIEWING_ONLY, "warn");
   return true;
 }
 
 export async function fetchReviewLink() {
-  if (!S.serverMode.available || !S.serverMode.reviewAvailable || conn.role === "review") return "";
+  if (!S.serverMode.available || !S.serverMode.reviewAvailable || isReviewer(authorityOf(conn))) return "";
   if (S.serverMode.links || isLinkGuest()) return "";
   if (!onServerDoc()) return "";
   var body;
@@ -884,7 +871,15 @@ export async function fetchReviewLink() {
          "#review=" + body.reviewKey;
 }
 
+var serverPickerEpoch = 0;
+
+export function captureServerPicker() {
+  var epoch = serverPickerEpoch;
+  return function () { return epoch === serverPickerEpoch; };
+}
+
 export async function openServerPicker() {
+  serverPickerEpoch++;
   var modal = document.getElementById("server-modal");
   var list = document.getElementById("server-doc-list");
   modal.hidden = false;
@@ -903,6 +898,7 @@ export async function openServerPicker() {
 }
 
 export function closeServerPicker() {
+  serverPickerEpoch++;
   document.getElementById("server-modal").hidden = true;
 }
 
@@ -927,7 +923,7 @@ function renderServerPicker() {
         '</span>' +
       '</button>' +
       (isOpen ? '<span class="server-doc-current">Open</span>' : '') +
-      (S.serverMode.readOnly || conn.role === "review" ? '' :
+      (S.serverMode.readOnly || isReviewer(authorityOf(conn)) ? '' :
         '<button type="button" class="server-doc-delete" data-action="server-delete" data-id="' +
           escapeHtml(d.id) + '" title="Delete this document from the server" aria-label="Delete from the server">' +
           spriteIcon("i-trash") + '</button>') +
@@ -938,7 +934,7 @@ function renderServerPicker() {
 export async function openServerDoc(id) {
   if (!S.DESKTOP && !S.draftServerResume && await armBrowserServerDraft(id)) {
     if (S.state && S.state.rows.length) pushSnapshot("Before opening a script from the server");
-    var resumed = await resumeServerDoc();
+    var resumed = await resumeServerDoc() === true;
     if (resumed) {
       if (typeof closeNewTabPage === "function") closeNewTabPage();
       closeServerPicker();
@@ -950,31 +946,42 @@ export async function openServerDoc(id) {
   try {
     body = await apiFetch("api/docs/" + encodeURIComponent(id));
   } catch (err) {
-    if (via !== conn) return false;
+    if (!stillOnServer(via)) return false;
     handleApiError(err, "Could not open that document"); return false;
   }
-  if (via !== conn) return false;
-  if (!body || !body.state) { showToast("That document is empty.", "warn"); return false; }
+  if (!stillOnServer(via)) return false;
+  if (!body || !isDocumentObject(body.state)) { showToast("That document is empty.", "warn"); return false; }
   forgetRemoteMisses();
 
   if (S.state && S.state.rows.length) pushSnapshot("Before opening " + (body.state.title || id));
 
-  S.state = migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null });
-  setBaseState(cloneState(S.state), "openServerDoc: the document as the server sent it");
+  documentTransitions().open({
+    from: { document: migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null }) },
+    reason: "openServerDoc: the document as the server sent it",
+    destination: { kind: "server", fields: { id: body.id, rev: body.rev || 0 } },
+    writtenOut: true
+  });
   if (typeof closeNewTabPage === "function") closeNewTabPage();
-  setHome("server", { id: body.id, rev: body.rev || 0 });
-  S.docIdWrittenOut = true;
   resetProductionPanelState();
 
   clearDirty();
   applyReviewMode();
-  render();
+  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   closeServerPicker();
   showToast("Opened " + (S.state.title || id) + " from the server — " + S.state.rows.length +
     " scene" + (S.state.rows.length === 1 ? "" : "s"), "ok");
   return true;
+}
+
+function serverLabel(c) {
+  try { return new URL(c.serverUrl).host || "the other server"; } catch (e) { return "the other server"; }
+}
+
+function reportPublishOnLeftServer(title, via) {
+  showToast("Published “" + title + "” to " + serverLabel(via) + ", but this tab had switched to another server by then, " +
+    "so the script you have open was left unpublished. The published copy stays on that server.", "warn", true);
 }
 
 export async function publishToServer(opts) {
@@ -994,14 +1001,15 @@ export async function publishToServer(opts) {
   var forkDocId = S.docIdWrittenOut ? mintDocId() : null;
   if (forkDocId) published.docId = forkDocId;
   var body;
-  var via = conn;
-  var homeAtStart = home;
+  var op = captureOperation();
+  var via = op.connection;
+  var transport = serverTransport(via);
   try {
     body = await withBusyBar("Publishing to the server…", function () {
-      return sendWithBlobs(published, function (sending, acceptMissing) {
+      return sendWithBlobs(transport, published, function (sending, acceptMissing) {
         var post = { state: sending, by: getEditorName() };
         if (acceptMissing.length) post.acceptMissing = acceptMissing;
-        return apiFetch("api/docs", { method: "POST", body: post });
+        return transport.request("api/docs", { method: "POST", body: post });
       }, true);
     });
   } catch (err) {
@@ -1009,19 +1017,26 @@ export async function publishToServer(opts) {
     else handleApiError(err, "Could not put that on the server");
     return false;
   }
-  if (via !== conn) return false;
-  if (S.state.docId !== oldId || home !== homeAtStart) {
-    showToast("Published “" + (published.title || body.id) + "” to the server, but you had opened " +
-      "another script by then, so that one was left as it was. You can open the published copy from File ▸ Open from the server….", "warn");
+  if (!stillOnServer(via)) {
+    reportPublishOnLeftServer(published.title || body.id, via);
     return false;
   }
-  setHome("server", { id: body.id, rev: body.rev || 1 });
-  setBaseState(published, "publishToServer: what the server just accepted");
-  if (forkDocId) {
-    S.state.docId = forkDocId;
-    copyDocHistorySafe(oldId, forkDocId);
+  var outcome = documentTransitions().publish(op, {
+    destination: { kind: "server", fields: { id: body.id, rev: body.rev || 1 } },
+    docId: forkDocId || oldId,
+    baseline: published,
+    reason: "publishToServer: what the server just accepted"
+  });
+  if (outcome.kind === "obsolete") {
+    var now = captureOperation();
+    var sameDocument = now.epoch === op.epoch && now.docId === op.docId && now.destination === op.destination;
+    showToast("Published “" + (published.title || body.id) + "” to the server, but " +
+      (sameDocument ? "your sign-in changed while it was uploading, so this script was left as it was. "
+        : "you had opened another script by then, so that one was left as it was. ") +
+      "You can open the published copy from File ▸ Open from the server….", "warn");
+    return false;
   }
-  S.docIdWrittenOut = true;
+  if (outcome.forkedFrom) copyDocHistorySafe(outcome.forkedFrom, forkDocId);
   if (S.editSeq === seqAtPublish) clearDirty();
   else scheduleAutoSave();
   updateFileChip();
@@ -1079,7 +1094,10 @@ export async function publishAndCopyShareLink() {
     return false;
   }
   if (onServerDoc()) {
-    if (S.dirty && !(await saveToServer())) return false;
+    if (S.dirty) {
+      var shared = await requestSave({ kind: "server" });
+      if (shared.kind !== "saved" && !(shared.kind === "obsolete" && shared.here)) return false;
+    }
   } else if (!(await publishToServer()) || !onServerDoc()) {
     return false;
   }
@@ -1104,10 +1122,10 @@ function readSharedDocParam() {
   return id;
 }
 
-async function openSharedDocFromLink() {
+async function openSharedDocFromLink(refusedId) {
   var id = conn.scope || sharedDocId || linkDocId;
   sharedDocId = "";
-  if (!id) return false;
+  if (!id || id === refusedId) return false;
   if (onServerDoc()) return false;
   var opened = await openServerDoc(id);
   if (opened && (isLinkGuest() || linkKey)) maybeAskGuestName();
@@ -1150,11 +1168,11 @@ function uniqueShas(list) {
   return out;
 }
 
-async function blobsMissingOnServer(shas) {
+async function blobsMissingOnServer(transport, shas) {
   var out = [];
   for (var i = 0; i < shas.length; i += MISSING_BATCH) {
     var chunk = shas.slice(i, i + MISSING_BATCH);
-    var body = await apiFetch("api/blobs/missing", { method: "POST", body: { shas: chunk } });
+    var body = await transport.request("api/blobs/missing", { method: "POST", body: { shas: chunk } });
     uniqueShas(body && body.missing).forEach(function (sha) {
       if (chunk.indexOf(sha) !== -1 && out.indexOf(sha) === -1) out.push(sha);
     });
@@ -1162,10 +1180,10 @@ async function blobsMissingOnServer(shas) {
   return out;
 }
 
-async function uploadBlobs(shas, known) {
+async function uploadBlobs(transport, shas, known) {
   var list = uniqueShas(shas);
   if (!list.length) return [];
-  var need = known ? list : await blobsMissingOnServer(list);
+  var need = known ? list : await blobsMissingOnServer(transport, list);
   if (!need.length) return [];
   var absent = await ensureBytes(need, { remote: false });
   for (var i = 0; i < need.length; i++) {
@@ -1174,7 +1192,7 @@ async function uploadBlobs(shas, known) {
     var bytes = bytesForSync(sha);
     var rec = blobRecordFor(sha);
     if (!bytes || !rec) { absent.push(sha); continue; }
-    await apiFetch("api/blobs/" + sha, { method: "PUT", raw: bytes, contentType: rec.mime });
+    await transport.request("api/blobs/" + sha, { method: "PUT", raw: bytes, contentType: rec.mime });
   }
   return absent;
 }
@@ -1187,31 +1205,34 @@ async function inlineBlobsForServer(state, refs) {
   return out;
 }
 
-async function sendWithBlobs(state, send, canAccept) {
+async function sendWithBlobs(transport, state, send, canAccept) {
   var refs = refsIn(state);
-  if (!serverTakesBlobs()) return send(await inlineBlobsForServer(state, refs), []);
-  if (refs.length) await uploadBlobs(refs, false);
+  if (!transport.takesBlobs()) return send(await inlineBlobsForServer(state, refs), []);
+  if (refs.length) await uploadBlobs(transport, refs, false);
   try {
     return await send(state, []);
   } catch (err) {
     if (!(err && err.code === "missing-blobs")) throw err;
-    var absent = await uploadBlobs(err.payload && err.payload.missing, true);
+    var absent = await uploadBlobs(transport, err.payload && err.payload.missing, true);
     if (absent.length && !canAccept) throw err;
     return send(state, absent);
   }
 }
 
-export async function fetchBlob(sha) {
-  if (!isSha256Hex(sha) || !serverTakesBlobs()) return null;
-  var res;
-  try {
-    res = await fetch(apiUrl("api/blobs/" + sha), {
-      method: "GET",
-      headers: clientHeaders({ "Accept": "image/*" }),
-      credentials: conn.serverUrl ? "omit" : "same-origin"
-    });
-  } catch (e) { return null; }
-  if (!res.ok || res.redirected) return null;
+export function fetchBlob(sha) {
+  return fetchBlobVia(serverTransport(conn), sha);
+}
+
+export function blobSourceNow() {
+  if (!onServerDoc()) return null;
+  var transport = serverTransport(conn);
+  return function (sha) { return fetchBlobVia(transport, sha); };
+}
+
+async function fetchBlobVia(transport, sha) {
+  if (!isSha256Hex(sha) || !transport.takesBlobs()) return null;
+  var res = await transport.get("api/blobs/" + sha, "image/*");
+  if (!res) return null;
   var bytes;
   try { bytes = new Uint8Array(await res.arrayBuffer()); } catch (e) { return null; }
   var rec = internBlob(bytes);
@@ -1222,16 +1243,36 @@ export async function fetchBlob(sha) {
   return bytesForSync(sha);
 }
 
-export async function saveToServer() {
+function reportLateServerSave() {
+  showToast("An earlier save of this script arrived late. Your next save will merge both versions.", "warn");
+}
+
+function reportIfLandedHere(op, docId, rev) {
+  if (serverHomeId() !== docId || !stillOnServer(op.connection)) return;
+  if (home.rev < rev) reportLateServerSave();
+}
+
+var SENT_OUTCOMES = ["saved", "obsolete"];
+
+export function saveToServer(job) {
+  if (job) return writeToServer(job);
+  return requestSave({ kind: "server" }).then(function (outcome) {
+    return SENT_OUTCOMES.indexOf(outcome.kind) !== -1;
+  });
+}
+
+async function writeToServer(job) {
   if (serverSessionExpired || clientTooOld || linkTurnedOff) return false;
   if (reviewMode()) return sendReviewWrites();
   var docId = serverHomeId();
+  var op = job.operation();
+  var transport = serverTransport(op.connection);
   var attempts = 0;
   var mergeResult = null;
 
   while (attempts < 3) {
     attempts++;
-    if (serverHomeId() !== docId) return false;
+    if (!job.owns()) return true;
     S.state.lastEditedBy = getEditorName();
     S.state.lastEditedAt = nowIso();
     var published = cloneState(S.state);
@@ -1240,23 +1281,27 @@ export async function saveToServer() {
 
     try {
       var body = await withBusyBar("Saving to the server…", function () {
-        return sendWithBlobs(published, function (sending, acceptMissing) {
+        return sendWithBlobs(transport, published, function (sending, acceptMissing) {
           var put = { baseRev: baseRevAtSave, state: sending, by: getEditorName() };
           if (acceptMissing.length) put.acceptMissing = acceptMissing;
-          return apiFetch("api/docs/" + encodeURIComponent(docId), { method: "PUT", body: put });
+          return transport.request("api/docs/" + encodeURIComponent(docId), { method: "PUT", body: put });
         }, true);
       });
-      if (serverHomeId() !== docId) return true;
-      home.rev = body.rev;
-      setBaseState(published, "saveToServer: what the server just accepted");
+      if (home === op.destination && job.alive()) {
+        home.rev = body.rev;
+        setBaseState(published, "saveToServer: what the server just accepted");
+      } else {
+        reportIfLandedHere(op, docId, body.rev);
+      }
+      if (!job.owns()) return true;
       if (S.editSeq === seqAtSave) clearDirty();
       updateFileChip();
       if (mergeResult) reportMerge(mergeResult, { alreadySaved: true, undo: "saved" });
       return true;
     } catch (err) {
-      if (serverHomeId() !== docId) return false;
+      if (!job.owns()) return true;
 
-      if (err && err.code === "conflict" && err.payload && err.payload.state) {
+      if (err && err.code === "conflict" && err.payload && isDocumentObject(err.payload.state)) {
         var prevDocId = S.state.docId;
         forgetRemoteMisses();
         var theirs = migrateDocument(cloneState(err.payload.state), {
@@ -1274,6 +1319,8 @@ export async function saveToServer() {
           report: false
         }).result;
         home.rev = err.payload.rev || home.rev;
+        job.moved();
+        op = job.operation();
         continue;
       }
 
@@ -1320,7 +1367,7 @@ function nextReviewWrite() {
       continue;
     }
     var was = base[bi];
-    var had = {};
+    var had = idMap();
     (was.replies || []).forEach(function (r) { if (r) had[r.id] = true; });
     var replies = c.replies || [];
     for (var j = 0; j < replies.length; j++) {
@@ -1356,7 +1403,7 @@ function reviewAnchorFor(c) {
   if (!row || !baseRow) return null;
   var body = inertBody(row[c.field] || "");
   if (!body.querySelector('.cmt-anchor[data-cmt="' + cssAttr(c.id) + '"]')) return null;
-  var confirmed = {};
+  var confirmed = idMap();
   inertBody(baseRow[c.field] || "").querySelectorAll(".cmt-anchor").forEach(function (el) {
     confirmed[el.getAttribute("data-cmt")] = true;
   });
@@ -1417,14 +1464,15 @@ function reviewRequest(op, c) {
 function sendReviewRequest(req) {
   var isReply = !!req.body.reply;
   var probe = { comments: [{ body: isReply ? req.body.reply.body : req.body.comment.body }] };
-  return sendWithBlobs(probe, function (sending) {
+  var transport = serverTransport(conn);
+  return sendWithBlobs(transport, probe, function (sending) {
     var body = req.body;
     if (sending !== probe) {
       body = jsonCopy(req.body);
       if (isReply) body.reply.body = sending.comments[0].body;
       else body.comment.body = sending.comments[0].body;
     }
-    return apiFetch(req.path, { method: req.method, body: body });
+    return transport.request(req.path, { method: req.method, body: body });
   }, false);
 }
 
@@ -1441,7 +1489,7 @@ function adoptReviewAnswer(op, sent, body) {
   if (local) {
     var next = jsonCopy(stored);
     if (!Array.isArray(next.replies)) next.replies = [];
-    var have = {};
+    var have = idMap();
     next.replies.forEach(function (r) { if (r) have[r.id] = true; });
     (local.replies || []).forEach(function (r) { if (r && !have[r.id]) next.replies.push(r); });
     list[si] = next;
@@ -1595,14 +1643,15 @@ export function notePresenceRev(body) {
 }
 
 async function pullServerDoc(docId) {
+  var op = captureOperation();
   var body;
   try {
-    body = await apiFetch("api/docs/" + encodeURIComponent(docId));
+    body = await serverTransport(op.connection).request("api/docs/" + encodeURIComponent(docId), {});
   } catch (err) {
     return;
   }
-  if (!body || !body.state) return;
-  if (serverHomeId() !== docId) return;
+  if (!body || !isDocumentObject(body.state)) return;
+  if (serverHomeId() !== docId || !stillOwns(op)) return;
   if (S.saveButtonBusy || reviewWriting) return;
   var rev = body.rev || 0;
   if (rev <= (home.rev || 0)) return;
@@ -1890,7 +1939,9 @@ async function driveListCurrentDesktop() {
   if (!folder) return;
   var list = document.getElementById("drive-list");
   list.innerHTML = '<div class="drive-empty">Loading…</div>';
+  var epoch = driveModalEpoch;
   var res = await driveDesktopCall("driveList", folder.id);
+  if (epoch !== driveModalEpoch) return;
   if (!res.ok) {
     if (await driveDesktopSignedOut(res)) return;
     list.innerHTML = '<div class="drive-empty">Could not load this folder — ' + escapeHtml(driveDesktopMessage(res)) + '</div>';
@@ -1933,7 +1984,10 @@ async function driveUploadOneDesktop(file, parentId) {
   return same.length === 1 ? "updated" : "created";
 }
 
+var driveModalEpoch = 0;
+
 export function openDriveModal() {
+  driveModalEpoch++;
   if (S.DESKTOP) {
     if (!driveDesktopBridge()) {
       showToast("Google Drive isn't available in this version of the desktop app. Use File ▸ Open… instead.", "warn");
@@ -1954,6 +2008,7 @@ export function openDriveModal() {
 }
 
 export function closeDriveModal() {
+  driveModalEpoch++;
   document.getElementById("drive-modal").hidden = true;
 }
 
@@ -2053,6 +2108,7 @@ export async function driveListCurrent() {
   var folder = driveState.path[driveState.path.length - 1];
   var list = document.getElementById("drive-list");
   list.innerHTML = '<div class="drive-empty">Loading…</div>';
+  var epoch = driveModalEpoch;
   try {
     var q = encodeURIComponent("'" + folder.id.replace(/'/g, "\\'") + "' in parents and trashed = false");
     var url = "https://www.googleapis.com/drive/v3/files?q=" + q +
@@ -2061,10 +2117,12 @@ export async function driveListCurrent() {
       "&pageSize=1000&supportsAllDrives=true&includeItemsFromAllDrives=true&" + driveApiKeyParam();
     var res = await driveFetch(url);
     var body = await res.json();
+    if (epoch !== driveModalEpoch) return;
     driveState.items = body.files || [];
     renderDriveBreadcrumb();
     renderDriveList();
   } catch (err) {
+    if (epoch !== driveModalEpoch) return;
     list.innerHTML = '<div class="drive-empty">Could not load this folder — ' + escapeHtml(plainReason(err)) + '</div>';
   }
 }

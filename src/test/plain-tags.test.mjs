@@ -1,7 +1,7 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readBuiltCss } from "../../tools/css-colours.mjs";
 import { fromHtml, namedTagId, projection, toHtml } from "../js/04c-doc-model.js";
 import { TAG_CATEGORIES } from "../js/07-production-tags.js";
 import {
@@ -78,6 +78,10 @@ test("what Tab wraps: the words, the spaces either side left out", () => {
   assert.equal(plainTagPhrase("   "), null);
   assert.equal(plainTagPhrase(ZW), null);
   assert.equal(plainTagPhrase(ZW + " " + NB), null);
+  for (const invisible of ["‌", "‍", "⁠", "­", " ‍⁠­ "]) {
+    assert.equal(plainTagPhrase(invisible), null, JSON.stringify(invisible) + " alone names nothing (#298)");
+  }
+  assert.equal(plainTagPhrase("!!").name, "!!");
   const long = "a".repeat(50) + " " + "b".repeat(50);
   const p = plainTagPhrase(" " + long);
   assert.equal(p.text, long);
@@ -154,7 +158,7 @@ test("refused when the words there are not a keyword of that category and someth
 });
 
 test("the open tag is painted for every category (app.css)", () => {
-  const css = readFileSync(new URL("../app.css", import.meta.url), "utf8");
+  const { css } = readBuiltCss();
   assert.match(css, /\.plain-tag-keyword\s*\{\s*display:\s*none;/);
   for (const c of TAG_CATEGORIES) {
     const at = css.indexOf("::highlight(splitpage-open-tag-" + c.id + ")");

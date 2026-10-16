@@ -5,6 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawn, execFileSync } from "node:child_process";
+import { freezeAsked, frozenWrites, withFreezeFlag } from "./freeze-flag.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -12,7 +13,8 @@ function parseArgs(argv) {
   const out = {
     port: 8791, cdpPort: 9333, root: path.resolve(HERE, "..", "..", ".."),
     shotDir: path.join(os.tmpdir(), "splitpage-shots"),
-    headed: false, script: null, runId: null, chrome: null,
+    headed: false, script: null, runId: null, chrome: null, bind: "127.0.0.1",
+    freezeCaches: freezeAsked(process.env),
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -26,9 +28,11 @@ function parseArgs(argv) {
       case "script": out.script = argv[++i]; break;
       case "runid": case "run-id": out.runId = argv[++i]; break;
       case "chrome": out.chrome = argv[++i]; break;
+      case "bind": out.bind = argv[++i]; break;
       case "headed": out.headed = true; break;
+      case "freezecaches": case "freeze-caches": out.freezeCaches = true; break;
       case "h": case "help":
-        console.log("usage: node driver.mjs --script <file> [--port N] [--cdp-port N] [--root DIR] [--shot-dir DIR] [--chrome PATH] [--headed]");
+        console.log("usage: node driver.mjs --script <file> [--port N] [--cdp-port N] [--root DIR] [--shot-dir DIR] [--chrome PATH] [--bind ADDRESS] [--headed] [--freeze-caches]");
         process.exit(0);
         break;
       default: throw new Error(`unknown option: ${a}`);
@@ -42,6 +46,7 @@ if (!opts.runId) opts.runId = Math.random().toString(16).slice(2, 10);
 fs.mkdirSync(opts.shotDir, { recursive: true });
 
 const log = (m) => process.stderr.write(`[driver] ${m}\n`);
+if (opts.freezeCaches) log("cache freezing on: every page opened here gets freeze-caches=1");
 const out1 = (m) => process.stdout.write(`${m}\n`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -54,10 +59,20 @@ const MIME = {
 };
 
 let server = null;
+const SERVER_ATTEMPTS = 3;
+
+function listenOnce(handler, port) {
+  return new Promise((resolve, reject) => {
+    const s = http.createServer(handler);
+    s.once("error", reject);
+    s.listen(port, opts.bind, () => { s.removeListener("error", reject); resolve(s); });
+  });
+}
+
 async function startServer() {
   if (server) return;
   const root = opts.root;
-  server = http.createServer((req, res) => {
+  const handler = (req, res) => {
     let p;
     try { p = decodeURIComponent(new URL(req.url, "http://localhost").pathname); }
     catch { res.statusCode = 400; return res.end(); }
@@ -72,12 +87,25 @@ async function startServer() {
     res.setHeader("Content-Type", MIME[path.extname(f).toLowerCase()] || "application/octet-stream");
     res.setHeader("Content-Length", body.length);
     res.end(body);
-  });
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(opts.port, "127.0.0.1", resolve);
-  });
-  log(`server up on http://localhost:${opts.port}/ (root ${root})`);
+  };
+  const reasons = [];
+  for (let attempt = 1; attempt <= SERVER_ATTEMPTS; attempt++) {
+    const port = attempt === 1 ? opts.port : 0;
+    try {
+      server = await listenOnce(handler, port);
+      opts.port = server.address().port;
+      log(`server up on http://localhost:${opts.port}/ (root ${root})`);
+      return;
+    } catch (e) {
+      reasons.push(`${port === 0 ? "a fresh port" : "port " + port}: ${e.code ?? e.message}`);
+      log(`static server attempt ${attempt} of ${SERVER_ATTEMPTS} failed: ${reasons[reasons.length - 1]}`);
+      if (attempt < SERVER_ATTEMPTS) await sleep(250);
+    }
+  }
+  const e = new Error(`static server did not come up after ${SERVER_ATTEMPTS} attempts (${reasons.join("; ")})`);
+  e.fatal = true;
+  e.notStarted = true;
+  throw e;
 }
 
 function findBrowser() {
@@ -153,6 +181,9 @@ async function startBrowser() {
   ];
   if (process.platform !== "win32" && typeof process.getuid === "function" && process.getuid() === 0) {
     args.push("--no-sandbox", "--disable-dev-shm-usage");
+  }
+  if (process.platform !== "win32") {
+    args.push("--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4");
   }
   if (process.env.SPLITPAGE_CHROME_ARGS) {
     args.push(...process.env.SPLITPAGE_CHROME_ARGS.split(/\s+/).filter(Boolean));
@@ -237,6 +268,7 @@ async function connectCdp() {
   log("cdp connected");
   await send("Page.enable");
   await send("Runtime.enable");
+  await send("Emulation.setFocusEmulationEnabled", { enabled: true });
   await send("Emulation.setEmulatedMedia", { features: [{ name: "prefers-color-scheme", value: "light" }] });
   await send("Page.addScriptToEvaluateOnNewDocument", {
     source: `
@@ -251,6 +283,7 @@ if (!/[?&]newtab=1(&|$)/.test(location.search)) { window.__splitpageNoNewTab = t
 window.__splitpageNoRemote = true;
 `,
   });
+  if (opts.freezeCaches) await send("Page.addScriptToEvaluateOnNewDocument", { source: "window.__splitpageFreezeRun = true;" });
   await send("Log.enable");
 }
 
@@ -331,9 +364,11 @@ async function waitFor(expr, timeoutMs = 15000) {
 }
 
 async function go(target) {
-  const url = /^https?:\/\//.test(target) ? target
+  const absolute = /^https?:\/\//.test(target);
+  const local = absolute ? target
     : target.startsWith("/") ? `http://localhost:${opts.port}${target}`
     : `http://localhost:${opts.port}/${target}`;
+  const url = opts.freezeCaches && !absolute ? withFreezeFlag(local) : local;
   await send("Page.navigate", { url });
   await waitFor('document.readyState === "complete"', 30000);
   out1(`at ${url}`);
@@ -429,6 +464,16 @@ async function pressChars(text) {
   out1(`pressed ${text.length} chars`);
 }
 
+async function imeInput(rest) {
+  const m = /^(set|commit|cancel)(?: ([\s\S]*))?$/.exec(rest);
+  if (!m) throw new Error("ime needs: set <text> | commit <text> | cancel");
+  const text = m[2] ?? "";
+  if (m[1] === "set") await send("Input.imeSetComposition", { text, selectionStart: text.length, selectionEnd: text.length });
+  else if (m[1] === "commit") await send("Input.insertText", { text });
+  else await send("Input.imeSetComposition", { text: "", selectionStart: 0, selectionEnd: 0 });
+  out1(`ime ${m[1]} ${text.length} chars`);
+}
+
 const KEY_MAP = {
   enter:     { key: "Enter",     code: "Enter",     vk: 13, text: "\r" },
   tab:       { key: "Tab",       code: "Tab",       vk: 9,  text: "\t" },
@@ -494,10 +539,13 @@ async function pressKey(name, mods = "") {
   out1(`key ${mods} ${name}`);
 }
 
+let touchEmulated = false;
+
 async function setViewport(rest) {
   if (/^\s*reset\s*$/.test(rest)) {
     await send("Emulation.clearDeviceMetricsOverride");
-    await send("Emulation.setTouchEmulationEnabled", { enabled: false, maxTouchPoints: 1 });
+    if (touchEmulated) await send("Emulation.setTouchEmulationEnabled", { enabled: false, maxTouchPoints: 1 });
+    touchEmulated = false;
     out1("viewport reset");
     return;
   }
@@ -506,7 +554,10 @@ async function setViewport(rest) {
   const w = parseInt(p[0], 10), h = parseInt(p[1], 10);
   const mobile = p.length >= 3 && /mobile/.test(p[2]);
   await send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile });
-  await send("Emulation.setTouchEmulationEnabled", { enabled: mobile, maxTouchPoints: mobile ? 5 : 1 });
+  if (mobile || touchEmulated) {
+    await send("Emulation.setTouchEmulationEnabled", { enabled: mobile, maxTouchPoints: mobile ? 5 : 1 });
+    touchEmulated = mobile;
+  }
   out1(`viewport ${w}x${h}${mobile ? " mobile" : ""}`);
 }
 
@@ -557,6 +608,7 @@ async function invokeLine(line) {
     }
     case "type": await typeText(rest); break;
     case "press": await pressChars(rest); break;
+    case "ime": await imeInput(rest); break;
     case "key": {
       const p = rest.trim().split(/\s+/);
       if (p.length >= 2) await pressKey(p[1], p[0].toLowerCase()); else await pressKey(p[0]);
@@ -595,12 +647,25 @@ async function main() {
     for (const line of lines) {
       try { if (!(await invokeLine(line))) break; }
       catch (e) {
-        out1(`ERROR: ${e.message}`); failures++; exit = 1;
+        if (e.notStarted) { out1(`NOT STARTED: ${e.message}`); checks++; }
+        else out1(`ERROR: ${e.message}`);
+        failures++; exit = 1;
         if (e.fatal) break;
       }
     }
     if (checks === 0 && failures === 0) {
       out1("WARNING: no expect/wait assertions ran - this proved nothing.");
+    }
+    if (opts.freezeCaches && ws && (checks > 0 || failures > 0)) {
+      try { await js("0"); } catch {}
+      checks++;
+      const hits = frozenWrites(consoleLines);
+      if (hits.length === 0) out1("PASS no write into a frozen cache value threw");
+      else {
+        failures++;
+        out1("FAIL a write into a frozen cache value threw");
+        for (const h of hits.slice(0, 5)) out1(`     ${h}`);
+      }
     }
     const passed = checks - failures;
     let summary = `RESULT: ${passed}/${checks} checks passed`;

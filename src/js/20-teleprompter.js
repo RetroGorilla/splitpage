@@ -1,3 +1,4 @@
+import { mountTagEntityContainer } from "../features/tags/mount.ts";
 import { S } from "./_state.js";
 import { writePref } from "./00p-prefs.js";
 import { serverHomeId } from "./_home.js";
@@ -5,8 +6,6 @@ import { SpeechRecognitionCtor } from "./00-prelude.js";
 import { formatTimecode, rowSeconds } from "./01-scene-status.js";
 import { hideShotScenes } from "./01b-hide-shot.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
-import { cellOf, projection, sliceCell, toHtml, toPlainText, withoutCues } from "./04c-doc-model.js";
-import { pad2 } from "./05-render.js";
 import {
   addPersonForTag,
   renderProduction,
@@ -29,7 +28,13 @@ import {
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "./_voice-relay.js";
-import { onRootClick } from "./21-events.js";
+import { pad2 } from "../core/production/timing.ts";
+import { withoutCues } from "../core/text/cues.ts";
+import { sliceCell } from "../core/text/edits.ts";
+import { toHtml } from "../core/text/html.ts";
+import { toPlainText } from "../core/text/projections.ts";
+import { projection } from "../core/text/runs.ts";
+import { cellOf } from "../legacy/richtext.ts";
 
 export var prompterMirror;
 export var prompterFlip;
@@ -252,11 +257,11 @@ export function updatePrompterStatus() {
 var prompterWakeLock = null;
 var wakeLockGen = 0;
 
-export function acquireWakeLock() {
+export function acquireWakeLock(owns) {
   if (!navigator.wakeLock || !navigator.wakeLock.request) return;
   var gen = ++wakeLockGen;
   navigator.wakeLock.request("screen").then(function (lock) {
-    if (gen !== wakeLockGen || !S.prompterOpen) { lock.release().catch(function () {}); return; }
+    if (gen !== wakeLockGen || !S.prompterOpen || (owns && !owns())) { lock.release().catch(function () {}); return; }
     prompterWakeLock = lock;
   }).catch(function () { });
 }
@@ -267,6 +272,12 @@ function releaseWakeLock() {
     prompterWakeLock.release().catch(function () {});
     prompterWakeLock = null;
   }
+}
+
+export function disposePrompterView() {
+  setPrompterPlaying(false);
+  stopVoiceFollow();
+  releaseWakeLock();
 }
 
 var PROMPTER_MIRROR_KEY = "splitpage-prompter-mirror";
@@ -985,54 +996,23 @@ function startPrompterLaunch(launch) {
   });
 }
 
-function isTagField(t) {
-  return !!t.classList && (t.classList.contains("tag-owner-select") || t.classList.contains("tag-notes-input") ||
-    t.classList.contains("tag-rename-input") || t.classList.contains("tag-person-input"));
-}
-
-export function wireTagEntityContainer(id) {
-  var el = document.getElementById(id);
-  el.addEventListener("click", onRootClick);
-  el.addEventListener("keydown", function (e) {
-    if (!e.target.classList) return;
-    if (reviewMode() && e.key === "Enter" &&
-        (e.target.classList.contains("tag-rename-input") || e.target.classList.contains("tag-person-input"))) {
-      e.preventDefault();
-      reviewBlocked();
-      renderProduction();
-      return;
+export function wireTagEntityContainer(id, rootClick) {
+  return mountTagEntityContainer({
+    window: window,
+    id: id,
+    ports: {
+      rootClick: rootClick,
+      reviewMode: reviewMode,
+      reviewBlocked: reviewBlocked,
+      renderProduction: renderProduction,
+      saveTagRename: saveTagRename,
+      addPersonForTag: addPersonForTag,
+      setRenaming: function (value) { S.tagRenaming = value; },
+      setAddingPerson: function (value) { S.tagAddingPersonFor = value; },
+      setTagOwner: setTagOwner,
+      setTagNotes: setTagNotes,
+      queueAutoSave: queueAutoSave
     }
-    if (e.target.classList.contains("tag-rename-input")) {
-      if (e.key === "Enter") { e.preventDefault(); saveTagRename(e.target.getAttribute("data-key")); }
-      else if (e.key === "Escape") { e.preventDefault(); S.tagRenaming = null; renderProduction(); }
-      return;
-    }
-    if (e.target.classList.contains("tag-person-input")) {
-      if (e.key === "Enter") { e.preventDefault(); addPersonForTag(e.target.getAttribute("data-key")); }
-      else if (e.key === "Escape") { e.preventDefault(); S.tagAddingPersonFor = null; renderProduction(); }
-    }
-  });
-  el.addEventListener("change", function (e) {
-    if (reviewMode()) {
-      if (isTagField(e.target)) { reviewBlocked(); renderProduction(); }
-      return;
-    }
-    if (e.target.classList && e.target.classList.contains("tag-owner-select")) {
-      setTagOwner(e.target.getAttribute("data-key"), e.target.value);
-    }
-  });
-  el.addEventListener("input", function (e) {
-    if (reviewMode()) {
-      if (isTagField(e.target)) { reviewBlocked(); renderProduction(); }
-      return;
-    }
-    if (e.target.classList && e.target.classList.contains("tag-notes-input")) {
-      setTagNotes(e.target.getAttribute("data-key"), e.target.value);
-    }
-  });
-  el.addEventListener("focusout", function (e) {
-    if (reviewMode()) return;
-    if (e.target.classList && e.target.classList.contains("tag-notes-input")) queueAutoSave();
   });
 }
 

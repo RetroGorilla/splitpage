@@ -1,41 +1,42 @@
 import { S } from "./_state.js";
-import { makeId } from "./02-state.js";
 import { internDataUrl, persist } from "./02c-blobs.js";
-import {
-  addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
-} from "./02d-gallery.js";
-import { findRowIndex, getEditorName, stampRow } from "./03-sync.js";
-import { safeHref, safeId, sanitizeHtml } from "./04-richtext.js";
-import { deleteRange, fromHtml, splitCell, syncCommentAnchors, toHtml } from "./04c-doc-model.js";
+import { findRowIndex } from "./03-sync.js";
+import { safeHref, safeId, storedHtmlFromDom } from "./04-richtext.js";
 import { armDeleteButton, disarmDeleteButton, render, syncFieldFromDom } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
 import { isBlankScene } from "./05g-scene-clip.js";
-import { cellSelection } from "./05b-cell-edit.js";
-import { nowIso } from "./10-comments.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { cellSelection, setCellSelection } from "./05b-cell-edit.js";
+import { showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
-import { queueAutoSave } from "./14-export.js";
 import { placeCaretAtTextOffset } from "./19-writer.js";
+import { makeId } from "../adapters/identity/ids.ts";
+import { addSceneCommand, deleteSceneCommand, moveSceneCommand, swapScenesCommand } from "../application/commands/rows.ts";
+import { splitSceneCommand, textCut } from "../application/commands/split-join.ts";
+import { REVIEW_ONLY, onDocumentReplaced, runCommand, sessionStamps, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { VIEWING_ONLY } from "../legacy/review-wording.ts";
+import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
+import {
+  addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
+} from "../core/document/gallery.ts";
+
+function runRowCommand(command) {
+  var outcome = runCommand(command);
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind === "rejected" && outcome.reason === REVIEW_ONLY) showToast(VIEWING_ONLY, "warn");
+  return outcome.kind === "applied" || outcome.kind === "committed";
+}
 
 export function addRow(afterId) {
-  var row = { id: makeId(), visualText: "", imageRef: null, audioText: "",
-              status: "todo", updatedAt: nowIso(), updatedBy: getEditorName() };
-  if (afterId) {
-    var idx = findRowIndex(afterId);
-    S.state.rows.splice(idx + 1, 0, row);
-  } else {
-    S.state.rows.push(row);
-  }
-  markDirty();
+  var createdId = makeId();
+  if (!runRowCommand(addSceneCommand(afterId || null, createdId, sessionStamps))) return null;
   render();
+  return createdId;
 }
 
 export function addRowAndFocus(afterId, field) {
-  addRow(afterId);
-  var idx = findRowIndex(afterId);
-  var created = S.state.rows[idx + 1];
-  if (!created) return;
-  var cell = document.querySelector('#rows .row[data-id="' + safeId(created.id, "r") +
+  var createdId = addRow(afterId);
+  if (!createdId) return;
+  var cell = document.querySelector('#rows .row[data-id="' + safeId(createdId, "r") +
     '"] .cell-editable[data-field="' + (field === "visualText" ? "visualText" : "audioText") + '"]');
   if (!cell) return;
   cell.focus();
@@ -49,46 +50,24 @@ export function addRowAndFocus(afterId, field) {
 }
 
 export function splitRowFieldCore(cellEl) {
-  var idx = findRowIndex(cellEl.getAttribute("data-id"));
+  var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
-  if (idx === -1 || (field !== "visualText" && field !== "audioText")) return null;
+  if (findRowIndex(id) === -1 || (field !== "visualText" && field !== "audioText")) return null;
   syncFieldFromDom(cellEl);
   var sel = cellSelection(cellEl);
   if (!sel) return null;
   breakUndoCoalescing();
-  var row = S.state.rows[idx];
-  var html = row[field] || "";
-  var halves = /<img|video-embed-card/.test(html)
-    ? splitMediaCellInDom(cellEl)
-    : splitCell(deleteRange(fromHtml(html), sel.from, sel.to), sel.from).map(function (c) { return toHtml(c); });
-
-  row[field] = halves[0];
-  stampRow(row);
-  var created = { id: makeId(), visualText: "", imageRef: null, audioText: "",
-                   status: "todo", updatedAt: nowIso(), updatedBy: getEditorName() };
-  created[field] = halves[1];
-  S.state.rows.splice(idx + 1, 0, created);
-  syncCommentAnchors(S.state);
-  return { idx: idx, created: created, field: field };
-}
-
-function splitMediaCellInDom(cellEl) {
-  var range = window.getSelection().getRangeAt(0);
-  if (!range.collapsed) range.deleteContents();
-  var tail = document.createRange();
-  tail.setStart(range.startContainer, range.startOffset);
-  tail.setEnd(cellEl, cellEl.childNodes.length);
-  var holder = document.createElement("div");
-  holder.appendChild(tail.extractContents());
-  return [sanitizeHtml(cellEl.innerHTML), sanitizeHtml(holder.innerHTML)];
+  var createdId = makeId();
+  var outcome = runCommand(splitSceneCommand(id, field, textCut(sel.from, sel.to), createdId, sessionTextPorts));
+  if (outcome.kind === "failed") throw outcome.error;
+  return outcome.kind === "applied" || outcome.kind === "committed" ? { id: createdId, field: field } : null;
 }
 
 export function splitCellField(cellEl) {
   var res = splitRowFieldCore(cellEl);
   if (!res) return;
-  markDirty();
   render();
-  focusRowField(res.created.id, res.field, 0);
+  focusRowField(res.id, res.field, 0);
 }
 
 export function focusRowField(rowId, field, offset) {
@@ -176,36 +155,17 @@ export function updateDragScroll(clientX, clientY) {
 }
 
 export function moveRowTo(id, targetId, after) {
-  var from = findRowIndex(id);
-  var to = findRowIndex(targetId);
-  if (from === -1 || to === -1 || from === to) return;
-  var row = S.state.rows.splice(from, 1)[0];
-  var dest = findRowIndex(targetId);
-  S.state.rows.splice(after ? dest + 1 : dest, 0, row);
-  markDirty();
+  if (!runRowCommand(moveSceneCommand(id, targetId, !!after))) return;
   render();
-  queueAutoSave();
 }
 
 function deleteRow(id) {
-  var idx = findRowIndex(id);
-  if (idx === -1) return;
-  S.state.rows.splice(idx, 1);
-  syncCommentAnchors(S.state);
-  markDirty();
+  if (!runRowCommand(deleteSceneCommand(id))) return;
   render();
 }
 
 export function swapAdjacentRows(id, dir) {
-  var idx = findRowIndex(id);
-  var j = idx + dir;
-  if (idx === -1 || j < 0 || j >= S.state.rows.length) return false;
-  var tmp = S.state.rows[idx];
-  S.state.rows[idx] = S.state.rows[j];
-  S.state.rows[j] = tmp;
-  markDirty();
-  queueAutoSave();
-  return true;
+  return runRowCommand(swapScenesCommand(id, dir < 0 ? -1 : 1));
 }
 
 export function moveRow(id, dir) {
@@ -340,8 +300,23 @@ export function compressImageFile(file, maxDim, quality) {
   });
 }
 
+export function capturePastePlace(cellEl) {
+  return { html: storedHtmlFromDom(cellEl.innerHTML), sel: cellSelection(cellEl) };
+}
+
+export function restorePastePlace(cellEl, place) {
+  var unchanged = place.sel && storedHtmlFromDom(cellEl.innerHTML) === place.html;
+  setCellSelection(cellEl, unchanged ? place.sel.from : Infinity, unchanged ? place.sel.to : Infinity);
+}
+
+export function showPictureNotAdded() {
+  showToast("The picture finished loading after the script changed, so it was not added.", "warn");
+}
+
 export function handleImageFile(rowId, file, slot) {
+  var ctx = captureOperation();
   compressImageFile(file, 1000, 0.78).then(function (dataUrl) {
+    if (!stillOwns(ctx)) { showPictureNotAdded(); return; }
     var idx = findRowIndex(rowId);
     if (idx === -1) return;
     var rec = internDataUrl(dataUrl);
@@ -396,6 +371,13 @@ export function sessionVideoUrl(link) {
     try { sessionVideoUrls[key] = URL.createObjectURL(sessionVideoFiles[key]); } catch (e) { return null; }
   }
   return sessionVideoUrls[key];
+}
+
+export function releaseSessionVideoUrls() {
+  Object.keys(sessionVideoUrls).forEach(function (key) {
+    try { URL.revokeObjectURL(sessionVideoUrls[key]); } catch (e) { }
+    delete sessionVideoUrls[key];
+  });
 }
 
 export function openVideoFile(link) {
@@ -475,4 +457,6 @@ export function videoFirstFrame(file) {
   });
 }
 
-export function __init() {}
+export function __init() {
+  onDocumentReplaced(releaseSessionVideoUrls);
+}

@@ -1,15 +1,14 @@
 import { S } from "./_state.js";
-import { home, setHome } from "./_home.js";
+import { home } from "./_home.js";
 import { readDefaultWpm, savedStatusText, savedWhenText } from "./00p-prefs.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
-import { cloneState, pushSnapshot, setBaseState, updateIdentityChip } from "./03-sync.js";
-import { render } from "./05-render.js";
+import { pushSnapshot, updateIdentityChip } from "./03-sync.js";
+import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { applyReviewMode, linkTurnedOff, reviewMode, serverSessionExpired, updateServerMenu } from "./13-hosted.js";
 import { openProjectFile, updateFileChip } from "./18-local-files.js";
-import { writerOpen } from "./19-writer.js";
 import {
   canOpenPrompterInBrowser,
   canOpenPrompterInChromium,
@@ -18,6 +17,7 @@ import {
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { LONG_DEMO } from "./_starters.js";
+import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
 
 function el(id) { return document.getElementById(id); }
 
@@ -159,6 +159,11 @@ function recentsSupported() {
   return !!(S.DESKTOP && typeof S.DESKTOP.listRecents === "function");
 }
 
+export function pasteItemState() {
+  var viewing = reviewMode();
+  return { hidden: false, disabled: viewing, reason: viewing ? "Viewing only — you can comment, but not change the script" : "" };
+}
+
 export function refreshFileMenu() {
   var presentBrowser = el("menu-present-browser");
   if (presentBrowser) presentBrowser.hidden = !canOpenPrompterInBrowser();
@@ -170,9 +175,9 @@ export function refreshFileMenu() {
 
   var paste = document.querySelector('#file-menu [data-file-action="paste"]');
   if (paste) {
-    var viewing = reviewMode();
-    paste.disabled = viewing;
-    setMenuItemReason(paste, viewing ? "Viewing only — you can comment, but not change the script" : "");
+    var pasteState = pasteItemState();
+    paste.disabled = pasteState.disabled;
+    setMenuItemReason(paste, pasteState.reason);
   }
 
   refreshFileCard();
@@ -338,13 +343,10 @@ function replaceWithNewDocument(next, reason, keepLabel) {
   if (active && active !== document.body && typeof active.blur === "function") active.blur();
   var kept = S.state.rows.length ? pushSnapshot(keepLabel) : null;
   if (kept) pushSnapshot(keepLabel, Object.assign({}, S.state, { docId: next.docId }));
-  S.state = next;
-  setBaseState(cloneState(S.state), reason);
-  setHome("none");
-  S.docIdWrittenOut = false;
+  documentTransitions().startNew({ from: { document: next }, reason: reason, destination: NO_DESTINATION });
   resetProductionPanelState();
   clearDirty();
-  render();
+  renderAbsorbed();
   applyReviewMode();
   updateIdentityChip();
   updateFileChip();
@@ -402,37 +404,6 @@ function onMenuKeydown(e) {
   }
 }
 
-function runMenuItem(action) {
-  var item = document.querySelector('#file-menu [data-file-action="' + action + '"]');
-  if (item && !item.disabled) item.click();
-  return !!item && !item.disabled;
-}
-
-export function modalIsOpen() {
-  return !!document.querySelector(".modal-backdrop:not([hidden]), .cmdk-backdrop:not([hidden])");
-}
-
-function onShortcutKeydown(e) {
-  if (e.defaultPrevented || e.isComposing) return;
-  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-  if (S.DESKTOP) return;
-  var k = String(e.key || "").toLowerCase();
-  if (k === "s") {
-    e.preventDefault();
-    if (modalIsOpen() || !S.state) return;
-    if (e.shiftKey) runMenuItem("save-as");
-    else {
-      var save = el("btn-save");
-      if (save && !save.disabled) save.click();
-    }
-  } else if (k === "o" && !e.shiftKey) {
-    e.preventDefault();
-    if (modalIsOpen() || S.prompterOpen || writerOpen || !S.state) return;
-    toggleFileMenu(false);
-    runMenuItem("open");
-  }
-}
-
 export function __init() {
   var menu = el("file-menu");
   var btn = el("btn-file");
@@ -455,7 +426,6 @@ export function __init() {
     });
   }
   window.addEventListener("resize", function () { if (fileMenuOpen()) positionMenu(); });
-  window.addEventListener("keydown", onShortcutKeydown);
   renderKeyChips(menu);
   var search = el("btn-command");
   if (search && search.parentElement) renderKeyChips(search.parentElement);

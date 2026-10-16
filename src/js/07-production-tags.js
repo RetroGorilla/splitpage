@@ -1,26 +1,11 @@
 import { S } from "./_state.js";
 import { updateScriptStats } from "./01-scene-status.js";
-import { escapeHtml, makeId } from "./02-state.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import {
   inertBody,
-  plainText,
   safeId,
   sanitizeHtml
 } from "./04-richtext.js";
-import {
-  cellOf,
-  cuesInCell,
-  editCues,
-  namedTagId,
-  projection,
-  replaceWithTag,
-  retag,
-  setMark,
-  tagIds,
-  tagNameOf,
-  toHtml
-} from "./04c-doc-model.js";
 import { render, syncFieldFromDom } from "./05-render.js";
 import { domToPos, editCell } from "./05b-cell-edit.js";
 import { plainTagOpen } from "./07b-plain-tags.js";
@@ -31,26 +16,64 @@ import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
 import { updateWriterStats, writerOpen } from "./19-writer.js";
-
-var TAG_SHORTCUT_CHARS;
-
-var TAG_ICON_PATHS = {
-  prop: '<path d="M20.5 7.5L12 3 3.5 7.5v9L12 21l8.5-4.5z"/><path d="M3.5 7.5L12 12l8.5-4.5M12 12v9"/>',
-  location: '<path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z"/><circle cx="12" cy="10" r="2.25"/>',
-  cast: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>',
-  vfx: '<path d="M11 3c.6 4.6 2.4 6.4 7 7-4.6.6-6.4 2.4-7 7-.6-4.6-2.4-6.4-7-7 4.6-.6 6.4-2.4 7-7z"/><path d="M19 15.5v5M16.5 18h5"/>',
-  sound: '<path d="M9 18V5.5l11-2V16"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/>',
-  gear: '<rect x="3" y="6.5" width="12.5" height="11" rx="2"/><path d="M15.5 10.5l5-3v9l-5-3z"/>'
+import { makeId } from "../adapters/identity/ids.ts";
+import { idMap } from "../core/document/id-map.ts";
+import { contentMemo } from "../core/document/memo.ts";
+import {
+  ensureTagIds,
+  isTagId,
+  mintTagId,
+  nextTagStatus,
+  normalizeTagName,
+  registryKey,
+  registryTagHooks,
+  tagKey,
+  tagStatusRank
+} from "../core/document/tags.ts";
+import { cappedName, cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
+import { TAG_CATEGORIES, TAG_STATUSES, groupTagsByCategory, tagCategory, tagStatus } from "../core/production/looks.ts";
+import {
+  bulkTagCell as bulkTagCellWith,
+  collectTagsFromRows as collectTagGroups,
+  deriveProductionIndex,
+  holdsMedia,
+  isBlankTagName,
+  missingRegistryTags as missingRegistryTagsIn,
+  newRegistryTag,
+  planRegistryHealing,
+  refreshedProductionIndex,
+  registryEntry as registryEntryIn,
+  registrySignature,
+  retagCell,
+  tagFieldOccurrences as tagFieldOccurrencesWith,
+  tagOccurrences
+} from "../core/production/tags.ts";
+import { replaceWithTag } from "../core/text/edits.ts";
+import { namedTagId, projection } from "../core/text/runs.ts";
+import { cacheSeal } from "../legacy/cache-freeze.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
+import { cellOf } from "../legacy/richtext.ts";
+import { requestRefresh } from "../legacy/session-bridge.ts";
+export {
+  TAG_CATEGORIES,
+  TAG_STATUSES,
+  contentMemo,
+  ensureTagIds,
+  isBlankTagName,
+  isTagId,
+  mintTagId,
+  nextTagStatus,
+  normalizeTagName,
+  registryKey,
+  registryTagHooks,
+  tagCategory,
+  tagKey,
+  tagOccurrences,
+  tagStatus,
+  tagStatusRank
 };
 
-export var TAG_CATEGORIES = [
-  { id: "prop",     label: "Prop",      plural: "Props & set dressing", color: "var(--tag-prop)",     icon: TAG_ICON_PATHS.prop },
-  { id: "location", label: "Location",  plural: "Locations & shots",    color: "var(--tag-location)", icon: TAG_ICON_PATHS.location },
-  { id: "cast",     label: "Cast",      plural: "Cast & wardrobe",      color: "var(--tag-cast)",     icon: TAG_ICON_PATHS.cast },
-  { id: "vfx",      label: "VFX",       plural: "VFX & graphics",       color: "var(--tag-vfx)",      icon: TAG_ICON_PATHS.vfx },
-  { id: "sound",    label: "Music/SFX", plural: "Music & SFX",          color: "var(--tag-sound)",    icon: TAG_ICON_PATHS.sound },
-  { id: "gear",     label: "Gear",      plural: "Gear",                 color: "var(--tag-gear)",     icon: TAG_ICON_PATHS.gear }
-];
+var TAG_SHORTCUT_CHARS;
 
 export function tagIconSvg(cat) {
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2" ' +
@@ -63,37 +86,12 @@ export function tagIconCss() {
   }).join("\n");
 }
 
-export var TAG_STATUSES = [
-  { id: "needed",   label: "Needed",   color: "var(--text-faint)" },
-  { id: "sourcing", label: "Sourcing", color: "var(--audio)" },
-  { id: "have",     label: "Have it",  color: "var(--text)" },
-  { id: "returned", label: "Returned", color: "var(--text-faint)" }
-];
-
 export function tagStatusLampHtml(id) {
   var st = tagStatus(id) || TAG_STATUSES[0];
   if (st.id === "returned") {
     return '<svg class="item-lamp is-returned" aria-hidden="true" focusable="false"><use href="#i-return"/></svg>';
   }
   return '<span class="item-lamp is-' + st.id + '" aria-hidden="true"></span>';
-}
-
-export function tagStatus(id) {
-  for (var i = 0; i < TAG_STATUSES.length; i++) {
-    if (TAG_STATUSES[i].id === id) return TAG_STATUSES[i];
-  }
-  return null;
-}
-
-export function tagStatusRank(id) {
-  for (var i = 0; i < TAG_STATUSES.length; i++) {
-    if (TAG_STATUSES[i].id === id) return i;
-  }
-  return 0;
-}
-
-export function nextTagStatus(id) {
-  return TAG_STATUSES[(tagStatusRank(id) + 1) % TAG_STATUSES.length].id;
 }
 
 var TAG_SHORTCUTS = [
@@ -110,149 +108,31 @@ function hasShortcutChar(s) {
   return false;
 }
 
-export function tagCategory(id) {
-  for (var i = 0; i < TAG_CATEGORIES.length; i++) {
-    if (TAG_CATEGORIES[i].id === id) return TAG_CATEGORIES[i];
-  }
-  return null;
-}
-
-export function normalizeTagName(name) {
-  return String(name == null ? "" : name).trim().toLowerCase().replace(/\s+/g, " ");
-}
-
-export function tagKey(cat, name) {
-  return cat + " " + normalizeTagName(name);
-}
-
 export function isInsideTagOrLink(el) {
   return !!(el && el.closest && el.closest(".tag-anchor, a"));
 }
 
-var MEMO_CHAR_BUDGET = 2000000;
+export { productionReaders };
 
-export function contentMemo(compute) {
-  var cache = new Map();
-  var chars = 0;
-  return function (html) {
-    var key = html || "";
-    var hit = cache.get(key);
-    if (hit !== undefined) return hit;
-    var val = compute(key);
-    if (chars > MEMO_CHAR_BUDGET) { cache.clear(); chars = 0; }
-    cache.set(key, val);
-    chars += key.length;
-    return val;
-  };
-}
-
-export var tagsInField = contentMemo(function (html) {
-  var out = [];
-  var last = null;
-  cellOf(html).forEach(function (r) {
-    var id = r.atom ? null : r.marks.tag;
-    if (id && last && last.id === id) { last.text += r.text; return; }
-    last = null;
-    var t = id ? tagNameOf(id) : null;
-    var name = t ? t.name.trim() : "";
-    if (!name) return;
-    last = { id: id, catId: t.cat, name: name, text: r.text };
-    out.push(last);
-  });
-  var found = out.map(function (m) { return { catId: m.catId, name: m.name, text: m.text.trim() }; });
-  if (html.indexOf("audio-cue") !== -1) {
-    cuesInCell(cellOf(html)).forEach(function (c) {
-      var name = c.name.slice(0, 80).trim();
-      if (name) found.push({ catId: "sound", name: name, text: c.text });
-    });
-  }
-  return found;
-});
+export var tagsInField = productionReaders.tagsInField;
 
 export function collectTagsFromRows(rows) {
-  var groups = {}, order = [];
-  (rows || []).forEach(function (row, rowIndex) {
-    ["visualText", "audioText"].forEach(function (field) {
-      tagsInField(row[field]).forEach(function (found) {
-        var cat = tagCategory(found.catId);
-        if (!cat) return;
-        var key = tagKey(cat.id, found.name);
-        if (!groups[key]) {
-          groups[key] = { key: key, cat: cat, name: found.name, mentions: [] };
-          order.push(key);
-        }
-        groups[key].mentions.push({
-          rowId: row.id,
-          rowIndex: rowIndex,
-          field: field,
-          text: found.text
-        });
-      });
-    });
+  return collectTagGroups(rows, productionReaders).map(function (g) {
+    return { key: g.key, cat: tagCategory(g.catId), name: g.name, mentions: g.mentions };
   });
-  return order.map(function (k) { return groups[k]; });
-}
-
-function collectTags() {
-  return collectTagsFromRows(S.state.rows);
-}
-
-export function registryKey(cat, name) {
-  return cat + " " + normalizeTagName(name);
 }
 
 export function registryEntry(cat, name) {
-  var key = registryKey(cat, name);
-  for (var i = 0; i < S.state.productionTags.length; i++) {
-    if (registryKey(S.state.productionTags[i].cat, S.state.productionTags[i].name) === key) {
-      return S.state.productionTags[i];
-    }
-  }
-  return null;
+  return registryEntryIn(S.state.productionTags, cat, name);
 }
 
 export function registerProductionTag(cat, name) {
-  if (registryEntry(cat, name)) return;
-  S.state.productionTags.push({ id: mintTagId(cat, name, S.state.productionTags), cat: cat, name: name,
-                                owner: "", notes: "", status: TAG_STATUSES[0].id });
+  var rec = newRegistryTag(S.state.productionTags, cat, cappedName(String(name == null ? "" : name), 80));
+  if (rec) S.state.productionTags.push(rec);
 }
 
-var TAG_ID_RE = /^t_[a-z0-9]{1,16}(-[0-9]{1,6})?$/;
-
-export function isTagId(id) {
-  return typeof id === "string" && TAG_ID_RE.test(id);
-}
-
-function tagKeyHash(key) {
-  var a = 0x811c9dc5, b = 0x01000193 ^ 0x5bd1e995;
-  for (var i = 0; i < key.length; i++) {
-    var c = key.charCodeAt(i);
-    a = Math.imul(a ^ c, 0x01000193);
-    b = Math.imul(b ^ c, 0x01000193) ^ (b >>> 15);
-  }
-  return (a >>> 0).toString(36) + (b >>> 0).toString(36);
-}
-
-export function mintTagId(cat, name, taken) {
-  var used = Object.create(null);
-  (taken || []).forEach(function (t) { if (t && t.id) used[t.id] = true; });
-  var base = "t_" + tagKeyHash(registryKey(cat, name)).slice(0, 16);
-  if (!used[base]) return base;
-  for (var n = 2; ; n++) if (!used[base + "-" + n]) return base + "-" + n;
-}
-
-export function ensureTagIds(registry) {
-  var seen = Object.create(null);
-  var need = [];
-  (registry || []).forEach(function (t) {
-    if (!t) return;
-    if (isTagId(t.id) && !seen[t.id]) { seen[t.id] = true; return; }
-    need.push(t);
-  });
-  need.forEach(function (t) {
-    t.id = mintTagId(t.cat, t.name, registry);
-  });
-  return registry;
+export function addRegistryTags(records) {
+  records.forEach(function (t) { S.state.productionTags.push(t); });
 }
 
 export function registryEntryById(id) {
@@ -261,28 +141,6 @@ export function registryEntryById(id) {
     if (t && t.id === id) return t;
   }
   return null;
-}
-
-export function registryTagHooks(registry) {
-  var byKey = Object.create(null), byId = Object.create(null);
-  (registry || []).forEach(function (t) {
-    if (!t || !t.id || !t.name) return;
-    var k = registryKey(t.cat, t.name);
-    if (!byKey[k]) byKey[k] = t;
-    byId[t.id] = t;
-  });
-  return {
-    tagId: function (cat, name) {
-      var t = byKey[registryKey(cat, name)];
-      return t ? t.id : "t:" + cat + ":" + name;
-    },
-    tagOf: function (id) {
-      var t = byId[id];
-      if (t) return { cat: t.cat, name: t.name };
-      var m = /^t:([a-z]+):([\s\S]+)$/.exec(String(id));
-      return m ? { cat: m[1], name: m[2] } : null;
-    }
-  };
 }
 
 export function personById(id) {
@@ -294,7 +152,7 @@ export function personById(id) {
 }
 
 export function findOrAddPerson(name) {
-  var clean = plainText(name).trim().slice(0, 60);
+  var clean = cappedText(name, 60);
   if (!clean) return "";
   var norm = normalizeTagName(clean);
   for (var i = 0; i < S.state.people.length; i++) {
@@ -308,6 +166,7 @@ export function findOrAddPerson(name) {
 export function deletePerson(id) {
   S.state.people = S.state.people.filter(function (p) { return p.id !== id; });
   S.state.productionTags.forEach(function (t) { if (t.owner === id) t.owner = ""; });
+  (S.state.brollShots || []).forEach(function (b) { if (b.owner === id) b.owner = ""; });
 }
 
 export function deleteProductionTagEntry(cat, name) {
@@ -320,196 +179,94 @@ export function deleteProductionTagEntry(cat, name) {
 var prodIndex = null;
 var prodIndexDerived = 0;
 
-function registrySignature(tags) {
-  var sig = [];
-  tags.forEach(function (t) {
-    if (!t) { sig.push(null, null, null, null, null, null); return; }
-    sig.push(t.cat, t.name, t.owner, t.notes, t.status, t.id);
-  });
-  return sig;
-}
-
-function sameFieldTags(a, b) {
-  if (a === b) return true;
-  if (a.length !== b.length) return false;
-  for (var i = 0; i < a.length; i++) {
-    if (a[i].catId !== b[i].catId || a[i].name !== b[i].name || a[i].text !== b[i].text) return false;
-  }
-  return true;
-}
-
-var ROW_SIG_SLOTS = 5;
-
-function prodIndexFresh(ix) {
-  var rows = S.state.rows, tags = S.state.productionTags;
-  if (ix.rowCount !== rows.length || ix.tagSig.length !== tags.length * 6) return false;
-  var rs = ix.rowSig;
-  for (var i = 0, j = 0; i < rows.length; i++, j += ROW_SIG_SLOTS) {
-    var r = rows[i];
-    if (rs[j] !== r.id) return false;
-    if (rs[j + 1] !== r.visualText) {
-      var vTags = tagsInField(r.visualText);
-      if (!sameFieldTags(rs[j + 3], vTags)) return false;
-      rs[j + 1] = r.visualText;
-      rs[j + 3] = vTags;
-    }
-    if (rs[j + 2] !== r.audioText) {
-      var aTags = tagsInField(r.audioText);
-      if (!sameFieldTags(rs[j + 4], aTags)) return false;
-      rs[j + 2] = r.audioText;
-      rs[j + 4] = aTags;
-    }
-  }
-  var ts = ix.tagSig;
-  for (i = 0, j = 0; i < tags.length; i++, j += 6) {
-    var t = tags[i];
-    if (!t) { if (ts[j] !== null) return false; continue; }
-    if (ts[j] !== t.cat || ts[j + 1] !== t.name || ts[j + 2] !== t.owner ||
-        ts[j + 3] !== t.notes || ts[j + 4] !== t.status || ts[j + 5] !== t.id) return false;
-  }
-  return true;
-}
-
-function deriveProductionIndex() {
-  var rows = S.state.rows;
-  var live = collectTags();
-  var liveByKey = {};
-  live.forEach(function (t) { liveByKey[registryKey(t.cat.id, t.name)] = t; });
-
-  var seen = {}, out = [], unregistered = [];
-  S.state.productionTags.forEach(function (t) {
-    if (!t) return;
-    var cat = tagCategory(t.cat);
-    if (!cat) return;
-    var key = registryKey(cat.id, t.name);
-    if (seen[key]) return;
-    seen[key] = true;
-    var liveMatch = liveByKey[key];
-    out.push({
-      key: key,
-      id: t.id || null,
-      cat: cat,
-      name: liveMatch ? liveMatch.name : t.name,
-      mentions: liveMatch ? liveMatch.mentions : [],
-      orphaned: !liveMatch,
-      owner: t.owner || "",
-      notes: t.notes || "",
-      status: (tagStatus(t.status) || TAG_STATUSES[0]).id
-    });
-  });
-  live.forEach(function (t) {
-    var key = registryKey(t.cat.id, t.name);
-    if (seen[key]) return;
-    seen[key] = true;
-    unregistered.push(t);
-    out.push({ key: key, id: null, cat: t.cat, name: t.name, mentions: t.mentions,
-               orphaned: false, owner: "", notes: "", status: TAG_STATUSES[0].id });
-  });
-
-  var rowSig = new Array(rows.length * ROW_SIG_SLOTS);
-  rows.forEach(function (r, i) {
-    var j = i * ROW_SIG_SLOTS;
-    rowSig[j] = r.id;
-    rowSig[j + 1] = r.visualText;
-    rowSig[j + 2] = r.audioText;
-    rowSig[j + 3] = tagsInField(r.visualText);
-    rowSig[j + 4] = tagsInField(r.audioText);
-  });
+function presentEntry(e) {
   return {
-    entries: out,
-    unregistered: unregistered,
-    rowCount: rows.length,
-    rowSig: rowSig,
-    tagSig: registrySignature(S.state.productionTags)
+    key: e.key,
+    id: e.id,
+    cat: tagCategory(e.catId),
+    name: e.name,
+    mentions: e.mentions,
+    orphaned: e.orphaned,
+    owner: e.owner,
+    notes: e.notes,
+    status: e.status
   };
 }
 
-function productionIndex() {
-  if (prodIndex && prodIndex.state === S.state && prodIndexFresh(prodIndex)) return prodIndex;
-  prodIndexDerived++;
-  prodIndex = deriveProductionIndex();
-  prodIndex.state = S.state;
+function holdIndex(core, entries, state) {
+  prodIndex = { core: cacheSeal(core), entries: cacheSeal(entries), state: state };
   return prodIndex;
+}
+
+function productionIndex() {
+  var kept = prodIndex && prodIndex.state === S.state ? refreshedProductionIndex(prodIndex.core, S.state, productionReaders) : null;
+  if (kept && kept === prodIndex.core) return prodIndex;
+  if (kept) return holdIndex(kept, prodIndex.entries, prodIndex.state);
+  prodIndexDerived++;
+  var core = deriveProductionIndex(S.state, productionReaders);
+  return holdIndex(core, core.entries.map(presentEntry), S.state);
 }
 
 export function productionEntries() {
   return productionIndex().entries.slice();
 }
 
-export function healTagRegistry() {
-  if (!S.state) return 0;
-  var ix = productionIndex();
-  var cuesWere = cueSnapshot;
-  cueSnapshot = snapshotCues();
-  if (!ix.unregistered.length) return 0;
-  var n = ix.unregistered.length;
-  var retitled = retitleEditedCues(cuesWere, cueSnapshot, ix);
-  ix.unregistered.forEach(function (t) {
-    registerProductionTag(t.cat.id, t.name);
-    var reg = registryEntry(t.cat.id, t.name);
-    ix.entries.forEach(function (e) { if (e.key === registryKey(t.cat.id, t.name) && reg) e.id = reg.id; });
+export function currentProductionIndex() {
+  return productionIndex().core;
+}
+
+function adoptRegisteredIds(ix) {
+  var ids = Object.create(null), left = Object.create(null);
+  ix.core.unregistered.forEach(function (t) {
+    var key = registryKey(t.catId, t.name);
+    var reg = registryEntry(t.catId, t.name);
+    if (reg) ids[key] = reg.id;
+    else left[key] = true;
   });
-  ix.unregistered = [];
-  ix.tagSig = registrySignature(S.state.productionTags);
-  if (retitled) prodIndex = null;
-  return n;
+  function withId(e) {
+    return e.key in ids ? Object.assign({}, e, { id: ids[e.key] }) : e;
+  }
+  function registeredFirst(entries) {
+    var stay = [], after = [];
+    entries.forEach(function (e) { (e.key in left ? after : stay).push(withId(e)); });
+    return stay.concat(after);
+  }
+  var core = Object.assign({}, ix.core, {
+    entries: registeredFirst(ix.core.entries),
+    unregistered: ix.core.unregistered.filter(function (t) { return registryKey(t.catId, t.name) in left; }),
+    tagSig: registrySignature(S.state.productionTags)
+  });
+  holdIndex(core, registeredFirst(ix.entries), ix.state);
+}
+
+export function tagRecordsPlan() {
+  if (!S.state) return null;
+  var ix = productionIndex();
+  var plan = planRegistryHealing(S.state, productionReaders, cueSnapshot, ix.core);
+  return {
+    apply: plan.count ? function () {
+      plan.retitle.forEach(function (r) { S.state.productionTags[r.at].name = r.name; });
+      addRegistryTags(plan.register);
+      adoptRegisteredIds(ix);
+      if (plan.retitle.length) prodIndex = null;
+      return plan.count;
+    } : null,
+    commit: function () { cueSnapshot = plan.cues; }
+  };
+}
+
+export function healTagRegistry() {
+  var plan = tagRecordsPlan();
+  if (!plan) return 0;
+  var count = plan.apply ? plan.apply() : 0;
+  plan.commit();
+  return count;
 }
 
 var cueSnapshot = null;
 
-var cueNamesInField = contentMemo(function (html) {
-  if (html.indexOf("audio-cue") === -1) return [];
-  return cuesInCell(cellOf(html)).map(function (c) { return c.name.slice(0, 80).trim(); }).filter(Boolean);
-});
-
-function snapshotCues() {
-  var cells = {};
-  S.state.rows.forEach(function (r) {
-    var names = cueNamesInField(r.audioText);
-    if (names.length) cells[r.id] = names;
-  });
-  return { docId: S.state.docId, cells: cells };
-}
-
-function retitleEditedCues(was, now, ix) {
-  if (!was || was.docId !== now.docId) return 0;
-  var fresh = {}, orphan = {};
-  ix.unregistered.forEach(function (t) { if (t.cat.id === "sound") fresh[registryKey("sound", t.name)] = true; });
-  ix.entries.forEach(function (e) { if (e.orphaned && e.cat.id === "sound") orphan[e.key] = true; });
-  var n = 0;
-  Object.keys(now.cells).forEach(function (rowId) {
-    var before = was.cells[rowId];
-    if (!before) return;
-    var after = now.cells[rowId];
-    var gone = before.filter(function (name) { return after.indexOf(name) === -1; });
-    var came = after.filter(function (name) { return before.indexOf(name) === -1; });
-    for (var i = 0; i < gone.length && i < came.length; i++) {
-      var oldKey = registryKey("sound", gone[i]), newKey = registryKey("sound", came[i]);
-      if (!fresh[newKey] || !orphan[oldKey]) continue;
-      var entry = registryEntry("sound", gone[i]);
-      if (!entry) continue;
-      entry.name = came[i];
-      delete fresh[newKey];
-      delete orphan[oldKey];
-      n++;
-    }
-  });
-  return n;
-}
-
 export function missingRegistryTags(rows, registry) {
-  var have = Object.create(null);
-  (registry || []).forEach(function (t) { if (t && t.name) have[registryKey(t.cat, t.name)] = true; });
-  var out = [];
-  collectTagsFromRows(rows).forEach(function (t) {
-    var name = plainText(t.name).trim().slice(0, 80);
-    if (!name) return;
-    var key = registryKey(t.cat.id, name);
-    if (have[key]) return;
-    have[key] = true;
-    out.push({ cat: t.cat.id, name: name, owner: "", notes: "", status: TAG_STATUSES[0].id });
-  });
-  return out;
+  return missingRegistryTagsIn(rows, registry, productionReaders);
 }
 
 export function productionIndexStats() {
@@ -522,48 +279,25 @@ export function resetProductionIndexStats() {
 }
 
 export function tagsByCategory(all) {
-  all = all || productionEntries();
-  return TAG_CATEGORIES.map(function (cat) {
-    var items = all.filter(function (t) { return t.cat.id === cat.id; });
-    items.sort(function (a, b) {
-      if (!!a.orphaned !== !!b.orphaned) return a.orphaned ? 1 : -1;
-      if (b.mentions.length !== a.mentions.length) return b.mentions.length - a.mentions.length;
-      return a.name.localeCompare(b.name);
-    });
-    return { cat: cat, items: items };
-  }).filter(function (g) { return g.items.length; });
+  return groupTagsByCategory(all || productionEntries());
 }
 
-var IDLE_REFRESH_MS = 180;
-var IDLE_REFRESH_MAX_MS = 1000;
-var idlePending = { production: false, writerStats: false, untagged: false, broll: false };
-var idleTimer = null;
-var idleSince = 0;
 var idleFlushes = 0;
 
 export function scheduleIdleRefresh(job) {
-  idlePending[job] = true;
-  var now = Date.now();
-  if (idleTimer) clearTimeout(idleTimer);
-  else idleSince = now;
-  var wait = Math.max(0, Math.min(IDLE_REFRESH_MS, idleSince + IDLE_REFRESH_MAX_MS - now));
-  idleTimer = setTimeout(runIdleRefresh, wait);
+  requestRefresh(job);
 }
 
-function runIdleRefresh() {
-  idleTimer = null;
-  var p = idlePending;
-  idlePending = { production: false, writerStats: false, untagged: false, broll: false };
+export function runIdleRefresh(jobs) {
   if (!S.state) return;
   idleFlushes++;
-  if (p.production) refreshProductionNow();
-  if (p.writerStats) updateWriterStats();
-  if (p.untagged) scanUntaggedMentions();
-  if (p.broll) runBrollRefresh();
+  if (jobs.has("production")) refreshProductionNow();
+  if (jobs.has("writerStats")) updateWriterStats();
+  if (jobs.has("untagged")) scanUntaggedMentions();
+  if (jobs.has("broll")) runBrollRefresh();
 }
 
 function refreshProductionNow() {
-  healTagRegistry();
   var panel = document.getElementById("production-panel");
   var gearPanel = document.getElementById("gear-panel");
   if ((panel && !panel.hidden) || (gearPanel && !gearPanel.hidden)) renderProduction();
@@ -615,7 +349,7 @@ export function maybeAutoTagShortcut(e, cellEl) {
   if (rule.open === rule.close && node.data.charAt(openAt - 1) === rule.open) return;
   var phrase = node.data.slice(openAt + 1, offset - 1);
   var trimmed = phrase.trim();
-  if (!trimmed || phrase.length > AUTO_TAG_MAX_LEN || hasShortcutChar(phrase)) return;
+  if (isBlankTagName(trimmed) || phrase.length > AUTO_TAG_MAX_LEN || hasShortcutChar(phrase)) return;
 
   tagTextRange(cellEl, node, openAt, offset, trimmed, rule.cat, trimmed);
   updateTagBadges();
@@ -628,8 +362,7 @@ function tagTextRange(cellEl, node, a, b, text, cat, name) {
     if (from === null || to === null) return null;
     if (projection(cell).slice(from, to) !== node.data.slice(a, b).replace(/\u200B/g, "")) return null;
     var r = replaceWithTag(cell, from, to, text, namedTagId(cat, name));
-    registerProductionTag(cat, name);
-    return { cell: r.cell, sel: { from: r.end, to: r.end } };
+    return { cell: r.cell, sel: { from: r.end, to: r.end }, records: { tags: [{ cat: cat, name: name }] } };
   });
 }
 
@@ -880,55 +613,6 @@ export function acceptUntaggedMention() {
   return true;
 }
 
-var TAG_WORD_CHAR_RE = /[\p{L}\p{N}]/u;
-
-function foldCaseKeepLength(s) {
-  var lower = s.toLowerCase();
-  if (lower.length === s.length) return lower;
-  var out = "";
-  for (var i = 0; i < s.length; i++) {
-    var c = s.charAt(i).toLowerCase();
-    out += c.length === 1 ? c : s.charAt(i);
-  }
-  return out;
-}
-
-function sameCmt(a, b) {
-  return (a || []).join("\u0000") === (b || []).join("\u0000");
-}
-
-export function tagOccurrences(cell, phrase) {
-  var needle = foldCaseKeepLength(String(phrase == null ? "" : phrase));
-  var out = [];
-  if (!needle) return out;
-  var text = "", marks = [];
-  (cell || []).forEach(function (r) {
-    if (r.atom) { text += "￼"; marks.push(null); return; }
-    text += r.text;
-    for (var i = 0; i < r.text.length; i++) marks.push(r.marks);
-  });
-  var hay = foldCaseKeepLength(text);
-  var at = hay.indexOf(needle);
-  while (at !== -1) {
-    var end = at + needle.length;
-    var ok = true;
-    for (var i = at; i < end && ok; i++) {
-      var m = marks[i];
-      ok = !!m && !m.tag && !m.href && text.charAt(i) !== "\n" && sameCmt(m.cmt, marks[at].cmt);
-    }
-    if (!ok) { at = hay.indexOf(needle, at + 1); continue; }
-    if (!TAG_WORD_CHAR_RE.test(text.charAt(at - 1)) && !TAG_WORD_CHAR_RE.test(text.charAt(end))) {
-      out.push({ from: at, to: end });
-    }
-    at = hay.indexOf(needle, end);
-  }
-  return out;
-}
-
-function holdsMedia(html) {
-  return /<img[\s>]|video-embed-card/i.test(html || "");
-}
-
 function wrapTagInHtml(html, cell, found, cat, name) {
   var body = inertBody(html);
   var doc = body.ownerDocument;
@@ -950,70 +634,11 @@ function wrapTagInHtml(html, cell, found, cat, name) {
 }
 
 export function tagFieldOccurrences(html, phrase, cat, name, countOnly, onlyOccurrence) {
-  var cell = cellOf(html);
-  var found = tagOccurrences(cell, phrase);
-  if (countOnly) return { hits: found.length, html: html };
-  if (onlyOccurrence !== undefined) found = found[onlyOccurrence] ? [found[onlyOccurrence]] : [];
-  return writeTags(html, cell, found, cat, name);
-}
-
-function writeTags(html, cell, found, cat, name) {
-  if (!found.length) return { hits: 0, html: html };
-  var clean = plainText(name).trim().slice(0, 80);
-  if (holdsMedia(html)) {
-    var wrapped = wrapTagInHtml(html, cell, found, cat, clean);
-    return wrapped === null ? { hits: 0, html: html } : { hits: found.length, html: wrapped };
-  }
-  var id = namedTagId(cat, clean);
-  found.forEach(function (m) { cell = setMark(cell, m.from, m.to, "tag", id); });
-  return { hits: found.length, html: toHtml(cell) };
-}
-
-function wholeWordHits(text, needle, matchCase) {
-  var hay = matchCase ? text : foldCaseKeepLength(text);
-  var find = matchCase ? needle : foldCaseKeepLength(needle);
-  var out = [];
-  if (!find) return out;
-  var at = hay.indexOf(find);
-  while (at !== -1) {
-    var end = at + find.length;
-    if (!TAG_WORD_CHAR_RE.test(text.charAt(at - 1)) && !TAG_WORD_CHAR_RE.test(text.charAt(end))) {
-      out.push({ from: at, to: end });
-      at = hay.indexOf(find, end);
-    } else {
-      at = hay.indexOf(find, at + 1);
-    }
-  }
-  return out;
+  return tagFieldOccurrencesWith(html, phrase, cat, name, countOnly, onlyOccurrence, productionReaders, wrapTagInHtml);
 }
 
 export function bulkTagCell(html, phrase, cat, name, matchCase, countOnly) {
-  var needle = String(phrase == null ? "" : phrase).trim();
-  var none = { hits: 0, inTags: 0, skipped: 0, html: html };
-  if (!needle) return none;
-  var cell = cellOf(html);
-  var text = "", tagged = [];
-  cell.forEach(function (r) {
-    if (r.atom) { text += "\uFFFC"; tagged.push(false); return; }
-    text += r.text;
-    for (var i = 0; i < r.text.length; i++) tagged.push(!!r.marks.tag);
-  });
-  var found = tagOccurrences(cell, needle).filter(function (m) {
-    return !matchCase || text.slice(m.from, m.to) === needle;
-  });
-  var taking = {};
-  found.forEach(function (m) { taking[m.from] = true; });
-  var inTags = 0, skipped = 0;
-  wholeWordHits(text, needle, matchCase).forEach(function (h) {
-    if (taking[h.from]) return;
-    if (tagged.slice(h.from, h.to).indexOf(true) !== -1) inTags++;
-    else skipped++;
-  });
-  if (countOnly || !found.length) {
-    return { hits: found.length, inTags: inTags, skipped: skipped, html: html };
-  }
-  var res = writeTags(html, cell, found, cat, name);
-  return { hits: res.hits, inTags: inTags, skipped: skipped + found.length - res.hits, html: res.html };
+  return bulkTagCellWith(html, phrase, cat, name, matchCase, countOnly, productionReaders, wrapTagInHtml);
 }
 
 export function bulkTagRows(rows, phrase, cat, name, matchCase, countOnly) {
@@ -1072,24 +697,13 @@ function eachTaggedField(cat, name, toName) {
       }).length;
       if (!mentions) return;
       changed += mentions;
-      row[field] = holdsMedia(html) ? retagInHtml(html, cat, target, toName) : retagCell(html, cat, target, toId);
+      row[field] = holdsMedia(html)
+        ? retagInHtml(html, cat, target, toName)
+        : retagCell(html, cat, target, toId, productionReaders);
       stampRow(row);
     });
   });
   return changed;
-}
-
-function retagCell(html, cat, target, toId) {
-  var cell = cellOf(html);
-  tagIds(cell).forEach(function (id) {
-    var t = tagNameOf(id);
-    if (t && t.cat === cat && normalizeTagName(t.name) === target) cell = retag(cell, id, toId);
-  });
-  if (cat === "sound" && html.indexOf("audio-cue") !== -1) {
-    cell = editCues(cell, function (name) { return normalizeTagName(name.slice(0, 80)) === target; },
-      toId === null ? null : tagNameOf(toId).name);
-  }
-  return toHtml(cell);
 }
 
 function retagInHtml(html, cat, target, toName) {
@@ -1105,7 +719,7 @@ function retagInHtml(html, cat, target, toName) {
 }
 
 export function renameTag(cat, oldName, newName) {
-  var clean = plainText(newName).trim().slice(0, 80);
+  var clean = cappedText(newName, 80);
   if (!clean) return false;
   if (registryKey(cat, clean) !== registryKey(cat, oldName)) {
     var collision = registryEntry(cat, clean);
@@ -1200,7 +814,7 @@ export function renderTagCategories(selected) {
 }
 
 function refreshTagNameList() {
-  var names = {};
+  var names = idMap();
   productionEntries().forEach(function (t) { names[t.name] = true; });
   document.getElementById("tag-name-list").innerHTML =
     Object.keys(names).sort().map(function (n) {
@@ -1227,7 +841,7 @@ export function openTagComposer(ctx) {
   pendingTag = ctx;
   document.getElementById("tag-quote").textContent = ctx.quotedText;
   var nameInput = document.getElementById("tag-name");
-  nameInput.value = ctx.quotedText.slice(0, 80);
+  nameInput.value = codePointPrefix(ctx.quotedText, 80);
   renderTagCategories(ctx.cat || "prop");
   refreshTagNameList();
   document.getElementById("tag-all").checked = false;
@@ -1249,8 +863,8 @@ function selectedTagCategory() {
 export function applyTag() {
   if (!pendingTag) return;
   var cat = selectedTagCategory();
-  var name = plainText(document.getElementById("tag-name").value).trim().slice(0, 80);
-  if (!name) { showToast("Give the label a name first.", "warn"); return; }
+  var name = cappedText(document.getElementById("tag-name").value, 80);
+  if (isBlankTagName(name)) { showToast("Give the label a name first.", "warn"); return; }
 
   var all = document.getElementById("tag-all").checked;
   var phrase = pendingTag.quotedText;
@@ -1304,5 +918,27 @@ export function __init() {
   iconStyle.id = "tag-icon-style";
   iconStyle.textContent = tagIconCss();
   document.head.appendChild(iconStyle);
+
+  window.__cacheTest = {
+    index: currentProductionIndex,
+    frozen: function () {
+      var html = "Put the " + '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="kettle">kettle</span> on.';
+      return [cellOf(html), productionReaders.tagsInField(html), productionReaders.cueNamesInField(html), currentProductionIndex()]
+        .map(function (v) { return !!v && Object.isFrozen(v); });
+    },
+    writes: function () {
+      var html = '<strong>Probe</strong> the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="probe lamp">lamp</span>.';
+      var cell = cellOf(html), tags = productionReaders.tagsInField(html);
+      return [
+        function () { cell[0].text = "x"; },
+        function () { delete cell[0].marks.b; },
+        function () { cell.length = 0; },
+        function () { tags[0].name = "x"; },
+        function () { Object.defineProperty(tags[0], "text", { value: "x" }); }
+      ].map(function (write) {
+        try { write(); return false; } catch (e) { return e instanceof TypeError; }
+      });
+    }
+  };
 
 }

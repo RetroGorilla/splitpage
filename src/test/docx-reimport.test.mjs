@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -7,7 +8,9 @@ import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { intern } from "../js/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { htmlToPlainText, strBytes, zipRead, zipWrite } from "../js/14-export.js";
+import { strBytes } from "../adapters/formats/bytes.ts";
+import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
+import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { __init as initDocx, buildDocx, buildNarrationDocx, docxToRows } from "../js/15-docx.js";
 
 initTags();
@@ -43,7 +46,7 @@ test("a Splitpage export reopens as exactly its script: no comment rows, no comm
     ]
   });
   const expected = plainRows(S.state.rows);
-  const bytes = buildDocx();
+  const bytes = buildDocx(...liveWithAssets());
 
   const parsed = await docxToRows(asFile(bytes));
   assert.equal(parsed.title, "Round trip");
@@ -62,11 +65,11 @@ test("an export with no comments reopens the same, and one with comments matches
     { id: "r1", visualText: "Two", audioText: "Second.", status: "todo" }
   ];
   S.state = migrateRows({ schema: 2, title: "Plain", rows, comments: [] });
-  const bare = await docxToRows(asFile(buildDocx()));
+  const bare = await docxToRows(asFile(buildDocx(...liveWithAssets())));
   S.state = migrateRows({ schema: 2, title: "Plain", rows, comments: [
     { id: "c0", rowId: "r0", field: "audioText", author: "Ann", createdAt: "2026-09-01T10:00:00Z", body: "A note", replies: [] }
   ] });
-  const withComments = await docxToRows(asFile(buildDocx()));
+  const withComments = await docxToRows(asFile(buildDocx(...liveWithAssets())));
   assert.deepEqual(plainRows(withComments.rows), plainRows(bare.rows));
   assert.equal(withComments.rows.length, 2);
 });
@@ -210,14 +213,14 @@ test("a .docx exported before #169 reopens exactly as it did, script and narrati
 
 test("the same script exported now reopens as exactly the same rows: nothing drawn round the words comes back", async () => {
   loadRoundTrip();
-  assert.deepEqual(await readBack(buildDocx()), OLD_READ.script);
+  assert.deepEqual(await readBack(buildDocx(...liveWithAssets())), OLD_READ.script);
   loadRoundTrip();
-  assert.deepEqual(await readBack(buildNarrationDocx({ directions: true })), OLD_READ.narration);
+  assert.deepEqual(await readBack(buildNarrationDocx(liveDoc(), { directions: true })), OLD_READ.narration);
 });
 
 test("the title's meta line, tags, markers, the b-roll chip and the comments' underlines are each in their own style", async () => {
   loadRoundTrip();
-  const { body } = await parts(buildDocx());
+  const { body } = await parts(buildDocx(...liveWithAssets()));
   const paras = kids(body, "p");
   assert.equal(paraStyle(paras[0]), "Title");
   assert.equal(paraStyle(paras[1]), "SplitpageMeta");
@@ -250,7 +253,7 @@ test("the title's meta line, tags, markers, the b-roll chip and the comments' un
 
 test("the scene gutter and the read time sit either side of the script and are read past", async () => {
   loadRoundTrip();
-  const { body } = await parts(buildDocx());
+  const { body } = await parts(buildDocx(...liveWithAssets()));
   const trs = kids(kids(body, "tbl")[0], "tr");
   const cells = (tr) => kids(tr, "tc");
   assert.deepEqual(cells(trs[0]).map((tc) => tc.textContent), ["Scene", "Visual", "Audio", "Read"]);
@@ -270,7 +273,7 @@ test("the scene gutter and the read time sit either side of the script and are r
 
 test("the breakdown is grouped by category and no item's row splits across a page", async () => {
   loadRoundTrip();
-  const { body } = await parts(buildDocx());
+  const { body } = await parts(buildDocx(...liveWithAssets()));
   const paras = kids(body, "p");
   const heading = paras.find((p) => p.textContent === "Production breakdown");
   assert.equal(paraStyle(heading), "Heading1");
@@ -292,20 +295,20 @@ test("the b-roll shot list, by scene, with a box for each shot", async () => {
   loadRoundTrip();
   S.state.brollShots = [{ id: "bs_1", name: "dust in the light", status: "shot", location: "Workbench", reshoot: true, notes: "Needs a haze.", props: [] }];
   S.state = migrateRows(S.state);
-  const { body } = await parts(buildDocx());
+  const { body } = await parts(buildDocx(...liveWithAssets()));
   const paras = kids(body, "p").map((p) => p.textContent);
   const at = paras.indexOf("B-roll shot list");
   assert.ok(at > 0);
   assert.deepEqual(paras.slice(at + 1, at + 6), [
     "1 of 1 shot · 1 flagged", "Scene 01  00:001/1 shot", "☑dust in the light", "Workbench  ·  Flagged", "Needs a haze."
   ]);
-  assert.deepEqual(plainRows((await docxToRows(asFile(buildDocx()))).rows).map((r) => r.v),
+  assert.deepEqual(plainRows((await docxToRows(asFile(buildDocx(...liveWithAssets())))).rows).map((r) => r.v),
     ["Wide on the workbench, the Pentax K1000 in frame.\nB-roll: dust in the light", "Title card over the montage.", "Close on the needle.", ""]);
 });
 
 test("the narration: its meta line and each scene's number in the margin, none of it read back", async () => {
   loadRoundTrip();
-  const { body } = await parts(buildNarrationDocx({ directions: true }));
+  const { body } = await parts(buildNarrationDocx(liveDoc(), { directions: true }));
   const paras = kids(body, "p");
   assert.equal(paraStyle(paras[1]), "SplitpageMeta");
   assert.match(paras[1].textContent, /^Narration · 3 scenes · \d+ words · about 0:\d\d at 150 wpm$/);
@@ -321,7 +324,7 @@ test("the narration: its meta line and each scene's number in the margin, none o
 
 test("the package says what it is: a title Word shows, Splitpage, the day; page X of Y in the footer", async () => {
   loadRoundTrip();
-  const { text, xml } = await parts(buildDocx());
+  const { text, xml } = await parts(buildDocx(...liveWithAssets()));
   const core = xml(await text("docProps/core.xml"));
   const one = (ns, name) => core.getElementsByTagNameNS(ns, name)[0].textContent;
   assert.equal(one("http://purl.org/dc/elements/1.1/", "title"), "Round trip, then and now");
@@ -338,18 +341,25 @@ test("the package says what it is: a title Word shows, Splitpage, the day; page 
   assert.equal(Array.from(footer.getElementsByTagNameNS(W, "t")).map((t) => t.textContent).join(""), "Round trip, then and nowPage 1 of 1");
 });
 
+test("a title cut short in the footer never ends in half an emoji (#434)", async () => {
+  const grin = String.fromCodePoint(0x1F600);
+  S.state = migrateRows({ schema: 2, title: "x".repeat(88) + grin + "tail", rows: [{ id: "r0", visualText: "V", audioText: "A.", status: "todo" }], comments: [] });
+  const { text, xml } = await parts(buildDocx(...liveWithAssets()));
+  assert.equal(xml(await text("word/footer1.xml")).getElementsByTagNameNS(W, "t")[0].textContent, "x".repeat(88) + "…");
+});
+
 test("a long title wraps on the page and is cut short in the footer; an empty script reopens empty", async () => {
   const long = "A title that goes on and on: " + "and on ".repeat(20).trim();
   S.state = migrateRows({ schema: 2, title: long, rows: [{ id: "r0", visualText: "V", audioText: "A.", status: "todo" }], comments: [] });
-  const { text, xml, body } = await parts(buildDocx());
+  const { text, xml, body } = await parts(buildDocx(...liveWithAssets()));
   assert.equal(kids(body, "p")[0].textContent, long);
   const foot = xml(await text("word/footer1.xml")).getElementsByTagNameNS(W, "t")[0].textContent;
   assert.ok(foot.length <= 90 && foot.endsWith("…") && long.startsWith(foot.slice(0, -1)), foot);
 
   S.state = migrateRows({ schema: 2, title: "Empty", rows: [], comments: [] });
-  const empty = await parts(buildDocx());
+  const empty = await parts(buildDocx(...liveWithAssets()));
   assert.match(kids(empty.body, "p")[1].textContent, /^0 scenes · 0:00 running time · /);
-  const back = await docxToRows(asFile(buildDocx()));
+  const back = await docxToRows(asFile(buildDocx(...liveWithAssets())));
   assert.equal(back.title, "Empty");
   assert.deepEqual(back.rows, []);
 });

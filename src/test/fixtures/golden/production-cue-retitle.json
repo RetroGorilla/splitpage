@@ -1,0 +1,545 @@
+{
+  "typedWithPauses": [
+    {
+      "step": "open and heal",
+      "healed": 0,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": []
+    },
+    {
+      "step": "Music: slow",
+      "healed": 1,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ],
+        [
+          "t_gwxd1lapfc5a",
+          "slow",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": []
+    },
+    {
+      "step": "Music: slow piano",
+      "healed": 1,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ],
+        [
+          "t_gwxd1lapfc5a",
+          "slow piano",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": []
+    },
+    {
+      "step": "Music: slow piano intro",
+      "healed": 1,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ],
+        [
+          "t_gwxd1lapfc5a",
+          "slow piano intro",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": []
+    },
+    {
+      "step": "marked Have it with a note",
+      "healed": null,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ],
+        [
+          "t_gwxd1lapfc5a",
+          "slow piano intro",
+          "have",
+          "the Rhodes take"
+        ]
+      ],
+      "orphaned": []
+    },
+    {
+      "step": "a one-letter fix",
+      "healed": 1,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ],
+        [
+          "t_gwxd1lapfc5a",
+          "slow piano intros",
+          "have",
+          "the Rhodes take"
+        ]
+      ],
+      "orphaned": []
+    },
+    {
+      "step": "undone",
+      "healed": 1,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ],
+        [
+          "t_gwxd1lapfc5a",
+          "slow piano intro",
+          "have",
+          "the Rhodes take"
+        ]
+      ],
+      "orphaned": []
+    }
+  ],
+  "oldNameStillInScript": [
+    {
+      "step": "open with the cue twice",
+      "healed": 0,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": [
+        "sound upbeat intro"
+      ]
+    },
+    {
+      "step": "marked Have it",
+      "healed": null,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "have",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": [
+        "sound upbeat intro"
+      ]
+    },
+    {
+      "step": "one copy edited",
+      "healed": 1,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "have",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ],
+        [
+          "t_fqkkuu16um2hf",
+          "door slams",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": [
+        "sound upbeat intro"
+      ]
+    }
+  ],
+  "oldNameStillTagged": [
+    {
+      "step": "a tag of the same name",
+      "healed": 0,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": []
+    },
+    {
+      "step": "the cue edited",
+      "healed": 1,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ],
+        [
+          "t_xe4cpq19f2ebz",
+          "door bang",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": []
+    }
+  ],
+  "newNameAlreadyTracked": [
+    {
+      "step": "open and heal",
+      "healed": 0,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": []
+    },
+    {
+      "step": "the cue moved to another row",
+      "healed": 0,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": [
+        "sound upbeat intro"
+      ]
+    },
+    {
+      "step": "the first cue renamed to a tracked name",
+      "healed": 0,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": []
+    }
+  ],
+  "twoCuesInOneCell": [
+    {
+      "step": "open and heal",
+      "healed": 0,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_18sj9dp103vkh2",
+          "kettle whistle",
+          "needed",
+          ""
+        ],
+        [
+          "t_1108x2110dth6z",
+          "theme",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": []
+    },
+    {
+      "step": "both edited at once",
+      "healed": 2,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slams",
+          "needed",
+          ""
+        ],
+        [
+          "t_18sj9dp103vkh2",
+          "kettle whistles",
+          "needed",
+          ""
+        ],
+        [
+          "t_1108x2110dth6z",
+          "theme",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": []
+    },
+    {
+      "step": "one removed, one edited",
+      "healed": 1,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slams",
+          "needed",
+          ""
+        ],
+        [
+          "t_18sj9dp103vkh2",
+          "kettle whistling",
+          "needed",
+          ""
+        ],
+        [
+          "t_1108x2110dth6z",
+          "theme",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": [
+        "sound door slams"
+      ]
+    }
+  ],
+  "cueMovedToAnotherRow": [
+    {
+      "step": "open and heal",
+      "healed": 0,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": []
+    },
+    {
+      "step": "removed from one row, a new one in another",
+      "healed": 1,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ],
+        [
+          "t_17si6ry1kn4bxx",
+          "upbeat outro",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": [
+        "sound upbeat intro"
+      ]
+    }
+  ],
+  "anotherDocumentBetweenHeals": [
+    {
+      "step": "document A healed",
+      "healed": 0,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": []
+    },
+    {
+      "step": "document B healed",
+      "healed": 0,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": []
+    },
+    {
+      "step": "back to A with its cue edited",
+      "healed": 1,
+      "sound": [
+        [
+          "t_1opaishvqv40e",
+          "door slam",
+          "needed",
+          ""
+        ],
+        [
+          "t_fdgwdb17fg3zn",
+          "upbeat intro",
+          "needed",
+          ""
+        ],
+        [
+          "t_1rtfb2c1a2yk7e",
+          "upbeat intros",
+          "needed",
+          ""
+        ]
+      ],
+      "orphaned": [
+        "sound upbeat intro"
+      ]
+    }
+  ]
+}

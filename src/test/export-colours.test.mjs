@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -6,9 +7,12 @@ import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { TAG_CATEGORIES, __init as initTags } from "../js/07-production-tags.js";
 import { breakdownRows } from "../js/08-production-panels.js";
-import { TAG_PRINT_COLORS, htmlToPlainText, zipRead } from "../js/14-export.js";
+import { zipRead } from "../adapters/formats/zip.ts";
+import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
+import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { __init as initDocx, buildDocx, docxToRows } from "../js/15-docx.js";
 import { buildPackingListPdf, buildPdf } from "../js/17-pdf.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
 
 initTags();
 initStatus();
@@ -51,14 +55,14 @@ async function documentXml(bytes) {
 
 test("breakdownRows says which category each row is", () => {
   load();
-  const rows = breakdownRows();
+  const rows = breakdownRows(exportDocumentOf(S.state));
   assert.deepEqual(rows.map((r) => [r.catId, r.categoryLabel]).sort(),
     [["cast", "Cast"], ["gear", "Gear"], ["location", "Location"], ["prop", "Prop"], ["prop", "Prop"], ["sound", "Music/SFX"], ["vfx", "VFX"]]);
 });
 
 test("the .docx breakdown heads each category with its dot and name in its colour; the highlight is unchanged", async () => {
   load();
-  const doc = await documentXml(buildDocx());
+  const doc = await documentXml(buildDocx(...liveWithAssets()));
   const tables = doc.getElementsByTagNameNS(W, "tbl");
   assert.equal(tables.length, 2, "script table and breakdown table");
   const trs = Array.from(tables[1].getElementsByTagNameNS(W, "tr"));
@@ -77,12 +81,12 @@ test("the .docx breakdown heads each category with its dot and name in its colou
       assert.ok(current, "a group head reads " + JSON.stringify(cells[0].textContent));
       seen.add(current.id);
       assert.deepEqual(runs.map((r) => r.textContent.trim()),
-        ["●", current.plural, String(breakdownRows().filter((r) => r.catId === current.id).length)]);
+        ["●", current.plural, String(breakdownRows(exportDocumentOf(S.state)).filter((r) => r.catId === current.id).length)]);
       for (const r of runs.slice(0, 2)) assert.equal(val(r.getElementsByTagNameNS(W, "color")[0]), TAG_PRINT_COLORS[current.id]);
       continue;
     }
     assert.ok(current, "an item before any group head");
-    assert.ok(breakdownRows().some((r) => r.catId === current.id && r.name === cells[0].textContent), cells[0].textContent + " under " + current.id);
+    assert.ok(breakdownRows(exportDocumentOf(S.state)).some((r) => r.catId === current.id && r.name === cells[0].textContent), cells[0].textContent + " under " + current.id);
     for (const c of Array.from(tr.getElementsByTagNameNS(W, "color"))) {
       assert.ok(!Object.values(TAG_PRINT_COLORS).includes(val(c)), "an item cell in a category colour");
     }
@@ -97,7 +101,7 @@ test("the .docx breakdown heads each category with its dot and name in its colou
 
 test("the .docx script draws each tag in its category's colour and reopens without it", async () => {
   load();
-  const doc = await documentXml(buildDocx());
+  const doc = await documentXml(buildDocx(...liveWithAssets()));
   const runs = Array.from(doc.getElementsByTagNameNS(W, "tbl")[0].getElementsByTagNameNS(W, "r"));
   const tagged = runs.filter((r) => {
     const s = r.getElementsByTagNameNS(W, "rStyle")[0];
@@ -117,7 +121,7 @@ test("the .docx script draws each tag in its category's colour and reopens witho
 test("a .docx with coloured categories reopens as exactly its script, highlight included", async () => {
   load();
   const expected = S.state.rows.map((r) => ({ v: htmlToPlainText(r.visualText), a: htmlToPlainText(r.audioText) }));
-  const parsed = await docxToRows(new File([buildDocx()], "colours.docx"));
+  const parsed = await docxToRows(new File([buildDocx(...liveWithAssets())], "colours.docx"));
   assert.equal(parsed.title, "Colours");
   assert.deepEqual(parsed.rows.map((r) => ({ v: htmlToPlainText(r.visualText), a: htmlToPlainText(r.audioText) })), expected);
   assert.match(parsed.rows[0].audioText, /<mark>hello<\/mark>/, "the highlight no longer reads back as a mark");
@@ -129,7 +133,7 @@ test("a .docx with coloured categories reopens as exactly its script, highlight 
 
 test("the PDF breakdown heads each category's group with a dot in its colour and its plural", () => {
   load();
-  const pages = streams(buildPdf([null, null]));
+  const pages = streams(buildPdf(liveDoc(), [null, null]));
   const all = pages.join("\n");
   const at = all.indexOf("(Production breakdown) Tj");
   assert.ok(at > 0, "no breakdown page");
@@ -153,7 +157,7 @@ test("the PDF breakdown heads each category's group with a dot in its colour and
 
 test("the PDF script draws each tagged word in its category's colour, underlined in it", () => {
   load();
-  const pages = streams(buildPdf([null, null]));
+  const pages = streams(buildPdf(liveDoc(), [null, null]));
   const script = pages[0].split("\n");
   for (const [word, id] of [["Mug", "prop"], ["Kitchen", "location"], ["Ann", "cast"], ["Glow", "vfx"], ["Kettle", "prop"], ["Theme", "sound"], ["Tripod", "gear"]]) {
     const re = new RegExp("^q " + rgb(TAG_PRINT_COLORS[id]) + " rg BT /F1 [\\d.]+ Tf 1 0 0 1 ([\\d.]+) [\\d.]+ Tm \\(" + word + "\\) Tj ET Q$");
@@ -167,7 +171,7 @@ test("the PDF script draws each tagged word in its category's colour, underlined
 test("the PDF breakdown draws a note at the size it was wrapped at, a space between its words", () => {
   load();
   S.state.productionTags.find((t) => t.name === "Mug").notes = "Borrow from the prop house.";
-  const pdf = streams(buildPdf([null, null])).join("\n");
+  const pdf = streams(buildPdf(liveDoc(), [null, null])).join("\n");
   const all = pdf.slice(pdf.indexOf("(Production breakdown) Tj"));
   const words = [];
   for (const m of all.matchAll(/BT \/F1 ([\d.]+) Tf 1 0 0 1 ([\d.]+) ([-\d.]+) Tm \((\w+\.?)\) Tj ET/g)) {
@@ -182,7 +186,7 @@ test("the packing list's heading names its category after a dot in that category
   load();
   for (const id of ["gear", "prop"]) {
     const cat = TAG_CATEGORIES.find((c) => c.id === id);
-    const page = streams(buildPackingListPdf(id))[0].split("\n");
+    const page = streams(buildPackingListPdf(liveDoc(), id))[0].split("\n");
     const colour = rgb(TAG_PRINT_COLORS[id]);
     const dots = page.filter((op) => op.includes(colour));
     assert.equal(dots.length, 1, id + ": the category's colour more than once");

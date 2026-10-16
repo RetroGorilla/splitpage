@@ -1,0 +1,224 @@
+{
+  "inputs": {
+    "base": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Hello there.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [],
+      "people": [
+        {
+          "id": "p1",
+          "name": "Sam"
+        },
+        {
+          "id": "p2",
+          "name": "Ada"
+        },
+        {
+          "id": "p3",
+          "name": "Cy"
+        }
+      ],
+      "productionTags": [
+        {
+          "id": "t_kettle",
+          "cat": "prop",
+          "name": "Kettle",
+          "owner": "p3",
+          "notes": "",
+          "status": "needed"
+        }
+      ],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "mine": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Hello there.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [],
+      "people": [
+        {
+          "id": "p1",
+          "name": "Sam"
+        },
+        {
+          "id": "p3",
+          "name": "Cyril"
+        },
+        {
+          "id": "p4",
+          "name": "Bo"
+        }
+      ],
+      "productionTags": [
+        {
+          "id": "t_kettle",
+          "cat": "prop",
+          "name": "Kettle",
+          "owner": "p3",
+          "notes": "",
+          "status": "needed"
+        },
+        {
+          "id": "t_ladder",
+          "cat": "prop",
+          "name": "Ladder",
+          "owner": "p4",
+          "notes": "",
+          "status": "needed"
+        }
+      ],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "theirs": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Hello there.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [],
+      "people": [
+        {
+          "id": "p1",
+          "name": "Sam"
+        },
+        {
+          "id": "p2",
+          "name": "Ada"
+        },
+        {
+          "id": "p3",
+          "name": "Cy"
+        },
+        {
+          "id": "p5",
+          "name": "bo"
+        },
+        {
+          "id": "p6",
+          "name": "Dee"
+        }
+      ],
+      "productionTags": [
+        {
+          "id": "t_kettle",
+          "cat": "prop",
+          "name": "Kettle",
+          "owner": "p3",
+          "notes": "",
+          "status": "needed"
+        }
+      ],
+      "brollShots": [],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    }
+  },
+  "inputsUntouched": true,
+  "merged": {
+    "title": "Lighthouse",
+    "docId": "d11111111111111111111111111111111",
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Hello there.",
+        "imageRef": null,
+        "updatedAt": "2026-02-01T09:00:00.000Z",
+        "updatedBy": "Base Writer"
+      }
+    ],
+    "comments": [],
+    "people": [
+      {
+        "id": "p1",
+        "name": "Sam"
+      },
+      {
+        "id": "p5",
+        "name": "bo"
+      },
+      {
+        "id": "p6",
+        "name": "Dee"
+      },
+      {
+        "id": "p3",
+        "name": "Cyril"
+      }
+    ],
+    "productionTags": [
+      {
+        "cat": "prop",
+        "name": "Kettle",
+        "owner": "p3",
+        "notes": "",
+        "status": "needed",
+        "id": "t_kettle"
+      },
+      {
+        "cat": "prop",
+        "name": "Ladder",
+        "owner": "p5",
+        "notes": "",
+        "status": "needed",
+        "id": "t_ladder"
+      }
+    ],
+    "brollShots": [],
+    "wordsPerMinute": 150,
+    "rev": 5,
+    "lastEditedBy": "Base Writer",
+    "lastEditedAt": "2026-02-01T09:00:00.000Z",
+    "schema": 2
+  },
+  "conflicts": [],
+  "stats": {
+    "rowsFromThem": 0,
+    "rowsFromMe": 0,
+    "rowsAddedByMe": 0,
+    "rowsAddedByThem": 0
+  }
+}

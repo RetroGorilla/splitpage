@@ -1,0 +1,75 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+expect document.hasFocus() == true
+eval (function(){ var F = window.__splitpageFormats, H = window.__hostedTest; if (F.autosave.enabled()) F.autosave.toggle(); var T = window.T = { puts: [], removed: [], theirs: null, u0: 0 }; var ans = function (s, b) { return new Response(JSON.stringify(b), { status: s, headers: { 'content-type': 'application/json' } }); }; var real = window.fetch.bind(window); window.fetch = async function (url, opts) { var u = String(url), i = u.indexOf('api/'); if (i === -1) return real(url, opts); opts = opts || {}; var m = opts.method || 'GET', p = u.slice(i).split('?')[0], body = null; try { body = opts.body ? JSON.parse(opts.body) : null; } catch (e) {} if (p === 'api/health') return ans(200, { ok: true, version: 'test', authRequired: false, reviewAvailable: true, links: 1, blobs: 1 }); if (p === 'api/me') return ans(200, { role: 'edit', scope: '', email: '', name: '' }); if (p === 'api/presence') return ans(200, { docId: 'doc-291', rev: 1, here: [] }); if (p === 'api/blobs/missing') return ans(200, { missing: [] }); if (p === 'api/docs/doc-291' && m === 'PUT') { T.puts.push(body.state.rows.map(function (r) { return r.audioText; })); if (T.puts.length === 1) return ans(409, { error: 'conflict', rev: 2, state: T.theirs }); return ans(200, { id: 'doc-291', rev: 3 }); } return ans(404, { error: 'not-found' }); }; document.addEventListener('focusout', function (e) { var t = e.target; if (t && t.classList && t.classList.contains('cell-editable')) T.removed.push({ id: t.getAttribute('data-id'), writer: !!t.closest('#writer-doc'), connected: t.isConnected, text: t.textContent }); }, true); T.open = function (title) { var doc = { schema: 2, title: title, rows: [ { id: 'r1', status: 'todo', visualText: 'Wide', audioText: 'Mine one.' }, { id: 'r2', status: 'todo', visualText: 'Close', audioText: 'Mine two.' }, { id: 'r3', status: 'todo', visualText: 'Detail', audioText: 'Mine three.' } ], comments: [] }; H.setSession({ role: 'edit', docId: null }); return F.openFile(new File([JSON.stringify(doc)], title + '.splitpage', { lastModified: Date.now() })); }; T.arm = function () { H.setSession({ role: 'edit', docId: 'doc-291', rev: 1 }); var t = H.base(); t.rows[1].audioText = 'Theirs two.'; T.theirs = t; T.puts = []; T.removed = []; window.__undoTest.flush(); T.u0 = window.__undoTest.sizes().undo; return t.rows[1].audioText; }; T.model = function () { return F.state().rows.map(function (r) { return r.audioText; }).join('|'); }; T.grid = function () { return Array.prototype.map.call(document.querySelectorAll('#rows .cell-editable[data-field="audioText"]'), function (c) { return c.textContent; }).join('|'); }; T.writer = function () { return Array.prototype.map.call(document.querySelectorAll('#writer-doc .wr-para'), function (c) { return c.textContent; }).join('|'); }; T.undone = function () { window.__undoTest.flush(); return window.__undoTest.sizes().undo - T.u0; }; T.caret = function () { var a = document.activeElement, s = getSelection(); if (!a || !s.rangeCount || !a.contains(s.getRangeAt(0).startContainer)) return -1; var p = document.createRange(); p.selectNodeContents(a); p.setEnd(s.getRangeAt(0).startContainer, s.getRangeAt(0).startOffset); return p.toString().length; }; T.at = function () { var a = document.activeElement; if (!a || !a.getAttribute) return ''; return (a.closest('#writer-doc') ? 'writer ' : a.closest('#rows') ? 'grid ' : a.closest('.toast') ? 'toast ' : '') + (a.getAttribute('data-id') || a.tagName.toLowerCase()); }; return 'ready'; })()
+
+eval T.open('Grid')
+wait window.__splitpageFormats.state().title === 'Grid' && document.querySelector('#rows .row[data-id="r3"]')
+sleep 300
+caret #rows .row[data-id="r1"] .audio-cell .cell-editable
+type Edited
+caret #rows .row[data-id="r2"] .audio-cell .cell-editable
+eval T.arm()
+jsclick #btn-save
+wait T.puts.length >= 2 && window.__hostedTest.dirty() === false
+expect T.puts[0][1] === 'Mine two.'
+expect T.puts[1][1] === 'Theirs two.'
+expect T.puts[1][0].indexOf('Edited') >= 0
+expect T.model().indexOf('Theirs two.') > 0
+expect T.grid() === T.model()
+expect T.removed.some(function (r) { return r.id === 'r2' && r.text === 'Mine two.' && r.connected; })
+expect T.at() === 'grid r2'
+expect T.undone() === 0
+expect window.__hostedTest.dirty() === false
+
+eval T.open('Writer')
+wait window.__splitpageFormats.state().title === 'Writer' && document.querySelector('#rows .row[data-id="r3"]')
+sleep 300
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+caret #writer-doc .wr-para[data-id="r1"]
+type Edited
+caret #writer-doc .wr-para[data-id="r2"] start
+eval T.arm()
+jsclick #wr-save
+wait T.puts.length >= 2 && window.__hostedTest.dirty() === false
+expect T.puts[1][1] === 'Theirs two.'
+expect T.puts[1][0].indexOf('Edited') >= 0
+expect T.model().indexOf('Theirs two.') > 0
+expect T.writer() === T.model()
+expect T.grid() === T.model()
+expect T.removed.some(function (r) { return r.id === 'r2' && r.writer && r.text === 'Mine two.' && r.connected; })
+expect T.at() === 'writer r2'
+expect T.caret() === 0
+expect T.undone() === 0
+expect window.__hostedTest.dirty() === false
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+expect T.grid() === T.model()
+expect T.undone() === 0
+
+eval T.open('Throw')
+wait window.__splitpageFormats.state().title === 'Throw' && document.querySelector('#rows .row[data-id="r3"]')
+sleep 300
+caret #rows .row[data-id="r1"] .audio-cell .cell-editable
+type Edited
+caret #rows .row[data-id="r2"] .audio-cell .cell-editable
+eval T.arm()
+eval (function(){ var real = Document.prototype.querySelectorAll; document.querySelectorAll = function (s) { if (String(s).indexOf('#rows .gutter-btn') === 0) throw new Error('render broke (291)'); return real.call(this, s); }; return true; })()
+jsclick #btn-save
+wait T.puts.length >= 2 && window.__hostedTest.dirty() === false
+eval delete document.querySelectorAll
+expect document.body.classList.contains('is-stale-screen')
+expect T.puts[1][1] === 'Theirs two.'
+expect T.model().indexOf('Theirs two.') > 0
+expect T.grid().indexOf('Theirs two.') < 0
+expect T.at().indexOf('toast') === 0
+expect T.undone() === 0
+expect window.__hostedTest.dirty() === false
+jsclick .toast .toast-action
+wait !document.body.classList.contains('is-stale-screen')
+expect T.grid() === T.model()
+expect T.at() === 'grid r2'
+expect window.__hostedTest.home().rev === 3
+expect T.undone() === 0
+expect window.__hostedTest.dirty() === false

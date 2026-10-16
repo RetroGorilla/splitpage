@@ -1,13 +1,14 @@
 import { S } from "./_state.js";
-import { SCHEMA_VERSION } from "./00-prelude.js";
 import { makeId, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, queuePersist } from "./02c-blobs.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
-import { inertBody } from "./04-richtext.js";
 import { cellOf, commentIds, fromHtml, normalizeCell, syncCommentAnchors, toHtml, toPlainText } from "./04c-doc-model.js";
 import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./05c-clipboard.js";
 import { collectTagsFromRows, mintTagId, normalizeTagName, registryKey } from "./07-production-tags.js";
 import { normalizeBrollProps, recordPastedBroll } from "./08c-broll.js";
+import { SCHEMA_VERSION } from "../core/document/fields.ts";
+import { cappedLongText } from "../core/document/text-policy.ts";
+import { inertBody } from "../legacy/richtext.ts";
 
 export var SCENES_MIME = "application/x-splitpage-scenes";
 export var SCENES_ATTR = "data-splitpage-scenes";
@@ -187,7 +188,7 @@ export function parseScenePayload(json) {
     cut: typeof p.cut === "string" && /^[A-Za-z0-9]{1,64}$/.test(p.cut) ? p.cut : null,
     source: {
       docId: typeof source.docId === "string" ? source.docId : null,
-      title: typeof source.title === "string" ? source.title.slice(0, 300) : ""
+      title: typeof source.title === "string" ? cappedLongText(source.title, 300) : ""
     },
     carried: carried,
     refs: refsIn(doc)
@@ -209,13 +210,7 @@ function mintFree(prefix, taken, mint) {
   return id;
 }
 
-export function insertScenes(clip, opts) {
-  opts = opts || {};
-  var state = S.state;
-  var mint = opts.mint || makeId;
-  var move = !!opts.move && scenesAway(clip, state);
-  var list = function (k) { if (!Array.isArray(state[k])) state[k] = []; return state[k]; };
-
+function sceneRowIds(clip, state, move, mint) {
   var rowTaken = Object.create(null);
   state.rows.forEach(function (r) { rowTaken[r.id] = true; });
   var rowMap = Object.create(null);
@@ -223,6 +218,53 @@ export function insertScenes(clip, opts) {
     if (move && !rowTaken[r.id]) { rowTaken[r.id] = true; rowMap[r.id] = r.id; }
     else rowMap[r.id] = mintFree("r", rowTaken, mint);
   });
+  return rowMap;
+}
+
+export function scenePaste(clip, opts) {
+  opts = opts || {};
+  var mint = opts.mint || makeId;
+  var planned = null;
+  var result = null;
+  return {
+    plan: function (doc) {
+      if (!clip || !clip.rows || !clip.rows.length) return null;
+      var row = doc.rows.filter(function (r) { return r.id === opts.afterRowId; })[0];
+      var move = isMove(clip, doc);
+      var rowMap = sceneRowIds(clip, doc, move, mint);
+      planned = { move: move, rowMap: rowMap, replaceRowId: row && isBlankScene(doc, row) ? row.id : null };
+      return {
+        inserted: clip.rows.map(function (r) { return rowMap[r.id]; }),
+        replaced: planned.replaceRowId,
+        title: !!opts.title,
+        saveNow: !opts.holdComments
+      };
+    },
+    apply: function (live) {
+      result = insertScenes(clip, {
+        state: live,
+        rowMap: planned.rowMap,
+        afterRowId: opts.afterRowId,
+        replaceRowId: planned.replaceRowId,
+        move: planned.move,
+        holdComments: !!opts.holdComments,
+        mint: mint,
+        stamp: opts.stamp
+      });
+      if (opts.title) live.title = opts.title;
+    },
+    result: function () { return result; }
+  };
+}
+
+export function insertScenes(clip, opts) {
+  opts = opts || {};
+  var state = opts.state || S.state;
+  var mint = opts.mint || makeId;
+  var move = !!opts.move && scenesAway(clip, state);
+  var list = function (k) { if (!Array.isArray(state[k])) state[k] = []; return state[k]; };
+
+  var rowMap = opts.rowMap || sceneRowIds(clip, state, move, mint);
   var firstRowId = rowMap[clip.rows[0].id];
 
   var comments = list("comments");

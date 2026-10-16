@@ -67,75 +67,104 @@ import { __init as init_20i_topbar } from "./20i-topbar.js";
 import { __init as init_20j_newtab } from "./20j-newtab.js";
 import { __init as init_20k_phone_bar } from "./20k-phone-bar.js";
 import { __init as init_20s_settings } from "./20s-settings.js";
-import { __init as init_21_events } from "./21-events.js";
+import { migrateRows } from "./02-state.js";
+import { documentIdentityPort, liveDocumentPort } from "./02b-doc-id.js";
+import { documentDestinationPort, getEditorName } from "./03-sync.js";
+import { runIdleRefresh } from "./07-production-tags.js";
+import { derivedRecordsPlan } from "./08c-broll.js";
+import { legacySessionEffects } from "./12-dirty-toast.js";
+import { legacySavePorts } from "./14-export.js";
+import { registerBuiltInExporters } from "./14e-export-formats.js";
+import { draftRecoveryPorts } from "./20g-drafts.js";
+import { wireApp } from "../bootstrap/wiring.ts";
+import { startAppWhenReady } from "../bootstrap/app.ts";
 
-init_00_prelude();
-init_00p_prefs();
-init_01_scene_status();
-init_01b_hide_shot();
-init_02_state();
-init_02b_doc_id();
-init_02c_blobs();
-init_02d_gallery();
-init_03_sync();
-init_03a_history_store();
-init_03b_side_panels();
-init_04_richtext();
-init_04a_row_motion();
-init_04b_busy();
-init_04c_doc_model();
-init_05_render();
-init_05b_cell_edit();
-init_05c_clipboard();
-init_05d_draft_edit();
-init_05e_gallery_overlay();
-init_05f_rundown();
-init_05g_scene_clip();
-init_05h_scene_select();
-init_05p_rundown_presence();
-init_05q_cell_reach();
-init_05r_read_time();
-init_05s_script_zoom();
-init_05t_target();
-init_05v_video();
-init_05w_annotate();
-init_06_rows();
-init_07_production_tags();
-init_07b_plain_tags();
-init_08_production_panels();
-init_08c_broll();
-init_08d_broll_panel();
-init_09_find_replace();
-init_10_comments();
-init_11_import();
-init_12_dirty_toast();
-init_12a_undo();
-init_13_hosted();
-init_13a_presence();
-init_13b_collaborate();
-init_14_export();
-init_14b_export_kit();
-init_15_docx();
-init_16_csv();
-init_16b_xlsx();
-init_17_pdf();
-init_18_local_files();
-init_18a_local_merge();
-init_18b_file_menu();
-init_18c_export_dialog();
-init_18d_command_menu();
-init_19_writer();
-init_20_teleprompter();
-init_20a_update();
-init_20b_onboarding();
-init_20c_help();
-init_20d_formats();
-init_20e_connect();
-init_20f_desktop();
-init_20g_drafts();
-init_20h_appdata();
-init_20i_topbar();
-init_20j_newtab();
-init_20k_phone_bar();
-init_20s_settings();
-init_21_events();
+var wiring = null;
+try {
+  wiring = wireApp({
+    entry: migrateRows,
+    effects: legacySessionEffects(),
+    editorName: getEditorName,
+    refresh: runIdleRefresh,
+    records: derivedRecordsPlan,
+    exporters: registerBuiltInExporters,
+    saves: legacySavePorts,
+    transitions: { live: liveDocumentPort, destination: documentDestinationPort, identity: documentIdentityPort },
+    recovery: draftRecoveryPorts,
+    keyTarget: window
+  });
+} catch (error) {
+  console.error(error);
+}
+if (wiring) {
+  init_00_prelude();
+  init_00p_prefs();
+  init_01_scene_status();
+  init_01b_hide_shot();
+  init_02_state();
+  init_02b_doc_id();
+  init_02c_blobs();
+  init_02d_gallery();
+  init_03_sync();
+  init_03a_history_store();
+  init_03b_side_panels();
+  init_04_richtext();
+  init_04a_row_motion();
+  init_04b_busy();
+  init_04c_doc_model();
+  init_05_render();
+  init_05b_cell_edit();
+  init_05c_clipboard();
+  init_05d_draft_edit();
+  init_05e_gallery_overlay();
+  init_05f_rundown();
+  init_05g_scene_clip();
+  init_05h_scene_select();
+  init_05p_rundown_presence();
+  init_05q_cell_reach();
+  init_05r_read_time();
+  init_05s_script_zoom();
+  init_05t_target();
+  init_05v_video();
+  init_05w_annotate();
+  init_06_rows();
+  init_07_production_tags();
+  init_07b_plain_tags();
+  init_08_production_panels();
+  init_08c_broll();
+  init_08d_broll_panel();
+  init_09_find_replace();
+  init_10_comments();
+  init_11_import();
+  init_12_dirty_toast();
+  init_12a_undo();
+  init_13_hosted();
+  init_13a_presence();
+  init_13b_collaborate();
+  init_14_export();
+  init_14b_export_kit();
+  init_15_docx();
+  init_16_csv();
+  init_16b_xlsx();
+  init_17_pdf();
+  init_18_local_files();
+  init_18a_local_merge();
+  init_18b_file_menu();
+  init_18c_export_dialog();
+  init_18d_command_menu();
+  init_19_writer();
+  init_20_teleprompter();
+  init_20a_update();
+  init_20b_onboarding();
+  init_20c_help();
+  init_20d_formats();
+  init_20e_connect();
+  init_20f_desktop();
+  init_20g_drafts();
+  init_20h_appdata();
+  init_20i_topbar();
+  init_20j_newtab();
+  init_20k_phone_bar();
+  init_20s_settings();
+  startAppWhenReady(document, wiring);
+}

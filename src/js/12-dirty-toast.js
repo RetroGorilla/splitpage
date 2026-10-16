@@ -1,31 +1,78 @@
 import { S } from "./_state.js";
-import { home } from "./_home.js";
+import { home, homeConn } from "./_home.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "./00p-prefs.js";
 import { linkTurnedOff, onServerDoc, reviewMode, serverSessionExpired } from "./13-hosted.js";
-import { recordMyColor } from "./13a-presence.js";
+import { personColorsWithMine } from "./13a-presence.js";
 import {
   autoSaveEnabled,
   autoSaveHalt,
   autoSaveTarget,
   clearAutoSaveTimers,
+  queueAutoSave,
   resumeAutoSave,
   scheduleAutoSave
 } from "./14-export.js";
 import { updateFileChip } from "./18-local-files.js";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { noteDraftChange } from "./20g-drafts.js";
-import { noteEdit } from "./12a-undo.js";
+import { noteAbsorbedDirty, noteSessionEdit } from "../legacy/session-bridge.ts";
+import { confirmSavedNow, noteSaveChange, saveRunning, savesStarted, unsavedFor } from "../legacy/save-bridge.ts";
+import { saveButtonView, saveStatus } from "../application/save/status.ts";
+import { changeSet } from "../application/session/change-set.ts";
+import { authorityOf, editCapability } from "../application/collaboration/authority.ts";
 
 S.saveButtonBusy = false;
 
-export function setSaveButtons(text, disabled) {
+function saveBusy() {
+  return !!S.saveButtonBusy || (savesStarted() && saveRunning());
+}
+
+var MY_COLOR = changeSet({ docFields: ["personColors"] });
+
+function myColorPlan(doc) {
+  if (!doc || reviewMode()) return null;
+  var next = personColorsWithMine(doc);
+  if (!next) return null;
+  return { changes: MY_COLOR, apply: function (live) { live.personColors = next; } };
+}
+
+function signLegacyEdit() {
+  var plan = myColorPlan(S.state);
+  if (plan) plan.apply(S.state);
+}
+
+export function legacySessionEffects() {
+  return {
+    dirty: function () {
+      S.dirty = true;
+      S.editSeq = noteSaveChange();
+    },
+    attribute: myColorPlan,
+    draft: function () {
+      if (typeof noteDraftChange === "function") noteDraftChange();
+    },
+    save: function (change) {
+      if (!saveBusy()) setSaveButtons();
+      if (change.kind !== "recovery") scheduleAutoSave();
+      if (home.kind === "import") { home.dirty = true; updateFileChip(); }
+      else if (onServerDoc()) { updateFileChip(); }
+      if (change.changes.saveNow) queueAutoSave();
+    },
+    edit: function () {
+      return editCapability(authorityOf(homeConn()));
+    }
+  };
+}
+
+export function setSaveButtons() {
+  var view = saveButtonView({ busy: saveBusy(), dirty: !!S.dirty });
   ["btn-save", "wr-save"].forEach(function (id) {
     var btn = document.getElementById(id);
     if (!btn) return;
-    btn.textContent = text;
-    if (disabled !== undefined) btn.disabled = disabled;
-    btn.classList.toggle("is-dirty", text.indexOf("•") !== -1);
+    btn.textContent = view.label;
+    btn.disabled = view.disabled;
+    btn.classList.toggle("is-dirty", view.dirty);
   });
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   if (S.DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
@@ -34,19 +81,18 @@ export function setSaveButtons(text, disabled) {
 }
 
 export function markDirty() {
-  S.dirty = true;
-  S.editSeq++;
-  if (!reviewMode()) recordMyColor(S.state);
-  noteEdit();
-  if (typeof noteDraftChange === "function") noteDraftChange();
-  if (!S.saveButtonBusy) setSaveButtons("Save •");
-  scheduleAutoSave();
-  if (home.kind === "import") { home.dirty = true; updateFileChip(); }
-  else if (onServerDoc()) { updateFileChip(); }
+  signLegacyEdit();
+  noteSessionEdit();
+}
+
+export function markAbsorbedDirty(kind) {
+  signLegacyEdit();
+  noteAbsorbedDirty(kind);
 }
 
 export function clearDirty() {
-  S.dirty = false;
+  confirmSavedNow();
+  S.dirty = unsavedFor();
   clearAutoSaveTimers();
   resumeAutoSave();
   savedAt = 0;
@@ -70,31 +116,20 @@ function saveStatusView() {
     : home.kind === "import" ? home.name || ""
     : "";
 
-  if (typeof onServerDoc === "function" && onServerDoc() && serverSessionExpired) {
-    return { text: "Not saving", cls: "warn",
-             title: "Your sign-in to the server has lapsed — reload the page to sign in again." };
-  }
-  if (typeof onServerDoc === "function" && onServerDoc() && linkTurnedOff) {
-    return { text: "Not saving", cls: "warn",
-             title: "The owner turned off the link you opened this with — File ▸ Save a copy… keeps what's on screen." };
-  }
-  if (S.saveButtonBusy) {
-    return { text: "Saving…", cls: "busy",
-             title: where ? "Writing your changes to " + where + "." : "Writing your changes." };
-  }
-  if (autoSaveHalt) return { text: "Not saving", cls: "warn", title: autoSaveHalt };
-  if (!S.dirty) {
-    if (!target && home.kind !== "file" && !where) return null;
-    return { text: "Saved", cls: "ok", title: "", where: where };
-  }
-  if (target && autoSaveEnabled) {
-    return { text: "Unsaved changes", cls: "pending",
-             title: "Autosave will write these to " + where + " a moment after you stop typing." };
-  }
-  return { text: "Unsaved changes", cls: "pending",
-           title: target
-             ? "Autosave is off — press Save to write these to " + where + "."
-             : "Press Save to choose where this script is kept." };
+  var onServer = typeof onServerDoc === "function" && onServerDoc();
+  var line = saveStatus({
+    busy: saveBusy(),
+    dirty: !!S.dirty,
+    halted: autoSaveHalt || "",
+    autoSaveOn: !!autoSaveEnabled,
+    target: target,
+    where: where,
+    homeKind: home.kind,
+    onServer: !!onServer,
+    signedOut: !!serverSessionExpired,
+    linkOff: !!linkTurnedOff
+  }).line;
+  return line ? Object.assign({}, line) : null;
 }
 
 var savedAt = 0;
@@ -136,6 +171,12 @@ export function updateSaveStatus() {
   }
 }
 
+export function showRefusal(outcome) {
+  if (!outcome || outcome.kind !== "unavailable" || !outcome.reason) return;
+  var text = outcome.reason;
+  showToast(/[.!?…]$/.test(text) ? text : text + ".", "warn");
+}
+
 export function showToast(msg, kind, sticky) {
   var host = document.getElementById("toast-host");
   var el = document.createElement("div");
@@ -154,6 +195,13 @@ export function showToast(msg, kind, sticky) {
   el.dismiss = dismiss;
   host.appendChild(el);
   return el;
+}
+
+if (typeof document !== "undefined" && document.addEventListener) {
+  document.addEventListener("undo-owner-cleared", function (e) {
+    var n = (e.detail && e.detail.count) || 0;
+    if (n) showToast("That person is no longer on the crew, so " + (n === 1 ? "1 item is" : n + " items are") + " now unassigned.", "warn");
+  });
 }
 
 export function showActionToast(msg, kind, label, onAction, sticky) {

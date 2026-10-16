@@ -13,9 +13,9 @@ import {
 } from "./02b-doc-id.js";
 import { inlineStateImages, internDataUrl, missingInlineImages, queuePersist, rowImageDataUrl } from "./02c-blobs.js";
 import { cloneState, setBaseState, stashLocalWork } from "./03-sync.js";
-import { plainText, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
 import { tagFieldOccurrences } from "./07-production-tags.js";
 import { handleImportFile, parseMarkdownTable } from "./11-import.js";
+import { captureExportDocument, exportDocumentOf } from "./14b-export-kit.js";
 import { audioDirectionsHtml } from "./15-docx.js";
 import {
   autoSaveEnabled,
@@ -25,25 +25,26 @@ import {
   autoSaveTarget,
   autoSaveTiming,
   flushAutoSave,
-  mdSceneCellSource,
   saveDoc,
-  toMarkdownTableDoc,
   toggleAutoSave
 } from "./14-export.js";
+import { mdSceneCellSource, toMarkdownTableDoc } from "./14d-export-text.js";
 import { openProjectFile } from "./18-local-files.js";
+import { cappedLongText, plainText, safeImageSrc } from "../core/document/text-policy.ts";
+import { sanitizeHtml } from "../legacy/richtext.ts";
 
-export function fileStateFor(s) {
-  var copy = migrateRows(cloneState(s || S.state));
+function fileStateFor(doc) {
+  var copy = migrateRows(cloneState(doc.document));
   inlineStateImages(copy);
   return copy;
 }
 
-export function buildSplitpageFile(s) {
-  return JSON.stringify(fileStateFor(s), null, 2);
+export function buildSplitpageFile(doc) {
+  return JSON.stringify(fileStateFor(doc), null, 2);
 }
 
-export function fileImagesMissing(s) {
-  return missingInlineImages(s || S.state);
+export function fileImagesMissing(doc) {
+  return missingInlineImages(doc.document);
 }
 
 export function parseSplitpageFile(text) {
@@ -66,11 +67,10 @@ function splitpageDataFence(json) {
   return new Array(Math.max(4, longest + 1) + 1).join("~");
 }
 
-export function buildMarkdownProject(s) {
-  s = s || S.state;
-  var json = buildSplitpageFile(s);
+export function buildMarkdownProject(doc) {
+  var json = buildSplitpageFile(doc);
   var fence = splitpageDataFence(json);
-  return toMarkdownTableDoc(s) + "\n" + MD_DATA_NOTE + "\n" +
+  return toMarkdownTableDoc(doc) + "\n" + MD_DATA_NOTE + "\n" +
     fence + MD_DATA_INFO + "\n" + json + "\n" + fence + "\n";
 }
 
@@ -227,7 +227,7 @@ export function finishMarkdownRowChoice(choice) {
 
 export async function applyMarkdownProject(proj, opts) {
   var s = proj.state;
-  if (proj.title && proj.title !== s.title) s.title = plainText(proj.title).slice(0, 300);
+  if (proj.title && proj.title !== s.title) s.title = cappedLongText(plainText(proj.title), 300);
 
   if (proj.table.length === s.rows.length) {
     reconcileMarkdownRows(s, proj.table);
@@ -242,10 +242,10 @@ export async function applyMarkdownProject(proj, opts) {
 
 export function __init() {
   window.__splitpageFormats = {
-    buildSplitpage: buildSplitpageFile,
-    buildMarkdown: buildMarkdownProject,
+    buildSplitpage: function (s) { return buildSplitpageFile(s ? exportDocumentOf(s) : captureExportDocument()); },
+    buildMarkdown: function (s) { return buildMarkdownProject(s ? exportDocumentOf(s) : captureExportDocument()); },
     parseMarkdown: parseMarkdownProject,
-    buildStandaloneHtml: function () { return standaloneHtmlFor(S.state); },
+    buildStandaloneHtml: function () { return standaloneHtmlFor(captureExportDocument()); },
     docId: function () { return S.state ? S.state.docId : null; },
     writtenOut: function () { return S.docIdWrittenOut; },
     deriveDocId: deriveDocId,

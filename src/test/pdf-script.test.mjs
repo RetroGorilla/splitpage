@@ -1,16 +1,18 @@
 import "./_dom.mjs";
+import { liveDoc } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { TAG_PRINT_COLORS } from "../js/14-export.js";
+import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import {
   PRINT_COLORS,
   commentNumbers,
   exportBrollScenes,
   exportComments,
+  exportDocumentOf,
   exportFacts,
   exportSummaryParts,
   sceneFacts
@@ -51,12 +53,12 @@ const pageWith = (doc, str, size) => doc.pages.findIndex((p) => p.texts.some((o)
 
 test("the title block: the title, the facts and the date, the rundown and its legend", () => {
   demo();
-  const doc = read(buildPdf(null));
+  const doc = read(buildPdf(liveDoc(), null));
   const p1 = doc.pages[0];
   const title = p1.texts.find((o) => o.size === 20);
   assert.equal(title.str, "I Fixed a $40 Film Camera \\(and Shot a Roll With It\\)");
   assert.equal(title.font, "F2");
-  const facts = exportFacts();
+  const facts = exportFacts(exportDocumentOf(S.state));
   const meta = p1.texts.find((o) => o.size === 8.5 && o.y < title.y);
   assert.equal(meta.str, exportSummaryParts(facts).concat(facts.date).join(" · "));
   assert.equal(meta.color, rgb(PRINT_COLORS.dim));
@@ -66,7 +68,7 @@ test("the title block: the title, the facts and the date, the rundown and its le
   assert.ok(strip.every((o, i) => i === 0 || +o.str > +strip[i - 1].str), "in scene order");
   assert.ok(strip.every((o) => o.x >= M && o.x < PW - M));
   assert.ok(p1.texts.some((o) => o.str === "Target 9:00" && o.size === 7));
-  const counts = sceneFacts().reduce((n, f) => { n[f.status.id]++; return n; }, { shot: 0, ready: 0, todo: 0 });
+  const counts = sceneFacts(exportDocumentOf(S.state)).reduce((n, f) => { n[f.status.id]++; return n; }, { shot: 0, ready: 0, todo: 0 });
   for (const [label, id] of [["Shot", "shot"], ["Ready", "ready"], ["To do", "todo"]]) {
     assert.ok(p1.texts.some((o) => o.str === label + " " + counts[id] && o.size === 7.5), label + " " + counts[id]);
   }
@@ -75,7 +77,7 @@ test("the title block: the title, the facts and the date, the rundown and its le
 
 test("column heads in sentence case on every page of the script, and only there", () => {
   demo();
-  const doc = read(buildPdf(null));
+  const doc = read(buildPdf(liveDoc(), null));
   const script = doc.pages.filter((p) => p.texts.some((o) => o.size === 12 && o.x === M));
   assert.ok(script.length >= 5);
   script.forEach((p) => {
@@ -90,9 +92,9 @@ test("column heads in sentence case on every page of the script, and only there"
 
 test("each scene's gutter: its number, its start, its status and its read time", () => {
   demo();
-  const doc = read(buildPdf(null));
+  const doc = read(buildPdf(liveDoc(), null));
   const all = doc.pages.flatMap((p, i) => p.texts.map((o) => Object.assign({ page: i }, o)));
-  const facts = sceneFacts();
+  const facts = sceneFacts(exportDocumentOf(S.state));
   facts.forEach((f) => {
     const num = all.find((o) => o.str === f.number && o.size === 12 && o.x === M && !o.color);
     assert.ok(num, "scene " + f.number + " has no number");
@@ -108,7 +110,7 @@ test("each scene's gutter: its number, its start, its status and its read time",
 
 test("a tag in its category's colour, underlined in it; the b-roll key a chip", () => {
   demo();
-  const doc = read(buildPdf(null));
+  const doc = read(buildPdf(liveDoc(), null));
   const p1 = doc.pages[0];
   const pentax = p1.texts.find((o) => o.str === "Pentax");
   assert.equal(pentax.color, rgb(TAG_PRINT_COLORS.prop));
@@ -126,8 +128,8 @@ test("a tag in its category's colour, underlined in it; the b-roll key a chip", 
 
 test("each open thread's number after its words, in amber, as the appendix numbers it", () => {
   demo();
-  const doc = read(buildPdf(null));
-  const nums = Object.values(commentNumbers()).sort();
+  const doc = read(buildPdf(liveDoc(), null));
+  const nums = Object.values(commentNumbers(exportDocumentOf(S.state))).sort();
   const amber = rgb(PRINT_COLORS.audio);
   const markers = doc.pages.flatMap((p) => p.texts.filter((o) => o.size === 6 && o.color === amber)).map((o) => +o.str);
   assert.deepEqual(markers, nums);
@@ -135,7 +137,7 @@ test("each open thread's number after its words, in amber, as the appendix numbe
   assert.ok(new RegExp("q " + rgb(PRINT_COLORS.faint) + " RG 0.9 w 1 J \\[0 1.8\\] 0 d").test(doc.t));
   const at = pageWith(doc, "Comments", 16);
   const badges = doc.pages.slice(at).flatMap((p) => p.texts.filter((o) => o.size === 7 && o.font === "F2" && o.color === "1.000 1.000 1.000")).map((o) => +o.str);
-  assert.deepEqual(badges, exportComments().filter((c) => c.number).map((c) => c.number));
+  assert.deepEqual(badges, exportComments(exportDocumentOf(S.state)).filter((c) => c.number).map((c) => c.number));
   const comments = words(doc.pages[at].texts);
   assert.match(comments, /\b3 open · 1 resolved\b/);
   assert.match(comments, /Scene 03 · Audio Jo \\\(editor\\\) · /);
@@ -149,7 +151,7 @@ test("a scene's video link and a link in its words are blue, and can be clicked"
       imageLinks: [{ href: "https://www.youtube.com/watch?v=aqz-KE-bpKQ", poster: true }] },
     { id: "r1", visualText: "", audioText: "No visual here.", status: "todo" }
   ] });
-  const doc = read(buildPdf(null));
+  const doc = read(buildPdf(liveDoc(), null));
   const p1 = doc.pages[0];
   const blue = rgb(PRINT_COLORS.visual);
   const addr = p1.texts.find((o) => o.str === "youtube.com/watch?v=aqz-KE-bpKQ");
@@ -166,7 +168,7 @@ test("a scene's video link and a link in its words are blue, and can be clicked"
 
 test("a running footer on every page, bookmarks to each part, and the title the viewer shows", () => {
   demo();
-  const doc = read(buildPdf(null));
+  const doc = read(buildPdf(liveDoc(), null));
   const n = doc.pages.length;
   doc.pages.forEach((p, i) => {
     assert.deepEqual(p.footer.map((o) => o.str), [LONG_DEMO.state.title.replace(/[()]/g, "\\$&"), "Page " + (i + 1) + " of " + n]);
@@ -179,12 +181,12 @@ test("a running footer on every page, bookmarks to each part, and the title the 
   assert.deepEqual(dests, [0, pageWith(doc, "Production breakdown", 16), pageWith(doc, "B-roll shot list", 16), pageWith(doc, "Comments", 16)]);
   assert.match(doc.t, /\/Info 7 0 R/);
   assert.ok(doc.t.indexOf("/Title (I Fixed a $40 Film Camera \\(and Shot a Roll With It\\))") > 0);
-  assert.deepEqual(buildPdf(null), buildPdf(null));
+  assert.deepEqual(buildPdf(liveDoc(), null), buildPdf(liveDoc(), null));
 });
 
 test("the appendix: the breakdown by category, the b-roll by scene, a summary line each", () => {
   demo();
-  const doc = read(buildPdf(null));
+  const doc = read(buildPdf(liveDoc(), null));
   const at = pageWith(doc, "Production breakdown", 16);
   const bd = doc.pages.slice(at, pageWith(doc, "B-roll shot list", 16));
   const bdWords = bd.flatMap((p) => p.texts);
@@ -196,7 +198,7 @@ test("the appendix: the breakdown by category, the b-roll by scene, a summary li
   }
   const bat = pageWith(doc, "B-roll shot list", 16);
   assert.equal((doc.t.match(/\/MediaBox \[0 0 792 612\]/g) || []).length, 1, "one landscape page, the shot list's");
-  const groups = exportBrollScenes();
+  const groups = exportBrollScenes(exportDocumentOf(S.state));
   const brollWords = doc.pages.slice(bat, pageWith(doc, "Comments", 16)).flatMap((p) => p.texts);
   groups.forEach((g) => assert.ok(brollWords.some((o) => o.str === g.scene && o.font === "F2"), g.label));
   assert.ok(brollWords.some((o) => o.str === "3 of 9 shot \xB7 1 flagged \xB7 by scene"));
@@ -211,17 +213,39 @@ test("the appendix: the breakdown by category, the b-roll by scene, a summary li
 
 test("an empty script is one page: its title, its facts, and no more", () => {
   S.state = migrateRows({ schema: 2, title: "Nothing yet", comments: [], rows: [] });
-  const doc = read(buildPdf(null));
+  const doc = read(buildPdf(liveDoc(), null));
   assert.equal(doc.pages.length, 1);
   const w = words(doc.pages[0].texts);
   assert.match(w, /^Nothing yet 0 scenes \xB7 0:00 running time \xB7 .*2\d\d\d No scenes yet\.$/);
   assert.deepEqual(doc.pages[0].footer.map((o) => o.str), ["Nothing yet", "Page 1 of 1"]);
 });
 
+test("a long title of emoji is shortened by whole characters, never half of one (#434)", () => {
+  const grin = String.fromCodePoint(0x1F600);
+  for (let lead = 0; lead < 4; lead++) {
+    S.state = migrateRows({ schema: 2, title: "Title " + "i".repeat(lead) + grin.repeat(30) + " end i" + grin.repeat(60), comments: [],
+      rows: [{ id: "r0", visualText: "Wide.", audioText: "Hello.", status: "shot" }] });
+    const lines = read(buildPdf(liveDoc(), null)).pages[0].texts.filter((o) => o.size === 20);
+    assert.equal(lines.length, 2);
+    lines.forEach((l) => assert.equal((l.str.match(/\?/g) || []).length % 2, 0, lead + ": " + l.str));
+  }
+});
+
+test("the footer's shortened title never ends in half an emoji (#434)", () => {
+  const grin = String.fromCodePoint(0x1F600);
+  for (let lead = 0; lead < 8; lead++) {
+    S.state = migrateRows({ schema: 2, title: "i".repeat(lead) + grin.repeat(120), comments: [],
+      rows: [{ id: "r0", visualText: "Wide.", audioText: "Hello.", status: "shot" }] });
+    const foot = read(buildPdf(liveDoc(), null)).pages[0].footer[0].str;
+    assert.ok(foot.length > 20 && foot.length < 240, lead + ": " + foot.length);
+    assert.equal((foot.match(/\?/g) || []).length % 2, 0, lead + ": " + foot);
+  }
+});
+
 test("a script with no tags, b-roll or comments has no appendix, and a long title never runs off the page", () => {
   S.state = migrateRows({ schema: 2, title: "A title so long that it could never fit on one line of the page, nor on two lines of it, however small the words are set and however wide the page is", comments: [],
     rows: [{ id: "r0", visualText: "Wide.", audioText: "Hello.", status: "shot" }] });
-  const doc = read(buildPdf(null));
+  const doc = read(buildPdf(liveDoc(), null));
   assert.equal(doc.pages.length, 1);
   assert.doesNotMatch(doc.t, /\/Outlines/);
   const lines = doc.pages[0].texts.filter((o) => o.size === 20);

@@ -1,95 +1,65 @@
 import { S } from "./_state.js";
-import { absorbRemoteChange, flushEdits } from "./12a-undo.js";
+import { flushEdits } from "./12a-undo.js";
+import { inertBody } from "../legacy/richtext.ts";
+import { noteReload } from "../legacy/session-bridge.ts";
+import { documentTransitions } from "../legacy/transition-bridge.ts";
+import { requestSave, unsavedFor } from "../legacy/save-bridge.ts";
 import { fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
-import { toggleHideShotScenes } from "./01b-hide-shot.js";
-import { migrateRows } from "./02-state.js";
-import { toggleRundownMinimized } from "./05f-rundown.js";
 import {
   docIdEmbeddedIn,
   migrateDocument,
   standaloneHtmlFor,
   syncDocIdentity
 } from "./02b-doc-id.js";
-import { ensureBytes, missingInlineImages } from "./02c-blobs.js";
-import { rowVideoLinks, videoLinkText } from "./02d-gallery.js";
-import { refsIn } from "../../shared/blob-policy.js";
 import {
   cloneState,
-  openHistoryPanel,
   pushSnapshot,
-  setBaseState,
   stampRow,
   updateIdentityChip
 } from "./03-sync.js";
 import { beginBusy, endBusy, withBusyBar } from "./04b-busy.js";
-import { pad2, render } from "./05-render.js";
+import { renderAbsorbed } from "./05-render.js";
+import { resetProductionPanelState } from "./07-production-tags.js";
+import { brollPrintView } from "./08d-broll-panel.js";
+import { formatTimestamp } from "./10-comments.js";
 import {
-  productionEntries,
-  resetProductionPanelState,
-  tagCategory
-} from "./07-production-tags.js";
-import { breakdownRows, buildBreakdownCsv } from "./08-production-panels.js";
-import { brollEntries } from "./08c-broll.js";
-import { brollShotListForPrint, buildBrollCsv } from "./08d-broll-panel.js";
-import { openFindBar } from "./09-find-replace.js";
-import { commentBodyText, commentEntries, formatTimestamp, showTaggingHelp } from "./10-comments.js";
+  captureExportDocument,
+  exportAssetsRequest,
+  loadExportAssets
+} from "./14b-export-kit.js";
 import {
   detectTwoColumnFormat,
   normalizeImportedRows,
-  openGdocModal,
-  openImportModal,
   parseImportRows
 } from "./11-import.js";
-import { clearDirty, markDirty, showToast } from "./12-dirty-toast.js";
+import { clearDirty, markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
 import {
+  blobSourceNow,
   linkTurnedOff,
   onServerDoc,
-  openDriveModal,
-  openServerPicker,
-  publishToServer,
   serverSessionExpired
 } from "./13-hosted.js";
-import { openCollaborate } from "./13b-collaborate.js";
-import { cellOf, toPlainText } from "./04c-doc-model.js";
-import {
-  autoSaveHalt,
-  exportMetaLine,
-  markdownExportImages,
-  saveDoc,
-  slugify,
-  strBytes,
-  toMarkdownDoc,
-  toMarkdownTableDoc,
-  toggleAutoSave,
-  warnImagesLeftOut,
-  zipWrite
-} from "./14-export.js";
-import {
-  buildDocx,
-  buildNarrationDocx,
-  buildNarrationText,
-  docxToRows,
-  narrationRows
-} from "./15-docx.js";
-import { buildCsv, csvToRows } from "./16-csv.js";
-import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } from "./16b-xlsx.js";
-import { buildPackingListPdf, buildPdf, buildShotListPdf, pdfCommentImagesFor, pdfImagesFor } from "./17-pdf.js";
+import { autoSaveHalt, slugify, warnImagesLeftOut } from "./14-export.js";
+import { exportToggleOptions } from "./14e-export-formats.js";
+import { docxToRows } from "./15-docx.js";
+import { csvToRows } from "./16-csv.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
-import { refreshFileMenu, setMenuItemLabel, startNewScript, toggleFileMenu } from "./18b-file-menu.js";
-import { exportAgain, isExportAction, openExportDialog, rememberExport } from "./18c-export-dialog.js";
-import { openCommandMenu } from "./18d-command-menu.js";
-import { showAbout } from "./20a-update.js";
+import { refreshFileMenu, setMenuItemLabel, toggleFileMenu } from "./18b-file-menu.js";
+import { isExportAction, rememberExport } from "./18c-export-dialog.js";
 import {
   applyMarkdownProject,
   parseMarkdownProject,
   parseSplitpageFile
 } from "./20d-formats.js";
 import {
-  makeDesktopHandle, notifyDesktopDocumentState, openPrompterInBrowser, openPrompterInChromium
+  makeDesktopHandle, notifyDesktopDocumentState
 } from "./20f-desktop.js";
-import { exportAppData, openImportAppData } from "./20h-appdata.js";
 import { closeNewTabPage } from "./20j-newtab.js";
+import { strBytes } from "../adapters/formats/bytes.ts";
+import { isDocumentObject } from "../core/migrate.ts";
+import { appActions } from "../legacy/app-actions.ts";
+import { exportFormats } from "../legacy/export-formats.ts";
 
 export function fileKindFromName(name) {
   var m = /\.([a-z0-9]+)$/i.exec(name || "");
@@ -130,9 +100,23 @@ export function mirrorFileChipToWriter() {
   dstState.classList.toggle("unsaved", srcState.classList.contains("unsaved"));
 }
 
+export function saveBackItemState() {
+  var imported = onServerDoc() ? null : importHome();
+  if (!imported) return { hidden: false, disabled: true, reason: "", label: "Save to file" };
+  return { hidden: false, disabled: false, reason: "",
+           label: imported.inPlace ? "Save to " + imported.name : "Save a new copy of " + imported.name };
+}
+
+function paintSaveBackItem() {
+  var saveBack = document.getElementById("menu-save-back");
+  var state = saveBackItemState();
+  saveBack.disabled = state.disabled;
+  setMenuItemLabel(saveBack, state.label);
+}
+
 function updateHeaderFileChip() {
   var chip = document.getElementById("file-chip");
-  var saveBack = document.getElementById("menu-save-back");
+  paintSaveBackItem();
   if (onServerDoc()) {
     chip.hidden = false;
     document.getElementById("file-chip-name").textContent = "On the server";
@@ -143,15 +127,11 @@ function updateHeaderFileChip() {
       : S.dirty && autoSaveHalt ? "· not saved yet"
       : (S.dirty ? "· saving…" : "· v" + home.rev + ", everyone sees this");
     srvState.classList.toggle("unsaved", serverSessionExpired || linkTurnedOff || !!S.dirty);
-    saveBack.disabled = true;
-    setMenuItemLabel(saveBack, "Save to file");
     return;
   }
   var imported = importHome();
   if (!imported) {
     chip.hidden = true;
-    saveBack.disabled = true;
-    setMenuItemLabel(saveBack, "Save to file");
     return;
   }
   chip.hidden = false;
@@ -159,128 +139,120 @@ function updateHeaderFileChip() {
   var stateEl = document.getElementById("file-chip-state");
   stateEl.textContent = imported.dirty ? "· unsaved changes" : "· up to date";
   stateEl.classList.toggle("unsaved", !!imported.dirty);
-  saveBack.disabled = false;
-  setMenuItemLabel(saveBack, imported.inPlace ? "Save to " + imported.name : "Save a new copy of " + imported.name);
 }
 
 export function exportFileName(kind, baseName, opts) {
-  opts = opts || {};
-  if (kind === "breakdown") return baseName + " - breakdown.csv";
-  if (kind === "b-roll csv") return baseName + " - b-roll shot list.csv";
-  if (kind === "breakdown xlsx") return baseName + " - breakdown.xlsx";
-  if (kind === "b-roll xlsx") return baseName + " - b-roll shot list.xlsx";
-  if (kind === "b-roll pdf") return baseName + " - b-roll shot list.pdf";
-  if (kind === "narration-docx") return baseName + " - narration.docx";
-  if (kind === "narration-txt") return baseName + " - narration.txt";
-  if (kind.indexOf("packing-") === 0) {
-    var packCatId = kind.slice("packing-".length);
-    var packCat = tagCategory(packCatId);
-    return baseName + " - " + (packCat ? packCat.label : packCatId) + " packing list.pdf";
-  }
-  if (kind === "md-table") return baseName + " - two column.md";
-  if (kind === "html") return baseName + " - SplitShare.html";
-  if (kind === "md" && opts.imageBundle) return baseName + " (with images).zip";
-  return baseName + "." + kind;
+  var exporter = exportFormats.byId(kind);
+  return exporter ? exporter.fileName(baseName, opts || {}) : baseName + "." + kind;
 }
 
 export function exportBaseName() {
   return importHome() ? importHome().name.replace(/\.[^.]+$/, "") : slugify(S.state.title);
 }
 
-export async function buildFileData(kind, baseName, opts) {
+export function exportRequest(kind, opts) {
   opts = opts || {};
-  await ensureBytes(refsIn(S.state));
-  var filename = exportFileName(kind, baseName);
-  if (kind === "docx") return { data: buildDocx(), filename: filename };
-  if (kind === "csv") return { data: buildCsv(), filename: filename };
-  if (kind === "breakdown") return { data: buildBreakdownCsv(), filename: filename };
-  if (kind === "b-roll csv") return { data: buildBrollCsv(), filename: filename };
-  if (kind === "xlsx") return { data: buildScriptXlsx(), filename: filename };
-  if (kind === "breakdown xlsx") return { data: buildBreakdownXlsx(), filename: filename };
-  if (kind === "b-roll xlsx") return { data: buildBrollXlsx(), filename: filename };
-  if (kind === "b-roll pdf") return { data: buildShotListPdf(brollShotListForPrint(opts.brollView)), filename: filename };
-  if (kind === "pdf") return { data: buildPdf(await pdfImagesFor(S.state.rows), await pdfCommentImagesFor()), filename: filename };
-  if (kind === "txt") return { data: htmlToPlainScript(), filename: filename };
-  if (kind === "narration-docx") return { data: buildNarrationDocx(), filename: filename };
-  if (kind === "narration-txt") return { data: buildNarrationText(), filename: filename };
-  if (kind.indexOf("packing-") === 0) return { data: buildPackingListPdf(kind.slice("packing-".length)), filename: filename };
-  if (kind === "md-table") return { data: toMarkdownTableDoc(null, { export: true }), filename: filename };
-  if (kind === "html") {
-    warnImagesLeftOut(missingInlineImages(S.state).length, filename);
-    return {
-      data: standaloneHtmlFor(S.state, {
-        title: (S.state.title || "Untitled Script") + " — SplitShare",
-        description: exportMetaLine()
-      }),
-      filename: filename
-    };
-  }
-  if (kind === "md" && opts.allowImageBundle) {
-    var images = markdownExportImages();
-    if (images.length) {
-      var entries = [{ name: baseName + ".md", data: strBytes(toMarkdownDoc()) }];
-      images.forEach(function (img) { entries.push({ name: img.path, data: img.bytes }); });
-      return { data: zipWrite(entries), filename: exportFileName(kind, baseName, { imageBundle: true }) };
-    }
-  }
-  return { data: toMarkdownDoc(), filename: filename };
+  var exporter = exportFormats.byId(kind) || exportFormats.byId("md");
+  var doc = captureExportDocument();
+  return Object.freeze({
+    kind: kind,
+    doc: doc,
+    options: Object.freeze(Object.assign(exportToggleOptions(exporter, opts), {
+      allowImageBundle: !!opts.allowImageBundle,
+      brollView: Object.freeze(brollPrintView(opts.brollView))
+    })),
+    assets: exportAssetsRequest(doc, blobSourceNow())
+  });
 }
 
-function htmlToPlainScript() {
-  var lines = [S.state.title || "Untitled Script", ""];
-  S.state.rows.forEach(function (row, i) {
-    lines.push("[" + pad2(i + 1) + "] VISUAL: " + toPlainText(cellOf(row.visualText)));
-    rowVideoLinks(row).forEach(function (l) { lines.push("      VIDEO: " + videoLinkText(l)); });
-    lines.push("      AUDIO: " + toPlainText(cellOf(row.audioText)));
-    lines.push("");
-  });
+export async function buildFileData(kind, baseName, opts) {
+  var request = exportRequest(kind, opts);
+  var registered = exportFormats.byId(kind);
+  var exporter = registered || exportFormats.byId("md");
+  var assets = await loadExportAssets(request.assets);
+  var made = await exporter.build({
+    doc: request.doc,
+    options: request.options,
+    assets: assets,
+    ports: { standaloneHtml: standaloneHtmlFor }
+  }, baseName);
+  var filename = registered
+    ? exporter.fileName(baseName, { imageBundle: !!made.imageBundle })
+    : baseName + "." + kind;
+  if (made.diagnostics) warnImagesLeftOut(made.diagnostics.imagesLeftOut, filename);
+  return { data: made.data, filename: filename };
+}
 
-  var breakdown = breakdownRows();
-  if (breakdown.length) {
-    lines.push("PRODUCTION BREAKDOWN");
-    lines.push("====================");
-    lines.push("");
-    breakdown.forEach(function (r) {
-      var where = r.inScript === "no"
-        ? "not in script"
-        : r.mentions + " mention" + (r.mentions === 1 ? "" : "s") +
-          (r.scenes.length ? ", scene" + (r.scenes.length === 1 ? " " : "s ") + r.scenes.join(", ") : "");
-      lines.push(r.categoryLabel + ": " + r.name +
-        "  [" + r.statusLabel + "]" +
-        (r.owner ? "  —  " + r.owner : "") +
-        "  (" + where + ")");
-      if (r.notes) {
-        r.notes.split(/\r\n|\r|\n/).forEach(function (l) { lines.push("    " + l); });
-      }
-    });
-    lines.push("");
-  }
+var RAW_TEXT_ELEMENTS = { script: 1, style: 1, textarea: 1, title: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1 };
 
-  var comments = commentEntries({ pieces: true });
-  if (comments.length) {
-    lines.push("COMMENTS");
-    lines.push("========");
-    lines.push("");
-    comments.forEach(function (c) {
-      lines.push(c.location + (c.resolved ? " (resolved)" : "") +
-                 "  —  " + c.author + (c.when ? ", " + c.when : ""));
-      if (c.quoted) {
-        c.quoted.split(/\r\n|\r|\n/).forEach(function (l) { lines.push('  "' + l + '"'); });
+function tagAttributes(text, from) {
+  var attrs = {};
+  var i = from;
+  var n = text.length;
+  while (i < n) {
+    while (i < n && /[\t\n\f\r /]/.test(text[i])) i++;
+    if (i >= n) return null;
+    if (text[i] === ">") return { attrs: attrs, end: i + 1 };
+    var nameStart = i;
+    i++;
+    while (i < n && !/[\t\n\f\r />=]/.test(text[i])) i++;
+    var name = text.slice(nameStart, i).toLowerCase();
+    while (i < n && /[\t\n\f\r ]/.test(text[i])) i++;
+    var value = "";
+    if (text[i] === "=") {
+      i++;
+      while (i < n && /[\t\n\f\r ]/.test(text[i])) i++;
+      var quote = text[i];
+      if (quote === "\"" || quote === "'") {
+        var close = text.indexOf(quote, i + 1);
+        if (close === -1) return null;
+        value = text.slice(i + 1, close);
+        i = close + 1;
+      } else {
+        var valueStart = i;
+        while (i < n && !/[\t\n\f\r >]/.test(text[i])) i++;
+        value = text.slice(valueStart, i);
       }
-      (commentBodyText(c) || "(empty)").split(/\r\n|\r|\n/).forEach(function (l) { lines.push("  " + l); });
-      c.replies.forEach(function (rp) {
-        lines.push("");
-        var prefix = "  > " + rp.author + (rp.when ? ", " + rp.when : "") + ": ";
-        (commentBodyText(rp) || "(empty)").split(/\r\n|\r|\n/).forEach(function (l, i) {
-          lines.push((i === 0 ? prefix : "    ") + l);
-        });
-      });
-      lines.push("");
-      lines.push("------------------------------");
-      lines.push("");
-    });
+    }
+    if (!Object.prototype.hasOwnProperty.call(attrs, name)) attrs[name] = value;
   }
-  return lines.join("\n");
+  return null;
+}
+
+function stateDataScriptText(text) {
+  var opening = /<(!--|[a-zA-Z][^\t\n\f\r />]*)/g;
+  for (var m = opening.exec(text); m; m = opening.exec(text)) {
+    if (m[1] === "!--") {
+      var commentEnd = text.indexOf("-->", m.index + 4);
+      if (commentEnd === -1) return null;
+      opening.lastIndex = commentEnd + 3;
+      continue;
+    }
+    var tag = tagAttributes(text, m.index + m[0].length);
+    if (!tag) return null;
+    var name = m[1].toLowerCase();
+    opening.lastIndex = tag.end;
+    if (!RAW_TEXT_ELEMENTS[name]) continue;
+    var closing = new RegExp("</" + name + "[\\t\\n\\f\\r />]", "ig");
+    closing.lastIndex = tag.end;
+    var closed = closing.exec(text);
+    var contentEnd = closed ? closed.index : text.length;
+    if (name === "script" && tag.attrs.id === "state-data") return text.slice(tag.end, contentEnd);
+    if (!closed) return null;
+    opening.lastIndex = contentEnd;
+  }
+  return null;
+}
+
+function stateDataFromRawText(text) {
+  var data = stateDataScriptText(text);
+  if (data === null) return null;
+  try {
+    var parsed = JSON.parse(data.replace(/\r\n?/g, "\n"));
+    return isDocumentObject(parsed) ? parsed : null;
+  } catch (e) {
+    return null;
+  }
 }
 
 export async function parseProjectFileState(file, opts) {
@@ -306,14 +278,16 @@ export async function parseProjectFileState(file, opts) {
   }
 
   if (kind === "html") {
-    var doc = new DOMParser().parseFromString(text, "text/html");
-    var dataEl = doc.getElementById("state-data");
-    var legacy;
-    try {
-      legacy = JSON.parse(dataEl.textContent);
-    } catch (e) {
-      return { error: "not-splitpage" };
+    var legacy = stateDataFromRawText(text);
+    if (!legacy) {
+      var dataEl = inertBody(text).ownerDocument.getElementById("state-data");
+      try {
+        legacy = JSON.parse(dataEl.textContent);
+      } catch (e) {
+        return { error: "not-splitpage" };
+      }
     }
+    if (!isDocumentObject(legacy)) return { error: "not-splitpage" };
     var legacyEmbedded = docIdEmbeddedIn(legacy);
     return { state: migrateDocument(legacy, { kind: "file" }), kind: "html", docIdEmbedded: legacyEmbedded };
   }
@@ -349,15 +323,17 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
   if (typeof closeNewTabPage === "function") closeNewTabPage();
   if (!opts.skipSnapshot && S.state && S.state.rows.length) pushSnapshot("Before opening " + file.name);
 
-  S.state = newState;
-  setBaseState(cloneState(S.state), "adoptProjectState: the project file as it was just read");
-  setHome("file", { handle: handle || null, format: kind, lastModified: file.lastModified || null,
-                    name: file.name, diskBase: cloneState(S.state) });
+  documentTransitions().open({
+    from: { document: newState },
+    reason: "adoptProjectState: the project file as it was just read",
+    destination: { kind: "file", fields: { handle: handle || null, format: kind, lastModified: file.lastModified || null,
+                                           name: file.name, diskBase: cloneState(newState) } },
+    writtenOut: true
+  });
   resetProductionPanelState();
 
-  S.docIdWrittenOut = true;
   clearDirty();
-  render();
+  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   var commentNote = S.state.comments.length
@@ -452,17 +428,9 @@ async function loadFileIntoEditor(file, handle, opts) {
   var openedTitle = newTitle || file.name.replace(/\.[^.]+$/, "");
   if (opts.reload) {
     flushEdits();
-    S.state.rows = newRows;
-    S.state.title = openedTitle;
-    absorbRemoteChange();
-  } else {
-    S.state = migrateRows({ schema: SCHEMA_VERSION, title: openedTitle, rows: newRows });
-    setBaseState(cloneState(S.state), "loadFileIntoEditor: the imported document as it was just read");
-    resetProductionPanelState();
-    S.docIdWrittenOut = false;
+    noteReload({ title: openedTitle, rows: newRows });
   }
-
-  var imported = setHome("import", {
+  var importFields = {
     name: file.name,
     handle: handle || null,
     format: kind,
@@ -470,12 +438,24 @@ async function loadFileIntoEditor(file, handle, opts) {
     dirty: false,
     lastModified: file.lastModified || null,
     size: file.size || null
-  });
+  };
+  if (opts.reload) {
+    setHome("import", importFields);
+  } else {
+    documentTransitions().open({
+      from: { raw: { schema: SCHEMA_VERSION, title: openedTitle, rows: newRows } },
+      reason: "loadFileIntoEditor: the imported document as it was just read",
+      destination: { kind: "import", fields: importFields },
+      writtenOut: false
+    });
+    resetProductionPanelState();
+  }
+  var imported = importHome();
 
-  markDirty();
+  markAbsorbedDirty(opts.reload ? "reload" : "adopt");
   imported.dirty = false;
   if (typeof closeNewTabPage === "function") closeNewTabPage();
-  render();
+  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   if (typeof syncDocIdentity === "function") syncDocIdentity();
@@ -599,46 +579,62 @@ function fileConflictHome() {
   return fileConflictCtx && fileConflictCtx.kind === "project" ? fileHome() : importHome();
 }
 
-export async function saveBackToFile(opts) {
+var WRITTEN_BACK = Object.freeze({ kind: "saved" });
+var WRITEBACK_FAILED = Object.freeze({ kind: "failed" });
+var WRITEBACK_CANCELLED = Object.freeze({ kind: "cancelled" });
+var WRITEBACK_CONFLICTED = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
+var NOTHING_IMPORTED = Object.freeze({ kind: "refused", reason: "The document has no imported file to write back to" });
+var IMPORT_REPLACED = Object.freeze({ kind: "refused", reason: "The imported file this write back was asked for is no longer open" });
+
+export function saveBackToFile(opts) {
   var imported = importHome();
-  if (!imported) return;
+  if (!imported) return Promise.resolve();
+  return requestSave({ kind: opts && opts.force ? "writebackForce" : "writeback", target: imported }).then(function (outcome) {
+    if (outcome.kind === "saved" && outcome.acknowledged) imported.dirty = unsavedFor(imported);
+    updateFileChip();
+  });
+}
+
+function stillWritingBack(job, imported) {
+  return importHome() === imported && job.owns();
+}
+
+export async function writeBackToFile(job) {
+  var imported = importHome();
+  if (!imported) return NOTHING_IMPORTED;
+  if (job.request.target !== imported || !stillWritingBack(job, imported)) return IMPORT_REPLACED;
   var baseName = imported.name.replace(/\.[^.]+$/, "");
   var built;
   try {
     built = await buildFileData(imported.format, baseName);
   } catch (e) {
     showToast("Could not build the file.", "error");
-    return;
+    return WRITEBACK_FAILED;
   }
-  var docIdAtBuild = S.state.docId;
-  var seqAtBuild = S.editSeq;
-  function bytesStillCurrent() {
-    return importHome() === imported && S.state.docId === docIdAtBuild && S.editSeq === seqAtBuild;
-  }
+  if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
 
   if (imported.handle && imported.handle.createWritable) {
-    if (!opts || !opts.force) {
+    if (job.request.kind !== "writebackForce") {
       var check = await checkFileConflict(imported.handle, imported.lastModified);
       if (!check.ok) {
         showFileConflict(imported.name, check.current, { kind: "import" });
-        return;
+        return WRITEBACK_CONFLICTED;
       }
+      if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
     }
     try {
       var writable = await imported.handle.createWritable();
       await writable.write(built.data);
       await writable.close();
-      if (bytesStillCurrent()) imported.dirty = false;
       try {
         var after = await imported.handle.getFile();
         imported.lastModified = after.lastModified;
         imported.size = after.size;
       } catch (e) { }
-      updateFileChip();
       showToast("Saved to " + imported.name, "ok");
-      return;
+      return WRITTEN_BACK;
     } catch (err) {
-      if (err && err.name === "AbortError") return;
+      if (err && err.name === "AbortError") return WRITEBACK_CANCELLED;
       imported.inPlace = false;
       updateFileChip();
     }
@@ -647,7 +643,7 @@ export async function saveBackToFile(opts) {
   var ok = await deliverFile(imported.name, built.data, {
     savedMsg: "Saved a copy of " + imported.name + " to your downloads"
   });
-  if (ok) { if (bytesStillCurrent()) imported.dirty = false; updateFileChip(); }
+  return ok ? WRITTEN_BACK : WRITEBACK_FAILED;
 }
 
 export function showFileConflict(fileName, currentFile, ctx) {
@@ -720,79 +716,46 @@ export async function exportAs(kind, more) {
   await deliverFile(built.filename, built.data, { savedMsg: "Exported " + built.filename });
 }
 
-export async function exportNarration(kind) {
-  if (!narrationRows().length) {
-    showToast("There is no narration to export yet — the Audio column is empty.", "warn");
-    return;
+export async function runExport(action) {
+  var exporter = exportFormats.byAction(action);
+  if (!exporter) return false;
+  var why = exporter.reason ? exporter.reason(captureExportDocument()) : "";
+  if (why) {
+    showToast(exporter.refusal || why + ".", "warn");
+    return false;
   }
-  await exportAs(kind);
+  await exportAs(exporter.id, exporter.defaults);
+  return true;
 }
 
-export async function exportPackingList(catId) {
-  var cat = tagCategory(catId);
-  var has = productionEntries().some(function (e) { return e.cat.id === catId; });
-  if (!has) {
-    showToast("Nothing tagged " + (cat ? cat.label : catId) + " yet — nothing to pack.", "warn");
-    return;
-  }
-  await exportAs("packing-" + catId);
+var fileMenuChoiceListeners = [];
+
+export function onFileMenuChoice(listener) {
+  fileMenuChoiceListeners.push(listener);
 }
 
-export async function exportBrollList(action) {
-  if (!brollEntries(true).length) {
-    showToast("There is no b-roll to export yet — start a Visual line with B-roll:", "warn");
-    return;
-  }
-  if (action === "export-broll-csv") await exportAs("b-roll csv");
-  else if (action === "export-broll-xlsx") await exportAs("b-roll xlsx");
-  else await exportAs("b-roll pdf", { brollView: { filter: "all", group: "scene" } });
+export function noteFileMenuChoice(action) {
+  fileMenuChoiceListeners.forEach(function (listener) { listener(action); });
 }
 
-export function handleFileMenuAction(action) {
+export function runExportAction(action) {
+  if (!exportFormats.isAction(action)) return false;
+  handleFileMenuAction(action, "command-menu");
+  return true;
+}
+
+export function handleFileMenuAction(action, source) {
+  noteFileMenuChoice(action);
   if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") toggleFileMenu(false);
   if (isExportAction(action)) rememberExport(action);
-  if (!S.state && action !== "history" && action !== "tagging-help"
-      && action !== "drive-open" && action !== "about") {
+  if (appActions.has(action)) {
+    appActions.invoke(action, source || "menu");
+    return;
+  }
+  if (!S.state) {
     showToast("Still loading…", "warn"); return;
   }
-  if (action === "save-as") saveDoc({ saveAs: true });
-  else if (action === "new") startNewScript();
-  else if (action === "export") openExportDialog();
-  else if (action === "export-again") exportAgain();
-  else if (action === "command-menu") openCommandMenu();
-  else if (action === "open") openLocalFile();
-  else if (action === "paste") openImportModal();
-  else if (action === "gdoc-import") openGdocModal();
-  else if (action === "save-back") saveBackToFile();
-  else if (action === "autosave") toggleAutoSave();
-  else if (action === "toggle-hide-shot") toggleHideShotScenes();
-  else if (action === "toggle-rundown-min") toggleRundownMinimized();
-  else if (action === "history") openHistoryPanel();
-  else if (action === "export-docx") exportAs("docx");
-  else if (action === "export-md") exportAs("md");
-  else if (action === "export-md-table") exportAs("md-table");
-  else if (action === "export-csv") exportAs("csv");
-  else if (action === "export-xlsx") exportAs("xlsx");
-  else if (action === "export-breakdown") exportAs("breakdown");
-  else if (action === "export-breakdown-xlsx") exportAs("breakdown xlsx");
-  else if (action === "export-pdf") exportAs("pdf");
-  else if (action === "export-html") exportAs("html");
-  else if (action === "export-narration-docx") exportNarration("narration-docx");
-  else if (action === "export-narration-txt") exportNarration("narration-txt");
-  else if (action === "export-packing-gear") exportPackingList("gear");
-  else if (action === "export-packing-prop") exportPackingList("prop");
-  else if (action === "export-broll-pdf" || action === "export-broll-csv" || action === "export-broll-xlsx") exportBrollList(action);
-  else if (action === "drive-open") openDriveModal();
-  else if (action === "server-open") openServerPicker();
-  else if (action === "server-publish") publishToServer();
-  else if (action === "collaborate") openCollaborate();
-  else if (action === "find") openFindBar();
-  else if (action === "prompter-open-in-browser") openPrompterInBrowser();
-  else if (action === "prompter-open-in-chromium") openPrompterInChromium();
-  else if (action === "export-app-data") exportAppData();
-  else if (action === "import-app-data") openImportAppData();
-  else if (action === "tagging-help") showTaggingHelp();
-  else if (action === "about") showAbout();
+  if (exportFormats.isAction(action)) runExport(action);
 }
 
 export function __init() {}

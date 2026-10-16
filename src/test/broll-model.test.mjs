@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { liveDoc, printData } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -11,10 +12,9 @@ import {
   brollShotsByProp, recordPastedBroll, removeBrollProp, renameBrollInScript
 } from "../js/08c-broll.js";
 import { renameTag } from "../js/07-production-tags.js";
-import { buildBreakdownCsv } from "../js/08-production-panels.js";
-import { brollShotListForPrint, buildBrollCsv } from "../js/08d-broll-panel.js";
+import { buildBreakdownCsv, buildBrollCsv } from "../js/16-csv.js";
 import { buildShotListPdf } from "../js/17-pdf.js";
-import { sceneFacts } from "../js/14b-export-kit.js";
+import { exportDocumentOf, sceneFacts } from "../js/14b-export-kit.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 
 brollInit();
@@ -209,16 +209,39 @@ const BROLL_CELLS = (() => {
   return out;
 })();
 
+function commentsAKeyOrBlank(html) {
+  return Array.prototype.some.call(inertBody(html).querySelectorAll(".cmt-anchor"),
+    (el) => !!el.querySelector(".broll-key") || !(el.textContent || "").trim());
+}
+
+function withoutComments(html) {
+  const body = inertBody(html);
+  body.querySelectorAll(".cmt-anchor").forEach((el) => {
+    while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
+    el.remove();
+  });
+  return body.innerHTML;
+}
+
 test("reading: every stored cell and every b-roll cell reads exactly as the HTML reader read it", () => {
-  let markers = 0, keyed = 0, plain = 0;
+  let markers = 0, keyed = 0, plain = 0, covered = 0;
   for (const html of STORED.concat(BROLL_CELLS)) {
     const before = oldBrollInField(html);
-    assert.deepEqual(brollInCell(cellOf(html)), before, html);
+    const now = brollInCell(cellOf(html));
+    if (commentsAKeyOrBlank(html)) {
+      const bare = oldBrollInField(withoutComments(html));
+      assert.equal(now.length, bare.length, html);
+      assert.deepEqual(now, bare, html);
+      const keyIds = Array.prototype.map.call(inertBody(html).querySelectorAll(".broll-key"), (el) => el.getAttribute("data-broll-id"));
+      now.forEach((b) => assert.ok(!b.id || keyIds.includes(b.id), html));
+      covered++;
+    } else assert.deepEqual(now, before, html);
     markers += before.length;
     before.forEach((b) => { if (b.id) keyed++; else plain++; });
   }
   assert.ok(keyed > 500 && plain > 500, "the cells exercise both kinds of marker: " + keyed + " keyed, " + plain + " plain");
   assert.ok(markers > 1000);
+  assert.ok(covered > 10, "keys under a comment: " + covered);
 });
 
 test("reading: where the model reads differently, by design", () => {
@@ -233,6 +256,34 @@ test("reading: where the model reads differently, by design", () => {
   const inTag = sanitizeHtml(tagSpan("prop", "It", KEY("b1") + " gulls"));
   assert.deepEqual(oldBrollInField(inTag), [{ id: "", name: "gulls", desc: "" }]);
   assert.deepEqual(read(inTag), [{ id: "b1", name: "gulls", desc: "" }]);
+  const commented = '<span class="cmt-anchor" data-cmt="c1">' + KEY("b1") + " gulls</span>";
+  assert.deepEqual(oldBrollInField(sanitizeHtml(commented)), [{ id: "", name: "gulls", desc: "" }]);
+  assert.deepEqual(read(commented), [{ id: "b1", name: "gulls", desc: "" }]);
+});
+
+test("anchoring: a key a comment covers keeps its id and its comment, and a repeated one keeps the comment", () => {
+  const commented = sanitizeHtml('<span class="cmt-anchor" data-cmt="c1">' + KEY("bsA") + " the gulls</span>");
+  S.state = {
+    rows: [
+      { id: "r0", visualText: commented, audioText: "" },
+      { id: "r1", visualText: "B-roll: drone", audioText: "" }
+    ],
+    brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
+    productionTags: []
+  };
+  assert.equal(anchorBrollInRows(S.state.rows), 1);
+  assert.equal(S.state.rows[0].visualText, commented);
+  assert.match(S.state.rows[1].visualText, /^<span class="broll-key"/);
+
+  S.state.rows.push({ id: "r2", visualText: commented, audioText: "" });
+  assert.equal(anchorBrollInRows(S.state.rows), 1);
+  assert.equal(S.state.rows[0].visualText, commented);
+  const after = S.state.rows[2].visualText;
+  assert.match(after, /data-cmt="c1"/);
+  const read = brollInCell(cellOf(after));
+  assert.deepEqual(read.map((b) => b.name), ["the gulls"]);
+  assert.ok(read[0].id && read[0].id !== "bsA");
+  assert.deepEqual(cellOf(after)[0].marks, { cmt: ["c1"] });
 });
 
 function bareBreaks(cell) {
@@ -254,7 +305,7 @@ test("anchoring: every unanchored line gets its key where the old pass put it", 
   for (const html of STORED.concat(BROLL_CELLS)) {
     const before = brollInCell(cellOf(html));
     if (!before.some((b) => !b.id)) continue;
-    if (repeatsAnId(before)) continue;
+    if (repeatsAnId(before) || commentsAKeyOrBlank(html)) continue;
     const after = withRow(html, (row) => {
       const n = anchorBrollInRows([row]);
       assert.equal(n, before.filter((b) => !b.id).length, html);
@@ -365,6 +416,7 @@ test("renaming: the line becomes the key and the new name, as the old rename wro
   let renamed = 0;
   for (const html of STORED.concat(BROLL_CELLS)) {
     const before = brollInCell(cellOf(html));
+    if (commentsAKeyOrBlank(html)) continue;
     before.forEach((b, ordinal) => {
       const id = b.id || "bsNew";
       const after = withRow(html, () => {
@@ -533,7 +585,7 @@ test("a pasted copy of a shot's line gets none of its hand-added props", () => {
 test("the breakdown CSV names the b-roll shots each prop is needed for, after the old columns", () => {
   propsDoc();
   addBrollProp("b2", "Kettle");
-  const lines = buildBreakdownCsv().replace(/^\uFEFF/, "").split("\r\n");
+  const lines = buildBreakdownCsv(liveDoc()).replace(/^\uFEFF/, "").split("\r\n");
   assert.equal(lines[0], "Category,Item,Status,Assigned to,Mentions,Scenes,In script,Notes,B-roll shots,First scene at,Group");
   const kettle = lines.find((l) => l.startsWith("Prop,Kettle,"));
   assert.ok(kettle.endsWith(",drone over the pier,,Props & set dressing"), kettle);
@@ -548,11 +600,11 @@ test("the shot list CSV: one row per shot in script order, with a Props column, 
   s.brollShots[1].reshoot = true;
   s.rows.push({ id: "r2", visualText: "B-roll: an unanchored line", audioText: "" });
   const before = JSON.stringify(s.brollShots);
-  const lines = buildBrollCsv().replace(/^\uFEFF/, "").split("\r\n");
+  const lines = buildBrollCsv(liveDoc()).replace(/^\uFEFF/, "").split("\r\n");
   assert.equal(JSON.stringify(s.brollShots), before, "building the file adds no record");
   assert.equal(lines[0], "Scene,Shot,Status,Flagged,Location,Props,Cuts against,Assigned to,Note,Description,Scene start");
   assert.equal(lines.length, 4);
-  const at = (i) => sceneFacts()[i].start;
+  const at = (i) => sceneFacts(exportDocumentOf(S.state))[i].start;
   assert.equal(lines[1], "01,the red mug on the sill,To shoot,,,Red mug,,,,,00:00");
   assert.equal(lines[2], '02,drone over the pier,To shoot,yes,,Kettle,,,"wide, then ""tight""",,' + at(1));
   assert.equal(lines[3], "03,an unanchored line,To shoot,,,,,,,," + at(2));
@@ -562,7 +614,7 @@ test("the printed shot list is a PDF of the shots as shown, flagged ones marked"
   const s = propsDoc();
   s.brollShots[1].reshoot = true;
   s.brollShots[1].notes = "too dark";
-  const text = Buffer.from(buildShotListPdf(brollShotListForPrint())).toString("latin1");
+  const text = Buffer.from(buildShotListPdf(liveDoc(), printData())).toString("latin1");
   assert.ok(text.startsWith("%PDF-1.4"));
   assert.ok(text.includes("(the red mug on the sill) Tj"));
   assert.ok(text.includes("(drone over the pier) Tj"));

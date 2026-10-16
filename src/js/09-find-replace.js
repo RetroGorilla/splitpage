@@ -1,18 +1,22 @@
 import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
-import { escapeHtml } from "./02-state.js";
 import { cssAttr, inertBody, sanitizeHtml } from "./04-richtext.js";
-import { cellOf, projection, replaceText, toHtml } from "./04c-doc-model.js";
 import { render } from "./05-render.js";
 import {
-  TAG_CATEGORIES, bulkTagRows, normalizeTagName, registerProductionTag, registryTagHooks, tagCategory
+  TAG_CATEGORIES, bulkTagRows, isBlankTagName, normalizeTagName, registerProductionTag, registryTagHooks, tagCategory
 } from "./07-production-tags.js";
-import { BROLL_MARKER_RE } from "./08c-broll.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
+import { BROLL_MARKER_RE } from "../core/document/broll.ts";
+import { idMap } from "../core/document/id-map.ts";
+import { escapeHtml, withoutLoneSurrogates } from "../core/document/text-policy.ts";
+import { replaceText } from "../core/text/edits.ts";
+import { toHtml } from "../core/text/html.ts";
+import { projection } from "../core/text/runs.ts";
+import { cellOf } from "../legacy/richtext.ts";
 
 export var findOpen = false;
 S.findMatchCase = false;
@@ -29,6 +33,7 @@ function escapeRegExpLiteral(s) {
 }
 
 function findAllMatches(text, needle, matchCase) {
+  needle = withoutLoneSurrogates(needle);
   if (!needle) return [];
   var re = new RegExp(escapeRegExpLiteral(needle), matchCase ? "g" : "gi");
   var out = [], m;
@@ -149,9 +154,7 @@ export function domProjection(root) {
   return out;
 }
 
-/* eslint-disable-next-line no-control-regex -- the characters cleanText() (04c-doc-model.js) drops. */
 var DROPPED_CHAR_RE = /[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/;
-/* eslint-disable-next-line no-control-regex -- the same set, for a whole string. */
 var DROPPED_CHARS_RE = /[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/g;
 var OBJ = "\uFFFC";
 
@@ -323,7 +326,7 @@ export function replaceAll() {
 var bulkTagCat = null;
 
 function bulkTagNeedle() {
-  return findNeedle().trim();
+  return withoutLoneSurrogates(findNeedle()).trim();
 }
 
 function bulkTagRowEl() { return document.getElementById("find-tag-row"); }
@@ -341,7 +344,7 @@ export function closeBulkTag() {
 }
 
 function bulkTagRefusal(needle, plan) {
-  if (!needle) return "Type the words to tag in the Find box first.";
+  if (isBlankTagName(needle)) return "Type the words to tag in the Find box first.";
   if (needle.length > 80) return "That is too long to be a tag's name.";
   if (plan.hits) return "";
   if (plan.inTags) return "Every mention of \u201c" + needle + "\u201d in the Visual column is tagged already.";
@@ -476,7 +479,7 @@ function firstMatchFrom(range) {
     if (r && r.compareBoundaryPoints(Range.START_TO_START, range) >= 0) break;
     nth++;
   }
-  var order = {};
+  var order = idMap();
   S.state.rows.forEach(function (row, i) { order[row.id] = i; });
   var at = field === "visualText" ? 0 : 1;
   for (var i = 0; i < findMatches.length; i++) {

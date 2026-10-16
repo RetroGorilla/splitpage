@@ -8,7 +8,22 @@ const { setHome } = homeMod;
 const { publishToServer, publishAndCopyShareLink, saveToServer } = await import("../js/13-hosted.js");
 const { setBaseState, cloneState } = await import("../js/03-sync.js");
 const { markDirty, clearDirty } = await import("../js/12-dirty-toast.js");
-const { setAutoSaveEnabled, autoSaveTiming } = await import("../js/14-export.js");
+const { setAutoSaveEnabled, autoSaveTiming, legacySavePorts } = await import("../js/14-export.js");
+const { startSaves } = await import("../legacy/save-bridge.ts");
+const { NO_DESTINATION, documentTransitions, startTransitions } = await import("../legacy/transition-bridge.ts");
+const { documentIdentityPort, liveDocumentPort } = await import("../js/02b-doc-id.js");
+const { documentDestinationPort } = await import("../js/03-sync.js");
+const { startTestSession } = await import("./_session.mjs");
+const { appSessionDeps } = await import("./_app-session.mjs");
+
+startTestSession(appSessionDeps());
+
+startTransitions({ live: liveDocumentPort, destination: documentDestinationPort, identity: documentIdentityPort });
+
+startSaves(legacySavePorts({
+  capture: () => Object.freeze({ epoch: 0, docId: S.state && S.state.docId, destination: homeMod.home, destinationGeneration: 0, generation: 0, connection: homeMod.conn, revision: null }),
+  stillOwns: (ctx) => ctx.destination === homeMod.home && ctx.docId === (S.state && S.state.docId)
+}));
 
 dom.window.document.body.innerHTML =
   '<div id="toast-host"></div>' +
@@ -19,9 +34,11 @@ const realFetch = globalThis.fetch;
 const realSetTimeout = globalThis.setTimeout;
 const realNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
 
-function doc(docId, title, audio) {
+const DOC_IDS = { "doc-a": "d" + "a".repeat(32), "doc-b": "d" + "b".repeat(32) };
+
+function doc(name, title, audio) {
   return {
-    title, docId, rev: 1, comments: [], productionTags: [], people: [], brollShots: [],
+    title, docId: DOC_IDS[name], rev: 1, comments: [], productionTags: [], people: [], brollShots: [],
     rows: [{ id: "r1", status: "todo", visualText: "", audioText: audio }]
   };
 }
@@ -53,12 +70,9 @@ function stubTimers() {
 
 function startOn(state, opts) {
   opts = opts || {};
-  S.state = state;
   S.serverMode.readOnly = false;
   S.serverMode.available = true;
-  S.docIdWrittenOut = !!opts.written;
-  setHome("none");
-  setBaseState(cloneState(state), "test: the document as opened");
+  documentTransitions().open({ from: { document: state }, reason: "test: the document as opened", destination: NO_DESTINATION, writtenOut: !!opts.written });
   clearDirty();
   S.editSeq = 0;
   if (opts.dirty) markDirty();
@@ -108,7 +122,7 @@ test("#247: a document opened during the upload keeps its own home, base, id and
   assert.equal(homeMod.home, bHome, "B's home is still B's file");
   assert.equal(S.baseState, bBase, "B's base is untouched");
   assert.equal(S.state, b);
-  assert.equal(S.state.docId, "doc-b");
+  assert.equal(S.state.docId, DOC_IDS["doc-b"]);
   assert.equal(S.dirty, true, "B's unsaved work is still unsaved");
   assert.equal(S.docIdWrittenOut, true);
   assert.equal(calls.filter((c) => c.method === "PUT").length, 0, "nothing was saved anywhere on B's behalf");
@@ -147,7 +161,7 @@ test("#247: the fork's new id is not put on the document that replaced this one"
 
   postGate();
   assert.equal(await p, false);
-  assert.equal(S.state.docId, "doc-b");
+  assert.equal(S.state.docId, DOC_IDS["doc-b"]);
 });
 
 test("#247: a share link is not made for the document that replaced the one published", async () => {

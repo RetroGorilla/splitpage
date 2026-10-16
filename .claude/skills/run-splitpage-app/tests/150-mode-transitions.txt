@@ -333,15 +333,19 @@ wait __fx('prompter').display === 'none'
 # =============================================================================
 click #btn-present
 wait __fx('prompter').opacity === 1 && __fx('prompter').fading === 0
+eval (function(){window.__rfs=[];window.__rfsOn=function(){var f=__fx('prompter');window.__rfs.push('change:fs='+!!document.fullscreenElement+':opacity='+f.opacity);};document.addEventListener('fullscreenchange',window.__rfsOn);return true;})()
 click #pp-fullscreen
 wait document.fullscreenElement === document.getElementById('prompter')
-eval (function(){window.__rfs=[];document.addEventListener('fullscreenchange',function(){var f=__fx('prompter');window.__rfs.push('change:fs='+!!document.fullscreenElement+':opacity='+f.opacity);},{once:true});document.getElementById('pp-close').click();var f=__fx('prompter');window.__rfs.push('close:fs='+!!document.fullscreenElement+':holding='+f.holding+':fading='+f.fading);return JSON.stringify(window.__rfs);})()
-expect window.__rfs[0] == close:fs=true:holding=true:fading=0
+wait window.__rfs.length === 1
+expect window.__rfs[0].indexOf('change:fs=true:') === 0
+eval (function(){document.getElementById('pp-close').click();var f=__fx('prompter');window.__rfs.push('close:fs='+!!document.fullscreenElement+':holding='+f.holding+':fading='+f.fading);return JSON.stringify(window.__rfs);})()
+expect window.__rfs[1] == close:fs=true:holding=true:fading=0
 wait document.fullscreenElement === null
-wait window.__rfs.length === 2
-eval JSON.stringify(window.__rfs)
+wait window.__rfs.length === 3
+eval (function(){document.removeEventListener('fullscreenchange',window.__rfsOn);return JSON.stringify(window.__rfs);})()
+expect window.__rfs.length === 3
 # out of fullscreen, it is still fully there: the fade begins after
-expect window.__rfs[1] == change:fs=false:opacity=1
+expect window.__rfs[2] == change:fs=false:opacity=1
 wait __fx('prompter').display === 'none'
 expect __fx('prompter').holding === false
 

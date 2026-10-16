@@ -1,0 +1,2379 @@
+{
+  "cases": {
+    "null input": {
+      "input": null,
+      "sanitized": "",
+      "fromHtml": [],
+      "media": [],
+      "toHtml": "",
+      "markdown": "",
+      "markdownOfInput": "",
+      "storedFromDom": null
+    },
+    "empty": {
+      "input": "",
+      "sanitized": "",
+      "fromHtml": [],
+      "media": [],
+      "toHtml": "",
+      "markdown": "",
+      "markdownOfInput": "",
+      "storedFromDom": ""
+    },
+    "whitespace only": {
+      "input": "   \n  \t ",
+      "sanitized": "   \n  \t ",
+      "fromHtml": [
+        {
+          "text": "      \t ",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "      \t ",
+      "markdown": "",
+      "markdownOfInput": "",
+      "storedFromDom": "   \n  \t "
+    },
+    "plain text": {
+      "input": "Hello world",
+      "sanitized": "Hello world",
+      "fromHtml": [
+        {
+          "text": "Hello world",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "Hello world",
+      "markdown": "Hello world",
+      "markdownOfInput": "Hello world",
+      "storedFromDom": "Hello world"
+    },
+    "seed audio cell": {
+      "input": "On the left, what the viewer sees. On the right, <strong>exactly</strong> what gets said — <span class=\"cmt-anchor\" data-cmt=\"c1\"><mark>word for word</mark></span>, ready for the <u>teleprompter</u>. (This sentence shows off <a href=\"https://example.com\" target=\"_blank\" rel=\"noopener\">a link</a>, too.)",
+      "sanitized": "On the left, what the viewer sees. On the right, <strong>exactly</strong> what gets said — <span class=\"cmt-anchor\" data-cmt=\"c1\"><mark>word for word</mark></span>, ready for the <u>teleprompter</u>. (This sentence shows off <a href=\"https://example.com\" target=\"_blank\" rel=\"noopener\">a link</a>, too.)",
+      "fromHtml": [
+        {
+          "text": "On the left, what the viewer sees. On the right, ",
+          "marks": {}
+        },
+        {
+          "text": "exactly",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": " what gets said — ",
+          "marks": {}
+        },
+        {
+          "text": "word for word",
+          "marks": {
+            "hl": true,
+            "cmt": [
+              "c1"
+            ]
+          }
+        },
+        {
+          "text": ", ready for the ",
+          "marks": {}
+        },
+        {
+          "text": "teleprompter",
+          "marks": {
+            "u": true
+          }
+        },
+        {
+          "text": ". (This sentence shows off ",
+          "marks": {}
+        },
+        {
+          "text": "a link",
+          "marks": {
+            "href": "https://example.com"
+          }
+        },
+        {
+          "text": ", too.)",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "On the left, what the viewer sees. On the right, <strong>exactly</strong> what gets said — <span class=\"cmt-anchor\" data-cmt=\"c1\"><mark>word for word</mark></span>, ready for the <u>teleprompter</u>. (This sentence shows off <a href=\"https://example.com\" target=\"_blank\" rel=\"noopener\">a link</a>, too.)",
+      "markdown": "On the left, what the viewer sees. On the right, **exactly** what gets said — <mark>word for word</mark>, ready for the <u>teleprompter</u>. (This sentence shows off [a link](https://example.com), too.)",
+      "markdownOfInput": "On the left, what the viewer sees. On the right, **exactly** what gets said — <mark>word for word</mark>, ready for the <u>teleprompter</u>. (This sentence shows off [a link](https://example.com), too.)",
+      "storedFromDom": "On the left, what the viewer sees. On the right, <strong>exactly</strong> what gets said — <span class=\"cmt-anchor\" data-cmt=\"c1\"><mark>word for word</mark></span>, ready for the <u>teleprompter</u>. (This sentence shows off <a href=\"https://example.com\" target=\"_blank\" rel=\"noopener\">a link</a>, too.)"
+    },
+    "pasted style spans: weight": {
+      "input": "<span style=\"font-weight: bold\">bold</span> <span style=\"font-weight:700\">w700</span> <span style=\"font-weight: 600\">w600</span> <span style=\"font-weight: 500\">w500</span> <span style=\"font-weight: normal\">normal</span> <span style=\"font-weight: bolder\">bolder</span>",
+      "sanitized": "<strong>bold</strong> <strong>w700</strong> <strong>w600</strong> w500 normal bolder",
+      "fromHtml": [
+        {
+          "text": "bold",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "w700",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "w600",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": " w500 normal bolder",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "<strong>bold</strong> <strong>w700</strong> <strong>w600</strong> w500 normal bolder",
+      "markdown": "**bold** **w700** **w600** w500 normal bolder",
+      "markdownOfInput": "bold w700 w600 w500 normal bolder",
+      "storedFromDom": "<span style=\"font-weight: bold\">bold</span> <span style=\"font-weight:700\">w700</span> <span style=\"font-weight: 600\">w600</span> <span style=\"font-weight: 500\">w500</span> <span style=\"font-weight: normal\">normal</span> <span style=\"font-weight: bolder\">bolder</span>"
+    },
+    "pasted style spans: italic, underline, strike": {
+      "input": "<span style=\"font-style: italic\">it</span> <span style=\"font-style: oblique\">oblique</span> <span style=\"text-decoration: underline\">u</span> <span style=\"text-decoration-line: line-through\">s</span> <span style=\"text-decoration: underline line-through\">us</span> <span style=\"text-decoration: overline\">over</span>",
+      "sanitized": "<em>it</em> oblique <u>u</u> <s>s</s> <u><s>us</s></u> over",
+      "fromHtml": [
+        {
+          "text": "it",
+          "marks": {
+            "i": true
+          }
+        },
+        {
+          "text": " oblique ",
+          "marks": {}
+        },
+        {
+          "text": "u",
+          "marks": {
+            "u": true
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "s",
+          "marks": {
+            "s": true
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "us",
+          "marks": {
+            "u": true,
+            "s": true
+          }
+        },
+        {
+          "text": " over",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "<em>it</em> oblique <u>u</u> <s>s</s> <u><s>us</s></u> over",
+      "markdown": "*it* oblique <u>u</u> ~~s~~ <u>~~us~~</u> over",
+      "markdownOfInput": "it oblique u s us over",
+      "storedFromDom": "<span style=\"font-style: italic\">it</span> <span style=\"font-style: oblique\">oblique</span> <span style=\"text-decoration: underline\">u</span> <span style=\"text-decoration-line: line-through\">s</span> <span style=\"text-decoration: underline line-through\">us</span> <span style=\"text-decoration: overline\">over</span>"
+    },
+    "pasted style spans: highlight": {
+      "input": "<span style=\"background-color: yellow\">hl</span> <span style=\"background-color: transparent\">transparent</span> <span style=\"background-color: rgba(0, 0, 0, 0)\">clear</span> <span style=\"background: #ff0\">shorthand</span> <span style=\"background-color: rgba(0,0,0,0.5)\">half</span>",
+      "sanitized": "<mark>hl</mark> transparent clear <mark>shorthand</mark> <mark>half</mark>",
+      "fromHtml": [
+        {
+          "text": "hl",
+          "marks": {
+            "hl": true
+          }
+        },
+        {
+          "text": " transparent clear ",
+          "marks": {}
+        },
+        {
+          "text": "shorthand",
+          "marks": {
+            "hl": true
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "half",
+          "marks": {
+            "hl": true
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<mark>hl</mark> transparent clear <mark>shorthand</mark> <mark>half</mark>",
+      "markdown": "<mark>hl</mark> transparent clear <mark>shorthand</mark> <mark>half</mark>",
+      "markdownOfInput": "hl transparent clear shorthand half",
+      "storedFromDom": "<span style=\"background-color: yellow\">hl</span> <span style=\"background-color: transparent\">transparent</span> <span style=\"background-color: rgba(0, 0, 0, 0)\">clear</span> <span style=\"background: #ff0\">shorthand</span> <span style=\"background-color: rgba(0,0,0,0.5)\">half</span>"
+    },
+    "pasted style spans: everything at once": {
+      "input": "<span style=\"font-weight:bold;font-style:italic;text-decoration:underline line-through;background-color:#ff0\">all</span>",
+      "sanitized": "<mark><strong><em><u><s>all</s></u></em></strong></mark>",
+      "fromHtml": [
+        {
+          "text": "all",
+          "marks": {
+            "b": true,
+            "i": true,
+            "u": true,
+            "s": true,
+            "hl": true
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<mark><strong><em><u><s>all</s></u></em></strong></mark>",
+      "markdown": "<mark>***<u>~~all~~</u>***</mark>",
+      "markdownOfInput": "all",
+      "storedFromDom": "<span style=\"font-weight:bold;font-style:italic;text-decoration:underline line-through;background-color:#ff0\">all</span>"
+    },
+    "pasted style spans: nested": {
+      "input": "<span style=\"font-weight:700\">bold <span style=\"font-style:italic\">and italic</span></span> <span>plain span</span> <span style=\"color:red;font-size:30px\">colour only</span>",
+      "sanitized": "<strong>bold <em>and italic</em></strong> plain span colour only",
+      "fromHtml": [
+        {
+          "text": "bold ",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": "and italic",
+          "marks": {
+            "b": true,
+            "i": true
+          }
+        },
+        {
+          "text": " plain span colour only",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "<strong>bold <em>and italic</em></strong> plain span colour only",
+      "markdown": "**bold *and italic*** plain span colour only",
+      "markdownOfInput": "bold and italic plain span colour only",
+      "storedFromDom": "<span style=\"font-weight:700\">bold <span style=\"font-style:italic\">and italic</span></span> <span>plain span</span> <span style=\"color:red;font-size:30px\">colour only</span>"
+    },
+    "b with normal weight": {
+      "input": "<b style=\"font-weight: normal\">normal</b> <b style=\"font-weight:400\">w400</b> <b style=\"font-weight: 500\">w500</b> <b style=\"font-weight: 599\">w599</b> <b style=\"font-weight: 600\">w600</b> <b style=\"font-weight: bolder\">bolder</b> <strong style=\"font-weight: normal\">strong normal</strong> <strong>strong</strong> <b>b</b>",
+      "sanitized": "normal w400 w500 w599 <strong>w600</strong> <strong>bolder</strong> strong normal <strong>strong</strong> <strong>b</strong>",
+      "fromHtml": [
+        {
+          "text": "normal w400 w500 w599 ",
+          "marks": {}
+        },
+        {
+          "text": "w600",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "bolder",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": " strong normal ",
+          "marks": {}
+        },
+        {
+          "text": "strong",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "b",
+          "marks": {
+            "b": true
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "normal w400 w500 w599 <strong>w600</strong> <strong>bolder</strong> strong normal <strong>strong</strong> <strong>b</strong>",
+      "markdown": "normal w400 w500 w599 **w600** **bolder** strong normal **strong** **b**",
+      "markdownOfInput": "**normal** **w400** **w500** **w599** **w600** **bolder** **strong normal** **strong** **b**",
+      "storedFromDom": "<b style=\"font-weight: normal\">normal</b> <b style=\"font-weight:400\">w400</b> <b style=\"font-weight: 500\">w500</b> <b style=\"font-weight: 599\">w599</b> <b style=\"font-weight: 600\">w600</b> <b style=\"font-weight: bolder\">bolder</b> <strong style=\"font-weight: normal\">strong normal</strong> <strong>strong</strong> <b>b</b>"
+    },
+    "google docs paste": {
+      "input": "<meta charset=\"utf-8\"><b style=\"font-weight:normal;\" id=\"docs-internal-guid-1234\"><p dir=\"ltr\" style=\"line-height:1.38\"><span style=\"font-size:11pt;font-weight:700\">Bold</span><span style=\"font-size:11pt\"> and </span><span style=\"font-style:italic\">italic</span></p><br><p dir=\"ltr\"><span>second para</span></p></b>",
+      "sanitized": "<strong>Bold</strong> and <em>italic</em><br><br>second para<br>",
+      "fromHtml": [
+        {
+          "text": "Bold",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": " and ",
+          "marks": {}
+        },
+        {
+          "text": "italic",
+          "marks": {
+            "i": true
+          }
+        },
+        {
+          "text": "\n\nsecond para\n",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "<strong>Bold</strong> and <em>italic</em><br><br>second para<br>",
+      "markdown": "**Bold** and *italic*\n\nsecond para",
+      "markdownOfInput": "**Bold and italic\nsecond para**",
+      "storedFromDom": "<meta charset=\"utf-8\"><b style=\"font-weight:normal;\" id=\"docs-internal-guid-1234\"><p dir=\"ltr\" style=\"line-height:1.38\"><span style=\"font-size:11pt;font-weight:700\">Bold</span><span style=\"font-size:11pt\"> and </span><span style=\"font-style:italic\">italic</span></p><br><p dir=\"ltr\"><span>second para</span></p></b>"
+    },
+    "word paste": {
+      "input": "<p class=\"MsoNormal\">Hello<o:p></o:p></p><!--[if gte mso 9]><xml><w:WordDocument></w:WordDocument></xml><![endif]--><p class=\"MsoNormal\"><span style=\"mso-bidi-font-weight:bold\">x</span></p>",
+      "sanitized": "Hello<br>x<br>",
+      "fromHtml": [
+        {
+          "text": "Hello\nx\n",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "Hello<br>x<br>",
+      "markdown": "Hello\nx",
+      "markdownOfInput": "Hellox",
+      "storedFromDom": "<p class=\"MsoNormal\">Hello<o:p></o:p></p><!--[if gte mso 9]><xml><w:WordDocument></w:WordDocument></xml><![endif]--><p class=\"MsoNormal\"><span style=\"mso-bidi-font-weight:bold\">x</span></p>"
+    },
+    "empty blocks": {
+      "input": "<div>one</div><div><br></div><div>three</div><p></p><p><br></p><p>five</p><div><br><br></div><div> </div>",
+      "sanitized": "one<br><br>three<br><br><br>five<br><br><br><br> <br>",
+      "fromHtml": [
+        {
+          "text": "one\n\nthree\n\n\nfive\n\n\n\n \n",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "one<br><br>three<br><br><br>five<br><br><br><br> <br>",
+      "markdown": "one\n\nthree\n\nfive",
+      "markdownOfInput": "one\nthree\nfive",
+      "storedFromDom": "<div>one</div><div><br></div><div>three</div><p></p><p><br></p><p>five</p><div><br><br></div><div> </div>"
+    },
+    "nested blocks": {
+      "input": "<div><div>inner</div></div><p>a<br>b</p><div>x<p>y</p>z</div>",
+      "sanitized": "inner<br><br>a<br>b<br>xy<br>z<br>",
+      "fromHtml": [
+        {
+          "text": "inner\n\na\nb\nxy\nz\n",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "inner<br><br>a<br>b<br>xy<br>z<br>",
+      "markdown": "inner\n\na\nb\nxy\nz",
+      "markdownOfInput": "innera\nbxyz",
+      "storedFromDom": "<div><div>inner</div></div><p>a<br>b</p><div>x<p>y</p>z</div>"
+    },
+    "formatting tags": {
+      "input": "<strong>s</strong><b>b</b><em>e</em><i>i</i><u>u</u><s>s</s><strike>st</strike><del>d</del><mark>m</mark><sup>sup</sup><code>code</code><ins>ins</ins>",
+      "sanitized": "<strong>s</strong><strong>b</strong><em>e</em><em>i</em><u>u</u><s>s</s><s>st</s><s>d</s><mark>m</mark>supcodeins",
+      "fromHtml": [
+        {
+          "text": "sb",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": "ei",
+          "marks": {
+            "i": true
+          }
+        },
+        {
+          "text": "u",
+          "marks": {
+            "u": true
+          }
+        },
+        {
+          "text": "sstd",
+          "marks": {
+            "s": true
+          }
+        },
+        {
+          "text": "m",
+          "marks": {
+            "hl": true
+          }
+        },
+        {
+          "text": "supcodeins",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "<strong>sb</strong><em>ei</em><u>u</u><s>sstd</s><mark>m</mark>supcodeins",
+      "markdown": "**s****b***e**i*<u>u</u>~~s~~~~st~~~~d~~<mark>m</mark>supcodeins",
+      "markdownOfInput": "**s****b***e**i*<u>u</u>~~s~~~~st~~~~d~~<mark>m</mark>supcodeins",
+      "storedFromDom": "<strong>s</strong><b>b</b><em>e</em><i>i</i><u>u</u><s>s</s><strike>st</strike><del>d</del><mark>m</mark><sup>sup</sup><code>code</code><ins>ins</ins>"
+    },
+    "nested formatting": {
+      "input": "<b><i><u>biu</u></i></b> <em>x <strong>y</strong></em> z <mark><s>ms</s></mark>",
+      "sanitized": "<strong><em><u>biu</u></em></strong> <em>x <strong>y</strong></em> z <mark><s>ms</s></mark>",
+      "fromHtml": [
+        {
+          "text": "biu",
+          "marks": {
+            "b": true,
+            "i": true,
+            "u": true
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "x ",
+          "marks": {
+            "i": true
+          }
+        },
+        {
+          "text": "y",
+          "marks": {
+            "b": true,
+            "i": true
+          }
+        },
+        {
+          "text": " z ",
+          "marks": {}
+        },
+        {
+          "text": "ms",
+          "marks": {
+            "s": true,
+            "hl": true
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<strong><em><u>biu</u></em></strong> <em>x </em><strong><em>y</em></strong> z <mark><s>ms</s></mark>",
+      "markdown": "***<u>biu</u>*** *x **y*** z <mark>~~ms~~</mark>",
+      "markdownOfInput": "***<u>biu</u>*** *x **y*** z <mark>~~ms~~</mark>",
+      "storedFromDom": "<b><i><u>biu</u></i></b> <em>x <strong>y</strong></em> z <mark><s>ms</s></mark>"
+    },
+    "script, style and frames": {
+      "input": "<script>alert(1)</script><style>p{color:red}</style><iframe src=\"https://evil.test\"></iframe><img src=x onerror=\"alert(1)\"><object data=\"x\"></object>ok",
+      "sanitized": "alert(1)p{color:red}ok",
+      "fromHtml": [
+        {
+          "text": "alert(1)p{color:red}ok",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "alert(1)p{color:red}ok",
+      "markdown": "alert(1)p{color:red}ok",
+      "markdownOfInput": "alert(1)p{color:red}ok",
+      "storedFromDom": "<script>alert(1)</script><style>p{color:red}</style><iframe src=\"https://evil.test\"></iframe><img src=x onerror=\"alert(1)\"><object data=\"x\"></object>ok"
+    },
+    "svg and math": {
+      "input": "<svg><a href=\"https://e.x/\">svg link</a><text>t</text></svg><math><mi>x</mi></math>after",
+      "sanitized": "svg linktxafter",
+      "fromHtml": [
+        {
+          "text": "svg linktxafter",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "svg linktxafter",
+      "markdown": "svg linktxafter",
+      "markdownOfInput": "svg linktxafter",
+      "storedFromDom": "<svg><a href=\"https://e.x/\">svg link</a><text>t</text></svg><math><mi>x</mi></math>after"
+    },
+    "template and noscript": {
+      "input": "<template><b>hidden</b></template><noscript><b>ns</b></noscript>end",
+      "sanitized": "<strong>ns</strong>end",
+      "fromHtml": [
+        {
+          "text": "ns",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": "end",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "<strong>ns</strong>end",
+      "markdown": "**ns**end",
+      "markdownOfInput": "**ns**end",
+      "storedFromDom": "<template><b>hidden</b></template><noscript><b>ns</b></noscript>end"
+    },
+    "lists, tables, headings": {
+      "input": "<h1>Title</h1><ul><li>one</li><li>two</li></ul><table><tr><td>a</td><td>b</td></tr></table><blockquote>q</blockquote><pre>pre\n  text</pre>",
+      "sanitized": "Titleonetwoabqpre\n  text",
+      "fromHtml": [
+        {
+          "text": "Titleonetwoabqpre   text",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "Titleonetwoabqpre   text",
+      "markdown": "Titleonetwoabqpre\n  text",
+      "markdownOfInput": "Titleonetwoabqpre\n  text",
+      "storedFromDom": "<h1>Title</h1><ul><li>one</li><li>two</li></ul><table><tr><td>a</td><td>b</td></tr></table><blockquote>q</blockquote><pre>pre\n  text</pre>"
+    },
+    "tag anchor": {
+      "input": "pick up the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Red mug\" contenteditable=\"false\">red mug</span> now",
+      "sanitized": "pick up the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Red mug\" contenteditable=\"false\">red mug</span> now",
+      "fromHtml": [
+        {
+          "text": "pick up the ",
+          "marks": {}
+        },
+        {
+          "text": "red mug",
+          "marks": {
+            "tag": "t:prop:Red mug"
+          }
+        },
+        {
+          "text": " now",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "pick up the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Red mug\" contenteditable=\"false\">red mug</span> now",
+      "markdown": "pick up the red mug now",
+      "markdownOfInput": "pick up the red mug now",
+      "storedFromDom": "pick up the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Red mug\" contenteditable=\"false\">red mug</span> now"
+    },
+    "tag anchor: every category": {
+      "input": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"prop one\" contenteditable=\"false\">prop</span> <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"location one\" contenteditable=\"false\">location</span> <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"cast one\" contenteditable=\"false\">cast</span> <span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"vfx one\" contenteditable=\"false\">vfx</span> <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"sound one\" contenteditable=\"false\">sound</span> <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"gear one\" contenteditable=\"false\">gear</span>",
+      "sanitized": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"prop one\" contenteditable=\"false\">prop</span> <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"location one\" contenteditable=\"false\">location</span> <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"cast one\" contenteditable=\"false\">cast</span> <span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"vfx one\" contenteditable=\"false\">vfx</span> <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"sound one\" contenteditable=\"false\">sound</span> <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"gear one\" contenteditable=\"false\">gear</span>",
+      "fromHtml": [
+        {
+          "text": "prop",
+          "marks": {
+            "tag": "t:prop:prop one"
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "location",
+          "marks": {
+            "tag": "t:location:location one"
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "cast",
+          "marks": {
+            "tag": "t:cast:cast one"
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "vfx",
+          "marks": {
+            "tag": "t:vfx:vfx one"
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "sound",
+          "marks": {
+            "tag": "t:sound:sound one"
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "gear",
+          "marks": {
+            "tag": "t:gear:gear one"
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"prop one\" contenteditable=\"false\">prop</span> <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"location one\" contenteditable=\"false\">location</span> <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"cast one\" contenteditable=\"false\">cast</span> <span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"vfx one\" contenteditable=\"false\">vfx</span> <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"sound one\" contenteditable=\"false\">sound</span> <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"gear one\" contenteditable=\"false\">gear</span>",
+      "markdown": "prop location cast vfx sound gear",
+      "markdownOfInput": "prop location cast vfx sound gear",
+      "storedFromDom": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"prop one\" contenteditable=\"false\">prop</span> <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"location one\" contenteditable=\"false\">location</span> <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"cast one\" contenteditable=\"false\">cast</span> <span class=\"tag-anchor\" data-tag-cat=\"vfx\" data-tag-name=\"vfx one\" contenteditable=\"false\">vfx</span> <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"sound one\" contenteditable=\"false\">sound</span> <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"gear one\" contenteditable=\"false\">gear</span>"
+    },
+    "tag anchor: invalid category": {
+      "input": "<span class=\"tag-anchor\" data-tag-cat=\"weapon\" data-tag-name=\"Sword\" contenteditable=\"false\">sword</span> <span class=\"tag-anchor\" data-tag-cat=\"Prop\" data-tag-name=\"Mug\" contenteditable=\"false\">mug</span> <span class=\"tag-anchor\" data-tag-cat=\"\" data-tag-name=\"Empty\" contenteditable=\"false\">empty</span> <span class=\"tag-anchor\" data-tag-name=\"No cat\">no cat</span>",
+      "sanitized": "sword mug empty no cat",
+      "fromHtml": [
+        {
+          "text": "sword mug empty no cat",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "sword mug empty no cat",
+      "markdown": "sword mug empty no cat",
+      "markdownOfInput": "sword mug empty no cat",
+      "storedFromDom": "<span class=\"tag-anchor\" data-tag-cat=\"weapon\" data-tag-name=\"Sword\" contenteditable=\"false\">sword</span> <span class=\"tag-anchor\" data-tag-cat=\"Prop\" data-tag-name=\"Mug\" contenteditable=\"false\">mug</span> <span class=\"tag-anchor\" data-tag-cat=\"\" data-tag-name=\"Empty\" contenteditable=\"false\">empty</span> <span class=\"tag-anchor\" data-tag-name=\"No cat\">no cat</span>"
+    },
+    "tag anchor: missing or blank name": {
+      "input": "<span class=\"tag-anchor\" data-tag-cat=\"prop\">no name</span> <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"   \" contenteditable=\"false\">blank</span> <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"&lt;b&gt;&lt;/b&gt;\" contenteditable=\"false\">markup only</span>",
+      "sanitized": "no name blank markup only",
+      "fromHtml": [
+        {
+          "text": "no name blank markup only",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "no name blank markup only",
+      "markdown": "no name blank markup only",
+      "markdownOfInput": "no name blank markup only",
+      "storedFromDom": "<span class=\"tag-anchor\" data-tag-cat=\"prop\">no name</span> <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"   \" contenteditable=\"false\">blank</span> <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"&lt;b&gt;&lt;/b&gt;\" contenteditable=\"false\">markup only</span>"
+    },
+    "tag anchor: dirty name": {
+      "input": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"&lt;b&gt;Big&lt;/b&gt; lamp &quot;x&quot; &amp; y\" contenteditable=\"false\">lamp</span> <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"  LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL  \" contenteditable=\"false\">long</span>",
+      "sanitized": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Big lamp &quot;x&quot; &amp; y\" contenteditable=\"false\">lamp</span> <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL\" contenteditable=\"false\">long</span>",
+      "fromHtml": [
+        {
+          "text": "lamp",
+          "marks": {
+            "tag": "t:prop:Big lamp \"x\" & y"
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "long",
+          "marks": {
+            "tag": "t:location:LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL"
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Big lamp &quot;x&quot; &amp; y\" contenteditable=\"false\">lamp</span> <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL\" contenteditable=\"false\">long</span>",
+      "markdown": "lamp long",
+      "markdownOfInput": "lamp long",
+      "storedFromDom": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"&lt;b&gt;Big&lt;/b&gt; lamp &quot;x&quot; &amp; y\" contenteditable=\"false\">lamp</span> <span class=\"tag-anchor\" data-tag-cat=\"location\" data-tag-name=\"  LLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLLL  \" contenteditable=\"false\">long</span>"
+    },
+    "tag anchor: runs merged across marks": {
+      "input": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Red mug\" contenteditable=\"false\">red <strong>mug</strong> <span class=\"cmt-anchor\" data-cmt=\"c7\">handle</span></span> <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"Tripod\" contenteditable=\"false\"><a href=\"https://e.x/t\">tri</a>pod</span> <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Ann\" contenteditable=\"false\"><span class=\"stage-dir\">Ann</span> waves</span>",
+      "sanitized": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Red mug\" contenteditable=\"false\">red <strong>mug</strong> <span class=\"cmt-anchor\" data-cmt=\"c7\">handle</span></span> <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"Tripod\" contenteditable=\"false\"><a href=\"https://e.x/t\" target=\"_blank\" rel=\"noopener\">tri</a>pod</span> <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Ann\" contenteditable=\"false\"><span class=\"stage-dir\">Ann</span> waves</span>",
+      "fromHtml": [
+        {
+          "text": "red ",
+          "marks": {
+            "tag": "t:prop:Red mug",
+            "cmt": [
+              "c7"
+            ]
+          }
+        },
+        {
+          "text": "mug",
+          "marks": {
+            "b": true,
+            "tag": "t:prop:Red mug",
+            "cmt": [
+              "c7"
+            ]
+          }
+        },
+        {
+          "text": " handle",
+          "marks": {
+            "tag": "t:prop:Red mug",
+            "cmt": [
+              "c7"
+            ]
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "tripod",
+          "marks": {
+            "href": "https://e.x/t",
+            "tag": "t:gear:Tripod"
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "Ann waves",
+          "marks": {
+            "dir": true,
+            "tag": "t:cast:Ann"
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"cmt-anchor\" data-cmt=\"c7\"><span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Red mug\" contenteditable=\"false\">red <strong>mug</strong> handle</span></span> <a href=\"https://e.x/t\" target=\"_blank\" rel=\"noopener\"><span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"Tripod\" contenteditable=\"false\">tripod</span></a> <span class=\"stage-dir\"><span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Ann\" contenteditable=\"false\">Ann waves</span></span>",
+      "markdown": "red **mug** handle [tri](https://e.x/t)pod ((Ann)) waves",
+      "markdownOfInput": "red **mug** handle [tri](https://e.x/t)pod ((Ann)) waves",
+      "storedFromDom": "<span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Red mug\" contenteditable=\"false\">red <strong>mug</strong> <span class=\"cmt-anchor\" data-cmt=\"c7\">handle</span></span> <span class=\"tag-anchor\" data-tag-cat=\"gear\" data-tag-name=\"Tripod\" contenteditable=\"false\"><a href=\"https://e.x/t\">tri</a>pod</span> <span class=\"tag-anchor\" data-tag-cat=\"cast\" data-tag-name=\"Ann\" contenteditable=\"false\"><span class=\"stage-dir\">Ann</span> waves</span>"
+    },
+    "b-roll key": {
+      "input": "<span class=\"broll-key\" data-broll-id=\"bs_1\" contenteditable=\"false\">B-roll:</span> drone shot<br>next",
+      "sanitized": "<span class=\"broll-key\" data-broll-id=\"bs_1\" contenteditable=\"false\">B-roll:</span> drone shot<br>next",
+      "fromHtml": [
+        {
+          "atom": "broll",
+          "id": "bs_1",
+          "text": "B-roll:",
+          "marks": {}
+        },
+        {
+          "text": " drone shot\nnext",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"broll-key\" data-broll-id=\"bs_1\" contenteditable=\"false\">B-roll:</span> drone shot<br>next",
+      "markdown": "B-roll: drone shot\nnext",
+      "markdownOfInput": "B-roll: drone shot\nnext",
+      "storedFromDom": "<span class=\"broll-key\" data-broll-id=\"bs_1\" contenteditable=\"false\">B-roll:</span> drone shot<br>next"
+    },
+    "b-roll key: marker variants": {
+      "input": "<span class=\"broll-key\" data-broll-id=\"k1\">b roll -</span> a <span class=\"broll-key\" data-broll-id=\"k2\">B-Roll —</span> b <span class=\"broll-key\" data-broll-id=\"k3\">broll–</span> c <span class=\"broll-key\" data-broll-id=\"k4\">  B-roll :  </span> d <span class=\"broll-key\" data-broll-id=\"k5\">B-roll: and words</span> e",
+      "sanitized": "<span class=\"broll-key\" data-broll-id=\"k1\" contenteditable=\"false\">b roll -</span> a <span class=\"broll-key\" data-broll-id=\"k2\" contenteditable=\"false\">B-Roll —</span> b <span class=\"broll-key\" data-broll-id=\"k3\" contenteditable=\"false\">broll–</span> c <span class=\"broll-key\" data-broll-id=\"k4\" contenteditable=\"false\">B-roll :</span> d <span class=\"broll-key\" data-broll-id=\"k5\" contenteditable=\"false\">B-roll: and words</span> e",
+      "fromHtml": [
+        {
+          "atom": "broll",
+          "id": "k1",
+          "text": "b roll -",
+          "marks": {}
+        },
+        {
+          "text": " a ",
+          "marks": {}
+        },
+        {
+          "atom": "broll",
+          "id": "k2",
+          "text": "B-Roll —",
+          "marks": {}
+        },
+        {
+          "text": " b ",
+          "marks": {}
+        },
+        {
+          "atom": "broll",
+          "id": "k3",
+          "text": "broll–",
+          "marks": {}
+        },
+        {
+          "text": " c ",
+          "marks": {}
+        },
+        {
+          "atom": "broll",
+          "id": "k4",
+          "text": "B-roll :",
+          "marks": {}
+        },
+        {
+          "text": " d ",
+          "marks": {}
+        },
+        {
+          "atom": "broll",
+          "id": "k5",
+          "text": "B-roll: and words",
+          "marks": {}
+        },
+        {
+          "text": " e",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"broll-key\" data-broll-id=\"k1\" contenteditable=\"false\">b roll -</span> a <span class=\"broll-key\" data-broll-id=\"k2\" contenteditable=\"false\">B-Roll —</span> b <span class=\"broll-key\" data-broll-id=\"k3\" contenteditable=\"false\">broll–</span> c <span class=\"broll-key\" data-broll-id=\"k4\" contenteditable=\"false\">B-roll :</span> d <span class=\"broll-key\" data-broll-id=\"k5\" contenteditable=\"false\">B-roll: and words</span> e",
+      "markdown": "b roll - a B-Roll — b broll– c B-roll : d B-roll: and words e",
+      "markdownOfInput": "b roll - a B-Roll — b broll– c   B-roll :   d B-roll: and words e",
+      "storedFromDom": "<span class=\"broll-key\" data-broll-id=\"k1\">b roll -</span> a <span class=\"broll-key\" data-broll-id=\"k2\">B-Roll —</span> b <span class=\"broll-key\" data-broll-id=\"k3\">broll–</span> c <span class=\"broll-key\" data-broll-id=\"k4\">  B-roll :  </span> d <span class=\"broll-key\" data-broll-id=\"k5\">B-roll: and words</span> e"
+    },
+    "b-roll key: bad marker": {
+      "input": "<span class=\"broll-key\" data-broll-id=\"bs2\">Not a marker</span> <span class=\"broll-key\">Rollb:</span> <span class=\"broll-key\" data-broll-id=\"bs3\"></span>end",
+      "sanitized": "Not a marker Rollb: end",
+      "fromHtml": [
+        {
+          "text": "Not a marker Rollb: end",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "Not a marker Rollb: end",
+      "markdown": "Not a marker Rollb: end",
+      "markdownOfInput": "Not a marker Rollb: end",
+      "storedFromDom": "<span class=\"broll-key\" data-broll-id=\"bs2\">Not a marker</span> <span class=\"broll-key\">Rollb:</span> <span class=\"broll-key\" data-broll-id=\"bs3\"></span>end"
+    },
+    "b-roll key: no id": {
+      "input": "<span class=\"broll-key\">B-roll:</span> one <span class=\"broll-key\" data-broll-id=\"\">B-roll:</span> two",
+      "sanitized": "<span class=\"broll-key\" data-broll-id=\"{minted:bs:1}\" contenteditable=\"false\">B-roll:</span> one <span class=\"broll-key\" data-broll-id=\"{minted:bs:2}\" contenteditable=\"false\">B-roll:</span> two",
+      "fromHtml": [
+        {
+          "atom": "broll",
+          "id": "{minted:bs:3}",
+          "text": "B-roll:",
+          "marks": {}
+        },
+        {
+          "text": " one ",
+          "marks": {}
+        },
+        {
+          "atom": "broll",
+          "id": "{minted:bs:4}",
+          "text": "B-roll:",
+          "marks": {}
+        },
+        {
+          "text": " two",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"broll-key\" data-broll-id=\"{minted:bs:3}\" contenteditable=\"false\">B-roll:</span> one <span class=\"broll-key\" data-broll-id=\"{minted:bs:4}\" contenteditable=\"false\">B-roll:</span> two",
+      "markdown": "B-roll: one B-roll: two",
+      "markdownOfInput": "B-roll: one B-roll: two",
+      "storedFromDom": "<span class=\"broll-key\">B-roll:</span> one <span class=\"broll-key\" data-broll-id=\"\">B-roll:</span> two"
+    },
+    "b-roll key: dirty id": {
+      "input": "<span class=\"broll-key\" data-broll-id=\"bs 9!&lt;x&gt;\">B-roll:</span> x <span class=\"broll-key\" data-broll-id=\"!!!\">B-roll:</span> y",
+      "sanitized": "<span class=\"broll-key\" data-broll-id=\"bs9x\" contenteditable=\"false\">B-roll:</span> x <span class=\"broll-key\" data-broll-id=\"{minted:bs:1}\" contenteditable=\"false\">B-roll:</span> y",
+      "fromHtml": [
+        {
+          "atom": "broll",
+          "id": "bs9x",
+          "text": "B-roll:",
+          "marks": {}
+        },
+        {
+          "text": " x ",
+          "marks": {}
+        },
+        {
+          "atom": "broll",
+          "id": "{minted:bs:2}",
+          "text": "B-roll:",
+          "marks": {}
+        },
+        {
+          "text": " y",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"broll-key\" data-broll-id=\"bs9x\" contenteditable=\"false\">B-roll:</span> x <span class=\"broll-key\" data-broll-id=\"{minted:bs:2}\" contenteditable=\"false\">B-roll:</span> y",
+      "markdown": "B-roll: x B-roll: y",
+      "markdownOfInput": "B-roll: x B-roll: y",
+      "storedFromDom": "<span class=\"broll-key\" data-broll-id=\"bs 9!&lt;x&gt;\">B-roll:</span> x <span class=\"broll-key\" data-broll-id=\"!!!\">B-roll:</span> y"
+    },
+    "b-roll key: markup inside": {
+      "input": "<span class=\"broll-key\" data-broll-id=\"bs4\"><b>B-roll</b>: </span>city <strong><span class=\"broll-key\" data-broll-id=\"bs5\">B-roll:</span></strong> bold",
+      "sanitized": "<span class=\"broll-key\" data-broll-id=\"bs4\" contenteditable=\"false\">B-roll:</span>city <strong><span class=\"broll-key\" data-broll-id=\"bs5\" contenteditable=\"false\">B-roll:</span></strong> bold",
+      "fromHtml": [
+        {
+          "atom": "broll",
+          "id": "bs4",
+          "text": "B-roll:",
+          "marks": {}
+        },
+        {
+          "text": "city ",
+          "marks": {}
+        },
+        {
+          "atom": "broll",
+          "id": "bs5",
+          "text": "B-roll:",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": " bold",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"broll-key\" data-broll-id=\"bs4\" contenteditable=\"false\">B-roll:</span>city <strong><span class=\"broll-key\" data-broll-id=\"bs5\" contenteditable=\"false\">B-roll:</span></strong> bold",
+      "markdown": "B-roll:city **B-roll:** bold",
+      "markdownOfInput": "**B-roll**: city **B-roll:** bold",
+      "storedFromDom": "<span class=\"broll-key\" data-broll-id=\"bs4\"><b>B-roll</b>: </span>city <strong><span class=\"broll-key\" data-broll-id=\"bs5\">B-roll:</span></strong> bold"
+    },
+    "b-roll key inside a comment, a link and a cue line": {
+      "input": "<span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"broll-key\" data-broll-id=\"k1\">B-roll:</span> x</span> <a href=\"https://e.x/\"><strong><span class=\"broll-key\" data-broll-id=\"k2\">B-roll:</span></strong> y</a><br><span class=\"audio-cue\">SFX: <span class=\"broll-key\" data-broll-id=\"k3\">B-roll:</span> z</span>",
+      "sanitized": "<span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"broll-key\" data-broll-id=\"k1\" contenteditable=\"false\">B-roll:</span> x</span> <a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\"><strong><span class=\"broll-key\" data-broll-id=\"k2\" contenteditable=\"false\">B-roll:</span></strong> y</a><br><span class=\"audio-cue\">SFX: <span class=\"broll-key\" data-broll-id=\"k3\" contenteditable=\"false\">B-roll:</span> z</span>",
+      "fromHtml": [
+        {
+          "atom": "broll",
+          "id": "k1",
+          "text": "B-roll:",
+          "marks": {
+            "cmt": [
+              "c1"
+            ]
+          }
+        },
+        {
+          "text": " x",
+          "marks": {
+            "cmt": [
+              "c1"
+            ]
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "atom": "broll",
+          "id": "k2",
+          "text": "B-roll:",
+          "marks": {
+            "b": true,
+            "href": "https://e.x/"
+          }
+        },
+        {
+          "text": " y",
+          "marks": {
+            "href": "https://e.x/"
+          }
+        },
+        {
+          "text": "\n",
+          "marks": {}
+        },
+        {
+          "text": "SFX: ",
+          "marks": {
+            "cue": true
+          }
+        },
+        {
+          "atom": "broll",
+          "id": "k3",
+          "text": "B-roll:",
+          "marks": {}
+        },
+        {
+          "text": " z",
+          "marks": {
+            "cue": true
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"broll-key\" data-broll-id=\"k1\" contenteditable=\"false\">B-roll:</span> x</span> <a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\"><strong><span class=\"broll-key\" data-broll-id=\"k2\" contenteditable=\"false\">B-roll:</span></strong> y</a><br><span class=\"audio-cue\">SFX: </span><span class=\"broll-key\" data-broll-id=\"k3\" contenteditable=\"false\">B-roll:</span><span class=\"audio-cue\"> z</span>",
+      "markdown": "B-roll: x [**B-roll:** y](https://e.x/)\nSFX: B-roll: z",
+      "markdownOfInput": "B-roll: x [**B-roll:** y](https://e.x/)\nSFX: B-roll: z",
+      "storedFromDom": "<span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"broll-key\" data-broll-id=\"k1\">B-roll:</span> x</span> <a href=\"https://e.x/\"><strong><span class=\"broll-key\" data-broll-id=\"k2\">B-roll:</span></strong> y</a><br><span class=\"audio-cue\">SFX: <span class=\"broll-key\" data-broll-id=\"k3\">B-roll:</span> z</span>"
+    },
+    "one span, two special classes": {
+      "input": "<span class=\"cmt-anchor tag-anchor\" data-cmt=\"c1\" data-tag-cat=\"prop\" data-tag-name=\"Mug\">mug</span> <span class=\"stage-dir audio-cue\">both</span> <span class=\"broll-key cmt-anchor\" data-cmt=\"c2\" data-broll-id=\"k1\">B-roll:</span> <a class=\"video-embed-card other\" href=\"https://e.x/v\">card</a>",
+      "sanitized": "<span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Mug\" contenteditable=\"false\">mug</span></span> <span class=\"stage-dir\">both</span> <span class=\"cmt-anchor\" data-cmt=\"c2\"><span class=\"broll-key\" data-broll-id=\"k1\" contenteditable=\"false\">B-roll:</span></span> <a class=\"video-embed-card\" href=\"https://e.x/v\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· e.x</span></a>",
+      "fromHtml": [
+        {
+          "text": "mug",
+          "marks": {
+            "tag": "t:prop:Mug",
+            "cmt": [
+              "c1"
+            ]
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "both",
+          "marks": {
+            "dir": true
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "atom": "broll",
+          "id": "k1",
+          "text": "B-roll:",
+          "marks": {
+            "cmt": [
+              "c2"
+            ]
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        }
+      ],
+      "media": [
+        {
+          "kind": "video",
+          "href": "https://e.x/v"
+        }
+      ],
+      "toHtml": "<span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Mug\" contenteditable=\"false\">mug</span></span> <span class=\"stage-dir\">both</span> <span class=\"cmt-anchor\" data-cmt=\"c2\"><span class=\"broll-key\" data-broll-id=\"k1\" contenteditable=\"false\">B-roll:</span></span> ",
+      "markdown": "mug ((both)) B-roll: [▶Watch video· e.x](https://e.x/v)",
+      "markdownOfInput": "mug ((both)) B-roll: [card](https://e.x/v)",
+      "storedFromDom": "<span class=\"cmt-anchor tag-anchor\" data-cmt=\"c1\" data-tag-cat=\"prop\" data-tag-name=\"Mug\">mug</span> <span class=\"stage-dir audio-cue\">both</span> <span class=\"broll-key cmt-anchor\" data-cmt=\"c2\" data-broll-id=\"k1\">B-roll:</span> <a class=\"video-embed-card other\" href=\"https://e.x/v\">card</a>"
+    },
+    "comment anchor": {
+      "input": "before <span class=\"cmt-anchor\" data-cmt=\"c1\">quoted</span> after",
+      "sanitized": "before <span class=\"cmt-anchor\" data-cmt=\"c1\">quoted</span> after",
+      "fromHtml": [
+        {
+          "text": "before ",
+          "marks": {}
+        },
+        {
+          "text": "quoted",
+          "marks": {
+            "cmt": [
+              "c1"
+            ]
+          }
+        },
+        {
+          "text": " after",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "before <span class=\"cmt-anchor\" data-cmt=\"c1\">quoted</span> after",
+      "markdown": "before quoted after",
+      "markdownOfInput": "before quoted after",
+      "storedFromDom": "before <span class=\"cmt-anchor\" data-cmt=\"c1\">quoted</span> after"
+    },
+    "comment anchor: no id": {
+      "input": "<span class=\"cmt-anchor\">no id</span> and <span class=\"cmt-anchor\" data-cmt=\"\">empty id</span>",
+      "sanitized": "<span class=\"cmt-anchor\" data-cmt=\"{minted:c:1}\">no id</span> and <span class=\"cmt-anchor\" data-cmt=\"{minted:c:2}\">empty id</span>",
+      "fromHtml": [
+        {
+          "text": "no id",
+          "marks": {
+            "cmt": [
+              "{minted:c:3}"
+            ]
+          }
+        },
+        {
+          "text": " and ",
+          "marks": {}
+        },
+        {
+          "text": "empty id",
+          "marks": {
+            "cmt": [
+              "{minted:c:4}"
+            ]
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"cmt-anchor\" data-cmt=\"{minted:c:3}\">no id</span> and <span class=\"cmt-anchor\" data-cmt=\"{minted:c:4}\">empty id</span>",
+      "markdown": "no id and empty id",
+      "markdownOfInput": "no id and empty id",
+      "storedFromDom": "<span class=\"cmt-anchor\">no id</span> and <span class=\"cmt-anchor\" data-cmt=\"\">empty id</span>"
+    },
+    "comment anchor: dirty and prototype ids": {
+      "input": "<span class=\"cmt-anchor\" data-cmt=\"c 1&lt;&gt;\">dirty</span> <span class=\"cmt-anchor\" data-cmt=\"__proto__\">proto</span> <span class=\"cmt-anchor\" data-cmt=\"constructor\">ctor</span>",
+      "sanitized": "<span class=\"cmt-anchor\" data-cmt=\"c1\">dirty</span> <span class=\"cmt-anchor\" data-cmt=\"__proto__\">proto</span> <span class=\"cmt-anchor\" data-cmt=\"constructor\">ctor</span>",
+      "fromHtml": [
+        {
+          "text": "dirty",
+          "marks": {
+            "cmt": [
+              "c1"
+            ]
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "proto",
+          "marks": {
+            "cmt": [
+              "__proto__"
+            ]
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "ctor",
+          "marks": {
+            "cmt": [
+              "constructor"
+            ]
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"cmt-anchor\" data-cmt=\"c1\">dirty</span> <span class=\"cmt-anchor\" data-cmt=\"__proto__\">proto</span> <span class=\"cmt-anchor\" data-cmt=\"constructor\">ctor</span>",
+      "markdown": "dirty proto ctor",
+      "markdownOfInput": "dirty proto ctor",
+      "storedFromDom": "<span class=\"cmt-anchor\" data-cmt=\"c 1&lt;&gt;\">dirty</span> <span class=\"cmt-anchor\" data-cmt=\"__proto__\">proto</span> <span class=\"cmt-anchor\" data-cmt=\"constructor\">ctor</span>"
+    },
+    "comment anchor: nested and overlapping": {
+      "input": "<span class=\"cmt-anchor\" data-cmt=\"c2\">outer <span class=\"cmt-anchor\" data-cmt=\"c1\">inner</span> tail</span> <span class=\"cmt-anchor\" data-cmt=\"c3\"><span class=\"cmt-anchor\" data-cmt=\"c3\">same twice</span></span>",
+      "sanitized": "<span class=\"cmt-anchor\" data-cmt=\"c2\">outer <span class=\"cmt-anchor\" data-cmt=\"c1\">inner</span> tail</span> <span class=\"cmt-anchor\" data-cmt=\"c3\"><span class=\"cmt-anchor\" data-cmt=\"c3\">same twice</span></span>",
+      "fromHtml": [
+        {
+          "text": "outer ",
+          "marks": {
+            "cmt": [
+              "c2"
+            ]
+          }
+        },
+        {
+          "text": "inner",
+          "marks": {
+            "cmt": [
+              "c1",
+              "c2"
+            ]
+          }
+        },
+        {
+          "text": " tail",
+          "marks": {
+            "cmt": [
+              "c2"
+            ]
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "same twice",
+          "marks": {
+            "cmt": [
+              "c3"
+            ]
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"cmt-anchor\" data-cmt=\"c2\">outer </span><span class=\"cmt-anchor\" data-cmt=\"c1\"><span class=\"cmt-anchor\" data-cmt=\"c2\">inner</span></span><span class=\"cmt-anchor\" data-cmt=\"c2\"> tail</span> <span class=\"cmt-anchor\" data-cmt=\"c3\">same twice</span>",
+      "markdown": "outer inner tail same twice",
+      "markdownOfInput": "outer inner tail same twice",
+      "storedFromDom": "<span class=\"cmt-anchor\" data-cmt=\"c2\">outer <span class=\"cmt-anchor\" data-cmt=\"c1\">inner</span> tail</span> <span class=\"cmt-anchor\" data-cmt=\"c3\"><span class=\"cmt-anchor\" data-cmt=\"c3\">same twice</span></span>"
+    },
+    "stage direction": {
+      "input": "Hello <span class=\"stage-dir\">beat</span> world <span class=\"stage-dir\"><em>softly</em></span>.",
+      "sanitized": "Hello <span class=\"stage-dir\">beat</span> world <span class=\"stage-dir\"><em>softly</em></span>.",
+      "fromHtml": [
+        {
+          "text": "Hello ",
+          "marks": {}
+        },
+        {
+          "text": "beat",
+          "marks": {
+            "dir": true
+          }
+        },
+        {
+          "text": " world ",
+          "marks": {}
+        },
+        {
+          "text": "softly",
+          "marks": {
+            "i": true,
+            "dir": true
+          }
+        },
+        {
+          "text": ".",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "Hello <span class=\"stage-dir\">beat</span> world <span class=\"stage-dir\"><em>softly</em></span>.",
+      "markdown": "Hello ((beat)) world ((*softly*)).",
+      "markdownOfInput": "Hello ((beat)) world ((*softly*)).",
+      "storedFromDom": "Hello <span class=\"stage-dir\">beat</span> world <span class=\"stage-dir\"><em>softly</em></span>."
+    },
+    "audio cue": {
+      "input": "<span class=\"audio-cue\">SFX: thunder</span><br>next line<br><span class=\"audio-cue\">Music : theme</span>",
+      "sanitized": "<span class=\"audio-cue\">SFX: thunder</span><br>next line<br><span class=\"audio-cue\">Music : theme</span>",
+      "fromHtml": [
+        {
+          "text": "SFX: thunder",
+          "marks": {
+            "cue": true
+          }
+        },
+        {
+          "text": "\nnext line\n",
+          "marks": {}
+        },
+        {
+          "text": "Music : theme",
+          "marks": {
+            "cue": true
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"audio-cue\">SFX: thunder</span><br>next line<br><span class=\"audio-cue\">Music : theme</span>",
+      "markdown": "SFX: thunder\nnext line\nMusic : theme",
+      "markdownOfInput": "SFX: thunder\nnext line\nMusic : theme",
+      "storedFromDom": "<span class=\"audio-cue\">SFX: thunder</span><br>next line<br><span class=\"audio-cue\">Music : theme</span>"
+    },
+    "audio cue: not a cue line": {
+      "input": "<span class=\"audio-cue\">not a cue</span> and <span class=\"audio-cue\">sfx</span>: late<br>x <span class=\"audio-cue\">SFX: mid-line</span>",
+      "sanitized": "<span class=\"audio-cue\">not a cue</span> and <span class=\"audio-cue\">sfx</span>: late<br>x <span class=\"audio-cue\">SFX: mid-line</span>",
+      "fromHtml": [
+        {
+          "text": "not a cue and sfx: late\nx SFX: mid-line",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "not a cue and sfx: late<br>x SFX: mid-line",
+      "markdown": "not a cue and sfx: late\nx SFX: mid-line",
+      "markdownOfInput": "not a cue and sfx: late\nx SFX: mid-line",
+      "storedFromDom": "<span class=\"audio-cue\">not a cue</span> and <span class=\"audio-cue\">sfx</span>: late<br>x <span class=\"audio-cue\">SFX: mid-line</span>"
+    },
+    "audio cue: spreads across its line": {
+      "input": "<span class=\"audio-cue\">SFX:</span> thunder <em>rolls</em><br>Music: <span class=\"audio-cue\">theme</span>",
+      "sanitized": "<span class=\"audio-cue\">SFX:</span> thunder <em>rolls</em><br>Music: <span class=\"audio-cue\">theme</span>",
+      "fromHtml": [
+        {
+          "text": "SFX: thunder ",
+          "marks": {
+            "cue": true
+          }
+        },
+        {
+          "text": "rolls",
+          "marks": {
+            "i": true,
+            "cue": true
+          }
+        },
+        {
+          "text": "\n",
+          "marks": {}
+        },
+        {
+          "text": "Music: theme",
+          "marks": {
+            "cue": true
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"audio-cue\">SFX: thunder <em>rolls</em></span><br><span class=\"audio-cue\">Music: theme</span>",
+      "markdown": "SFX: thunder *rolls*\nMusic: theme",
+      "markdownOfInput": "SFX: thunder *rolls*\nMusic: theme",
+      "storedFromDom": "<span class=\"audio-cue\">SFX:</span> thunder <em>rolls</em><br>Music: <span class=\"audio-cue\">theme</span>"
+    },
+    "audio cue: with a tag": {
+      "input": "<span class=\"audio-cue\">Music: <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"Theme\" contenteditable=\"false\">Theme</span></span>",
+      "sanitized": "<span class=\"audio-cue\">Music: <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"Theme\" contenteditable=\"false\">Theme</span></span>",
+      "fromHtml": [
+        {
+          "text": "Music: ",
+          "marks": {
+            "cue": true
+          }
+        },
+        {
+          "text": "Theme",
+          "marks": {
+            "cue": true,
+            "tag": "t:sound:Theme"
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<span class=\"audio-cue\">Music: <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"Theme\" contenteditable=\"false\">Theme</span></span>",
+      "markdown": "Music: Theme",
+      "markdownOfInput": "Music: Theme",
+      "storedFromDom": "<span class=\"audio-cue\">Music: <span class=\"tag-anchor\" data-tag-cat=\"sound\" data-tag-name=\"Theme\" contenteditable=\"false\">Theme</span></span>"
+    },
+    "image: png": {
+      "input": "a <img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEcAAAANCAYAAAAAAAAAAAAAAElFTkQ=\" alt=\"x\" onerror=\"y\" width=\"9\"> b",
+      "sanitized": "a <img class=\"comment-img\" data-blob=\"5414dbea89888a4a76d0e250a3c5cfe982e629108158e425201e35c6bd8afcb0\" data-w=\"71\" data-h=\"13\" data-mime=\"image/png\"> b",
+      "fromHtml": [
+        {
+          "text": "a  b",
+          "marks": {}
+        }
+      ],
+      "media": [
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "5414dbea89888a4a76d0e250a3c5cfe982e629108158e425201e35c6bd8afcb0",
+            "width": 71,
+            "height": 13,
+            "mime": "image/png"
+          }
+        }
+      ],
+      "toHtml": "a  b",
+      "markdown": "a  b",
+      "markdownOfInput": "a  b",
+      "storedFromDom": "a <img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEcAAAANCAYAAAAAAAAAAAAAAElFTkQ=\" alt=\"x\" onerror=\"y\" width=\"9\"> b"
+    },
+    "image: jpeg": {
+      "input": "<img src=\"data:image/jpeg;base64,/9j/wAARCAAHAAkDASIAAhEBAxEB/9k=\">",
+      "sanitized": "<img class=\"comment-img\" data-blob=\"9a0fd7cbc8669dfedd9093716715532b325122ba075a12b4dc082f3d8ec79f7d\" data-w=\"9\" data-h=\"7\" data-mime=\"image/jpeg\">",
+      "fromHtml": [],
+      "media": [
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "9a0fd7cbc8669dfedd9093716715532b325122ba075a12b4dc082f3d8ec79f7d",
+            "width": 9,
+            "height": 7,
+            "mime": "image/jpeg"
+          }
+        }
+      ],
+      "toHtml": "",
+      "markdown": "",
+      "markdownOfInput": "",
+      "storedFromDom": "<img src=\"data:image/jpeg;base64,/9j/wAARCAAHAAkDASIAAhEBAxEB/9k=\">"
+    },
+    "image: jpg label": {
+      "input": "<img src=\"data:image/jpg;base64,/9j/wAARCAAIAAoDASIAAhEBAxEB/9k=\">",
+      "sanitized": "<img class=\"comment-img\" data-blob=\"1b2785cb018ee0bb5bba01e7f1b83c180c385b4dab68def065e395302de7cde9\" data-w=\"10\" data-h=\"8\" data-mime=\"image/jpeg\">",
+      "fromHtml": [],
+      "media": [
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "1b2785cb018ee0bb5bba01e7f1b83c180c385b4dab68def065e395302de7cde9",
+            "width": 10,
+            "height": 8,
+            "mime": "image/jpeg"
+          }
+        }
+      ],
+      "toHtml": "",
+      "markdown": "",
+      "markdownOfInput": "",
+      "storedFromDom": "<img src=\"data:image/jpg;base64,/9j/wAARCAAIAAoDASIAAhEBAxEB/9k=\">"
+    },
+    "image: gif": {
+      "input": "<img src=\"data:image/gif;base64,R0lGODlhAwACAAAAADs=\">",
+      "sanitized": "<img class=\"comment-img\" data-blob=\"b8fb65a2d0cc28345f187165e68eda5f05d7372be287aa021c86c6fcf4b646d4\" data-w=\"3\" data-h=\"2\" data-mime=\"image/gif\">",
+      "fromHtml": [],
+      "media": [
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "b8fb65a2d0cc28345f187165e68eda5f05d7372be287aa021c86c6fcf4b646d4",
+            "width": 3,
+            "height": 2,
+            "mime": "image/gif"
+          }
+        }
+      ],
+      "toHtml": "",
+      "markdown": "",
+      "markdownOfInput": "",
+      "storedFromDom": "<img src=\"data:image/gif;base64,R0lGODlhAwACAAAAADs=\">"
+    },
+    "image: webp": {
+      "input": "<img src=\"data:image/webp;base64,UklGRhEAAABXRUJQVlA4TAUAAAAvK8ExAA==\">",
+      "sanitized": "<img class=\"comment-img\" data-blob=\"e2f4394dc9b22ae0acea48b26db96c4603b24e4ba49df65a060c59f42bb38b32\" data-w=\"300\" data-h=\"200\" data-mime=\"image/webp\">",
+      "fromHtml": [],
+      "media": [
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "e2f4394dc9b22ae0acea48b26db96c4603b24e4ba49df65a060c59f42bb38b32",
+            "width": 300,
+            "height": 200,
+            "mime": "image/webp"
+          }
+        }
+      ],
+      "toHtml": "",
+      "markdown": "",
+      "markdownOfInput": "",
+      "storedFromDom": "<img src=\"data:image/webp;base64,UklGRhEAAABXRUJQVlA4TAUAAAAvK8ExAA==\">"
+    },
+    "image: svg": {
+      "input": "a<img src=\"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIG9ubG9hZD0iYWxlcnQoMSkiLz4=\">b<img src=\"data:image/svg+xml,%3Csvg%2F%3E\">c",
+      "sanitized": "abc",
+      "fromHtml": [
+        {
+          "text": "abc",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "abc",
+      "markdown": "abc",
+      "markdownOfInput": "abc",
+      "storedFromDom": "a<img src=\"data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIG9ubG9hZD0iYWxlcnQoMSkiLz4=\">b<img src=\"data:image/svg+xml,%3Csvg%2F%3E\">c"
+    },
+    "image: label disagrees with bytes": {
+      "input": "<img src=\"data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAKCAYAAAAAAAAAAAAAAElFTkQ=\">",
+      "sanitized": "<img class=\"comment-img\" data-blob=\"4b3e96f2342a06a501e961d84f159136eeda3e0af079ad0419bc0cb835737948\" data-w=\"20\" data-h=\"10\" data-mime=\"image/png\">",
+      "fromHtml": [],
+      "media": [
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "4b3e96f2342a06a501e961d84f159136eeda3e0af079ad0419bc0cb835737948",
+            "width": 20,
+            "height": 10,
+            "mime": "image/png"
+          }
+        }
+      ],
+      "toHtml": "",
+      "markdown": "",
+      "markdownOfInput": "",
+      "storedFromDom": "<img src=\"data:image/gif;base64,iVBORw0KGgoAAAANSUhEUgAAABQAAAAKCAYAAAAAAAAAAAAAAElFTkQ=\">"
+    },
+    "image: wrapped base64": {
+      "input": "<img src=\"data:image/png;base64,iVBORw0KGgoA\nAAANSUhEUgAA\nACEAAAALCAYA\nAAAAAAAAAAAA\nAElFTkQ=\">",
+      "sanitized": "<img class=\"comment-img\" data-blob=\"393acbb0ca9790f8097b38f2acd210be637368acdda4e6b7f48614c5856a258a\" data-w=\"33\" data-h=\"11\" data-mime=\"image/png\">",
+      "fromHtml": [],
+      "media": [
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "393acbb0ca9790f8097b38f2acd210be637368acdda4e6b7f48614c5856a258a",
+            "width": 33,
+            "height": 11,
+            "mime": "image/png"
+          }
+        }
+      ],
+      "toHtml": "",
+      "markdown": "",
+      "markdownOfInput": "",
+      "storedFromDom": "<img src=\"data:image/png;base64,iVBORw0KGgoA\nAAANSUhEUgAA\nACEAAAALCAYA\nAAAAAAAAAAAA\nAElFTkQ=\">"
+    },
+    "image: bad base64 characters": {
+      "input": "a<img src=\"data:image/png;base64,@@@@\">b<img src=\"data:image/png;base64,iVBORw0K GgoAAAANSUhEUgAAAEcAAAANCAYAAAAAAAAAAAAAAElFTkQ=\">c",
+      "sanitized": "abc",
+      "fromHtml": [
+        {
+          "text": "abc",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "abc",
+      "markdown": "abc",
+      "markdownOfInput": "abc",
+      "storedFromDom": "a<img src=\"data:image/png;base64,@@@@\">b<img src=\"data:image/png;base64,iVBORw0K GgoAAAANSUhEUgAAAEcAAAANCAYAAAAAAAAAAAAAAElFTkQ=\">c"
+    },
+    "image: bad base64 padding": {
+      "input": "a<img src=\"data:image/png;base64,iVBO=Rw0\">b<img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEcAAAANCAYAAAAAAAAAAAAAAElFTkQ=A\">c",
+      "sanitized": "abc",
+      "fromHtml": [
+        {
+          "text": "abc",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "abc",
+      "markdown": "abc",
+      "markdownOfInput": "abc",
+      "storedFromDom": "a<img src=\"data:image/png;base64,iVBO=Rw0\">b<img src=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEcAAAANCAYAAAAAAAAAAAAAAElFTkQ=A\">c"
+    },
+    "image: base64 that is not a picture": {
+      "input": "a<img src=\"data:image/png;base64,aGVsbG8sIHdvcmxk\">b<img src=\"data:image/png;base64,AAAA\">c",
+      "sanitized": "abc",
+      "fromHtml": [
+        {
+          "text": "abc",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "abc",
+      "markdown": "abc",
+      "markdownOfInput": "abc",
+      "storedFromDom": "a<img src=\"data:image/png;base64,aGVsbG8sIHdvcmxk\">b<img src=\"data:image/png;base64,AAAA\">c"
+    },
+    "image: remote and blob sources": {
+      "input": "a<img src=\"https://example.com/x.png\">b<img src=\"blob:https://splitpage.test/abc\">c<img>d",
+      "sanitized": "abcd",
+      "fromHtml": [
+        {
+          "text": "abcd",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "abcd",
+      "markdown": "abcd",
+      "markdownOfInput": "abcd",
+      "storedFromDom": "a<img src=\"https://example.com/x.png\">b<img src=\"blob:https://splitpage.test/abc\">c<img>d"
+    },
+    "image: known data-blob": {
+      "input": "<img data-blob=\"5a959e62ba0438df54116292c6913720463699ecb9e7870c4dd750eb0d483b46\" data-w=\"999\" data-h=\"1\" data-mime=\"image/gif\" src=\"blob:https://splitpage.test/1\" class=\"x\" alt=\"y\">",
+      "sanitized": "<img class=\"comment-img\" data-blob=\"5a959e62ba0438df54116292c6913720463699ecb9e7870c4dd750eb0d483b46\" data-w=\"7\" data-h=\"5\" data-mime=\"image/png\">",
+      "fromHtml": [],
+      "media": [
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "5a959e62ba0438df54116292c6913720463699ecb9e7870c4dd750eb0d483b46",
+            "width": 7,
+            "height": 5,
+            "mime": "image/png"
+          }
+        }
+      ],
+      "toHtml": "",
+      "markdown": "",
+      "markdownOfInput": "",
+      "storedFromDom": "<img data-blob=\"5a959e62ba0438df54116292c6913720463699ecb9e7870c4dd750eb0d483b46\" data-w=\"999\" data-h=\"1\" data-mime=\"image/gif\" class=\"x\">"
+    },
+    "image: unknown data-blob with a size": {
+      "input": "<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" class=\"x\" data-w=\"5\" data-h=\"6\" data-mime=\"image/webp\" width=\"9\">",
+      "sanitized": "<img class=\"comment-img\" data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"5\" data-h=\"6\" data-mime=\"image/webp\">",
+      "fromHtml": [],
+      "media": [
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "width": 5,
+            "height": 6,
+            "mime": "image/webp"
+          }
+        }
+      ],
+      "toHtml": "",
+      "markdown": "",
+      "markdownOfInput": "",
+      "storedFromDom": "<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" class=\"x\" data-w=\"5\" data-h=\"6\" data-mime=\"image/webp\">"
+    },
+    "image: unknown data-blob with a bad size": {
+      "input": "<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"5\" data-h=\"6\" data-mime=\"image/svg+xml\">|<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"0\" data-h=\"6\" data-mime=\"image/png\">|<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"5.5\" data-h=\"6\" data-mime=\"image/png\">|<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"5\" data-mime=\"image/png\">|<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"-5\" data-h=\"6\" data-mime=\"image/png\">|<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"01\" data-h=\"6\" data-mime=\"image/png\">|<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"12345678\" data-h=\"6\" data-mime=\"image/png\">|<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\">",
+      "sanitized": "<img class=\"comment-img\" data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\">|<img class=\"comment-img\" data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\">|<img class=\"comment-img\" data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\">|<img class=\"comment-img\" data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\">|<img class=\"comment-img\" data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\">|<img class=\"comment-img\" data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\">|<img class=\"comment-img\" data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\">|<img class=\"comment-img\" data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\">",
+      "fromHtml": [
+        {
+          "text": "|||||||",
+          "marks": {}
+        }
+      ],
+      "media": [
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "width": null,
+            "height": null,
+            "mime": null
+          }
+        },
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "width": null,
+            "height": null,
+            "mime": null
+          }
+        },
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "width": null,
+            "height": null,
+            "mime": null
+          }
+        },
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "width": null,
+            "height": null,
+            "mime": null
+          }
+        },
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "width": null,
+            "height": null,
+            "mime": null
+          }
+        },
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "width": null,
+            "height": null,
+            "mime": null
+          }
+        },
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "width": null,
+            "height": null,
+            "mime": null
+          }
+        },
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "width": null,
+            "height": null,
+            "mime": null
+          }
+        }
+      ],
+      "toHtml": "|||||||",
+      "markdown": "|||||||",
+      "markdownOfInput": "|||||||",
+      "storedFromDom": "<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"5\" data-h=\"6\" data-mime=\"image/svg+xml\">|<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"0\" data-h=\"6\" data-mime=\"image/png\">|<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"5.5\" data-h=\"6\" data-mime=\"image/png\">|<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"5\" data-mime=\"image/png\">|<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"-5\" data-h=\"6\" data-mime=\"image/png\">|<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"01\" data-h=\"6\" data-mime=\"image/png\">|<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"12345678\" data-h=\"6\" data-mime=\"image/png\">|<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\">"
+    },
+    "image: unknown data-blob beside a data src": {
+      "input": "<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"2\" data-h=\"2\" data-mime=\"image/png\" src=\"data:image/gif;base64,R0lGODlhBAAEAAAAADs=\">",
+      "sanitized": "<img class=\"comment-img\" data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"2\" data-h=\"2\" data-mime=\"image/png\">",
+      "fromHtml": [],
+      "media": [
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+            "width": 2,
+            "height": 2,
+            "mime": "image/png"
+          }
+        }
+      ],
+      "toHtml": "",
+      "markdown": "",
+      "markdownOfInput": "",
+      "storedFromDom": "<img data-blob=\"a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1\" data-w=\"2\" data-h=\"2\" data-mime=\"image/png\">"
+    },
+    "image: bad data-blob": {
+      "input": "x<img data-blob=\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\">x<img data-blob=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\">x<img data-blob=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\">x<img data-blob=\"gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg\">x<img data-blob=\"\">x<img data-blob=\" aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\">y",
+      "sanitized": "xxxxxxy",
+      "fromHtml": [
+        {
+          "text": "xxxxxxy",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "xxxxxxy",
+      "markdown": "xxxxxxy",
+      "markdownOfInput": "xxxxxxy",
+      "storedFromDom": "x<img data-blob=\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\">x<img data-blob=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\">x<img data-blob=\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\">x<img data-blob=\"gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg\">x<img data-blob=\"\">x<img data-blob=\" aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\">y"
+    },
+    "image: bad data-blob with a picture of its own": {
+      "input": "<img data-blob=\"nope\" src=\"data:image/gif;base64,R0lGODlhBAAEAAAAADs=\">",
+      "sanitized": "<img class=\"comment-img\" data-blob=\"4920534ee890f9758d84d55f9e07b93090a07bfb0c5e81d806e1ca3657174bca\" data-w=\"4\" data-h=\"4\" data-mime=\"image/gif\">",
+      "fromHtml": [],
+      "media": [
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "4920534ee890f9758d84d55f9e07b93090a07bfb0c5e81d806e1ca3657174bca",
+            "width": 4,
+            "height": 4,
+            "mime": "image/gif"
+          }
+        }
+      ],
+      "toHtml": "",
+      "markdown": "",
+      "markdownOfInput": "",
+      "storedFromDom": "<img data-blob=\"nope\">"
+    },
+    "links: safe": {
+      "input": "<a href=\"https://e.x/a?b=1&amp;c=2\">https</a> <a href=\"http://e.x/\">http</a> <a href=\"mailto:a@e.x\">mail</a> <a href=\"  https://e.x/trim  \">trim</a> <a href=\"HTTPS://E.X/\">upper</a> <a href=\"https://e.x/\" target=\"_self\" onclick=\"x()\">attrs</a>",
+      "sanitized": "<a href=\"https://e.x/a?b=1&amp;c=2\" target=\"_blank\" rel=\"noopener\">https</a> <a href=\"http://e.x/\" target=\"_blank\" rel=\"noopener\">http</a> <a href=\"mailto:a@e.x\" target=\"_blank\" rel=\"noopener\">mail</a> <a href=\"https://e.x/trim\" target=\"_blank\" rel=\"noopener\">trim</a> <a href=\"HTTPS://E.X/\" target=\"_blank\" rel=\"noopener\">upper</a> <a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\">attrs</a>",
+      "fromHtml": [
+        {
+          "text": "https",
+          "marks": {
+            "href": "https://e.x/a?b=1&c=2"
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "http",
+          "marks": {
+            "href": "http://e.x/"
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "mail",
+          "marks": {
+            "href": "mailto:a@e.x"
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "trim",
+          "marks": {
+            "href": "https://e.x/trim"
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "upper",
+          "marks": {
+            "href": "HTTPS://E.X/"
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "attrs",
+          "marks": {
+            "href": "https://e.x/"
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<a href=\"https://e.x/a?b=1&amp;c=2\" target=\"_blank\" rel=\"noopener\">https</a> <a href=\"http://e.x/\" target=\"_blank\" rel=\"noopener\">http</a> <a href=\"mailto:a@e.x\" target=\"_blank\" rel=\"noopener\">mail</a> <a href=\"https://e.x/trim\" target=\"_blank\" rel=\"noopener\">trim</a> <a href=\"HTTPS://E.X/\" target=\"_blank\" rel=\"noopener\">upper</a> <a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\">attrs</a>",
+      "markdown": "[https](https://e.x/a?b=1&c=2) [http](http://e.x/) [mail](mailto:a@e.x) [trim](https://e.x/trim) [upper](HTTPS://E.X/) [attrs](https://e.x/)",
+      "markdownOfInput": "[https](https://e.x/a?b=1&c=2) [http](http://e.x/) [mail](mailto:a@e.x) [trim](  https://e.x/trim  ) [upper](HTTPS://E.X/) [attrs](https://e.x/)",
+      "storedFromDom": "<a href=\"https://e.x/a?b=1&amp;c=2\">https</a> <a href=\"http://e.x/\">http</a> <a href=\"mailto:a@e.x\">mail</a> <a href=\"  https://e.x/trim  \">trim</a> <a href=\"HTTPS://E.X/\">upper</a> <a href=\"https://e.x/\" target=\"_self\" onclick=\"x()\">attrs</a>"
+    },
+    "links: javascript": {
+      "input": "<a href=\"javascript:alert(1)\">js</a> <a href=\" JaVaScRiPt:alert(1)\">js2</a> <a href=\"java&#0;script:alert(1)\">js3</a> <a href=\"java&#9;script:alert(1)\">tab</a> <a href=\"java&#10;script:x\">nl</a> <a href=\"vbscript:x\">vb</a> <a href=\"&#1;javascript:x\">c0</a>",
+      "sanitized": "js js2 js3 tab nl vb c0",
+      "fromHtml": [
+        {
+          "text": "js js2 js3 tab nl vb c0",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "js js2 js3 tab nl vb c0",
+      "markdown": "js js2 js3 tab nl vb c0",
+      "markdownOfInput": "[js](javascript:alert(1)) [js2]( JaVaScRiPt:alert(1)) [js3](java�script:alert(1)) [tab](java\tscript:alert(1)) [nl](java\nscript:x) [vb](vbscript:x) [c0](\u0001javascript:x)",
+      "storedFromDom": "<a href=\"javascript:alert(1)\">js</a> <a href=\" JaVaScRiPt:alert(1)\">js2</a> <a href=\"java&#0;script:alert(1)\">js3</a> <a href=\"java&#9;script:alert(1)\">tab</a> <a href=\"java&#10;script:x\">nl</a> <a href=\"vbscript:x\">vb</a> <a href=\"&#1;javascript:x\">c0</a>"
+    },
+    "links: data": {
+      "input": "<a href=\"data:text/html,&lt;script&gt;x&lt;/script&gt;\">d</a> <a href=\"DATA:image/png;base64,AAAA\">d2</a> <a href=\" data:x\">d3</a>",
+      "sanitized": "d d2 d3",
+      "fromHtml": [
+        {
+          "text": "d d2 d3",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "d d2 d3",
+      "markdown": "d d2 d3",
+      "markdownOfInput": "[d](data:text/html,<script>x</script>) [d2](DATA:image/png;base64,AAAA) [d3]( data:x)",
+      "storedFromDom": "<a href=\"data:text/html,&lt;script&gt;x&lt;/script&gt;\">d</a> <a href=\"DATA:image/png;base64,AAAA\">d2</a> <a href=\" data:x\">d3</a>"
+    },
+    "links: other schemes": {
+      "input": "<a href=\"ftp://e.x/\">ftp</a> <a href=\"/x\">rel</a> <a href=\"#frag\">frag</a> <a href=\"MAILTO:a@e.x\">MAIL</a> <a href=\"https:no-slashes\">ns</a> <a>none</a>",
+      "sanitized": "ftp rel frag MAIL ns none",
+      "fromHtml": [
+        {
+          "text": "ftp rel frag MAIL ns none",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "ftp rel frag MAIL ns none",
+      "markdown": "ftp rel frag MAIL ns none",
+      "markdownOfInput": "[ftp](ftp://e.x/) [rel](/x) [frag](#frag) [MAIL](MAILTO:a@e.x) [ns](https:no-slashes) none",
+      "storedFromDom": "<a href=\"ftp://e.x/\">ftp</a> <a href=\"/x\">rel</a> <a href=\"#frag\">frag</a> <a href=\"MAILTO:a@e.x\">MAIL</a> <a href=\"https:no-slashes\">ns</a> <a>none</a>"
+    },
+    "links: label with brackets": {
+      "input": "<a href=\"https://e.x/(1)\">a [b] (c)</a> and <a href=\"https://e.x/\"><strong>bold</strong> label</a>",
+      "sanitized": "<a href=\"https://e.x/(1)\" target=\"_blank\" rel=\"noopener\">a [b] (c)</a> and <a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\"><strong>bold</strong> label</a>",
+      "fromHtml": [
+        {
+          "text": "a [b] (c)",
+          "marks": {
+            "href": "https://e.x/(1)"
+          }
+        },
+        {
+          "text": " and ",
+          "marks": {}
+        },
+        {
+          "text": "bold",
+          "marks": {
+            "b": true,
+            "href": "https://e.x/"
+          }
+        },
+        {
+          "text": " label",
+          "marks": {
+            "href": "https://e.x/"
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<a href=\"https://e.x/(1)\" target=\"_blank\" rel=\"noopener\">a [b] (c)</a> and <a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\"><strong>bold</strong> label</a>",
+      "markdown": "[a [b\\] \\(c\\)](https://e.x/(1)) and [**bold** label](https://e.x/)",
+      "markdownOfInput": "[a [b\\] \\(c\\)](https://e.x/(1)) and [**bold** label](https://e.x/)",
+      "storedFromDom": "<a href=\"https://e.x/(1)\">a [b] (c)</a> and <a href=\"https://e.x/\"><strong>bold</strong> label</a>"
+    },
+    "links: a link inside a link": {
+      "input": "<a href=\"https://one.test/\">p<table><td><a href=\"https://two.test/\"><b>x</b></a></td></table>q<object><a href=\"javascript:void(0)\">u</a></object></a>",
+      "sanitized": "<a href=\"https://one.test/\" target=\"_blank\" rel=\"noopener\">p</a><a href=\"https://two.test/\" target=\"_blank\" rel=\"noopener\"><strong>x</strong></a><a href=\"https://one.test/\" target=\"_blank\" rel=\"noopener\">qu</a>",
+      "fromHtml": [
+        {
+          "text": "p",
+          "marks": {
+            "href": "https://one.test/"
+          }
+        },
+        {
+          "text": "x",
+          "marks": {
+            "b": true,
+            "href": "https://two.test/"
+          }
+        },
+        {
+          "text": "qu",
+          "marks": {
+            "href": "https://one.test/"
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<a href=\"https://one.test/\" target=\"_blank\" rel=\"noopener\">p</a><a href=\"https://two.test/\" target=\"_blank\" rel=\"noopener\"><strong>x</strong></a><a href=\"https://one.test/\" target=\"_blank\" rel=\"noopener\">qu</a>",
+      "markdown": "[p](https://one.test/)[**x**](https://two.test/)[qu](https://one.test/)",
+      "markdownOfInput": "[p[**x**\\]\\(https://two.test/\\)q[u\\]\\(javascript:void\\(0\\)\\)](https://one.test/)",
+      "storedFromDom": "<a href=\"https://one.test/\">p<table><td><a href=\"https://two.test/\"><b>x</b></a></td></table>q<object><a href=\"javascript:void(0)\">u</a></object></a>"
+    },
+    "links: a video card inside a link": {
+      "input": "<a href=\"https://one.test/\">see <object><a class=\"video-embed-card\" href=\"https://youtu.be/x\"><span>Watch video</span></a></object> after<object><a class=\"video-embed-card\" href=\"javascript:alert(1)\">gone</a></object></a>",
+      "sanitized": "<a href=\"https://one.test/\" target=\"_blank\" rel=\"noopener\">see </a><a class=\"video-embed-card\" href=\"https://youtu.be/x\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· youtu.be</span></a><a href=\"https://one.test/\" target=\"_blank\" rel=\"noopener\"> after</a>",
+      "fromHtml": [
+        {
+          "text": "see  after",
+          "marks": {
+            "href": "https://one.test/"
+          }
+        }
+      ],
+      "media": [
+        {
+          "kind": "video",
+          "href": "https://youtu.be/x"
+        }
+      ],
+      "toHtml": "<a href=\"https://one.test/\" target=\"_blank\" rel=\"noopener\">see  after</a>",
+      "markdown": "[see ](https://one.test/)[▶Watch video· youtu.be](https://youtu.be/x)[ after](https://one.test/)",
+      "markdownOfInput": "[see [Watch video\\]\\(https://youtu.be/x\\) after[gone\\]\\(javascript:alert\\(1\\)\\)](https://one.test/)",
+      "storedFromDom": "<a href=\"https://one.test/\">see <object><a class=\"video-embed-card\" href=\"https://youtu.be/x\"><span>Watch video</span></a></object> after<object><a class=\"video-embed-card\" href=\"javascript:alert(1)\">gone</a></object></a>"
+    },
+    "links: nested in formatting": {
+      "input": "<strong>bold <a href=\"https://e.x/\">link</a></strong> <a href=\"https://e.x/\"><em>it</em></a>",
+      "sanitized": "<strong>bold <a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\">link</a></strong> <a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\"><em>it</em></a>",
+      "fromHtml": [
+        {
+          "text": "bold ",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": "link",
+          "marks": {
+            "b": true,
+            "href": "https://e.x/"
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "it",
+          "marks": {
+            "i": true,
+            "href": "https://e.x/"
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "<strong>bold </strong><a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\"><strong>link</strong></a> <a href=\"https://e.x/\" target=\"_blank\" rel=\"noopener\"><em>it</em></a>",
+      "markdown": "**bold [link](https://e.x/)** [*it*](https://e.x/)",
+      "markdownOfInput": "**bold [link](https://e.x/)** [*it*](https://e.x/)",
+      "storedFromDom": "<strong>bold <a href=\"https://e.x/\">link</a></strong> <a href=\"https://e.x/\"><em>it</em></a>"
+    },
+    "video card": {
+      "input": "watch <a class=\"video-embed-card\" href=\"https://www.youtube.com/watch?v=abc\" target=\"_blank\"><span>junk</span></a> this",
+      "sanitized": "watch <a class=\"video-embed-card\" href=\"https://www.youtube.com/watch?v=abc\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· youtube.com</span></a> this",
+      "fromHtml": [
+        {
+          "text": "watch  this",
+          "marks": {}
+        }
+      ],
+      "media": [
+        {
+          "kind": "video",
+          "href": "https://www.youtube.com/watch?v=abc"
+        }
+      ],
+      "toHtml": "watch  this",
+      "markdown": "watch [▶Watch video· youtube.com](https://www.youtube.com/watch?v=abc) this",
+      "markdownOfInput": "watch [junk](https://www.youtube.com/watch?v=abc) this",
+      "storedFromDom": "watch <a class=\"video-embed-card\" href=\"https://www.youtube.com/watch?v=abc\" target=\"_blank\"><span>junk</span></a> this"
+    },
+    "video card: unsafe href": {
+      "input": "a <a class=\"video-embed-card\" href=\"javascript:alert(1)\"><span>Watch video</span></a> b <a class=\"video-embed-card\">no href</a> c",
+      "sanitized": "a  b  c",
+      "fromHtml": [
+        {
+          "text": "a  b  c",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "a  b  c",
+      "markdown": "a  b  c",
+      "markdownOfInput": "a [Watch video](javascript:alert(1)) b no href c",
+      "storedFromDom": "a <a class=\"video-embed-card\" href=\"javascript:alert(1)\"><span>Watch video</span></a> b <a class=\"video-embed-card\">no href</a> c"
+    },
+    "video card: mailto and odd hosts": {
+      "input": "<a class=\"video-embed-card\" href=\"mailto:a@e.x\">m</a><a class=\"video-embed-card\" href=\"https://WWW.Example.COM/Path\">e</a><a class=\"video-embed-card\" href=\"http://[::1]:8080/x\">v6</a>",
+      "sanitized": "<a class=\"video-embed-card\" href=\"mailto:a@e.x\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· </span></a><a class=\"video-embed-card\" href=\"https://WWW.Example.COM/Path\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· example.com</span></a><a class=\"video-embed-card\" href=\"http://[::1]:8080/x\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· [::1]</span></a>",
+      "fromHtml": [],
+      "media": [
+        {
+          "kind": "video",
+          "href": "mailto:a@e.x"
+        },
+        {
+          "kind": "video",
+          "href": "https://WWW.Example.COM/Path"
+        },
+        {
+          "kind": "video",
+          "href": "http://[::1]:8080/x"
+        }
+      ],
+      "toHtml": "",
+      "markdown": "[▶Watch video· ](mailto:a@e.x)[▶Watch video· example.com](https://WWW.Example.COM/Path)[▶Watch video· [::1\\]](http://[::1]:8080/x)",
+      "markdownOfInput": "[m](mailto:a@e.x)[e](https://WWW.Example.COM/Path)[v6](http://[::1]:8080/x)",
+      "storedFromDom": "<a class=\"video-embed-card\" href=\"mailto:a@e.x\">m</a><a class=\"video-embed-card\" href=\"https://WWW.Example.COM/Path\">e</a><a class=\"video-embed-card\" href=\"http://[::1]:8080/x\">v6</a>"
+    },
+    "astral characters": {
+      "input": "😀 𝒳 👩‍👩‍👧 <b>𝄞 bold</b> <span class=\"cmt-anchor\" data-cmt=\"c5\">🎬</span>",
+      "sanitized": "😀 𝒳 👩‍👩‍👧 <strong>𝄞 bold</strong> <span class=\"cmt-anchor\" data-cmt=\"c5\">🎬</span>",
+      "fromHtml": [
+        {
+          "text": "😀 𝒳 👩‍👩‍👧 ",
+          "marks": {}
+        },
+        {
+          "text": "𝄞 bold",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": "🎬",
+          "marks": {
+            "cmt": [
+              "c5"
+            ]
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "😀 𝒳 👩‍👩‍👧 <strong>𝄞 bold</strong> <span class=\"cmt-anchor\" data-cmt=\"c5\">🎬</span>",
+      "markdown": "😀 𝒳 👩‍👩‍👧 **𝄞 bold** 🎬",
+      "markdownOfInput": "😀 𝒳 👩‍👩‍👧 **𝄞 bold** 🎬",
+      "storedFromDom": "😀 𝒳 👩‍👩‍👧 <b>𝄞 bold</b> <span class=\"cmt-anchor\" data-cmt=\"c5\">🎬</span>"
+    },
+    "nbsp": {
+      "input": "a&nbsp;b c  d <b>&nbsp;</b> <span class=\"stage-dir\">&nbsp;x&nbsp;</span>",
+      "sanitized": "a&nbsp;b&nbsp;c  d <strong>&nbsp;</strong> <span class=\"stage-dir\">&nbsp;x&nbsp;</span>",
+      "fromHtml": [
+        {
+          "text": "a b c  d ",
+          "marks": {}
+        },
+        {
+          "text": " ",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": " ",
+          "marks": {}
+        },
+        {
+          "text": " x ",
+          "marks": {
+            "dir": true
+          }
+        }
+      ],
+      "media": [],
+      "toHtml": "a&nbsp;b&nbsp;c  d <strong>&nbsp;</strong> <span class=\"stage-dir\">&nbsp;x&nbsp;</span>",
+      "markdown": "a b c  d ** ** (( x ))",
+      "markdownOfInput": "a b c  d ** ** (( x ))",
+      "storedFromDom": "a&nbsp;b c  d <b>&nbsp;</b> <span class=\"stage-dir\">&nbsp;x&nbsp;</span>"
+    },
+    "object replacement character": {
+      "input": "a￼b <b>￼</b>",
+      "sanitized": "a￼b <strong>￼</strong>",
+      "fromHtml": [
+        {
+          "text": "ab ",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "ab ",
+      "markdown": "a￼b **￼**",
+      "markdownOfInput": "a￼b **￼**",
+      "storedFromDom": "a￼b <b>￼</b>"
+    },
+    "zero width space": {
+      "input": "a​b <b>​</b> ​",
+      "sanitized": "a​b <strong>​</strong> ​",
+      "fromHtml": [
+        {
+          "text": "ab  ",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "ab  ",
+      "markdown": "a​b **​** ​",
+      "markdownOfInput": "a​b **​** ​",
+      "storedFromDom": "a​b <b>​</b> ​"
+    },
+    "crlf": {
+      "input": "line1\r\nline2\rline3\nline4<br>\r\nafter",
+      "sanitized": "line1\nline2\nline3\nline4<br>\nafter",
+      "fromHtml": [
+        {
+          "text": "line1 line2 line3 line4\n after",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "line1 line2 line3 line4<br> after",
+      "markdown": "line1\nline2\nline3\nline4\n\nafter",
+      "markdownOfInput": "line1\nline2\nline3\nline4\n\nafter",
+      "storedFromDom": "line1\r\nline2\rline3\nline4<br>\r\nafter"
+    },
+    "control characters": {
+      "input": "a\u0000b\u0001c\bd\te\u000bf\fg\u001fhi",
+      "sanitized": "ab\u0001c\bd\te\u000bf\fg\u001fhi",
+      "fromHtml": [
+        {
+          "text": "abcd\tefghi",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "abcd\tefghi",
+      "markdown": "ab\u0001c\bd\te\u000bf\fg\u001fhi",
+      "markdownOfInput": "ab\u0001c\bd\te\u000bf\fg\u001fhi",
+      "storedFromDom": "a\u0000b\u0001c\bd\te\u000bf\fg\u001fhi"
+    },
+    "entities": {
+      "input": "&lt;b&gt; &amp; &quot; &#x1F600; &copy; &#0; &bogus;",
+      "sanitized": "&lt;b&gt; &amp; \" 😀 © � &amp;bogus;",
+      "fromHtml": [
+        {
+          "text": "<b> & \" 😀 © � &bogus;",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "&lt;b&gt; &amp; \" 😀 © � &amp;bogus;",
+      "markdown": "<b> & \" 😀 © � &bogus;",
+      "markdownOfInput": "<b> & \" 😀 © � &bogus;",
+      "storedFromDom": "&lt;b&gt; &amp; &quot; &#x1F600; &copy; &#0; &bogus;"
+    },
+    "lone surrogates": {
+      "input": "x\ud800y \udc00z <b>\ud83d</b>",
+      "sanitized": "xy z <strong></strong>",
+      "fromHtml": [
+        {
+          "text": "xy z ",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "xy z ",
+      "markdown": "xy z ****",
+      "markdownOfInput": "x\ud800y \udc00z **\ud83d**",
+      "storedFromDom": "x\ud800y \udc00z <b>\ud83d</b>"
+    },
+    "markdown-looking text": {
+      "input": "**not bold** *not it* ~~not s~~ [x](https://e.x/) ((not a direction)) # heading",
+      "sanitized": "**not bold** *not it* ~~not s~~ [x](https://e.x/) ((not a direction)) # heading",
+      "fromHtml": [
+        {
+          "text": "**not bold** *not it* ~~not s~~ [x](https://e.x/) ((not a direction)) # heading",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "**not bold** *not it* ~~not s~~ [x](https://e.x/) ((not a direction)) # heading",
+      "markdown": "**not bold** *not it* ~~not s~~ [x](https://e.x/) ((not a direction)) # heading",
+      "markdownOfInput": "**not bold** *not it* ~~not s~~ [x](https://e.x/) ((not a direction)) # heading",
+      "storedFromDom": "**not bold** *not it* ~~not s~~ [x](https://e.x/) ((not a direction)) # heading"
+    },
+    "hydrated cell": {
+      "input": "one <strong>two</strong> <img class=\"comment-img\" data-blob=\"c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3\" data-w=\"4\" data-h=\"5\" data-mime=\"image/png\" src=\"blob:https://splitpage.test/9\" alt=\"\" width=\"4\"> <img class=\"comment-img\" data-blob=\"c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3\" data-blob-state=\"missing\" alt=\"Image unavailable\" title=\"Image unavailable\"> three&nbsp;",
+      "sanitized": "one <strong>two</strong> <img class=\"comment-img\" data-blob=\"c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3\" data-w=\"4\" data-h=\"5\" data-mime=\"image/png\"> <img class=\"comment-img\" data-blob=\"c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3\"> three&nbsp;",
+      "fromHtml": [
+        {
+          "text": "one ",
+          "marks": {}
+        },
+        {
+          "text": "two",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": "   three ",
+          "marks": {}
+        }
+      ],
+      "media": [
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+            "width": 4,
+            "height": 5,
+            "mime": "image/png"
+          }
+        },
+        {
+          "kind": "image",
+          "ref": {
+            "sha256": "c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3",
+            "width": null,
+            "height": null,
+            "mime": null
+          }
+        }
+      ],
+      "toHtml": "one <strong>two</strong>   three&nbsp;",
+      "markdown": "one **two**   three",
+      "markdownOfInput": "one **two**   three",
+      "storedFromDom": "one <strong>two</strong> <img class=\"comment-img\" data-blob=\"c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3\" data-w=\"4\" data-h=\"5\" data-mime=\"image/png\"> <img class=\"comment-img\" data-blob=\"c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3\"> three&nbsp;"
+    },
+    "data-blob only in text": {
+      "input": "the word data-blob appears <b>here</b> &amp; there",
+      "sanitized": "the word data-blob appears <strong>here</strong> &amp; there",
+      "fromHtml": [
+        {
+          "text": "the word data-blob appears ",
+          "marks": {}
+        },
+        {
+          "text": "here",
+          "marks": {
+            "b": true
+          }
+        },
+        {
+          "text": " & there",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "the word data-blob appears <strong>here</strong> &amp; there",
+      "markdown": "the word data-blob appears **here** & there",
+      "markdownOfInput": "the word data-blob appears **here** & there",
+      "storedFromDom": "the word data-blob appears <b>here</b> &amp; there"
+    },
+    "data-blob attribute on another element": {
+      "input": "<span data-blob=\"c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3\">x</span> <img src=\"x\" data-blob>",
+      "sanitized": "x ",
+      "fromHtml": [
+        {
+          "text": "x ",
+          "marks": {}
+        }
+      ],
+      "media": [],
+      "toHtml": "x ",
+      "markdown": "x",
+      "markdownOfInput": "x",
+      "storedFromDom": "<span data-blob=\"c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3\">x</span> <img data-blob=\"\">"
+    }
+  },
+  "videoCards": [
+    {
+      "href": "https://www.youtube.com/watch?v=abc",
+      "html": "<a class=\"video-embed-card\" href=\"https://www.youtube.com/watch?v=abc\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· youtube.com</span></a>"
+    },
+    {
+      "href": "https://youtu.be/xyz",
+      "html": "<a class=\"video-embed-card\" href=\"https://youtu.be/xyz\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· youtu.be</span></a>"
+    },
+    {
+      "href": "http://vimeo.com/123",
+      "html": "<a class=\"video-embed-card\" href=\"http://vimeo.com/123\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· vimeo.com</span></a>"
+    },
+    {
+      "href": "https://WWW.Example.COM/Path",
+      "html": "<a class=\"video-embed-card\" href=\"https://WWW.Example.COM/Path\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· example.com</span></a>"
+    },
+    {
+      "href": "https://例え.jp/動画",
+      "html": "<a class=\"video-embed-card\" href=\"https://例え.jp/動画\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· xn--r8jz45g.jp</span></a>"
+    },
+    {
+      "href": "mailto:someone@example.com",
+      "html": "<a class=\"video-embed-card\" href=\"mailto:someone@example.com\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· </span></a>"
+    },
+    {
+      "href": "http://[::1]:8080/x",
+      "html": "<a class=\"video-embed-card\" href=\"http://[::1]:8080/x\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· [::1]</span></a>"
+    },
+    {
+      "href": "http://",
+      "html": "<a class=\"video-embed-card\" href=\"http://\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· http://</span></a>"
+    },
+    {
+      "href": "not a url",
+      "html": "<a class=\"video-embed-card\" href=\"not a url\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· not a url</span></a>"
+    },
+    {
+      "href": "javascript:alert(1)",
+      "html": "<a class=\"video-embed-card\" href=\"javascript:alert(1)\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· </span></a>"
+    },
+    {
+      "href": "https://example.com/a\"b<c>&d",
+      "html": "<a class=\"video-embed-card\" href=\"https://example.com/a&quot;b<c>&amp;d\" target=\"_blank\" rel=\"noopener\"><span class=\"vec-play\">▶</span><span>Watch video</span><span class=\"vec-host\">· example.com</span></a>"
+    }
+  ]
+}

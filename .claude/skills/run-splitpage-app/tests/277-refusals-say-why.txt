@@ -1,0 +1,36 @@
+# A button that asks for something the app will not do now says why, as it
+# did before the action registry (4.0 milestone 1): Collaborate from the
+# Servers dialog and from the header's Collab button, on a server that is
+# read-only. Passes against the code before the registry (4.0-development
+# 19c66f7 and 47c0309) and after it.
+
+open
+viewport 1400 900
+eval (function(){ window.fetch = function(){ return new Promise(function(){}); }; window.H = window.__hostedTest; window.__shown = function (id) { var e = document.getElementById(id); return !!e && !e.hidden; }; window.__toasts = function () { return Array.prototype.map.call(document.querySelectorAll('#toast-host .toast'), function (t) { return t.textContent; }).join('|'); }; window.__clearToasts = function () { document.getElementById('toast-host').innerHTML = ''; return true; }; return true; })()
+eval (function(){ H.setSession({ role: 'edit', docId: 'srv-doc' }); var m = window.__shareTest.mode(); m.links = true; m.readOnly = true; window.__shareTest.updateMenu(); return true; })()
+sleep 300
+expect window.__collabTest.blocked() == This server is read-only
+
+# --- the Servers dialog's Collaborate button ---------------------------------
+jsclick #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="servers"]
+wait __shown('connect-modal')
+wait !!document.querySelector('#connect-review [data-connect-action="collaborate"]')
+eval __clearToasts()
+jsclick #connect-review [data-connect-action="collaborate"]
+sleep 300
+expect !__shown('connect-modal')
+expect !__shown('collab-modal')
+expect __toasts().indexOf('This server is read-only.') !== -1
+
+# --- the header's Collab button ----------------------------------------------
+eval __clearToasts()
+jsclick #btn-collab
+sleep 300
+expect !__shown('collab-modal')
+expect __toasts().indexOf('This server is read-only.') !== -1
+
+eval (function(){ var m = window.__shareTest.mode(); m.readOnly = false; m.links = false; H.setSession({ role: 'edit', docId: null }); m.available = false; window.__shareTest.updateMenu(); return true; })()
+sleep 300
+expect window.__collabTest.blocked() === ''

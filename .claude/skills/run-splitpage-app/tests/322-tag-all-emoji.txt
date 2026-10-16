@@ -1,0 +1,79 @@
+# Then a caret or a selection set by code inside a pair: paste, cut, Alt+Enter
+# and a paste into a comment box each keep the emoji single and whole.
+#
+# Every `eval` is one physical line (the driver splits on newlines).
+
+open
+wait document.querySelectorAll('#rows .row').length > 1
+eval (function(){ window.F = window.__splitpageFormats; window.U = window.__undoTest; window.GRIN = String.fromCodePoint(0x1F600); window.NAME = 'x'.repeat(79) + GRIN.charAt(0); window.LONE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/; window.anchors = function () { var d = document.createElement('div'); d.innerHTML = F.state().rows[0].visualText; return Array.prototype.slice.call(d.querySelectorAll('.tag-anchor')); }; window.loose = function () { var d = document.createElement('div'); d.innerHTML = F.state().rows[0].visualText; var w = document.createTreeWalker(d, NodeFilter.SHOW_TEXT), n, bad = 0; while ((n = w.nextNode())) if (LONE.test(n.nodeValue)) bad++; return bad; }; return true; })()
+
+eval (function(){ var s = JSON.parse(F.buildSplitpage()); s.title = 'Emoji tag'; s.rows = [ { id: 'r1', status: 'todo', visualText: 'x'.repeat(79) + GRIN + ' more', audioText: '' }, { id: 'r2', status: 'todo', visualText: 'Close on the lake.', audioText: '' } ]; s.productionTags = [ { cat: 'prop', name: NAME, owner: '', notes: '', status: 'needed' } ]; s.comments = []; s.brollShots = []; F.openFile(new File([JSON.stringify(s)], 'emoji.splitpage')); return true; })()
+wait F.state().title === 'Emoji tag' && document.querySelectorAll('#rows .row').length === 2
+sleep 400
+expect F.state().productionTags.some(function (t) { return t.name === 'x'.repeat(79); }) && !F.state().productionTags.some(function (t) { return LONE.test(t.name); })
+expect loose() === 0
+eval (function(){ U.flush(); window.__before = F.state().rows[0].visualText; window.__n = U.sizes().undo; return true; })()
+
+jsclick #btn-production
+wait document.querySelector('#production-list') && document.querySelectorAll('#production-list .tag-entity-head').length > 0
+eval (function(){ var h = document.querySelector('#production-list .tag-entity-head'); h.click(); return !!h; })()
+wait document.querySelector('[data-action="tag-all-mentions"]')
+expect document.querySelector('[data-action="tag-all-mentions"]').textContent == Tag all 1 mention
+jsclick [data-action="tag-all-mentions"]
+sleep 500
+
+expect anchors().length === 1
+expect anchors()[0].textContent === 'x'.repeat(79)
+expect loose() === 0
+expect document.querySelector('#rows .row').textContent.indexOf('x'.repeat(79) + GRIN + ' more') !== -1
+expect U.sizes().undo === window.__n + 1
+shot 322-tag-all-emoji
+eval document.activeElement && document.activeElement.blur && document.activeElement.blur()
+key ctrl KeyZ
+sleep 400
+expect F.state().rows[0].visualText === window.__before
+
+# --- a caret or selection placed by code inside a pair ----------------------
+# Chromium keeps a programmatic offset between the two halves. Paste, cut,
+# Alt+Enter and a paste into a comment box each act on the whole emoji once.
+eval (function(){ var s = JSON.parse(F.buildSplitpage()); s.title = 'Emoji paste'; s.rows = [ { id: 'p1', status: 'todo', visualText: 'a' + GRIN + 'b', audioText: 'Alpha <span class="cmt-anchor" data-cmt="c1">bravo</span>' }, { id: 'p2', status: 'todo', visualText: 'a' + GRIN + 'bc', audioText: '' }, { id: 'p3', status: 'todo', visualText: 'a' + GRIN + 'bc', audioText: '' }, { id: 'p4', status: 'todo', visualText: 'a' + GRIN + 'bc', audioText: '' } ]; s.productionTags = []; s.brollShots = []; s.comments = [ { id: 'c1', rowId: 'p1', field: 'audioText', anchorId: 'c1', quotedText: 'bravo', author: 'Ann', body: 'about bravo', createdAt: '2026-09-01T10:00:00Z', kind: 'anchor', replies: [] } ]; F.openFile(new File([JSON.stringify(s)], 'emoji-paste.splitpage')); return true; })()
+wait F.state().title === 'Emoji paste' && document.querySelector('#rows .row[data-id="p4"]')
+sleep 400
+eval (function(){ window.vis = function (id) { return document.querySelector('#rows .row[data-id="' + id + '"] .visual-cell .cell-editable'); }; window.st = function (id) { return F.state().rows.filter(function (r) { return r.id === id; })[0].visualText; }; window.place = function (el, from, to) { el.focus(); var w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), n, seen = 0, a = null, b = null; while ((n = w.nextNode())) { var len = n.nodeValue.length; if (!a && from <= seen + len) a = [n, from - seen]; if (!b && to <= seen + len) b = [n, to - seen]; seen += len; } var r = document.createRange(); r.setStart(a[0], a[1]); r.setEnd(b[0], b[1]); var s = getSelection(); s.removeAllRanges(); s.addRange(r); return s.getRangeAt(0).startOffset; }; window.clip = function (type, el, data) { var dt = new DataTransfer(); if (data) Object.keys(data).forEach(function (k) { dt.setData(k, data[k]); }); var ev = new ClipboardEvent(type, { clipboardData: dt, bubbles: true, cancelable: true }); el.dispatchEvent(ev); return { prevented: ev.defaultPrevented, text: dt.getData('text/plain') }; }; window.before = function (el) { var s = getSelection(); var r = document.createRange(); r.selectNodeContents(el); r.setEnd(s.anchorNode, s.anchorOffset); return r.toString().replace(/​/g, ''); }; return true; })()
+
+# a paste at a caret inside the pair goes after the emoji, which stays single
+expect place(vis('p1'), 2, 2) === 2
+eval clip('paste', vis('p1'), { 'text/html': '<b>P</b>', 'text/plain': 'P' }).prevented
+expect st('p1') === 'a' + GRIN + '<strong>P</strong>b'
+expect before(vis('p1')) === 'a' + GRIN + 'P'
+
+# a paste over a selection that starts inside the pair replaces the whole emoji
+eval place(vis('p2'), 2, 4)
+eval clip('paste', vis('p2'), { 'text/html': '<b>P</b>', 'text/plain': 'P' }).prevented
+expect st('p2') === 'a<strong>P</strong>c'
+expect before(vis('p2')) === 'aP'
+
+# a cut takes the whole emoji, and leaves the caret on a boundary
+eval place(vis('p3'), 2, 4)
+eval window.__cut = clip('cut', vis('p3'))
+expect __cut.text === GRIN + 'b'
+expect st('p3') === 'ac'
+expect before(vis('p3')) === 'a'
+
+# Alt+Enter over a selection that starts inside the pair
+eval place(vis('p4'), 2, 4)
+key alt Enter
+wait F.state().rows.length === 5
+expect st('p4') === 'a'
+expect F.state().rows[4].visualText === 'c'
+
+# a paste into a comment's reply box
+jsclick #btn-comments
+wait document.querySelector('#comments-list .comment-card[data-id="c1"]')
+eval (function(){ document.querySelector('#comments-list .comment-card[data-id="c1"] [data-action="toggle-reply"]').click(); return true; })()
+wait document.querySelector('#comments-list .reply-composer .cell-editable')
+eval (function(){ var box = document.querySelector('#comments-list .reply-composer .cell-editable'); box.focus(); box.textContent = 'a' + GRIN + 'b'; box.dispatchEvent(new Event('input', { bubbles: true })); return place(box, 2, 2); })()
+eval clip('paste', document.querySelector('#comments-list .reply-composer .cell-editable'), { 'text/html': '<b>P</b>', 'text/plain': 'P' }).prevented
+expect document.querySelector('#comments-list .reply-composer .cell-editable').textContent.replace(/​/g, '') === 'a' + GRIN + 'Pb'
+expect document.querySelector('#comments-list .reply-composer .cell-editable strong').textContent === 'P'
+shot 322-emoji-paste

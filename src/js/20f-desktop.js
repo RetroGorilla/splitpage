@@ -1,6 +1,5 @@
 import { S } from "./_state.js";
 import { conn, fileHome, home, homeConn, serverHomeId, setHome } from "./_home.js";
-import { escapeHtml } from "./02-state.js";
 import { normalizeDocId, reassignDocId } from "./02b-doc-id.js";
 import { setBackend as setBlobBackend } from "./02c-blobs.js";
 import {
@@ -13,13 +12,14 @@ import {
 import { hashText as historyHashText } from "./03c-history-idb.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "./04-richtext.js";
-import { runScriptZoomCommand } from "./05s-script-zoom.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { detectServer, normalizeServerBase, openServerDoc, pointTabAt } from "./13-hosted.js";
-import { concatBytes, saveDoc, strBytes } from "./14-export.js";
+import { saveDoc } from "./14-export.js";
 import { mimeForFilename, openProjectFile } from "./18-local-files.js";
 import { openServersDialog } from "./20e-connect.js";
 import { draftRestorePending, flushDraftNow } from "./20g-drafts.js";
+import { concatBytes, strBytes } from "../adapters/formats/bytes.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
 
 export function makeDesktopHandle(entry) {
   var id = entry.id;
@@ -53,7 +53,10 @@ export function makeDesktopHandle(entry) {
           return Promise.resolve();
         },
         close: function () {
-          return S.DESKTOP.writeFile(id, concatBytes(chunks)).then(function () {});
+          return S.DESKTOP.writeFile(id, concatBytes(chunks)).then(function (written) {
+            var stamp = written && written.lastModified;
+            return typeof stamp === "number" && isFinite(stamp) ? { lastModified: stamp } : undefined;
+          });
         }
       });
     },
@@ -90,23 +93,17 @@ export function notifyDesktopDocumentState() {
   });
 }
 
-var DESKTOP_HEADER_BUTTONS = {
-  "save": "btn-save",
-  "toggle-production": "btn-production",
-  "toggle-gear": "btn-gear",
-  "toggle-comments": "btn-comments",
-  "write": "btn-write",
-  "present": "btn-present"
-};
+var menuCommandRunner = null;
+
+export function runMenuCommandsWith(runner) {
+  menuCommandRunner = runner;
+  return function () {
+    if (menuCommandRunner === runner) menuCommandRunner = null;
+  };
+}
 
 function runDesktopMenuCommand(cmd) {
-  if (runScriptZoomCommand(cmd)) return;
-  var btnId = DESKTOP_HEADER_BUTTONS[cmd];
-  if (btnId) {
-    var btn = document.getElementById(btnId);
-    if (btn && !btn.disabled) btn.click();
-    return;
-  }
+  if (menuCommandRunner && menuCommandRunner(cmd)) return;
   var item = document.querySelector('#file-menu [data-file-action="' + cssAttr(cmd) + '"]');
   if (item && !item.disabled) item.click();
 }
@@ -119,6 +116,14 @@ export function canOpenPrompterInBrowser() {
 
 export function canOpenPrompterInChromium() {
   return !!(S.DESKTOP && typeof S.DESKTOP.openPrompterInChromium === "function");
+}
+
+export function driveOpenShown() {
+  return !S.DESKTOP || typeof S.DESKTOP.driveStatus === "function";
+}
+
+export function appDataImportShown() {
+  return !!S.DESKTOP;
 }
 
 var PROMPTER_BROWSER_MESSAGES = {
@@ -384,12 +389,12 @@ export function initDesktop() {
   wireDesktopBlobs(S.DESKTOP);
 
   var driveItem = document.getElementById("menu-drive-open");
-  if (driveItem) driveItem.hidden = typeof S.DESKTOP.driveStatus !== "function";
+  if (driveItem) driveItem.hidden = !driveOpenShown();
 
   var exportAppItem = document.getElementById("menu-export-app-data");
   if (exportAppItem) exportAppItem.hidden = false;
   var importAppItem = document.getElementById("menu-import-app-data");
-  if (importAppItem) importAppItem.hidden = false;
+  if (importAppItem) importAppItem.hidden = !appDataImportShown();
 
   var intent = S.DESKTOP.launchIntent && S.DESKTOP.launchIntent.type;
   awaitingHandedDocument = intent === "open-file" || intent === "open-server";

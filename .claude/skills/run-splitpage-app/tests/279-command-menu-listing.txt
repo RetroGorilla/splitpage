@@ -1,0 +1,53 @@
+# What the command menu lists, in what order, and what it says about each
+# item (4.0 milestone 1): the whole listing with no query, in the browser, in
+# a review session and in the desktop app, plus the key chips, switch states
+# and icons. Since the command menu is built from the action registry rather
+# than a hand-kept list, this pins that nothing was added, dropped or moved.
+# Passes against the code before the registry (4.0-development 19c66f7 and
+# 47c0309) and after it.
+
+open
+viewport 1400 900
+eval (function(){ localStorage.removeItem('splitpage-recent-commands'); localStorage.removeItem('splitpage-hide-shot'); localStorage.removeItem('splitpage-rundown-min'); window.C = window.__commandTest; window.__ids = function (q) { return C.results(q).map(function (g) { return g.group + ':' + g.items.map(function (i) { return i.id + (i.disabled ? '!' : ''); }).join(','); }).join('|'); }; window.__why = function (id) { var hit = ''; C.results('').forEach(function (g) { g.items.forEach(function (i) { if (i.id === id) hit = i.why; }); }); return hit; }; window.__rows = function () { return Array.prototype.map.call(document.querySelectorAll('#cmdk-list .cmdk-item'), function (r) { var k = r.querySelector('.cmdk-keys'); var s = r.querySelector('.cmdk-state'); return r.getAttribute('data-cmd') + '=' + (k ? k.textContent : '') + '/' + (s ? s.textContent : ''); }).filter(function (x) { return !/=\/$/.test(x); }).join('|'); }; window.__icons = function () { return Array.prototype.map.call(document.querySelectorAll('#cmdk-list .cmdk-item .cmdk-icon use'), function (u) { return u.getAttribute('href'); }).join(','); }; return true; })()
+
+# --- the browser, nothing open ------------------------------------------------
+key ctrl KeyK
+sleep 300
+expect __ids('') == Tags:tagging-help|File:save,save-as,autosave,new,open,paste,gdoc-import,drive-open|Share:collaborate,servers|Export:export,export-pdf,export-docx,export-md,export-md-table,export-xlsx,export-csv,export-html,export-narration-docx,export-narration-txt,export-breakdown-xlsx,export-breakdown,export-packing-gear!,export-packing-prop!,export-broll-pdf!,export-broll-xlsx!,export-broll-csv!|View:panel-production,panel-gear,panel-broll,panel-comments,write,present|This document:history,find,toggle-hide-shot,toggle-rundown-min,set-target|Help:settings,help,tour,long-demo,setup,about,export-app-data
+expect __rows() == save=CtrlS/|save-as=CtrlShiftS/|autosave=/On|open=CtrlO/|export=CtrlE/|find=CtrlF/|toggle-hide-shot=CtrlAltH/Off|toggle-rundown-min=/Off
+expect __icons() == #i-tag,#i-save,#i-copy,#i-autosave,#i-file-plus,#i-folder,#i-clipboard,#i-link,#i-cloud,#i-people,#i-globe,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-export,#i-panel,#i-panel,#i-panel,#i-panel,#i-pen,#i-play,#i-history,#i-find,#i-eye-off,#i-rundown-min,#i-clock,#i-settings,#i-help,#i-compass,#i-file-plus,#i-sliders,#i-info,#i-box
+expect C.results('save').map(function (g) { return g.group + ':' + g.items.map(function (i) { return i.id; }).join(','); }).join('|') == File:save,save-as,autosave|Export:export
+expect C.results('help').map(function (g) { return g.group + ':' + g.items.map(function (i) { return i.id; }).join(','); }).join('|') == Help:help,settings,tour,long-demo,setup,about,export-app-data|Tags:tagging-help
+key Escape
+sleep 200
+
+# --- a review session -----------------------------------------------------------
+eval (function(){ window.__fetchWas = window.fetch; window.fetch = function(){ return new Promise(function(){}); }; window.__hostedTest.setSession({ role: 'review', docId: 'shared-doc' }); return true; })()
+sleep 300
+key ctrl KeyK
+sleep 300
+expect __ids('') == Tags:tagging-help|File:save,save-as,autosave,new,open,server-open,paste!,gdoc-import,drive-open|Share:collaborate!,server-publish!,servers|Export:export,export-pdf,export-docx,export-md,export-md-table,export-xlsx,export-csv,export-html,export-narration-docx,export-narration-txt,export-breakdown-xlsx,export-breakdown,export-packing-gear!,export-packing-prop!,export-broll-pdf!,export-broll-xlsx!,export-broll-csv!|View:panel-production,panel-gear,panel-broll,panel-comments,write!,present|This document:history,find,toggle-hide-shot,toggle-rundown-min,set-target!|Help:settings,help,tour,long-demo,setup,about,export-app-data
+expect __why('paste') == Viewing only — you can comment, but not change the script
+expect __why('collaborate') == Only the script's owner can invite people
+expect __why('server-publish') == Viewing only — publishing needs the editing code
+expect __why('write') == Viewing only — the writer changes the script
+expect __why('set-target') == Viewing only — the writer sets the target
+key Escape
+sleep 200
+eval (function(){ window.__hostedTest.setSession({ role: 'edit', docId: null }); var m = window.__shareTest.mode(); m.available = false; window.__shareTest.updateMenu(); window.fetch = window.__fetchWas; return true; })()
+sleep 300
+
+# --- the desktop app ------------------------------------------------------------
+eval (function(){ window.D = window.__desktopTest; window.fakeL = D.makeFakeBackend({ drive: true }); D.setBackend(window.fakeL); D.initDesktop(); return true; })()
+sleep 300
+key ctrl KeyK
+sleep 300
+expect __ids('') == Tags:tagging-help|File:save,save-as,autosave,new,open,paste,gdoc-import,drive-open|Share:collaborate,servers|Export:export,export-pdf,export-docx,export-md,export-md-table,export-xlsx,export-csv,export-html,export-narration-docx,export-narration-txt,export-breakdown-xlsx,export-breakdown,export-packing-gear!,export-packing-prop!,export-broll-pdf!,export-broll-xlsx!,export-broll-csv!|View:panel-production,panel-gear,panel-broll,panel-comments,write,present|This document:history,find,toggle-hide-shot,toggle-rundown-min,set-target,prompter-open-in-browser,prompter-open-in-chromium|Help:settings,help,tour,long-demo,setup,about,export-app-data,import-app-data
+expect __rows() == save=CtrlS/|save-as=CtrlShiftS/|autosave=/On|open=CtrlO/|export=CtrlE/|find=CtrlF/|toggle-hide-shot=CtrlAltH/Off|toggle-rundown-min=/Off|prompter-open-in-browser=CtrlShiftP/|help=F1/
+key Escape
+sleep 200
+eval (function(){ D.restoreBackend(); return true; })()
+expect !window.splitpageDesktop
+
+# nothing here edited the document
+expect document.getElementById('btn-save').textContent == Save

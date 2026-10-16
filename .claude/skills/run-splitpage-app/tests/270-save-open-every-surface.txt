@@ -1,0 +1,124 @@
+# Save, Save a copy and Open from every surface (4.0 milestone 1): the
+# header and Writer Save buttons, the File menu, the command menu and the
+# shortcuts. On a script kept in a file, Save writes that file in place and
+# Save a copy asks where to put a copy, so the two cannot be mistaken for
+# each other; with no file yet, Save asks too. The shortcuts keep the
+# browser's own Save and Open dialogs away even when the app refuses. The
+# pickers and the file are fakes, so nothing waits on a real one. Passes
+# against 4.0-development 47c0309, before the action registry, and after it.
+
+open
+viewport 1400 900
+eval (function(){ window.F = window.__splitpageFormats; window.__picked = []; window.showSaveFilePicker = function () { window.__picked.push('save'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.showOpenFilePicker = function () { window.__picked.push('open'); return Promise.reject(new DOMException('cancelled', 'AbortError')); }; window.__prevented = null; window.addEventListener('keydown', function (e) { window.__prevented = e.defaultPrevented; }); window.__take = function () { var p = window.__picked.join(','); window.__picked = []; return p; }; window.__cmdRun = function (q, id) { var it = document.querySelector('#cmdk-list .cmdk-item[data-cmd="' + id + '"]'); if (it) it.click(); return !!it; }; return true; })()
+
+# --- with no file yet, Save asks where ---------------------------------------
+key ctrl KeyS
+sleep 400
+expect __take() === 'save'
+expect window.__prevented === true
+
+# --- from here on the script is kept in a file ----------------------------------
+eval (function(){ var text = JSON.stringify({ schema: 2, title: 'Kept', rows: [{ id: 'r1', visualText: 'Wide', audioText: 'Kept words.', status: 'todo' }], comments: [] }); window.__mtime = Date.now() - 100000; window.__fh = { name: 'kept.splitpage', createWritable: async function () { window.__picked.push('write'); return { write: async function () {}, close: async function () { window.__mtime = Date.now(); } }; }, getFile: async function () { return new File([text], 'kept.splitpage', { lastModified: window.__mtime }); } }; return F.openFile(new File([text], 'kept.splitpage', { lastModified: window.__mtime }), window.__fh); })()
+wait F.docFile().name === 'kept.splitpage'
+eval __take()
+
+# --- Save writes the file in place -----------------------------------------------
+key ctrl KeyS
+sleep 400
+expect __take() === 'write'
+expect window.__prevented === true
+jsclick #btn-save
+sleep 400
+expect __take() === 'write'
+key ctrl KeyK
+sleep 200
+type save
+sleep 200
+eval __cmdRun('save', 'save')
+sleep 400
+expect __take() === 'write'
+
+# --- Save a copy asks where ------------------------------------------------------
+key ctrl+shift KeyS
+sleep 400
+expect __take() === 'save'
+expect window.__prevented === true
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="save-as"]
+sleep 400
+expect __take() === 'save'
+expect document.getElementById('file-menu').hidden
+key ctrl KeyK
+sleep 200
+type save a copy
+sleep 200
+eval __cmdRun('save a copy', 'save-as')
+sleep 400
+expect __take() === 'save'
+expect F.docFile().name === 'kept.splitpage'
+
+# --- Open ------------------------------------------------------------------
+key ctrl KeyO
+sleep 400
+expect __take() === 'open'
+expect window.__prevented === true
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="open"]
+sleep 400
+expect __take() === 'open'
+key ctrl KeyK
+sleep 200
+type open
+sleep 200
+eval __cmdRun('open', 'open')
+sleep 400
+expect __take() === 'open'
+
+# --- under a dialog: nothing opens, and the browser's own dialogs stay away -
+click #btn-file
+sleep 200
+jsclick #file-menu [data-file-action="about"]
+sleep 300
+expect !!document.querySelector('.modal-backdrop:not([hidden])')
+key ctrl KeyS
+sleep 300
+expect window.__prevented === true
+key ctrl+shift KeyS
+sleep 300
+expect window.__prevented === true
+key ctrl KeyO
+sleep 300
+expect window.__prevented === true
+expect __take() === ''
+# the header's Save, and the desktop app's native Save that runs the same
+# action, are refused under a dialog and say why
+eval document.getElementById('toast-host').innerHTML = ''; true
+jsclick #btn-save
+sleep 300
+expect __take() === ''
+expect Array.prototype.some.call(document.querySelectorAll('#toast-host .toast'), function(t){ return t.textContent === 'Close the open dialog first.'; })
+key Escape
+sleep 300
+
+# --- the Writer: its Save button and Ctrl+S write the file; Ctrl+O is refused -
+jsclick #btn-write
+wait !document.getElementById('writer').hidden
+sleep 600
+jsclick #wr-save
+sleep 400
+expect __take() === 'write'
+key ctrl KeyS
+sleep 400
+expect __take() === 'write'
+key ctrl+shift KeyS
+sleep 400
+expect __take() === 'save'
+key ctrl KeyO
+sleep 400
+expect __take() === ''
+expect window.__prevented === true
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+sleep 600

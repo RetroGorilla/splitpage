@@ -1,123 +1,72 @@
 import { S } from "./_state.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
-import { ensureTrailingCaretSpot } from "./04-richtext.js";
-import { fromHtml, toHtml } from "./04c-doc-model.js";
-import { syncFieldFromDom } from "./05-render.js";
-import { markDirty } from "./12-dirty-toast.js";
+import { findRowIndex } from "./03-sync.js";
+import { cssAttr, ensureTrailingCaretSpot } from "./04-richtext.js";
+import { screenIsStale, syncFieldFromDom } from "./05-render.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
+import { toHtml } from "../core/text/html.ts";
+import { editorKeys, isSelectionField } from "../core/text/selection.ts";
+import { createSelectionModel } from "../application/editing/selection.ts";
+import { cellRuns, cellTextCommand } from "../application/commands/cell-text.ts";
+import { domKeys, domToPos, placeSelection, posToDom, readSelection } from "../features/editing/cell-dom.ts";
+import { fromHtml, scriptCellOf } from "../legacy/richtext.ts";
+import { liveSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 
-var ATOM_SELECTOR = ".broll-key, .video-embed-card";
+export { domToPos, posToDom };
 
-function isAtomEl(node) {
-  if (node.nodeType !== 1) return false;
-  if (node.tagName === "IMG") return true;
-  return !!(node.classList && (node.classList.contains("broll-key") || node.classList.contains("video-embed-card")));
-}
-
-function isBlankPara(node) {
-  return node.childNodes.length === 1 && node.firstChild.nodeType === 1 && node.firstChild.tagName === "BR";
-}
-
-function walkCell(cellEl, visit) {
-  var stop = false;
-  (function walk(parent) {
-    for (var c = parent.firstChild; c && !stop; c = c.nextSibling) {
-      if (c.nodeType === 3) {
-        if (visit("text", c, c.nodeValue.replace(/\u200B/g, "").length)) stop = true;
-      } else if (c.nodeType === 1) {
-        if (c.tagName === "BR") { if (visit("br", c, 1)) stop = true; continue; }
-        if (isAtomEl(c)) { if (visit("atom", c, 1)) stop = true; continue; }
-        if (c.tagName === "DIV" || c.tagName === "P") {
-          if (!isBlankPara(c)) walk(c);
-          if (!stop && visit("end", c, 1)) stop = true;
-          continue;
-        }
-        walk(c);
-      }
-    }
-  })(cellEl);
-}
-
-function textCount(node, offset) {
-  return node.nodeValue.slice(0, offset).replace(/\u200B/g, "").length;
-}
-
-function atOrAfter(kind, n, c) {
-  if (n === c || c.contains(n)) return true;
-  if (kind === "end" && n.contains(c)) return true;
-  return !!(c.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_FOLLOWING);
-}
-
-function posBefore(cellEl, c) {
-  var p = 0, result = null;
-  walkCell(cellEl, function (kind, n, len) {
-    if (atOrAfter(kind, n, c)) { result = p; return true; }
-    p += len;
-    return false;
-  });
-  return result === null ? p : result;
-}
-
-function posAfterNode(cellEl, c) {
-  var p = 0, result = null;
-  walkCell(cellEl, function (kind, n, len) {
-    var inside = n === c ? kind !== "end" : c.contains(n);
-    if (!inside && atOrAfter(kind, n, c)) { result = p; return true; }
-    p += len;
-    return false;
-  });
-  return result === null ? p : result;
-}
-
-export function domToPos(cellEl, node, offset) {
-  if (node !== cellEl && !cellEl.contains(node)) return null;
-  var key = node.nodeType === 3 ? node.parentNode : node;
-  var atom = key && key.closest ? key.closest(ATOM_SELECTOR) : null;
-  if (atom && cellEl.contains(atom)) {
-    var atStart = offset === 0 && (node === atom || node === atom.firstChild);
-    return atStart ? posBefore(cellEl, atom) : posAfterNode(cellEl, atom);
+var editorSelection = createSelectionModel({
+  epoch: function () { return liveSession().epoch(); },
+  order: function () { return S.state ? S.state.rows.map(function (r) { return r.id; }) : []; },
+  keys: function (rowId, field) {
+    var idx = S.state ? findRowIndex(rowId) : -1;
+    return idx === -1 ? null : editorKeys(scriptCellOf(S.state.rows[idx][field] || ""));
   }
-  if (node.nodeType === 3) return posBefore(cellEl, node) + textCount(node, offset);
-  if (offset < node.childNodes.length) return posBefore(cellEl, node.childNodes[offset]);
-  return posAfterNode(cellEl, node);
+});
+
+var paintedEpochs = new WeakMap();
+
+export function notePaintedEpoch(rootEl) {
+  if (rootEl) paintedEpochs.set(rootEl, liveSession().epoch());
 }
 
-export function posToDom(cellEl, pos) {
-  var p = 0, result = null, last = null;
-  walkCell(cellEl, function (kind, n, len) {
-    last = { kind: kind, node: n };
-    if (kind === "text") {
-      if (pos <= p + len) {
-        var tag = n.parentNode && n.parentNode.closest && n.parentNode.closest(".tag-anchor");
-        if (tag && cellEl.contains(tag)) {
-          result = pos === p && tag.firstChild === n ? before(tag) : after(tag);
-          return true;
-        }
-        var raw = n.nodeValue, seen = 0, i = 0;
-        while (i < raw.length && seen < pos - p) { if (raw[i] !== "\u200B") seen++; i++; }
-        result = { node: n, offset: i };
-        return true;
-      }
-    } else if (pos <= p) {
-      result = kind === "end" ? endOf(n) : before(n);
-      return true;
-    }
-    p += len;
-    return false;
+function shownOrder(rootEl, field) {
+  return Array.prototype.map.call(rootEl.querySelectorAll('.cell-editable[data-id][data-field="' + field + '"]'), function (el) {
+    return el.getAttribute("data-id");
   });
-  if (result) return result;
-  if (last && last.kind === "atom") return after(last.node);
-  return { node: cellEl, offset: cellEl.childNodes.length };
 }
 
-function before(node) {
-  return { node: node.parentNode, offset: Array.prototype.indexOf.call(node.parentNode.childNodes, node) };
+export function rememberCellSelection(cellEl) {
+  var rootEl = cellEl && cellEl.isConnected ? cellEl.closest("#rows, #writer-doc") : null;
+  if (!rootEl) {
+    editorSelection.forget();
+    return null;
+  }
+  var rowId = cellEl.getAttribute("data-id");
+  var field = cellEl.getAttribute("data-field");
+  var points = rowId && isSelectionField(field) ? readSelection(cellEl, window.getSelection()) : null;
+  if (!points) {
+    editorSelection.forget();
+    return null;
+  }
+  return editorSelection.remember({
+    epoch: paintedEpochs.has(rootEl) ? paintedEpochs.get(rootEl) : liveSession().epoch(),
+    order: shownOrder(rootEl, field),
+    rowId: rowId,
+    field: field,
+    anchor: points.anchor,
+    head: points.head,
+    affinity: points.affinity,
+    keys: domKeys(cellEl)
+  });
 }
-function after(node) {
-  return { node: node.parentNode, offset: Array.prototype.indexOf.call(node.parentNode.childNodes, node) + 1 };
-}
-function endOf(el) {
-  return { node: el, offset: el.childNodes.length };
+
+export function placeEditorSelection(rootEl) {
+  var sel = editorSelection.resolve();
+  if (!sel || !rootEl) return null;
+  var cellEl = rootEl.querySelector('.cell-editable[data-id="' + cssAttr(sel.rowId) + '"][data-field="' + sel.field + '"]');
+  if (!cellEl) return null;
+  cellEl.focus({ preventScroll: true });
+  placeSelection(cellEl, window.getSelection(), sel);
+  return cellEl;
 }
 
 export function cellSelection(cellEl) {
@@ -142,7 +91,8 @@ export function setCellSelection(cellEl, from, to) {
   sel.addRange(range);
 }
 
-export function editCell(cellEl, fn) {
+export function openCellEdit(cellEl) {
+  if (screenIsStale()) return null;
   var rowId = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var idx = findRowIndex(rowId);
@@ -153,26 +103,32 @@ export function editCell(cellEl, fn) {
   if (/<img|video-embed-card/.test(html)) return null;
   var sel = cellSelection(cellEl);
   breakUndoCoalescing();
-  var out = fn(fromHtml(html), sel);
-  if (!out || !out.cell) return null;
-  var next = toHtml(out.cell);
-  if (next !== html) {
-    row[field] = next;
-    stampRow(row);
-    markDirty();
-  }
-  if (out.also) {
-    out.also();
-    markDirty();
-  }
+  return { rowId: rowId, field: field, html: html, sel: sel };
+}
+
+export function closeCellEdit(cellEl, next, sel) {
   cellEl.innerHTML = next;
   ensureTrailingCaretSpot(cellEl);
   syncFieldFromDom(cellEl);
   cellEl.focus({ preventScroll: true });
-  if (out.sel) setCellSelection(cellEl, out.sel.from, out.sel.to);
+  if (sel) setCellSelection(cellEl, sel.from, sel.to);
   flushEdits();
   breakUndoCoalescing();
   return cellEl;
+}
+
+export function editCell(cellEl, fn) {
+  var open = openCellEdit(cellEl);
+  if (!open) return null;
+  var out = fn(fromHtml(open.html), open.sel);
+  if (!out || !out.cell) return null;
+  var next = toHtml(out.cell);
+  if (next !== open.html) {
+    var outcome = runCommand(cellTextCommand(open.rowId, open.field, cellRuns(out.cell), sessionTextPorts, out.records));
+    if (outcome.kind === "failed") throw outcome.error;
+    if (outcome.kind === "rejected") return null;
+  }
+  return closeCellEdit(cellEl, next, out.sel);
 }
 
 export function __init() {}

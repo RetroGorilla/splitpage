@@ -1,0 +1,14 @@
+  .btn.panel-toggle .comments-badge {
+    min-width: 0;
+    height: auto;
+    margin: 0 0 0 5px;
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--text-faint);
+    font-family: var(--font-display);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }

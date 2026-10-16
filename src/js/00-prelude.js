@@ -1,11 +1,11 @@
 import { S } from "./_state.js";
+export { SCHEMA_VERSION } from "../core/document/fields.ts";
 
 export var PAGE_SHELL;
 export var SpeechRecognitionCtor;
 
 S.state = null;
 S.initialStateReady = null;
-export var SCHEMA_VERSION = 2;
 S.editSeq = 0;
 S.dirty = false;
 export var suppressUnloadWarning = false;

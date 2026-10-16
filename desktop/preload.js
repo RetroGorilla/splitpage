@@ -52,13 +52,13 @@ if (location.origin === "splitpage://app") {
   receive("splitpage:reassign-doc-id", (_event, payload) => {
     if (reassignDocIdCallback) reassignDocIdCallback(payload);
   });
-  receive("splitpage:draft-flush", (_event, reqId) => {
+  receive("splitpage:draft-flush", (_event, reqId, keep) => {
     const reply = (result) => {
       try { send("splitpage:draft-flushed", reqId, result); } catch (_) { }
     };
     if (typeof draftFlushCallback !== "function") { reply({ ok: false, code: "NO_TAB" }); return; }
     Promise.resolve()
-      .then(() => draftFlushCallback())
+      .then(() => draftFlushCallback({ keep: keep === true }))
       .then(
         (result) => reply(result && typeof result === "object" ? result : { ok: true }),
         () => reply({ ok: false })

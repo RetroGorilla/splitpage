@@ -1,0 +1,281 @@
+{
+  "undone": [
+    "title",
+    "rows",
+    "comments",
+    "people",
+    "productionTags",
+    "brollShots",
+    "wordsPerMinute",
+    "targetSeconds"
+  ],
+  "notUndone": [
+    "docId",
+    "rev",
+    "lastEditedBy",
+    "lastEditedAt",
+    "personColors",
+    "schema"
+  ],
+  "edits": [
+    {
+      "key": "title",
+      "edit": "changed",
+      "undoEntries": 1,
+      "steps": [
+        "docField:title"
+      ],
+      "undo": "applied",
+      "restored": true,
+      "changedBetween": {
+        "doc": [
+          "title"
+        ],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "docId",
+      "edit": "changed",
+      "undoEntries": 0,
+      "steps": [],
+      "undo": "nothing to undo",
+      "restored": false,
+      "changedBetween": {
+        "doc": [],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "rows",
+      "edit": "a cell changed",
+      "undoEntries": 1,
+      "steps": [
+        "rowField:audioText"
+      ],
+      "undo": "applied",
+      "restored": true,
+      "changedBetween": {
+        "doc": [],
+        "rowFields": [
+          "r1\u0000audioText"
+        ],
+        "structure": false
+      }
+    },
+    {
+      "key": "rows",
+      "edit": "a row added",
+      "undoEntries": 1,
+      "steps": [
+        "insertRow"
+      ],
+      "undo": "applied",
+      "restored": true,
+      "changedBetween": {
+        "doc": [],
+        "rowFields": [],
+        "structure": true
+      }
+    },
+    {
+      "key": "comments",
+      "edit": "one added",
+      "undoEntries": 1,
+      "steps": [
+        "docField:comments"
+      ],
+      "undo": "applied",
+      "restored": true,
+      "changedBetween": {
+        "doc": [
+          "comments"
+        ],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "people",
+      "edit": "one added",
+      "undoEntries": 1,
+      "steps": [
+        "docField:people"
+      ],
+      "undo": "applied",
+      "restored": true,
+      "changedBetween": {
+        "doc": [
+          "people"
+        ],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "productionTags",
+      "edit": "a status changed",
+      "undoEntries": 1,
+      "steps": [
+        "docField:productionTags"
+      ],
+      "undo": "applied",
+      "restored": true,
+      "changedBetween": {
+        "doc": [
+          "productionTags"
+        ],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "brollShots",
+      "edit": "one added",
+      "undoEntries": 1,
+      "steps": [
+        "docField:brollShots"
+      ],
+      "undo": "applied",
+      "restored": true,
+      "changedBetween": {
+        "doc": [
+          "brollShots"
+        ],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "wordsPerMinute",
+      "edit": "changed",
+      "undoEntries": 1,
+      "steps": [
+        "docField:wordsPerMinute"
+      ],
+      "undo": "applied",
+      "restored": true,
+      "changedBetween": {
+        "doc": [
+          "wordsPerMinute"
+        ],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "rev",
+      "edit": "changed",
+      "undoEntries": 0,
+      "steps": [],
+      "undo": "nothing to undo",
+      "restored": false,
+      "changedBetween": {
+        "doc": [],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "lastEditedBy",
+      "edit": "changed",
+      "undoEntries": 0,
+      "steps": [],
+      "undo": "nothing to undo",
+      "restored": false,
+      "changedBetween": {
+        "doc": [],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "lastEditedAt",
+      "edit": "changed",
+      "undoEntries": 0,
+      "steps": [],
+      "undo": "nothing to undo",
+      "restored": false,
+      "changedBetween": {
+        "doc": [],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "personColors",
+      "edit": "a colour changed",
+      "undoEntries": 0,
+      "steps": [],
+      "undo": "nothing to undo",
+      "restored": false,
+      "changedBetween": {
+        "doc": [],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "personColors",
+      "edit": "removed",
+      "undoEntries": 0,
+      "steps": [],
+      "undo": "nothing to undo",
+      "restored": false,
+      "changedBetween": {
+        "doc": [],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "targetSeconds",
+      "edit": "changed",
+      "undoEntries": 1,
+      "steps": [
+        "docField:targetSeconds"
+      ],
+      "undo": "applied",
+      "restored": true,
+      "changedBetween": {
+        "doc": [
+          "targetSeconds"
+        ],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "targetSeconds",
+      "edit": "removed",
+      "undoEntries": 1,
+      "steps": [
+        "docField:targetSeconds"
+      ],
+      "undo": "applied",
+      "restored": true,
+      "changedBetween": {
+        "doc": [
+          "targetSeconds"
+        ],
+        "rowFields": [],
+        "structure": false
+      }
+    },
+    {
+      "key": "schema",
+      "edit": "changed",
+      "undoEntries": 0,
+      "steps": [],
+      "undo": "nothing to undo",
+      "restored": false,
+      "changedBetween": {
+        "doc": [],
+        "rowFields": [],
+        "structure": false
+      }
+    }
+  ]
+}

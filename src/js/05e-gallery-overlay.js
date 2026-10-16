@@ -1,6 +1,5 @@
 import { S } from "./_state.js";
 import { PREF_EVENT, VIDEO_THUMBS_KEY } from "./00p-prefs.js";
-import { escapeHtml } from "./02-state.js";
 import {
   annotateGallerySlot,
   moveGallerySlot,
@@ -10,22 +9,26 @@ import {
   videoLinkKey,
   videoLinkLabel
 } from "./02d-gallery.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
+import { findRowIndex } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";
 import {
   formatVideoLength,
   galleryBadgeHtml,
   gallerySlotPictureHtml,
   render,
-  slotPoster,
-  videoHostLabel
+  slotPoster
 } from "./05-render.js";
 import { embeddableVideo, embedRefusal, fetchThumbnailRecord, playerSrc, thumbnailsAllowed } from "./05v-video.js";
 import { openAnnotator, refreshAnnotator } from "./05w-annotate.js";
 import { hasSessionVideo, openGalleryLink, sessionVideoUrl } from "./06-rows.js";
-import { markDirty, showActionToast, showToast } from "./12-dirty-toast.js";
+import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, lastUndoEntry, undo } from "./12a-undo.js";
 import { reviewMode } from "./13-hosted.js";
+import { videoHostLabel } from "../adapters/formats/video-host.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
+import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
+import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { galleryCommand } from "../application/commands/gallery.ts";
 
 var view = null;
 var returnFocus = null;
@@ -306,10 +309,15 @@ function retryThumbnail() {
   var poster = slot && slotPoster(slot);
   if (!poster || !poster.href || reviewMode()) return;
   var key = videoLinkKey(poster);
+  var ctx = captureOperation();
   view.fetching = key;
   paint();
   fetchThumbnailRecord(poster.href).then(function (rec) {
     if (view && view.fetching === key) view.fetching = null;
+    if (!stillOwns(ctx)) {
+      if (view) refreshGalleryOverlay();
+      return;
+    }
     var done = rec && rowOf(rowId) && galleryEdit(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); });
     if (!done) showToast("Could not get this video’s thumbnail — you may be offline, or the video is private or gone.", "warn");
     if (view && view.rowId === rowId) refreshGalleryOverlay();
@@ -327,13 +335,12 @@ function revealPicked(grid) {
 }
 
 export function galleryEdit(rowId, msg, fn) {
-  var got = rowOf(rowId);
-  if (!got) return false;
+  if (!rowOf(rowId)) return false;
   var before = lastUndoEntry();
   breakUndoCoalescing();
-  if (!fn(got.row)) return false;
-  stampRow(got.row);
-  markDirty();
+  var outcome = runCommand(galleryCommand(rowId, fn, sessionTextPorts));
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind !== "applied" && outcome.kind !== "committed") return false;
   render();
   announceGalleryEdit(msg, before);
   return true;

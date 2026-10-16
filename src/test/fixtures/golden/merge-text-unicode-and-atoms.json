@@ -1,0 +1,454 @@
+{
+  "inputs": {
+    "base": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "<span class=\"broll-key\" data-broll-id=\"bsA\" contenteditable=\"false\">B-roll:</span> gulls over the pier<br><span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> on the hob 🔥",
+          "audioText": "Café 🎬 opens at 𝟗 — naïve crew. 東京 and עברית.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Hi.<br><span class=\"audio-cue\">SFX: door slam</span><br><span class=\"cmt-anchor\" data-cmt=\"c1\">Then</span> we go <span class=\"stage-dir\">beat</span> home.",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Score: 𝄞 one",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        },
+        {
+          "id": "r4",
+          "status": "todo",
+          "visualText": "a&nbsp;b c​d",
+          "audioText": "Put the red mug on the tabel",
+          "imageRef": null,
+          "updatedAt": "2026-02-01T09:00:00.000Z",
+          "updatedBy": "Base Writer"
+        }
+      ],
+      "comments": [
+        {
+          "id": "c1",
+          "rowId": "r2",
+          "field": "audioText",
+          "anchorId": "c1",
+          "quotedText": "Then",
+          "author": "Sam",
+          "body": "Look at c1",
+          "resolved": false,
+          "resolvedBy": null,
+          "resolvedAt": null,
+          "assignee": "",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-02T09:00:00.000Z",
+          "replies": []
+        }
+      ],
+      "people": [],
+      "productionTags": [
+        {
+          "cat": "prop",
+          "name": "Kettle",
+          "owner": "",
+          "notes": "",
+          "status": "needed",
+          "id": "t_o3zvjjzm6qwq"
+        },
+        {
+          "cat": "sound",
+          "name": "door slam",
+          "owner": "",
+          "notes": "",
+          "status": "needed",
+          "id": "t_1opaishvqv40e"
+        }
+      ],
+      "brollShots": [
+        {
+          "id": "bsA",
+          "name": "gulls over the pier",
+          "desc": "kettle on the hob 🔥",
+          "status": "unshot",
+          "reshoot": false,
+          "notes": "",
+          "owner": "",
+          "audioRef": "Café 🎬 opens at 𝟗 — naïve crew. 東京 and עברית.",
+          "location": "",
+          "props": [],
+          "origin": "script"
+        }
+      ],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "mine": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "<span class=\"broll-key\" data-broll-id=\"bsA\" contenteditable=\"false\">B-roll:</span> terns over the pier<br><span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> on the hob 🔥",
+          "audioText": "Café 🎬 starts at 𝟗 — naïve crew. 東京 and עברית.",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Hi.<br><span class=\"audio-cue\">SFX: door slam</span><br><span class=\"cmt-anchor\" data-cmt=\"c1\">Then</span> we go <span class=\"stage-dir\">beat</span> inside.",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Score: 𝄞 two",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        },
+        {
+          "id": "r4",
+          "status": "todo",
+          "visualText": "a&nbsp;b c​d e",
+          "audioText": "Put the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"red mug\" contenteditable=\"false\">red mug</span> on the tabel",
+          "imageRef": null,
+          "updatedAt": "2026-02-05T10:00:00.000Z",
+          "updatedBy": "Mine Writer"
+        }
+      ],
+      "comments": [
+        {
+          "id": "c1",
+          "rowId": "r2",
+          "field": "audioText",
+          "anchorId": "c1",
+          "quotedText": "Then",
+          "author": "Sam",
+          "body": "Look at c1",
+          "resolved": false,
+          "resolvedBy": null,
+          "resolvedAt": null,
+          "assignee": "",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-02T09:00:00.000Z",
+          "replies": []
+        }
+      ],
+      "people": [],
+      "productionTags": [
+        {
+          "cat": "prop",
+          "name": "Kettle",
+          "owner": "",
+          "notes": "",
+          "status": "needed",
+          "id": "t_o3zvjjzm6qwq"
+        },
+        {
+          "cat": "sound",
+          "name": "door slam",
+          "owner": "",
+          "notes": "",
+          "status": "needed",
+          "id": "t_1opaishvqv40e"
+        },
+        {
+          "cat": "prop",
+          "name": "red mug",
+          "owner": "",
+          "notes": "",
+          "status": "needed",
+          "id": "t_13ff9pk7vdcv3"
+        }
+      ],
+      "brollShots": [
+        {
+          "id": "bsA",
+          "name": "terns over the pier",
+          "desc": "kettle on the hob 🔥",
+          "status": "unshot",
+          "reshoot": false,
+          "notes": "",
+          "owner": "",
+          "audioRef": "Café 🎬 starts at 𝟗 — naïve crew. 東京 and עברית.",
+          "location": "",
+          "props": [],
+          "origin": "script"
+        }
+      ],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    },
+    "theirs": {
+      "schema": 2,
+      "title": "Lighthouse",
+      "docId": "d11111111111111111111111111111111",
+      "rows": [
+        {
+          "id": "r1",
+          "status": "todo",
+          "visualText": "<span class=\"broll-key\" data-broll-id=\"bsA\" contenteditable=\"false\">B-roll:</span> gulls over the pier<br><span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> on the stove 🔥",
+          "audioText": "Café 🎬 opens at 𝟗 — brave crew. 東京 and עברית.",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        },
+        {
+          "id": "r2",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Hi.<br><span class=\"audio-cue\">SFX: door slams</span><br><span class=\"cmt-anchor\" data-cmt=\"c1\">Then</span> we go <span class=\"stage-dir\">beat</span> home.",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        },
+        {
+          "id": "r3",
+          "status": "todo",
+          "visualText": "",
+          "audioText": "Score: 𝄞 three",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        },
+        {
+          "id": "r4",
+          "status": "todo",
+          "visualText": "A&nbsp;b c​d",
+          "audioText": "Put the red mug on the table",
+          "imageRef": null,
+          "updatedAt": "2026-02-06T11:00:00.000Z",
+          "updatedBy": "Their Writer"
+        }
+      ],
+      "comments": [
+        {
+          "id": "c1",
+          "rowId": "r2",
+          "field": "audioText",
+          "anchorId": "c1",
+          "quotedText": "Then",
+          "author": "Sam",
+          "body": "Look at c1",
+          "resolved": false,
+          "resolvedBy": null,
+          "resolvedAt": null,
+          "assignee": "",
+          "kind": "anchor",
+          "createdAt": "2026-02-02T09:00:00.000Z",
+          "updatedAt": "2026-02-02T09:00:00.000Z",
+          "replies": []
+        }
+      ],
+      "people": [],
+      "productionTags": [
+        {
+          "cat": "prop",
+          "name": "Kettle",
+          "owner": "",
+          "notes": "",
+          "status": "needed",
+          "id": "t_o3zvjjzm6qwq"
+        },
+        {
+          "cat": "sound",
+          "name": "door slams",
+          "owner": "",
+          "notes": "",
+          "status": "needed",
+          "id": "t_fqkkuu16um2hf"
+        }
+      ],
+      "brollShots": [
+        {
+          "id": "bsA",
+          "name": "gulls over the pier",
+          "desc": "kettle on the stove 🔥",
+          "status": "unshot",
+          "reshoot": false,
+          "notes": "",
+          "owner": "",
+          "audioRef": "Café 🎬 opens at 𝟗 — brave crew. 東京 and עברית.",
+          "location": "",
+          "props": [],
+          "origin": "script"
+        }
+      ],
+      "wordsPerMinute": 150,
+      "rev": 4,
+      "lastEditedBy": "Base Writer",
+      "lastEditedAt": "2026-02-01T09:00:00.000Z"
+    }
+  },
+  "inputsUntouched": true,
+  "merged": {
+    "title": "Lighthouse",
+    "docId": "d11111111111111111111111111111111",
+    "rows": [
+      {
+        "id": "r1",
+        "status": "todo",
+        "visualText": "<span class=\"broll-key\" data-broll-id=\"bsA\" contenteditable=\"false\">B-roll:</span> terns over the pier<br><span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"Kettle\" contenteditable=\"false\">kettle</span> on the stove 🔥",
+        "audioText": "Café 🎬 starts at 𝟗 — brave crew. 東京 and עברית.",
+        "imageRef": null,
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor"
+      },
+      {
+        "id": "r2",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Hi.<br><span class=\"audio-cue\">SFX: door slams</span><br><span class=\"cmt-anchor\" data-cmt=\"c1\">Then</span> we go <span class=\"stage-dir\">beat</span> inside.",
+        "imageRef": null,
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor"
+      },
+      {
+        "id": "r3",
+        "status": "todo",
+        "visualText": "",
+        "audioText": "Score: 𝄞 three",
+        "imageRef": null,
+        "updatedAt": "2026-02-06T11:00:00.000Z",
+        "updatedBy": "Their Writer"
+      },
+      {
+        "id": "r4",
+        "status": "todo",
+        "visualText": "A&nbsp;b cd e",
+        "audioText": "Put the <span class=\"tag-anchor\" data-tag-cat=\"prop\" data-tag-name=\"red mug\" contenteditable=\"false\">red mug</span> on the table",
+        "imageRef": null,
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "updatedBy": "Merge Editor"
+      }
+    ],
+    "comments": [
+      {
+        "id": "c1",
+        "rowId": "r2",
+        "field": "audioText",
+        "anchorId": "c1",
+        "quotedText": "Then",
+        "author": "Sam",
+        "body": "Look at c1",
+        "resolved": false,
+        "resolvedBy": null,
+        "resolvedAt": null,
+        "assignee": "",
+        "kind": "anchor",
+        "createdAt": "2026-02-02T09:00:00.000Z",
+        "updatedAt": "2026-02-02T09:00:00.000Z",
+        "replies": []
+      },
+      {
+        "id": "<minted-comment-id-1>",
+        "rowId": "r3",
+        "field": "audioText",
+        "anchorId": "<minted-comment-id-1>",
+        "quotedText": "",
+        "author": "Merge Editor",
+        "body": "Score: 𝄞 two",
+        "resolved": false,
+        "createdAt": "2030-01-02T03:04:05.678Z",
+        "updatedAt": "2030-01-02T03:04:05.678Z",
+        "kind": "conflict",
+        "conflictField": "Audio",
+        "emptyValue": false,
+        "replies": [],
+        "resolvedBy": null,
+        "resolvedAt": null,
+        "assignee": ""
+      }
+    ],
+    "people": [],
+    "productionTags": [
+      {
+        "cat": "prop",
+        "name": "Kettle",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_o3zvjjzm6qwq"
+      },
+      {
+        "cat": "sound",
+        "name": "door slams",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_fqkkuu16um2hf"
+      },
+      {
+        "cat": "prop",
+        "name": "red mug",
+        "owner": "",
+        "notes": "",
+        "status": "needed",
+        "id": "t_13ff9pk7vdcv3"
+      }
+    ],
+    "brollShots": [
+      {
+        "id": "bsA",
+        "name": "terns over the pier",
+        "desc": "kettle on the stove 🔥",
+        "status": "unshot",
+        "reshoot": false,
+        "notes": "",
+        "owner": "",
+        "audioRef": "Café 🎬 opens at 𝟗 — brave crew. 東京 and עברית.",
+        "location": "",
+        "props": [],
+        "origin": "script"
+      }
+    ],
+    "wordsPerMinute": 150,
+    "rev": 5,
+    "lastEditedBy": "Base Writer",
+    "lastEditedAt": "2026-02-01T09:00:00.000Z",
+    "schema": 2
+  },
+  "conflicts": [
+    {
+      "rowId": "r3",
+      "field": "audioText",
+      "mine": "Score: 𝄞 two",
+      "theirs": "Score: 𝄞 three"
+    }
+  ],
+  "stats": {
+    "rowsFromThem": 1,
+    "rowsFromMe": 3,
+    "rowsAddedByMe": 0,
+    "rowsAddedByThem": 0
+  }
+}

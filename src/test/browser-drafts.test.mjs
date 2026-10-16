@@ -7,7 +7,9 @@ import {
   createIdbDraftStore,
   draftBaseOf,
   planDraftEviction
-} from "../js/03d-drafts-idb.js";
+} from "../adapters/storage/draft-store-idb.ts";
+
+const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 
 const DAY = 24 * 60 * 60 * 1000;
 const PAGE = "https://script.example.test/app/index.html?doc=d1#invite=SECRETKEY";
@@ -56,8 +58,18 @@ test("eviction: expired first, then the oldest past the count or the bytes, neve
   assert.deepEqual(planDraftEviction([null, { key: 5 }, m("ok", 1)], now), []);
 });
 
+test("a draft's title is cut at 500 by code point, with no half emoji (#434)", async () => {
+  const grin = String.fromCodePoint(0x1F600);
+  const store = openDraftStore({ indexedDB: new IDBFactory() });
+  const a = browserDraftKey("https://s.test/", "doc-1"), b = browserDraftKey("https://s.test/", "doc-2");
+  await store.put(rec(a, { title: "x".repeat(499) + grin + "y" }));
+  await store.put(rec(b, { docId: "doc-2", title: "a\uD83D b" }));
+  const titles = (await store.list()).map((m) => [m.docId, m.title]).sort();
+  assert.deepEqual(titles, [["doc-1", "x".repeat(499) + grin], ["doc-2", "a b"]]);
+});
+
 test("put and get: the draft comes back whole, with its scalars and its ancestor", async () => {
-  const store = createIdbDraftStore({ indexedDB: new IDBFactory() });
+  const store = openDraftStore({ indexedDB: new IDBFactory() });
   assert.equal(await store.available(), true);
   const key = browserDraftKey("https://s.test/", "doc-1");
   assert.deepEqual(await store.put(rec(key)), { ok: true, evicted: 0 });
@@ -72,7 +84,7 @@ test("put and get: the draft comes back whole, with its scalars and its ancestor
 });
 
 test("a null ancestor is the writer's own last one, else NEED_BASE", async () => {
-  const store = createIdbDraftStore({ indexedDB: new IDBFactory() });
+  const store = openDraftStore({ indexedDB: new IDBFactory() });
   const key = browserDraftKey("https://s.test/", "doc-1");
   assert.deepEqual(await store.put(rec(key, { baseJson: null })), { ok: false, code: "NEED_BASE" });
   assert.equal(await store.get(key), null);
@@ -92,7 +104,7 @@ test("a null ancestor is the writer's own last one, else NEED_BASE", async () =>
 });
 
 test("remove takes only the writer's own draft; claim hands it over", async () => {
-  const store = createIdbDraftStore({ indexedDB: new IDBFactory() });
+  const store = openDraftStore({ indexedDB: new IDBFactory() });
   const key = browserDraftKey("https://s.test/", "doc-1");
   await store.put(rec(key));
   assert.equal(await store.remove(key, "w2"), false);
@@ -107,7 +119,7 @@ test("remove takes only the writer's own draft; claim hands it over", async () =
 
 test("eviction runs inside the put; an expired draft is neither read nor listed", async () => {
   let clock = 1000 * DAY;
-  const store = createIdbDraftStore({ indexedDB: new IDBFactory(), now: () => clock,
+  const store = openDraftStore({ indexedDB: new IDBFactory(), now: () => clock,
     limits: { maxAgeMs: 30 * DAY, maxCount: 3, maxBytes: 64 * 1024 * 1024 } });
   const keys = ["a", "b", "c", "d"].map((d) => browserDraftKey("https://s.test/", d));
   for (const k of keys) { await store.put(rec(k)); clock += 1000; }
@@ -122,16 +134,16 @@ test("eviction runs inside the put; an expired draft is neither read nor listed"
 });
 
 test("no IndexedDB: every call answers quietly, nothing throws", async () => {
-  const none = createIdbDraftStore({ indexedDB: null });
+  const none = openDraftStore({ indexedDB: null });
   assert.equal(await none.available(), false);
   assert.deepEqual(await none.put(rec("k")), { ok: false, code: "UNAVAILABLE" });
   assert.equal(await none.get("k"), null);
   assert.deepEqual(await none.list(), []);
   assert.equal(await none.remove("k", "w1"), false);
-  const throwing = createIdbDraftStore({ indexedDB: { open() { throw new Error("SecurityError"); } } });
+  const throwing = openDraftStore({ indexedDB: { open() { throw new Error("SecurityError"); } } });
   assert.equal(await throwing.available(), false);
   assert.deepEqual(await throwing.put(rec("k")), { ok: false, code: "UNAVAILABLE" });
-  const erroring = createIdbDraftStore({ indexedDB: { open() {
+  const erroring = openDraftStore({ indexedDB: { open() {
     const req = {};
     setTimeout(() => { req.error = new Error("InvalidStateError"); req.onerror && req.onerror({ preventDefault() {} }); }, 0);
     return req;
@@ -140,10 +152,33 @@ test("no IndexedDB: every call answers quietly, nothing throws", async () => {
 });
 
 test("nothing credential-shaped is added on the way in", async () => {
-  const store = createIdbDraftStore({ indexedDB: new IDBFactory() });
+  const store = openDraftStore({ indexedDB: new IDBFactory() });
   const key = browserDraftKey(draftBaseOf("", PAGE), "doc-1");
   await store.put(rec(key, { base: draftBaseOf("", PAGE), token: "tok-SECRET", linkKey: "SECRETKEY" }));
   const got = await store.get(key);
   assert.ok(!("token" in got) && !("linkKey" in got));
   assert.ok(!/SECRET|invite/.test(JSON.stringify(got)));
+});
+
+test("the store is built with its factory, limits and clock: none is filled in from the page", () => {
+  assert.throws(() => createIdbDraftStore({ limits: DRAFT_LIMITS, now: () => 0 }), /IndexedDB factory/);
+  assert.throws(() => createIdbDraftStore({ indexedDB: null, now: () => 0 }), /limits and clock/);
+  assert.throws(() => createIdbDraftStore({ indexedDB: null, limits: DRAFT_LIMITS }), /limits and clock/);
+  assert.equal(typeof createIdbDraftStore({ indexedDB: null, limits: DRAFT_LIMITS, now: () => 0 }).put, "function");
+});
+
+test("generations: remove with a generation takes only that generation, and claim sets the claimer's", async () => {
+  const store = openDraftStore({ indexedDB: new IDBFactory() });
+  const key = browserDraftKey("https://s.test/", "doc-1");
+  await store.put(rec(key, { writerId: "w1", generation: 4 }));
+  assert.equal((await store.get(key)).generation, 4);
+  assert.equal(await store.remove(key, "w1", 3), false, "an older generation is not the one stored");
+  assert.notEqual(await store.get(key), null);
+  assert.equal(await store.claim(key, "w2", 9), true);
+  const claimed = await store.get(key);
+  assert.equal(claimed.writerId, "w2");
+  assert.equal(claimed.generation, 9);
+  assert.equal(await store.remove(key, "w2", 4), false);
+  assert.equal(await store.remove(key, "w2", 9), true);
+  assert.equal(await store.get(key), null);
 });

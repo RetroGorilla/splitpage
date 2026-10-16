@@ -11,6 +11,7 @@ import {
   commentNumbers,
   exportBrollScenes,
   exportComments,
+  exportDocumentOf,
   exportFacts,
   exportRuns,
   exportSummaryParts,
@@ -25,9 +26,10 @@ initTags();
 const copy = (o) => JSON.parse(JSON.stringify(o));
 const demo = () => { S.state = migrateRows(copy(LONG_DEMO.state)); };
 
-test("the document's facts: scenes, running time, target, shot count", () => {
+test("the document's facts: scenes, running time, target, shot count", (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 8, 26, 12) });
   demo();
-  const f = exportFacts(new Date(Date.UTC(2026, 8, 26, 12)));
+  const f = exportFacts(exportDocumentOf(S.state));
   assert.equal(f.title, LONG_DEMO.state.title);
   assert.equal(f.scenes, 30);
   assert.equal(f.runtime, "9:44");
@@ -42,19 +44,19 @@ test("the document's facts: scenes, running time, target, shot count", () => {
 test("a script with no target and one scene says so in the singular", () => {
   S.state = migrateRows({ schema: 2, title: "One", comments: [],
     rows: [{ id: "r0", visualText: "", audioText: "Hello there, and welcome to a line long enough to take a few seconds.", status: "todo" }] });
-  const parts = exportSummaryParts();
+  const parts = exportSummaryParts(exportFacts(exportDocumentOf(S.state)));
   assert.equal(parts[0], "1 scene");
   assert.equal(parts.some((p) => /Target/.test(p)), false);
   assert.equal(parts[2], "0 of 1 shot");
   S.state.targetSeconds = 1;
-  assert.match(exportSummaryParts()[2], / over$/);
+  assert.match(exportSummaryParts(exportFacts(exportDocumentOf(S.state)))[2], / over$/);
   S.state.targetSeconds = 3600;
-  assert.match(exportSummaryParts()[2], / under$/);
+  assert.match(exportSummaryParts(exportFacts(exportDocumentOf(S.state)))[2], / under$/);
 });
 
 test("each scene's gutter: number, start timecode, read time, set by hand or not, status", () => {
   demo();
-  const scenes = sceneFacts();
+  const scenes = sceneFacts(exportDocumentOf(S.state));
   assert.equal(scenes.length, 30);
   assert.equal(scenes[0].number, "01");
   assert.equal(scenes[0].start, "00:00");
@@ -70,13 +72,13 @@ test("each scene's gutter: number, start timecode, read time, set by hand or not
 
 test("the open threads are numbered down the script, a resolved one not at all", () => {
   demo();
-  const nums = commentNumbers();
+  const nums = commentNumbers(exportDocumentOf(S.state));
   const open = S.state.comments.filter((c) => !c.resolved);
   const resolved = S.state.comments.filter((c) => c.resolved);
   assert.equal(Object.keys(nums).length, open.length);
   assert.deepEqual(Object.values(nums).sort(), open.map((_, i) => i + 1));
   for (const c of resolved) assert.equal(nums[c.id], undefined);
-  const list = exportComments();
+  const list = exportComments(exportDocumentOf(S.state));
   assert.equal(list.length, S.state.comments.length);
   const numbered = list.filter((c) => c.number);
   assert.deepEqual(numbered.map((c) => c.number), [1, 2, 3]);
@@ -97,8 +99,8 @@ test("nested and overlapping spans count the way the script's counter does", () 
       author: "Ann", body: id, resolved: id === "c"
     }))
   });
-  assert.deepEqual({ ...commentNumbers() }, { b: 1, a: 2, d: 3, e: 4 });
-  const runs = exportRuns(S.state.rows[0].audioText);
+  assert.deepEqual({ ...commentNumbers(exportDocumentOf(S.state)) }, { b: 1, a: 2, d: 3, e: 4 });
+  const runs = exportRuns(S.state.rows[0].audioText, exportDocumentOf(S.state).commentNumbers);
   const marked = runs.filter((r) => r.markers);
   assert.equal(marked.length, 1);
   assert.equal(marked[0].text, "two");
@@ -107,7 +109,7 @@ test("nested and overlapping spans count the way the script's counter does", () 
 
 test("a cell's runs carry their tag and its colour, the b-roll key, and the markers", () => {
   demo();
-  const nums = commentNumbers();
+  const nums = commentNumbers(exportDocumentOf(S.state));
   const v1 = exportRuns(S.state.rows[0].visualText, nums);
   const tagged = v1.filter((r) => r.tag);
   assert.ok(tagged.length >= 3);
@@ -128,7 +130,7 @@ test("a cell's runs carry their tag and its colour, the b-roll key, and the mark
 
 test("the breakdown by category, in the panel's order and words", () => {
   demo();
-  const groups = breakdownGroups();
+  const groups = breakdownGroups(exportDocumentOf(S.state));
   assert.deepEqual(groups.map((g) => g.catId), ["prop", "location", "cast", "vfx", "sound", "gear"]);
   assert.equal(groups[0].label, "Props & set dressing");
   assert.equal(groups[0].color, "764AA2");
@@ -137,7 +139,7 @@ test("the breakdown by category, in the panel's order and words", () => {
 
 test("the b-roll by scene, with each scene's start and count", () => {
   demo();
-  const groups = exportBrollScenes();
+  const groups = exportBrollScenes(exportDocumentOf(S.state));
   const all = groups.reduce((n, g) => n + g.items.length, 0);
   assert.equal(all, 9);
   assert.equal(groups[0].label, "Scene 04");
@@ -145,7 +147,7 @@ test("the b-roll by scene, with each scene's start and count", () => {
   assert.equal(groups[0].done, 1);
   assert.equal(brollSummaryText(groups), "3 of 9 shot · 1 flagged");
   const s = S.state.brollShots.length;
-  exportBrollScenes();
+  exportBrollScenes(exportDocumentOf(S.state));
   assert.equal(S.state.brollShots.length, s, "reading the list adds nothing to it");
 });
 

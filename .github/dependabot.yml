@@ -1,23 +1,19 @@
-# Dependency updates arrive as pull requests, so they run through the same CI
-# as any other change. Weekly and grouped, so a week's worth is one PR per
-# area rather than a stream.
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
       interval: weekly
+    target-branch: 4.0-development
     groups:
       dev-tooling:
         patterns: ['*']
 
-  # The Electron shell and its installer builder. Major Electron releases
-  # change Chromium and the security defaults, so they are read, not merged
-  # on green.
   - package-ecosystem: npm
     directory: /desktop
     schedule:
       interval: weekly
+    target-branch: 4.0-development
     groups:
       desktop:
         patterns: ['*']
@@ -26,12 +22,13 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    target-branch: 4.0-development
     groups:
       actions:
         patterns: ['*']
 
-  # The server image's base (node:*-alpine or similar).
   - package-ecosystem: docker
     directory: /
     schedule:
       interval: weekly
+    target-branch: 4.0-development

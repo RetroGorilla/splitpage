@@ -6,51 +6,20 @@ directories:
   output: dist
   buildResources: build
 
-# main.js requires ./drafts at load and both preloads by path, so all four
-# have to be inside the asar or a packaged launch crashes on startup. The tab
-# strip's own three files are NOT here — they are served from
-# resources/splitpage/tabstrip (stage.mjs stages them, extraResources below
-# ships them), because protocol.handle reads them off disk.
-#
-# shared/ (issue #76) is required at startup too but is NOT here either, for a
-# different reason: it lives at the REPO root, one level above this app
-# directory, and main.js finds it through APP_ROOT — the repo root in dev,
-# resources/splitpage when packaged. stage.mjs copies it there with the rest,
-# so one path expression works in both, and requiring a plain file outside the
-# asar is ordinary. Deleting it from stage.mjs breaks launch, not just a
-# feature.
 files:
   - main.js
   - preload.js
   - tabstrip-preload.js
   - drafts.js
-  # The IPC channel table. main.js requires it at startup and both preloads
-  # read it over splitpage:ipc-table-sync, so a packaged build without it is
-  # an app with no bridge at all — same reason drafts.js is listed.
   - ipc-channels.js
-  # The teleprompter's loopback listener (issue #86). main.js requires it at
-  # startup, so it has to ship for the same reason drafts.js does.
   - prompter-share.js
-  # Google Drive through a loopback OAuth redirect (issue #10). main.js
-  # requires it at startup, so it has to ship for the same reason drafts.js
-  # does. desktop/test/google-drive.test.mjs checks that every ./module
-  # main.js requires is listed here.
   - google-drive.js
-  # The content-addressed blob folder images live in (issue #82). main.js
-  # requires it at startup, so it has to ship for the same reason drafts.js
-  # does.
+  - bind-host.js
+  - close-keep.js
+  - quit-watchdog.js
   - blob-store.js
-  # Follow My Voice's listener process (issue #8). main.js requires it at
-  # startup, so it has to ship for the same reason drafts.js does. The
-  # PowerShell script it runs cannot be read from inside the asar, so that
-  # goes through stage.mjs into resources/splitpage/voice instead.
   - voice-helper.js
-  # Finding an installed Chromium browser for "Use Chromium Speech
-  # Recognition" (issue #123). main.js requires it at startup, so it has to
-  # ship for the same reason drafts.js does.
   - chromium-browsers.js
-  # Version history on disk (issue #83): the fs backend the shared store runs
-  # over in main. history-fs-backend.js itself requires ./blob-store.js.
   - history-fs-backend.js
   - package.json
 
@@ -61,13 +30,6 @@ extraResources:
 asar: true
 
 win:
-  # Both architectures are pinned here, not left to electron-builder's
-  # default, which is the HOST's architecture. On this Snapdragon machine
-  # that default is ARM64-only. The IExpress setups hit the same trap: 1.0.1's
-  # "x64" setup came out as an ARM64 binary that no x64 PC could start.
-  # `npm run dist:win` also passes --x64 --arm64 and then runs verify-dist.mjs,
-  # which reads each produced binary's PE machine field and fails the build on
-  # a mismatch.
   target:
     - target: nsis
       arch:
@@ -77,24 +39,6 @@ win:
   icon: build/icon.ico
 
 nsis:
-  # The app payload ships as a ZIP rather than 7z, and differential packaging
-  # is off because it forces 7z back on regardless of useZip (NsisTarget.js:78
-  # picks the format from `!isBuildDifferentialAware && options.useZip`).
-  #
-  # 7-Zip applies an architecture-specific BCJ filter to executables, and the
-  # differential path builds the archive non-solid (dictSize 1, solid false),
-  # so that filter lands on each PE file individually. Whatever unpacks the
-  # payload inside NSIS cannot decode the ARM64 variant: the 2.0.1 ARM64 setup
-  # extracted every .pak, .dat, .bin and .html correctly, silently dropped all
-  # seven top-level binaries including Splitpage.exe, then wrote the shortcuts
-  # and the uninstaller and exited 0. What the user sees is Windows hunting for
-  # a Splitpage.exe that was never written. The x64 setup was unaffected on the
-  # same machine in the same minute — its BCJ filter is old and understood
-  # everywhere.
-  #
-  # Differential packaging costs us nothing here: blockmaps are not published
-  # assets (DEPLOY.md §7 ships the zip, two setups and SHA256SUMS) and the
-  # updater downloads whole installers.
   differentialPackage: false
   useZip: true
   oneClick: false
@@ -103,11 +47,6 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: Splitpage
-  # Puts the main Start Menu shortcut in the same "Splitpage" subfolder that
-  # installer.nsh's customInstall macro already creates for the "(shared
-  # session)" shortcut, instead of the main one landing loose at the Start
-  # Menu root while a same-named "Splitpage" folder sits next to it holding
-  # only the second shortcut — easy to miss or mistake for a duplicate.
   menuCategory: Splitpage
   include: build/installer.nsh
 
@@ -117,13 +56,11 @@ fileAssociations:
     description: Splitpage script
     role: Editor
 
-# macOS target (not built on this machine, but configured for future use)
 mac:
   target:
     - dmg
   category: public.app-category.productivity
 
-# Linux target (not built on this machine, but configured for future use)
 linux:
   target:
     - AppImage

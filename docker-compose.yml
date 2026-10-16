@@ -1,5 +1,3 @@
-# Splitpage on Unraid.
-
 services:
   splitpage:
     build: .
@@ -10,15 +8,9 @@ services:
     env_file: .env
 
     ports:
-      # Bound to the LAN so the Cloudflare tunnel (and you) can reach it.
-      # The tunnel connects outbound, so this port never needs forwarding.
       - "8791:8791"
 
     volumes:
-      # Every document lives here as one .json file. Back it up by copying the
-      # folder — there is no database and no index to rebuild.
       - ./data:/data
 
-    # The share is usually owned by nobody:users (99:100) on Unraid. If the
-    # container logs EACCES on startup, this is the line to change.
     user: "99:100"

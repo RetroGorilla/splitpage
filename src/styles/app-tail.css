@@ -1,0 +1,10 @@
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .toast { animation: none; }
+    .toast.is-leaving { transition: none; transform: none; }
+  }
+
+.is-stale-part {
+  opacity: 0.5;
+}
