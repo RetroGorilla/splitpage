@@ -5,7 +5,8 @@ import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import {
-  layerOf, layerAllows, analyzeScript, buildGraph, findViolations, migratedCycles, compareBaseline, metrics, run, loadGraph, stronglyConnected
+  layerOf, layerAllows, analyzeScript, buildGraph, findViolations, migratedCycles, compareBaseline, metrics, run, loadGraph, stronglyConnected,
+  legacyMeasurements, legacyMetrics, legacyViolations, assertLegacyMetrics, loopModel
 } from "./dep-report.mjs";
 
 const TOOLS = dirname(fileURLToPath(import.meta.url));
@@ -1017,8 +1018,11 @@ try {
     "cycle-edge src/js/a.js src/js/b.js",
     "cycle-edge src/js/b.js src/js/f.js",
     "cycle-edge src/js/f.js src/js/a.js",
+    "legacy-state-refs src/js/a.js global:S",
+    "legacy-state-refs src/js/b.js global:S",
     "state-import src/js/a.js global:S",
     "state-import src/js/b.js global:S",
+    "state-write src/js/b.js direct:S.state",
     "state-write src/js/b.js global:S.state"
   ]);
   eq("the unchanged fixture passes", cli(repo).code, 0);
@@ -1033,15 +1037,15 @@ try {
 
   const writer = attempt(repo, { "src/js/a.js": 'import { S } from "./_state.js";\nimport { b } from "./b.js";\nexport function a() { S.state = null; return b(); }\n' });
   eq("a new S.state writer fails", writer.code, 1);
-  eq("it is the only change reported", lines(writer, ""), ["dep-report: FAILED", "new state-write: src/js/a.js:3 -> global:S.state"]);
+  eq("both the count and the field change are reported", lines(writer, ""), ["dep-report: FAILED", "new state-write: src/js/a.js -> direct:S.state", "new state-write: src/js/a.js:3 -> global:S.state"]);
 
   const namespaced = attempt(repo, { "src/js/a.js": 'import * as G from "./_state.js";\nimport { b } from "./b.js";\nexport function a() { G.S.state.rows = []; return b(); }\n' });
   eq("a nested write through a namespace import fails", namespaced.code, 1);
-  eq("the namespace import still counts as the same importer", lines(namespaced, ""), ["dep-report: FAILED", "new state-write: src/js/a.js:3 -> global:S.state.*"]);
+  eq("the namespace import still counts as the same importer", lines(namespaced, ""), ["dep-report: FAILED", "new state-write: src/js/a.js -> direct:S.state", "new state-write: src/js/a.js:3 -> global:S.state.*"]);
 
   const aliased = attempt(repo, { "src/js/a.js": 'import { S as T } from "./_state.js";\nimport { b } from "./b.js";\nexport function a() { T["dirty"] = true; return b(); }\n' });
   eq("an element-access write through an aliased import fails", aliased.code, 1);
-  eq("it names the member", lines(aliased, ""), ["dep-report: FAILED", "new state-write: src/js/a.js:3 -> global:S.dirty"]);
+  eq("it names the member and the removed literal reference", lines(aliased, ""), ["dep-report: FAILED", "new state-write: src/js/a.js:3 -> global:S.dirty", "resolved legacy-state-refs: src/js/a.js -> global:S"]);
 
   const viaAlias = attempt(repo, { "src/js/a.js": 'import { S } from "./_state.js";\nimport { b } from "./b.js";\nexport function a() {\n  const st = S.state;\n  st.rows.push(1);\n  return b();\n}\n' });
   eq("a mutating call through a local alias fails", viaAlias.code, 1);
@@ -1054,6 +1058,7 @@ try {
   eq("a re-export bridge and a feature using it fail", bridge.code, 1);
   eq("the bridge, the feature's import and its layer breach are all named", lines(bridge, "new "), [
     "new layer: src/features/rows/view.ts:1 -> src/legacy/state.ts",
+    "new legacy-state-refs: src/features/rows/view.ts -> global:S",
     "new state-import: src/features/rows/view.ts:1 -> global:S",
     "new state-import: src/legacy/state.ts:1 -> global:S"
   ]);
@@ -1061,7 +1066,9 @@ try {
   const outside = attempt(repo, { "src/util/helper.js": 'import { S } from "../js/_state.js";\nS.state = null;\n' });
   eq("an S writer in a src folder outside the layer table fails", outside.code, 1);
   eq("its folder, import and write are all named", lines(outside, "new "), [
+    "new legacy-state-refs: src/util/helper.js -> global:S",
     "new state-import: src/util/helper.js:1 -> global:S",
+    "new state-write: src/util/helper.js -> direct:S.state",
     "new state-write: src/util/helper.js:2 -> global:S.state",
     "new unknown-layer: src/util/helper.js -> src/util/"
   ]);
@@ -1094,10 +1101,11 @@ try {
     "resolved cycle-edge: src/js/a.js -> src/js/b.js",
     "resolved cycle-edge: src/js/b.js -> src/js/f.js",
     "resolved cycle-edge: src/js/f.js -> src/js/a.js",
+    "resolved state-write: src/js/b.js -> direct:S.state",
     "resolved state-write: src/js/b.js -> global:S.state"
   ]);
   eq("--prune accepts it", cli(repo, "--prune").code, 0);
-  eq("the pruned baseline keeps only the importers", JSON.parse(readFileSync(join(repo, "tools/dep-baseline.json"), "utf8")).exceptions.map((e) => `${e.rule} ${e.source}`), ["state-import src/js/a.js", "state-import src/js/b.js"]);
+  eq("the pruned baseline keeps the importers and reference counts", JSON.parse(readFileSync(join(repo, "tools/dep-baseline.json"), "utf8")).exceptions.map((e) => `${e.rule} ${e.source}`), ["legacy-state-refs src/js/a.js", "legacy-state-refs src/js/b.js", "state-import src/js/a.js", "state-import src/js/b.js"]);
   eq("and the check passes", cli(repo).code, 0);
 
   const r = spawnSync(process.execPath, [join(TOOLS, "dep-report.mjs"), "--bogus"], { encoding: "utf8" });
@@ -1110,7 +1118,7 @@ try {
   writeFiles(accepting, { "src/js/a.js": LEGACY["src/js/a.js"] + 'import "./f.js";\n' });
   const moved = cli(accepting);
   eq("moving a helper between two cycle members fails the check", moved.code, 1);
-  check("the summary counts the baseline and the new entries separately", moved.out.includes("6 exceptions in the baseline, 1 new, 0 resolved"), moved.out);
+  check("the summary counts the baseline and the new entries separately", moved.out.includes("9 exceptions in the baseline, 1 new, 0 resolved"), moved.out);
   eq("--accept without a reason exits 2", cli(accepting, "--accept").code, 2);
   eq("--accept with a blank reason exits 2", cli(accepting, "--accept", "  ").code, 2);
   eq("and leaves the baseline alone", readFileSync(baselineFile, "utf8"), initial);
@@ -1121,13 +1129,13 @@ try {
   eq("exactly the new entry is added, with the reason", afterAccept.filter((e) => e.reason), [
     { rule: "cycle-edge", source: "src/js/a.js", target: "src/js/f.js", reason: "helper moved from b.js to f.js; a.js now calls it directly" }
   ]);
-  eq("the other entries are unchanged", afterAccept.filter((e) => !e.reason).length, 6);
+  eq("the other entries are unchanged", afterAccept.filter((e) => !e.reason).length, 9);
   eq("the check passes after --accept", cli(accepting).code, 0);
 
   writeFiles(accepting, { "src/js/b.js": 'import { S } from "./_state.js";\nimport { f } from "./f.js";\nexport function b() { S.dirty = true; return f(); }\n' });
   const mixed = cli(accepting, "--accept", "b.js sets the dirty flag while it waits for the session owner");
   eq("--accept adds new entries but does not prune", [mixed.code, cli(accepting).code], [0, 1]);
-  check("and says what is left to prune", mixed.out.includes("1 resolved"), mixed.out);
+  check("and says what is left to prune", mixed.out.includes("2 resolved"), mixed.out);
   eq("--prune then removes the resolved entry and keeps both reasons", [cli(accepting, "--prune").code, JSON.parse(readFileSync(baselineFile, "utf8")).exceptions.filter((e) => e.reason).map((e) => e.target)], [0, ["src/js/f.js", "global:S.dirty"]]);
   eq("and the check passes", cli(accepting).code, 0);
 
@@ -1138,7 +1146,7 @@ try {
   eq("and writes nothing", readFileSync(baselineFile, "utf8"), beforeCycle);
 
   const linkedRepo = cliRepo({ "src/js/a.js": "export const a = 1;\n" });
-  symlinkSync(join(linkedRepo, "tools"), join(linkedRepo, "linked"), "junction");
+  symlinkSync(join(linkedRepo, "tools"), join(linkedRepo, "linked"), process.platform === "win32" ? "junction" : "dir");
   const viaLink = (...args) => spawnSync(process.execPath, [join("linked", "dep-report.mjs"), ...args], { cwd: linkedRepo, encoding: "utf8" });
   eq("run through a linked folder, an unknown argument still exits 2", viaLink("--bogus").status, 2);
   const linkedMetrics = viaLink("--metrics");
@@ -1149,8 +1157,95 @@ try {
   const initText = readFileSync(join(sorted, "tools/dep-baseline.json"), "utf8");
   eq("--init writes the baseline in code-point order", JSON.parse(initText).exceptions.map((e) => e.target), ["global:TextDecoder", "global:URL", "global:clearTimeout", "global:setTimeout"]);
   eq("--prune rewrites the same bytes", [cli(sorted, "--prune").code, readFileSync(join(sorted, "tools/dep-baseline.json"), "utf8") === initText], [0, true]);
+  const numberedFiles = {
+    ...STATE_FILE,
+    "src/js/00-a.js": 'import { S } from "./_state.js";\nimport { b } from "./01-b.js";\nexport function a() { S.state.rows.push(1); return S.dirty ? b() : 0; }\n',
+    "src/js/01-b.js": 'import { a } from "./00-a.js";\nexport function b() { return a; }\nexport function extra() { return 2; }\n',
+    "src/test/a.test.mjs": 'import { S } from "../js/_state.js";\nvoid S.state;\n'
+  };
+  const guarded = cliRepo(numberedFiles);
+  eq("init records the four legacy ratchets", cli(guarded, "--init").code, 0);
+  eq("the numbered fixture starts clean", cli(guarded).code, 0);
+  const newFile = attempt(guarded, { "src/js/02-new.js": "export const leaf = 1;\n" });
+  eq("a new acyclic numbered file fails", newFile.code, 1);
+  eq("the numbered file guard names it", lines(newFile, "new legacy-file"), ["new legacy-file: src/js/02-new.js -> src/js"]);
+  const moreRefs = attempt(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] + "void S.dirty;\n" });
+  eq("one more reference to an existing S field fails", moreRefs.code, 1);
+  eq("the reference count guard names its file", lines(moreRefs, "new legacy-state-refs"), ["new legacy-state-refs: src/js/00-a.js -> global:S"]);
+  const moreTestRefs = attempt(guarded, { "src/test/a.test.mjs": numberedFiles["src/test/a.test.mjs"] + "void S.dirty;\n" });
+  eq("one more S reference in tests also fails", moreTestRefs.code, 1);
+  const moreWrites = attempt(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] + "S.state.rows.push(2);\n" });
+  eq("one more write to an already recorded target fails", moreWrites.code, 1);
+  eq("the per-file write count catches it", lines(moreWrites, "new state-write"), ["new state-write: src/js/00-a.js -> direct:S.state"]);
+  eq("prune refuses a rise in a count", (() => {
+    writeFiles(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] + "S.state.rows.push(2);\n" });
+    const code = cli(guarded, "--prune").code;
+    writeFiles(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] });
+    return code;
+  })(), 1);
+  const moreNames = attempt(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"].replace("{ b }", "{ b, extra as notify }") });
+  eq("a new name on an existing numbered link fails", moreNames.code, 1);
+  eq("only the imported name is new, not the cycle edge", lines(moreNames, "new "), ["new loop-import: src/js/00-a.js:2 -> src/js/01-b.js#extra"]);
+  const measured = cli(guarded, "--legacy-metrics");
+  eq("legacy metrics emits JSON and exits successfully", measured.code, 0);
+  eq("legacy metrics reports the entire numeric exit table", JSON.parse(measured.out), {
+    loopModules: 2, loopLinks: 2, stateModules: 1, stateFields: 3,
+    stateReferences: 2, testStateReferences: 1, stateImporters: 1, testStateImporters: 1,
+    stateAssigners: 0, directWriteLines: 1, numberedFiles: 2, numberedLines: 6
+  });
+  writeFiles(guarded, { "limits.json": measured.out, "steps.json": '[{"label":"moved b","names":["b"]}]\n' });
+  eq("assert accepts values exactly on their thresholds", cli(guarded, "--legacy-metrics", "--assert", "limits.json").code, 0);
+  writeFiles(guarded, { "limits.json": JSON.stringify({ ...JSON.parse(measured.out), numberedFiles: 1 }) });
+  const missed = cli(guarded, "--assert", "limits.json");
+  eq("assert fails a missed closing threshold", missed.code, 1);
+  check("the missed threshold is named", missed.err.includes("numberedFiles: 2 exceeds 1"), missed.err);
+  writeFiles(guarded, { "limits.json": '{"unknown":0}\n' });
+  eq("assert rejects an unknown metric", cli(guarded, "--assert", "limits.json").code, 2);
+  eq("assert rejects a missing threshold file", cli(guarded, "--assert", "missing.json").code, 2);
+  eq("assert needs a filename", cli(guarded, "--assert").code, 2);
+  const modeled = cli(guarded, "--loop-model", "steps.json");
+  eq("the loop steps option runs", modeled.code, 0);
+  eq("moving the last imported name cuts the loop", JSON.parse(modeled.out).steps.map((s) => [s.label, s.loopModules, s.loopLinks]), [["now", 2, 2], ["moved b", 0, 0]]);
+  eq("loop steps needs a filename", cli(guarded, "--loop-model").code, 2);
+  writeFiles(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"].replace("S.dirty", "true") });
+  eq("a fallen reference count must be pruned", cli(guarded).code, 1);
+  eq("prune lowers the recorded reference count", cli(guarded, "--prune").code, 0);
+  eq("the lower reference count is recorded", JSON.parse(readFileSync(join(guarded, "tools/dep-baseline.json"), "utf8")).exceptions.find((e) => e.rule === "legacy-state-refs" && e.source === "src/js/00-a.js")?.count, 1);
+  eq("the lowered baseline passes", cli(guarded).code, 0);
+  writeFiles(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] });
+  eq("references cannot grow back after pruning", cli(guarded).code, 1);
+  const deleted = cliRepo({ "src/js/00-leaf.js": "export const leaf = 1;\n" });
+  cli(deleted, "--init");
+  rmSync(join(deleted, "src/js/00-leaf.js"));
+  eq("a deleted numbered file must be pruned", cli(deleted).code, 1);
+  eq("prune removes the deleted numbered file", cli(deleted, "--prune").code, 0);
+  eq("the deleted numbered file leaves no exceptions", JSON.parse(readFileSync(join(deleted, "tools/dep-baseline.json"), "utf8")).exceptions, []);
 } finally {
   rmSync(cliWork, { recursive: true, force: true });
+}
+
+console.log("\nlegacy measurements and loop steps:\n");
+
+eq("the measurement uses appendix matches and counts write lines once", legacyMeasurements("S.state = {}; S.state.rows.push(1);\nS.state == null;\nS.state.rows.splice(0);\n"), { references: 4, directWrites: 2, lines: 3 });
+eq("a fully retired legacy layer meets the committed closing limits", assertLegacyMetrics(legacyMetrics(graph({})), JSON.parse(readFileSync(join(TOOLS, "legacy-exit.json"), "utf8"))), []);
+eq("an unnumbered caller still gets a reference and direct-write ratchet", legacyViolations(graph({ "src/legacy/example.ts": "S.state = {};\n" })).map(({ rule, target, count }) => ({ rule, target, count })), [
+  { rule: "legacy-state-refs", target: "global:S", count: 1 },
+  { rule: "state-write", target: "direct:S.state", count: 1 }
+]);
+
+{
+  const modelGraph = graph({
+    ...STATE_FILE,
+    "src/js/00-a.js": 'import { call, pure, page, held, moving, fixed, passed } from "./01-b.js";\nexport function a() { return call(); }\n',
+    "src/js/01-b.js": 'import { a } from "./00-a.js";\nimport { S } from "./_state.js";\nexport function call() { return a(); }\nexport function pure() { return 2; }\nexport function page() { return document.title; }\nexport function held() { return S.dirty; }\nexport let moving = 0;\nmoving++;\nexport const fixed = 1;\nexport { S as passed } from "./_state.js";\n'
+  });
+  const model = loopModel(modelGraph, [
+    { label: "rules", kinds: ["rule"], exceptNames: ["pure"] },
+    { label: "one name", names: ["call"] },
+    { label: "rest", kinds: ["rule", "page-helper", "stateful", "changing", "value"] }
+  ]);
+  eq("the loop model classifies all six appendix kinds", model.counts, { "calls-loop": 2, rule: 1, "page-helper": 1, stateful: 1, changing: 1, value: 2 });
+  eq("a link stays until every imported name moves", model.steps.map((s) => [s.label, s.loopModules, s.loopLinks]), [["now", 2, 2], ["rules", 2, 2], ["one name", 2, 2], ["rest", 0, 0]]);
 }
 
 const WRITERS_OUT_OF_THE_CYCLE = [
