@@ -24,6 +24,7 @@ export interface SaveJob<R> {
   readonly generation: number;
   readonly operation: () => OperationContext;
   readonly owns: () => boolean;
+  readonly alive: () => boolean;
   readonly moved: () => void;
 }
 
@@ -204,6 +205,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
       generation: generation,
       operation: function () { return operation; },
       owns: function () { return !stopped && ports.ownership.stillOwns(operation); },
+      alive: function () { return !stopped; },
       moved: function () {
         if (stopped) return;
         operation = ports.ownership.capture();
