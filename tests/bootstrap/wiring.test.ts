@@ -279,13 +279,15 @@ test("failed partial startup: a port that is present but lacks a function is nam
   };
   for (const [port, names] of Object.entries(methods) as [keyof LegacyTransitionPorts, readonly string[]][]) {
     for (const method of names) {
-      const f = fakes();
-      const transitions = { ...f.deps.transitions, [port]: without(f.deps.transitions[port], method) };
-      const error = refused(() => wireLoose({ ...f.deps, transitions }));
-      assert.equal(error.step, "transitions");
-      assert.equal(error.message, "Wiring: the transitions dependency's " + port + " port has no " + method + " function");
-      assert.deepEqual(f.log, [], port + "." + method + ": nothing is built");
-      assert.deepEqual(started(), NOTHING, port + "." + method + ": no facade is started");
+      for (const spoilt of [(given: object) => without(given, method), (given: object) => ({ ...given, [method]: 7 })]) {
+        const f = fakes();
+        const transitions = { ...f.deps.transitions, [port]: spoilt(f.deps.transitions[port]) };
+        const error = refused(() => wireLoose({ ...f.deps, transitions }));
+        assert.equal(error.step, "transitions");
+        assert.equal(error.message, "Wiring: the transitions dependency's " + port + " port has no " + method + " function");
+        assert.deepEqual(f.log, [], port + "." + method + ": nothing is built");
+        assert.deepEqual(started(), NOTHING, port + "." + method + ": no facade is started");
+      }
     }
   }
   const f = fakes();
@@ -300,10 +302,14 @@ test("failed partial startup: a save factory that returns malformed ports fails 
     ["nothing", () => undefined, "the saves dependency returned no save ports"],
     ...(["write", "destination", "keyOf", "obsolete", "running"] as const).map((port): [string, (ports: LegacySavePorts) => unknown, string] =>
       [port, (ports) => without(ports, port), "the saves dependency returned no " + port + " port"]),
-    ["write not a function", (ports) => ({ ...ports, write: 7 }), "the saves dependency returned no write port"],
+    ...(["write", "destination", "keyOf", "obsolete", "running"] as const).map((port): [string, (ports: LegacySavePorts) => unknown, string] =>
+      [port + " not a function", (ports) => ({ ...ports, [port]: 7 }), "the saves dependency returned no " + port + " port"]),
+    ["ownership not an object", (ports) => ({ ...ports, ownership: 7 }), "the saves dependency returned no ownership port"],
     ["ownership", (ports) => without(ports, "ownership"), "the saves dependency returned no ownership port"],
     ...(["capture", "stillOwns"] as const).map((method): [string, (ports: LegacySavePorts) => unknown, string] =>
-      [method, (ports) => ({ ...ports, ownership: without(ports.ownership, method) }), "the saves dependency's ownership port has no " + method + " function"])
+      [method, (ports) => ({ ...ports, ownership: without(ports.ownership, method) }), "the saves dependency's ownership port has no " + method + " function"]),
+    ...(["capture", "stillOwns"] as const).map((method): [string, (ports: LegacySavePorts) => unknown, string] =>
+      [method + " not a function", (ports) => ({ ...ports, ownership: { ...ports.ownership, [method]: "x" } }), "the saves dependency's ownership port has no " + method + " function"])
   ];
   for (const [what, spoil, message] of malformed) {
     const f = fakes();
