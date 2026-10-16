@@ -22,7 +22,11 @@ Developer notes — architecture, invariants, how to test — are
 report a security problem, [SECURITY.md](SECURITY.md); what changed in each
 release is in [CHANGELOG.md](CHANGELOG.md).
 
-## Version 4.0
+## Version 4.0 beta
+
+The 4.0 beta (`4.0.0-beta.1`) is a prerelease: the update check in 3.1 does
+not offer it, so download it from the releases page below. The final 4.0.0
+will be offered to everyone, beta users included.
 
 4.0 is a rebuild of the inside of Splitpage and adds no new feature: the code
 now lives in folders that each own one job, and saving and switching

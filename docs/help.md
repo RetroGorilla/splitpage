@@ -12,7 +12,7 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 whoever opens it works on the same script, with nothing to install. On your
 own network you can also [host a shared session](#hosting-a-shared-session).
 
-## What's new in 4.0
+## What's new in the 4.0 beta
 
 - **No new features; sturdier saving.** 4.0 rebuilds the inside of
   Splitpage. Your 3.1 scripts and files open as before, and a 4.0 app and a
