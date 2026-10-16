@@ -167,7 +167,8 @@ export function exportRequest(kind, opts) {
 
 export async function buildFileData(kind, baseName, opts) {
   var request = exportRequest(kind, opts);
-  var exporter = exportFormats.byId(kind) || exportFormats.byId("md");
+  var registered = exportFormats.byId(kind);
+  var exporter = registered || exportFormats.byId("md");
   var assets = await loadExportAssets(request.assets);
   var made = await exporter.build({
     doc: request.doc,
@@ -175,7 +176,9 @@ export async function buildFileData(kind, baseName, opts) {
     assets: assets,
     ports: { standaloneHtml: standaloneHtmlFor }
   }, baseName);
-  var filename = exportFileName(kind, baseName, { imageBundle: !!made.imageBundle });
+  var filename = registered
+    ? exporter.fileName(baseName, { imageBundle: !!made.imageBundle })
+    : baseName + "." + kind;
   if (made.diagnostics) warnImagesLeftOut(made.diagnostics.imagesLeftOut, filename);
   return { data: made.data, filename: filename };
 }
