@@ -8,8 +8,7 @@ check passed on 2026-10-16 (item 8). Rows 4a, 4b and 5 were checked on
 `9c39567` (the merge of M7 PR 1) on 2026-10-15. This sheet changes status only;
 it records no new requirement.
 
-`VERSION` still says `3.1.0` on `4.0-development`; the bump to 4.0 is a release
-step and affects the version the Docker checks compare against.
+`VERSION` says `4.0.0` on `4.0-development` (bumped by the release PR "Release: bump VERSION to 4.0.0"); the rows below that record `3.1.0` were run before the bump and keep that version.
 
 Status words: **done** (evidence linked), **in progress** (thread or PR named),
 **waiting on M7** (cannot be finished before milestone 7 closes; the evidence
@@ -86,7 +85,7 @@ Options that weaken no test, none applied yet:
 | Native ARM64 packaged check | **not started** | Item 3c; needs the ARM64 device. |
 | Release candidate named in the release notes (shim, module count, bridges) | **in progress** | Item 7; counts recorded at `53dff02`. |
 | M7 gate (Windows full run, Electron dev smoke, gate record) | **done** | Runs and external review recorded in [milestone-7-gate.md](milestone-7-gate.md); closed on `89d309f` after Sol's re-check of #637. |
-| `VERSION` bump to 4.0 | **not started** | `VERSION` is `3.1.0` on `4.0-development`. |
+| `VERSION` bump to 4.0 | **done** | PR "Release: bump VERSION to 4.0.0": `VERSION`, `desktop/package.json`, `desktop/package-lock.json` and the `sw.js` cache name are `4.0.0`; `node build.mjs --check` and `desktop/stage.mjs` pass. |
 
 ## Known problems to carry into the release
 
