@@ -25,7 +25,7 @@ below ran on `cbab324`; the Electron smoke ran on `53dff02`
 | Electron smoke, dev target | `53dff02`: 974/974, 0 skipped, first run. 971/972 on `cbab324` and earlier heads, a test race fixed by #633 ([below](#the-531-smoke-case)) | passed |
 | Windows x64 packaged check | not required: the build entry does not change and no packaging input moved | not required |
 | CI on the merges | push runs for `9c39567`, `cbab324` and `53dff02` succeeded ([below](#ci-on-the-closing-tree)) | passed |
-| External review | the 4.0 release review of milestones 5 and 7 (Astra, Codex CLI, on `53dff02`): 1 blocking and 1 should-fix finding for milestone 7, 1 should-fix for milestone 5; verdict no for both ([below](#external-review)) | **not passed**; fixes pending |
+| External review | the 4.0 release review of milestones 5 and 7 (Astra, Codex CLI, on `53dff02`): 1 blocking and 1 should-fix finding for milestone 7, 1 should-fix for milestone 5; verdict no for both ([below](#external-review)) | findings fixed: 1 and 2 in #636 (`23b49a7`), 3 in #635 (`81ae567`); M5 PDF check open |
 | Linux full run, native ARM64, Docker, portable, 3.1 exchange | the 4.0 release gate; see [release-4.0-checklist.md](release-4.0-checklist.md) | not part of this gate |
 
 ## Pull requests
@@ -227,9 +227,21 @@ review (Astra, Codex CLI, 2026-10-15), applied by #628.
 
 | # | Severity | Milestone | Finding | Decision |
 | --- | --- | --- | --- | --- |
-| 1 | blocking | 7 | Teardown leaves an active save running against released bridges. `src/legacy/save-bridge.ts:59` only clears the installed coordinator and does not stop its queue or continuations. After disposal, a held write that completes reaches the ownership check in `src/application/save/coordinator.ts:164`, which calls the now-unstarted transition bridge; that throws into a promise chain with no terminal rejection handler, so the original save request never reaches `current.settle` (`coordinator.ts:222`). After a rewire, old continuations can consult the replacement owners. Production does not call teardown, but the contract does not hold. Suggested: a coordinator shutdown that settles queued requests, guards active completions and keeps later callbacks away from released or replacement owners | to be fixed in #636 "M7: external review fixes, coordinator shutdown and wiring validation" (with the wiring test gaps) |
-| 2 | should-fix | 7 | `wireApp` accepts incomplete dependency objects. `src/bootstrap/wiring.ts:117` validates the transition ports only as objects, so `{ live: {}, destination: {}, identity: {} }` passes and fails later at `src/application/transitions/transitions.ts:60`, after startup can proceed. Save-port factory results reach `save-bridge.ts:51` unchecked. Suggested: validate required nested methods and factory results before installing their owners and name the missing port in the `WiringError` | to be fixed in #636, with finding 1 |
+| 1 | blocking | 7 | Teardown leaves an active save running against released bridges. `src/legacy/save-bridge.ts:59` only clears the installed coordinator and does not stop its queue or continuations. After disposal, a held write that completes reaches the ownership check in `src/application/save/coordinator.ts:164`, which calls the now-unstarted transition bridge; that throws into a promise chain with no terminal rejection handler, so the original save request never reaches `current.settle` (`coordinator.ts:222`). After a rewire, old continuations can consult the replacement owners. Production does not call teardown, but the contract does not hold. Suggested: a coordinator shutdown that settles queued requests, guards active completions and keeps later callbacks away from released or replacement owners | **Fixed** in #636 "M7: external review fixes, coordinator shutdown and wiring validation", merged as `23b49a7` on 2026-10-16 ([merge record](https://github.com/RetroGorilla/splitpage/pull/636#issuecomment-6205122166)), with the wiring test gaps |
+| 2 | should-fix | 7 | `wireApp` accepts incomplete dependency objects. `src/bootstrap/wiring.ts:117` validates the transition ports only as objects, so `{ live: {}, destination: {}, identity: {} }` passes and fails later at `src/application/transitions/transitions.ts:60`, after startup can proceed. Save-port factory results reach `save-bridge.ts:51` unchecked. Suggested: validate required nested methods and factory results before installing their owners and name the missing port in the `WiringError` | **Fixed** in #636 (`23b49a7`), with finding 1 |
 | 3 | should-fix | 5 | An export can combine one exporter's bytes with another registration's filename. `src/js/18-local-files.js:170` keeps the selected exporter before awaiting assets and the build, but line 178 calls `exportFileName`, which looks the exporter up again in the mutable registry (line 145). Replacing or unregistering it while the build is pending changes the filename. Suggested: take the filename from the retained exporter's `fileName(...)`, using the finished product's `imageBundle` flag | **Fixed** in #635 "M5: derive the export filename from the retained exporter", merged as `81ae567` on 2026-10-16 with a held-build exporter swap test ([merge record](https://github.com/RetroGorilla/splitpage/pull/635#issuecomment-6204934037), no blocking findings). The reviewer noted a 4.x test gap: nothing checks the "(with images).zip" export name |
+
+### After the fixes
+
+#636 changes source (`src/application/save/coordinator.ts`,
+`src/bootstrap/wiring.ts`, `src/legacy/save-bridge.ts`, `src/js/20b-onboarding.js`)
+and tests; #635 changes `src/js/18-local-files.js` and one test. Milestone 7's
+final tree is therefore `23b49a7`, the merge of #636. Evidence on it, from
+the two merge records: CI and an independent review on each PR, with one
+should-fix test gap in #636 fixed by a test-only follow-up before merge, and
+the Electron dev smoke at 974/974 on #636's head `2566deb` on Adam's PC. The
+Windows full browser runs were not repeated after the fixes; they cover
+`cbab324`.
 
 **Promised but not delivered**, as the review lists it:
 
@@ -268,8 +280,9 @@ machine; this section is the disposition.
 
 ## Blockers for Adam
 
-- The release review's verdict is no for both milestones. Milestone 7 closes
-  when findings 1 and 2 and the wiring test gaps are fixed and re-reviewed;
-  finding 3 is fixed by #635 (`81ae567`).
-- Milestone 5's PDF check needs a person to open the crafted and `LONG_DEMO`
-  script PDFs; DOCX, XLSX and the round trips passed.
+- None for milestone 7. The release review's verdict was no for both
+  milestones; its findings are fixed, each fix reviewed independently and
+  merged: 1 and 2 with the wiring test gaps in #636 (`23b49a7`), 3 in #635
+  (`81ae567`). The external reviewer has not re-reviewed the fixes.
+- Milestone 5's PDF check still needs a person to open the crafted and
+  `LONG_DEMO` script PDFs; DOCX, XLSX and the round trips passed.
