@@ -261,6 +261,19 @@ test("a writer that answers nothing it can be judged by is a failure", async () 
   assert.equal(outcome.kind, "failed");
 });
 
+test("a job whose document moved on owns nothing but stays alive while its coordinator runs", async () => {
+  const w = world();
+  const done = w.coordinator.request({ kind: "save" });
+  const job = nth(w, 0).job;
+  w.epoch = 2;
+  assert.equal(job.owns(), false, "a new epoch ends the job's ownership");
+  assert.equal(job.alive(), true, "the coordinator that started the job is still running");
+  nth(w, 0).answer(SAVED);
+  assert.deepEqual(await done, { kind: "obsolete", here: true });
+  w.coordinator.stop();
+  assert.equal(job.alive(), false, "a stop ends the job's lifetime");
+});
+
 test("stop: queued saves settle cancelled, a running write settles from its own answer, and nothing after the stop reaches a port", async () => {
   const w = world();
   const active = w.coordinator.request({ kind: "save" });
@@ -272,11 +285,13 @@ test("stop: queued saves settle cancelled, a running write settles from its own 
   assert.equal(w.coordinator.waiting(), 1);
   w.destination = other;
   const job = nth(w, 0).job;
+  assert.equal(job.alive(), true, "a running coordinator's job is alive");
   w.coordinator.stop();
   w.calls = 0;
   assert.deepEqual(await settled(queued), { kind: "cancelled" });
   assert.equal(w.coordinator.waiting(), 0);
   assert.equal(job.owns(), false, "a stopped coordinator owns nothing");
+  assert.equal(job.alive(), false, "a stopped coordinator's job is not alive");
   job.moved();
   assert.deepEqual(await settled(w.coordinator.request({ kind: "save" })), { kind: "refused", reason: "The save coordinator is stopped" });
   nth(w, 0).answer(SAVED);
