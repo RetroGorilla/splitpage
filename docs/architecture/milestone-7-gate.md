@@ -25,7 +25,7 @@ below ran on `cbab324`; the Electron smoke ran on `53dff02`
 | Electron smoke, dev target | `53dff02`: 974/974, 0 skipped, first run. 971/972 on `cbab324` and earlier heads, a test race fixed by #633 ([below](#the-531-smoke-case)) | passed |
 | Windows x64 packaged check | not required: the build entry does not change and no packaging input moved | not required |
 | CI on the merges | push runs for `9c39567`, `cbab324` and `53dff02` succeeded ([below](#ci-on-the-closing-tree)) | passed |
-| External review | the 4.0 release review of milestones 5 and 7 (Astra, Codex CLI, on `53dff02`): no for both; fixed in #635, #636 and #637 and re-checked by Sol (Codex CLI), milestone 7 code side pass at `89d309f` ([below](#external-review)) | passed for milestone 7; milestone 5 PDF check open |
+| External review | the 4.0 release review of milestones 5 and 7 (Astra, Codex CLI, on `53dff02`): no for both; fixed in #635, #636 and #637 and re-checked by Sol (Codex CLI), milestone 7 code side pass at `89d309f` ([below](#external-review)) | passed for milestone 7; milestone 5 PDF check passed 2026-10-16 |
 | Linux full run, native ARM64, Docker, portable, 3.1 exchange | the 4.0 release gate; see [release-4.0-checklist.md](release-4.0-checklist.md) | not part of this gate |
 
 ## Pull requests
@@ -288,8 +288,8 @@ browser runs were not repeated after the fixes; they cover `cbab324`.
 
 **External review outcome.** Milestone 7: Astra, no at `53dff02`; #635 and
 #636; Sol, no at `23b49a7`; #637; Sol, pass at `89d309f`. Milestone 5: code
-side passed in Sol's re-review at `23b49a7`; the PDF viewer check is still
-open.
+side passed in Sol's re-review at `23b49a7`; the PDF viewer check passed
+on 2026-10-16.
 
 **Promised but not delivered**, as the review lists it:
 
@@ -300,8 +300,9 @@ open.
   evidence. Adam's decision card recommended "Run now" (the other options
   were "Accept fixtures" and "Defer"); it got no answer, and the run went
   ahead on the recommended option on Adam's PC at `53dff02`: DOCX and XLSX pass in Word and Excel 16.0, the project round trips
-  pass, and the PDF check is **open** until a person opens the PDFs, since the
-  PC has no PDF reader. Details in
+  pass. The PDF check passed on 2026-10-16: the PC has no PDF reader, and the
+  PDFs it made from the test harness had no pictures (no canvas), so the check
+  was redone with a real-browser export that Adam opened. Details in
   [milestone-5-gate.md](milestone-5-gate.md#viewer-checks-and-round-trips-amendment-2026-10-15).
 - Milestone 7's teardown and missing-dependency contracts, as findings 1 and 2
   show.
@@ -335,5 +336,5 @@ and `sol-637-recheck.md`). This section is the disposition.
 - None for milestone 7. Its external review chain ends in a pass: Astra, no
   at `53dff02`; fixes #635 and #636; Sol, no at `23b49a7` (R1, R2); fix #637;
   Sol, pass at `89d309f` ([final re-check](#re-check-of-637)).
-- Milestone 5's PDF check still needs a person to open the crafted and
-  `LONG_DEMO` script PDFs; DOCX, XLSX and the round trips passed.
+- None for milestone 5's viewer checks: DOCX, XLSX, the round trips and the
+  PDF check (2026-10-16) all passed.
