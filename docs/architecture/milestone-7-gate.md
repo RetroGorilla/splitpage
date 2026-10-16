@@ -25,7 +25,7 @@ below ran on `cbab324`; the Electron smoke ran on `53dff02`
 | Electron smoke, dev target | `53dff02`: 974/974, 0 skipped, first run. 971/972 on `cbab324` and earlier heads, a test race fixed by #633 ([below](#the-531-smoke-case)) | passed |
 | Windows x64 packaged check | not required: the build entry does not change and no packaging input moved | not required |
 | CI on the merges | push runs for `9c39567`, `cbab324` and `53dff02` succeeded ([below](#ci-on-the-closing-tree)) | passed |
-| External review | the 4.0 release review of milestones 5 and 7 (Astra, Codex CLI, on `53dff02`): 1 blocking and 1 should-fix finding for milestone 7, 1 should-fix for milestone 5; verdict no for both ([below](#external-review)) | findings fixed: 1 and 2 in #636 (`23b49a7`), 3 in #635 (`81ae567`); M5 PDF check open |
+| External review | the 4.0 release review of milestones 5 and 7 (Astra, Codex CLI, on `53dff02`): 1 blocking and 1 should-fix finding for milestone 7, 1 should-fix for milestone 5; verdict no for both ([below](#external-review)) | finding 3 closed by #635 (`81ae567`); findings 1 and 2 only partly closed by #636 (`23b49a7`) per Sol's re-review, a further fix PR is open ([below](#re-review-of-the-fixes)); M5 PDF check open |
 | Linux full run, native ARM64, Docker, portable, 3.1 exchange | the 4.0 release gate; see [release-4.0-checklist.md](release-4.0-checklist.md) | not part of this gate |
 
 ## Pull requests
@@ -150,6 +150,9 @@ Counted in the repository at `53dff02` for this record:
 | Test files under `src/test` and `tests` naming `legacy/session-bridge` | 38 | `grep -rl` |
 | Runtime import cycles | one, 46 modules, 310 edges | `node tools/dep-report.mjs --metrics` |
 
+Rechecked at `23b49a7` after the review fixes: the same counts, except the
+bridge files are 1,452 lines (#636 added one line to `save-bridge.ts`).
+
 These match the [release-checklist inputs](milestone-7.md#release-checklist-inputs)
 in milestone-7.md, except the session-bridge test count: that section says 35
 files "reference the session bridge"; the 38 here is a plain text search over
@@ -227,21 +230,38 @@ review (Astra, Codex CLI, 2026-10-15), applied by #628.
 
 | # | Severity | Milestone | Finding | Decision |
 | --- | --- | --- | --- | --- |
-| 1 | blocking | 7 | Teardown leaves an active save running against released bridges. `src/legacy/save-bridge.ts:59` only clears the installed coordinator and does not stop its queue or continuations. After disposal, a held write that completes reaches the ownership check in `src/application/save/coordinator.ts:164`, which calls the now-unstarted transition bridge; that throws into a promise chain with no terminal rejection handler, so the original save request never reaches `current.settle` (`coordinator.ts:222`). After a rewire, old continuations can consult the replacement owners. Production does not call teardown, but the contract does not hold. Suggested: a coordinator shutdown that settles queued requests, guards active completions and keeps later callbacks away from released or replacement owners | **Fixed** in #636 "M7: external review fixes, coordinator shutdown and wiring validation", merged as `23b49a7` on 2026-10-16 ([merge record](https://github.com/RetroGorilla/splitpage/pull/636#issuecomment-6205122166)), with the wiring test gaps |
-| 2 | should-fix | 7 | `wireApp` accepts incomplete dependency objects. `src/bootstrap/wiring.ts:117` validates the transition ports only as objects, so `{ live: {}, destination: {}, identity: {} }` passes and fails later at `src/application/transitions/transitions.ts:60`, after startup can proceed. Save-port factory results reach `save-bridge.ts:51` unchecked. Suggested: validate required nested methods and factory results before installing their owners and name the missing port in the `WiringError` | **Fixed** in #636 (`23b49a7`), with finding 1 |
+| 1 | blocking | 7 | Teardown leaves an active save running against released bridges. `src/legacy/save-bridge.ts:59` only clears the installed coordinator and does not stop its queue or continuations. After disposal, a held write that completes reaches the ownership check in `src/application/save/coordinator.ts:164`, which calls the now-unstarted transition bridge; that throws into a promise chain with no terminal rejection handler, so the original save request never reaches `current.settle` (`coordinator.ts:222`). After a rewire, old continuations can consult the replacement owners. Production does not call teardown, but the contract does not hold. Suggested: a coordinator shutdown that settles queued requests, guards active completions and keeps later callbacks away from released or replacement owners | Partly fixed in #636, merged as `23b49a7` on 2026-10-16 ([merge record](https://github.com/RetroGorilla/splitpage/pull/636#issuecomment-6205122166)), with the wiring test gaps; see [the re-review](#re-review-of-the-fixes) (R1) |
+| 2 | should-fix | 7 | `wireApp` accepts incomplete dependency objects. `src/bootstrap/wiring.ts:117` validates the transition ports only as objects, so `{ live: {}, destination: {}, identity: {} }` passes and fails later at `src/application/transitions/transitions.ts:60`, after startup can proceed. Save-port factory results reach `save-bridge.ts:51` unchecked. Suggested: validate required nested methods and factory results before installing their owners and name the missing port in the `WiringError` | Partly fixed in #636 (`23b49a7`); see [the re-review](#re-review-of-the-fixes) (R2) |
 | 3 | should-fix | 5 | An export can combine one exporter's bytes with another registration's filename. `src/js/18-local-files.js:170` keeps the selected exporter before awaiting assets and the build, but line 178 calls `exportFileName`, which looks the exporter up again in the mutable registry (line 145). Replacing or unregistering it while the build is pending changes the filename. Suggested: take the filename from the retained exporter's `fileName(...)`, using the finished product's `imageBundle` flag | **Fixed** in #635 "M5: derive the export filename from the retained exporter", merged as `81ae567` on 2026-10-16 with a held-build exporter swap test ([merge record](https://github.com/RetroGorilla/splitpage/pull/635#issuecomment-6204934037), no blocking findings). The reviewer noted a 4.x test gap: nothing checks the "(with images).zip" export name |
 
 ### After the fixes
 
 #636 changes source (`src/application/save/coordinator.ts`,
 `src/bootstrap/wiring.ts`, `src/legacy/save-bridge.ts`, `src/js/20b-onboarding.js`)
-and tests; #635 changes `src/js/18-local-files.js` and one test. Milestone 7's
-final tree is therefore `23b49a7`, the merge of #636. Evidence on it, from
+and tests; #635 changes `src/js/18-local-files.js` and one test. The tree after
+them is `23b49a7`, the merge of #636. Evidence on it, from
 the two merge records: CI and an independent review on each PR, with one
 should-fix test gap in #636 fixed by a test-only follow-up before merge, and
 the Electron dev smoke at 974/974 on #636's head `2566deb` on Adam's PC. The
 Windows full browser runs were not repeated after the fixes; they cover
 `cbab324`.
+
+### Re-review of the fixes
+
+| | |
+| --- | --- |
+| Reviewer | Sol (Codex CLI), a read-only session that took no part in writing #635 or #636 |
+| Date | 2026-10-16 |
+| Scope | #635 and #636 against findings 1 to 3 and the coverage gaps, on `23b49a7` |
+| Verdict | Milestone 5: pass on the code side (finding 3 and its regression coverage closed). Milestone 7: no, findings 1 and 2 only partly closed |
+
+| # | Severity | Finding | Decision |
+| --- | --- | --- | --- |
+| R1 | blocking | A hosted save held across dispose and a rewire with the same home still reaches the replacement owner: `src/js/13-hosted.js:1290` updates `home.rev` and calls `setBaseState` before the `job.owns()` check at line 1296, so the baseline is forwarded through `confirmBaseline` (`src/js/03-sync.js:821`) into the replacement coordinator via `save-bridge.ts:93` | to be fixed in a further fix PR |
+| R2 | should-fix | Validation is still incomplete: `src/bootstrap/wiring.ts:89` checks `timers` only as an object (`effects.ts:44` calls `timers.now` later), and `wiring.ts:223` does not validate the recovery factory's `desktop` function (`draft-store-desktop.ts:12` defers the call) | to be fixed in the same PR as R1 |
+
+Sol also confirmed the INV-30 probe gap closed: `20b-onboarding.js:361`
+keeps the auto-show promise and the probe awaits it instead of a fixed window.
 
 **Promised but not delivered**, as the review lists it:
 
@@ -280,9 +300,9 @@ machine; this section is the disposition.
 
 ## Blockers for Adam
 
-- None for milestone 7. The release review's verdict was no for both
-  milestones; its findings are fixed, each fix reviewed independently and
-  merged: 1 and 2 with the wiring test gaps in #636 (`23b49a7`), 3 in #635
-  (`81ae567`). The external reviewer has not re-reviewed the fixes.
+- Milestone 7 stays open. Sol's re-review of the fixes at `23b49a7` closed
+  finding 3 (#635) but found findings 1 and 2 only partly closed by #636 (R1
+  blocking, R2 should-fix). A further fix PR is open; milestone 7 closes when
+  it merges and Sol re-checks it.
 - Milestone 5's PDF check still needs a person to open the crafted and
   `LONG_DEMO` script PDFs; DOCX, XLSX and the round trips passed.
