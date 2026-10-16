@@ -105,7 +105,7 @@ they are not copied to the project's shared files. The cloud run's per-suite sum
 
 | Item | Status | Notes |
 | --- | --- | --- |
-| Linux full run | **done** | Above. 194 of 194 suites on Linux and Windows after the browser driver fix. |
+| Linux full run | **done** | Above. 194 of 194 suites on Linux and Windows after the browser driver fix. On the merged head `2519df0`, the PC runs were Windows x64 (Node 24.22.0) 194 of 194 suites, 10394 of 10394 checks, and WSL Linux (Node 24.22.0) 194 of 194 suites, 10394 of 10394 checks; logs on the PC at `D:\vibecoding\.scratch\linux-gate\logs-640-win` and `logs-640-linux`, recorded in the [#640 review comment](https://github.com/RetroGorilla/splitpage/pull/640#issuecomment-6208624000). |
 | Native ARM64 packaged check | **done** | Item 3c. |
 | Release candidate named in the release notes (shim, module count, bridges) | **in progress** | Item 7; counts recorded at `53dff02`. |
 | M7 gate (Windows full run, Electron dev smoke, gate record) | **done** | Runs and external review recorded in [milestone-7-gate.md](milestone-7-gate.md); closed on `89d309f` after Sol's re-check of #637. |
