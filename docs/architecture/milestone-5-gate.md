@@ -119,9 +119,10 @@ and the build entry did not change); it was run anyway.
 
 Run on `53dff02` (the milestone 7 closing tree) on the maintainer's Windows PC
 after the 4.0 release review named the missing viewer pass
-([milestone 7 gate record](milestone-7-gate.md#external-review)). Logs and
-exported files are kept under `D:\vibecoding\.scratch\m5-viewer-check\` on
-that machine.
+([milestone 7 gate record](milestone-7-gate.md#external-review)). The six
+PDFs, the crafted DOCX and XLSX, `report.json` and the two check scripts are
+kept under `D:\vibecoding\.scratch\m5-viewer-check\` on that machine; the
+`LONG_DEMO` DOCX and XLSX were not kept.
 
 | Check | Result |
 | --- | --- |

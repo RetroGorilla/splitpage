@@ -297,9 +297,9 @@ open.
   requires representative DOCX, XLSX and PDF reader or viewer checks and
   recorded project round trips; [milestone-5-gate.md](milestone-5-gate.md)
   lists them under "Not run". Passing byte fixtures do not supply this
-  evidence. Run on Adam's PC at `53dff02` under the recommended option of
-  his decision card ("Run now"; the other options were "Accept fixtures" and
-  "Defer"): DOCX and XLSX pass in Word and Excel 16.0, the project round trips
+  evidence. Adam's decision card recommended "Run now" (the other options
+  were "Accept fixtures" and "Defer"); it got no answer, and the run went
+  ahead on the recommended option on Adam's PC at `53dff02`: DOCX and XLSX pass in Word and Excel 16.0, the project round trips
   pass, and the PDF check is **open** until a person opens the PDFs, since the
   PC has no PDF reader. Details in
   [milestone-5-gate.md](milestone-5-gate.md#viewer-checks-and-round-trips-amendment-2026-10-15).
@@ -323,8 +323,12 @@ open.
   (`src/test/_onboarding-probe.mjs:53`); an explicit completion signal would
   make its negative assertions stronger and less sensitive to machine load.
 
-The review text is kept with the project's files and on the maintainer's
-machine; this section is the disposition.
+The three review texts are kept verbatim in the project's shared files under
+`release-checks/external-reviews/` (`astra-release-review-53dff02.md`,
+`sol-rereview-23b49a7.md`, `sol-recheck-637-89d309f.md`), in the project
+thread that ran them, and as the raw output on the maintainer's machine
+(`D:\vibecoding\.scratch\astra-release-review.md`, `sol-fixes-rereview.md`
+and `sol-637-recheck.md`). This section is the disposition.
 
 ## Blockers for Adam
 
