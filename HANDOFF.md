@@ -1978,7 +1978,7 @@ evaluation order via `_entry.js`):
 | `12a-undo.js` | the one undo/redo stack: every edit recorded by diffing after `markDirty()`; remote merges forget what they touched; `foldIntoEdit` puts something the app finishes later (a pasted link's thumbnail, #141) into the edit's own entry, or nowhere when a later entry touches it |
 | `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, field sync (`syncFieldFromDom`, the view of the typing command), rich-text commands (§3.16) |
 | `05g-scene-clip.js` | whole scenes on the clipboard (#204): the payload (`application/x-splitpage-scenes` JSON — the scenes and everything they name, comments, b-roll records, breakdown entries, owners, picture bytes up to `SCENE_BLOB_CAP`, 16 MiB, the rest by reference), the two-column table (the payload without bytes on its `data-splitpage-scenes` attribute) and labelled plain text; reading it back through `migrateRows`; `insertScenes` (fresh row/comment/reply ids, anchors renamed, a b-roll key's id kept only when free — invariant #54 — with its record, a live cut in the same document a move while none of its scenes are in it, so it follows undo) and `removeScenes` (comments re-pointed at words that stay) |
-| `05h-scene-select.js` | selecting whole scenes by dragging out of a script cell (#204): the gesture, the autoscroll, the highlight (a `<style>` keyed by row id, since `render()` resets row classes), Ctrl+C/X, Delete/Backspace, Esc, the right-click menu, New script from these scenes, `pasteScenesAt` (called from 21-events.js's paste), each change one undo entry; a server document's pasted comments a second, unrecorded step (design D5) |
+| `05h-scene-select.js` | selecting whole scenes by dragging out of a script cell (#204): the gesture, the autoscroll, the highlight (a `<style>` keyed by row id, since `render()` resets row classes), Ctrl+C/X, Delete/Backspace, Esc, the right-click menu, New script from these scenes, `pasteScenesAt` (called from the paste route wired in 22a-editor-wiring.js), each change one undo entry; a server document's pasted comments a second, unrecorded step (design D5) |
 | `05q-cell-reach.js` | a press anywhere in a script cell puts the caret at the end of its field (#182) |
 | `05r-read-time.js` | the rail's Read time as a button: setting and clearing a scene's length by hand (#179) |
 | `05s-script-zoom.js` | Ctrl + wheel / pinch / Ctrl + `+` `−` `0` zoom the script alone via `--script-scale` (#191) |
@@ -2024,7 +2024,7 @@ evaluation order via `_entry.js`):
 | `20k-phone-bar.js` | the phone's bottom bar (#169, ≤760px): Script, Write and the panel tabs, each clicking its header button, with the header badges' counts mirrored |
 | `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (the registry's `settings` action, src/legacy/help-actions.ts, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Collaboration / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open; Collaboration is the server address (13b-collaborate.js's pref, not in the app-data bundle), whether this device is signed in there and Sign out; `openSettings({focus})` for the Collaborate dialog's Change the address… |
 | `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed; and `LONG_DEMO` (#215), the 30-scene demo written by `tools/make-long-demo.mjs`, opened from the New Tab page's footer and the command menu (`openLongDemo`, 18b-file-menu.js) |
-| `21-events.js` | all event wiring, `init()` |
+| `22a-editor-wiring.js`, `22b-production-wiring.js`, `22c-comments-wiring.js`, `22d-views-wiring.js`, `22e-overlay-wiring.js`, `22f-startup-wiring.js` | event wiring: the ports each feature mount under `src/features/` is given, one file per area (editor, production, comments, views, overlays, startup); `_entry.js` calls `wireApp` and then starts the modules |
 
 **Desktop files** (optional; the web app runs without them):
 
@@ -2069,7 +2069,7 @@ rebuilds the app. An HTML comment left loose in `docs/help.md` now renders as
 visible text on the Help page — keep any inside a fenced code block.
 
 **Choosing a File menu item:** one click listener on `#file-menu`
-(`21-events.js`) hands an enabled item's id to `handleFileMenuAction()`
+(`mountFileMenu` in `src/features/file-menu/mount.ts`, wired by `22d-views-wiring.js`) hands an enabled item's id to `handleFileMenuAction()`
 (`18-local-files.js`), which runs the `onFileMenuChoice()` listeners, closes
 the menu, remembers an export and invokes the action from the registry
 (`docs/architecture/actions.md`). Help, Servers, Tour and Set up are actions
