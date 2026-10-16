@@ -514,6 +514,13 @@ tests. The Linux cloud containers ship Node 22.22.0, which is outside the range:
 there, install the pinned Node first (for example the
 `node-v24.22.0-linux-x64.tar.xz` build from nodejs.org, put on `PATH`).
 
+Browser suites on Linux: `driver.mjs` starts Chromium with a mouse's hover and
+pointer settings off Windows (headless Chromium there otherwise reports
+`hover: none`, which keeps the rundown lens from opening in suite 102), and
+sends the touch-emulation call only to start or undo a `mobile` viewport.
+Suite 38 sets a Windows user agent because the "Want its own window" pitch it
+measures is shown to Windows browsers only.
+
 ## CI
 
 `.github/workflows/ci.yml` runs on every pull request to `main` or
