@@ -73,8 +73,9 @@ Options that weaken no test, none applied yet:
 | | |
 | --- | --- |
 | Item | #382 "Bump the actions group with 4 updates" (opened 2026-10-05 against `main`, touches 3 files) |
-| Status | **not started** (planned for the 4.0 release) |
+| Status | **cleanup done 2026-10-16; #382 stays open until the release** |
 | Why | `.github/dependabot.yml` now targets `4.0-development` for all four ecosystems, but #382 was opened when Dependabot targeted `main`. It stays open until the release. |
+| Checked 2026-10-16 | `dependabot.yml` on `4.0-development` sets `target-branch: 4.0-development` on all four entries (npm `/`, npm `/desktop`, github-actions, docker). Open pull requests from Dependabot: only #382. Dependabot branches on the remote: only #382's. No stale Dependabot pull request exists to close, and nothing was rebased or merged. |
 | Needed | At the release: after `4.0-development` merges to `main`, close #382 or let Dependabot rebase it on the new `main`, check that no Dependabot branch still targets a removed branch, and confirm `target-branch` in `dependabot.yml` points at the branch Dependabot should now use. |
 
 ## Gate items outside the numbered list
