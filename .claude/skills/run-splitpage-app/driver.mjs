@@ -182,9 +182,6 @@ async function startBrowser() {
   if (process.platform !== "win32" && typeof process.getuid === "function" && process.getuid() === 0) {
     args.push("--no-sandbox", "--disable-dev-shm-usage");
   }
-  // Headless Chromium off Windows reports hover: none and a coarse pointer, so
-  // the rundown lens (05f-rundown.js) refuses to open. Report a mouse, as
-  // headless Edge on Windows already does.
   if (process.platform !== "win32") {
     args.push("--blink-settings=primaryHoverType=2,availableHoverTypes=2,primaryPointerType=4,availablePointerTypes=4");
   }
@@ -557,9 +554,6 @@ async function setViewport(rest) {
   const w = parseInt(p[0], 10), h = parseInt(p[1], 10);
   const mobile = p.length >= 3 && /mobile/.test(p[2]);
   await send("Emulation.setDeviceMetricsOverride", { width: w, height: h, deviceScaleFactor: 1, mobile });
-  // Even a "disabled" touch emulation call makes headless Chromium on Linux
-  // report hover: none again, so a desktop viewport only sends it to undo an
-  // earlier mobile one.
   if (mobile || touchEmulated) {
     await send("Emulation.setTouchEmulationEnabled", { enabled: mobile, maxTouchPoints: mobile ? 5 : 1 });
     touchEmulated = mobile;
