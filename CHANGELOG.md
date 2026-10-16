@@ -155,13 +155,48 @@ before, and a 4.0 app and a 3.1 server work with each other either way.
   `docs/IMPLEMENTATION-PLAN.md` are closed; the composition root as build
   entry, the remaining bridges and the `S` fields are 4.x work. Building and
   testing need Node 24.22.0 (`.nvmrc`).
-- The legacy initializer shim is `src/js/_entry.js` (170 lines). It calls
-  `wireApp`, then starts 69 of the 79 numbered modules in `src/js`; ten load
-  only as imports. 23 bridge files remain under `src/legacy` (1,451 lines;
-  106 imports from 57 numbered modules). Each bridge is owned by the
-  integration owner until 4.x removes it with the legacy modules that keep it;
-  `docs/architecture/milestone-7.md#release-checklist-inputs` lists them one
-  by one. Counted at `53dff02`; see `docs/architecture/milestone-7-gate.md`.
+
+### Remaining legacy code
+
+4.0 does not remove the old startup code; it fences it in.
+
+- **The legacy initializer shim** is `src/js/_entry.js` (170 lines). It calls
+  `wireApp` with dependencies it imports from the numbered modules, then starts
+  **69 of the 79 numbered modules** in `src/js/`. The other ten (`03c`, `14c`,
+  `14d`, `14e`, `22a` to `22f`) load only as imports. Its import list is frozen
+  at 72 specifiers by `tests/bootstrap/legacy-shim.test.ts` and may only shrink.
+- **23 bridge files** remain in `src/legacy/` (1,452 lines). Numbered modules
+  import them 106 times from 57 files; `_entry.js` imports none of them.
+- **Owner:** every bridge is owned by the integration owner until the 4.x
+  bridge work (plan section 8, item 2), which removes each bridge together
+  with the legacy modules that keep it.
+
+| Bridge file | Lines | Kept alive by |
+| --- | --- | --- |
+| `richtext.ts` | 60 | the editor and format modules still in `src/js/` |
+| `session-bridge.ts` | 218 | every numbered module that edits or reads the session |
+| `transition-bridge.ts` | 89 | open, new, restore and publish callers in `src/js/` |
+| `app-actions.ts` | 43 | numbered modules invoking actions by id |
+| `document-ports.ts` | 42 | state entry and format modules (`02`, `02b`, `03`, `07`, `14b`, `14c`, `15`) |
+| `plain-text.ts` | 7 | `08c`, `14b`, `14c`, `15`, `18a`, `19` |
+| `save-bridge.ts` | 108 | `03`, `12`, `13`, `14`, `18` |
+| `export-formats.ts` | 28 | `14e`, `18`, `18c`, `18d` |
+| `review-wording.ts` | 1 | `05h`, `06`, `13`, `19` |
+| `cache-freeze.ts` | 18 | `05f`, `07`, `14b` |
+| `recovery-bridge.ts` | 86 | `03`, `20g` |
+| `tour-pause.ts` | 18 | `20c`, `20e` |
+| `screen.ts` | 69 | `18d` and the action bridges |
+| `screen-state.ts` | 26 | the action bridges |
+| `undo-adapter.ts` | 27 | `12a-undo.js` |
+| `menu-items.ts` | 21 | the share actions |
+| `file-actions.ts`, `help-actions.ts`, `share-actions.ts`, `this-document-actions.ts`, `view-actions.ts`, `zoom-actions.ts`, `native-menu.ts` | 99, 121, 166, 55, 82, 20, 48 | action definitions that call numbered modules |
+
+Also still legacy: one runtime import cycle of 46 modules and 310 edges, three
+modules that assign the global `S` (`00-prelude.js`, `02b-doc-id.js`,
+`03-sync.js`), and 514 recorded dependency exceptions in
+`tools/dep-baseline.json` (`npm run check:deps`: 0 new, 0 resolved).
+
+Measured at `7b7b430`.
 
 ## 3.1.0 — 2026-09-29
 
