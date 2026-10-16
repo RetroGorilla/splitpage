@@ -93,7 +93,15 @@ const OPTIONAL: readonly (readonly [keyof WiringDeps, "function" | "object"])[] 
   ["report", "function"]
 ];
 
-const TRANSITION_PORTS: readonly (keyof LegacyTransitionPorts)[] = ["live", "destination", "identity"];
+const TRANSITION_PORTS: { readonly [P in keyof LegacyTransitionPorts]: readonly (keyof LegacyTransitionPorts[P])[] } = {
+  live: ["current", "assign"],
+  destination: ["set", "confirm"],
+  identity: ["mint", "writtenOut", "markWrittenOut"]
+};
+
+const SAVE_PORTS: readonly (keyof Omit<LegacySavePorts, "ownership">)[] = ["write", "destination", "keyOf", "obsolete", "running"];
+
+const OWNERSHIP_PORTS: readonly (keyof SaveOwnershipPort)[] = ["capture", "stillOwns"];
 
 const UNDO_PORTS: readonly (keyof SessionUndoPorts)[] = ["adapter", "route", "watch"];
 
@@ -101,6 +109,22 @@ const SESSION_EFFECTS: readonly (keyof SessionEffects)[] = ["dirty", "draft", "s
 
 function present(value: unknown, kind: "function" | "object"): boolean {
   return value !== null && typeof value === kind;
+}
+
+function checkedSaves(ports: LegacySavePorts | null | undefined): LegacySavePorts {
+  if (!present(ports, "object")) throw new WiringError("saves", "Wiring: the saves dependency returned no save ports");
+  const given = ports as unknown as Record<string, unknown>;
+  for (const port of SAVE_PORTS) {
+    if (!present(given[port], "function")) throw new WiringError("saves", "Wiring: the saves dependency returned no " + port + " port");
+  }
+  const ownership = given["ownership"];
+  if (!present(ownership, "object")) throw new WiringError("saves", "Wiring: the saves dependency returned no ownership port");
+  for (const method of OWNERSHIP_PORTS) {
+    if (!present((ownership as Record<string, unknown>)[method], "function")) {
+      throw new WiringError("saves", "Wiring: the saves dependency's ownership port has no " + method + " function");
+    }
+  }
+  return ports as LegacySavePorts;
 }
 
 function validate(deps: WiringDeps | null | undefined): void {
@@ -114,8 +138,14 @@ function validate(deps: WiringDeps | null | undefined): void {
   for (const effect of SESSION_EFFECTS) {
     if (!present(deps.effects[effect], "function")) throw new WiringError("effects", "Wiring: the effects dependency has no " + effect + " effect");
   }
-  for (const port of TRANSITION_PORTS) {
-    if (!present(deps.transitions[port], "object")) throw new WiringError("transitions", "Wiring: the transitions dependency has no " + port + " port");
+  for (const [port, methods] of Object.entries(TRANSITION_PORTS) as [keyof LegacyTransitionPorts, readonly string[]][]) {
+    const given: unknown = deps.transitions[port];
+    if (!present(given, "object")) throw new WiringError("transitions", "Wiring: the transitions dependency has no " + port + " port");
+    for (const method of methods) {
+      if (!present((given as Record<string, unknown>)[method], "function")) {
+        throw new WiringError("transitions", "Wiring: the transitions dependency's " + port + " port has no " + method + " function");
+      }
+    }
   }
   if (deps.undo) {
     for (const port of UNDO_PORTS) {
@@ -188,7 +218,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   const exports = build("export registry", () => createExportRegistry(), installExportFormats);
   build("built-in exporters", () => deps.exporters(exports), (drop) => drop);
   build("session", () => startSessionBridge(legacySessionPorts(deps)), (stop) => stop);
-  build("saves", () => startSaves(deps.saves({ capture: captureOperation, stillOwns: stillOwns })), (stop) => stop);
+  build("saves", () => startSaves(checkedSaves(deps.saves({ capture: captureOperation, stillOwns: stillOwns }))), (stop) => stop);
   build("transitions", () => startTransitions(deps.transitions), (stop) => stop);
   build("recovery", () => startRecovery(deps.recovery()), (stop) => stop);
   let disposed = false;
