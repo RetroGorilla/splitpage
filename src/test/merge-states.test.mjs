@@ -6,7 +6,6 @@ import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";
 import {
   acceptStash,
-  cloneState,
   mergeStates,
   readStash,
   stashLocalWork,
@@ -16,6 +15,7 @@ import { createMemoryBackend, dataUrlForSync, intern, setBackend } from "../adap
 import { S } from "../js/_state.js";
 import { changedBetween } from "../js/12a-undo.js";
 import { personIdRemap } from "../core/merge/lists.ts";
+import { cloneState } from "../core/document/clone.ts";
 
 function mk() {
   return migrateRows({

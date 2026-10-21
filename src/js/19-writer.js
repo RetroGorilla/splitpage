@@ -26,7 +26,6 @@ import {
 import { splitRowFieldCore } from "./06-rows.js";
 import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
 import { closeFindBar, findOpen } from "./09-find-replace.js";
-import { truncateForPreview } from "./11-import.js";
 import { showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "./12a-undo.js";
 import { mirrorFileChipToWriter } from "./18-local-files.js";
@@ -36,7 +35,7 @@ import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { editAllowed, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { focusMemory } from "../legacy/editor-bridge.ts";
 import { gallerySize } from "../core/document/gallery.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
+import { escapeHtml, truncateForPreview } from "../core/document/text-policy.ts";
 
 export var writerOpen = false;
 var writerGutterMode = "visuals";

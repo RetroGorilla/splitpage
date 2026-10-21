@@ -24,7 +24,6 @@ import {
 import {
   captureSnapshot,
   getHistorySnapshot,
-  historyNoop,
   listDocHistory,
   protectHistorySnapshot
 } from "./03a-history-store.js";
@@ -45,13 +44,16 @@ import {
   saveAuthorName
 } from "./10-comments.js";
 import { markAbsorbedDirty, markDirty, showToast } from "./12-dirty-toast.js";
-import { driveFormatSize, reviewMode } from "./13-hosted.js";
+import { reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { haltAutoSave, queueAutoSave } from "./14-export.js";
 import { updateFileChip } from "./18-local-files.js";
 import { confirmBaseline } from "../legacy/save-bridge.ts";
 import { captureRestore, stillRestoring } from "../legacy/recovery-bridge.ts";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
+import { driveFormatSize } from "../../shared/text.js";
+import { cloneState } from "../core/document/clone.ts";
+export { cloneState };
 export { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
 export { mergeTargetLength } from "../core/merge/scalars.ts";
 
@@ -60,8 +62,6 @@ export var SNAPSHOT_KEY = "splitpage-snapshots";
 export var RELOAD_GUARD_KEY = "splitpage-conflict-reloaded";
 
 S.baseState = null;
-
-export function cloneState(s) { return JSON.parse(JSON.stringify(s)); }
 
 export function getEditorName() {
   return getSavedAuthorName() || "Anonymous";
@@ -94,7 +94,7 @@ async function restoreSnapshot(id, opts) {
   var docIdAtStart = S.state.docId;
   var ctx = captureRestore();
   var moved = function () { return !S.state || !stillRestoring(ctx); };
-  var releaseHold = historyNoop;
+  var releaseHold = function () {};
   try {
     releaseHold = protectHistorySnapshot({ docId: opts.older ? null : docIdAtStart, older: !!opts.older, id: id });
 

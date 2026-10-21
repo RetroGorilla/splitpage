@@ -9,6 +9,7 @@ const globalsBefore = new Set(Reflect.ownKeys(globalThis));
 
 const modules: Record<string, Record<string, unknown>> = {
   "document/broll.ts": await import("../../src/core/document/broll.ts"),
+  "document/clone.ts": await import("../../src/core/document/clone.ts"),
   "document/comments.ts": await import("../../src/core/document/comments.ts"),
   "document/export-document.ts": await import("../../src/core/document/export-document.ts"),
   "document/fields.ts": await import("../../src/core/document/fields.ts"),
@@ -18,6 +19,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "document/ids.ts": await import("../../src/core/document/ids.ts"),
   "document/media.ts": await import("../../src/core/document/media.ts"),
   "document/memo.ts": await import("../../src/core/document/memo.ts"),
+  "document/people.ts": await import("../../src/core/document/people.ts"),
   "document/person-colors.ts": await import("../../src/core/document/person-colors.ts"),
   "document/ports.ts": await import("../../src/core/document/ports.ts"),
   "document/tags.ts": await import("../../src/core/document/tags.ts"),

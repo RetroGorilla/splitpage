@@ -5,10 +5,12 @@ import { closeAllSidePanels } from "./03b-side-panels.js";
 import { showToast } from "./12-dirty-toast.js";
 import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
 import { deliverFile, onFileMenuChoice } from "./18-local-files.js";
-import { addServerBookmark, joinErrorText } from "./20e-connect.js";
+import { addServerBookmark } from "./20e-connect.js";
 import { draftRestorePending } from "./20g-drafts.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
+import { joinErrorText } from "../../shared/server-links.js";
+import { checksumText } from "../../shared/text.js";
 
 export var ONBOARD_KEY = "splitpage-onboarding";
 
@@ -28,15 +30,6 @@ function writeOnboardKey(skipped) {
       v: 1, done: true, skipped: !!skipped, at: new Date().toISOString()
     }));
   } catch (e) { }
-}
-
-export function checksumText(str) {
-  var h = 0x811c9dc5;
-  for (var i = 0; i < str.length; i++) {
-    h ^= str.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return (h >>> 0).toString(16);
 }
 
 export function seedCheckPasses() {
