@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 const { bootApp, closeApp } = await import("./_app-boot.mjs");
 await bootApp();
 const app = await import("../bootstrap/app.ts");
-const { mountRowsFeature, routeRootClick, rootRoutesTaken, stopRowsFeature } = await import("../js/22a-editor-wiring.js");
+const { mountRowsFeature, routeRootClick, rootRoutesTaken, stopRowsFeature } = await import("../bootstrap/wiring/editor.ts");
 
 after(() => {
   app.stopApp();

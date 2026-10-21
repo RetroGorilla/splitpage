@@ -1,6 +1,6 @@
 # Editing a comment or reply draft through the document model, with an
 # undo history of the box's own (#85 design §10 step 7;
-# src/js/05d-draft-edit.js, wired in 05-render.js and 22a-editor-wiring.js).
+# src/js/05d-draft-edit.js, wired in 05-render.js and src/bootstrap/wiring/editor.ts).
 #
 # The composer and the reply boxes used to be edited with execCommand,
 # which kept the browser's own undo working in them. Now B/I/U/S,
