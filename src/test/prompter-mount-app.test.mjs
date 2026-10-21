@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 
 await bootApp();
+const { setPrompterOpen } = await import("../application/prompter-state.ts");
 const { mountPrompterVisibilityFeature } = await import("../js/22d-views-wiring.js");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 after(closeApp);
@@ -13,7 +14,7 @@ function open() {
     schema: 2, docId: "deeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", title: "Wake lock lifetime",
     rows: [{ id: "r1", status: "todo", visualText: "Scene", audioText: "One" }]
   } }, reason: "wake-lock-lifetime" });
-  S.prompterOpen = true;
+  setPrompterOpen(true);
 }
 
 for (const scenario of ["dispose and reopen", "same-ID replacement", "stale completion after remount", "normal completion"]) {
@@ -49,7 +50,7 @@ for (const scenario of ["dispose and reopen", "same-ID replacement", "stale comp
       replacement?.dispose();
       const { disposePrompterView } = await import("../js/20-teleprompter.js");
       disposePrompterView();
-      S.prompterOpen = false;
+      setPrompterOpen(false);
       if (prior) Object.defineProperty(navigator, "wakeLock", prior);
       else delete navigator.wakeLock;
       if (visibility) Object.defineProperty(document, "visibilityState", visibility);
