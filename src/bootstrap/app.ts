@@ -1,5 +1,3 @@
-import type { CommentsMount } from "../features/comments/mount.ts";
-import type { OverlayMount } from "../features/overlay/mount.ts";
 import { startActions } from "./actions.ts";
 import { beginStartup } from "./startup.ts";
 import type { Wiring } from "./wiring.ts";
@@ -31,8 +29,8 @@ import {
   stopVideoFeature,
   stopWriterFeature
 } from "./wiring/editor.ts";
-import { mountFindFeature, mountTagsFeature, stopFindFeature, stopTagsFeature } from "../js/22b-production-wiring.js";
-import { mountCommentsFeature, stopCommentsFeature } from "../js/22c-comments-wiring.js";
+import { mountFindFeature, mountTagsFeature, stopFindFeature, stopTagsFeature } from "./wiring/production.ts";
+import { mountCommentsFeature, stopCommentsFeature } from "./wiring/comments.ts";
 import {
   mountConflictsFeature,
   mountDriveFeature,
@@ -54,9 +52,9 @@ import {
   mountWriterNavigationFeature,
   mountWriterOpenFeature,
   stopViewFeature
-} from "../js/22d-views-wiring.js";
-import { mountOverlayFeature, stopOverlayFeature } from "../js/22e-overlay-wiring.js";
-import { openInitialDocument, startupPorts } from "../js/22f-startup-wiring.js";
+} from "./wiring/views.ts";
+import { mountOverlayFeature, stopOverlayFeature } from "./wiring/overlay.ts";
+import { openInitialDocument, startupPorts } from "./wiring/startup.ts";
 
 let running: (() => void) | null = null;
 
@@ -90,11 +88,11 @@ export function startApp(wiring: Wiring): () => void {
     run([mountTagsFeature, stopTagsFeature]);
     run(view("mountPrompterVisibility", mountPrompterVisibilityFeature));
     openInitialDocument(startup);
-    const comments = mountCommentsFeature() as CommentsMount;
+    const comments = mountCommentsFeature();
     stops.push(stopCommentsFeature);
     run([mountVideoFeature, stopVideoFeature]);
     run([mountToolbarFeature, stopToolbarFeature]);
-    const overlay = mountOverlayFeature() as OverlayMount;
+    const overlay = mountOverlayFeature();
     stops.push(stopOverlayFeature);
     run([mountRowsFeature, stopRowsFeature]);
     run([mountRowsEditingFeature, stopRowsEditingFeature]);

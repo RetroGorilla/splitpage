@@ -1,9 +1,11 @@
-import { owned } from "../features/routing/owned.ts";
-import { runFromButton } from "../legacy/app-actions.ts";
-import { mountFind } from "../features/find/mount.ts";
-import { mountTags } from "../features/tags/mount.ts";
-import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
-import { cssAttr } from "./04-richtext.js";
+import type { FindPorts } from "../../features/find/mount.ts";
+import type { TagsPorts } from "../../features/tags/mount.ts";
+import { owned } from "../../features/routing/owned.ts";
+import { runFromButton } from "../../legacy/app-actions.ts";
+import { mountFind } from "../../features/find/mount.ts";
+import { mountTags } from "../../features/tags/mount.ts";
+import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
+import { cssAttr } from "../../js/04-richtext.js";
 import {
   acceptTagGhost,
   acceptUntaggedMention,
@@ -18,8 +20,8 @@ import {
   renderTagCategories,
   selectedKeys,
   tagKey
-} from "./07-production-tags.js";
-import { closePlainTag, plainTagOpen, refreshPlainTag } from "./07b-plain-tags.js";
+} from "../../js/07-production-tags.js";
+import { closePlainTag, plainTagOpen, refreshPlainTag } from "../../js/07b-plain-tags.js";
 import {
   IS_TOUCH,
   addPersonForTag,
@@ -44,7 +46,7 @@ import {
   toggleCardSelection,
   setTagOwner,
   setTagNotes
-} from "./08-production-panels.js";
+} from "../../js/08-production-panels.js";
 import {
   bulkTagOpen,
   closeBulkTag,
@@ -57,22 +59,20 @@ import {
   runBulkTag,
   stepFind,
   toggleBulkTag
-} from "./09-find-replace.js";
-import { reviewBlocked, reviewMode } from "./13-hosted.js";
-import { queueAutoSave } from "./14-export.js";
-import { exportAs, runExport } from "./18-local-files.js";
-import { wireTagEntityContainer } from "./20-teleprompter.js";
-import { onRootClick, routeRootClick, routeRootMouseDown } from "../bootstrap/wiring/editor.ts";
-import { productionGroupBy, setGearGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey } from "../application/tag-panel-state.ts";
-import { findMatchesCase, setFindMatchCase } from "../application/find-options.ts";
+} from "../../js/09-find-replace.js";
+import { reviewBlocked, reviewMode } from "../../js/13-hosted.js";
+import { queueAutoSave } from "../../js/14-export.js";
+import { exportAs, runExport } from "../../js/18-local-files.js";
+import { wireTagEntityContainer } from "../../js/20-teleprompter.js";
+import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";
+import { productionGroupBy, setGearGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey } from "../../application/tag-panel-state.ts";
+import { findMatchesCase, setFindMatchCase } from "../../application/find-options.ts";
 
-var find = owned();
+const find = owned<ReturnType<typeof mountFind>>();
 
-export function mountFindFeature() {
+export function mountFindFeature(): ReturnType<typeof mountFind> {
   return find.replace(function () {
-    return mountFind({
-    window: window,
-    ports: {
+    const ports: FindPorts = {
       closeFindBar: closeFindBar,
       stepFind: stepFind,
       replaceCurrent: replaceCurrent,
@@ -86,20 +86,18 @@ export function mountFindFeature() {
       bulkTagOpen: bulkTagOpen,
       getFindMatchCase: function () { return findMatchesCase(); },
       setFindMatchCase: function (value) { setFindMatchCase(value); }
-    }
-    });
+    };
+    return mountFind({ window: window, ports: ports });
   });
 }
 
-export var stopFindFeature = find.stop;
+export const stopFindFeature = find.stop;
 
-var tags = owned();
+const tags = owned<ReturnType<typeof mountTags>>();
 
-export function mountTagsFeature() {
+export function mountTagsFeature(): ReturnType<typeof mountTags> {
   return tags.replace(function () {
-    return mountTags({
-    window: window,
-    ports: {
+    const ports: TagsPorts = {
       acceptTagGhost: acceptTagGhost,
       acceptUntaggedMention: acceptUntaggedMention,
       applyTag: applyTag,
@@ -146,7 +144,7 @@ export function mountTagsFeature() {
       setTagOwner: setTagOwner,
       setTagNotes: setTagNotes,
       bulkDeleteArmed: function () { return bulkDeleteArmed; },
-      isTouch: function () { return IS_TOUCH; },
+      isTouch: function () { return IS_TOUCH as boolean | undefined; },
       addingPerson: function () { return tagAddingPersonKey(); },
       expanded: function () { return tagExpandedKey(); },
       productionGroup: function () { return productionGroupBy(); },
@@ -155,10 +153,10 @@ export function mountTagsFeature() {
       setExpanded: function (value) { setTagExpanded(value); },
       setProductionGroup: function (value) { setProductionGroupBy(value); },
       setGearGroup: function (value) { setGearGroupBy(value); },
-      capture: function () { var context = captureOperation(); return function () { return stillOwns(context); }; },
+      capture: function () { const context = captureOperation(); return function () { return stillOwns(context); }; },
       installEntity: function (id) { return wireTagEntityContainer(id, onRootClick); }
-    }
-    });
+    };
+    return mountTags({ window: window, ports: ports });
   }, function (owner) {
     return [
       function () { return routeRootClick("tags-jump", function (e) { return owner.jumpClick(e); }); },
@@ -168,4 +166,4 @@ export function mountTagsFeature() {
   });
 }
 
-export var stopTagsFeature = tags.stop;
+export const stopTagsFeature = tags.stop;

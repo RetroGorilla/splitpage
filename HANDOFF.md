@@ -2024,7 +2024,7 @@ evaluation order via `_entry.js`):
 | `20k-phone-bar.js` | the phone's bottom bar (#169, ≤760px): Script, Write and the panel tabs, each clicking its header button, with the header badges' counts mirrored |
 | `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (the registry's `settings` action, src/legacy/help-actions.ts, like Help and Set up), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Collaboration / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open; Collaboration is the server address (13b-collaborate.js's pref, not in the app-data bundle), whether this device is signed in there and Sign out; `openSettings({focus})` for the Collaborate dialog's Change the address… |
 | `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed; and `LONG_DEMO` (#215), the 30-scene demo written by `tools/make-long-demo.mjs`, opened from the New Tab page's footer and the command menu (`openLongDemo`, 18b-file-menu.js) |
-| `22b-production-wiring.js`, `22c-comments-wiring.js`, `22d-views-wiring.js`, `22e-overlay-wiring.js`, `22f-startup-wiring.js` | event wiring: the ports each feature mount under `src/features/` is given, one file per area (production, comments, views, overlays, startup; the editor's is `src/bootstrap/wiring/editor.ts`); `_entry.js` calls `wireApp` and then starts the modules |
+| `src/bootstrap/wiring/` | typed event and startup wiring: `editor.ts`, `production.ts`, `comments.ts`, `views.ts`, `overlay.ts` and `startup.ts` supply each feature's ports and own its mount lifetime; `_entry.js` calls `wireApp` and hands the result to `startAppWhenReady` |
 
 **Desktop files** (optional; the web app runs without them):
 
@@ -2069,7 +2069,7 @@ rebuilds the app. An HTML comment left loose in `docs/help.md` now renders as
 visible text on the Help page — keep any inside a fenced code block.
 
 **Choosing a File menu item:** one click listener on `#file-menu`
-(`mountFileMenu` in `src/features/file-menu/mount.ts`, wired by `22d-views-wiring.js`) hands an enabled item's id to `handleFileMenuAction()`
+(`mountFileMenu` in `src/features/file-menu/mount.ts`, wired by `src/bootstrap/wiring/views.ts`) hands an enabled item's id to `handleFileMenuAction()`
 (`18-local-files.js`), which runs the `onFileMenuChoice()` listeners, closes
 the menu, remembers an export and invokes the action from the registry
 (`docs/architecture/actions.md`). Help, Servers, Tour and Set up are actions

@@ -123,7 +123,7 @@ test("there are three S.state assignments, in these functions", () => {
 
 test("boot from the seed: 00-prelude and the initial load assign null, then the transition API's live-document port the seed script, a migrateRows fixed point", () => {
   assert.equal(seedCheckPasses(), true, "the page's seed check matches its state-data, as a fresh build's does");
-  assert.deepEqual(atBoot.map((r) => r.site), ["00-prelude.js#(anonymous)", "02b-doc-id.js#loadInitialDocument", "02b-doc-id.js#assign"]);
+  assert.deepEqual(atBoot.map((r) => r.site), ["00-prelude.js#(anonymous)", "_entry.js#(anonymous)", "02b-doc-id.js#assign"]);
   assert.equal(atBoot[0].value, null);
   assert.equal(atBoot[1].value, null);
   const seed = JSON.parse(readFileSync(new URL("../seed-state.json", import.meta.url), "utf8"));

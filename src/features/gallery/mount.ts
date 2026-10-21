@@ -1,7 +1,9 @@
-export function mountHistoryGallery(ports: {
+export interface HistoryGalleryPorts {
   restore: (button: HTMLElement) => void;
   open: (row: string | null, slot: number, videos: boolean) => void;
-}): { restoreClick: (event: MouseEvent) => boolean; galleryClick: (event: MouseEvent) => boolean; dispose: () => void } {
+}
+
+export function mountHistoryGallery(ports: HistoryGalleryPorts): { restoreClick: (event: MouseEvent) => boolean; galleryClick: (event: MouseEvent) => boolean; dispose: () => void } {
   let active = true;
   return {
     restoreClick(event): boolean {

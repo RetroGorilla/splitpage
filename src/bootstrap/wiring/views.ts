@@ -1,33 +1,41 @@
-import { owned } from "../features/routing/owned.ts";
-import { runFromButton, saveFromButton } from "../legacy/app-actions.ts";
-import { mountNotices } from "../features/notices/mount.ts";
-import { mountPrompterVisibility, mountPrompterOpen, mountPrompter } from "../features/prompter/mount.ts";
-import { mountIdentity, mountServer, mountDrive } from "../features/settings/mount.ts";
-import { mountHistory } from "../features/history/mount.ts";
-import { mountSaveRecovery, mountConflicts, mountSave, mountFileMenu } from "../features/file-menu/mount.ts";
-import { mountImports, mountGdoc } from "../features/imports/mount.ts";
-import { mountWriterOpen, mountWriterNavigation, mountWriterClose } from "../features/writer/mount.ts";
-import { mountHistoryGallery } from "../features/gallery/mount.ts";
-import { S } from "./_state.js";
-import { touchImportMode } from "../application/import-mode.ts";
+import type { Disposable, Owned } from "../../features/routing/owned.ts";
+import type { NoticesPorts } from "../../features/notices/mount.ts";
+import type { PrompterVisibilityPorts, PrompterOpenPorts, PrompterPorts } from "../../features/prompter/mount.ts";
+import type { IdentityPorts, ServerPorts, DrivePorts } from "../../features/settings/mount.ts";
+import type { HistoryPorts } from "../../features/history/mount.ts";
+import type { SaveRecoveryPorts, ConflictsPorts, SavePorts, FileMenuPorts } from "../../features/file-menu/mount.ts";
+import type { ImportsPorts, GdocPorts } from "../../features/imports/mount.ts";
+import type { WriterOpenPorts, WriterNavigationPorts, WriterClosePorts } from "../../features/writer/mount.ts";
+import type { HistoryGalleryPorts } from "../../features/gallery/mount.ts";
+import { owned } from "../../features/routing/owned.ts";
+import { runFromButton, saveFromButton } from "../../legacy/app-actions.ts";
+import { mountNotices } from "../../features/notices/mount.ts";
+import { mountPrompterVisibility, mountPrompterOpen, mountPrompter } from "../../features/prompter/mount.ts";
+import { mountIdentity, mountServer, mountDrive } from "../../features/settings/mount.ts";
+import { mountHistory } from "../../features/history/mount.ts";
+import { mountSaveRecovery, mountConflicts, mountSave, mountFileMenu } from "../../features/file-menu/mount.ts";
+import { mountImports, mountGdoc } from "../../features/imports/mount.ts";
+import { mountWriterOpen, mountWriterNavigation, mountWriterClose } from "../../features/writer/mount.ts";
+import { mountHistoryGallery } from "../../features/gallery/mount.ts";
+import { touchImportMode } from "../../application/import-mode.ts";
 import {
   prompterIsOpen,
   prompterIsPlaying,
   prompterSkipsShot,
   setPrompterSkipShot,
   voiceIsFollowing
-} from "../application/prompter-state.ts";
-import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
-import { conn, importHome } from "./_home.js";
-import { expandHiddenShotStrip } from "./01b-hide-shot.js";
+} from "../../application/prompter-state.ts";
+import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
+import { importHome } from "../../js/_home.js";
+import { expandHiddenShotStrip } from "../../js/01b-hide-shot.js";
 import {
   closeHistoryPanel,
   promptForName,
   promptForWpm,
   restoreSnapshotFromCard
-} from "./03-sync.js";
-import { initSidePanelResizeHandles } from "./03b-side-panels.js";
-import { openGalleryOverlay } from "./05e-gallery-overlay.js";
+} from "../../js/03-sync.js";
+import { initSidePanelResizeHandles } from "../../js/03b-side-panels.js";
+import { openGalleryOverlay } from "../../js/05e-gallery-overlay.js";
 import {
   clearPendingFileRows,
   captureImportPreview,
@@ -38,8 +46,8 @@ import {
   handleImportFile,
   maybeAutoDetectTwoColumn,
   updateImportPreview
-} from "./11-import.js";
-import { showToast, updateSaveStatus } from "./12-dirty-toast.js";
+} from "../../js/11-import.js";
+import { showToast, updateSaveStatus } from "../../js/12-dirty-toast.js";
 import {
   armDriveDelete,
   armServerDelete,
@@ -62,8 +70,8 @@ import {
   driveUploadFiles,
   openServerDoc,
   toggleDriveNewFolder
-} from "./13-hosted.js";
-import { saveDoc } from "./14-export.js";
+} from "../../js/13-hosted.js";
+import { saveDoc } from "../../js/14-export.js";
 import {
   buildFileData,
   closeFileConflict,
@@ -78,10 +86,10 @@ import {
   reloadProjectFromDisk,
   resumeFromHandle,
   saveBackToFile
-} from "./18-local-files.js";
-import { cancelMergeReview, confirmFileMerge, openMergeReview } from "./18a-local-merge.js";
-import { toggleFileMenu, toggleSubmenu } from "./18b-file-menu.js";
-import { applyWriterSize, closeWriter, jumpFromWriterToRow } from "./19-writer.js";
+} from "../../js/18-local-files.js";
+import { cancelMergeReview, confirmFileMerge, openMergeReview } from "../../js/18a-local-merge.js";
+import { toggleFileMenu, toggleSubmenu } from "../../js/18b-file-menu.js";
+import { applyWriterSize, closeWriter, jumpFromWriterToRow } from "../../js/19-writer.js";
 import {
   acquireWakeLock,
   disposePrompterView,
@@ -105,97 +113,103 @@ import {
   updatePrompterStatus,
   updateSceneReadout,
   updateVoiceAvailability
-} from "./20-teleprompter.js";
+} from "../../js/20-teleprompter.js";
 import {
   dismissDesktopAppNotice,
   dismissUpdateNotice,
   loadUpdateStatus,
   renderDesktopAppNotice
-} from "./20a-update.js";
-import { finishMarkdownRowChoice } from "./20d-formats.js";
-import { onRootClick, routeRootClick } from "../bootstrap/wiring/editor.ts";
+} from "../../js/20a-update.js";
+import { routeServerOpen } from "../../js/20f-desktop.js";
+import { finishMarkdownRowChoice } from "../../js/20d-formats.js";
+import { onRootClick, routeRootClick } from "./editor.ts";
 
-var viewMounts = new Map();
+const viewMounts = new Map<string, Pick<Owned<Disposable>, "stop">>();
 
-function replaceViewMount(key, mount, routes) {
-  var slot = viewMounts.get(key);
+function replaceViewMount<T extends Disposable>(key: string, mount: () => T, routes?: (owner: T) => readonly (() => () => void)[]): T {
+  let slot = viewMounts.get(key) as Owned<T> | undefined;
   if (!slot) {
-    slot = owned();
+    slot = owned<T>();
     viewMounts.set(key, slot);
   }
   return slot.replace(mount, routes);
 }
 
-export function stopViewFeature(key) {
-  var slot = viewMounts.get(key);
+export function stopViewFeature(key: string): void {
+  const slot = viewMounts.get(key);
   if (slot) slot.stop();
 }
 
-function captureViewDocument() {
-  var context = captureOperation();
+function captureViewDocument(): () => boolean {
+  const context = captureOperation();
   return function () { return stillOwns(context); };
 }
 
-export function mountNoticesFeature() {
+export function mountNoticesFeature(): ReturnType<typeof mountNotices> {
   return replaceViewMount("mountNotices", function () {
-    return mountNotices({ window: window, ports: {
+    const ports: NoticesPorts = {
       loadUpdateStatus: loadUpdateStatus,
       dismissUpdateNotice: dismissUpdateNotice,
       renderDesktopAppNotice: renderDesktopAppNotice,
       dismissDesktopAppNotice: dismissDesktopAppNotice
-    } });
+    };
+    return mountNotices({ window: window, ports: ports });
   });
 }
 
-export function mountPrompterVisibilityFeature() {
+export function mountPrompterVisibilityFeature(): ReturnType<typeof mountPrompterVisibility> {
   return replaceViewMount("mountPrompterVisibility", function () {
-    return mountPrompterVisibility({ window: window, ports: {
+    const ports: PrompterVisibilityPorts = {
       acquireWakeLock: function (active) {
-        var ownsDocument = captureViewDocument();
+        const ownsDocument = captureViewDocument();
         acquireWakeLock(function () { return active() && ownsDocument(); });
       },
       isOpen: prompterIsOpen
-    } });
+    };
+    return mountPrompterVisibility({ window: window, ports: ports });
   });
 }
 
-export function mountIdentityFeature() {
+export function mountIdentityFeature(): ReturnType<typeof mountIdentity> {
   return replaceViewMount("mountIdentity", function () {
-    return mountIdentity({ window: window, ports: {
+    const ports: IdentityPorts = {
       promptForName: promptForName
-    } });
+    };
+    return mountIdentity({ window: window, ports: ports });
   });
 }
 
-export function mountHistoryFeature() {
+export function mountHistoryFeature(): ReturnType<typeof mountHistory> {
   return replaceViewMount("mountHistory", function () {
-    return mountHistory({ window: window, ports: {
+    const ports: HistoryPorts = {
       promptForWpm: promptForWpm,
       closeHistoryPanel: closeHistoryPanel,
       onRootClick: onRootClick
-    } });
+    };
+    return mountHistory({ window: window, ports: ports });
   });
 }
 
-export function mountServerFeature() {
+export function mountServerFeature(): ReturnType<typeof mountServer> {
   return replaceViewMount("mountServer", function () {
-    return mountServer({ window: window, ports: {
+    const ports: ServerPorts = {
       closeServerPicker: closeServerPicker,
       openServerDoc: openServerDoc,
       armServerDelete: armServerDelete,
-      routeOpen: function (id) { return S.DESKTOP ? S.DESKTOP.routeOpen({ kind: "server", serverDocId: id, serverUrl: conn.serverUrl, token: conn.token, tunnel: conn.tunnel }).then(function (result) { return !!result && result.where === "this-tab"; }) : null; },
+      routeOpen: routeServerOpen,
       capture: function () {
-        var ownsDocument = captureViewDocument();
-        var ownsModal = captureServerPicker();
+        const ownsDocument = captureViewDocument();
+        const ownsModal = captureServerPicker();
         return function () { return ownsDocument() && ownsModal(); };
       }
-    } });
+    };
+    return mountServer({ window: window, ports: ports });
   });
 }
 
-export function mountDriveFeature() {
+export function mountDriveFeature(): ReturnType<typeof mountDrive> {
   return replaceViewMount("mountDrive", function () {
-    return mountDrive({ window: window, ports: {
+    const ports: DrivePorts = {
       closeDriveModal: closeDriveModal,
       driveSaveCredsFromForm: driveSaveCredsFromForm,
       driveShowCredsForm: driveShowCredsForm,
@@ -213,27 +227,32 @@ export function mountDriveFeature() {
       driveItemById: driveItemById,
       armDriveDelete: armDriveDelete,
       driveUploadFiles: driveUploadFiles
-    } });
+    };
+    return mountDrive({ window: window, ports: ports });
   });
 }
 
-export function mountSaveRecoveryFeature() {
+export function mountSaveRecoveryFeature(): ReturnType<typeof mountSaveRecovery> {
   return replaceViewMount("mountSaveRecovery", function () {
-    return mountSaveRecovery({ window: window, ports: {
+    const ports: SaveRecoveryPorts = {
       hideResumeBanner: hideResumeBanner,
       resumeFromHandle: resumeFromHandle,
       showToast: showToast,
       saveDoc: saveDoc,
       exportAs: exportAs,
-      pendingHandle: function () { return pendingResumeHandle; },
+      pendingHandle: function () {
+        const handle: ReturnType<SaveRecoveryPorts["pendingHandle"]> = pendingResumeHandle;
+        return handle;
+      },
       capture: captureViewDocument
-    } });
+    };
+    return mountSaveRecovery({ window: window, ports: ports });
   });
 }
 
-export function mountConflictsFeature() {
+export function mountConflictsFeature(): ReturnType<typeof mountConflicts> {
   return replaceViewMount("mountConflicts", function () {
-    return mountConflicts({ window: window, ports: {
+    const ports: ConflictsPorts = {
       closeFileConflict: closeFileConflict,
       reloadProjectFromDisk: reloadProjectFromDisk,
       reloadFileFromDisk: reloadFileFromDisk,
@@ -245,49 +264,56 @@ export function mountConflictsFeature() {
       importHome: importHome,
       buildFileData: buildFileData,
       deliverFile: deliverFile,
-      conflict: function () { return fileConflictCtx; },
+      conflict: function () {
+        const conflict: ReturnType<ConflictsPorts["conflict"]> = fileConflictCtx;
+        return conflict;
+      },
       capture: captureViewDocument
-    } });
+    };
+    return mountConflicts({ window: window, ports: ports });
   });
 }
 
-export function mountPanelsFeature() {
+export function mountPanelsFeature(): Disposable {
   return replaceViewMount("mountPanels", function () {
     return { dispose: initSidePanelResizeHandles() };
   });
 }
 
-export function mountSaveFeature() {
+export function mountSaveFeature(): ReturnType<typeof mountSave> {
   return replaceViewMount("mountSave", function () {
-    return mountSave({ window: window, ports: {
+    const ports: SavePorts = {
       saveFromButton: saveFromButton,
       updateSaveStatus: updateSaveStatus
-    } });
+    };
+    return mountSave({ window: window, ports: ports });
   });
 }
 
-export function mountPrompterOpenFeature() {
+export function mountPrompterOpenFeature(): ReturnType<typeof mountPrompterOpen> {
   return replaceViewMount("mountPrompterOpen", function () {
-    return mountPrompterOpen({ window: window, ports: {
+    const ports: PrompterOpenPorts = {
       runFromButton: runFromButton
-    } });
+    };
+    return mountPrompterOpen({ window: window, ports: ports });
   });
 }
 
-export function mountFileMenuFeature() {
+export function mountFileMenuFeature(): ReturnType<typeof mountFileMenu> {
   return replaceViewMount("mountFileMenu", function () {
-    return mountFileMenu({ window: window, ports: {
+    const ports: FileMenuPorts = {
       toggleFileMenu: toggleFileMenu,
       toggleSubmenu: toggleSubmenu,
       handleFileMenuAction: handleFileMenuAction,
       openProjectFile: openProjectFile
-    } });
+    };
+    return mountFileMenu({ window: window, ports: ports });
   });
 }
 
-export function mountImportsFeature() {
+export function mountImportsFeature(): ReturnType<typeof mountImports> {
   return replaceViewMount("mountImports", function () {
-    return mountImports({ window: window, ports: {
+    const ports: ImportsPorts = {
       finishMarkdownRowChoice: finishMarkdownRowChoice,
       closeImportModal: closeImportModal,
       confirmImport: confirmImport,
@@ -297,26 +323,28 @@ export function mountImportsFeature() {
       handleImportFile: handleImportFile,
       touchMode: touchImportMode,
       capture: function () {
-        var ownsDocument = captureViewDocument();
-        var ownsModal = captureImportPreview();
+        const ownsDocument = captureViewDocument();
+        const ownsModal = captureImportPreview();
         return function () { return ownsDocument() && ownsModal(); };
       }
-    } });
+    };
+    return mountImports({ window: window, ports: ports });
   });
 }
 
-export function mountGdocFeature() {
+export function mountGdocFeature(): ReturnType<typeof mountGdoc> {
   return replaceViewMount("mountGdoc", function () {
-    return mountGdoc({ window: window, ports: {
+    const ports: GdocPorts = {
       closeGdocModal: closeGdocModal,
       confirmGdocImport: confirmGdocImport
-    } });
+    };
+    return mountGdoc({ window: window, ports: ports });
   });
 }
 
-export function mountPrompterFeature() {
+export function mountPrompterFeature(): ReturnType<typeof mountPrompter> {
   return replaceViewMount("mountPrompter", function () {
-    return mountPrompter({ window: window, ports: {
+    const ports: PrompterPorts = {
       disposeRuntime: disposePrompterView,
       closePrompter: closePrompter,
       stopVoiceFollow: stopVoiceFollow,
@@ -340,43 +368,48 @@ export function mountPrompterFeature() {
       isOpen: prompterIsOpen,
       skipShot: prompterSkipsShot,
       setSkipShot: setPrompterSkipShot,
-      mirror: function () { return prompterMirror; },
-      flip: function () { return prompterFlip; },
-      sceneMode: function () { return promptSceneMode; }
-    } });
+      mirror: function () { const mirror: boolean = prompterMirror; return mirror; },
+      flip: function () { const flip: boolean = prompterFlip; return flip; },
+      sceneMode: function () { const sceneMode: boolean = promptSceneMode; return sceneMode; }
+    };
+    return mountPrompter({ window: window, ports: ports });
   });
 }
 
-export function mountWriterOpenFeature() {
+export function mountWriterOpenFeature(): ReturnType<typeof mountWriterOpen> {
   return replaceViewMount("mountWriterOpen", function () {
-    return mountWriterOpen({ window: window, ports: {
+    const ports: WriterOpenPorts = {
       runFromButton: runFromButton
-    } });
+    };
+    return mountWriterOpen({ window: window, ports: ports });
   });
 }
 
-export function mountWriterNavigationFeature() {
+export function mountWriterNavigationFeature(): ReturnType<typeof mountWriterNavigation> {
   return replaceViewMount("mountWriterNavigation", function () {
-    return mountWriterNavigation({ window: window, ports: {
+    const ports: WriterNavigationPorts = {
       jumpFromWriterToRow: jumpFromWriterToRow,
       expandHiddenShotStrip: expandHiddenShotStrip,
       saveFromButton: saveFromButton,
       applyWriterSize: applyWriterSize
-    } });
+    };
+    return mountWriterNavigation({ window: window, ports: ports });
   });
 }
 
-export function mountWriterCloseFeature() {
+export function mountWriterCloseFeature(): ReturnType<typeof mountWriterClose> {
   return replaceViewMount("mountWriterClose", function () {
-    return mountWriterClose({ window: window, ports: {
+    const ports: WriterClosePorts = {
       closeWriter: closeWriter
-    } });
+    };
+    return mountWriterClose({ window: window, ports: ports });
   });
 }
 
-export function mountHistoryGalleryFeature() {
+export function mountHistoryGalleryFeature(): ReturnType<typeof mountHistoryGallery> {
   return replaceViewMount("mountHistoryGallery", function () {
-    return mountHistoryGallery({ restore: restoreSnapshotFromCard, open: openGalleryOverlay });
+    const ports: HistoryGalleryPorts = { restore: restoreSnapshotFromCard, open: openGalleryOverlay };
+    return mountHistoryGallery(ports);
   }, function (owner) {
     return [
       function () { return routeRootClick("history-restore", function (e) { return owner.restoreClick(e); }); },
