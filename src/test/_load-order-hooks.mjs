@@ -22,6 +22,7 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/zoom-actions.ts": { functions: ["registerZoomActions"] },
   "src/js/14e-export-formats.js": { functions: ["registerBuiltInExporters"] },
   "src/bootstrap/wiring.ts": { functions: ["wireApp"] },
+  "src/bootstrap/wiring/editor.ts": { functions: ["routeRootClick", "routeRootMouseDown", "onRootClick", "onRootMouseDown", "onRootInput", "onRootPaste", "onRootKeydown"] },
   "src/bootstrap/app.ts": { functions: ["startApp", "startAppWhenReady"] },
   "src/bootstrap/actions.ts": { functions: ["startActions"] },
   "src/bootstrap/startup/page-lifetime.ts": { functions: ["watchHistoryMigration", "registerServiceWorker"] }

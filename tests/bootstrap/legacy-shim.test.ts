@@ -133,10 +133,10 @@ test("the load-order check catches a module that configures a bridge while it lo
 });
 
 test("no numbered module configures a bridge or starts an owner while it loads: each is imported alone, with fresh module state", { timeout: 600_000 }, async () => {
-  assert.equal(NUMBERED.length, 76, "every remaining numbered module");
-  const targets = [...NUMBERED, "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js"];
+  assert.equal(NUMBERED.length, 75, "every remaining numbered module");
+  const targets = [...NUMBERED, "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js", "src/bootstrap/wiring/editor.ts"];
   assert.equal(targets.length, 79);
-  for (const loadOnly of ["src/adapters/storage/03c-history-idb.js", "src/js/14c-export-projections.js", "src/js/14d-export-text.js", "src/js/14e-export-formats.js", "src/js/22a-editor-wiring.js", "src/js/22f-startup-wiring.js"]) {
+  for (const loadOnly of ["src/adapters/storage/03c-history-idb.js", "src/js/14c-export-projections.js", "src/js/14d-export-text.js", "src/js/14e-export-formats.js", "src/bootstrap/wiring/editor.ts", "src/js/22f-startup-wiring.js"]) {
     assert.ok(targets.includes(loadOnly), loadOnly);
   }
   const reports = await loadEachAlone(targets);
