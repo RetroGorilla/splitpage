@@ -34,7 +34,8 @@ resolved edge (static imports, re-exports, literal `require`, literal dynamic
 | `contracts` | `src/contracts/` | itself, `shared` |
 | `application` | `src/application/` | itself, core, `contracts`, `shared` |
 | `adapters` | `src/adapters/` | itself, core, `application`, `contracts`, `shared` |
-| `features/<name>` | `src/features/<name>/` | itself, core, `application`, `contracts`, `shared` |
+| `features/<name>` | `src/features/<name>/` | itself, `features/common`, core, `application`, `contracts`, `shared` |
+| `features/common` | `src/features/common/` | DOM helpers used by more than one feature; same imports as `features/<name>`, imported by every feature |
 | `legacy` | `src/legacy/` | itself, core, `legacy-js`, `application`, `contracts`, `adapters`, `shared` |
 | `bootstrap` | `src/bootstrap/` | anything |
 | `shared` | `shared/` | itself |
