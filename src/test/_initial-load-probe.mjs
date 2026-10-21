@@ -12,7 +12,7 @@ try {
 } catch (failure) {
   error = String((failure && failure.stack) || failure);
 }
-const { deriveDocId } = await import("../js/02b-doc-id.js");
+const { deriveDocId } = await import("../core/document/ids.ts");
 const report = {
   pristine,
   error,

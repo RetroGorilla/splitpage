@@ -1,9 +1,10 @@
+import { byId } from "../core/merge/rows.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";
 import { migrateDocument } from "../js/02b-doc-id.js";
-import { byId, mergeBrollShots, mergePeople, mergeProductionTags, mergeStates } from "../js/03-sync.js";
+import { mergeBrollShots, mergePeople, mergeProductionTags, mergeStates } from "../js/03-sync.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { PROTOTYPE_IDS } from "../core/document/id-map.ts";
 import { mergeCase, renameIds, seededRandom, settleMerge, unrenameIds } from "./merge-corpus.mjs";

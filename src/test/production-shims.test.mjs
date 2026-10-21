@@ -1,3 +1,5 @@
+import { productionReaders } from "../legacy/document-ports.ts";
+import { mintTagId } from "../core/document/tags.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -7,10 +9,8 @@ import {
   currentProductionIndex,
   deletePerson,
   healTagRegistry,
-  mintTagId,
   productionEntries,
   productionIndexStats,
-  productionReaders,
   registerProductionTag,
   renameTag
 } from "../js/07-production-tags.js";

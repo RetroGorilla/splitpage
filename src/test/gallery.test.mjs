@@ -1,3 +1,4 @@
+import { rowContentEqual } from "../core/merge/rows.ts";
 import "./_dom.mjs";
 import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
@@ -9,7 +10,7 @@ import { intern } from "../adapters/storage/02c-blobs.js";
 import {
   addGalleryPicture, addGalleryVideo, moveGallerySlot, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
 } from "../adapters/storage/02d-gallery.js";
-import { mergeStates, rowContentEqual } from "../js/03-sync.js";
+import { mergeStates } from "../js/03-sync.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { toMarkdownDoc } from "../js/14d-export-text.js";
 import { __init as initDocx, buildDocx, docxToRows } from "../js/15-docx.js";

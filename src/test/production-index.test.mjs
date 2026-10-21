@@ -1,3 +1,4 @@
+import { mintTagId } from "../core/document/tags.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -5,7 +6,6 @@ import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import {
   healTagRegistry,
-  mintTagId,
   productionEntries,
   productionIndexStats,
   resetProductionIndexStats

@@ -1,9 +1,16 @@
+import { rowContentEqual } from "../core/merge/rows.ts";
+import { mergeTextField } from "../core/merge/text-field.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";
 import {
-  acceptStash, cloneState, mergeStates, mergeTextField, readStash, rowContentEqual, stashLocalWork, textMergeContext
+  acceptStash,
+  cloneState,
+  mergeStates,
+  readStash,
+  stashLocalWork,
+  textMergeContext
 } from "../js/03-sync.js";
 import { createMemoryBackend, dataUrlForSync, intern, setBackend } from "../adapters/storage/02c-blobs.js";
 import { S } from "../js/_state.js";

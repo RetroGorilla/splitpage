@@ -9,13 +9,13 @@ const { migrateRows } = await import("../js/02-state.js");
 const {
   currentProductionIndex,
   healTagRegistry,
-  mintTagId,
   productionEntries,
   productionIndexStats,
-  productionReaders,
-  resetProductionIndexStats,
-  TAG_CATEGORIES
+  resetProductionIndexStats
 } = await import("../js/07-production-tags.js");
+const { mintTagId } = await import("../core/document/tags.ts");
+const { productionReaders } = await import("../legacy/document-ports.ts");
+const { TAG_CATEGORIES } = await import("../core/production/looks.ts");
 const { cellOf } = await import("../legacy/richtext.ts");
 const { cacheSeal, freezeCachesAsked } = await import("../legacy/cache-freeze.ts");
 const { deepLock } = await import("../core/document/freeze.ts");

@@ -1,8 +1,7 @@
+import { hasSetLength, parseSceneLength } from "../core/document/timing.ts";
+import { formatDuration } from "../core/production/timing.ts";
 import {
   estimatedSeconds,
-  formatDuration,
-  hasSetLength,
-  parseSceneLength,
   rowSeconds,
   updateScriptStats
 } from "./01-scene-status.js";

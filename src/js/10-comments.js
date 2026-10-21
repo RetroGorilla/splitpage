@@ -1,3 +1,4 @@
+import { pad2 } from "../core/production/timing.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { S } from "./_state.js";
 import { formatClock, formatDateClock } from "./00p-prefs.js";
@@ -19,7 +20,7 @@ import {
   safeId,
   sanitizeHtml
 } from "./04-richtext.js";
-import { editableCellHtml, pad2, render } from "./05-render.js";
+import { editableCellHtml, render } from "./05-render.js";
 import { resetDraftHistory } from "./05d-draft-edit.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
@@ -38,7 +39,7 @@ import { normalizeTagName } from "../core/document/tags.ts";
 import { EDITOR_NAME_MAX, normalizeEditorName } from "../core/document/fields.ts";
 import { cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
 import { commentSortMode, setCommentSort } from "../application/comment-sort.ts";
-export { commentBodyText, commentEntries, nowIso };
+export { commentBodyText, commentEntries };
 
 var commentFilter;
 

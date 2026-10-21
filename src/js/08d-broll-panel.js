@@ -1,5 +1,10 @@
+import { brollSortedForList } from "../core/production/broll.ts";
+import { BROLL_NAME_MAX, BROLL_TEXT_MAX } from "../core/document/broll.ts";
+import { tagCategory, tagStatus } from "../core/production/looks.ts";
+import { normalizeTagName } from "../core/document/tags.ts";
+import { formatTimecode } from "../core/production/timing.ts";
 import { S } from "./_state.js";
-import { formatTimecode, rowSeconds } from "./01-scene-status.js";
+import { rowSeconds } from "./01-scene-status.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
@@ -8,20 +13,14 @@ import { render } from "./05-render.js";
 import { focusRowField } from "./06-rows.js";
 import {
   findOrAddPerson,
-  normalizeTagName,
   personById,
   productionEntries,
-  scheduleProductionRefresh,
-  tagCategory,
-  tagStatus
+  scheduleProductionRefresh
 } from "./07-production-tags.js";
 import {
-  BROLL_NAME_MAX,
-  BROLL_TEXT_MAX,
   addBrollProp,
   brollEntries,
   brollRecord,
-  brollSortedForList,
   deleteBrollRecord,
   newBrollRecord,
   removeBrollProp,

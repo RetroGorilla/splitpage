@@ -1,43 +1,30 @@
+import { productionReaders } from "../legacy/document-ports.ts";
 import { S } from "./_state.js";
 import { armShotHideGrace, clearShotHideGrace, hideShotScenes } from "./01b-hide-shot.js";
 import { paintRowTimes, render, renderRow } from "./05-render.js";
 import { renderRundown, setRundownExtraSeconds } from "./05f-rundown.js";
 import { paintTargetOverlay } from "./05t-target.js";
-import { productionReaders } from "./07-production-tags.js";
 import { showToast } from "./12-dirty-toast.js";
 import { sceneStatus, sceneStatusCommand, shotGrace } from "../application/commands/scene-status.ts";
-import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
 import { REVIEW_ONLY, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import {
-  DEFAULT_WPM,
   SCENE_LENGTH_MAX,
-  hasSetLength,
   normalizeSceneLength,
   normalizeTargetLength,
-  parseSceneLength,
   targetLengthOf
 } from "../core/document/timing.ts";
 import {
   estimatedSeconds as estimatedSecondsIn,
   formatDuration,
-  formatTimecode,
   rowSeconds as rowSecondsIn,
   targetClock,
   totalSeconds as totalSecondsIn
 } from "../core/production/timing.ts";
 export {
-  DEFAULT_WPM,
-  ROW_STATUSES,
   SCENE_LENGTH_MAX,
-  formatDuration,
-  formatTimecode,
-  hasSetLength,
   normalizeSceneLength,
   normalizeTargetLength,
-  parseSceneLength,
-  rowStatus,
-  targetClock,
-  targetLengthOf
+  targetClock
 };
 
 export var wordCount;

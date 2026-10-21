@@ -1,3 +1,4 @@
+import { mintTagId, registryTagHooks } from "../core/document/tags.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -6,7 +7,10 @@ import { migrateRows } from "../js/02-state.js";
 import { mergeProductionTags, mergeStates } from "../js/03-sync.js";
 import { fromHtml, toHtml } from "../js/04c-doc-model.js";
 import {
-  ensureTagIds, isTagId, mintTagId, registryEntryById, registryTagHooks, renameTag
+  ensureTagIds,
+  isTagId,
+  registryEntryById,
+  renameTag
 } from "../js/07-production-tags.js";
 
 const span = (cat, name, text) =>

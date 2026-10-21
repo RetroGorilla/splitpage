@@ -1,9 +1,9 @@
+import { TAG_CATEGORIES } from "../core/production/looks.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readBuiltCss } from "../../tools/css-colours.mjs";
 import { fromHtml, namedTagId, projection, toHtml } from "../js/04c-doc-model.js";
-import { TAG_CATEGORIES } from "../js/07-production-tags.js";
 import {
   PLAIN_TAG_KEYWORDS,
   applyPlainTag,

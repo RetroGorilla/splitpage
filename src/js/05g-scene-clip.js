@@ -1,11 +1,13 @@
+import { normalizeBrollProps } from "../core/document/broll.ts";
+import { mintTagId, normalizeTagName, registryKey } from "../core/document/tags.ts";
 import { S } from "./_state.js";
 import { makeId, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, queuePersist } from "../adapters/storage/02c-blobs.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { cellOf, commentIds, fromHtml, normalizeCell, syncCommentAnchors, toHtml, toPlainText } from "./04c-doc-model.js";
 import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./05c-clipboard.js";
-import { collectTagsFromRows, mintTagId, normalizeTagName, registryKey } from "./07-production-tags.js";
-import { normalizeBrollProps, recordPastedBroll } from "./08c-broll.js";
+import { collectTagsFromRows } from "./07-production-tags.js";
+import { recordPastedBroll } from "./08c-broll.js";
 import { SCHEMA_VERSION } from "../core/document/fields.ts";
 import { cappedLongText } from "../core/document/text-policy.ts";
 import { inertBody } from "../legacy/richtext.ts";

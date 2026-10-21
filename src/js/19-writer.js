@@ -1,6 +1,7 @@
+import { formatDuration, pad2 } from "../core/production/timing.ts";
 import { S } from "./_state.js";
 import { writePref } from "./00p-prefs.js";
-import { formatDuration, totalSeconds, wordCount } from "./01-scene-status.js";
+import { totalSeconds, wordCount } from "./01-scene-status.js";
 import { renderRowGroups } from "./01b-hide-shot.js";
 import { findRowIndex } from "./03-sync.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
@@ -14,7 +15,6 @@ import {
   cellFormatState,
   editableCellHtml,
   notePaintedEpoch,
-  pad2,
   placeEditorSelection,
   rememberCellSelection,
   renderAbsorbed,
