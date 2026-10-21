@@ -379,7 +379,7 @@ stash when `splitpage-server-resume` is present.
 
 ### 3.7 The server
 
-`server/server.js` — plain Node, no dependencies, `server.js` plus four pure helpers (`comments.js`, `blobs.js`, `html-tokens.js`, `text.js`). One JSON file
+`server/server.js` — plain Node, no dependencies, `server.js` plus five helpers (`comments.js`, `blobs.js`, `links.js`, `html-tokens.js`, `text.js`). One JSON file
 per document in `DATA_DIR`.
 
 - No identity of its own — `Cf-Access-Authenticated-User-Email` is read for
@@ -460,7 +460,7 @@ per document in `DATA_DIR`.
   included. `GET /api/share?doc=<id>` (owner only) is kept for older clients:
   it is get-or-create that document's REVIEW link from the store below,
   answered `{reviewAvailable:true, reviewKey, docId}` — never the PIN.
-- **Invite links: the link store** (replaced #63's in-memory
+- **Invite links: the link store** (`server/links.js`; replaced #63's in-memory
   `reviewGrantFor`/`reviewGrantsBy*`/`reviewScopeByToken`). A link is
   `{id (12 hex), key (24 random bytes hex — what the URL carries), token (32
   bytes hex — what join hands back), docId, role "edit"|"review", createdAt,
