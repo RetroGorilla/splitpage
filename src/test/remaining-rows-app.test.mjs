@@ -14,6 +14,7 @@ const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
+const { editorSelection } = await import("../legacy/editor-bridge.ts");
 const { setHideShotScenes } = await import("../js/01b-hide-shot.js");
 const writer = await import("../js/19-writer.js");
 
@@ -195,7 +196,7 @@ test("B04 and B05: a link added by Enter or Add lands as one edit; Escape and Ca
   await nothingWritten(() => { esc = key(vbox.querySelector("input"), { key: "Escape" }); });
   assert.ok(esc.defaultPrevented);
   assert.equal(vbox.hidden, true);
-  assert.equal(S.savedRange, null, "the saved selection is dropped");
+  assert.equal(editorSelection().heldLink(), null, "the saved selection is dropped");
   click(wrapOf(cellOf("r3", "visualText")).querySelector('.mini-toolbar button[data-cmd="link"]'));
   await nothingWritten(() => click(vbox.querySelector('[data-action="link-cancel"]')));
   assert.equal(vbox.hidden, true);

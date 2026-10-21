@@ -1,4 +1,4 @@
-import { cellSelection, setCellSelection } from "./05b-cell-edit.js";
+import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
 import { clamp, clampRange, deleteRange, insertCell, insertText, markThroughout, setMark } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
 import { cellLength, normalizeCell, projection } from "../core/text/runs.ts";
