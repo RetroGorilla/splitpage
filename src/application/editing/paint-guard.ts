@@ -44,3 +44,23 @@ export function createPaintGuard(): PaintGuard {
     }
   };
 }
+
+export interface UndoGuard {
+  readonly whileApplying: <T>(redraw: () => T) => T;
+  readonly applying: () => boolean;
+}
+
+export function createUndoGuard(): UndoGuard {
+  let applying = false;
+  return {
+    whileApplying<T>(redraw: () => T): T {
+      applying = true;
+      try {
+        return redraw();
+      } finally {
+        applying = false;
+      }
+    },
+    applying: () => applying
+  };
+}

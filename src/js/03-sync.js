@@ -52,6 +52,7 @@ import { haltAutoSave, queueAutoSave } from "./14-export.js";
 import { updateFileChip } from "./18-local-files.js";
 import { confirmBaseline } from "../legacy/save-bridge.ts";
 import { captureRestore, stillRestoring } from "../legacy/recovery-bridge.ts";
+import { mergeUndo } from "../legacy/editor-bridge.ts";
 export { GALLERY_FIELDS, ROW_FIELDS } from "../core/document/fields.ts";
 export { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
 export { byId, rowContentEqual, rowFieldKey } from "../core/merge/rows.ts";
@@ -754,7 +755,6 @@ export async function renderHistory() {
   }
 }
 
-S.lastMergeUndo = null;
 var mergeBanner = null;
 
 export function installMergeBanner(banner) {
@@ -798,7 +798,7 @@ var mergePorts = {
   },
   documentId: function (doc) { return doc.docId; },
   noteHistoryFrom: function (prevDocId) { noteMergedDocId(prevDocId); },
-  armUndo: function (record) { S.lastMergeUndo = record; },
+  armUndo: function (record) { mergeUndo().arm(record); },
   setBase: function (next, why) { setBaseState(next, why); },
   capture: function () { return captureRestore(); },
   stillOwns: function (ctx) { return stillRestoring(ctx); },

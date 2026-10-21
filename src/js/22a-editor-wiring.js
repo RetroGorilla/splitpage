@@ -15,6 +15,7 @@ import { mountVideoPopover } from "../features/video/popover.ts";
 import { mountWriterRoutes } from "../features/writer/routes.ts";
 import { S } from "./_state.js";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
+import { focusMemory, installPicturePicker, mergeUndo, rowDrag, undoGuard } from "../legacy/editor-bridge.ts";
 import { cycleRowStatus } from "./01-scene-status.js";
 import { expandHiddenShotStrip, revealRow } from "./01b-hide-shot.js";
 import { installMergeBanner, restoreMergeSnapshot } from "./03-sync.js";
@@ -273,7 +274,7 @@ export function mountMergeBannerFeature() {
     return mountMergeBanner({
       window: window,
       ports: {
-        lastUndo: function () { return S.lastMergeUndo; },
+        lastUndo: function () { return mergeUndo().last(); },
         sameDocument: function (docId) { return !!S.state && docId === S.state.docId; },
         restore: restoreMergeSnapshot,
         warn: function (message) { showToast(message, "warn"); },
@@ -291,8 +292,6 @@ export var stopMergeBannerFeature = mergeBanner.stop;
 var mediaRoutes = owned();
 
 var mediaRoutePorts = {
-  pendingRow: function () { return S.pendingImageRowId; },
-  setPendingRow: function (rowId) { S.pendingImageRowId = rowId; },
   choose: function () { document.getElementById("file-input").click(); },
   addPicture: handleImageFile,
   removePicture: removeImage,
@@ -306,7 +305,8 @@ export function mountMediaFeature() {
   }, function (owner) {
     return [
       function () { return routeRootClick("media-picker", function (e) { return owner.pickerClick(e); }); },
-      function () { return routeRootClick("media-link", function (e) { return owner.linkClick(e); }); }
+      function () { return routeRootClick("media-link", function (e) { return owner.linkClick(e); }); },
+      function () { return installPicturePicker(function (rowId) { owner.pick(rowId); }); }
     ];
   });
 }
@@ -316,8 +316,8 @@ export var stopMediaFeature = mediaRoutes.stop;
 var rowRoutes = owned();
 
 var rowRoutePorts = {
-  dragging: function () { return S.dragRowId; },
-  setDragging: function (rowId) { S.dragRowId = rowId; },
+  dragging: function () { return rowDrag().dragging(); },
+  setDragging: function (rowId) { if (rowId) rowDrag().start(rowId); else rowDrag().end(); },
   clearMarkers: clearDropMarkers,
   markDrop: setDropMarkerForRow,
   scroll: updateDragScroll,
@@ -354,7 +354,7 @@ var rowsEditorPorts = {
   mousedown: onRootMouseDown,
   input: onRootInput,
   keydown: onRootKeydown,
-  rowDragging: function () { return !!S.dragRowId; },
+  rowDragging: function () { return !!rowDrag().dragging(); },
   rowDragOver: function (e) { var routes = rowRoutes.owner(); return !!routes && routes.dragOver(e); },
   rowDrop: function (e) { var routes = rowRoutes.owner(); return !!routes && routes.drop(e); },
   scriptCell: isScriptCell,
@@ -378,13 +378,10 @@ function afterUndoApplied(steps) {
     if (st.op !== "rowField" || !S.state.rows.some(function (r) { return r.id === st.rowId; })) return;
     if (!cellStep && (st.key === "visualText" || st.key === "audioText")) cellStep = st;
   });
-  S.undoApplying = true;
-  try {
+  undoGuard().whileApplying(function () {
     if (writerOpen) renderWriter(); else render();
     renderProduction();
-  } finally {
-    S.undoApplying = false;
-  }
+  });
   settleAfterApply();
   if (cellStep) {
     var sel = '.cell-editable[data-id="' + cssAttr(cellStep.rowId) + '"][data-field="' + cellStep.key + '"]';
@@ -415,7 +412,7 @@ function afterScriptCellChange(cellEl) {
   scheduleProductionRefresh();
   scheduleBrollRefresh();
   scheduleWriterStats();
-  S.untaggedMutedFor = null;
+  focusMemory().unmutePrompt();
   scheduleUntaggedScan();
   updateTagGhost(cellEl);
   refreshPlainTag();
@@ -488,24 +485,24 @@ export var stopWriterFeature = writerRoutes.stop;
 
 var editorFocusPorts = {
   isScriptCell: isScriptCell,
-  blurSuppressed: function () { return !!S.undoApplying || paintingScreen(); },
+  blurSuppressed: function () { return undoGuard().applying() || paintingScreen(); },
   leftEditable: function () {
     hideTagGhost();
     cancelPlainTag();
     hideUntaggedPrompt();
-    S.untaggedMutedFor = null;
+    focusMemory().unmutePrompt();
   },
   blurredCell: function (cellEl) {
     var clean = sanitizeHtml(cellEl.innerHTML);
     if (clean !== storedHtmlFromDom(cellEl.innerHTML)) cellEl.innerHTML = clean;
     syncFieldFromDom(cellEl);
-    if (!S.undoApplying) anchorBrollInLeftCell(cellEl);
+    if (!undoGuard().applying()) anchorBrollInLeftCell(cellEl);
   },
   typeAtMarks: function (cellEl, data) { return typePendingMarks(cellEl, data) || typeAtDirectionEdge(cellEl, data); },
   typed: function (cellEl, data) { onRootInput({ target: cellEl, inputType: "insertText", data: data }); },
-  focusedRow: function (rowId) { S.lastFocusedRowId = rowId; },
+  focusedRow: function (rowId) { focusMemory().focusedRow(rowId); },
   focusedParagraph: function (paraEl) {
-    S.writerLastCell = paraEl;
+    focusMemory().focusedParagraph(paraEl);
     updateWriterFormatState();
   },
   selectionChanged: function (active) {
@@ -655,7 +652,7 @@ export function onRootKeydown(e) {
     hideTagGhost();
   }
   if (e.key === "Escape" && untaggedSuggestion) {
-    S.untaggedMutedFor = cellEl;
+    focusMemory().mutePrompt(cellEl);
     hideUntaggedPrompt();
   }
   var mod = e.ctrlKey || e.metaKey;
