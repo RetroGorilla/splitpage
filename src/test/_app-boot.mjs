@@ -2,6 +2,7 @@ import "./_dom.mjs";
 import "fake-indexeddb/auto";
 import { readFileSync } from "node:fs";
 import { S } from "../js/_state.js";
+import { checksumText } from "../../shared/text.js";
 
 export const seen = [];
 let held = S.state;
@@ -65,8 +66,7 @@ function stateDataText(html) {
 }
 
 export async function bootApp(stateData, opts) {
-  const { checksumText } = await import("../js/20b-onboarding.js");
-  const page = read("../page.html").replace("{{VERSION}}", () => read("../../VERSION").trim());
+    const page = read("../page.html").replace("{{VERSION}}", () => read("../../VERSION").trim());
   const shipped = opts && opts.pristine && stateData !== undefined ? stateData : SEED_TEXT;
   const seedText = stateDataText(page.replace("{{SEED_STATE}}", () => shipped));
   const check = seedText.length + "-" + checksumText(seedText);

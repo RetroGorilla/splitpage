@@ -1,12 +1,13 @@
 import { dom } from "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { cloneState } from "../core/document/clone.ts";
 
 const { S } = await import("../js/_state.js");
 const homeMod = await import("../js/_home.js");
 const { setHome } = homeMod;
 const { publishToServer, publishAndCopyShareLink, saveToServer } = await import("../js/13-hosted.js");
-const { setBaseState, cloneState } = await import("../js/03-sync.js");
+const { setBaseState } = await import("../js/03-sync.js");
 const { markDirty, clearDirty } = await import("../js/12-dirty-toast.js");
 const { setAutoSaveEnabled, autoSaveTiming, legacySavePorts } = await import("../js/14-export.js");
 const { startSaves } = await import("../legacy/save-bridge.ts");

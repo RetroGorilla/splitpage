@@ -8,7 +8,7 @@ import {
   copyDocHistorySafe,
   syncDocIdentity
 } from "./02b-doc-id.js";
-import { cloneState, updateIdentityChip } from "./03-sync.js";
+import { updateIdentityChip } from "./03-sync.js";
 import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
 import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
@@ -32,6 +32,7 @@ import {
 import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
 import { SCHEMA_VERSION } from "../core/document/fields.ts";
 import { createCaptureSchedule } from "../application/recovery/capture-schedule.ts";
+import { cloneState } from "../core/document/clone.ts";
 
 export var draftRestorePending;
 var draftOnDisk;

@@ -6,13 +6,14 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import ts from "typescript";
 import { S } from "../js/_state.js";
+import { cloneState } from "../core/document/clone.ts";
 
 const atBoot = await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { adoptRestoredState } = await import("../js/02b-doc-id.js");
-const { applyMerge, cloneState } = await import("../js/03-sync.js");
+const { applyMerge } = await import("../js/03-sync.js");
 const { openServerDoc } = await import("../js/13-hosted.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { openLongDemo, startNewScript } = await import("../js/18b-file-menu.js");

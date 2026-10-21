@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { cloneState } from "../core/document/clone.ts";
 
 const SAVED = {
   schema: 2,
@@ -18,7 +19,6 @@ const SAVED = {
 const atBoot = await bootApp("\n" + JSON.stringify(SAVED, null, 2) + "\n");
 
 const { migrateRows } = await import("../js/02-state.js");
-const { cloneState } = await import("../js/03-sync.js");
 const { seedCheckPasses } = await import("../js/20b-onboarding.js");
 
 after(closeApp);
