@@ -63,6 +63,7 @@ import { createPaintGuard } from "../application/editing/paint-guard.ts";
 import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { undoGuard } from "../legacy/editor-bridge.ts";
 import { setTagAddingPerson } from "../application/tag-panel-state.ts";
+import { formatVideoLength } from "../../shared/text.js";
 
 export { notePaintedEpoch, placeEditorSelection, rememberCellSelection };
 
@@ -256,13 +257,6 @@ var GALLERY_CAPTION_MAX = 3;
 
 export function slotPoster(slot) {
   return slot.links.filter(function (l) { return l.poster; })[0] || null;
-}
-
-export function formatVideoLength(sec) {
-  if (!(sec > 0)) return "";
-  var s = Math.round(sec);
-  var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
-  return (h ? h + ":" + (m < 10 ? "0" : "") + m : m) + ":" + (r < 10 ? "0" : "") + r;
 }
 
 export function gallerySlotPictureHtml(slot) {

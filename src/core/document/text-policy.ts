@@ -199,3 +199,8 @@ export function storedImageHtml(ref: unknown): string {
   if (!clean) return "";
   return storedImageMarkup(clean);
 }
+
+export function truncateForPreview(s: string | null | undefined, n: number): string {
+  s = s || "";
+  return s.length > n ? unitSafePrefix(s, n) + "…" : s;
+}

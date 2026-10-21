@@ -23,7 +23,6 @@ import {
   acceptStash,
   applyMerge,
   clearStash,
-  cloneState,
   getEditorName,
   mergeStates,
   pushSnapshot,
@@ -54,7 +53,7 @@ import {
   saveAuthorName
 } from "./10-comments.js";
 import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
-import { maybeAskGuestName, parseLinkFragment, updateCollaborateMenu } from "./13b-collaborate.js";
+import { maybeAskGuestName, updateCollaborateMenu } from "./13b-collaborate.js";
 import { saveDoc, scheduleAutoSave } from "./14-export.js";
 import { requestSave } from "../legacy/save-bridge.ts";
 import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
@@ -65,7 +64,6 @@ import {
   openPinDialog,
   openServersDialog,
   shortHost,
-  tunnelCommand,
   updateConnectMenu
 } from "./20e-connect.js";
 import { setMenuItemReason } from "./18b-file-menu.js";
@@ -75,6 +73,9 @@ import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { idMap } from "../core/document/id-map.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { isDocumentObject } from "../core/migrate.ts";
+import { cloneState } from "../core/document/clone.ts";
+import { parseLinkFragment, tunnelCommand } from "../../shared/server-links.js";
+import { driveFormatSize } from "../../shared/text.js";
 
 var sharedDocId;
 
@@ -2156,14 +2157,6 @@ function driveIconFor(mimeType) {
   if (/^video\//.test(mimeType)) return spriteIcon("i-camera");
   if (/^audio\//.test(mimeType)) return spriteIcon("i-mic");
   return spriteIcon("i-file");
-}
-
-export function driveFormatSize(bytes) {
-  var n = Number(bytes);
-  if (!n) return "";
-  if (n < 1024) return n + " B";
-  if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
-  return (n / (1024 * 1024)).toFixed(1) + " MB";
 }
 
 function renderDriveList() {

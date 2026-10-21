@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { S } from "../js/_state.js";
+import { cloneState } from "../core/document/clone.ts";
 
 await bootApp();
 
@@ -10,7 +11,7 @@ const { liveSession, noteReload } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { adoptRestoredState } = await import("../js/02b-doc-id.js");
-const { applyMerge, cloneState, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { applyMerge, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { scheduleIdleRefresh, productionIndexStats } = await import("../js/07-production-tags.js");
 const { markDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits, lastUndoEntry, undoSizes } = await import("../js/12a-undo.js");

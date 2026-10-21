@@ -232,6 +232,10 @@ function fetchVideoThumbnail(v, opts) {
   }).then(null, function () { return fail("NETWORK"); });
 }
 
+function embeddableVideo(link) {
+  return link && link.href ? parseVideoLink(link.href) : null;
+}
+
 module.exports = {
   FETCH_TIMEOUT_MS,
   PLAYER_ORIGINS,
@@ -239,6 +243,7 @@ module.exports = {
   THUMB_MIMES,
   VIDEO_HOSTS,
   VIDEO_REF_RE,
+  embeddableVideo,
   fetchVideoThumbnail,
   oembedThumbnailUrl,
   parseStart,

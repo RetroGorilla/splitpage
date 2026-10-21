@@ -10,9 +10,10 @@ import { dataUrlForSync, has, inlineStateImages, recordFor, setBackend } from ".
 import { createHash } from "node:crypto";
 import { mergeStates } from "../../src/js/03-sync.js";
 import * as tags from "../../src/js/07-production-tags.js";
-import { checksumText, seedCheckPasses } from "../../src/js/20b-onboarding.js";
+import { seedCheckPasses } from "../../src/js/20b-onboarding.js";
 import { S } from "../../src/js/_state.js";
 import { image } from "../../src/test/golden-helpers.mjs";
+import { checksumText } from "../../shared/text.js";
 
 type Put = { sha: string; interned: boolean };
 type Doc = Record<string, unknown>;

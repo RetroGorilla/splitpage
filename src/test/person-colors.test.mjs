@@ -13,8 +13,9 @@ import {
 import { S } from "../js/_state.js";
 import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
-import { buildSplitpageFile, parseSplitpageFile, buildMarkdownProject, parseMarkdownProject } from "../js/20d-formats.js";
+import { buildSplitpageFile, buildMarkdownProject, parseMarkdownProject } from "../js/20d-formats.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
 const [BLUE, AMBER, VIOLET, GREEN] = PERSON_COLORS;
 

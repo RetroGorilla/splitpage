@@ -9,13 +9,14 @@ import { fileHome } from "./_home.js";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import { blobImgHtml, rowImage, rowImageKey } from "../adapters/storage/02c-blobs.js";
 import { videoLinkLabel } from "../adapters/storage/02d-gallery.js";
-import { cloneState, textMergeContext } from "./03-sync.js";
+import { textMergeContext } from "./03-sync.js";
 import { applyStashedWork } from "./14-export.js";
 import { closeFileConflict, parseProjectFileState } from "./18-local-files.js";
 import { idMap } from "../core/document/id-map.ts";
 import { safeImageSrc } from "../core/document/text-policy.ts";
 import { pad2 } from "../core/production/timing.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
+import { cloneState } from "../core/document/clone.ts";
 
 var mergeCandidate = null;
 var mergeProbeToken = 0;
