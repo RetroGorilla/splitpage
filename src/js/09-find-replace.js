@@ -21,9 +21,9 @@ import { replaceText } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
 import { projection } from "../core/text/runs.ts";
 import { cellOf } from "../legacy/richtext.ts";
+import { findMatchesCase } from "../application/find-options.ts";
 
 export var findOpen = false;
-S.findMatchCase = false;
 var findMatches = [];
 var findIndex = -1;
 var findInTags = 0;
@@ -199,7 +199,7 @@ export function replaceInHtml(html, needle, replacement, nth, matchCase, hooks) 
 }
 
 export function refreshFindMatches(keepIndex) {
-  var found = findInRows(S.state ? S.state.rows : [], findNeedle(), S.findMatchCase);
+  var found = findInRows(S.state ? S.state.rows : [], findNeedle(), findMatchesCase());
   findMatches = found.matches;
   findInTags = found.inTags;
   if (!findMatches.length) findIndex = -1;
@@ -233,7 +233,7 @@ function currentMatchRange() {
   var idx = findRowIndex(m.rowId);
   if (idx === -1) return null;
   var model = cellOf(S.state.rows[idx][m.field]);
-  var hit = findInCell(model, findNeedle(), S.findMatchCase)[m.nth];
+  var hit = findInCell(model, findNeedle(), findMatchesCase())[m.nth];
   if (!hit) return null;
   var range = domRangeFor(cell, hit.from, hit.to, projection(model));
   return range ? { cell: cell, range: range } : null;
@@ -278,7 +278,7 @@ export function replaceCurrent() {
   var idx = findRowIndex(m.rowId);
   if (idx === -1) return;
   var replacement = document.getElementById("replace-input").value || "";
-  var res = replaceInHtml(S.state.rows[idx][m.field], needle, replacement, m.nth, S.findMatchCase,
+  var res = replaceInHtml(S.state.rows[idx][m.field], needle, replacement, m.nth, findMatchesCase(),
     registryTagHooks(S.state.productionTags));
   if (!res.changed) return;
   S.state.rows[idx][m.field] = res.html;
@@ -299,7 +299,7 @@ export function replaceAll() {
   var total = 0;
   S.state.rows.forEach(function (row) {
     ["visualText", "audioText"].forEach(function (field) {
-      var res = replaceInHtml(row[field], needle, replacement, -1, S.findMatchCase, hooks);
+      var res = replaceInHtml(row[field], needle, replacement, -1, findMatchesCase(), hooks);
       if (!res.changed) return;
       total += res.changed;
       row[field] = res.html;
@@ -307,8 +307,8 @@ export function replaceAll() {
     });
   });
   var inTags = S.state.rows.reduce(function (n, row) {
-    return n + countInTags(cellOf(row.visualText), needle, S.findMatchCase) +
-               countInTags(cellOf(row.audioText), needle, S.findMatchCase);
+    return n + countInTags(cellOf(row.visualText), needle, findMatchesCase()) +
+               countInTags(cellOf(row.audioText), needle, findMatchesCase());
   }, 0);
   var tagNote = inTags
     ? " · " + inTags + " left inside tag" + (inTags === 1 ? "" : "s") + " — rename those in Production"
@@ -358,7 +358,7 @@ function bulkTagRefusal(needle, plan) {
 
 function renderBulkTagRow() {
   var needle = bulkTagNeedle();
-  var plan = bulkTagRows(S.state ? S.state.rows : [], needle, bulkTagCat, needle, S.findMatchCase, true);
+  var plan = bulkTagRows(S.state ? S.state.rows : [], needle, bulkTagCat, needle, findMatchesCase(), true);
   var why = bulkTagRefusal(needle, plan);
   var ask = document.getElementById("find-tag-ask");
   var go = document.getElementById("find-tag-go");
@@ -427,11 +427,11 @@ export function runBulkTag() {
   if (!S.state) return;
   var needle = bulkTagNeedle();
   var cat = tagCategory(bulkTagCat) || TAG_CATEGORIES[0];
-  var plan = bulkTagRows(S.state.rows, needle, cat.id, needle, S.findMatchCase, true);
+  var plan = bulkTagRows(S.state.rows, needle, cat.id, needle, findMatchesCase(), true);
   var why = bulkTagRefusal(needle, plan);
   if (why) { showToast(why, "warn"); return; }
   breakUndoCoalescing();
-  var done = bulkTagRows(S.state.rows, needle, cat.id, needle, S.findMatchCase, false);
+  var done = bulkTagRows(S.state.rows, needle, cat.id, needle, findMatchesCase(), false);
   if (!done.hits) { showToast(bulkTagRefusal(needle, done) || "Nothing to tag.", "warn"); return; }
   registerProductionTag(cat.id, needle);
   markDirty();
@@ -476,7 +476,7 @@ function firstMatchFrom(range) {
   var field = cell.getAttribute("data-field");
   var model = cellOf(S.state.rows[rowIdx][field]);
   var expect = projection(model);
-  var hits = findInCell(model, findNeedle(), S.findMatchCase);
+  var hits = findInCell(model, findNeedle(), findMatchesCase());
   var nth = 0;
   while (nth < hits.length) {
     var r = domRangeFor(cell, hits[nth].from, hits[nth].to, expect);

@@ -3,8 +3,6 @@ export const S = {
 
   baseState: undefined,
 
-  commentSortMode: undefined,
-
   deleteArmId: undefined,
 
   deleteArmTimer: undefined,
@@ -19,31 +17,7 @@ export const S = {
 
   editSeq: undefined,
 
-  finalTranscript: undefined,
-
-  findMatchCase: undefined,
-
-  gearGroupBy: undefined,
-
-
   initialStateReady: undefined,
-
-  interimTranscript: undefined,
-
-  productionGroupBy: undefined,
-
-  promptWords: undefined,
-
-  prompterLastTs: undefined,
-
-
-
-  prompterRAF: undefined,
-
-
-  prompterSpeed: undefined,
-
-  recognition: undefined,
 
   saveButtonBusy: undefined,
 
@@ -57,31 +31,9 @@ export const S = {
 
   serverMode: undefined,
 
-  speakCursor: undefined,
-
-  speakNorms: undefined,
-
-  speakable: undefined,
-
   state: undefined,
-
-  tagAddingPersonFor: undefined,
 
   tagDeleteArmId: undefined,
 
-  tagDeleteArmTimer: undefined,
-
-  tagExpanded: undefined,
-
-  tagRenaming: undefined,
-
-  voiceRestarts: undefined,
-
-  voiceSession: undefined,
-
-  voiceStarting: undefined,
-
-  voiceStream: undefined,
-
-  wordCursor: undefined
+  tagDeleteArmTimer: undefined
 };
