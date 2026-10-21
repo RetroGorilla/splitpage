@@ -25,7 +25,7 @@ function page() {
 }
 
 function harness(p: ReturnType<typeof page>) {
-  const state = { pending: null as string | null, chosen: 0 };
+  const state = { chosen: 0 };
   const calls: string[] = [];
   const counts = { added: 0, removed: 0 };
   const target: EventTarget = p.input;
@@ -37,8 +37,6 @@ function harness(p: ReturnType<typeof page>) {
     window: p.win,
     fileInput: p.input,
     ports: {
-      pendingRow: () => state.pending,
-      setPendingRow: (rowId) => { state.pending = rowId; },
       choose: () => { state.chosen++; },
       addPicture: (rowId, file, slot) => { calls.push("add " + rowId + " " + file.name + " " + String(slot)); },
       removePicture: (rowId, slot) => { calls.push("remove " + rowId + " " + String(slot)); },
@@ -79,11 +77,9 @@ test("the picker buttons set the pending scene, open the chooser, and the chosen
   const h = harness(p);
   const routes = h.mount();
   assert.equal(routeClick(p, routes, p.byId("inner")).picker, true, "a click inside the button counts");
-  assert.equal(h.state.pending, "r1");
   assert.equal(h.state.chosen, 1);
   pick(p, "a.png");
   assert.deepEqual(h.calls, ["add r1 a.png undefined"]);
-  assert.equal(h.state.pending, null);
   pick(p, "b.png");
   assert.deepEqual(h.calls, ["add r1 a.png undefined"], "nothing pending: a second change adds nothing");
 });
@@ -105,8 +101,26 @@ test("a change with no file clears the pending scene and slot and adds nothing",
   const routes = h.mount();
   routeClick(p, routes, p.at('[data-action="image-replace"]'));
   pick(p, null);
-  assert.equal(h.state.pending, null);
   assert.deepEqual(h.calls, []);
+  pick(p, "late.png");
+  assert.deepEqual(h.calls, [], "no scene is pending after the empty change");
+  routes.pick("r9");
+  pick(p, "fresh.png");
+  assert.deepEqual(h.calls, ["add r9 fresh.png undefined"], "and no slot is left over");
+});
+
+test("pick opens the chooser for a scene from outside the scene's buttons, and the chosen file goes to it once", () => {
+  const p = page();
+  const h = harness(p);
+  const routes = h.mount();
+  routes.pick("r4");
+  assert.equal(h.state.chosen, 1);
+  pick(p, "g.png");
+  pick(p, "again.png");
+  assert.deepEqual(h.calls, ["add r4 g.png undefined"]);
+  routes.dispose();
+  routes.pick("r5");
+  assert.equal(h.state.chosen, 1, "a disposed owner opens no chooser");
 });
 
 test("Remove, link off and link open route to their ports; opening a link prevents the default", () => {
@@ -135,12 +149,12 @@ test("dispose removes the file-input listener and turns the click routes off; a 
   const h = harness(p);
   const first = h.mount();
   assert.equal(h.counts.added, 1);
+  routeClick(p, first, p.byId("inner"));
   first.dispose();
   first.dispose();
   assert.equal(h.counts.removed, 1, "dispose is idempotent");
   assert.equal(routeClick(p, first, p.byId("inner")).picker, false);
   assert.equal(routeClick(p, first, p.at('[data-action="gallery-link"]')).link, false);
-  h.state.pending = "r1";
   pick(p, "late.png");
   assert.deepEqual(h.calls, [], "a disposed owner takes no file");
   const second = h.mount();

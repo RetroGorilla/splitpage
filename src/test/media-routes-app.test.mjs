@@ -16,6 +16,7 @@ const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { rowSlots } = await import("../core/document/gallery.ts");
+const { openGalleryOverlay, closeGalleryOverlay } = await import("../js/05e-gallery-overlay.js");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 function pngDataUrl(red, green, blue) {
@@ -145,6 +146,33 @@ test("the picker's pending scene and slot are used once: a second change with no
   await settle();
   assert.equal(S.editSeq, seq);
   assert.equal(document.getElementById("file-input").value, "");
+});
+
+test("the gallery's Add opens the chooser for its scene, and the picked picture joins that scene once", async () => {
+  await open();
+  const input = document.getElementById("file-input");
+  let chosen = 0;
+  input.addEventListener("click", () => { chosen++; });
+  openGalleryOverlay("r2", 0);
+  try {
+    click(document.querySelector('[data-gact="add"]'));
+  } finally {
+    closeGalleryOverlay();
+  }
+  assert.equal(chosen, 1, "the file chooser opened");
+  const w = watch();
+  try {
+    pick(new window.File(["more"], "more.png", { type: "image/png" }));
+    await settle();
+  } finally {
+    w.stop();
+  }
+  assertGalleryEdit(w.seen, "r2");
+  assert.equal(rowSlots(row("r2")).length, 2, "added beside the scene's picture, not over it");
+  const generation = liveSession().generation();
+  pick(new window.File(["again"], "again.png", { type: "image/png" }));
+  await settle();
+  assert.equal(liveSession().generation(), generation, "a second change with no Add adds nothing");
 });
 
 test("Replace puts the picked picture in the slot it was clicked on", async () => {

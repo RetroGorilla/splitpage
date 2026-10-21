@@ -48,7 +48,6 @@ export async function loadLastFileHandle() {
     });
   } catch (e) { return null; }
 }
-S.pendingImageRowId = null;
 S.savedRange = null;
 S.savedRangeCell = null;
 

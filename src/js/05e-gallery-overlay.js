@@ -28,6 +28,7 @@ import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { pickPictureFor } from "../legacy/editor-bridge.ts";
 import { galleryCommand } from "../application/commands/gallery.ts";
 
 var view = null;
@@ -433,10 +434,7 @@ function onClick(e) {
   else if (act === "zoom") openZoom();
   else if (act === "retry-thumb") retryThumbnail();
   else if (act === "open" || act === "link") openGalleryLink(view.rowId, view.sel, el.getAttribute("data-key"));
-  else if (act === "add") {
-    S.pendingImageRowId = view.rowId;
-    document.getElementById("file-input").click();
-  }
+  else if (act === "add") pickPictureFor(view.rowId);
 }
 
 function onKeydown(e) {

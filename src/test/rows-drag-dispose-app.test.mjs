@@ -24,6 +24,7 @@ function runFrames(n) {
 
 const { bootApp, closeApp, rewireApp } = await import("./_app-boot.mjs");
 const { S } = await import("../js/_state.js");
+const { rowDrag } = await import("../legacy/editor-bridge.ts");
 await bootApp();
 const app = await import("../bootstrap/app.ts");
 
@@ -47,14 +48,15 @@ function startEdgeDrag() {
 test("stopping the app mid edge-drag ends the drag: the auto-scroll stops, the markers clear, and a remount starts with no dragged scene", async () => {
   const row = startEdgeDrag();
   const id = row.getAttribute("data-id");
-  assert.equal(S.dragRowId, id, "the drag started");
+  assert.equal(rowDrag().dragging(), id, "the drag started");
   assert.equal(frames.size, 1, "the edge auto-scroll is running");
   runFrames(2);
   assert.equal(scrolled, 2, "the auto-scroll scrolls each frame");
   assert.equal(frames.size, 1, "and keeps going while the drag holds");
 
+  const drag = rowDrag();
   app.stopApp();
-  assert.equal(S.dragRowId, null, "dispose forgets the dragged scene");
+  assert.equal(drag.dragging(), null, "dispose forgets the dragged scene");
   assert.equal(frames.size, 0, "dispose cancels the auto-scroll frame");
   assert.equal(document.querySelectorAll("#rows .row.is-dragging, #rows .row[draggable]").length, 0, "dispose clears the drag markers");
   runFrames(3);
@@ -62,11 +64,11 @@ test("stopping the app mid edge-drag ends the drag: the auto-scroll stops, the m
 
   app.startApp(await rewireApp());
   await S.initialStateReady;
-  assert.equal(S.dragRowId, null, "the remount inherits no dragged scene");
+  assert.equal(rowDrag().dragging(), null, "the remount inherits no dragged scene");
   document.body.dispatchEvent(new window.MouseEvent("dragover", { bubbles: true, cancelable: true, clientX: 10, clientY: 2 }));
   assert.equal(frames.size, 0, "an edge dragover with no drag does not scroll");
   startEdgeDrag();
-  assert.equal(S.dragRowId, firstRow().getAttribute("data-id"), "a new drag starts on the remount");
+  assert.equal(rowDrag().dragging(), firstRow().getAttribute("data-id"), "a new drag starts on the remount");
   assert.equal(frames.size, 1, "and auto-scrolls once");
   document.getElementById("rows").dispatchEvent(new window.MouseEvent("dragend", { bubbles: true }));
   assert.equal(frames.size, 0);

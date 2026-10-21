@@ -11,6 +11,7 @@ await bootApp();
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { applyMerge, cloneState } = await import("../js/03-sync.js");
+const { mergeUndo } = await import("../legacy/editor-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { SERVER_RESUME_KEY, finishServerDetect, openServerDoc, saveToServer } = await import("../js/13-hosted.js");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
@@ -402,14 +403,14 @@ test("applyMerge refuses a theirs or a mine that is no document, and nothing cha
       const opts = call(raw, start);
       const where = name + " " + JSON.stringify(raw);
       const epoch = session.epoch(), gen = session.generation();
-      const undo = S.lastMergeUndo;
+      const undo = mergeUndo().last();
       heard.length = 0;
       S.dirty = false;
       const out = applyMerge(opts);
       unchangedBy(where, start, epoch, gen);
       assert.deepEqual([out.state, out.result, out.snapshot], [S.state, null, null], where + ": answers the document it kept");
       assert.equal(S.dirty, false, where + ": not marked unsaved");
-      assert.equal(S.lastMergeUndo, undo, where + ": no merge to undo");
+      assert.equal(mergeUndo().last(), undo, where + ": no merge to undo");
       assert.deepEqual(S.state.rows.map((row) => row.id), ["r1", "r2"], where + ": both scenes stay");
     }
   }

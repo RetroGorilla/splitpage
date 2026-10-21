@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { applyMerge, baseStateReason, cloneState, mergeStates, setBaseState } from "../js/03-sync.js";
+import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { getHistorySnapshot, listDocHistory } from "../js/03a-history-store.js";
 import { personById } from "../js/07-production-tags.js";
 
@@ -41,7 +42,7 @@ function reset() {
   clearTimers();
   S.state = { sentinel: "state" };
   S.baseState = { sentinel: "base" };
-  S.lastMergeUndo = { id: "s-earlier", docId: "d-earlier" };
+  mergeUndo().arm({ id: "s-earlier", docId: "d-earlier" });
 }
 
 test("mergeOnly merges and hands the result back, touching nothing on screen", () => {
@@ -147,7 +148,7 @@ test("nothing differed: no merge, no snapshot, no rev bump", () => {
   assert.equal(out.result, null);
   assert.equal(out.snapshot, null);
   assert.equal(out.state.rev, 7, "max-plus-one never ran");
-  assert.deepEqual(S.lastMergeUndo, { id: "s-earlier", docId: "d-earlier" });
+  assert.deepEqual(mergeUndo().last(), { id: "s-earlier", docId: "d-earlier" });
 });
 
 for (const [source, label] of [
@@ -167,7 +168,7 @@ for (const [source, label] of [
       source: source, mergeOnly: true, undoPoint: cloneState(theirs)
     });
     assert.ok(out.snapshot, "a ticket, synchronously");
-    assert.deepEqual(S.lastMergeUndo, { id: out.snapshot.id, docId: id, source: source });
+    assert.deepEqual(mergeUndo().last(), { id: out.snapshot.id, docId: id, source: source });
 
     await out.snapshot.done;
     const listed = await listDocHistory(id);
@@ -212,7 +213,7 @@ test("server-conflict arms Undo merge at MINE, the version being saved (#97)", a
     undoPoint: cloneState(mine)
   });
   assert.ok(out.snapshot);
-  assert.deepEqual(S.lastMergeUndo, { id: out.snapshot.id, docId: id, source: "server-conflict" });
+  assert.deepEqual(mergeUndo().last(), { id: out.snapshot.id, docId: id, source: "server-conflict" });
   assert.equal(out.state.rows[1].audioText, "theirs", "the merge took theirs");
 
   await out.snapshot.done;
@@ -236,7 +237,7 @@ test("an undo point the store refuses clears Undo merge rather than leaving it s
     source: "stash", mergeOnly: true, undoPoint: { docId: id, rows: null }
   });
   assert.equal(out.snapshot, null);
-  assert.equal(S.lastMergeUndo, null);
+  assert.equal(mergeUndo().last(), null);
   assert.ok(out.result, "the merge still happened");
 });
 
@@ -247,7 +248,7 @@ test("no undo point asked for leaves Undo merge alone", () => {
   mine.rows[0].audioText = "mine";
 
   applyMerge({ base: mk(id), mine: mine, theirs: mk(id), source: "server-resume", mergeOnly: true });
-  assert.deepEqual(S.lastMergeUndo, { id: "s-earlier", docId: "d-earlier" });
+  assert.deepEqual(mergeUndo().last(), { id: "s-earlier", docId: "d-earlier" });
 });
 
 function ticks(n) {
@@ -281,7 +282,7 @@ test("awaitUndoPoint adopts nothing until the undo point is written", async () =
     await ticks(5);
     assert.deepEqual(S.state, { sentinel: "state" });
     assert.deepEqual(S.baseState, { sentinel: "base" });
-    assert.deepEqual(S.lastMergeUndo, { id: "s-earlier", docId: "d-earlier" });
+    assert.deepEqual(mergeUndo().last(), { id: "s-earlier", docId: "d-earlier" });
     assert.equal(baseAsked, 0, "newBase is not even read yet");
 
     window.__historyTest.releaseDelayedPut();
@@ -295,11 +296,11 @@ test("awaitUndoPoint adopts nothing until the undo point is written", async () =
   assert.equal(S.baseState, newBase, "the function's answer, as it is");
   assert.equal(baseAsked, 1);
   assert.equal(baseStateReason(), "merge: stash");
-  assert.equal(S.lastMergeUndo.docId, id);
-  assert.equal(S.lastMergeUndo.source, "stash");
+  assert.equal(mergeUndo().last().docId, id);
+  assert.equal(mergeUndo().last().source, "stash");
 
   const listed = await listDocHistory(id);
-  const filed = listed.entries.filter((e) => e.id === S.lastMergeUndo.id);
+  const filed = listed.entries.filter((e) => e.id === mergeUndo().last().id);
   assert.equal(filed.length, 1, "the undo point it waited for is in the history");
   assert.equal(filed[0].label, "Before merging your unsaved changes");
 });

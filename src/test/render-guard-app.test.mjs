@@ -19,6 +19,7 @@ const { pasteIntoCell } = await import("../js/05c-clipboard.js");
 const annotate = await import("../js/05w-annotate.js");
 const { flushEdits, lastUndoEntry, nextRedoEntry, undo, undoSizes } = await import("../js/12a-undo.js");
 const writer = await import("../js/19-writer.js");
+const { focusMemory, mergeUndo } = await import("../legacy/editor-bridge.ts");
 const find = await import("../js/09-find-replace.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
 const autosave = await import("../js/14-export.js");
@@ -114,7 +115,7 @@ function fresh(title) {
   clearDirty();
   updateFileChip();
   document.getElementById("identity-name").textContent = "Stale name";
-  S.lastMergeUndo = null;
+  mergeUndo().arm(null);
   for (const id of ["merge-banner", "merge-undo", "merge-review"]) document.getElementById(id).hidden = true;
   document.querySelectorAll("#rows .just-merged").forEach((el) => el.classList.remove("just-merged"));
   quiet();
@@ -136,7 +137,7 @@ function bookkeeping() {
     banner: document.getElementById("merge-banner").hidden ? null : document.getElementById("merge-summary").textContent,
     review: !document.getElementById("merge-review").hidden,
     undoButton: !document.getElementById("merge-undo").hidden,
-    undoPoint: !!S.lastMergeUndo,
+    undoPoint: !!mergeUndo().last(),
     highlighted: Array.from(document.querySelectorAll("#rows .row.just-merged")).map((el) => el.getAttribute("data-id")),
     sessionHoldsIt: held() === S.state,
     fileChip: chipText("file-chip", ["file-chip-name", "file-chip-state"]),
@@ -587,7 +588,7 @@ const EDITS = [
   { name: "typing in the Writer", setup: openTheWriter, act: () => typeChar(inWriter("r1"), "x"), teardown: closeTheWriter, closeRedraws: true },
   { name: "a new scene in the Writer (Enter)", setup: openTheWriter, act: () => { const p = inWriter("r1"); p.focus(); select(p, 6); key(p, "Enter"); }, teardown: closeTheWriter, closeRedraws: true },
   { name: "joining scenes in the Writer (Backspace)", setup: openTheWriter, act: () => { const p = inWriter("r2"); p.focus(); select(p, 0); key(p, "Backspace"); }, teardown: closeTheWriter, closeRedraws: true },
-  { name: "the Writer's Bold", setup: openTheWriter, act: () => { const p = inWriter("r1"); p.focus(); select(p, 0, 5); S.writerLastCell = p; document.querySelector('#writer .wr-fmt[data-cmd="bold"]').click(); }, teardown: closeTheWriter, closeRedraws: true },
+  { name: "the Writer's Bold", setup: openTheWriter, act: () => { const p = inWriter("r1"); p.focus(); select(p, 0, 5); focusMemory().focusedParagraph(p); document.querySelector('#writer .wr-fmt[data-cmd="bold"]').click(); }, teardown: closeTheWriter, closeRedraws: true },
   { name: "typing the Writer's title", setup: openTheWriter, act: () => retitle(document.getElementById("writer-title"), "Writer title"), teardown: closeTheWriter, closeRedraws: true }
 ];
 

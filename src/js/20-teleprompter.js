@@ -43,6 +43,7 @@ import { toHtml } from "../core/text/html.ts";
 import { toPlainText } from "../core/text/projections.ts";
 import { projection } from "../core/text/runs.ts";
 import { cellOf } from "../legacy/richtext.ts";
+import { focusMemory } from "../legacy/editor-bridge.ts";
 
 export var prompterMirror;
 export var prompterFlip;
@@ -333,7 +334,6 @@ var sceneWordEnd = [];
 var promptSceneIndex = -1;
 var promptSceneEndWordOffset = null;
 var promptSceneGuideOffset = 0;
-S.lastFocusedRowId = null;
 
 function scenePastReadingLine(scrollTop, wordTop, guideTop) {
   return (wordTop - scrollTop) <= guideTop;
@@ -387,7 +387,8 @@ export function stepScene(dir) {
 
 export function cueSceneForCurrentPosition() {
   if (!sceneRowIds.length) { promptSceneIndex = -1; promptSceneEndWordOffset = null; updateSceneReadout(); return; }
-  var idx = S.lastFocusedRowId ? sceneRowIds.indexOf(S.lastFocusedRowId) : -1;
+  var lastRow = focusMemory().lastRow();
+  var idx = lastRow ? sceneRowIds.indexOf(lastRow) : -1;
   if (idx === -1) idx = 0;
   var resolved = findNonEmptySceneIndex(idx, 1);
   if (resolved === -1) resolved = findNonEmptySceneIndex(idx, -1);

@@ -12,6 +12,10 @@ import * as draftWriter from "../../src/application/recovery/draft-writer.ts";
 import * as saveCoordinator from "../../src/application/save/coordinator.ts";
 import * as saveStatus from "../../src/application/save/status.ts";
 import * as autoSave from "../../src/application/save/autosave.ts";
+import * as rowDrag from "../../src/application/editing/row-drag.ts";
+import * as focusMemory from "../../src/application/editing/focus-memory.ts";
+import * as paintGuard from "../../src/application/editing/paint-guard.ts";
+import * as mergeUndo from "../../src/application/session/merge-undo.ts";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -19,7 +23,11 @@ const OWNERS = [
   "src/application/session/operation.ts",
   "src/application/transitions",
   "src/application/recovery",
-  "src/application/save"
+  "src/application/save",
+  "src/application/editing/row-drag.ts",
+  "src/application/editing/focus-memory.ts",
+  "src/application/editing/paint-guard.ts",
+  "src/application/session/merge-undo.ts"
 ];
 
 function sourcesOf(path: string): string[] {
@@ -71,7 +79,8 @@ test("E12: the owners' modules do nothing when they are loaded: only types, func
 test("E12: importing the owners constructs nothing: each export is a constructor function or frozen data", () => {
   const loaded: Record<string, Record<string, unknown>> = {
     operation: operation, transitionPorts: transitionPorts, transitions: transitions, recoveryPorts: recoveryPorts, draftWriter: draftWriter,
-    saveCoordinator: saveCoordinator, saveStatus: saveStatus, autoSave: autoSave
+    saveCoordinator: saveCoordinator, saveStatus: saveStatus, autoSave: autoSave,
+    rowDrag: rowDrag, focusMemory: focusMemory, paintGuard: paintGuard, mergeUndo: mergeUndo
   };
   for (const [module, exports] of Object.entries(loaded)) {
     for (const [name, value] of Object.entries(exports)) {

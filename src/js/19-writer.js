@@ -34,6 +34,7 @@ import { bothScenesHaveVisual, joinScenesCommand } from "../application/commands
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { editAllowed, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { focusMemory } from "../legacy/editor-bridge.ts";
 import { gallerySize } from "../core/document/gallery.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 
@@ -41,7 +42,6 @@ export var writerOpen = false;
 var writerGutterMode = "visuals";
 var writerUndoMark = 0;
 var reopenOnRedo = null;
-S.writerLastCell = null;
 
 function writerBlockHtml(row, i) {
   var visual;
@@ -96,11 +96,11 @@ export function paintWriterDraw(draw) {
     doc.querySelectorAll(".wr-para").forEach(ensureTrailingCaretSpot);
   }
   notePaintedEpoch(doc);
-  S.writerLastCell = null;
+  focusMemory().focusedParagraph(null);
   if (caret) {
     var placed = placeEditorSelection(doc);
     if (placed) {
-      S.writerLastCell = placed;
+      focusMemory().focusedParagraph(placed);
       placed.scrollIntoView({ block: "nearest" });
     }
   }
@@ -173,7 +173,7 @@ function focusWriterBlock(rowId, offset) {
   } else {
     placeCaretAtTextOffset(el, offset || 0);
   }
-  S.writerLastCell = el;
+  focusMemory().focusedParagraph(el);
   el.scrollIntoView({ block: "nearest" });
 }
 
@@ -249,7 +249,7 @@ export function onWriterKeydown(e) {
 }
 
 export function onWriterFormat(btn) {
-  var cellEl = S.writerLastCell;
+  var cellEl = focusMemory().writerParagraph();
   if (!cellEl || !cellEl.isConnected) return;
   var cmd = btn.getAttribute("data-cmd");
   cellEl.focus();
@@ -259,8 +259,9 @@ export function onWriterFormat(btn) {
 }
 
 export function updateWriterFormatState() {
-  var live = writerOpen && S.writerLastCell && S.writerLastCell.isConnected;
-  var model = live ? cellFormatState(S.writerLastCell) : null;
+  var paragraph = writerOpen ? focusMemory().writerParagraph() : null;
+  var live = paragraph && paragraph.isConnected;
+  var model = live ? cellFormatState(paragraph) : null;
   ["bold", "italic", "underline", "direction"].forEach(function (cmd) {
     var btn = document.querySelector('.writer-bar .wr-fmt[data-cmd="' + cmd + '"]');
     if (btn) btn.classList.toggle("is-active", !!(model && model[cmd]));
@@ -348,7 +349,7 @@ export function closeWriter() {
   el.inert = true;
   el.hidden = true;
   writerOpen = false;
-  S.writerLastCell = null;
+  focusMemory().focusedParagraph(null);
   hideTagGhost();
   renderAbsorbed();
 }

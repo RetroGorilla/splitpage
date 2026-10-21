@@ -64,6 +64,7 @@ import { cellRuns, cellTextCommand } from "../application/commands/cell-text.ts"
 import { fromHtml } from "../legacy/richtext.ts";
 import { createPaintGuard } from "../application/editing/paint-guard.ts";
 import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { undoGuard } from "../legacy/editor-bridge.ts";
 
 export { notePaintedEpoch, placeEditorSelection, rememberCellSelection };
 export { pad2 };
@@ -814,7 +815,7 @@ export function renderFirstDraw() {
 var SCRIPT_CELL = Object.freeze({ media: true });
 
 export function syncFieldFromDom(cellEl) {
-  if (!cellEl.isConnected || S.undoApplying || screenStale) return;
+  if (!cellEl.isConnected || undoGuard().applying() || screenStale) return;
   var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var idx = findRowIndex(id);

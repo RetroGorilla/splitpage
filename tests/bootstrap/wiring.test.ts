@@ -14,6 +14,7 @@ import { WIRING_STEPS, WiringError, wireApp } from "../../src/bootstrap/wiring.t
 import type { Wiring, WiringDeps } from "../../src/bootstrap/wiring.ts";
 import { appActions } from "../../src/legacy/app-actions.ts";
 import { exportFormats, installExportFormats } from "../../src/legacy/export-formats.ts";
+import { editorStarted, startEditor } from "../../src/legacy/editor-bridge.ts";
 import { recoveryStarted } from "../../src/legacy/recovery-bridge.ts";
 import { requestSave, savesStarted, savesWaiting } from "../../src/legacy/save-bridge.ts";
 import type { LegacySaveJob, LegacySavePorts } from "../../src/legacy/save-bridge.ts";
@@ -36,7 +37,7 @@ import { migrateRows } from "../../src/js/02-state.js";
 
 after(closeApp);
 
-const OWNERS = ["actions", "exports", "session", "saves", "transitions", "recovery"] as const;
+const OWNERS = ["actions", "exports", "session", "saves", "transitions", "recovery", "editor"] as const;
 
 type Owner = (typeof OWNERS)[number];
 type Started = Record<Owner, boolean>;
@@ -58,7 +59,8 @@ function started(): Started {
     session: sessionStarted() && live(() => liveSession().epoch()),
     saves: savesStarted(),
     transitions: live(() => documentTransitions()),
-    recovery: recoveryStarted()
+    recovery: recoveryStarted(),
+    editor: editorStarted()
   };
 }
 
@@ -398,9 +400,10 @@ test("failed partial startup: a step that throws undoes every step before it, in
     session: (f) => ({ deps: { ...f.deps, undo: { ...must(f.deps.undo), route: () => { throw boom; } } } }),
     saves: (f) => ({ deps: { ...f.deps, saves: () => { throw boom; } } }),
     transitions: (f) => ({ deps: f.deps, cleanup: startTransitions(transitionPorts()), cause: false }),
-    recovery: (f) => ({ deps: { ...f.deps, recovery: () => { throw boom; } } })
+    recovery: (f) => ({ deps: { ...f.deps, recovery: () => { throw boom; } } }),
+    editor: (f) => ({ deps: f.deps, cleanup: startEditor(), cause: false })
   };
-  const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { "export registry": "exports", transitions: "transitions" };
+  const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { "export registry": "exports", transitions: "transitions", editor: "editor" };
   assert.deepEqual(Object.keys(breakers), [...WIRING_STEPS], "every step is broken once");
   for (const step of WIRING_STEPS) {
     const f = fakes();
