@@ -65,6 +65,7 @@ import { fromHtml } from "../legacy/richtext.ts";
 import { createPaintGuard } from "../application/editing/paint-guard.ts";
 import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { undoGuard } from "../legacy/editor-bridge.ts";
+import { setTagAddingPerson } from "../application/tag-panel-state.ts";
 
 export { notePaintedEpoch, placeEditorSelection, rememberCellSelection };
 export { pad2 };
@@ -654,7 +655,7 @@ function resetTransientUiState() {
   S.deleteCommentArmId = null;
   clearTimeout(S.tagDeleteArmTimer);
   S.tagDeleteArmId = null;
-  S.tagAddingPersonFor = null;
+  setTagAddingPerson(null);
 }
 
 var renderCalls = 0;

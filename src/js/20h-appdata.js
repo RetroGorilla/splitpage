@@ -38,6 +38,7 @@ import {
   updateConnectMenu
 } from "./20e-connect.js";
 import { cappedLongText, cappedName } from "../core/document/text-policy.ts";
+import { setCommentSort } from "../application/comment-sort.ts";
 
 var APPDATA_FORMAT = "splitpage-app-data";
 var APPDATA_VERSION = 1;
@@ -393,7 +394,7 @@ function appDataMergePrefs(prefs) {
   }
 
   try {
-    if (written.indexOf("commentsSort") !== -1) S.commentSortMode = readCommentSortMode();
+    if (written.indexOf("commentsSort") !== -1) setCommentSort(readCommentSortMode());
     if (written.indexOf("writerSize") !== -1) applyWriterSize(readWriterSize(), false);
   } catch (e) {}
   return written;
