@@ -1,6 +1,6 @@
 # Pictures and videos pasted or dropped into a scene go into its gallery,
 # the Image section (#135; 05c-clipboard.js pasteIntoCell/attachToGallery/
-# readClipboardFiles, 22a-editor-wiring.js insertIntoScriptCell/announceAttached,
+# readClipboardFiles, src/bootstrap/wiring/editor.ts insertIntoScriptCell/announceAttached,
 # 06-rows.js videoFirstFrame/grantVideoFile/openVideoFile). This replaces
 # #124's "attach as a comment": no comment is made any more.
 #   * every picture and every video is an item of its own, added after the

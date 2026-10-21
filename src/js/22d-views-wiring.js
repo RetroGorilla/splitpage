@@ -113,7 +113,7 @@ import {
   renderDesktopAppNotice
 } from "./20a-update.js";
 import { finishMarkdownRowChoice } from "./20d-formats.js";
-import { onRootClick, routeRootClick } from "./22a-editor-wiring.js";
+import { onRootClick, routeRootClick } from "../bootstrap/wiring/editor.ts";
 
 var viewMounts = new Map();
 

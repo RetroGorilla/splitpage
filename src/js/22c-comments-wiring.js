@@ -45,7 +45,7 @@ import {
   onRootMouseDown,
   onRootPaste,
   routeRootClick
-} from "./22a-editor-wiring.js";
+} from "../bootstrap/wiring/editor.ts";
 import { commentSortMode } from "../application/comment-sort.ts";
 
 var comments = owned();

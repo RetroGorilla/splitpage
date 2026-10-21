@@ -205,7 +205,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** To keep the caret in view, the app scrolls to the caret's own rectangle within the nearest scrolling ancestor, so the caret never ends up off-screen in a cell taller than the viewport.
 - **Tests:** browser `09-alt-enter-and-scroll.txt` (in a tall cell, the caret's rectangle is inside the viewport).
-- **Owner:** `src/js/22a-editor-wiring.js` (`nearestScrollAncestor` and the scroll that uses it; no feature folder owns it) · **Milestone:** 6 · **Class:** keep
+- **Owner:** `src/bootstrap/wiring/editor.ts` (`nearestScrollAncestor` and the scroll that uses it; no feature folder owns it) · **Milestone:** 6 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** `09-alt-enter-and-scroll.txt` passes on the migrated editor.
 
