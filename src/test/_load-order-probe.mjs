@@ -42,12 +42,14 @@ const session = await import("../legacy/session-bridge.ts");
 const saves = await import("../legacy/save-bridge.ts");
 const recovery = await import("../legacy/recovery-bridge.ts");
 const transitions = await import("../legacy/transition-bridge.ts");
+const editor = await import("../legacy/editor-bridge.ts");
 const actions = await import("../legacy/app-actions.ts");
 const exports = await import("../legacy/export-formats.ts");
 const owners = {
   session: session.sessionStarted(),
   saves: saves.savesStarted(),
   recovery: recovery.recoveryStarted(),
+  editor: editor.editorStarted(),
   transitions: started(() => transitions.documentTransitions()),
   actions: started(() => actions.appActions.list()),
   exports: started(() => exports.exportFormats.cards())

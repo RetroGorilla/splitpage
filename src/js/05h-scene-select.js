@@ -22,6 +22,7 @@ import { addHeldCommentsCommand, pasteScenesCommand, removeScenesCommand } from 
 import { cappedLongText } from "../core/document/text-policy.ts";
 import { REVIEW_ONLY, runCommand } from "../legacy/session-bridge.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
+import { rowDrag } from "../legacy/editor-bridge.ts";
 
 var TOLERANCE = 4;
 var SCROLL_ZONE = 120;
@@ -104,7 +105,7 @@ function rowIdAtY(y) {
 }
 
 function onRowsMouseDown(e) {
-  if (e.button !== 0 || S.dragRowId) return;
+  if (e.button !== 0 || rowDrag().dragging()) return;
   var cell = e.target.closest && e.target.closest(".cell-editable");
   if (!cell || !isScriptCell(cell) || !cell.closest("#rows")) return;
   track = { cell: cell, rowId: cell.getAttribute("data-id"), x: e.clientX, y: e.clientY, scene: false };

@@ -15,6 +15,7 @@ const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { legacySessionEffects } = await import("../js/12-dirty-toast.js");
 const { addRow, moveRowTo } = await import("../js/06-rows.js");
+const { rowDrag } = await import("../legacy/editor-bridge.ts");
 const writer = await import("../js/19-writer.js");
 
 after(closeApp);
@@ -158,12 +159,12 @@ test("rows: Alt+ArrowUp in a script cell swaps through the session", async () =>
 
 test("rows: dropping a dragged scene moves it through the session", async () => {
   await open();
-  S.dragRowId = "r1";
+  rowDrag().start("r1");
   const target = rowEl("r3");
   target.classList.add("drop-after");
   const changes = await throughSession(() => target.dispatchEvent(new window.Event("drop", { bubbles: true, cancelable: true })));
   assert.equal(changes.rowsMoved, true);
-  assert.equal(S.dragRowId, null);
+  assert.equal(rowDrag().dragging(), null);
   assert.deepEqual(ids(), ["r2", "r3", "r1", "r4"]);
   await undoesInOneStep(["r1", "r2", "r3", "r4"]);
 });

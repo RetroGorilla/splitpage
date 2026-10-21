@@ -8,6 +8,7 @@ import type { Capability, DocumentEntry, ReportPort, TimerPort, UndoPort } from 
 import type { SaveOwnershipPort } from "../application/save/coordinator.ts";
 import { createAppActions, installAppActions } from "../legacy/app-actions.ts";
 import { installExportFormats } from "../legacy/export-formats.ts";
+import { startEditor } from "../legacy/editor-bridge.ts";
 import { startRecovery } from "../legacy/recovery-bridge.ts";
 import type { LegacyRecoveryPorts } from "../legacy/recovery-bridge.ts";
 import { startSaves } from "../legacy/save-bridge.ts";
@@ -68,7 +69,8 @@ export const WIRING_STEPS = Object.freeze([
   "session",
   "saves",
   "transitions",
-  "recovery"
+  "recovery",
+  "editor"
 ] as const);
 
 export type WiringStep = (typeof WIRING_STEPS)[number];
@@ -265,6 +267,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("saves", () => startSaves(checkedSaves(deps.saves({ capture: captureOperation, stillOwns: stillOwns }))), (stop) => stop);
   build("transitions", () => startTransitions(deps.transitions), (stop) => stop);
   build("recovery", () => startRecovery(checkedRecovery(deps.recovery())), (stop) => stop);
+  build("editor", () => startEditor(), (stop) => stop);
   let disposed = false;
   const dispose = (): void => {
     if (disposed) return;

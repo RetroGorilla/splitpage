@@ -15,6 +15,7 @@ import { splitSceneCommand, textCut } from "../application/commands/split-join.t
 import { REVIEW_ONLY, onDocumentReplaced, runCommand, sessionStamps, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
+import { rowDrag } from "../legacy/editor-bridge.ts";
 import {
   addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
 } from "../core/document/gallery.ts";
@@ -79,8 +80,6 @@ export function focusRowField(rowId, field, offset) {
   cell.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
-S.dragRowId = null;
-
 export function clearDropMarkers() {
   document.querySelectorAll("#rows .row").forEach(function (r) {
     r.classList.remove("drop-before", "drop-after", "is-dragging");
@@ -115,7 +114,7 @@ function dragScrollSpeedFor(depthIntoZone) {
 function updateDropMarkersAtPoint(clientX, clientY) {
   var el = document.elementFromPoint(clientX, clientY);
   var row = el && el.closest && el.closest(".row");
-  if (!row || row.getAttribute("data-id") === S.dragRowId) return;
+  if (!row || row.getAttribute("data-id") === rowDrag().dragging()) return;
   setDropMarkerForRow(row, clientY);
 }
 

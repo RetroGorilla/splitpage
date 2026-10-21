@@ -13,6 +13,7 @@ import { toPlainText } from "../core/text/projections.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { cellOf } from "../legacy/richtext.ts";
+import { rowDrag } from "../legacy/editor-bridge.ts";
 
 export var RUNDOWN_TAIL_SECONDS = 10;
 var BLOCK_GAP_PX = 2;
@@ -813,11 +814,12 @@ export function toggleRundownMinimized() {
 }
 
 function dragIndex() {
-  return S.dragRowId ? findRowIndex(S.dragRowId) : -1;
+  var id = rowDrag().dragging();
+  return id ? findRowIndex(id) : -1;
 }
 
 function dropAllowed() {
-  return !!S.dragRowId && !minimized && !reviewMode() && base.n > 0 && !!base.X && !!S.state;
+  return !!rowDrag().dragging() && !minimized && !reviewMode() && base.n > 0 && !!base.X && !!S.state;
 }
 
 function ensureDropEls(track) {
@@ -921,13 +923,13 @@ function onStripDragOver(e) {
 }
 
 function onStripDrop(e) {
-  if (!S.dragRowId) return;
+  var id = rowDrag().dragging();
+  if (!id) return;
   e.preventDefault();
-  var id = S.dragRowId;
   var allowed = dropAllowed();
   if (allowed) showDrop(trackX(e));
   var g = allowed ? drop.gap : -1;
-  S.dragRowId = null;
+  rowDrag().end();
   clearDropMarkers();
   hideDrop();
   lensOff();
@@ -1020,7 +1022,7 @@ export function __init() {
   var track = strip.querySelector(".rundown-track");
   if (track) {
     track.addEventListener("pointermove", function (e) {
-      if (e.pointerType === "touch" || S.dragRowId) return;
+      if (e.pointerType === "touch" || rowDrag().dragging()) return;
       var x = trackX(e);
       if (overLength(x)) { lensOff("pointer"); return; }
       lensAt(x, "pointer", e.timeStamp);

@@ -54,6 +54,7 @@ import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { requestRefresh } from "../legacy/session-bridge.ts";
+import { focusMemory } from "../legacy/editor-bridge.ts";
 export {
   TAG_CATEGORIES,
   TAG_STATUSES,
@@ -452,7 +453,6 @@ export function acceptTagGhost() {
 var UNTAGGED_HL = "splitpage-untagged";
 var untaggedList = [];
 export var untaggedSuggestion = null;
-S.untaggedMutedFor = null;
 
 function highlightApiOk() {
   return !!(window.CSS && CSS.highlights && window.Highlight);
@@ -561,7 +561,7 @@ export function updateUntaggedPrompt() {
   var active = document.activeElement;
   var cellEl = (active && active.classList && active.classList.contains("cell-editable") &&
     active.getAttribute("data-field") === "visualText" && active.closest("#rows")) ? active : null;
-  if (!cellEl || S.untaggedMutedFor === cellEl) { hideUntaggedPrompt(); return; }
+  if (!cellEl || focusMemory().promptMutedFor() === cellEl) { hideUntaggedPrompt(); return; }
   if (plainTagOpen(cellEl)) { hideUntaggedPrompt(); return; }
 
   var here = untaggedList.filter(function (i) { return i.cellEl === cellEl; });

@@ -12,6 +12,7 @@ const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { syncFieldFromDom, render } = await import("../js/05-render.js");
+const { undoGuard } = await import("../legacy/editor-bridge.ts");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 const writer = await import("../js/19-writer.js");
 
@@ -181,12 +182,7 @@ test("while an undo applies, a cell's input stores nothing", async () => {
   await open();
   const el = cellOf("r1", "audioText");
   const seq = S.editSeq;
-  S.undoApplying = true;
-  try {
-    typeChar(el, "x");
-  } finally {
-    S.undoApplying = false;
-  }
+  undoGuard().whileApplying(() => typeChar(el, "x"));
   assert.equal(row("r1").audioText, "Hello there");
   assert.equal(S.editSeq, seq);
   input(el, "x");
