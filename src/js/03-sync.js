@@ -53,7 +53,6 @@ import { captureRestore, stillRestoring } from "../legacy/recovery-bridge.ts";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { driveFormatSize } from "../../shared/text.js";
 import { cloneState } from "../core/document/clone.ts";
-export { cloneState };
 export { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
 export { mergeTargetLength } from "../core/merge/scalars.ts";
 

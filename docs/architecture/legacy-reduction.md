@@ -167,12 +167,14 @@ The five remaining wiring files now live in `src/bootstrap/wiring/production.ts`
 
 | PR | What moves | Who |
 | --- | --- | --- |
-| 1 | The `rule` functions: document and people rules to `src/core/`; text, time, file-name and link helpers to `shared/`; the project-file codec to `src/adapters/formats/`. Also `rowSeconds`, `estimatedSeconds` and `brollCountInRow`, whose only loop call is a name this step moves | Codex, Sol high |
+| 1 | The `rule` functions: document and people rules to `src/core/`; text, time, file-name and link helpers to `shared/`; the project-file codec to `src/adapters/formats/`. Also `brollCountInRow`, whose only loop call is a name this step moves. `rowSeconds` and `estimatedSeconds` move to L3d instead (see below) | Codex, Sol high |
 | 2 | Effects other areas trigger become ports in `src/application/`, implemented by a feature and wired at startup: notices (`showToast`, `showActionToast`), menu items (`setMenuItemLabel`, `setMenuItemReason`) and the clipboard (`copyShareText`). Numbered files reach each through its bridge | cloud, Sonnet |
 | 3 | Values. 44 of the 61 are pass-through names, which files import instead from where they are defined, mostly `src/core/`. Of the 17 defined in a loop file: `normalizeServerBase` is an alias of `normalizeServerUrl`, and `MD_IMAGE_PREFIX_RE` goes to `src/adapters/formats/`. The other 15 are state and move with their owners: the 12 storage keys, server defaults and writer size limits (L3b PRs 2 and 6, L3c PR 1), `autoSaveTiming` (L3b PR 1), `liveDocumentPort` (L3d PR 3) and `whilePainting` (L3e PR 1) | Codex, Sol high |
 | 4 | `findRowIndex(id)`, which reads `S.state`, becomes `rowIndexOf(doc, id)` in `src/core/document/`, and its 14 callers pass the document they hold | cloud, Sonnet |
 
 View helpers (functions that build markup or adjust an element they are given) stay with the area that draws that view, and are listed with their owning area in the appendix.
+
+`rowSeconds` and `estimatedSeconds` moved from L3a PR 1 to L3d, because they need the live-document port, which L3a does not yet have.
 
 **Structure:** rules depend on nothing; effects are requested through a port, so the code asking for a notice does not import the code that draws it.
 
