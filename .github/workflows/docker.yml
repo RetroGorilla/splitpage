@@ -98,7 +98,7 @@ jobs:
           cat "$RUNNER_TEMP/image-files.txt"
           for f in /app/VERSION /app/public/index.html /app/public/sw.js \
                    /app/public/manifest.webmanifest /app/public/icon.svg \
-                   /app/public/icon-maskable.svg /app/server/server.js /app/server/comments.js /app/server/text.js /app/server/html-tokens.js /app/server/package.json; do
+                   /app/public/icon-maskable.svg /app/server/server.js /app/server/comments.js /app/server/text.js /app/server/html-tokens.js /app/server/blobs.js /app/server/package.json; do
             grep -qx "$f" "$RUNNER_TEMP/image-files.txt" || { echo "::error::$f is missing from the image"; exit 1; }
           done
           if grep -E 'node_modules|^/app/(src|shared|docs|tools|desktop)(/|$)|build\.mjs|package-lock|\.env|\.git' "$RUNNER_TEMP/image-files.txt"; then
