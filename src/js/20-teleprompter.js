@@ -50,6 +50,22 @@ export var prompterMirror;
 export var prompterFlip;
 export var promptSceneMode;
 
+var prompterSpeed = 42;
+var prompterRAF = null;
+var prompterLastTs = null;
+var recognition = null;
+var voiceStarting = false;
+var promptWords = [];
+var wordCursor = -1;
+var speakable = [];
+var speakNorms = [];
+var speakCursor = -1;
+var voiceRestarts = 0;
+var voiceSession = 0;
+var voiceStream = null;
+var finalTranscript = "";
+var interimTranscript = "";
+
 function normalizeWord(w) {
   return String(w || "").toLowerCase().replace(/[^a-z0-9']/g, "");
 }
@@ -102,24 +118,24 @@ export function buildPrompterContent() {
     content.innerHTML = '<div class="prompter-empty">' + (skippingShot
       ? "Every scene is marked Shot — switch off Skip shot (or Hide shot scenes) to read them again."
       : "Nothing to read yet — add some audio text first.") + '</div>';
-    S.promptWords = [];
+    promptWords = [];
   } else {
     content.innerHTML = paragraphs.map(function (html) {
       return '<div class="prompter-line">' + html + '</div>';
     }).join("");
-    S.promptWords = Array.prototype.map.call(content.querySelectorAll(".w"), function (el) {
+    promptWords = Array.prototype.map.call(content.querySelectorAll(".w"), function (el) {
       return { el: el, norm: normalizeWord(el.textContent) };
     });
   }
-  S.speakable = [];
-  S.speakNorms = [];
-  S.promptWords.forEach(function (w, i) {
+  speakable = [];
+  speakNorms = [];
+  promptWords.forEach(function (w, i) {
     if (!w.norm) return;
-    S.speakable.push(i);
-    S.speakNorms.push(w.norm);
+    speakable.push(i);
+    speakNorms.push(w.norm);
   });
-  S.wordCursor = -1;
-  S.speakCursor = -1;
+  wordCursor = -1;
+  speakCursor = -1;
 
   sceneRowIds = [];
   sceneWordStart = [];
@@ -181,7 +197,7 @@ function renderPrompterRundown() {
 }
 
 function readingPosition(scroller) {
-  var words = S.promptWords;
+  var words = promptWords;
   var n = words.length;
   if (!n) return 0;
   var guide = scroller.scrollTop + scroller.clientHeight / 2;
@@ -204,7 +220,7 @@ function readingPosition(scroller) {
 }
 
 function sceneAtWord(pos) {
-  var w = Math.min(Math.floor(pos), S.promptWords.length - 1);
+  var w = Math.min(Math.floor(pos), promptWords.length - 1);
   var lo = 0, hi = sceneWordEnd.length - 1;
   while (lo < hi) {
     var mid = (lo + hi) >> 1;
@@ -221,7 +237,7 @@ export function updatePrompterStatus() {
   if (!prompterIsOpen()) return;
   var scroller = document.getElementById("prompter-scroll");
   var scene = -1, elapsed = 0;
-  if (S.promptWords.length && sceneRowIds.length) {
+  if (promptWords.length && sceneRowIds.length) {
     var pos = readingPosition(scroller);
     scene = sceneAtWord(pos);
     var span = sceneWordEnd[scene] - sceneWordStart[scene];
@@ -367,8 +383,8 @@ function cueScene(idx) {
   if (idx < 0 || idx >= sceneRowIds.length) return false;
   if (sceneWordEnd[idx] <= sceneWordStart[idx]) return false;
   var scroller = document.getElementById("prompter-scroll");
-  var firstWord = S.promptWords[sceneWordStart[idx]].el;
-  var lastWord = S.promptWords[sceneWordEnd[idx] - 1].el;
+  var firstWord = promptWords[sceneWordStart[idx]].el;
+  var lastWord = promptWords[sceneWordEnd[idx] - 1].el;
   promptSceneIndex = idx;
   promptSceneGuideOffset = scroller.clientHeight / 2;
   scroller.scrollTop = Math.max(0, firstWord.offsetTop - promptSceneGuideOffset);
@@ -401,7 +417,7 @@ function advanceSceneAfterAutoPause() {
   var next = findNonEmptySceneIndex(promptSceneIndex + 1, 1);
   if (next === -1) { promptSceneEndWordOffset = null; return; }
   promptSceneIndex = next;
-  promptSceneEndWordOffset = S.promptWords[sceneWordEnd[next] - 1].el.offsetTop;
+  promptSceneEndWordOffset = promptWords[sceneWordEnd[next] - 1].el.offsetTop;
   updateSceneReadout();
 }
 
@@ -479,20 +495,20 @@ export function setPrompterPlaying(on) {
   else btn.textContent = on ? "Pause" : "Play";
   btn.classList.toggle("is-active", on);
   if (on) {
-    S.prompterLastTs = null;
-    S.prompterRAF = requestAnimationFrame(prompterTick);
-  } else if (S.prompterRAF) {
-    cancelAnimationFrame(S.prompterRAF);
-    S.prompterRAF = null;
+    prompterLastTs = null;
+    prompterRAF = requestAnimationFrame(prompterTick);
+  } else if (prompterRAF) {
+    cancelAnimationFrame(prompterRAF);
+    prompterRAF = null;
   }
 }
 
 function prompterTick(ts) {
   var scroller = document.getElementById("prompter-scroll");
-  if (S.prompterLastTs == null) S.prompterLastTs = ts;
-  var dt = (ts - S.prompterLastTs) / 1000;
-  S.prompterLastTs = ts;
-  scroller.scrollTop += S.prompterSpeed * dt;
+  if (prompterLastTs == null) prompterLastTs = ts;
+  var dt = (ts - prompterLastTs) / 1000;
+  prompterLastTs = ts;
+  scroller.scrollTop += prompterSpeed * dt;
   if (promptSceneMode && promptSceneEndWordOffset != null &&
       scenePastReadingLine(scroller.scrollTop, promptSceneEndWordOffset, promptSceneGuideOffset)) {
     setPrompterPlaying(false);
@@ -503,7 +519,7 @@ function prompterTick(ts) {
     setPrompterPlaying(false);
     return;
   }
-  S.prompterRAF = requestAnimationFrame(prompterTick);
+  prompterRAF = requestAnimationFrame(prompterTick);
 }
 
 export function applyPrompterSize() {
@@ -540,17 +556,17 @@ var PROMPTER_SPEED_BASE = 42;
 
 export function setPrompterSpeed(value) {
   var input = document.getElementById("pp-speed");
-  S.prompterSpeed = Math.max(Number(input.min), Math.min(Number(input.max), Math.round(value)));
-  input.value = String(S.prompterSpeed);
+  prompterSpeed = Math.max(Number(input.min), Math.min(Number(input.max), Math.round(value)));
+  input.value = String(prompterSpeed);
   syncSpeedReadout();
 }
 
 export function stepPrompterSpeed(dir) {
-  setPrompterSpeed(S.prompterSpeed + dir * PROMPTER_SPEED_STEP);
+  setPrompterSpeed(prompterSpeed + dir * PROMPTER_SPEED_STEP);
 }
 
 function syncSpeedReadout() {
-  setText(document.getElementById("pp-speed-value"), (S.prompterSpeed / PROMPTER_SPEED_BASE).toFixed(1) + "×");
+  setText(document.getElementById("pp-speed-value"), (prompterSpeed / PROMPTER_SPEED_BASE).toFixed(1) + "×");
 }
 
 function setVoiceStatus(msg, kind) {
@@ -605,7 +621,7 @@ export function updateVoiceAvailability() {
   if (S.DESKTOP) {
     if (desktopListens()) {
       btn.disabled = false;
-      if (!voiceIsFollowing() && !S.voiceStarting) setVoiceStatus("", "");
+      if (!voiceIsFollowing() && !voiceStarting) setVoiceStatus("", "");
     } else if (canOpenPrompterInBrowser()) {
       btn.disabled = false;
       setVoiceStatus("Chrome or Edge can follow your voice — this opens the saved script there.", "");
@@ -615,7 +631,7 @@ export function updateVoiceAvailability() {
     }
   } else if (hasVoiceRelay()) {
     btn.disabled = false;
-    if (!voiceIsFollowing() && !S.voiceStarting) setVoiceStatus("", "");
+    if (!voiceIsFollowing() && !voiceStarting) setVoiceStatus("", "");
   } else if (!SpeechRecognitionCtor) {
     btn.disabled = true;
     setVoiceStatus("Voice follow needs Chrome or Edge.", "");
@@ -639,22 +655,22 @@ function updateVoiceButtonUI() {
 }
 
 function applySpokenUpTo(idx) {
-  for (var i = 0; i < S.promptWords.length; i++) {
-    var el = S.promptWords[i].el;
+  for (var i = 0; i < promptWords.length; i++) {
+    var el = promptWords[i].el;
     el.classList.toggle("spoken", i < idx);
     el.classList.toggle("current-word", i === idx);
   }
 }
 
 function clearSpokenHighlights() {
-  S.promptWords.forEach(function (w) {
+  promptWords.forEach(function (w) {
     w.el.classList.remove("spoken");
     w.el.classList.remove("current-word");
   });
 }
 
 function scrollWordIntoView(idx) {
-  var w = S.promptWords[idx];
+  var w = promptWords[idx];
   if (!w) return;
   var scroller = document.getElementById("prompter-scroll");
   scroller.scrollTo({ top: Math.max(0, w.el.offsetTop - scroller.clientHeight / 2), behavior: "smooth" });
@@ -675,31 +691,31 @@ function findBestMatch(recentWords, scriptNorms, searchStart, searchEnd) {
 }
 
 function onSpeechTranscript() {
-  var combined = (S.finalTranscript + " " + S.interimTranscript).trim();
+  var combined = (finalTranscript + " " + interimTranscript).trim();
   var words = combined.split(/\s+/).map(normalizeWord).filter(Boolean);
   var recent = words.slice(-8);
-  if (!recent.length || !S.speakNorms.length) return;
+  if (!recent.length || !speakNorms.length) return;
 
-  var searchStart = Math.max(0, S.speakCursor - 40);
-  var searchEnd = Math.min(S.speakNorms.length - 1, S.speakCursor + 80);
-  var best = findBestMatch(recent, S.speakNorms, searchStart, searchEnd);
+  var searchStart = Math.max(0, speakCursor - 40);
+  var searchEnd = Math.min(speakNorms.length - 1, speakCursor + 80);
+  var best = findBestMatch(recent, speakNorms, searchStart, searchEnd);
 
-  if (best.index !== -1 && best.index !== S.speakCursor &&
-      best.score >= (best.index > S.speakCursor ? 2 : 3)) {
-    S.speakCursor = best.index;
-    S.wordCursor = S.speakable[S.speakCursor];
-    applySpokenUpTo(S.wordCursor);
-    scrollWordIntoView(S.wordCursor);
-    if (promptSceneMode && promptSceneIndex !== -1 && S.wordCursor >= sceneWordEnd[promptSceneIndex]) {
+  if (best.index !== -1 && best.index !== speakCursor &&
+      best.score >= (best.index > speakCursor ? 2 : 3)) {
+    speakCursor = best.index;
+    wordCursor = speakable[speakCursor];
+    applySpokenUpTo(wordCursor);
+    scrollWordIntoView(wordCursor);
+    if (promptSceneMode && promptSceneIndex !== -1 && wordCursor >= sceneWordEnd[promptSceneIndex]) {
       stopVoiceFollow();
       advanceSceneAfterAutoPause();
       setVoiceStatus("Scene finished — say it again to keep following, or press Next.", "listening");
     }
   }
 
-  if (S.finalTranscript.length > 4000) S.finalTranscript = S.finalTranscript.slice(-1200);
+  if (finalTranscript.length > 4000) finalTranscript = finalTranscript.slice(-1200);
 
-  if (S.speakCursor >= S.speakNorms.length - 1) {
+  if (speakCursor >= speakNorms.length - 1) {
     setVoiceStatus("Reached the end", "listening");
   } else if (voiceIsFollowing()) {
     setVoiceStatus(listeningStatus("Listening"), "listening");
@@ -707,9 +723,9 @@ function onSpeechTranscript() {
 }
 
 function releaseVoiceStream() {
-  if (!S.voiceStream) return;
-  try { S.voiceStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
-  S.voiceStream = null;
+  if (!voiceStream) return;
+  try { voiceStream.getTracks().forEach(function (t) { t.stop(); }); } catch (e) {}
+  voiceStream = null;
 }
 
 var DESKTOP_VOICE_WARNINGS = {
@@ -745,28 +761,28 @@ export async function startVoiceFollow() {
   }
   var relayed = !desktop && hasVoiceRelay();
   if (!desktop && !relayed && !SpeechRecognitionCtor) return;
-  if (voiceIsFollowing() || S.voiceStarting) return;
-  if (!S.speakNorms.length) {
+  if (voiceIsFollowing() || voiceStarting) return;
+  if (!speakNorms.length) {
     setVoiceStatus("Nothing to read yet.", "error");
     return;
   }
-  S.voiceStarting = true;
-  var mySession = ++S.voiceSession;
+  voiceStarting = true;
+  var mySession = ++voiceSession;
   setPrompterPlaying(false);
-  S.finalTranscript = "";
-  S.interimTranscript = "";
-  S.wordCursor = -1;
-  S.speakCursor = -1;
-  S.voiceRestarts = 0;
+  finalTranscript = "";
+  interimTranscript = "";
+  wordCursor = -1;
+  speakCursor = -1;
+  voiceRestarts = 0;
   voiceMicName = "";
   clearSpokenHighlights();
 
   if (!desktop && !relayed && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     setVoiceStatus("Asking for the microphone…", "");
     try {
-      S.voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
-      S.voiceStarting = false;
+      voiceStarting = false;
       var name = err && err.name;
       setVoiceStatus(
         name === "NotFoundError" || name === "DevicesNotFoundError"
@@ -775,30 +791,30 @@ export async function startVoiceFollow() {
         "error");
       return;
     }
-    if (mySession !== S.voiceSession) { releaseVoiceStream(); S.voiceStarting = false; return; }
+    if (mySession !== voiceSession) { releaseVoiceStream(); voiceStarting = false; return; }
     try {
-      var track = S.voiceStream.getAudioTracks()[0];
+      var track = voiceStream.getAudioTracks()[0];
       voiceMicName = (track && track.label) || "";
     } catch (e) {}
   }
 
   try {
-    S.recognition = desktop ? createDesktopRecognition()
+    recognition = desktop ? createDesktopRecognition()
       : relayed ? createRelayRecognition()
       : new SpeechRecognitionCtor();
   } catch (e) {
-    S.voiceStarting = false;
+    voiceStarting = false;
     releaseVoiceStream();
     setVoiceStatus("Could not start speech recognition.", "error");
     return;
   }
-  S.recognition.continuous = true;
-  S.recognition.interimResults = true;
-  S.recognition.lang = "en-US";
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = "en-US";
 
   if (desktop || relayed) {
     setVoiceStatus(relayed ? "Starting speech recognition in the Splitpage desktop app…" : "Starting Windows speech recognition…", "");
-    S.recognition.onwarning = function (e) {
+    recognition.onwarning = function (e) {
       if (e && e.warning === "clear") {
         var el = document.getElementById("pp-voice-status");
         if (voiceIsFollowing() && el) {
@@ -814,31 +830,31 @@ export async function startVoiceFollow() {
       var warn = DESKTOP_VOICE_WARNINGS[e && e.warning];
       if (warn && voiceIsFollowing()) setVoiceStatus(warn(), "error");
     };
-    S.recognition.ondevice = function (e) {
-      if (mySession !== S.voiceSession) return;
+    recognition.ondevice = function (e) {
+      if (mySession !== voiceSession) return;
       voiceMicName = (e && typeof e.name === "string") ? e.name : "";
     };
   }
-  S.recognition.onstart = function () {
-    S.voiceStarting = false;
+  recognition.onstart = function () {
+    voiceStarting = false;
     setVoiceFollowing(true);
     updateVoiceButtonUI();
     setVoiceStatus(listeningStatus("Listening…"), "listening");
   };
-  S.recognition.onresult = function (e) {
+  recognition.onresult = function (e) {
     var finalChunk = "", interimChunk = "";
     for (var i = e.resultIndex; i < e.results.length; i++) {
       var r = e.results[i];
       if (r.isFinal) finalChunk += r[0].transcript + " ";
       else interimChunk += r[0].transcript + " ";
     }
-    if (finalChunk) S.finalTranscript += finalChunk;
-    S.interimTranscript = interimChunk;
-    S.voiceRestarts = 0;
+    if (finalChunk) finalTranscript += finalChunk;
+    interimTranscript = interimChunk;
+    voiceRestarts = 0;
     onSpeechTranscript();
   };
-  S.recognition.onerror = function (e) {
-    S.voiceStarting = false;
+  recognition.onerror = function (e) {
+    voiceStarting = false;
     if (e.error === "no-speech" || e.error === "aborted") return;
     if (e.error === "not-allowed" || e.error === "service-not-allowed") {
       setVoiceStatus(desktop || relayed
@@ -867,14 +883,14 @@ export async function startVoiceFollow() {
     }
     updateVoiceButtonUI();
   };
-  S.recognition.onend = function () {
-    if (mySession !== S.voiceSession || !voiceIsFollowing()) {
-      if (mySession === S.voiceSession) releaseVoiceStream();
+  recognition.onend = function () {
+    if (mySession !== voiceSession || !voiceIsFollowing()) {
+      if (mySession === voiceSession) releaseVoiceStream();
       updateVoiceButtonUI();
       return;
     }
-    S.voiceRestarts++;
-    if (S.voiceRestarts > 40) {
+    voiceRestarts++;
+    if (voiceRestarts > 40) {
       setVoiceFollowing(false);
       releaseVoiceStream();
       updateVoiceButtonUI();
@@ -882,20 +898,20 @@ export async function startVoiceFollow() {
       return;
     }
     setTimeout(function () {
-      if (mySession !== S.voiceSession || !voiceIsFollowing() || !S.recognition) return;
-      try { S.recognition.start(); }
+      if (mySession !== voiceSession || !voiceIsFollowing() || !recognition) return;
+      try { recognition.start(); }
       catch (e) {
         setVoiceFollowing(false);
-        S.recognition = null;
+        recognition = null;
         releaseVoiceStream();
         updateVoiceButtonUI();
       }
-    }, Math.min(2000, 150 * S.voiceRestarts));
+    }, Math.min(2000, 150 * voiceRestarts));
   };
   try {
-    S.recognition.start();
+    recognition.start();
   } catch (e) {
-    S.voiceStarting = false;
+    voiceStarting = false;
     releaseVoiceStream();
     setVoiceStatus("Could not start speech recognition.", "error");
   }
@@ -903,12 +919,12 @@ export async function startVoiceFollow() {
 
 export function stopVoiceFollow() {
   var wasActive = voiceIsFollowing();
-  S.voiceSession++;
+  voiceSession++;
   setVoiceFollowing(false);
-  S.voiceStarting = false;
-  if (S.recognition) {
-    try { S.recognition.onend = null; S.recognition.onresult = null; S.recognition.stop(); } catch (e) {}
-    S.recognition = null;
+  voiceStarting = false;
+  if (recognition) {
+    try { recognition.onend = null; recognition.onresult = null; recognition.stop(); } catch (e) {}
+    recognition = null;
   }
   releaseVoiceStream();
   updateVoiceButtonUI();
@@ -1043,8 +1059,8 @@ export function __init() {
       return true;
     },
     simulateVoiceWordCursor: function (idx) {
-      S.wordCursor = idx;
-      if (!promptSceneMode || promptSceneIndex === -1 || S.wordCursor < sceneWordEnd[promptSceneIndex]) return false;
+      wordCursor = idx;
+      if (!promptSceneMode || promptSceneIndex === -1 || wordCursor < sceneWordEnd[promptSceneIndex]) return false;
       stopVoiceFollow();
       advanceSceneAfterAutoPause();
       return true;
