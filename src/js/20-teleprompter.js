@@ -1,4 +1,12 @@
 import { mountTagEntityContainer } from "../features/tags/mount.ts";
+import {
+  prompterIsOpen,
+  prompterSkipsShot,
+  setPrompterOpen,
+  setPrompterPlayingFlag,
+  setVoiceFollowing,
+  voiceIsFollowing
+} from "../application/prompter-state.ts";
 import { S } from "./_state.js";
 import { writePref } from "./00p-prefs.js";
 import { serverHomeId } from "./_home.js";
@@ -71,7 +79,7 @@ export function trimPrompterCell(cell) {
 var SENTENCE_END_RE = /[.!?]["'’”)\]]*$/;
 
 export function buildPrompterContent() {
-  var skippingShot = S.prompterSkipShot || hideShotScenes;
+  var skippingShot = prompterSkipsShot() || hideShotScenes;
   var source = skippingShot
     ? S.state.rows.filter(function (row) { return row.status !== "shot"; })
     : S.state.rows;
@@ -138,7 +146,7 @@ export function buildPrompterContent() {
   promptTotalSec = t;
   renderPrompterRundown();
   var skip = document.getElementById("pp-skip-shot");
-  if (skip) skip.setAttribute("aria-pressed", S.prompterSkipShot ? "true" : "false");
+  if (skip) skip.setAttribute("aria-pressed", prompterSkipsShot() ? "true" : "false");
 }
 
 var sceneSeconds = [];
@@ -209,7 +217,7 @@ function setText(el, text) {
 }
 
 export function updatePrompterStatus() {
-  if (!S.prompterOpen) return;
+  if (!prompterIsOpen()) return;
   var scroller = document.getElementById("prompter-scroll");
   var scene = -1, elapsed = 0;
   if (S.promptWords.length && sceneRowIds.length) {
@@ -262,7 +270,7 @@ export function acquireWakeLock(owns) {
   if (!navigator.wakeLock || !navigator.wakeLock.request) return;
   var gen = ++wakeLockGen;
   navigator.wakeLock.request("screen").then(function (lock) {
-    if (gen !== wakeLockGen || !S.prompterOpen || (owns && !owns())) { lock.release().catch(function () {}); return; }
+    if (gen !== wakeLockGen || !prompterIsOpen() || (owns && !owns())) { lock.release().catch(function () {}); return; }
     prompterWakeLock = lock;
   }).catch(function () { });
 }
@@ -409,7 +417,7 @@ export function setPrompterSceneMode(on) {
 var prompterLeaveSeq = 0;
 
 function lockPageScrollWhenArrived(el) {
-  var lock = function () { if (S.prompterOpen) document.body.classList.add("prompter-open"); };
+  var lock = function () { if (prompterIsOpen()) document.body.classList.add("prompter-open"); };
   var arriving = el.getAnimations ? el.getAnimations().filter(function (a) {
     return a.effect && a.effect.target === el;
   }) : [];
@@ -425,7 +433,7 @@ export function openPrompter() {
   el.classList.remove("is-holding");
   el.inert = false;
   el.hidden = false;
-  S.prompterOpen = true;
+  setPrompterOpen(true);
   lockPageScrollWhenArrived(el);
   document.getElementById("prompter-scroll").scrollTop = 0;
   setPrompterPlaying(false);
@@ -443,7 +451,7 @@ export function openPrompter() {
 export function closePrompter() {
   setPrompterPlaying(false);
   stopVoiceFollow();
-  S.prompterOpen = false;
+  setPrompterOpen(false);
   releaseWakeLock();
   var el = document.getElementById("prompter");
   if (el.contains(document.activeElement)) document.activeElement.blur();
@@ -460,8 +468,8 @@ export function closePrompter() {
 }
 
 export function setPrompterPlaying(on) {
-  if (on && S.voiceFollowActive) stopVoiceFollow();
-  S.prompterPlaying = on;
+  if (on && voiceIsFollowing()) stopVoiceFollow();
+  setPrompterPlayingFlag(on);
   var btn = document.getElementById("pp-play");
   var icon = btn.querySelector("use");
   var label = btn.querySelector(".pp-sr");
@@ -556,7 +564,7 @@ function syncVoiceState() {
   var group = document.getElementById("pp-voice-state");
   var el = document.getElementById("pp-voice-status");
   if (!group || !el) return;
-  group.classList.toggle("is-live", !!S.voiceFollowActive);
+  group.classList.toggle("is-live", !!voiceIsFollowing());
   group.classList.toggle("has-msg", !!el.textContent);
 }
 
@@ -592,11 +600,11 @@ export function updateVoiceAvailability() {
     loadDesktopVoice().then(updateVoiceAvailability);
     return;
   }
-  if (!S.voiceFollowActive) setVoiceLabel(btn, voiceIdleLabel());
+  if (!voiceIsFollowing()) setVoiceLabel(btn, voiceIdleLabel());
   if (S.DESKTOP) {
     if (desktopListens()) {
       btn.disabled = false;
-      if (!S.voiceFollowActive && !S.voiceStarting) setVoiceStatus("", "");
+      if (!voiceIsFollowing() && !S.voiceStarting) setVoiceStatus("", "");
     } else if (canOpenPrompterInBrowser()) {
       btn.disabled = false;
       setVoiceStatus("Chrome or Edge can follow your voice — this opens the saved script there.", "");
@@ -606,7 +614,7 @@ export function updateVoiceAvailability() {
     }
   } else if (hasVoiceRelay()) {
     btn.disabled = false;
-    if (!S.voiceFollowActive && !S.voiceStarting) setVoiceStatus("", "");
+    if (!voiceIsFollowing() && !S.voiceStarting) setVoiceStatus("", "");
   } else if (!SpeechRecognitionCtor) {
     btn.disabled = true;
     setVoiceStatus("Voice follow needs Chrome or Edge.", "");
@@ -615,17 +623,17 @@ export function updateVoiceAvailability() {
     setVoiceStatus("Voice follow needs the app served over http:// — start it with start.bat.", "");
   } else {
     btn.disabled = false;
-    if (!S.voiceFollowActive) setVoiceStatus("", "");
+    if (!voiceIsFollowing()) setVoiceStatus("", "");
   }
 }
 
 function updateVoiceButtonUI() {
   var btn = document.getElementById("pp-voice");
   if (!btn) return;
-  btn.classList.toggle("is-active", S.voiceFollowActive);
-  setVoiceLabel(btn, S.voiceFollowActive ? "Stop Following" : voiceIdleLabel());
+  btn.classList.toggle("is-active", voiceIsFollowing());
+  setVoiceLabel(btn, voiceIsFollowing() ? "Stop Following" : voiceIdleLabel());
   var scroller = document.getElementById("prompter-scroll");
-  if (scroller) scroller.classList.toggle("is-following", !!S.voiceFollowActive);
+  if (scroller) scroller.classList.toggle("is-following", !!voiceIsFollowing());
   syncVoiceState();
 }
 
@@ -692,7 +700,7 @@ function onSpeechTranscript() {
 
   if (S.speakCursor >= S.speakNorms.length - 1) {
     setVoiceStatus("Reached the end", "listening");
-  } else if (S.voiceFollowActive) {
+  } else if (voiceIsFollowing()) {
     setVoiceStatus(listeningStatus("Listening"), "listening");
   }
 }
@@ -736,7 +744,7 @@ export async function startVoiceFollow() {
   }
   var relayed = !desktop && hasVoiceRelay();
   if (!desktop && !relayed && !SpeechRecognitionCtor) return;
-  if (S.voiceFollowActive || S.voiceStarting) return;
+  if (voiceIsFollowing() || S.voiceStarting) return;
   if (!S.speakNorms.length) {
     setVoiceStatus("Nothing to read yet.", "error");
     return;
@@ -792,7 +800,7 @@ export async function startVoiceFollow() {
     S.recognition.onwarning = function (e) {
       if (e && e.warning === "clear") {
         var el = document.getElementById("pp-voice-status");
-        if (S.voiceFollowActive && el) {
+        if (voiceIsFollowing() && el) {
           for (var i = 0; i < CLEARABLE_VOICE_WARNINGS.length; i++) {
             if (el.textContent === DESKTOP_VOICE_WARNINGS[CLEARABLE_VOICE_WARNINGS[i]]()) {
               setVoiceStatus(listeningStatus("Listening…"), "listening");
@@ -803,7 +811,7 @@ export async function startVoiceFollow() {
         return;
       }
       var warn = DESKTOP_VOICE_WARNINGS[e && e.warning];
-      if (warn && S.voiceFollowActive) setVoiceStatus(warn(), "error");
+      if (warn && voiceIsFollowing()) setVoiceStatus(warn(), "error");
     };
     S.recognition.ondevice = function (e) {
       if (mySession !== S.voiceSession) return;
@@ -812,7 +820,7 @@ export async function startVoiceFollow() {
   }
   S.recognition.onstart = function () {
     S.voiceStarting = false;
-    S.voiceFollowActive = true;
+    setVoiceFollowing(true);
     updateVoiceButtonUI();
     setVoiceStatus(listeningStatus("Listening…"), "listening");
   };
@@ -835,22 +843,22 @@ export async function startVoiceFollow() {
       setVoiceStatus(desktop || relayed
         ? "Microphone blocked — let desktop apps use it in Settings › Privacy & security › Microphone, then try again."
         : "Microphone blocked — allow it for this site (the icon at the right of the address bar), then try again.", "error");
-      S.voiceFollowActive = false;
+      setVoiceFollowing(false);
     } else if (e.error === "no-recognizer") {
       setVoiceStatus("Windows has no speech recogniser installed. Add one in Settings › Time & language › Speech, or use Present in Browser.", "error");
-      S.voiceFollowActive = false;
+      setVoiceFollowing(false);
     } else if (e.error === "taken") {
       setVoiceStatus("Another tab is following your voice now.", "");
-      S.voiceFollowActive = false;
+      setVoiceFollowing(false);
     } else if (e.error === "helper-failed" || e.error === "unavailable") {
       setVoiceStatus("Windows speech recognition couldn't start. Present in Browser still works.", "error");
-      S.voiceFollowActive = false;
+      setVoiceFollowing(false);
     } else if (e.error === "relay-lost") {
       setVoiceStatus("Lost the Splitpage desktop app — open the teleprompter from it again to follow your voice.", "error");
-      S.voiceFollowActive = false;
+      setVoiceFollowing(false);
     } else if (e.error === "audio-capture") {
       setVoiceStatus("No microphone was found.", "error");
-      S.voiceFollowActive = false;
+      setVoiceFollowing(false);
     } else if (e.error === "network") {
       setVoiceStatus("Speech recognition needs an internet connection.", "error");
     } else {
@@ -859,24 +867,24 @@ export async function startVoiceFollow() {
     updateVoiceButtonUI();
   };
   S.recognition.onend = function () {
-    if (mySession !== S.voiceSession || !S.voiceFollowActive) {
+    if (mySession !== S.voiceSession || !voiceIsFollowing()) {
       if (mySession === S.voiceSession) releaseVoiceStream();
       updateVoiceButtonUI();
       return;
     }
     S.voiceRestarts++;
     if (S.voiceRestarts > 40) {
-      S.voiceFollowActive = false;
+      setVoiceFollowing(false);
       releaseVoiceStream();
       updateVoiceButtonUI();
       setVoiceStatus("Voice follow kept dropping out — stopped.", "error");
       return;
     }
     setTimeout(function () {
-      if (mySession !== S.voiceSession || !S.voiceFollowActive || !S.recognition) return;
+      if (mySession !== S.voiceSession || !voiceIsFollowing() || !S.recognition) return;
       try { S.recognition.start(); }
       catch (e) {
-        S.voiceFollowActive = false;
+        setVoiceFollowing(false);
         S.recognition = null;
         releaseVoiceStream();
         updateVoiceButtonUI();
@@ -893,9 +901,9 @@ export async function startVoiceFollow() {
 }
 
 export function stopVoiceFollow() {
-  var wasActive = S.voiceFollowActive;
+  var wasActive = voiceIsFollowing();
   S.voiceSession++;
-  S.voiceFollowActive = false;
+  setVoiceFollowing(false);
   S.voiceStarting = false;
   if (S.recognition) {
     try { S.recognition.onend = null; S.recognition.onresult = null; S.recognition.stop(); } catch (e) {}
@@ -950,7 +958,7 @@ function whenInitialStateReady() {
 
 function showPrompterForLaunch() {
   closeNewTabPage();
-  if (!S.prompterOpen) openPrompter();
+  if (!prompterIsOpen()) openPrompter();
 }
 
 async function launchPrompterFromScript(token) {

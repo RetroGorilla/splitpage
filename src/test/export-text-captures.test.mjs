@@ -5,7 +5,7 @@ import { S } from "../js/_state.js";
 import { CLOCK_KEY, writePref } from "../js/00p-prefs.js";
 import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
-import { blobStore, intern } from "../js/02c-blobs.js";
+import { blobStore, intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { __init as initBroll } from "../js/08c-broll.js";
 import { exportAssetsNow, exportDocumentOf } from "../js/14b-export-kit.js";

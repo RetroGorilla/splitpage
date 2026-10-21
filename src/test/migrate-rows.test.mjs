@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { legacyMdToHtml, mediaCommentId, migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
 import { refsIn } from "../../shared/blob-policy.js";
-import { dataUrlForSync } from "../js/02c-blobs.js";
+import { dataUrlForSync } from "../adapters/storage/02c-blobs.js";
 import { DEFAULT_WPM } from "../js/01-scene-status.js";
 import { __init as initTags, collectTagsFromRows, mintTagId } from "../js/07-production-tags.js";
 

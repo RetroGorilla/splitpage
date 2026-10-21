@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { createActionRegistry } from "../../src/application/actions.ts";
 import type { ActionRegistry, ActionSource } from "../../src/application/actions.ts";
 import { S } from "../../src/js/_state.js";
+import { prompterIsOpen, setPrompterOpen } from "../../src/application/prompter-state.ts";
 import { registerFileActions } from "../../src/legacy/file-actions.ts";
 import { registerHelpActions } from "../../src/legacy/help-actions.ts";
 import { availableUnless, EVERY_OVERLAY, everyOverlayBut, inFront, OPENS_A_DIALOG } from "../../src/legacy/screen.ts";
@@ -56,12 +57,14 @@ function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
   const registry = createActionRegistry();
   const disposers = [registerFileActions(registry), registerThisDocumentActions(registry), registerViewActions(registry),
     registerShareActions(registry)];
-  const was = { state: S.state as unknown, prompterOpen: S.prompterOpen as unknown };
-  Object.assign(S, { state: { rows: [] }, prompterOpen: false });
+  const was = { state: S.state as unknown, prompterOpen: prompterIsOpen() };
+  Object.assign(S, { state: { rows: [] } });
+  setPrompterOpen(false);
   return {
     registry,
     restore: () => {
-      Object.assign(S, was);
+      Object.assign(S, { state: was.state });
+      setPrompterOpen(was.prompterOpen);
       document.body.innerHTML = "";
       for (const dispose of disposers) dispose();
     }
@@ -81,7 +84,7 @@ const PAGE_COMMANDS =["open", "export", "command-menu", "find", "history", "pane
 test("in Present, what would open behind it is refused, and Save, Hide shot scenes and Present itself are not", () => {
   const { registry, restore } = loadedRegistry();
   try {
-    Object.assign(S, { prompterOpen: true });
+    setPrompterOpen(true);
     for (const id of [...PAGE_COMMANDS, "write"]) assert.equal(refusal(registry, id), "Close Present first", id);
     for (const id of ["save", "save-as", "toggle-hide-shot", "present"]) assert.equal(refusal(registry, id), null, id);
   } finally {
@@ -105,7 +108,7 @@ test("on the shot-list page, what would open behind it is refused", () => {
 test("a dialog over Present is named first, and the commands that only acted behind a dialog are refused there too", () => {
   const { registry, restore } = loadedRegistry();
   try {
-    Object.assign(S, { prompterOpen: true });
+    setPrompterOpen(true);
     document.body.innerHTML = '<div class="modal-backdrop"></div>';
     for (const id of [...PAGE_COMMANDS, "write", "present", "save", "save-as", "toggle-hide-shot", ...NO_DIALOG_COMMANDS]) {
       assert.equal(refusal(registry, id), "Close the open dialog first", id);
@@ -127,7 +130,7 @@ test("a command that opens a dialog, Help among them, is refused over a dialog b
     document.body.innerHTML = '<div class="modal-backdrop"></div>';
     for (const id of [...DIALOG_OPENERS, "help"]) assert.equal(refusal(registry, id, "menu"), "Close the open dialog first", id);
     document.body.innerHTML = "";
-    Object.assign(S, { prompterOpen: true });
+    setPrompterOpen(true);
     for (const id of [...DIALOG_OPENERS, "help"]) assert.equal(refusal(registry, id, "menu"), null, id);
   } finally {
     help();
@@ -146,9 +149,9 @@ test("the tour is refused over a dialog and starts over Present and the shot lis
     document.body.innerHTML = '<div class="modal-backdrop" hidden></div>';
     assert.equal(refusal(registry, "tour", "menu"), null);
     document.body.innerHTML = "";
-    Object.assign(S, { prompterOpen: true });
+    setPrompterOpen(true);
     assert.equal(refusal(registry, "tour", "menu"), null);
-    Object.assign(S, { prompterOpen: false });
+    setPrompterOpen(false);
     document.body.innerHTML = '<div id="broll-page"></div>';
     assert.equal(refusal(registry, "tour", "menu"), null);
   } finally {

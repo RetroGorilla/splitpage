@@ -9,7 +9,7 @@ import {
   normalizeDocId,
   syncDocIdentity
 } from "./02b-doc-id.js";
-import { ensureBytes } from "./02c-blobs.js";
+import { ensureBytes } from "../adapters/storage/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import {
   RELOAD_GUARD_KEY,

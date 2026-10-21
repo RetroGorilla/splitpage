@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { videoThumbsOn } from "./00p-prefs.js";
-import { intern, persist } from "./02c-blobs.js";
+import { intern, persist } from "../adapters/storage/02c-blobs.js";
 import { findRowIndex } from "./03-sync.js";
 import { render, renderRow } from "./05-render.js";
 import { foldIntoEdit } from "./12a-undo.js";

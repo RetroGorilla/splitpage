@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { internDataUrl, queuePersist } from "./02c-blobs.js";
+import { internDataUrl, queuePersist } from "../adapters/storage/02c-blobs.js";
 import { pushSnapshot, stampRow } from "./03-sync.js";
 import { cssAttr, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
 import { render } from "./05-render.js";
@@ -9,13 +9,12 @@ import { audioDirectionsHtml, docxToRows } from "./15-docx.js";
 import { csvToRows } from "./16-csv.js";
 import { fileKindFromName } from "./18-local-files.js";
 import { MD_IMAGE_PREFIX_RE } from "./20d-formats.js";
+import { importModeTouched, resetImportMode } from "../application/import-mode.ts";
 import { importRowsCommand } from "../application/commands/import-rows.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { escapeHtml, legacyMdToHtml, unitSafePrefix } from "../core/document/text-policy.ts";
 import { REVIEW_ONLY, editAllowed, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
-
-S.importModeTouched = false;
 
 export function truncateForPreview(s, n) {
   s = s || "";
@@ -362,7 +361,7 @@ function getImportMode() {
 }
 
 export function maybeAutoDetectTwoColumn(text) {
-  if (S.importModeTouched) return;
+  if (importModeTouched()) return;
   if (detectTwoColumnFormat(text)) {
     var radio = document.querySelector('input[name="import-split"][value="twocolumn"]');
     if (radio) radio.checked = true;
@@ -424,7 +423,7 @@ export function openImportModal(opts) {
   document.getElementById("import-modal").classList.toggle("is-new-document", !!importIntoNewDocument);
   document.getElementById("import-textarea").value = "";
   document.getElementById("import-replace").checked = false;
-  S.importModeTouched = false;
+  resetImportMode();
   pendingFileRows = null;
   pendingFileName = "";
   var paragraphRadio = document.querySelector('input[name="import-split"][value="paragraph"]');
