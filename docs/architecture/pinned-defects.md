@@ -14,13 +14,13 @@ commitment of the milestone 2 external review
 Adam approved these dispositions and the milestone assignments on 2026-10-01.
 He may change any of them later.
 
-**How a fix lands.** Bug fixes go to `4.0-development` only. No 3.1.x release
+**How a fix lands.** Bug fixes go to `4.1-development` only. No 3.1.x release
 is planned, and `3.1.x-development` takes no more fixes
 ([review.md §2](review.md#2-where-bugs-get-fixed)). Each fix is its own PR,
 in the module that now owns the code, with a regression test written to fail
 first. A test that pins the old behaviour changes in that PR, on purpose. A
 golden that changes is regenerated in a dedicated commit on
-`4.0-development` that changes nothing else
+`4.1-development` that changes nothing else
 ([milestone-2.md, Characterisation](milestone-2.md#characterisation-20)). The
 closed 3.1.x branches hold fixes and fail-first tests to port from:
 `fix/274-overlay-commands`, `fix/276-save-during-load`,
@@ -29,7 +29,7 @@ and `fix/281-283-md-null-href-and-person-merge`.
 
 **Dispositions.**
 - **Post-M2 queue:** fix after milestone 2, in its own PR.
-- **Fixed by #N:** the PR merged into `4.0-development`. The issue may still show as open on GitHub, because the base is not the default branch and a merge there does not close it.
+- **Fixed by #N:** the PR merged into `4.1-development`. The issue may still show as open on GitHub, because the base is not the default branch and a merge there does not close it.
 - **Milestone N:** fix there, for the reason given.
 - **Won't fix:** by design, or not reachable, for the reason given. No issue is filed for these. The row records the behaviour so that a change is deliberate.
 - **Needs Adam's decision:** a product decision comes first.
