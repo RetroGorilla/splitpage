@@ -7,6 +7,7 @@ const path = require("node:path");
 const crypto = require("node:crypto");
 const { codePointPrefix } = require("./text");
 const blobs = require("./blobs");
+const { LINK_ROLES, isLinkId, linkAnswer, createLinkStore } = require("./links");
 const {
   COMMENT_NAME_MAX,
   DOC_COMMENTS_MAX,
@@ -42,143 +43,10 @@ const PERSIST_LINKS = process.env.PERSIST_LINKS === "1";
 const LINKS_DIR = path.join(DATA_DIR, "links");
 const LINKS_FILE = path.join(LINKS_DIR, "links.json");
 const LINKS_SECRET_FILE = path.join(LINKS_DIR, "secret");
-const LINK_ROLES = ["edit", "review"];
-const LINK_ID_RE = /^[0-9a-f]{12}$/;
-const SHA_RE = /^[0-9a-f]{64}$/;
-const LINK_TOMBSTONE_MAX = 2000;
-
-const linksById = new Map();
-const linkByKey = new Map();
-const linkByToken = new Map();
-const linkByDocRole = new Map();
-const linkTombstones = [];
-const tombKeyHashes = new Set();
-const tombTokenHashes = new Set();
-
-function docRoleKey(docId, role) {
-  return docId + "/" + role;
-}
-
-function indexLink(rec) {
-  linksById.set(rec.id, rec);
-  linkByKey.set(rec.key, rec);
-  linkByToken.set(rec.token, rec);
-  linkByDocRole.set(docRoleKey(rec.docId, rec.role), rec);
-}
-
-function unindexLink(rec) {
-  linksById.delete(rec.id);
-  linkByKey.delete(rec.key);
-  linkByToken.delete(rec.token);
-  const slot = docRoleKey(rec.docId, rec.role);
-  if (linkByDocRole.get(slot) === rec) linkByDocRole.delete(slot);
-}
-
-function addTombstone(tomb) {
-  linkTombstones.push(tomb);
-  tombKeyHashes.add(tomb.keyHash);
-  tombTokenHashes.add(tomb.tokenHash);
-  while (linkTombstones.length > LINK_TOMBSTONE_MAX) {
-    const oldest = linkTombstones.shift();
-    tombKeyHashes.delete(oldest.keyHash);
-    tombTokenHashes.delete(oldest.tokenHash);
-  }
-}
-
-function activeLink(docId, role) {
-  return linkByDocRole.get(docRoleKey(docId, role)) || null;
-}
-
-function mintLink(docId, role, createdBy) {
-  let id;
-  do { id = crypto.randomBytes(6).toString("hex"); } while (linksById.has(id));
-  const rec = {
-    id,
-    key: crypto.randomBytes(24).toString("hex"),
-    token: crypto.randomBytes(32).toString("hex"),
-    docId,
-    role,
-    createdAt: new Date().toISOString(),
-    createdBy: createdBy || null
-  };
-  indexLink(rec);
-  return rec;
-}
-
-function revokeLink(rec) {
-  unindexLink(rec);
-  addTombstone({
-    id: rec.id,
-    keyHash: sha256Of(rec.key),
-    tokenHash: sha256Of(rec.token),
-    docId: rec.docId,
-    role: rec.role,
-    revokedAt: new Date().toISOString()
-  });
-}
-
-function linkAnswer(rec) {
-  return { id: rec.id, role: rec.role, key: rec.key, createdAt: rec.createdAt };
-}
-
-let linksWriting = Promise.resolve();
-
-function saveLinks() {
-  if (!PERSIST_LINKS) return Promise.resolve();
-  const write = () => writeFileDurable(LINKS_FILE, JSON.stringify({
-    version: 1,
-    links: Array.from(linksById.values()),
-    revoked: linkTombstones
-  }, null, 2) + "\n", 0o600);
-  const next = linksWriting.then(write, write);
-  linksWriting = next.catch(() => {});
-  return next;
-}
-
-async function linkFor(docId, role, opts) {
-  const existing = activeLink(docId, role);
-  if (existing && !(opts && opts.replace)) return { link: existing, created: false };
-  if (existing) revokeLink(existing);
-  const rec = mintLink(docId, role, opts && opts.by);
-  try {
-    await saveLinks();
-  } catch (err) {
-    unindexLink(rec);
-    throw err;
-  }
-  return { link: rec, created: true };
-}
-
-function revokeLinksOf(docId) {
-  let n = 0;
-  for (const role of LINK_ROLES) {
-    const rec = activeLink(docId, role);
-    if (rec) { revokeLink(rec); n++; }
-  }
-  return n;
-}
-
-function cleanLinkRecord(r) {
-  if (!r || typeof r !== "object") return null;
-  if (!LINK_ID_RE.test(String(r.id)) || !isValidId(r.docId) || LINK_ROLES.indexOf(r.role) === -1) return null;
-  if (typeof r.key !== "string" || !/^[0-9a-f]{48,128}$/.test(r.key)) return null;
-  if (typeof r.token !== "string" || !/^[0-9a-f]{64}$/.test(r.token)) return null;
-  return {
-    id: r.id, key: r.key, token: r.token, docId: r.docId, role: r.role,
-    createdAt: typeof r.createdAt === "string" ? r.createdAt : null,
-    createdBy: typeof r.createdBy === "string" ? r.createdBy : null
-  };
-}
-
-function cleanTombstone(t) {
-  if (!t || typeof t !== "object") return null;
-  if (!SHA_RE.test(String(t.keyHash)) || !SHA_RE.test(String(t.tokenHash))) return null;
-  return {
-    id: String(t.id || ""), keyHash: t.keyHash, tokenHash: t.tokenHash,
-    docId: String(t.docId || ""), role: String(t.role || ""),
-    revokedAt: typeof t.revokedAt === "string" ? t.revokedAt : null
-  };
-}
+const linkStore = createLinkStore({
+  isValidId,
+  persist: PERSIST_LINKS ? (text) => writeFileDurable(LINKS_FILE, text, 0o600) : null
+});
 
 async function loadLinkStore() {
   await fsp.mkdir(LINKS_DIR, { recursive: true, mode: 0o700 });
@@ -215,20 +83,7 @@ async function loadLinkStore() {
                     "aside to start with no links (every link handed out stops working).", { cause: err });
   }
   await fsp.chmod(LINKS_FILE, 0o600).catch(() => {});
-  let skipped = 0;
-  for (const t of (data && Array.isArray(data.revoked)) ? data.revoked : []) {
-    const tomb = cleanTombstone(t);
-    if (tomb) addTombstone(tomb); else skipped++;
-  }
-  for (const r of (data && Array.isArray(data.links)) ? data.links : []) {
-    const rec = cleanLinkRecord(r);
-    if (!rec || linksById.has(rec.id) || linkByKey.has(rec.key) || linkByToken.has(rec.token) ||
-        activeLink(rec.docId, rec.role) || tombKeyHashes.has(sha256Of(rec.key))) {
-      skipped++;
-      continue;
-    }
-    indexLink(rec);
-  }
+  const skipped = linkStore.restore(data);
   if (skipped) console.warn("[splitpage] " + skipped + " unreadable entr" + (skipped === 1 ? "y" : "ies") +
                             " in " + LINKS_FILE + " were ignored");
 }
@@ -334,9 +189,9 @@ function sessionOfToken(given) {
   if (!token) return null;
   if (sameToken(token, ownerToken)) return { role: "edit", scope: "", token };
   if (REVIEW_ACTIVE && sameToken(token, REVIEW_TOKEN)) return { role: "review", scope: "", token };
-  const link = linkByToken.get(token);
+  const link = linkStore.byToken(token);
   if (link) return { role: link.role, scope: link.docId, token };
-  if (tombTokenHashes.size && tombTokenHashes.has(sha256Of(token))) return { revoked: true };
+  if (linkStore.tokenRevoked(token)) return { revoked: true };
   return null;
 }
 
@@ -869,7 +724,7 @@ async function handleLinks(req, res, parts, id, session, who) {
   if (req.method === "GET") {
     const links = [];
     for (const role of LINK_ROLES) {
-      const rec = activeLink(id, role);
+      const rec = linkStore.activeLink(id, role);
       if (rec) links.push(linkAnswer(rec));
     }
     return sendJson(res, 200, { links });
@@ -882,15 +737,15 @@ async function handleLinks(req, res, parts, id, session, who) {
     if (READ_ONLY && role === "edit") return sendJson(res, 403, { error: "read-only" });
     return withDocLock(id, async () => {
       if (!(await readDocMeta(id))) return sendJson(res, 404, { error: "not-found" });
-      const { link, created } = await linkFor(id, role, { replace: body.replace === true, by: who.name });
+      const { link, created } = await linkStore.linkFor(id, role, { replace: body.replace === true, by: who.name });
       return sendJson(res, created ? 201 : 200, linkAnswer(link));
     });
   }
 
-  const rec = LINK_ID_RE.test(linkId) ? linksById.get(linkId) : null;
+  const rec = isLinkId(linkId) ? linkStore.byId(linkId) : null;
   if (!rec || rec.docId !== id) return sendJson(res, 404, { error: "no-such-link" });
-  revokeLink(rec);
-  await saveLinks();
+  linkStore.revokeLink(rec);
+  await linkStore.saveLinks();
   return sendJson(res, 200, { ok: true });
 }
 
@@ -924,11 +779,11 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, { token: ownerToken, role: "edit" });
     }
     const key = body && typeof body.key === "string" ? body.key : "";
-    const link = key ? linkByKey.get(key) : null;
+    const link = key ? linkStore.byKey(key) : null;
     if (link) {
       return sendJson(res, 200, { token: link.token, role: link.role, docId: link.docId, scope: link.docId });
     }
-    if (key && tombKeyHashes.has(sha256Of(key))) {
+    if (key && linkStore.keyRevoked(key)) {
       return sendJson(res, 410, { error: "link-off" });
     }
     if (REVIEW_ACTIVE && ((REVIEW_PIN && sameSecret(body && body.pin, REVIEW_PIN)) ||
@@ -1018,7 +873,7 @@ async function handleApi(req, res, url) {
     if (!isValidId(wanted)) return sendJson(res, 400, { error: "bad-id" });
     return withDocLock(wanted, async () => {
       if (!(await readDocMeta(wanted))) return sendJson(res, 404, { error: "not-found" });
-      const { link } = await linkFor(wanted, "review", { by: who.name });
+      const { link } = await linkStore.linkFor(wanted, "review", { by: who.name });
       return sendJson(res, 200, {
         reviewAvailable: true,
         reviewKey: link.key,
@@ -1272,7 +1127,7 @@ async function handleApi(req, res, url) {
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
     if (role === "review") return sendJson(res, 403, { error: "review-only" });
     return withDocLock(id, async () => {
-      if (revokeLinksOf(id)) await saveLinks();
+      if (linkStore.revokeLinksOf(id)) await linkStore.saveLinks();
       try {
         await fsp.unlink(docPath(id));
       } catch (err) {
