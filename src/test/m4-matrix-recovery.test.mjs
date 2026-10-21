@@ -22,6 +22,7 @@ import { cloneState } from "../core/document/clone.ts";
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
+const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
@@ -116,7 +117,7 @@ function browserStore(wrap) {
 async function endCase() {
   clearDirty();
   await flushDraftNow();
-  S.draftServerResume = null;
+  draftResume().dropServerResume();
   window.__hostedTest.setSession({ docId: null });
   drafts().browser.useIndexedDB(new IDBFactory());
   exportModule.setAutoSaveEnabled(true);
@@ -136,7 +137,7 @@ function toasts() {
 
 async function resumeBrowserDraft(serverId, outcome) {
   assert.equal(await armBrowserServerDraft(serverId), true, "the draft was taken for restoring");
-  S.draftServerResume.onDone(outcome || "server-resumed");
+  draftResume().serverResume().onDone(outcome || "server-resumed");
   await until(() => !drafts().restorePending(), "the restore settled");
 }
 
@@ -187,7 +188,7 @@ rightToday("B2", "with Web Locks a live writer's draft is not taken over, and it
     serverDocument("srv-c", "Shared", "c");
 
     assert.equal(await armBrowserServerDraft("srv-c"), false, "a live writer's draft is not taken over");
-    assert.equal(S.draftServerResume, null, "nothing is waiting to resume");
+    assert.equal(draftResume().serverResume(), null, "nothing is waiting to resume");
     assert.equal(drafts().restorePending(), false);
     assert.equal((await idb.store.get(draftKey("srv-c"))).writerId, OTHER, "the draft still belongs to the other tab");
 
@@ -316,7 +317,7 @@ rightToday("B6", "a corrupt draft record reads as none: nothing is resumed, offe
   await idb.store.put(record("srv-k", doc, OTHER));
   serverDocument("srv-k", "Corrupt", "1");
   await resumeBrowserDraft("srv-k");
-  S.draftServerResume = null;
+  draftResume().dropServerResume();
   const kinds = {
     "not JSON": "{ this is not json",
     "JSON that is not a document": JSON.stringify({ title: "x" }),
@@ -326,7 +327,7 @@ rightToday("B6", "a corrupt draft record reads as none: nothing is resumed, offe
     await idb.store.put(record("srv-k", doc, OTHER, { stateJson: stateJson }));
     serverDocument("srv-k", "Corrupt", "1");
     assert.equal(await armBrowserServerDraft("srv-k"), false, kind + ": not resumed");
-    assert.equal(S.draftServerResume, null, kind + ": nothing waits");
+    assert.equal(draftResume().serverResume(), null, kind + ": nothing waits");
     assert.equal(drafts().restorePending(), false, kind + ": no restore is pending");
     window.__hostedTest.setSession({ docId: null });
     assert.equal(await offerBrowserDraftAfterLinkOff("srv-k"), false, kind + ": not offered after a link was turned off");

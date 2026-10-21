@@ -2,7 +2,7 @@ import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { S } from "./_state.js";
 import { conn, fileHome, home, importHome, stillOnServer } from "./_home.js";
 import { migrateRows } from "./02-state.js";
-import { inlineStateJson, persist } from "../adapters/storage/02c-blobs.js";
+import { inlineStateJson, internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import {
   copyDocHistorySafe,
@@ -18,6 +18,7 @@ import {
   browserDrafts,
   captureRestore,
   desktopDrafts,
+  draftResume,
   recoveryStarted,
   stillRestoring,
   useBrowserDraftFactory
@@ -34,7 +35,6 @@ import { SCHEMA_VERSION } from "../core/document/fields.ts";
 import { createCaptureSchedule } from "../application/recovery/capture-schedule.ts";
 import { cloneState } from "../core/document/clone.ts";
 
-export var draftRestorePending;
 var draftOnDisk;
 
 var draftTiming = {
@@ -89,7 +89,10 @@ export function draftRecoveryPorts() {
     limits: DRAFT_LIMITS,
     now: function () { return Date.now(); },
     writerId: browserWriterId,
-    desktop: function () { return S.DESKTOP; }
+    desktop: function () { return S.DESKTOP; },
+    sessionStorage: function () { return sessionStorage; },
+    localStorage: function () { return localStorage; },
+    internImage: internDataUrl
   };
 }
 
@@ -247,7 +250,7 @@ function draftOriginSignature(origin) {
 function captureAndSendDraft(keepClean) {
   draftSchedule.cancel();
   if (!draftWriterLive() || !S.state) return Promise.resolve(null);
-  if (draftRestorePending) { draftSchedule.keepPending(); return Promise.resolve(null); }
+  if (draftResume().restorePending()) { draftSchedule.keepPending(); return Promise.resolve(null); }
   if (draftInFlight) { draftSchedule.keepPending(); return draftInFlight; }
 
   var keepCleanFile = !S.dirty && keepClean === true && !!S.DESKTOP && draftOriginOf().kind === "file";
@@ -531,7 +534,7 @@ function showDraftPendingBanner(t, title) {
     btn.addEventListener("click", function () {
       var waiting = draftPendingFor;
       if (!waiting) { hideDraftPendingBanner(); return; }
-      S.draftServerResume = null;
+      draftResume().dropServerResume();
       hideDraftPendingBanner();
       recoverDraftAsUnsavedCopy(waiting,
         "These recovered changes are open here as an unsaved copy — the server document they came " +
@@ -586,14 +589,14 @@ export function armServerDraftResume(t) {
       resolveSettle(outcome);
     }
   };
-  S.draftServerResume = {
+  draftResume().armServerResume({
     id: String(origin.server.docId),
     rev: origin.server.rev || 0,
     base: base,
     mine: mine,
     at: t.header.writtenAt || 0,
     onDone: function (outcome) { draftServerSettle.settle(outcome); }
-  };
+  });
 }
 
 function draftNormalizeBase(v) {
@@ -630,13 +633,14 @@ function draftRaceTimeout(promise, ms) {
 }
 
 async function restoreServerDraft(t, mine, origin) {
+  var resume = draftResume();
   var server = origin.server || {};
   var title = draftTitleOf(mine, server.docId);
   await draftWaitForServerDetect();
 
   var headerBase = draftNormalizeBase(server.base);
   if (headerBase && headerBase !== draftNormalizeBase(conn.serverUrl)) {
-    S.draftServerResume = null;
+    resume.dropServerResume();
     if (draftServerSettle) draftServerSettle.settle("server-copy");
     recoverDraftAsUnsavedCopy(t,
       "These recovered changes came from a document on another server — they are open here as an " +
@@ -645,7 +649,7 @@ async function restoreServerDraft(t, mine, origin) {
   }
 
   if (S.serverMode.checked && !S.serverMode.available) {
-    S.draftServerResume = null;
+    resume.dropServerResume();
     if (draftServerSettle) draftServerSettle.settle("server-copy");
     recoverDraftAsUnsavedCopy(t,
       "These recovered changes belong to “" + title + "” on a server this copy can't reach — they " +
@@ -672,7 +676,7 @@ async function restoreServerDraft(t, mine, origin) {
   if (outcome === "server-resumed") return "server-resumed";
   if (outcome === "server-copy") return "server-copy";
   if (outcome === "replaced") return keptForNextLaunch();
-  S.draftServerResume = null;
+  resume.dropServerResume();
   recoverDraftAsUnsavedCopy(t,
     "“" + title + "” is no longer on the server — the changes recovered from the last session are " +
     "open here as an unsaved copy.", mine);
@@ -847,7 +851,8 @@ function browserDraftRestoreDone(t, outcome) {
 }
 
 export function armBrowserServerDraft(docId) {
-  if (S.DESKTOP || browserDraftsOff || !docId || draftRestorePending || S.draftServerResume) return Promise.resolve(false);
+  var resume = draftResume();
+  if (S.DESKTOP || browserDraftsOff || !docId || resume.restorePending() || resume.serverResume()) return Promise.resolve(false);
   if (conn.role === "review") return Promise.resolve(false);
   var base = draftBaseOf(conn.serverUrl, location.href);
   if (!base) return Promise.resolve(false);
@@ -856,11 +861,11 @@ export function armBrowserServerDraft(docId) {
   return browserDraftStore().get(key).then(function (rec) {
     if (!rec) return false;
     return browserWriterIsLive(rec.writerId).then(function (live) {
-      if (live || !stillOnServer(via) || draftRestorePending || S.draftServerResume) return false;
+      if (live || !stillOnServer(via) || resume.restorePending() || resume.serverResume()) return false;
       var t = takenFromBrowserDraft(rec, key);
       armServerDraftResume(t);
-      if (!S.draftServerResume) return false;
-      draftRestorePending = true;
+      if (!resume.serverResume()) return false;
+      resume.setRestorePending(true);
       applyTakenDraft(t);
       return true;
     });
@@ -868,7 +873,8 @@ export function armBrowserServerDraft(docId) {
 }
 
 export function offerBrowserDraftAfterLinkOff(docId) {
-  if (S.DESKTOP || browserDraftsOff || draftRestorePending || onServerDoc() || S.dirty) return Promise.resolve(false);
+  var resume = draftResume();
+  if (S.DESKTOP || browserDraftsOff || resume.restorePending() || onServerDoc() || S.dirty) return Promise.resolve(false);
   var base = draftBaseOf(conn.serverUrl, location.href);
   if (!base) return Promise.resolve(false);
   var store = browserDraftStore();
@@ -888,7 +894,7 @@ export function offerBrowserDraftAfterLinkOff(docId) {
   }).then(function (pick) {
     return pick ? store.get(pick.key) : null;
   }).then(function (rec) {
-    if (!rec || onServerDoc() || S.dirty || draftRestorePending) return false;
+    if (!rec || onServerDoc() || S.dirty || resume.restorePending()) return false;
     var mine = draftMigrate(rec.stateJson);
     if (!mine) return false;
     var t = takenFromBrowserDraft(rec, rec.key);
@@ -904,11 +910,12 @@ export function offerBrowserDraftAfterLinkOff(docId) {
 
 export function desktopDraftTaker() {
   var desktop = S.DESKTOP;
-  if (!(desktop && draftRestorePending && typeof desktop.takeDraft === "function")) return null;
+  if (!(desktop && draftResume().restorePending() && typeof desktop.takeDraft === "function")) return null;
   return function () { return desktop.takeDraft(); };
 }
 
 export async function applyTakenDraft(t) {
+  var resume = draftResume();
   var outcome;
   try {
     outcome = await runDraftRestore(t);
@@ -918,7 +925,7 @@ export async function applyTakenDraft(t) {
     showToast("Could not restore the changes from the last session — they have been kept for the " +
       "next launch.", "warn", true);
   }
-  draftRestorePending = false;
+  resume.setRestorePending(false);
   if (S.DESKTOP && typeof S.DESKTOP.draftRestoreDone === "function") {
     try { S.DESKTOP.draftRestoreDone(outcome); } catch (e2) {}
   }
@@ -929,7 +936,7 @@ export async function applyTakenDraft(t) {
 }
 
 export function __init() {
-  draftRestorePending = !!(S.DESKTOP && S.DESKTOP.hasDraftToRestore);
+  draftResume().setRestorePending(!!(S.DESKTOP && S.DESKTOP.hasDraftToRestore));
 
   draftOnDisk = !!(S.DESKTOP && S.DESKTOP.hasDraftToRestore);
 
@@ -964,7 +971,7 @@ export function __init() {
           onDisk: draftOnDisk,
           stopped: draftStopped,
           slow: draftSchedule.slow(),
-          restorePending: draftRestorePending
+          restorePending: draftResume().restorePending()
         };
       },
       setTiming: function (t) {
@@ -974,9 +981,9 @@ export function __init() {
               Object.prototype.hasOwnProperty.call(draftTiming, k)) draftTiming[k] = t[k];
         }
       },
-      restorePending: function () { return draftRestorePending; },
+      restorePending: function () { return draftResume().restorePending(); },
       applyForTest: function (taken) {
-        draftRestorePending = true;
+        draftResume().setRestorePending(true);
         armServerDraftResume(taken);
         return applyTakenDraft(taken);
       },

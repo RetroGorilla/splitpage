@@ -172,7 +172,7 @@ function fakes(): Fakes {
     transitions: transitionPorts(),
     recovery: () => {
       note("recovery");
-      return { indexedDB: null, limits: { maxAgeMs: 1, maxCount: 1, maxBytes: 1 }, now: () => 0, writerId: "w", desktop: () => null };
+      return { indexedDB: null, limits: { maxAgeMs: 1, maxCount: 1, maxBytes: 1 }, now: () => 0, writerId: "w", desktop: () => null, sessionStorage: () => null, localStorage: () => null, internImage: () => {} };
     },
     keyTarget: new EventTarget(),
     undo,
@@ -362,7 +362,7 @@ test("failed partial startup: a timers port, undo adapter or key target that lac
 
 test("failed partial startup: an actions, exporters or recovery factory that returns something malformed fails its step, names what is missing and leaves no owner", () => {
   const registryMethods = ["register", "has", "shortcuts", "view", "list", "invoke", "presentRefusals"] as const;
-  const recoveryMethods = ["now", "desktop"] as const;
+  const recoveryMethods = ["now", "desktop", "sessionStorage", "localStorage", "internImage"] as const;
   type Spoilt = [string, (f: Fakes) => WiringDeps | Record<string, unknown>, string, string];
   const cases: Spoilt[] = [
     ["actions nothing", (f) => ({ ...f.deps, actions: () => undefined }), "action registry", "the actions dependency returned no action registry"],
