@@ -30,7 +30,7 @@ import {
   stopUndoFeature,
   stopVideoFeature,
   stopWriterFeature
-} from "../js/22a-editor-wiring.js";
+} from "./wiring/editor.ts";
 import { mountFindFeature, mountTagsFeature, stopFindFeature, stopTagsFeature } from "../js/22b-production-wiring.js";
 import { mountCommentsFeature, stopCommentsFeature } from "../js/22c-comments-wiring.js";
 import {
