@@ -51,22 +51,6 @@ export async function loadLastFileHandle() {
 S.savedRange = null;
 S.savedRangeCell = null;
 
-S.prompterSpeed = 42;
-S.prompterRAF = null;
-S.prompterLastTs = null;
-S.recognition = null;
-S.voiceStarting = false;
-S.promptWords = [];
-S.wordCursor = -1;
-S.speakable = [];
-S.speakNorms = [];
-S.speakCursor = -1;
-S.voiceRestarts = 0;
-S.voiceSession = 0;
-S.voiceStream = null;
-S.finalTranscript = "";
-S.interimTranscript = "";
-
 export function __init() {
   PAGE_SHELL = "<!doctype html>" + document.documentElement.outerHTML;
 
