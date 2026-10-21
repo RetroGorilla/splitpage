@@ -616,6 +616,10 @@ export function analyzeScript(path, text) {
         else for (const el of clause.namedBindings.elements) names.push((el.propertyName ?? el.name).text);
       }
       if (spec !== null) imports.push({ spec, names, typeOnly: Boolean(clause?.isTypeOnly), kind: "import", line: at(node) });
+    } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+      const spec = literalText(node.moduleReference.expression);
+      if (spec !== null) imports.push({ spec, names: [node.name.text], typeOnly: node.isTypeOnly, kind: "import-equals", line: at(node) });
+      else unresolved.push({ kind: "import-equals", expression: node.getText(sf).replace(/\s+/g, " "), line: at(node) });
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
       const spec = literalText(node.moduleSpecifier);
       const names = node.exportClause && ts.isNamedExports(node.exportClause)
@@ -959,11 +963,26 @@ export function isNumbered(path) {
   return /^src\/js\/[0-9][^/]*$/.test(path) && isScript(path);
 }
 
-export function legacyMeasurements(text) {
+export function legacyMeasurements(text, path = "legacy.js") {
   const lines = text.split("\n");
   const directWrite = /\bS\.state(\.[A-Za-z_]+|\[[^\]]+\])*\s*(=[^=]|\+=|-=)|\bS\.state\.[a-zA-Z_]+\.(push|splice|pop|shift|unshift|sort)\(/;
+  const sf = parseScript(path, text);
+  const references = new Set([...text.matchAll(/\bS\.[A-Za-z_]+/g)].map((match) => match.index));
+  const visit = (node) => {
+    if (ts.isIdentifier(node) && node.text === STATE_EXPORT && isReference(node)
+      || ts.isPropertyAccessExpression(node) && node.name.text === STATE_EXPORT) {
+      const n = outermost(node);
+      const p = n.parent;
+      const access = (ts.isPropertyAccessExpression(p) || ts.isElementAccessExpression(p)) && p.expression === n;
+      const alias = ts.isIdentifier(node) && (ts.isVariableDeclaration(p) && p.initializer === n
+        || ts.isBinaryExpression(p) && p.operatorToken.kind === ts.SyntaxKind.EqualsToken && p.right === n);
+      if (access || alias) references.add((ts.isPropertyAccessExpression(node) ? node.name : node).getStart(sf));
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
   return {
-    references: [...text.matchAll(/\bS\.[A-Za-z_]+/g)].length,
+    references: references.size,
     directWrites: lines.filter((line) => directWrite.test(line)).length,
     lines: lines.length - 1
   };
@@ -990,7 +1009,7 @@ export function legacyViolations(modules) {
   const out = [];
   for (const m of modules.values()) {
     if (!m.path.startsWith("src/")) continue;
-    const counts = legacyMeasurements(m.text);
+    const counts = legacyMeasurements(m.text, m.path);
     const directWrites = legacyWriteCount(m.path, m.text);
     if (isNumbered(m.path)) out.push({ rule: "legacy-file", source: m.path, target: "src/js" });
     if (counts.references) out.push({ rule: "legacy-state-refs", source: m.path, target: "global:S", count: counts.references });
@@ -1013,7 +1032,7 @@ export function legacyMetrics(modules) {
   const app = new Map([...modules].filter(([p]) => p.startsWith("src/") && layerOf(p) !== "tests"));
   const tests = [...modules.values()].filter((m) => m.path.startsWith("src/test/"));
   const numbered = [...app.values()].filter((m) => isNumbered(m.path));
-  const total = (items, field) => items.reduce((sum, m) => sum + legacyMeasurements(m.text)[field], 0);
+  const total = (items, field) => items.reduce((sum, m) => sum + legacyMeasurements(m.text, m.path)[field], 0);
   const state = modules.get(STATE_MODULE);
   let stateFields = 0;
   if (state) {
