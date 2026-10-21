@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
 import { writerOpen } from "./19-writer.js";
+import { prompterIsOpen } from "../application/prompter-state.ts";
 import { appActions } from "../legacy/app-actions.ts";
 
 export var SCRIPT_SCALE_KEY = "splitpage-script-scale";
@@ -168,7 +169,7 @@ function hideReadoutSoon() {
 }
 
 export function scriptViewActive() {
-  return !!S.state && !S.prompterOpen && !writerOpen &&
+  return !!S.state && !prompterIsOpen() && !writerOpen &&
     !document.documentElement.classList.contains("is-newtab-open");
 }
 

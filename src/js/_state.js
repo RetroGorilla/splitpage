@@ -27,7 +27,6 @@ export const S = {
 
   gearGroupBy: undefined,
 
-  importModeTouched: undefined,
 
   initialStateReady: undefined,
 
@@ -47,13 +46,10 @@ export const S = {
 
   prompterLastTs: undefined,
 
-  prompterOpen: undefined,
 
-  prompterPlaying: undefined,
 
   prompterRAF: undefined,
 
-  prompterSkipShot: undefined,
 
   prompterSpeed: undefined,
 
@@ -91,7 +87,6 @@ export const S = {
 
   untaggedMutedFor: undefined,
 
-  voiceFollowActive: undefined,
 
   voiceRestarts: undefined,
 
