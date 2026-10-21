@@ -13,8 +13,6 @@ export const S = {
 
   docIdWrittenOut: undefined,
 
-  draftServerResume: undefined,
-
   editSeq: undefined,
 
   initialStateReady: undefined,

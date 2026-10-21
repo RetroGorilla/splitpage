@@ -6,9 +6,9 @@ import { showToast } from "./12-dirty-toast.js";
 import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
 import { deliverFile, onFileMenuChoice } from "./18-local-files.js";
 import { addServerBookmark } from "./20e-connect.js";
-import { draftRestorePending } from "./20g-drafts.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
+import { draftResume } from "../legacy/recovery-bridge.ts";
 import { joinErrorText } from "../../shared/server-links.js";
 import { checksumText } from "../../shared/text.js";
 
@@ -275,7 +275,7 @@ async function onboardEligibleForAutoShow() {
   if (!seedCheckPasses()) return false;
   if (readOnboardKey()) return false;
   if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
-  if (S.DESKTOP && draftRestorePending) return false;
+  if (S.DESKTOP && draftResume().restorePending()) return false;
   if (home.kind === "server" || home.kind === "file") return false;
   if (S.DESKTOP) {
     if (!S.DESKTOP.firstTabOfLaunch || S.DESKTOP.hadPriorSession ||

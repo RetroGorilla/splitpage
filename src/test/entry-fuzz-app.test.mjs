@@ -11,6 +11,7 @@ await bootApp();
 
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
+const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { applyMerge } = await import("../js/03-sync.js");
 const { mergeUndo } = await import("../legacy/editor-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
@@ -631,13 +632,13 @@ test("a server open that takes a pending browser draft and finds a state that is
     assert.deepEqual(asked, ["GET api/docs/doc-draft"]);
     return result;
   });
-  assert.ok(S.draftServerResume, "the browser draft was taken");
+  assert.ok(draftResume().serverResume(), "the browser draft was taken");
   assert.equal(opened, false);
   assert.deepEqual(toasts(), ["That document is empty."]);
   assert.equal(modal.hidden, false);
   unchangedBy("server open with a draft", start, start.epoch, start.gen);
   assert.notEqual(window.__hostedTest.home().kind, "server");
-  S.draftServerResume.onDone("not-found");
+  draftResume().serverResume().onDone("not-found");
   await idle();
   await store.remove(key);
   modal.hidden = true;

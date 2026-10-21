@@ -1,13 +1,10 @@
-import { HISTORY_SNAP_ID_RE, historyUtf8Length, sanitizeHistoryMeta } from "../../shared/history-policy.js";
+import { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE, historyUtf8Length, sanitizeHistoryMeta } from "../../shared/history-policy.js";
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { S } from "./_state.js";
 import { conn, fileHome, home, homeConn, serverHomeId, setHome, normalizeServerUrl } from "./_home.js";
 import { reassignDocId } from "./02b-doc-id.js";
 import { setBackend as setBlobBackend } from "../adapters/storage/02c-blobs.js";
-import {
-  HISTORY_OLDER_KEY,
-  isPristineSeedDocument
-} from "./03a-history-store.js";
+import { isPristineSeedDocument } from "./03a-history-store.js";
 import { hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "./04-richtext.js";
@@ -16,7 +13,8 @@ import { detectServer, openServerDoc, pointTabAt } from "./13-hosted.js";
 import { saveDoc } from "./14-export.js";
 import { openProjectFile } from "./18-local-files.js";
 import { openServersDialog } from "./20e-connect.js";
-import { draftRestorePending, flushDraftNow } from "./20g-drafts.js";
+import { flushDraftNow } from "./20g-drafts.js";
+import { draftResume, recoveryStarted } from "../legacy/recovery-bridge.ts";
 import { concatBytes, strBytes } from "../adapters/formats/bytes.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { mimeForFilename } from "../../shared/file-names.js";
@@ -78,7 +76,7 @@ export function handedDocumentSettled() {
 export function notifyDesktopDocumentState() {
   if (!S.DESKTOP || !S.state) return;
   if (awaitingHandedDocument) return;
-  var restoring = typeof draftRestorePending !== "undefined" && draftRestorePending;
+  var restoring = recoveryStarted() && draftResume().restorePending();
   var c = homeConn();
   S.DESKTOP.setDocumentState({
     title: S.state.title || "Untitled Script",
