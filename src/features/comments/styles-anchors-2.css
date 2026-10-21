@@ -19,7 +19,7 @@
     min-width: 16px;
     height: 14px;
     box-sizing: border-box;
-    margin-left: 2px;
+    margin-left: var(--space-2);
     padding: 0 3px;
     border: 1px solid var(--audio);
     border-radius: 4px 4px 4px 1px;

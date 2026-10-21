@@ -1,7 +1,7 @@
   @media (max-width: 999px) {
-    .topbar-row { column-gap: 12px; }
-    .topbar-left { gap: 8px; }
-    .toolbar { gap: 6px; }
+    .topbar-row { column-gap: var(--space-12); }
+    .topbar-left { gap: var(--space-8); }
+    .toolbar { gap: var(--space-6); }
     .btn.btn-mode {
       padding: 0 7px;
       transition: background var(--dur-fast) var(--ease-standard),

@@ -1,4 +1,4 @@
-  .btn.btn-quiet.btn-brand { gap: 8px; padding: 0 4px 0 6px; }
+  .btn.btn-quiet.btn-brand { gap: var(--space-8); padding: 0 var(--space-4) 0 var(--space-6); }
   .topbar-left > .menu-wrap { margin-left: -6px; }
   .btn-brand .brand-mark { display: block; flex: none; width: 22px; height: 22px; }
   .btn-brand .brand-name {

@@ -26,7 +26,7 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    column-gap: 24px;
+    column-gap: var(--space-24);
     height: 60px;
     box-sizing: border-box;
     padding: 0 40px;
@@ -41,10 +41,10 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-  .pp-where { gap: 12px; }
+  .pp-where { gap: var(--space-12); }
   .pp-scene-pos { font-size: 16px; line-height: 20px; }
   .pp-scene-start { font-size: 14px; line-height: 20px; color: var(--text-faint); }
-  .pp-clock { gap: 10px; }
+  .pp-clock { gap: var(--space-10); }
   .pp-elapsed { font-size: 30px; line-height: 36px; letter-spacing: -0.01em; }
   .pp-remaining { font-size: 16px; line-height: 20px; font-weight: 450; color: var(--text-faint); }
   .pp-voice-state {
@@ -52,9 +52,9 @@
     align-self: start;
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: var(--space-10);
     min-width: 0;
-    margin-top: 20px;
+    margin-top: var(--space-20);
     text-align: right;
     background: var(--pp-ground);
     box-shadow: 0 0 0 10px var(--pp-ground);
@@ -70,7 +70,7 @@
     border-radius: 50%;
     background: var(--tally);
   }
-  .pp-voice-state .pp-lamp { display: none; margin-top: 6px; animation: pp-rec-pulse var(--dur-pulse) ease-in-out infinite; }
+  .pp-voice-state .pp-lamp { display: none; margin-top: var(--space-6); animation: pp-rec-pulse var(--dur-pulse) ease-in-out infinite; }
   .pp-voice-state.is-live .pp-lamp { display: block; }
   @keyframes pp-rec-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
   @media (prefers-reduced-motion: reduce) {

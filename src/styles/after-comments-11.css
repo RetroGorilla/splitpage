@@ -20,7 +20,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 4px;
+      gap: var(--space-4);
       padding: 0;
       border: 0;
       background: transparent;
