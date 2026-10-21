@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { ensureBytes } from "./02c-blobs.js";
+import { ensureBytes } from "../adapters/storage/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import { stampRow } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";

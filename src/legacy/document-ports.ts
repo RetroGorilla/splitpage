@@ -7,7 +7,7 @@ import type { ImageIngestion } from "../core/document/media.ts";
 import type { MigratePorts } from "../core/migrate.ts";
 import { createProductionReaders } from "../core/production/readers.ts";
 import type { ProductionReaders } from "../core/production/ports.ts";
-import { blobStore } from "../js/02c-blobs.js";
+import { blobStore } from "../adapters/storage/02c-blobs.js";
 import { cacheSeal } from "./cache-freeze.ts";
 import { cellOf } from "./richtext.ts";
 

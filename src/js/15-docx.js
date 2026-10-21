@@ -1,5 +1,5 @@
-import { internDataUrl, queuePersist, rowImage } from "./02c-blobs.js";
-import { morePictureRefs, rowVideoLinks } from "./02d-gallery.js";
+import { internDataUrl, queuePersist, rowImage } from "../adapters/storage/02c-blobs.js";
+import { morePictureRefs, rowVideoLinks } from "../adapters/storage/02d-gallery.js";
 import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
 import {
   PRINT_COLORS,

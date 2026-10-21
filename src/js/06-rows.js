@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { internDataUrl, persist } from "./02c-blobs.js";
+import { internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
 import { findRowIndex } from "./03-sync.js";
 import { safeHref, safeId, storedHtmlFromDom } from "./04-richtext.js";
 import { armDeleteButton, disarmDeleteButton, render, syncFieldFromDom } from "./05-render.js";

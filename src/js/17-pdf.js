@@ -1,4 +1,4 @@
-import { morePictureRefs, rowVideoLinks, videoLinkText } from "./02d-gallery.js";
+import { morePictureRefs, rowVideoLinks, videoLinkText } from "../adapters/storage/02d-gallery.js";
 import {
   PRINT_COLORS,
   STATUS_PRINT,

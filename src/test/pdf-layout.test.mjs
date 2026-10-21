@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
-import { intern } from "../js/02c-blobs.js";
+import { intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { commentEntries } from "../js/10-comments.js";
 import { buildPdf, pdfCommentImagesFor } from "../js/17-pdf.js";

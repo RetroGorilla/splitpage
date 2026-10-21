@@ -11,7 +11,7 @@ import {
   reassignDocId,
   standaloneHtmlFor
 } from "./02b-doc-id.js";
-import { inlineStateImages, internDataUrl, missingInlineImages, queuePersist, rowImageDataUrl } from "./02c-blobs.js";
+import { inlineStateImages, internDataUrl, missingInlineImages, queuePersist, rowImageDataUrl } from "../adapters/storage/02c-blobs.js";
 import { cloneState, setBaseState, stashLocalWork } from "./03-sync.js";
 import { tagFieldOccurrences } from "./07-production-tags.js";
 import { handleImportFile, parseMarkdownTable } from "./11-import.js";
