@@ -1045,7 +1045,7 @@ try {
 
   const aliased = attempt(repo, { "src/js/a.js": 'import { S as T } from "./_state.js";\nimport { b } from "./b.js";\nexport function a() { T["dirty"] = true; return b(); }\n' });
   eq("an element-access write through an aliased import fails", aliased.code, 1);
-  eq("it names the member and the removed literal reference", lines(aliased, ""), ["dep-report: FAILED", "new state-write: src/js/a.js:3 -> global:S.dirty", "resolved legacy-state-refs: src/js/a.js -> global:S"]);
+  eq("it names the member and preserves the aliased reference", lines(aliased, ""), ["dep-report: FAILED", "new state-write: src/js/a.js:3 -> global:S.dirty"]);
 
   const viaAlias = attempt(repo, { "src/js/a.js": 'import { S } from "./_state.js";\nimport { b } from "./b.js";\nexport function a() {\n  const st = S.state;\n  st.rows.push(1);\n  return b();\n}\n' });
   eq("a mutating call through a local alias fails", viaAlias.code, 1);
@@ -1203,6 +1203,57 @@ try {
   const moreRefs = attempt(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] + "void S.dirty;\n" });
   eq("one more reference to an existing S field fails", moreRefs.code, 1);
   eq("the reference count guard names its file", lines(moreRefs, "new legacy-state-refs"), ["new legacy-state-refs: src/js/00-a.js -> global:S"]);
+  for (const [label, declaration, name] of [
+    ["named import", 'import { S as GuardState } from "./_state.js";', "GuardState"],
+    ["namespace import", 'import * as GuardModule from "./_state.js";', "GuardModule.S"],
+    ["import-equals", 'import GuardModule = require("./_state.js");', "GuardModule.S"]
+  ]) {
+    const path = "src/js/alias.cts";
+    const original = `${declaration}\nvoid ${name}.dirty;\n${name}.state.rows.push(1);\n`;
+    const aliasedRepo = cliRepo({ ...STATE_FILE, [path]: original, "src/js/fresh.cts": "export const value = 1;\n" });
+    eq(`init records an existing ${label} alias`, cli(aliasedRepo, "--init").code, 0);
+    eq(`the existing ${label} alias starts clean`, cli(aliasedRepo).code, 0);
+    eq(`the ${label} alias uses the canonical reference and write keys`, JSON.parse(readFileSync(join(aliasedRepo, "tools/dep-baseline.json"), "utf8")).exceptions.filter((e) => e.count !== undefined).map(({ rule, target, count }) => ({ rule, target, count })), [
+      { rule: "legacy-state-refs", target: "global:S", count: 2 },
+      { rule: "state-write", target: "direct:S.state", count: 1 }
+    ]);
+    const growth = attempt(aliasedRepo, { [path]: original + `void ${name}.dirty;\n${name}.state.rows.push(2);\n` });
+    eq(`an existing ${label} alias gaining a read and write fails`, growth.code, 1);
+    eq(`both ratchets catch growth through the ${label} alias`, lines(growth, "new "), [
+      `new legacy-state-refs: ${path} -> global:S`,
+      `new state-write: ${path} -> direct:S.state`
+    ]);
+    const fresh = attempt(aliasedRepo, { "src/js/fresh.cts": `${declaration}\nvoid ${name}.dirty;\n` });
+    eq(`a new ${label} alias in an existing file fails`, fresh.code, 1);
+    eq(`the reference ratchet catches a newly imported ${label} alias`, lines(fresh, "new legacy-state-refs"), ["new legacy-state-refs: src/js/fresh.cts -> global:S"]);
+    const renamed = original.replaceAll("GuardState", "RenamedState").replaceAll("GuardModule", "RenamedModule");
+    eq(`renaming the ${label} alias preserves its allowances`, attempt(aliasedRepo, { [path]: renamed }).code, 0);
+    writeFiles(aliasedRepo, { [path]: renamed });
+    const baselineBeforePrune = readFileSync(join(aliasedRepo, "tools/dep-baseline.json"), "utf8");
+    eq(`pruning a renamed ${label} alias succeeds`, cli(aliasedRepo, "--prune").code, 0);
+    eq(`pruning a renamed ${label} alias keeps every allowance`, readFileSync(join(aliasedRepo, "tools/dep-baseline.json"), "utf8"), baselineBeforePrune);
+  }
+  const unresolvedState = cliRepo({ ...STATE_FILE, "src/js/alias.cts": 'import * as GuardModule from "./_state.js";\nvoid GuardModule.S.dirty;\n' });
+  eq("init records a statically resolved state namespace", cli(unresolvedState, "--init").code, 0);
+  for (const [label, text] of [
+    ["computed namespace member", 'import * as GuardModule from "./_state.js";\nvoid GuardModule[key].dirty;\n'],
+    ["escaped namespace", 'import * as GuardModule from "./_state.js";\nconsume(GuardModule);\n'],
+    ["dynamic import callback", 'import("./_state.js").then(({ S: GuardState }) => GuardState.dirty);\n'],
+    ["computed require destructuring", 'const { [key]: GuardState } = require("./_state.js");\nvoid GuardState.dirty;\n']
+  ]) {
+    const unknown = attempt(unresolvedState, { "src/js/alias.cts": text });
+    eq(`an unresolved state ${label} fails`, unknown.code, 1);
+    check(`the state ${label} explains the resolution failure`, unknown.err.includes("cannot be resolved statically"), unknown.err);
+  }
+  const unresolvedBaseline = readFileSync(join(unresolvedState, "tools/dep-baseline.json"), "utf8");
+  writeFiles(unresolvedState, { "src/js/alias.cts": 'import * as GuardModule from "./_state.js";\nvoid GuardModule[key].dirty;\n' });
+  for (const args of [["--accept", "unresolved state import"], ["--prune"]]) {
+    eq(`${args[0]} refuses unresolved state imports`, cli(unresolvedState, ...args).code, 1);
+    eq(`${args[0]} preserves unresolved state allowances`, readFileSync(join(unresolvedState, "tools/dep-baseline.json"), "utf8"), unresolvedBaseline);
+  }
+  const unknownStateInit = cliRepo({ ...STATE_FILE, "src/js/alias.cts": 'import * as GuardModule from "./_state.js";\nconsume(GuardModule);\n' });
+  eq("init refuses an unresolved state import", cli(unknownStateInit, "--init").code, 1);
+  eq("init writes no baseline for an unresolved state import", existsSync(join(unknownStateInit, "tools/dep-baseline.json")), false);
   for (const [label, reference] of [
     ["optional chaining", "S?.dirty"],
     ["parentheses", "(S).dirty"],
@@ -1337,7 +1388,45 @@ for (const [text, expected] of [
 ]) {
   eq(`the import-equals parser handles ${text}`, analyzeScript("src/js/00-a.cts", text).imports, [expected]);
 }
+for (const [label, declaration, name] of [
+  ["named", 'import { S as GuardState } from "./_state.js";', "GuardState"],
+  ["namespace", 'import * as GuardModule from "./_state.js";', "GuardModule.S"],
+  ["namespace bracket", 'import * as GuardModule from "./_state.js";', 'GuardModule["S"]'],
+  ["import-equals", 'import GuardModule = require("./_state.js");', "GuardModule.S"],
+  ["import-equals bracket", 'import GuardModule = require("./_state.js");', 'GuardModule["S"]'],
+  ["namespace named S", 'import * as S from "./_state.js";', "S.S"],
+  ["re-exported", 'import { Stable as GuardState } from "./bridge.js";', "GuardState"],
+  ["default re-exported", 'import GuardState from "./bridge.js";', "GuardState"]
+]) {
+  const files = {
+    ...STATE_FILE,
+    "src/js/bridge.js": 'export { S as Stable, S as default } from "./_state.js";\n',
+    "src/js/alias.cts": `${declaration}\nvoid (${name})?.dirty;\n(${name})["state"]\n.rows.length += 1;\n`
+  };
+  const counts = legacyViolations(graph(files)).filter((e) => e.source === "src/js/alias.cts" && e.count !== undefined).map(({ rule, target, count }) => ({ rule, target, count }));
+  eq(`parsed ${label} aliases count references and multiline writes once`, counts, [
+    { rule: "legacy-state-refs", target: "global:S", count: 2 },
+    { rule: "state-write", target: "direct:S.state", count: 1 }
+  ]);
+  const local = name.split(/[.[]/)[0];
+  files["src/js/alias.cts"] += `function shadow(${local}) { void ${name}.dirty; ${name}.state.x = 1; }\n`;
+  eq(`a shadowed ${label} alias does not grow either count`, legacyViolations(graph(files)).filter((e) => e.source === "src/js/alias.cts" && e.count !== undefined).map(({ rule, target, count }) => ({ rule, target, count })), counts);
+}
 eq("an internal import-equals creates no external dependency", analyzeScript("src/js/00-a.cts", "import b = Namespace.b;").imports, []);
+eq("internal import-equals aliases retain state provenance", legacyViolations(graph({
+  ...STATE_FILE,
+  "src/js/alias.cts": 'import * as GuardModule from "./_state.js";\nimport GuardState = GuardModule.S;\nvoid GuardState.dirty;\nGuardState.state.x = 1;\n'
+})).filter((e) => e.count !== undefined).map(({ rule, target, count }) => ({ rule, target, count })), [
+  { rule: "legacy-state-refs", target: "global:S", count: 3 },
+  { rule: "state-write", target: "direct:S.state", count: 1 }
+]);
+eq("internal namespace import-equals aliases retain state provenance", legacyViolations(graph({
+  ...STATE_FILE,
+  "src/js/alias.cts": 'import * as GuardModule from "./_state.js";\nimport GuardAlias = GuardModule;\nvoid GuardAlias.S.dirty;\nGuardAlias.S.state.x = 1;\n'
+})).filter((e) => e.count !== undefined || e.unknownNames).map(({ rule, target, count }) => ({ rule, target, count })), [
+  { rule: "legacy-state-refs", target: "global:S", count: 2 },
+  { rule: "state-write", target: "direct:S.state", count: 1 }
+]);
 eq("import-equals contributes an edge to runtime cycles", stronglyConnected(graph({
   "src/js/00-a.cts": 'import b = require("./01-b.cts");',
   "src/js/01-b.cts": 'import a = require("./00-a.cts");'

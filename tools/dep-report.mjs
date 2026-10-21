@@ -295,6 +295,7 @@ function chainOf(expr) {
   for (;;) {
     if (isWrapper(e)) { e = e.expression; continue; }
     if (ts.isPropertyAccessExpression(e)) { path.unshift(e.name.text); e = e.expression; continue; }
+    if (ts.isQualifiedName(e)) { path.unshift(e.right.text); e = e.left; continue; }
     if (ts.isElementAccessExpression(e)) { path.unshift(keyOf(e.argumentExpression)); e = e.expression; continue; }
     break;
   }
@@ -469,7 +470,16 @@ function bindScopes(sf) {
     if (hasModifier(node, ts.SyntaxKind.DeclareKeyword)) { collectAmbient(node); return; }
     if (ts.isImportDeclaration(node)) { handleImport(node, s); return; }
     if (ts.isExportDeclaration(node)) { handleExport(node, s); return; }
-    if (ts.isImportEqualsDeclaration(node)) { declare(s, node.name, "import-equals"); return; }
+    if (ts.isImportEqualsDeclaration(node)) {
+      const ref = node.moduleReference;
+      const spec = ts.isExternalModuleReference(ref) ? literalText(ref.expression) : null;
+      declare(s, node.name, node.isTypeOnly ? "import-type" : "import-equals",
+        ts.isExternalModuleReference(ref)
+          ? spec === null ? {} : { source: { spec, via: [], node, requireCallee: null } }
+          : { aliasInit: ref, aliasPath: [] });
+      if (!ts.isExternalModuleReference(ref)) walk(ref, s);
+      return;
+    }
     if (ts.isImportTypeNode(node)) { for (const t of node.typeArguments ?? []) walk(t, s); return; }
     if (ts.isExportAssignment(node)) {
       walk(node.expression, s);
@@ -553,6 +563,7 @@ function accessAt(identifier, isFree) {
     const p = n.parent;
     if (isWrapper(p)) { n = p; continue; }
     if (ts.isPropertyAccessExpression(p) && p.expression === n) { path.push(p.name.text); n = p; continue; }
+    if (ts.isQualifiedName(p) && p.left === n) { path.push(p.right.text); n = p; continue; }
     if (ts.isElementAccessExpression(p) && p.expression === n) { path.push(keyOf(p.argumentExpression)); n = p; continue; }
     break;
   }
@@ -813,7 +824,11 @@ export function buildGraph(sources, allFiles = sources.map((s) => s.path)) {
     modules.set(path, { path, text, layer: layerOf(path), edges, unresolved: analysis.unresolved, htmlParses: analysis.htmlParses, globals: analysis.globals, ambients: analysis.ambients, stateLinks });
   }
   const { provides, truncated } = stateProviders(modules);
-  for (const m of modules.values()) m.state = stateUsage(m, provides, truncated);
+  for (const m of modules.values()) {
+    m.state = stateUsage(m, provides, truncated);
+    m.stateProviders = new Map(m.edges.filter((e) => e.kind === "file" && provides.has(e.target))
+      .map((e) => [e.spec, provides.get(e.target)]));
+  }
   return modules;
 }
 
@@ -963,24 +978,77 @@ export function isNumbered(path) {
   return /^src\/js\/[0-9][^/]*$/.test(path) && isScript(path);
 }
 
-export function legacyMeasurements(text, path = "legacy.js") {
-  const lines = text.split("\n");
-  const directWrite = /\bS\.state(\.[A-Za-z_]+|\[[^\]]+\])*\s*(=[^=]|\+=|-=)|\bS\.state\.[a-zA-Z_]+\.(push|splice|pop|shift|unshift|sort)\(/;
-  const sf = parseScript(path, text);
-  const references = new Set([...text.matchAll(/\bS\.[A-Za-z_]+/g)].map((match) => match.index));
+function legacyStateNodes(sf, providers) {
+  const nodes = new Map();
+  const unresolved = [];
+  const ignored = new Set();
+  const scopes = bindScopes(sf);
+  const position = (node) => (ts.isPropertyAccessExpression(node) ? node.name : ts.isQualifiedName(node) ? node.right : node).getStart(sf);
+  const add = (node, prefix = [], resolved = false) => nodes.set(position(node), { node, prefix, resolved });
   const visit = (node) => {
     if (ts.isIdentifier(node) && node.text === STATE_EXPORT && isReference(node)
       || ts.isPropertyAccessExpression(node) && node.name.text === STATE_EXPORT) {
-      const n = outermost(node);
-      const p = n.parent;
-      const access = (ts.isPropertyAccessExpression(p) || ts.isElementAccessExpression(p)) && p.expression === n;
-      const alias = ts.isIdentifier(node) && (ts.isVariableDeclaration(p) && p.initializer === n
-        || ts.isBinaryExpression(p) && p.operatorToken.kind === ts.SyntaxKind.EqualsToken && p.right === n);
-      if (access || alias) references.add((ts.isPropertyAccessExpression(node) ? node.name : node).getStart(sf));
+      const chain = chainOf(node);
+      if (chain && scopes.refOf.get(chain.root)?.binding) ignored.add(position(node));
+      else add(node);
     }
     ts.forEachChild(node, visit);
   };
   visit(sf);
+  const sourceOf = (binding, seen = new Set()) => {
+    if (!binding || seen.has(binding)) return null;
+    if (binding.source) return binding.source;
+    if (binding.kind !== "import-equals" || !binding.aliasInit) return null;
+    seen.add(binding);
+    const chain = chainOf(binding.aliasInit);
+    const source = chain ? sourceOf(scopes.refOf.get(chain.root)?.binding, seen) : null;
+    return source ? { ...source, via: [...source.via, ...chain.path] } : null;
+  };
+  for (const r of scopes.refs) {
+    const source = sourceOf(r.binding);
+    if (!source || source.requireCallee && !scopes.isFree(source.requireCallee)) continue;
+    const from = providers ? providers.get(source.spec) ?? [] : [{ path: [STATE_EXPORT], sub: [] }];
+    for (const q of from) {
+      if (!prefixOf(source.via, q.path) && !prefixOf(q.path, source.via)) continue;
+      let node = r.node;
+      let unknown = false;
+      let matches = true;
+      for (const name of q.path.slice(source.via.length)) {
+        const n = outermost(node);
+        const p = n.parent;
+        const member = ts.isPropertyAccessExpression(p) && p.expression === n ? p.name.text
+          : ts.isQualifiedName(p) && p.left === n ? p.right.text
+          : ts.isElementAccessExpression(p) && p.expression === n ? literalText(p.argumentExpression) : null;
+        if (ts.isImportEqualsDeclaration(p) && p.moduleReference === n) { matches = false; break; }
+        if (member === null || name === "*") { unknown = true; break; }
+        if (member !== name) { matches = false; break; }
+        node = p;
+      }
+      if (unknown) {
+        unresolved.push({ line: sf.getLineAndCharacterOfPosition(r.node.getStart(sf)).line + 1,
+          detail: `state import ${r.binding.name} from ${source.spec} cannot be resolved statically; use an explicit named import or static namespace member` });
+      } else if (matches) add(node, [...q.sub, ...source.via.slice(q.path.length)], true);
+    }
+  }
+  return { nodes, unresolved, ignored };
+}
+
+export function legacyMeasurements(text, path = "legacy.js", providers) {
+  const lines = text.split("\n");
+  const directWrite = /\bS\.state(\.[A-Za-z_]+|\[[^\]]+\])*\s*(=[^=]|\+=|-=)|\bS\.state\.[a-zA-Z_]+\.(push|splice|pop|shift|unshift|sort)\(/;
+  const sf = parseScript(path, text);
+  const references = new Set([...text.matchAll(/\bS\.[A-Za-z_]+/g)].map((match) => match.index));
+  const { nodes, ignored } = legacyStateNodes(sf, providers);
+  for (const start of ignored) references.delete(start);
+  for (const { node, prefix, resolved } of nodes.values()) {
+    const n = outermost(node);
+    const p = n.parent;
+    const access = (ts.isPropertyAccessExpression(p) || ts.isElementAccessExpression(p)) && p.expression === n;
+    const alias = (resolved || ts.isIdentifier(node)) && (ts.isVariableDeclaration(p) && p.initializer === n
+      || ts.isBinaryExpression(p) && p.operatorToken.kind === ts.SyntaxKind.EqualsToken && p.right === n
+      || ts.isImportEqualsDeclaration(p) && p.moduleReference === n);
+    if (access || alias || prefix.length) references.add((ts.isPropertyAccessExpression(node) ? node.name : ts.isQualifiedName(node) ? node.right : node).getStart(sf));
+  }
   return {
     references: references.size,
     directWrites: lines.filter((line) => directWrite.test(line)).length,
@@ -988,29 +1056,30 @@ export function legacyMeasurements(text, path = "legacy.js") {
   };
 }
 
-function legacyWriteCount(path, text) {
+function legacyWriteCount(path, text, providers) {
   const sf = parseScript(path, text);
   const methods = new Set(["push", "splice", "pop", "shift", "unshift", "sort"]);
   let count = 0;
-  const visit = (node) => {
-    if (ts.isIdentifier(node) && node.text === STATE_EXPORT && isReference(node)
-      || ts.isPropertyAccessExpression(node) && node.name.text === STATE_EXPORT) {
-      const access = accessAt(node, () => false);
-      if (access.path[0] === "state" && (access.write === "set"
-        || access.write === "mutate" && methods.has(chainOf(access.node)?.path.at(-1)))) count++;
-    }
-    ts.forEachChild(node, visit);
-  };
-  visit(sf);
-  return count;
+  const { nodes, unresolved } = legacyStateNodes(sf, providers);
+  for (const { node, prefix } of nodes.values()) {
+    const access = accessAt(node, () => false);
+    if ([...prefix, ...access.path][0] === "state" && (access.write === "set"
+      || access.write === "mutate" && methods.has(chainOf(access.node)?.path.at(-1)))) count++;
+  }
+  return { count, unresolved };
 }
 
 export function legacyViolations(modules) {
   const out = [];
   for (const m of modules.values()) {
     if (!m.path.startsWith("src/")) continue;
-    const counts = legacyMeasurements(m.text, m.path);
-    const directWrites = legacyWriteCount(m.path, m.text);
+    const counts = legacyMeasurements(m.text, m.path, m.stateProviders);
+    const { count: directWrites, unresolved } = legacyWriteCount(m.path, m.text, m.stateProviders);
+    for (const l of m.stateLinks.loads) {
+      if (m.stateProviders.has(l.spec)) unresolved.push({ line: l.line,
+        detail: `state import from ${l.spec} cannot be resolved statically; use an explicit named import or static namespace member` });
+    }
+    for (const u of unresolved) out.push({ rule: "state-import", source: m.path, target: "global:S", ...u, unknownNames: true });
     if (isNumbered(m.path)) out.push({ rule: "legacy-file", source: m.path, target: "src/js" });
     if (counts.references) out.push({ rule: "legacy-state-refs", source: m.path, target: "global:S", count: counts.references });
     if (directWrites) out.push({ rule: "state-write", source: m.path, target: "direct:S.state", count: directWrites });
@@ -1032,7 +1101,7 @@ export function legacyMetrics(modules) {
   const app = new Map([...modules].filter(([p]) => p.startsWith("src/") && layerOf(p) !== "tests"));
   const tests = [...modules.values()].filter((m) => m.path.startsWith("src/test/"));
   const numbered = [...app.values()].filter((m) => isNumbered(m.path));
-  const total = (items, field) => items.reduce((sum, m) => sum + legacyMeasurements(m.text, m.path)[field], 0);
+  const total = (items, field) => items.reduce((sum, m) => sum + legacyMeasurements(m.text, m.path, m.stateProviders)[field], 0);
   const state = modules.get(STATE_MODULE);
   let stateFields = 0;
   if (state) {
