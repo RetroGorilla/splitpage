@@ -919,7 +919,8 @@ export function findViolations(modules) {
     for (const e of m.edges) {
       if (e.kind === "file") {
         const targetLayer = layerOf(e.target);
-        if (!layerAllows(m.layer, targetLayer)) add("layer", m.path, e.target, e.line, `${m.layer} may not import ${targetLayer}`);
+        if (m.layer === "bootstrap" && e.target === STATE_MODULE) add("layer", m.path, e.target, e.line, `bootstrap may not import ${STATE_MODULE}`);
+        else if (!layerAllows(m.layer, targetLayer)) add("layer", m.path, e.target, e.line, `${m.layer} may not import ${targetLayer}`);
       } else if (e.kind === "builtin" || e.kind === "package") {
         if (!platformImportAllowed(m.layer)) add("platform-import", m.path, e.target, e.line, `${m.layer} may not import ${e.target}`);
       } else if (e.kind === "missing") {

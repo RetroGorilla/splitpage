@@ -62,6 +62,26 @@ check("bootstrap may import anything", layerAllows("bootstrap", "features/rows")
 check("production code may not import tests", !layerAllows("legacy-js", "tests") && !layerAllows("server", "tests"));
 check("tools may import tests", layerAllows("tools", "tests"));
 
+for (const [label, source] of [
+  ["named import", 'import { S } from "../../js/_state.js";'],
+  ["side-effect import", 'import "../../js/_state.js";'],
+  ["re-export", 'export { S } from "../../js/_state.js";'],
+  ["dynamic import", 'export const load = () => import("../../js/_state.js");'],
+  ["type import", 'export type State = typeof import("../../js/_state.js");']
+]) {
+  eq(`bootstrap's ${label} of the state module fails the layer rule`, findViolations(graph({
+    "src/js/_state.js": "export const S = {};\n",
+    "src/bootstrap/wiring/probe.ts": source + "\n"
+  })).filter((v) => v.rule === "layer").map(({ source, target, line }) => ({ source, target, line })), [
+    { source: "src/bootstrap/wiring/probe.ts", target: "src/js/_state.js", line: 1 }
+  ]);
+}
+
+eq("bootstrap may still import a numbered module that supplies a port", findViolations(graph({
+  "src/js/00-port.js": "export const port = {};\n",
+  "src/bootstrap/wiring/probe.ts": 'import { port } from "../../js/00-port.js";\nexport { port };\n'
+})).filter((v) => v.rule === "layer"), []);
+
 console.log("\nanalyzeScript():\n");
 
 {
@@ -1026,6 +1046,10 @@ try {
     "state-write src/js/b.js global:S.state"
   ]);
   eq("the unchanged fixture passes", cli(repo).code, 0);
+
+  const bootstrapState = attempt(repo, { "src/bootstrap/probe.ts": 'import "../js/_state.js";\n' });
+  eq("a bootstrap state import fails before any state is read", bootstrapState.code, 1);
+  eq("the bootstrap layer failure names the state module", lines(bootstrapState, "new layer"), ["new layer: src/bootstrap/probe.ts:1 -> src/js/_state.js"]);
 
   const swap = attempt(repo, {
     "src/js/a.js": 'import { b } from "./b.js";\nexport function a() { return b(); }\n',

@@ -23,7 +23,7 @@ The layers the steps move code into, with dependencies pointing down only (`laye
 | `src/application/` | The session, commands, the save coordinator, the action registry, the state owners, and ports for effects other areas trigger (notices, menu items, the clipboard, cell editing). No platform globals: timers, storage and the clock come in as ports | Core, contracts, shared |
 | `src/features/` | Views and panels. They get owners and ports from the wiring and listen for changes | Core, application, contracts, shared |
 | `src/adapters/` | Storage, file formats, transport, and the desktop bridge | Core, application, contracts, shared |
-| `src/bootstrap/` | The one place that builds and connects everything at startup | Anything |
+| `src/bootstrap/` | The one place that builds and connects everything at startup | Anything except `src/js/_state.js` |
 
 **How numbered files reach an owner.** An owner that more than one area uses lives in `src/application/` and is constructed by the wiring at startup; nothing creates one at module evaluation. Numbered files reach it through one named bridge in `src/legacy/`, which throws before startup and after teardown, as `session-bridge.ts` does with `running()`. Each new bridge joins plan §8's list of bridges to retire, and goes when its last numbered importer becomes a feature. Features receive owners as ports from the wiring, as `features/file-menu/mount.ts` receives `showToast` today. Nothing goes into a feature or adapter folder that another area will import, because no feature may import another feature or an adapter.
 
@@ -158,6 +158,8 @@ Exit per PR: its fields have no `S.` reference in `src/` or `src/test/`, and `le
 **L2b. Port the files** (2 PRs). `22a-editor-wiring.js` becomes `src/bootstrap/wiring/editor.ts` (cloud, Opus). `22b`–`22f` become `production.ts`, `comments.ts`, `views.ts`, `overlay.ts` and `startup.ts` in the same folder (Codex, Sol xhigh). Strict TypeScript, no behaviour change, slot order unchanged; the evidence is the 294-row remount test and the 14 root-route registrations (13 click slots and the tags-anchor mousedown).
 
 Exit: no `src/js/22*.js`; 0 `S.` references in `src/bootstrap/`; a layer rule forbids `src/bootstrap/` to import `_state.js`, with a fail-first case; 6 numbered files and 1,452 numbered lines removed; the remount test passes 4/4.
+
+The five remaining wiring files now live in `src/bootstrap/wiring/production.ts`, `comments.ts`, `views.ts`, `overlay.ts` and `startup.ts`, alongside `editor.ts`. Bootstrap owns their mount lifetimes and typed feature ports. Startup reads the live document through `liveDocumentPort`, unsaved work through `unsavedFor`, and the desktop bridge through `desktopBridge`; the initial-ready assignment stays with the prelude through `setInitialStateReady`. Server-picker routing goes through `routeServerOpen` in the desktop owner. Bootstrap has no direct dependency on `_state.js`, enforced by the layer rule and its fail-first cases. All 13 click slots and the tags-anchor mousedown keep their order, and the load-order probe retains all 79 targets, including all six typed wiring modules. This port deletes 762 numbered lines and adds 13 lines at the existing prelude and desktop boundaries, a net reduction of 749 numbered lines; the remaining numbered-file count is 70. The local gates still require a run with the worktree's dependencies available.
 
 ### L3. Give every shared job an owner (fixes the core of F1)
 

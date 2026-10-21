@@ -59,6 +59,7 @@ const { S } = await import("../js/_state.js");
 await bootApp();
 const app = await import("../bootstrap/app.ts");
 const { rootRoutesTaken } = await import("../bootstrap/wiring/editor.ts");
+const { ROOT_CLICK_ORDER, ROOT_MOUSEDOWN_ORDER } = await import("../features/routing/root-router.ts");
 
 after(() => {
   proto.addEventListener = realAdd;
@@ -100,4 +101,5 @@ test("one throwing disposer does not stop the rest: every other mount is release
   const wiring = await rewireApp();
   assert.doesNotThrow(() => app.startApp(wiring), "the app is not left marked as running");
   await S.initialStateReady;
+  assert.deepEqual(rootRoutesTaken(), { click: [...ROOT_CLICK_ORDER], mousedown: [...ROOT_MOUSEDOWN_ORDER] });
 });

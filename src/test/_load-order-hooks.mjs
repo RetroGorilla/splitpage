@@ -23,6 +23,11 @@ export const CONFIGURATION = Object.freeze({
   "src/js/14e-export-formats.js": { functions: ["registerBuiltInExporters"] },
   "src/bootstrap/wiring.ts": { functions: ["wireApp"] },
   "src/bootstrap/wiring/editor.ts": { functions: ["routeRootClick", "routeRootMouseDown", "onRootClick", "onRootMouseDown", "onRootInput", "onRootPaste", "onRootKeydown"] },
+  "src/bootstrap/wiring/production.ts": { functions: ["mountFindFeature", "mountTagsFeature"] },
+  "src/bootstrap/wiring/comments.ts": { functions: ["mountCommentsFeature"] },
+  "src/bootstrap/wiring/views.ts": { functions: ["mountNoticesFeature", "mountPrompterVisibilityFeature", "mountIdentityFeature", "mountHistoryFeature", "mountServerFeature", "mountDriveFeature", "mountSaveRecoveryFeature", "mountConflictsFeature", "mountPanelsFeature", "mountSaveFeature", "mountPrompterOpenFeature", "mountFileMenuFeature", "mountImportsFeature", "mountGdocFeature", "mountPrompterFeature", "mountWriterOpenFeature", "mountWriterNavigationFeature", "mountWriterCloseFeature", "mountHistoryGalleryFeature"] },
+  "src/bootstrap/wiring/overlay.ts": { functions: ["mountOverlayFeature"] },
+  "src/bootstrap/wiring/startup.ts": { functions: ["startupPorts", "openInitialDocument"] },
   "src/bootstrap/app.ts": { functions: ["startApp", "startAppWhenReady"] },
   "src/bootstrap/actions.ts": { functions: ["startActions"] },
   "src/bootstrap/startup/page-lifetime.ts": { functions: ["watchHistoryMigration", "registerServiceWorker"] }
