@@ -1,3 +1,4 @@
+import { docIdEmbeddedIn } from "../core/document/ids.ts";
 import { S } from "./_state.js";
 import { flushEdits } from "./12a-undo.js";
 import { inertBody } from "../legacy/richtext.ts";
@@ -7,7 +8,6 @@ import { requestSave, unsavedFor } from "../legacy/save-bridge.ts";
 import { fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import {
-  docIdEmbeddedIn,
   migrateDocument,
   standaloneHtmlFor,
   syncDocIdentity

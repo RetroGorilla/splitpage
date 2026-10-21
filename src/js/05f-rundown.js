@@ -1,5 +1,6 @@
+import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
 import { S } from "./_state.js";
-import { ROW_STATUSES, formatDuration, rowSeconds, rowStatus } from "./01-scene-status.js";
+import { rowSeconds } from "./01-scene-status.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { findRowIndex } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";
@@ -8,7 +9,7 @@ import { brollCountInRow } from "./08c-broll.js";
 import { reviewMode } from "./13-hosted.js";
 import { contentMemo } from "../core/document/memo.ts";
 import { escapeHtml, unitSafePrefix } from "../core/document/text-policy.ts";
-import { pad2 } from "../core/production/timing.ts";
+import { pad2, formatDuration } from "../core/production/timing.ts";
 import { toPlainText } from "../core/text/projections.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";

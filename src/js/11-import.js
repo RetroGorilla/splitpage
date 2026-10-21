@@ -1,3 +1,4 @@
+import { MD_IMAGE_PREFIX_RE } from "../adapters/formats/markdown-image.ts";
 import { S } from "./_state.js";
 import { internDataUrl, queuePersist } from "../adapters/storage/02c-blobs.js";
 import { pushSnapshot, stampRow } from "./03-sync.js";
@@ -8,7 +9,6 @@ import { markDirty, showToast } from "./12-dirty-toast.js";
 import { audioDirectionsHtml, docxToRows } from "./15-docx.js";
 import { csvToRows } from "./16-csv.js";
 import { fileKindFromName } from "./18-local-files.js";
-import { MD_IMAGE_PREFIX_RE } from "./20d-formats.js";
 import { importModeTouched, resetImportMode } from "../application/import-mode.ts";
 import { importRowsCommand } from "../application/commands/import-rows.ts";
 import { makeId } from "../adapters/identity/ids.ts";

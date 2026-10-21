@@ -1,8 +1,10 @@
+import { formatDuration } from "../core/production/timing.ts";
+import { DEFAULT_WPM } from "../core/document/timing.ts";
 import { S } from "./_state.js";
 import { readDefaultWpm } from "./00p-prefs.js";
 import { home } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
-import { DEFAULT_WPM, formatDuration, wordCount } from "./01-scene-status.js";
+import { wordCount } from "./01-scene-status.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { updateIdentityChip } from "./03-sync.js";

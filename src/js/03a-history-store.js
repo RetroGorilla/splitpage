@@ -1,6 +1,7 @@
+import { sha256Bytes } from "../core/document/ids.ts";
+import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { S } from "./_state.js";
 import { home } from "./_home.js";
-import { mintDocId, normalizeDocId, sha256Bytes } from "./02b-doc-id.js";
 import { dataUrlForSync, ensureBytes, inlineStateJson, intern, persist, recordFor } from "../adapters/storage/02c-blobs.js";
 import {
   SNAPSHOT_KEY,
@@ -24,16 +25,13 @@ import {
 } from "../../shared/history-policy.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { imageDims, isSha256Hex, refsIn, sniffImageMime } from "../../shared/blob-policy.js";
-import { makeId } from "../adapters/identity/ids.ts";
+import { makeId, mintDocId } from "../adapters/identity/ids.ts";
 export {
   HISTORY_OLDER_KEY,
   HISTORY_OLDER_TTL_MS,
   HISTORY_PER_DOC,
-  HISTORY_SNAP_ID_RE,
   historyStampAfter,
-  historyUtf8Length,
-  planHistoryEviction,
-  sanitizeHistoryMeta
+  planHistoryEviction
 };
 
 var historyChain;

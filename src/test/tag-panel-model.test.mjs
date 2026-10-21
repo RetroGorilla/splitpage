@@ -1,3 +1,4 @@
+import { normalizeTagName } from "../core/document/tags.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -5,7 +6,11 @@ import { S } from "../js/_state.js";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { cellOf, projection, tagNameOf, toHtml } from "../js/04c-doc-model.js";
 import {
-  normalizeTagName, removeTag, renameTag, tagFieldOccurrences, tagOccurrences, tagsInField
+  removeTag,
+  renameTag,
+  tagFieldOccurrences,
+  tagOccurrences,
+  tagsInField
 } from "../js/07-production-tags.js";
 import { domProjection } from "../js/09-find-replace.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";

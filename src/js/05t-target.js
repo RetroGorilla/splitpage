@@ -1,5 +1,7 @@
+import { parseSceneLength, targetLengthOf } from "../core/document/timing.ts";
+import { formatDuration } from "../core/production/timing.ts";
 import { S } from "./_state.js";
-import { formatDuration, parseSceneLength, targetLengthOf, updateScriptStats } from "./01-scene-status.js";
+import { updateScriptStats } from "./01-scene-status.js";
 import { onRundownPaint, rundownLayout } from "./05f-rundown.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";

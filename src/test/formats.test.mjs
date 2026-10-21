@@ -1,3 +1,4 @@
+import { pad2 } from "../core/production/timing.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -6,7 +7,6 @@ import { S } from "../js/_state.js";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { htmlToMarkdown } from "../js/04-richtext.js";
-import { pad2 } from "../js/05-render.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { breakdownRows } from "../js/08-production-panels.js";
 import { commentBodyText, commentEntries } from "../js/10-comments.js";

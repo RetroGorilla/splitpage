@@ -1,3 +1,6 @@
+import { BROLL_NAME_MAX, BROLL_TEXT_MAX, normalizeBrollProps } from "../core/document/broll.ts";
+import { nextTagStatus, normalizeTagName, registryKey } from "../core/document/tags.ts";
+import { TAG_CATEGORIES, TAG_STATUSES, tagCategory, tagStatus } from "../core/production/looks.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -6,12 +9,27 @@ import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { cellOf } from "../js/04c-doc-model.js";
 import {
-  TAG_CATEGORIES, TAG_STATUSES, bulkTagCell, bulkTagRows, healTagRegistry, nextTagStatus, normalizeTagName, productionEntries,
-  registryKey, tagCategory, tagKey, tagOccurrences, tagStatus, tagStatusRank, tagsByCategory, tagsInField
+  bulkTagCell,
+  bulkTagRows,
+  healTagRegistry,
+  productionEntries,
+  tagKey,
+  tagOccurrences,
+  tagStatusRank,
+  tagsByCategory,
+  tagsInField
 } from "../js/07-production-tags.js";
 import {
-  BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_STATUSES, BROLL_TEXT_MAX, __init as initBroll, anchorBrollInRows, brollEntries, derivedRecordsPlan,
-  brollInCell, brollPropKey, brollShotsByProp, brollStatus, normalizeBrollProps
+  BROLL_PROPS_MAX,
+  BROLL_STATUSES,
+  __init as initBroll,
+  anchorBrollInRows,
+  brollEntries,
+  derivedRecordsPlan,
+  brollInCell,
+  brollPropKey,
+  brollShotsByProp,
+  brollStatus
 } from "../js/08c-broll.js";
 import { __init as initHistory } from "../js/03a-history-store.js";
 import { applyGearQuickAdd } from "../js/08-production-panels.js";

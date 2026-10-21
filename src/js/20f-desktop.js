@@ -1,19 +1,18 @@
+import { HISTORY_SNAP_ID_RE, historyUtf8Length, sanitizeHistoryMeta } from "../../shared/history-policy.js";
+import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { S } from "./_state.js";
-import { conn, fileHome, home, homeConn, serverHomeId, setHome } from "./_home.js";
-import { normalizeDocId, reassignDocId } from "./02b-doc-id.js";
+import { conn, fileHome, home, homeConn, serverHomeId, setHome, normalizeServerUrl } from "./_home.js";
+import { reassignDocId } from "./02b-doc-id.js";
 import { setBackend as setBlobBackend } from "../adapters/storage/02c-blobs.js";
 import {
   HISTORY_OLDER_KEY,
-  HISTORY_SNAP_ID_RE,
-  historyUtf8Length,
-  isPristineSeedDocument,
-  sanitizeHistoryMeta
+  isPristineSeedDocument
 } from "./03a-history-store.js";
 import { hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "./04-richtext.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
-import { detectServer, normalizeServerBase, openServerDoc, pointTabAt } from "./13-hosted.js";
+import { detectServer, openServerDoc, pointTabAt } from "./13-hosted.js";
 import { saveDoc } from "./14-export.js";
 import { mimeForFilename, openProjectFile } from "./18-local-files.js";
 import { openServersDialog } from "./20e-connect.js";
@@ -450,7 +449,7 @@ export function initDesktop() {
 
 function adoptPayloadServer(payload) {
   if (typeof payload.serverUrl !== "string") return;
-  var url = normalizeServerBase(payload.serverUrl);
+  var url = normalizeServerUrl(payload.serverUrl);
   if (url === conn.serverUrl) return;
   if (home.kind === "server") setHome("none");
   S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,

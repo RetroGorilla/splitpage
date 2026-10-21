@@ -1,17 +1,15 @@
+import { normalizeTagName, registryKey } from "../core/document/tags.ts";
+import { mergeTextField } from "../core/merge/text-field.ts";
+import { byId, rowContentEqual, rowFieldKey } from "../core/merge/rows.ts";
+import { GALLERY_FIELDS, ROW_FIELDS } from "../core/document/fields.ts";
+import { normalizeDocId } from "../../shared/doc-id-policy.js";
+import { rowStatus, tagCategory, tagStatus } from "../core/production/looks.ts";
 import { S } from "./_state.js";
 import { fileHome } from "./_home.js";
-import { rowStatus } from "./01-scene-status.js";
 import { escapeHtml, migrateRows } from "./02-state.js";
-import { normalizeDocId } from "./02b-doc-id.js";
 import { blobImgHtml, rowImage, rowImageKey } from "../adapters/storage/02c-blobs.js";
 import { videoLinkLabel } from "../adapters/storage/02d-gallery.js";
-import { GALLERY_FIELDS, ROW_FIELDS, byId, cloneState, mergeTextField, rowContentEqual, rowFieldKey, textMergeContext } from "./03-sync.js";
-import {
-  normalizeTagName,
-  registryKey,
-  tagCategory,
-  tagStatus
-} from "./07-production-tags.js";
+import { cloneState, textMergeContext } from "./03-sync.js";
 import { applyStashedWork } from "./14-export.js";
 import { closeFileConflict, parseProjectFileState } from "./18-local-files.js";
 import { idMap } from "../core/document/id-map.ts";

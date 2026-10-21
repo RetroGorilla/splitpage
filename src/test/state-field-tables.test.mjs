@@ -2,9 +2,9 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { STATE_FIELDS, migrateRows, missingStateFields } from "../js/02-state.js";
-import { GALLERY_FIELDS as SYNC_GALLERY_FIELDS, ROW_FIELDS as SYNC_ROW_FIELDS } from "../js/03-sync.js";
 import { changedBetween } from "../js/12a-undo.js";
-import { GALLERY_FIELDS, ROW_FIELDS, STATE_FIELDS as CORE_FIELDS } from "../core/document/fields.ts";
+import { STATE_FIELDS as CORE_FIELDS } from "../core/document/fields.ts";
+import * as sync from "../js/03-sync.js";
 import { LIST_MERGERS } from "../core/merge/lists.ts";
 
 function withProbe(field, run) {
@@ -48,9 +48,9 @@ test("02-state's STATE_FIELDS is a thawed copy of core's frozen table, with core
   });
 });
 
-test("03-sync's ROW_FIELDS and GALLERY_FIELDS are core's tables, not copies", () => {
-  assert.equal(SYNC_ROW_FIELDS, ROW_FIELDS);
-  assert.equal(SYNC_GALLERY_FIELDS, GALLERY_FIELDS);
+test("03-sync no longer re-exports core's ROW_FIELDS and GALLERY_FIELDS", () => {
+  assert.equal("ROW_FIELDS" in sync, false);
+  assert.equal("GALLERY_FIELDS" in sync, false);
 });
 
 test("12a-undo skips exactly the fields core marks undo: false", () => {

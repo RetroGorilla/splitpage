@@ -7,7 +7,7 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { render } = await import("../js/05-render.js");
-const { registryKey } = await import("../js/07-production-tags.js");
+const { registryKey } = await import("../core/document/tags.ts");
 const { openProductionPanel, closeProductionPanel } = await import("../js/08-production-panels.js");
 const { closeBrollPage, closeBrollPanel, openBrollPage, openBrollPanel } = await import("../js/08d-broll-panel.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");

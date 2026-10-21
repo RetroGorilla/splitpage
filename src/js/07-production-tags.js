@@ -1,3 +1,4 @@
+import { domToPos } from "../features/editing/cell-dom.ts";
 import { S } from "./_state.js";
 import { updateScriptStats } from "./01-scene-status.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
@@ -7,7 +8,7 @@ import {
   sanitizeHtml
 } from "./04-richtext.js";
 import { render, syncFieldFromDom } from "./05-render.js";
-import { domToPos, editCell } from "./05b-cell-edit.js";
+import { editCell } from "./05b-cell-edit.js";
 import { plainTagOpen } from "./07b-plain-tags.js";
 import { renderProduction, updateGearCount } from "./08-production-panels.js";
 import { brollPropsRenamed, runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
@@ -22,11 +23,8 @@ import { contentMemo } from "../core/document/memo.ts";
 import {
   ensureTagIds,
   isTagId,
-  mintTagId,
-  nextTagStatus,
   normalizeTagName,
   registryKey,
-  registryTagHooks,
   tagKey,
   tagStatusRank
 } from "../core/document/tags.ts";
@@ -57,21 +55,11 @@ import { requestRefresh } from "../legacy/session-bridge.ts";
 import { focusMemory } from "../legacy/editor-bridge.ts";
 import { resetTagPanel } from "../application/tag-panel-state.ts";
 export {
-  TAG_CATEGORIES,
-  TAG_STATUSES,
   contentMemo,
   ensureTagIds,
-  isBlankTagName,
   isTagId,
-  mintTagId,
-  nextTagStatus,
-  normalizeTagName,
-  registryKey,
-  registryTagHooks,
-  tagCategory,
   tagKey,
   tagOccurrences,
-  tagStatus,
   tagStatusRank
 };
 
@@ -114,7 +102,6 @@ export function isInsideTagOrLink(el) {
   return !!(el && el.closest && el.closest(".tag-anchor, a"));
 }
 
-export { productionReaders };
 
 export var tagsInField = productionReaders.tagsInField;
 

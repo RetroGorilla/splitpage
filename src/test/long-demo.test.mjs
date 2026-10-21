@@ -1,11 +1,13 @@
+import { TAG_CATEGORIES } from "../core/production/looks.ts";
+import { hasSetLength } from "../core/document/timing.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
-import { __init as initSceneStatus, rowSeconds, hasSetLength } from "../js/01-scene-status.js";
+import { __init as initSceneStatus, rowSeconds } from "../js/01-scene-status.js";
 import { STATE_FIELDS, migrateRows, missingStateFields } from "../js/02-state.js";
 import { cellOf } from "../js/04c-doc-model.js";
-import { TAG_CATEGORIES, collectTagsFromRows, __init as initTags } from "../js/07-production-tags.js";
+import { collectTagsFromRows, __init as initTags } from "../js/07-production-tags.js";
 import { brollInCell } from "../js/08c-broll.js";
 import { buildSplitpageFile, parseSplitpageFile } from "../js/20d-formats.js";
 import { LONG_DEMO, STARTERS, starterById } from "../js/_starters.js";

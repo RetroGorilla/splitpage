@@ -1,3 +1,5 @@
+import { rowContentEqual } from "../core/merge/rows.ts";
+import { hasSetLength, parseSceneLength } from "../core/document/timing.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -5,14 +7,12 @@ import { S } from "../js/_state.js";
 import {
   __init as initSceneStatus,
   estimatedSeconds,
-  hasSetLength,
   normalizeSceneLength,
-  parseSceneLength,
   rowSeconds,
   totalSeconds
 } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
-import { mergeStates, rowContentEqual } from "../js/03-sync.js";
+import { mergeStates } from "../js/03-sync.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { applyStepsLive, diffStates } from "../js/12a-undo.js";
 import { invertSteps } from "../js/04c-doc-model.js";

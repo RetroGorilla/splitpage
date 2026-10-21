@@ -1,3 +1,6 @@
+import { productionReaders } from "../legacy/document-ports.ts";
+import { normalizeTagName } from "../core/document/tags.ts";
+import { domToPos } from "../features/editing/cell-dom.ts";
 import { S } from "./_state.js";
 import { findRowIndex } from "./03-sync.js";
 import {
@@ -5,11 +8,9 @@ import {
   inertBody,
   sanitizeHtml
 } from "./04-richtext.js";
-import { domToPos, editCell } from "./05b-cell-edit.js";
+import { editCell } from "./05b-cell-edit.js";
 import {
   isInsideTagOrLink,
-  normalizeTagName,
-  productionReaders,
   registerProductionTag,
   registryEntry,
   scheduleIdleRefresh,
@@ -20,11 +21,9 @@ import { makeId, randomIds } from "../adapters/identity/ids.ts";
 import {
   BROLL_CLOSERS,
   BROLL_MARKER_RE,
-  BROLL_NAME_MAX,
   BROLL_PROP_NAME_MAX,
   BROLL_PROPS_MAX,
   BROLL_STATUS_IDS,
-  BROLL_TEXT_MAX,
   brollPropKey,
   newBrollShot,
   normalizeBrollProps
@@ -56,14 +55,10 @@ import { cellOf, scriptCellOf } from "../legacy/richtext.ts";
 import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 export {
   BROLL_MARKER_RE,
-  BROLL_NAME_MAX,
   BROLL_PROPS_MAX,
-  BROLL_TEXT_MAX,
   brollInCell,
   brollPropKey,
-  brollPropsInCell,
-  brollSortedForList,
-  normalizeBrollProps
+  brollPropsInCell
 };
 
 var brollAnchorDeclined;
