@@ -2,7 +2,6 @@ import { owned } from "../features/routing/owned.ts";
 import { runFromButton } from "../legacy/app-actions.ts";
 import { mountFind } from "../features/find/mount.ts";
 import { mountTags } from "../features/tags/mount.ts";
-import { S } from "./_state.js";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { cssAttr } from "./04-richtext.js";
 import {
@@ -64,6 +63,8 @@ import { queueAutoSave } from "./14-export.js";
 import { exportAs, runExport } from "./18-local-files.js";
 import { wireTagEntityContainer } from "./20-teleprompter.js";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./22a-editor-wiring.js";
+import { productionGroupBy, setGearGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey } from "../application/tag-panel-state.ts";
+import { findMatchesCase, setFindMatchCase } from "../application/find-options.ts";
 
 var find = owned();
 
@@ -83,8 +84,8 @@ export function mountFindFeature() {
       findQueryChanged: findQueryChanged,
       leaveFindAtMatch: leaveFindAtMatch,
       bulkTagOpen: bulkTagOpen,
-      getFindMatchCase: function () { return S.findMatchCase; },
-      setFindMatchCase: function (value) { S.findMatchCase = value; }
+      getFindMatchCase: function () { return findMatchesCase(); },
+      setFindMatchCase: function (value) { setFindMatchCase(value); }
     }
     });
   });
@@ -146,14 +147,14 @@ export function mountTagsFeature() {
       setTagNotes: setTagNotes,
       bulkDeleteArmed: function () { return bulkDeleteArmed; },
       isTouch: function () { return IS_TOUCH; },
-      addingPerson: function () { return S.tagAddingPersonFor; },
-      expanded: function () { return S.tagExpanded; },
-      productionGroup: function () { return S.productionGroupBy; },
-      setAddingPerson: function (value) { S.tagAddingPersonFor = value; },
-      setRenaming: function (value) { S.tagRenaming = value; },
-      setExpanded: function (value) { S.tagExpanded = value; },
-      setProductionGroup: function (value) { S.productionGroupBy = value; },
-      setGearGroup: function (value) { S.gearGroupBy = value; },
+      addingPerson: function () { return tagAddingPersonKey(); },
+      expanded: function () { return tagExpandedKey(); },
+      productionGroup: function () { return productionGroupBy(); },
+      setAddingPerson: function (value) { setTagAddingPerson(value); },
+      setRenaming: function (value) { setTagRenaming(value); },
+      setExpanded: function (value) { setTagExpanded(value); },
+      setProductionGroup: function (value) { setProductionGroupBy(value); },
+      setGearGroup: function (value) { setGearGroupBy(value); },
       capture: function () { var context = captureOperation(); return function () { return stillOwns(context); }; },
       installEntity: function (id) { return wireTagEntityContainer(id, onRootClick); }
     }

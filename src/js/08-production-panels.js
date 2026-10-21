@@ -40,6 +40,7 @@ import { breakdownRows, breakdownTable } from "./14c-export-projections.js";
 import { idMap } from "../core/document/id-map.ts";
 import { cappedLongText, escapeHtml } from "../core/document/text-policy.ts";
 import { planQuickAdd } from "../core/production/tags.ts";
+import { gearGroupBy, productionGroupBy, setTagAddingPerson, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../application/tag-panel-state.ts";
 
 export { breakdownRows, breakdownTable };
 
@@ -56,7 +57,6 @@ export function closeProductionPanel() {
   syncPanelClass();
 }
 
-S.gearGroupBy = "flat";
 
 function gearEntries() {
   return productionEntries().filter(function (e) { return e.cat.id === "gear"; });
@@ -102,7 +102,7 @@ export function renderGearList() {
   updateGearHeadCount(entries.length);
 
   document.querySelectorAll("#gear-modes [data-group]").forEach(function (b) {
-    var on = b.getAttribute("data-group") === S.gearGroupBy;
+    var on = b.getAttribute("data-group") === gearGroupBy();
     b.classList.toggle("is-active", on);
     b.setAttribute("aria-checked", on ? "true" : "false");
   });
@@ -115,7 +115,7 @@ export function renderGearList() {
     return;
   }
 
-  if (S.gearGroupBy === "scene") {
+  if (gearGroupBy() === "scene") {
     var untracked = entries.filter(function (e) { return e.orphaned; }).length;
     listEl.innerHTML = renderProductionByScene(entries.filter(function (e) { return !e.orphaned; })) +
       (untracked ? '<div class="tag-orphan-note">' + untracked +
@@ -243,8 +243,8 @@ function iconHtml(id, cls) {
 
 function dropEditingForReview() {
   if (!reviewMode()) return;
-  S.tagRenaming = null;
-  S.tagAddingPersonFor = null;
+  setTagRenaming(null);
+  setTagAddingPerson(null);
   if (selectedKeys().length) clearProductionSelection();
   if (bulkDeleteArmed) disarmBulkDelete();
 }
@@ -323,7 +323,7 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
       '" title="Add someone to the crew list"' +
       (gear ? ' aria-label="Add a person to the crew list">' + iconHtml("i-plus") + 'Person' : '>Add person') +
     '</button>';
-  var personRow = S.tagAddingPersonFor === item.key
+  var personRow = tagAddingPersonKey() === item.key
     ? '<div class="tag-person-row">' +
         '<input type="text" class="tag-person-input ev-field" data-key="' + k +
           '" placeholder="Their name" maxlength="60" aria-label="The new person’s name">' +
@@ -389,8 +389,8 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
 function tagEntityHtml(item, opts) {
   opts = opts || {};
   var gear = !!opts.gear;
-  var renaming = S.tagRenaming === item.key;
-  var expanded = S.tagExpanded === item.key || renaming;
+  var renaming = tagRenamingKey() === item.key;
+  var expanded = tagExpandedKey() === item.key || renaming;
   var k = escapeHtml(item.key);
   var selected = opts.selection && !reviewMode() && productionSelection[item.key];
   var detailId = tagFieldId("detail", gear, item.key);
@@ -581,7 +581,7 @@ function renderProductionList(entries) {
   entries = entries || productionEntries();
 
   document.querySelectorAll("#production-modes [data-group]").forEach(function (b) {
-    var on = b.getAttribute("data-group") === S.productionGroupBy;
+    var on = b.getAttribute("data-group") === productionGroupBy();
     b.classList.toggle("is-active", on);
     b.setAttribute("aria-checked", on ? "true" : "false");
   });
@@ -590,10 +590,10 @@ function renderProductionList(entries) {
   var cols = document.getElementById("production-cols");
   if (cols) {
     cols.hidden = !groups.length ||
-      (S.productionGroupBy !== "cat" && S.productionGroupBy !== "person");
+      (productionGroupBy() !== "cat" && productionGroupBy() !== "person");
   }
 
-  if (S.productionGroupBy === "shoot") {
+  if (productionGroupBy() === "shoot") {
     listEl.innerHTML = renderProductionByShoot(entries);
     return;
   }
@@ -608,7 +608,7 @@ function renderProductionList(entries) {
     return;
   }
 
-  if (S.productionGroupBy === "scene") {
+  if (productionGroupBy() === "scene") {
     var orphanCount = groups.reduce(function (n, g) {
       return n + g.items.filter(function (i) { return i.orphaned; }).length;
     }, 0);
@@ -620,7 +620,7 @@ function renderProductionList(entries) {
     return;
   }
 
-  if (S.productionGroupBy === "person") {
+  if (productionGroupBy() === "person") {
     listEl.innerHTML = renderProductionByPerson(entries);
     return;
   }
@@ -833,7 +833,7 @@ export function bulkAddPerson() {
   var input = document.getElementById("bulk-person-input");
   if (!input) return;
   var id = findOrAddPerson(input.value);
-  S.tagAddingPersonFor = null;
+  setTagAddingPerson(null);
   if (!id) { renderProduction(); return; }
   bulkSetOwner(id);
 }
@@ -868,7 +868,7 @@ function renderBulkBar(entries) {
   var bar = document.getElementById("production-bulk");
   if (!bar) return;
   var items = selectedEntries(entries);
-  var cardView = S.productionGroupBy === "cat" || S.productionGroupBy === "person";
+  var cardView = productionGroupBy() === "cat" || productionGroupBy() === "person";
   if (!items.length || !cardView || reviewMode()) { bar.hidden = true; bar.innerHTML = ""; return; }
 
   var n = items.length;
@@ -908,7 +908,7 @@ function renderBulkBar(entries) {
           : 'Delete') +
       '</button>' +
     '</div>' +
-    (S.tagAddingPersonFor === "__bulk__"
+    (tagAddingPersonKey() === "__bulk__"
       ? '<div class="bulk-row bulk-person-row">' +
           '<input type="text" class="ev-field" id="bulk-person-input" placeholder="Their name" maxlength="60" ' +
             'aria-label="The new person’s name">' +
@@ -970,7 +970,7 @@ export function addPersonForTag(key) {
   var input = document.querySelector('.tag-person-input[data-key="' + cssAttr(key) + '"]');
   if (!input) return;
   var id = findOrAddPerson(input.value);
-  S.tagAddingPersonFor = null;
+  setTagAddingPerson(null);
   if (!id) { renderProduction(); return; }
   var item = findTagByKey(key);
   var entry = item && trackedEntry(item);
@@ -1006,10 +1006,10 @@ export function armPersonDelete(btn, personId) {
 export function saveTagRename(key) {
   var input = document.querySelector('.tag-rename-input[data-key="' + cssAttr(key) + '"]');
   var item = findTagByKey(key);
-  if (!input || !item) { S.tagRenaming = null; renderProduction(); return; }
+  if (!input || !item) { setTagRenaming(null); renderProduction(); return; }
   breakUndoCoalescing();
   var changed = renameTag(item.cat.id, item.name, input.value);
-  S.tagRenaming = null;
+  setTagRenaming(null);
   if (changed) {
     markDirty();
     breakUndoCoalescing();
