@@ -55,6 +55,7 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { requestRefresh } from "../legacy/session-bridge.ts";
 import { focusMemory } from "../legacy/editor-bridge.ts";
+import { resetTagPanel } from "../application/tag-panel-state.ts";
 export {
   TAG_CATEGORIES,
   TAG_STATUSES,
@@ -749,12 +750,8 @@ export function removeTag(cat, name) {
 }
 
 var pendingTag = null;
-S.tagRenaming = null;
 S.tagDeleteArmId = null;
 S.tagDeleteArmTimer = null;
-S.productionGroupBy = "cat";
-S.tagExpanded = null;
-S.tagAddingPersonFor = null;
 
 export var productionSelection = {};
 S.selectionAnchorKey = null;
@@ -795,10 +792,7 @@ export function pruneProductionSelection(entries) {
 }
 
 export function resetProductionPanelState() {
-  S.tagRenaming = null;
-  S.tagExpanded = null;
-  S.tagAddingPersonFor = null;
-  S.productionGroupBy = "cat";
+  resetTagPanel();
   clearTimeout(S.tagDeleteArmTimer);
   S.tagDeleteArmId = null;
   clearProductionSelection();

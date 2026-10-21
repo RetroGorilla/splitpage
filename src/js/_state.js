@@ -3,8 +3,6 @@ export const S = {
 
   baseState: undefined,
 
-  commentSortMode: undefined,
-
   deleteArmId: undefined,
 
   deleteArmTimer: undefined,
@@ -21,25 +19,16 @@ export const S = {
 
   finalTranscript: undefined,
 
-  findMatchCase: undefined,
-
-  gearGroupBy: undefined,
-
-
   initialStateReady: undefined,
 
   interimTranscript: undefined,
-
-  productionGroupBy: undefined,
 
   promptWords: undefined,
 
   prompterLastTs: undefined,
 
 
-
   prompterRAF: undefined,
-
 
   prompterSpeed: undefined,
 
@@ -65,15 +54,9 @@ export const S = {
 
   state: undefined,
 
-  tagAddingPersonFor: undefined,
-
   tagDeleteArmId: undefined,
 
   tagDeleteArmTimer: undefined,
-
-  tagExpanded: undefined,
-
-  tagRenaming: undefined,
 
   voiceRestarts: undefined,
 
