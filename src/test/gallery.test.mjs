@@ -15,9 +15,10 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import { toMarkdownDoc } from "../js/14d-export-text.js";
 import { __init as initDocx, buildDocx, docxToRows } from "../js/15-docx.js";
 import { buildPdf } from "../js/17-pdf.js";
-import { buildSplitpageFile, parseSplitpageFile } from "../js/20d-formats.js";
+import { buildSplitpageFile } from "../js/20d-formats.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
 initTags();
 initStatus();

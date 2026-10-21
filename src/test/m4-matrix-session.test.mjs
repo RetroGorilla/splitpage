@@ -11,6 +11,7 @@ import {
   rightToday,
   traceFields
 } from "./_m4-matrix.mjs";
+import { cloneState } from "../core/document/clone.ts";
 
 const { liveSession, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../legacy/session-bridge.ts");
 
@@ -25,7 +26,7 @@ bootTrace.stop();
 const { LONG_DEMO } = await import("../js/_starters.js");
 const { migrateRows } = await import("../js/02-state.js");
 const { adoptRestoredState, migrateDocument, standaloneHtmlFor } = await import("../js/02b-doc-id.js");
-const { cloneState, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
 const exportModule = await import("../js/14-export.js");

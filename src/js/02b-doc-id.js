@@ -10,7 +10,6 @@ import { neverWrittenOut } from "../application/recovery/pristine.ts";
 import { base64Encode } from "../core/document/media.ts";
 import { STATE_FIELDS, buildPublishHtml, defaultState, migrateRows } from "./02-state.js";
 import { inlineStateImages } from "../adapters/storage/02c-blobs.js";
-import { cloneState } from "./03-sync.js";
 import { copyHistory, historyDocumentChanged } from "./03a-history-store.js";
 import { showToast } from "./12-dirty-toast.js";
 import { onServerDoc } from "./13-hosted.js";
@@ -20,6 +19,7 @@ import {
   duplicateReplacementInput,
   normalizeDocId
 } from "../../shared/doc-id-policy.js";
+import { cloneState } from "../core/document/clone.ts";
 export { decideDuplicateLoser };
 export { mergedDocId, randomHexBytes, sha256Hex, withPageHead };
 

@@ -8,9 +8,10 @@ import {
 } from "../adapters/storage/02d-gallery.js";
 import { mergeStates } from "../js/03-sync.js";
 import { S } from "../js/_state.js";
-import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject, parseSplitpageFile } from "../js/20d-formats.js";
+import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject } from "../js/20d-formats.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
 const jpegBytes = (w, h, salt) => new Uint8Array([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, salt || 0, 0xFF, 0xD9]);
 const O1 = intern(jpegBytes(300, 200, 11));

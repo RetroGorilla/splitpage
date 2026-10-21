@@ -10,7 +10,8 @@ import {
   safeImageSrc,
   storedImageAttributes,
   storedImageHtml,
-  storedImageMarkup
+  storedImageMarkup,
+  truncateForPreview
 } from "../../../src/core/document/text-policy.ts";
 import type { StoredImageRef } from "../../../src/core/document/text-policy.ts";
 import type { IdSource } from "../../../src/core/document/ports.ts";
@@ -160,4 +161,13 @@ test("legacyMdToHtml reads the old markdown and the inline tags it allowed", () 
   assert.equal(legacyMdToHtml("[x](javascript:alert(1))"), "[x](javascript:alert(1))");
   assert.equal(legacyMdToHtml(null), "");
   assert.equal(legacyMdToHtml(7), "");
+});
+
+test("truncateForPreview cuts at a unit count with an ellipsis and never splits a pair", () => {
+  assert.equal(truncateForPreview("short", 10), "short");
+  assert.equal(truncateForPreview("exactly10!", 10), "exactly10!");
+  assert.equal(truncateForPreview("a longer line", 8), "a longer…");
+  assert.equal(truncateForPreview("ab😀cd", 3), "ab…");
+  assert.equal(truncateForPreview(null, 5), "");
+  assert.equal(truncateForPreview(undefined, 5), "");
 });

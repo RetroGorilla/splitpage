@@ -5,6 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 import { readBuiltCss } from "../../tools/css-colours.mjs";
 import { S } from "../js/_state.js";
 import { table304Document } from "../../tests/application/raw-inputs.ts";
+import { cloneState } from "../core/document/clone.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -12,7 +13,7 @@ await bootApp();
 
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
-const { applyMerge, cloneState, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { applyMerge, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { renderAbsorbed, syncFieldFromDom } = await import("../js/05-render.js");
 const { cellSelection, editCell, openCellEdit } = await import("../js/05b-cell-edit.js");
 const { pasteIntoCell } = await import("../js/05c-clipboard.js");

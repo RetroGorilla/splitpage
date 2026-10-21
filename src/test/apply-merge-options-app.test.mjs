@@ -4,11 +4,12 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
-import { applyMerge, baseStateReason, cloneState, reportMerge, setBaseState } from "../js/03-sync.js";
+import { applyMerge, baseStateReason, reportMerge, setBaseState } from "../js/03-sync.js";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { listDocHistory } from "../js/03a-history-store.js";
 import { clearDirty } from "../js/12-dirty-toast.js";
 import * as exporting from "../js/14-export.js";
+import { cloneState } from "../core/document/clone.ts";
 
 await bootApp();
 await window.__historyTest.forceBackend("memory");

@@ -13,7 +13,7 @@ import { resetProductionPanelState } from "./07-production-tags.js";
 import { openGdocModal, openImportModal } from "./11-import.js";
 import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { arrivingOnLink } from "./13-hosted.js";
-import { fileKindFromName, openLocalFile, openProjectFile, updateFileChip } from "./18-local-files.js";
+import { openLocalFile, openProjectFile, updateFileChip } from "./18-local-files.js";
 import { desktopAppUrl, desktopAppOffered } from "./20a-update.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
 import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
@@ -21,6 +21,7 @@ import { draftRestorePending } from "./20g-drafts.js";
 import { STARTERS, starterById } from "./_starters.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
+import { fileKindFromName } from "../../shared/file-names.js";
 
 var newTabPageShown = false;
 

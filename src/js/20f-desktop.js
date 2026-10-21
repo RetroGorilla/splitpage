@@ -14,11 +14,12 @@ import { cssAttr } from "./04-richtext.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { detectServer, openServerDoc, pointTabAt } from "./13-hosted.js";
 import { saveDoc } from "./14-export.js";
-import { mimeForFilename, openProjectFile } from "./18-local-files.js";
+import { openProjectFile } from "./18-local-files.js";
 import { openServersDialog } from "./20e-connect.js";
 import { draftRestorePending, flushDraftNow } from "./20g-drafts.js";
 import { concatBytes, strBytes } from "../adapters/formats/bytes.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
+import { mimeForFilename } from "../../shared/file-names.js";
 
 export function makeDesktopHandle(entry) {
   var id = entry.id;

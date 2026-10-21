@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { home } from "../js/_home.js";
+import { truncateForPreview } from "../core/document/text-policy.ts";
 
 await bootApp();
 
@@ -17,7 +18,6 @@ const { newScriptFromSelection, selectScenes } = await import("../js/05h-scene-s
 const { registryKey } = await import("../core/document/tags.ts");
 const { setTagNotes } = await import("../js/08-production-panels.js");
 const { closeBrollPanel, openBrollPanel } = await import("../js/08d-broll-panel.js");
-const { truncateForPreview } = await import("../js/11-import.js");
 const { closeExportDialog, openExportDialog } = await import("../js/18c-export-dialog.js");
 const { presenceInitials } = await import("../js/13a-presence.js");
 const { buildMarkdownProject, parseMarkdownProject, applyMarkdownProject } = await import("../js/20d-formats.js");

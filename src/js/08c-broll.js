@@ -119,10 +119,6 @@ function brollHtmlLineText(nodes) {
   return nodes.map(function (n) { return n.textContent || ""; }).join("");
 }
 
-export function brollCountInRow(row) {
-  return row && row.visualText ? productionReaders.brollInField(row.visualText).length : 0;
-}
-
 function brollRow(rowId) {
   var i = rowId ? findRowIndex(rowId) : -1;
   return i === -1 ? null : S.state.rows[i];

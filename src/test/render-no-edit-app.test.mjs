@@ -2,13 +2,14 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { cloneState } from "../core/document/clone.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
-const { applyMerge, cloneState } = await import("../js/03-sync.js");
+const { applyMerge } = await import("../js/03-sync.js");
 const { render, renderAbsorbed, screenIsStale } = await import("../js/05-render.js");
 const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");

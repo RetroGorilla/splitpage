@@ -5,12 +5,13 @@ import { S } from "../js/_state.js";
 import {
   TABLE_304, chance, judge, pick, rawObject, seeded, table304Document, text, upTo
 } from "../../tests/application/raw-inputs.ts";
+import { cloneState } from "../core/document/clone.ts";
 
 await bootApp();
 
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
-const { applyMerge, cloneState } = await import("../js/03-sync.js");
+const { applyMerge } = await import("../js/03-sync.js");
 const { mergeUndo } = await import("../legacy/editor-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { SERVER_RESUME_KEY, finishServerDetect, openServerDoc, saveToServer } = await import("../js/13-hosted.js");
