@@ -21,10 +21,6 @@ export const S = {
 
   saveButtonBusy: undefined,
 
-  savedRange: undefined,
-
-  savedRangeCell: undefined,
-
   selectionAnchorKey: undefined,
 
   serverBookmarks: undefined,
