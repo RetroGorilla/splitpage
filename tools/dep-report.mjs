@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { builtinModules } from "node:module";
-import { join, posix } from "node:path";
+import { join, posix, resolve } from "node:path";
 import ts from "typescript";
 import { REPO, isScript, listRepoFiles, parseScript } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
@@ -295,6 +295,7 @@ function chainOf(expr) {
   for (;;) {
     if (isWrapper(e)) { e = e.expression; continue; }
     if (ts.isPropertyAccessExpression(e)) { path.unshift(e.name.text); e = e.expression; continue; }
+    if (ts.isQualifiedName(e)) { path.unshift(e.right.text); e = e.left; continue; }
     if (ts.isElementAccessExpression(e)) { path.unshift(keyOf(e.argumentExpression)); e = e.expression; continue; }
     break;
   }
@@ -469,7 +470,16 @@ function bindScopes(sf) {
     if (hasModifier(node, ts.SyntaxKind.DeclareKeyword)) { collectAmbient(node); return; }
     if (ts.isImportDeclaration(node)) { handleImport(node, s); return; }
     if (ts.isExportDeclaration(node)) { handleExport(node, s); return; }
-    if (ts.isImportEqualsDeclaration(node)) { declare(s, node.name, "import-equals"); return; }
+    if (ts.isImportEqualsDeclaration(node)) {
+      const ref = node.moduleReference;
+      const spec = ts.isExternalModuleReference(ref) ? literalText(ref.expression) : null;
+      declare(s, node.name, node.isTypeOnly ? "import-type" : "import-equals",
+        ts.isExternalModuleReference(ref)
+          ? spec === null ? {} : { source: { spec, via: [], node, requireCallee: null } }
+          : { aliasInit: ref, aliasPath: [] });
+      if (!ts.isExternalModuleReference(ref)) walk(ref, s);
+      return;
+    }
     if (ts.isImportTypeNode(node)) { for (const t of node.typeArguments ?? []) walk(t, s); return; }
     if (ts.isExportAssignment(node)) {
       walk(node.expression, s);
@@ -553,6 +563,7 @@ function accessAt(identifier, isFree) {
     const p = n.parent;
     if (isWrapper(p)) { n = p; continue; }
     if (ts.isPropertyAccessExpression(p) && p.expression === n) { path.push(p.name.text); n = p; continue; }
+    if (ts.isQualifiedName(p) && p.left === n) { path.push(p.right.text); n = p; continue; }
     if (ts.isElementAccessExpression(p) && p.expression === n) { path.push(keyOf(p.argumentExpression)); n = p; continue; }
     break;
   }
@@ -566,6 +577,27 @@ function accessAt(identifier, isFree) {
     if (OBJECT_MUTATORS[owner.text]?.has(p.expression.name.text) && isFree(owner)) return { path, write: "mutate", node: n };
   }
   return { path, write: null, node: n };
+}
+
+function loadedNames(call, kind) {
+  let n = outermost(call);
+  const awaited = ts.isAwaitExpression(n.parent);
+  if (kind === "dynamic-import" && !awaited) return null;
+  if (awaited) n = outermost(n.parent);
+  const p = n.parent;
+  if (ts.isPropertyAccessExpression(p) && p.expression === n) return [p.name.text];
+  if (ts.isElementAccessExpression(p) && p.expression === n) {
+    const name = literalText(p.argumentExpression);
+    return name === null ? null : [name];
+  }
+  if (!ts.isVariableDeclaration(p) || p.initializer !== n || !ts.isObjectBindingPattern(p.name)) return null;
+  const names = [];
+  for (const el of p.name.elements) {
+    const name = el.dotDotDotToken ? null : staticName(el.propertyName ?? el.name);
+    if (name === null) return null;
+    names.push(name);
+  }
+  return names;
 }
 
 export function analyzeScript(path, text) {
@@ -587,10 +619,23 @@ export function analyzeScript(path, text) {
     }
     if (ts.isImportDeclaration(node)) {
       const spec = literalText(node.moduleSpecifier);
-      if (spec !== null) imports.push({ spec, typeOnly: Boolean(node.importClause?.isTypeOnly), kind: "import", line: at(node) });
+      const clause = node.importClause;
+      const names = [];
+      if (clause?.name) names.push("default");
+      if (clause?.namedBindings) {
+        if (ts.isNamespaceImport(clause.namedBindings)) names.push("*");
+        else for (const el of clause.namedBindings.elements) names.push((el.propertyName ?? el.name).text);
+      }
+      if (spec !== null) imports.push({ spec, names, typeOnly: Boolean(clause?.isTypeOnly), kind: "import", line: at(node) });
+    } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
+      const spec = literalText(node.moduleReference.expression);
+      if (spec !== null) imports.push({ spec, names: [node.name.text], typeOnly: node.isTypeOnly, kind: "import-equals", line: at(node) });
+      else unresolved.push({ kind: "import-equals", expression: node.getText(sf).replace(/\s+/g, " "), line: at(node) });
     } else if (ts.isExportDeclaration(node) && node.moduleSpecifier) {
       const spec = literalText(node.moduleSpecifier);
-      if (spec !== null) imports.push({ spec, typeOnly: node.isTypeOnly, kind: "re-export", line: at(node) });
+      const names = node.exportClause && ts.isNamedExports(node.exportClause)
+        ? node.exportClause.elements.map((el) => (el.propertyName ?? el.name).text) : ["*"];
+      if (spec !== null) imports.push({ spec, names, typeOnly: node.isTypeOnly, kind: "re-export", line: at(node) });
     } else if (ts.isImportTypeNode(node)) {
       const arg = node.argument;
       const spec = ts.isLiteralTypeNode(arg) ? literalText(arg.literal) : null;
@@ -598,7 +643,7 @@ export function analyzeScript(path, text) {
     } else if (ts.isCallExpression(node) && loadsByCall.has(node)) {
       const l = loadsByCall.get(node);
       if (liveLoad(l)) {
-        if (l.spec !== null) imports.push({ spec: l.spec, typeOnly: false, kind: l.kind, line: at(node) });
+        if (l.spec !== null) imports.push({ spec: l.spec, names: loadedNames(node, l.kind), typeOnly: false, kind: l.kind, line: at(node) });
         else unresolved.push({ kind: l.kind, expression: node.getText(sf).replace(/\s+/g, " "), line: at(node) });
       }
     }
@@ -776,10 +821,14 @@ export function buildGraph(sources, allFiles = sources.map((s) => s.path)) {
       loads: analysis.loads.map((l) => ({ ...l, target: fileTarget(l.spec) })),
       exports: analysis.exports.map((e) => ({ ...e, target: fileTarget(e.spec) }))
     };
-    modules.set(path, { path, layer: layerOf(path), edges, unresolved: analysis.unresolved, htmlParses: analysis.htmlParses, globals: analysis.globals, ambients: analysis.ambients, stateLinks });
+    modules.set(path, { path, text, layer: layerOf(path), edges, unresolved: analysis.unresolved, htmlParses: analysis.htmlParses, globals: analysis.globals, ambients: analysis.ambients, stateLinks });
   }
   const { provides, truncated } = stateProviders(modules);
-  for (const m of modules.values()) m.state = stateUsage(m, provides, truncated);
+  for (const m of modules.values()) {
+    m.state = stateUsage(m, provides, truncated);
+    m.stateProviders = new Map(m.edges.filter((e) => e.kind === "file" && provides.has(e.target))
+      .map((e) => [e.spec, provides.get(e.target)]));
+  }
   return modules;
 }
 
@@ -920,9 +969,275 @@ export function compareBaseline(violations, baseline) {
   const allowed = new Map((baseline.exceptions ?? []).map((e) => [key(e), e]));
   const current = new Set(violations.map(key));
   return {
-    added: violations.filter((v) => !allowed.has(key(v))),
-    resolved: [...allowed.values()].filter((e) => !current.has(key(e)))
+    added: violations.filter((v) => !allowed.has(key(v)) || (v.count !== undefined && v.count > (allowed.get(key(v)).count ?? 0))),
+    resolved: [...allowed.values()].filter((e) => !current.has(key(e)) || (e.count !== undefined && violations.some((v) => key(v) === key(e) && v.count < e.count)))
   };
+}
+
+export function isNumbered(path) {
+  return /^src\/js\/[0-9][^/]*$/.test(path) && isScript(path);
+}
+
+function legacyStateNodes(sf, providers) {
+  const nodes = new Map();
+  const unresolved = [];
+  const ignored = new Set();
+  const scopes = bindScopes(sf);
+  const position = (node) => (ts.isPropertyAccessExpression(node) ? node.name : ts.isQualifiedName(node) ? node.right : node).getStart(sf);
+  const add = (node, prefix = [], resolved = false) => nodes.set(position(node), { node, prefix, resolved });
+  const visit = (node) => {
+    if (ts.isIdentifier(node) && node.text === STATE_EXPORT && isReference(node)
+      || ts.isPropertyAccessExpression(node) && node.name.text === STATE_EXPORT) {
+      const chain = chainOf(node);
+      if (chain && scopes.refOf.get(chain.root)?.binding) ignored.add(position(node));
+      else add(node);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  const sourceOf = (binding, seen = new Set()) => {
+    if (!binding || seen.has(binding)) return null;
+    if (binding.source) return binding.source;
+    if (binding.kind !== "import-equals" || !binding.aliasInit) return null;
+    seen.add(binding);
+    const chain = chainOf(binding.aliasInit);
+    const source = chain ? sourceOf(scopes.refOf.get(chain.root)?.binding, seen) : null;
+    return source ? { ...source, via: [...source.via, ...chain.path] } : null;
+  };
+  for (const r of scopes.refs) {
+    const source = sourceOf(r.binding);
+    if (!source || source.requireCallee && !scopes.isFree(source.requireCallee)) continue;
+    const from = providers ? providers.get(source.spec) ?? [] : [{ path: [STATE_EXPORT], sub: [] }];
+    for (const q of from) {
+      if (!prefixOf(source.via, q.path) && !prefixOf(q.path, source.via)) continue;
+      let node = r.node;
+      let unknown = false;
+      let matches = true;
+      for (const name of q.path.slice(source.via.length)) {
+        const n = outermost(node);
+        const p = n.parent;
+        const member = ts.isPropertyAccessExpression(p) && p.expression === n ? p.name.text
+          : ts.isQualifiedName(p) && p.left === n ? p.right.text
+          : ts.isElementAccessExpression(p) && p.expression === n ? literalText(p.argumentExpression) : null;
+        if (ts.isImportEqualsDeclaration(p) && p.moduleReference === n) { matches = false; break; }
+        if (member === null || name === "*") { unknown = true; break; }
+        if (member !== name) { matches = false; break; }
+        node = p;
+      }
+      if (unknown) {
+        unresolved.push({ line: sf.getLineAndCharacterOfPosition(r.node.getStart(sf)).line + 1,
+          detail: `state import ${r.binding.name} from ${source.spec} cannot be resolved statically; use an explicit named import or static namespace member` });
+      } else if (matches) add(node, [...q.sub, ...source.via.slice(q.path.length)], true);
+    }
+  }
+  return { nodes, unresolved, ignored };
+}
+
+export function legacyMeasurements(text, path = "legacy.js", providers) {
+  const lines = text.split("\n");
+  const directWrite = /\bS\.state(\.[A-Za-z_]+|\[[^\]]+\])*\s*(=[^=]|\+=|-=)|\bS\.state\.[a-zA-Z_]+\.(push|splice|pop|shift|unshift|sort)\(/;
+  const sf = parseScript(path, text);
+  const references = new Set([...text.matchAll(/\bS\.[A-Za-z_]+/g)].map((match) => match.index));
+  const { nodes, ignored } = legacyStateNodes(sf, providers);
+  for (const start of ignored) references.delete(start);
+  for (const { node, prefix, resolved } of nodes.values()) {
+    const n = outermost(node);
+    const p = n.parent;
+    const access = (ts.isPropertyAccessExpression(p) || ts.isElementAccessExpression(p)) && p.expression === n;
+    const alias = (resolved || ts.isIdentifier(node)) && (ts.isVariableDeclaration(p) && p.initializer === n
+      || ts.isBinaryExpression(p) && p.operatorToken.kind === ts.SyntaxKind.EqualsToken && p.right === n
+      || ts.isImportEqualsDeclaration(p) && p.moduleReference === n);
+    if (access || alias || prefix.length) references.add((ts.isPropertyAccessExpression(node) ? node.name : ts.isQualifiedName(node) ? node.right : node).getStart(sf));
+  }
+  return {
+    references: references.size,
+    directWrites: lines.filter((line) => directWrite.test(line)).length,
+    lines: lines.length - 1
+  };
+}
+
+function legacyWriteCount(path, text, providers) {
+  const sf = parseScript(path, text);
+  const methods = new Set(["push", "splice", "pop", "shift", "unshift", "sort"]);
+  let count = 0;
+  const { nodes, unresolved } = legacyStateNodes(sf, providers);
+  for (const { node, prefix } of nodes.values()) {
+    const access = accessAt(node, () => false);
+    if ([...prefix, ...access.path][0] === "state" && (access.write === "set"
+      || access.write === "mutate" && methods.has(chainOf(access.node)?.path.at(-1)))) count++;
+  }
+  return { count, unresolved };
+}
+
+export function legacyViolations(modules) {
+  const out = [];
+  for (const m of modules.values()) {
+    if (!m.path.startsWith("src/")) continue;
+    const counts = legacyMeasurements(m.text, m.path, m.stateProviders);
+    const { count: directWrites, unresolved } = legacyWriteCount(m.path, m.text, m.stateProviders);
+    for (const l of m.stateLinks.loads) {
+      if (m.stateProviders.has(l.spec)) unresolved.push({ line: l.line,
+        detail: `state import from ${l.spec} cannot be resolved statically; use an explicit named import or static namespace member` });
+    }
+    for (const u of unresolved) out.push({ rule: "state-import", source: m.path, target: "global:S", ...u, unknownNames: true });
+    if (isNumbered(m.path)) out.push({ rule: "legacy-file", source: m.path, target: "src/js" });
+    if (counts.references) out.push({ rule: "legacy-state-refs", source: m.path, target: "global:S", count: counts.references });
+    if (directWrites) out.push({ rule: "state-write", source: m.path, target: "direct:S.state", count: directWrites });
+    if (!isNumbered(m.path)) continue;
+    for (const e of m.edges) {
+      if (e.kind !== "file" || !isNumbered(e.target)) continue;
+      for (const name of e.names?.length ? e.names : ["*"]) {
+        out.push({ rule: "loop-import", source: m.path, target: `${e.target}#${name}`, line: e.line,
+          ...(e.names === null ? { detail: `${e.kind} imported names cannot be determined statically; use explicit named destructuring`, unknownNames: true } : {}) });
+      }
+    }
+  }
+  const unique = new Map();
+  for (const v of out) if (!unique.has(key(v)) || v.unknownNames) unique.set(key(v), v);
+  return [...unique.values()].sort(compareExceptions);
+}
+
+export function legacyMetrics(modules) {
+  const app = new Map([...modules].filter(([p]) => p.startsWith("src/") && layerOf(p) !== "tests"));
+  const tests = [...modules.values()].filter((m) => m.path.startsWith("src/test/"));
+  const numbered = [...app.values()].filter((m) => isNumbered(m.path));
+  const total = (items, field) => items.reduce((sum, m) => sum + legacyMeasurements(m.text, m.path, m.stateProviders)[field], 0);
+  const state = modules.get(STATE_MODULE);
+  let stateFields = 0;
+  if (state) {
+    const sf = parseScript(state.path, state.text);
+    for (const st of sf.statements) {
+      if (!ts.isVariableStatement(st)) continue;
+      for (const d of st.declarationList.declarations) {
+        if (ts.isIdentifier(d.name) && d.name.text === STATE_EXPORT && d.initializer && ts.isObjectLiteralExpression(d.initializer)) stateFields = d.initializer.properties.length;
+      }
+    }
+  }
+  return {
+    loopModules: stronglyConnected(app, false).flat().length,
+    loopLinks: cycleEdges(app).length,
+    stateModules: state ? 1 : 0,
+    stateFields,
+    stateReferences: total([...app.values()], "references"),
+    testStateReferences: total(tests, "references"),
+    stateImporters: [...app.values()].filter((m) => m.state.importsState).length,
+    testStateImporters: tests.filter((m) => m.state.importsState).length,
+    stateAssigners: metrics(app).stateAssigners.length,
+    directWriteLines: total([...app.values()], "directWrites"),
+    numberedFiles: numbered.length,
+    numberedLines: total(numbered, "lines")
+  };
+}
+
+export function assertLegacyMetrics(actual, thresholds) {
+  if (!thresholds || Array.isArray(thresholds) || typeof thresholds !== "object" || !Object.keys(thresholds).length) throw new Error("legacy thresholds must be a non-empty object of upper bounds");
+  const failures = [];
+  for (const [name, limit] of Object.entries(thresholds)) {
+    if (!Object.hasOwn(actual, name) || !Number.isFinite(limit) || limit < 0) throw new Error(`invalid legacy threshold: ${name}`);
+    if (actual[name] > limit) failures.push(`${name}: ${actual[name]} exceeds ${limit}`);
+  }
+  return failures;
+}
+
+export function loopModel(modules, steps) {
+  const kindsAllowed = ["rule", "page-helper", "value", "changing", "stateful", "calls-loop"];
+  if (!Array.isArray(steps) || steps.some((s) => !s || typeof s.label !== "string"
+    || ["kinds", "names", "exceptNames"].some((k) => s[k] !== undefined && (!Array.isArray(s[k]) || s[k].some((v) => typeof v !== "string")))
+    || s.kinds?.some((k) => !kindsAllowed.includes(k)))) throw new Error("invalid loop steps: expected labels with kinds, exceptNames and names arrays");
+  const frontend = new Map([...modules].filter(([p]) => p.startsWith("src/") && layerOf(p) !== "tests"));
+  const loop = new Set(stronglyConnected(frontend, false).flat());
+  const files = new Map();
+  const pageGlobals = new Set(["window", "document", "navigator", "location", "history", "localStorage", "sessionStorage", "indexedDB", "caches", "fetch", "XMLHttpRequest", "WebSocket", "EventSource", "BroadcastChannel", "Worker", "AbortController", "URL", "TextDecoder", "TextEncoder", "Blob", "File", "FileReader", "Image", "setTimeout", "setInterval", "clearTimeout", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame", "requestIdleCallback", "queueMicrotask", "performance", "crypto", "getComputedStyle", "HTMLElement", "Node", "Element"]);
+  const parse = (path) => {
+    if (files.has(path)) return files.get(path);
+    const sf = parseScript(path, modules.get(path).text);
+    const imported = new Map(), fns = new Map(), vars = new Set(), assigned = new Set(), exported = new Map();
+    for (const st of sf.statements) {
+      if (ts.isImportDeclaration(st)) {
+        const target = modules.get(path).edges.find((e) => e.spec === literalText(st.moduleSpecifier))?.target;
+        const b = st.importClause?.namedBindings;
+        if (b && ts.isNamedImports(b)) for (const el of b.elements) imported.set(el.name.text, target);
+        if (b && ts.isNamespaceImport(b)) imported.set(b.name.text, target);
+        if (st.importClause?.name) imported.set(st.importClause.name.text, target);
+      }
+      const isExport = hasModifier(st, ts.SyntaxKind.ExportKeyword);
+      if ((ts.isFunctionDeclaration(st) || ts.isClassDeclaration(st)) && st.name) {
+        fns.set(st.name.text, st);
+        if (isExport) exported.set(st.name.text, st.name.text);
+      }
+      if (ts.isVariableStatement(st)) for (const d of st.declarationList.declarations) {
+        if (!ts.isIdentifier(d.name)) continue;
+        if (d.initializer && (ts.isFunctionExpression(d.initializer) || ts.isArrowFunction(d.initializer))) fns.set(d.name.text, d.initializer);
+        else vars.add(d.name.text);
+        if (isExport) exported.set(d.name.text, d.name.text);
+      }
+      if (ts.isExportDeclaration(st) && st.exportClause && ts.isNamedExports(st.exportClause)) {
+        for (const el of st.exportClause.elements) exported.set(el.name.text, st.moduleSpecifier ? null : (el.propertyName ?? el.name).text);
+      }
+    }
+    const walk = (n) => {
+      if (ts.isBinaryExpression(n) && isAssignmentOperator(n.operatorToken.kind) && ts.isIdentifier(n.left)) assigned.add(n.left.text);
+      if ((ts.isPrefixUnaryExpression(n) || ts.isPostfixUnaryExpression(n)) && [ts.SyntaxKind.PlusPlusToken, ts.SyntaxKind.MinusMinusToken].includes(n.operator) && ts.isIdentifier(n.operand)) assigned.add(n.operand.text);
+      ts.forEachChild(n, walk);
+    };
+    walk(sf);
+    const result = { imported, fns, vars, assigned, exported };
+    files.set(path, result);
+    return result;
+  };
+  const profile = (path, name, seen) => {
+    const f = parse(path), node = f.fns.get(name), p = { state: false, page: false, loop: false };
+    const id = `${path}#${name}`;
+    if (!node || seen.has(id)) return p;
+    seen.add(id);
+    const walk = (n) => {
+      if (ts.isIdentifier(n)) {
+        const nameHere = n.text, target = f.imported.get(nameHere);
+        if (f.vars.has(nameHere) || (nameHere === "S" && target)) p.state = true;
+        if (pageGlobals.has(nameHere)) p.page = true;
+        if (target && nameHere !== "S") {
+          if (loop.has(target)) p.loop = true;
+          else if (!target.startsWith("src/core/") && !target.startsWith("shared/")) p.state = true;
+        }
+        if (nameHere !== name && f.fns.has(nameHere)) {
+          const q = profile(path, nameHere, seen);
+          p.state ||= q.state; p.page ||= q.page; p.loop ||= q.loop;
+        }
+      }
+      ts.forEachChild(n, walk);
+    };
+    walk(node);
+    return p;
+  };
+  const kindOf = (path, name) => {
+    const f = parse(path), local = f.exported.get(name);
+    if (local == null || f.imported.has(local)) return "value";
+    if (!f.fns.has(local)) return f.assigned.has(local) ? "changing" : "value";
+    const p = profile(path, local, new Set());
+    return p.loop ? "calls-loop" : p.state ? "stateful" : p.page ? "page-helper" : "rule";
+  };
+  const kinds = {};
+  for (const m of frontend.values()) for (const e of m.edges) {
+    if (!loop.has(m.path) || !loop.has(e.target) || e.typeOnly) continue;
+    for (const name of e.names ?? []) kinds[`${e.target}#${name}`] ??= kindOf(e.target, name);
+  }
+  const counts = {};
+  for (const kind of Object.values(kinds)) counts[kind] = (counts[kind] ?? 0) + 1;
+  const moved = new Set();
+  const report = (label) => {
+    const kept = new Map([...frontend].map(([path, m]) => [path, { ...m, edges: m.edges.filter((e) => !e.names?.length || !e.names.every((n) => moved.has(`${e.target}#${n}`))) }]));
+    const c = stronglyConnected(kept, false);
+    return { label, largest: c[0]?.length ?? 0, loopModules: c.flat().length, loops: c.length, loopLinks: cycleEdges(kept).length };
+  };
+  const rows = [report("now")];
+  for (const step of steps) {
+    for (const [key, kind] of Object.entries(kinds)) {
+      const name = key.slice(key.lastIndexOf("#") + 1);
+      if ((step.kinds?.includes(kind) && !step.exceptNames?.includes(name)) || step.names?.includes(name)) moved.add(key);
+    }
+    rows.push(report(step.label));
+  }
+  return { counts, steps: rows };
 }
 
 export function metrics(modules) {
@@ -963,32 +1278,61 @@ function readBaseline(path) {
 
 function writeBaseline(path, exceptions, previous) {
   const reasons = new Map((previous.exceptions ?? []).filter((e) => e.reason).map((e) => [key(e), e.reason]));
-  const rows = [...exceptions].sort(compareExceptions).map(({ rule, source, target, reason: given }) => {
+  const unique = new Map(exceptions.map((e) => [key(e), e]));
+  const rows = [...unique.values()].sort(compareExceptions).map(({ rule, source, target, count, reason: given }) => {
     const reason = given ?? reasons.get(key({ rule, source, target }));
-    return JSON.stringify(reason ? { rule, source, target, reason } : { rule, source, target });
+    return JSON.stringify({ rule, source, target, ...(count === undefined ? {} : { count }), ...(reason ? { reason } : {}) });
   });
   writeFileSync(path, rows.length ? `{\n  "exceptions": [\n    ${rows.join(",\n    ")}\n  ]\n}\n` : "{\n  \"exceptions\": []\n}\n");
 }
 
 function describe(v) {
-  return `${v.rule}: ${v.source}${v.line ? ":" + v.line : ""} -> ${v.target}${v.detail ? " (" + v.detail + ")" : ""}`;
+  return `${v.rule}: ${v.source}${v.line ? ":" + v.line : ""} -> ${v.target}${v.count === undefined ? "" : ` (count ${v.count})`}${v.detail ? " (" + v.detail + ")" : ""}`;
 }
 
-export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check", reason = "", print = console.log, printError = console.error } = {}) {
+export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check", reason = "", assertPath, stepsPath, print = console.log, printError = console.error } = {}) {
   const acceptReason = typeof reason === "string" ? reason.trim() : "";
   if (mode === "accept" && !acceptReason) {
     printError('dep-report: --accept needs a reason, e.g. --accept "helper moved from 05-render.js to 06-rows.js"');
     return 2;
   }
   const modules = loadGraph(repo);
-  const violations = findViolations(modules);
+  const violations = [...findViolations(modules), ...legacyViolations(modules)].sort(compareExceptions);
   const cycles = migratedCycles(modules);
   const baseline = readBaseline(baselinePath);
   const m = metrics(modules);
 
+  if (mode === "legacy-metrics" || assertPath) {
+    const actual = legacyMetrics(modules);
+    print(JSON.stringify(actual, null, 2));
+    if (!assertPath) return 0;
+    try {
+      const failures = assertLegacyMetrics(actual, JSON.parse(readFileSync(resolve(repo, assertPath), "utf8")));
+      for (const failure of failures) printError(`dep-report: ${failure}`);
+      return failures.length ? 1 : 0;
+    } catch (error) {
+      printError(`dep-report: ${error.message}`);
+      return 2;
+    }
+  }
+  if (mode === "loop-model") {
+    try {
+      print(JSON.stringify(loopModel(modules, JSON.parse(readFileSync(resolve(repo, stepsPath), "utf8"))), null, 2));
+      return 0;
+    } catch (error) {
+      printError(`dep-report: ${error.message}`);
+      return 2;
+    }
+  }
   if (mode === "metrics") {
     print(JSON.stringify(m, null, 2));
     return 0;
+  }
+  const unknownNames = violations.filter((v) => v.unknownNames);
+  if (unknownNames.length) {
+    for (const v of unknownNames) printError("  " + describe(v));
+    printError("dep-report: FAILED");
+    return 1;
   }
   if (mode === "init") {
     if (existsSync(baselinePath)) { printError(`dep-report: ${baselinePath} already exists; use --prune`); return 2; }
@@ -1045,13 +1389,16 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
 
 if (isMain(import.meta.url)) {
   const args = process.argv.slice(2);
-  const modes = { "--metrics": "metrics", "--init": "init", "--prune": "prune" };
+  const modes = { "--metrics": "metrics", "--legacy-metrics": "legacy-metrics", "--init": "init", "--prune": "prune" };
   let options = null;
   if (args.length === 0) options = { mode: "check" };
   else if (args.length === 1 && modes[args[0]]) options = { mode: modes[args[0]] };
   else if (args[0] === "--accept" && args.length <= 2) options = { mode: "accept", reason: args[1] ?? "" };
+  else if (args[0] === "--assert" && args.length === 2) options = { mode: "legacy-metrics", assertPath: args[1] };
+  else if (args[0] === "--legacy-metrics" && args[1] === "--assert" && args.length === 3) options = { mode: "legacy-metrics", assertPath: args[2] };
+  else if (args[0] === "--loop-model" && args.length === 2) options = { mode: "loop-model", stepsPath: args[1] };
   if (options === null) {
-    console.error(`dep-report: unknown argument ${args.join(" ")}; use --metrics, --prune, --init or --accept "<reason>"`);
+    console.error(`dep-report: unknown argument ${args.join(" ")}; use --metrics, --legacy-metrics [--assert <file>], --assert <file>, --loop-model <steps.json>, --prune, --init or --accept "<reason>"`);
     process.exitCode = 2;
   } else {
     process.exitCode = run(options);
