@@ -11,7 +11,7 @@ import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "../adapters/storage/02d-gallery.js";
 import { findRowIndex } from "./03-sync.js";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
-import { cellSelection, editCell, notePaintedEpoch, placeEditorSelection, rememberCellSelection } from "./05b-cell-edit.js";
+import { editCell } from "./05b-cell-edit.js";
 import { refreshGalleryOverlay } from "./05e-gallery-overlay.js";
 import { appendDraftMedia, draftModel, editDraft, isDraftBox } from "./05d-draft-edit.js";
 import { trackDocument } from "./12a-undo.js";
@@ -61,11 +61,11 @@ import { cellRuns, cellTextCommand } from "../application/commands/cell-text.ts"
 import { fromHtml } from "../legacy/richtext.ts";
 import { createPaintGuard } from "../application/editing/paint-guard.ts";
 import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
-import { undoGuard } from "../legacy/editor-bridge.ts";
+import { editorSelection, undoGuard } from "../legacy/editor-bridge.ts";
+import { cellSelection, placeEditorSelection, rememberCellSelection } from "../features/editing/cell-selection.ts";
 import { setTagAddingPerson } from "../application/tag-panel-state.ts";
 import { formatVideoLength } from "../../shared/text.js";
 
-export { notePaintedEpoch, placeEditorSelection, rememberCellSelection };
 
 var LINK_POPOVER_HTML =
   '<div class="link-popover" hidden>' +
@@ -482,7 +482,7 @@ function paintOneRow(rowId) {
   var whole = patch ? null : newRowEl(S.state.rows[idx], idx);
   var active = document.activeElement;
   var heldCell = active && active.classList && active.classList.contains("cell-editable") && rowEl.contains(active) &&
-    rememberCellSelection(active) ? active : null;
+    rememberCellSelection(editorSelection(), active) ? active : null;
   var touched = true;
   if (patch) touched = commitRowPatch(rowEl, patch);
   else {
@@ -490,7 +490,7 @@ function paintOneRow(rowId) {
     rowsPainted++;
     cellsPainted += 2;
   }
-  if (heldCell && !heldCell.isConnected) placeEditorSelection(rowsEl);
+  if (heldCell && !heldCell.isConnected) placeEditorSelection(editorSelection(), rowsEl);
   if (touched) paintPresence();
   if (touched) paintRowTimes();
   if (touched) refreshGalleryOverlay();
@@ -634,7 +634,7 @@ function restoreRenderFocus(rowsEl, f) {
     }
     return;
   }
-  placeEditorSelection(rowsEl);
+  placeEditorSelection(editorSelection(), rowsEl);
 }
 
 function resetTransientUiState() {
@@ -676,11 +676,11 @@ function paintAll() {
 
   resetTransientUiState();
   var focus = captureRenderFocus(rowsEl);
-  if (focus && focus.cell) rememberCellSelection(focus.cell);
+  if (focus && focus.cell) rememberCellSelection(editorSelection(), focus.cell);
   withRowMotion(rowsEl, function () {
     commitRows(rowsEl, plan, focus && focus.rowEl);
   });
-  notePaintedEpoch(rowsEl);
+  editorSelection().notePainted(rowsEl);
   if (!writerOpen) restoreRenderFocus(rowsEl, focus);
 
   var titleInput = document.getElementById("doc-title");
@@ -698,10 +698,8 @@ function paintAll() {
   scheduleUntaggedScan();
   paintPresence();
   refreshGalleryOverlay();
-  if (S.savedRangeCell && !S.savedRangeCell.isConnected) {
-    S.savedRange = null;
-    S.savedRangeCell = null;
-  }
+  var link = editorSelection().heldLink();
+  if (link && !link.cell.isConnected) editorSelection().dropLink();
 }
 
 var REDRAW_FAILED = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
@@ -1055,8 +1053,7 @@ export function handleToolbarCmd(btn) {
       showToast("Select some text inside one cell, then add a link.", "warn");
       return;
     }
-    S.savedRange = sel.getRangeAt(0).cloneRange();
-    S.savedRangeCell = cellEl;
+    editorSelection().holdLink(sel.getRangeAt(0).cloneRange(), cellEl);
     var popover = wrap.querySelector(".link-popover");
     popover.hidden = false;
     var input = popover.querySelector("input");
@@ -1146,17 +1143,17 @@ export function confirmLink(wrap) {
   var input = popover.querySelector("input");
   var url = (input.value || "").trim();
   var owner = wrap.querySelector(".cell-editable");
-  if (!url || !S.savedRange || !S.savedRangeCell || S.savedRangeCell !== owner ||
-      !document.contains(S.savedRangeCell)) {
+  var link = editorSelection().heldLink();
+  if (!url || !link || link.cell !== owner || !document.contains(link.cell)) {
     popover.hidden = true;
-    S.savedRange = null; S.savedRangeCell = null;
+    editorSelection().dropLink();
     return;
   }
   if (!/^https?:\/\//i.test(url) && url.indexOf("mailto:") !== 0) url = "https://" + url;
-  var cellEl = S.savedRangeCell;
-  var saved = S.savedRange;
+  var cellEl = link.cell;
+  var saved = link.range;
   popover.hidden = true;
-  S.savedRange = null; S.savedRangeCell = null;
+  editorSelection().dropLink();
   cellEl.focus();
   var sel = window.getSelection();
   sel.removeAllRanges();
@@ -1189,7 +1186,7 @@ function caretOutOfLinkEnd(cellEl) {
 export function cancelLink(wrap) {
   if (!wrap) return;
   wrap.querySelector(".link-popover").hidden = true;
-  S.savedRange = null; S.savedRangeCell = null;
+  editorSelection().dropLink();
 }
 
 function wrapRangeInComment(range, cmtId) {

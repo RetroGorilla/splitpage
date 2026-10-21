@@ -48,6 +48,8 @@ eq("an unknown src folder is src-unknown, not other", layerOf("src/util/helper.j
 eq("a file directly under src is src-unknown", layerOf("src/entry.js"), "src-unknown");
 eq("a root script is still other", layerOf("build.mjs"), "other");
 check("core may not import an unknown src folder", !layerAllows("core/document", "src-unknown"));
+check("a feature may import features/common", layerAllows("features/rows", "features/common"));
+check("a feature may not import another feature", !layerAllows("features/rows", "features/find"));
 check("a feature may not import an unknown src folder", !layerAllows("features/rows", "src-unknown"));
 eq("a .test.ts beside source is tests", layerOf("src/core/text/runs.test.ts"), "tests");
 check("core/text may import core/document", layerAllows("core/text", "core/document"));

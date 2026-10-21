@@ -52,8 +52,6 @@ export async function loadLastFileHandle() {
     });
   } catch (e) { return null; }
 }
-S.savedRange = null;
-S.savedRangeCell = null;
 
 export function __init() {
   PAGE_SHELL = "<!doctype html>" + document.documentElement.outerHTML;

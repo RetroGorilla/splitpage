@@ -122,7 +122,7 @@ export function layerAllows(source, target) {
     case "legacy": return isCore(target) || ["legacy-js", "application", "contracts", "adapters", "shared"].includes(target);
     case "bootstrap": return true;
     default:
-      if (source.startsWith("features/")) return isCore(target) || ["application", "contracts", "shared"].includes(target);
+      if (source.startsWith("features/")) return isCore(target) || target === "features/common" || ["application", "contracts", "shared"].includes(target);
       return true;
   }
 }
