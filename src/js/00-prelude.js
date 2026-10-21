@@ -52,14 +52,10 @@ S.pendingImageRowId = null;
 S.savedRange = null;
 S.savedRangeCell = null;
 
-S.prompterOpen = false;
-S.prompterPlaying = false;
 S.prompterSpeed = 42;
 S.prompterRAF = null;
 S.prompterLastTs = null;
-S.prompterSkipShot = false;
 S.recognition = null;
-S.voiceFollowActive = false;
 S.voiceStarting = false;
 S.promptWords = [];
 S.wordCursor = -1;
