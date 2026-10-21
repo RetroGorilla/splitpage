@@ -1185,9 +1185,40 @@ try {
   const newTsImport = attempt(tsGuarded, { "src/js/00-a.ts": 'import { b } from "./01-b.ts";\n' + tsFiles["src/js/00-a.ts"] });
   eq("a new acyclic import between numbered TypeScript files fails", newTsImport.code, 1);
   eq("only the numbered TypeScript import is new", lines(newTsImport, "new "), ["new loop-import: src/js/00-a.ts:1 -> src/js/01-b.ts#b"]);
+  const ctsFiles = {
+    "src/js/00-a.cts": "export const a = 1;\n",
+    "src/js/01-b.cts": "export const b = 2;\n"
+  };
+  const ctsGuarded = cliRepo(ctsFiles);
+  eq("init records the numbered cts fixture", cli(ctsGuarded, "--init").code, 0);
+  const importEquals = attempt(ctsGuarded, { "src/js/00-a.cts": 'import b = require("./01-b.cts");\n' + ctsFiles["src/js/00-a.cts"] });
+  eq("a new import-equals between numbered cts files fails", importEquals.code, 1);
+  eq("import-equals records its binding on the numbered link", lines(importEquals, "new "), ["new loop-import: src/js/00-a.cts:1 -> src/js/01-b.cts#b"]);
+  const missingEquals = attempt(ctsGuarded, { "src/js/00-a.cts": 'import b = require("./missing.cts");\n' });
+  eq("an import-equals with a missing module fails", missingEquals.code, 1);
+  check("the missing import-equals explains resolution failure", missingEquals.err.includes("./missing.cts does not resolve to a file"), missingEquals.err);
+  const computedEquals = attempt(ctsGuarded, { "src/js/00-a.cts": 'import b = require(moduleName);\n' });
+  eq("an import-equals with a computed module fails", computedEquals.code, 1);
+  check("the computed import-equals explains its unresolved name", computedEquals.err.includes("import-equals with a computed specifier"), computedEquals.err);
   const moreRefs = attempt(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] + "void S.dirty;\n" });
   eq("one more reference to an existing S field fails", moreRefs.code, 1);
   eq("the reference count guard names its file", lines(moreRefs, "new legacy-state-refs"), ["new legacy-state-refs: src/js/00-a.js -> global:S"]);
+  for (const [label, reference] of [
+    ["optional chaining", "S?.dirty"],
+    ["parentheses", "(S).dirty"],
+    ["multiline access", "S\n  .dirty"]
+  ]) {
+    const added = attempt(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] + `void ${reference};\n` });
+    eq(`one more S reference with ${label} fails`, added.code, 1);
+    eq(`the reference ratchet catches ${label}`, lines(added, "new "), ["new legacy-state-refs: src/js/00-a.js -> global:S"]);
+  }
+  for (const path of ["src/js/00-a.js", "src/test/a.test.mjs", "src/legacy/alias.ts"]) {
+    for (const alias of ["const T = S;", "const T = (S);", "let T; T = S;", "let T; T = (S);"]) {
+      const added = attempt(guarded, { [path]: (numberedFiles[path] ?? "") + alias + "\nT.state.rows.push({});\n" });
+      eq(`a direct alias in ${path} using ${alias} fails`, added.code, 1);
+      eq(`the reference ratchet catches ${alias} in ${path}`, lines(added, "new legacy-state-refs"), [`new legacy-state-refs: ${path} -> global:S`]);
+    }
+  }
   const moreTestRefs = attempt(guarded, { "src/test/a.test.mjs": numberedFiles["src/test/a.test.mjs"] + "void S.dirty;\n" });
   eq("one more S reference in tests also fails", moreTestRefs.code, 1);
   const moreWrites = attempt(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"] + "S.state.rows.push(2);\n" });
@@ -1288,6 +1319,29 @@ try {
 console.log("\nlegacy measurements and loop steps:\n");
 
 eq("the measurement uses appendix matches and counts write lines once", legacyMeasurements("S.state = {}; S.state.rows.push(1);\nS.state == null;\nS.state.rows.splice(0);\n"), { references: 4, directWrites: 2, lines: 3 });
+for (const [label, text, count] of [
+  ["optional property and element chains", 'S?.dirty; S?.["dirty"];', 2],
+  ["wrapped and multiline access", '(S).dirty; S\n.dirty; (S)\n["dirty"];', 3],
+  ["bare direct alias declarations", "const T = S; const U = (S);", 2],
+  ["bare direct alias assignments", "let T, U; T = S; U = (S);", 2],
+  ["type identity wrappers", "const T = (S as State); let U; U = S!;", 2],
+  ["property names", "const S = {}; const obj = { S: 1 };", 0],
+  ["historical references in string contents", 'const text = "S.dirty"; S?.dirty;', 2],
+  ["function call and object property alias limits", "const T = identity(S); const U = holder.S;", 0]
+]) {
+  eq(`the reference measurement counts ${label}`, legacyMeasurements(text, "src/legacy/example.ts").references, count);
+}
+for (const [text, expected] of [
+  ['import b = require("./01-b.cts");', { spec: "./01-b.cts", names: ["b"], typeOnly: false, kind: "import-equals", line: 1 }],
+  ['import type b = require("./01-b.cts");', { spec: "./01-b.cts", names: ["b"], typeOnly: true, kind: "import-equals", line: 1 }]
+]) {
+  eq(`the import-equals parser handles ${text}`, analyzeScript("src/js/00-a.cts", text).imports, [expected]);
+}
+eq("an internal import-equals creates no external dependency", analyzeScript("src/js/00-a.cts", "import b = Namespace.b;").imports, []);
+eq("import-equals contributes an edge to runtime cycles", stronglyConnected(graph({
+  "src/js/00-a.cts": 'import b = require("./01-b.cts");',
+  "src/js/01-b.cts": 'import a = require("./00-a.cts");'
+}), false).map((c) => c.sort()), [["src/js/00-a.cts", "src/js/01-b.cts"]]);
 eq("a fully retired legacy layer meets the committed closing limits", assertLegacyMetrics(legacyMetrics(graph({})), JSON.parse(readFileSync(join(TOOLS, "legacy-exit.json"), "utf8"))), []);
 eq("an unnumbered caller still gets a reference and direct-write ratchet", legacyViolations(graph({ "src/legacy/example.ts": "S.state = {};\n" })).map(({ rule, target, count }) => ({ rule, target, count })), [
   { rule: "legacy-state-refs", target: "global:S", count: 1 },
