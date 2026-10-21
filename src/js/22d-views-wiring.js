@@ -9,6 +9,14 @@ import { mountImports, mountGdoc } from "../features/imports/mount.ts";
 import { mountWriterOpen, mountWriterNavigation, mountWriterClose } from "../features/writer/mount.ts";
 import { mountHistoryGallery } from "../features/gallery/mount.ts";
 import { S } from "./_state.js";
+import { touchImportMode } from "../application/import-mode.ts";
+import {
+  prompterIsOpen,
+  prompterIsPlaying,
+  prompterSkipsShot,
+  setPrompterSkipShot,
+  voiceIsFollowing
+} from "../application/prompter-state.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { conn, importHome } from "./_home.js";
 import { expandHiddenShotStrip } from "./01b-hide-shot.js";
@@ -146,7 +154,7 @@ export function mountPrompterVisibilityFeature() {
         var ownsDocument = captureViewDocument();
         acquireWakeLock(function () { return active() && ownsDocument(); });
       },
-      isOpen: function () { return S.prompterOpen; }
+      isOpen: prompterIsOpen
     } });
   });
 }
@@ -287,7 +295,7 @@ export function mountImportsFeature() {
       maybeAutoDetectTwoColumn: maybeAutoDetectTwoColumn,
       updateImportPreview: updateImportPreview,
       handleImportFile: handleImportFile,
-      touchMode: function () { S.importModeTouched = true; },
+      touchMode: touchImportMode,
       capture: function () {
         var ownsDocument = captureViewDocument();
         var ownsModal = captureImportPreview();
@@ -327,11 +335,11 @@ export function mountPrompterFeature() {
       setPrompterFlip: setPrompterFlip,
       setPrompterSceneMode: setPrompterSceneMode,
       stepScene: stepScene,
-      voiceActive: function () { return S.voiceFollowActive; },
-      playing: function () { return S.prompterPlaying; },
-      isOpen: function () { return S.prompterOpen; },
-      skipShot: function () { return S.prompterSkipShot; },
-      setSkipShot: function (value) { S.prompterSkipShot = value; },
+      voiceActive: voiceIsFollowing,
+      playing: prompterIsPlaying,
+      isOpen: prompterIsOpen,
+      skipShot: prompterSkipsShot,
+      setSkipShot: setPrompterSkipShot,
       mirror: function () { return prompterMirror; },
       flip: function () { return prompterFlip; },
       sceneMode: function () { return promptSceneMode; }

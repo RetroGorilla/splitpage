@@ -9,6 +9,7 @@ const { mountImportsFeature } = await import("../js/22d-views-wiring.js");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../js/05-render.js");
 const { openImportModal, closeImportModal } = await import("../js/11-import.js");
+const { resetImportMode } = await import("../application/import-mode.ts");
 after(closeApp);
 
 function open() {
@@ -19,7 +20,7 @@ function open() {
     } }, reason: "import-lifetime"
   });
   render();
-  S.importModeTouched = false;
+  resetImportMode();
   document.querySelector('input[name="import-split"][value="paragraph"]').checked = true;
   document.getElementById("import-preview").textContent = "replacement preview";
 }
