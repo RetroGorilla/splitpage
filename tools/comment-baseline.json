@@ -230,8 +230,10 @@
       "# {\"type\":\"start\",\"lang\":\"en-US\"} listening",
       "# {\"type\":\"warning\",\"code\":\"...\"} no-signal / too-quiet / too-noisy /"
     ],
+    "server/comments.js": [
+      "/* eslint-disable-next-line no-control-regex -- C0 controls, minus the tab/LF/CR a comment may legitimately contain, are what this strips. */"
+    ],
     "server/server.js": [
-      "/* eslint-disable-next-line no-control-regex -- C0 controls, minus the tab/LF/CR a comment may legitimately contain, are what this strips. */",
       "/* eslint-disable-next-line no-control-regex -- stripping them is the job. */"
     ],
     "shared/history-policy.js": [
