@@ -5,7 +5,7 @@
     font-family: var(--font-body);
     font-size: 14px;
     line-height: 1.5;
-    padding: 10px 12px;
+    padding: var(--space-10) var(--space-12);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     background: var(--bg);
@@ -17,7 +17,7 @@
     height: 36px;
     font-family: var(--font-display);
     font-size: 13px;
-    padding: 0 12px;
+    padding: 0 var(--space-12);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
     background: var(--bg);

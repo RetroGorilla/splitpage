@@ -1,13 +1,13 @@
-  .import-split-group { display: flex; gap: 14px; font-family: var(--font-body); font-size: 13px; color: var(--text-dim); }
+  .import-split-group { display: flex; gap: var(--space-14); font-family: var(--font-body); font-size: 13px; color: var(--text-dim); }
   .import-split-group label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
   .modal-preview {
-    margin-top: 12px;
+    margin-top: var(--space-12);
     font-family: var(--font-body);
     font-size: 13px;
     color: var(--text-dim);
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    padding: 9px 12px;
+    padding: 9px var(--space-12);
     line-height: 1.5;
   }

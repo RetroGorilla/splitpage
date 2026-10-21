@@ -17,7 +17,7 @@
     --script-audio-size: 18px;
     --script-audio-lh: 1.6;
     --row-cols: calc(112px * var(--script-scale)) minmax(0, 1fr) minmax(0, 1.25fr) calc(80px * var(--script-scale));
-    padding: 0 20px 80px;
+    padding: 0 var(--space-20) 80px;
   }
   @media (min-width: 1801px) {
     #root > :not(.topbar) {
@@ -42,14 +42,14 @@
     display: grid;
     grid-template-columns: minmax(0, 1fr) max-content;
     align-items: center;
-    column-gap: 16px;
+    column-gap: var(--space-16);
     height: 52px;
-    padding: 0 20px;
+    padding: 0 var(--space-20);
     border-bottom: 1px solid var(--border);
   }
   .topbar-left {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--space-12);
     min-width: 0;
   }

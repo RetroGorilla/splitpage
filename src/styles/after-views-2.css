@@ -8,7 +8,7 @@
     background: transparent;
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
-    padding: 5px 6px;
+    padding: 5px var(--space-6);
     margin: 0 -6px;
     field-sizing: content;
     min-width: 8ch;

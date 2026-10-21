@@ -3,10 +3,10 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 14px;
+    gap: var(--space-14);
     flex-wrap: wrap;
-    padding: 11px 14px;
-    margin: 0 0 14px;
+    padding: 11px var(--space-14);
+    margin: 0 0 var(--space-14);
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
     background: var(--surface);

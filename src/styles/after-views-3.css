@@ -12,5 +12,5 @@
   .doc-meta > :not([hidden]) ~ :not([hidden])::before {
     content: "·";
     color: var(--text-faint);
-    margin: 0 8px;
+    margin: 0 var(--space-8);
   }

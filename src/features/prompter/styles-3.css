@@ -91,16 +91,16 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-8);
     min-height: 72px;
     box-sizing: border-box;
-    padding: 10px 40px;
+    padding: var(--space-10) 40px;
     color: var(--text);
   }
   .prompter-bar [hidden] { display: none !important; }
-  .pp-group { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .pp-group { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-8); }
   .prompter-bar .spacer { flex: 1; }
-  .prompter-bar .div-sep { flex: none; width: 1px; height: 24px; margin: 0 12px; background: var(--border); }
+  .prompter-bar .div-sep { flex: none; width: 1px; height: 24px; margin: 0 var(--space-12); background: var(--border); }
   .prompter .pp-icon {
     flex: none;
     width: 18px;
@@ -138,8 +138,8 @@
   .prompter-bar .pp-play:hover { background: color-mix(in srgb, var(--accent) 88%, var(--text)); }
   .pp-play .pp-icon { width: 22px; height: 22px; fill: currentColor; stroke-width: 3; }
 
-  .pp-step { display: flex; align-items: center; gap: 10px; padding-left: 8px; }
-  .pp-play + .pp-step { padding-left: 16px; }
+  .pp-step { display: flex; align-items: center; gap: var(--space-10); padding-left: var(--space-8); }
+  .pp-play + .pp-step { padding-left: var(--space-16); }
   .pp-step-label { color: var(--text-dim); white-space: nowrap; }
   .pp-stepper {
     display: flex;
@@ -174,7 +174,7 @@
     color: var(--text);
   }
   .pp-scene-readout {
-    padding: 0 6px;
+    padding: 0 var(--space-6);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     color: var(--text);
@@ -183,10 +183,10 @@
   .prompter-bar .pp-btn {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-8);
     height: 40px;
     box-sizing: border-box;
-    padding: 0 14px 0 12px;
+    padding: 0 var(--space-14) 0 var(--space-12);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
     background: transparent;
@@ -202,14 +202,14 @@
   .prompter-bar .pp-btn:disabled { opacity: 0.4; cursor: default; }
   #pp-voice .pp-lamp, #pp-voice.is-active .pp-icon { display: none; }
   #pp-voice.is-active .pp-lamp { display: block; }
-  #pp-voice.is-active { gap: 9px; padding-left: 14px; }
-  .prompter-bar .close-btn { gap: 10px; padding: 0 10px 0 14px; }
+  #pp-voice.is-active { gap: 9px; padding-left: var(--space-14); }
+  .prompter-bar .close-btn { gap: var(--space-10); padding: 0 var(--space-10) 0 var(--space-14); }
   .pp-kbd {
     display: inline-flex;
     align-items: center;
     height: 20px;
     box-sizing: border-box;
-    padding: 0 6px;
+    padding: 0 var(--space-6);
     border: 1px solid var(--border-strong);
     border-radius: 4px;
     font-family: var(--font-display);
@@ -220,27 +220,27 @@
   }
 
   @media (max-width: 760px) {
-    .prompter .prompter-top { height: 48px; padding: 0 12px; column-gap: 12px; }
+    .prompter .prompter-top { height: 48px; padding: 0 var(--space-12); column-gap: var(--space-12); }
     .prompter .pp-scene-pos { font-size: 14px; }
     .prompter .pp-scene-start { font-size: 12.5px; }
-    .prompter .pp-where { gap: 8px; }
+    .prompter .pp-where { gap: var(--space-8); }
     .prompter .pp-elapsed { font-size: 22px; line-height: 28px; }
     .prompter .pp-remaining { font-size: 13px; }
-    .prompter .pp-clock { gap: 6px; }
+    .prompter .pp-clock { gap: var(--space-6); }
     .prompter .pp-voice-name { display: none; }
-    .prompter .pp-voice-state { margin-top: 16px; font-size: 12.5px; line-height: 16px; }
-    .prompter .pp-voice-state .pp-lamp { margin-top: 4px; }
+    .prompter .pp-voice-state { margin-top: var(--space-16); font-size: 12.5px; line-height: 16px; }
+    .prompter .pp-voice-state .pp-lamp { margin-top: var(--space-4); }
     .prompter .prompter-scroll { padding-inline: 6vw; }
     .prompter .pp-pointer { left: max(2px, calc(6vw - 0.6em)); width: 0.25em; height: 0.3em; }
-    .prompter .pp-rundown { height: 20px; padding: 0 12px; }
-    .prompter .prompter-bar { gap: 8px; padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); }
+    .prompter .pp-rundown { height: 20px; padding: 0 var(--space-12); }
+    .prompter .prompter-bar { gap: var(--space-8); padding: 8px 12px calc(8px + env(safe-area-inset-bottom)); }
     .prompter-bar .pp-transport { flex: 1 1 100%; }
     .prompter .prompter-bar .pp-modes, .prompter .prompter-bar .pp-rig { display: contents; }
     .prompter .prompter-bar .div-sep, .prompter .prompter-bar .spacer { display: none; }
-    .prompter .pp-play + .pp-step, .prompter .pp-step { gap: 6px; padding-left: 0; }
+    .prompter .pp-play + .pp-step, .prompter .pp-step { gap: var(--space-6); padding-left: 0; }
     .prompter-bar .pp-play { width: 44px; height: 44px; }
     .prompter-bar .pp-step-btn { width: 32px; }
     .prompter .pp-step-value { width: 40px; }
-    .prompter .prompter-bar .pp-btn { gap: 6px; padding: 0 10px; }
-    .prompter .prompter-bar .close-btn { gap: 8px; padding: 0 8px 0 10px; }
+    .prompter .prompter-bar .pp-btn { gap: var(--space-6); padding: 0 var(--space-10); }
+    .prompter .prompter-bar .close-btn { gap: var(--space-8); padding: 0 var(--space-8) 0 var(--space-10); }
   }

@@ -8,8 +8,8 @@
     padding: 0; border: 0; border-radius: 0; box-shadow: none; overflow: hidden;
   }
   .annotate-bar {
-    flex: none; display: flex; align-items: center; gap: 8px 16px;
-    min-height: 56px; padding: 8px 16px;
+    flex: none; display: flex; align-items: center; gap: var(--space-8) var(--space-16);
+    min-height: 56px; padding: var(--space-8) var(--space-16);
     border-bottom: 1px solid var(--border-strong);
     background: var(--surface-2);
   }
@@ -18,13 +18,13 @@
     font-family: var(--font-body); font-size: 16px; line-height: 24px; font-weight: 700; color: var(--text);
   }
   .annotate-tools {
-    flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center; gap: 6px 18px;
+    flex: 1 1 auto; min-width: 0; display: flex; align-items: center; justify-content: center; gap: var(--space-6) 18px;
     flex-wrap: wrap;
   }
-  .annotate-group { display: flex; align-items: center; gap: 4px; flex: none; }
+  .annotate-group { display: flex; align-items: center; gap: var(--space-4); flex: none; }
   .annotate-btn {
     display: inline-flex; align-items: center; justify-content: center; flex: none;
-    min-width: 36px; height: 36px; padding: 0 8px;
+    min-width: 36px; height: 36px; padding: 0 var(--space-8);
     border: 1px solid transparent; border-radius: var(--radius-sm);
     background: transparent; color: var(--text-dim); cursor: pointer;
     font-family: var(--font-body); font-size: 14px; line-height: 20px; font-weight: 500;
@@ -54,7 +54,7 @@
   .annotate-swatch:hover:not(:disabled) { background: var(--layer-hover, var(--hover)); }
   .annotate-swatch:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
   .annotate-swatch:disabled { opacity: .3; cursor: default; }
-  .annotate-end { flex: none; display: flex; align-items: center; gap: 8px; }
+  .annotate-end { flex: none; display: flex; align-items: center; gap: var(--space-8); }
   .annotate-end .btn.armed,
   .annotate-end .btn.armed:hover { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
   .annotate-stage {
@@ -86,19 +86,19 @@
   }
   .annotate-status {
     position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%);
-    max-width: calc(100% - 24px); margin: 0; padding: 4px 12px; border-radius: 14px;
+    max-width: calc(100% - 24px); margin: 0; padding: var(--space-4) var(--space-12); border-radius: 14px;
     background: var(--media-control-scrim); color: var(--media-ink); pointer-events: none;
     font-family: var(--font-body); font-size: 13px; line-height: 20px; text-align: center;
   }
   .annotate-status[hidden] { display: none; }
   @media (max-width: 600px) {
-    .annotate-bar { flex-wrap: wrap; padding: 6px 8px; gap: 6px 8px; }
-    .annotate-title { flex: 1 1 auto; min-width: 0; padding-left: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .annotate-bar { flex-wrap: wrap; padding: var(--space-6) var(--space-8); gap: var(--space-6) var(--space-8); }
+    .annotate-title { flex: 1 1 auto; min-width: 0; padding-left: var(--space-4); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .annotate-end { order: 1; }
     .annotate-tools {
-      order: 2; flex: 1 0 100%; flex-wrap: nowrap; justify-content: flex-start; gap: 12px;
+      order: 2; flex: 1 0 100%; flex-wrap: nowrap; justify-content: flex-start; gap: var(--space-12);
       overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none;
-      padding: 2px; margin: 0 -2px;
+      padding: var(--space-2); margin: 0 -2px;
     }
     .annotate-tools::-webkit-scrollbar { display: none; }
     .annotate-btn { min-width: 40px; height: 40px; }
@@ -109,7 +109,7 @@
     bottom: calc(52px + env(safe-area-inset-bottom));
   }
 
-  .add-row-bar { padding: 18px 0 4px; display: flex; justify-content: center; }
+  .add-row-bar { padding: 18px 0 var(--space-4); display: flex; justify-content: center; }
   .add-row-btn {
     font-family: var(--font-body);
     font-size: 13.5px;
@@ -118,17 +118,17 @@
     background: transparent;
     border: 1px dashed var(--border);
     border-radius: var(--radius-sm);
-    padding: 10px 22px;
+    padding: var(--space-10) 22px;
     cursor: pointer;
   }
   .add-row-btn:hover { border-color: var(--visual); color: var(--visual); }
 
   .empty-state {
     text-align: center;
-    padding: 60px 20px;
+    padding: 60px var(--space-20);
     color: var(--text-dim);
   }
-  .empty-state .btn-accent { margin-top: 14px; }
+  .empty-state .btn-accent { margin-top: var(--space-14); }
 
   #toast-host {
     position: fixed;
@@ -137,7 +137,7 @@
     transform: translateX(-50%);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-8);
     z-index: 200;
     align-items: center;
   }

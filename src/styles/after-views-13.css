@@ -1,12 +1,12 @@
   .toast {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: var(--space-10);
     min-height: 40px;
     font-family: var(--font-body);
     font-size: 13.5px;
     line-height: 18px;
-    padding: 10px 14px;
+    padding: var(--space-10) var(--space-14);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow);
     background: var(--surface-2);
@@ -14,7 +14,7 @@
     color: var(--text);
     animation: toast-in var(--dur-enter) var(--ease-enter);
   }
-  .toast.ok, .toast.warn, .toast.error { padding-left: 12px; }
+  .toast.ok, .toast.warn, .toast.error { padding-left: var(--space-12); }
   .toast.ok::before, .toast.warn::before, .toast.error::before {
     content: "";
     flex: none;
@@ -23,7 +23,7 @@
   .toast.ok::before {
     width: 12px;
     height: 7px;
-    margin: 0 2px 3px 2px;
+    margin: 0 var(--space-2) 3px var(--space-2);
     border-left: 1.75px solid currentColor;
     border-bottom: 1.75px solid currentColor;
     transform: rotate(-45deg);
@@ -38,7 +38,7 @@
   .toast.error::before { background: var(--danger); }
   .toast.is-sticky { cursor: pointer; max-width: 340px; }
   .toast.is-sticky.is-held { cursor: default; }
-  .toast.has-action { gap: 12px; padding-right: 8px; }
+  .toast.has-action { gap: var(--space-12); padding-right: var(--space-8); }
   .toast-action {
     flex: none;
     height: 28px;
@@ -47,7 +47,7 @@
     background: none;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
-    padding: 0 10px;
+    padding: 0 var(--space-10);
     cursor: pointer;
   }
   .toast-action:hover, .toast-action:focus-visible { background: color-mix(in srgb, var(--text) 7%, var(--surface-2)); border-color: var(--text-faint); }

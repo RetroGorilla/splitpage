@@ -1,2 +1,2 @@
-    .bulk-btn, .tag-person-add { padding: 8px 10px; }
-    .server-doc-delete, .tag-person-remove, .bulk-clear { padding: 6px 10px; font-size: 16px; }
+    .bulk-btn, .tag-person-add { padding: var(--space-8) var(--space-10); }
+    .server-doc-delete, .tag-person-remove, .bulk-clear { padding: var(--space-6) var(--space-10); font-size: 16px; }

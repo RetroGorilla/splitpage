@@ -1,13 +1,13 @@
   .findbar {
-    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
-    padding: 8px 12px; margin: 0 0 14px;
+    display: flex; align-items: center; gap: var(--space-6); flex-wrap: wrap;
+    padding: var(--space-8) var(--space-12); margin: 0 0 var(--space-14);
     border: 1px solid var(--border); border-radius: var(--radius-sm);
     background: var(--surface);
   }
   .findbar[hidden] { display: none; }
   .findbar input[type="text"] {
     font-family: var(--font-body); font-size: 13px;
-    padding: 5px 8px; border: 1px solid var(--border); border-radius: 5px;
+    padding: 5px var(--space-8); border: 1px solid var(--border); border-radius: 5px;
     background: var(--bg); color: var(--text); min-width: 0;
   }
   #find-input { flex: 1 1 180px; }
@@ -16,7 +16,7 @@
   .findbar button {
     font-family: var(--font-body); font-size: 12.5px;
     border: 1px solid var(--border); background: var(--bg); color: var(--text-dim);
-    border-radius: 5px; padding: 5px 8px; cursor: pointer; flex: none;
+    border-radius: 5px; padding: 5px var(--space-8); cursor: pointer; flex: none;
   }
   .findbar button:hover { color: var(--text); border-color: var(--text-dim); }
   .findbar button.is-active { background: var(--surface-2); color: var(--text); border-color: var(--text-dim); }
@@ -33,8 +33,8 @@
     text-underline-offset: 3px;
   }
   .find-tag-row {
-    display: flex; align-items: center; gap: 6px 8px; flex-wrap: wrap;
-    flex: 1 1 100%; padding-top: 6px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; gap: var(--space-6) var(--space-8); flex-wrap: wrap;
+    flex: 1 1 100%; padding-top: var(--space-6); border-top: 1px solid var(--border);
   }
   .find-tag-row[hidden] { display: none; }
   .find-tag-ask { font-size: 13px; color: var(--text); flex: 1 1 100%; }
