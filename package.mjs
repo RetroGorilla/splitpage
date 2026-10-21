@@ -27,6 +27,7 @@ const FILES = [
   ["server/text.js", 0o644],
   ["server/html-tokens.js", 0o644],
   ["server/blobs.js", 0o644],
+  ["server/links.js", 0o644],
   ["server/package.json", 0o644],
   ["start.mjs", 0o644],
   ["start.bat", 0o644],
