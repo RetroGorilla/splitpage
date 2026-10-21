@@ -9,9 +9,10 @@ import { STATE_FIELDS, migrateRows, missingStateFields } from "../js/02-state.js
 import { cellOf } from "../js/04c-doc-model.js";
 import { collectTagsFromRows, __init as initTags } from "../js/07-production-tags.js";
 import { brollInCell } from "../js/08c-broll.js";
-import { buildSplitpageFile, parseSplitpageFile } from "../js/20d-formats.js";
+import { buildSplitpageFile } from "../js/20d-formats.js";
 import { LONG_DEMO, STARTERS, starterById } from "../js/_starters.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
 initSceneStatus();
 initTags();

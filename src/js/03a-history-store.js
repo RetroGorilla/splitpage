@@ -11,7 +11,7 @@ import {
 } from "./03-sync.js";
 import { createIdbHistoryBackend, hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
 import { showToast } from "./12-dirty-toast.js";
-import { checksumText, seedCheckPasses } from "./20b-onboarding.js";
+import { seedCheckPasses } from "./20b-onboarding.js";
 import {
   HISTORY_OLDER_KEY,
   HISTORY_OLDER_TTL_MS,
@@ -26,6 +26,7 @@ import {
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { imageDims, isSha256Hex, refsIn, sniffImageMime } from "../../shared/blob-policy.js";
 import { makeId, mintDocId } from "../adapters/identity/ids.ts";
+import { checksumText } from "../../shared/text.js";
 export {
   HISTORY_OLDER_KEY,
   HISTORY_OLDER_TTL_MS,
@@ -43,7 +44,7 @@ var HISTORY_MEMORY_CAP = 50 * 1024 * 1024;
 var HISTORY_PENDING_PER_DOC = 10;
 var HISTORY_MIGRATION_LOOPS = 3;
 
-export function historyNoop() {}
+function historyNoop() {}
 
 function enqueueHistory(job, fallback) {
   var run = historyChain.then(function () { return job(); }).then(null, function (e) {

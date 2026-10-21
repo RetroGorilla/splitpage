@@ -6,7 +6,8 @@ const fsp = require("node:fs/promises");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { codePointPrefix } = require("./text");
-const { htmlTokens, attrValue } = require("./html-tokens");
+const blobs = require("./blobs");
+const { LINK_ROLES, isLinkId, linkAnswer, createLinkStore } = require("./links");
 const {
   COMMENT_NAME_MAX,
   DOC_COMMENTS_MAX,
@@ -26,7 +27,6 @@ const MAX_BODY = Number(process.env.MAX_BODY_BYTES || 25 * 1024 * 1024);
 const MAX_BLOB_BYTES = Number(process.env.MAX_BLOB_BYTES || 8 * 1024 * 1024);
 const REVIEW_BLOB_BUDGET = Number(process.env.REVIEW_BLOB_BUDGET_BYTES || 20 * 1024 * 1024);
 const LINK_EDIT_BLOB_BUDGET = Number(process.env.LINK_EDIT_BLOB_BUDGET_BYTES || 100 * 1024 * 1024);
-const REVIEW_BLOB_WINDOW_MS = 60 * 60 * 1000;
 const READ_ONLY = process.env.READ_ONLY === "1";
 const NO_API = process.env.NO_API === "1";
 
@@ -43,142 +43,10 @@ const PERSIST_LINKS = process.env.PERSIST_LINKS === "1";
 const LINKS_DIR = path.join(DATA_DIR, "links");
 const LINKS_FILE = path.join(LINKS_DIR, "links.json");
 const LINKS_SECRET_FILE = path.join(LINKS_DIR, "secret");
-const LINK_ROLES = ["edit", "review"];
-const LINK_ID_RE = /^[0-9a-f]{12}$/;
-const LINK_TOMBSTONE_MAX = 2000;
-
-const linksById = new Map();
-const linkByKey = new Map();
-const linkByToken = new Map();
-const linkByDocRole = new Map();
-const linkTombstones = [];
-const tombKeyHashes = new Set();
-const tombTokenHashes = new Set();
-
-function docRoleKey(docId, role) {
-  return docId + "/" + role;
-}
-
-function indexLink(rec) {
-  linksById.set(rec.id, rec);
-  linkByKey.set(rec.key, rec);
-  linkByToken.set(rec.token, rec);
-  linkByDocRole.set(docRoleKey(rec.docId, rec.role), rec);
-}
-
-function unindexLink(rec) {
-  linksById.delete(rec.id);
-  linkByKey.delete(rec.key);
-  linkByToken.delete(rec.token);
-  const slot = docRoleKey(rec.docId, rec.role);
-  if (linkByDocRole.get(slot) === rec) linkByDocRole.delete(slot);
-}
-
-function addTombstone(tomb) {
-  linkTombstones.push(tomb);
-  tombKeyHashes.add(tomb.keyHash);
-  tombTokenHashes.add(tomb.tokenHash);
-  while (linkTombstones.length > LINK_TOMBSTONE_MAX) {
-    const oldest = linkTombstones.shift();
-    tombKeyHashes.delete(oldest.keyHash);
-    tombTokenHashes.delete(oldest.tokenHash);
-  }
-}
-
-function activeLink(docId, role) {
-  return linkByDocRole.get(docRoleKey(docId, role)) || null;
-}
-
-function mintLink(docId, role, createdBy) {
-  let id;
-  do { id = crypto.randomBytes(6).toString("hex"); } while (linksById.has(id));
-  const rec = {
-    id,
-    key: crypto.randomBytes(24).toString("hex"),
-    token: crypto.randomBytes(32).toString("hex"),
-    docId,
-    role,
-    createdAt: new Date().toISOString(),
-    createdBy: createdBy || null
-  };
-  indexLink(rec);
-  return rec;
-}
-
-function revokeLink(rec) {
-  unindexLink(rec);
-  addTombstone({
-    id: rec.id,
-    keyHash: sha256Of(rec.key),
-    tokenHash: sha256Of(rec.token),
-    docId: rec.docId,
-    role: rec.role,
-    revokedAt: new Date().toISOString()
-  });
-}
-
-function linkAnswer(rec) {
-  return { id: rec.id, role: rec.role, key: rec.key, createdAt: rec.createdAt };
-}
-
-let linksWriting = Promise.resolve();
-
-function saveLinks() {
-  if (!PERSIST_LINKS) return Promise.resolve();
-  const write = () => writeFileDurable(LINKS_FILE, JSON.stringify({
-    version: 1,
-    links: Array.from(linksById.values()),
-    revoked: linkTombstones
-  }, null, 2) + "\n", 0o600);
-  const next = linksWriting.then(write, write);
-  linksWriting = next.catch(() => {});
-  return next;
-}
-
-async function linkFor(docId, role, opts) {
-  const existing = activeLink(docId, role);
-  if (existing && !(opts && opts.replace)) return { link: existing, created: false };
-  if (existing) revokeLink(existing);
-  const rec = mintLink(docId, role, opts && opts.by);
-  try {
-    await saveLinks();
-  } catch (err) {
-    unindexLink(rec);
-    throw err;
-  }
-  return { link: rec, created: true };
-}
-
-function revokeLinksOf(docId) {
-  let n = 0;
-  for (const role of LINK_ROLES) {
-    const rec = activeLink(docId, role);
-    if (rec) { revokeLink(rec); n++; }
-  }
-  return n;
-}
-
-function cleanLinkRecord(r) {
-  if (!r || typeof r !== "object") return null;
-  if (!LINK_ID_RE.test(String(r.id)) || !isValidId(r.docId) || LINK_ROLES.indexOf(r.role) === -1) return null;
-  if (typeof r.key !== "string" || !/^[0-9a-f]{48,128}$/.test(r.key)) return null;
-  if (typeof r.token !== "string" || !/^[0-9a-f]{64}$/.test(r.token)) return null;
-  return {
-    id: r.id, key: r.key, token: r.token, docId: r.docId, role: r.role,
-    createdAt: typeof r.createdAt === "string" ? r.createdAt : null,
-    createdBy: typeof r.createdBy === "string" ? r.createdBy : null
-  };
-}
-
-function cleanTombstone(t) {
-  if (!t || typeof t !== "object") return null;
-  if (!SHA_RE.test(String(t.keyHash)) || !SHA_RE.test(String(t.tokenHash))) return null;
-  return {
-    id: String(t.id || ""), keyHash: t.keyHash, tokenHash: t.tokenHash,
-    docId: String(t.docId || ""), role: String(t.role || ""),
-    revokedAt: typeof t.revokedAt === "string" ? t.revokedAt : null
-  };
-}
+const linkStore = createLinkStore({
+  isValidId,
+  persist: PERSIST_LINKS ? (text) => writeFileDurable(LINKS_FILE, text, 0o600) : null
+});
 
 async function loadLinkStore() {
   await fsp.mkdir(LINKS_DIR, { recursive: true, mode: 0o700 });
@@ -215,20 +83,7 @@ async function loadLinkStore() {
                     "aside to start with no links (every link handed out stops working).", { cause: err });
   }
   await fsp.chmod(LINKS_FILE, 0o600).catch(() => {});
-  let skipped = 0;
-  for (const t of (data && Array.isArray(data.revoked)) ? data.revoked : []) {
-    const tomb = cleanTombstone(t);
-    if (tomb) addTombstone(tomb); else skipped++;
-  }
-  for (const r of (data && Array.isArray(data.links)) ? data.links : []) {
-    const rec = cleanLinkRecord(r);
-    if (!rec || linksById.has(rec.id) || linkByKey.has(rec.key) || linkByToken.has(rec.token) ||
-        activeLink(rec.docId, rec.role) || tombKeyHashes.has(sha256Of(rec.key))) {
-      skipped++;
-      continue;
-    }
-    indexLink(rec);
-  }
+  const skipped = linkStore.restore(data);
   if (skipped) console.warn("[splitpage] " + skipped + " unreadable entr" + (skipped === 1 ? "y" : "ies") +
                             " in " + LINKS_FILE + " were ignored");
 }
@@ -334,9 +189,9 @@ function sessionOfToken(given) {
   if (!token) return null;
   if (sameToken(token, ownerToken)) return { role: "edit", scope: "", token };
   if (REVIEW_ACTIVE && sameToken(token, REVIEW_TOKEN)) return { role: "review", scope: "", token };
-  const link = linkByToken.get(token);
+  const link = linkStore.byToken(token);
   if (link) return { role: link.role, scope: link.docId, token };
-  if (tombTokenHashes.size && tombTokenHashes.has(sha256Of(token))) return { revoked: true };
+  if (linkStore.tokenRevoked(token)) return { revoked: true };
   return null;
 }
 
@@ -497,7 +352,7 @@ async function writeFileDurable(target, data, mode) {
 
 async function writeDoc(doc, refs) {
   await writeFileDurable(docPath(doc.id), encodeDoc(doc));
-  noteRefs(doc.id, doc.rev || 0, refs || refsIn(doc.state));
+  noteRefs(doc.id, doc.rev || 0, refs || blobs.refsIn(doc.state));
 }
 
 function stillUploading(req) {
@@ -689,60 +544,16 @@ function commentAnswer(id, doc, comment, extra) {
 }
 
 const BLOBS_DIR = path.join(DATA_DIR, "blobs");
-const SHA_RE = /^[0-9a-f]{64}$/;
 const CLIENT_BLOBS = 2;
 const MISSING_BODY = 256 * 1024;
 const MISSING_MAX = 2000;
-
-function isSha(value) {
-  return typeof value === "string" && SHA_RE.test(value);
-}
 
 function blobPath(sha) {
   return path.join(BLOBS_DIR, sha.slice(0, 2), sha);
 }
 
-function sniffImageMime(buf) {
-  if (!buf || buf.length < 12) return "";
-  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47 &&
-      buf[4] === 0x0d && buf[5] === 0x0a && buf[6] === 0x1a && buf[7] === 0x0a) return "image/png";
-  if (buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "image/jpeg";
-  const head = buf.toString("latin1", 0, 12);
-  if (head.startsWith("GIF87a") || head.startsWith("GIF89a")) return "image/gif";
-  if (head.startsWith("RIFF") && head.slice(8, 12) === "WEBP") return "image/webp";
-  return "";
-}
-
 function sha256Of(buf) {
   return crypto.createHash("sha256").update(buf).digest("hex");
-}
-
-function refsIn(state) {
-  const out = new Set();
-  const walk = (value, key, depth) => {
-    if (depth > 64) return;
-    if (typeof value === "string") {
-      if (value.indexOf("data-blob") !== -1) blobAttrsIn(value, out);
-      return;
-    }
-    if (!value || typeof value !== "object") return;
-    if (Array.isArray(value)) {
-      for (const item of value) walk(item, "", depth + 1);
-      return;
-    }
-    if ((key === "imageRef" || key === "imageValue") && isSha(value.sha256)) out.add(value.sha256);
-    for (const k of Object.keys(value)) walk(value[k], k, depth + 1);
-  };
-  walk(state, "", 0);
-  return out;
-}
-
-function blobAttrsIn(html, out) {
-  for (const tk of htmlTokens(html)) {
-    if (tk.kind !== "open" || tk.attrs.indexOf("data-blob") === -1) continue;
-    const sha = attrValue(tk.attrs, "data-blob");
-    if (isSha(sha)) out.add(sha);
-  }
 }
 
 const refsCache = new Map();
@@ -762,7 +573,7 @@ async function storedRefsOf(id) {
   if (hit && hit.rev === rev) return hit.refs;
   const doc = await readDoc(id);
   if (!doc) return null;
-  const refs = refsIn(doc.state);
+  const refs = blobs.refsIn(doc.state);
   noteRefs(id, doc.rev || 0, refs);
   return refs;
 }
@@ -790,32 +601,12 @@ async function writeBlob(sha, buf) {
   await writeFileDurable(blobPath(sha), buf);
 }
 
-async function refusedRefs(incoming, docId, acceptMissing, visible) {
-  if (!incoming.size) return [];
-  const missing = [];
-  for (const sha of incoming) {
-    if ((visible && !visible(sha)) || !(await hasBlob(sha))) missing.push(sha);
-  }
-  if (!missing.length) return [];
-  const accept = new Set(Array.isArray(acceptMissing) ? acceptMissing.filter(isSha) : []);
-  const stored = docId ? await storedRefsOf(docId) : null;
-  return missing.filter((sha) => !accept.has(sha) && !(stored && stored.has(sha)));
-}
-
-async function commentRefsRefused(session, docId, html) {
-  const refs = new Set();
-  if (typeof html === "string" && html.indexOf("data-blob") !== -1) blobAttrsIn(html, refs);
-  if (!refs.size) return { refs, missing: [] };
-  const visible = await blobVisibility(session);
-  let stored;
-  const missing = [];
-  for (const sha of refs) {
-    if (visible && !visible(sha)) { missing.push(sha); continue; }
-    if (await hasBlob(sha)) continue;
-    if (stored === undefined) stored = (await storedRefsOf(docId)) || new Set();
-    if (!stored.has(sha)) missing.push(sha);
-  }
-  return { refs, missing };
+function commentRefsRefused(session, docId, html) {
+  return blobs.commentRefsRefused(html, {
+    visibility: () => blobVisibility(session),
+    hasBlob,
+    storedRefs: () => storedRefsOf(docId)
+  });
 }
 
 function clientKnowsBlobs(req) {
@@ -823,40 +614,16 @@ function clientKnowsBlobs(req) {
   return isFinite(v) && v >= CLIENT_BLOBS;
 }
 
-const blobLedgers = new Map();
-
-function blobLedger(token, now) {
-  const list = (blobLedgers.get(token) || []).filter((e) => now - e.at < REVIEW_BLOB_WINDOW_MS);
-  if (list.length) blobLedgers.set(token, list); else blobLedgers.delete(token);
-  return list;
-}
-
-function blobBudgetOf(session) {
-  if (session.role === "review") return REVIEW_BLOB_BUDGET;
-  if (session.scope) return LINK_EDIT_BLOB_BUDGET;
-  return 0;
-}
-
-const BLOB_MIN_CHARGE = 4096;
-
-function blobCharge(bytes) {
-  return Math.max(BLOB_MIN_CHARGE, bytes);
-}
-
-function blobBytesUsed(token, now) {
-  let used = 0;
-  for (const e of blobLedger(token, now)) used += e.bytes;
-  return used;
-}
-
-function blobUploaded(token, sha) {
-  return blobLedger(token, Date.now()).some((e) => e.sha === sha);
-}
+const blobBudgets = blobs.createBlobBudgets({
+  reviewBudget: REVIEW_BLOB_BUDGET,
+  linkEditBudget: LINK_EDIT_BLOB_BUDGET,
+  maxBlobBytes: MAX_BLOB_BYTES
+});
 
 async function blobVisibility(session) {
   if (!session || !session.scope) return null;
   const refs = (await storedRefsOf(session.scope)) || new Set();
-  return (sha) => refs.has(sha) || blobUploaded(session.token, sha);
+  return blobBudgets.visibleTo(session, refs);
 }
 
 async function handleBlobs(req, res, parts, session) {
@@ -864,16 +631,12 @@ async function handleBlobs(req, res, parts, session) {
     if (req.method !== "POST") return sendJson(res, 405, { error: "method-not-allowed" });
     const body = await readBody(req, MISSING_BODY);
     const shas = body && body.shas;
-    if (!Array.isArray(shas) || shas.length > MISSING_MAX || !shas.every(isSha)) {
+    if (!Array.isArray(shas) || shas.length > MISSING_MAX || !shas.every(blobs.isSha)) {
       return sendJson(res, 400, { error: "bad-shas" });
     }
     const unique = Array.from(new Set(shas));
     const visible = await blobVisibility(session);
-    const missing = [];
-    for (const sha of unique) {
-      if (visible && !visible(sha)) missing.push(sha);
-      else if (!(await hasBlob(sha))) missing.push(sha);
-    }
+    const missing = await blobs.unavailableBlobs(unique, visible, hasBlob);
     return sendJson(res, 200, { missing });
   }
 
@@ -881,7 +644,7 @@ async function handleBlobs(req, res, parts, session) {
   const sha = parts[2];
 
   if (req.method === "GET") {
-    if (!isSha(sha)) return sendJson(res, 400, { error: "bad-sha" });
+    if (!blobs.isSha(sha)) return sendJson(res, 400, { error: "bad-sha" });
     const visible = await blobVisibility(session);
     if (visible && !visible(sha)) return sendJson(res, 404, { error: "not-found" });
     let buf;
@@ -891,7 +654,7 @@ async function handleBlobs(req, res, parts, session) {
       if (err && err.code === "ENOENT") return sendJson(res, 404, { error: "not-found" });
       throw err;
     }
-    const mime = sniffImageMime(buf);
+    const mime = blobs.sniffImageMime(buf);
     if (!mime || sha256Of(buf) !== sha) {
       console.error("[splitpage] blob " + sha + " does not match its name; not serving it");
       return sendJson(res, 404, { error: "not-found" });
@@ -917,30 +680,18 @@ async function handleBlobs(req, res, parts, session) {
 
   if (req.method === "PUT") {
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
-    if (!isSha(sha)) return sendJson(res, 400, { error: "bad-sha" });
+    if (!blobs.isSha(sha)) return sendJson(res, 400, { error: "bad-sha" });
     const declared = req.headers["content-length"] !== undefined
       ? Number(req.headers["content-length"]) : NaN;
     if (isFinite(declared) && declared > MAX_BLOB_BYTES) {
       return sendJson(res, 413, { error: "too-large" });
     }
-    let entry = null;
-    const token = session.token;
-    const budget = blobBudgetOf(session);
-    if (budget) {
-      const now = Date.now();
-      const reserve = blobCharge(isFinite(declared) && declared >= 0 ? declared : MAX_BLOB_BYTES);
-      if (blobBytesUsed(token, now) + reserve > budget) {
-        return sendJson(res, 429, { error: "review-budget" });
-      }
-      entry = { at: now, bytes: reserve, sha: "" };
-      const list = blobLedger(token, now);
-      list.push(entry);
-      blobLedgers.set(token, list);
-    }
+    const hold = blobBudgets.reserve(session, declared);
+    if (hold.refused) return sendJson(res, 429, { error: "review-budget" });
     try {
       const buf = await readRawBody(req, MAX_BLOB_BYTES);
       if (sha256Of(buf) !== sha) return sendJson(res, 400, { error: "hash-mismatch" });
-      if (!sniffImageMime(buf)) return sendJson(res, 415, { error: "unsupported-type" });
+      if (!blobs.sniffImageMime(buf)) return sendJson(res, 415, { error: "unsupported-type" });
       const visible = await blobVisibility(session);
       const truthful = !visible || visible(sha);
       let present = false;
@@ -949,19 +700,11 @@ async function handleBlobs(req, res, parts, session) {
       }
       if (present) touchBlobs([sha]);
       else await writeBlob(sha, buf);
-      if (entry && !(present && truthful)) {
-        entry.sha = sha;
-        entry.bytes = blobCharge(buf.length);
-        entry = null;
-      }
+      if (!(present && truthful)) hold.settle(sha, buf.length);
       if (present && truthful) return sendJson(res, 200, { stored: false });
       return sendJson(res, 201, { stored: true });
     } finally {
-      if (entry) {
-        const list = blobLedgers.get(token);
-        const at = list ? list.indexOf(entry) : -1;
-        if (at !== -1) list.splice(at, 1);
-      }
+      hold.release();
     }
   }
 
@@ -981,7 +724,7 @@ async function handleLinks(req, res, parts, id, session, who) {
   if (req.method === "GET") {
     const links = [];
     for (const role of LINK_ROLES) {
-      const rec = activeLink(id, role);
+      const rec = linkStore.activeLink(id, role);
       if (rec) links.push(linkAnswer(rec));
     }
     return sendJson(res, 200, { links });
@@ -994,15 +737,15 @@ async function handleLinks(req, res, parts, id, session, who) {
     if (READ_ONLY && role === "edit") return sendJson(res, 403, { error: "read-only" });
     return withDocLock(id, async () => {
       if (!(await readDocMeta(id))) return sendJson(res, 404, { error: "not-found" });
-      const { link, created } = await linkFor(id, role, { replace: body.replace === true, by: who.name });
+      const { link, created } = await linkStore.linkFor(id, role, { replace: body.replace === true, by: who.name });
       return sendJson(res, created ? 201 : 200, linkAnswer(link));
     });
   }
 
-  const rec = LINK_ID_RE.test(linkId) ? linksById.get(linkId) : null;
+  const rec = isLinkId(linkId) ? linkStore.byId(linkId) : null;
   if (!rec || rec.docId !== id) return sendJson(res, 404, { error: "no-such-link" });
-  revokeLink(rec);
-  await saveLinks();
+  linkStore.revokeLink(rec);
+  await linkStore.saveLinks();
   return sendJson(res, 200, { ok: true });
 }
 
@@ -1036,11 +779,11 @@ async function handleApi(req, res, url) {
       return sendJson(res, 200, { token: ownerToken, role: "edit" });
     }
     const key = body && typeof body.key === "string" ? body.key : "";
-    const link = key ? linkByKey.get(key) : null;
+    const link = key ? linkStore.byKey(key) : null;
     if (link) {
       return sendJson(res, 200, { token: link.token, role: link.role, docId: link.docId, scope: link.docId });
     }
-    if (key && tombKeyHashes.has(sha256Of(key))) {
+    if (key && linkStore.keyRevoked(key)) {
       return sendJson(res, 410, { error: "link-off" });
     }
     if (REVIEW_ACTIVE && ((REVIEW_PIN && sameSecret(body && body.pin, REVIEW_PIN)) ||
@@ -1130,7 +873,7 @@ async function handleApi(req, res, url) {
     if (!isValidId(wanted)) return sendJson(res, 400, { error: "bad-id" });
     return withDocLock(wanted, async () => {
       if (!(await readDocMeta(wanted))) return sendJson(res, 404, { error: "not-found" });
-      const { link } = await linkFor(wanted, "review", { by: who.name });
+      const { link } = await linkStore.linkFor(wanted, "review", { by: who.name });
       return sendJson(res, 200, {
         reviewAvailable: true,
         reviewKey: link.key,
@@ -1177,8 +920,8 @@ async function handleApi(req, res, url) {
     if (!body || !isDocState(body.state)) {
       return sendJson(res, 400, { error: "bad-state" });
     }
-    const createRefs = refsIn(body.state);
-    const createMissing = await refusedRefs(createRefs, "", body.acceptMissing);
+    const createRefs = blobs.refsIn(body.state);
+    const createMissing = await blobs.refusedRefs(createRefs, { hasBlob, acceptMissing: body.acceptMissing });
     if (createMissing.length) {
       return sendJson(res, 422, { error: "missing-blobs", missing: createMissing });
     }
@@ -1338,7 +1081,7 @@ async function handleApi(req, res, url) {
     if (!body || !isDocState(body.state)) {
       return sendJson(res, 400, { error: "bad-state" });
     }
-    const putRefs = refsIn(body.state);
+    const putRefs = blobs.refsIn(body.state);
     const baseRev = Number(body.baseRev);
     if (!isFinite(baseRev) || baseRev < 0) return sendJson(res, 400, { error: "bad-base-rev" });
 
@@ -1359,7 +1102,12 @@ async function handleApi(req, res, url) {
       }
 
       const visible = putRefs.size ? await blobVisibility(session) : null;
-      const missing = await refusedRefs(putRefs, id, body.acceptMissing, visible);
+      const missing = await blobs.refusedRefs(putRefs, {
+        visible,
+        hasBlob,
+        acceptMissing: body.acceptMissing,
+        storedRefs: () => storedRefsOf(id)
+      });
       if (missing.length) return sendJson(res, 422, { error: "missing-blobs", missing });
 
       const doc = {
@@ -1379,7 +1127,7 @@ async function handleApi(req, res, url) {
     if (READ_ONLY) return sendJson(res, 403, { error: "read-only" });
     if (role === "review") return sendJson(res, 403, { error: "review-only" });
     return withDocLock(id, async () => {
-      if (revokeLinksOf(id)) await saveLinks();
+      if (linkStore.revokeLinksOf(id)) await linkStore.saveLinks();
       try {
         await fsp.unlink(docPath(id));
       } catch (err) {

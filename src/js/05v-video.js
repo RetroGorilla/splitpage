@@ -14,10 +14,6 @@ function noRemote() {
   return !!window.__splitpageNoRemote;
 }
 
-export function embeddableVideo(link) {
-  return link && link.href ? parseVideoLink(link.href) : null;
-}
-
 export function embedRefusal(v) {
   if (!v) return "";
   var protocol = testHooks.protocol || location.protocol;

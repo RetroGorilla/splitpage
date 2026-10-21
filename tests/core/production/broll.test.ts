@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   anchorBrollCell,
   brollAnchorTodo,
+  brollCountIn,
   brollCellLines,
   brollEntries,
   brollInCell,
@@ -355,4 +356,15 @@ test("the shot list sorts by scene and line, then shots outside the script by na
   const copy = jsonCopy(list);
   assert.deepEqual(brollSortedForList(list).map((e) => e.name), ["x", "y", "z", undefined, "a", "b"]);
   assert.deepEqual(jsonCopy(list), copy, "the input keeps its order");
+});
+
+test("brollCountIn counts the items in a row's visual cell and is zero for a row with none", () => {
+  const item = { id: "k", name: "Shot", desc: "" };
+  const counting = { brollInField: (html: string | null | undefined) => (html === "two" ? [item, item] : html ? [item] : []) };
+  assert.equal(brollCountIn({ visualText: "two" }, counting), 2);
+  assert.equal(brollCountIn({ visualText: "one" }, counting), 1);
+  assert.equal(brollCountIn({ visualText: "" }, counting), 0);
+  assert.equal(brollCountIn({}, counting), 0);
+  assert.equal(brollCountIn(null, counting), 0);
+  assert.equal(brollCountIn(undefined, counting), 0);
 });

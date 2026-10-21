@@ -17,12 +17,13 @@ import {
   mockClock,
   rightToday
 } from "./_m4-matrix.mjs";
+import { cloneState } from "../core/document/clone.ts";
 
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { cloneState, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
 const exportModule = await import("../js/14-export.js");

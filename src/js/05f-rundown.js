@@ -5,7 +5,6 @@ import { revealRow } from "./01b-hide-shot.js";
 import { findRowIndex } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";
 import { clearDropMarkers, moveRowTo } from "./06-rows.js";
-import { brollCountInRow } from "./08c-broll.js";
 import { reviewMode } from "./13-hosted.js";
 import { contentMemo } from "../core/document/memo.ts";
 import { escapeHtml, unitSafePrefix } from "../core/document/text-policy.ts";
@@ -15,6 +14,8 @@ import { appActions } from "../legacy/app-actions.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { rowDrag } from "../legacy/editor-bridge.ts";
+import { brollCountIn } from "../core/production/broll.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
 
 export var RUNDOWN_TAIL_SECONDS = 10;
 var BLOCK_GAP_PX = 2;
@@ -361,7 +362,7 @@ function sceneSnippet(row) {
 }
 
 function brollTicksHtml(row) {
-  var n = brollCountInRow(row);
+  var n = brollCountIn(row, productionReaders);
   var out = "";
   for (var i = 0; i < n; i++) {
     out += '<span class="rd-broll" style="left:calc(' + tenth((i + 1) / (n + 1) * 100) + '% - 1px)"></span>';
