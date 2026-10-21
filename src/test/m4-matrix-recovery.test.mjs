@@ -32,7 +32,7 @@ const { startNewScript } = await import("../js/18b-file-menu.js");
 const { applyTakenDraft, armBrowserServerDraft, flushDraftNow, offerBrowserDraftAfterLinkOff } = await import("../js/20g-drafts.js");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
-const { bytesForSync, createMemoryBackend, ensureBytes, has, internDataUrl, isDurableSync, persist, setBackend: setBlobBackend } = await import("../js/02c-blobs.js");
+const { bytesForSync, createMemoryBackend, ensureBytes, has, internDataUrl, isDurableSync, persist, setBackend: setBlobBackend } = await import("../adapters/storage/02c-blobs.js");
 const { addGalleryPicture } = await import("../core/document/gallery.ts");
 const homeModule = await import("../js/_home.js");
 

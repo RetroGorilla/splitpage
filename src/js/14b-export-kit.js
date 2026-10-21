@@ -1,6 +1,6 @@
 import { readClockPref } from "./00p-prefs.js";
 import { migrateRows } from "./02-state.js";
-import { bytesForSync, dataUrlPicture, ensureBytes, recordFor } from "./02c-blobs.js";
+import { bytesForSync, dataUrlPicture, ensureBytes, recordFor } from "../adapters/storage/02c-blobs.js";
 import { breakdownRows, commentEntries, sceneFacts, shotRecordForFile } from "./14c-export-projections.js";
 import { tagPrintColor } from "../adapters/formats/print-colors.ts";
 import { randomIds, systemClock } from "../adapters/identity/ids.ts";

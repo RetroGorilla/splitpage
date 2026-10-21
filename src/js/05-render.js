@@ -10,8 +10,8 @@ import {
   updateScriptStats
 } from "./01-scene-status.js";
 import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
-import { blobImgHtml } from "./02c-blobs.js";
-import { rowSlots, videoLinkKey, videoLinkLabel } from "./02d-gallery.js";
+import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
+import { rowSlots, videoLinkKey, videoLinkLabel } from "../adapters/storage/02d-gallery.js";
 import { findRowIndex } from "./03-sync.js";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
 import { cellSelection, editCell, notePaintedEpoch, placeEditorSelection, rememberCellSelection } from "./05b-cell-edit.js";

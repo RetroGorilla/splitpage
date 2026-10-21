@@ -1,14 +1,14 @@
 import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { mintDocId, normalizeDocId, sha256Bytes } from "./02b-doc-id.js";
-import { dataUrlForSync, ensureBytes, inlineStateJson, intern, persist, recordFor } from "./02c-blobs.js";
+import { dataUrlForSync, ensureBytes, inlineStateJson, intern, persist, recordFor } from "../adapters/storage/02c-blobs.js";
 import {
   SNAPSHOT_KEY,
   getEditorName,
   readLegacySnapshotsRaw,
   renderHistory
 } from "./03-sync.js";
-import { createIdbHistoryBackend, hashText as historyHashText } from "./03c-history-idb.js";
+import { createIdbHistoryBackend, hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
 import { showToast } from "./12-dirty-toast.js";
 import { checksumText, seedCheckPasses } from "./20b-onboarding.js";
 import {

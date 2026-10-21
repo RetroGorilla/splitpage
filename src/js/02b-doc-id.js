@@ -9,7 +9,7 @@ import { documentTransitions } from "../legacy/transition-bridge.ts";
 import { neverWrittenOut } from "../application/recovery/pristine.ts";
 import { base64Encode } from "../core/document/media.ts";
 import { STATE_FIELDS, buildPublishHtml, defaultState, migrateRows } from "./02-state.js";
-import { inlineStateImages } from "./02c-blobs.js";
+import { inlineStateImages } from "../adapters/storage/02c-blobs.js";
 import { cloneState } from "./03-sync.js";
 import { copyHistory, historyDocumentChanged } from "./03a-history-store.js";
 import { showToast } from "./12-dirty-toast.js";

@@ -2,10 +2,10 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";
-import { intern } from "../js/02c-blobs.js";
+import { intern } from "../adapters/storage/02c-blobs.js";
 import {
   ANNOTATION_COLORS, annotateGallerySlot, moveGallerySlot, normalizeMarks, removeGallerySlot, replaceGalleryPicture, rowSlots, slotOriginal
-} from "../js/02d-gallery.js";
+} from "../adapters/storage/02d-gallery.js";
 import { mergeStates } from "../js/03-sync.js";
 import { S } from "../js/_state.js";
 import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject, parseSplitpageFile } from "../js/20d-formats.js";

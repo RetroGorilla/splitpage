@@ -41,7 +41,7 @@ import {
   bytesForSync,
   setRemoteSource,
   forgetRemoteMisses
-} from "./02c-blobs.js";
+} from "../adapters/storage/02c-blobs.js";
 import { cssAttr, inertBody } from "./04-richtext.js";
 import { withBusyBar } from "./04b-busy.js";
 import { render, renderAbsorbed } from "./05-render.js";

@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { sanitizeHtml, storedHtmlFromDom, storedImageHtml } from "../js/04-richtext.js";
-import { dataUrlForSync, has, inlineStateImages, recordFor } from "../js/02c-blobs.js";
+import { dataUrlForSync, has, inlineStateImages, recordFor } from "../adapters/storage/02c-blobs.js";
 import { migrateRows } from "../js/02-state.js";
 import { refsIn } from "../../shared/blob-policy.js";
 

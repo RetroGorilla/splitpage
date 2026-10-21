@@ -5,7 +5,7 @@ import type { Frozen } from "../core/document/freeze.ts";
 import type { StoredImageRef } from "../core/document/text-policy.ts";
 import type { DecodeOptions } from "../core/text/ports.ts";
 import type { Run } from "../core/text/runs.ts";
-import { registryImages } from "../js/02c-blobs.js";
+import { registryImages } from "../adapters/storage/02c-blobs.js";
 import { cacheSeal } from "./cache-freeze.ts";
 
 let shared: RichText | null = null;

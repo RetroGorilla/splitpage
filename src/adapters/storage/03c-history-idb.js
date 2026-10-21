@@ -1,6 +1,6 @@
-import { DOC_ID_RE } from "../../shared/doc-id-policy.js";
-import { HISTORY_OLDER_KEY } from "../../shared/history-policy.js";
-import { sha256Bytes } from "../core/document/ids.ts";
+import { DOC_ID_RE } from "../../../shared/doc-id-policy.js";
+import { HISTORY_OLDER_KEY } from "../../../shared/history-policy.js";
+import { sha256Bytes } from "../../core/document/ids.ts";
 
 export var HISTORY_IDB_NAME = "splitpage-history";
 export var HISTORY_IDB_VERSION = 3;

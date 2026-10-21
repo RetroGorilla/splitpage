@@ -1,5 +1,5 @@
-import { rowImage, rowImageDataUrl, rowImageKey } from "./02c-blobs.js";
-import { morePictureRefs, rowVideoLinks, videoLinkLabel, videoLinkText } from "./02d-gallery.js";
+import { rowImage, rowImageDataUrl, rowImageKey } from "../adapters/storage/02c-blobs.js";
+import { morePictureRefs, rowVideoLinks, videoLinkLabel, videoLinkText } from "../adapters/storage/02d-gallery.js";
 import {
   breakdownGroups,
   brollSummaryText,

@@ -1,4 +1,4 @@
-import { internDataUrl, persist } from "./02c-blobs.js";
+import { internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
 import { findRowIndex } from "./03-sync.js";
 import {
   cellLength,

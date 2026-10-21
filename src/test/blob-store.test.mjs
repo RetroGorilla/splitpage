@@ -24,7 +24,7 @@ import {
   rowImageKey,
   rowImageShas,
   rowImageUrl
-} from "../js/02c-blobs.js";
+} from "../adapters/storage/02c-blobs.js";
 
 const be32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
 const png = (w, h) => new Uint8Array([

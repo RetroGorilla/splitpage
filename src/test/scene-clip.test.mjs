@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
-import { dataUrlForSync, intern } from "../js/02c-blobs.js";
+import { dataUrlForSync, intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { commentIds, fromHtml } from "../js/04c-doc-model.js";
 import { createUndoHistory, diffStates } from "../js/12a-undo.js";
