@@ -1,4 +1,4 @@
-import { createViewLifetime } from "./lifetime.ts";
+import { createViewLifetime } from "../common/view-lifetime.ts";
 
 export interface ResumeHandle {
   readonly requestPermission: (options: { mode: "readwrite" }) => Promise<string>;

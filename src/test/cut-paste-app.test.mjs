@@ -15,7 +15,7 @@ const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { copyFromCell, pasteIntoCell } = await import("../js/05c-clipboard.js");
 const { render, syncFieldFromDom } = await import("../js/05-render.js");
-const { cellSelection } = await import("../js/05b-cell-edit.js");
+const { cellSelection } = await import("../features/editing/cell-selection.ts");
 const { armDeleteComment } = await import("../js/10-comments.js");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 
