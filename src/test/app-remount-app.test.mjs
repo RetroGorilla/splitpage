@@ -111,7 +111,7 @@ const { bootApp, closeApp, rewireApp } = await import("./_app-boot.mjs");
 const { S } = await import("../js/_state.js");
 await bootApp();
 const app = await import("../bootstrap/app.ts");
-const { rootRoutesTaken } = await import("../js/22a-editor-wiring.js");
+const { rootRoutesTaken } = await import("../bootstrap/wiring/editor.ts");
 const { ROOT_CLICK_ORDER, ROOT_MOUSEDOWN_ORDER } = await import("../features/routing/root-router.ts");
 
 after(() => {

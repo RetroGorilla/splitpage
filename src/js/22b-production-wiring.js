@@ -62,7 +62,7 @@ import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { exportAs, runExport } from "./18-local-files.js";
 import { wireTagEntityContainer } from "./20-teleprompter.js";
-import { onRootClick, routeRootClick, routeRootMouseDown } from "./22a-editor-wiring.js";
+import { onRootClick, routeRootClick, routeRootMouseDown } from "../bootstrap/wiring/editor.ts";
 import { productionGroupBy, setGearGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey } from "../application/tag-panel-state.ts";
 import { findMatchesCase, setFindMatchCase } from "../application/find-options.ts";
 
