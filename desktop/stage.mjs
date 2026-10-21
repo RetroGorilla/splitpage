@@ -84,7 +84,7 @@ for (const filename of ["listen.ps1"]) {
 
 const serverDir = resolve(STAGE_DIR, "server");
 await fs.mkdir(serverDir, { recursive: true });
-for (const filename of ["server.js", "package.json"]) {
+for (const filename of ["server.js", "comments.js", "text.js", "html-tokens.js", "package.json"]) {
   const data = await fs.readFile(resolve(REPO_ROOT, "server", filename));
   await fs.writeFile(resolve(serverDir, filename), data);
   console.log(`  server/${filename} (${data.length} bytes)`);
