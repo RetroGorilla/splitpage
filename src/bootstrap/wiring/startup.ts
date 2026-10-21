@@ -23,6 +23,10 @@ import { seedCheckPasses } from "../../js/20b-onboarding.js";
 import { desktopBridge, initDesktop, notifyDesktopDocumentState } from "../../js/20f-desktop.js";
 import { applyTakenDraft, armServerDraftResume, desktopDraftTaker } from "../../js/20g-drafts.js";
 
+function cloneDocument<T>(doc: T): T {
+  return cloneState(doc) as T;
+}
+
 export function startupPorts(): StartupPorts<unknown, ValidatedDocument, ValidatedDocument, unknown> {
   return {
     desktop: !!desktopBridge(),
@@ -35,7 +39,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
     document: {
       pristine: seedCheckPasses,
       load: loadInitialDocument,
-      clone: cloneState,
+      clone: cloneDocument,
       applyStash: function (loaded, options) {
         const applied: StashResult<ValidatedDocument, unknown> = applyStashedWork(loaded, null, options);
         return applied;

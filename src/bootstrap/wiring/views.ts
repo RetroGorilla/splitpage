@@ -261,7 +261,7 @@ export function mountConflictsFeature(): ReturnType<typeof mountConflicts> {
       openMergeReview: openMergeReview,
       cancelMergeReview: cancelMergeReview,
       confirmFileMerge: confirmFileMerge,
-      importHome: importHome,
+      importHome: importHome as unknown as ConflictsPorts["importHome"],
       buildFileData: buildFileData,
       deliverFile: deliverFile,
       conflict: function () {
