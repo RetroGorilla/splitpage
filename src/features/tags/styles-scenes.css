@@ -4,28 +4,28 @@
     color: var(--text-faint); white-space: nowrap;
   }
   .shoot-progress.is-done { color: var(--ok); }
-  .shoot-detail { margin: 0; padding: 6px 20px 8px; }
-  .shoot-detail dt { margin-top: 8px; font-size: 12.5px; line-height: 16px; color: var(--text-dim); }
+  .shoot-detail { margin: 0; padding: var(--space-6) var(--space-20) var(--space-8); }
+  .shoot-detail dt { margin-top: var(--space-8); font-size: 12.5px; line-height: 16px; color: var(--text-dim); }
   .shoot-detail dt:first-child { margin-top: 0; }
-  .shoot-detail dd { margin: 2px 0 0; }
-  .shoot-detail .tag-scenes { padding: 6px 0; }
+  .shoot-detail dd { margin: var(--space-2) 0 0; }
+  .shoot-detail .tag-scenes { padding: var(--space-6) 0; }
   .tag-scene-tick {
     width: 12px; height: 12px; flex: none;
     fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
   }
   .shoot-needs { margin: 0; padding: 0; list-style: none; }
   .shoot-need {
-    display: grid; grid-template-columns: 6px minmax(0, 1fr) 96px 72px; column-gap: 10px; align-items: center;
+    display: grid; grid-template-columns: 6px minmax(0, 1fr) 96px 72px; column-gap: var(--space-10); align-items: center;
     min-height: 32px; font-size: 14px; line-height: 20px;
   }
   .shoot-need .tag-cat-dot { width: 6px; height: 6px; }
-  .shoot-need-name { min-width: 0; padding: 6px 0; overflow-wrap: anywhere; }
+  .shoot-need-name { min-width: 0; padding: var(--space-6) 0; overflow-wrap: anywhere; }
   .shoot-need-status {
     display: flex; align-items: center; gap: 7px;
     font-size: 13px; line-height: 16px; color: var(--text-visual); white-space: nowrap;
   }
   @container (max-width: 459px) {
     .shoot-need { grid-template-columns: 6px minmax(0, 1fr) auto; }
-    .shoot-need .tag-owner { grid-column: 2 / -1; min-height: 20px; padding-bottom: 4px; }
+    .shoot-need .tag-owner { grid-column: 2 / -1; min-height: 20px; padding-bottom: var(--space-4); }
     .shoot-need .tag-owner.is-none { display: none; }
   }

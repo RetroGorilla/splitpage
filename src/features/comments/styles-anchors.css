@@ -4,8 +4,8 @@
     justify-content: center;
     min-width: 16px;
     height: 16px;
-    padding: 0 4px;
-    margin-left: 6px;
+    padding: 0 var(--space-4);
+    margin-left: var(--space-6);
     border-radius: 999px;
     background: var(--danger);
     color: var(--accent-contrast);

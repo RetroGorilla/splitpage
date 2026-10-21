@@ -1,8 +1,8 @@
   .writer { --wr-font: 19px; }
 
   .writer-top {
-    display: flex; align-items: center; gap: 14px;
-    padding: 10px 20px;
+    display: flex; align-items: center; gap: var(--space-14);
+    padding: var(--space-10) var(--space-20);
     background: var(--surface);
     border-bottom: 1px solid var(--border);
   }
@@ -22,12 +22,12 @@
     background: transparent;
     border: 1px solid transparent;
     border-radius: var(--radius-sm);
-    padding: 6px 8px;
+    padding: var(--space-6) var(--space-8);
   }
   .writer-title:hover { border-color: var(--border); }
   .writer-title:focus { outline: none; border-color: var(--audio); background: var(--bg); }
   .writer-stats {
-    display: flex; align-items: center; gap: 16px;
+    display: flex; align-items: center; gap: var(--space-16);
     font-family: var(--font-body);
     font-size: 13px;
     color: var(--text-dim);
@@ -40,7 +40,7 @@
     flex: 1;
     overflow-y: auto;
     scrollbar-gutter: stable both-edges;
-    padding: 44px 24px 55vh;
+    padding: 44px var(--space-24) 55vh;
   }
 
   .writer-doc { max-width: clamp(640px, 60vw, 1100px); margin: 0 auto; }
@@ -49,7 +49,7 @@
     position: absolute;
     top: 0; right: 100%;
     width: 142px;
-    margin-right: 20px;
+    margin-right: var(--space-20);
     text-align: right;
     padding-top: 15px;
     font-family: var(--font-display);
@@ -63,7 +63,7 @@
   }
   .writer[data-gutter="numbers"] .wr-gutter { width: 34px; }
   .writer[data-gutter="compact"] .wr-gutter { display: none; }
-  .writer[data-gutter="compact"] .wr-block { margin-bottom: 12px; }
+  .writer[data-gutter="compact"] .wr-block { margin-bottom: var(--space-12); }
   .wr-gutter:hover .wr-num, .wr-gutter:hover .wr-visual { color: var(--audio); }
   .wr-num { display: block; }
   .wr-visual {
@@ -88,7 +88,7 @@
     line-height: 1.72;
     min-height: 0;
     margin: 0;
-    padding: 8px 12px 10px;
+    padding: var(--space-8) var(--space-12) var(--space-10);
     background: transparent;
     box-shadow: none;
   }
@@ -108,9 +108,9 @@
   }
 
   .writer-bar {
-    display: flex; align-items: center; gap: 10px;
+    display: flex; align-items: center; gap: var(--space-10);
     flex-wrap: wrap;
-    padding: 8px 20px;
+    padding: var(--space-8) var(--space-20);
     background: var(--surface);
     border-bottom: 1px solid var(--border);
   }
@@ -122,7 +122,7 @@
     border: 1px solid var(--border);
     color: var(--text);
     border-radius: var(--radius-sm);
-    padding: 8px 11px;
+    padding: var(--space-8) 11px;
     cursor: pointer;
   }
   .writer-bar button:hover { border-color: var(--audio); color: var(--audio); }
@@ -136,7 +136,7 @@
   .writer-bar .grp {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-8);
     font-family: var(--font-body);
     font-size: 12.5px;
     color: var(--text-dim);
@@ -154,11 +154,11 @@
       position: static;
       width: auto;
       margin: 0;
-      padding: 12px 12px 0;
+      padding: var(--space-12) var(--space-12) 0;
       text-align: left;
       display: flex;
       align-items: baseline;
-      gap: 8px;
+      gap: var(--space-8);
     }
     .writer[data-gutter="numbers"] .wr-gutter { width: auto; }
     .wr-num { flex: none; }

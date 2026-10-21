@@ -2,27 +2,27 @@
   .conflict-panel .modal-footer-actions { flex-wrap: wrap; justify-content: flex-end; }
 
   .modal-panel.merge-review-panel { max-width: 780px; }
-  .merge-group { margin-bottom: 16px; }
+  .merge-group { margin-bottom: var(--space-16); }
   .merge-group-head {
-    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    display: flex; align-items: baseline; gap: var(--space-10); flex-wrap: wrap;
     font-family: var(--font-body); font-size: 13px; font-weight: 600;
     color: var(--text-dim);
-    padding-bottom: 6px; border-bottom: 1px solid var(--border); margin-bottom: 10px;
+    padding-bottom: var(--space-6); border-bottom: 1px solid var(--border); margin-bottom: var(--space-10);
   }
   .merge-group-note {
     font-size: 12px; font-weight: 450; color: var(--text-dim);
   }
-  .merge-entry { margin-bottom: 12px; }
+  .merge-entry { margin-bottom: var(--space-12); }
   .merge-entry-head {
-    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
-    flex-wrap: wrap; font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 6px;
+    display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-10);
+    flex-wrap: wrap; font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: var(--space-6);
   }
   .merge-entry-outcome { font-weight: 400; font-size: 12px; color: var(--text-dim); }
   .merge-entry[data-outcome="conflict"] .merge-entry-outcome { color: var(--danger); }
-  .merge-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .merge-sides { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-10); }
   .merge-side {
     border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: var(--bg); padding: 8px 10px; min-width: 0;
+    background: var(--bg); padding: var(--space-8) var(--space-10); min-width: 0;
   }
   .merge-side-head {
     font-family: var(--font-body); font-size: 12px; font-weight: 500;

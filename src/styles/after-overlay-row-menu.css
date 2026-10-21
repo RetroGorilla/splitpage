@@ -6,7 +6,7 @@
   .scene-menu { position: fixed; top: 0; left: 0; z-index: 140; min-width: 248px; }
   .scene-menu-keys {
     margin-left: auto;
-    padding-left: 16px;
+    padding-left: var(--space-16);
     font-family: var(--font-display);
     font-size: 12px;
     color: var(--text-faint);
@@ -25,7 +25,7 @@
     display: inline-block;
     min-width: 0;
     margin: 0 -6px 0 0;
-    padding: 0 6px;
+    padding: 0 var(--space-6);
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
@@ -49,7 +49,7 @@
     max-width: calc(80px * var(--script-scale));
     height: calc(29px * var(--script-scale));
     margin: 0;
-    padding: 0 6px;
+    padding: 0 var(--space-6);
     border: 1px solid var(--visual);
     border-radius: var(--radius-sm);
     background: var(--surface);
@@ -67,7 +67,7 @@
     z-index: 190;
     transform: translateX(-50%);
     height: 36px;
-    padding: 0 14px;
+    padding: 0 var(--space-14);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-md);
     background: var(--surface-2);
@@ -95,9 +95,9 @@
     align-items: center;
     justify-content: space-between;
     width: calc(100% + 40px);
-    gap: 10px;
+    gap: var(--space-10);
     margin: 0 -20px;
-    padding: 9px 20px;
+    padding: 9px var(--space-20);
     border: none;
     border-bottom: 1px solid var(--border);
     background: transparent;

@@ -44,8 +44,8 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 8px 8px 4px 16px;
+    gap: var(--space-12);
+    padding: var(--space-8) var(--space-8) var(--space-4) var(--space-16);
   }
   .tagging-help-title {
     margin: 0;
@@ -60,38 +60,38 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-    padding: 0 16px 4px;
+    padding: 0 var(--space-16) var(--space-4);
     font-size: 13px;
     line-height: 1.5;
     color: var(--text-dim);
   }
   .tagging-help-label {
-    margin: 10px 0 6px;
+    margin: var(--space-10) 0 var(--space-6);
     font-family: var(--font-body);
     font-size: 12px;
     line-height: 16px;
     font-weight: 600;
     color: var(--text-faint);
   }
-  .tagging-help-label:first-child { margin-top: 4px; }
+  .tagging-help-label:first-child { margin-top: var(--space-4); }
   .tagging-help-list {
     list-style: none;
     margin: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--space-6);
   }
   .tagging-help-row {
     display: grid;
     grid-template-columns: 124px 14px auto minmax(0, 1fr);
     align-items: baseline;
-    column-gap: 6px;
+    column-gap: var(--space-6);
   }
-  .tagging-help-keys .tagging-help-row { grid-template-columns: 100px minmax(0, 1fr); column-gap: 8px; }
-  .tagging-help-words .tagging-help-row > span:first-child { display: inline-flex; gap: 4px; }
+  .tagging-help-keys .tagging-help-row { grid-template-columns: 100px minmax(0, 1fr); column-gap: var(--space-8); }
+  .tagging-help-words .tagging-help-row > span:first-child { display: inline-flex; gap: var(--space-4); }
   .tagging-help-row > .tagging-help-cat:nth-child(3) { grid-column: 3 / -1; }
-  .tagging-help-example { margin: 0 0 6px; }
+  .tagging-help-example { margin: 0 0 var(--space-6); }
   .tagging-help-label kbd { font-weight: 500; }
   .tagging-help-arrow { color: var(--text-faint); text-align: center; }
   .tagging-help-cat { font-size: 12.5px; color: var(--text-dim); }
@@ -104,16 +104,16 @@
     color: var(--text);
     white-space: nowrap;
   }
-  .tagging-help-note { margin: 8px 0 0; font-size: 12.5px; color: var(--text-dim); line-height: 1.45; }
+  .tagging-help-note { margin: var(--space-8) 0 0; font-size: 12.5px; color: var(--text-dim); line-height: 1.45; }
   .tagging-help-note strong { color: var(--text); font-weight: 600; }
   .tagging-help-foot {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
     justify-content: space-between;
-    gap: 4px 12px;
-    margin-top: 8px;
-    padding: 10px 16px 12px;
+    gap: var(--space-4) var(--space-12);
+    margin-top: var(--space-8);
+    padding: var(--space-10) var(--space-16) var(--space-12);
     border-top: 1px solid var(--border);
   }
   .tagging-help-sub {
@@ -144,7 +144,7 @@
       border-width: 1px 0 0;
       border-radius: var(--radius-md) var(--radius-md) 0 0;
     }
-    .tagging-help-head { padding-top: 10px; }
+    .tagging-help-head { padding-top: var(--space-10); }
   }
   .tagging-help-body kbd {
     display: inline-block;
@@ -157,7 +157,7 @@
     background: transparent;
     border: 1px solid var(--border-strong);
     border-radius: 4px;
-    padding: 0 6px;
+    padding: 0 var(--space-6);
     color: var(--text-dim);
   }
   .tagging-help-body code, .tagging-help-body kbd { flex: none; }

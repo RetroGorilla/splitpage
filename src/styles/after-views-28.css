@@ -1,9 +1,9 @@
-    .topbar .rundown { padding: 0 16px; }
+    .topbar .rundown { padding: 0 var(--space-16); }
     .rundown .rundown-ruler { display: none; }
     .rundown .rundown-track { height: 51px; }
     .rundown .rd-block { top: 15px; height: 22px; font-size: 10.5px; line-height: 12px; }
     @container rdb (min-width: 26px) {
-      .rundown .rd-in { gap: 4px; padding: 0 6px; }
+      .rundown .rd-in { gap: var(--space-4); padding: 0 var(--space-6); }
     }
     #rundown .rd-len, #rundown .rd-stat, #rundown .rd-snip { display: none; }
     .rundown .rd-check { width: 9px; height: 9px; }

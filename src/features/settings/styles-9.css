@@ -6,7 +6,7 @@
       grid-row: 3;
       justify-self: end;
       margin: 0 0 -8px;
-      padding: 0 4px 8px 10px;
+      padding: 0 var(--space-4) var(--space-8) var(--space-10);
       border: 0;
       background: transparent;
       color: var(--text-faint);
