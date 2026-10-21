@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createSelectionModel } from "../../../src/application/editing/selection.ts";
+import { createEditorSelection, createSelectionModel } from "../../../src/application/editing/selection.ts";
 import { cellKeys } from "../../../src/core/text/selection.ts";
 import type { SelectionField } from "../../../src/core/text/selection.ts";
 
@@ -75,4 +75,54 @@ test("a new document epoch drops the selection for good; forget drops it too", (
   model.forget();
   assert.equal(model.resolve(), null);
   assert.equal(model.snapshot(), null);
+});
+
+function fakeEditor() {
+  const doc = { epoch: 1, rows: [{ id: "r1", audioText: "Mine one." }] };
+  const editor = createEditorSelection<object, string, string>({
+    epoch: () => doc.epoch,
+    order: () => doc.rows.map((r) => r.id),
+    keys: (rowId: string, field: SelectionField) => {
+      const row = doc.rows.find((r) => r.id === rowId);
+      return row && field === "audioText" ? cellKeys([{ text: row.audioText, marks: {} }]) : null;
+    }
+  });
+  return { doc, editor };
+}
+
+test("the editor selection remembers and resolves like the model it is built on", () => {
+  const { doc, editor } = fakeEditor();
+  editor.remember(taken("r1", 4, 4, "Mine one."));
+  assert.equal(editor.snapshot()?.selection.head, 4);
+  assert.equal(editor.resolve()?.head, 4);
+  doc.epoch = 2;
+  assert.equal(editor.resolve(), null, "a new document drops it");
+  editor.remember(taken("r1", 4, 4, "Mine one.", 2));
+  editor.forget();
+  assert.equal(editor.resolve(), null);
+});
+
+test("a painted surface keeps the epoch it was painted at; an unpainted one reads the document's epoch now", () => {
+  const { doc, editor } = fakeEditor();
+  const rows = {};
+  const writer = {};
+  editor.notePainted(rows);
+  doc.epoch = 3;
+  assert.equal(editor.paintedEpoch(rows), 1);
+  assert.equal(editor.paintedEpoch(writer), 3);
+  editor.notePainted(rows);
+  assert.equal(editor.paintedEpoch(rows), 3, "painting again takes the new epoch");
+});
+
+test("the link target is held with its cell until it is dropped, and a new hold replaces the old one", () => {
+  const { editor } = fakeEditor();
+  assert.equal(editor.heldLink(), null);
+  editor.holdLink("range a", "cell a");
+  assert.deepEqual(editor.heldLink(), { range: "range a", cell: "cell a" });
+  editor.holdLink("range b", "cell b");
+  assert.deepEqual(editor.heldLink(), { range: "range b", cell: "cell b" });
+  editor.dropLink();
+  assert.equal(editor.heldLink(), null);
+  editor.dropLink();
+  assert.equal(editor.heldLink(), null, "dropping twice is harmless");
 });
