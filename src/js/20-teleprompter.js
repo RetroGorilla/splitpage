@@ -44,6 +44,7 @@ import { toPlainText } from "../core/text/projections.ts";
 import { projection } from "../core/text/runs.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { focusMemory } from "../legacy/editor-bridge.ts";
+import { setTagAddingPerson, setTagRenaming } from "../application/tag-panel-state.ts";
 
 export var prompterMirror;
 export var prompterFlip;
@@ -1016,8 +1017,8 @@ export function wireTagEntityContainer(id, rootClick) {
       renderProduction: renderProduction,
       saveTagRename: saveTagRename,
       addPersonForTag: addPersonForTag,
-      setRenaming: function (value) { S.tagRenaming = value; },
-      setAddingPerson: function (value) { S.tagAddingPersonFor = value; },
+      setRenaming: function (value) { setTagRenaming(value); },
+      setAddingPerson: function (value) { setTagAddingPerson(value); },
       setTagOwner: setTagOwner,
       setTagNotes: setTagNotes,
       queueAutoSave: queueAutoSave
