@@ -1,6 +1,6 @@
 # Splitpage review policy
 
-This applies to every PR into `4.0-development`. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more bug fixes; a bug that also exists on 3.1.x is fixed on 4.0 under §2.
+This applies to every PR into `4.1-development`. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more bug fixes; a bug that also exists on 3.1.x is fixed on 4.0 under §2.
 
 **Fast path.** Two kinds of PR get the automated checks and a quick read instead of the full process:
 - docs-only PRs (CI's change classifier marks them as prose)
@@ -64,7 +64,7 @@ One independent reviewer: a session or agent that did not write the change. They
 | Core purity | Nothing the dependency gate bans: no clock reads, no ambient randomness, no platform globals. Time and randomness come in through the ports. Pure date operations are fine. |
 | No comments | No authored comments anywhere, including workflow and config files |
 | Behavior preservation | Does the refactor change behavior? Is every intended change called out and routed per §2? |
-| Goldens | Are golden files changed only in a dedicated commit on `4.0-development` via `src/test/golden-helpers.mjs`, with the diff explained? |
+| Goldens | Are golden files changed only in a dedicated commit on `4.1-development` via `src/test/golden-helpers.mjs`, with the diff explained? |
 | User-facing text | Do toasts and refusal messages, and the PR's suggested CHANGELOG line, match what the code actually does? The PR does not edit CHANGELOG or help.md (§7). |
 
 ## 5. Extra verification by risk
@@ -118,7 +118,7 @@ The lane that wrote the code fixes the findings. The reviewer then re-checks the
 - GitHub reports a conflict, or
 - the base has changed files the PR touches.
 
-Otherwise merge with CI green on the PR's own head, even though the base has moved. The safety net is CI on `4.0-development` after every merge, plus the milestone gate's full run on the merged tree (§8). When the base is merged in, push, so CI runs on the new combined tree. A re-run alone isn't enough, because it reuses the old merge commit. Local run evidence counts only for the tree it ran on.
+Otherwise merge with CI green on the PR's own head, even though the base has moved. The safety net is CI on `4.1-development` after every merge, plus the milestone gate's full run on the merged tree (§8). When the base is merged in, push, so CI runs on the new combined tree. A re-run alone isn't enough, because it reuses the old merge commit. Local run evidence counts only for the tree it ran on.
 
 **CHANGELOG and help are not edited in fix PRs.** Adam approved this rule on 2026-10-02. `CHANGELOG.md` and `docs/help.md` stay as the base has them. A user-visible fix puts a "Suggested CHANGELOG line" section in its PR body, in the existing entry style, or says "No CHANGELOG entry" and why. The coordinator writes every entry in one docs PR, and Adam signs off the wording there once, under "Wording for Adam's sign-off".
 

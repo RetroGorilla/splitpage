@@ -1,4 +1,4 @@
-# The image blob registry and its IndexedDB backend (src/js/02c-blobs.js,
+# The image blob registry and its IndexedDB backend (src/adapters/storage/02c-blobs.js,
 # issue #82 P1), mostly driven through window.__blobsTest: real encoder
 # output from a canvas (PNG, JPEG, WebP) measured and hashed, the data: URI decoder held to what
 # this browser itself decodes, then intern -> persist -> reload -> ensureBytes

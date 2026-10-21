@@ -214,7 +214,7 @@ names, and a golden test writes its fixture only when that variable names it
 left in a shell cannot rewrite every fixture and pass; the helper starts
 `node --test` itself and is not affected.
 
-Goldens are regenerated only on `4.0-development`, in a commit of their own
+Goldens are regenerated only on `4.1-development`, in a commit of their own
 that changes nothing else, and never inside a lane that moves code: such a
 lane keeps every golden passing unchanged.
 
@@ -525,7 +525,7 @@ measures is shown to Windows browsers only.
 ## CI
 
 `.github/workflows/ci.yml` runs on every pull request to `main` or
-`4.0-development` and every push to either branch. Its jobs call the scripts
+`4.1-development` and every push to either branch. Its jobs call the scripts
 above and nothing else.
 
 | Job | Runs |
