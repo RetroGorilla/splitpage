@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { storedImageMarkup } from "../../src/core/document/text-policy.ts";
 import * as legacy from "../../src/legacy/richtext.ts";
-import { has, intern, recordFor, setBackend } from "../../src/js/02c-blobs.js";
+import { has, intern, recordFor, setBackend } from "../../src/adapters/storage/02c-blobs.js";
 import * as richtext from "../../src/js/04-richtext.js";
 import * as docModel from "../../src/js/04c-doc-model.js";
 import { image } from "../../src/test/golden-helpers.mjs";

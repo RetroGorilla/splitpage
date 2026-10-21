@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildVideoCardEl, htmlToMarkdown, sanitizeHtml, storedHtmlFromDom } from "../js/04-richtext.js";
 import { fromHtml, toHtml } from "../js/04c-doc-model.js";
-import { intern } from "../js/02c-blobs.js";
+import { intern } from "../adapters/storage/02c-blobs.js";
 import { createIdMasker, goldenText, idsInHtml, image, mintedId, settleGolden } from "./golden-helpers.mjs";
 
 const KNOWN = image("png", 7, 5);

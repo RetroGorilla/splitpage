@@ -8,7 +8,7 @@ import {
   setVideoThumbnail,
   videoLinkKey,
   videoLinkLabel
-} from "./02d-gallery.js";
+} from "../adapters/storage/02d-gallery.js";
 import { findRowIndex } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";
 import {

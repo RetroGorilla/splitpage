@@ -2,14 +2,14 @@ import {
   createBlobStore,
   createIdbBlobBackend,
   createMemoryBlobBackend
-} from "../adapters/storage/blob-store.ts";
+} from "./blob-store.ts";
 import {
   forgivingBase64Decode,
   rowImage,
   rowImageKey,
   rowImageShas
-} from "../core/document/media.ts";
-import { imageDims, isSha256Hex, normalizeImageRef, refsIn, sniffImageMime } from "../../shared/blob-policy.js";
+} from "../../core/document/media.ts";
+import { imageDims, isSha256Hex, normalizeImageRef, refsIn, sniffImageMime } from "../../../shared/blob-policy.js";
 export { rowImage, rowImageKey, rowImageShas };
 
 var idbBlobs = createIdbBlobBackend(function () {

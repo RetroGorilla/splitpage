@@ -5,7 +5,7 @@ import { migrateRows } from "../js/02-state.js";
 import {
   acceptStash, cloneState, mergeStates, mergeTextField, readStash, rowContentEqual, stashLocalWork, textMergeContext
 } from "../js/03-sync.js";
-import { createMemoryBackend, dataUrlForSync, intern, setBackend } from "../js/02c-blobs.js";
+import { createMemoryBackend, dataUrlForSync, intern, setBackend } from "../adapters/storage/02c-blobs.js";
 import { S } from "../js/_state.js";
 import { changedBetween } from "../js/12a-undo.js";
 import { personIdRemap } from "../core/merge/lists.ts";

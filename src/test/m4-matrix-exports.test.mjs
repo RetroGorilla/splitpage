@@ -9,7 +9,7 @@ after(closeApp);
 
 const { LONG_DEMO } = await import("../js/_starters.js");
 const { migrateRows } = await import("../js/02-state.js");
-const { blobStore, createMemoryBackend, intern, setBackend } = await import("../js/02c-blobs.js");
+const { blobStore, createMemoryBackend, intern, setBackend } = await import("../adapters/storage/02c-blobs.js");
 const { brollShotListForPrint } = await import("../js/08d-broll-panel.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");

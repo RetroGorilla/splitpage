@@ -2,7 +2,7 @@ import { owned } from "../features/routing/owned.ts";
 import { runFromButton } from "../legacy/app-actions.ts";
 import { mountComments } from "../features/comments/mount.ts";
 import { S } from "./_state.js";
-import { internDataUrl, persist } from "./02c-blobs.js";
+import { internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
 import { storedImageHtml } from "./04-richtext.js";
 import { typePendingMarks } from "./05-render.js";
 import {
