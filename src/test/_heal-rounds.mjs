@@ -1,3 +1,4 @@
+import { productionReaders } from "../legacy/document-ports.ts";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
@@ -5,8 +6,7 @@ import {
   currentProductionIndex,
   healTagRegistry,
   productionEntries,
-  productionIndexStats,
-  productionReaders
+  productionIndexStats
 } from "../js/07-production-tags.js";
 import { deriveProductionIndex } from "../core/production/tags.ts";
 

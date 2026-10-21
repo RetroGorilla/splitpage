@@ -1,3 +1,4 @@
+import { normalizeServerUrl } from "./_home.js";
 import { S } from "./_state.js";
 import { SETTINGS_APPDATA_PREFS } from "./00p-prefs.js";
 import { setBackend as setBlobBackend } from "../adapters/storage/02c-blobs.js";
@@ -14,7 +15,6 @@ import {
   readCommentSortMode
 } from "./10-comments.js";
 import { showToast } from "./12-dirty-toast.js";
-import { normalizeServerBase } from "./13-hosted.js";
 import { AUTOSAVE_KEY } from "./14-export.js";
 import { deliverFile } from "./18-local-files.js";
 import {
@@ -289,13 +289,13 @@ function appDataMergeBookmarks(list) {
   loadBookmarks();
   var byUrl = {}, ids = {};
   S.serverBookmarks.forEach(function (b) {
-    var u = normalizeServerBase(b.url);
+    var u = normalizeServerUrl(b.url);
     if (u) byUrl[u] = true;
     if (typeof b.id === "string") ids[b.id] = true;
   });
   var fresh = [];
   list.forEach(function (b) {
-    var url = normalizeServerBase(b.url);
+    var url = normalizeServerUrl(b.url);
     if (!url) { out.failed++; return; }
     if (byUrl[url]) { out.skipped++; return; }
     var id = (typeof b.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(b.id)) ? b.id : "";

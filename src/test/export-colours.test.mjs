@@ -1,3 +1,4 @@
+import { TAG_CATEGORIES } from "../core/production/looks.ts";
 import "./_dom.mjs";
 import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
@@ -5,7 +6,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
-import { TAG_CATEGORIES, __init as initTags } from "../js/07-production-tags.js";
+import { __init as initTags } from "../js/07-production-tags.js";
 import { breakdownRows } from "../js/08-production-panels.js";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";

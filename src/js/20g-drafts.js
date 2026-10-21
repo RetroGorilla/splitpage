@@ -1,3 +1,4 @@
+import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { S } from "./_state.js";
 import { conn, fileHome, home, importHome, stillOnServer } from "./_home.js";
 import { migrateRows } from "./02-state.js";
@@ -5,7 +6,6 @@ import { inlineStateJson, persist } from "../adapters/storage/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import {
   copyDocHistorySafe,
-  normalizeDocId,
   syncDocIdentity
 } from "./02b-doc-id.js";
 import { cloneState, updateIdentityChip } from "./03-sync.js";

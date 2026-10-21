@@ -1,7 +1,7 @@
 import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { mintDocId, randomHexBytes } from "../adapters/identity/ids.ts";
-import { deriveDocId, docIdEmbeddedIn, mergedDocId, sha256Bytes, sha256Hex, withPageHead } from "../core/document/ids.ts";
+import { mergedDocId, sha256Hex, withPageHead } from "../core/document/ids.ts";
 import { cappedLongText, plainText } from "../core/document/text-policy.ts";
 import { migrateDocument as migrateDocumentWith } from "../core/migrate.ts";
 import { withDocumentPorts } from "../legacy/document-ports.ts";
@@ -20,8 +20,8 @@ import {
   duplicateReplacementInput,
   normalizeDocId
 } from "../../shared/doc-id-policy.js";
-export { decideDuplicateLoser, normalizeDocId };
-export { deriveDocId, docIdEmbeddedIn, mergedDocId, mintDocId, randomHexBytes, sha256Bytes, sha256Hex, withPageHead };
+export { decideDuplicateLoser };
+export { mergedDocId, randomHexBytes, sha256Hex, withPageHead };
 
 var PAGE_NONCE;
 

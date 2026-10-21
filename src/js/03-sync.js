@@ -1,3 +1,4 @@
+import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { S } from "./_state.js";
 import { setHome } from "./_home.js";
 import { PERSON_COLORS, PERSON_COLOR_NAMES, formatClock, readMyColor, writePref, PERSON_COLOR_KEY } from "./00p-prefs.js";
@@ -7,7 +8,7 @@ import { noteMerged, noteRecovery, noteServerUpdate } from "../legacy/session-br
 import { applyIncomingMerge } from "../application/session/apply-merge.ts";
 import { mergeIncoming } from "../application/session/merge-incoming.ts";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
-import { randomIds, systemClock } from "../adapters/identity/ids.ts";
+import { randomIds, systemClock, nowIso } from "../adapters/identity/ids.ts";
 import { DEFAULT_WPM } from "../core/document/timing.ts";
 import { mergeStates as mergeStatesWith } from "../core/merge-states.ts";
 import { isDocumentObject } from "../core/migrate.ts";
@@ -18,7 +19,6 @@ import { fromHtml } from "../legacy/richtext.ts";
 import {
   adoptRestoredState,
   liveDocumentPort,
-  normalizeDocId,
   noteMergedDocId
 } from "./02b-doc-id.js";
 import {
@@ -42,7 +42,6 @@ import { resetProductionPanelState } from "./07-production-tags.js";
 import {
   formatTimestamp,
   getSavedAuthorName,
-  nowIso,
   saveAuthorName
 } from "./10-comments.js";
 import { markAbsorbedDirty, markDirty, showToast } from "./12-dirty-toast.js";
@@ -53,11 +52,8 @@ import { updateFileChip } from "./18-local-files.js";
 import { confirmBaseline } from "../legacy/save-bridge.ts";
 import { captureRestore, stillRestoring } from "../legacy/recovery-bridge.ts";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
-export { GALLERY_FIELDS, ROW_FIELDS } from "../core/document/fields.ts";
 export { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
-export { byId, rowContentEqual, rowFieldKey } from "../core/merge/rows.ts";
 export { mergeTargetLength } from "../core/merge/scalars.ts";
-export { mergeTextField } from "../core/merge/text-field.ts";
 
 var STASH_KEY = "splitpage-conflict-stash";
 export var SNAPSHOT_KEY = "splitpage-snapshots";

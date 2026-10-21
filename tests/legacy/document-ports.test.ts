@@ -1,10 +1,11 @@
+import { deriveDocId } from "../../src/core/document/ids.ts";
 import { dom } from "../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { productionReaders, withDocumentPorts } from "../../src/legacy/document-ports.ts";
 import { STATE_FIELDS, migrateRows } from "../../src/js/02-state.js";
 import * as state from "../../src/js/02-state.js";
-import { deriveDocId, loadInitialState, migrateDocument } from "../../src/js/02b-doc-id.js";
+import { loadInitialState, migrateDocument } from "../../src/js/02b-doc-id.js";
 import { dataUrlForSync, has, inlineStateImages, recordFor, setBackend } from "../../src/adapters/storage/02c-blobs.js";
 import { createHash } from "node:crypto";
 import { mergeStates } from "../../src/js/03-sync.js";
@@ -106,8 +107,8 @@ test("a pass looks a picture it did not decode up in the registry: a conflict ca
   assert.deepEqual(await settled(), []);
 });
 
-test("07 hands out the one productionReaders the document ports read tags through", () => {
-  assert.equal(tags.productionReaders, productionReaders);
+test("07 uses the document ports' tagsInField without re-exporting productionReaders", () => {
+  assert.equal("productionReaders" in tags, false);
   assert.equal(tags.tagsInField, productionReaders.tagsInField);
 });
 

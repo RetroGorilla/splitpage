@@ -1,3 +1,4 @@
+import { domToPos } from "../features/editing/cell-dom.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -14,7 +15,7 @@ import {
   stripMediaMarks
 } from "../js/05d-draft-edit.js";
 import { cellLength, fromHtml, projection, setMark } from "../js/04c-doc-model.js";
-import { domToPos, posToDom } from "../js/05b-cell-edit.js";
+import { posToDom } from "../js/05b-cell-edit.js";
 
 const SHA = "a".repeat(64);
 const SHA2 = "b".repeat(64);

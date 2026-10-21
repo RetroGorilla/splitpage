@@ -1,12 +1,9 @@
+import { hasSetLength } from "../core/document/timing.ts";
+import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
 import { S } from "./_state.js";
 import {
-  ROW_STATUSES,
   estimatedSeconds,
-  formatDuration,
-  formatTimecode,
-  hasSetLength,
   rowSeconds,
-  rowStatus,
   updateScriptStats
 } from "./01-scene-status.js";
 import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
@@ -46,7 +43,7 @@ import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
-import { pad2 } from "../core/production/timing.ts";
+import { pad2, formatDuration, formatTimecode } from "../core/production/timing.ts";
 import { cueShortcut } from "../core/text/cues.ts";
 import { directionRangeAt, directionShortcut, directionToggleRange, toggleDirection } from "../core/text/directions.ts";
 import {
@@ -67,7 +64,6 @@ import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { undoGuard } from "../legacy/editor-bridge.ts";
 
 export { notePaintedEpoch, placeEditorSelection, rememberCellSelection };
-export { pad2 };
 
 var LINK_POPOVER_HTML =
   '<div class="link-popover" hidden>' +

@@ -1,3 +1,5 @@
+import { normalizeDocId } from "../../shared/doc-id-policy.js";
+import { mintDocId, nowIso } from "../adapters/identity/ids.ts";
 import { S } from "./_state.js";
 import { writePref } from "./00p-prefs.js";
 import { fileHome, home, restoreHome, serverOf, setHome } from "./_home.js";
@@ -5,8 +7,6 @@ import { rememberLastFileHandle } from "./00-prelude.js";
 import { migrateRows } from "./02-state.js";
 import {
   copyDocHistorySafe,
-  mintDocId,
-  normalizeDocId,
   syncDocIdentity
 } from "./02b-doc-id.js";
 import { ensureBytes } from "../adapters/storage/02c-blobs.js";
@@ -21,7 +21,6 @@ import {
   readStash,
   setBaseState
 } from "./03-sync.js";
-import { nowIso } from "./10-comments.js";
 import {
   clearDirty,
   noteSaveStatus,

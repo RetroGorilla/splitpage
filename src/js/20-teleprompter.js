@@ -11,7 +11,7 @@ import { S } from "./_state.js";
 import { writePref } from "./00p-prefs.js";
 import { serverHomeId } from "./_home.js";
 import { SpeechRecognitionCtor } from "./00-prelude.js";
-import { formatTimecode, rowSeconds } from "./01-scene-status.js";
+import { rowSeconds } from "./01-scene-status.js";
 import { hideShotScenes } from "./01b-hide-shot.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import {
@@ -36,7 +36,7 @@ import {
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "./_voice-relay.js";
-import { pad2 } from "../core/production/timing.ts";
+import { pad2, formatTimecode } from "../core/production/timing.ts";
 import { withoutCues } from "../core/text/cues.ts";
 import { sliceCell } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";

@@ -1,3 +1,5 @@
+import { normalizeDocId } from "../../shared/doc-id-policy.js";
+import { mintDocId, nowIso } from "../adapters/identity/ids.ts";
 import { S } from "./_state.js";
 import { authorityOf, isLinkGuest as guestAuthority, isReviewer } from "../application/collaboration/authority.ts";
 import {
@@ -15,9 +17,7 @@ import {
 import { escapeHtml, migrateRows } from "./02-state.js";
 import {
   copyDocHistorySafe,
-  migrateDocument,
-  mintDocId,
-  normalizeDocId
+  migrateDocument
 } from "./02b-doc-id.js";
 import {
   acceptStash,
@@ -50,7 +50,6 @@ import {
   captureReplyDrafts,
   formatTimestamp,
   getSavedAuthorName,
-  nowIso,
   renderComments,
   saveAuthorName
 } from "./10-comments.js";
@@ -105,8 +104,6 @@ export function reviewMode() {
 }
 
 var ApiError = apiError;
-
-export var normalizeServerBase = normalizeServerUrl;
 
 function readJsonFrom(storage, key) {
   try {
