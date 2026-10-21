@@ -3,8 +3,8 @@ import { fileHome } from "./_home.js";
 import { rowStatus } from "./01-scene-status.js";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import { normalizeDocId } from "./02b-doc-id.js";
-import { blobImgHtml, rowImage, rowImageKey } from "./02c-blobs.js";
-import { videoLinkLabel } from "./02d-gallery.js";
+import { blobImgHtml, rowImage, rowImageKey } from "../adapters/storage/02c-blobs.js";
+import { videoLinkLabel } from "../adapters/storage/02d-gallery.js";
 import { GALLERY_FIELDS, ROW_FIELDS, byId, cloneState, mergeTextField, rowContentEqual, rowFieldKey, textMergeContext } from "./03-sync.js";
 import {
   normalizeTagName,

@@ -5,8 +5,8 @@ import { readFileSync } from "node:fs";
 import { S } from "../js/_state.js";
 import { SETTINGS_APPDATA_PREFS, VIDEO_THUMBS_KEY, videoThumbsOn } from "../js/00p-prefs.js";
 import { migrateRows } from "../js/02-state.js";
-import { intern } from "../js/02c-blobs.js";
-import { addGalleryPicture, addGalleryVideo, setVideoThumbnail, videoLinkKey } from "../js/02d-gallery.js";
+import { intern } from "../adapters/storage/02c-blobs.js";
+import { addGalleryPicture, addGalleryVideo, setVideoThumbnail, videoLinkKey } from "../adapters/storage/02d-gallery.js";
 import { flushEdits, foldIntoEdit, lastUndoEntry, noteEdit, redo, resetUndo, trackDocument, undo, undoSizes } from "../js/12a-undo.js";
 import videoEmbed from "../../shared/video-embed.js";
 

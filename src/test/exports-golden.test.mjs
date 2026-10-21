@@ -18,7 +18,7 @@ after(closeApp);
 const { STARTERS, LONG_DEMO } = await import("../js/_starters.js");
 const { migrateRows } = await import("../js/02-state.js");
 const { standaloneHtmlFor } = await import("../js/02b-doc-id.js");
-const { intern } = await import("../js/02c-blobs.js");
+const { intern } = await import("../adapters/storage/02c-blobs.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { exportMetaLine, markdownExportImages, toMarkdownDoc, toMarkdownTableDoc } = await import("../js/14d-export-text.js");

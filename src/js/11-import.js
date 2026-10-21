@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { internDataUrl, queuePersist } from "./02c-blobs.js";
+import { internDataUrl, queuePersist } from "../adapters/storage/02c-blobs.js";
 import { pushSnapshot, stampRow } from "./03-sync.js";
 import { cssAttr, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
 import { render } from "./05-render.js";

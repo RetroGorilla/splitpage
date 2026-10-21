@@ -2,7 +2,7 @@ import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { S } from "./_state.js";
 import { formatClock, formatDateClock } from "./00p-prefs.js";
 import { revealRow } from "./01b-hide-shot.js";
-import { blobImgHtml } from "./02c-blobs.js";
+import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { normalizeImageRef } from "../../shared/blob-policy.js";
 import {
   findRowIndex,

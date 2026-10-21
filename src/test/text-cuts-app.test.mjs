@@ -9,7 +9,7 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { initDocIdentityChannel, reassignDocId, syncDocIdentity } = await import("../js/02b-doc-id.js");
-const { videoLinkLabel } = await import("../js/02d-gallery.js");
+const { videoLinkLabel } = await import("../adapters/storage/02d-gallery.js");
 const { render } = await import("../js/05-render.js");
 const { renderRundown } = await import("../js/05f-rundown.js");
 const { buildScenePayload, parseScenePayload } = await import("../js/05g-scene-clip.js");

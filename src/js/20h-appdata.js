@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { SETTINGS_APPDATA_PREFS } from "./00p-prefs.js";
-import { setBackend as setBlobBackend } from "./02c-blobs.js";
+import { setBackend as setBlobBackend } from "../adapters/storage/02c-blobs.js";
 import { SNAPSHOT_KEY } from "./03-sync.js";
 import {
   exportHistoryAll,

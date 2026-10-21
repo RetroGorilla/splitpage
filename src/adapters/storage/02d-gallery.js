@@ -23,8 +23,8 @@ import {
   setVideoThumbnail,
   slotOriginal,
   videoLinkKey
-} from "../core/document/gallery.ts";
-import { unitSafePrefix } from "../core/document/text-policy.ts";
+} from "../../core/document/gallery.ts";
+import { unitSafePrefix } from "../../core/document/text-policy.ts";
 export {
   ANNOTATION_COLORS,
   addGalleryPicture,

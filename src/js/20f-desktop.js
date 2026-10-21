@@ -1,7 +1,7 @@
 import { S } from "./_state.js";
 import { conn, fileHome, home, homeConn, serverHomeId, setHome } from "./_home.js";
 import { normalizeDocId, reassignDocId } from "./02b-doc-id.js";
-import { setBackend as setBlobBackend } from "./02c-blobs.js";
+import { setBackend as setBlobBackend } from "../adapters/storage/02c-blobs.js";
 import {
   HISTORY_OLDER_KEY,
   HISTORY_SNAP_ID_RE,
@@ -9,7 +9,7 @@ import {
   isPristineSeedDocument,
   sanitizeHistoryMeta
 } from "./03a-history-store.js";
-import { hashText as historyHashText } from "./03c-history-idb.js";
+import { hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "./04-richtext.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
