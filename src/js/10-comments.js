@@ -37,6 +37,7 @@ import { idMap } from "../core/document/id-map.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
 import { EDITOR_NAME_MAX, normalizeEditorName } from "../core/document/fields.ts";
 import { cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
+import { commentSortMode, setCommentSort } from "../application/comment-sort.ts";
 export { commentBodyText, commentEntries, nowIso };
 
 var commentFilter;
@@ -262,8 +263,8 @@ export function readCommentSortMode() {
   catch (e) { return "position"; }
 }
 export function setCommentSortMode(mode) {
-  S.commentSortMode = mode === "recent" ? "recent" : "position";
-  try { localStorage.setItem(COMMENTS_SORT_KEY, S.commentSortMode); } catch (e) {}
+  const chosen = setCommentSort(mode);
+  try { localStorage.setItem(COMMENTS_SORT_KEY, chosen); } catch (e) {}
   captureReplyDrafts();
   renderComments();
 }
@@ -1046,7 +1047,7 @@ export function renderComments() {
   var items = S.state.comments.filter(function (c) {
     return commentMatchesFilterMode(c, commentFilter.mode) && commentMatchesAssigneeFilter(c, commentFilter.assignee);
   });
-  items = items.slice().sort(S.commentSortMode === "recent" ? commentRecentOrder : commentPositionCompare);
+  items = items.slice().sort(commentSortMode() === "recent" ? commentRecentOrder : commentPositionCompare);
   if (!items.length) {
     listEl.innerHTML = '<div class="comments-empty">' + (S.state.comments.length ? "No comments match this filter." : "No comments yet.") + '</div>' +
       COMMENTS_HINT_HTML;
@@ -1065,7 +1066,7 @@ export function renderComments() {
 }
 
 export function __init() {
-  S.commentSortMode = readCommentSortMode();
+  setCommentSort(readCommentSortMode());
 
   commentFilter = readCommentFilter();
 

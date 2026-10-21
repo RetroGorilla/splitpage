@@ -7,6 +7,7 @@ import { createHeldImageDecode } from "./_m4-matrix.mjs";
 window.Element.prototype.scrollIntoView = function () {};
 window.Element.prototype.scrollBy = function () {};
 await bootApp();
+const { commentSortMode } = await import("../application/comment-sort.ts");
 const { mountCommentsFeature } = await import("../js/22c-comments-wiring.js");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../js/05-render.js");
@@ -66,7 +67,7 @@ test("comments app: every document, root and control registration is removed and
     target.addEventListener = function (type, fn, options) {
       assert.equal(phase(options), false, id + ":" + type);
       added.push(type); active.push({ type, fn, capture: phase(options) }); order.push(id + ":" + type);
-      if (id === "comments-sort") assert.equal(this.value, S.commentSortMode);
+      if (id === "comments-sort") assert.equal(this.value, commentSortMode());
       return add.call(this, type, fn, options);
     };
     target.removeEventListener = function (type, fn, options) {
