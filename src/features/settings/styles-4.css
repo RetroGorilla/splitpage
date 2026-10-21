@@ -1,15 +1,15 @@
-  .server-doc-list { max-height: 46vh; overflow-y: auto; margin: 4px 0 2px; }
+  .server-doc-list { max-height: 46vh; overflow-y: auto; margin: var(--space-4) 0 var(--space-2); }
   .server-doc {
-    display: flex; align-items: stretch; gap: 6px;
+    display: flex; align-items: stretch; gap: var(--space-6);
     border: 1px solid var(--border); border-radius: var(--radius-sm);
-    background: transparent; margin-bottom: 6px;
+    background: transparent; margin-bottom: var(--space-6);
   }
   .server-doc.is-current { border-color: var(--visual); }
   .server-doc-open {
     flex: 1; min-width: 0; text-align: left;
-    display: flex; flex-direction: column; gap: 2px;
+    display: flex; flex-direction: column; gap: var(--space-2);
     border: none; background: none; color: inherit; cursor: pointer;
-    padding: 9px 12px; border-radius: var(--radius-sm);
+    padding: 9px var(--space-12); border-radius: var(--radius-sm);
   }
   .server-doc-open:hover { background: var(--layer-hover, var(--hover)); }
   .server-doc-title { font-size: 14px; line-height: 20px; font-weight: 600; color: var(--text); }
@@ -17,10 +17,10 @@
   .server-doc-current {
     align-self: center; flex: none;
     font-family: var(--font-body); font-size: 12px; font-weight: 500; color: var(--visual);
-    border: 1px solid var(--visual); border-radius: var(--radius-lamp); padding: 1px 6px;
+    border: 1px solid var(--visual); border-radius: var(--radius-lamp); padding: 1px var(--space-6);
   }
   .server-doc-delete {
-    flex: none; align-self: center; margin-right: 6px;
+    flex: none; align-self: center; margin-right: var(--space-6);
     display: inline-flex; align-items: center; justify-content: center;
     min-width: 28px; height: 28px;
     border: 1px solid transparent; background: none;
@@ -29,6 +29,6 @@
   }
   .server-doc-delete:hover { color: var(--danger); background: var(--layer-hover, var(--hover)); }
   .server-doc-delete.armed {
-    font-family: var(--font-body); font-size: 12px; padding: 0 8px;
+    font-family: var(--font-body); font-size: 12px; padding: 0 var(--space-8);
     border-color: var(--danger); background: var(--danger-soft); color: var(--danger);
   }

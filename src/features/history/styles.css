@@ -1,25 +1,25 @@
   .history-subtitle {
     flex: none;
     margin: 0;
-    padding: 0 20px 12px;
+    padding: 0 var(--space-20) var(--space-12);
     font-size: 12.5px; line-height: 18px;
     color: var(--text-faint);
   }
   .history-scroll {
     flex: 1; min-height: 0;
     overflow-y: auto;
-    display: flex; flex-direction: column; gap: 8px;
-    padding-bottom: 16px;
+    display: flex; flex-direction: column; gap: var(--space-8);
+    padding-bottom: var(--space-16);
   }
-  .history-list { display: flex; flex-direction: column; gap: 8px; }
-  .history-empty { margin: 0; padding: 8px 20px; font-size: 13px; line-height: 1.5; color: var(--text-faint); }
+  .history-list { display: flex; flex-direction: column; gap: var(--space-8); }
+  .history-empty { margin: 0; padding: var(--space-8) var(--space-20); font-size: 13px; line-height: 1.5; color: var(--text-faint); }
   .history-fig { font-family: var(--font-display); font-weight: 500; font-variant-numeric: tabular-nums; }
   .history-none { color: var(--text-faint); }
 
   .history-day-head {
-    display: flex; align-items: center; gap: 8px;
+    display: flex; align-items: center; gap: var(--space-8);
     height: 32px;
-    margin: 0; padding: 0 20px;
+    margin: 0; padding: 0 var(--space-20);
     font-size: 12.5px; line-height: 16px; font-weight: 600;
     color: var(--text-dim);
     white-space: nowrap;
@@ -28,9 +28,9 @@
   .history-day-list, .history-older-list { margin: 0; padding: 0; list-style: none; }
 
   .history-row {
-    display: flex; align-items: flex-start; gap: 12px;
+    display: flex; align-items: flex-start; gap: var(--space-12);
     min-height: 44px;
-    padding: 12px 20px;
+    padding: var(--space-12) var(--space-20);
     list-style: none;
     cursor: pointer;
   }
@@ -57,12 +57,12 @@
     color: var(--text-faint);
     white-space: nowrap;
   }
-  .history-snap[open] { background: var(--surface-2); padding-bottom: 16px; }
+  .history-snap[open] { background: var(--surface-2); padding-bottom: var(--space-16); }
   .history-snap[open] .history-time { color: var(--text); }
   .history-card.is-writing { opacity: 0.6; }
   .history-card-badge {
     display: inline-block;
-    margin-left: 8px; padding: 0 5px;
+    margin-left: var(--space-8); padding: 0 5px;
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-lamp);
     font-size: 11.5px; line-height: 16px;
@@ -73,7 +73,7 @@
 
   .history-facts {
     display: grid; grid-template-columns: auto minmax(0, 1fr);
-    margin: 4px 20px 0 78px;
+    margin: var(--space-4) var(--space-20) 0 78px;
     border-top: 1px solid var(--border);
   }
   .history-facts dt, .history-facts dd {
@@ -81,9 +81,9 @@
     min-height: 34px;
     border-bottom: 1px solid var(--border);
   }
-  .history-facts dt { padding-right: 12px; font-size: 13px; line-height: 16px; color: var(--text-dim); }
+  .history-facts dt { padding-right: var(--space-12); font-size: 13px; line-height: 16px; color: var(--text-dim); }
   .history-facts dd {
-    justify-content: flex-end; gap: 8px;
+    justify-content: flex-end; gap: var(--space-8);
     margin: 0;
     font-size: 14px; line-height: 20px;
     color: var(--text);
@@ -91,14 +91,14 @@
   }
   .history-person { min-width: 0; overflow-wrap: anywhere; }
   .history-restore {
-    display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
-    margin-top: 14px;
-    padding: 0 20px 0 78px;
+    display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-8);
+    margin-top: var(--space-14);
+    padding: 0 var(--space-20) 0 78px;
   }
   .btn-outline.history-restore-btn {
-    gap: 8px;
+    gap: var(--space-8);
     height: auto; min-height: 32px;
-    padding: 5px 12px 5px 10px;
+    padding: 5px var(--space-12) 5px var(--space-10);
     white-space: normal;
     text-align: left;
   }
@@ -112,11 +112,11 @@
   .btn-outline.history-restore-btn.armed svg { color: currentColor; }
   .history-restore-hint { margin: 0; font-size: 12.5px; line-height: 18px; color: var(--text-faint); }
 
-  .history-older { margin-top: 8px; }
+  .history-older { margin-top: var(--space-8); }
   .history-older > summary {
-    display: flex; align-items: center; gap: 8px;
+    display: flex; align-items: center; gap: var(--space-8);
     min-height: 40px;
-    padding: 10px 20px;
+    padding: var(--space-10) var(--space-20);
     list-style: none;
     font-size: 14px; line-height: 20px;
     color: var(--text-faint);
@@ -132,21 +132,21 @@
     transition: transform var(--dur-fast) var(--ease-standard);
   }
   .history-older[open] .history-older-chevron { transform: rotate(90deg); }
-  .history-older-hint { margin: 0; padding: 4px 20px 8px 42px; font-size: 12.5px; line-height: 18px; color: var(--text-faint); }
+  .history-older-hint { margin: 0; padding: var(--space-4) var(--space-20) var(--space-8) 42px; font-size: 12.5px; line-height: 18px; color: var(--text-faint); }
   .history-older-item {
-    display: flex; align-items: flex-start; gap: 12px;
+    display: flex; align-items: flex-start; gap: var(--space-12);
     min-height: 44px;
-    padding: 12px 20px 12px 42px;
+    padding: var(--space-12) var(--space-20) var(--space-12) 42px;
   }
-  .history-older-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .history-older-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-2); }
   .history-card-doc { font-size: 14px; line-height: 20px; color: var(--text); overflow-wrap: break-word; }
   .history-older-meta { font-size: 12.5px; line-height: 18px; color: var(--text-faint); overflow-wrap: break-word; }
   .btn-outline.is-small.history-older-restore {
     flex: 0 1 auto; max-width: 55%;
     height: auto; min-height: 28px;
     margin-top: -4px;
-    padding: 5px 8px;
+    padding: 5px var(--space-8);
     white-space: normal;
     text-align: left;
   }
-  .history-usage { margin: 0; padding: 0 20px; font-size: 12.5px; line-height: 18px; color: var(--text-faint); }
+  .history-usage { margin: 0; padding: 0 var(--space-20); font-size: 12.5px; line-height: 18px; color: var(--text-faint); }

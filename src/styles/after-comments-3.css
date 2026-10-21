@@ -24,7 +24,7 @@
     }
     .btn.btn-collab:is(:focus-visible, .is-label-open) .btn-label {
       max-width: calc(var(--label-w, 0px) + 6px);
-      padding-left: 6px;
+      padding-left: var(--space-6);
       opacity: 1;
       transition: max-width var(--dur-enter) var(--ease-enter) var(--dur-fast),
                   padding var(--dur-enter) var(--ease-enter) var(--dur-fast),

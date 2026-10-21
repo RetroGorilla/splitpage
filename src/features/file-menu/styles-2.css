@@ -12,7 +12,7 @@
     display: inline-flex;
     align-items: center;
     height: 32px;
-    padding: 0 6px;
+    padding: 0 var(--space-6);
     margin: 0 -2px;
     border: 0;
     border-radius: var(--radius-sm);

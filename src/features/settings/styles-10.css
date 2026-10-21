@@ -4,9 +4,9 @@
   flex-direction: column;
   max-height: calc(100vh - 48px);
 }
-.settings-body { overflow-y: auto; margin: 0 -24px; padding: 0 24px 4px; }
-.settings-section { padding: 14px 0 16px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
-.settings-section:first-child { border-top: 0; padding-top: 4px; }
+.settings-body { overflow-y: auto; margin: 0 -24px; padding: 0 var(--space-24) var(--space-4); }
+.settings-section { padding: var(--space-14) 0 var(--space-16); border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: var(--space-12); }
+.settings-section:first-child { border-top: 0; padding-top: var(--space-4); }
 .settings-section-title {
   margin: 0;
   font-family: var(--font-body);
@@ -14,12 +14,12 @@
   font-weight: 600;
   color: var(--text-dim);
 }
-.settings-field { display: flex; flex-direction: column; gap: 6px; }
-.settings-field.settings-inline { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.settings-field { display: flex; flex-direction: column; gap: var(--space-6); }
+.settings-field.settings-inline { flex-direction: row; align-items: center; justify-content: space-between; gap: var(--space-12); flex-wrap: wrap; }
 .settings-label { font-size: 13.5px; font-weight: 500; color: var(--text); padding: 0; }
 .settings-hint { margin: -6px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--text-dim); }
 .settings-seg { max-width: 360px; }
-.settings-inline-control { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.settings-inline-control { display: inline-flex; align-items: center; gap: var(--space-8); flex-wrap: wrap; }
 .settings-inline-control input[type="number"],
 .settings-inline-control input[type="text"] {
   height: 32px;
@@ -41,9 +41,9 @@
 .settings-inline-control input[type="range"] { width: 160px; accent-color: var(--visual); }
 .settings-unit { font-size: 12.5px; color: var(--text-dim); }
 .settings-value { min-width: 48px; font-family: var(--font-display); font-size: 12.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
-.settings-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.settings-switch { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; }
-.settings-switch-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.settings-actions { display: flex; flex-wrap: wrap; gap: var(--space-8); }
+.settings-switch { display: flex; align-items: center; justify-content: space-between; gap: var(--space-16); cursor: pointer; }
+.settings-switch-text { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .settings-switch-label { font-size: 13.5px; font-weight: 500; color: var(--text); }
 .settings-switch .settings-hint { margin: 0; }
 .settings-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
@@ -72,7 +72,7 @@
 .settings-switch input:focus-visible + .settings-switch-track { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
 @media (max-width: 760px) {
   .modal-panel.settings-panel { max-height: calc(100vh - 20px); }
-  .settings-body { margin: 0 -14px; padding: 0 14px 4px; }
+  .settings-body { margin: 0 -14px; padding: 0 var(--space-14) var(--space-4); }
   .settings-inline-control input[type="text"], .settings-inline-control input[type="number"] { font-size: 16px; }
   .settings-inline-control input[type="text"].settings-wide { font-size: 16px; width: 100%; }
   .settings-inline-control:has(.settings-wide) { width: 100%; }

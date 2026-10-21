@@ -1,7 +1,7 @@
     #btn-present {
       width: 44px;
       height: 44px;
-      padding: 2px;
+      padding: var(--space-2);
       border-radius: 8px;
       background-clip: content-box;
       justify-content: center;

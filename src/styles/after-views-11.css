@@ -2,7 +2,7 @@
   img[data-blob]:not([src]) { background: var(--surface-2); color: var(--text-dim); font-size: 12px; text-align: center; }
   img[data-blob][data-blob-state="missing"] { min-height: 48px; border: 1px dashed var(--border); }
   .image-thumb-actions {
-    position: absolute; top: 6px; right: 6px; display: flex; align-items: center; gap: 2px;
+    position: absolute; top: 6px; right: 6px; display: flex; align-items: center; gap: var(--space-2);
     padding: 1px;
     background: var(--surface-2);
     border: 1px solid var(--border-strong);
@@ -13,7 +13,7 @@
   .image-thumb-wrap:hover .image-thumb-actions { opacity: 1; }
   .image-thumb-actions button {
     height: 28px;
-    padding: 0 8px;
+    padding: 0 var(--space-8);
     font-family: var(--font-body);
     font-size: 12.5px;
     line-height: 16px;

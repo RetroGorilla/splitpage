@@ -4,10 +4,10 @@
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--space-8);
     width: max-content;
     min-width: 220px;
-    padding: 12px;
+    padding: var(--space-12);
     background: var(--surface-2);
     color: var(--text);
     border: 1px solid var(--border-strong);
@@ -23,7 +23,7 @@
     padding: 0;
     margin: 0;
   }
-  .anchor-popover-row { display: flex; align-items: center; gap: 6px; }
+  .anchor-popover-row { display: flex; align-items: center; gap: var(--space-6); }
   .anchor-popover-unit { font-size: 12.5px; color: var(--text-dim); white-space: nowrap; }
   .anchor-popover input[type="text"], .anchor-popover input[type="number"] {
     flex: 1 1 auto;
@@ -41,8 +41,8 @@
   .anchor-popover input[type="text"] { width: 180px; }
   .anchor-popover input:focus { outline: none; border-color: var(--visual); box-shadow: 0 0 0 1px var(--visual); }
   .anchor-popover .btn-outline { flex: none; height: 32px; }
-  .swatch-group { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-  .swatch-row { display: flex; flex-wrap: wrap; gap: 4px; }
+  .swatch-group { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: var(--space-6); }
+  .swatch-row { display: flex; flex-wrap: wrap; gap: var(--space-4); }
   .swatch { position: relative; display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border-radius: 50%; cursor: pointer; }
   .swatch input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
   .swatch-dot {
@@ -57,12 +57,12 @@
   .target-section {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    margin-top: 4px;
-    padding-top: 12px;
+    gap: var(--space-8);
+    margin-top: var(--space-4);
+    padding-top: var(--space-12);
     border-top: 1px solid var(--border);
   }
-  .target-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+  .target-presets { display: flex; flex-wrap: wrap; gap: var(--space-4); }
   .target-preset, .target-clear {
     height: 28px;
     padding: 0 9px;

@@ -8,7 +8,7 @@
     #root { padding: 0 16px calc(96px + env(safe-area-inset-bottom)); }
 
     .topbar { margin: 0 -16px; }
-    .topbar-row { display: flex; height: 56px; padding: 0 6px 0 2px; gap: 4px; }
+    .topbar-row { display: flex; height: 56px; padding: 0 var(--space-6) 0 var(--space-2); gap: var(--space-4); }
     .topbar-left {
       display: grid;
       grid-template-columns: 44px auto auto minmax(0, 1fr) auto;

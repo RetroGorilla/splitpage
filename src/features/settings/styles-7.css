@@ -1,10 +1,10 @@
   .identity-chip {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    margin-top: 8px;
-    margin-right: 6px;
-    padding: 4px 10px;
+    gap: var(--space-6);
+    margin-top: var(--space-8);
+    margin-right: var(--space-6);
+    padding: var(--space-4) var(--space-10);
     border: 1px solid var(--border);
     border-radius: 999px;
     background: var(--surface);

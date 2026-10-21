@@ -1,9 +1,9 @@
   #btn-present {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-8);
     height: 34px;
-    padding: 0 14px;
+    padding: 0 var(--space-14);
     border: 0;
     background: var(--tally-fill);
     color: var(--white);

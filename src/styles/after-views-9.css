@@ -7,14 +7,14 @@
     align-items: center;
     height: 40px;
     margin: 0 -20px;
-    padding: 0 20px;
+    padding: 0 var(--space-20);
     border-bottom: 1px solid var(--border);
     background: var(--bg);
   }
   .col-head-cell {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--space-8);
     min-width: 0;
     font-family: var(--font-body);
     font-size: 13px;
@@ -43,13 +43,13 @@
     display: flex;
     flex-direction: column;
     align-items: flex-start;
-    gap: 2px;
+    gap: var(--space-2);
     min-width: 0;
   }
   .row-head {
     display: flex;
     align-items: baseline;
-    gap: 8px;
+    gap: var(--space-8);
     cursor: grab;
     user-select: none;
     font-family: var(--font-display);
@@ -60,7 +60,7 @@
   .row-head:active { cursor: grabbing; }
   .row-num { font-size: calc(18px * var(--script-scale)); line-height: calc(28px * var(--script-scale)); color: var(--text); user-select: none; }
   .row-start { font-size: calc(12.5px * var(--script-scale)); line-height: calc(16px * var(--script-scale)); color: var(--text-faint); }
-  .row-controls { display: flex; align-items: center; gap: 4px; width: 100%; min-width: 0; }
+  .row-controls { display: flex; align-items: center; gap: var(--space-4); width: 100%; min-width: 0; }
 
   .status-btn {
     display: inline-flex;
@@ -68,7 +68,7 @@
     gap: 7px;
     height: 32px;
     margin-left: -8px;
-    padding: 0 8px;
+    padding: 0 var(--space-8);
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
@@ -104,7 +104,7 @@
   .row-tools {
     display: flex;
     align-items: center;
-    gap: 2px;
+    gap: var(--space-2);
     margin-left: auto;
     opacity: 0;
     transition: opacity var(--dur-fast) var(--ease-standard);
