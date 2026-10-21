@@ -13,7 +13,8 @@ const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { applyStepsLive, undo, redo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
 const { invertSteps } = await import("../js/04c-doc-model.js");
-const { rememberCellSelection, placeEditorSelection, cellSelection } = await import("../js/05b-cell-edit.js");
+const { rememberCellSelection, placeEditorSelection, cellSelection } = await import("../features/editing/cell-selection.ts");
+const { editorSelection } = await import("../legacy/editor-bridge.ts");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { sanitizeHtml } = await import("../legacy/richtext.ts");
 
@@ -113,9 +114,9 @@ test("a remembered caret after a picture comes back at the same place", async ()
   sel.addRange(range);
   const at = cellSelection(el);
   assert.equal(at.from, 7, "three letters, the picture and three letters");
-  const taken = rememberCellSelection(el);
+  const taken = rememberCellSelection(editorSelection(), el);
   assert.equal(taken.head, 7);
   sel.removeAllRanges();
-  assert.equal(placeEditorSelection(document.querySelector("#rows")), el);
+  assert.equal(placeEditorSelection(editorSelection(), document.querySelector("#rows")), el);
   assert.deepEqual(cellSelection(el), { from: 7, to: 7 });
 });

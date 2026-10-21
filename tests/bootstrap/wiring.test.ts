@@ -401,7 +401,7 @@ test("failed partial startup: a step that throws undoes every step before it, in
     saves: (f) => ({ deps: { ...f.deps, saves: () => { throw boom; } } }),
     transitions: (f) => ({ deps: f.deps, cleanup: startTransitions(transitionPorts()), cause: false }),
     recovery: (f) => ({ deps: { ...f.deps, recovery: () => { throw boom; } } }),
-    editor: (f) => ({ deps: f.deps, cleanup: startEditor(), cause: false })
+    editor: (f) => ({ deps: f.deps, cleanup: startEditor(f.deps.transitions.live), cause: false })
   };
   const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { "export registry": "exports", transitions: "transitions", editor: "editor" };
   assert.deepEqual(Object.keys(breakers), [...WIRING_STEPS], "every step is broken once");

@@ -1,4 +1,4 @@
-import { createViewLifetime } from "./lifetime.ts";
+import { createViewLifetime } from "../common/view-lifetime.ts";
 
 export interface PrompterVisibilityPorts {
   readonly acquireWakeLock: (owns: () => boolean) => void;
