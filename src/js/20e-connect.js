@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { conn, home, setHome } from "./_home.js";
+import { conn, home, setHome, normalizeServerUrl } from "./_home.js";
 import { render } from "./05-render.js";
 import { showToast } from "./12-dirty-toast.js";
 import {
@@ -7,7 +7,6 @@ import {
   detectServer,
   fetchReviewLink,
   finishServerDetect,
-  normalizeServerBase,
   pointTabAt,
   setServerToken
 } from "./13-hosted.js";
@@ -113,7 +112,7 @@ function closePinDialog() {
 function closePinDialogForAnotherServer() {
   var modal = document.getElementById("pin-modal");
   if (!modal || modal.hidden || !pinRequest) return;
-  if (normalizeServerBase(pinRequest.base) === conn.serverUrl) return;
+  if (normalizeServerUrl(pinRequest.base) === conn.serverUrl) return;
   closePinDialog();
 }
 
@@ -188,7 +187,7 @@ async function submitPin() {
   var done = pinRequest.onDone;
   var base = pinRequest.base;
   closePinDialog();
-  var forThisTab = normalizeServerBase(base) === conn.serverUrl;
+  var forThisTab = normalizeServerUrl(base) === conn.serverUrl;
   if (forThisTab) setServerToken(result.token, remember);
   showToast("Joined" + (base ? " " + shortHost(base) : "") +
     (result.role === "review" ? " — viewing and commenting only." : "."), "ok");
@@ -308,7 +307,7 @@ export function connectPortOr(value, fallback) {
 
 async function addBookmarkFromForm() {
   var name = document.getElementById("connect-name").value.trim();
-  var url = normalizeServerBase(document.getElementById("connect-url").value);
+  var url = normalizeServerUrl(document.getElementById("connect-url").value);
   var pin = document.getElementById("connect-pin").value.trim();
   var remember = !!document.getElementById("connect-remember").checked;
   var useSsh = !!document.getElementById("connect-ssh-toggle").checked;
@@ -353,7 +352,7 @@ async function addBookmarkFromForm() {
 
 export async function addServerBookmark(name, url, opts) {
   opts = opts || {};
-  var base = normalizeServerBase(url);
+  var base = normalizeServerUrl(url);
   if (!base) return { ok: false, error: "no-url" };
   var joined = null;
   if (opts.pin) {

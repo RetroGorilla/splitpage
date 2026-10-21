@@ -1,3 +1,4 @@
+import { targetLengthOf } from "../core/document/timing.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -5,8 +6,7 @@ import { S } from "../js/_state.js";
 import {
   __init as initSceneStatus,
   normalizeTargetLength,
-  targetClock,
-  targetLengthOf
+  targetClock
 } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates, mergeTargetLength } from "../js/03-sync.js";

@@ -1,9 +1,10 @@
+import { deriveDocId } from "../core/document/ids.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { migrateRows } from "../js/02-state.js";
-import { deriveDocId, migrateDocument } from "../js/02b-doc-id.js";
+import { migrateDocument } from "../js/02b-doc-id.js";
 import { has, recordFor, setBackend } from "../adapters/storage/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import { createIdMasker, goldenText, idsInHtml, image, mintedId, settleGolden } from "./golden-helpers.mjs";

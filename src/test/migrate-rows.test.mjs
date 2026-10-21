@@ -1,3 +1,5 @@
+import { mintTagId } from "../core/document/tags.ts";
+import { DEFAULT_WPM } from "../core/document/timing.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -6,8 +8,7 @@ import { legacyMdToHtml, mediaCommentId, migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import { dataUrlForSync } from "../adapters/storage/02c-blobs.js";
-import { DEFAULT_WPM } from "../js/01-scene-status.js";
-import { __init as initTags, collectTagsFromRows, mintTagId } from "../js/07-production-tags.js";
+import { __init as initTags, collectTagsFromRows } from "../js/07-production-tags.js";
 
 initTags();
 

@@ -1,3 +1,4 @@
+import { normalizeBrollProps } from "../core/document/broll.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -8,7 +9,6 @@ import { directionShortcut, importDirections } from "../js/04c-doc-model.js";
 import { normalizePersonColors } from "../js/00p-prefs.js";
 import { normalizeSceneLength, normalizeTargetLength } from "../js/01-scene-status.js";
 import { migrateGallery, normalizeMarks, normalizePictureName, normalizeVideoLink, normalizeVideoLinks } from "../adapters/storage/02d-gallery.js";
-import { normalizeBrollProps } from "../js/08c-broll.js";
 import { assertGolden, goldenNames, mintedId, updatingGoldens } from "./golden-helpers.mjs";
 
 const SUMMARY_OVER = 24;

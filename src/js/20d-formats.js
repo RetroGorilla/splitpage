@@ -1,10 +1,10 @@
+import { MD_IMAGE_PREFIX_RE } from "../adapters/formats/markdown-image.ts";
+import { deriveDocId, docIdEmbeddedIn } from "../core/document/ids.ts";
 import { S } from "./_state.js";
 import { fileHome } from "./_home.js";
 import { legacyMdToHtml, makeId, migrateRows } from "./02-state.js";
 import {
   adoptRestoredState,
-  deriveDocId,
-  docIdEmbeddedIn,
   docIdEvents,
   initDocIdentityChannel,
   migrateDocument,
@@ -109,8 +109,6 @@ export function parseMarkdownProject(text) {
     title: heading ? heading[1].trim() : null
   };
 }
-
-export var MD_IMAGE_PREFIX_RE = /^!\[[^\]]*\]\((data:image\/[^)\s]+)\)\s*(?:<br\s*\/?>)?\s*/i;
 
 function markdownCellToHtml(s, md) {
   var html = sanitizeHtml(legacyMdToHtml(String(md == null ? "" : md).replace(/\u00A0/g, " ")));

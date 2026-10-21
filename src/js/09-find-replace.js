@@ -1,10 +1,14 @@
+import { normalizeTagName, registryTagHooks } from "../core/document/tags.ts";
+import { isBlankTagName } from "../core/production/tags.ts";
+import { TAG_CATEGORIES, tagCategory } from "../core/production/looks.ts";
 import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { findRowIndex, stampRow } from "./03-sync.js";
 import { cssAttr, inertBody, sanitizeHtml } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import {
-  TAG_CATEGORIES, bulkTagRows, isBlankTagName, normalizeTagName, registerProductionTag, registryTagHooks, tagCategory
+  bulkTagRows,
+  registerProductionTag
 } from "./07-production-tags.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";

@@ -11,7 +11,7 @@ import { domKeys, domToPos, placeSelection, posToDom, readSelection } from "../f
 import { fromHtml, scriptCellOf } from "../legacy/richtext.ts";
 import { liveSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 
-export { domToPos, posToDom };
+export { posToDom };
 
 var editorSelection = createSelectionModel({
   epoch: function () { return liveSession().epoch(); },
