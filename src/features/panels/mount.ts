@@ -1,4 +1,4 @@
-import { createViewLifetime } from "./lifetime.ts";
+import { createViewLifetime } from "../common/view-lifetime.ts";
 
 export interface PanelsPorts {
   readonly ids: readonly string[];
