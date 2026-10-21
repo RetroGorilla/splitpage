@@ -115,7 +115,7 @@ none, no golden is expected to change.
 
 | Item | Issue | Pinned by | Owner on 4.0 | Disposition |
 | --- | --- | --- | --- | --- |
-| Image ingestion hashes each picture twice and may copy its bytes twice. The review's probe was slower on milestone 2, but it was not a controlled browser benchmark | #320 | Not applicable | `src/core/document/media.ts`, `src/legacy/document-ports.ts`, `src/js/02c-blobs.js` | Milestone 4: measured first (PR 4.5), then trimmed by PR 4.19, which hands a pass's decoded pictures to the blob store without the second hash and copy. The closing tree is not slower than `d18adde` (open -1.4%, merge -4.4%, Linux rerun by PR 4.22; [performance-record.md](performance-record.md)) |
+| Image ingestion hashes each picture twice and may copy its bytes twice. The review's probe was slower on milestone 2, but it was not a controlled browser benchmark | #320 | Not applicable | `src/core/document/media.ts`, `src/legacy/document-ports.ts`, `src/adapters/storage/02c-blobs.js` | Milestone 4: measured first (PR 4.5), then trimmed by PR 4.19, which hands a pass's decoded pictures to the blob store without the second hash and copy. The closing tree is not slower than `d18adde` (open -1.4%, merge -4.4%, Linux rerun by PR 4.22; [performance-record.md](performance-record.md)) |
 
 ## Found during milestone 3
 
