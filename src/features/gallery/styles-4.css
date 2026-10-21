@@ -1,1 +1,3 @@
-    .scene-gallery-link-remove { opacity: 1; }
+@media (hover: none) {
+      .scene-gallery-link-remove { opacity: 1; }
+}
