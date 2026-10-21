@@ -12,7 +12,7 @@ import {
   standaloneHtmlFor
 } from "./02b-doc-id.js";
 import { inlineStateImages, internDataUrl, missingInlineImages, queuePersist, rowImageDataUrl } from "../adapters/storage/02c-blobs.js";
-import { cloneState, setBaseState, stashLocalWork } from "./03-sync.js";
+import { setBaseState, stashLocalWork } from "./03-sync.js";
 import { tagFieldOccurrences } from "./07-production-tags.js";
 import { handleImportFile, parseMarkdownTable } from "./11-import.js";
 import { captureExportDocument, exportDocumentOf } from "./14b-export-kit.js";
@@ -32,6 +32,8 @@ import { mdSceneCellSource, toMarkdownTableDoc } from "./14d-export-text.js";
 import { openProjectFile } from "./18-local-files.js";
 import { cappedLongText, plainText, safeImageSrc } from "../core/document/text-policy.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";
+import { cloneState } from "../core/document/clone.ts";
+import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
 function fileStateFor(doc) {
   var copy = migrateRows(cloneState(doc.document));
@@ -45,14 +47,6 @@ export function buildSplitpageFile(doc) {
 
 export function fileImagesMissing(doc) {
   return missingInlineImages(doc.document);
-}
-
-export function parseSplitpageFile(text) {
-  var parsed = JSON.parse(text);
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || !Array.isArray(parsed.rows)) {
-    throw new Error("not-a-splitpage-file");
-  }
-  return parsed;
 }
 
 var MD_DATA_INFO = "splitpage";

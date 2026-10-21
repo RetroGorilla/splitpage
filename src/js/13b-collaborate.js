@@ -5,7 +5,7 @@ import { conn, home, normalizeServerUrl, serverHomeId, updateConnection } from "
 import { readPref, writePref } from "./00p-prefs.js";
 import { personSwatchesHtml, setMyColor, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
-import { COMMENT_NAME_KEY, cleanAuthorName, getSavedAuthorName } from "./10-comments.js";
+import { COMMENT_NAME_KEY, getSavedAuthorName } from "./10-comments.js";
 import { showToast } from "./12-dirty-toast.js";
 import {
   apiFetch,
@@ -33,6 +33,8 @@ import { joinServer, updateConnectMenu } from "./20e-connect.js";
 import { openSettings } from "./20s-settings.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
+import { cleanAuthorName } from "../core/document/people.ts";
+import { parseLinkFragment } from "../../shared/server-links.js";
 
 export var DEFAULT_COLLAB_SERVER = "https://script.bigmanonline.uk/";
 export var COLLAB_SERVER_KEY = "splitpage-collab-server";
@@ -50,16 +52,6 @@ export function normalizeCollabServer(input) {
   if (u.protocol !== "http:" && u.protocol !== "https:") return "";
   if (!u.hostname || u.username || u.password) return "";
   return normalizeServerUrl(u.origin + u.pathname.replace(/\/+$/, ""));
-}
-
-export function parseLinkFragment(hash) {
-  var h = String(hash || "");
-  var m = /(^#|&)(invite|review)=([A-Za-z0-9_-]{1,256})(?=&|$)/.exec(h);
-  if (!m) return null;
-  var rest = h.slice(0, m.index) + m[1] + h.slice(m.index + m[0].length);
-  rest = rest.replace(/^#&/, "#").replace(/&&/g, "&").replace(/&$/, "");
-  if (rest === "#") rest = "";
-  return { key: m[3], kind: m[2], rest: rest };
 }
 
 export function inviteLink(base, docId, key) {

@@ -24,9 +24,13 @@ import {
 import { buildCsv } from "../js/16-csv.js";
 import { prompterSceneHtml } from "../js/20-teleprompter.js";
 import {
-  applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject, parseSplitpageFile
+  applyMarkdownProject,
+  buildMarkdownProject,
+  buildSplitpageFile,
+  parseMarkdownProject
 } from "../js/20d-formats.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
 initTags();
 initSceneStatus();

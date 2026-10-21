@@ -16,7 +16,6 @@ import {
   acceptStash,
   applyMerge,
   clearStash,
-  cloneState,
   getEditorName,
   readStash,
   setBaseState
@@ -39,7 +38,6 @@ import { captureExportDocument } from "./14b-export-kit.js";
 import {
   checkFileConflict,
   deliverFile,
-  fileKindFromName,
   showFileConflict,
   updateFileChip,
   writeBackToFile
@@ -49,6 +47,9 @@ import { makeDesktopHandle } from "./20f-desktop.js";
 import { existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
 import { requestSave, saveRunning } from "../legacy/save-bridge.ts";
 import { autoSaveMay, autoSaveWhere } from "../application/save/autosave.ts";
+import { cloneState } from "../core/document/clone.ts";
+import { fileKindFromName } from "../../shared/file-names.js";
+import { slugify } from "../../shared/text.js";
 
 export var autoSaveEnabled;
 
@@ -461,14 +462,6 @@ export function legacySavePorts(ownership) {
     running: showSaveRunning,
     ownership: saveOwnership(ownership)
   };
-}
-
-export function slugify(s) {
-  return String(s || "splitpage")
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "") || "splitpage";
 }
 
 export function __init() {

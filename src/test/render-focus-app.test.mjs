@@ -2,13 +2,14 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { cloneState } from "../core/document/clone.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
-const { applyMerge, cloneState } = await import("../js/03-sync.js");
+const { applyMerge } = await import("../js/03-sync.js");
 const { afterThisPaint, paintingScreen, renderAbsorbed, renderRow, whilePainting } = await import("../js/05-render.js");
 const { setHideShotScenes } = await import("../js/01b-hide-shot.js");
 const { runBrollRefresh } = await import("../js/08c-broll.js");

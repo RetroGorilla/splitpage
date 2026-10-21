@@ -16,6 +16,7 @@ import { renderDesktopShareInfo } from "./20f-desktop.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { interruptTourForDialog, offerTourResumeAfterDialog } from "../legacy/tour-pause.ts";
+import { joinErrorText, tunnelCommand } from "../../shared/server-links.js";
 
 export var SERVER_BOOKMARKS_KEY = "splitpage-server-bookmarks";
 
@@ -148,15 +149,6 @@ export async function joinServer(base, pin, key) {
   if (res.status === 429) return { ok: false, error: "too-many-attempts" };
   if (res.status === 404 || !body) return { ok: false, error: "not-splitpage" };
   return { ok: false, error: (body && body.error) || ("HTTP " + res.status) };
-}
-
-export function joinErrorText(code) {
-  if (code === "bad-pin") return "That code was not right. Ask whoever is hosting for it again.";
-  if (code === "link-off") return "The owner turned off this link. Ask them for a new one.";
-  if (code === "too-many-attempts") return "Too many wrong codes. Wait a minute, then try again.";
-  if (code === "offline") return "No answer from that address. Check it, and that the session is still running.";
-  if (code === "not-splitpage") return "Something answered, but it was not a Splitpage server.";
-  return "Could not join: " + code + ".";
 }
 
 async function withBusy(button, label, work) {
@@ -445,10 +437,6 @@ async function backToThisCopy() {
   renderConnect();
   renderReviewLink();
   showToast("This tab is back on this copy of Splitpage.", "ok");
-}
-
-export function tunnelCommand(t) {
-  return "ssh -N -L " + t.localPort + ":localhost:" + t.remotePort + " " + t.userHost;
 }
 
 function sshCommandFor(bookmark) {

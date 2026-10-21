@@ -11,7 +11,7 @@ import { flushEdits, foldIntoEdit, lastUndoEntry, noteEdit, redo, resetUndo, tra
 import videoEmbed from "../../shared/video-embed.js";
 
 const {
-  PLAYER_ORIGINS, THUMB_MAX_BYTES, VIDEO_HOSTS, fetchVideoThumbnail, oembedThumbnailUrl, parseStart,
+  PLAYER_ORIGINS, THUMB_MAX_BYTES, VIDEO_HOSTS, embeddableVideo, fetchVideoThumbnail, oembedThumbnailUrl, parseStart,
   parseVideoLink, parseVideoRef, playerUrl, thumbnailRefusal, videoRef
 } = videoEmbed;
 
@@ -44,6 +44,15 @@ test("a YouTube link in any of its spellings is its 11-character id, with a star
   assert.deepEqual(parseVideoLink("https://www.youtube.com/watch?v=" + id + "&t=1m30s"), { host: "youtube", id, start: 90 });
   assert.equal(parseStart("1h2m3s"), 3723);
   assert.equal(parseStart("nonsense"), 0);
+});
+
+test("embeddableVideo reads a gallery link's address and is null for a link with none", () => {
+  const id = "dQw4w9WgXcQ";
+  assert.deepEqual(embeddableVideo({ href: "https://youtu.be/" + id }), { host: "youtube", id });
+  assert.equal(embeddableVideo({ href: "https://example.com/watch" }), null);
+  assert.equal(embeddableVideo({ href: "" }), null);
+  assert.equal(embeddableVideo({}), null);
+  assert.equal(embeddableVideo(null), null);
 });
 
 test("a Vimeo link is its numeric id, with an unlisted video's hash", () => {

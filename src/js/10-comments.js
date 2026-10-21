@@ -36,9 +36,10 @@ import {
 } from "../core/document/comments.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
-import { EDITOR_NAME_MAX, normalizeEditorName } from "../core/document/fields.ts";
+import { EDITOR_NAME_MAX } from "../core/document/fields.ts";
 import { cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
 import { commentSortMode, setCommentSort } from "../application/comment-sort.ts";
+import { cleanAuthorName } from "../core/document/people.ts";
 export { commentBodyText, commentEntries };
 
 var commentFilter;
@@ -228,9 +229,6 @@ S.deleteCommentArmId = null;
 export var deleteCommentArmTimer = null;
 
 export var AUTHOR_NAME_FIELDS = "#settings-name, #comment-name, .reply-name-input, #identity-input, #guest-name";
-export function cleanAuthorName(name) {
-  return normalizeEditorName(name) || "";
-}
 var EMOJI_PART = /[\p{Extended_Pictographic}\p{Regional_Indicator}⃣]/u;
 function wholeEmojiCut(value, at) {
   if (typeof Intl === "undefined" || typeof Intl.Segmenter !== "function") return at;

@@ -3,6 +3,7 @@ import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { createHeldFetch, mockClock } from "./_m4-matrix.mjs";
+import { cloneState } from "../core/document/clone.ts";
 
 await bootApp();
 
@@ -13,7 +14,7 @@ const exportModule = await import("../js/14-export.js");
 const { saveDoc } = exportModule;
 const hosted = await import("../js/13-hosted.js");
 const homeModule = await import("../js/_home.js");
-const { cloneState, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 
 after(closeApp);
 

@@ -17,11 +17,11 @@ import {
   buildMarkdownProject,
   buildSplitpageFile,
   fileImagesMissing,
-  parseMarkdownProject,
-  parseSplitpageFile
+  parseMarkdownProject
 } from "../js/20d-formats.js";
 import { STORED } from "./_stored-cells.mjs";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
 initTags();
 initStatus();

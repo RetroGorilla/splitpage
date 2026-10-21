@@ -20,10 +20,10 @@ import {
   applyMarkdownProject,
   buildMarkdownProject,
   buildSplitpageFile,
-  parseMarkdownProject,
-  parseSplitpageFile
+  parseMarkdownProject
 } from "../js/20d-formats.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
 initTags();
 initSceneStatus();

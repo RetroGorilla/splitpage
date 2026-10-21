@@ -13,7 +13,6 @@ import {
   syncDocIdentity
 } from "./02b-doc-id.js";
 import {
-  cloneState,
   pushSnapshot,
   stampRow,
   updateIdentityChip
@@ -40,7 +39,7 @@ import {
   onServerDoc,
   serverSessionExpired
 } from "./13-hosted.js";
-import { autoSaveHalt, slugify, warnImagesLeftOut } from "./14-export.js";
+import { autoSaveHalt, warnImagesLeftOut } from "./14-export.js";
 import { exportToggleOptions } from "./14e-export-formats.js";
 import { docxToRows } from "./15-docx.js";
 import { csvToRows } from "./16-csv.js";
@@ -49,8 +48,7 @@ import { refreshFileMenu, setMenuItemLabel, toggleFileMenu } from "./18b-file-me
 import { isExportAction, rememberExport } from "./18c-export-dialog.js";
 import {
   applyMarkdownProject,
-  parseMarkdownProject,
-  parseSplitpageFile
+  parseMarkdownProject
 } from "./20d-formats.js";
 import {
   makeDesktopHandle, notifyDesktopDocumentState
@@ -60,18 +58,10 @@ import { strBytes } from "../adapters/formats/bytes.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { exportFormats } from "../legacy/export-formats.ts";
-
-export function fileKindFromName(name) {
-  var m = /\.([a-z0-9]+)$/i.exec(name || "");
-  var ext = m ? m[1].toLowerCase() : "";
-  if (ext === "docx") return "docx";
-  if (ext === "csv") return "csv";
-  if (ext === "md" || ext === "markdown") return "md";
-  if (ext === "txt") return "txt";
-  if (ext === "splitpage") return "splitpage";
-  if (ext === "html" || ext === "htm") return "html";
-  return null;
-}
+import { cloneState } from "../core/document/clone.ts";
+import { slugify } from "../../shared/text.js";
+import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
+import { fileKindFromName, mimeForFilename } from "../../shared/file-names.js";
 
 export function updateFileChip() {
   updateHeaderFileChip();
@@ -501,19 +491,6 @@ export async function openLocalFile() {
     }
   }
   document.getElementById("open-file-input").click();
-}
-
-export function mimeForFilename(filename) {
-  var ext = (/\.([a-z0-9]+)$/i.exec(filename || "") || ["", ""])[1].toLowerCase();
-  if (ext === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  if (ext === "csv") return "text/csv";
-  if (ext === "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  if (ext === "md" || ext === "markdown") return "text/markdown";
-  if (ext === "pdf") return "application/pdf";
-  if (ext === "html") return "text/html";
-  if (ext === "splitpage") return "application/json";
-  if (ext === "zip") return "application/zip";
-  return "text/plain";
 }
 
 export async function deliverFile(filename, data, opts) {

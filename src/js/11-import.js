@@ -8,18 +8,13 @@ import { anchorBrollInRows, declineBrollAnchoring } from "./08c-broll.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
 import { audioDirectionsHtml, docxToRows } from "./15-docx.js";
 import { csvToRows } from "./16-csv.js";
-import { fileKindFromName } from "./18-local-files.js";
 import { importModeTouched, resetImportMode } from "../application/import-mode.ts";
 import { importRowsCommand } from "../application/commands/import-rows.ts";
 import { makeId } from "../adapters/identity/ids.ts";
-import { escapeHtml, legacyMdToHtml, unitSafePrefix } from "../core/document/text-policy.ts";
+import { escapeHtml, legacyMdToHtml, truncateForPreview } from "../core/document/text-policy.ts";
 import { REVIEW_ONLY, editAllowed, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
-
-export function truncateForPreview(s, n) {
-  s = s || "";
-  return s.length > n ? unitSafePrefix(s, n) + "…" : s;
-}
+import { fileKindFromName } from "../../shared/file-names.js";
 
 function splitImportText(text, mode) {
   var norm = String(text || "").replace(/\r\n/g, "\n").trim();

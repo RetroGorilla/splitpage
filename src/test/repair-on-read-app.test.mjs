@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { createHeldFileHandle, mockClock } from "./_m4-matrix.mjs";
+import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -19,7 +20,7 @@ const { flushEdits, undo } = await import("../js/12a-undo.js");
 const { saveDoc, setAutoSaveEnabled } = await import("../js/14-export.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
-const { buildSplitpageFile, parseSplitpageFile } = await import("../js/20d-formats.js");
+const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const homeModule = await import("../js/_home.js");
 const { cellRuns, cellTextCommand } = await import("../application/commands/cell-text.ts");
 const { changeSet } = await import("../application/session/change-set.ts");

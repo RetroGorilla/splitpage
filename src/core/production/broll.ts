@@ -16,7 +16,7 @@ import { TAG_STATUS_IDS, normalizeTagName, tagStatusId } from "../document/tags.
 import { deleteRange, insertBrollKey, insertText, replaceWithBrollKey } from "../text/edits.ts";
 import { tagNameOf } from "../text/runs.ts";
 import type { BrollRun, Marks, Run } from "../text/runs.ts";
-import type { BrollItem, FieldText, ProductionReaders, ProductionRow } from "./ports.ts";
+import type { BrollItem, FieldHtml, FieldText, ProductionReaders, ProductionRow } from "./ports.ts";
 import { TAG_FIELDS, registryEntry } from "./tags.ts";
 import type { RegistryList, RegistryTag } from "./tags.ts";
 
@@ -617,4 +617,8 @@ export function brollSortedForList<T extends BrollListItem>(entries: readonly T[
     if (a.rowIndex !== b.rowIndex) return a.rowIndex - b.rowIndex;
     return a.ordinal - b.ordinal;
   });
+}
+
+export function brollCountIn(row: { visualText?: FieldHtml } | null | undefined, readers: Pick<ProductionReaders, "brollInField">): number {
+  return row && row.visualText ? readers.brollInField(row.visualText).length : 0;
 }
