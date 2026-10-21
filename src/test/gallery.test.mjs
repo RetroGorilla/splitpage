@@ -5,10 +5,10 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
-import { intern } from "../js/02c-blobs.js";
+import { intern } from "../adapters/storage/02c-blobs.js";
 import {
   addGalleryPicture, addGalleryVideo, moveGallerySlot, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
-} from "../js/02d-gallery.js";
+} from "../adapters/storage/02d-gallery.js";
 import { mergeStates, rowContentEqual } from "../js/03-sync.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { toMarkdownDoc } from "../js/14d-export-text.js";

@@ -46,7 +46,7 @@ export default [
   },
 
   {
-    files: ["src/js/**/*.js"],
+    files: ["src/js/**/*.js", "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js"],
     languageOptions: {
       sourceType: "module",
       globals: globals.browser

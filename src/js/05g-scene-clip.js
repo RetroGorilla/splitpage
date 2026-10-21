@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { makeId, migrateRows } from "./02-state.js";
-import { dataUrlForSync, internDataUrl, queuePersist } from "./02c-blobs.js";
+import { dataUrlForSync, internDataUrl, queuePersist } from "../adapters/storage/02c-blobs.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { cellOf, commentIds, fromHtml, normalizeCell, syncCommentAnchors, toHtml, toPlainText } from "./04c-doc-model.js";
 import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./05c-clipboard.js";

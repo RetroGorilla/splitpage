@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { ensureBytes, intern, persist, urlForSync } from "./02c-blobs.js";
+import { ensureBytes, intern, persist, urlForSync } from "../adapters/storage/02c-blobs.js";
 import { findRowIndex } from "./03-sync.js";
 import { slotPoster } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
