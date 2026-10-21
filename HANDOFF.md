@@ -379,7 +379,7 @@ stash when `splitpage-server-resume` is present.
 
 ### 3.7 The server
 
-`server/server.js` — plain Node, no dependencies, one file (~2,850 lines). One JSON file
+`server/server.js` — plain Node, no dependencies, `server.js` plus three pure helpers (`comments.js`, `html-tokens.js`, `text.js`). One JSON file
 per document in `DATA_DIR`.
 
 - No identity of its own — `Cf-Access-Authenticated-User-Email` is read for
