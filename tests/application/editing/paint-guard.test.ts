@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createPaintGuard } from "../../../src/application/editing/paint-guard.ts";
+import { createPaintGuard, createUndoGuard } from "../../../src/application/editing/paint-guard.ts";
 
 test("a paint is guarded for its whole length, nested paints included, and returns what it drew", () => {
   const guard = createPaintGuard();
@@ -43,4 +43,25 @@ test("a paint that throws runs each failure handler, keeps work that has none fo
   assert.deepEqual(runs, ["length failed"]);
   guard.whilePainting(() => {});
   assert.deepEqual(runs, ["length failed", "typed"]);
+});
+
+test("the undo guard holds while an undo's redraw runs, returns what it drew, and lets go when the redraw throws", () => {
+  const guard = createUndoGuard();
+  assert.equal(guard.applying(), false);
+  let seen = false;
+  assert.equal(guard.whileApplying(() => { seen = guard.applying(); return 3; }), 3);
+  assert.equal(seen, true);
+  assert.equal(guard.applying(), false);
+  assert.throws(() => guard.whileApplying(() => { throw new Error("redraw failed"); }), /redraw failed/);
+  assert.equal(guard.applying(), false);
+});
+
+test("each undo guard is its own: one applying leaves another, and the paint guard, untouched", () => {
+  const one = createUndoGuard();
+  const two = createUndoGuard();
+  const paint = createPaintGuard();
+  one.whileApplying(() => {
+    assert.equal(two.applying(), false);
+    assert.equal(paint.painting(), false);
+  });
 });

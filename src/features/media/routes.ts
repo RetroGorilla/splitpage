@@ -1,6 +1,4 @@
 export interface MediaRoutePorts {
-  readonly pendingRow: () => string | null;
-  readonly setPendingRow: (rowId: string | null) => void;
   readonly choose: () => void;
   readonly addPicture: (rowId: string, file: File, slot: number | undefined) => void;
   readonly removePicture: (rowId: string, slot: number) => void;
@@ -17,6 +15,7 @@ export interface MediaRoutesMount {
 export interface MediaRoutes {
   readonly pickerClick: (e: MouseEvent) => boolean;
   readonly linkClick: (e: MouseEvent) => boolean;
+  readonly pick: (rowId: string) => void;
   readonly dispose: () => void;
 }
 
@@ -28,6 +27,7 @@ export function mountMediaRoutes(mount: MediaRoutesMount): MediaRoutes {
   const ports = mount.ports;
   const realm = mount.window as Realm;
   const input = mount.fileInput;
+  let pendingRow: string | null = null;
   let pendingSlot: number | undefined;
   let open = true;
 
@@ -47,10 +47,10 @@ export function mountMediaRoutes(mount: MediaRoutesMount): MediaRoutes {
   function onChange(): void {
     const files = input.files;
     const file = files && files[0];
-    const rowId = ports.pendingRow();
+    const rowId = pendingRow;
     if (file && rowId) ports.addPicture(rowId, file, pendingSlot);
     input.value = "";
-    ports.setPendingRow(null);
+    pendingRow = null;
     pendingSlot = undefined;
   }
 
@@ -61,7 +61,7 @@ export function mountMediaRoutes(mount: MediaRoutesMount): MediaRoutes {
       if (!open) return false;
       const add = closest(e, PICKER);
       if (add) {
-        ports.setPendingRow(idOf(add));
+        pendingRow = idOf(add);
         pendingSlot = add.getAttribute("data-action") === "image-replace" ? slotOf(add) : undefined;
         ports.choose();
         return true;
@@ -82,9 +82,15 @@ export function mountMediaRoutes(mount: MediaRoutesMount): MediaRoutes {
       }
       return false;
     },
+    pick(rowId: string): void {
+      if (!open) return;
+      pendingRow = rowId;
+      ports.choose();
+    },
     dispose(): void {
       if (!open) return;
       open = false;
+      pendingRow = null;
       pendingSlot = undefined;
       input.removeEventListener("change", onChange);
     }

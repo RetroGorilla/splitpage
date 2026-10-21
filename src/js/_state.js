@@ -17,8 +17,6 @@ export const S = {
 
   draftServerResume: undefined,
 
-  dragRowId: undefined,
-
   editSeq: undefined,
 
   finalTranscript: undefined,
@@ -32,14 +30,6 @@ export const S = {
   initialStateReady: undefined,
 
   interimTranscript: undefined,
-
-  lastFocusedRowId: undefined,
-
-  lastMergeUndo: undefined,
-
-  undoApplying: false,
-
-  pendingImageRowId: undefined,
 
   productionGroupBy: undefined,
 
@@ -89,8 +79,6 @@ export const S = {
 
   tagRenaming: undefined,
 
-  untaggedMutedFor: undefined,
-
   voiceFollowActive: undefined,
 
   voiceRestarts: undefined,
@@ -101,7 +89,5 @@ export const S = {
 
   voiceStream: undefined,
 
-  wordCursor: undefined,
-
-  writerLastCell: undefined
+  wordCursor: undefined
 };

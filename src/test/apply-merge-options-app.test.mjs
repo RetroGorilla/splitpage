@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { applyMerge, baseStateReason, cloneState, reportMerge, setBaseState } from "../js/03-sync.js";
+import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { listDocHistory } from "../js/03a-history-store.js";
 import { clearDirty } from "../js/12-dirty-toast.js";
 import * as exporting from "../js/14-export.js";
@@ -44,7 +45,7 @@ function start(id) {
   const doc = mk(id);
   S.state = cloneState(doc);
   setBaseState(cloneState(doc), "a test: the document as opened");
-  S.lastMergeUndo = null;
+  mergeUndo().arm(null);
   clearDirty();
   exporting.resumeAutoSave();
   banner().hidden = true;
@@ -122,7 +123,7 @@ test("characterization: `unchanged` with reporting marks the adopted document un
   const out = applyMerge({ theirs: theirs, unchanged: true, source: "stash", recovery: true, undoPoint: mk(id) });
   assert.equal(out.result, null);
   assert.equal(out.snapshot, null, "an unchanged apply takes no undo point even when given one");
-  assert.equal(S.lastMergeUndo, null, "and arms no Undo merge");
+  assert.equal(mergeUndo().last(), null, "and arms no Undo merge");
   assert.equal(banner().hidden, true);
   assert.ok(S.dirty);
   const listed = await listDocHistory(id);
@@ -224,7 +225,7 @@ test("characterization: `alreadySaved` shows the banner without marking unsaved;
   start(id);
   const s = sides(id);
   const merged = applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "server-conflict", undoPoint: cloneState(s.mine), report: false });
-  assert.ok(S.lastMergeUndo);
+  assert.ok(mergeUndo().last());
   const defaultTitle = undoBtn().title;
 
   reportMerge(merged.result, { alreadySaved: true, undo: "saved" });
@@ -291,7 +292,7 @@ test("characterization: Undo merge with nothing armed, or armed for another docu
   assert.equal(undoBtn().textContent, "Undo merge");
 
   document.getElementById("toast-host").innerHTML = "";
-  S.lastMergeUndo = { id: "s-x", docId: freshId(), source: "stash" };
+  mergeUndo().arm({ id: "s-x", docId: freshId(), source: "stash" });
   undoBtn().click();
   assert.deepEqual(toasts().map((t) => t.text), ["That merge belongs to a different document, so there is nothing to undo here."]);
   assert.equal(undoBtn().textContent, "Undo merge");
@@ -300,7 +301,7 @@ test("characterization: Undo merge with nothing armed, or armed for another docu
 test("characterization: Undo merge for a stash asks to discard, and a snapshot gone from the history says so", async () => {
   const id = freshId();
   start(id);
-  S.lastMergeUndo = { id: "s-y", docId: id, source: "stash" };
+  mergeUndo().arm({ id: "s-y", docId: id, source: "stash" });
   undoBtn().click();
   assert.equal(undoBtn().textContent, "Discard my edits?");
   undoBtn().click();

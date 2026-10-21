@@ -14,6 +14,7 @@ const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, undoSizes, flushEdits, breakUndoCoalescing } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
+const { focusMemory } = await import("../legacy/editor-bridge.ts");
 
 after(closeApp);
 
@@ -207,7 +208,7 @@ test("writer: the bar's Bold button formats the selection as one edit", async ()
   await openInWriter();
   const p = para("r1");
   selectText(p, 0, 5);
-  S.writerLastCell = p;
+  focusMemory().focusedParagraph(p);
   const changes = await throughSession(() => click(document.querySelector('.writer-bar .wr-fmt[data-cmd="bold"]')));
   assert.ok(changes.cells.some((c) => c.rowId === "r1" && c.field === "audioText"));
   assert.match(S.state.rows[0].audioText, /<(b|strong)>First<\/(b|strong)>/);

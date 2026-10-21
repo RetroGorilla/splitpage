@@ -12,6 +12,7 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/save-bridge.ts": { functions: ["startSaves"] },
   "src/legacy/transition-bridge.ts": { functions: ["startTransitions"] },
   "src/legacy/recovery-bridge.ts": { functions: ["startRecovery", "useBrowserDraftFactory"] },
+  "src/legacy/editor-bridge.ts": { functions: ["startEditor", "installPicturePicker"] },
   "src/legacy/tour-pause.ts": { functions: ["handTourPauseTo"] },
   "src/legacy/file-actions.ts": { functions: ["registerFileActions"] },
   "src/legacy/help-actions.ts": { functions: ["registerHelpActions"] },
