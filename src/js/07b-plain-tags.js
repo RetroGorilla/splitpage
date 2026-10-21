@@ -1,7 +1,8 @@
 import { tagCategory } from "../core/production/looks.ts";
 import { isBlankTagName } from "../core/production/tags.ts";
 import { domToPos } from "../features/editing/cell-dom.ts";
-import { cellSelection, editCell, setCellSelection } from "./05b-cell-edit.js";
+import { editCell } from "./05b-cell-edit.js";
+import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
 import {
   isInsideTagOrLink,
   registryEntry,

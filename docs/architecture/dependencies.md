@@ -34,7 +34,8 @@ resolved edge (static imports, re-exports, literal `require`, literal dynamic
 | `contracts` | `src/contracts/` | itself, `shared` |
 | `application` | `src/application/` | itself, core, `contracts`, `shared` |
 | `adapters` | `src/adapters/` | itself, core, `application`, `contracts`, `shared` |
-| `features/<name>` | `src/features/<name>/` | itself, core, `application`, `contracts`, `shared` |
+| `features/<name>` | `src/features/<name>/` | itself, `features/common`, core, `application`, `contracts`, `shared` |
+| `features/common` | `src/features/common/` | DOM helpers used by more than one feature; same imports as `features/<name>`, imported by every feature |
 | `legacy` | `src/legacy/` | itself, core, `legacy-js`, `application`, `contracts`, `adapters`, `shared` |
 | `bootstrap` | `src/bootstrap/` | anything |
 | `shared` | `shared/` | itself |
@@ -382,7 +383,7 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `08c-broll.js` | features/broll | `plain-text`, `richtext`, `session-bridge` |
 | `08d-broll-panel.js` | features/broll | `app-actions` |
 | `09-find-replace.js` | features/find | `richtext` |
-| `10-comments.js` | features/comments | `transition-bridge` |
+| `10-comments.js` | features/comments | `editor-bridge`, `transition-bridge` |
 | `11-import.js` | features/imports | `session-bridge`, `transition-bridge` |
 | `12-dirty-toast.js` | features/notices (session effects: composition root) | `save-bridge`, `session-bridge` |
 | `12a-undo.js` | features/undo | `richtext` |
@@ -399,7 +400,7 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `18a-local-merge.js` | features/merge | `plain-text` |
 | `18b-file-menu.js` | features/file-menu | `transition-bridge` |
 | `18c-export-dialog.js` | features/file-menu | `export-formats`, `richtext` |
-| `18d-command-menu.js` | features/shortcuts | `app-actions`, `export-formats`, `screen` |
+| `18d-command-menu.js` | features/shortcuts | `app-actions`, `editor-bridge`, `export-formats`, `screen` |
 | `19-writer.js` | features/writer | `editor-bridge`, `plain-text`, `review-wording`, `session-bridge` |
 | `20-teleprompter.js` | features/prompter | `editor-bridge`, `richtext` |
 | `20a-update.js` | features/notices | none |

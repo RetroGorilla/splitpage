@@ -267,7 +267,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("saves", () => startSaves(checkedSaves(deps.saves({ capture: captureOperation, stillOwns: stillOwns }))), (stop) => stop);
   build("transitions", () => startTransitions(deps.transitions), (stop) => stop);
   build("recovery", () => startRecovery(checkedRecovery(deps.recovery())), (stop) => stop);
-  build("editor", () => startEditor(), (stop) => stop);
+  build("editor", () => startEditor(deps.transitions.live), (stop) => stop);
   let disposed = false;
   const dispose = (): void => {
     if (disposed) return;

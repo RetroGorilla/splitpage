@@ -4,16 +4,25 @@ import { createUndoGuard } from "../application/editing/paint-guard.ts";
 import type { UndoGuard } from "../application/editing/paint-guard.ts";
 import { createRowDrag } from "../application/editing/row-drag.ts";
 import type { RowDrag } from "../application/editing/row-drag.ts";
+import { createEditorSelection } from "../application/editing/selection.ts";
+import type { EditorSelection, SelectionPorts } from "../application/editing/selection.ts";
 import { createMergeUndo } from "../application/session/merge-undo.ts";
 import type { MergeUndo } from "../application/session/merge-undo.ts";
+import type { LiveDocumentPort } from "../application/transitions/ports.ts";
+import { editorKeys } from "../core/text/selection.ts";
+import { scriptCellOf } from "./richtext.ts";
+import { liveSession } from "./session-bridge.ts";
 
 export type PicturePicker = (rowId: string) => void;
+
+export type CellSelection = EditorSelection<Element, Range, Element>;
 
 interface Started {
   readonly drag: RowDrag;
   readonly undo: UndoGuard;
   readonly focus: FocusMemory<Element>;
   readonly merge: MergeUndo;
+  readonly selection: CellSelection;
   picker: PicturePicker | null;
 }
 
@@ -24,13 +33,29 @@ function running(): Started {
   return started;
 }
 
-export function startEditor(): () => void {
+function selectionPorts(live: LiveDocumentPort): SelectionPorts {
+  return {
+    epoch: function () { return liveSession().epoch(); },
+    order: function () {
+      const doc = live.current();
+      return doc ? doc.rows.map(function (r) { return r.id; }) : [];
+    },
+    keys: function (rowId, field) {
+      const doc = live.current();
+      const row = doc ? doc.rows.find(function (r) { return r.id === rowId; }) : undefined;
+      return row ? editorKeys(scriptCellOf(row[field] || "")) : null;
+    }
+  };
+}
+
+export function startEditor(live: LiveDocumentPort): () => void {
   if (started) throw new Error("The editor's owners are already started; stop them first");
   const mine: Started = {
     drag: createRowDrag(),
     undo: createUndoGuard(),
     focus: createFocusMemory<Element>(),
     merge: createMergeUndo(),
+    selection: createEditorSelection<Element, Range, Element>(selectionPorts(live)),
     picker: null
   };
   started = mine;
@@ -57,6 +82,10 @@ export function focusMemory(): FocusMemory<Element> {
 
 export function mergeUndo(): MergeUndo {
   return running().merge;
+}
+
+export function editorSelection(): CellSelection {
+  return running().selection;
 }
 
 export function installPicturePicker(pick: PicturePicker): () => void {
