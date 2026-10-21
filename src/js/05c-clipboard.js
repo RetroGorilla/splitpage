@@ -11,7 +11,8 @@ import {
   sliceCell,
   toHtml
 } from "./04c-doc-model.js";
-import { cellSelection, closeCellEdit, openCellEdit } from "./05b-cell-edit.js";
+import { closeCellEdit, openCellEdit } from "./05b-cell-edit.js";
+import { cellSelection } from "../features/editing/cell-selection.ts";
 import { brollSeedOf } from "./08c-broll.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
 import { makeId, randomHexBytes, randomIds } from "../adapters/identity/ids.ts";

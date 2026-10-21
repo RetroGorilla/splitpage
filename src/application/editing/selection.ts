@@ -53,3 +53,37 @@ export function createSelectionModel(ports: SelectionPorts): SelectionModel {
     forget: function () { held = null; }
   };
 }
+
+export interface HeldLink<Range, Cell> {
+  readonly range: Range;
+  readonly cell: Cell;
+}
+
+export interface EditorSelection<Root extends object, Range, Cell> extends SelectionModel {
+  readonly notePainted: (root: Root) => void;
+  readonly paintedEpoch: (root: Root) => number;
+  readonly holdLink: (range: Range, cell: Cell) => void;
+  readonly heldLink: () => HeldLink<Range, Cell> | null;
+  readonly dropLink: () => void;
+}
+
+export function createEditorSelection<Root extends object, Range, Cell>(ports: SelectionPorts): EditorSelection<Root, Range, Cell> {
+  const model = createSelectionModel(ports);
+  const painted = new WeakMap<Root, number>();
+  let link: HeldLink<Range, Cell> | null = null;
+
+  return {
+    remember: model.remember,
+    resolve: model.resolve,
+    snapshot: model.snapshot,
+    forget: model.forget,
+    notePainted: function (root) { painted.set(root, ports.epoch()); },
+    paintedEpoch: function (root) {
+      const epoch = painted.get(root);
+      return epoch === undefined ? ports.epoch() : epoch;
+    },
+    holdLink: function (range, cell) { link = { range: range, cell: cell }; },
+    heldLink: function () { return link; },
+    dropLink: function () { link = null; }
+  };
+}

@@ -14,9 +14,6 @@ import {
 import {
   cellFormatState,
   editableCellHtml,
-  notePaintedEpoch,
-  placeEditorSelection,
-  rememberCellSelection,
   renderAbsorbed,
   syncFieldFromDom,
   toggleCellDirection,
@@ -33,7 +30,8 @@ import { bothScenesHaveVisual, joinScenesCommand } from "../application/commands
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { editAllowed, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
-import { focusMemory } from "../legacy/editor-bridge.ts";
+import { editorSelection, focusMemory } from "../legacy/editor-bridge.ts";
+import { placeEditorSelection, rememberCellSelection } from "../features/editing/cell-selection.ts";
 import { gallerySize } from "../core/document/gallery.ts";
 import { escapeHtml, truncateForPreview } from "../core/document/text-policy.ts";
 
@@ -84,7 +82,7 @@ export function paintWriterDraw(draw) {
   var doc = document.getElementById("writer-doc");
   var active = document.activeElement;
   var caret = writerOpen && active && active.classList && active.classList.contains("wr-para") && doc.contains(active)
-    ? rememberCellSelection(active) : null;
+    ? rememberCellSelection(editorSelection(), active) : null;
   var titleEl = document.getElementById("writer-title");
   if (document.activeElement !== titleEl) titleEl.value = draw.title;
   titleEl.readOnly = draw.readOnly;
@@ -94,10 +92,10 @@ export function paintWriterDraw(draw) {
     doc.innerHTML = draw.html;
     doc.querySelectorAll(".wr-para").forEach(ensureTrailingCaretSpot);
   }
-  notePaintedEpoch(doc);
+  editorSelection().notePainted(doc);
   focusMemory().focusedParagraph(null);
   if (caret) {
-    var placed = placeEditorSelection(doc);
+    var placed = placeEditorSelection(editorSelection(), doc);
     if (placed) {
       focusMemory().focusedParagraph(placed);
       placed.scrollIntoView({ block: "nearest" });
