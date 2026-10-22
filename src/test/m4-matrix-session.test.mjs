@@ -36,7 +36,8 @@ const { saveDoc, setAutoSaveEnabled } = exportModule;
 const { exportMetaLine, toMarkdownDoc } = await import("../js/14d-export-text.js");
 const { captureExportDocument, exportDocumentOf, exportFacts } = await import("../js/14b-export-kit.js");
 const { buildMarkdownProject, buildSplitpageFile } = await import("../js/20d-formats.js");
-const { PERSON_COLORS, PERSON_COLOR_KEY, writePref } = await import("../js/00p-prefs.js");
+const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
+const { preferences } = await import("../legacy/preferences-bridge.ts");
 const { saveAuthorName } = await import("../js/10-comments.js");
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { startNewScript } = await import("../js/18b-file-menu.js");
@@ -165,7 +166,7 @@ function undeclaredChanges(before, after, changes) {
 
 function namedEditor() {
   saveAuthorName("Sam Ortega");
-  writePref(PERSON_COLOR_KEY, PERSON_COLORS[0]);
+  preferences().setMyColor(PERSON_COLORS[0]);
 }
 
 function committedPrecondition() {

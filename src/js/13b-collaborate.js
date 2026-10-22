@@ -2,7 +2,6 @@ import { S } from "./_state.js";
 import { authorityOf, isOwner } from "../application/collaboration/authority.ts";
 import { runIsStale } from "../application/collaboration/workflow.ts";
 import { conn, home, normalizeServerUrl, serverHomeId, updateConnection } from "./_home.js";
-import { readPref } from "./00p-prefs.js";
 import { personSwatchesHtml, setMyColor, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { getSavedAuthorName } from "./10-comments.js";
@@ -12,13 +11,12 @@ import { joinServer, updateConnectMenu } from "./20e-connect.js";
 import { openSettings } from "./20s-settings.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
-import { preferences } from "../legacy/preferences-bridge.ts";
+import { preferences, preferencesStarted } from "../legacy/preferences-bridge.ts";
 import { copyShareText, setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
 import { cleanAuthorName } from "../core/document/people.ts";
 import { parseLinkFragment } from "../../shared/server-links.js";
 
 export var DEFAULT_COLLAB_SERVER = "https://script.bigmanonline.uk/";
-export var COLLAB_SERVER_KEY = "splitpage-collab-server";
 
 export function normalizeCollabServer(input) {
   var raw = String(input == null ? "" : input).trim();
@@ -53,7 +51,7 @@ export function serverLabel(url) {
 }
 
 export function readCollabServer() {
-  return normalizeCollabServer(readPref(COLLAB_SERVER_KEY)) || DEFAULT_COLLAB_SERVER;
+  return normalizeCollabServer(preferences().collabServer()) || DEFAULT_COLLAB_SERVER;
 }
 
 function servedByServer() {
@@ -98,7 +96,7 @@ export function collaborateBlockedReason() {
 
 export function updateCollaborateMenu() {
   var btn = document.getElementById("menu-collaborate");
-  if (!btn) return;
+  if (!btn || !preferencesStarted()) return;
   var why = collaborateBlockedReason();
   btn.disabled = !!why;
   setMenuItemReason(btn, why);

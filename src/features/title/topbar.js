@@ -1,3 +1,5 @@
+import { cssDurationMs } from "../common/css-duration.js";
+
 export function mountTopbar({ window }) {
   const document = window.document;
   const releases = [];
@@ -5,15 +7,6 @@ export function mountTopbar({ window }) {
   function listen(target, name, handler, options) {
     target.addEventListener(name, handler, options);
     releases.push(function () { target.removeEventListener(name, handler, options); });
-  }
-  function rowMotionMs(name, fallback) {
-    try {
-      const raw = window.getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-      if (!raw) return fallback;
-      const n = parseFloat(raw);
-      if (!isFinite(n)) return fallback;
-      return /ms$/.test(raw) ? n : n * 1000;
-    } catch (e) { return fallback; }
   }
   (function setupToolbarLabels() {
     const buttons = document.querySelectorAll(".toolbar .panel-toggle, .toolbar .btn-mode");
@@ -161,8 +154,8 @@ export function mountTopbar({ window }) {
 
     function play(parts, before) {
       const after = measure(parts);
-      const moveMs = rowMotionMs("--dur-move", 180);
-      const enterMs = rowMotionMs("--dur-enter", 180);
+      const moveMs = cssDurationMs(window, "--dur-move", 180);
+      const enterMs = cssDurationMs(window, "--dur-enter", 180);
       const easeStandard = "cubic-bezier(0.2, 0, 0, 1)";
       const easeEnter = "cubic-bezier(0.05, 0.7, 0.1, 1)";
 
@@ -221,7 +214,7 @@ export function mountTopbar({ window }) {
         sheddingTimer = setTimeout(function () {
           sheddingTimer = 0;
           topbar.classList.remove("is-condensing");
-        }, rowMotionMs("--dur-move", 180));
+        }, cssDurationMs(window, "--dur-move", 180));
       }
     }
 

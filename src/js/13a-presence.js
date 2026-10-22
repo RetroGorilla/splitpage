@@ -4,9 +4,8 @@ import {
   normalizePersonColors,
   paletteColor,
   personKey,
-  readMyColor,
   resolvePersonColor
-} from "./00p-prefs.js";
+} from "../core/document/person-colors.ts";
 import { cssAttr } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import { paintRundownPresence } from "./05p-rundown-presence.js";
@@ -21,6 +20,7 @@ import {
 } from "./13-hosted.js";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { cappedName, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 
 var presenceLastActive;
 
@@ -78,7 +78,7 @@ function noteLiveColors(list) {
 export function personColor(seed) {
   return resolvePersonColor(seed, {
     self: getSavedAuthorName(),
-    selfColor: readMyColor(),
+    selfColor: preferences().myColor(),
     live: presenceLiveColors,
     doc: S.state && S.state.personColors
   });
@@ -87,7 +87,7 @@ export function personColor(seed) {
 export function personColorsWithMine(state) {
   if (!state) return null;
   var name = getSavedAuthorName().trim();
-  var color = readMyColor();
+  var color = preferences().myColor();
   if (!name || !color) return null;
   var map = state.personColors && typeof state.personColors === "object" ? state.personColors : null;
   var have = "";
@@ -136,7 +136,7 @@ function presencePayload(gone) {
     docId: serverHomeId(),
     id: presenceSelfId(),
     name: getSavedAuthorName() || "",
-    color: readMyColor(),
+    color: preferences().myColor(),
     rowId: presenceWhere.rowId || "",
     field: presenceWhere.field || "",
     gone: !!gone

@@ -2,6 +2,7 @@ import type { Disposable, Owned } from "../../features/routing/owned.ts";
 import type { NoticesPorts } from "../../features/notices/mount.ts";
 import type { PrompterVisibilityPorts, PrompterOpenPorts, PrompterPorts } from "../../features/prompter/mount.ts";
 import type { IdentityPorts, ServerPorts, DrivePorts } from "../../features/settings/mount.ts";
+import type { AppearancePorts } from "../../features/settings/appearance.ts";
 import type { HistoryPorts } from "../../features/history/mount.ts";
 import type { SaveRecoveryPorts, ConflictsPorts, SavePorts, FileMenuPorts } from "../../features/file-menu/mount.ts";
 import type { ImportsPorts, GdocPorts } from "../../features/imports/mount.ts";
@@ -12,6 +13,7 @@ import { runFromButton, saveFromButton } from "../../legacy/app-actions.ts";
 import { mountNotices } from "../../features/notices/mount.ts";
 import { mountPrompterVisibility, mountPrompterOpen, mountPrompter } from "../../features/prompter/mount.ts";
 import { mountIdentity, mountServer, mountDrive } from "../../features/settings/mount.ts";
+import { mountAppearance } from "../../features/settings/appearance.ts";
 import { mountHistory } from "../../features/history/mount.ts";
 import { mountSaveRecovery, mountConflicts, mountSave, mountFileMenu } from "../../features/file-menu/mount.ts";
 import { mountImports, mountGdoc } from "../../features/imports/mount.ts";
@@ -52,6 +54,7 @@ import {
 } from "../../js/11-import.js";
 import { updateSaveStatus } from "../../js/12-dirty-toast.js";
 import { showToast } from "../../legacy/effects-bridge.ts";
+import { preferences } from "../../legacy/preferences-bridge.ts";
 import {
   armDriveDelete,
   armServerDelete,
@@ -149,11 +152,10 @@ function captureViewDocument(): () => boolean {
   return function () { return stillOwns(context); };
 }
 
-let topbar: Disposable | null = null;
-
 export function mountTopbarFeature(): Disposable {
-  if (!topbar) topbar = mountTopbar({ window: window });
-  return topbar;
+  return replaceViewMount("mountTopbar", function () {
+    return mountTopbar({ window: window });
+  });
 }
 
 export function mountCellReachFeature(): Disposable {
@@ -165,6 +167,18 @@ export function mountCellReachFeature(): Disposable {
 export function mountPhoneBarFeature(): Disposable {
   return replaceViewMount("mountPhoneBar", function () {
     return mountPhoneBar({ window: window });
+  });
+}
+
+export function mountAppearanceFeature(): ReturnType<typeof mountAppearance> {
+  return replaceViewMount("mountAppearance", function () {
+    const prefs = preferences();
+    const ports: AppearancePorts = {
+      theme: prefs.theme,
+      tagIcons: prefs.tagIcons,
+      nameOf: prefs.nameOf
+    };
+    return mountAppearance({ window: window, ports: ports });
   });
 }
 
