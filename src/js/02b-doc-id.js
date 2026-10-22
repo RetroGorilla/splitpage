@@ -2,7 +2,7 @@ import { S } from "./_state.js";
 import { currentHome, documentLocation } from "../legacy/location-bridge.ts";
 import { mintDocId, randomHexBytes } from "../adapters/identity/ids.ts";
 import { documentIdStamp } from "../application/commands/save-stamps.ts";
-import { currentDocument, stampDocument } from "../legacy/session-bridge.ts";
+import { currentDocument, heldDocument, stampDocument } from "../legacy/session-bridge.ts";
 import { documentGuardOn, documentView, quietly } from "../legacy/document-guard.ts";
 import { mergedDocId, sha256Hex, withPageHead } from "../core/document/ids.ts";
 import { cappedLongText, plainText } from "../core/document/text-policy.ts";
@@ -218,9 +218,9 @@ export function __init() {
   PAGE_NONCE = randomHexBytes(16);
   window.__documentGuardTest = {
     on: function () { return documentGuardOn; },
-    viewed: function () { var doc = currentDocument(); return doc !== null && documentView(doc) !== doc; },
+    viewed: function () { var doc = heldDocument(); return doc !== null && documentView(doc) !== doc; },
     writes: function () {
-      var view = documentView(currentDocument());
+      var view = currentDocument();
       return [
         function () { Reflect.set(view, "title", view.title); },
         function () { Reflect.set(view.rows, "length", view.rows.length); },
