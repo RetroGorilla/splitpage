@@ -123,7 +123,16 @@ export function driveOpenShown() {
 }
 
 export function appDataImportShown() {
-  return !!S.DESKTOP;
+  return !!desktopBridge();
+}
+
+export function desktopBridge() {
+  return S.DESKTOP;
+}
+
+export function routeServerOpen(id) {
+  var bridge = desktopBridge();
+  return bridge ? bridge.routeOpen({ kind: "server", serverDocId: id, serverUrl: conn.serverUrl, token: conn.token, tunnel: conn.tunnel }).then(function (result) { return !!result && result.where === "this-tab"; }) : null;
 }
 
 var PROMPTER_BROWSER_MESSAGES = {

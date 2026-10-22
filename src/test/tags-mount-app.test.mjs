@@ -7,7 +7,7 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 const { tagRenamingKey } = await import("../application/tag-panel-state.ts");
-const { mountTagsFeature } = await import("../js/22b-production-wiring.js");
+const { mountTagsFeature } = await import("../bootstrap/wiring/production.ts");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../js/05-render.js");
 const { openProductionPanel } = await import("../js/08-production-panels.js");
