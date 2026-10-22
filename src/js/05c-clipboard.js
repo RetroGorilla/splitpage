@@ -1,5 +1,5 @@
 import { internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
-import { findRowIndex } from "./03-sync.js";
+import { rowIndexOf } from "../core/document/rows.ts";
 import {
   cellLength,
   cellOf,
@@ -233,7 +233,7 @@ function outsideSelection(cellEl) {
 export function copyFromCell(e, cellEl, cut, readOnly) {
   var cd = e.clipboardData;
   var field = cellEl.getAttribute("data-field");
-  if (!cd || !holdsDocument() || !isTextField(field) || findRowIndex(cellEl.getAttribute("data-id")) === -1) return false;
+  if (!cd || !holdsDocument() || !isTextField(field) || readSession(function (doc) { return rowIndexOf(doc, cellEl.getAttribute("data-id")); }) === -1) return false;
   var html = liveCellHtml(cellEl);
   if (/<img|video-embed-card/.test(html)) return false;
   var sel = cellSelection(cellEl);
@@ -289,7 +289,7 @@ export function pasteIntoCell(cellEl, html, text, extra) {
   var rowId = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   var result = { done: true, cellEl: cellEl, media: got.media, lost: got.lost, attached: null,
-                 rowIndex: findRowIndex(rowId), field: field, movedComments: false };
+                 rowIndex: readSession(function (doc) { return rowIndexOf(doc, rowId); }), field: field, movedComments: false };
   if (!cellLength(got.cell)) {
     if (!attach.length || result.rowIndex === -1) return result;
     breakUndoCoalescing();

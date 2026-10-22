@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
-import { findRowIndex } from "./03-sync.js";
+import { rowIndexOf } from "../core/document/rows.ts";
+import { readSession } from "../legacy/session-bridge.ts";
 import { render } from "./05-render.js";
 import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
@@ -57,7 +58,7 @@ export function clearShotHideGrace(rowId) {
 
 export function revealRow(rowId) {
   if (!hideShotOn() || !S.state) return;
-  var idx = findRowIndex(rowId);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
   if (idx === -1 || !isRowHiddenByShotToggle(S.state.rows[idx])) return;
   var start = idx, end = idx;
   while (start > 0 && S.state.rows[start - 1].status === "shot") start--;

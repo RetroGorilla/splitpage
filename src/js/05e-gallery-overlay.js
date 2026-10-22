@@ -8,7 +8,8 @@ import {
   videoLinkKey,
   videoLinkLabel
 } from "../adapters/storage/02d-gallery.js";
-import { findRowIndex } from "./03-sync.js";
+import { rowIndexOf } from "../core/document/rows.ts";
+import { readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { cssAttr } from "./04-richtext.js";
 import {
   galleryBadgeHtml,
@@ -24,7 +25,6 @@ import { reviewMode } from "./13-hosted.js";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
-import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { pickPictureFor } from "../legacy/editor-bridge.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 import { galleryCommand } from "../application/commands/gallery.ts";
@@ -39,7 +39,7 @@ var dragFrom = -1;
 function modal() { return document.getElementById("gallery-modal"); }
 
 function rowOf(rowId) {
-  var idx = findRowIndex(rowId);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
   return idx === -1 ? null : { row: S.state.rows[idx], index: idx };
 }
 
