@@ -3,7 +3,8 @@ import { S } from "./_state.js";
 import { reviewMode, setHome } from "../legacy/location-bridge.ts";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, isDurableSync } from "../adapters/storage/02c-blobs.js";
-import { noteMerged, noteRecovery, noteServerUpdate } from "../legacy/session-bridge.ts";
+import { noteMerged, noteRecovery, noteServerUpdate, runDocumentEdit } from "../legacy/session-bridge.ts";
+import { wordsPerMinuteCommand } from "../application/commands/document-settings.ts";
 import { applyIncomingMerge } from "../application/session/apply-merge.ts";
 import { mergeIncoming } from "../application/session/merge-incoming.ts";
 import { refsIn } from "../../shared/blob-policy.js";
@@ -41,7 +42,7 @@ import {
   getSavedAuthorName,
   saveAuthorName
 } from "./10-comments.js";
-import { markAbsorbedDirty, markDirty, showToast } from "./12-dirty-toast.js";
+import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
 import { personColor } from "./13a-presence.js";
 import { haltAutoSave, queueAutoSave } from "./14-export.js";
 import { updateFileChip } from "./18-local-files.js";
@@ -391,13 +392,7 @@ function openClockPopover(focusOn) {
   else { first.focus(); first.select(); }
   function commit() {
     if (reviewMode()) { closeAnchorPopover(); return; }
-    var v = Math.round(Number(input.value));
-    if (isFinite(v) && v >= 60 && v <= 400 && v !== S.state.wordsPerMinute) {
-      S.state.wordsPerMinute = v;
-      markDirty();
-      render();
-      queueAutoSave();
-    }
+    if (runDocumentEdit(wordsPerMinuteCommand(Number(input.value)))) render();
     closeAnchorPopover();
   }
   document.getElementById("wpm-save").addEventListener("click", commit);

@@ -11,26 +11,17 @@ import { closeAllSidePanels } from "./03b-side-panels.js";
 import { cssAttr, plainText } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import { focusRowField } from "./06-rows.js";
-import {
-  findOrAddPerson,
-  personById,
-  productionEntries,
-  scheduleProductionRefresh
-} from "./07-production-tags.js";
+import { productionEntries } from "./07-production-tags.js";
 import {
   addBrollProp,
   brollEntries,
-  brollRecord,
-  deleteBrollRecord,
   newBrollRecord,
   removeBrollProp,
   renameBrollInScript,
   updateBrollBadge
 } from "./08c-broll.js";
-import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { personColor } from "./13a-presence.js";
-import { queueAutoSave } from "./14-export.js";
 import { brollGroups as brollGroupsFrom, brollShotListForPrint, brollTable, filterCounts, FILTERS, matchesFilter, oneOf, PAGE_GROUPS, pageSummaryText, sceneLabel, shotRecordForFile, startOf } from "./14c-export-projections.js";
 import { exportAs } from "./18-local-files.js";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
@@ -38,6 +29,10 @@ import { appActions } from "../legacy/app-actions.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { mountBroll } from "../features/broll/mount.ts";
 import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
+import { deleteShotCommand, setShotsCommand } from "../application/commands/broll-records.ts";
+import { brollRecord as shotIn, personById as personIn, personNamed } from "../core/production/records.ts";
+import { randomIds } from "../adapters/identity/ids.ts";
+import { readSession, runDocumentEdit } from "../legacy/session-bridge.ts";
 
 var VIEW_KEY = "splitpage-broll-view";
 
@@ -728,19 +723,22 @@ function entryById(id) {
   return null;
 }
 
+function brollRecord(id) {
+  return readSession(function (doc) { return shotIn(doc, id); });
+}
+
+function personById(id) {
+  return readSession(function (doc) { return personIn(doc, id); });
+}
+
 function writeRecord(id, fields) {
-  var rec = brollRecord(id);
-  if (!rec) return null;
-  Object.keys(fields).forEach(function (k) { rec[k] = fields[k]; });
-  markDirty();
-  queueAutoSave();
-  return rec;
+  if (!brollRecord(id)) return false;
+  runDocumentEdit(setShotsCommand([id], fields));
+  return true;
 }
 
 function updateRecord(id, fields) {
-  var rec = writeRecord(id, fields);
-  if (rec) renderBrollViews();
-  return rec;
+  if (writeRecord(id, fields)) renderBrollViews();
 }
 
 export function toggleBrollShot(id) {
@@ -749,19 +747,16 @@ export function toggleBrollShot(id) {
   updateRecord(id, { status: rec.status === "shot" ? "unshot" : "shot" });
 }
 
-function bulkUpdate(apply, describe) {
+function bulkUpdate(fields, describe, owner) {
   var entries = brollEntries();
   var ids = selectedIds(entries);
   if (!ids.length) return;
   breakUndoCoalescing();
-  var n = 0;
-  ids.forEach(function (id) {
+  var n = ids.filter(function (id) {
     var rec = brollRecord(id);
-    if (rec && apply(rec)) n++;
-  });
-  if (!n) { renderBrollViews(); return; }
-  markDirty();
-  queueAutoSave();
+    return rec && Object.keys(fields).some(function (k) { return rec[k] !== fields[k]; });
+  }).length;
+  if (!n || !runDocumentEdit(setShotsCommand(ids, fields, owner, randomIds))) { renderBrollViews(); return; }
   renderBrollViews();
   showToast(describe(n), "ok");
 }
@@ -772,30 +767,18 @@ function bulkMarkShot() {
   var entries = brollEntries().filter(function (e) { return selection[e.id]; });
   var allShot = entries.length && entries.every(function (e) { return e.status === "shot"; });
   var want = allShot ? "unshot" : "shot";
-  bulkUpdate(function (rec) {
-    if (rec.status === want) return false;
-    rec.status = want;
-    return true;
-  }, function (n) { return "Marked " + shotsWord(n) + (want === "shot" ? " shot" : " to shoot") + "."; });
+  bulkUpdate({ status: want }, function (n) { return "Marked " + shotsWord(n) + (want === "shot" ? " shot" : " to shoot") + "."; });
 }
 
 function bulkFlag() {
   var entries = brollEntries().filter(function (e) { return selection[e.id]; });
   var want = !(entries.length && entries.every(function (e) { return e.reshoot; }));
-  bulkUpdate(function (rec) {
-    if (!!rec.reshoot === want) return false;
-    rec.reshoot = want;
-    return true;
-  }, function (n) { return (want ? "Flagged " : "Unflagged ") + shotsWord(n) + "."; });
+  bulkUpdate({ reshoot: want }, function (n) { return (want ? "Flagged " : "Unflagged ") + shotsWord(n) + "."; });
 }
 
 function bulkAssign(personId) {
   var owner = personById(personId) ? personId : "";
-  bulkUpdate(function (rec) {
-    if ((rec.owner || "") === owner) return false;
-    rec.owner = owner;
-    return true;
-  }, function (n) {
+  bulkUpdate({ owner: owner }, function (n) {
     var who = personById(owner);
     return who ? "Assigned " + shotsWord(n) + " to " + who.name + "." : "Unassigned " + shotsWord(n) + ".";
   });
@@ -803,28 +786,22 @@ function bulkAssign(personId) {
 
 function bulkLocation(name) {
   var clean = cappedText(name, 80);
-  bulkUpdate(function (rec) {
-    if ((rec.location || "") === clean) return false;
-    rec.location = clean;
-    return true;
-  }, function (n) { return clean ? "Moved " + shotsWord(n) + " to " + clean + "." : "Cleared the location of " + shotsWord(n) + "."; });
+  bulkUpdate({ location: clean }, function (n) { return clean ? "Moved " + shotsWord(n) + " to " + clean + "." : "Cleared the location of " + shotsWord(n) + "."; });
 }
 
 function bulkAssignNewPerson(name) {
   var entries = brollEntries();
-  if (!selectedIds(entries).length) return;
+  var ids = selectedIds(entries);
+  if (!ids.length) return;
   breakUndoCoalescing();
-  var id = findOrAddPerson(name);
-  if (!id) { renderBrollViews(); return; }
-  var owner = id, n = 0;
-  selectedIds(entries).forEach(function (sid) {
+  var known = readSession(function (doc) { return personNamed(doc, name); });
+  var n = ids.filter(function (sid) {
     var rec = brollRecord(sid);
-    if (rec && rec.owner !== owner) { rec.owner = owner; n++; }
-  });
-  markDirty();
-  queueAutoSave();
+    return rec && (!known || rec.owner !== known.id);
+  }).length;
+  if (!runDocumentEdit(setShotsCommand(ids, {}, { name: name }, randomIds))) { renderBrollViews(); return; }
   renderBrollViews();
-  var who = personById(owner);
+  var who = readSession(function (doc) { return personNamed(doc, name); });
   showToast("Assigned " + shotsWord(n) + " to " + (who ? who.name : "them") + ".", "ok");
 }
 
@@ -869,8 +846,6 @@ function addBrollFromPanel() {
   var rec = newBrollRecord({ name: name, origin: "list" });
   input.value = "";
   openId = rec.id;
-  markDirty();
-  queueAutoSave();
   renderBrollViews();
   showToast("Added to the b-roll list.", "ok");
 }
@@ -888,11 +863,7 @@ function commitPropInput(input) {
   var name = input.value;
   input.value = "";
   if (!plainText(name).trim()) return;
-  if (addBrollProp(id, name)) {
-    markDirty();
-    queueAutoSave();
-    scheduleProductionRefresh();
-  }
+  addBrollProp(id, name);
   renderBrollViews();
   var again = document.querySelector('.broll-prop-input[data-id="' + cssAttr(id) + '"]');
   if (again) again.focus();
@@ -910,23 +881,17 @@ function renameShot(id, box) {
   var next = box ? cappedText(box.value, BROLL_NAME_MAX) : "";
   renamingId = null;
   breakUndoCoalescing();
-  if (e && next && next !== e.name && renameBrollInScript(e, next)) {
-    render();
-    markDirty();
-    queueAutoSave();
-  }
+  if (e && next && next !== e.name && renameBrollInScript(e, next)) render();
   renderBrollViews();
 }
 
 function deleteShot(id) {
   var e = entryById(id);
   if (!e) return;
-  deleteBrollRecord(id);
+  runDocumentEdit(deleteShotCommand(id));
   if (openId === id) openId = null;
   menuFor = null;
   delete selection[id];
-  markDirty();
-  queueAutoSave();
   renderBrollViews();
   showToast(e.rowId ? "Removed from the list — the line stays in the script." : "Removed from the list.", "ok");
 }
@@ -1019,10 +984,7 @@ function onBrollClick(e, root) {
     var ref = root.querySelector('.broll-ref-input[data-id="' + cssAttr(id) + '"]');
     if (ref) ref.focus();
   } else if (action === "broll-prop-remove") {
-    if (removeBrollProp(id, btn.getAttribute("data-ref"))) {
-      markDirty();
-      queueAutoSave();
-    }
+    removeBrollProp(id, btn.getAttribute("data-ref"));
     renderBrollViews();
   } else if (action === "broll-person-new") {
     addingPersonFor = id;
@@ -1033,9 +995,9 @@ function onBrollClick(e, root) {
     var nameBox = root.querySelector('.broll-person-input[data-id="' + cssAttr(id) + '"]');
     addingPersonFor = null;
     breakUndoCoalescing();
-    var personId = nameBox ? findOrAddPerson(nameBox.value) : "";
-    if (personId) updateRecord(id, { owner: personId });
-    else renderBrollViews();
+    var named = nameBox ? nameBox.value : "";
+    if (brollRecord(id)) runDocumentEdit(setShotsCommand([id], {}, { name: named }, randomIds));
+    renderBrollViews();
   } else if (action === "broll-person-cancel") {
     addingPersonFor = null;
     renderBrollViews();

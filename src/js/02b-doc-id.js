@@ -1,6 +1,8 @@
 import { S } from "./_state.js";
 import { currentHome, documentLocation } from "../legacy/location-bridge.ts";
 import { mintDocId, randomHexBytes } from "../adapters/identity/ids.ts";
+import { documentIdStamp } from "../application/commands/save-stamps.ts";
+import { stampDocument } from "../legacy/session-bridge.ts";
 import { mergedDocId, sha256Hex, withPageHead } from "../core/document/ids.ts";
 import { cappedLongText, plainText } from "../core/document/text-policy.ts";
 import { migrateDocument as migrateDocumentWith } from "../core/migrate.ts";
@@ -129,7 +131,7 @@ export function reassignDocId(toId, opts) {
   var fromId = normalizeDocId(opts.fromId);
   if (!toId || !fromId || toId === fromId || !S.state || S.state.docId !== fromId) return false;
   if (onServerDoc()) return false;
-  S.state.docId = toId;
+  stampDocument(documentIdStamp(fromId, toId));
   documentLocation().markWrittenOut(false);
   copyDocHistorySafe(fromId, toId);
   syncDocIdentity();

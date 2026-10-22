@@ -10,13 +10,22 @@ import { commentIds, fromHtml } from "../js/04c-doc-model.js";
 import { createUndoHistory, diffStates } from "../js/12a-undo.js";
 import { detectTwoColumnFormat, parseImportRows } from "../js/11-import.js";
 import {
-  SCENES_ATTR, SCENES_MIME, buildScenePayload, insertScenes, isBlankScene, isMove, parseScenePayload, removeScenes,
+  SCENES_ATTR, SCENES_MIME, buildScenePayload, insertScenes, isBlankScene, isMove, parseScenePayload,
   scenesOnClipboard, setLiveCut
 } from "../js/05g-scene-clip.js";
 import { loadTestDocument } from "./_document.mjs";
+import { removeScenesCommand } from "../application/commands/scenes.ts";
+import { runCommand } from "../legacy/session-bridge.ts";
 
 initTags();
 initStatus();
+
+function removeScenes(rowIds) {
+  const outcome = runCommand(removeScenesCommand(rowIds));
+  assert.notEqual(outcome.kind, "failed", outcome.error && outcome.error.stack);
+  assert.notEqual(outcome.kind, "rejected", outcome.reason);
+  return outcome.kind === "noop" ? 0 : outcome.changes.rowsRemoved.length;
+}
 
 const jpegBytes = (w, h, salt) => new Uint8Array([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, salt || 0, 0xFF, 0xD9]);
 const P1 = intern(jpegBytes(300, 200, 41));

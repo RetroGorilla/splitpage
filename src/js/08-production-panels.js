@@ -11,15 +11,10 @@ import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { cssAttr, plainText, safeId } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import {
-  addRegistryTags,
   bulkTagRows,
   currentProductionIndex,
-  deletePerson,
-  deleteProductionTagEntry,
-  findOrAddPerson,
   personById,
   productionEntries,
-  registerProductionTag,
   registryEntry,
   removeTag,
   renameTag,
@@ -27,14 +22,18 @@ import {
   tagsByCategory,
   updateProductionBadge
 } from "./07-production-tags.js";
-import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { personColor } from "./13a-presence.js";
-import { queueAutoSave } from "./14-export.js";
 import { breakdownRows, breakdownTable } from "./14c-export-projections.js";
 import { idMap } from "../core/document/id-map.ts";
-import { cappedLongText, escapeHtml } from "../core/document/text-policy.ts";
+import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
 import { planQuickAdd } from "../core/production/tags.ts";
+import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddCommand, tagCellsCommand, updateTagsCommand } from "../application/commands/production-records.ts";
+import { PERSON_NAME_MAX, personNamed } from "../core/production/records.ts";
+import { randomIds } from "../adapters/identity/ids.ts";
+import { readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
+import { retagMentions, retagRewrites } from "../legacy/tag-rewrites.ts";
+import { rewrittenCopies } from "../application/commands/document-edit.ts";
 import { gearGroupBy, productionGroupBy, setTagAddingPerson, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../application/tag-panel-state.ts";
 import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
 
@@ -136,16 +135,13 @@ function fillGearQuickAdd() {
 export function applyGearQuickAdd() {
   if (reviewBlocked()) return;
   var raw = document.getElementById("gear-quickadd-input").value || "";
-  var plan = planQuickAdd(S.state, productionReaders, raw, currentProductionIndex());
-  plan.remove.forEach(function (name) { deleteProductionTagEntry("gear", name); });
-  addRegistryTags(plan.register);
+  function planned(doc) { return planQuickAdd(doc, productionReaders, raw, currentProductionIndex()); }
+  var plan = readSession(planned);
   var added = plan.added, removed = plan.removed;
 
-  if (!added && !removed) { fillGearQuickAdd(); return; }
-  markDirty();
+  if (!runDocumentEdit(gearQuickAddCommand(planned))) { fillGearQuickAdd(); return; }
   renderProduction();
   fillGearQuickAdd();
-  queueAutoSave();
   var parts = [];
   if (added) parts.push("added " + added);
   if (removed) parts.push("removed " + removed);
@@ -265,13 +261,14 @@ export function tagAllMentions(key) {
   var item = findTagByKey(key);
   if (!item) return;
   breakUndoCoalescing();
-  var done = bulkTagRows(S.state.rows, item.name, item.cat.id, item.name, false, false);
-  if (!done.hits) { showToast("No untagged mentions of " + item.name + " left.", "warn"); return; }
-  registerProductionTag(item.cat.id, item.name);
-  markDirty();
+  var done = bulkTagRows(jsonRows(), item.name, item.cat.id, item.name, false, true);
+  var tagged = rewrittenCopies(["visualText"], function (rows) { bulkTagRows(rows, item.name, item.cat.id, item.name, false, false); });
+  if (!done.hits || !runDocumentEdit(tagCellsCommand("tag-all-mentions", tagged, tagRef(item), sessionStamps))) {
+    showToast("No untagged mentions of " + item.name + " left.", "warn");
+    return;
+  }
   breakUndoCoalescing();
   render();
-  queueAutoSave();
   showToast("Tagged " + done.hits + " mention" + (done.hits === 1 ? "" : "s") + " of " + item.name, "ok");
 }
 
@@ -635,22 +632,23 @@ function renderProductionList(entries) {
   }).join("");
 }
 
-var registeredByAction = false;
-
-function trackedEntry(item) {
-  var entry = registryEntry(item.cat.id, item.name);
-  if (entry) return entry;
-  registerProductionTag(item.cat.id, item.name);
-  entry = registryEntry(item.cat.id, item.name);
-  if (entry) registeredByAction = true;
-  return entry;
+function jsonRows() {
+  return readSession(function (doc) {
+    return doc ? doc.rows.map(function (row) { return { id: row.id, visualText: row.visualText }; }) : [];
+  });
 }
 
-function noteRegistered() {
-  var was = registeredByAction;
-  registeredByAction = false;
-  if (was) markDirty();
-  return was;
+function tagRef(item) {
+  return { cat: item.cat.id, name: item.name };
+}
+
+function entryValue(item, field) {
+  var entry = registryEntry(item.cat.id, item.name);
+  return entry ? entry[field] || "" : "";
+}
+
+function updateTags(items, change) {
+  return runDocumentEdit(updateTagsCommand(items.map(tagRef), change, randomIds));
 }
 
 function findTagByKey(key) {
@@ -690,10 +688,8 @@ export function armRemoveTag(btn, key) {
     if (!item) return;
     breakUndoCoalescing();
     var n = removeTag(item.cat.id, item.name);
-    markDirty();
     breakUndoCoalescing();
     render();
-    queueAutoSave();
     showToast("Removed " + item.name + " from " + n + " mention" + (n === 1 ? "" : "s"), "ok");
     return;
   }
@@ -722,10 +718,8 @@ export function armDeleteTag(btn, key) {
     deleteConfirmation().disarm("tag");
     var item = findTagByKey(key);
     if (!item) return;
-    deleteProductionTagEntry(item.cat.id, item.name);
-    markDirty();
+    runDocumentEdit(deleteTagsCommand([{ cat: item.cat.id, name: item.name, unlabel: false }], function () { return []; }, sessionStamps));
     render();
-    queueAutoSave();
     showToast("Deleted " + item.name + " from the production list", "ok");
     return;
   }
@@ -765,22 +759,18 @@ function selectedEntries(entries) {
 }
 
 export function bulkSetOwner(personId) {
-  var items = selectedEntries();
+  setOwnerOf(selectedEntries(), { id: personId });
+}
+
+function setOwnerOf(items, choice) {
   if (!items.length) return;
-  var owner = personById(personId) ? personId : "";
-  var n = 0;
-  items.forEach(function (item) {
-    var entry = trackedEntry(item);
-    if (!entry || entry.owner === owner) return;
-    entry.owner = owner;
-    n++;
-  });
-  if (!n) { noteRegistered(); renderProduction(); return; }
-  registeredByAction = false;
-  markDirty();
+  var known = "id" in choice ? personById(choice.id) : readSession(function (doc) { return personNamed(doc, choice.name); });
+  var owner = known ? known.id : "";
+  var n = items.filter(function (item) { return (!known && "name" in choice) || entryValue(item, "owner") !== owner; }).length;
+  updateTags(items, { owner: choice });
   renderProduction();
-  queueAutoSave();
-  var who = personById(personId);
+  if (!n) return;
+  var who = "id" in choice ? personById(choice.id) : readSession(function (doc) { return personNamed(doc, choice.name); });
   showToast(who ? ("Assigned " + n + " item" + (n === 1 ? "" : "s") + " to " + who.name)
                 : ("Unassigned " + n + " item" + (n === 1 ? "" : "s")), "ok");
 }
@@ -789,45 +779,37 @@ export function bulkSetStatus(statusId) {
   var items = selectedEntries();
   if (!items.length) return;
   var want = (tagStatus(statusId) || TAG_STATUSES[0]);
-  var n = 0;
-  items.forEach(function (item) {
-    var entry = trackedEntry(item);
-    if (!entry || entry.status === want.id) return;
-    entry.status = want.id;
-    n++;
-  });
-  if (!n) { noteRegistered(); renderProduction(); return; }
-  registeredByAction = false;
-  markDirty();
+  var n = items.filter(function (item) {
+    var entry = registryEntry(item.cat.id, item.name);
+    return (entry ? entry.status : TAG_STATUSES[0].id) !== want.id;
+  }).length;
+  updateTags(items, { status: want.id });
   renderProduction();
-  queueAutoSave();
+  if (!n) return;
   showToast("Marked " + n + " item" + (n === 1 ? "" : "s") + " " + want.label, "ok");
 }
 
 export function bulkAddPerson() {
   var input = document.getElementById("bulk-person-input");
   if (!input) return;
-  var id = findOrAddPerson(input.value);
   setTagAddingPerson(null);
-  if (!id) { renderProduction(); return; }
-  bulkSetOwner(id);
+  if (!cappedText(input.value, PERSON_NAME_MAX)) { renderProduction(); return; }
+  setOwnerOf(selectedEntries(), { name: input.value });
 }
 
 export function bulkDeleteSelected() {
   var items = selectedEntries();
   if (!items.length) return;
-  var unlabelled = 0;
   breakUndoCoalescing();
-  items.forEach(function (item) {
-    if (!item.orphaned) unlabelled += removeTag(item.cat.id, item.name);
-    deleteProductionTagEntry(item.cat.id, item.name);
-  });
+  var labelled = items.filter(function (item) { return !item.orphaned; }).map(tagRef);
+  var unlabelled = readSession(function (doc) { return retagMentions(doc, labelled); });
+  runDocumentEdit(deleteTagsCommand(items.map(function (item) {
+    return { cat: item.cat.id, name: item.name, unlabel: !item.orphaned };
+  }), retagRewrites(labelled, null), sessionStamps));
   var n = items.length;
   clearProductionSelection();
-  markDirty();
   breakUndoCoalescing();
   render();
-  queueAutoSave();
   showToast("Deleted " + n + " item" + (n === 1 ? "" : "s") +
     (unlabelled ? " and removed " + unlabelled + " label" + (unlabelled === 1 ? "" : "s") +
       " from the script" : ""), "ok");
@@ -904,66 +886,38 @@ function renderBulkBar(entries) {
 export function setTagStatus(key, statusId) {
   var item = findTagByKey(key);
   if (!item) return;
-  var entry = trackedEntry(item);
-  if (!entry) return;
-  var want = statusId === null
-    ? nextTagStatus(entry.status)
-    : (tagStatus(statusId) || TAG_STATUSES[0]).id;
-  if (entry.status === want) { noteRegistered(); return; }
-  entry.status = want;
-  registeredByAction = false;
-  markDirty();
-  renderProduction();
-  queueAutoSave();
+  if (updateTags([item], { status: statusId === null ? { next: true } : (tagStatus(statusId) || TAG_STATUSES[0]).id })) renderProduction();
 }
 
 export function setTagOwner(key, personId) {
   var item = findTagByKey(key);
   if (!item) return;
-  var entry = trackedEntry(item);
-  if (!entry) return;
-  entry.owner = personById(personId) ? personId : "";
-  registeredByAction = false;
-  markDirty();
+  updateTags([item], { owner: { id: personId } });
   renderProduction();
-  queueAutoSave();
 }
 
 export function setTagNotes(key, text) {
   var item = findTagByKey(key);
   if (!item) return;
-  var entry = trackedEntry(item);
-  if (!entry) return;
-  var clean = cappedLongText(plainText(text), 2000);
-  if (entry.notes === clean) { noteRegistered(); return; }
-  entry.notes = clean;
-  registeredByAction = false;
-  markDirty();
+  updateTags([item], { notes: cappedLongText(plainText(text), 2000) });
 }
 
 export function addPersonForTag(key) {
   var input = document.querySelector('.tag-person-input[data-key="' + cssAttr(key) + '"]');
   if (!input) return;
-  var id = findOrAddPerson(input.value);
   setTagAddingPerson(null);
-  if (!id) { renderProduction(); return; }
   var item = findTagByKey(key);
-  var entry = item && trackedEntry(item);
-  if (entry) entry.owner = id;
-  registeredByAction = false;
-  markDirty();
+  if (item) updateTags([item], { owner: { name: input.value } });
+  else runDocumentEdit(addPersonCommand(input.value, randomIds));
   renderProduction();
-  queueAutoSave();
 }
 
 export function armPersonDelete(btn, personId) {
   if (deleteConfirmation().armedId("tag") === "person:" + personId) {
     deleteConfirmation().disarm("tag");
     var person = personById(personId);
-    deletePerson(personId);
-    markDirty();
+    runDocumentEdit(deletePersonCommand(personId));
     renderProduction();
-    queueAutoSave();
     showToast("Removed " + (person ? person.name : "that person") +
       " — their items are now unassigned", "ok");
     return;
@@ -982,10 +936,8 @@ export function saveTagRename(key) {
   var changed = renameTag(item.cat.id, item.name, input.value);
   setTagRenaming(null);
   if (changed) {
-    markDirty();
     breakUndoCoalescing();
     render();
-    queueAutoSave();
     showToast("Renamed to " + plainText(input.value).trim(), "ok");
   } else {
     renderProduction();
