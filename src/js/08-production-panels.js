@@ -29,7 +29,6 @@ import {
 } from "./07-production-tags.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
-import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
 import { breakdownRows, breakdownTable } from "./14c-export-projections.js";
@@ -37,6 +36,7 @@ import { idMap } from "../core/document/id-map.ts";
 import { cappedLongText, escapeHtml } from "../core/document/text-policy.ts";
 import { planQuickAdd } from "../core/production/tags.ts";
 import { gearGroupBy, productionGroupBy, setTagAddingPerson, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../application/tag-panel-state.ts";
+import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
 
 export { breakdownRows, breakdownTable };
 

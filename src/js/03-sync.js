@@ -1,6 +1,6 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { S } from "./_state.js";
-import { setHome } from "./_home.js";
+import { reviewMode, setHome } from "../legacy/location-bridge.ts";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, isDurableSync } from "../adapters/storage/02c-blobs.js";
 import { noteMerged, noteRecovery, noteServerUpdate } from "../legacy/session-bridge.ts";
@@ -42,7 +42,6 @@ import {
   saveAuthorName
 } from "./10-comments.js";
 import { markAbsorbedDirty, markDirty, showToast } from "./12-dirty-toast.js";
-import { reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { haltAutoSave, queueAutoSave } from "./14-export.js";
 import { updateFileChip } from "./18-local-files.js";

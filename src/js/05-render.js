@@ -37,7 +37,6 @@ import {
   syncAnchorResolvedClasses,
   updateCommentsCount
 } from "./10-comments.js";
-import { reviewMode } from "./13-hosted.js";
 import { paintPresence, personColor } from "./13a-presence.js";
 import { drawWriter, paintWriterDraw } from "./19-writer.js";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
@@ -67,6 +66,7 @@ import { viewFlags } from "../legacy/preferences-bridge.ts";
 import { cellSelection, placeEditorSelection, rememberCellSelection } from "../features/editing/cell-selection.ts";
 import { setTagAddingPerson } from "../application/tag-panel-state.ts";
 import { formatVideoLength } from "../../shared/text.js";
+import { reviewMode } from "../legacy/location-bridge.ts";
 
 
 var LINK_POPOVER_HTML =

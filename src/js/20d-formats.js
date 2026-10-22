@@ -1,7 +1,7 @@
 import { MD_IMAGE_PREFIX_RE } from "../adapters/formats/markdown-image.ts";
 import { deriveDocId, docIdEmbeddedIn } from "../core/document/ids.ts";
 import { S } from "./_state.js";
-import { fileHome } from "./_home.js";
+import { amendHome, documentLocation, fileHome } from "../legacy/location-bridge.ts";
 import { legacyMdToHtml, makeId, migrateRows } from "./02-state.js";
 import {
   adoptRestoredState,
@@ -235,7 +235,7 @@ export function __init() {
     parseMarkdown: parseMarkdownProject,
     buildStandaloneHtml: function () { return standaloneHtmlFor(captureExportDocument()); },
     docId: function () { return S.state ? S.state.docId : null; },
-    writtenOut: function () { return S.docIdWrittenOut; },
+    writtenOut: function () { return documentLocation().writtenOut(); },
     deriveDocId: deriveDocId,
     adoptRestoredState: adoptRestoredState,
     reassignDocId: reassignDocId,
@@ -263,6 +263,6 @@ export function __init() {
                lastModified: f ? f.lastModified : null };
     },
     hasDiskBase: function () { return !!(fileHome() && fileHome().diskBase); },
-    forgetDiskBase: function () { if (fileHome()) fileHome().diskBase = null; setBaseState(null, "__splitpageFormats.forgetDiskBase: test hook, drives the two-way fallback"); return true; }
+    forgetDiskBase: function () { if (fileHome()) amendHome(fileHome(), { diskBase: null }); setBaseState(null, "__splitpageFormats.forgetDiskBase: test hook, drives the two-way fallback"); return true; }
   };
 }

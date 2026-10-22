@@ -293,7 +293,8 @@ test("a new blank script whose render throws still replaces the document, as a c
 });
 
 test("reopening a server document after a reload whose render throws still reopens it and says so (#418)", async () => {
-  const { SERVER_RESUME_KEY, finishServerDetect } = await import("../js/13-hosted.js");
+  const { finishServerDetect } = await import("../js/13-hosted.js");
+  const { SERVER_RESUME_KEY } = await import("../application/location/server-status.ts");
   const seen = await bothWays("server reopen", () => {
     fresh("Before the reopen");
     sessionStorage.setItem(SERVER_RESUME_KEY, JSON.stringify({ id: "doc-again", rev: 1 }));
@@ -424,7 +425,7 @@ test("a redraw toast still on screen goes away when a later update draws cleanly
 });
 
 test("a desktop file draft over an untouched file whose render throws still restores the changes and marks them unsaved (#418)", async () => {
-  const { setHome } = await import("../js/_home.js");
+  const { setHome } = await import("../legacy/location-bridge.ts");
   const seen = await bothWays("file draft", () => {
     fresh("Before the file draft");
     const disk = table304Document("On disk");

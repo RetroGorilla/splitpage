@@ -7,7 +7,7 @@ await bootApp();
 after(closeApp);
 
 const { LONG_DEMO } = await import("../js/_starters.js");
-const { setConnection, setHome } = await import("../js/_home.js");
+const { documentLocation, setHome } = await import("../legacy/location-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { standaloneHtmlFor } = await import("../js/02b-doc-id.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
@@ -28,7 +28,7 @@ function useDemo() {
 
 test("E15: a capture taken with a live connection and a file home holds no token, file name or handle", () => {
   useDemo();
-  setConnection({ serverUrl: "http://127.0.0.1:9/", token: TOKEN, role: "edit" });
+  documentLocation().setConnection({ serverUrl: "http://127.0.0.1:9/", token: TOKEN, role: "edit" });
   setHome("file", { handle: { name: FILE_NAME, kind: "file" }, format: "md", name: FILE_NAME });
   try {
     const doc = captureExportDocument();
@@ -49,7 +49,7 @@ test("E15: a capture taken with a live connection and a file home holds no token
       ["broll", "capturedAt", "clockMode", "commentNumbers", "comments", "document", "people", "production", "scenes", "shots", "tags", "title"]);
   } finally {
     setHome("none");
-    setConnection({});
+    documentLocation().setConnection({});
   }
 });
 

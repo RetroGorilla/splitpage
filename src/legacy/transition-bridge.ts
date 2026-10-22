@@ -4,7 +4,7 @@ import { createTransitions } from "../application/transitions/transitions.ts";
 import type { Transitions } from "../application/transitions/transitions.ts";
 import type { DestinationPort, IdentityPort, LiveDocumentPort } from "../application/transitions/ports.ts";
 import { migrateRows } from "../js/02-state.js";
-import { conn, home, serverHomeRev } from "../js/_home.js";
+import { currentConn, currentHome, documentLocation } from "./location-bridge.ts";
 import { confirmedGeneration } from "./save-bridge.ts";
 import { adoptReplacement, liveSession } from "./session-bridge.ts";
 
@@ -47,16 +47,16 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
       }
     },
     destination: {
-      identity: function (): unknown { return home; },
+      identity: function (): unknown { return currentHome(); },
       generation: confirmedGeneration,
       revision: function () {
-        const rev: unknown = serverHomeRev();
+        const rev: unknown = documentLocation().serverHomeRev();
         return typeof rev === "number" ? rev : null;
       }
     },
     connection: {
       current: function (): unknown {
-        const instance: unknown = conn;
+        const instance: unknown = currentConn();
         return instance;
       }
     }

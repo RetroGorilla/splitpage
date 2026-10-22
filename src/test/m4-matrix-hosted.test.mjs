@@ -5,6 +5,7 @@ import { S } from "../js/_state.js";
 import blobPolicy from "../../shared/blob-policy.js";
 import { createHeldFetch, createHeldFileHandle, mockClock, rightToday } from "./_m4-matrix.mjs";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
+import { documentLocation, serverStatus } from "../legacy/location-bridge.ts";
 
 const { refsIn } = blobPolicy;
 
@@ -21,7 +22,7 @@ const { startNewScript } = await import("../js/18b-file-menu.js");
 const { closeCollaborate, collaborateBlockedReason, openCollaborate } = await import("../js/13b-collaborate.js");
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const hosted = await import("../js/13-hosted.js");
-const homeModule = await import("../js/_home.js");
+const homeModule = await import("../legacy/location-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { setHome } = homeModule;
 
@@ -131,19 +132,19 @@ function newToasts(before) {
 }
 
 function resetTab() {
-  if (homeModule.home.kind === "server") {
+  if (homeModule.currentHome().kind === "server") {
     setHome("none");
     window.__hostedTest.setSession({ docId: null });
   }
-  if (homeModule.conn.serverUrl) hosted.pointTabAt("");
-  homeModule.updateConnection({ token: "", role: "", scope: "" });
-  S.serverMode.readOnly = false;
+  if (homeModule.currentConn().serverUrl) hosted.pointTabAt("");
+  documentLocation().updateConnection({ token: "", role: "", scope: "" });
+  serverStatus().recordMode({ readOnly: false });
   clearDirty();
 }
 
 async function scenario(run) {
   const server = createServer();
-  const held = createHeldFetch({ connection: () => homeModule.conn, answer: server.answer });
+  const held = createHeldFetch({ connection: () => homeModule.currentConn(), answer: server.answer });
   const uninstall = held.install();
   try {
     await run({ server: server, held: held });
@@ -167,11 +168,10 @@ function openHosted(doc, id, rev, options) {
   loadTestDocument(doc);
   flushEdits();
   clearDirty();
-  S.serverMode.available = true;
-  S.serverMode.readOnly = false;
+  serverStatus().recordMode({ available: true, readOnly: false });
   setHome("none");
   window.__hostedTest.setSession({ docId: id, rev: rev === undefined ? 1 : rev, role: o.role, scope: o.scope, blobs: o.blobs });
-  S.docIdWrittenOut = true;
+  documentLocation().markWrittenOut(true);
   clearDirty();
   return doc;
 }
@@ -180,11 +180,10 @@ function startUnpublished(doc) {
   loadTestDocument(doc);
   flushEdits();
   clearDirty();
-  S.serverMode.available = true;
-  S.serverMode.readOnly = false;
-  S.docIdWrittenOut = false;
+  serverStatus().recordMode({ available: true, readOnly: false });
+  documentLocation().markWrittenOut(false);
   setHome("none");
-  homeModule.updateConnection({ token: "", role: "edit", scope: "" });
+  documentLocation().updateConnection({ token: "", role: "edit", scope: "" });
   markDirty();
 }
 
@@ -195,8 +194,8 @@ function editRow(index, text) {
 
 function summary() {
   return {
-    homeId: homeModule.home.id,
-    rev: homeModule.home.rev,
+    homeId: homeModule.currentHome().id,
+    rev: homeModule.currentHome().rev,
     dirty: unsavedChanges(),
     texts: S.state.rows.map((r) => r.audioText),
     baseTexts: S.baseState ? S.baseState.rows.map((r) => r.audioText) : null
@@ -226,7 +225,7 @@ rightToday("S1", "a hosted save whose document is switched for another acknowled
   await settle();
   assert.equal(S.state.title, "B", "the other document is still open");
   assert.deepEqual(summary(), before, "the save of A changed nothing in B");
-  assert.equal(homeModule.home.rev, 4, "B keeps its own revision");
+  assert.equal(homeModule.currentHome().rev, 4, "B keeps its own revision");
   assert.equal(puts(held, "srv-b").length, 0, "nothing was sent for B");
 }));
 
@@ -286,7 +285,7 @@ async function requestsOfSaveChangedMidway(change) {
     holdFirst(held, "PUT", "api/blobs/");
     const saving = saveDoc();
     await held.gates.arrived("fetch");
-    homeModule.updateConnection(change);
+    documentLocation().updateConnection(change);
     held.gates.releaseAll("fetch");
     await saving;
     await settle();
@@ -447,7 +446,7 @@ rightToday("S9", "a role lowered mid-save authorizes no write and the work stays
   holdFirst(held, "PUT", "api/docs/srv-a");
   const saving = saveDoc();
   await held.gates.arrived("fetch");
-  homeModule.updateConnection({ role: "review", scope: "srv-a" });
+  documentLocation().updateConnection({ role: "review", scope: "srv-a" });
   held.gates.releaseAll("fetch");
   await saving;
   await settle();
@@ -469,11 +468,11 @@ rightToday("P2", "a publish that completes after another document was opened lea
   await held.gates.arrived("fetch");
   startNewScript();
   assert.equal(S.state.title, "Untitled Script");
-  const other = { dirty: unsavedChanges(), homeKind: homeModule.home.kind, base: JSON.stringify(S.baseState) };
+  const other = { dirty: unsavedChanges(), homeKind: homeModule.currentHome().kind, base: JSON.stringify(S.baseState) };
   held.gates.releaseAll("fetch");
   assert.equal(await publishing, false, "the publish reports that it did not adopt the copy");
   await settle();
-  assert.equal(homeModule.home.kind, other.homeKind, "the new document has no server home");
+  assert.equal(homeModule.currentHome().kind, other.homeKind, "the new document has no server home");
   assert.equal(unsavedChanges(), other.dirty, "the new document's dirty state is unchanged");
   assert.equal(JSON.stringify(S.baseState), other.base, "the new document's baseline is unchanged");
   assert.ok(newToasts(before).some((text) => /another script/.test(text)), "the user is told the copy was published and the other script left alone");
@@ -488,7 +487,7 @@ rightToday("P3", "typing during a publish leaves the document dirty (#248)", hos
   held.gates.releaseAll("fetch");
   assert.equal(await publishing, true);
   await settle();
-  assert.equal(homeModule.home.kind, "server", "the document was published");
+  assert.equal(homeModule.currentHome().kind, "server", "the document was published");
   assert.equal(unsavedChanges(), true, "the edit made during the publish is still unsaved");
   assert.deepEqual(S.baseState.rows.map((r) => r.audioText), ["One.", "Two."], "the baseline is what the server accepted");
 }));
@@ -513,7 +512,7 @@ rightToday("P1-token", "a publish that lands after a token change on the same se
   holdFirst(held, "POST", "api/docs");
   const publishing = hosted.publishToServer();
   await held.gates.arrived("fetch");
-  homeModule.updateConnection({ token: "a-new-token" });
+  documentLocation().updateConnection({ token: "a-new-token" });
   held.gates.releaseAll("fetch");
   assert.equal(await publishing, false);
   await settle();
@@ -541,9 +540,9 @@ rightToday("C1", "hosted Save As acknowledges no server edit and keeps the merge
   assert.ok(target.text().includes("Typed before Save As."), "the copy holds the unsaved text");
   assert.equal(held.requests.filter((r) => r.method === "PUT" || r.method === "POST").length, 0, "nothing was sent to the server");
   assert.equal(JSON.stringify(S.baseState), baseBefore, "the merge ancestor is the one the server last sent");
-  assert.equal(homeModule.home.kind, "server", "the document is still on the server");
-  assert.equal(homeModule.home.id, "srv-a");
-  assert.equal(homeModule.home.rev, 1, "the server revision did not move");
+  assert.equal(homeModule.currentHome().kind, "server", "the document is still on the server");
+  assert.equal(homeModule.currentHome().id, "srv-a");
+  assert.equal(homeModule.currentHome().rev, 1, "the server revision did not move");
   assert.equal(unsavedChanges(), true, "the edit is still unsaved on the server");
 }));
 
@@ -557,9 +556,7 @@ function collabScenario(answerFor, setup) {
     loadTestDocument(script("Collab", idOf("a")));
     flushEdits();
     clearDirty();
-    S.serverMode.available = true;
-    S.serverMode.readOnly = false;
-    S.serverMode.checked = true;
+    serverStatus().recordMode({ available: true, readOnly: false, checked: true });
     setHome("none");
     const run = await setup({ server, held });
     try {
@@ -575,7 +572,7 @@ rightToday("C2", "a collaboration step that completes after the modal closed cha
   await collabScenario(
     (r, path) => (path === "api/health" ? { status: 200, body: { ok: true, links: 1, version: "9.9.9", authRequired: false } } : null),
     async ({ held }) => async () => {
-      const modeBefore = JSON.stringify(S.serverMode);
+      const modeBefore = JSON.stringify(serverStatus().mode());
       holdFirst(held, "GET", "api/health");
       const opening = openCollaborate();
       await held.gates.arrived("fetch");
@@ -585,7 +582,7 @@ rightToday("C2", "a collaboration step that completes after the modal closed cha
       held.gates.releaseAll("fetch");
       await opening;
       await settle();
-      assert.equal(JSON.stringify(S.serverMode), modeBefore, "connect: the server facts did not change");
+      assert.equal(JSON.stringify(serverStatus().mode()), modeBefore, "connect: the server facts did not change");
       assert.equal(collabBody(), bodyAfterClose, "connect: the modal body was not redrawn");
       assert.equal(held.requests.length, requestsAfterClose, "connect: no further request was sent");
       assert.equal(document.getElementById("collab-modal").hidden, true, "connect: the modal stayed closed");
@@ -612,7 +609,7 @@ rightToday("C2", "a collaboration step that completes after the modal closed cha
       const requestsAfterClose = held.requests.length;
       held.gates.releaseAll("fetch");
       await settle();
-      assert.equal(homeModule.conn.token, "", "sign-in: no token was adopted");
+      assert.equal(homeModule.currentConn().token, "", "sign-in: no token was adopted");
       assert.equal(held.requests.length, requestsAfterClose, "sign-in: no further request was sent");
     }
   )();
@@ -757,7 +754,7 @@ async function capabilityRecord(role, scope) {
     const openRefused = hosted.serverOpenItemState();
     const collaborate = collaborateBlockedReason();
     const before = held.requests.length;
-    S.docIdWrittenOut = false;
+    documentLocation().markWrittenOut(false);
     await hosted.publishToServer({ quiet: true });
     await settle();
     const publish = held.requests.slice(before).filter((r) => r.method === "POST" && r.url.endsWith("api/docs")).length;
@@ -803,7 +800,7 @@ rightToday("S9-link", "a link turned off mid-save authorizes no write and the wo
   await saving;
   await settle();
   const after = summary();
-  assert.equal(hosted.linkTurnedOff, true, "the app knows the link is off");
+  assert.equal(serverStatus().linkTurnedOff(), true, "the app knows the link is off");
   assert.equal(after.rev, 1, "the revision did not move");
   assert.equal(after.dirty, true, "the document is still unsaved");
   assert.equal(after.texts[0], "Typed before the link went off.", "the typed text is still on screen");

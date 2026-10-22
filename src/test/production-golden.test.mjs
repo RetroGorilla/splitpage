@@ -3,6 +3,7 @@ import { nextTagStatus, normalizeTagName, registryKey } from "../core/document/t
 import { TAG_CATEGORIES, TAG_STATUSES, tagCategory, tagStatus } from "../core/production/looks.ts";
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
+import "./_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";

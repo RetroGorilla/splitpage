@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const bridge = await import("../legacy/session-bridge.ts");
-const homeMod = await import("../js/_home.js");
+const homeMod = await import("../legacy/location-bridge.ts");
 const { baseStateReason } = await import("../js/03-sync.js");
 const { documentIdentityPort, liveDocumentPort } = await import("../js/02b-doc-id.js");
 const { loadDocumentWithoutSession, loadTestDocument } = await import("./_document.mjs");
@@ -48,11 +48,11 @@ test("no document leaves the session holding none", () => {
 });
 
 test("loading a test document sets no destination, baseline or identity", () => {
-  const home = homeMod.home;
+  const home = homeMod.currentHome();
   const reason = baseStateReason();
   const writtenOut = documentIdentityPort.writtenOut();
   loadTestDocument(raw("Third"));
-  assert.equal(homeMod.home, home);
+  assert.equal(homeMod.currentHome(), home);
   assert.equal(baseStateReason(), reason);
   assert.equal(documentIdentityPort.writtenOut(), writtenOut);
 });

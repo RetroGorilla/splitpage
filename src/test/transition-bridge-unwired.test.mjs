@@ -2,6 +2,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import "./_location-started.mjs";
 
 const bridge = await import("../legacy/transition-bridge.ts");
 const { liveSession, requestRefresh } = await import("../legacy/session-bridge.ts");
@@ -70,11 +71,11 @@ test("a replacement through the API disposes the old document's session: its arm
 
 test("captureOperation and stillOwns follow the live session, document, destination and connection", async () => {
   const stop = startWith([]);
-  const home = await import("../js/_home.js");
+  const loc = await import("../legacy/location-bridge.ts");
   const saves = await import("../legacy/save-bridge.ts");
   const stopSaves = saves.startSaves({
     write: async () => ({ kind: "saved" }),
-    destination: () => home.home,
+    destination: () => loc.currentHome(),
     keyOf: (h) => ({ owner: h, name: "" }),
     obsolete: () => {},
     running: () => {},
@@ -87,16 +88,16 @@ test("captureOperation and stillOwns follow the live session, document, destinat
     saves.confirmSavedNow();
     const ctx = bridge.captureOperation();
     assert.equal(ctx.docId, S.state.docId);
-    assert.equal(ctx.destination, home.home);
+    assert.equal(ctx.destination, loc.currentHome());
     assert.equal(ctx.destinationGeneration, saves.confirmedGeneration(), "the destination's confirmed generation is captured");
-    assert.equal(ctx.connection, home.conn);
+    assert.equal(ctx.connection, loc.currentConn());
     assert.equal(bridge.stillOwns(ctx), true);
-    home.updateConnection({ token: "another" });
+    loc.documentLocation().updateConnection({ token: "another" });
     assert.equal(bridge.stillOwns(ctx), false, "a token change is another connection");
     const again = bridge.captureOperation();
     bridge.documentTransitions().open({ from: { document: script("Owned") }, reason: "reopened" });
     assert.equal(bridge.stillOwns(again), false, "a same-id reopen is another epoch");
-    home.updateConnection({ token: "" });
+    loc.documentLocation().updateConnection({ token: "" });
   } finally {
     stopSaves();
     stop();

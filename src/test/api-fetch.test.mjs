@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import "./_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
