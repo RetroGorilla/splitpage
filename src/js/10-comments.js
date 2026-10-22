@@ -1,7 +1,7 @@
 import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
 import { pad2 } from "../core/production/timing.ts";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
 import {
   addCommentCommand,
   addReplyCommand,
@@ -15,7 +15,6 @@ import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { editorSelection } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
-import { S } from "./_state.js";
 import { formatClock, formatDateClock } from "../../shared/clock.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
@@ -295,8 +294,8 @@ function commentAssigneeCandidates() {
     seen[norm] = true;
     out.push(clean);
   }
-  (S.state.people || []).forEach(function (p) { add(p.name); });
-  (S.state.comments || []).forEach(function (c) {
+  (currentDocument()?.people || []).forEach(function (p) { add(p.name); });
+  (currentDocument()?.comments || []).forEach(function (c) {
     add(c.author);
     (c.replies || []).forEach(function (r) { add(r.author); });
   });
@@ -329,11 +328,12 @@ function commentAssigneeOptionsHtml(current) {
 }
 
 function renderCommentFilterBar() {
-  if (!S.state) return;
+  const doc = currentDocument();
+  if (!doc) return;
   var seg = document.getElementById("comments-filter-seg");
   if (seg) {
     var modeCounts = { open: 0, resolved: 0, all: 0 };
-    S.state.comments.forEach(function (c) {
+    doc.comments.forEach(function (c) {
       if (!commentMatchesAssigneeFilter(c, commentFilter.assignee)) return;
       modeCounts.all++;
       modeCounts[c.resolved ? "resolved" : "open"]++;
@@ -354,7 +354,7 @@ function renderCommentFilterBar() {
   var mode = commentFilter.mode;
   function countFor(matcher) {
     var n = 0;
-    S.state.comments.forEach(function (c) { if (commentMatchesFilterMode(c, mode) && matcher(c)) n++; });
+    doc.comments.forEach(function (c) { if (commentMatchesFilterMode(c, mode) && matcher(c)) n++; });
     return n;
   }
   var meNorm = normalizeTagName(getSavedAuthorName());
@@ -447,11 +447,12 @@ function commentPositionCompare(a, b) {
 }
 
 function anchorTextFromState(cmtId) {
-  if (!S.state) return null;
+  const doc = currentDocument();
+  if (!doc) return null;
   var cIdx = findCommentIndex(cmtId);
   if (cIdx === -1) return null;
-  var c = S.state.comments[cIdx];
-  var row = S.state.rows[readSession(function (doc) { return rowIndexOf(doc, c.rowId); })];
+  const c = doc.comments[cIdx];
+  const row = doc.rows[readSession(function (doc) { return rowIndexOf(doc, c.rowId); })];
   if (!row) return null;
   var body = inertBody(row[c.field] || "");
   var span = body.querySelector('.cmt-anchor[data-cmt="' + cssAttr(cmtId) + '"]');
@@ -478,8 +479,10 @@ function anchorUnwrapped(rowId, field, cmtId) {
 }
 
 export function syncAnchorResolvedClasses() {
+  const doc = currentDocument();
+  if (!doc) return;
   var resolvedIds = idMap();
-  S.state.comments.forEach(function (c) { if (c.resolved) resolvedIds[c.id] = true; });
+  doc.comments.forEach(function (c) { if (c.resolved) resolvedIds[c.id] = true; });
   document.querySelectorAll("#rows .cmt-anchor").forEach(function (el) {
     var id = el.getAttribute("data-cmt");
     el.classList.toggle("resolved", !!resolvedIds[id]);
@@ -487,7 +490,9 @@ export function syncAnchorResolvedClasses() {
 }
 
 export function updateCommentsCount() {
-  var open = S.state.comments.filter(function (c) { return !c.resolved; }).length;
+  const doc = currentDocument();
+  if (!doc) return;
+  const open = doc.comments.filter(function (c) { return !c.resolved; }).length;
   var badge = document.getElementById("comments-badge");
   if (open > 0) { badge.hidden = false; badge.textContent = open > 99 ? "99+" : String(open); }
   else badge.hidden = true;
@@ -576,12 +581,14 @@ function sendNow() {
 }
 
 function findCommentIndex(id) {
-  for (var i = 0; i < S.state.comments.length; i++) if (S.state.comments[i].id === id) return i;
+  const doc = currentDocument();
+  if (!doc) return -1;
+  for (let i = 0; i < doc.comments.length; i++) if (doc.comments[i].id === id) return i;
   return -1;
 }
 
 export function openCommentsPanel() {
-  if (!S.state) return;
+  if (!currentDocument()) return;
   openSidePanel("comments-panel");
   captureReplyDrafts();
   renderComments();
@@ -598,9 +605,11 @@ export function toggleResolve(id) {
 }
 
 function deleteComment(id) {
+  const doc = currentDocument();
+  if (!doc) return;
   var idx = findCommentIndex(id);
   if (idx === -1) return;
-  var c = S.state.comments[idx];
+  const c = doc.comments[idx];
   runDocumentEdit(deleteCommentCommand(id, anchorUnwrapped(c.rowId, c.field, c.anchorId)));
   delete expandedReplyIds[id];
   delete replyDrafts[id];
@@ -659,8 +668,10 @@ export function postReply(id) {
 }
 
 export function jumpToAnchor(cmtId) {
+  const doc = currentDocument();
+  if (!doc) return;
   var cIdx = findCommentIndex(cmtId);
-  if (cIdx !== -1) revealRow(S.state.comments[cIdx].rowId);
+  if (cIdx !== -1) revealRow(doc.comments[cIdx].rowId);
   var el = document.querySelector('#rows .cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
   if (!el) {
     showToast("That text is no longer in the script.", "warn");
@@ -673,8 +684,10 @@ export function jumpToAnchor(cmtId) {
 }
 
 export function jumpToComment(cmtId) {
+  const doc = currentDocument();
+  if (!doc) return;
   var idx = findCommentIndex(cmtId);
-  var target = idx === -1 ? null : S.state.comments[idx];
+  const target = idx === -1 ? null : doc.comments[idx];
   if (target && (!commentMatchesFilterMode(target, commentFilter.mode) ||
       !commentMatchesAssigneeFilter(target, commentFilter.assignee))) {
     commentFilter.mode = "all";
@@ -949,9 +962,11 @@ function conflictCardHtml(c) {
 }
 
 export function restoreConflictValue(commentId) {
+  const doc = currentDocument();
+  if (!doc) return;
   var ci = findCommentIndex(commentId);
   if (ci === -1) return;
-  var c = S.state.comments[ci];
+  const c = doc.comments[ci];
   if (c.field === "title") {
     pushSnapshot("Before using your version of the title");
     runDocumentEdit(restoreConflictCommand(commentId, { kind: "title", title: c.emptyValue ? "" : (c.titleValue || "") }, sessionStamps));
@@ -984,16 +999,17 @@ export function captureReplyDrafts() {
 var COMMENTS_HINT_HTML = '<p class="comments-hint">To start a thread, select words in the script and choose Comment.</p>';
 
 export function renderComments() {
-  if (!S.state) return;
+  const doc = currentDocument();
+  if (!doc) return;
   var listEl = document.getElementById("comments-list");
   if (!listEl) return;
   renderCommentFilterBar();
-  var items = S.state.comments.filter(function (c) {
+  let items = doc.comments.filter(function (c) {
     return commentMatchesFilterMode(c, commentFilter.mode) && commentMatchesAssigneeFilter(c, commentFilter.assignee);
   });
   items = items.slice().sort(commentSortMode() === "recent" ? commentRecentOrder : commentPositionCompare);
   if (!items.length) {
-    listEl.innerHTML = '<div class="comments-empty">' + (S.state.comments.length ? "No comments match this filter." : "No comments yet.") + '</div>' +
+    listEl.innerHTML = '<div class="comments-empty">' + (doc.comments.length ? "No comments match this filter." : "No comments yet.") + '</div>' +
       COMMENTS_HINT_HTML;
     return;
   }
