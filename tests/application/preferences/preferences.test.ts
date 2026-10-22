@@ -147,18 +147,24 @@ test("the prompter's three switches read on only for 1 and store 1 or 0", () => 
   assert.equal(prefs.prompterFlag("prompterMirror"), false);
 });
 
-test("the script zoom reads 1 unless a value in range is stored, and is stored as written", () => {
+test("the script zoom reads 1 unless a value in range is stored, rounds writes and removes the default", () => {
   const { prefs, storage, announced } = setup();
   assert.equal(prefs.scriptScale(), 1);
   storage.items.set("splitpage-script-scale", "2.5");
   assert.equal(prefs.scriptScale(), 1);
   storage.items.set("splitpage-script-scale", "0.7");
   assert.equal(prefs.scriptScale(), 0.7);
-  prefs.setScriptScale(1.3);
+  prefs.setScriptScale(1.304);
   assert.equal(storage.items.get("splitpage-script-scale"), "1.3");
   prefs.setScriptScale(1);
-  assert.equal(storage.items.get("splitpage-script-scale"), "1");
-  assert.deepEqual(announced.map((c) => c.value), ["1.3", "1"]);
+  assert.equal(storage.items.has("splitpage-script-scale"), false);
+  prefs.setScriptScale(1.004);
+  assert.equal(storage.items.has("splitpage-script-scale"), false);
+  assert.deepEqual(announced, [
+    { key: "splitpage-script-scale", value: "1.3" },
+    { key: "splitpage-script-scale", value: null },
+    { key: "splitpage-script-scale", value: null }
+  ]);
 });
 
 test("the collaboration server is read as stored, and the desktop notice is shown again by removing its key", () => {
@@ -168,12 +174,19 @@ test("the collaboration server is read as stored, and the desktop notice is show
   assert.equal(prefs.collabServer(), "https://mine.example.com/");
   prefs.setCollabServer(null);
   assert.equal(storage.items.has("splitpage-collab-server"), false);
-  storage.items.set("splitpage-desktop-notice-dismissed", "1");
+  assert.equal(prefs.desktopNoticeDismissed(), false);
+  storage.items.set("splitpage-desktop-notice-dismissed", "0");
+  assert.equal(prefs.desktopNoticeDismissed(), false);
+  prefs.dismissDesktopNotice();
+  assert.equal(prefs.desktopNoticeDismissed(), true);
+  assert.equal(storage.items.get("splitpage-desktop-notice-dismissed"), "1");
   prefs.resetDesktopNotice();
+  assert.equal(prefs.desktopNoticeDismissed(), false);
   assert.equal(storage.items.has("splitpage-desktop-notice-dismissed"), false);
   assert.deepEqual(announced, [
     { key: "splitpage-collab-server", value: "https://mine.example.com/" },
     { key: "splitpage-collab-server", value: null },
+    { key: "splitpage-desktop-notice-dismissed", value: "1" },
     { key: "splitpage-desktop-notice-dismissed", value: null }
   ]);
 });
@@ -200,6 +213,41 @@ test("the settings carried by Export app data keep their names, keys, order and 
   assert.deepEqual(["60", "400", "59", "401", "150.5", "0150"].map((v) => valid("defaultWpm", v)), [true, true, false, false, false, false]);
   assert.deepEqual(["0", "1", "yes"].map((v) => valid("rundownMin", v)), [true, true, false]);
   assert.deepEqual(["0.7", "2", "1.125", "0.6", "1.1234", "2.1"].map((v) => valid("scriptScale", v)), [true, true, true, false, false, false]);
+});
+
+test("rundown and zoom still export and import their stored forms silently, excluding desktop notice dismissal", () => {
+  const source = setup();
+  source.prefs.setRundownMin(true);
+  source.prefs.setScriptScale(1.25);
+  source.prefs.dismissDesktopNotice();
+  const exported = source.prefs.appDataExport(settingsAppData());
+  assert.equal(exported["rundownMin"], "1");
+  assert.equal(exported["scriptScale"], "1.25");
+  assert.equal(Object.hasOwn(exported, "desktopNotice"), false);
+  const target = setup();
+  assert.deepEqual(target.prefs.appDataImport(exported, settingsAppData()), ["rundownMin", "scriptScale"]);
+  assert.equal(target.prefs.rundownMin(), true);
+  assert.equal(target.prefs.scriptScale(), 1.25);
+  assert.equal(target.prefs.desktopNoticeDismissed(), false);
+  assert.deepEqual(target.announced, []);
+  source.prefs.setScriptScale(1);
+  assert.equal(source.prefs.appDataExport(settingsAppData())["scriptScale"], null);
+});
+
+test("desktop notice and zoom writes still announce when storage is unavailable", () => {
+  const announced: PreferenceChange[] = [];
+  const prefs = createPreferences({ storage: () => null, announce: (change) => { announced.push(change); } });
+  assert.equal(prefs.desktopNoticeDismissed(), false);
+  prefs.dismissDesktopNotice();
+  prefs.resetDesktopNotice();
+  prefs.setScriptScale(1.25);
+  prefs.setScriptScale(1);
+  assert.deepEqual(announced, [
+    { key: "splitpage-desktop-notice-dismissed", value: "1" },
+    { key: "splitpage-desktop-notice-dismissed", value: null },
+    { key: "splitpage-script-scale", value: "1.25" },
+    { key: "splitpage-script-scale", value: null }
+  ]);
 });
 
 test("autosave is on until it is switched off, and switching announces the change", () => {
