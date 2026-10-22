@@ -4,7 +4,6 @@ import { showToast } from "../legacy/effects-bridge.ts";
 import { nextTagStatus, normalizeTagName } from "../core/document/tags.ts";
 import { formatDuration, pad2 } from "../core/production/timing.ts";
 import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, tagStatus } from "../core/production/looks.ts";
-import { S } from "./_state.js";
 import { rowSeconds } from "./01-scene-status.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
@@ -31,7 +30,7 @@ import { planQuickAdd } from "../core/production/tags.ts";
 import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddCommand, tagCellsCommand, updateTagsCommand } from "../application/commands/production-records.ts";
 import { PERSON_NAME_MAX, personNamed } from "../core/production/records.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
-import { readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
 import { retagMentions, retagRewrites } from "../legacy/tag-rewrites.ts";
 import { rewrittenCopies } from "../application/commands/document-edit.ts";
 import { gearGroupBy, productionGroupBy, setTagAddingPerson, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../application/tag-panel-state.ts";
@@ -42,7 +41,7 @@ export { breakdownRows, breakdownTable };
 export var IS_TOUCH;
 
 export function openProductionPanel() {
-  if (!S.state) return;
+  if (!currentDocument()) return;
   openSidePanel("production-panel");
   renderProduction();
 }
@@ -58,7 +57,7 @@ function gearEntries() {
 }
 
 export function openGearPanel() {
-  if (!S.state) return;
+  if (!currentDocument()) return;
   openSidePanel("gear-panel");
   fillGearQuickAdd();
   renderProduction();
@@ -77,7 +76,7 @@ function updateGearBadge(n) {
 }
 
 export function updateGearCount() {
-  updateGearBadge(S.state ? gearEntries().length : 0);
+  updateGearBadge(currentDocument() ? gearEntries().length : 0);
 }
 
 function updateGearHeadCount(n) {
@@ -89,7 +88,7 @@ function updateGearHeadCount(n) {
 
 export function renderGearList() {
   var panel = document.getElementById("gear-panel");
-  if (!panel || panel.hidden || !S.state) return;
+  if (!panel || panel.hidden || !currentDocument()) return;
   dropEditingForReview();
   var listEl = document.getElementById("gear-list");
   var entries = gearEntries();
@@ -242,8 +241,8 @@ function dropEditingForReview() {
 }
 
 function untaggedMentionCount(item) {
-  if (!S.state || !item.name) return 0;
-  return bulkTagRows(S.state.rows, item.name, item.cat.id, item.name, false, true).hits;
+  if (!currentDocument() || !item.name) return 0;
+  return bulkTagRows(currentDocument().rows, item.name, item.cat.id, item.name, false, true).hits;
 }
 
 function untaggedMentionsHtml(item, ro) {
@@ -304,7 +303,7 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
       '<select class="tag-owner-select' + (personById(item.owner) ? '' : ' is-unassigned') + '" id="' + ownerId +
         '" data-key="' + k + '"' + off + '>' +
         '<option value=""' + (item.owner ? '' : ' selected') + '>Unassigned</option>' +
-        S.state.people.map(function (p) {
+        (currentDocument()?.people || []).map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '"' +
             (p.id === item.owner ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
         }).join("") +
@@ -440,7 +439,7 @@ function renderProductionByPerson(all) {
     if (!buckets[id]) { buckets[id] = { id: id, label: label, items: [] }; order.push(id); }
     return buckets[id];
   }
-  S.state.people.forEach(function (p) { bucket(p.id, p.name); });
+  (currentDocument()?.people || []).forEach(function (p) { bucket(p.id, p.name); });
   all.forEach(function (item) {
     var p = personById(item.owner);
     bucket(p ? p.id : "", p ? p.name : "Unassigned").items.push(item);
@@ -483,7 +482,9 @@ function renderProductionByShoot(entries) {
     return groups[key];
   }
 
-  S.state.rows.forEach(function (row, i) {
+  const doc = currentDocument();
+  if (!doc) return '<div class="comments-empty">Nothing to schedule yet.</div>';
+  doc.rows.forEach(function (row, i) {
     var here = byRow[i] || [];
     var locs = here.filter(function (t) { return t.cat.id === "location"; });
     var targets = locs.length
@@ -506,8 +507,8 @@ function renderProductionByShoot(entries) {
 
   return order.map(function (key) {
     var g = groups[key];
-    var shot = g.rows.filter(function (i) { return S.state.rows[i].status === "shot"; }).length;
-    var secs = g.rows.reduce(function (n, i) { return n + rowSeconds(S.state.rows[i]); }, 0);
+    const shot = g.rows.filter(function (i) { return doc.rows[i].status === "shot"; }).length;
+    const secs = g.rows.reduce(function (n, i) { return n + rowSeconds(doc.rows[i]); }, 0);
     var done = shot === g.rows.length;
     return '<section class="shoot-group" style="--dot:' + (key ? TAG_CATEGORIES[1].color : "var(--border-strong)") + '">' +
       '<h3 class="shoot-head">' +
@@ -521,7 +522,7 @@ function renderProductionByShoot(entries) {
         '<dt>Scenes</dt>' +
         '<dd class="tag-scenes">' +
           joinSceneLinks(g.rows.map(function (i) {
-            var row = S.state.rows[i];
+            const row = doc.rows[i];
             var st = rowStatus(row.status) || ROW_STATUSES[0];
             var label = "Scene " + pad2(i + 1) + " · " + st.label + " — go to it";
             return '<button type="button" class="tag-scene jump-link' + (row.status === "shot" ? ' is-shot' : '') +
@@ -558,7 +559,7 @@ export function renderProduction() {
 
 function renderProductionPanel() {
   var panel = document.getElementById("production-panel");
-  if (!panel || panel.hidden || !S.state) return;
+  if (!panel || panel.hidden || !currentDocument()) return;
   dropEditingForReview();
   var entries = productionEntries();
   if (selectedKeys().length) pruneProductionSelection(entries);
@@ -570,7 +571,7 @@ function renderProductionPanel() {
 function renderProductionList(entries) {
   var listEl = document.getElementById("production-list");
   var panel = document.getElementById("production-panel");
-  if (!listEl || !panel || panel.hidden || !S.state) return;
+  if (!listEl || !panel || panel.hidden || !currentDocument()) return;
   entries = entries || productionEntries();
 
   document.querySelectorAll("#production-modes [data-group]").forEach(function (b) {
@@ -842,7 +843,7 @@ function renderBulkBar(entries) {
         '<select class="bulk-select" id="bulk-owner" aria-label="Assign the selected items to">' +
           '<option value="__none__" selected>Assign to…</option>' +
           '<option value="">Unassigned</option>' +
-          S.state.people.map(function (p) {
+          (currentDocument()?.people || []).map(function (p) {
             return '<option value="' + escapeHtml(p.id) + '">' + escapeHtml(p.name) + '</option>';
           }).join("") +
         '</select>' + iconHtml("i-chevron-down", "ev-chevron") +
