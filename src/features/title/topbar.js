@@ -1,10 +1,18 @@
-import { rowMotionMs } from "./04a-row-motion.js";
+import { cssDurationMs } from "../common/css-duration.js";
 
-export function __init() {
+export function mountTopbar({ window }) {
+  const document = window.document;
+  const releases = [];
+  let disposed = false;
+  function listen(target, name, handler, options) {
+    target.addEventListener(name, handler, options);
+    releases.push(function () { target.removeEventListener(name, handler, options); });
+  }
   (function setupToolbarLabels() {
     const buttons = document.querySelectorAll(".toolbar .panel-toggle, .toolbar .btn-mode");
     if (!buttons.length) return;
     function measure() {
+      if (disposed) return;
       buttons.forEach(function (btn) {
         const label = btn.querySelector(".btn-label");
         if (!label) return;
@@ -45,6 +53,11 @@ export function __init() {
     const row = document.querySelector(".topbar-row");
     let lastWidth = -1;
     let jumpFrame = 0;
+    releases.push(function () {
+      if (jumpFrame) cancelAnimationFrame(jumpFrame);
+      if (toolbar) toolbar.classList.remove("is-width-jump");
+      buttons.forEach(function (btn) { btn.classList.remove("is-label-open"); });
+    });
     function widthNow(w) {
       const jump = lastWidth >= 0 && Math.abs(w - lastWidth) > 24;
       lastWidth = w;
@@ -59,21 +72,24 @@ export function __init() {
       });
     }
     if (row && typeof ResizeObserver !== "undefined") {
-      new ResizeObserver(function (entries) {
+      const observer = new ResizeObserver(function (entries) {
+        if (disposed) return;
         widthNow(entries[entries.length - 1].contentRect.width);
-      }).observe(row);
+      });
+      observer.observe(row);
+      releases.push(function () { observer.disconnect(); });
     } else {
-      window.addEventListener("resize", function () { widthNow(window.innerWidth); });
+      listen(window, "resize", function () { widthNow(window.innerWidth); });
     }
     buttons.forEach(function (btn) {
       if (btn.id === "btn-write") return;
-      btn.addEventListener("pointerenter", function (e) {
+      listen(btn, "pointerenter", function (e) {
         if (e.pointerType === "touch") return;
         settleReach(btn);
         btn.classList.add("is-label-open");
       });
-      btn.addEventListener("focus", function () { settleReach(btn); });
-      btn.addEventListener("pointerleave", function () {
+      listen(btn, "focus", function () { settleReach(btn); });
+      listen(btn, "pointerleave", function () {
         btn.classList.remove("is-label-open");
       });
     });
@@ -81,7 +97,7 @@ export function __init() {
 
   const titleInput = document.getElementById("doc-title");
   if (titleInput) {
-    titleInput.addEventListener("mouseenter", function () {
+    listen(titleInput, "mouseenter", function () {
       titleInput.title = titleInput.value || "";
     });
   }
@@ -96,6 +112,12 @@ export function __init() {
     let queued = false;
     let playing = [];
     let sheddingTimer = 0;
+    let scrollFrame = 0;
+    releases.push(function () {
+      if (scrollFrame) cancelAnimationFrame(scrollFrame);
+      stopPlaying();
+      topbar.classList.remove("is-condensed", "is-condensing");
+    });
 
     function motionOK() {
       try {
@@ -132,8 +154,8 @@ export function __init() {
 
     function play(parts, before) {
       const after = measure(parts);
-      const moveMs = rowMotionMs("--dur-move", 180);
-      const enterMs = rowMotionMs("--dur-enter", 180);
+      const moveMs = cssDurationMs(window, "--dur-move", 180);
+      const enterMs = cssDurationMs(window, "--dur-enter", 180);
       const easeStandard = "cubic-bezier(0.2, 0, 0, 1)";
       const easeEnter = "cubic-bezier(0.05, 0.7, 0.1, 1)";
 
@@ -192,7 +214,7 @@ export function __init() {
         sheddingTimer = setTimeout(function () {
           sheddingTimer = 0;
           topbar.classList.remove("is-condensing");
-        }, rowMotionMs("--dur-move", 180));
+        }, cssDurationMs(window, "--dur-move", 180));
       }
     }
 
@@ -210,10 +232,20 @@ export function __init() {
     function onScroll() {
       if (queued) return;
       queued = true;
-      requestAnimationFrame(function () { applyCondensedState(true); });
+      scrollFrame = requestAnimationFrame(function () {
+        scrollFrame = 0;
+        if (!disposed) applyCondensedState(true);
+      });
     }
 
-    window.addEventListener("scroll", onScroll, { passive: true });
+    listen(window, "scroll", onScroll, { passive: true });
     applyCondensedState(false);
   })();
+  return {
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      while (releases.length) releases.pop()();
+    }
+  };
 }

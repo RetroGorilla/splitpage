@@ -30,6 +30,11 @@ function rawColours(text) {
   return failures;
 }
 
+function addRuntimeDefinitions(url, definitions) {
+  const source = readFileSync(url, "utf8");
+  for (const match of source.matchAll(/\.setProperty\(\s*["'](--[\w-]+)["']\s*,|(--[\w-]+)\s*:/g)) definitions.add(match[1] || match[2]);
+}
+
 function runtimeDefinitions(directory) {
   const definitions = new Set();
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -37,8 +42,7 @@ function runtimeDefinitions(directory) {
     if (entry.isDirectory()) {
       for (const name of runtimeDefinitions(url)) definitions.add(name);
     } else if (/\.(?:js|ts)$/.test(entry.name)) {
-      const source = readFileSync(url, "utf8");
-      for (const match of source.matchAll(/\.setProperty\(\s*["'](--[\w-]+)["']\s*,|(--[\w-]+)\s*:/g)) definitions.add(match[1] || match[2]);
+      addRuntimeDefinitions(url, definitions);
     }
   }
   return definitions;
@@ -58,6 +62,13 @@ test("the literal guard checks fallbacks, gradients, shadows and media blocks", 
 test("every CSS variable has a CSS definition or a runtime assignment", () => {
   const rules = cssRules(css);
   const definitions = runtimeDefinitions(new URL("src/js/", repoUrl));
+  for (const file of [
+    "src/features/rows/row-motion.js",
+    "src/features/title/topbar.js",
+    "src/features/notices/busy.js",
+    "src/features/editing/cell-reach.js",
+    "src/features/notices/phone-bar.js"
+  ]) addRuntimeDefinitions(new URL(file, repoUrl), definitions);
   for (const rule of rules) {
     for (const { property } of rule.declarations) if (property.startsWith("--")) definitions.add(property);
   }

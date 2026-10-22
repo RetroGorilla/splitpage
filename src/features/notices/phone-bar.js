@@ -52,21 +52,25 @@ function closeOpenPanels() {
   });
 }
 
-export function __init() {
+export function mountPhoneBar({ window }) {
+  var document = window.document;
   var bar = document.getElementById("phone-bar");
-  if (!bar) return;
+  if (!bar) return { dispose: function () {} };
+  var disposed = false;
+  var observer = null;
 
-  bar.addEventListener("click", function (e) {
+  function onClick(e) {
     var tab = e.target.closest ? e.target.closest(".phone-tab") : null;
     if (!tab) return;
     var target = tab.getAttribute("data-for");
     if (target === "script") { closeOpenPanels(); return; }
     var btn = document.getElementById(target);
     if (btn) btn.click();
-  });
+  }
+  bar.addEventListener("click", onClick);
 
   if (typeof MutationObserver === "function") {
-    var observer = new MutationObserver(syncPhoneBar);
+    observer = new MutationObserver(function () { if (!disposed) syncPhoneBar(); });
     PANEL_CLOSERS.forEach(function (pair) {
       var panel = document.getElementById(pair[0]);
       if (panel) observer.observe(panel, { attributes: true, attributeFilter: ["hidden"] });
@@ -77,4 +81,12 @@ export function __init() {
     });
   }
   syncPhoneBar();
+  return {
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      bar.removeEventListener("click", onClick);
+      if (observer) observer.disconnect();
+    }
+  };
 }
