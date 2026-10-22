@@ -1,5 +1,5 @@
 import { createDocumentSession } from "../application/session/document-session.ts";
-import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView, Plan, ReloadedContent, Replay, SessionCounters, SessionListener } from "../application/session/document-session.ts";
+import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView, Plan, ReloadedContent, Replay, SessionCounters, SessionListener, Stamp } from "../application/session/document-session.ts";
 import type { ChangeSet } from "../application/session/change-set.ts";
 import type { CapabilityPort, CellTextPorts, DocumentEntry, EditorPort, EffectPort, RecordsPlan, ReportPort, StampPorts, TimerPort, UndoPort } from "../application/session/ports.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
@@ -96,6 +96,7 @@ const session: DocumentSession = {
   run: function (command: Command) { return running().current.run(command); },
   replay: function (task: Replay) { return running().current.replay(task); },
   amend: function (task: Replay) { return running().current.amend(task); },
+  stamp: function (task: Stamp) { return running().current.stamp(task); },
   noteEdit: function (changes?: ChangeSet) { running().current.noteEdit(changes); },
   refresh: function (job: string) { running().current.refresh(job); },
   subscribe: function (listener: SessionListener) { return running().current.subscribe(listener); },
@@ -177,6 +178,18 @@ export function runCommand(command: Command): CommandOutcome {
   running();
   followLiveDocument();
   return session.run(command);
+}
+
+export function runDocumentEdit(command: Command): boolean {
+  const outcome = runCommand(command);
+  if (outcome.kind === "failed") throw outcome.error;
+  return outcome.kind === "applied" || outcome.kind === "committed";
+}
+
+export function stampDocument(task: Stamp): CommandOutcome {
+  running();
+  followLiveDocument();
+  return session.stamp(task);
 }
 
 export function editAllowed(): boolean {

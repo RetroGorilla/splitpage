@@ -7,7 +7,6 @@ import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import {
   currentProductionIndex,
-  deletePerson,
   healTagRegistry,
   productionEntries,
   productionIndexStats,
@@ -20,6 +19,8 @@ import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { planBrollRecords } from "../core/production/broll.ts";
 import { seededHealRounds } from "./_heal-rounds.mjs";
 import { loadTestDocument } from "./_document.mjs";
+import { deletePersonCommand } from "../application/commands/production-records.ts";
+import { runDocumentEdit } from "../legacy/session-bridge.ts";
 
 initBroll();
 
@@ -72,7 +73,7 @@ test("deleting a person clears them as the owner of production items and b-roll 
     ],
     brollShots: [shot("b1", "steam", { owner: "p1" }), shot("b2", "pour", { owner: "p2" }), shot("b3", "cup")]
   });
-  deletePerson("p1");
+  assert.equal(runDocumentEdit(deletePersonCommand("p1")), true);
   assert.deepEqual(s.people.map((p) => p.id), ["p2"]);
   assert.deepEqual(s.productionTags.map((t) => t.owner), ["", "p2"]);
   assert.deepEqual(s.brollShots.map((b) => b.owner), ["", "p2", ""]);
