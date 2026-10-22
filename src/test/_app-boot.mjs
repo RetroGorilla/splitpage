@@ -9,7 +9,7 @@ let held = S.state;
 
 function siteOf(stack) {
   for (const line of String(stack).split("\n").slice(1)) {
-    const named = /^\s*at (?:async )?([\w$.<>]+) \(.*\/src\/js\/([\w.-]+\.js):\d+:\d+\)$/.exec(line);
+    const named = /^\s*at (?:async )?([\w$.<>]+)(?: \[as [\w$]+\])? \(.*\/src\/js\/([\w.-]+\.js):\d+:\d+\)$/.exec(line);
     if (named) return named[2] + "#" + named[1].replace(/^Object\./, "");
     const bare = /^\s*at (?:async )?.*\/src\/js\/([\w.-]+\.js):\d+:\d+$/.exec(line);
     if (bare) return bare[1] + "#(anonymous)";

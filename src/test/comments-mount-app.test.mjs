@@ -8,7 +8,7 @@ window.Element.prototype.scrollIntoView = function () {};
 window.Element.prototype.scrollBy = function () {};
 await bootApp();
 const { commentSortMode } = await import("../application/comment-sort.ts");
-const { mountCommentsFeature } = await import("../js/22c-comments-wiring.js");
+const { mountCommentsFeature } = await import("../bootstrap/wiring/comments.ts");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../js/05-render.js");
 const { updateConnection } = await import("../js/_home.js");

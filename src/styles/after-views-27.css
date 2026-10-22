@@ -1,4 +1,0 @@
-    .toolbar { flex: none; gap: 0; }
-    .btn-group, #btn-write, #btn-collab { display: none; }
-    .btn.cmdk-trigger { width: 44px; height: 44px; }
-    .btn.cmdk-trigger .btn-icon { width: 20px; height: 20px; }
