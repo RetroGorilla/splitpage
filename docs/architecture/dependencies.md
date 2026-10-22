@@ -340,9 +340,13 @@ resolved entry.
 
 ## The legacy initializer shim
 
-`src/js/_entry.js` is the legacy initializer shim, the build entry until plan §8's 4.x composition root replaces it. Since milestone 7's step 7.1 it does three things, in this order: it calls `wireApp` (`src/bootstrap/wiring.ts`) with the dependencies the numbered modules export, which builds the action and export registries, the document session, the save coordinator, the transitions, the draft recovery, the editor's owners and the preferences; it calls the 68 numbered modules' `__init` in numbered order; and it hands the wiring to `startAppWhenReady` (`src/bootstrap/app.ts`), which mounts the features and starts the actions on DOM ready. If `wireApp` throws, the shim reports the `WiringError` with `console.error` and calls no `__init` and no mount. Since 7.2 the session's effects come the same way: the shim imports `legacySessionEffects` (12), `getEditorName` (03), `runIdleRefresh` (07) and `derivedRecordsPlan` (08c) from modules already in its set and passes them to `wireApp`, and no numbered module configures a bridge while it loads (the load-order check in the same test file).
+`src/js/_entry.js` is the legacy initializer shim, the build entry until plan §8's 4.x composition root replaces it. Since milestone 7's step 7.1 it does three things, in this order: it calls `wireApp` (`src/bootstrap/wiring.ts`) with the dependencies the numbered modules export, which builds the action and export registries, the document session, the save coordinator, the transitions, the draft recovery, the editor's owners and the preferences; it calls 63 modules' `__init` in numbered order; and it hands the wiring to `startAppWhenReady` (`src/bootstrap/app.ts`), which mounts the features and starts the actions on DOM ready. If `wireApp` throws, the shim reports the `WiringError` with `console.error` and calls no `__init` and no mount. Since 7.2 the session's effects come the same way: the shim imports `legacySessionEffects` (12), `getEditorName` (03), `runIdleRefresh` (07) and `derivedRecordsPlan` (08c) from modules already in its set and passes them to `wireApp`, and no numbered module configures a bridge while it loads (the load-order check in the same test file).
 
-Its import specifiers are a frozen set of 71 (the 68 modules it starts, `14e-export-formats.js` for `registerBuiltInExporters`, `../bootstrap/wiring.ts` and `../bootstrap/app.ts`). `tests/bootstrap/legacy-shim.test.ts` fails if the shim imports anything outside that set, so the list can only shrink, and if any file under `src/application`, `src/features` or `src/bootstrap` imports the shim (resolved with this tool's resolver). `tools/modularize.mjs` generated the first version of the shim; rerunning it would overwrite the wiring call, so it is not rerun.
+Its import specifiers are a frozen set of 66 (the 63 modules it starts, `14e-export-formats.js` for `registerBuiltInExporters`, `../bootstrap/wiring.ts` and `../bootstrap/app.ts`). `tests/bootstrap/legacy-shim.test.ts` fails if the shim imports anything outside that set, so the list can only shrink, and if any file under `src/application`, `src/features` or `src/bootstrap` imports the shim (resolved with this tool's resolver). `tools/modularize.mjs` generated the first version of the shim; rerunning it would overwrite the wiring call, so it is not rerun.
+
+L4a PR 3 moves row reconciliation animation from `04a-row-motion.js` to `src/features/rows/row-motion.js`, the delayed busy indicator from `04b-busy.js` to `src/features/notices/busy.js`, cell press targeting from `05q-cell-reach.js` to `src/features/editing/cell-reach.js`, header labels and condensing from `20i-topbar.js` to `src/features/title/topbar.js`, and phone navigation and badge mirroring from `20k-phone-bar.js` to `src/features/notices/phone-bar.js`.
+
+Bootstrap owns the disposable topbar, cell-reach and phone-bar mounts through `mountTopbarFeature`, `mountCellReachFeature` and `mountPhoneBarFeature` in `src/bootstrap/wiring/views.ts`, called by `startApp` in `src/bootstrap/app.ts`. Each mount uses `replaceViewMount`, and app stop disposes its owner. The topbar owner registers and releases its label, resize and passive scroll handlers, disconnects its observer and cancels pending animation frames, animations and timers; a subsequent app start creates a fresh owner. Row motion and busy have no startup work, so their empty initializers are removed. The header and row motion share the CSS duration reader in `src/features/common/css-duration.js`, without a feature-to-feature dependency outside common. All five modules remain free of legacy state and legacy imports; their presentation behavior and mount lifetimes can be exercised independently of the initializer shim. Rendering, hosted operations and local-file operations now import the owning feature helpers directly. The baseline loses five legacy-file entries and seven numbered-import entries; those imports no longer qualify as numbered-to-numbered dependencies.
 
 The modules it starts, the owner each is expected to move to in 4.x (a planning label: a feature folder, an adapter, or the composition root), and the bridges under `src/legacy/` each imports:
 
@@ -359,8 +363,6 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `03a-history-store.js` | features/history | `recovery-bridge`, `save-bridge`, `seed-check` |
 | `03b-side-panels.js` | features/panels | `preferences-bridge` |
 | `04-richtext.js` | adapters/richtext | `richtext` |
-| `04a-row-motion.js` | features/rows | none |
-| `04b-busy.js` | features/notices | none |
 | `04c-doc-model.js` | adapters/richtext | `richtext` |
 | `05-render.js` | features/rows | `editor-bridge`, `preferences-bridge`, `richtext`, `session-bridge` |
 | `05b-cell-edit.js` | features/editing | `richtext`, `session-bridge` |
@@ -371,7 +373,6 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `05g-scene-clip.js` | features/clipboard | `richtext` |
 | `05h-scene-select.js` | features/rows | `editor-bridge`, `preferences-bridge`, `review-wording`, `session-bridge` |
 | `05p-rundown-presence.js` | features/panels | none |
-| `05q-cell-reach.js` | features/editing | none |
 | `05r-read-time.js` | features/rows | `session-bridge` |
 | `05s-script-zoom.js` | features/settings | `app-actions`, `preferences-bridge` |
 | `05t-target.js` | features/panels | none |
@@ -412,9 +413,7 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `20f-desktop.js` | composition root (desktop host) | `recovery-bridge`, `save-bridge`, `startup-bridge` |
 | `20g-drafts.js` | adapters/storage (draft recovery) | `recovery-bridge`, `save-bridge`, `transition-bridge` |
 | `20h-appdata.js` | adapters/storage | `preferences-bridge` |
-| `20i-topbar.js` | features/title | none |
 | `20j-newtab.js` | composition root (desktop host) | `app-actions`, `document-ports`, `preferences-bridge`, `recovery-bridge`, `seed-check`, `startup-bridge`, `transition-bridge` |
-| `20k-phone-bar.js` | features/notices | none |
 | `20s-settings.js` | features/settings | `app-actions`, `preferences-bridge` |
 
 
