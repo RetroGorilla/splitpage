@@ -1,5 +1,7 @@
 import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
 import { pad2 } from "../core/production/timing.ts";
+import { rowIndexOf } from "../core/document/rows.ts";
+import { readSession } from "../legacy/session-bridge.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { editorSelection } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
@@ -10,7 +12,6 @@ import { revealRow } from "./01b-hide-shot.js";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { normalizeImageRef } from "../../shared/blob-policy.js";
 import {
-  findRowIndex,
   getEditorName,
   openSidePanel,
   pushSnapshot,
@@ -433,7 +434,7 @@ function formatRelativeTime(iso) {
 
 function commentLocationHtml(rowId, field) {
   if (field === "title") return "Document title";
-  var idx = findRowIndex(rowId);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
   var fieldLabel = field === "audioText" ? "Audio" : "Visual";
   if (idx === -1) return "Deleted scene · " + fieldLabel;
   return 'Scene <span class="comment-loc-num">' + pad2(idx + 1) + '</span> · ' + fieldLabel;
@@ -466,7 +467,7 @@ function commentTimeHtml(iso, cls) {
 }
 
 function commentPositionCompare(a, b) {
-  return compareCommentPositions(a, b, findRowIndex);
+  return compareCommentPositions(a, b, function (id) { return readSession(function (doc) { return rowIndexOf(doc, id); }); });
 }
 
 function anchorTextFromState(cmtId) {
@@ -474,7 +475,7 @@ function anchorTextFromState(cmtId) {
   var cIdx = findCommentIndex(cmtId);
   if (cIdx === -1) return null;
   var c = S.state.comments[cIdx];
-  var row = S.state.rows[findRowIndex(c.rowId)];
+  var row = S.state.rows[readSession(function (doc) { return rowIndexOf(doc, c.rowId); })];
   if (!row) return null;
   var body = inertBody(row[c.field] || "");
   var span = body.querySelector('.cmt-anchor[data-cmt="' + cssAttr(cmtId) + '"]');
@@ -488,7 +489,7 @@ function anchorLiveText(cmtId) {
 }
 
 function unwrapAnchorInState(rowId, field, cmtId) {
-  var idx = findRowIndex(rowId);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
   if (idx === -1) return;
   var html = S.state.rows[idx][field] || "";
   var container = inertBody(html);
@@ -1000,7 +1001,7 @@ export function restoreConflictValue(commentId) {
     showToast("Restored your version of the title", "ok");
     return;
   }
-  var ri = findRowIndex(c.rowId);
+  var ri = readSession(function (doc) { return rowIndexOf(doc, c.rowId); });
   if (ri === -1) { showToast("That scene no longer exists.", "warn"); return; }
 
   pushSnapshot("Before using your version of " + (c.conflictField || "a field"));
