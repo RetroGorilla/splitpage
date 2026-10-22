@@ -1,4 +1,3 @@
-import { readPref, writePref } from "./00p-prefs.js";
 import { exportDay, exportFacts, exportBrollScenes } from "./14b-export-kit.js";
 import { brollShotListForPrint } from "./14c-export-projections.js";
 import {
@@ -27,15 +26,14 @@ import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipWrite } from "../adapters/formats/zip.ts";
 import { tagCategory } from "../core/production/looks.ts";
 import { exportFormats } from "../legacy/export-formats.ts";
-
-export var NARRATION_DIRECTIONS_KEY = "splitpage-export-directions";
+import { preferences } from "../legacy/preferences-bridge.ts";
 
 export function narrationIncludesDirections() {
-  return readPref(NARRATION_DIRECTIONS_KEY) !== "0";
+  return preferences().exportDirections();
 }
 
 export function setNarrationIncludesDirections(on) {
-  writePref(NARRATION_DIRECTIONS_KEY, on ? null : "0");
+  preferences().setExportDirections(on);
 }
 
 export function exportToggleOptions(exporter, overrides) {
