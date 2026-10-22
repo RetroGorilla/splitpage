@@ -16,6 +16,8 @@ import { preferences, preferencesStarted } from "../legacy/preferences-bridge.ts
 import { copyShareText, setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
 import { cleanAuthorName } from "../core/document/people.ts";
 import { parseLinkFragment } from "../../shared/server-links.js";
+import { desktopPort } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 import { joinServer } from "../adapters/transport/server-join.ts";
 
 export var DEFAULT_COLLAB_SERVER = "https://script.bigmanonline.uk/";
@@ -46,7 +48,7 @@ export function inviteLink(base, docId, key) {
 
 export function serverLabel(url) {
   if (!url) {
-    if (S.DESKTOP) return "this computer's shared session";
+    if (runningOnDesktop()) return "this computer's shared session";
     try { return location.host || "this server"; } catch (e) { return "this server"; }
   }
   try { return new URL(url).host || url; } catch (e) { return url; }
@@ -64,7 +66,7 @@ function collabTarget() {
   if (onServerDoc()) return { url: currentConn().serverUrl, onTab: true };
   if (servedByServer()) return { url: "", onTab: true };
   var url = readCollabServer();
-  var maybeHere = !currentConn().serverUrl && !serverStatus().mode().checked && !S.DESKTOP &&
+  var maybeHere = !currentConn().serverUrl && !serverStatus().mode().checked && !runningOnDesktop() &&
     /^https?:$/.test(location.protocol);
   return { url: url, onTab: url === currentConn().serverUrl, maybeHere: maybeHere };
 }
@@ -401,9 +403,9 @@ function linksFailure(c, e) {
 
 async function linkBase() {
   if (currentConn().serverUrl) return currentConn().serverUrl;
-  if (S.DESKTOP && typeof S.DESKTOP.getSessionInfo === "function") {
+  if (runningOnDesktop() && typeof desktopPort().getSessionInfo === "function") {
     try {
-      var info = await S.DESKTOP.getSessionInfo();
+      var info = await desktopPort().getSessionInfo();
       var lan = info && Array.isArray(info.lanUrls) ? info.lanUrls[0] : "";
       return lan ? normalizeServerUrl(lan) : "";
     } catch (e) { return ""; }
@@ -512,7 +514,7 @@ function collabErrorText(e, url) {
   var code = e && e.code;
   if (code === "offline") {
     return "No answer from " + host + ". Check you're online and that the address is right" +
-      (collab && collab.target && !collab.target.onTab && !S.DESKTOP
+      (collab && collab.target && !collab.target.onTab && !runningOnDesktop()
         ? " — and that the server lets this copy of Splitpage connect (its ALLOW_ORIGINS)." : ".");
   }
   if (code === "auth") return "Something answered at " + host + ", but it isn't a Splitpage server.";
@@ -531,7 +533,7 @@ function unreachableText(c) {
   var code = c.error && c.error.code;
   if (code === "offline") {
     return "Check you're online and that the address is right" +
-      (!c.target.onTab && !S.DESKTOP
+      (!c.target.onTab && !runningOnDesktop()
         ? " — and that the server lets this copy of Splitpage connect (its ALLOW_ORIGINS)." : ".");
   }
   if (code === "auth") return "Something answered there, but it isn't a Splitpage server.";

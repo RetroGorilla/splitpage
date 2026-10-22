@@ -4,6 +4,7 @@ import { breakdownRows, commentEntries, sceneFacts, shotRecordForFile } from "./
 import { tagPrintColor } from "../adapters/formats/print-colors.ts";
 import { randomIds, systemClock } from "../adapters/identity/ids.ts";
 import { exportAssetRequest, heldExportAssets, resolveExportAssets } from "../application/export/assets.ts";
+import { exportServices } from "../application/export/services.ts";
 import { captureExportDocument as captureWith } from "../application/save/capture.ts";
 import { buildExportDocument } from "../core/document/export-document.ts";
 import { rowImage } from "../core/document/media.ts";
@@ -15,10 +16,6 @@ import { deriveProductionIndex } from "../core/production/tags.ts";
 import { formatDuration, pad2, rowSeconds as rowSecondsIn, targetClock } from "../core/production/timing.ts";
 import { toHtml } from "../core/text/html.ts";
 import { toDocxRuns } from "../core/text/projections.ts";
-import { cacheSeal } from "../legacy/cache-freeze.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
-import { htmlToPlainText } from "../legacy/plain-text.ts";
-import { cellOf, inertBody } from "../legacy/richtext.ts";
 import { readSession } from "../legacy/session-bridge.ts";
 import { refsIn, sniffImageMime } from "../../shared/blob-policy.js";
 import { preferences } from "../legacy/preferences-bridge.ts";
@@ -77,10 +74,11 @@ export function exportDateText(d) {
 function plural(n, one, many) { return n + " " + (n === 1 ? one : (many || one + "s")); }
 
 function exportReadModels(doc) {
+  var services = exportServices();
   return {
-    production: deriveProductionIndex(doc, productionReaders).entries,
+    production: deriveProductionIndex(doc, services.productionReaders).entries,
     commentNumbers: numberComments(doc),
-    broll: brollEntries(doc, productionReaders, randomIds, htmlToPlainText)
+    broll: brollEntries(doc, services.productionReaders, randomIds, services.htmlToPlainText)
   };
 }
 
@@ -138,12 +136,13 @@ export function exportDocumentOf(state, opts) {
 
 export function exportFacts(doc) {
   var s = doc.document;
+  var readers = exportServices().productionReaders;
   var rows = s.rows || [];
   var seconds = 0, words = 0;
   var status = { todo: 0, ready: 0, shot: 0 };
   rows.forEach(function (r) {
-    seconds += rowSecondsIn(r, s, productionReaders);
-    words += productionReaders.wordCount(r.audioText);
+    seconds += rowSecondsIn(r, s, readers);
+    words += readers.wordCount(r.audioText);
     var st = rowStatus(r.status) || ROW_STATUSES[0];
     status[st.id]++;
   });
@@ -179,14 +178,15 @@ export function commentNumbers(doc) {
 }
 
 var anchorOrder = contentMemo(function (html) {
-  var spans = Array.prototype.slice.call(inertBody(toHtml(cellOf(html))).querySelectorAll(".cmt-anchor"));
+  var services = exportServices();
+  var spans = Array.prototype.slice.call(services.inertBody(toHtml(services.cellOf(html))).querySelectorAll(".cmt-anchor"));
   spans.sort(function (a, b) {
     if (a.contains(b)) return 1;
     if (b.contains(a)) return -1;
     return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
   });
   return spans.map(function (el) { return el.getAttribute("data-cmt"); });
-}, cacheSeal);
+}, function (value) { return exportServices().cacheSeal(value); });
 
 function numberComments(state) {
   var open = Object.create(null);
@@ -233,7 +233,7 @@ export function exportComments(doc, opts) {
 }
 
 export function exportRuns(html, nums) {
-  var runs = toDocxRuns(cellOf(html), { annotate: true });
+  var runs = toDocxRuns(exportServices().cellOf(html), { annotate: true });
   runs.forEach(function (r, i) {
     if (r.tag) r.tag = { cat: r.tag.cat, name: r.tag.name, color: tagPrintColor(r.tag.cat) };
     if (!r.cmt) return;

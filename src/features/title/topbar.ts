@@ -1,18 +1,23 @@
-import { cssDurationMs } from "../common/css-duration.js";
+import { cssDurationMs } from "../common/css-duration.ts";
+import { createViewLifetime } from "../common/view-lifetime.ts";
 
-export function mountTopbar({ window }) {
+interface PartMeasurement {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  opacity: number;
+}
+
+export function mountTopbar({ window }: { window: Window }) {
   const document = window.document;
-  const releases = [];
-  let disposed = false;
-  function listen(target, name, handler, options) {
-    target.addEventListener(name, handler, options);
-    releases.push(function () { target.removeEventListener(name, handler, options); });
-  }
+  const life = createViewLifetime(window);
+  const { listen } = life;
   (function setupToolbarLabels() {
-    const buttons = document.querySelectorAll(".toolbar .panel-toggle, .toolbar .btn-mode");
+    const buttons = document.querySelectorAll<HTMLElement>(".toolbar .panel-toggle, .toolbar .btn-mode");
     if (!buttons.length) return;
     function measure() {
-      if (disposed) return;
+      if (!life.active()) return;
       buttons.forEach(function (btn) {
         const label = btn.querySelector(".btn-label");
         if (!label) return;
@@ -22,13 +27,13 @@ export function mountTopbar({ window }) {
         if (w > 0) btn.style.setProperty("--label-w", w + "px");
       });
     }
-    function closedBox(el) {
+    function closedBox(el: Element) {
       const r = el.getBoundingClientRect();
-      const cs = getComputedStyle(el);
+      const cs = window.getComputedStyle(el);
       return { left: r.left - (parseFloat(cs.marginLeft) || 0),
                right: r.right + (parseFloat(cs.marginRight) || 0) };
     }
-    function settleReach(btn) {
+    function settleReach(btn: HTMLElement) {
       const label = btn.querySelector(".btn-label");
       if (!label) return;
       const growsRight = btn.id === "btn-production" || btn.id === "btn-gear";
@@ -53,19 +58,19 @@ export function mountTopbar({ window }) {
     const row = document.querySelector(".topbar-row");
     let lastWidth = -1;
     let jumpFrame = 0;
-    releases.push(function () {
-      if (jumpFrame) cancelAnimationFrame(jumpFrame);
+    life.release(function () {
+      if (jumpFrame) window.cancelAnimationFrame(jumpFrame);
       if (toolbar) toolbar.classList.remove("is-width-jump");
       buttons.forEach(function (btn) { btn.classList.remove("is-label-open"); });
     });
-    function widthNow(w) {
+    function widthNow(w: number) {
       const jump = lastWidth >= 0 && Math.abs(w - lastWidth) > 24;
       lastWidth = w;
       if (!jump || !toolbar) return;
       toolbar.classList.add("is-width-jump");
-      if (jumpFrame) cancelAnimationFrame(jumpFrame);
-      jumpFrame = requestAnimationFrame(function () {
-        jumpFrame = requestAnimationFrame(function () {
+      if (jumpFrame) window.cancelAnimationFrame(jumpFrame);
+      jumpFrame = window.requestAnimationFrame(function () {
+        jumpFrame = window.requestAnimationFrame(function () {
           jumpFrame = 0;
           toolbar.classList.remove("is-width-jump");
         });
@@ -73,18 +78,19 @@ export function mountTopbar({ window }) {
     }
     if (row && typeof ResizeObserver !== "undefined") {
       const observer = new ResizeObserver(function (entries) {
-        if (disposed) return;
-        widthNow(entries[entries.length - 1].contentRect.width);
+        if (!life.active()) return;
+        const entry = entries[entries.length - 1];
+        if (entry) widthNow(entry.contentRect.width);
       });
       observer.observe(row);
-      releases.push(function () { observer.disconnect(); });
+      life.release(function () { observer.disconnect(); });
     } else {
       listen(window, "resize", function () { widthNow(window.innerWidth); });
     }
     buttons.forEach(function (btn) {
       if (btn.id === "btn-write") return;
       listen(btn, "pointerenter", function (e) {
-        if (e.pointerType === "touch") return;
+        if ("pointerType" in e && e.pointerType === "touch") return;
         settleReach(btn);
         btn.classList.add("is-label-open");
       });
@@ -95,7 +101,7 @@ export function mountTopbar({ window }) {
     });
   })();
 
-  const titleInput = document.getElementById("doc-title");
+  const titleInput = document.querySelector<HTMLInputElement>("#doc-title");
   if (titleInput) {
     listen(titleInput, "mouseenter", function () {
       titleInput.title = titleInput.value || "";
@@ -103,18 +109,19 @@ export function mountTopbar({ window }) {
   }
 
   (function setupCondensingTopbar() {
-    const topbar = document.querySelector(".topbar");
-    if (!topbar) return;
+    const topbarElement = document.querySelector<HTMLElement>(".topbar");
+    if (!topbarElement) return;
+    const topbar: HTMLElement = topbarElement;
 
     const ENTER_AT = 64;
     const LEAVE_AT = 24;
     let condensed = false;
     let queued = false;
-    let playing = [];
+    let playing: Animation[] = [];
     let sheddingTimer = 0;
     let scrollFrame = 0;
-    releases.push(function () {
-      if (scrollFrame) cancelAnimationFrame(scrollFrame);
+    life.release(function () {
+      if (scrollFrame) window.cancelAnimationFrame(scrollFrame);
       stopPlaying();
       topbar.classList.remove("is-condensed", "is-condensing");
     });
@@ -129,8 +136,8 @@ export function mountTopbar({ window }) {
     }
 
     function headerParts() {
-      const out = [];
-      const strip = topbar.querySelector(".rundown");
+      const out: Element[] = [];
+      const strip = topbar.querySelector<HTMLElement>(".rundown");
       if (strip && !strip.hidden) {
         const ruler = strip.querySelector(".rundown-ruler");
         const track = strip.querySelector(".rundown-track");
@@ -142,17 +149,17 @@ export function mountTopbar({ window }) {
       return out;
     }
 
-    function measure(parts) {
+    function measure(parts: Element[]): PartMeasurement[] {
       return parts.map(function (el) {
         const r = el.getBoundingClientRect();
         let opacity = 1;
-        try { opacity = parseFloat(getComputedStyle(el).opacity); } catch (e) {}
+        try { opacity = parseFloat(window.getComputedStyle(el).opacity); } catch (e) {}
         return { top: r.top, left: r.left, width: r.width, height: r.height,
                  opacity: isFinite(opacity) ? opacity : 1 };
       });
     }
 
-    function play(parts, before) {
+    function play(parts: Element[], before: PartMeasurement[]) {
       const after = measure(parts);
       const moveMs = cssDurationMs(window, "--dur-move", 180);
       const enterMs = cssDurationMs(window, "--dur-enter", 180);
@@ -163,6 +170,7 @@ export function mountTopbar({ window }) {
         const el = parts[i];
         const b = before[i];
         const a = after[i];
+        if (!el || !a || !b) continue;
         if (!a.width && !a.height) continue;
         if (!b.width && !b.height) {
           playing.push(el.animate(
@@ -176,27 +184,27 @@ export function mountTopbar({ window }) {
         const scale = (el.id === "doc-title" && a.height) ? b.height / a.height : 1;
         const fades = Math.abs(b.opacity - a.opacity) >= 0.01;
         if (Math.abs(dx) < 1 && Math.abs(dy) < 1 && Math.abs(scale - 1) < 0.01 && !fades) continue;
-        const from = {
+        const from: Keyframe = {
           transformOrigin: "left top",
           transform: "translate(" + dx + "px, " + dy + "px) scale(" + scale + ")"
         };
-        const to = { transformOrigin: "left top", transform: "none" };
+        const to: Keyframe = { transformOrigin: "left top", transform: "none" };
         if (fades) { from.opacity = b.opacity; to.opacity = a.opacity; }
         playing.push(el.animate([from, to], { duration: moveMs, easing: easeStandard }));
       }
     }
 
     function stopPlaying() {
-      for (let i = 0; i < playing.length; i++) {
-        try { playing[i].cancel(); } catch (e) {}
+      for (const animation of playing) {
+        try { animation.cancel(); } catch (e) {}
       }
       playing = [];
-      if (sheddingTimer) { clearTimeout(sheddingTimer); sheddingTimer = 0; }
+      if (sheddingTimer) { window.clearTimeout(sheddingTimer); sheddingTimer = 0; }
     }
 
-    function setCondensed(next, animate) {
+    function setCondensed(next: boolean, animate: boolean) {
       const parts = animate ? headerParts() : null;
-      const before = animate ? measure(parts) : null;
+      const before = parts ? measure(parts) : null;
       const yBefore = scrollTop();
       stopPlaying();
 
@@ -207,11 +215,11 @@ export function mountTopbar({ window }) {
       topbar.getBoundingClientRect();
       if (scrollTop() !== yBefore) window.scrollTo(window.scrollX || 0, yBefore);
 
-      if (!animate) return;
+      if (!parts || !before) return;
 
       play(parts, before);
       if (next) {
-        sheddingTimer = setTimeout(function () {
+        sheddingTimer = window.setTimeout(function () {
           sheddingTimer = 0;
           topbar.classList.remove("is-condensing");
         }, cssDurationMs(window, "--dur-move", 180));
@@ -222,7 +230,7 @@ export function mountTopbar({ window }) {
       return window.scrollY || document.documentElement.scrollTop || 0;
     }
 
-    function applyCondensedState(animate) {
+    function applyCondensedState(animate: boolean) {
       queued = false;
       const y = scrollTop();
       if (!condensed && y > ENTER_AT) setCondensed(true, animate && motionOK());
@@ -232,20 +240,14 @@ export function mountTopbar({ window }) {
     function onScroll() {
       if (queued) return;
       queued = true;
-      scrollFrame = requestAnimationFrame(function () {
+      scrollFrame = window.requestAnimationFrame(function () {
         scrollFrame = 0;
-        if (!disposed) applyCondensedState(true);
+        if (life.active()) applyCondensedState(true);
       });
     }
 
     listen(window, "scroll", onScroll, { passive: true });
     applyCondensedState(false);
   })();
-  return {
-    dispose: function () {
-      if (disposed) return;
-      disposed = true;
-      while (releases.length) releases.pop()();
-    }
-  };
+  return { dispose: life.dispose };
 }
