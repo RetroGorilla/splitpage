@@ -1,11 +1,14 @@
-export const S = {
-  baseState: undefined,
+import { currentDocument } from "../legacy/session-bridge.ts";
+import { documentView } from "../legacy/document-guard.ts";
 
+export const S = {
   docIdWrittenOut: undefined,
 
   serverBookmarks: undefined,
 
   serverMode: undefined,
 
-  state: undefined
+  get state() { return documentView(currentDocument()); },
+
+  set state(doc) { throw new TypeError("The document is read-only here: the document session holds it"); }
 };

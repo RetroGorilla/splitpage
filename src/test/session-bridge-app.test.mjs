@@ -90,13 +90,13 @@ test("opening another document, or restoring one with the same id, opens a new e
 
 test("a merge right after a document was swapped in, with no flush between, leaves the session holding the merged document", () => {
   const base = script("Merge");
-  loadTestDocument(cloneState(base));
   const epoch = session.epoch(), gen = session.generation();
+  listen();
+  loadTestDocument(cloneState(base));
   const theirs = cloneState(base);
   theirs.rows[1].audioText = "Theirs.";
-  listen();
   applyMerge({ base: base, mine: cloneState(base), theirs: theirs, source: "server-conflict", report: false });
-  assert.deepEqual(heard, ["adopt", "server"], "12a adopts the swapped-in document as the merge flushes, then the merge lands");
+  assert.deepEqual(heard, ["adopt", "server"], "the session adopts the swapped-in document as it is handed over, then the merge lands");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
   assert.equal(held(), S.state);
@@ -167,16 +167,16 @@ test("a reload in place is its own kind: same epoch, no generation, saveChanges(
 test("a reload into a document swapped in with no flush lands in the document the app shows", () => {
   const before = held();
   const beforeText = JSON.stringify(before);
+  listen();
   loadTestDocument(cloneState(script("Swapped")));
   const doc = S.state;
-  listen();
   const taken = noteReload({ title: "Reloaded", rows: [{ id: "r1", visualText: "Wide", audioText: "Reloaded." }] });
   assert.equal(S.state, doc);
   assert.equal(taken, doc);
   assert.equal(held(), doc);
   assert.equal(doc.title, "Reloaded");
   assert.deepEqual(doc.rows.map((row) => [row.audioText, row.status]), [["Reloaded.", "todo"]]);
-  assert.deepEqual(heard, ["adopt", "reload"], "the bridge adopts the swapped-in document, then the reload lands in it");
+  assert.deepEqual(heard, ["adopt", "reload"], "the session adopts the swapped-in document as it is handed over, then the reload lands in it");
   assert.equal(JSON.stringify(before), beforeText, "the document held before is not written into");
 });
 

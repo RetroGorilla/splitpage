@@ -291,6 +291,51 @@ function freezeChecks() {
   eq("run-tests.ps1 hands the lane's token to driver.ps1", off.slice(off.indexOf("-ResultToken"), off.indexOf("-ResultToken") + 2), ["-ResultToken", "tok"]);
 }
 
+function guardHarness() {
+  const file = join(work, "guard.ps1");
+  writeFileSync(file, [
+    importParts(join(SKILL, "driver.ps1"), ["Add-GuardFlag", "Test-GuardedWrites"], []),
+    importParts(join(SKILL, "run-tests.ps1"), ["Get-DriverArgs"], []),
+    "function Out1($m) { $script:Out += [string]$m }",
+    "function Writes($lines) { $script:Console = @($lines); $script:Checks = 0; $script:Failures = 0; $script:Out = @(); Test-GuardedWrites; Emit @{ checks = $script:Checks; failures = $script:Failures; out = @($script:Out) } }",
+    "Writes @('log: fine', 'exception: TypeError: Cannot assign to read only property ''id'' of object ''#<Object>''')",
+    "Writes @('log: fine', 'error: DocumentWriteError: a write to title was refused', 'exception: DocumentWriteError: a write to length was refused', 'exception: ReferenceError: x is not defined')",
+    "$here = 'C:\\skill'; $Port = 100; $CdpPort = 200; $Headed = $false",
+    "$lane = [pscustomobject]@{ Index = 3; Tag = 'abc'; Token = 'tok'; File = [pscustomobject]@{ FullName = 'C:\\s\\x.txt' } }",
+    "foreach ($u in @('http://localhost:1/index.html', 'http://localhost:1/index.html?freeze-caches=1', 'http://localhost:1/index.html?teleprompter=1#script=ab&voice=1', 'http://localhost:1/index.html#review=abc', 'http://localhost:1/index.html?document-guard=0', 'http://localhost:1/index.html#a?b')) { Emit @{ url = (Add-GuardFlag $u) } }",
+    "$DocumentGuard = $false; Emit @{ args = @(Get-DriverArgs $lane) }",
+    "$DocumentGuard = $true; Emit @{ args = @(Get-DriverArgs $lane) }",
+    "[Environment]::Exit(0)"
+  ].join("\n"));
+  return file;
+}
+
+function guardChecks() {
+  console.log("\ndocument guard in driver.ps1 and run-tests.ps1:\n");
+  const all = powershell(guardHarness()).records;
+  const [clean, refused] = all.slice(0, 2);
+  eq("Test-GuardedWrites passes one check when no console line names a refused document write", [clean?.checks, clean?.failures, clean?.out], [1, 0, ["PASS no write into the guarded document was refused"]]);
+  eq("and fails it, quoting each such line, caught or not, and no other, when one does",
+    [refused?.checks, refused?.failures, refused?.out], [1, 1, [
+      "FAIL a write into the guarded document was refused",
+      "     error: DocumentWriteError: a write to title was refused",
+      "     exception: DocumentWriteError: a write to length was refused"
+    ]]);
+  const r = all.slice(2);
+  eq("Add-GuardFlag puts document-guard=1 in the query, after any query the page has and before any fragment, and leaves a page that names it alone",
+    r.slice(0, 6).map((x) => x.url), [
+      "http://localhost:1/index.html?document-guard=1",
+      "http://localhost:1/index.html?freeze-caches=1&document-guard=1",
+      "http://localhost:1/index.html?teleprompter=1&document-guard=1#script=ab&voice=1",
+      "http://localhost:1/index.html?document-guard=1#review=abc",
+      "http://localhost:1/index.html?document-guard=0",
+      "http://localhost:1/index.html?document-guard=1#a?b"
+    ]);
+  const off = (r[6]?.args ?? []).flat(), on = (r[7]?.args ?? []).flat();
+  eq("with the guard off, run-tests.ps1 starts driver.ps1 as before", off.includes("-DocumentGuard"), false);
+  eq("with it on, it adds -DocumentGuard once", [on.filter((a) => a === "-DocumentGuard").length, on.slice(0, -1)], [1, off]);
+}
+
 function laneSpec(name, lines, timedOut = false) {
   return { name, lines, timedOut };
 }
@@ -549,6 +594,7 @@ try {
   driverStateChecks();
   imeChecks();
   freezeChecks();
+  guardChecks();
   runnerChecks();
   digestChecks();
   digestFlowChecks();

@@ -37,6 +37,7 @@ import { createCaptureSchedule } from "../application/recovery/capture-schedule.
 import { cloneState } from "../core/document/clone.ts";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
+import { mergeBase } from "../legacy/session-bridge.ts";
 
 var draftOnDisk;
 
@@ -282,7 +283,7 @@ function captureAndSendDraft(keepClean) {
   }
   var signature = draftOriginSignature(origin);
   if ((draftOnDisk || !keepCleanFile) &&
-      saveChanges() === draftSentEditSeq && draftSentBase === S.baseState && signature === draftSentSignature) {
+      saveChanges() === draftSentEditSeq && draftSentBase === mergeBase() && signature === draftSentSignature) {
     draftSchedule.dropPending();
     return Promise.resolve(null);
   }
@@ -300,8 +301,8 @@ function captureAndSendDraft(keepClean) {
   draftSchedule.setSlow(stateJson.length > draftTiming.largeBytes || elapsed > draftTiming.slowStringifyMs);
 
   var editSeqAtCapture = saveChanges();
-  var baseAtCapture = S.baseState;
-  var sendBase = S.baseState !== draftSentBase;
+  var baseAtCapture = mergeBase();
+  var sendBase = mergeBase() !== draftSentBase;
   var baseTextCache = null;
   var inlineFailed = null;
   function baseTextFor() {

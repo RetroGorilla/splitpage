@@ -12,6 +12,7 @@ import * as exporting from "../js/14-export.js";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
 import { loadTestDocument } from "./_document.mjs";
+import { mergeBase } from "../legacy/session-bridge.ts";
 
 await bootApp();
 await window.__historyTest.forceBackend("memory");
@@ -71,7 +72,7 @@ test("characterization: an adopted merge redraws, shows the banner, marks the do
   const id = freshId();
   start(id);
   const s = sides(id);
-  const baseBefore = S.baseState;
+  const baseBefore = mergeBase();
 
   const out = applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "server-conflict" });
   assert.equal(out.state, S.state);
@@ -85,7 +86,7 @@ test("characterization: an adopted merge redraws, shows the banner, marks the do
   assert.equal(reviewBtn().hidden, true, "no conflicts");
   assert.ok(unsavedChanges(), "unsaved");
   assert.equal(autoSavePolicy().halted(), "");
-  assert.equal(S.baseState, baseBefore, "no newBase, no baseline move");
+  assert.equal(mergeBase(), baseBefore, "no newBase, no baseline move");
 });
 
 test("characterization: `report: false` merges silently: no banner, no unsaved mark, no autosave halt", () => {
@@ -185,7 +186,7 @@ test("characterization: `newBase` sets the baseline through setBaseState with th
   const given = cloneState(s.theirs);
 
   applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "server-resume", newBase: given, report: false });
-  assert.equal(S.baseState, given);
+  assert.equal(mergeBase(), given);
   assert.equal(baseStateReason(), "merge: server-resume");
 
   start(id);
@@ -193,13 +194,13 @@ test("characterization: `newBase` sets the baseline through setBaseState with th
   const fromFn = cloneState(s.theirs);
   applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, newBase: function () { asked++; return fromFn; }, report: false });
   assert.equal(asked, 1);
-  assert.equal(S.baseState, fromFn);
+  assert.equal(mergeBase(), fromFn);
   assert.equal(baseStateReason(), "merge: ", "no source, an empty one");
 
   start(id);
-  const before = S.baseState;
+  const before = mergeBase();
   applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "stash", newBase: undefined, report: false });
-  assert.equal(S.baseState, before, "no newBase, no move");
+  assert.equal(mergeBase(), before, "no newBase, no move");
 });
 
 test("characterization: `toast` speaks after adoption, a function seeing the adopted document", () => {
