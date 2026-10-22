@@ -1,5 +1,4 @@
 import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
-import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { currentDocument, readSession } from "../legacy/session-bridge.ts";
@@ -434,7 +433,7 @@ function segmentHtml(row, b, isCurrent) {
 export function renderRundown() {
   var strip = document.getElementById("rundown");
   if (!strip) return;
-  var rows = S.state && S.state.rows ? S.state.rows : [];
+  var rows = currentDocument()?.rows ?? [];
   strip.hidden = !rows.length;
   if (!rows.length) { lensReset(); return; }
   var track = strip.querySelector(".rundown-track");
@@ -818,7 +817,7 @@ function dragIndex() {
 }
 
 function dropAllowed() {
-  return !!rowDrag().dragging() && !minimized && !reviewMode() && base.n > 0 && !!base.X && !!S.state;
+  return !!rowDrag().dragging() && !minimized && !reviewMode() && base.n > 0 && !!base.X && !!currentDocument();
 }
 
 function ensureDropEls(track) {
@@ -932,8 +931,9 @@ function onStripDrop(e) {
   clearDropMarkers();
   hideDrop();
   lensOff();
-  if (g < 0 || !S.state) return;
-  var rows = S.state.rows;
+  var doc = currentDocument();
+  if (g < 0 || !doc) return;
+  var rows = doc.rows;
   if (g === 0) cellEditing().moveRow(id, rows[0].id, false);
   else cellEditing().moveRow(id, rows[g - 1].id, true);
   followMovedScene(id);
