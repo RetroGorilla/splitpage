@@ -60,6 +60,8 @@ test("comments app: panel sort and filter changes announce to another preference
   const owner = mount();
   const announced = [];
   const listen = (event) => { announced.push(event.detail); };
+  const nodeCustomEvent = globalThis.CustomEvent;
+  globalThis.CustomEvent = window.CustomEvent;
   document.addEventListener("splitpage:pref", listen);
   try {
     openCommentsPanel();
@@ -76,6 +78,7 @@ test("comments app: panel sort and filter changes announce to another preference
     ]);
   } finally {
     document.removeEventListener("splitpage:pref", listen);
+    globalThis.CustomEvent = nodeCustomEvent;
     localStorage.removeItem("splitpage-comments-sort");
     localStorage.removeItem("splitpage-comments-filter");
     owner.dispose();
