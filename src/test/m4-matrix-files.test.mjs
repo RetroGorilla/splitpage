@@ -11,6 +11,7 @@ import {
   mockClock,
   rightToday
 } from "./_m4-matrix.mjs";
+import { mergeBase } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
@@ -121,13 +122,13 @@ function homeRecord() {
 }
 
 function observed() {
-  return { docId: S.state.docId, rev: S.state.rev, base: JSON.stringify(S.baseState), dirty: unsavedChanges(), home: homeRecord() };
+  return { docId: S.state.docId, rev: S.state.rev, base: JSON.stringify(mergeBase()), dirty: unsavedChanges(), home: homeRecord() };
 }
 
 function assertSame(before, who) {
   assert.equal(S.state.docId, before.docId, "the " + who + "'s document id is unchanged");
   assert.equal(S.state.rev, before.rev, "the " + who + "'s rev is unchanged");
-  assert.equal(JSON.stringify(S.baseState), before.base, "the " + who + "'s baseline is unchanged");
+  assert.equal(JSON.stringify(mergeBase()), before.base, "the " + who + "'s baseline is unchanged");
   assert.equal(unsavedChanges(), before.dirty, "the " + who + "'s dirty state is unchanged");
   const now = homeRecord();
   assert.equal(now.record, before.home.record, "the " + who + "'s home is the same record");
@@ -222,11 +223,11 @@ rightToday("F2", "a file save that completes after a same-id reopen leaves the r
   assert.equal(S.state.docId, ID("3"), "the reopened document has the same id");
   assert.equal(S.state.rows[0].audioText, "One.", "and it was read before the write landed");
   edit("Typed after the reopen.");
-  const baselineBefore = JSON.stringify(S.baseState);
+  const baselineBefore = JSON.stringify(mergeBase());
   target.releaseOp("close");
   await saving;
   assert.equal(unsavedChanges(), true, "the reopened session is still unsaved");
-  assert.equal(JSON.stringify(S.baseState), baselineBefore, "the reopened session's baseline is the one it opened with");
+  assert.equal(JSON.stringify(mergeBase()), baselineBefore, "the reopened session's baseline is the one it opened with");
 }));
 
 rightToday("F3", "a Save As that is cancelled or fails leaves Save's target and the document id as they were", scene(async () => {
@@ -549,7 +550,7 @@ rightToday("I2", "import writeback acknowledges only the import home", scene(asy
   assert.equal(imported.dirty, false, "the import home is saved");
   assert.equal(homeModule.home, before.home.record, "the home is the same record");
   assert.equal(unsavedChanges(), before.dirty, "the document's dirty state is unchanged");
-  assert.equal(JSON.stringify(S.baseState), before.base, "the document's baseline is unchanged");
+  assert.equal(JSON.stringify(mergeBase()), before.base, "the document's baseline is unchanged");
   assert.equal(S.state.rev, before.rev, "the document's rev is unchanged");
   assert.equal(S.state.docId, before.docId, "the document's id is unchanged");
 }));

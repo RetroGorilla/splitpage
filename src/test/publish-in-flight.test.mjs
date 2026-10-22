@@ -13,7 +13,8 @@ const { markDirty, clearDirty } = await import("../js/12-dirty-toast.js");
 const { setAutoSaveEnabled, legacySavePorts } = await import("../js/14-export.js");
 const { autoSavePolicy, noteSaveChange, startSaves, unsavedChanges } = await import("../legacy/save-bridge.ts");
 const { NO_DESTINATION, documentTransitions, startTransitions } = await import("../legacy/transition-bridge.ts");
-const { documentIdentityPort, liveDocumentPort } = await import("../js/02b-doc-id.js");
+const { documentIdentityPort } = await import("../js/02b-doc-id.js");
+const { liveDocumentPort, mergeBase } = await import("../legacy/session-bridge.ts");
 const { documentDestinationPort } = await import("../js/03-sync.js");
 const { startTestSession } = await import("./_session.mjs");
 const { appSessionDeps } = await import("./_app-session.mjs");
@@ -101,7 +102,7 @@ test("control: an undisturbed publish adopts the server copy and is clean", asyn
   assert.equal(homeMod.home.kind, "server");
   assert.equal(homeMod.home.id, "server-a");
   assert.equal(unsavedChanges(), false);
-  assert.equal(S.baseState.rows[0].audioText, "one");
+  assert.equal(mergeBase().rows[0].audioText, "one");
 });
 
 test("#247: a document opened during the upload keeps its own home, base, id and dirty flag", async () => {
@@ -122,7 +123,7 @@ test("#247: a document opened during the upload keeps its own home, base, id and
 
   assert.equal(ok, false, "publishToServer says the copy was not adopted");
   assert.equal(homeMod.home, bHome, "B's home is still B's file");
-  assert.equal(S.baseState, bBase, "B's base is untouched");
+  assert.equal(mergeBase(), bBase, "B's base is untouched");
   assert.equal(S.state, b);
   assert.equal(S.state.docId, DOC_IDS["doc-b"]);
   assert.equal(unsavedChanges(), true, "B's unsaved work is still unsaved");
@@ -146,7 +147,7 @@ test("#247: a server document opened during the upload is not re-homed onto the 
   assert.equal(homeMod.home, bHome);
   assert.equal(homeMod.home.id, "server-b");
   assert.equal(homeMod.home.rev, 7);
-  assert.equal(S.baseState, bBase);
+  assert.equal(mergeBase(), bBase);
   assert.equal(unsavedChanges(), false);
 });
 
@@ -201,7 +202,7 @@ test("#248: text typed during the upload stays dirty, and the next save carries 
 
   assert.equal(homeMod.home.kind, "server", "the publish itself still succeeded");
   assert.equal(unsavedChanges(), true, "the editor does not claim the newer text is saved");
-  assert.equal(S.baseState.rows[0].audioText, "before", "the base is what the server was given");
+  assert.equal(mergeBase().rows[0].audioText, "before", "the base is what the server was given");
   assert.ok(timers.includes(autoSavePolicy().timing.hostedIdle), "an autosave to the new server home is scheduled");
 
   assert.equal(await saveToServer(), true);
