@@ -55,8 +55,6 @@ import { cloneState } from "../core/document/clone.ts";
 export { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
 export { mergeTargetLength } from "../core/merge/scalars.ts";
 
-export { LEGACY_SNAPSHOTS_KEY as SNAPSHOT_KEY } from "../application/recovery/legacy-snapshots.ts";
-
 S.baseState = null;
 
 export function getEditorName() {
