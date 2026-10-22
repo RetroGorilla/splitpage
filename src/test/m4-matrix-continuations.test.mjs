@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import zlib from "node:zlib";
 import { S } from "../js/_state.js";
 import { createHeldFetch, createHeldImageDecode, rightToday } from "./_m4-matrix.mjs";
+import { unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -125,7 +126,7 @@ function toasts() {
 }
 
 function edits() {
-  return { doc: JSON.stringify(S.state), dirty: S.dirty, undo: undoSizes(), top: JSON.stringify(lastUndoEntry() || null) };
+  return { doc: JSON.stringify(S.state), dirty: unsavedChanges(), undo: undoSizes(), top: JSON.stringify(lastUndoEntry() || null) };
 }
 
 async function latePaste(replace) {
@@ -157,7 +158,7 @@ const afterCaret = (at, text) => AUDIO.slice(0, at) + text + AUDIO.slice(at);
 rightToday("M0", "a delayed paste into an untouched document lands at the caret it started at, with its picture on the scene", async () => {
   await latePaste(async () => {});
   assert.equal(S.state.rows[0].audioText, afterCaret(5, "Pasted "), "the text went in at the caret");
-  assert.equal(S.dirty, true);
+  assert.equal(unsavedChanges(), true);
   assert.ok(S.state.rows[0].imageRef || S.state.rows[0].moreImages, "the picture is on the scene: " + JSON.stringify(Object.keys(S.state.rows[0])));
 });
 

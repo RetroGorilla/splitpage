@@ -4,7 +4,7 @@ import { flushEdits } from "./12a-undo.js";
 import { inertBody } from "../legacy/richtext.ts";
 import { noteReload } from "../legacy/session-bridge.ts";
 import { documentTransitions } from "../legacy/transition-bridge.ts";
-import { requestSave, unsavedFor } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
 import { fileHome, home, importHome, setHome } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import {
@@ -39,7 +39,7 @@ import {
   onServerDoc,
   serverSessionExpired
 } from "./13-hosted.js";
-import { autoSaveHalt, warnImagesLeftOut } from "./14-export.js";
+import { warnImagesLeftOut } from "./14-export.js";
 import { exportToggleOptions } from "./14e-export-formats.js";
 import { docxToRows } from "./15-docx.js";
 import { csvToRows } from "./16-csv.js";
@@ -112,12 +112,13 @@ function updateHeaderFileChip() {
     chip.hidden = false;
     document.getElementById("file-chip-name").textContent = "On the server";
     var srvState = document.getElementById("file-chip-state");
+    var unsaved = unsavedChanges();
     srvState.textContent = serverSessionExpired
       ? "· signed out — reload"
       : linkTurnedOff ? "· link turned off — not saving"
-      : S.dirty && autoSaveHalt ? "· not saved yet"
-      : (S.dirty ? "· saving…" : "· v" + home.rev + ", everyone sees this");
-    srvState.classList.toggle("unsaved", serverSessionExpired || linkTurnedOff || !!S.dirty);
+      : unsaved && autoSavePolicy().halted() ? "· not saved yet"
+      : (unsaved ? "· saving…" : "· v" + home.rev + ", everyone sees this");
+    srvState.classList.toggle("unsaved", serverSessionExpired || linkTurnedOff || unsaved);
     return;
   }
   var imported = importHome();
@@ -357,7 +358,7 @@ export async function tryResumeLastProject() {
 export async function resumeFromHandle(handle) {
   try {
     var file = await handle.getFile();
-    await openProjectFile(file, handle, { skipSnapshot: !S.dirty, resumed: true });
+    await openProjectFile(file, handle, { skipSnapshot: !unsavedChanges(), resumed: true });
   } catch (e) {
   }
 }

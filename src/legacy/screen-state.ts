@@ -5,6 +5,7 @@ import { viewFlags } from "./preferences-bridge.ts";
 import { tourShowing } from "../js/20c-help.js";
 import { dialogOpen, launcherOpen } from "./screen.ts";
 import type { ScreenState } from "./screen.ts";
+import { saveBusy } from "./save-bridge.ts";
 
 export function screenNow(): ScreenState {
   return {
@@ -23,5 +24,5 @@ export function inDesktopApp(): boolean {
 }
 
 export function saveInProgress(): boolean {
-  return Boolean(S.saveButtonBusy);
+  return saveBusy();
 }

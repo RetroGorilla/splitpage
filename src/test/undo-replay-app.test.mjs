@@ -2,6 +2,7 @@ import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -184,7 +185,7 @@ test("6.2: the row stamp is written inside the transaction, before the replay is
   assert.equal(w.seen[0].stamp, row("r1").updatedAt);
   assert.equal(row("r1").updatedBy, getEditorName());
   assert.deepEqual(w.seen[0].changes.cells.map((c) => c.rowId + "." + c.field), ["r1.audioText", "r1.updatedAt", "r1.updatedBy"]);
-  assert.equal(S.dirty, true, "the effect pass marked the document dirty");
+  assert.equal(unsavedChanges(), true, "the effect pass marked the document dirty");
 });
 
 test("6.2: an empty replay changes nothing observable", async () => {

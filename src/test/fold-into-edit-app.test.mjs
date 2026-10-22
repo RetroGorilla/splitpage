@@ -3,6 +3,7 @@ import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { createHeldFetch, createHeldImageDecode } from "./_m4-matrix.mjs";
+import { unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -117,7 +118,7 @@ test("6.3: the thumbnail amendment is one transaction: one generation, one publi
   assert.ok(cells.includes("r1.imageRef"), "the change set names the written field: " + cells.join(", "));
   assert.ok(cells.includes("r1.updatedAt") && cells.includes("r1.updatedBy"), "the change set names the stamps: " + cells.join(", "));
   assert.ok(cells.every((c) => c.startsWith("r1.")), "only the amended scene: " + cells.join(", "));
-  assert.equal(S.dirty, true, "the effect pass marked the document dirty");
+  assert.equal(unsavedChanges(), true, "the effect pass marked the document dirty");
 });
 
 test("6.3: an amended thumbnail undoes together with the edit it belongs to, and redoes with it", async () => {

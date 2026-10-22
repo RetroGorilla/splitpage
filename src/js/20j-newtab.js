@@ -23,6 +23,7 @@ import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge
 import { showToast } from "../legacy/effects-bridge.ts";
 import { draftResume } from "../legacy/recovery-bridge.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
+import { startupReady } from "../legacy/startup-bridge.ts";
 
 var newTabPageShown = false;
 
@@ -91,8 +92,9 @@ function adoptNewDocument(next, reason) {
 }
 
 function startNewDocument(makeState, reason) {
-  if (!S.state && S.initialStateReady) {
-    return S.initialStateReady.then(function () { return startNewDocument(makeState, reason); });
+  var ready = S.state ? null : startupReady();
+  if (ready) {
+    return ready.then(function () { return startNewDocument(makeState, reason); });
   }
   var next = makeState();
   if (!next) return Promise.resolve(false);

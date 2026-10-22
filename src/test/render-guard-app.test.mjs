@@ -6,6 +6,7 @@ import { readBuiltCss } from "../../tools/css-colours.mjs";
 import { S } from "../js/_state.js";
 import { table304Document } from "../../tests/application/raw-inputs.ts";
 import { cloneState } from "../core/document/clone.ts";
+import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -25,7 +26,6 @@ const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { focusMemory, mergeUndo } = await import("../legacy/editor-bridge.ts");
 const find = await import("../js/09-find-replace.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
-const autosave = await import("../js/14-export.js");
 const { openServerDoc } = await import("../js/13-hosted.js");
 const { openProjectFile, reloadFileFromDisk, updateFileChip } = await import("../js/18-local-files.js");
 const { openLongDemo } = await import("../js/18b-file-menu.js");
@@ -133,11 +133,11 @@ function chipText(chipId, partIds) {
 
 function bookkeeping() {
   return {
-    dirty: S.dirty,
+    dirty: unsavedChanges(),
     saveButton: document.getElementById("btn-save").textContent,
     saveStatus: document.getElementById("save-status").textContent,
-    halted: autosave.autoSaveHalt,
-    timer: autosave.autoSaveIdleTimer !== null,
+    halted: autoSavePolicy().halted(),
+    timer: autoSavePolicy().pending(),
     banner: document.getElementById("merge-banner").hidden ? null : document.getElementById("merge-summary").textContent,
     review: !document.getElementById("merge-review").hidden,
     undoButton: !document.getElementById("merge-undo").hidden,
@@ -439,7 +439,7 @@ test("a desktop file draft over an untouched file whose render throws still rest
     };
     return {
       draft: { header: { origin: { kind: "file", fileName: "guard.splitpage" }, docIdWrittenOut: true }, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(disk), file: { id: "f-guard", name: "guard.splitpage" } },
-      observe: () => { const book = S.dirty; clearDirty(); setHome("none"); return book; }
+      observe: () => { const book = unsavedChanges(); clearDirty(); setHome("none"); return book; }
     };
   }, (ctx) => applyTakenDraft(ctx.draft), "late", 2);
   assert.equal(seen.value, "applied");
@@ -517,8 +517,8 @@ function editState() {
     undo: undoSizes(),
     top: JSON.stringify(lastUndoEntry() || null),
     redo: JSON.stringify(nextRedoEntry() || null),
-    dirty: S.dirty,
-    saving: autosave.autoSaveIdleTimer,
+    dirty: unsavedChanges(),
+    saving: autoSavePolicy().pending() ? autoSavePolicy().scheduled() : null,
     heard: heard.slice()
   };
 }

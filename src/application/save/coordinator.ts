@@ -70,6 +70,7 @@ export interface SaveCoordinator<R, B> {
   readonly confirmBaseline: (baseline: B | null) => B | null;
   readonly confirmed: (identity?: unknown) => Confirmed<B>;
   readonly dirty: (identity?: unknown) => boolean;
+  readonly unsaved: () => boolean;
   readonly stop: () => void;
 }
 
@@ -108,6 +109,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
   const queues: Queue<R>[] = [];
   const held = new Map<unknown, Map<string, Held<B>>>();
   let changes = 0;
+  let cleanAt = 0;
   let activeCount = 0;
   let stopped = false;
 
@@ -262,6 +264,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
 
   function confirmClean(): void {
     acknowledge(keyNow(), changes);
+    cleanAt = changes;
   }
 
   function confirmBaseline(baseline: B | null): B | null {
@@ -295,6 +298,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
     dirty: function (identity?: unknown) {
       return changes > confirmed(identity).generation;
     },
+    unsaved: function () { return changes > cleanAt; },
     stop: stop
   });
 }

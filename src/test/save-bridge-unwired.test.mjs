@@ -11,7 +11,15 @@ function ports(log) {
     keyOf: (identity) => ({ owner: identity, name: "" }),
     obsolete: () => log.push("obsolete"),
     running: (running) => log.push("running:" + running),
-    ownership: { capture: () => Object.freeze({ destination: "here" }), stillOwns: () => true }
+    ownership: { capture: () => Object.freeze({ destination: "here" }), stillOwns: () => true },
+    autosave: { enabledAtStart: () => true, due: () => log.push("autosave due"), changed: (what) => log.push("autosave " + what) }
+  };
+}
+
+function timers(log) {
+  return {
+    start: (run, ms) => { log.push("arm:" + ms); return { run }; },
+    stop: () => log.push("disarm")
   };
 }
 
@@ -23,13 +31,17 @@ test("before the save coordinator is started, every accessor throws instead of r
   assert.throws(() => bridge.confirmSavedNow(), /not started yet/);
   assert.throws(() => bridge.confirmBaseline(null), /not started yet/);
   assert.throws(() => bridge.confirmedGeneration(), /not started yet/);
+  assert.throws(() => bridge.saveChanges(), /not started yet/);
+  assert.throws(() => bridge.autoSavePolicy(), /not started yet/);
+  assert.equal(bridge.saveBusy(), false, "no coordinator is running a save");
+  assert.equal(bridge.unsavedChanges(), false, "no coordinator holds a change");
 });
 
 test("started once, with the ports it is handed; a second start throws until the first is stopped", async () => {
   const log = [];
-  const stop = bridge.startSaves(ports(log));
+  const stop = bridge.startSaves(ports(log), timers(log));
   try {
-    assert.throws(() => bridge.startSaves(ports([])), /already started/);
+    assert.throws(() => bridge.startSaves(ports([]), timers([])), /already started/);
     const outcome = await bridge.requestSave({ kind: "auto" });
     assert.deepEqual(outcome, { kind: "saved", acknowledged: true });
     assert.deepEqual(log, ["running:true", "write:auto", "running:false"]);
@@ -37,6 +49,35 @@ test("started once, with the ports it is handed; a second start throws until the
     stop();
   }
   assert.equal(bridge.savesStarted(), false);
+});
+
+test("the status readers answer the started coordinator, and its autosave policy is built with it and stopped with it", async () => {
+  const log = [];
+  const stop = bridge.startSaves(ports(log), timers(log));
+  let policy;
+  try {
+    policy = bridge.autoSavePolicy();
+    assert.equal(policy.enabled(), true, "the policy starts from the autosave port's preference");
+    assert.equal(bridge.unsavedChanges(), false);
+    const seq = bridge.noteSaveChange();
+    assert.equal(bridge.saveChanges(), seq, "the change count is the coordinator's");
+    assert.equal(bridge.unsavedChanges(), true, "a noted change is unsaved");
+    const saving = bridge.requestSave({ kind: "save" });
+    assert.equal(bridge.saveBusy(), true, "busy while the coordinator runs the save");
+    await saving;
+    assert.equal(bridge.saveBusy(), false);
+    assert.equal(bridge.unsavedChanges(), true, "only confirming clean saves the change");
+    bridge.confirmSavedNow();
+    assert.equal(bridge.unsavedChanges(), false);
+    policy.schedule("file");
+    assert.equal(policy.pending(), true);
+  } finally {
+    stop();
+  }
+  assert.equal(policy.pending(), false, "stopping the saves stops the autosave timers");
+  assert.deepEqual(log.filter((l) => /^(arm|disarm|autosave)/.test(l)), ["arm:2000", "arm:15000", "disarm", "disarm"]);
+  assert.throws(() => bridge.autoSavePolicy(), /not started yet/);
+  assert.equal(bridge.unsavedChanges(), false);
 });
 
 test("the legacy join rule: plain saves fold, a manual save absorbs an automatic one, Save As and a forced save never fold", () => {

@@ -15,9 +15,11 @@ import { openProjectFile } from "./18-local-files.js";
 import { openServersDialog } from "./20e-connect.js";
 import { flushDraftNow } from "./20g-drafts.js";
 import { draftResume, recoveryStarted } from "../legacy/recovery-bridge.ts";
+import { unsavedChanges } from "../legacy/save-bridge.ts";
 import { concatBytes, strBytes } from "../adapters/formats/bytes.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { mimeForFilename } from "../../shared/file-names.js";
+import { startupReady } from "../legacy/startup-bridge.ts";
 
 export function makeDesktopHandle(entry) {
   var id = entry.id;
@@ -80,7 +82,7 @@ export function notifyDesktopDocumentState() {
   var c = homeConn();
   S.DESKTOP.setDocumentState({
     title: S.state.title || "Untitled Script",
-    dirty: !!S.dirty || restoring,
+    dirty: unsavedChanges() || restoring,
     pristine: (typeof isPristineSeedDocument === "function" && isPristineSeedDocument()) && !restoring,
     docId: S.state.docId || null,
     fileId: (home.kind === "file" && home.handle && home.handle._desktopId) || null,
@@ -185,10 +187,10 @@ async function openPrompterElsewhere(chromium) {
     var fh = fileHome();
     var onDisk = !!(fh && fh.handle && fh.handle._desktopId);
     if (!onDisk && !serverId) return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.NOT_SAVED);
-    if (S.dirty) {
+    if (unsavedChanges()) {
       if (onDisk && fh.format === "html") return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.NOT_SAVED);
       await saveDoc();
-      if (S.dirty) return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.SAVE_FAILED);
+      if (unsavedChanges()) return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.SAVE_FAILED);
     }
     var answer;
     try { answer = await (chromium ? S.DESKTOP.openPrompterInChromium() : S.DESKTOP.openPrompterInBrowser()); }
@@ -415,8 +417,8 @@ export function initDesktop() {
         showToast("Could not open " + ((entry && entry.name) || "that file") + ".", "error");
       }).then(handedDocumentSettled);
     }
-    if (S.state) proceed();
-    else if (S.initialStateReady) S.initialStateReady.then(proceed);
+    var ready = S.state ? null : startupReady();
+    if (ready) ready.then(proceed);
     else proceed();
   });
 
@@ -427,8 +429,8 @@ export function initDesktop() {
       adoptPayloadServer(payload);
       openPendingServerDocForTab(serverDocId);
     }
-    if (S.state) proceed();
-    else if (S.initialStateReady) S.initialStateReady.then(proceed);
+    var ready = S.state ? null : startupReady();
+    if (ready) ready.then(proceed);
     else proceed();
   });
 

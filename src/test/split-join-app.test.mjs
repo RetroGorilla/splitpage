@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -120,7 +121,7 @@ function stepNames(entry) {
 function observe(run) {
   flushEdits();
   const session = liveSession();
-  const seq0 = S.editSeq, generation0 = session.generation(), undo0 = undoSizes().undo, top0 = lastUndoEntry();
+  const seq0 = saveChanges(), generation0 = session.generation(), undo0 = undoSizes().undo, top0 = lastUndoEntry();
   const published = [], refreshed = [];
   const stop = session.subscribe((c) => published.push({ kind: c.kind, whole: c.changes.whole, rows: c.changes.rowsInserted.length + c.changes.rowsRemoved.length, saveNow: c.changes.saveNow, derive: c.changes.derive.slice() }));
   const refresh = session.refresh;
@@ -136,7 +137,7 @@ function observe(run) {
   flushEdits();
   const top = lastUndoEntry();
   return {
-    seq: S.editSeq - seq0,
+    seq: saveChanges() - seq0,
     generation: session.generation() - generation0,
     published,
     refreshed,
@@ -169,7 +170,7 @@ test("a grid split (Alt+Enter) publishes one declared edit: one generation, one 
   assert.equal(row("r1").audioText, "Hello");
   assert.equal(row(created).audioText, " there");
   assert.notEqual(row("r1").updatedAt, stamp);
-  assert.equal(S.dirty, true);
+  assert.equal(unsavedChanges(), true);
 });
 
 test("a split makes a todo scene after it with the cut-off half in the same field and an empty other field, keys in this order", async () => {
@@ -748,7 +749,7 @@ test("a grid split whose commit is followed by a throw still draws the new scene
   assert.deepEqual(reported, ["listener broke"]);
   assert.equal(row(created).audioText, " there");
   assert.ok(cellOf(created, "audioText"), "the new scene is on screen");
-  assert.equal(S.dirty, true);
+  assert.equal(unsavedChanges(), true);
 });
 
 test("a Writer join whose commit is followed by a throw still redraws the Writer, and the throw is only reported", async () => {
@@ -761,7 +762,7 @@ test("a Writer join whose commit is followed by a throw still redraws the Writer
   assert.deepEqual(reported, ["listener broke"]);
   assert.deepEqual(ids(), ["j1"]);
   assert.equal(para("j2"), null, "the joined scene left the Writer");
-  assert.equal(S.dirty, true);
+  assert.equal(unsavedChanges(), true);
   writer.closeWriter();
 });
 

@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { confirmSavedNow, unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -129,7 +130,7 @@ async function throughSession(gesture) {
   assert.equal(seen[0].changes.whole, false, "the session is told exactly what changed, not just that something did");
   assert.equal(liveSession().generation(), generation + 1, "one generation");
   assert.equal(undoSizes().undo, before.undo + 1, "one undo entry");
-  assert.equal(S.dirty, true, "the script is marked unsaved");
+  assert.equal(unsavedChanges(), true, "the script is marked unsaved");
   return seen[0].changes;
 }
 
@@ -247,10 +248,10 @@ test("writer: typing the main title is one set-title edit and updates the page t
 
 test("writer: an input that leaves the title as it was makes no edit", async () => {
   await openInWriter();
-  S.dirty = false;
+  confirmSavedNow();
   untouched(() => typeTitle(writerTitle(), "Writer commands"));
   untouched(() => typeTitle(docTitle(), "Writer commands"));
-  assert.equal(S.dirty, false);
+  assert.equal(unsavedChanges(), false);
   writer.closeWriter();
 });
 
@@ -258,12 +259,12 @@ test("writer: a review copy refuses either title, puts the words back and change
   await openInWriter();
   window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
   flushEdits();
-  S.dirty = false;
+  confirmSavedNow();
   untouched(() => typeTitle(writerTitle(), "Not mine"));
   assert.equal(writerTitle().value, "Writer commands");
   writer.closeWriter();
   untouched(() => typeTitle(docTitle(), "Not mine either"));
   assert.equal(docTitle().value, "Writer commands");
-  assert.equal(S.dirty, false);
+  assert.equal(unsavedChanges(), false);
   window.__hostedTest.setSession({ role: "edit", docId: null });
 });

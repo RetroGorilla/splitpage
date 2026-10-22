@@ -34,16 +34,14 @@ import {
 import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./20d-formats.js";
 import { makeDesktopHandle } from "./20f-desktop.js";
 import { existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
-import { requestSave, saveRunning, savesStarted } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, requestSave, saveChanges, saveRunning, unsavedChanges } from "../legacy/save-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 import { conflictStash } from "../legacy/recovery-bridge.ts";
-import { autoSaveMay, autoSaveWhere } from "../application/save/autosave.ts";
+import { autoSaveWhere } from "../application/save/autosave.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
 import { slugify } from "../../shared/text.js";
-
-export var autoSaveEnabled;
 
 function saveKind(opts) {
   if (opts.saveAs) return "saveAs";
@@ -63,11 +61,6 @@ var CANCELLED = Object.freeze({ kind: "cancelled" });
 var FAILED = Object.freeze({ kind: "failed" });
 var CONFLICTED = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
 var NOT_AUTOSAVING = Object.freeze({ kind: "refused", reason: "Autosave is off, paused, has nowhere to write or nothing to write" });
-
-function finishWriting(job) {
-  S.saveButtonBusy = !job.alive() && savesStarted() && saveRunning();
-  setSaveButtons(S.dirty ? "Save •" : "Save", false);
-}
 
 function saveDialogs(slug) {
   return {
@@ -103,7 +96,7 @@ function confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, co
     if (landed.lastModified !== null) landed.home.lastModified = landed.lastModified;
   }
   adoptSavedCopyDocId(forkDocId, docIdAtSave, true);
-  if (!copyOfHosted && S.editSeq === seqAtSave) clearDirty();
+  if (!copyOfHosted && saveChanges() === seqAtSave) clearDirty();
 }
 
 async function writeDoc(opts, job) {
@@ -111,8 +104,6 @@ async function writeDoc(opts, job) {
   var saveAs = !!opts.saveAs;
   var auto = !!opts.auto;
   if (!auto) resumeAutoSave();
-  S.saveButtonBusy = true;
-  setSaveButtons("Saving…", true);
 
   if (onServerDoc() && !saveAs) {
     try {
@@ -122,7 +113,7 @@ async function writeDoc(opts, job) {
                      "Press Save to try again.");
       }
     } finally {
-      finishWriting(job);
+      setSaveButtons();
     }
     return sentToServer === false ? FAILED : SAVED;
   }
@@ -142,7 +133,7 @@ async function writeDoc(opts, job) {
     stamp: { rev: (S.state.rev || 0) + 1, lastEditedBy: getEditorName(), lastEditedAt: nowIso() }
   });
   var published = cloneState(captured.document);
-  var seqAtSave = S.editSeq;
+  var seqAtSave = saveChanges();
   var slug = slugify(published.title);
   var reusing = !saveAs && fileHome() ? fileHome() : null;
   var kind = saveAs ? "md" : ((reusing && reusing.format) || "md");
@@ -236,7 +227,7 @@ async function writeDoc(opts, job) {
     }
   } finally {
     undoRetarget();
-    finishWriting(job);
+    setSaveButtons();
   }
   return written;
 }
@@ -289,14 +280,6 @@ export function applyStashedWork(loaded, override, apply) {
   });
 }
 
-export var autoSaveTiming = { idle: 2000, hostedIdle: 5000, max: 15000 };
-
-export function autoSaveIdleFor(target) {
-  return target === "server" ? autoSaveTiming.hostedIdle : autoSaveTiming.idle;
-}
-export var autoSaveIdleTimer = null;
-export var autoSaveMaxTimer = null;
-export var autoSaveHalt = "";
 
 function readAutoSavePref() {
   return preferences().autosave();
@@ -313,21 +296,19 @@ export function autoSaveTarget() {
 }
 
 function autoSaveAllowed() {
-  return autoSaveMay({ on: !!autoSaveEnabled, halted: autoSaveHalt, target: autoSaveTarget() });
+  return autoSavePolicy().may(autoSaveTarget());
 }
 
 export function setAutoSaveEnabled(on) {
-  autoSaveEnabled = !!on;
-  preferences().setAutosave(autoSaveEnabled);
-  if (!autoSaveEnabled) clearAutoSaveTimers();
-  else if (S.dirty) scheduleAutoSave();
-  updateAutoSaveMenu();
-  updateSaveStatus();
+  preferences().setAutosave(!!on);
+  autoSavePolicy().setEnabled(on);
+  if (on && unsavedChanges()) scheduleAutoSave();
 }
 
 export function toggleAutoSave() {
-  setAutoSaveEnabled(!autoSaveEnabled);
-  showToast(autoSaveEnabled
+  var on = !autoSavePolicy().enabled();
+  setAutoSaveEnabled(on);
+  showToast(on
     ? "Autosave is on — edits go to the file you saved to, a moment after you stop typing."
     : "Autosave is off — your changes are only written when you press Save.", "ok");
 }
@@ -335,47 +316,43 @@ export function toggleAutoSave() {
 export function updateAutoSaveMenu() {
   var item = document.getElementById("menu-autosave");
   if (!item) return;
-  item.setAttribute("aria-checked", autoSaveEnabled ? "true" : "false");
-  item.classList.toggle("is-on", autoSaveEnabled);
+  var on = autoSavePolicy().enabled();
+  item.setAttribute("aria-checked", on ? "true" : "false");
+  item.classList.toggle("is-on", on);
 }
 
 export function scheduleAutoSave() {
-  if (!autoSaveAllowed()) return;
-  var target = autoSaveTarget();
-  if (autoSaveIdleTimer) clearTimeout(autoSaveIdleTimer);
-  autoSaveIdleTimer = setTimeout(runAutoSaveTimer, autoSaveIdleFor(target));
-  if (!autoSaveMaxTimer) autoSaveMaxTimer = setTimeout(runAutoSaveTimer, autoSaveTiming.max);
+  autoSavePolicy().schedule(autoSaveTarget());
 }
 
 export function clearAutoSaveTimers() {
-  if (autoSaveIdleTimer) { clearTimeout(autoSaveIdleTimer); autoSaveIdleTimer = null; }
-  if (autoSaveMaxTimer) { clearTimeout(autoSaveMaxTimer); autoSaveMaxTimer = null; }
+  autoSavePolicy().clear();
 }
 
-function runAutoSaveTimer() {
-  clearAutoSaveTimers();
-  if (!S.dirty) return;
+function autoSaveDue() {
+  if (!unsavedChanges()) return;
   queueAutoSave();
 }
 
+function autoSaveChanged(what) {
+  if (what === "enabled") updateAutoSaveMenu();
+  updateSaveStatus();
+  if (what === "halt") updateFileChip();
+}
+
 export function flushAutoSave() {
-  if (!autoSaveIdleTimer && !autoSaveMaxTimer) return;
-  clearAutoSaveTimers();
-  if (S.dirty) queueAutoSave();
+  var policy = autoSavePolicy();
+  if (!policy.pending()) return;
+  policy.clear();
+  if (unsavedChanges()) queueAutoSave();
 }
 
 export function haltAutoSave(reason) {
-  clearAutoSaveTimers();
-  autoSaveHalt = reason || "Autosave is paused — press Save to try again.";
-  updateSaveStatus();
-  updateFileChip();
+  autoSavePolicy().halt(reason);
 }
 
 export function resumeAutoSave() {
-  if (!autoSaveHalt) return;
-  autoSaveHalt = "";
-  updateSaveStatus();
-  updateFileChip();
+  autoSavePolicy().resume();
 }
 
 var autoSaveWriting = false;
@@ -387,7 +364,7 @@ export function queueAutoSave() {
 }
 
 function writeAutoSave(job) {
-  if (!autoSaveAllowed() || !S.dirty) return Promise.resolve(NOT_AUTOSAVING);
+  if (!autoSaveAllowed() || !unsavedChanges()) return Promise.resolve(NOT_AUTOSAVING);
   autoSaveWriting = true;
   return writeDoc({ auto: true }, job).then(function (result) {
     autoSaveWriting = false;
@@ -428,8 +405,7 @@ export function obsoleteSaveText(title) {
   return "An earlier save of “" + (title || "Untitled Script") + "” finished after you reopened it. Your open copy is unchanged.";
 }
 
-function showSaveRunning(running) {
-  S.saveButtonBusy = running;
+function showSaveRunning() {
   setSaveButtons();
 }
 
@@ -452,13 +428,16 @@ export function legacySavePorts(ownership) {
     keyOf: destinationKeyOf,
     obsolete: reportObsoleteSave,
     running: showSaveRunning,
-    ownership: saveOwnership(ownership)
+    ownership: saveOwnership(ownership),
+    autosave: {
+      enabledAtStart: readAutoSavePref,
+      due: autoSaveDue,
+      changed: autoSaveChanged
+    }
   };
 }
 
 export function __init() {
-  autoSaveEnabled = readAutoSavePref();
-
   window.addEventListener("blur", function () { flushAutoSave(); });
 
   document.addEventListener("visibilitychange", function () {

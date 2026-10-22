@@ -3,6 +3,7 @@ import "fake-indexeddb/auto";
 import { readFileSync } from "node:fs";
 import { S } from "../js/_state.js";
 import { checksumText } from "../../shared/text.js";
+import { startupReady } from "../legacy/startup-bridge.ts";
 
 export const seen = [];
 let held = S.state;
@@ -88,7 +89,7 @@ export async function bootApp(stateData, opts) {
   } else {
     await import("../js/_entry.js");
   }
-  await S.initialStateReady;
+  await startupReady();
   return seen.splice(0);
 }
 
@@ -137,5 +138,5 @@ export async function rewireRunningApp(overrides) {
   const app = await import("../bootstrap/app.ts");
   app.stopApp();
   app.startApp(await rewireApp(overrides));
-  await S.initialStateReady;
+  await startupReady();
 }

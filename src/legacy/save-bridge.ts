@@ -1,3 +1,5 @@
+import { createAutoSavePolicy } from "../application/save/autosave.ts";
+import type { AutoSaveChange, AutoSavePolicy } from "../application/save/autosave.ts";
 import { createSaveCoordinator } from "../application/save/coordinator.ts";
 import type {
   Confirmed,
@@ -8,6 +10,7 @@ import type {
   SaveOwnershipPort,
   WriterResult
 } from "../application/save/coordinator.ts";
+import type { TimerPort } from "../application/session/ports.ts";
 
 export type LegacySaveKind = "save" | "auto" | "autosave" | "force" | "saveAs" | "server" | "writeback" | "writebackForce";
 
@@ -25,15 +28,31 @@ export interface LegacySavePorts {
   readonly obsolete: (request: LegacySaveRequest, here: boolean) => void;
   readonly running: (running: boolean) => void;
   readonly ownership: SaveOwnershipPort;
+  readonly autosave: LegacyAutoSavePorts;
+}
+
+export interface LegacyAutoSavePorts {
+  readonly enabledAtStart: () => boolean;
+  readonly due: () => void;
+  readonly changed: (what: AutoSaveChange) => void;
 }
 
 type Coordinator = SaveCoordinator<LegacySaveRequest, unknown>;
 
-let started: Coordinator | null = null;
+interface Started {
+  readonly coordinator: Coordinator;
+  readonly autosave: AutoSavePolicy;
+}
 
-function running(): Coordinator {
+let started: Started | null = null;
+
+function live(): Started {
   if (!started) throw new Error("The save coordinator is not started yet");
   return started;
+}
+
+function running(): Coordinator {
+  return live().coordinator;
 }
 
 const PLAIN: readonly LegacySaveKind[] = Object.freeze(["save", "auto", "autosave", "server"]);
@@ -46,19 +65,28 @@ export function joinSaves(pending: LegacySaveRequest, next: LegacySaveRequest): 
   return pending.kind === "save" ? pending : Object.freeze({ kind: "save" });
 }
 
-export function startSaves(ports: LegacySavePorts): () => void {
+export function startSaves(ports: LegacySavePorts, timers: Pick<TimerPort, "start" | "stop">): () => void {
   if (started) throw new Error("The save coordinator is already started; stop it first");
-  const mine: Coordinator = createSaveCoordinator<LegacySaveRequest, unknown>({
-    ownership: ports.ownership,
-    destination: { current: ports.destination, keyOf: ports.keyOf },
-    writer: { write: ports.write },
-    report: { obsolete: ports.obsolete, running: ports.running },
-    join: joinSaves
+  const mine: Started = Object.freeze({
+    coordinator: createSaveCoordinator<LegacySaveRequest, unknown>({
+      ownership: ports.ownership,
+      destination: { current: ports.destination, keyOf: ports.keyOf },
+      writer: { write: ports.write },
+      report: { obsolete: ports.obsolete, running: ports.running },
+      join: joinSaves
+    }),
+    autosave: createAutoSavePolicy({
+      timers: timers,
+      enabledAtStart: ports.autosave.enabledAtStart,
+      due: ports.autosave.due,
+      changed: ports.autosave.changed
+    })
   });
   started = mine;
   return function () {
     if (started === mine) started = null;
-    mine.stop();
+    mine.autosave.stop();
+    mine.coordinator.stop();
   };
 }
 
@@ -105,4 +133,16 @@ export function confirmedGeneration(): number {
 
 export function unsavedFor(identity?: unknown): boolean {
   return running().dirty(identity);
+}
+
+export function saveBusy(): boolean {
+  return started !== null && started.coordinator.running();
+}
+
+export function unsavedChanges(): boolean {
+  return started !== null && started.coordinator.unsaved();
+}
+
+export function autoSavePolicy(): AutoSavePolicy {
+  return live().autosave;
 }
