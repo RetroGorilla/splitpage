@@ -8,6 +8,37 @@ import { formatDuration, pad2, rowSeconds as rowSecondsIn, targetClock } from ".
 import { tagPrintColor } from "./print-colors.ts";
 import { breakdownRows, commentEntries, sceneFacts, shotRecordForFile } from "./export-projections.ts";
 import type { CommentEntry, CommentOptions, ShotRecord } from "./export-projections.ts";
+import { toDocxRuns } from "../../core/text/projections.ts";
+import type { DocxRun } from "../../core/text/projections.ts";
+
+export type ExportRun = Omit<DocxRun, "tag"> & {
+  tag?: { cat: string; name: string; color?: string | null };
+  markers?: number[];
+};
+
+export function exportRuns(html: unknown, nums: Readonly<Record<string, number>>, services: ExportServices = exportServices()): ExportRun[] {
+  const runs: ExportRun[] = toDocxRuns(services.cellOf(html), { annotate: true });
+  runs.forEach(function (r, i) {
+    if (r.tag) r.tag = { cat: r.tag.cat, name: r.tag.name, color: tagPrintColor(r.tag.cat) };
+    if (!r.cmt) return;
+    let next: ExportRun | null = null;
+    for (let k = i + 1; k < runs.length; k++) {
+      const candidate = runs[k];
+      if (!candidate) throw new Error("Missing export run");
+      if (candidate.dir && (candidate.text === "(" || candidate.text === ")") && !candidate.cmt) continue;
+      next = candidate;
+      break;
+    }
+    const nextIds = (next && next.cmt) || [];
+    const ending = r.cmt.filter(function (id) { return nextIds.indexOf(id) === -1 && nums[id]; }).reverse();
+    if (ending.length) r.markers = ending.map(function (id) {
+      const number = nums[id];
+      if (number === undefined) throw new Error("Missing export comment number");
+      return number;
+    });
+  });
+  return runs;
+}
 
 export interface ExportFacts {
   title: string;

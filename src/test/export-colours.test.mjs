@@ -12,8 +12,8 @@ import { breakdownRows } from "../js/08-production-panels.js";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
-import { __init as initDocx, buildDocx, docxToRows } from "../js/15-docx.js";
-import { buildPackingListPdf, buildPdf } from "../js/17-pdf.js";
+import { __init as initDocx, buildDocx, docxToRows } from "../adapters/formats/docx.ts";
+import { buildPackingListPdf, buildPdf } from "../adapters/formats/pdf.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { loadTestDocument } from "./_document.mjs";
 
