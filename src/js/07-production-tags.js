@@ -12,38 +12,31 @@ import { render, syncFieldFromDom } from "./05-render.js";
 import { editCell } from "./05b-cell-edit.js";
 import { plainTagOpen } from "./07b-plain-tags.js";
 import { renderProduction, updateGearCount } from "./08-production-panels.js";
-import { brollPropsRenamed, runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
+import { runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
 import { domRangeFor } from "./09-find-replace.js";
-import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
-import { queueAutoSave } from "./14-export.js";
 import { updateWriterStats } from "./19-writer.js";
-import { makeId } from "../adapters/identity/ids.ts";
+import { randomIds } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { contentMemo } from "../core/document/memo.ts";
 import {
   ensureTagIds,
   isTagId,
-  normalizeTagName,
   registryKey,
   tagKey,
   tagStatusRank
 } from "../core/document/tags.ts";
-import { cappedName, cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
+import { cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
 import { TAG_CATEGORIES, TAG_STATUSES, groupTagsByCategory, tagCategory, tagStatus } from "../core/production/looks.ts";
 import {
   bulkTagCell as bulkTagCellWith,
   collectTagsFromRows as collectTagGroups,
   deriveProductionIndex,
-  holdsMedia,
   isBlankTagName,
   missingRegistryTags as missingRegistryTagsIn,
-  newRegistryTag,
   planRegistryHealing,
   refreshedProductionIndex,
-  registryEntry as registryEntryIn,
   registrySignature,
-  retagCell,
   tagFieldOccurrences as tagFieldOccurrencesWith,
   tagOccurrences
 } from "../core/production/tags.ts";
@@ -52,7 +45,10 @@ import { namedTagId, projection } from "../core/text/runs.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
-import { readSession, requestRefresh } from "../legacy/session-bridge.ts";
+import { readSession, requestRefresh, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
+import { retagMentions, retagRewrites } from "../legacy/tag-rewrites.ts";
+import { addPersonCommand, registerTagCommand, retagCommand, tagCellsCommand } from "../application/commands/production-records.ts";
+import { personById as personByIdIn, personNamed, registryEntryById as registryEntryByIdIn, registryEntryOf } from "../core/production/records.ts";
 import { focusMemory } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
@@ -114,57 +110,25 @@ export function collectTagsFromRows(rows) {
 }
 
 export function registryEntry(cat, name) {
-  return registryEntryIn(S.state.productionTags, cat, name);
+  return readSession(function (doc) { return registryEntryOf(doc, cat, name); });
 }
 
 export function registerProductionTag(cat, name) {
-  var rec = newRegistryTag(S.state.productionTags, cat, cappedName(String(name == null ? "" : name), 80));
-  if (rec) S.state.productionTags.push(rec);
-}
-
-export function addRegistryTags(records) {
-  records.forEach(function (t) { S.state.productionTags.push(t); });
+  return runDocumentEdit(registerTagCommand({ cat: cat, name: String(name == null ? "" : name) }));
 }
 
 export function registryEntryById(id) {
-  for (var i = 0; i < S.state.productionTags.length; i++) {
-    var t = S.state.productionTags[i];
-    if (t && t.id === id) return t;
-  }
-  return null;
+  return readSession(function (doc) { return registryEntryByIdIn(doc, id); });
 }
 
 export function personById(id) {
-  if (!id) return null;
-  for (var i = 0; i < S.state.people.length; i++) {
-    if (S.state.people[i].id === id) return S.state.people[i];
-  }
-  return null;
+  return readSession(function (doc) { return personByIdIn(doc, id); });
 }
 
 export function findOrAddPerson(name) {
-  var clean = cappedText(name, 60);
-  if (!clean) return "";
-  var norm = normalizeTagName(clean);
-  for (var i = 0; i < S.state.people.length; i++) {
-    if (normalizeTagName(S.state.people[i].name) === norm) return S.state.people[i].id;
-  }
-  var person = { id: makeId("p"), name: clean };
-  S.state.people.push(person);
-  return person.id;
-}
-
-export function deletePerson(id) {
-  S.state.people = S.state.people.filter(function (p) { return p.id !== id; });
-  S.state.productionTags.forEach(function (t) { if (t.owner === id) t.owner = ""; });
-  (S.state.brollShots || []).forEach(function (b) { if (b.owner === id) b.owner = ""; });
-}
-
-export function deleteProductionTagEntry(cat, name) {
-  var key = registryKey(cat, name);
-  var before = S.state.productionTags.length;
-  S.state.productionTags = S.state.productionTags.filter(function (t) { return registryKey(t.cat, t.name) !== key; });
-  return before !== S.state.productionTags.length;
+  runDocumentEdit(addPersonCommand(name, randomIds));
+  var person = readSession(function (doc) { return personNamed(doc, name); });
+  return person ? person.id : "";
 }
 
 var prodIndex = null;
@@ -206,11 +170,11 @@ export function currentProductionIndex() {
   return productionIndex().core;
 }
 
-function adoptRegisteredIds(ix) {
+function adoptRegisteredIds(ix, doc) {
   var ids = Object.create(null), left = Object.create(null);
   ix.core.unregistered.forEach(function (t) {
     var key = registryKey(t.catId, t.name);
-    var reg = registryEntry(t.catId, t.name);
+    var reg = registryEntryOf(doc, t.catId, t.name);
     if (reg) ids[key] = reg.id;
     else left[key] = true;
   });
@@ -225,20 +189,20 @@ function adoptRegisteredIds(ix) {
   var core = Object.assign({}, ix.core, {
     entries: registeredFirst(ix.core.entries),
     unregistered: ix.core.unregistered.filter(function (t) { return registryKey(t.catId, t.name) in left; }),
-    tagSig: registrySignature(S.state.productionTags)
+    tagSig: registrySignature(doc.productionTags)
   });
   holdIndex(core, registeredFirst(ix.entries), ix.state);
 }
 
-export function tagRecordsPlan() {
-  if (!S.state) return null;
+export function tagRecordsPlan(doc) {
+  if (!doc) return null;
   var ix = productionIndex();
-  var plan = planRegistryHealing(S.state, productionReaders, cueSnapshot, ix.core);
+  var plan = planRegistryHealing(doc, productionReaders, cueSnapshot, ix.core);
   return {
-    apply: plan.count ? function () {
-      plan.retitle.forEach(function (r) { S.state.productionTags[r.at].name = r.name; });
-      addRegistryTags(plan.register);
-      adoptRegisteredIds(ix);
+    apply: plan.count ? function (into) {
+      plan.retitle.forEach(function (r) { into.productionTags[r.at].name = r.name; });
+      plan.register.forEach(function (t) { into.productionTags.push(t); });
+      adoptRegisteredIds(ix, into);
       if (plan.retitle.length) prodIndex = null;
       return plan.count;
     } : null,
@@ -247,9 +211,9 @@ export function tagRecordsPlan() {
 }
 
 export function healTagRegistry() {
-  var plan = tagRecordsPlan();
+  var plan = tagRecordsPlan(S.state);
   if (!plan) return 0;
-  var count = plan.apply ? plan.apply() : 0;
+  var count = plan.apply ? plan.apply(S.state) : 0;
   plan.commit();
   return count;
 }
@@ -646,21 +610,19 @@ export function bulkTagRows(rows, phrase, cat, name, matchCase, countOnly) {
   return total;
 }
 
-function tagAllOccurrences(phrase, cat, name) {
+function allOccurrencesTagged(doc, phrase, cat, name) {
   var needle = String(phrase || "").trim();
-  if (!needle) return 0;
-  var total = 0;
-  S.state.rows.forEach(function (row) {
+  var out = { hits: 0, rewrites: [] };
+  if (!needle || !doc) return out;
+  doc.rows.forEach(function (row) {
     ["visualText", "audioText"].forEach(function (field) {
       var res = tagFieldOccurrences(row[field], needle, cat, name, false);
-      if (res.hits) {
-        total += res.hits;
-        row[field] = res.html;
-        stampRow(row);
-      }
+      if (!res.hits) return;
+      out.hits += res.hits;
+      out.rewrites.push({ rowId: row.id, field: field, html: res.html });
     });
   });
-  return total;
+  return out;
 }
 
 function countPhraseMatches(phrase) {
@@ -675,67 +637,18 @@ function countPhraseMatches(phrase) {
   return total;
 }
 
-function eachTaggedField(cat, name, toName) {
-  var target = normalizeTagName(name);
-  var toId = toName === null ? null : namedTagId(cat, toName);
-  var changed = 0;
-  S.state.rows.forEach(function (row) {
-    ["visualText", "audioText"].forEach(function (field) {
-      var html = row[field];
-      var mentions = tagsInField(html).filter(function (t) {
-        return t.catId === cat && normalizeTagName(t.name) === target;
-      }).length;
-      if (!mentions) return;
-      changed += mentions;
-      row[field] = holdsMedia(html)
-        ? retagInHtml(html, cat, target, toName)
-        : retagCell(html, cat, target, toId, productionReaders);
-      stampRow(row);
-    });
-  });
-  return changed;
-}
-
-function retagInHtml(html, cat, target, toName) {
-  var body = inertBody(html);
-  Array.prototype.forEach.call(body.querySelectorAll(".tag-anchor"), function (el) {
-    if (el.getAttribute("data-tag-cat") !== cat) return;
-    if (normalizeTagName(el.getAttribute("data-tag-name")) !== target) return;
-    if (toName !== null) { el.setAttribute("data-tag-name", toName); return; }
-    while (el.firstChild) el.parentNode.insertBefore(el.firstChild, el);
-    el.parentNode.removeChild(el);
-  });
-  return sanitizeHtml(body.innerHTML);
-}
-
 export function renameTag(cat, oldName, newName) {
   var clean = cappedText(newName, 80);
   if (!clean) return false;
-  if (registryKey(cat, clean) !== registryKey(cat, oldName)) {
-    var collision = registryEntry(cat, clean);
-    var oldEntry = registryEntry(cat, oldName);
-    if (collision && oldEntry && collision !== oldEntry) {
-      if (!collision.owner && oldEntry.owner) collision.owner = oldEntry.owner;
-      if (!collision.notes && oldEntry.notes) collision.notes = oldEntry.notes;
-      if (tagStatusRank(oldEntry.status) > tagStatusRank(collision.status)) {
-        collision.status = oldEntry.status;
-      }
-      var oi = S.state.productionTags.indexOf(oldEntry);
-      if (oi !== -1) S.state.productionTags.splice(oi, 1);
-      brollPropsRenamed(oldEntry.id, cat === "prop" ? oldEntry.name : "", collision.id, collision.name);
-    }
-  }
-  var spanCount = eachTaggedField(cat, oldName, clean);
-  var entry = registryEntry(cat, oldName);
-  if (entry) {
-    entry.name = clean;
-    brollPropsRenamed(entry.id, cat === "prop" ? oldName : "", entry.id, clean);
-  }
-  return spanCount > 0 || !!entry;
+  var tag = { cat: cat, name: oldName };
+  return runDocumentEdit(retagCommand(tag, clean, retagRewrites([tag], clean), sessionStamps));
 }
 
 export function removeTag(cat, name) {
-  return eachTaggedField(cat, name, null);
+  var tag = { cat: cat, name: name };
+  var n = readSession(function (doc) { return retagMentions(doc, [tag]); });
+  if (!n) return 0;
+  return runDocumentEdit(retagCommand(tag, null, retagRewrites([tag], null), sessionStamps)) ? n : 0;
 }
 
 var pendingTag = null;
@@ -808,12 +721,12 @@ export function applyTag() {
 
   if (all) {
     breakUndoCoalescing();
-    var n = tagAllOccurrences(phrase, cat, name);
-    registerProductionTag(cat, name);
-    markDirty();
+    var n = readSession(function (doc) { return allOccurrencesTagged(doc, phrase, cat, name).hits; });
+    runDocumentEdit(tagCellsCommand("tag-all-occurrences", function (doc) {
+      return allOccurrencesTagged(doc, phrase, cat, name).rewrites;
+    }, { cat: cat, name: name }, sessionStamps, true));
     breakUndoCoalescing();
     render();
-    queueAutoSave();
     showToast("Labelled " + n + " mention" + (n === 1 ? "" : "s") + " of " + name, "ok");
     return;
   }
@@ -826,16 +739,15 @@ export function applyTag() {
   if (idx === -1) return;
   syncFieldFromDom(cellEl);
   breakUndoCoalescing();
-  var row = S.state.rows[idx];
-  var res = tagFieldOccurrences(row[ctx.field], phrase, cat, name, false, ctx.occurrenceIndex || 0);
-  if (!res.hits) { showToast("Could not find that text any more.", "warn"); return; }
-  row[ctx.field] = res.html;
-  stampRow(row);
-  registerProductionTag(cat, name);
-  markDirty();
+  function tagged(doc) {
+    var row = doc ? doc.rows[rowIndexOf(doc, ctx.rowId)] : null;
+    var res = row ? tagFieldOccurrences(row[ctx.field], phrase, cat, name, false, ctx.occurrenceIndex || 0) : null;
+    return res && res.hits ? [{ rowId: ctx.rowId, field: ctx.field, html: res.html }] : [];
+  }
+  if (!readSession(tagged).length) { showToast("Could not find that text any more.", "warn"); return; }
+  runDocumentEdit(tagCellsCommand("tag-occurrence", tagged, { cat: cat, name: name }, sessionStamps, true));
   breakUndoCoalescing();
   render();
-  queueAutoSave();
   showToast("Labelled as " + name, "ok");
 }
 

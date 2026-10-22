@@ -1,5 +1,7 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { mintDocId, nowIso } from "../adapters/identity/ids.ts";
+import { documentIdStamp, editStamp } from "../application/commands/save-stamps.ts";
+import { stampDocument } from "../legacy/session-bridge.ts";
 import { S } from "./_state.js";
 import { fileHome, home, restoreHome, serverOf, setHome } from "./_home.js";
 import { rememberLastFileHandle } from "./00-prelude.js";
@@ -87,9 +89,7 @@ function saveDialogs(slug) {
 
 function confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted, landed) {
   var stamp = captured.document;
-  S.state.rev = stamp.rev;
-  S.state.lastEditedBy = stamp.lastEditedBy;
-  S.state.lastEditedAt = stamp.lastEditedAt;
+  stampDocument(editStamp({ rev: stamp.rev, lastEditedBy: stamp.lastEditedBy, lastEditedAt: stamp.lastEditedAt }));
   if (!copyOfHosted) setBaseState(published, "saveDoc: the bytes just written");
   if (landed) {
     landed.home.diskBase = published;
@@ -242,7 +242,7 @@ function adoptSavedCopyDocId(forkDocId, docIdAtSave, owned) {
   forkDocId = normalizeDocId(forkDocId);
   if (forkDocId) copyDocHistorySafe(docIdAtSave, forkDocId);
   if (!owned) return;
-  if (forkDocId && !onServerDoc()) S.state.docId = forkDocId;
+  if (forkDocId && !onServerDoc()) stampDocument(documentIdStamp(null, forkDocId));
   S.docIdWrittenOut = true;
   syncDocIdentity();
 }

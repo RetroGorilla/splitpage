@@ -1,5 +1,7 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { mintDocId, nowIso } from "../adapters/identity/ids.ts";
+import { editStamp } from "../application/commands/save-stamps.ts";
+import { stampDocument } from "../legacy/session-bridge.ts";
 import { S } from "./_state.js";
 import { authorityOf, isLinkGuest as guestAuthority, isReviewer } from "../application/collaboration/authority.ts";
 import {
@@ -1269,8 +1271,7 @@ async function writeToServer(job) {
   while (attempts < 3) {
     attempts++;
     if (!job.owns()) return true;
-    S.state.lastEditedBy = getEditorName();
-    S.state.lastEditedAt = nowIso();
+    stampDocument(editStamp({ lastEditedBy: getEditorName(), lastEditedAt: nowIso() }));
     var published = cloneState(S.state);
     var seqAtSave = saveChanges();
     var baseRevAtSave = home.rev;
