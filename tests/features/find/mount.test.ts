@@ -183,11 +183,11 @@ test("find: disposal removes every listener newest first and silences retained c
   for (const target of Object.keys(targets).map((id) => h.el(id))) {
     const add = target.addEventListener.bind(target);
     const remove = target.removeEventListener.bind(target);
-    target.addEventListener = (type: string, fn: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions): void => {
+    target.addEventListener = (type: string, fn: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void => {
       added.push({ target, type, fn, options });
       add(type, fn, options);
     };
-    target.removeEventListener = (type: string, fn: EventListenerOrEventListenerObject | null, options?: boolean | EventListenerOptions): void => {
+    target.removeEventListener = (type: string, fn: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions): void => {
       removed.push({ target, type, fn, options });
       remove(type, fn, options);
     };

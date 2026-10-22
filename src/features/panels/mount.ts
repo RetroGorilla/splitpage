@@ -35,14 +35,14 @@ export function mountPanels(mount: { window: Window; ports: PanelsPorts }): { di
       ports.applyWidth(id, width);
       ports.saveWidth(id, width);
     });
-    function down(event: MouseEvent): void {
+    function down(event: Event): void {
       end();
       drag = createViewLifetime(window);
       startX = x(event);
       startWidth = ports.readWidth(id);
       handle?.classList.add("is-dragging");
       document.body.classList.add("is-panel-resizing");
-      const move = (event: MouseEvent): void => {
+      const move = (event: Event): void => {
         if (!panel?.isConnected || !handle?.isConnected) { end(); return; }
         ports.applyWidth(id, ports.clampWidth(startWidth + startX - x(event), id));
       };
@@ -62,7 +62,7 @@ export function mountPanels(mount: { window: Window; ports: PanelsPorts }): { di
   return { dispose: life.dispose };
 }
 
-function x(event: MouseEvent): number {
-  const touch = (event as unknown as TouchEvent).touches?.[0];
-  return touch ? touch.clientX : event.clientX;
+function x(event: Event & { readonly touches?: TouchList; readonly clientX?: number }): number {
+  const touch = event.touches?.[0];
+  return touch ? touch.clientX : Number(event.clientX);
 }

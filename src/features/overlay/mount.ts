@@ -23,13 +23,11 @@ export interface OverlayMount {
   readonly dispose: () => void;
 }
 
-type OverlayEvent = Event & { readonly key?: string; readonly target: HTMLElement | null };
-
 export function mountOverlay(mount: { window: Window; ports: OverlayPorts }): OverlayMount {
   const win = mount.window;
   const doc = win.document;
   const ports = mount.ports;
-  const life = createViewLifetime<OverlayEvent>(win, () => true);
+  const life = createViewLifetime(win, () => true);
   const { listen } = life;
   const stages = new Set<string>();
   function stage(name: string, install: () => void): void {

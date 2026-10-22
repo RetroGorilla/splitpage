@@ -76,7 +76,7 @@ export function mountTagEntityContainer(mount: { window: Window; id: string; por
   const doc = mount.window.document;
   const ports = mount.ports;
   const el = doc.getElementById(mount.id);
-  const life = createViewLifetime<TagEvent>(mount.window, () => true);
+  const life = createViewLifetime(mount.window, () => true);
   const { listen } = life;
   listen(el, "click", ports.rootClick);
   listen(el, "keydown", function (e) {
@@ -126,7 +126,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
   const realm = mount.window as Window & typeof globalThis;
   const doc = realm.document;
   const ports = mount.ports;
-  const life = createViewLifetime<TagEvent>(mount.window, () => true);
+  const life = createViewLifetime(mount.window, () => true);
   const { listen } = life;
   const timers = new Set<number>();
   const touchPress = { timer: null as number | null, key: null as string | null, fired: false, x: 0, y: 0 };
