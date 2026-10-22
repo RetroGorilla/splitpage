@@ -1,13 +1,16 @@
+import { registerBuiltInExporters } from "./wiring/exporters.ts";
 import { wireProductionEditing } from "./wiring/production-editing.ts";
 import type { ActionRegistry } from "../application/actions.ts";
 import { createExportRegistry } from "../application/export/registry.ts";
 import type { ExportRegistry } from "../application/export/registry.ts";
+import { installExportServices } from "../application/export/services.ts";
 import type { DocumentSession, DocumentView, Plan } from "../application/session/document-session.ts";
 import type { ChangeSet, SessionChange } from "../application/session/change-set.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
 import type { Capability, DocumentEntry, ReportPort, TimerPort, UndoPort } from "../application/session/ports.ts";
 import type { SaveOwnershipPort } from "../application/save/coordinator.ts";
 import { startPageEffects } from "./effects.ts";
+import { legacyExportServices } from "./export-services.ts";
 import { createAppActions, installAppActions } from "../legacy/app-actions.ts";
 import { installExportFormats } from "../legacy/export-formats.ts";
 import { startEditor } from "../legacy/editor-bridge.ts";
@@ -36,12 +39,12 @@ export interface WiringDeps {
   readonly editorName: () => string;
   readonly refresh: (jobs: ReadonlySet<string>) => void;
   readonly records: RecordsReconciler;
-  readonly exporters: (registry: ExportRegistry) => () => void;
   readonly saves: (ownership: SaveOwnershipPort) => LegacySavePorts;
   readonly transitions: LegacyTransitionPorts;
   readonly recovery: () => LegacyRecoveryPorts;
   readonly keyTarget: EventTarget;
   readonly actions?: (() => ActionRegistry) | undefined;
+  readonly exporters?: ((registry: ExportRegistry) => () => void) | undefined;
   readonly undo?: SessionUndoPorts | undefined;
   readonly timers?: TimerPort | undefined;
   readonly report?: ReportPort | undefined;
@@ -68,6 +71,7 @@ export class WiringError extends Error {
 export const WIRING_STEPS = Object.freeze([
   "page effects",
   "action registry",
+  "export services",
   "export registry",
   "built-in exporters",
   "session",
@@ -87,7 +91,6 @@ const REQUIRED: readonly (readonly [keyof WiringDeps, "function" | "object"])[] 
   ["editorName", "function"],
   ["refresh", "function"],
   ["records", "function"],
-  ["exporters", "function"],
   ["saves", "function"],
   ["transitions", "object"],
   ["recovery", "function"],
@@ -96,6 +99,7 @@ const REQUIRED: readonly (readonly [keyof WiringDeps, "function" | "object"])[] 
 
 const OPTIONAL: readonly (readonly [keyof WiringDeps, "function" | "object"])[] = [
   ["actions", "function"],
+  ["exporters", "function"],
   ["undo", "object"],
   ["timers", "object"],
   ["report", "function"]
@@ -274,8 +278,9 @@ export function wireApp(deps: WiringDeps): Wiring {
   };
   build("page effects", () => startPageEffects(window), (stop) => stop);
   const actions = build("action registry", () => checkedActions((deps.actions ?? createAppActions)()), installAppActions);
+  build("export services", () => legacyExportServices(), installExportServices);
   const exports = build("export registry", () => createExportRegistry(), installExportFormats);
-  build("built-in exporters", () => checkedExporters(deps.exporters(exports)), (drop) => drop);
+  build("built-in exporters", () => checkedExporters((deps.exporters ?? registerBuiltInExporters)(exports)), (drop) => drop);
   build("session", () => startSessionBridge(legacySessionPorts(deps)), (stop) => stop);
   build("saves", () => startSaves(checkedSaves(deps.saves({ capture: captureOperation, stillOwns: stillOwns })), deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
   build("transitions", () => startTransitions(deps.transitions), (stop) => stop);

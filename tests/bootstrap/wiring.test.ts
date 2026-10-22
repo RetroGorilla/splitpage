@@ -9,9 +9,11 @@ import { createActionRegistry } from "../../src/application/actions.ts";
 import type { ActionRegistry } from "../../src/application/actions.ts";
 import { createExportRegistry } from "../../src/application/export/registry.ts";
 import type { ExportRegistry } from "../../src/application/export/registry.ts";
+import { exportServicesStarted, installExportServices } from "../../src/application/export/services.ts";
 import type { CommandOutcome, Replay } from "../../src/application/session/document-session.ts";
 import type { StampPorts, TimerPort } from "../../src/application/session/ports.ts";
 import { WIRING_STEPS, WiringError, wireApp } from "../../src/bootstrap/wiring.ts";
+import { legacyExportServices } from "../../src/bootstrap/export-services.ts";
 import type { Wiring, WiringDeps } from "../../src/bootstrap/wiring.ts";
 import { appActions } from "../../src/legacy/app-actions.ts";
 import { exportFormats, installExportFormats } from "../../src/legacy/export-formats.ts";
@@ -42,7 +44,7 @@ import { migrateRows } from "../../src/js/02-state.js";
 
 after(closeApp);
 
-const OWNERS = ["effects", "actions", "exports", "session", "saves", "transitions", "recovery", "editor", "productionEditing", "preferences"] as const;
+const OWNERS = ["effects", "actions", "exportServices", "exports", "session", "saves", "transitions", "recovery", "editor", "productionEditing", "preferences"] as const;
 
 type Owner = (typeof OWNERS)[number];
 type Started = Record<Owner, boolean>;
@@ -61,6 +63,7 @@ function started(): Started {
   return {
     effects: effectsStarted(),
     actions: live(() => appActions.list()),
+    exportServices: exportServicesStarted(),
     exports: live(() => exportFormats.cards()),
     session: sessionStarted() && live(() => liveSession().epoch()),
     saves: savesStarted(),
@@ -223,11 +226,11 @@ test("startup: wireApp builds every owner in order, each step sees only the owne
   const wiring = wireApp(f.deps);
   assert.deepEqual(f.log, [
     ["actions", only("effects")],
-    ["exporters", only("effects", "actions", "exports")],
-    ["undo watch", only("effects", "actions", "exports", "session")],
-    ["undo route", only("effects", "actions", "exports", "session")],
-    ["saves", only("effects", "actions", "exports", "session")],
-    ["recovery", only("effects", "actions", "exports", "session", "saves", "transitions")]
+    ["exporters", only("effects", "actions", "exportServices", "exports")],
+    ["undo watch", only("effects", "actions", "exportServices", "exports", "session")],
+    ["undo route", only("effects", "actions", "exportServices", "exports", "session")],
+    ["saves", only("effects", "actions", "exportServices", "exports", "session")],
+    ["recovery", only("effects", "actions", "exportServices", "exports", "session", "saves", "transitions")]
   ]);
   assert.deepEqual(started(), EVERYTHING);
   assert.equal(wiring.session, liveSession());
@@ -243,7 +246,7 @@ test("startup: wireApp builds every owner in order, each step sees only the owne
 });
 
 test("failed partial startup: each missing dependency is named and nothing is built", () => {
-  const required: (keyof WiringDeps)[] = ["entry", "effects", "editorName", "refresh", "records", "exporters", "saves", "transitions", "recovery", "keyTarget"];
+  const required: (keyof WiringDeps)[] = ["entry", "effects", "editorName", "refresh", "records", "saves", "transitions", "recovery", "keyTarget"];
   for (const name of required) {
     const f = fakes();
     const error = refused(() => wireLoose(without(f.deps, name)));
@@ -411,6 +414,7 @@ test("failed partial startup: a step that throws undoes every step before it, in
   const breakers: Record<(typeof WIRING_STEPS)[number], (f: Fakes) => { deps: WiringDeps; cleanup?: () => void; cause?: boolean }> = {
     "page effects": (f) => ({ deps: f.deps, cleanup: startEffects({} as EffectPorts<Element>), cause: false }),
     "action registry": (f) => ({ deps: { ...f.deps, actions: () => { throw boom; } } }),
+    "export services": (f) => ({ deps: f.deps, cleanup: installExportServices(legacyExportServices()), cause: false }),
     "export registry": (f) => ({ deps: f.deps, cleanup: installExportFormats(createExportRegistry()), cause: false }),
     "built-in exporters": (f) => ({ deps: { ...f.deps, exporters: () => { throw boom; } } }),
     session: (f) => ({ deps: { ...f.deps, undo: { ...must(f.deps.undo), route: () => { throw boom; } } } }),
@@ -421,7 +425,7 @@ test("failed partial startup: a step that throws undoes every step before it, in
     "production editing": (f) => ({ deps: f.deps, cleanup: startProductionEditing(must(f.deps.timers)), cause: false }),
     preferences: (f) => ({ deps: f.deps, cleanup: startPreferences(), cause: false })
   };
-  const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { "page effects": "effects", "export registry": "exports", transitions: "transitions", editor: "editor", "production editing": "productionEditing", preferences: "preferences" };
+  const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { "page effects": "effects", "export services": "exportServices", "export registry": "exports", transitions: "transitions", editor: "editor", "production editing": "productionEditing", preferences: "preferences" };
   assert.deepEqual(Object.keys(breakers), [...WIRING_STEPS], "every step is broken once");
   for (const step of WIRING_STEPS) {
     const f = fakes();

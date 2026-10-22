@@ -342,7 +342,7 @@ resolved entry.
 
 `src/js/_entry.js` is the legacy initializer shim, the build entry until plan §8's 4.x composition root replaces it. Since milestone 7's step 7.1 it does three things, in this order: it calls `wireApp` (`src/bootstrap/wiring.ts`) with the dependencies the numbered modules export, which builds the action and export registries, the document session, the save coordinator, the transitions, the draft recovery, the editor's owners and the preferences; it calls the 69 numbered modules' `__init` in numbered order; and it hands the wiring to `startAppWhenReady` (`src/bootstrap/app.ts`), which mounts the features and starts the actions on DOM ready. If `wireApp` throws, the shim reports the `WiringError` with `console.error` and calls no `__init` and no mount. Since 7.2 the session's effects come the same way: the shim imports `legacySessionEffects` (12), `getEditorName` (03), `runIdleRefresh` (07) and `derivedRecordsPlan` (08c) from modules already in its set and passes them to `wireApp`, and no numbered module configures a bridge while it loads (the load-order check in the same test file).
 
-Its import specifiers are a frozen set of 72 (the 69 modules it starts, `14e-export-formats.js` for `registerBuiltInExporters`, `../bootstrap/wiring.ts` and `../bootstrap/app.ts`). `tests/bootstrap/legacy-shim.test.ts` fails if the shim imports anything outside that set, so the list can only shrink, and if any file under `src/application`, `src/features` or `src/bootstrap` imports the shim (resolved with this tool's resolver). `tools/modularize.mjs` generated the first version of the shim; rerunning it would overwrite the wiring call, so it is not rerun.
+Its import specifiers are a frozen set of 71 (the 69 modules it starts, `../bootstrap/wiring.ts` and `../bootstrap/app.ts`). The built-in exporters' registration left the set with `14e-export-formats.js` (L4b PR 1): `wireApp` registers them from `src/bootstrap/wiring/exporters.ts` itself. `tests/bootstrap/legacy-shim.test.ts` fails if the shim imports anything outside that set, so the list can only shrink, and if any file under `src/application`, `src/features` or `src/bootstrap` imports the shim (resolved with this tool's resolver). `tools/modularize.mjs` generated the first version of the shim; rerunning it would overwrite the wiring call, so it is not rerun.
 
 The modules it starts, the owner each is expected to move to in 4.x (a planning label: a feature folder, an adapter, or the composition root), and the bridges under `src/legacy/` each imports:
 
@@ -394,8 +394,8 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `13b-collaborate.js` | features/file-menu | `app-actions`, `preferences-bridge` |
 | `14-export.js` | adapters/files (save writer) | `preferences-bridge`, `recovery-bridge`, `save-bridge` |
 | `14b-export-kit.js` | adapters/formats | `cache-freeze`, `document-ports`, `plain-text`, `richtext`, `session-bridge` |
-| `15-docx.js` | adapters/formats | `document-ports`, `plain-text`, `richtext` |
-| `16-csv.js` | adapters/formats | `richtext` |
+| `15-docx.js` | adapters/formats | none (decodes through the export services port) |
+| `16-csv.js` | adapters/formats | none (decodes through the export services port) |
 | `16b-xlsx.js` | adapters/formats | none |
 | `17-pdf.js` | adapters/formats | none |
 | `18-local-files.js` | adapters/files | `app-actions`, `export-formats`, `richtext`, `save-bridge`, `session-bridge`, `transition-bridge` |
