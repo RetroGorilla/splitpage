@@ -12,14 +12,13 @@ import { breakdownRows } from "../js/08-production-panels.js";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
-import { __init as initDocx, buildDocx, docxToRows } from "../adapters/formats/docx.ts";
+import { buildDocx, docxToRows } from "../adapters/formats/docx.ts";
 import { buildPackingListPdf, buildPdf } from "../adapters/formats/pdf.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initStatus();
-initDocx();
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const tag = (cat, name) =>

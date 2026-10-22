@@ -22,7 +22,7 @@ import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
 import { toMarkdownDoc } from "../adapters/formats/export-text.ts";
 import {
-  __init as initDocx, audioDirectionsHtml, buildDocx, buildNarrationDocx, buildNarrationText, docxToRows, narrationRows
+  audioDirectionsHtml, buildDocx, buildNarrationDocx, buildNarrationText, docxToRows, narrationRows
 } from "../adapters/formats/docx.ts";
 import { buildCsv } from "../adapters/formats/csv.ts";
 import { prompterSceneHtml } from "../js/20-teleprompter.js";
@@ -38,7 +38,6 @@ import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initSceneStatus();
-initDocx();
 
 const T = (text, marks) => ({ text, marks: marks || {} });
 const D = (text, marks) => ({ text, marks: Object.assign({ dir: true }, marks || {}) });
