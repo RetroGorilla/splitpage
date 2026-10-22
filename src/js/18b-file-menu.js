@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { home } from "./_home.js";
-import { readDefaultWpm, savedStatusText, savedWhenText } from "./00p-prefs.js";
+import { savedStatusText, savedWhenText } from "../../shared/clock.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { pushSnapshot, updateIdentityChip } from "./03-sync.js";
@@ -20,6 +20,7 @@ import { LONG_DEMO } from "./_starters.js";
 import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
 import { setMenuItemLabel, setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
 import { saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 
 function el(id) { return document.getElementById(id); }
 
@@ -105,7 +106,7 @@ function savedWord(at) {
   if (saveBusy()) return { text: "Saving…" };
   if (unsavedChanges()) return { text: "Unsaved changes", unsaved: true };
   var now = Date.now();
-  var when = at ? savedWhenText(at, now) : "";
+  var when = at ? savedWhenText(at, now, preferences().clock()) : "";
   return { text: savedStatusText(at, now), title: when ? "Last saved at " + when : "" };
 }
 
@@ -312,7 +313,7 @@ export function startNewScript() {
   var kept = replaceWithNewDocument(migrateRows({
     title: "Untitled Script",
     rows: [{ id: makeId("r"), visualText: "", imageRef: null, audioText: "" }],
-    wordsPerMinute: readDefaultWpm()
+    wordsPerMinute: preferences().defaultWpm()
   }), "startNewScript: a new blank document", "Before starting a new script");
   var first = document.querySelector('#rows .row .audio-cell .cell-editable');
   if (first) first.focus();

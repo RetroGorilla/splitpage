@@ -32,6 +32,7 @@ import {
 import { mountFindFeature, mountTagsFeature, stopFindFeature, stopTagsFeature } from "./wiring/production.ts";
 import { mountCommentsFeature, stopCommentsFeature } from "./wiring/comments.ts";
 import {
+  mountAppearanceFeature,
   mountConflictsFeature,
   mountCellReachFeature,
   mountDriveFeature,
@@ -59,12 +60,16 @@ import {
 import { mountOverlayFeature, stopOverlayFeature } from "./wiring/overlay.ts";
 import { openInitialDocument, startupPorts } from "./wiring/startup.ts";
 
-export { mountTopbarFeature };
-
 let running: (() => void) | null = null;
 
 function view(key: string, mount: () => unknown): [() => unknown, () => void] {
   return [mount, () => stopViewFeature(key)];
+}
+
+let appearanceMountedEarly = false;
+
+function stopAppearance(): void {
+  stopViewFeature("mountAppearance");
 }
 
 export function startApp(wiring: Wiring): () => void {
@@ -86,9 +91,14 @@ export function startApp(wiring: Wiring): () => void {
     mount();
   };
   try {
+    const appearance = appearanceMountedEarly;
+    appearanceMountedEarly = false;
+    if (appearance) stops.push(stopAppearance);
     stops.push(startActions(wiring.actions, wiring.keyTarget));
     const startup = beginStartup(startupPorts());
     stops.push(startup.dispose);
+    if (!appearance) run([mountAppearanceFeature, stopAppearance]);
+    run(view("mountTopbar", mountTopbarFeature));
     run(view("mountCellReach", mountCellReachFeature));
     run(view("mountPhoneBar", mountPhoneBarFeature));
     run(view("mountNotices", mountNoticesFeature));
@@ -166,6 +176,8 @@ export function stopApp(): void {
 
 export function startAppWhenReady(doc: Document, wiring: Wiring): void {
   if (running || cancelReady) throw new Error("the app is already started or waiting to start; stop it first");
+  mountAppearanceFeature();
+  appearanceMountedEarly = true;
   let started = false;
   const cancel = whenDocumentReady(doc, () => {
     started = true;
@@ -177,7 +189,12 @@ export function startAppWhenReady(doc: Document, wiring: Wiring): void {
       try {
         cancel();
       } finally {
-        wiring.dispose();
+        appearanceMountedEarly = false;
+        try {
+          stopAppearance();
+        } finally {
+          wiring.dispose();
+        }
       }
     };
   }

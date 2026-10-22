@@ -94,7 +94,16 @@ const CONDITIONAL = {
 };
 
 const RESOURCE_ROWS = {
+  appearance: ["window storage/B"],
   shortcuts: ["window keydown/B"],
+  topbar: [
+    "#btn-production pointerenter/B", "#btn-production focus/B", "#btn-production pointerleave/B",
+    "#btn-gear pointerenter/B", "#btn-gear focus/B", "#btn-gear pointerleave/B",
+    "#btn-broll pointerenter/B", "#btn-broll focus/B", "#btn-broll pointerleave/B",
+    "#btn-comments pointerenter/B", "#btn-comments focus/B", "#btn-comments pointerleave/B",
+    "#btn-collab pointerenter/B", "#btn-collab focus/B", "#btn-collab pointerleave/B",
+    "#doc-title mouseenter/B", "window resize/B", "window scroll/B"
+  ],
   cellReach: ["#rows mousedown/B"],
   phoneBar: ["#phone-bar click/B"],
   S13: ["#production-list click/C", "#production-list contextmenu/B", "#production-list pointercancel/B", "#production-list pointerdown/B", "#production-list pointermove/B", "#production-list pointerup/B"],

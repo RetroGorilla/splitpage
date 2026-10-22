@@ -12,7 +12,7 @@ import { CONFIGURATION } from "../../src/test/_load-order-hooks.mjs";
 const SHIM = "src/js/_entry.js";
 
 const FROZEN_SHIM_IMPORTS: readonly string[] = [
-  "./00-prelude.js", "./00p-prefs.js", "./01-scene-status.js", "./01b-hide-shot.js", "./02-state.js", "./02b-doc-id.js",
+  "./00-prelude.js", "./01-scene-status.js", "./01b-hide-shot.js", "./02-state.js", "./02b-doc-id.js",
   "../adapters/storage/02c-blobs.js", "../adapters/storage/02d-gallery.js", "./03-sync.js", "./03a-history-store.js", "./03b-side-panels.js", "./04-richtext.js",
   "./04c-doc-model.js", "./05-render.js", "./05b-cell-edit.js", "./05c-clipboard.js",
   "./05d-draft-edit.js", "./05e-gallery-overlay.js", "./05f-rundown.js", "./05g-scene-clip.js", "./05h-scene-select.js", "./05p-rundown-presence.js",
@@ -38,10 +38,10 @@ function importsOf(path: string): readonly Import[] {
   return analysis.imports;
 }
 
-test("the frozen shim import set has the 64 started modules, 14e and the two bootstrap modules", () => {
+test("the frozen shim import set has the 63 started modules, 14e and the two bootstrap modules", () => {
   assert.equal(new Set(FROZEN_SHIM_IMPORTS).size, FROZEN_SHIM_IMPORTS.length);
-  assert.equal(FROZEN_SHIM_IMPORTS.length, 67);
-  assert.equal(FROZEN_SHIM_IMPORTS.filter((s) => /^\.\/\d/.test(s)).length, 63);
+  assert.equal(FROZEN_SHIM_IMPORTS.length, 66);
+  assert.equal(FROZEN_SHIM_IMPORTS.filter((s) => /^\.\/\d/.test(s)).length, 62);
   assert.ok(FROZEN_SHIM_IMPORTS.includes("./14e-export-formats.js"));
 });
 
@@ -133,9 +133,9 @@ test("the load-order check catches a module that configures a bridge while it lo
 });
 
 test("no numbered module configures a bridge or starts an owner while it loads: each is imported alone, with fresh module state", { timeout: 600_000 }, async () => {
-  assert.equal(NUMBERED.length, 65, "every remaining numbered module");
+  assert.equal(NUMBERED.length, 64, "every remaining numbered module");
   const targets = [...NUMBERED, "src/features/rows/row-motion.js", "src/features/title/topbar.js", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/notices/phone-bar.js", "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts"];
-  assert.equal(targets.length, 80);
+  assert.equal(targets.length, 79);
   for (const loadOnly of ["src/features/rows/row-motion.js", "src/features/title/topbar.js", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/notices/phone-bar.js", "src/adapters/storage/03c-history-idb.js", "src/js/14c-export-projections.js", "src/js/14d-export-text.js", "src/js/14e-export-formats.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts"]) {
     assert.ok(targets.includes(loadOnly), loadOnly);
   }

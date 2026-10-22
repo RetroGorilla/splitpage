@@ -1,5 +1,4 @@
 import { __init as init_00_prelude } from "./00-prelude.js";
-import { __init as init_00p_prefs } from "./00p-prefs.js";
 import { __init as init_01_scene_status } from "./01-scene-status.js";
 import { __init as init_01b_hide_shot } from "./01b-hide-shot.js";
 import { __init as init_02_state } from "./02-state.js";
@@ -72,7 +71,7 @@ import { legacySavePorts } from "./14-export.js";
 import { registerBuiltInExporters } from "./14e-export-formats.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { wireApp } from "../bootstrap/wiring.ts";
-import { mountTopbarFeature, startAppWhenReady } from "../bootstrap/app.ts";
+import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
 try {
@@ -93,7 +92,6 @@ try {
 }
 if (wiring) {
   init_00_prelude();
-  init_00p_prefs();
   init_01_scene_status();
   init_01b_hide_shot();
   init_02_state();
@@ -154,7 +152,6 @@ if (wiring) {
   init_20f_desktop();
   init_20g_drafts();
   init_20h_appdata();
-  mountTopbarFeature();
   init_20j_newtab();
   init_20s_settings();
   startAppWhenReady(document, wiring);
