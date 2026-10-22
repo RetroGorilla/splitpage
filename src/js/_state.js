@@ -3,12 +3,6 @@ export const S = {
 
   baseState: undefined,
 
-  deleteArmId: undefined,
-
-  deleteArmTimer: undefined,
-
-  deleteCommentArmId: undefined,
-
   dirty: undefined,
 
   docIdWrittenOut: undefined,
@@ -19,15 +13,9 @@ export const S = {
 
   saveButtonBusy: undefined,
 
-  selectionAnchorKey: undefined,
-
   serverBookmarks: undefined,
 
   serverMode: undefined,
 
-  state: undefined,
-
-  tagDeleteArmId: undefined,
-
-  tagDeleteArmTimer: undefined
+  state: undefined
 };

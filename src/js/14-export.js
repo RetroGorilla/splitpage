@@ -35,7 +35,7 @@ import {
 import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./20d-formats.js";
 import { makeDesktopHandle } from "./20f-desktop.js";
 import { existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
-import { requestSave, saveRunning } from "../legacy/save-bridge.ts";
+import { requestSave, saveRunning, savesStarted } from "../legacy/save-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { conflictStash } from "../legacy/recovery-bridge.ts";
 import { autoSaveMay, autoSaveWhere } from "../application/save/autosave.ts";
@@ -64,8 +64,8 @@ var FAILED = Object.freeze({ kind: "failed" });
 var CONFLICTED = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
 var NOT_AUTOSAVING = Object.freeze({ kind: "refused", reason: "Autosave is off, paused, has nowhere to write or nothing to write" });
 
-function finishWriting() {
-  S.saveButtonBusy = false;
+function finishWriting(job) {
+  S.saveButtonBusy = !job.alive() && savesStarted() && saveRunning();
   setSaveButtons(S.dirty ? "Save •" : "Save", false);
 }
 
@@ -122,7 +122,7 @@ async function writeDoc(opts, job) {
                      "Press Save to try again.");
       }
     } finally {
-      finishWriting();
+      finishWriting(job);
     }
     return sentToServer === false ? FAILED : SAVED;
   }
@@ -236,7 +236,7 @@ async function writeDoc(opts, job) {
     }
   } finally {
     undoRetarget();
-    finishWriting();
+    finishWriting(job);
   }
   return written;
 }

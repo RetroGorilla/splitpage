@@ -2,7 +2,9 @@ import { S } from "./_state.js";
 import { internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
 import { findRowIndex } from "./03-sync.js";
 import { safeHref, safeId, storedHtmlFromDom } from "./04-richtext.js";
-import { armDeleteButton, disarmDeleteButton, render, syncFieldFromDom } from "./05-render.js";
+import { render, syncFieldFromDom } from "./05-render.js";
+import { armDeleteButton, disarmDeleteButton } from "../features/rows/delete-button.ts";
+import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
 import { galleryEdit } from "./05e-gallery-overlay.js";
 import { isBlankScene } from "./05g-scene-clip.js";
 import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
@@ -177,25 +179,19 @@ export function armDelete(btn, id) {
   var rowEl = document.querySelector('#rows .row[data-id="' + safeId(id) + '"]');
   if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(syncFieldFromDom);
   if (idx !== -1 && isBlankScene(S.state, S.state.rows[idx])) {
-    clearTimeout(S.deleteArmTimer);
-    S.deleteArmId = null;
+    deleteConfirmation().disarm("row");
     deleteRow(id);
     return;
   }
-  if (S.deleteArmId === id) {
-    clearTimeout(S.deleteArmTimer);
-    S.deleteArmId = null;
+  if (deleteConfirmation().armedId("row") === id) {
+    deleteConfirmation().disarm("row");
     deleteRow(id);
     return;
   }
   document.querySelectorAll(".gutter-btn.danger.armed").forEach(disarmDeleteButton);
-  S.deleteArmId = id;
-  armDeleteButton(btn);
-  clearTimeout(S.deleteArmTimer);
-  S.deleteArmTimer = setTimeout(function () {
-    S.deleteArmId = null;
+  deleteConfirmation().arm("row", id, function () {
     disarmDeleteButton(btn);
-  }, 2800);
+  }, function () { armDeleteButton(btn); });
 }
 
 export function closeRowMenus(except) {
