@@ -12,6 +12,7 @@ import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import { PRINT_COLORS, exportDateText, exportDocumentOf, sceneFacts } from "../js/14b-export-kit.js";
 import { buildPackingListPdf, buildShotListPdf, pdfTextWidth } from "../js/17-pdf.js";
 import { LONG_DEMO } from "../js/_starters.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initStatus();
 initTags();
@@ -19,7 +20,7 @@ initBroll();
 
 const PW = 612, M = 54;
 const copy = (o) => JSON.parse(JSON.stringify(o));
-const demo = () => { S.state = migrateRows(copy(LONG_DEMO.state)); };
+const demo = () => { loadTestDocument(migrateRows(copy(LONG_DEMO.state))); };
 
 const rgb = (hex) => [0, 2, 4].map((i) => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(3)).join(" ");
 const C = PRINT_COLORS;
@@ -201,7 +202,7 @@ const LONG_TITLE = "A Very Long Script Title That Goes On and On: How We Rebuilt
 function edgeDoc(n) {
   const extra = [];
   for (let i = 0; i < n; i++) extra.push({ cat: "prop", name: "Spare part " + String(i + 1).padStart(2, "0"), status: "needed" });
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: LONG_TITLE, comments: [],
     people: [{ id: "p1", name: "Jordan Sato" }],
     rows: [
@@ -215,7 +216,7 @@ function edgeDoc(n) {
       { cat: "prop", name: "Teapot", status: "returned" }
     ].concat(extra),
     brollShots: [{ id: "s1", name: "steam off the kettle", status: "unshot", props: [{ name: "Kettle" }] }]
-  });
+  }));
 }
 
 test("the packing list: a long title wraps, notes and the b-roll shots under the name, an item no longer in the script", () => {
@@ -411,7 +412,7 @@ test("by scene: no bands — the Scene column groups the rows, a scene named on 
 function shotsDoc(n) {
   const more = [];
   for (let i = 0; i < n; i++) more.push({ id: "m" + i, name: "Extra shot " + (i + 1), status: "unshot", origin: "list", location: "Harbour", notes: "Any time." });
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: LONG_TITLE, comments: [],
     people: [{ id: "p1", name: "Jordan Sato" }, { id: "p2", name: "Ada Brenner" }],
     rows: [
@@ -425,7 +426,7 @@ function shotsDoc(n) {
       { id: "s2", name: "boats at dawn", status: "unshot", reshoot: true, owner: "p2" },
       { id: "s3", name: "Crowd at the auction", status: "unshot", origin: "list", notes: "Ask the harbourmaster first." }
     ].concat(more)
-  });
+  }));
 }
 
 test("a shot's Cuts against opening never ends in half an emoji (#434)", () => {

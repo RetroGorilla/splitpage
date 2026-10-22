@@ -21,6 +21,7 @@ const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = awai
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 const { openProjectFile, reloadFileFromDisk } = await import("../js/18-local-files.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -52,7 +53,7 @@ async function quietly(run) {
 }
 
 function settle(doc) {
-  S.state = doc;
+  loadTestDocument(doc);
   flushEdits();
   heard.length = 0;
 }

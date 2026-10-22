@@ -19,12 +19,13 @@ import {
 } from "../js/14b-export-kit.js";
 import { assemblePdf, pdfLampOp, pdfTextWidth, pdfWrapRuns } from "../js/17-pdf.js";
 import { LONG_DEMO } from "../js/_starters.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initSceneStatus();
 initTags();
 
 const copy = (o) => JSON.parse(JSON.stringify(o));
-const demo = () => { S.state = migrateRows(copy(LONG_DEMO.state)); };
+const demo = () => { loadTestDocument(migrateRows(copy(LONG_DEMO.state))); };
 
 test("the document's facts: scenes, running time, target, shot count", (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 8, 26, 12) });
@@ -42,8 +43,8 @@ test("the document's facts: scenes, running time, target, shot count", (t) => {
 });
 
 test("a script with no target and one scene says so in the singular", () => {
-  S.state = migrateRows({ schema: 2, title: "One", comments: [],
-    rows: [{ id: "r0", visualText: "", audioText: "Hello there, and welcome to a line long enough to take a few seconds.", status: "todo" }] });
+  loadTestDocument(migrateRows({ schema: 2, title: "One", comments: [],
+    rows: [{ id: "r0", visualText: "", audioText: "Hello there, and welcome to a line long enough to take a few seconds.", status: "todo" }] }));
   const parts = exportSummaryParts(exportFacts(exportDocumentOf(S.state)));
   assert.equal(parts[0], "1 scene");
   assert.equal(parts.some((p) => /Target/.test(p)), false);
@@ -88,7 +89,7 @@ test("the open threads are numbered down the script, a resolved one not at all",
 
 test("nested and overlapping spans count the way the script's counter does", () => {
   const span = (id, inner) => '<span class="cmt-anchor" data-cmt="' + id + '">' + inner + "</span>";
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "t",
     rows: [
       { id: "r0", visualText: "", audioText: span("a", "one " + span("b", "two")) + " three " + span("c", "four"), status: "todo" },
@@ -98,7 +99,7 @@ test("nested and overlapping spans count the way the script's counter does", () 
       id, rowId: id === "d" || id === "e" ? "r1" : "r0", field: id === "d" ? "visualText" : "audioText",
       author: "Ann", body: id, resolved: id === "c"
     }))
-  });
+  }));
   assert.deepEqual({ ...commentNumbers(exportDocumentOf(S.state)) }, { b: 1, a: 2, d: 3, e: 4 });
   const runs = exportRuns(S.state.rows[0].audioText, exportDocumentOf(S.state).commentNumbers);
   const marked = runs.filter((r) => r.markers);

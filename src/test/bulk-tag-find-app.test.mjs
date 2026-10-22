@@ -7,6 +7,7 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { openBulkTag, closeBulkTag, runBulkTag } = await import("../js/09-find-replace.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -16,10 +17,10 @@ const low = String.fromCharCode(0xde00);
 const BLANK = "Type the words to tag in the Find box first.";
 
 function load(visual) {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "Bulk", productionTags: [],
     rows: [{ id: "r1", status: "todo", visualText: visual, audioText: "" }]
-  });
+  }));
 }
 
 function typeIntoFind(text) {
@@ -122,10 +123,10 @@ test("bulk tag: a whole emoji in the Find box is a needle, alone or after words"
 });
 
 test("bulk tag: the category picked for a name already registered ignores a lone half in the needle", () => {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "Bulk", rows: [{ id: "r1", status: "todo", visualText: "see the drone now", audioText: "" }],
     productionTags: [{ id: "t_drone", cat: "gear", name: "drone", owner: "", notes: "", status: "needed" }]
-  });
+  }));
   typeIntoFind("drone" + high);
   openBulkTag();
   assert.equal(document.querySelector("#find-tag-cats .tag-cat-btn.is-active").getAttribute("data-tag-cat"), "gear");

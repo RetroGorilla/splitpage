@@ -17,6 +17,7 @@ const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -207,7 +208,7 @@ test("6.2: a refused replay changes nothing in the document, keeps the refusal's
   edit("r1", "Hello again");
   const next = JSON.parse(JSON.stringify(S.state));
   next.rows = next.rows.filter((r) => r.id !== "r1");
-  S.state = liveSession().absorbServer(next);
+  loadTestDocument(liveSession().absorbServer(next));
   const text = docText();
   const generation = liveSession().generation();
   const sizes = undoSizes();
@@ -283,7 +284,7 @@ test("6.2: owner cleanup by a replay is in its change set, including lists the e
   assert.deepEqual(lastUndoEntry().steps.map((s) => s.key), ["people"], "the entry carries the crew only");
   const next = JSON.parse(JSON.stringify(S.state));
   next.brollShots.find((b) => b.id === "bs_pier").owner = "pC";
-  S.state = liveSession().absorbServer(next);
+  loadTestDocument(liveSession().absorbServer(next));
   const w = watch();
   let r;
   try {

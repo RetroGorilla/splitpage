@@ -22,6 +22,7 @@ import {
 import { STORED } from "./_stored-cells.mjs";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
+import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initStatus();
@@ -77,8 +78,8 @@ function sortAll(v) {
 
 function withState(s, fn) {
   const was = S.state;
-  S.state = s;
-  try { return fn(s); } finally { S.state = was; }
+  loadTestDocument(s);
+  try { return fn(s); } finally { loadTestDocument(was); }
 }
 
 test(".splitpage has no envelope: the file IS the state object", () => {

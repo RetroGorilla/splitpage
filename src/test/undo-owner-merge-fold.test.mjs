@@ -8,6 +8,7 @@ import { mergeStates } from "../js/03-sync.js";
 import { flushEdits, noteEdit, redo, trackDocument, undo } from "../js/12a-undo.js";
 import { startTestSession } from "./_session.mjs";
 import { appSessionDeps } from "./_app-session.mjs";
+import { loadTestDocument } from "./_document.mjs";
 
 startTestSession(appSessionDeps());
 
@@ -18,9 +19,9 @@ const shot = (id, name, owner) => ({ id, name, owner: owner || "" });
 const ownerOf = (list, name) => (list.find((e) => e.name === name) || {}).owner;
 
 function boot() {
-  S.state = migrateRows({ schema: 2, title: "Fold", comments: [], rows: [
+  loadTestDocument(migrateRows({ schema: 2, title: "Fold", comments: [], rows: [
     { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-  ] });
+  ] }));
   S.state.people.push(person("pM", "Ada"));
   S.state.productionTags.push(tag("t_kettle", "Kettle", ""));
   S.state.brollShots.push(shot("bs_pier", "Pier", ""));
@@ -86,9 +87,9 @@ const NAMES = ["Ada", "Bo", "Cy"];
 const ITEMS = [["productionTags", "Kettle"], ["productionTags", "Lamp"], ["brollShots", "Pier"], ["brollShots", "Dock"]];
 
 function boot2() {
-  S.state = migrateRows({ schema: 2, title: "Prop", comments: [], rows: [
+  loadTestDocument(migrateRows({ schema: 2, title: "Prop", comments: [], rows: [
     { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-  ] });
+  ] }));
   S.state.productionTags.push(tag("t_kettle", "Kettle", ""), tag("t_lamp", "Lamp", ""));
   S.state.brollShots.push(shot("bs_pier", "Pier", ""), shot("bs_dock", "Dock", ""));
   trackDocument();

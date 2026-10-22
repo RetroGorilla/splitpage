@@ -16,6 +16,7 @@ const { flushEdits, lastUndoEntry, undo, undoSizes } = await import("../js/12a-u
 const { PERSON_COLORS, PERSON_COLOR_KEY, writePref } = await import("../js/00p-prefs.js");
 const { saveAuthorName } = await import("../js/10-comments.js");
 const NAME_KEY = "splitpage-comment-author";
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -36,7 +37,7 @@ let docs = 0;
 
 function fresh() {
   docs++;
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 5,
     title: "Colours " + docs,
     docId: "d" + String(docs).padStart(32, "7"),
@@ -44,7 +45,7 @@ function fresh() {
       { id: "r1", visualText: "Wide", audioText: "One.", status: "todo" },
       { id: "r2", visualText: "Close", audioText: "Two.", status: "todo" }
     ]
-  });
+  }));
   render();
   flushEdits();
   clearDirty();

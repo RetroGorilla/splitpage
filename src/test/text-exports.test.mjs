@@ -12,11 +12,12 @@ import { exportMetaLine } from "../js/14d-export-text.js";
 import { buildBreakdownCsv, buildBrollCsv, buildCsv, csvToRows } from "../js/16-csv.js";
 import { LONG_DEMO } from "../js/_starters.js";
 import { exportDocumentOf, exportFacts } from "../js/14b-export-kit.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initStatus();
 
-const demo = () => { S.state = migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))); return S.state; };
+const demo = () => { loadTestDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)))); return S.state; };
 
 function sheet(text) {
   assert.equal(text.charCodeAt(0), 0xFEFF, "a BOM, so Excel reads UTF-8");
@@ -115,7 +116,7 @@ test("somebody else's sheet keeps what follows a row that says Comments", () => 
 });
 
 test("a script with no target and no comments: no Target row, no Comments block", () => {
-  S.state = migrateRows({ schema: 2, title: "Plain", rows: [{ id: "r0", visualText: "Wide", audioText: "Hello there.", status: "ready" }] });
+  loadTestDocument(migrateRows({ schema: 2, title: "Plain", rows: [{ id: "r0", visualText: "Wide", audioText: "Hello there.", status: "ready" }] }));
   const rows = sheet(buildCsv(liveDoc()));
   assert.equal(rows.length, 3);
   assert.deepEqual(rows[1].slice(0, 3), ["01", "00:00", "Ready"]);

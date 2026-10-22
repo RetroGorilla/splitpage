@@ -2,12 +2,12 @@ import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { sanitizeHtml } from "../js/04-richtext.js";
 import { cellOf, projection } from "../js/04c-doc-model.js";
 import { bulkTagCell, bulkTagRows } from "../js/07-production-tags.js";
+import { loadTestDocument } from "./_document.mjs";
 
-S.state = { rows: [], productionTags: [] };
+loadTestDocument({ rows: [], productionTags: [] });
 
 const KEY = '<span class="broll-key" data-broll-id="b1" contenteditable="false">B-roll:</span>';
 const tagSpan = (cat, name, words) =>

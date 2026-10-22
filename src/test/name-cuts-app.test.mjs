@@ -17,6 +17,7 @@ const { PERSON_COLOR_KEY, writePref } = await import("../js/00p-prefs.js");
 const { personColorsWithMine } = await import("../js/13a-presence.js");
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -28,7 +29,7 @@ const AFTER_SPACE = { typed: (cap) => x(cap - 1) + " y", kept: (cap) => x(cap - 
 const CASES = [["an emoji across the cap", ACROSS], ["a cut that lands after a space", AFTER_SPACE]];
 
 function load(extra) {
-  S.state = migrateRows(Object.assign({
+  loadTestDocument(migrateRows(Object.assign({
     schema: 2, title: "Names",
     rows: [
       { id: "r1", status: "todo", audioText: "the mug and the mug", visualText: '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> Old shot' },
@@ -41,7 +42,7 @@ function load(extra) {
       { id: "bs1", name: "Old shot", origin: "script" },
       { id: "bs2", name: "Listed shot", origin: "list" }
     ]
-  }, extra || {}));
+  }, extra || {})));
   render();
 }
 
@@ -175,7 +176,7 @@ const OLD_CUTS = [
 ];
 
 function migrated(doc) {
-  S.state = migrateRows(Object.assign({ schema: 2, title: "Old cuts", comments: [], people: [{ id: "p1", name: "Ann" }], productionTags: [], brollShots: [] }, doc));
+  loadTestDocument(migrateRows(Object.assign({ schema: 2, title: "Old cuts", comments: [], people: [{ id: "p1", name: "Ann" }], productionTags: [], brollShots: [] }, doc)));
   render();
 }
 

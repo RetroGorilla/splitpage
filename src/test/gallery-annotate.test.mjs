@@ -13,6 +13,7 @@ import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMa
 import { refsIn } from "../../shared/blob-policy.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
+import { loadTestDocument } from "./_document.mjs";
 
 const jpegBytes = (w, h, salt) => new Uint8Array([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, salt || 0, 0xFF, 0xD9]);
 const O1 = intern(jpegBytes(300, 200, 11));
@@ -146,7 +147,7 @@ test("a .splitpage file carries the originals inline and reads back the same ann
 test(".md: an untouched file keeps the annotation; another picture put in the cell by hand drops it", async () => {
   const s = doc([{ imageRef: F1, imageAnnotation: { imageRef: O1, marks: [PEN] } }]);
   const was = S.state;
-  S.state = s;
+  loadTestDocument(s);
   try {
     const md = buildMarkdownProject(exportDocumentOf(s));
     const same = await applyMarkdownProject(parseMarkdownProject(md), { noAsk: true });
@@ -160,7 +161,7 @@ test(".md: an untouched file keeps the annotation; another picture put in the ce
     assert.equal(back.rows[0].imageRef.sha256, P3.sha256);
     assert.ok(!("imageAnnotation" in back.rows[0]));
   } finally {
-    S.state = was;
+    loadTestDocument(was);
   }
 });
 

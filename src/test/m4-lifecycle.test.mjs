@@ -69,6 +69,7 @@ const { openProjectFile } = await import("../js/18-local-files.js");
 const { grantVideoFile, hasSessionVideo, sessionVideoUrl } = await import("../js/06-rows.js");
 const { normalizeVideoLink } = await import("../core/document/gallery.ts");
 const { requestRefresh } = await import("../legacy/session-bridge.ts");
+const { loadTestDocument } = await import("./_document.mjs");
 
 function script(title) {
   return migrateRows({
@@ -81,7 +82,7 @@ function script(title) {
 }
 
 function useDocument(doc) {
-  S.state = doc;
+  loadTestDocument(doc);
   flushEdits();
   clearDirty();
   return doc;

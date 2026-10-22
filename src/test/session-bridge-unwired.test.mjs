@@ -8,11 +8,12 @@ const { migrateRows } = await import("../js/02-state.js");
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
 const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");
+const { loadTestDocument } = await import("./_document.mjs");
 
 const unwired = unwiredSessionDeps();
 
 function script() {
-  S.state = migrateRows({ title: "Unwired", rows: [{ id: "r1", visualText: "", audioText: "", status: "todo" }] });
+  loadTestDocument(migrateRows({ title: "Unwired", rows: [{ id: "r1", visualText: "", audioText: "", status: "todo" }] }));
   return S.state;
 }
 

@@ -19,13 +19,14 @@ import {
   sceneFacts
 } from "../js/14c-export-projections.js";
 import { LONG_DEMO } from "../js/_starters.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initSceneStatus();
 initTags();
 initBroll();
 
 const copy = (o) => JSON.parse(JSON.stringify(o));
-const demo = () => { S.state = migrateRows(copy(LONG_DEMO.state)); };
+const demo = () => { loadTestDocument(migrateRows(copy(LONG_DEMO.state))); };
 
 function projections(doc) {
   return {
@@ -82,7 +83,7 @@ test("b-roll groups come from the rows and people they are given, not from the o
   const doc = exportDocumentOf(S.state);
   const from = { rows: doc.scenes, people: doc.people };
   const grouped = brollGroups(doc.broll, "scene", from);
-  S.state = null;
+  loadTestDocument(null);
   assert.deepEqual(brollGroups(doc.broll, "scene", from), grouped);
   assert.ok(grouped.some((g) => g.kind === "scene" && g.row));
 });

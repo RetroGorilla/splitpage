@@ -22,6 +22,7 @@ const { closeCollaborate, collaborateBlockedReason, openCollaborate } = await im
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const hosted = await import("../js/13-hosted.js");
 const homeModule = await import("../js/_home.js");
+const { loadTestDocument } = await import("./_document.mjs");
 const { setHome } = homeModule;
 
 after(closeApp);
@@ -163,7 +164,7 @@ function hostedCase(run) {
 
 function openHosted(doc, id, rev, options) {
   const o = options || {};
-  S.state = doc;
+  loadTestDocument(doc);
   flushEdits();
   clearDirty();
   S.serverMode.available = true;
@@ -176,7 +177,7 @@ function openHosted(doc, id, rev, options) {
 }
 
 function startUnpublished(doc) {
-  S.state = doc;
+  loadTestDocument(doc);
   flushEdits();
   clearDirty();
   S.serverMode.available = true;
@@ -553,7 +554,7 @@ function collabBody() {
 function collabScenario(answerFor, setup) {
   return () => scenario(async ({ server, held }) => {
     server.override = answerFor;
-    S.state = script("Collab", idOf("a"));
+    loadTestDocument(script("Collab", idOf("a")));
     flushEdits();
     clearDirty();
     S.serverMode.available = true;

@@ -5,6 +5,7 @@ import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { offerFileMerge, openMergeReview, resetMergeOffer } from "../js/18a-local-merge.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 
@@ -23,7 +24,7 @@ const row = (id, text) => ({ id: id, audioText: text, visualText: "", status: "t
 
 async function review(mine, theirs) {
   shell();
-  S.state = migrateRows(JSON.parse(JSON.stringify(mine)));
+  loadTestDocument(migrateRows(JSON.parse(JSON.stringify(mine))));
   const file = new File([JSON.stringify(theirs)], "disk.splitpage", { type: "application/json" });
   await offerFileMerge(file, null);
   assert.equal(document.getElementById("file-conflict-merge").hidden, false, "the merge is offered");
@@ -44,7 +45,7 @@ test("merge review: a scene only I hold named constructor is listed, and a scene
     assert.deepEqual(r.heads, ["Scene 02", "Scene 03"]);
     assert.match(r.text, /MINE ONLY/);
   } finally {
-    S.state = saved;
+    loadTestDocument(saved);
     document.body.innerHTML = "";
   }
 });
@@ -60,7 +61,7 @@ test("merge review: a crew member named constructor that only one side holds is 
     assert.match(r.text, /Crew: constructor/);
     assert.doesNotMatch(r.text, /Object/);
   } finally {
-    S.state = saved;
+    loadTestDocument(saved);
     document.body.innerHTML = "";
   }
 });

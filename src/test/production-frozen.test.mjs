@@ -23,13 +23,14 @@ const { runInThisContext } = await import("node:vm");
 const sloppyWrite = (body) => runInThisContext("(function (o) { " + body + " })");
 const { deriveProductionIndex } = await import("../core/production/tags.ts");
 const { seededHealRounds } = await import("./_heal-rounds.mjs");
+const { loadTestDocument } = await import("./_document.mjs");
 
 const tag = (cat, name) =>
   `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${name}</span>`;
 const row = (id, audioText, visualText) => ({ id, status: "todo", audioText, visualText });
 
 function load(rows, productionTags) {
-  S.state = migrateRows({ schema: 2, title: "Frozen", docId: "d" + "7".repeat(32), rows, comments: [] });
+  loadTestDocument(migrateRows({ schema: 2, title: "Frozen", docId: "d" + "7".repeat(32), rows, comments: [] }));
   S.state.productionTags = productionTags;
   resetProductionIndexStats();
 }

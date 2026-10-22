@@ -19,13 +19,14 @@ import {
 } from "../js/14b-export-kit.js";
 import { buildPdf, pdfTextWidth } from "../js/17-pdf.js";
 import { LONG_DEMO } from "../js/_starters.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initStatus();
 initTags();
 
 const M = 54, PW = 612;
 const copy = (o) => JSON.parse(JSON.stringify(o));
-const demo = () => { S.state = migrateRows(copy(LONG_DEMO.state)); };
+const demo = () => { loadTestDocument(migrateRows(copy(LONG_DEMO.state))); };
 const rgb = (hex) => [0, 2, 4].map((i) => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(3)).join(" ");
 
 function read(bytes) {
@@ -146,11 +147,11 @@ test("each open thread's number after its words, in amber, as the appendix numbe
 });
 
 test("a scene's video link and a link in its words are blue, and can be clicked", () => {
-  S.state = migrateRows({ schema: 2, title: "Links", comments: [], rows: [
+  loadTestDocument(migrateRows({ schema: 2, title: "Links", comments: [], rows: [
     { id: "r0", visualText: 'See <a href="https://example.com/ref">the reference clip</a> for the look.', audioText: "Hello.", status: "todo",
       imageLinks: [{ href: "https://www.youtube.com/watch?v=aqz-KE-bpKQ", poster: true }] },
     { id: "r1", visualText: "", audioText: "No visual here.", status: "todo" }
-  ] });
+  ] }));
   const doc = read(buildPdf(liveDoc(), null));
   const p1 = doc.pages[0];
   const blue = rgb(PRINT_COLORS.visual);
@@ -212,7 +213,7 @@ test("the appendix: the breakdown by category, the b-roll by scene, a summary li
 });
 
 test("an empty script is one page: its title, its facts, and no more", () => {
-  S.state = migrateRows({ schema: 2, title: "Nothing yet", comments: [], rows: [] });
+  loadTestDocument(migrateRows({ schema: 2, title: "Nothing yet", comments: [], rows: [] }));
   const doc = read(buildPdf(liveDoc(), null));
   assert.equal(doc.pages.length, 1);
   const w = words(doc.pages[0].texts);
@@ -223,8 +224,8 @@ test("an empty script is one page: its title, its facts, and no more", () => {
 test("a long title of emoji is shortened by whole characters, never half of one (#434)", () => {
   const grin = String.fromCodePoint(0x1F600);
   for (let lead = 0; lead < 4; lead++) {
-    S.state = migrateRows({ schema: 2, title: "Title " + "i".repeat(lead) + grin.repeat(30) + " end i" + grin.repeat(60), comments: [],
-      rows: [{ id: "r0", visualText: "Wide.", audioText: "Hello.", status: "shot" }] });
+    loadTestDocument(migrateRows({ schema: 2, title: "Title " + "i".repeat(lead) + grin.repeat(30) + " end i" + grin.repeat(60), comments: [],
+      rows: [{ id: "r0", visualText: "Wide.", audioText: "Hello.", status: "shot" }] }));
     const lines = read(buildPdf(liveDoc(), null)).pages[0].texts.filter((o) => o.size === 20);
     assert.equal(lines.length, 2);
     lines.forEach((l) => assert.equal((l.str.match(/\?/g) || []).length % 2, 0, lead + ": " + l.str));
@@ -234,8 +235,8 @@ test("a long title of emoji is shortened by whole characters, never half of one 
 test("the footer's shortened title never ends in half an emoji (#434)", () => {
   const grin = String.fromCodePoint(0x1F600);
   for (let lead = 0; lead < 8; lead++) {
-    S.state = migrateRows({ schema: 2, title: "i".repeat(lead) + grin.repeat(120), comments: [],
-      rows: [{ id: "r0", visualText: "Wide.", audioText: "Hello.", status: "shot" }] });
+    loadTestDocument(migrateRows({ schema: 2, title: "i".repeat(lead) + grin.repeat(120), comments: [],
+      rows: [{ id: "r0", visualText: "Wide.", audioText: "Hello.", status: "shot" }] }));
     const foot = read(buildPdf(liveDoc(), null)).pages[0].footer[0].str;
     assert.ok(foot.length > 20 && foot.length < 240, lead + ": " + foot.length);
     assert.equal((foot.match(/\?/g) || []).length % 2, 0, lead + ": " + foot);
@@ -243,8 +244,8 @@ test("the footer's shortened title never ends in half an emoji (#434)", () => {
 });
 
 test("a script with no tags, b-roll or comments has no appendix, and a long title never runs off the page", () => {
-  S.state = migrateRows({ schema: 2, title: "A title so long that it could never fit on one line of the page, nor on two lines of it, however small the words are set and however wide the page is", comments: [],
-    rows: [{ id: "r0", visualText: "Wide.", audioText: "Hello.", status: "shot" }] });
+  loadTestDocument(migrateRows({ schema: 2, title: "A title so long that it could never fit on one line of the page, nor on two lines of it, however small the words are set and however wide the page is", comments: [],
+    rows: [{ id: "r0", visualText: "Wide.", audioText: "Hello.", status: "shot" }] }));
   const doc = read(buildPdf(liveDoc(), null));
   assert.equal(doc.pages.length, 1);
   assert.doesNotMatch(doc.t, /\/Outlines/);

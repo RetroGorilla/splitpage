@@ -30,6 +30,7 @@ const { openServerDoc } = await import("../js/13-hosted.js");
 const { openProjectFile, reloadFileFromDisk, updateFileChip } = await import("../js/18-local-files.js");
 const { openLongDemo } = await import("../js/18b-file-menu.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 const REDRAW = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
 const BROKE = "render broke (#418)";
@@ -112,7 +113,7 @@ function quiet() {
 function fresh(title) {
   window.__hostedTest.setSession({ docId: null });
   answer = () => null;
-  S.state = migrateRows(table304Document(title));
+  loadTestDocument(migrateRows(table304Document(title)));
   flushEdits();
   renderAbsorbed();
   clearDirty();
@@ -878,7 +879,7 @@ test("on a stale screen the picture annotator's Ctrl+Z and Ctrl+Y still undo and
     await staleScreen(async () => {
       const doc = table304Document("Annotate on a stale screen");
       doc.rows[0].visualImage = PNG;
-      S.state = migrateRows(doc);
+      loadTestDocument(migrateRows(doc));
       flushEdits();
       renderAbsorbed();
       clearDirty();

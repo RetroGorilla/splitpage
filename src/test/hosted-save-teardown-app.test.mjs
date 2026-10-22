@@ -14,6 +14,7 @@ const homeModule = await import("../js/_home.js");
 const app = await import("../bootstrap/app.ts");
 const { confirmedSave } = await import("../legacy/save-bridge.ts");
 const { saveInProgress } = await import("../legacy/screen-state.ts");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -64,7 +65,7 @@ async function settle() {
 }
 
 function openOnServer(docId) {
-  S.state = script();
+  loadTestDocument(script());
   flushEdits();
   clearDirty();
   homeModule.setHome("none");

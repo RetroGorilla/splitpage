@@ -1,7 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 
 const GRIN = String.fromCodePoint(0x1F600);
 const NAME_KEY = "splitpage-comment-author";
@@ -15,6 +14,7 @@ const { toggleReplyComposer } = await import("../js/10-comments.js");
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { openSettings } = await import("../js/20s-settings.js");
 const { render } = await import("../js/05-render.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -170,11 +170,11 @@ test("a value set in code over the limit is still cut at the end", () => {
 });
 
 function openReply() {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "T",
     rows: [{ id: "r1", status: "todo", audioText: "the mug", visualText: "" }],
     comments: [{ id: "c1", rowId: "r1", field: "audioText", anchorId: "c1", quotedText: "mug", author: "Ann", body: "x", createdAt: "2026-10-01T10:00:00Z", kind: "anchor", replies: [] }]
-  });
+  }));
   render();
   toggleReplyComposer("c1");
   return document.querySelector(".reply-composer .reply-name-input");

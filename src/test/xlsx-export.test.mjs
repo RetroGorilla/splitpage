@@ -14,11 +14,12 @@ import { PRINT_COLORS, exportDocumentOf } from "../js/14b-export-kit.js";
 import { scriptTable } from "../js/16-csv.js";
 import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx, colName } from "../js/16b-xlsx.js";
 import { LONG_DEMO } from "../js/_starters.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initStatus();
 
-const demo = () => { S.state = migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))); return S.state; };
+const demo = () => { loadTestDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)))); return S.state; };
 const MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
 async function open(bytes) {
@@ -166,7 +167,7 @@ test("the breakdown's and the shot list's own workbooks, and empty ones", async 
   assert.deepEqual(br.sheets.map((s) => s.name), ["B-roll"]);
   assert.equal(br.sheets[0].rows.length, brollTable(liveDoc()).rows.length + 1);
 
-  S.state = migrateRows({ schema: 2, title: "Bare", comments: [], rows: [{ id: "r1", visualText: "Wide", audioText: "Hello.", status: "todo" }] });
+  loadTestDocument(migrateRows({ schema: 2, title: "Bare", comments: [], rows: [{ id: "r1", visualText: "Wide", audioText: "Hello.", status: "todo" }] }));
   const bare = await open(buildScriptXlsx(liveDoc()));
   assert.deepEqual(bare.sheets.map((s) => s.name), ["Script"], "no comments, tags or b-roll: just the script");
   assert.deepEqual((await open(buildBreakdownXlsx(liveDoc()))).sheets[0].rows[1][0], "(nothing labelled yet)");
@@ -175,9 +176,9 @@ test("the breakdown's and the shot list's own workbooks, and empty ones", async 
 
 test("a cell cut at Excel's limit and a shortened Cuts against never end in half an emoji (#434)", async () => {
   const grin = String.fromCodePoint(0x1F600);
-  S.state = migrateRows({ schema: 2, title: "Cuts", comments: [], rows: [
+  loadTestDocument(migrateRows({ schema: 2, title: "Cuts", comments: [], rows: [
     { id: "r1", visualText: '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> Pier', audioText: "x".repeat(32765) + grin + "yy", status: "todo" }
-  ], brollShots: [{ id: "bs1", name: "Pier", audioRef: "x".repeat(89) + grin + "y", origin: "script" }] });
+  ], brollShots: [{ id: "bs1", name: "Pier", audioRef: "x".repeat(89) + grin + "y", origin: "script" }] }));
   const book = await open(buildScriptXlsx(liveDoc()));
   const script = book.sheets[0].rows[1].find((c) => typeof c === "string" && c.length > 30000);
   assert.equal(script, "x".repeat(32765) + "…");
@@ -187,9 +188,9 @@ test("a cell cut at Excel's limit and a shortened Cuts against never end in half
 });
 
 test("awkward text survives: markup characters, line breaks, spaces at the ends, controls", async () => {
-  S.state = migrateRows({ schema: 2, title: "Tom & Jerry's <cut>", comments: [], rows: [
+  loadTestDocument(migrateRows({ schema: 2, title: "Tom & Jerry's <cut>", comments: [], rows: [
     { id: "r1", visualText: "A &lt;b&gt; &amp; C<br>second line", audioText: "  padded  ", status: "ready" }
-  ] });
+  ] }));
   const book = await open(buildScriptXlsx(liveDoc()));
   const row = book.sheets[0].rows[1];
   assert.equal(row[5], "A <b> & C\nsecond line");

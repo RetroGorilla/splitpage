@@ -19,6 +19,7 @@ import {
 import { zipRead } from "../adapters/formats/zip.ts";
 import { __init as initDocx, audioDirectionsHtml, buildDocx, buildNarrationText } from "../js/15-docx.js";
 import { prompterSceneHtml, trimPrompterCell } from "../js/20-teleprompter.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initSceneStatus();
@@ -30,8 +31,8 @@ const CUE = (inner) => `<span class="audio-cue">${inner}</span>`;
 
 function withState(s, fn) {
   const was = S.state;
-  S.state = s;
-  try { return fn(s); } finally { S.state = was; }
+  loadTestDocument(s);
+  try { return fn(s); } finally { loadTestDocument(was); }
 }
 
 function cueDoc() {

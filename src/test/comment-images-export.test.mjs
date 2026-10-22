@@ -13,6 +13,7 @@ import { toMarkdownDoc, toMarkdownTableDoc } from "../js/14d-export-text.js";
 import { __init as initDocx, buildDocx } from "../js/15-docx.js";
 import { buildCsv } from "../js/16-csv.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initStatus();
@@ -42,14 +43,14 @@ const ROW1 = { id: "r0", visualText: "A scene.", audioText: "Some audio.", statu
 const ROW2 = { id: "r1", visualText: "Another.", audioText: "More audio.", status: "todo" };
 
 function setDoc(rows, comments) {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "Comment pictures",
     rows: rows || [ROW1, ROW2],
     comments: comments.map((c, i) => Object.assign({
       id: "c" + i, rowId: "r0", field: "audioText", author: "Ann",
       createdAt: "2026-09-0" + (i % 9 + 1) + "T10:00:00Z", replies: []
     }, c))
-  });
+  }));
 }
 
 async function readDocx(bytes) {
