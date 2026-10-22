@@ -5,9 +5,10 @@ import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { flushEdits, lastUndoEntry, nextRedoEntry, noteEdit, noteRemoteChange, redo, resetUndo, undo, undoSizes } from "../js/12a-undo.js";
 import { cellEdit, changeSet } from "../application/session/change-set.ts";
-import { createDocumentSession } from "../application/session/document-session.ts";
-import { createUndoAdapter, watchUndoAdoption } from "../legacy/undo-adapter.ts";
-import { loadDocumentWithoutSession } from "./_document.mjs";
+import { liveSession } from "../legacy/session-bridge.ts";
+import { createUndoAdapter } from "../legacy/undo-adapter.ts";
+import { loadTestDocument } from "./_document.mjs";
+import { startTestSession } from "./_session.mjs";
 
 const SEEDS = 60;
 const OPS = 40;
@@ -93,8 +94,7 @@ async function drive(seed, perform) {
   const r = seeded(seed);
   clock = 1e6;
   resetUndo();
-  loadDocumentWithoutSession(script(seed));
-  perform.open();
+  loadTestDocument(script(seed));
   const out = [];
   for (let n = 0; n < OPS; n++) {
     const p = plan(r, S.state);
@@ -102,7 +102,7 @@ async function drive(seed, perform) {
     if (p.name === "wait") clock += p.ms;
     else if (p.name === "undo") undo();
     else if (p.name === "redo") redo();
-    else if (p.name === "remote") { const next = p.theirs(S.state); perform.remote(next); loadDocumentWithoutSession(next); }
+    else if (p.name === "remote") perform.remote(p.theirs(S.state));
     else perform.edit(p);
     await Promise.resolve();
     flushEdits();
@@ -112,27 +112,24 @@ async function drive(seed, perform) {
 }
 
 const legacy = {
-  open: () => { flushEdits(); },
   edit: (p) => { p.apply(S.state); noteEdit(); },
-  remote: (next) => { noteRemoteChange(next); }
+  remote: (next) => { noteRemoteChange(next); loadTestDocument(next); }
 };
 
-const session = createDocumentSession({
+startTestSession({
   entry: (raw) => migrateRows(raw),
-  undo: createUndoAdapter(),
-  effects: { dirty() {}, draft() {}, save() {}, refresh() {} },
-  capability: { edit: () => ({ allowed: true }) },
-  reconcile: { anchors: () => 0 },
-  attribution: { attribute: () => null },
+  effects: { dirty() {}, draft() {}, save() {}, edit: () => ({ allowed: true }), attribute: () => null },
+  editorName: () => "Differential",
+  refresh() {},
+  records: () => null,
+  undo: { adapter: createUndoAdapter(), route: () => () => {} },
   report: (error) => { throw error; },
   timers: { now: () => clock, start: () => 0, stop() {} }
 });
 
-let adopting = false;
-watchUndoAdoption((doc) => { if (adopting) session.adopt(doc); });
+const session = liveSession();
 
 const throughSession = {
-  open: () => { adopting = true; flushEdits(); adopting = false; },
   edit: (p) => {
     const out = session.run({ name: p.name, needs: "edit", plan: () => ({ changes: p.changes, apply: p.apply }) });
     assert.equal(out.kind, "applied", p.name);

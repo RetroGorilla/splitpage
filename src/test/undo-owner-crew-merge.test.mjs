@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
-import { flushEdits, noteEdit, noteRemoteChange, redo, trackDocument, undo } from "../js/12a-undo.js";
+import { flushEdits, noteEdit, noteRemoteChange, redo, undo } from "../js/12a-undo.js";
 import { startTestSession } from "./_session.mjs";
 import { appSessionDeps } from "./_app-session.mjs";
 import { loadTestDocument } from "./_document.mjs";
@@ -20,13 +20,13 @@ const shot = (id, name, owner) => ({ id, name, owner: owner || "" });
 const ownerOf = (list, name) => (list.find((e) => e.name === name) || {}).owner;
 
 function boot(names) {
-  loadTestDocument(migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
+  const opening = migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
     { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-  ] }));
-  names.forEach((n) => S.state.people.push(person("p_" + n, n)));
-  S.state.productionTags.push(tag("t_kettle", "Kettle", ""));
-  S.state.brollShots.push(shot("bs_dock", "Dock", ""));
-  trackDocument();
+  ] });
+  names.forEach((n) => opening.people.push(person("p_" + n, n)));
+  opening.productionTags.push(tag("t_kettle", "Kettle", ""));
+  opening.brollShots.push(shot("bs_dock", "Dock", ""));
+  loadTestDocument(opening);
 }
 
 function commit() {
@@ -129,13 +129,13 @@ test("undo of an entry that only added a person clears the item a collaborator g
 
 for (const list of ["brollShots", "productionTags"]) {
   test("redo of my own unassignment lands after a crew-only undo cleared a collaborator's owner, in " + list + " (#476 review)", () => {
-    loadTestDocument(migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
+    const opening = migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
       { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-    ] }));
-    S.state.people.push(person("p_Cy", "Cy"));
+    ] });
+    opening.people.push(person("p_Cy", "Cy"));
     const item = list === "brollShots" ? shot : (id, name, owner) => tag(id, name, owner);
-    S.state[list].push(item("i_dock", "Dock", ""), item("i_pier", "Pier", "p_Cy"));
-    trackDocument();
+    opening[list].push(item("i_dock", "Dock", ""), item("i_pier", "Pier", "p_Cy"));
+    loadTestDocument(opening);
     S.state.people.push(person("p_Ada", "Ada"));
     commit();
     remoteCrew((st) => { st[list].find((e) => e.name === "Dock").owner = "p_Ada"; });
@@ -352,12 +352,12 @@ test("seeded: through noteRemoteChange, with crew-changing, item-assigning and m
   for (let seed = 1; seed <= 400; seed++) {
     const r = rng(seed);
     const pick = (list) => list[Math.floor(r() * list.length)];
-    loadTestDocument(migrateRows({ schema: 2, title: "Prop", comments: [], rows: [
+    const opening = migrateRows({ schema: 2, title: "Prop", comments: [], rows: [
       { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-    ] }));
-    S.state.productionTags.push(tag("t_kettle", "Kettle", ""), tag("t_lamp", "Lamp", ""));
-    S.state.brollShots.push(shot("bs_pier", "Pier", ""), shot("bs_dock", "Dock", ""));
-    trackDocument();
+    ] });
+    opening.productionTags.push(tag("t_kettle", "Kettle", ""), tag("t_lamp", "Lamp", ""));
+    opening.brollShots.push(shot("bs_pier", "Pier", ""), shot("bs_dock", "Dock", ""));
+    loadTestDocument(opening);
     let synced = clone(S.state);
     const seen = {};
     ITEMS.forEach(([, n]) => { seen[n] = new Set([""]); });

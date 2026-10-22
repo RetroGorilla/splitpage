@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
+import { mergeBase } from "../legacy/session-bridge.ts";
 
 await bootApp();
 after(closeApp);
@@ -72,7 +73,7 @@ function observed() {
     docId: S.state.docId,
     home: homeModule.currentHome(),
     homeKind: homeModule.currentHome().kind,
-    base: JSON.stringify(S.baseState),
+    base: JSON.stringify(mergeBase()),
     rev: S.state.rev
   };
 }
@@ -86,7 +87,7 @@ function assertSameDocument(before) {
   assert.equal(S.state.docId, before.docId, "its id is unchanged");
   assert.equal(homeModule.currentHome(), before.home, "its destination is the same record");
   assert.equal(homeModule.currentHome().kind, before.homeKind, "of the same kind");
-  assert.equal(JSON.stringify(S.baseState), before.base, "its baseline is unchanged");
+  assert.equal(JSON.stringify(mergeBase()), before.base, "its baseline is unchanged");
   assert.equal(S.state.rev, before.rev, "its rev is unchanged");
 }
 

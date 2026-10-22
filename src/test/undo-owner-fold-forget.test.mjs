@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
-import { flushEdits, noteEdit, noteRemoteChange, redo, trackDocument, undo } from "../js/12a-undo.js";
+import { flushEdits, noteEdit, noteRemoteChange, redo, undo } from "../js/12a-undo.js";
 import { startTestSession } from "./_session.mjs";
 import { appSessionDeps } from "./_app-session.mjs";
 import { loadTestDocument } from "./_document.mjs";
@@ -40,13 +40,13 @@ function dangling() {
 }
 
 function foldedCrewEntry(list) {
-  loadTestDocument(migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
+  const opening = migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
     { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-  ] }));
-  S.state.people.push(person("p_Cy", "Cy"));
+  ] });
+  opening.people.push(person("p_Cy", "Cy"));
   const item = list === "brollShots" ? shot : tag;
-  S.state[list].push(item("i_dock", "Dock", ""), item("i_quay", "Quay", ""), item("i_pier", "Pier", ""));
-  trackDocument();
+  opening[list].push(item("i_dock", "Dock", ""), item("i_quay", "Quay", ""), item("i_pier", "Pier", ""));
+  loadTestDocument(opening);
   S.state.people.push(person("p_Ada", "Ada"));
   commit();
   remote((st) => { itemOf(st, list, "Dock").owner = "p_Ada"; });
@@ -173,12 +173,12 @@ for (const list of ["brollShots", "productionTags"]) {
 }
 
 test("the folded owner change leaves alone an owner I unassigned later, and does not count it as cleared (#518)", () => {
-  loadTestDocument(migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
+  const opening = migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
     { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-  ] }));
-  S.state.people.push(person("p_Cy", "Cy"));
-  S.state.brollShots.push(shot("bs_dock", "Dock", ""), shot("bs_quay", "Quay", ""));
-  trackDocument();
+  ] });
+  opening.people.push(person("p_Cy", "Cy"));
+  opening.brollShots.push(shot("bs_dock", "Dock", ""), shot("bs_quay", "Quay", ""));
+  loadTestDocument(opening);
   S.state.people.push(person("p_Ada", "Ada"));
   commit();
   assert.equal(undo().ok, true);
@@ -234,12 +234,12 @@ test("seeded: with collaborators editing other items, undo and redo of folded ow
   for (let seed = 1; seed <= 1000; seed++) {
     const r = rng(seed);
     const pick = (list) => list[Math.floor(r() * list.length)];
-    loadTestDocument(migrateRows({ schema: 2, title: "Prop", comments: [], rows: [
+    const opening = migrateRows({ schema: 2, title: "Prop", comments: [], rows: [
       { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-    ] }));
-    S.state.productionTags.push(tag("t_kettle", "Kettle"), tag("t_lamp", "Lamp"));
-    S.state.brollShots.push(shot("bs_pier", "Pier"), shot("bs_dock", "Dock"), shot("bs_quay", "Quay"));
-    trackDocument();
+    ] });
+    opening.productionTags.push(tag("t_kettle", "Kettle"), tag("t_lamp", "Lamp"));
+    opening.brollShots.push(shot("bs_pier", "Pier"), shot("bs_dock", "Dock"), shot("bs_quay", "Quay"));
+    loadTestDocument(opening);
     const seen = {};
     ITEMS.forEach(([, n]) => { seen[n] = new Set([""]); });
     const note = () => ITEMS.forEach(([l, n]) => seen[n].add(ownerName(l, n)));

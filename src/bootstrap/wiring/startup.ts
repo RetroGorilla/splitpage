@@ -5,7 +5,8 @@ import { connectStartup } from "../../legacy/startup-bridge.ts";
 import { documentTransitions } from "../../legacy/transition-bridge.ts";
 import { suppressUnloadWarning } from "../../js/00-prelude.js";
 import { updateHideShotMenu } from "../../js/01b-hide-shot.js";
-import { initDocIdentityChannel, liveDocumentPort, loadInitialDocument, syncDocIdentity } from "../../js/02b-doc-id.js";
+import { initDocIdentityChannel, loadInitialState, syncDocIdentity } from "../../js/02b-doc-id.js";
+import { liveDocumentPort } from "../../legacy/session-bridge.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
 import {
@@ -34,7 +35,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
     },
     document: {
       pristine: seedCheckPasses,
-      load: loadInitialDocument,
+      load: loadInitialState,
       clone: cloneState,
       applyStash: function (loaded, options) {
         const applied: StashResult<ValidatedDocument, unknown> = applyStashedWork(loaded, null, options);

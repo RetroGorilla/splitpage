@@ -15,13 +15,39 @@ import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
 import { documentLocation, serverStatus } from "../legacy/location-bridge.ts";
 
-const { liveSession, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession, mergeBase, onDocumentReplaced, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../legacy/session-bridge.ts");
 
 const session = liveSession();
 const probe = { epoch: () => (sessionStarted() ? session.epoch() : null), held: () => (sessionStarted() ? session.read((doc) => doc) : null) };
-const TRACED = ["state", "baseState", "docIdWrittenOut"];
+const TRACED = ["docIdWrittenOut"];
+const tracing = new Set();
 
-const bootTrace = traceFields(S, TRACED, probe);
+let unfollow = null;
+
+function noteHeld() {
+  for (const events of tracing) {
+    events.push({ field: "state", value: currentDocument() === null ? null : "object", epoch: probe.epoch(), sessionHolds: probe.held() === S.state });
+  }
+}
+
+function followAbsorbs() {
+  if (unfollow) unfollow();
+  unfollow = sessionStarted() ? session.subscribe((change) => { if (change.kind === "server" || change.kind === "recovery") noteHeld(); }) : null;
+}
+
+onDocumentReplaced(function () {
+  noteHeld();
+  followAbsorbs();
+});
+
+function traceDocument() {
+  const trace = traceFields(S, TRACED, probe);
+  followAbsorbs();
+  tracing.add(trace.events);
+  return { events: trace.events, stop: () => { tracing.delete(trace.events); trace.stop(); } };
+}
+
+const bootTrace = traceDocument();
 await bootApp();
 bootTrace.stop();
 
@@ -62,7 +88,7 @@ const refreshed = { into: null };
 await rewireRunningApp({ refresh: (due) => (refreshed.into ? refreshed.into.push(...due) : runIdleRefresh(due)) });
 
 async function traced(run) {
-  const trace = traceFields(S, TRACED, probe);
+  const trace = traceDocument();
   try {
     await run();
   } finally {
@@ -354,7 +380,7 @@ rightToday("T2c-resume-switch", "a late server resume leaves a document opened d
     assert.equal(S.state.title, replacement.title, "setup: the replacement document opened while the resume fetch was held");
     assert.equal(homeModule.currentConn(), connection, "setup: opening the file kept the same connection");
     const opened = JSON.stringify(S.state);
-    const baseline = JSON.stringify(S.baseState);
+    const baseline = JSON.stringify(mergeBase());
     const destination = homeModule.currentHome();
     const epoch = session.epoch();
     held.gates.release("fetch");
@@ -362,7 +388,7 @@ rightToday("T2c-resume-switch", "a late server resume leaves a document opened d
     assert.equal(S.state.title, replacement.title, "late server resume must leave the newly opened document in place");
     assert.equal(JSON.stringify(S.state), opened, "the opened document's contents and identity are unchanged");
     assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
-    assert.equal(JSON.stringify(S.baseState), baseline, "the opened document's baseline is unchanged");
+    assert.equal(JSON.stringify(mergeBase()), baseline, "the opened document's baseline is unchanged");
     assert.equal(unsavedChanges(), false, "the opened document stays clean");
     assert.equal(homeModule.currentHome(), destination, "the opened document keeps its file destination");
     assert.equal(target.commits.length, 0, "the resume writes nothing to the opened file");
@@ -429,7 +455,7 @@ rightToday("T2c-reopen-switch", "a late sign-in resume leaves a document opened 
     assert.equal(S.state.title, replacement.title, "setup: the replacement document opened while the resume fetch was held");
     assert.equal(homeModule.currentConn(), connection, "setup: opening the file kept the same connection");
     const opened = JSON.stringify(S.state);
-    const baseline = JSON.stringify(S.baseState);
+    const baseline = JSON.stringify(mergeBase());
     const destination = homeModule.currentHome();
     const epoch = session.epoch();
     held.gates.release("fetch");
@@ -438,7 +464,7 @@ rightToday("T2c-reopen-switch", "a late sign-in resume leaves a document opened 
     assert.equal(S.state.title, replacement.title, "late sign-in resume must leave the newly opened document in place");
     assert.equal(JSON.stringify(S.state), opened, "the opened document's contents and identity are unchanged");
     assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
-    assert.equal(JSON.stringify(S.baseState), baseline, "the opened document's baseline is unchanged");
+    assert.equal(JSON.stringify(mergeBase()), baseline, "the opened document's baseline is unchanged");
     assert.equal(unsavedChanges(), false, "the opened document stays clean");
     assert.equal(homeModule.currentHome(), destination, "the opened document keeps its file destination");
     assert.equal(target.commits.length, 0, "the resume writes nothing to the opened file");
@@ -483,7 +509,7 @@ rightToday("T2c-reopen-stale", "a sign-in resume dropped for a newly opened docu
     assert.equal(S.state.title, replacement.title, "setup: the first resume was dropped for the newly opened document");
     assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending, "setup: the dropped resume kept its key");
     const opened = JSON.stringify(S.state);
-    const baseline = JSON.stringify(S.baseState);
+    const baseline = JSON.stringify(mergeBase());
     const destination = homeModule.currentHome();
     const epoch = session.epoch();
     await finishServerDetect();
@@ -491,7 +517,7 @@ rightToday("T2c-reopen-stale", "a sign-in resume dropped for a newly opened docu
     assert.equal(S.state.title, replacement.title, "a later sign-in must not resume the server document over the opened one");
     assert.equal(JSON.stringify(S.state), opened, "the opened document's contents and identity are unchanged");
     assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
-    assert.equal(JSON.stringify(S.baseState), baseline, "the opened document's baseline is unchanged");
+    assert.equal(JSON.stringify(mergeBase()), baseline, "the opened document's baseline is unchanged");
     assert.equal(unsavedChanges(), false, "the opened document stays clean");
     assert.equal(homeModule.currentHome(), destination, "the opened document keeps its file destination");
     assert.equal(target.commits.length, 0, "nothing is written to the opened file");
@@ -653,12 +679,12 @@ rightToday("T5", "restoring a draft onto an unchanged file schedules no save and
     assert.equal(restored.outcome, "applied");
     assert.equal(S.state.rows[0].audioText, "Unsaved here.", "the restored text is on screen");
     const fileBefore = await restored.onDisk();
-    const baselineBefore = JSON.stringify(S.baseState);
-    assert.equal(S.baseState.rows[0].audioText, restored.disk.rows[0].audioText, "the baseline is the file's own content");
+    const baselineBefore = JSON.stringify(mergeBase());
+    assert.equal(mergeBase().rows[0].audioText, restored.disk.rows[0].audioText, "the baseline is the file's own content");
     await settleSaves(clock);
     assert.equal(restored.writes().length, 0, "nothing was written to the file after the restore");
     assert.equal(await restored.onDisk(), fileBefore, "the file holds what it held");
-    assert.equal(JSON.stringify(S.baseState), baselineBefore, "the baseline did not move");
+    assert.equal(JSON.stringify(mergeBase()), baselineBefore, "the baseline did not move");
     assert.equal(unsavedChanges(), true, "the recovered work is still unsaved");
     assert.equal(homeModule.currentHome().kind, "file", "the destination is still the file");
     assert.equal(homeModule.currentHome().handle._desktopId, restored.fileId, "and it is the same file");
@@ -674,11 +700,11 @@ rightToday("T5-merge", "restoring a draft onto a changed file merges, halts auto
     assert.equal(S.state.rows[0].audioText, "Unsaved here.");
     assert.equal(S.state.rows[1].audioText, "Changed on disk.");
     const fileBefore = await restored.onDisk();
-    const baselineBefore = JSON.stringify(S.baseState);
+    const baselineBefore = JSON.stringify(mergeBase());
     await settleSaves(clock);
     assert.equal(restored.writes().length, 0, "the merge did not autosave");
     assert.equal(await restored.onDisk(), fileBefore);
-    assert.equal(JSON.stringify(S.baseState), baselineBefore);
+    assert.equal(JSON.stringify(mergeBase()), baselineBefore);
     assert.match(autoSavePolicy().halted(), /Autosave is paused/);
     assert.equal(unsavedChanges(), true, "the merged work is still unsaved");
     assert.equal(homeModule.currentHome().handle._desktopId, restored.fileId, "the destination is still the file");

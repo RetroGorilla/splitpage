@@ -24,10 +24,9 @@ import type { WriterRoutePorts } from "../../features/writer/routes.ts";
 import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
 import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
 import { focusMemory, installPicturePicker, mergeUndo, rowDrag, undoGuard } from "../../legacy/editor-bridge.ts";
-import { liveSession, runCommand } from "../../legacy/session-bridge.ts";
+import { liveDocumentPort, liveSession, runCommand } from "../../legacy/session-bridge.ts";
 import { cycleRowStatus } from "../../js/01-scene-status.js";
 import { expandHiddenShotStrip, revealRow } from "../../js/01b-hide-shot.js";
-import { liveDocumentPort } from "../../js/02b-doc-id.js";
 import { installMergeBanner, restoreMergeSnapshot } from "../../js/03-sync.js";
 import { cssAttr, safeId, sanitizeHtml, storedHtmlFromDom } from "../../js/04-richtext.js";
 import {

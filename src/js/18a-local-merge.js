@@ -17,14 +17,15 @@ import { safeImageSrc } from "../core/document/text-policy.ts";
 import { pad2 } from "../core/production/timing.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { cloneState } from "../core/document/clone.ts";
+import { mergeBase } from "../legacy/session-bridge.ts";
 
 var mergeCandidate = null;
 var mergeProbeToken = 0;
 
 function fileMergeBase(home) {
   if (home && home.diskBase) return home.diskBase;
-  if (home && home === fileHome() && S.baseState && S.state &&
-      normalizeDocId(S.baseState.docId) === normalizeDocId(S.state.docId)) return S.baseState;
+  if (home && home === fileHome() && mergeBase() && S.state &&
+      normalizeDocId(mergeBase().docId) === normalizeDocId(S.state.docId)) return mergeBase();
   return null;
 }
 

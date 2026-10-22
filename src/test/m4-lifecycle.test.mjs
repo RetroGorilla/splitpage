@@ -43,7 +43,7 @@ for (const name of ["MutationObserver", "ResizeObserver"]) {
   globalThis[name] = Tracked;
 }
 
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const session = liveSession();
 const realSubscribe = session.subscribe;
 session.subscribe = function (listener) {
@@ -261,8 +261,10 @@ test("E9: the session's own dispose stops its timers and drops its listeners", a
   markDirty();
   assert.deepEqual(heard, ["edit"], "setup: the subscription hears an edit");
   requestRefresh("m4-lifecycle-disposed");
+  const doc = currentDocument();
   session.dispose();
-  S.state.rows[0].audioText = "After dispose.";
+  assert.equal(currentDocument(), null, "a disposed session holds no document");
+  doc.rows[0].audioText = "After dispose.";
   markDirty();
   clock.tick(60 * 60 * 1000);
   await settle(clock);

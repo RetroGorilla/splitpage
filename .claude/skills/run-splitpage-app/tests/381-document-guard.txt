@@ -1,0 +1,6 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+expect (window.__splitpageGuardRun === true) === /[?&]document-guard=1(&|$)/.test(location.search)
+expect window.__documentGuardTest.on() === (window.__splitpageGuardRun === true)
+expect window.__documentGuardTest.viewed() === (window.__splitpageGuardRun === true)
+expect JSON.stringify(window.__documentGuardTest.writes().map(function (threw) { return threw === (window.__splitpageGuardRun === true); })) == [true,true,true,true]
