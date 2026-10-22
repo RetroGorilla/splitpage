@@ -19,7 +19,7 @@ const FROZEN_SHIM_IMPORTS: readonly string[] = [
   "./05r-read-time.js", "./05s-script-zoom.js", "./05t-target.js", "./05v-video.js", "./05w-annotate.js",
   "./06-rows.js", "./07-production-tags.js", "./07b-plain-tags.js", "./08-production-panels.js", "./08c-broll.js", "./08d-broll-panel.js",
   "./09-find-replace.js", "./10-comments.js", "./11-import.js", "./12-dirty-toast.js", "./12a-undo.js", "./13-hosted.js",
-  "./13a-presence.js", "./13b-collaborate.js", "./14-export.js", "./14b-export-kit.js", "./14e-export-formats.js", "./15-docx.js",
+  "./13a-presence.js", "./13b-collaborate.js", "./14-export.js", "./14b-export-kit.js", "./15-docx.js",
   "./16-csv.js", "./16b-xlsx.js", "./17-pdf.js", "./18-local-files.js", "./18a-local-merge.js", "./18b-file-menu.js",
   "./18c-export-dialog.js", "./18d-command-menu.js", "./19-writer.js", "./20-teleprompter.js", "./20a-update.js", "./20b-onboarding.js",
   "./20c-help.js", "./20d-formats.js", "./20e-connect.js", "./20f-desktop.js", "./20g-drafts.js", "./20h-appdata.js",
@@ -38,11 +38,11 @@ function importsOf(path: string): readonly Import[] {
   return analysis.imports;
 }
 
-test("the frozen shim import set has the 63 started modules, 14e and the two bootstrap modules", () => {
+test("the frozen shim import set has the 63 started modules and the two bootstrap modules", () => {
   assert.equal(new Set(FROZEN_SHIM_IMPORTS).size, FROZEN_SHIM_IMPORTS.length);
-  assert.equal(FROZEN_SHIM_IMPORTS.length, 66);
-  assert.equal(FROZEN_SHIM_IMPORTS.filter((s) => /^\.\/\d/.test(s)).length, 62);
-  assert.ok(FROZEN_SHIM_IMPORTS.includes("./14e-export-formats.js"));
+  assert.equal(FROZEN_SHIM_IMPORTS.length, 65);
+  assert.equal(FROZEN_SHIM_IMPORTS.filter((s) => /^\.\/\d/.test(s)).length, 61);
+  assert.ok(!FROZEN_SHIM_IMPORTS.includes("./14e-export-formats.js"));
 });
 
 test("the legacy shim imports nothing outside its frozen set, so nothing new registers into it", () => {
@@ -79,7 +79,7 @@ interface LoadReport {
   readonly owners: Readonly<Record<string, boolean | string>>;
 }
 
-const NOTHING_STARTED = { session: false, saves: false, recovery: false, editor: false, productionEditing: false, preferences: false, effects: false, transitions: false, actions: false, exports: false };
+const NOTHING_STARTED = { session: false, saves: false, recovery: false, editor: false, productionEditing: false, preferences: false, effects: false, transitions: false, actions: false, exports: false, exportServices: false };
 const CONFIGURES = /^(?:start|install|register|provide|configure|route|watch|hand|use|on)[A-Z]/;
 const run = promisify(execFile);
 
@@ -133,10 +133,10 @@ test("the load-order check catches a module that configures a bridge while it lo
 });
 
 test("no numbered module configures a bridge or starts an owner while it loads: each is imported alone, with fresh module state", { timeout: 600_000 }, async () => {
-  assert.equal(NUMBERED.length, 64, "every remaining numbered module");
-  const targets = [...NUMBERED, "src/features/rows/row-motion.js", "src/features/title/topbar.js", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/notices/phone-bar.js", "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts"];
+  assert.equal(NUMBERED.length, 63, "every remaining numbered module");
+  const targets = [...NUMBERED, "src/features/rows/row-motion.js", "src/features/title/topbar.js", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/notices/phone-bar.js", "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts", "src/bootstrap/wiring/exporters.ts"];
   assert.equal(targets.length, 79);
-  for (const loadOnly of ["src/features/rows/row-motion.js", "src/features/title/topbar.js", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/notices/phone-bar.js", "src/adapters/storage/03c-history-idb.js", "src/js/14c-export-projections.js", "src/js/14d-export-text.js", "src/js/14e-export-formats.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts"]) {
+  for (const loadOnly of ["src/features/rows/row-motion.js", "src/features/title/topbar.js", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/notices/phone-bar.js", "src/adapters/storage/03c-history-idb.js", "src/js/14c-export-projections.js", "src/js/14d-export-text.js", "src/bootstrap/wiring/exporters.ts", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts"]) {
     assert.ok(targets.includes(loadOnly), loadOnly);
   }
   const reports = await loadEachAlone(targets);

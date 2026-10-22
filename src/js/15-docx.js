@@ -21,6 +21,7 @@ import { strBytes } from "../adapters/formats/bytes.ts";
 import { xmlEscape } from "../adapters/formats/xml.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
 import { makeId } from "../adapters/identity/ids.ts";
+import { exportServices } from "../application/export/services.ts";
 import { escapeHtml, safeHref, unitSafePrefix } from "../core/document/text-policy.ts";
 import { DEFAULT_WPM } from "../core/document/timing.ts";
 import { formatDuration, pad2 } from "../core/production/timing.ts";
@@ -30,9 +31,6 @@ import { setMark } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
 import { OMIT_CLOSES, toDocxRuns, toPlainText } from "../core/text/projections.ts";
 import { cellLength } from "../core/text/runs.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
-import { htmlToPlainText } from "../legacy/plain-text.ts";
-import { cellOf, fromHtml, inertBody } from "../legacy/richtext.ts";
 
 var DOCX_CATEGORY_DOT = "● ";
 
@@ -163,7 +161,7 @@ function docxRunsXml(html, rels, opts) {
   if (ann) {
     runs = exportRuns(html, ann.nums);
   } else {
-    var cell = cellOf(html);
+    var cell = exportServices().cellOf(html);
     if (opts.cues === "omit") cell = withoutCues(cell);
     runs = toDocxRuns(cell);
   }
@@ -248,10 +246,10 @@ function docxVideoLinksXml(links, rels) {
 
 function docxVideoLinksOf(pEl, linkMap) {
   var html = docxParaToHtml(pEl, linkMap);
-  var text = htmlToPlainText(html);
+  var text = exportServices().htmlToPlainText(html);
   if (text.indexOf(VIDEO_LINKS_MARK) !== 0) return null;
   var hrefs = [];
-  inertBody(html).querySelectorAll("a[href]").forEach(function (a) { hrefs.push(a.getAttribute("href")); });
+  exportServices().inertBody(html).querySelectorAll("a[href]").forEach(function (a) { hrefs.push(a.getAttribute("href")); });
   var parts = text.slice(VIDEO_LINKS_MARK.length).split("  ·  ");
   var links = [];
   for (var i = 0; i < parts.length; i++) {
@@ -334,7 +332,7 @@ var KEEP_WHOLE_LINES = 10;
 
 function sceneLineEstimate(row) {
   function lines(html) {
-    return toPlainText(cellOf(html)).split("\n").reduce(function (n, l) { return n + Math.max(1, Math.ceil(l.length / 40)); }, 0);
+    return toPlainText(exportServices().cellOf(html)).split("\n").reduce(function (n, l) { return n + Math.max(1, Math.ceil(l.length / 40)); }, 0);
   }
   var pics = (rowImage(row) ? 1 : 0) + morePictureRefs(row).length;
   return Math.max(lines(row.visualText) + pics * 8, lines(row.audioText));
@@ -786,14 +784,14 @@ function narrationTextOpts(opts) {
 
 export function narrationRows(doc, opts) {
   var t = narrationTextOpts(opts);
-  return doc.scenes.filter(function (row) { return toPlainText(cellOf(row.audioText), t); });
+  return doc.scenes.filter(function (row) { return toPlainText(exportServices().cellOf(row.audioText), t); });
 }
 
 export function buildNarrationText(doc, opts) {
   var t = narrationTextOpts(opts);
   var out = [doc.title || "Untitled Script", ""];
   narrationRows(doc, opts).forEach(function (row) {
-    out.push(toPlainText(cellOf(row.audioText), t).replace(/\n[ \t]*(\n[ \t]*)+/g, "\n"));
+    out.push(toPlainText(exportServices().cellOf(row.audioText), t).replace(/\n[ \t]*(\n[ \t]*)+/g, "\n"));
     out.push("");
   });
   return out.join("\n");
@@ -812,7 +810,7 @@ export function buildNarrationDocx(doc, opts) {
   var links = [];
   var rels = { addLink: function (href) { links.push(href); return "rIdL" + links.length; } };
   var rows = narrationRows(doc, opts);
-  var words = rows.reduce(function (n, row) { return n + productionReaders.wordCount(row.audioText); }, 0);
+  var words = rows.reduce(function (n, row) { return n + exportServices().productionReaders.wordCount(row.audioText); }, 0);
   var wpm = doc.document.wordsPerMinute || DEFAULT_WPM;
 
   var body = titleParaXml(doc.title || "Untitled Script") +
@@ -1048,7 +1046,7 @@ export async function docxToRows(file) {
   });
 
   var loose = blocks.filter(function (n) { return n.localName === "p" && !isHeadingPara(n); });
-  var withText = loose.filter(function (n) { return htmlToPlainText(docxParaToHtml(n, linkMap, paraOpts)); });
+  var withText = loose.filter(function (n) { return exportServices().htmlToPlainText(docxParaToHtml(n, linkMap, paraOpts)); });
   var boldCount = withText.filter(isAllBoldPara).length;
   var boldMeansVisual = boldCount > 0 && boldCount < withText.length * 0.7;
 
@@ -1091,7 +1089,7 @@ export async function docxToRows(file) {
         }));
       }
       var mapping = mapTableColumns(cellHtml.map(function (r) {
-        return r.map(function (h) { return htmlToPlainText(h); });
+        return r.map(function (h) { return exportServices().htmlToPlainText(h); });
       }));
       if (!mapping) return;
 
@@ -1104,7 +1102,7 @@ export async function docxToRows(file) {
             if (imageMap[id] && targets.indexOf(imageMap[id]) === -1) targets.push(imageMap[id]);
           });
         }
-        if (!htmlToPlainText(v) && !htmlToPlainText(a) && !targets.length && !cellLinks[i].length) continue;
+        if (!exportServices().htmlToPlainText(v) && !exportServices().htmlToPlainText(a) && !targets.length && !cellLinks[i].length) continue;
         rows.push(newRow({
           visualText: v, audioText: a,
           _pendingImage: targets[0] || null,
@@ -1116,7 +1114,7 @@ export async function docxToRows(file) {
     }
 
     var html = docxParaToHtml(node, linkMap, paraOpts);
-    var plain = htmlToPlainText(html);
+    var plain = exportServices().htmlToPlainText(html);
     var embedId = firstEmbedId(node);
     var target = embedId && imageMap[embedId] ? imageMap[embedId] : null;
     if (!plain && !target) return;
@@ -1194,7 +1192,7 @@ export function audioDirectionsHtml(html) {
   var dirs = html.indexOf("((") !== -1 || html.indexOf("stage-dir") !== -1;
   var cues = /(sfx|music)[ \t\u00a0]*:/i.test(html);
   if (!dirs && !cues) return html;
-  var c = fromHtml(html);
+  var c = exportServices().fromHtml(html);
   if (dirs) c = importDirections(c);
   if (cues) c = importCues(c);
   return toHtml(c);
@@ -1202,7 +1200,7 @@ export function audioDirectionsHtml(html) {
 
 function noDirectionsHtml(html) {
   if (!html || (html.indexOf("stage-dir") === -1 && html.indexOf("audio-cue") === -1)) return html;
-  var c = fromHtml(html);
+  var c = exportServices().fromHtml(html);
   return toHtml(flattenCues(setMark(c, 0, cellLength(c), "dir", false)));
 }
 
