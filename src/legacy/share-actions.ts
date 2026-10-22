@@ -4,7 +4,8 @@ import { promptForTarget } from "../js/03-sync.js";
 import { openGdocModal, openImportModal } from "../js/11-import.js";
 import { openDriveModal, openServerPicker, publishToServer, reviewMode, serverOpenItemState, serverPublishItemState } from "../js/13-hosted.js";
 import { collaborateBlockedReason, openCollaborate } from "../js/13b-collaborate.js";
-import { autoSaveEnabled, toggleAutoSave } from "../js/14-export.js";
+import { toggleAutoSave } from "../js/14-export.js";
+import { autoSavePolicy, savesStarted } from "./save-bridge.ts";
 import { saveBackItemState, saveBackToFile } from "../js/18-local-files.js";
 import { pasteItemState, startNewScript } from "../js/18b-file-menu.js";
 import { exportAgain, exportAgainItemState } from "../js/18c-export-dialog.js";
@@ -54,7 +55,7 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       group: "File",
       icon: "i-autosave",
       words: "automatic save saving",
-      availability: () => ({ ...loaded(), checked: Boolean(autoSaveEnabled) }),
+      availability: () => ({ ...loaded(), checked: savesStarted() && autoSavePolicy().enabled() }),
       run: () => { toggleAutoSave(); }
     },
     {

@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { confirmSavedNow, saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -125,18 +126,18 @@ async function writerInReview() {
   writer.openWriter();
   toReview();
   flushEdits();
-  S.dirty = false;
+  confirmSavedNow();
 }
 
 function untouched(run) {
   flushEdits();
   host().textContent = "";
-  const model = JSON.stringify(S.state), seq = S.editSeq, generation = liveSession().generation(), sizes = undoSizes();
+  const model = JSON.stringify(S.state), seq = saveChanges(), generation = liveSession().generation(), sizes = undoSizes();
   const out = run();
   flushEdits();
   assert.equal(JSON.stringify(S.state), model, "the document is unchanged");
-  assert.equal(S.editSeq, seq, "S.editSeq is unchanged");
-  assert.equal(S.dirty, false, "the script is not marked dirty");
+  assert.equal(saveChanges(), seq, "saveChanges() is unchanged");
+  assert.equal(unsavedChanges(), false, "the script is not marked dirty");
   assert.equal(liveSession().generation(), generation, "the session did not change");
   assert.deepEqual(undoSizes(), sizes, "the undo stack is unchanged");
   return out;
@@ -291,7 +292,7 @@ test("Ctrl+Z and Ctrl+Y in the Writer in review mode refuse and leave the undo s
   assert.equal(S.state.rows[0].audioText, "Hello there!");
   toReview();
   flushEdits();
-  S.dirty = false;
+  confirmSavedNow();
   const p = para("r1");
   p.focus();
   const undone = untouched(() => key(p, "z", { ctrlKey: true }));
@@ -426,7 +427,7 @@ test("the split and join commands themselves are rejected by the session in revi
   const join = runCommand(joinScenesCommand("r3", Object.assign({}, sessionTextPorts, { plainText: htmlToPlainText })));
   assert.deepEqual(join, { kind: "rejected", reason: REVIEW_ONLY });
   assert.equal(JSON.stringify(S.state), before);
-  assert.equal(S.dirty, false);
+  assert.equal(unsavedChanges(), false);
   toEdit();
   writer.closeWriter();
 });
@@ -549,7 +550,7 @@ test("in review mode, a grid cell whose text or formatting differs from the mode
   await open();
   toReview();
   flushEdits();
-  S.dirty = false;
+  confirmSavedNow();
   const cell = document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');
   cell.innerHTML = "Hello there CHANGED";
   untouched(() => cell.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true })));
@@ -576,7 +577,7 @@ test("in review mode, an input on the grid's title does not rename the script an
   await open();
   toReview();
   flushEdits();
-  S.dirty = false;
+  confirmSavedNow();
   const title = document.getElementById("doc-title");
   untouched(() => {
     title.value = "Renamed";

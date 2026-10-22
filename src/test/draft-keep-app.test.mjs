@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { unsavedChanges } from "../legacy/save-bridge.ts";
 
 await bootApp();
 
@@ -53,7 +54,7 @@ const writes = () => calls.filter((c) => c.op === "write");
 test("a plain flush of a clean desktop file tab writes no draft, as before (#258)", async () => {
   await withDesktop(async () => {
     await openCleanFile("fplain", "Plain");
-    assert.equal(S.dirty, false);
+    assert.equal(unsavedChanges(), false);
     await flushDraftNow();
     assert.equal(writes().length, 0, JSON.stringify(calls.map((c) => c.op)));
   });
@@ -69,7 +70,7 @@ test("a keep flush of a clean desktop file tab writes its whole document as a fi
     assert.equal(p.originKind, "file");
     assert.equal(p.fileId, "fkeep");
     assert.equal(JSON.parse(p.stateJson).rows[0].audioText, "Kept Moved away.");
-    assert.equal(S.dirty, false, "keeping a copy does not mark the script unsaved");
+    assert.equal(unsavedChanges(), false, "keeping a copy does not mark the script unsaved");
   });
 });
 

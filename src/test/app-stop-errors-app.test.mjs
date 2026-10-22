@@ -1,6 +1,7 @@
 import "./_dom.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import { startupReady } from "../legacy/startup-bridge.ts";
 
 const live = new Map();
 const proto = window.EventTarget.prototype;
@@ -55,7 +56,6 @@ function minus(a, b) {
 }
 
 const { bootApp, closeApp, rewireApp } = await import("./_app-boot.mjs");
-const { S } = await import("../js/_state.js");
 await bootApp();
 const app = await import("../bootstrap/app.ts");
 const { rootRoutesTaken } = await import("../bootstrap/wiring/editor.ts");
@@ -67,7 +67,7 @@ async function restart() {
 }
 
 function settled() {
-  return S.initialStateReady;
+  return startupReady();
 }
 
 after(() => {

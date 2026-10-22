@@ -19,6 +19,7 @@ import { closeNewTabPage } from "./20j-newtab.js";
 import { LONG_DEMO } from "./_starters.js";
 import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
 import { setMenuItemLabel, setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
+import { saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
 
 function el(id) { return document.getElementById(id); }
 
@@ -101,8 +102,8 @@ export function timeAgo(at, now) {
 }
 
 function savedWord(at) {
-  if (S.saveButtonBusy) return { text: "Saving…" };
-  if (S.dirty) return { text: "Unsaved changes", unsaved: true };
+  if (saveBusy()) return { text: "Saving…" };
+  if (unsavedChanges()) return { text: "Unsaved changes", unsaved: true };
   var now = Date.now();
   var when = at ? savedWhenText(at, now) : "";
   return { text: savedStatusText(at, now), title: when ? "Last saved at " + when : "" };

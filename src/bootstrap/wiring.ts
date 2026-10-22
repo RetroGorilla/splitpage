@@ -15,7 +15,7 @@ import { startPreferences } from "../legacy/preferences-bridge.ts";
 import { startRecovery } from "../legacy/recovery-bridge.ts";
 import type { LegacyRecoveryPorts } from "../legacy/recovery-bridge.ts";
 import { startSaves } from "../legacy/save-bridge.ts";
-import type { LegacySavePorts } from "../legacy/save-bridge.ts";
+import type { LegacyAutoSavePorts, LegacySavePorts } from "../legacy/save-bridge.ts";
 import { liveSession, startSessionBridge } from "../legacy/session-bridge.ts";
 import type { RecordsReconciler, SessionBridgePorts, SessionUndoPorts } from "../legacy/session-bridge.ts";
 import { captureOperation, startTransitions, stillOwns } from "../legacy/transition-bridge.ts";
@@ -107,9 +107,11 @@ const TRANSITION_PORTS: { readonly [P in keyof LegacyTransitionPorts]: readonly 
   identity: ["mint", "writtenOut", "markWrittenOut"]
 };
 
-const SAVE_PORTS: readonly (keyof Omit<LegacySavePorts, "ownership">)[] = ["write", "destination", "keyOf", "obsolete", "running"];
+const SAVE_PORTS: readonly (keyof Omit<LegacySavePorts, "ownership" | "autosave">)[] = ["write", "destination", "keyOf", "obsolete", "running"];
 
 const OWNERSHIP_PORTS: readonly (keyof SaveOwnershipPort)[] = ["capture", "stillOwns"];
+
+const AUTOSAVE_PORTS: readonly (keyof LegacyAutoSavePorts)[] = ["enabledAtStart", "due", "changed"];
 
 const UNDO_PORTS: readonly (keyof SessionUndoPorts)[] = ["adapter", "route", "watch"];
 
@@ -168,6 +170,10 @@ function checkedSaves(ports: LegacySavePorts | null | undefined): LegacySavePort
       throw new WiringError("saves", "Wiring: the saves dependency's ownership port has no " + method + " function");
     }
   }
+  const autosave = given["autosave"];
+  if (!present(autosave, "object")) throw new WiringError("saves", "Wiring: the saves dependency returned no autosave port");
+  const missingAutoSave = lacking(autosave, AUTOSAVE_PORTS);
+  if (missingAutoSave) throw new WiringError("saves", "Wiring: the saves dependency's autosave port has no " + missingAutoSave + " function");
   return ports as LegacySavePorts;
 }
 
@@ -271,7 +277,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   const exports = build("export registry", () => createExportRegistry(), installExportFormats);
   build("built-in exporters", () => checkedExporters(deps.exporters(exports)), (drop) => drop);
   build("session", () => startSessionBridge(legacySessionPorts(deps)), (stop) => stop);
-  build("saves", () => startSaves(checkedSaves(deps.saves({ capture: captureOperation, stillOwns: stillOwns }))), (stop) => stop);
+  build("saves", () => startSaves(checkedSaves(deps.saves({ capture: captureOperation, stillOwns: stillOwns })), deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
   build("transitions", () => startTransitions(deps.transitions), (stop) => stop);
   build("recovery", () => startRecovery(checkedRecovery(deps.recovery())), (stop) => stop);
   build("editor", () => startEditor(deps.transitions.live), (stop) => stop);

@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { cloneState } from "../core/document/clone.ts";
+import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -147,14 +148,14 @@ function chromiumRemoval(run) {
 
 function observe(run) {
   flushEdits();
-  const seq = S.editSeq, generation = session.generation(), sizes = undoSizes();
+  const seq = saveChanges(), generation = session.generation(), sizes = undoSizes();
   published.length = 0;
   const value = chromiumRemoval(run);
   flushEdits();
   return {
     value: value,
     edits: published.filter((k) => k === "edit").length,
-    seq: S.editSeq - seq,
+    seq: saveChanges() - seq,
     generation: session.generation() - generation,
     undo: undoSizes().undo - sizes.undo
   };
@@ -165,7 +166,7 @@ const noEdit = (got) => ({ edits: got.edits, seq: got.seq, generation: got.gener
 
 function holds(got, expected, label, opts = {}) {
   assert.deepEqual(noEdit(got), NO_EDIT, label + ": the render made an edit");
-  assert.equal(S.dirty, opts.dirty === true, label + ": the dirty state");
+  assert.equal(unsavedChanges(), opts.dirty === true, label + ": the dirty state");
   assert.deepEqual(modelTexts(), expected, label + ": the model holds the incoming document");
   assert.deepEqual(gridTexts(), expected, label + ": the grid shows it");
   if (opts.writer) assert.deepEqual(writerTexts(), expected.map((r) => [r[0], r[2]]), label + ": the Writer shows it");
@@ -268,7 +269,7 @@ test("R3a: an incoming merge while a grid cell holds focus after accepted typing
   const cell = gridCell("r1", "audioText");
   typeAtEnd(cell, "!");
   assert.equal(row("r1").audioText, "Mine one.!");
-  assert.equal(S.dirty, true);
+  assert.equal(unsavedChanges(), true);
   const theirs = cloneState(base);
   theirs.rows[0].visualText = "Theirs wide.";
   theirs.rows[2].audioText = "Theirs three.";
@@ -304,7 +305,7 @@ test("R3b: an incoming merge while a grid cell holds focus, whose text both side
   assert.deepEqual(noEdit(run.got), noEdit(alone.got), "the focused cell added no edit or undo step beyond the merge itself");
   assert.deepEqual(run.texts, run.decided, "the model is what the merge decided");
   assert.deepEqual(run.grid, run.decided, "the grid shows it");
-  assert.equal(S.dirty, true);
+  assert.equal(unsavedChanges(), true);
   assert.equal(document.activeElement, gridCell("r1", "audioText"));
 });
 
@@ -319,7 +320,7 @@ test("R3c: an incoming merge that removes the focused cell's scene, after accept
   assert.deepEqual(noEdit(got), NO_EDIT);
   assert.deepEqual(modelTexts(), [["r2", "Close", "Mine two."], ["r3", "Detail", "Mine three.?"]]);
   assert.deepEqual(gridTexts(), modelTexts());
-  assert.equal(S.dirty, true);
+  assert.equal(unsavedChanges(), true);
   assert.equal(gridCell("r1", "audioText"), null);
   assert.ok(!document.activeElement.closest("#rows .cell-editable[data-id='r1']"), "the removed scene's cell is not focused");
 });
@@ -464,7 +465,7 @@ for (const place of PLACES) {
         assert.deepEqual(noEdit(run.out.value), NO_EDIT, "the failed render made an edit");
         assert.deepEqual(modelTexts(), EXPECTED_THROWN, "the model holds the incoming document");
         assert.equal(screenIsStale(), true);
-        assert.equal(S.dirty, false);
+        assert.equal(unsavedChanges(), false);
         const stale = run.target;
         const staleText = stale.textContent;
         assert.equal(staleText, "Mine two.", "the cell the user was in still shows the old text");
@@ -474,7 +475,7 @@ for (const place of PLACES) {
         });
         assert.deepEqual(noEdit(probe), NO_EDIT, "the stale cell's blur made an edit");
         assert.deepEqual(modelTexts(), EXPECTED_THROWN, "the stale cell's blur wrote its text over the model");
-        assert.equal(S.dirty, false);
+        assert.equal(unsavedChanges(), false);
         const toast = redrawToast();
         assert.ok(toast, "Redraw is offered");
         const redrawn = observe(() => toast.querySelector(".toast-action").click());

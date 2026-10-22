@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import blobPolicy from "../../shared/blob-policy.js";
 import { createHeldFetch, createHeldFileHandle, mockClock, rightToday } from "./_m4-matrix.mjs";
+import { unsavedChanges } from "../legacy/save-bridge.ts";
 
 const { refsIn } = blobPolicy;
 
@@ -195,7 +196,7 @@ function summary() {
   return {
     homeId: homeModule.home.id,
     rev: homeModule.home.rev,
-    dirty: S.dirty,
+    dirty: unsavedChanges(),
     texts: S.state.rows.map((r) => r.audioText),
     baseTexts: S.baseState ? S.baseState.rows.map((r) => r.audioText) : null
   };
@@ -467,12 +468,12 @@ rightToday("P2", "a publish that completes after another document was opened lea
   await held.gates.arrived("fetch");
   startNewScript();
   assert.equal(S.state.title, "Untitled Script");
-  const other = { dirty: S.dirty, homeKind: homeModule.home.kind, base: JSON.stringify(S.baseState) };
+  const other = { dirty: unsavedChanges(), homeKind: homeModule.home.kind, base: JSON.stringify(S.baseState) };
   held.gates.releaseAll("fetch");
   assert.equal(await publishing, false, "the publish reports that it did not adopt the copy");
   await settle();
   assert.equal(homeModule.home.kind, other.homeKind, "the new document has no server home");
-  assert.equal(S.dirty, other.dirty, "the new document's dirty state is unchanged");
+  assert.equal(unsavedChanges(), other.dirty, "the new document's dirty state is unchanged");
   assert.equal(JSON.stringify(S.baseState), other.base, "the new document's baseline is unchanged");
   assert.ok(newToasts(before).some((text) => /another script/.test(text)), "the user is told the copy was published and the other script left alone");
 }));
@@ -487,7 +488,7 @@ rightToday("P3", "typing during a publish leaves the document dirty (#248)", hos
   assert.equal(await publishing, true);
   await settle();
   assert.equal(homeModule.home.kind, "server", "the document was published");
-  assert.equal(S.dirty, true, "the edit made during the publish is still unsaved");
+  assert.equal(unsavedChanges(), true, "the edit made during the publish is still unsaved");
   assert.deepEqual(S.baseState.rows.map((r) => r.audioText), ["One.", "Two."], "the baseline is what the server accepted");
 }));
 
@@ -542,7 +543,7 @@ rightToday("C1", "hosted Save As acknowledges no server edit and keeps the merge
   assert.equal(homeModule.home.kind, "server", "the document is still on the server");
   assert.equal(homeModule.home.id, "srv-a");
   assert.equal(homeModule.home.rev, 1, "the server revision did not move");
-  assert.equal(S.dirty, true, "the edit is still unsaved on the server");
+  assert.equal(unsavedChanges(), true, "the edit is still unsaved on the server");
 }));
 
 function collabBody() {

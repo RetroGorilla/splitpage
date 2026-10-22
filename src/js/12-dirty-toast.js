@@ -5,8 +5,6 @@ import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "./00p-prefs.j
 import { linkTurnedOff, onServerDoc, reviewMode, serverSessionExpired } from "./13-hosted.js";
 import { personColorsWithMine } from "./13a-presence.js";
 import {
-  autoSaveEnabled,
-  autoSaveHalt,
   autoSaveTarget,
   clearAutoSaveTimers,
   queueAutoSave,
@@ -17,17 +15,11 @@ import { updateFileChip } from "./18-local-files.js";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { noteDraftChange } from "./20g-drafts.js";
 import { noteAbsorbedDirty, noteSessionEdit } from "../legacy/session-bridge.ts";
-import { confirmSavedNow, noteSaveChange, saveRunning, savesStarted, unsavedFor } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, confirmSavedNow, noteSaveChange, saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
 import { saveButtonView, saveStatus } from "../application/save/status.ts";
 import { changeSet } from "../application/session/change-set.ts";
 import { authorityOf, editCapability } from "../application/collaboration/authority.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
-
-S.saveButtonBusy = false;
-
-function saveBusy() {
-  return !!S.saveButtonBusy || (savesStarted() && saveRunning());
-}
 
 var MY_COLOR = changeSet({ docFields: ["personColors"] });
 
@@ -43,13 +35,12 @@ function signLegacyEdit() {
   if (plan) plan.apply(S.state);
 }
 
-export function hasUnsavedChanges() { return !!S.dirty; }
+export function hasUnsavedChanges() { return unsavedChanges(); }
 
 export function legacySessionEffects() {
   return {
     dirty: function () {
-      S.dirty = true;
-      S.editSeq = noteSaveChange();
+      noteSaveChange();
     },
     attribute: myColorPlan,
     draft: function () {
@@ -95,7 +86,6 @@ export function markAbsorbedDirty(kind) {
 
 export function clearDirty() {
   confirmSavedNow();
-  S.dirty = unsavedFor();
   clearAutoSaveTimers();
   resumeAutoSave();
   savedAt = 0;
@@ -120,11 +110,12 @@ function saveStatusView() {
     : "";
 
   var onServer = typeof onServerDoc === "function" && onServerDoc();
+  var autosave = autoSavePolicy();
   var line = saveStatus({
     busy: saveBusy(),
-    dirty: !!S.dirty,
-    halted: autoSaveHalt || "",
-    autoSaveOn: !!autoSaveEnabled,
+    dirty: unsavedChanges(),
+    halted: autosave.halted(),
+    autoSaveOn: autosave.enabled(),
     target: target,
     where: where,
     homeKind: home.kind,

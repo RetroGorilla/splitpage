@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { S } from "../js/_state.js";
 import { cloneState } from "../core/document/clone.ts";
+import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 await bootApp();
 
@@ -52,14 +53,14 @@ test("the booted app's session holds the live document it adopted when the file 
   assert.ok(session.epoch() >= 2, "the seed and then the file were each adopted");
 });
 
-test("markDirty is one session edit: one generation, one S.editSeq, dirty, and one undo entry once the edit is flushed", () => {
-  const gen = session.generation(), seq = S.editSeq, entries = undoSizes().undo;
+test("markDirty is one session edit: one generation, one saveChanges(), dirty, and one undo entry once the edit is flushed", () => {
+  const gen = session.generation(), seq = saveChanges(), entries = undoSizes().undo;
   listen();
   S.state.rows[0].audioText = "One, edited.";
   markDirty();
   assert.equal(session.generation(), gen + 1);
-  assert.equal(S.editSeq, seq + 1);
-  assert.equal(S.dirty, true);
+  assert.equal(saveChanges(), seq + 1);
+  assert.equal(unsavedChanges(), true);
   assert.deepEqual(heard, ["edit"]);
   flushEdits();
   assert.equal(undoSizes().undo, entries + 1);
@@ -67,7 +68,7 @@ test("markDirty is one session edit: one generation, one S.editSeq, dirty, and o
 });
 
 test("opening another document, or restoring one with the same id, opens a new epoch and is no edit", () => {
-  const epoch = session.epoch(), gen = session.generation(), seq = S.editSeq;
+  const epoch = session.epoch(), gen = session.generation(), seq = saveChanges();
   listen();
   startNewScript();
   assert.equal(session.epoch(), epoch + 1, "a new script is adopted at the transition, with no flush or render first");
@@ -81,7 +82,7 @@ test("opening another document, or restoring one with the same id, opens a new e
   assert.equal(session.epoch(), epoch + 2, "a new epoch all the same");
   assert.equal(held(), S.state);
   assert.equal(session.generation(), gen);
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
   assert.equal(undoSizes().undo, 0);
 });
 
@@ -124,7 +125,7 @@ test("a server update over undo entries forgets the ones on a field their side c
   assert.deepEqual([lastUndoEntry().steps[0].rowId, lastUndoEntry().steps[0].key], ["r1", "audioText"]);
 });
 
-test("a reported merge marks the document dirty and advances S.editSeq as before, but adds no edit generation", () => {
+test("a reported merge marks the document dirty and advances saveChanges() as before, but adds no edit generation", () => {
   const base = script("Reported");
   S.state = cloneState(base);
   flushEdits();
@@ -132,21 +133,21 @@ test("a reported merge marks the document dirty and advances S.editSeq as before
   theirs.rows[1].audioText = "Theirs.";
   const mine = cloneState(base);
   mine.rows[0].audioText = "Mine.";
-  const gen = session.generation(), seq = S.editSeq;
+  const gen = session.generation(), seq = saveChanges();
   listen();
   applyMerge({ base: base, mine: mine, theirs: theirs, source: "server-conflict" });
   assert.deepEqual(heard, ["server"]);
   assert.equal(session.generation(), gen);
-  assert.equal(S.editSeq, seq + 1);
-  assert.equal(S.dirty, true);
+  assert.equal(saveChanges(), seq + 1);
+  assert.equal(unsavedChanges(), true);
 });
 
-test("a reload in place is its own kind: same epoch, no generation, S.editSeq and dirty as before, no undo entry", async () => {
+test("a reload in place is its own kind: same epoch, no generation, saveChanges() and dirty as before, no undo entry", async () => {
   let disk = new File(["Wide\tOne.\nClose\tTwo."], "reload.txt", { lastModified: 1 });
   const handle = { kind: "file", name: "reload.txt", getFile: async () => disk };
   await openProjectFile(disk, handle, { skipSnapshot: true });
   const doc = S.state;
-  const epoch = session.epoch(), gen = session.generation(), seq = S.editSeq;
+  const epoch = session.epoch(), gen = session.generation(), seq = saveChanges();
   listen();
   disk = new File(["Wide\tOne, again.\nClose\tTwo."], "reload.txt", { lastModified: 2 });
   await reloadFileFromDisk();
@@ -155,8 +156,8 @@ test("a reload in place is its own kind: same epoch, no generation, S.editSeq an
   assert.deepEqual(heard, ["reload"]);
   assert.equal(session.epoch(), epoch);
   assert.equal(session.generation(), gen);
-  assert.equal(S.editSeq, seq + 1, "loadFileIntoEditor's dirty marking still counts");
-  assert.equal(S.dirty, true);
+  assert.equal(saveChanges(), seq + 1, "loadFileIntoEditor's dirty marking still counts");
+  assert.equal(unsavedChanges(), true);
   flushEdits();
   assert.equal(undoSizes().undo, 0, "the reloaded text is not an undo step");
 });
@@ -189,13 +190,13 @@ test("E4: resumeServerDoc's merge is a recovery: a new epoch, the undo stack kep
   flushEdits();
   const theirs = cloneState(base);
   theirs.rows[1].audioText = "Server.";
-  const epoch = session.epoch(), gen = session.generation(), seq = S.editSeq;
+  const epoch = session.epoch(), gen = session.generation(), seq = saveChanges();
   listen();
   applyMerge({ base: base, mine: S.state, theirs: theirs, source: "server-resume", newBase: cloneState(theirs), noAutoSave: true });
   assert.deepEqual(heard, ["recovery"]);
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
-  assert.equal(S.editSeq, seq + 1);
+  assert.equal(saveChanges(), seq + 1);
   assert.equal(held(), S.state);
   flushEdits();
   assert.equal(undoSizes().undo, 1, "12a's stack is kept through the merge, as before");
@@ -232,26 +233,26 @@ test("E4: a file draft restored onto a changed file is a recovery merge; an unti
   } finally {
     S.DESKTOP = desktop;
   }
-  const epoch = session.epoch(), gen = session.generation(), seq = S.editSeq;
+  const epoch = session.epoch(), gen = session.generation(), seq = saveChanges();
   listen();
   await applyTakenDraft({ header: { origin: { kind: "untitled" } }, stateJson: JSON.stringify(script("Untitled draft")) });
   assert.deepEqual(heard, [], "the draft is recovered at the transition, a new session: a subscription made for the old document hears nothing of it");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
-  assert.equal(S.editSeq, seq + 1);
-  assert.equal(S.dirty, true);
+  assert.equal(saveChanges(), seq + 1);
+  assert.equal(unsavedChanges(), true);
   assert.equal(held(), S.state);
 });
 
-test("importing a file is an adoption at the transition that marks the document dirty and advances S.editSeq as before, with no edit generation", async () => {
-  const gen = session.generation(), epoch = session.epoch(), seq = S.editSeq;
+test("importing a file is an adoption at the transition that marks the document dirty and advances saveChanges() as before, with no edit generation", async () => {
+  const gen = session.generation(), epoch = session.epoch(), seq = saveChanges();
   listen();
   await openProjectFile(new File(["Wide\tOne.\nClose\tTwo."], "import.txt", { lastModified: 1 }), null, { skipSnapshot: true });
   assert.deepEqual(heard, [], "the import is a new session: a subscription made for the old document hears nothing of it");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
-  assert.equal(S.editSeq, seq + 1);
-  assert.equal(S.dirty, true);
+  assert.equal(saveChanges(), seq + 1);
+  assert.equal(unsavedChanges(), true);
   assert.equal(held(), S.state);
 });
 
@@ -264,15 +265,15 @@ test("restoring a version from history is an adoption at the transition that mar
   await ticket.done;
   const button = document.createElement("button");
   button.setAttribute("data-id", ticket.id);
-  const gen = session.generation(), epoch = session.epoch(), seq = S.editSeq;
+  const gen = session.generation(), epoch = session.epoch(), seq = saveChanges();
   listen();
   assert.equal(await restoreSnapshotFromCard(button), "restored");
   assert.equal(S.state.rows[0].audioText, "As it was.");
   assert.deepEqual(heard, [], "the version is restored at the transition, a new session: a subscription made for the old document hears nothing of it");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
-  assert.equal(S.editSeq, seq + 1);
-  assert.equal(S.dirty, true);
+  assert.equal(saveChanges(), seq + 1);
+  assert.equal(unsavedChanges(), true);
   assert.equal(held(), S.state);
 });
 

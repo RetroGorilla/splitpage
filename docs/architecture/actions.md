@@ -94,7 +94,7 @@ and both the menu's painting and the action's availability call it:
 | Export again, and its label | `exportAgainItemState()`, `18c-export-dialog.js` |
 | The Servers label | `serversMenuLabel()`, `20e-connect.js` |
 | Present in browser, Chromium speech, Google Drive, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `driveOpenShown()`, `appDataImportShown()`, `20f-desktop.js` |
-| Autosave's switch | `autoSaveEnabled`, `14-export.js` |
+| Autosave's switch | `autoSavePolicy().enabled()`, `src/legacy/save-bridge.ts` |
 | Save while a save is running | `saveInProgress()`, `src/legacy/screen-state.ts` |
 | Collaborate | `collaborateBlockedReason()`, `13b-collaborate.js` |
 
