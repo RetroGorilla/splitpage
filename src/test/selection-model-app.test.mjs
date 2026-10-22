@@ -18,6 +18,7 @@ const { clearDirty } = await import("../js/12-dirty-toast.js");
 const { closeCommandMenu, openCommandMenu } = await import("../js/18d-command-menu.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
+const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 
 after(closeApp);
 
@@ -41,7 +42,7 @@ function fixture(title) {
 }
 
 function fresh(title) {
-  if (writer.writerOpen) writer.closeWriter();
+  if (viewFlags().writerOpen()) writer.closeWriter();
   window.__hostedTest.setSession({ role: "edit", docId: null });
   clock += 10_000;
   S.state = migrateRows(fixture(title));

@@ -11,6 +11,7 @@ import { startPageEffects } from "./effects.ts";
 import { createAppActions, installAppActions } from "../legacy/app-actions.ts";
 import { installExportFormats } from "../legacy/export-formats.ts";
 import { startEditor } from "../legacy/editor-bridge.ts";
+import { startPreferences } from "../legacy/preferences-bridge.ts";
 import { startRecovery } from "../legacy/recovery-bridge.ts";
 import type { LegacyRecoveryPorts } from "../legacy/recovery-bridge.ts";
 import { startSaves } from "../legacy/save-bridge.ts";
@@ -74,7 +75,8 @@ export const WIRING_STEPS = Object.freeze([
   "transitions",
   "recovery",
   "editor",
-  "production editing"
+  "production editing",
+  "preferences"
 ] as const);
 
 export type WiringStep = (typeof WIRING_STEPS)[number];
@@ -274,6 +276,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("recovery", () => startRecovery(checkedRecovery(deps.recovery())), (stop) => stop);
   build("editor", () => startEditor(deps.transitions.live), (stop) => stop);
   build("production editing", () => wireProductionEditing(deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
+  build("preferences", () => startPreferences(), (stop) => stop);
   let disposed = false;
   const dispose = (): void => {
     if (disposed) return;

@@ -25,7 +25,7 @@ import {
 import { setHideShotScenes } from "./01b-hide-shot.js";
 import { personSwatchesHtml, renderHistory, setMyColor, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
-import { COMMENT_NAME_KEY, TAGGING_HELP_KEY, getSavedAuthorName, renderComments } from "./10-comments.js";
+import { getSavedAuthorName, renderComments } from "./10-comments.js";
 import { updateSaveStatus } from "./12-dirty-toast.js";
 import {
   COLLAB_SERVER_KEY,
@@ -36,21 +36,21 @@ import {
   signOutCollab,
   updateCollaborateMenu
 } from "./13b-collaborate.js";
-import { AUTOSAVE_KEY, setAutoSaveEnabled } from "./14-export.js";
-import { WRITER_SIZE_MAX, WRITER_SIZE_MIN, applyWriterSize, readWriterSize } from "./19-writer.js";
+import { setAutoSaveEnabled } from "./14-export.js";
+import { applyWriterSize, readWriterSize } from "./19-writer.js";
 import { setPrompterFlip, setPrompterMirror, setPrompterSceneMode } from "./20-teleprompter.js";
 import { renderDesktopAppNotice } from "./20a-update.js";
-import { TOUR_DONE_KEY } from "./20c-help.js";
+import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../application/preferences/preferences.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 import { cleanAuthorName } from "../core/document/people.ts";
 
 var SETTINGS_ID = "settings-modal";
 var settingsReturnFocus = null;
 
 var DESKTOP_NOTICE_KEY = "splitpage-desktop-notice-dismissed";
-var HIDE_SHOT_KEY = "splitpage-hide-shot";
 var PROMPTER_KEYS = {
   mirror: "splitpage-prompter-mirror",
   flip: "splitpage-prompter-flip",
@@ -158,8 +158,8 @@ function bodyHtml() {
       switchHtml("settings-tag-icons", "Show icons on tags",
         "Put a small icon for its category before each tag, as well as its colour.", tagIconsOn())) +
     section("Editor",
-      switchHtml("settings-hide-shot", "Hide shot scenes", "Collapse scenes marked Shot into a thin strip.", flagOn(HIDE_SHOT_KEY)) +
-      switchHtml("settings-autosave", "Autosave", "Write each change to the file you saved to, a moment after you stop typing.", flagOn(AUTOSAVE_KEY, true)) +
+      switchHtml("settings-hide-shot", "Hide shot scenes", "Collapse scenes marked Shot into a thin strip.", preferences().hideShot()) +
+      switchHtml("settings-autosave", "Autosave", "Write each change to the file you saved to, a moment after you stop typing.", preferences().autosave()) +
       switchHtml("settings-video-thumbs", "Fetch video thumbnails",
         "When you paste a YouTube or Vimeo link, ask the site for its picture once and keep it with the script.", videoThumbsOn()) +
       '<div class="settings-field settings-inline">' +
@@ -232,8 +232,11 @@ function ensureModal() {
 }
 
 function typedFields() {
-  return { "settings-name": COMMENT_NAME_KEY, "settings-default-wpm": DEFAULT_WPM_KEY,
-           "settings-collab-server": COLLAB_SERVER_KEY };
+  return {
+    "settings-name": function (key) { return preferences().nameOf(key) === "commentAuthor"; },
+    "settings-default-wpm": function (key) { return key === DEFAULT_WPM_KEY; },
+    "settings-collab-server": function (key) { return key === COLLAB_SERVER_KEY; }
+  };
 }
 
 function renderSettings(changedKey) {
@@ -244,7 +247,7 @@ function renderSettings(changedKey) {
   var fields = typedFields();
   Object.keys(fields).forEach(function (fid) {
     var el = document.getElementById(fid);
-    if (el && fields[fid] !== changedKey) typed[fid] = el.value;
+    if (el && !fields[fid](changedKey)) typed[fid] = el.value;
   });
   var focusedId = document.activeElement && m.contains(document.activeElement) ? document.activeElement.id : "";
   var focusedRadio = document.activeElement && document.activeElement.type === "radio" && m.contains(document.activeElement)
@@ -295,10 +298,6 @@ export function closeSettings() {
   }
 }
 
-function announce(key) {
-  writePref(key, readPref(key));
-}
-
 function applyChange(target) {
   var id = target.id, name = target.name;
   if (name === "settings-theme") { writePref(THEME_KEY, target.value === "system" ? null : target.value); return; }
@@ -327,7 +326,7 @@ function applyChange(target) {
   if (id === "settings-name") {
     var v = cleanAuthorName(target.value);
     if (!v || v === getSavedAuthorName()) { target.value = getSavedAuthorName(); return; }
-    writePref(COMMENT_NAME_KEY, v);
+    preferences().setCommentAuthor(v);
     updateIdentityChip();
     if (S.state) render();
   }
@@ -360,12 +359,12 @@ function runAction(action) {
   if (action === "tagging-help") {
     closeSettings();
     appActions.invoke("tagging-help", "button");
-    announce(TAGGING_HELP_KEY);
+    preferences().announceTaggingHelp();
     return;
   }
   if (action === "tour") {
     closeSettings();
-    writePref(TOUR_DONE_KEY, null);
+    preferences().resetTour();
     appActions.invoke("tour", "button");
     return;
   }
@@ -424,7 +423,7 @@ function onPrefChanged(key) {
     var hist = document.getElementById("history-panel");
     if (hist && !hist.hidden) renderHistory();
   }
-  if (key === COMMENT_NAME_KEY || key === PERSON_COLOR_KEY) updateIdentityChip();
+  if (preferences().nameOf(key) === "commentAuthor" || key === PERSON_COLOR_KEY) updateIdentityChip();
   if (key === COLLAB_SERVER_KEY) updateCollaborateMenu();
   if (settingsOpen()) renderSettings(key);
 }

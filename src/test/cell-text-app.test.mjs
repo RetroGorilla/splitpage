@@ -18,6 +18,7 @@ const { liveSession } = await import("../legacy/session-bridge.ts");
 const { fromHtml, sanitizeHtml, storedHtmlFromDom } = await import("../legacy/richtext.ts");
 const { toHtml } = await import("../core/text/html.ts");
 const writer = await import("../js/19-writer.js");
+const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { applyMerge } = await import("../js/03-sync.js");
 
 after(closeApp);
@@ -46,7 +47,7 @@ function fixture() {
 
 let opened = 0;
 async function open() {
-  if (writer.writerOpen) writer.closeWriter();
+  if (viewFlags().writerOpen()) writer.closeWriter();
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "typing-" + (++opened) + ".splitpage", { lastModified: opened });
   await openProjectFile(file, null, { skipSnapshot: true });
   flushEdits();
@@ -254,7 +255,7 @@ test("#380: in the Writer too, a cancelled composition leaves no step", async ()
     assert.equal(row("r3").audioText, "Three.");
     assert.deepEqual(undoSizes(), sizes);
     assert.equal(writer.writerUndoStep("undo"), true, "so the first Ctrl+Z in this fresh Writer closes it");
-    assert.equal(writer.writerOpen, false);
+    assert.equal(viewFlags().writerOpen(), false);
   } finally {
     writer.closeWriter();
   }
@@ -339,7 +340,7 @@ test("in the Writer, typing a letter and deleting it leaves no step, so the firs
     await settle();
     assert.deepEqual(undoSizes(), { undo: 0, redo: 0 });
     assert.equal(writer.writerUndoStep("undo"), true);
-    assert.equal(writer.writerOpen, false);
+    assert.equal(viewFlags().writerOpen(), false);
   } finally {
     writer.closeWriter();
   }
@@ -354,11 +355,11 @@ test("Ctrl+Y after the Ctrl+Z that closed the Writer reopens it, but not once ty
   writer.openWriter();
   try {
     assert.equal(writer.writerUndoStep("undo"), true);
-    assert.equal(writer.writerOpen, false);
+    assert.equal(viewFlags().writerOpen(), false);
     assert.equal(writer.writerUndoStep("redo"), true);
-    assert.equal(writer.writerOpen, true);
+    assert.equal(viewFlags().writerOpen(), true);
     assert.equal(writer.writerUndoStep("undo"), true);
-    assert.equal(writer.writerOpen, false);
+    assert.equal(viewFlags().writerOpen(), false);
     const el = cellOf("r3", "audioText");
     clock += 5;
     typeChar(el, "x");
@@ -368,7 +369,7 @@ test("Ctrl+Y after the Ctrl+Z that closed the Writer reopens it, but not once ty
     await settle();
     assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
     assert.equal(writer.writerUndoStep("redo"), false);
-    assert.equal(writer.writerOpen, false);
+    assert.equal(viewFlags().writerOpen(), false);
   } finally {
     writer.closeWriter();
   }
@@ -677,7 +678,7 @@ async function inPlace(where, fn) {
     flushEdits();
     await fn(el);
   } finally {
-    if (writer.writerOpen) writer.closeWriter();
+    if (viewFlags().writerOpen()) writer.closeWriter();
   }
 }
 

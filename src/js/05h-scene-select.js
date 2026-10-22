@@ -15,7 +15,7 @@ import { breakUndoCoalescing, flushEdits, lastUndoEntry, undo } from "./12a-undo
 import { onServerDoc, reviewMode } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { startNewScript } from "./18b-file-menu.js";
-import { renderWriter, writerOpen } from "./19-writer.js";
+import { renderWriter } from "./19-writer.js";
 import { randomHexBytes } from "../adapters/identity/ids.ts";
 import { addHeldCommentsCommand, pasteScenesCommand, removeScenesCommand } from "../application/commands/scenes.ts";
 import { cappedLongText } from "../core/document/text-policy.ts";
@@ -23,6 +23,7 @@ import { REVIEW_ONLY, runCommand } from "../legacy/session-bridge.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { rowDrag } from "../legacy/editor-bridge.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
+import { viewFlags } from "../legacy/preferences-bridge.ts";
 
 var TOLERANCE = 4;
 var SCROLL_ZONE = 120;
@@ -329,7 +330,7 @@ function offerUndo(msg, entry) {
 }
 
 function repaint() {
-  if (writerOpen) {
+  if (viewFlags().writerOpen()) {
     renderWriter();
     renderProduction();
     renderComments();
@@ -356,7 +357,7 @@ function pasteClip(clip, afterRowId, opts) {
   }
   breakUndoCoalescing();
   repaint();
-  if (!writerOpen && res.rowIds.length) {
+  if (!viewFlags().writerOpen() && res.rowIds.length) {
     selectScenes(res.rowIds[0], res.rowIds[res.rowIds.length - 1]);
     var first = document.querySelector('#rows .row[data-id="' + cssAttr(res.rowIds[0]) + '"]');
     if (first) first.scrollIntoView({ block: "nearest", behavior: "smooth" });

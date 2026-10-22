@@ -340,7 +340,7 @@ resolved entry.
 
 ## The legacy initializer shim
 
-`src/js/_entry.js` is the legacy initializer shim, the build entry until plan §8's 4.x composition root replaces it. Since milestone 7's step 7.1 it does three things, in this order: it calls `wireApp` (`src/bootstrap/wiring.ts`) with the dependencies the numbered modules export, which builds the action and export registries, the document session, the save coordinator, the transitions, the draft recovery and the editor's owners; it calls the 69 numbered modules' `__init` in numbered order; and it hands the wiring to `startAppWhenReady` (`src/bootstrap/app.ts`), which mounts the features and starts the actions on DOM ready. If `wireApp` throws, the shim reports the `WiringError` with `console.error` and calls no `__init` and no mount. Since 7.2 the session's effects come the same way: the shim imports `legacySessionEffects` (12), `getEditorName` (03), `runIdleRefresh` (07) and `derivedRecordsPlan` (08c) from modules already in its set and passes them to `wireApp`, and no numbered module configures a bridge while it loads (the load-order check in the same test file).
+`src/js/_entry.js` is the legacy initializer shim, the build entry until plan §8's 4.x composition root replaces it. Since milestone 7's step 7.1 it does three things, in this order: it calls `wireApp` (`src/bootstrap/wiring.ts`) with the dependencies the numbered modules export, which builds the action and export registries, the document session, the save coordinator, the transitions, the draft recovery, the editor's owners and the preferences; it calls the 69 numbered modules' `__init` in numbered order; and it hands the wiring to `startAppWhenReady` (`src/bootstrap/app.ts`), which mounts the features and starts the actions on DOM ready. If `wireApp` throws, the shim reports the `WiringError` with `console.error` and calls no `__init` and no mount. Since 7.2 the session's effects come the same way: the shim imports `legacySessionEffects` (12), `getEditorName` (03), `runIdleRefresh` (07) and `derivedRecordsPlan` (08c) from modules already in its set and passes them to `wireApp`, and no numbered module configures a bridge while it loads (the load-order check in the same test file).
 
 Its import specifiers are a frozen set of 72 (the 69 modules it starts, `14e-export-formats.js` for `registerBuiltInExporters`, `../bootstrap/wiring.ts` and `../bootstrap/app.ts`). `tests/bootstrap/legacy-shim.test.ts` fails if the shim imports anything outside that set, so the list can only shrink, and if any file under `src/application`, `src/features` or `src/bootstrap` imports the shim (resolved with this tool's resolver). `tools/modularize.mjs` generated the first version of the shim; rerunning it would overwrite the wiring call, so it is not rerun.
 
@@ -350,49 +350,49 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | --- | --- | --- |
 | `00-prelude.js` | composition root | none |
 | `00p-prefs.js` | features/settings | none |
-| `01-scene-status.js` | features/rows | `session-bridge` |
-| `01b-hide-shot.js` | features/rows | none |
+| `01-scene-status.js` | features/rows | `preferences-bridge`, `session-bridge` |
+| `01b-hide-shot.js` | features/rows | `preferences-bridge` |
 | `02-state.js` | core document entry (composition root) | `document-ports` |
 | `02b-doc-id.js` | composition root (initial load, identity) | `document-ports`, `transition-bridge` |
 | `02c-blobs.js` | adapters/storage | none |
 | `02d-gallery.js` | features/gallery | none |
-| `03-sync.js` | composition root (destination, merge) | `document-ports`, `editor-bridge`, `recovery-bridge`, `richtext`, `save-bridge`, `session-bridge` |
-| `03a-history-store.js` | features/history | `recovery-bridge` |
-| `03b-side-panels.js` | features/panels | none |
+| `03-sync.js` | composition root (destination, merge) | `document-ports`, `editor-bridge`, `preferences-bridge`, `recovery-bridge`, `richtext`, `save-bridge`, `session-bridge` |
+| `03a-history-store.js` | features/history | `recovery-bridge`, `seed-check` |
+| `03b-side-panels.js` | features/panels | `preferences-bridge` |
 | `04-richtext.js` | adapters/richtext | `richtext` |
 | `04a-row-motion.js` | features/rows | none |
 | `04b-busy.js` | features/notices | none |
 | `04c-doc-model.js` | adapters/richtext | `richtext` |
-| `05-render.js` | features/rows | `editor-bridge`, `richtext`, `session-bridge` |
+| `05-render.js` | features/rows | `editor-bridge`, `preferences-bridge`, `richtext`, `session-bridge` |
 | `05b-cell-edit.js` | features/editing | `richtext`, `session-bridge` |
 | `05c-clipboard.js` | features/clipboard | `richtext`, `session-bridge` |
 | `05d-draft-edit.js` | features/editing | `richtext` |
 | `05e-gallery-overlay.js` | features/overlay | `editor-bridge`, `session-bridge`, `transition-bridge` |
 | `05f-rundown.js` | features/panels | `app-actions`, `cache-freeze`, `editor-bridge`, `richtext` |
 | `05g-scene-clip.js` | features/clipboard | `richtext` |
-| `05h-scene-select.js` | features/rows | `editor-bridge`, `review-wording`, `session-bridge` |
+| `05h-scene-select.js` | features/rows | `editor-bridge`, `preferences-bridge`, `review-wording`, `session-bridge` |
 | `05p-rundown-presence.js` | features/panels | none |
 | `05q-cell-reach.js` | features/editing | none |
 | `05r-read-time.js` | features/rows | `session-bridge` |
-| `05s-script-zoom.js` | features/settings | `app-actions` |
+| `05s-script-zoom.js` | features/settings | `app-actions`, `preferences-bridge` |
 | `05t-target.js` | features/panels | none |
 | `05v-video.js` | features/video | `transition-bridge` |
 | `05w-annotate.js` | features/gallery | `transition-bridge` |
 | `06-rows.js` | features/rows | `editor-bridge`, `review-wording`, `session-bridge`, `transition-bridge` |
-| `07-production-tags.js` | features/tags | `cache-freeze`, `document-ports`, `editor-bridge`, `richtext`, `session-bridge` |
+| `07-production-tags.js` | features/tags | `cache-freeze`, `document-ports`, `editor-bridge`, `preferences-bridge`, `richtext`, `session-bridge` |
 | `07b-plain-tags.js` | features/tags | `richtext` |
 | `08-production-panels.js` | features/panels | none |
 | `08c-broll.js` | features/broll | `plain-text`, `richtext`, `session-bridge` |
 | `08d-broll-panel.js` | features/broll | `app-actions` |
-| `09-find-replace.js` | features/find | `richtext` |
-| `10-comments.js` | features/comments | `editor-bridge`, `transition-bridge` |
+| `09-find-replace.js` | features/find | `preferences-bridge`, `richtext` |
+| `10-comments.js` | features/comments | `editor-bridge`, `preferences-bridge`, `transition-bridge` |
 | `11-import.js` | features/imports | `session-bridge`, `transition-bridge` |
 | `12-dirty-toast.js` | features/notices (session effects: composition root) | `save-bridge`, `session-bridge` |
 | `12a-undo.js` | features/undo | `richtext` |
 | `13-hosted.js` | adapters/transport | `recovery-bridge`, `review-wording`, `save-bridge`, `transition-bridge` |
 | `13a-presence.js` | adapters/transport | `transition-bridge` |
-| `13b-collaborate.js` | features/file-menu | `app-actions` |
-| `14-export.js` | adapters/files (save writer) | `recovery-bridge`, `save-bridge` |
+| `13b-collaborate.js` | features/file-menu | `app-actions`, `preferences-bridge` |
+| `14-export.js` | adapters/files (save writer) | `preferences-bridge`, `recovery-bridge`, `save-bridge` |
 | `14b-export-kit.js` | adapters/formats | `cache-freeze`, `document-ports`, `plain-text`, `richtext`, `session-bridge` |
 | `15-docx.js` | adapters/formats | `document-ports`, `plain-text`, `richtext` |
 | `16-csv.js` | adapters/formats | `richtext` |
@@ -403,20 +403,20 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `18b-file-menu.js` | features/file-menu | `transition-bridge` |
 | `18c-export-dialog.js` | features/file-menu | `export-formats`, `richtext` |
 | `18d-command-menu.js` | features/shortcuts | `app-actions`, `editor-bridge`, `export-formats`, `screen` |
-| `19-writer.js` | features/writer | `editor-bridge`, `plain-text`, `review-wording`, `session-bridge` |
-| `20-teleprompter.js` | features/prompter | `editor-bridge`, `richtext` |
+| `19-writer.js` | features/writer | `document-ports`, `editor-bridge`, `plain-text`, `preferences-bridge`, `review-wording`, `session-bridge` |
+| `20-teleprompter.js` | features/prompter | `editor-bridge`, `preferences-bridge`, `richtext` |
 | `20a-update.js` | features/notices | none |
-| `20b-onboarding.js` | composition root (onboarding) | `app-actions`, `recovery-bridge` |
-| `20c-help.js` | features/settings | `app-actions`, `tour-pause` |
+| `20b-onboarding.js` | composition root (onboarding) | `app-actions`, `preferences-bridge`, `recovery-bridge`, `seed-check` |
+| `20c-help.js` | features/settings | `app-actions`, `preferences-bridge`, `tour-pause` |
 | `20d-formats.js` | adapters/formats | `richtext` |
 | `20e-connect.js` | adapters/transport | `app-actions`, `tour-pause` |
 | `20f-desktop.js` | composition root (desktop host) | `recovery-bridge` |
 | `20g-drafts.js` | adapters/storage (draft recovery) | `recovery-bridge`, `transition-bridge` |
-| `20h-appdata.js` | adapters/storage | none |
+| `20h-appdata.js` | adapters/storage | `preferences-bridge` |
 | `20i-topbar.js` | features/title | none |
-| `20j-newtab.js` | composition root (desktop host) | `app-actions`, `recovery-bridge`, `transition-bridge` |
+| `20j-newtab.js` | composition root (desktop host) | `app-actions`, `document-ports`, `recovery-bridge`, `seed-check`, `transition-bridge` |
 | `20k-phone-bar.js` | features/notices | none |
-| `20s-settings.js` | features/settings | `app-actions` |
+| `20s-settings.js` | features/settings | `app-actions`, `preferences-bridge` |
 
 
 ## Baseline workflow

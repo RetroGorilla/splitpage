@@ -16,6 +16,7 @@ const { deleteSelectedScenes, newScriptFromSelection, pasteScenesAt } = await im
 const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
+const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 
 after(closeApp);
 
@@ -41,7 +42,7 @@ function fixture(blankLast) {
 
 let opened = 0;
 async function open(blankLast) {
-  if (writer.writerOpen) writer.closeWriter();
+  if (viewFlags().writerOpen()) writer.closeWriter();
   window.__sceneSelectTest.clear();
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture(blankLast))))], "scene-clip-" + (++opened) + ".splitpage", { lastModified: opened });
   await openProjectFile(file, null, { skipSnapshot: true });

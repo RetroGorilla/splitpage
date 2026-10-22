@@ -14,6 +14,7 @@ const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
+const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { openProductionPanel } = await import("../js/08-production-panels.js");
 const { openBrollPanel } = await import("../js/08d-broll-panel.js");
 
@@ -45,7 +46,7 @@ function fixture() {
 
 let opened = 0;
 async function open(doc) {
-  if (writer.writerOpen) writer.closeWriter();
+  if (viewFlags().writerOpen()) writer.closeWriter();
   window.__hostedTest.setSession({ role: "edit", docId: null });
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(doc || fixture())))], "split-" + (++opened) + ".splitpage", { lastModified: opened });
   await openProjectFile(file, null, { skipSnapshot: true });
