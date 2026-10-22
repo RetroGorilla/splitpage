@@ -5,7 +5,7 @@ import { safeHref, safeId, storedHtmlFromDom } from "./04-richtext.js";
 import { armDeleteButton, disarmDeleteButton, render, syncFieldFromDom } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
 import { isBlankScene } from "./05g-scene-clip.js";
-import { cellSelection, setCellSelection } from "./05b-cell-edit.js";
+import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
 import { showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { placeCaretAtTextOffset } from "./19-writer.js";

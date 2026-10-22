@@ -1,5 +1,6 @@
 import { pad2 } from "../core/production/timing.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
+import { editorSelection } from "../legacy/editor-bridge.ts";
 import { S } from "./_state.js";
 import { formatClock, formatDateClock } from "./00p-prefs.js";
 import { revealRow } from "./01b-hide-shot.js";
@@ -529,8 +530,7 @@ function closeFieldPopovers(root) {
 export function openCommentComposer(ctx) {
   composerVersion++;
   pendingComment = ctx;
-  S.savedRange = null;
-  S.savedRangeCell = null;
+  editorSelection().dropLink();
   closeFieldPopovers(document.getElementById("comment-modal"));
   document.getElementById("comment-modal-quote").innerHTML =
     '“<span class="comment-quote-words">' + escapeHtml(ctx.quotedText) + '</span>”';
@@ -553,8 +553,7 @@ export function closeCommentComposer(cancelled) {
     render();
   }
   pendingComment = null;
-  S.savedRange = null;
-  S.savedRangeCell = null;
+  editorSelection().dropLink();
   closeFieldPopovers(document.getElementById("comment-modal"));
   document.getElementById("comment-body-editable").innerHTML = "";
   resetDraftHistory(document.getElementById("comment-body-editable"));
