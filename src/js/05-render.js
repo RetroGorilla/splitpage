@@ -37,7 +37,7 @@ import {
 } from "./10-comments.js";
 import { reviewMode } from "./13-hosted.js";
 import { paintPresence, personColor } from "./13a-presence.js";
-import { drawWriter, paintWriterDraw, writerOpen } from "./19-writer.js";
+import { drawWriter, paintWriterDraw } from "./19-writer.js";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
@@ -62,6 +62,7 @@ import { createPaintGuard } from "../application/editing/paint-guard.ts";
 import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { editorSelection, undoGuard } from "../legacy/editor-bridge.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
+import { viewFlags } from "../legacy/preferences-bridge.ts";
 import { cellSelection, placeEditorSelection, rememberCellSelection } from "../features/editing/cell-selection.ts";
 import { setTagAddingPerson } from "../application/tag-panel-state.ts";
 import { formatVideoLength } from "../../shared/text.js";
@@ -451,7 +452,7 @@ function commitRowPatch(rowEl, patch) {
     part.el.parentNode.replaceChild(part.fresh, part.el);
     if (part.key === "visualText" || part.key === "audioText") {
       cellsPainted++;
-    } else if (action && !writerOpen) {
+    } else if (action && !viewFlags().writerOpen()) {
       var again = part.fresh.querySelector('[data-action="' + cssAttr(action) + '"]');
       if (again) again.focus({ preventScroll: true });
     }
@@ -672,7 +673,7 @@ function paintAll() {
   var rowsEl = document.getElementById("rows");
   var plan = planRows(rowsEl);
   var title = S.state.title || "";
-  var writerDraw = writerOpen ? drawWriter() : null;
+  var writerDraw = viewFlags().writerOpen() ? drawWriter() : null;
 
   resetTransientUiState();
   var focus = captureRenderFocus(rowsEl);
@@ -681,7 +682,7 @@ function paintAll() {
     commitRows(rowsEl, plan, focus && focus.rowEl);
   });
   editorSelection().notePainted(rowsEl);
-  if (!writerOpen) restoreRenderFocus(rowsEl, focus);
+  if (!viewFlags().writerOpen()) restoreRenderFocus(rowsEl, focus);
 
   var titleInput = document.getElementById("doc-title");
   if (document.activeElement !== titleInput) titleInput.value = title;

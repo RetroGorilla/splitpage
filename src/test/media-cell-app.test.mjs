@@ -18,6 +18,7 @@ const { sanitizeHtml } = await import("../legacy/richtext.ts");
 const cellText = await import("../application/commands/cell-text.ts");
 const splitJoin = await import("../application/commands/split-join.ts");
 const writer = await import("../js/19-writer.js");
+const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 
 after(closeApp);
 
@@ -58,7 +59,7 @@ function joinFixture() {
 
 let opened = 0;
 async function open(doc) {
-  if (writer.writerOpen) writer.closeWriter();
+  if (viewFlags().writerOpen()) writer.closeWriter();
   window.__hostedTest.setSession({ role: "edit", docId: null });
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(doc || fixture())))], "media-" + (++opened) + ".splitpage", { lastModified: opened });
   await openProjectFile(file, null, { skipSnapshot: true });

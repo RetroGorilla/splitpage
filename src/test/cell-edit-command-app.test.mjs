@@ -17,6 +17,7 @@ const { undo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-u
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { setMark } = await import("../js/04c-doc-model.js");
 const writer = await import("../js/19-writer.js");
+const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 
 after(closeApp);
 
@@ -38,7 +39,7 @@ function fixture() {
 
 let opened = 0;
 async function open() {
-  if (writer.writerOpen) writer.closeWriter();
+  if (viewFlags().writerOpen()) writer.closeWriter();
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "cell-edit-" + (++opened) + ".splitpage", { lastModified: opened });
   await openProjectFile(file, null, { skipSnapshot: true });
   flushEdits();

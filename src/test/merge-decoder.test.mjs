@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mergeStates } from "../js/03-sync.js";

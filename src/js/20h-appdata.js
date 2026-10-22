@@ -8,25 +8,11 @@ import {
   importHistoryBundle,
   normalizeLegacySnapshots
 } from "./03a-history-store.js";
-import {
-  COMMENTS_SORT_KEY,
-  COMMENT_NAME_KEY,
-  TAGGING_HELP_KEY,
-  readCommentSortMode
-} from "./10-comments.js";
+import { COMMENTS_SORT_KEY, readCommentSortMode } from "./10-comments.js";
 import { showToast } from "./12-dirty-toast.js";
-import { AUTOSAVE_KEY } from "./14-export.js";
 import { deliverFile } from "./18-local-files.js";
-import {
-  WRITER_SIZE_KEY,
-  WRITER_SIZE_MAX,
-  WRITER_SIZE_MIN,
-  applyWriterSize,
-  readWriterSize
-} from "./19-writer.js";
+import { applyWriterSize, readWriterSize } from "./19-writer.js";
 import { readEmbeddedVersion } from "./20a-update.js";
-import { ONBOARD_KEY } from "./20b-onboarding.js";
-import { TOUR_DONE_KEY } from "./20c-help.js";
 import {
   SERVER_BOOKMARKS_KEY,
   connectPortOr,
@@ -37,7 +23,8 @@ import {
   shortHost,
   updateConnectMenu
 } from "./20e-connect.js";
-import { cappedLongText, cappedName } from "../core/document/text-policy.ts";
+import { cappedName } from "../core/document/text-policy.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 import { setCommentSort } from "../application/comment-sort.ts";
 
 var APPDATA_FORMAT = "splitpage-app-data";
@@ -98,18 +85,7 @@ async function buildAppDataBundle() {
   }
 
   try {
-    bundle.prefs = {
-      onboarding: appDataReadJson(ONBOARD_KEY, null),
-      tourDone: appDataReadRaw(TOUR_DONE_KEY),
-      commentAuthor: appDataReadRaw(COMMENT_NAME_KEY),
-      commentsSort: appDataReadRaw(COMMENTS_SORT_KEY),
-      writerSize: appDataReadRaw(WRITER_SIZE_KEY),
-      taggingHelpDismissed: appDataReadRaw(TAGGING_HELP_KEY),
-      autosave: appDataReadRaw(AUTOSAVE_KEY)
-    };
-    SETTINGS_APPDATA_PREFS.forEach(function (spec) {
-      bundle.prefs[spec.name] = appDataReadRaw(spec.key);
-    });
+    bundle.prefs = preferences().appDataExport(appDataExtraPrefs());
   } catch (e) {
     bundle.prefs = {};
   }
@@ -328,71 +304,15 @@ function appDataMergeBookmarks(list) {
   return out;
 }
 
-function appDataPrefSpecs() {
+function appDataExtraPrefs() {
   return [
-    { name: "tourDone", key: TOUR_DONE_KEY,
-      valid: function (v) { return v.length > 0 && v.length <= 20; } },
-    { name: "commentAuthor", key: COMMENT_NAME_KEY,
-      valid: function (v) { return v.trim().length > 0 && v.length <= 200; } },
     { name: "commentsSort", key: COMMENTS_SORT_KEY,
-      valid: function (v) { return v === "recent" || v === "position"; } },
-    { name: "writerSize", key: WRITER_SIZE_KEY,
-      valid: function (v) {
-        var n = /^\d{1,3}$/.test(v) ? parseInt(v, 10) : NaN;
-        return n >= WRITER_SIZE_MIN && n <= WRITER_SIZE_MAX;
-      } },
-    { name: "taggingHelpDismissed", key: TAGGING_HELP_KEY,
-      valid: function (v) { return v === "0" || v === "1"; } },
-    { name: "autosave", key: AUTOSAVE_KEY,
-      valid: function (v) { return v === "0" || v === "1"; } }
+      valid: function (v) { return v === "recent" || v === "position"; } }
   ].concat(SETTINGS_APPDATA_PREFS);
 }
 
 function appDataMergePrefs(prefs) {
-  var written = [];
-  prefs = prefs || {};
-  appDataPrefSpecs().forEach(function (spec) {
-    var incoming = prefs[spec.name];
-    if (typeof incoming !== "string" || !spec.valid(incoming)) return;
-    if (appDataReadRaw(spec.key) != null) return;
-    try {
-      localStorage.setItem(spec.key, incoming);
-      written.push(spec.name);
-    } catch (e) { }
-  });
-
-  var inc = prefs.onboarding;
-  if (appDataIsPlainObject(inc)) {
-    var clean = {}, n = 0;
-    Object.keys(inc).forEach(function (k) {
-      var v = inc[k];
-      if (n >= 20 || k === "__proto__" || k.length > 40) return;
-      if (typeof v === "string") { clean[k] = cappedLongText(v, 200); n++; }
-      else if (typeof v === "boolean" || (typeof v === "number" && isFinite(v))) { clean[k] = v; n++; }
-    });
-    var rawLocal = appDataReadRaw(ONBOARD_KEY);
-    var local = rawLocal == null ? null : appDataReadJson(ONBOARD_KEY, undefined);
-    if (n && (rawLocal == null || appDataIsPlainObject(local))) {
-      var merged = {}, changed = rawLocal == null;
-      Object.keys(clean).forEach(function (k) { merged[k] = clean[k]; });
-      if (local) {
-        Object.keys(local).forEach(function (k) {
-          if (k === "__proto__") return;
-          merged[k] = local[k];
-        });
-        Object.keys(clean).forEach(function (k) {
-          if (!Object.prototype.hasOwnProperty.call(local, k)) changed = true;
-        });
-      }
-      if (changed) {
-        try {
-          localStorage.setItem(ONBOARD_KEY, JSON.stringify(merged));
-          written.push("onboarding");
-        } catch (e) {}
-      }
-    }
-  }
-
+  var written = preferences().appDataImport(prefs, appDataExtraPrefs());
   try {
     if (written.indexOf("commentsSort") !== -1) setCommentSort(readCommentSortMode());
     if (written.indexOf("writerSize") !== -1) applyWriterSize(readWriterSize(), false);

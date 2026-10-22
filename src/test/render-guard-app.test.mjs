@@ -21,6 +21,7 @@ const { pasteIntoCell } = await import("../js/05c-clipboard.js");
 const annotate = await import("../js/05w-annotate.js");
 const { flushEdits, lastUndoEntry, nextRedoEntry, undo, undoSizes } = await import("../js/12a-undo.js");
 const writer = await import("../js/19-writer.js");
+const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { focusMemory, mergeUndo } = await import("../legacy/editor-bridge.ts");
 const find = await import("../js/09-find-replace.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
@@ -564,7 +565,7 @@ function typedOnce() {
 
 const inWriter = (id) => cellOf(id, "audioText", "#writer-doc");
 const openTheWriter = () => { writer.openWriter(); };
-const closeTheWriter = () => { if (writer.writerOpen) writer.closeWriter(); };
+const closeTheWriter = () => { if (viewFlags().writerOpen()) writer.closeWriter(); };
 const rowsInert = () => document.getElementById("rows").hasAttribute("inert");
 
 const EDITS = [
@@ -788,7 +789,7 @@ for (const how of WRITER_CLOSES) {
       }
       assert.equal(out.threw, null, out.threw && out.threw.stack);
       assert.deepEqual(out.logged, [BROKE]);
-      assert.equal(writer.writerOpen, false);
+      assert.equal(viewFlags().writerOpen(), false);
       assert.equal(document.getElementById("writer").hidden, true);
       sameEdits(editState(), before, "closing the Writer");
       assert.equal(redrawToasts().length, 1, "Redraw is offered");

@@ -1,7 +1,6 @@
 import { formatDuration, pad2 } from "../core/production/timing.ts";
 import { S } from "./_state.js";
-import { writePref } from "./00p-prefs.js";
-import { totalSeconds, wordCount } from "./01-scene-status.js";
+import { totalSeconds } from "./01-scene-status.js";
 import { renderRowGroups } from "./01b-hide-shot.js";
 import { findRowIndex } from "./03-sync.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
@@ -22,20 +21,22 @@ import {
 } from "./05-render.js";
 import { splitRowFieldCore } from "./06-rows.js";
 import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
-import { closeFindBar, findOpen } from "./09-find-replace.js";
+import { closeFindBar } from "./09-find-replace.js";
 import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "./12a-undo.js";
 import { mirrorFileChipToWriter } from "./18-local-files.js";
 import { bothScenesHaveVisual, joinScenesCommand } from "../application/commands/split-join.ts";
+import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../application/preferences/preferences.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { editAllowed, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { editorSelection, focusMemory } from "../legacy/editor-bridge.ts";
+import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { placeEditorSelection, rememberCellSelection } from "../features/editing/cell-selection.ts";
 import { gallerySize } from "../core/document/gallery.ts";
 import { escapeHtml, truncateForPreview } from "../core/document/text-policy.ts";
 
-export var writerOpen = false;
 var writerGutterMode = "visuals";
 var writerUndoMark = 0;
 var reopenOnRedo = null;
@@ -81,7 +82,7 @@ export function drawWriter() {
 export function paintWriterDraw(draw) {
   var doc = document.getElementById("writer-doc");
   var active = document.activeElement;
-  var caret = writerOpen && active && active.classList && active.classList.contains("wr-para") && doc.contains(active)
+  var caret = viewFlags().writerOpen() && active && active.classList && active.classList.contains("wr-para") && doc.contains(active)
     ? rememberCellSelection(editorSelection(), active) : null;
   var titleEl = document.getElementById("writer-title");
   if (document.activeElement !== titleEl) titleEl.value = draw.title;
@@ -105,16 +106,16 @@ export function paintWriterDraw(draw) {
 }
 
 export function updateWriterStats() {
-  if (!writerOpen || !S.state) return;
+  if (!viewFlags().writerOpen() || !S.state) return;
   var words = 0;
-  S.state.rows.forEach(function (row) { words += wordCount(row.audioText); });
+  S.state.rows.forEach(function (row) { words += productionReaders.wordCount(row.audioText); });
   document.getElementById("wr-scenes").textContent = String(S.state.rows.length);
   document.getElementById("wr-words").textContent = words.toLocaleString();
   document.getElementById("wr-runtime").textContent = formatDuration(totalSeconds());
 }
 
 export function scheduleWriterStats() {
-  if (!writerOpen) return;
+  if (!viewFlags().writerOpen()) return;
   scheduleIdleRefresh("writerStats");
 }
 
@@ -256,7 +257,7 @@ export function onWriterFormat(btn) {
 }
 
 export function updateWriterFormatState() {
-  var paragraph = writerOpen ? focusMemory().writerParagraph() : null;
+  var paragraph = viewFlags().writerOpen() ? focusMemory().writerParagraph() : null;
   var live = paragraph && paragraph.isConnected;
   var model = live ? cellFormatState(paragraph) : null;
   ["bold", "italic", "underline", "direction"].forEach(function (cmd) {
@@ -270,14 +271,8 @@ export function updateWriterFormatState() {
 var WRITER_GUTTER_MODES = ["visuals", "numbers", "compact"];
 var WRITER_GUTTER_LABELS = { visuals: "Visuals", numbers: "Numbers", compact: "Compact" };
 
-export var WRITER_SIZE_KEY = "splitpage-writer-size";
-export var WRITER_SIZE_MIN = 16, WRITER_SIZE_MAX = 34;
-
 export function readWriterSize() {
-  var n;
-  try { n = parseInt(localStorage.getItem(WRITER_SIZE_KEY), 10); } catch (e) { n = NaN; }
-  if (!isFinite(n)) return null;
-  return Math.min(WRITER_SIZE_MAX, Math.max(WRITER_SIZE_MIN, n));
+  return preferences().writerSize();
 }
 
 export function applyWriterSize(px, remember) {
@@ -291,7 +286,7 @@ export function applyWriterSize(px, remember) {
   var n = Math.min(WRITER_SIZE_MAX, Math.max(WRITER_SIZE_MIN, Math.round(px)));
   el.style.setProperty("--wr-font", n + "px");
   document.getElementById("wr-size").value = String(n);
-  if (remember) writePref(WRITER_SIZE_KEY, String(n));
+  if (remember) preferences().setWriterSize(n);
 }
 
 function setWriterGutter(mode) {
@@ -313,14 +308,14 @@ export function openWriter(keepMark) {
   writerUndoMark = keepMark == null ? undoMark() : keepMark;
   reopenOnRedo = null;
   closeAllSidePanels();
-  if (findOpen) closeFindBar();
+  if (viewFlags().findOpen()) closeFindBar();
   document.getElementById("writer-title").value = S.state.title || "";
   mirrorFileChipToWriter();
   applyWriterSize(readWriterSize(), false);
   setWriterGutter(writerGutterMode);
   el.inert = false;
   el.hidden = false;
-  writerOpen = true;
+  viewFlags().setWriterOpen(true);
   renderWriter();
   document.getElementById("writer-scroll").scrollTop = 0;
 
@@ -345,14 +340,14 @@ export function closeWriter() {
   if (el.contains(document.activeElement)) document.activeElement.blur();
   el.inert = true;
   el.hidden = true;
-  writerOpen = false;
+  viewFlags().setWriterOpen(false);
   focusMemory().focusedParagraph(null);
   hideTagGhost();
   renderAbsorbed();
 }
 
 export function writerUndoStep(dir) {
-  if (writerOpen) {
+  if (viewFlags().writerOpen()) {
     if (dir === "redo") {
       var next = nextRedoEntry();
       return !next || next.n <= writerUndoMark;

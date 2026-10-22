@@ -1,6 +1,7 @@
 import { mintTagId } from "../core/document/tags.ts";
 import { DEFAULT_WPM } from "../core/document/timing.ts";
 import "./_dom.mjs";
+import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
