@@ -2,8 +2,8 @@ import { brollSortedForList } from "../core/production/broll.ts";
 import { BROLL_NAME_MAX, BROLL_TEXT_MAX } from "../core/document/broll.ts";
 import { tagCategory, tagStatus } from "../core/production/looks.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
-import { formatTimecode } from "../core/production/timing.ts";
-import { rowSeconds } from "./01-scene-status.js";
+import { formatTimecode, rowSeconds } from "../core/production/timing.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
 import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
@@ -21,7 +21,7 @@ import {
 } from "./08c-broll.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { personColor } from "./13a-presence.js";
-import { brollGroups as brollGroupsFrom, brollShotListForPrint, brollTable, filterCounts, FILTERS, matchesFilter, oneOf, PAGE_GROUPS, pageSummaryText, sceneLabel, shotRecordForFile, startOf } from "./14c-export-projections.js";
+import { brollGroups as brollGroupsFrom, brollShotListForPrint, brollTable, filterCounts, FILTERS, matchesFilter, oneOf, PAGE_GROUPS, pageSummaryText, sceneLabel, shotRecordForFile, startOf } from "../adapters/formats/export-projections.ts";
 import { exportAs } from "./18-local-files.js";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
@@ -145,7 +145,8 @@ function plural(n, one, many) {
 
 function sceneStarts() {
   var t = 0, out = Object.create(null);
-  (currentDocument()?.rows || []).forEach(function (row) { out[row.id] = t; t += rowSeconds(row); });
+  const doc = currentDocument();
+  (doc?.rows || []).forEach(function (row) { out[row.id] = t; t += rowSeconds(row, doc, productionReaders); });
   return out;
 }
 

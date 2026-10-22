@@ -10,8 +10,9 @@ import { migrateRows } from "../js/02-state.js";
 import { blobStore, intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { __init as initBroll } from "../js/08c-broll.js";
-import { exportAssetsNow, exportDocumentOf } from "../js/14b-export-kit.js";
-import { htmlToPlainScript, toMarkdownDoc, toMarkdownTableDoc } from "../js/14d-export-text.js";
+import { exportAssetsNow } from "../adapters/formats/export-assets.ts";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { htmlToPlainScript, toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
 import { LONG_DEMO } from "../js/_starters.js";
 import { loadTestDocument } from "./_document.mjs";
 

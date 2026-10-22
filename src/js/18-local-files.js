@@ -22,11 +22,8 @@ import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { brollPrintView } from "./08d-broll-panel.js";
 import { formatTimestamp } from "./10-comments.js";
-import {
-  captureExportDocument,
-  exportAssetsRequest,
-  loadExportAssets
-} from "./14b-export-kit.js";
+import { captureExportDocument, loadExportAssets } from "./14b-export-kit.js";
+import { exportAssetsRequest } from "../adapters/formats/export-assets.ts";
 import {
   detectTwoColumnFormat,
   normalizeImportedRows,
@@ -39,7 +36,7 @@ import {
 } from "./13-hosted.js";
 import { warnImagesLeftOut } from "./14-export.js";
 import { docxToRows } from "./15-docx.js";
-import { csvToRows } from "./16-csv.js";
+import { csvToRows } from "../adapters/formats/csv.ts";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { refreshFileMenu, toggleFileMenu } from "./18b-file-menu.js";
 import { isExportAction, rememberExport } from "./18c-export-dialog.js";

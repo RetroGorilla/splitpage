@@ -14,6 +14,8 @@ test("before the editor's owners are started, every accessor throws instead of r
   assert.throws(() => bridge.editorSelection(), /not started yet/);
   assert.throws(() => bridge.installPicturePicker(() => {}), /not started yet/);
   assert.throws(() => bridge.pickPictureFor("r1"), /not started yet/);
+  assert.throws(() => bridge.installCellEditing({}), /not started yet/);
+  assert.throws(() => bridge.cellEditing(), /not started yet/);
 });
 
 test("started once with fresh owners; a second start throws until the first is stopped, and a restart forgets the old state", () => {
@@ -71,5 +73,27 @@ test("the gallery's Add goes to the installed picture picker; with none installe
     assert.deepEqual(picked, ["a r1", "b r2"]);
   } finally {
     stop();
+  }
+});
+
+test("cell editing is reached only while installed: one at a time, an uninstall forgets it, and a stopped editor drops it", () => {
+  const stop = bridge.startEditor(live);
+  const editing = { sync() {} };
+  try {
+    assert.throws(() => bridge.cellEditing(), /Cell editing is not installed yet/);
+    const off = bridge.installCellEditing(editing);
+    assert.equal(bridge.cellEditing(), editing);
+    assert.throws(() => bridge.installCellEditing({}), /already installed/);
+    off();
+    assert.throws(() => bridge.cellEditing(), /not installed yet/);
+    bridge.installCellEditing(editing);
+  } finally {
+    stop();
+  }
+  const again = bridge.startEditor(live);
+  try {
+    assert.throws(() => bridge.cellEditing(), /not installed yet/, "a restarted editor starts without the old cell editing");
+  } finally {
+    again();
   }
 });

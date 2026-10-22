@@ -1,15 +1,12 @@
 import { hasSetLength, parseSceneLength } from "../core/document/timing.ts";
-import { formatDuration } from "../core/production/timing.ts";
-import {
-  estimatedSeconds,
-  rowSeconds,
-  updateScriptStats
-} from "./01-scene-status.js";
+import { estimatedSeconds, formatDuration, rowSeconds } from "../core/production/timing.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
+import { updateScriptStats } from "./01-scene-status.js";
 import { cssAttr } from "./04-richtext.js";
 import { afterThisPaint, render, renderRow } from "./05-render.js";
 import { redo, undo } from "./12a-undo.js";
 import { sceneAt, sceneLengthCommand } from "../application/commands/scene-length.ts";
-import { REVIEW_ONLY, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
+import { REVIEW_ONLY, currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { reviewMode } from "../legacy/location-bridge.ts";
 
@@ -43,7 +40,10 @@ export function openReadTimeEditor(btn) {
   var row = scene.row;
   var idx = scene.index;
   var wasSet = hasSetLength(row);
-  var prefill = wasSet || rowSeconds(row) >= 0.5 ? formatDuration(rowSeconds(row)) : "";
+  var doc = currentDocument();
+  var secs = rowSeconds(row, doc, productionReaders);
+  var estimate = formatDuration(estimatedSeconds(row, doc, productionReaders));
+  var prefill = wasSet || secs >= 0.5 ? formatDuration(secs) : "";
   var input = document.createElement("input");
   input.type = "text";
   input.className = "row-read-input";
@@ -52,9 +52,8 @@ export function openReadTimeEditor(btn) {
   input.setAttribute("autocomplete", "off");
   input.setAttribute("spellcheck", "false");
   input.setAttribute("aria-label", "Scene " + (idx + 1) + " length");
-  input.placeholder = formatDuration(estimatedSeconds(row));
-  input.title = "A length like 1:30, 90 or 1m30s. Leave it empty to use the estimate (" +
-    formatDuration(estimatedSeconds(row)) + ").";
+  input.placeholder = estimate;
+  input.title = "A length like 1:30, 90 or 1m30s. Leave it empty to use the estimate (" + estimate + ").";
   btn.hidden = true;
   btn.parentNode.insertBefore(input, btn.nextSibling);
   var rowEl = btn.closest(".row");

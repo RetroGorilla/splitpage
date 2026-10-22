@@ -23,7 +23,7 @@ import {
   saveDoc,
   toggleAutoSave
 } from "./14-export.js";
-import { mdSceneCellSource, toMarkdownTableDoc } from "./14d-export-text.js";
+import { mdSceneCellSource, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
 import { openProjectFile } from "./18-local-files.js";
 import { cappedLongText, plainText, safeImageSrc } from "../core/document/text-policy.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";

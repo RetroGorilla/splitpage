@@ -2,6 +2,9 @@ import { owned } from "../../features/routing/owned.ts";
 import { ROOT_CLICK_ORDER, ROOT_MOUSEDOWN_ORDER, createRootRouter } from "../../features/routing/root-router.ts";
 import type { RootClickSlot, RootMouseDownSlot, RootRoute } from "../../features/routing/root-router.ts";
 import { createReviewClickGate } from "../../features/review/click-gate.ts";
+import { createCellEditing } from "../../application/editing/cell-editing.ts";
+import { caretTextOffset, placeCaretAtTextOffset } from "../../features/editing/caret.ts";
+import { createCellPage, isDraftBox, isScriptCell } from "../../features/editing/cell-page.ts";
 import { mountComposition } from "../../features/editing/composition.ts";
 import type { CompositionCell } from "../../features/editing/composition.ts";
 import { editorBlur, mountEditorFocus } from "../../features/editing/focus.ts";
@@ -23,12 +26,15 @@ import { mountWriterRoutes } from "../../features/writer/routes.ts";
 import type { WriterRoutePorts } from "../../features/writer/routes.ts";
 import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
 import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
-import { focusMemory, installPicturePicker, mergeUndo, rowDrag, undoGuard } from "../../legacy/editor-bridge.ts";
-import { liveDocumentPort, liveSession, runCommand } from "../../legacy/session-bridge.ts";
+import { cellEditing, focusMemory, installCellEditing, installPicturePicker, mergeUndo, rowDrag, undoGuard } from "../../legacy/editor-bridge.ts";
+import { REVIEW_ONLY, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "../../legacy/session-bridge.ts";
+import { fromHtml } from "../../legacy/richtext.ts";
+import { VIEWING_ONLY } from "../../legacy/review-wording.ts";
 import { cycleRowStatus } from "../../js/01-scene-status.js";
 import { expandHiddenShotStrip, revealRow } from "../../js/01b-hide-shot.js";
 import { installMergeBanner, restoreMergeSnapshot } from "../../js/03-sync.js";
-import { cssAttr, safeId, sanitizeHtml, storedHtmlFromDom } from "../../js/04-richtext.js";
+import { cssAttr, ensureTrailingCaretSpot, safeId, sanitizeHtml, storedHtmlFromDom } from "../../js/04-richtext.js";
+import { announceGalleryEdit } from "../../js/05e-gallery-overlay.js";
 import {
   cancelLink,
   cancelVideo,
@@ -37,14 +43,13 @@ import {
   forgetStalePendingMarks,
   handleToolbarCmd,
   insertLineBreak,
-  isScriptCell,
   maybeCueShortcut,
   maybeDirectionShortcut,
+  noteFieldPainted,
   paintingScreen,
   render,
   renderRow,
   screenIsStale,
-  syncFieldFromDom,
   syncPageTitle,
   toggleCellFormat,
   typeAtDirectionEdge,
@@ -57,7 +62,6 @@ import { thumbnailsAfterPaste } from "../../js/05v-video.js";
 import {
   draftRedo,
   draftUndo,
-  isDraftBox,
   noteDraftInput,
   pasteIntoDraft
 } from "../../js/05d-draft-edit.js";
@@ -72,7 +76,6 @@ import {
   focusRowField,
   handleImageFile,
   moveRow,
-  moveRowTo,
   openGalleryLink,
   removeImage,
   removeImageLink,
@@ -121,10 +124,12 @@ import {
 import { showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
 import {
+  breakUndoCoalescing,
   caretAfterStep,
   compositionUndoMark,
   configureUndo,
   dropEmptyStepsSince,
+  flushEdits,
   lastUndoEntry,
   redo,
   settleAfterApply,
@@ -133,11 +138,9 @@ import {
 import { onServerDoc } from "../../js/13-hosted.js";
 import { runExport } from "../../js/18-local-files.js";
 import {
-  caretTextOffset,
   cycleWriterGutter,
   onWriterFormat,
   onWriterKeydown,
-  placeCaretAtTextOffset,
   renderWriter,
   scheduleWriterStats,
   updateWriterFormatState,
@@ -288,6 +291,39 @@ export function mountToolbarFeature(): ReturnType<typeof mountEditorToolbar> {
 
 export const stopToolbarFeature = editorToolbar.stop;
 
+const cellEditingMount = owned<{ readonly dispose: () => void }>();
+
+const MEDIA_CELL = Object.freeze({ media: true });
+
+export function mountCellEditingFeature(): { readonly dispose: () => void } {
+  return cellEditingMount.replace(function () {
+    const editing = createCellEditing<Element>({
+      page: createCellPage({ storedHtml: function (html) { return storedHtmlFromDom(html); }, caretSpot: ensureTrailingCaretSpot }),
+      document: liveDocument.current,
+      run: runCommand,
+      text: sessionTextPorts,
+      decode: {
+        text: function (html) { return fromHtml(html); },
+        withMedia: function (html) { return fromHtml(html, MEDIA_CELL); }
+      },
+      undo: {
+        applying: function () { return undoGuard().applying(); },
+        breakCoalescing: breakUndoCoalescing,
+        flush: flushEdits,
+        latest: lastUndoEntry
+      },
+      stale: screenIsStale,
+      painted: noteFieldPainted,
+      redraw: function () { render(); },
+      announce: announceGalleryEdit,
+      refused: function (reason) { if (reason === REVIEW_ONLY) showToast(VIEWING_ONLY, "warn"); }
+    });
+    return { dispose: installCellEditing(editing) };
+  });
+}
+
+export const stopCellEditingFeature = cellEditingMount.stop;
+
 function editorRoots(): Element[] {
   return [document.getElementById("rows") as Element, document.getElementById("writer-doc") as Element];
 }
@@ -375,7 +411,7 @@ const rowRoutePorts: RowRoutePorts = {
   markDrop: setDropMarkerForRow,
   scroll: updateDragScroll,
   stopScroll: stopDragScroll,
-  move: moveRowTo,
+  move: function (rowId, targetId, after) { cellEditing().moveRow(rowId, targetId, after); },
   add: addRow,
   moveBy: function (rowId, dir) { moveRow(rowId, dir); refocusRowMenu(rowId); },
   toggleMenu: toggleRowMenu,
@@ -459,7 +495,7 @@ export function onRootInput(e: RootInput): void {
   maybeCueShortcut(e, cellEl);
   maybeCaptureBroll(e, cellEl);
   maybeOpenPlainTag(e, cellEl);
-  syncFieldFromDom(cellEl);
+  cellEditing().sync(cellEl);
   settleEndedComposition(e);
   afterScriptCellChange(cellEl);
 }
@@ -555,7 +591,7 @@ const editorFocusPorts: EditorFocusPorts = {
   blurredCell: function (cellEl) {
     const clean = sanitizeHtml(cellEl.innerHTML);
     if (clean !== storedHtmlFromDom(cellEl.innerHTML)) cellEl.innerHTML = clean;
-    syncFieldFromDom(cellEl);
+    cellEditing().sync(cellEl);
     if (!undoGuard().applying()) anchorBrollInLeftCell(cellEl);
   },
   typeAtMarks: function (cellEl, data) {
@@ -727,13 +763,13 @@ export function onRootKeydown(e: KeyboardEvent): void {
   if (e.key === "Enter" && e.altKey && !mod && isScriptCell(cellEl)) {
     e.preventDefault();
     hideTagGhost();
-    syncFieldFromDom(cellEl);
+    cellEditing().sync(cellEl);
     splitCellField(cellEl);
     return;
   }
   if ((e.key === "ArrowUp" || e.key === "ArrowDown") && e.altKey && !mod && isScriptCell(cellEl)) {
     e.preventDefault();
-    syncFieldFromDom(cellEl);
+    cellEditing().sync(cellEl);
     const mvId = cellEl.getAttribute("data-id");
     const mvField = cellEl.getAttribute("data-field");
     const mvOffset = caretTextOffset(cellEl);
@@ -751,13 +787,14 @@ export function onRootKeydown(e: KeyboardEvent): void {
   if (e.key === "Enter" && mod && isScriptCell(cellEl)) {
     e.preventDefault();
     hideTagGhost();
-    syncFieldFromDom(cellEl);
+    cellEditing().sync(cellEl);
     addRowAndFocus(cellEl.getAttribute("data-id"), cellEl.getAttribute("data-field"));
     return;
   }
   if (e.key === "Enter") {
     e.preventDefault();
-    syncFieldFromDom(insertLineBreak(cellEl));
+    const broken: Element = insertLineBreak(cellEl);
+    cellEditing().sync(broken);
     return;
   }
   if (toolbar) toolbar.formatKey(e, cellEl);

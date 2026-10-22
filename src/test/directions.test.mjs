@@ -5,7 +5,8 @@ import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
-import { __init as initSceneStatus, rowSeconds } from "../js/01-scene-status.js";
+import { __init as initSceneStatus } from "../js/01-scene-status.js";
+import { rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
@@ -20,11 +21,11 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import { replaceInHtml } from "../js/09-find-replace.js";
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
-import { toMarkdownDoc } from "../js/14d-export-text.js";
+import { toMarkdownDoc } from "../adapters/formats/export-text.ts";
 import {
   __init as initDocx, audioDirectionsHtml, buildDocx, buildNarrationDocx, buildNarrationText, docxToRows, narrationRows
 } from "../js/15-docx.js";
-import { buildCsv } from "../js/16-csv.js";
+import { buildCsv } from "../adapters/formats/csv.ts";
 import { prompterSceneHtml } from "../js/20-teleprompter.js";
 import {
   applyMarkdownProject,
@@ -190,8 +191,8 @@ test("read time: a direction takes none", () => {
   ] });
   withState(s, () => {
     assert.equal(productionReaders.wordCount(s.rows[1].audioText), 10);
-    assert.equal(rowSeconds(s.rows[0]), 4);
-    assert.equal(rowSeconds(s.rows[1]), 4);
+    assert.equal(rowSeconds(s.rows[0], s, productionReaders), 4);
+    assert.equal(rowSeconds(s.rows[1], s, productionReaders), 4);
   });
 });
 

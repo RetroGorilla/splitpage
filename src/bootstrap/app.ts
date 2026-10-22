@@ -4,6 +4,7 @@ import type { Wiring } from "./wiring.ts";
 import { whenDocumentReady } from "./startup/dom-ready.ts";
 import { mountBrollFeature, stopBrollFeature } from "../js/08d-broll-panel.js";
 import {
+  mountCellEditingFeature,
   mountClipboardFeature,
   mountCompositionFeature,
   mountFocusFeature,
@@ -16,6 +17,7 @@ import {
   mountUndoFeature,
   mountVideoFeature,
   mountWriterFeature,
+  stopCellEditingFeature,
   stopClipboardFeature,
   stopCompositionFeature,
   stopFocusFeature,
@@ -97,6 +99,7 @@ export function startApp(wiring: Wiring): () => void {
     stops.push(startActions(wiring.actions, wiring.keyTarget));
     const startup = beginStartup(startupPorts());
     stops.push(startup.dispose);
+    run([mountCellEditingFeature, stopCellEditingFeature]);
     if (!appearance) run([mountAppearanceFeature, stopAppearance]);
     run(view("mountTopbar", mountTopbarFeature));
     run(view("mountCellReach", mountCellReachFeature));

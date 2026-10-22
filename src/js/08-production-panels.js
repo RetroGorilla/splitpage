@@ -2,9 +2,8 @@ import { bulkDeleteArmed, clearProductionSelection, deleteConfirmation, disarmBu
 import { productionReaders } from "../legacy/document-ports.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { nextTagStatus, normalizeTagName } from "../core/document/tags.ts";
-import { formatDuration, pad2 } from "../core/production/timing.ts";
+import { formatDuration, pad2, rowSeconds } from "../core/production/timing.ts";
 import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, tagStatus } from "../core/production/looks.ts";
-import { rowSeconds } from "./01-scene-status.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { cssAttr, plainText, safeId } from "./04-richtext.js";
@@ -23,7 +22,7 @@ import {
 } from "./07-production-tags.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { personColor } from "./13a-presence.js";
-import { breakdownRows, breakdownTable } from "./14c-export-projections.js";
+import { breakdownRows, breakdownTable } from "../adapters/formats/export-projections.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
 import { planQuickAdd } from "../core/production/tags.ts";
@@ -468,6 +467,8 @@ function renderProductionByPerson(all) {
 }
 
 function renderProductionByShoot(entries) {
+  const doc = currentDocument();
+  if (!doc) return '<div class="comments-empty">Nothing to schedule yet.</div>';
   var live = entries || productionEntries();
   var byRow = {};
   live.forEach(function (item) {
@@ -482,8 +483,6 @@ function renderProductionByShoot(entries) {
     return groups[key];
   }
 
-  const doc = currentDocument();
-  if (!doc) return '<div class="comments-empty">Nothing to schedule yet.</div>';
   doc.rows.forEach(function (row, i) {
     var here = byRow[i] || [];
     var locs = here.filter(function (t) { return t.cat.id === "location"; });
@@ -508,7 +507,7 @@ function renderProductionByShoot(entries) {
   return order.map(function (key) {
     var g = groups[key];
     const shot = g.rows.filter(function (i) { return doc.rows[i].status === "shot"; }).length;
-    const secs = g.rows.reduce(function (n, i) { return n + rowSeconds(doc.rows[i]); }, 0);
+    const secs = g.rows.reduce(function (n, i) { return n + rowSeconds(doc.rows[i], doc, productionReaders); }, 0);
     var done = shot === g.rows.length;
     return '<section class="shoot-group" style="--dot:' + (key ? TAG_CATEGORIES[1].color : "var(--border-strong)") + '">' +
       '<h3 class="shoot-head">' +

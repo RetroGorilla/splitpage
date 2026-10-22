@@ -1,3 +1,4 @@
+import type { CellEditing } from "../application/editing/cell-editing.ts";
 import { createFocusMemory } from "../application/editing/focus-memory.ts";
 import type { FocusMemory } from "../application/editing/focus-memory.ts";
 import { createUndoGuard } from "../application/editing/paint-guard.ts";
@@ -24,6 +25,7 @@ interface Started {
   readonly merge: MergeUndo;
   readonly selection: CellSelection;
   picker: PicturePicker | null;
+  editing: CellEditing<Element> | null;
 }
 
 let started: Started | null = null;
@@ -56,7 +58,8 @@ export function startEditor(live: LiveDocumentPort): () => void {
     focus: createFocusMemory<Element>(),
     merge: createMergeUndo(),
     selection: createEditorSelection<Element, Range, Element>(selectionPorts(live)),
-    picker: null
+    picker: null,
+    editing: null
   };
   started = mine;
   return function () {
@@ -99,4 +102,19 @@ export function installPicturePicker(pick: PicturePicker): () => void {
 export function pickPictureFor(rowId: string): void {
   const pick = running().picker;
   if (pick) pick(rowId);
+}
+
+export function installCellEditing(editing: CellEditing<Element>): () => void {
+  const mine = running();
+  if (mine.editing) throw new Error("Cell editing is already installed; stop it first");
+  mine.editing = editing;
+  return function () {
+    if (mine.editing === editing) mine.editing = null;
+  };
+}
+
+export function cellEditing(): CellEditing<Element> {
+  const editing = running().editing;
+  if (!editing) throw new Error("Cell editing is not installed yet");
+  return editing;
 }
