@@ -1,1 +1,3 @@
-    .doc-meta .file-chip-name, .doc-meta #file-chip-name { font-size: 11px; }
+@media (max-width: 760px) {
+      .doc-meta .file-chip-name, .doc-meta #file-chip-name { font-size: 11px; }
+}

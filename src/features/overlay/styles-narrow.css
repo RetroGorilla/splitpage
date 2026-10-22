@@ -1,2 +1,4 @@
-    .gutter-btn.row-menu-item { height: 44px; }
-    .row-menu { left: auto; right: 0; }
+@media (max-width: 760px) {
+      .gutter-btn.row-menu-item { height: 44px; }
+      .row-menu { left: auto; right: 0; }
+}

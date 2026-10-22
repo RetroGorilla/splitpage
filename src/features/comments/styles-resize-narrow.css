@@ -1,1 +1,3 @@
-    .comments-panel-resize-handle { display: none; }
+@media (max-width: 760px) {
+      .comments-panel-resize-handle { display: none; }
+}
