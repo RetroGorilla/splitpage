@@ -1,3 +1,4 @@
+import { preferences } from "../legacy/preferences-bridge.ts";
 import { arrivingOnLink } from "./13-hosted.js";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
@@ -216,8 +217,6 @@ export function dismissUpdateNotice() {
   if (updatePollTimer) { clearTimeout(updatePollTimer); updatePollTimer = null; }
 }
 
-var DESKTOP_NOTICE_KEY = "splitpage-desktop-notice-dismissed";
-
 export function desktopAppOffered() {
   if (runningOnDesktop()) return false;
   if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
@@ -234,9 +233,7 @@ export function renderDesktopAppNotice() {
     if (action) action.onclick = null;
   }
   if (!desktopAppOffered()) return dispose;
-  try {
-    if (localStorage.getItem(DESKTOP_NOTICE_KEY) === "1") return dispose;
-  } catch (e) { }
+  if (preferences().desktopNoticeDismissed()) return dispose;
 
   var bar = document.getElementById("desktop-app-bar");
   if (!bar) return dispose;
@@ -261,7 +258,7 @@ export function desktopAppUrl() {
 export function dismissDesktopAppNotice() {
   var bar = document.getElementById("desktop-app-bar");
   if (bar) bar.hidden = true;
-  try { localStorage.setItem(DESKTOP_NOTICE_KEY, "1"); } catch (e) {}
+  preferences().dismissDesktopNotice();
 }
 
 export function showAbout() {

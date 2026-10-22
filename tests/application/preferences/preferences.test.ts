@@ -44,7 +44,9 @@ test("the stored keys keep the 3.x names, and each key maps back to its preferen
   assert.equal(prefs.nameOf("splitpage-tag-icons"), "tagIcons");
   assert.equal(prefs.nameOf("splitpage-theme"), "theme");
   assert.equal(prefs.nameOf("splitpage-video-thumbs"), "videoThumbs");
-  assert.equal(prefs.nameOf("splitpage-comments-sort"), null);
+  assert.equal(prefs.nameOf("splitpage-comments-sort"), "commentsSort");
+  assert.equal(prefs.nameOf("splitpage-comments-filter"), "commentFilter");
+  assert.equal(prefs.nameOf("splitpage-comments-hide-resolved"), null);
 });
 
 test("the clock and the theme read as system unless a known mode is stored, and choosing system removes the key", () => {
@@ -147,18 +149,24 @@ test("the prompter's three switches read on only for 1 and store 1 or 0", () => 
   assert.equal(prefs.prompterFlag("prompterMirror"), false);
 });
 
-test("the script zoom reads 1 unless a value in range is stored, and is stored as written", () => {
+test("the script zoom reads 1 unless a value in range is stored, rounds writes and removes the default", () => {
   const { prefs, storage, announced } = setup();
   assert.equal(prefs.scriptScale(), 1);
   storage.items.set("splitpage-script-scale", "2.5");
   assert.equal(prefs.scriptScale(), 1);
   storage.items.set("splitpage-script-scale", "0.7");
   assert.equal(prefs.scriptScale(), 0.7);
-  prefs.setScriptScale(1.3);
+  prefs.setScriptScale(1.304);
   assert.equal(storage.items.get("splitpage-script-scale"), "1.3");
   prefs.setScriptScale(1);
-  assert.equal(storage.items.get("splitpage-script-scale"), "1");
-  assert.deepEqual(announced.map((c) => c.value), ["1.3", "1"]);
+  assert.equal(storage.items.has("splitpage-script-scale"), false);
+  prefs.setScriptScale(1.004);
+  assert.equal(storage.items.has("splitpage-script-scale"), false);
+  assert.deepEqual(announced, [
+    { key: "splitpage-script-scale", value: "1.3" },
+    { key: "splitpage-script-scale", value: null },
+    { key: "splitpage-script-scale", value: null }
+  ]);
 });
 
 test("the collaboration server is read as stored, and the desktop notice is shown again by removing its key", () => {
@@ -168,12 +176,19 @@ test("the collaboration server is read as stored, and the desktop notice is show
   assert.equal(prefs.collabServer(), "https://mine.example.com/");
   prefs.setCollabServer(null);
   assert.equal(storage.items.has("splitpage-collab-server"), false);
-  storage.items.set("splitpage-desktop-notice-dismissed", "1");
+  assert.equal(prefs.desktopNoticeDismissed(), false);
+  storage.items.set("splitpage-desktop-notice-dismissed", "0");
+  assert.equal(prefs.desktopNoticeDismissed(), false);
+  prefs.dismissDesktopNotice();
+  assert.equal(prefs.desktopNoticeDismissed(), true);
+  assert.equal(storage.items.get("splitpage-desktop-notice-dismissed"), "1");
   prefs.resetDesktopNotice();
+  assert.equal(prefs.desktopNoticeDismissed(), false);
   assert.equal(storage.items.has("splitpage-desktop-notice-dismissed"), false);
   assert.deepEqual(announced, [
     { key: "splitpage-collab-server", value: "https://mine.example.com/" },
     { key: "splitpage-collab-server", value: null },
+    { key: "splitpage-desktop-notice-dismissed", value: "1" },
     { key: "splitpage-desktop-notice-dismissed", value: null }
   ]);
 });
@@ -200,6 +215,41 @@ test("the settings carried by Export app data keep their names, keys, order and 
   assert.deepEqual(["60", "400", "59", "401", "150.5", "0150"].map((v) => valid("defaultWpm", v)), [true, true, false, false, false, false]);
   assert.deepEqual(["0", "1", "yes"].map((v) => valid("rundownMin", v)), [true, true, false]);
   assert.deepEqual(["0.7", "2", "1.125", "0.6", "1.1234", "2.1"].map((v) => valid("scriptScale", v)), [true, true, true, false, false, false]);
+});
+
+test("rundown and zoom still export and import their stored forms silently, excluding desktop notice dismissal", () => {
+  const source = setup();
+  source.prefs.setRundownMin(true);
+  source.prefs.setScriptScale(1.25);
+  source.prefs.dismissDesktopNotice();
+  const exported = source.prefs.appDataExport(settingsAppData());
+  assert.equal(exported["rundownMin"], "1");
+  assert.equal(exported["scriptScale"], "1.25");
+  assert.equal(Object.hasOwn(exported, "desktopNotice"), false);
+  const target = setup();
+  assert.deepEqual(target.prefs.appDataImport(exported, settingsAppData()), ["rundownMin", "scriptScale"]);
+  assert.equal(target.prefs.rundownMin(), true);
+  assert.equal(target.prefs.scriptScale(), 1.25);
+  assert.equal(target.prefs.desktopNoticeDismissed(), false);
+  assert.deepEqual(target.announced, []);
+  source.prefs.setScriptScale(1);
+  assert.equal(source.prefs.appDataExport(settingsAppData())["scriptScale"], null);
+});
+
+test("desktop notice and zoom writes still announce when storage is unavailable", () => {
+  const announced: PreferenceChange[] = [];
+  const prefs = createPreferences({ storage: () => null, announce: (change) => { announced.push(change); } });
+  assert.equal(prefs.desktopNoticeDismissed(), false);
+  prefs.dismissDesktopNotice();
+  prefs.resetDesktopNotice();
+  prefs.setScriptScale(1.25);
+  prefs.setScriptScale(1);
+  assert.deepEqual(announced, [
+    { key: "splitpage-desktop-notice-dismissed", value: "1" },
+    { key: "splitpage-desktop-notice-dismissed", value: null },
+    { key: "splitpage-script-scale", value: "1.25" },
+    { key: "splitpage-script-scale", value: null }
+  ]);
 });
 
 test("autosave is on until it is switched off, and switching announces the change", () => {
@@ -317,6 +367,103 @@ test("a listener that throws does not stop the write", () => {
 
 const EXTRA: readonly AppDataPref[] = [{ name: "theme", key: "splitpage-theme", valid: (v) => v === "dark" }];
 
+test("comments sort defaults to position, accepts recent and announces normalized writes", () => {
+  const { prefs, storage, announced } = setup();
+  assert.equal(prefs.commentsSort(), "position");
+  storage.items.set("splitpage-comments-sort", "unknown");
+  assert.equal(prefs.commentsSort(), "position");
+  prefs.setCommentsSort("recent");
+  assert.equal(prefs.commentsSort(), "recent");
+  prefs.setCommentsSort("unknown");
+  assert.equal(prefs.commentsSort(), "position");
+  prefs.setCommentsSort("position");
+  assert.deepEqual(announced, [
+    { key: "splitpage-comments-sort", value: "recent" },
+    { key: "splitpage-comments-sort", value: "position" },
+    { key: "splitpage-comments-sort", value: "position" }
+  ]);
+});
+
+test("comment filter keeps its JSON form, defaults and private legacy fallback", () => {
+  const { prefs, storage, announced } = setup();
+  assert.deepEqual(prefs.commentFilter(), { mode: "open", assignee: "" });
+  storage.items.set("splitpage-comments-hide-resolved", "false");
+  assert.deepEqual(prefs.commentFilter(), { mode: "all", assignee: "" });
+  storage.items.set("splitpage-comments-hide-resolved", "true");
+  assert.deepEqual(prefs.commentFilter(), { mode: "open", assignee: "" });
+  for (const mode of ["open", "resolved", "all"]) {
+    prefs.setCommentFilter({ mode, assignee: "Ada" });
+    assert.deepEqual(prefs.commentFilter(), { mode, assignee: "Ada" });
+  }
+  assert.deepEqual(announced, ["open", "resolved", "all"].map((mode) => ({
+    key: "splitpage-comments-filter", value: JSON.stringify({ mode, assignee: "Ada" })
+  })));
+  assert.equal(storage.items.get("splitpage-comments-filter"), '{"mode":"all","assignee":"Ada"}');
+  storage.items.set("splitpage-comments-hide-resolved", "false");
+  for (const raw of ['{"mode":"unknown","assignee":42}', '{broken']) {
+    storage.items.set("splitpage-comments-filter", raw);
+    assert.deepEqual(prefs.commentFilter(), { mode: "open", assignee: "" });
+  }
+  for (const raw of ["", "null", "42"]) {
+    storage.items.set("splitpage-comments-filter", raw);
+    assert.deepEqual(prefs.commentFilter(), { mode: "all", assignee: "" });
+  }
+  const count = announced.length;
+  assert.equal(prefs.commentFilter().mode, "all");
+  assert.equal(announced.length, count);
+});
+
+test("comments preferences reread changes shared with another owner without announcing reads", () => {
+  const { prefs, storage, announced } = setup();
+  const other = createPreferences({ storage: () => storage, announce: () => {} });
+  other.setCommentsSort("recent");
+  other.setCommentFilter({ mode: "resolved", assignee: "Bo" });
+  assert.equal(prefs.commentsSort(), "recent");
+  assert.deepEqual(prefs.commentFilter(), { mode: "resolved", assignee: "Bo" });
+  storage.items.delete("splitpage-comments-sort");
+  storage.items.delete("splitpage-comments-filter");
+  assert.equal(prefs.commentsSort(), "position");
+  assert.deepEqual(prefs.commentFilter(), { mode: "open", assignee: "" });
+  assert.deepEqual(announced, []);
+});
+
+test("comments writes still announce when storage is unavailable", () => {
+  for (const storage of [() => null, () => { throw new Error("storage"); }]) {
+    const announced: PreferenceChange[] = [];
+    const prefs = createPreferences({ storage, announce: (change) => { announced.push(change); } });
+    assert.equal(prefs.commentsSort(), "position");
+    assert.deepEqual(prefs.commentFilter(), { mode: "open", assignee: "" });
+    prefs.setCommentsSort("recent");
+    prefs.setCommentFilter({ mode: "all", assignee: "" });
+    assert.deepEqual(announced, [
+      { key: "splitpage-comments-sort", value: "recent" },
+      { key: "splitpage-comments-filter", value: '{"mode":"all","assignee":""}' }
+    ]);
+  }
+});
+
+test("app data owns comments sort validation, imports silently and preserves the export bytes", () => {
+  const { prefs, storage, announced } = setup();
+  assert.equal(JSON.stringify(prefs.appDataExport(settingsAppData())), '{"onboarding":null,"tourDone":null,"commentAuthor":null,"writerSize":null,"taggingHelpDismissed":null,"autosave":null,"commentsSort":null,"theme":null,"clock":null,"personColor":null,"defaultWpm":null,"hideShot":null,"prompterMirror":null,"prompterFlip":null,"prompterSceneMode":null,"rundownMin":null,"videoThumbs":null,"tagIcons":null,"scriptScale":null}');
+  for (const commentsSort of ["unknown", "Recent", "", 1, null]) {
+    assert.deepEqual(prefs.appDataImport({ commentsSort }, []), []);
+  }
+  for (const commentsSort of ["recent", "position"]) {
+    storage.items.delete("splitpage-comments-sort");
+    assert.deepEqual(prefs.appDataImport({ commentsSort }, []), ["commentsSort"]);
+    assert.equal(prefs.commentsSort(), commentsSort);
+    assert.deepEqual(prefs.appDataImport({ commentsSort: "recent" }, []), []);
+  }
+  prefs.setCommentFilter({ mode: "all", assignee: "Ada" });
+  const exported = prefs.appDataExport(settingsAppData());
+  const target = setup();
+  assert.deepEqual(target.prefs.appDataImport(exported, settingsAppData()), ["commentsSort"]);
+  assert.equal(JSON.stringify(target.prefs.appDataExport(settingsAppData())), JSON.stringify(exported));
+  assert.equal(Object.hasOwn(exported, "commentFilter"), false);
+  assert.equal(announced.length, 1);
+  assert.deepEqual(target.announced, []);
+});
+
 test("exporting the app data lists every owned preference by name, with the onboarding record parsed and absent values as none", () => {
   const { prefs, storage } = setup();
   storage.items.set("splitpage-theme", "dark");
@@ -329,6 +476,7 @@ test("exporting the app data lists every owned preference by name, with the onbo
     writerSize: "20",
     taggingHelpDismissed: null,
     autosave: null,
+    commentsSort: null,
     theme: "dark"
   });
 });
