@@ -1,3 +1,5 @@
+import { createViewLifetime } from "../common/view-lifetime.ts";
+
 export type CommentEvent = Event & {
   readonly target: HTMLElement & { value: string; files?: FileList };
   readonly isComposing: boolean;
@@ -61,21 +63,12 @@ export function mountComments(mount: { window: Window; ports: CommentsPorts }): 
   const win = mount.window;
   const doc = win.document;
   const ports = mount.ports;
-  const releases: (() => void)[] = [];
-  let open = true;
+  const life = createViewLifetime(win, (target) =>
+    target === doc || doc.getElementById((target as HTMLElement).id) === target);
+  const { listen } = life;
   let rootsMounted = false;
   let controlsMounted = false;
   let dragSource: HTMLElement | null = null;
-  function listen(target: EventTarget | null, type: string, fn: (event: CommentEvent) => void): void {
-    if (!target) return;
-    const handler: EventListener = (event) => {
-      if (!open) return;
-      if (target !== doc && doc.getElementById((target as HTMLElement).id) !== target) return;
-      fn(event as CommentEvent);
-    };
-    target.addEventListener(type, handler, false);
-    releases.push(() => target.removeEventListener(type, handler, false));
-  }
   function draftBox(event: CommentEvent): HTMLElement | null {
     return event.target?.closest?.<HTMLElement>(".cell-editable") || null;
   }
@@ -126,7 +119,7 @@ export function mountComments(mount: { window: Window; ports: CommentsPorts }): 
   });
   return {
     mountRoots(): void {
-      if (!open || rootsMounted) return;
+      if (!life.active() || rootsMounted) return;
       rootsMounted = true;
       for (const root of [doc.getElementById("comment-modal"), doc.getElementById("comments-panel")]) {
         listen(root, "click", (event) => ports.rootClick(event as unknown as MouseEvent));
@@ -147,7 +140,7 @@ export function mountComments(mount: { window: Window; ports: CommentsPorts }): 
       listen(doc.getElementById("comments-panel-close"), "click", ports.closePanel);
     },
     mountControls(): void {
-      if (!open || controlsMounted) return;
+      if (!life.active() || controlsMounted) return;
       controlsMounted = true;
       listen(doc.getElementById("comments-panel"), "change", (event) => {
         if (event.target.id === "comments-assignee-filter") { ports.assigneeFilter(event.target.value); return; }
@@ -169,7 +162,7 @@ export function mountComments(mount: { window: Window; ports: CommentsPorts }): 
         const resolveComposer = ports.captureComposer();
         const input = event.target;
         function live(): HTMLElement | null {
-          return open && doc.getElementById("comment-image-input") === input ? resolveComposer() : null;
+          return life.active() && doc.getElementById("comment-image-input") === input ? resolveComposer() : null;
         }
         ports.compressImage(file, 700, 0.72).then((dataUrl) => {
           const composer = live();
@@ -178,7 +171,7 @@ export function mountComments(mount: { window: Window; ports: CommentsPorts }): 
       });
     },
     click(event): boolean {
-      if (!open) return false;
+      if (!life.active()) return false;
       const target = event.target as HTMLElement;
       const resolve = target.closest('[data-action="toggle-resolve"]');
       if (resolve) { ports.toggleResolve(resolve.getAttribute("data-id")); return true; }
@@ -199,7 +192,7 @@ export function mountComments(mount: { window: Window; ports: CommentsPorts }): 
       return !!target.closest(".comment-menu");
     },
     jumpClick(event): boolean {
-      if (!open) return false;
+      if (!life.active()) return false;
       const target = event.target as HTMLElement;
       const card = target.closest(".comment-card.is-jumpable");
       if (card && !target.closest(".reply-composer") && !target.closest("a") && win.getSelection()?.isCollapsed) {
@@ -209,10 +202,9 @@ export function mountComments(mount: { window: Window; ports: CommentsPorts }): 
       return false;
     },
     dispose(): void {
-      if (!open) return;
-      open = false;
+      if (!life.active()) return;
+      life.dispose();
       dragSource = null;
-      releases.splice(0).reverse().forEach((release) => release());
       ports.reset();
     }
   };
