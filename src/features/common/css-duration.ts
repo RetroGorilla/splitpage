@@ -1,4 +1,4 @@
-export function cssDurationMs(window, name, fallback) {
+export function cssDurationMs(window: Window, name: string, fallback: number): number {
   try {
     const raw = window.getComputedStyle(window.document.documentElement).getPropertyValue(name).trim();
     if (!raw) return fallback;
