@@ -7,7 +7,7 @@ const bridge = await import("../legacy/recovery-bridge.ts");
 const { DRAFT_LIMITS } = await import("../adapters/storage/draft-store-idb.ts");
 
 function ports(over) {
-  return Object.assign({ indexedDB: new IDBFactory(), limits: DRAFT_LIMITS, now: () => Date.now(), writerId: "w-test", desktop: () => null }, over);
+  return Object.assign({ indexedDB: new IDBFactory(), limits: DRAFT_LIMITS, now: () => Date.now(), writerId: "w-test", desktop: () => null, sessionStorage: () => null, localStorage: () => null, internImage: () => {} }, over);
 }
 
 test("before the draft recovery is started, every accessor throws instead of running on a default", () => {
@@ -15,6 +15,9 @@ test("before the draft recovery is started, every accessor throws instead of run
   assert.throws(() => bridge.browserDrafts(), /The draft recovery is not started yet/);
   assert.throws(() => bridge.desktopDrafts(), /not started yet/);
   assert.throws(() => bridge.useBrowserDraftFactory(null), /not started yet/);
+  assert.throws(() => bridge.draftResume(), /not started yet/);
+  assert.throws(() => bridge.conflictStash(), /not started yet/);
+  assert.throws(() => bridge.legacySnapshots(), /not started yet/);
 });
 
 test("started once, with the ports it is handed; a second start throws until the first is stopped", async () => {
@@ -34,4 +37,34 @@ test("started once, with the ports it is handed; a second start throws until the
   }
   assert.equal(bridge.recoveryStarted(), false);
   assert.throws(() => bridge.browserDrafts(), /not started yet/);
+  assert.throws(() => bridge.draftResume(), /not started yet/);
+});
+
+test("the resume, the conflict stash and the legacy snapshots use the storage they are handed, and a restart starts the resume afresh", () => {
+  const items = new Map();
+  const memory = { getItem: (k) => (items.has(k) ? items.get(k) : null), setItem: (k, v) => { items.set(k, v); }, removeItem: (k) => { items.delete(k); } };
+  const interned = [];
+  let stop = bridge.startRecovery(ports({ sessionStorage: () => memory, localStorage: () => memory, internImage: (url) => { interned.push(url); } }));
+  try {
+    assert.equal(bridge.draftResume().serverResume(), null);
+    assert.equal(bridge.draftResume().restorePending(), false);
+    bridge.draftResume().setRestorePending(true);
+    bridge.draftResume().armServerResume({ id: "doc-a", rev: 1, base: null, mine: null, at: 0, onDone: () => {} });
+    assert.equal(bridge.conflictStash().save({ mine: { rows: [] }, blobs: { ["c".repeat(64)]: "data:image/png;base64,AA" } }), true);
+    assert.ok(items.has("splitpage-conflict-stash"));
+    bridge.conflictStash().accept(bridge.conflictStash().read(), null);
+    assert.deepEqual(interned, ["data:image/png;base64,AA"]);
+    items.set("splitpage-snapshots", "[]");
+    assert.equal(bridge.legacySnapshots().readRaw(), "[]");
+  } finally {
+    stop();
+  }
+  stop = bridge.startRecovery(ports({ sessionStorage: () => memory, localStorage: () => memory }));
+  try {
+    assert.equal(bridge.draftResume().serverResume(), null, "a new start holds no server resume");
+    assert.equal(bridge.draftResume().restorePending(), false);
+    assert.ok(bridge.conflictStash().read(), "the stash lives in storage, not in the bridge");
+  } finally {
+    stop();
+  }
 });

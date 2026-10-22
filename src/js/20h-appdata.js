@@ -2,7 +2,7 @@ import { normalizeServerUrl } from "./_home.js";
 import { S } from "./_state.js";
 import { SETTINGS_APPDATA_PREFS } from "./00p-prefs.js";
 import { setBackend as setBlobBackend } from "../adapters/storage/02c-blobs.js";
-import { SNAPSHOT_KEY } from "./03-sync.js";
+import { LEGACY_SNAPSHOTS_KEY } from "../application/recovery/legacy-snapshots.ts";
 import {
   exportHistoryAll,
   importHistoryBundle,
@@ -72,7 +72,7 @@ async function buildAppDataBundle() {
   };
 
   try {
-    bundle.snapshots = appDataReadJson(SNAPSHOT_KEY, null);
+    bundle.snapshots = appDataReadJson(LEGACY_SNAPSHOTS_KEY, null);
   } catch (e) {
     bundle.snapshots = null;
   }

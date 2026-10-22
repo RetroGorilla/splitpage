@@ -117,7 +117,7 @@ const KEY_TARGET_METHODS: readonly (keyof EventTarget)[] = ["addEventListener", 
 
 const ACTION_REGISTRY_METHODS: readonly (keyof ActionRegistry)[] = ["register", "has", "shortcuts", "view", "list", "invoke", "presentRefusals"];
 
-const RECOVERY_METHODS: readonly (keyof LegacyRecoveryPorts)[] = ["now", "desktop"];
+const RECOVERY_METHODS: readonly (keyof LegacyRecoveryPorts)[] = ["now", "desktop", "sessionStorage", "localStorage", "internImage"];
 
 function present(value: unknown, kind: "function" | "object"): boolean {
   return value !== null && typeof value === kind;

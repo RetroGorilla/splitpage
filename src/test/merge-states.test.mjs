@@ -5,17 +5,22 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";
 import {
-  acceptStash,
   mergeStates,
-  readStash,
   stashLocalWork,
   textMergeContext
 } from "../js/03-sync.js";
-import { createMemoryBackend, dataUrlForSync, intern, setBackend } from "../adapters/storage/02c-blobs.js";
+import { createMemoryBackend, dataUrlForSync, intern, internDataUrl, setBackend } from "../adapters/storage/02c-blobs.js";
+import { conflictStash, startRecovery } from "../legacy/recovery-bridge.ts";
+import { DRAFT_LIMITS } from "../adapters/storage/draft-store-idb.ts";
 import { S } from "../js/_state.js";
 import { changedBetween } from "../js/12a-undo.js";
 import { personIdRemap } from "../core/merge/lists.ts";
 import { cloneState } from "../core/document/clone.ts";
+
+startRecovery({
+  indexedDB: null, limits: DRAFT_LIMITS, now: () => Date.now(), writerId: "w-merge-states", desktop: () => null,
+  sessionStorage: () => sessionStorage, localStorage: () => localStorage, internImage: internDataUrl
+});
 
 function mk() {
   return migrateRows({
@@ -638,7 +643,7 @@ test("a stash carries the pictures the store does not hold, and they come back",
   const url = "data:image/png;base64," + Buffer.from(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, ...be32(13), 0x49, 0x48, 0x44, 0x52,
     ...be32(41), ...be32(10), 8, 6, 0, 0, 0, ...be32(0), ...be32(0), 0x49, 0x45, 0x4e, 0x44])).toString("base64");
   const stash = { mine: imgDoc(b), blobs: { ["0".repeat(64)]: url } };
-  acceptStash(stash, imgDoc(null));
+  conflictStash().accept(stash, imgDoc(null));
   assert.equal(stash.mine.rows[0].imageRef.sha256, b.sha256);
 });
 
@@ -650,7 +655,7 @@ test("stashLocalWork writes refs, plus the bytes of every picture not durably st
   S.baseState = imgDoc(c);
   try {
     assert.equal(stashLocalWork(), true);
-    const st = readStash();
+    const st = conflictStash().read();
     assert.deepEqual(st.mine.rows[0].imageRef, b);
     assert.equal(JSON.stringify(st.mine).indexOf("data:image"), -1, "the document itself holds refs");
     assert.deepEqual(Object.keys(st.blobs).sort(), [b.sha256, c.sha256].sort());
@@ -671,7 +676,7 @@ test("one release: an older stash's \"__IMAGE__\" sentinels take theirs' picture
     mine: { title: "R", schema: 2, rows: [{ id: "r1", audioText: "mine", visualImage: "__IMAGE__" }, { id: "r2", audioText: "new", visualImage: null }] }
   };
   const theirs = imgDoc(c);
-  acceptStash(stash, theirs);
+  conflictStash().accept(stash, theirs);
   assert.equal(stash.imagesStripped, undefined);
   assert.deepEqual(stash.mine.rows[0].imageRef, c);
   assert.equal("visualImage" in stash.mine.rows[0], false);

@@ -12,12 +12,8 @@ import {
 import { ensureBytes } from "../adapters/storage/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import {
-  RELOAD_GUARD_KEY,
-  acceptStash,
   applyMerge,
-  clearStash,
   getEditorName,
-  readStash,
   setBaseState
 } from "./03-sync.js";
 import {
@@ -46,6 +42,7 @@ import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./2
 import { makeDesktopHandle } from "./20f-desktop.js";
 import { existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
 import { requestSave, saveRunning } from "../legacy/save-bridge.ts";
+import { conflictStash } from "../legacy/recovery-bridge.ts";
 import { autoSaveMay, autoSaveWhere } from "../application/save/autosave.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
@@ -265,10 +262,11 @@ function adoptSavedCopyDocId(forkDocId, docIdAtSave, owned) {
 }
 
 export function applyStashedWork(loaded, override, apply) {
-  var stash = override || readStash();
-  if (!override) { try { sessionStorage.removeItem(RELOAD_GUARD_KEY); } catch (e) {} }
+  var stashes = conflictStash();
+  var stash = override || stashes.read();
+  if (!override) stashes.dropReloadGuard();
   if (!stash || !stash.mine || !Array.isArray(stash.mine.rows)) return { state: loaded, report: null, snapshot: null };
-  acceptStash(stash, loaded);
+  stashes.accept(stash, loaded);
   if (!override) {
     try {
       if (sessionStorage.getItem(SERVER_RESUME_KEY)) return { state: loaded, report: null, snapshot: null };
@@ -277,7 +275,7 @@ export function applyStashedWork(loaded, override, apply) {
     var stashId = normalizeDocId(stash.mine.docId);
     if (stashId) { loaded.docId = stashId; S.docIdWrittenOut = true; }
 
-    clearStash();
+    stashes.clear();
   }
   function through(extra) {
     var out = applyMerge(Object.assign(

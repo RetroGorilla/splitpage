@@ -6,8 +6,8 @@ import { setInitialStateReady, suppressUnloadWarning } from "../../js/00-prelude
 import { updateHideShotMenu } from "../../js/01b-hide-shot.js";
 import { initDocIdentityChannel, liveDocumentPort, loadInitialDocument, syncDocIdentity } from "../../js/02b-doc-id.js";
 import { cloneState } from "../../core/document/clone.ts";
+import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
 import {
-  SNAPSHOT_KEY,
   reportMerge,
   toastLastEditor,
   updateIdentityChip
@@ -53,7 +53,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
     },
     page: {
       window: window,
-      snapshotKey: SNAPSHOT_KEY,
+      snapshotKey: LEGACY_SNAPSHOTS_KEY,
       unsaved: function () { return hasUnsavedChanges() && !suppressUnloadWarning; }
     },
     startDesktop: initDesktop
