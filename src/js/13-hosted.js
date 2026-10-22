@@ -54,7 +54,7 @@ import {
   saveAuthorName
 } from "./10-comments.js";
 import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
-import { maybeAskGuestName, updateCollaborateMenu } from "./13b-collaborate.js";
+import { maybeAskGuestName } from "./13b-collaborate.js";
 import { saveDoc, scheduleAutoSave } from "./14-export.js";
 import { requestSave, saveBusy, saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 import { conflictStash, draftResume } from "../legacy/recovery-bridge.ts";
@@ -820,7 +820,6 @@ function paintServerItem(id, state) {
 export function updateServerMenu() {
   paintServerItem("menu-server-open", serverOpenItemState());
   paintServerItem("menu-server-new", serverPublishItemState());
-  updateCollaborateMenu();
 }
 
 export function applyReviewMode() {
@@ -2468,6 +2467,12 @@ export function driveSignOut() {
 }
 
 export function __init() {
+  documentLocation().onChange(function (change) {
+    if (change === "connection") updateServerMenu();
+  });
+  serverStatus().onChange(function (change) {
+    if (change === "mode") updateServerMenu();
+  });
   handServerCheckTo(detectServer);
   loadTabConnection();
 
