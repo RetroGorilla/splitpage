@@ -420,7 +420,7 @@
     {"rule":"legacy-state-refs","source":"src/test/_heal-rounds.mjs","target":"global:S","count":6},
     {"rule":"legacy-state-refs","source":"src/test/_initial-load-probe.mjs","target":"global:S","count":5},
     {"rule":"legacy-state-refs","source":"src/test/app-remount-app.test.mjs","target":"global:S","count":2},
-    {"rule":"legacy-state-refs","source":"src/test/app-stop-errors-app.test.mjs","target":"global:S","count":2},
+    {"rule":"legacy-state-refs","source":"src/test/app-stop-errors-app.test.mjs","target":"global:S","count":1},
     {"rule":"legacy-state-refs","source":"src/test/apply-merge-options-app.test.mjs","target":"global:S","count":26},
     {"rule":"legacy-state-refs","source":"src/test/apply-merge.test.mjs","target":"global:S","count":19},
     {"rule":"legacy-state-refs","source":"src/test/broll-id-sequence.test.mjs","target":"global:S","count":10},
