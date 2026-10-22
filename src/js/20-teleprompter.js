@@ -8,7 +8,7 @@ import {
   voiceIsFollowing
 } from "../application/prompter-state.ts";
 import { S } from "./_state.js";
-import { serverHomeId } from "./_home.js";
+import { reviewBlocked, reviewMode, serverHomeId } from "../legacy/location-bridge.ts";
 import { SpeechRecognitionCtor } from "./00-prelude.js";
 import { rowSeconds } from "./01-scene-status.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
@@ -19,7 +19,6 @@ import {
   setTagNotes,
   setTagOwner
 } from "./08-production-panels.js";
-import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { adoptProjectState, parseProjectFileState } from "./18-local-files.js";
 import {

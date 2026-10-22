@@ -21,7 +21,6 @@ import {
   updateBrollBadge
 } from "./08c-broll.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
-import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { brollGroups as brollGroupsFrom, brollShotListForPrint, brollTable, filterCounts, FILTERS, matchesFilter, oneOf, PAGE_GROUPS, pageSummaryText, sceneLabel, shotRecordForFile, startOf } from "./14c-export-projections.js";
 import { exportAs } from "./18-local-files.js";
@@ -29,6 +28,7 @@ import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-po
 import { appActions } from "../legacy/app-actions.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { mountBroll } from "../features/broll/mount.ts";
+import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
 import { deleteShotCommand, setShotsCommand } from "../application/commands/broll-records.ts";
 import { brollRecord as shotIn, personById as personIn, personNamed } from "../core/production/records.ts";
 import { randomIds } from "../adapters/identity/ids.ts";

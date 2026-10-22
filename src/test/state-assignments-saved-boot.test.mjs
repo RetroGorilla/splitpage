@@ -1,8 +1,8 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { cloneState } from "../core/document/clone.ts";
+import { documentLocation } from "../legacy/location-bridge.ts";
 
 const SAVED = {
   schema: 2,
@@ -31,5 +31,5 @@ test("boot from a saved file's state-data: the session's document is replaced on
   assert.equal(loaded.rows[1].status, "todo", "an unknown status was normalised on the way in");
   assert.match(loaded.docId, /^d[0-9a-f]{32}$/);
   assert.equal(JSON.stringify(migrateRows(cloneState(loaded))), JSON.stringify(loaded));
-  assert.equal(S.docIdWrittenOut, true);
+  assert.equal(documentLocation().writtenOut(), true);
 });

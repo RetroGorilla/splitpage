@@ -5,7 +5,7 @@ import { inertBody } from "../legacy/richtext.ts";
 import { noteReload } from "../legacy/session-bridge.ts";
 import { documentTransitions } from "../legacy/transition-bridge.ts";
 import { autoSavePolicy, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
-import { fileHome, home, importHome, setHome } from "./_home.js";
+import { amendHome, currentHome, fileHome, importHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import {
   migrateDocument,
@@ -35,9 +35,7 @@ import {
 import { clearDirty, markAbsorbedDirty } from "./12-dirty-toast.js";
 import {
   blobSourceNow,
-  linkTurnedOff,
-  onServerDoc,
-  serverSessionExpired
+  onServerDoc
 } from "./13-hosted.js";
 import { warnImagesLeftOut } from "./14-export.js";
 import { docxToRows } from "./15-docx.js";
@@ -75,7 +73,7 @@ export function updateFileChip() {
 function updateReadonlyBanner() {
   var banner = document.getElementById("readonly-banner");
   if (!banner) return;
-  banner.hidden = !(S.serverMode.readOnly && onServerDoc());
+  banner.hidden = !(serverStatus().mode().readOnly && onServerDoc());
 }
 
 export function mirrorFileChipToWriter() {
@@ -113,12 +111,12 @@ function updateHeaderFileChip() {
     document.getElementById("file-chip-name").textContent = "On the server";
     var srvState = document.getElementById("file-chip-state");
     var unsaved = unsavedChanges();
-    srvState.textContent = serverSessionExpired
+    srvState.textContent = serverStatus().sessionExpired()
       ? "· signed out — reload"
-      : linkTurnedOff ? "· link turned off — not saving"
+      : serverStatus().linkTurnedOff() ? "· link turned off — not saving"
       : unsaved && autoSavePolicy().halted() ? "· not saved yet"
-      : (unsaved ? "· saving…" : "· v" + home.rev + ", everyone sees this");
-    srvState.classList.toggle("unsaved", serverSessionExpired || linkTurnedOff || unsaved);
+      : (unsaved ? "· saving…" : "· v" + currentHome().rev + ", everyone sees this");
+    srvState.classList.toggle("unsaved", serverStatus().sessionExpired() || serverStatus().linkTurnedOff() || unsaved);
     return;
   }
   var imported = importHome();
@@ -445,7 +443,7 @@ async function loadFileIntoEditor(file, handle, opts) {
   var imported = importHome();
 
   markAbsorbedDirty(opts.reload ? "reload" : "adopt");
-  imported.dirty = false;
+  amendHome(imported, { dirty: false });
   if (typeof closeNewTabPage === "function") closeNewTabPage();
   renderAbsorbed();
   updateIdentityChip();
@@ -569,7 +567,7 @@ export function saveBackToFile(opts) {
   var imported = importHome();
   if (!imported) return Promise.resolve();
   return requestSave({ kind: opts && opts.force ? "writebackForce" : "writeback", target: imported }).then(function (outcome) {
-    if (outcome.kind === "saved" && outcome.acknowledged) imported.dirty = unsavedFor(imported);
+    if (outcome.kind === "saved" && outcome.acknowledged) amendHome(imported, { dirty: unsavedFor(imported) });
     updateFileChip();
   });
 }
@@ -607,14 +605,13 @@ export async function writeBackToFile(job) {
       await writable.close();
       try {
         var after = await imported.handle.getFile();
-        imported.lastModified = after.lastModified;
-        imported.size = after.size;
+        amendHome(imported, { lastModified: after.lastModified, size: after.size });
       } catch (e) { }
       showToast("Saved to " + imported.name, "ok");
       return WRITTEN_BACK;
     } catch (err) {
       if (err && err.name === "AbortError") return WRITEBACK_CANCELLED;
-      imported.inPlace = false;
+      amendHome(imported, { inPlace: false });
       updateFileChip();
     }
   }

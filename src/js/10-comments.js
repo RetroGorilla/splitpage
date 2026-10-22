@@ -34,7 +34,6 @@ import {
 } from "./04-richtext.js";
 import { editableCellHtml, render } from "./05-render.js";
 import { resetDraftHistory } from "./05d-draft-edit.js";
-import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave, resumeAutoSave } from "./14-export.js";
 import { commentBodyText, commentEntries, formatTimestampAbsolute } from "./14c-export-projections.js";
@@ -51,6 +50,7 @@ import { EDITOR_NAME_MAX } from "../core/document/fields.ts";
 import { codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
 import { commentSortMode, setCommentSort } from "../application/comment-sort.ts";
 import { cleanAuthorName } from "../core/document/people.ts";
+import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
 export { commentBodyText, commentEntries };
 
 var commentFilter;
