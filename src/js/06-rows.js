@@ -21,6 +21,8 @@ import { showToast } from "../legacy/effects-bridge.ts";
 import {
   addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
 } from "../core/document/gallery.ts";
+import { desktopPort } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 function runRowCommand(command) {
   var outcome = runCommand(command);
@@ -349,8 +351,8 @@ export function grantVideoFile(file, link) {
     }
     sessionVideoFiles[key] = file;
   }
-  if (!S.DESKTOP || typeof S.DESKTOP.grantVideoFile !== "function") return;
-  Promise.resolve(S.DESKTOP.grantVideoFile(file)).then(function (token) {
+  if (!runningOnDesktop() || typeof desktopPort().grantVideoFile !== "function") return;
+  Promise.resolve(desktopPort().grantVideoFile(file)).then(function (token) {
     if (typeof token === "string" && token) videoFileTokens[key] = token;
   }, function () {});
 }
@@ -377,7 +379,7 @@ export function releaseSessionVideoUrls() {
 
 export function openVideoFile(link) {
   var name = link.name || "that video";
-  if (!S.DESKTOP || typeof S.DESKTOP.openVideoFile !== "function") {
+  if (!runningOnDesktop() || typeof desktopPort().openVideoFile !== "function") {
     showToast("“" + name + "” is a video file on the computer it was added from — only its name is kept here. " +
       "Open it from there, or in the Splitpage desktop app.", "warn", true);
     return;
@@ -388,7 +390,7 @@ export function openVideoFile(link) {
       "drop “" + name + "” onto this scene again to open it from here.", "warn", true);
     return;
   }
-  Promise.resolve(S.DESKTOP.openVideoFile(token)).then(function (res) {
+  Promise.resolve(desktopPort().openVideoFile(token)).then(function (res) {
     if (res && res.ok) return;
     showToast("Could not open “" + name + "”" + (res && res.code === "GONE" ? " — it is no longer where it was." : "."), "error");
   }, function () { showToast("Could not open “" + name + "”.", "error"); });
@@ -403,7 +405,7 @@ export function openGalleryLink(rowId, slot, key) {
   if (link.href) {
     var href = safeHref(link.href);
     if (!href || !/^https?:\/\//i.test(href)) return;
-    if (S.DESKTOP && S.DESKTOP.openExternal) { S.DESKTOP.openExternal(href); return; }
+    if (runningOnDesktop() && desktopPort().openExternal) { desktopPort().openExternal(href); return; }
     var win = window.open(href, "_blank", "noopener");
     if (win) win.opener = null;
     return;

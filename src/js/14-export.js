@@ -42,6 +42,8 @@ import { autoSaveWhere } from "../application/save/autosave.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
 import { slugify } from "../../shared/text.js";
+import { desktopPort } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 function saveKind(opts) {
   if (opts.saveAs) return "saveAs";
@@ -64,8 +66,8 @@ var NOT_AUTOSAVING = Object.freeze({ kind: "refused", reason: "Autosave is off, 
 
 function saveDialogs(slug) {
   return {
-    desktop: S.DESKTOP ? function () {
-      return S.DESKTOP.saveFileDialog({
+    desktop: runningOnDesktop() ? function () {
+      return desktopPort().saveFileDialog({
         suggestedName: slug + ".md",
         filters: [
           { name: "Markdown script", extensions: ["md"] },

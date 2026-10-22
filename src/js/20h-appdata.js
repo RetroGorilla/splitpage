@@ -26,6 +26,8 @@ import {
 import { cappedName } from "../core/document/text-policy.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 import { setCommentSort } from "../application/comment-sort.ts";
+import { desktopPort } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 var APPDATA_FORMAT = "splitpage-app-data";
 var APPDATA_VERSION = 1;
@@ -45,7 +47,7 @@ function appDataReadJson(key, fallback) {
 }
 
 function appDataVersionString() {
-  if (S.DESKTOP && typeof S.DESKTOP.appVersion === "string" && S.DESKTOP.appVersion) return S.DESKTOP.appVersion;
+  if (runningOnDesktop() && typeof desktopPort().appVersion === "string" && desktopPort().appVersion) return desktopPort().appVersion;
   var embedded = typeof readEmbeddedVersion === "function" ? readEmbeddedVersion() : null;
   return embedded || "";
 }

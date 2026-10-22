@@ -45,6 +45,7 @@ import { showToast } from "../legacy/effects-bridge.ts";
 import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
 import { setTagAddingPerson, setTagRenaming } from "../application/tag-panel-state.ts";
 import { startupReady } from "../legacy/startup-bridge.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 export var prompterMirror;
 export var prompterFlip;
@@ -601,24 +602,24 @@ var VOICE_BROWSER_LABEL = "Open in browser to use Follow My Voice";
 var VOICE_DESKTOP_UNAVAILABLE = "Follow My Voice isn't available in this desktop app — it works in the browser version.";
 
 function desktopListens() {
-  return !!S.DESKTOP && desktopVoiceAvailable();
+  return runningOnDesktop() && desktopVoiceAvailable();
 }
 
 function voiceIdleLabel() {
-  if (S.DESKTOP && !desktopListens() && canOpenPrompterInBrowser()) return VOICE_BROWSER_LABEL;
+  if (runningOnDesktop() && !desktopListens() && canOpenPrompterInBrowser()) return VOICE_BROWSER_LABEL;
   return VOICE_IDLE_LABEL;
 }
 
 export function updateVoiceAvailability() {
   var btn = document.getElementById("pp-voice");
   if (!btn) return;
-  if (S.DESKTOP && !desktopVoiceKnown()) {
+  if (runningOnDesktop() && !desktopVoiceKnown()) {
     btn.disabled = true;
     loadDesktopVoice().then(updateVoiceAvailability);
     return;
   }
   if (!voiceIsFollowing()) setVoiceLabel(btn, voiceIdleLabel());
-  if (S.DESKTOP) {
+  if (runningOnDesktop()) {
     if (desktopListens()) {
       btn.disabled = false;
       if (!voiceIsFollowing() && !voiceStarting) setVoiceStatus("", "");
@@ -749,7 +750,7 @@ var DESKTOP_VOICE_WARNINGS = {
 var CLEARABLE_VOICE_WARNINGS = ["no-signal", "too-quiet", "blocked-all", "blocked-desktop"];
 
 export async function startVoiceFollow() {
-  var desktop = !!S.DESKTOP;
+  var desktop = runningOnDesktop();
   if (desktop && !desktopVoiceKnown()) await loadDesktopVoice();
   if (desktop && !desktopListens()) {
     if (!canOpenPrompterInBrowser()) { setVoiceStatus(VOICE_DESKTOP_UNAVAILABLE, ""); return; }
@@ -936,7 +937,7 @@ var PROMPTER_TOKEN_RE = /^[0-9a-f]{64}$/;
 var HOSTED_LAUNCH_WAIT_MS = 5 * 60 * 1000;
 
 function readPrompterLaunch() {
-  if (S.DESKTOP) return null;
+  if (runningOnDesktop()) return null;
   var wanted;
   try { wanted = new URLSearchParams(location.search).get("teleprompter") === "1"; } catch (e) { wanted = false; }
   var m = /(?:^#|&)script=([0-9a-f]{64})(?=&|$)/.exec(location.hash || "");

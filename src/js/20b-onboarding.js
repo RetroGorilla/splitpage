@@ -1,4 +1,3 @@
-import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { loadLastFileHandle } from "./00-prelude.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
@@ -12,6 +11,8 @@ import { preferences } from "../legacy/preferences-bridge.ts";
 import { draftResume } from "../legacy/recovery-bridge.ts";
 import { seedCheckPasses } from "../legacy/seed-check.ts";
 import { joinErrorText } from "../../shared/server-links.js";
+import { desktopPort } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 
 var onboardStep = 1;
@@ -139,7 +140,7 @@ function renderLauncherInfo(info) {
 async function loadLauncherInfo() {
   if (launcherInfoState !== "unloaded") return;
   launcherInfoState = "loading";
-  if (S.DESKTOP) {
+  if (runningOnDesktop()) {
     launcherInfoState = "done";
     renderLauncherInfoBody(desktopInstallHtml());
     return;
@@ -248,12 +249,12 @@ async function onboardEligibleForAutoShow() {
   if (!seedCheckPasses()) return false;
   if (preferences().onboarding()) return false;
   if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
-  if (S.DESKTOP && draftResume().restorePending()) return false;
+  if (runningOnDesktop() && draftResume().restorePending()) return false;
   if (home.kind === "server" || home.kind === "file") return false;
-  if (S.DESKTOP) {
-    if (!S.DESKTOP.firstTabOfLaunch || S.DESKTOP.hadPriorSession ||
-        (S.DESKTOP.launchIntent && S.DESKTOP.launchIntent.type !== "blank") ||
-        S.DESKTOP.hasDraftToRestore) return false;
+  if (runningOnDesktop()) {
+    if (!desktopPort().firstTabOfLaunch || desktopPort().hadPriorSession ||
+        (desktopPort().launchIntent && desktopPort().launchIntent.type !== "blank") ||
+        desktopPort().hasDraftToRestore) return false;
   } else {
     var handle;
     try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }

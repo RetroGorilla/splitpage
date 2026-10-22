@@ -27,6 +27,8 @@ import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/his
 import { imageDims, isSha256Hex, refsIn, sniffImageMime } from "../../shared/blob-policy.js";
 import { makeId, mintDocId } from "../adapters/identity/ids.ts";
 import { checksumText } from "../../shared/text.js";
+import { desktopPort } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 export {
   HISTORY_OLDER_TTL_MS,
   HISTORY_PER_DOC,
@@ -353,7 +355,7 @@ var desktopHistoryBackend = {
       return Promise.resolve({ stored: false, code: "invalid" });
     }
     return historyDesktopCall(function () {
-      return S.DESKTOP.historyPut(docId, clean, stateJson, { protect: historyProtectedList() });
+      return desktopPort().historyPut(docId, clean, stateJson, { protect: historyProtectedList() });
     }, { stored: false, code: "timeout" }, { stored: false, code: "invalid" }).then(function (r) {
       if (!r || typeof r !== "object") return { stored: false, code: "io" };
       if (r.stored === false) return r;
@@ -368,7 +370,7 @@ var desktopHistoryBackend = {
     var empty = { entries: [], older: [], olderExpiresAt: null };
     var failed = (opts && opts.strict) ? null : empty;
     return historyDesktopCall(function () {
-      return S.DESKTOP.historyList(docId || null);
+      return desktopPort().historyList(docId || null);
     }, failed, failed).then(function (r) {
       if (!r || typeof r !== "object") return failed;
       if (opts && opts.strict && docId && !Array.isArray(r.entries)) return null;
@@ -390,7 +392,7 @@ var desktopHistoryBackend = {
       ? { older: true, protect: historyProtectedList() }
       : { docId: bucket, protect: historyProtectedList() };
     return historyDesktopCall(function () {
-      return S.DESKTOP.historyGet(query, id);
+      return desktopPort().historyGet(query, id);
     }, null, null).then(function (r) {
       if (!r || typeof r !== "object" || typeof r.stateJson !== "string") return null;
       var meta = historyStripMeta(r.meta);
@@ -402,7 +404,7 @@ var desktopHistoryBackend = {
 
   copy: function (from, to) {
     return historyDesktopCall(function () {
-      return S.DESKTOP.historyCopy(from, to);
+      return desktopPort().historyCopy(from, to);
     }, { ok: false, copied: 0, code: "timeout" }, { ok: false, copied: 0, code: "invalid" })
       .then(function (r) {
         if (!r || typeof r !== "object") return { ok: false, copied: 0, code: "io" };
@@ -412,7 +414,7 @@ var desktopHistoryBackend = {
 
   touch: function (docId, title) {
     return historyDesktopCall(function () {
-      return S.DESKTOP.historyTouch(docId, title);
+      return desktopPort().historyTouch(docId, title);
     }, null, null);
   },
 
@@ -425,7 +427,7 @@ var desktopHistoryBackend = {
       var meta = e && typeof e === "object" ? sanitizeHistoryMeta(e.meta) : null;
       if (!meta || typeof e.stateJson !== "string") return next();
       return historyDesktopCall(function () {
-        return S.DESKTOP.historyPut(null, meta, e.stateJson, { protect: historyProtectedList(), older: true });
+        return desktopPort().historyPut(null, meta, e.stateJson, { protect: historyProtectedList(), older: true });
       }, { ok: false, code: "timeout" }, { ok: false, code: "invalid" }).then(function (r) {
         if (!r || typeof r !== "object") r = { ok: false, code: "io" };
         if (r.ok) {
@@ -444,7 +446,7 @@ var desktopHistoryBackend = {
 
   rawDocIds: function () {
     return historyDesktopCall(function () {
-      return S.DESKTOP.historyListDocs();
+      return desktopPort().historyListDocs();
     }, null, null).then(function (r) {
       if (!Array.isArray(r)) return null;
       var ids = [];
@@ -458,7 +460,7 @@ var desktopHistoryBackend = {
 
   rawDoc: function (bucket) {
     return historyDesktopCall(function () {
-      return S.DESKTOP.historyListDocs();
+      return desktopPort().historyListDocs();
     }, null, null).then(function (r) {
       if (!Array.isArray(r)) return null;
       var hit = null;
@@ -489,7 +491,7 @@ function historyUseMemory() {
 
 function resolveHistoryBackend() {
   if (historyForced === "memory") return Promise.resolve(historyUseMemory());
-  if (!historyForced && S.DESKTOP && typeof S.DESKTOP.historyPut === "function") {
+  if (!historyForced && runningOnDesktop() && typeof desktopPort().historyPut === "function") {
     historyBackendNameNow = "desktop";
     return Promise.resolve(desktopHistoryBackend);
   }

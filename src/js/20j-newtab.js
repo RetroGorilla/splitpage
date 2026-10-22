@@ -24,6 +24,8 @@ import { showToast } from "../legacy/effects-bridge.ts";
 import { draftResume } from "../legacy/recovery-bridge.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
 import { startupReady } from "../legacy/startup-bridge.ts";
+import { desktopPort } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 var newTabPageShown = false;
 
@@ -87,7 +89,7 @@ function adoptNewDocument(next, reason) {
   updateIdentityChip();
   updateSaveStatus();
   if (typeof syncDocIdentity === "function") syncDocIdentity();
-  if (S.DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
+  if (runningOnDesktop() && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
   closeNewTabPage();
 }
 
@@ -191,7 +193,7 @@ function updateDesktopPitch() {
 }
 
 function recentsSupported() {
-  return !!(S.DESKTOP && typeof S.DESKTOP.listRecents === "function");
+  return !!(runningOnDesktop() && typeof desktopPort().listRecents === "function");
 }
 
 function formatRecentWhen(at) {
@@ -266,7 +268,7 @@ async function refreshRecents() {
   updateDesktopPitch();
   if (!recentsSupported()) { renderContinue(null); return; }
   var entries;
-  try { entries = await S.DESKTOP.listRecents(); } catch (e) { return; }
+  try { entries = await desktopPort().listRecents(); } catch (e) { return; }
   renderRecents(Array.isArray(entries) ? entries : []);
 }
 
@@ -274,12 +276,12 @@ async function openRecent(fileId) {
   if (!fileId || !recentsSupported()) return;
   var entry;
   try {
-    var r = await S.DESKTOP.routeOpen({ kind: "file", fileId: fileId });
+    var r = await desktopPort().routeOpen({ kind: "file", fileId: fileId });
     if (!r || r.where !== "this-tab") {
       refreshRecents();
       return;
     }
-    entry = await S.DESKTOP.readFile(fileId);
+    entry = await desktopPort().readFile(fileId);
   } catch (e) {
     showToast("That file isn't there any more — it may have been moved or deleted. " +
       "Use × to take it off this list.", "warn");
@@ -291,16 +293,16 @@ async function openRecent(fileId) {
 }
 
 async function forgetRecent(fileId) {
-  if (!fileId || !recentsSupported() || typeof S.DESKTOP.removeRecent !== "function") return;
+  if (!fileId || !recentsSupported() || typeof desktopPort().removeRecent !== "function") return;
   var entries;
-  try { entries = await S.DESKTOP.removeRecent(fileId); } catch (e) { return; }
+  try { entries = await desktopPort().removeRecent(fileId); } catch (e) { return; }
   renderRecents(Array.isArray(entries) ? entries : []);
 }
 
 async function clearRecents() {
-  if (!recentsSupported() || typeof S.DESKTOP.clearRecents !== "function") return;
+  if (!recentsSupported() || typeof desktopPort().clearRecents !== "function") return;
   var entries;
-  try { entries = await S.DESKTOP.clearRecents(); } catch (e) { return; }
+  try { entries = await desktopPort().clearRecents(); } catch (e) { return; }
   renderRecents(Array.isArray(entries) ? entries : []);
 }
 
@@ -308,11 +310,11 @@ async function newTabEligibleForAutoShow() {
   if (newTabSuppressed()) return false;
   if (!seedCheckPasses()) return false;
   if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
-  if (S.DESKTOP && draftResume().restorePending()) return false;
+  if (runningOnDesktop() && draftResume().restorePending()) return false;
   if (home.kind === "server" || home.kind === "file") return false;
-  if (S.DESKTOP) {
-    if ((S.DESKTOP.launchIntent && S.DESKTOP.launchIntent.type !== "blank") ||
-        S.DESKTOP.hasDraftToRestore) return false;
+  if (runningOnDesktop()) {
+    if ((desktopPort().launchIntent && desktopPort().launchIntent.type !== "blank") ||
+        desktopPort().hasDraftToRestore) return false;
   } else {
     var handle;
     try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }

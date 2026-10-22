@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
+import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 
 await bootApp();
 
@@ -36,9 +37,8 @@ function desktopHandle(id, name) {
 }
 
 async function withDesktop(fn) {
-  const was = S.DESKTOP;
-  S.DESKTOP = fakeDesktop;
-  try { return await fn(); } finally { S.DESKTOP = was; }
+  useDesktopForTest(fakeDesktop);
+  try { return await fn(); } finally { restoreDesktop(); }
 }
 
 async function openCleanFile(id, title) {

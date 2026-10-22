@@ -1,6 +1,4 @@
 export const S = {
-  DESKTOP: undefined,
-
   baseState: undefined,
 
   docIdWrittenOut: undefined,
