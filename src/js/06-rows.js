@@ -2,21 +2,20 @@ import { S } from "./_state.js";
 import { internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { safeHref, safeId, storedHtmlFromDom } from "./04-richtext.js";
-import { render, syncFieldFromDom } from "./05-render.js";
+import { render } from "./05-render.js";
 import { armDeleteButton, disarmDeleteButton } from "../features/rows/delete-button.ts";
 import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
-import { galleryEdit } from "./05e-gallery-overlay.js";
 import { isBlankScene } from "./05g-scene-clip.js";
 import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
 import { breakUndoCoalescing } from "./12a-undo.js";
-import { placeCaretAtTextOffset } from "./19-writer.js";
+import { placeCaretAtTextOffset } from "../features/editing/caret.ts";
 import { makeId } from "../adapters/identity/ids.ts";
-import { addSceneCommand, deleteSceneCommand, moveSceneCommand, swapScenesCommand } from "../application/commands/rows.ts";
+import { addSceneCommand, deleteSceneCommand, swapScenesCommand } from "../application/commands/rows.ts";
 import { splitSceneCommand, textCut } from "../application/commands/split-join.ts";
 import { REVIEW_ONLY, onDocumentReplaced, readSession, runCommand, sessionStamps, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
-import { rowDrag } from "../legacy/editor-bridge.ts";
+import { cellEditing, rowDrag } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import {
   addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
@@ -58,7 +57,7 @@ export function splitRowFieldCore(cellEl) {
   var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
   if (readSession(function (doc) { return rowIndexOf(doc, id); }) === -1 || (field !== "visualText" && field !== "audioText")) return null;
-  syncFieldFromDom(cellEl);
+  cellEditing().sync(cellEl);
   var sel = cellSelection(cellEl);
   if (!sel) return null;
   breakUndoCoalescing();
@@ -157,11 +156,6 @@ export function updateDragScroll(clientX, clientY) {
   }
 }
 
-export function moveRowTo(id, targetId, after) {
-  if (!runRowCommand(moveSceneCommand(id, targetId, !!after))) return;
-  render();
-}
-
 function deleteRow(id) {
   if (!runRowCommand(deleteSceneCommand(id))) return;
   render();
@@ -179,7 +173,7 @@ export function moveRow(id, dir) {
 export function armDelete(btn, id) {
   var idx = readSession(function (doc) { return rowIndexOf(doc, id); });
   var rowEl = document.querySelector('#rows .row[data-id="' + safeId(id) + '"]');
-  if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(syncFieldFromDom);
+  if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(function (cellEl) { cellEditing().sync(cellEl); });
   if (idx !== -1 && isBlankScene(S.state, S.state.rows[idx])) {
     deleteConfirmation().disarm("row");
     deleteRow(id);
@@ -320,7 +314,7 @@ export function handleImageFile(rowId, file, slot) {
     if (!rec) throw new Error("not a picture the registry takes");
     persist([rec.sha256]);
     var replacing = typeof slot === "number";
-    galleryEdit(rowId, "Picture " + (replacing ? "replaced in" : "added to") + " scene " + (idx + 1), function (row) {
+    cellEditing().editGallery(rowId, "Picture " + (replacing ? "replaced in" : "added to") + " scene " + (idx + 1), function (row) {
       if (replacing && !replaceGalleryPicture(row, slot, rec, file.name)) return false;
       if (!replacing) addGalleryPicture(row, rec, file.name);
       return true;
@@ -329,13 +323,13 @@ export function handleImageFile(rowId, file, slot) {
 }
 
 export function removeImage(rowId, slot) {
-  galleryEdit(rowId, "Picture removed", function (row) {
+  cellEditing().editGallery(rowId, "Picture removed", function (row) {
     return removeGallerySlot(row, slot || 0);
   });
 }
 
 export function removeImageLink(rowId, slot, key) {
-  galleryEdit(rowId, "Video link removed", function (row) { return removeGalleryLink(row, slot, key); });
+  cellEditing().editGallery(rowId, "Video link removed", function (row) { return removeGalleryLink(row, slot, key); });
 }
 
 var videoFileTokens = {};

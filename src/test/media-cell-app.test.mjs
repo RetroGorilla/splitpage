@@ -12,7 +12,7 @@ const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
-const { syncFieldFromDom } = await import("../js/05-render.js");
+const { cellEditing } = await import("../legacy/editor-bridge.ts");
 const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { sanitizeHtml } = await import("../legacy/richtext.ts");
@@ -159,7 +159,7 @@ test("a stored media cell is a fixed point of the sanitiser and of a second sync
   assert.equal(sanitizeHtml(stored), stored);
   const seq = saveChanges();
   el.innerHTML = stored;
-  syncFieldFromDom(el);
+  cellEditing().sync(el);
   assert.equal(row("r1").audioText, stored);
   assert.equal(saveChanges(), seq);
 });

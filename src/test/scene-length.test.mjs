@@ -8,11 +8,11 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import {
   __init as initSceneStatus,
-  estimatedSeconds,
   normalizeSceneLength,
-  rowSeconds,
   totalSeconds
 } from "../js/01-scene-status.js";
+import { estimatedSeconds, rowSeconds } from "../core/production/timing.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
 import { __init as initTags } from "../js/07-production-tags.js";
@@ -85,8 +85,8 @@ test("with nothing set, a scene's length is its Audio words at the reading speed
   const s = doc([{ id: "r1", audioText: TEN }]);
   withState(s, () => {
     assert.equal(hasSetLength(s.rows[0]), false);
-    assert.equal(rowSeconds(s.rows[0]), 4);
-    assert.equal(estimatedSeconds(s.rows[0]), 4);
+    assert.equal(rowSeconds(s.rows[0], s, productionReaders), 4);
+    assert.equal(estimatedSeconds(s.rows[0], s, productionReaders), 4);
   });
 });
 
@@ -98,8 +98,8 @@ test("a set length replaces the estimate outright, shorter or longer", () => {
     { id: "r4", audioText: TEN }
   ]);
   withState(s, () => {
-    assert.deepEqual(s.rows.map(rowSeconds), [2, 30, 12, 4]);
-    assert.equal(estimatedSeconds(s.rows[0]), 4, "the estimate is still there to compare with");
+    assert.deepEqual(s.rows.map((row) => rowSeconds(row, s, productionReaders)), [2, 30, 12, 4]);
+    assert.equal(estimatedSeconds(s.rows[0], s, productionReaders), 4, "the estimate is still there to compare with");
     assert.equal(totalSeconds(), 48);
   });
 });
@@ -108,14 +108,14 @@ test("a set length of 0 is a length, not the estimate", () => {
   const s = doc([{ id: "r1", audioText: TEN, lengthSeconds: 0 }]);
   withState(s, () => {
     assert.equal(hasSetLength(s.rows[0]), true);
-    assert.equal(rowSeconds(s.rows[0]), 0);
+    assert.equal(rowSeconds(s.rows[0], s, productionReaders), 0);
   });
 });
 
 test("the reading speed moves an estimate and never a set length", () => {
   const s = doc([{ id: "r1", audioText: TEN }, { id: "r2", audioText: TEN, lengthSeconds: 9 }]);
   s.wordsPerMinute = 300;
-  withState(s, () => assert.deepEqual(s.rows.map(rowSeconds), [2, 9]));
+  withState(s, () => assert.deepEqual(s.rows.map((row) => rowSeconds(row, s, productionReaders)), [2, 9]));
 });
 
 test("migrateRows keeps whole seconds from 0 to a day, rounds, and drops the rest", () => {
@@ -140,7 +140,7 @@ test("migrateRows keeps whole seconds from 0 to a day, rounds, and drops the res
 test("an older file has no key and reads as the estimate", () => {
   const s = doc([{ id: "r1", audioText: TEN }]);
   assert.ok(!("lengthSeconds" in s.rows[0]));
-  withState(s, () => assert.equal(rowSeconds(s.rows[0]), 4));
+  withState(s, () => assert.equal(rowSeconds(s.rows[0], s, productionReaders), 4));
 });
 
 test(".splitpage and .md both carry it, and read it back", async () => {
