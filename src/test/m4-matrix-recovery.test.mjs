@@ -18,6 +18,7 @@ import {
   rightToday
 } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
+import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
 
 await bootApp();
 
@@ -274,7 +275,7 @@ rightToday("B4", "quota pauses crash recovery with a notice and backs off 5, 10,
   assert.equal(drafts().status().paused, false, "the pause ended with the first write that landed");
   assert.equal(toasts().filter((x) => /Crash recovery is working again/.test(x)).length, 1);
   assert.equal(JSON.parse((await idb.store.get(draftKey("srv-q"))).stateJson).rows[0].audioText, "Second edit, while paused.", "the draft holds the latest work");
-  assert.equal(S.dirty, true, "the document stayed unsaved throughout");
+  assert.equal(unsavedChanges(), true, "the document stayed unsaved throughout");
 }));
 
 rightToday("B4b", "a change noted while a retry is in flight does not bring the next retry forward from its backoff", (t) => cleanly(async () => {
@@ -307,7 +308,7 @@ rightToday("B5", "unavailable storage turns browser drafts off quietly, with no 
   typeInto("Typed again.");
   await advance(clock, 120000);
   assert.equal(opens, 1, "storage was not tried again");
-  assert.equal(S.dirty, true, "the document is unaffected");
+  assert.equal(unsavedChanges(), true, "the document is unaffected");
   browserStore();
   assert.equal(drafts().browser.status().off, false, "a working store turns them back on");
 }));
@@ -396,7 +397,7 @@ rightToday("B8", "restoring a browser draft onto a server document, or an unsave
     assert.equal(await openServerDoc("srv-r"), true);
     assert.equal(S.state.rows[0].audioText, "Unsaved in the browser.", "the draft was resumed");
     assert.equal(S.state.rows[1].audioText, "Changed on the server.");
-    assert.equal(S.dirty, true, "the resumed work is unsaved");
+    assert.equal(unsavedChanges(), true, "the resumed work is unsaved");
     await advance(clock, 40000);
     assert.deepEqual(sent.requests.filter((r) => r.method !== "GET").map((r) => r.method + " " + r.url), [], "nothing was written to the server");
 
@@ -404,11 +405,11 @@ rightToday("B8", "restoring a browser draft onto a server document, or an unsave
     const outcome = await applyTakenDraft({ header: { origin: { kind: "untitled" }, docIdWrittenOut: false }, stateJson: JSON.stringify(mine) });
     assert.equal(outcome, "applied");
     assert.equal(S.state.rows[0].audioText, "Unsaved in the browser.", "the recovered work is on screen");
-    assert.equal(S.dirty, true, "and unsaved");
+    assert.equal(unsavedChanges(), true, "and unsaved");
     await advance(clock, 40000);
     assert.deepEqual(sent.requests.filter((r) => r.method !== "GET").map((r) => r.method + " " + r.url), [], "still nothing written");
     assert.equal(homeModule.home.kind, "none", "no file or server destination was set");
-    assert.equal(exportModule.autoSaveIdleTimer, null, "no autosave is armed");
+    assert.equal(autoSavePolicy().pending(), false, "no autosave is armed");
   } finally {
     S.serverMode.available = available;
     uninstall();
@@ -433,7 +434,7 @@ rightToday("B9", "a revoked link keeps the draft as an unsaved local copy and se
     assert.equal(await openServerDoc("srv-gone"), false);
     await until(() => !drafts().restorePending(), "the restore settled");
     assert.equal(S.state.rows[0].audioText, "Kept for the user.", "the draft's work is open");
-    assert.equal(S.dirty, true, "as unsaved work");
+    assert.equal(unsavedChanges(), true, "as unsaved work");
     assert.equal(homeModule.home.kind, "none", "with no server destination");
     assert.notEqual(S.state.docId, idOf("5"), "and its own new identity");
     assert.deepEqual(sent.requests.filter((r) => r.method !== "GET").map((r) => r.method + " " + r.url), [], "no write went to the server");
@@ -519,12 +520,12 @@ rightToday("B11", "after a restart, the unsaved work left by the closed session 
     assert.equal(outcome, "applied");
     assert.equal(S.state.title, "Left behind");
     assert.equal(S.state.rows[0].audioText, "Typed before the crash.");
-    assert.equal(S.dirty, true, "it is marked unsaved");
+    assert.equal(unsavedChanges(), true, "it is marked unsaved");
     assert.ok(toasts().some((x) => /Restored your unsaved script/.test(x) && /save it somewhere/.test(x)), "the user is told it was never saved");
     const gone = await applyTakenDraft({ header: { origin: { kind: "file", fileName: "gone.splitpage" }, docIdWrittenOut: true }, stateJson: JSON.stringify(left) });
     assert.equal(gone, "untitled-copy", "a draft of a file that is no longer there opens as an unsaved copy");
     assert.equal(homeModule.home.kind, "none");
-    assert.equal(S.dirty, true);
+    assert.equal(unsavedChanges(), true);
     assert.deepEqual(sent.requests, [], "nothing was sent anywhere");
   } finally {
     uninstall();

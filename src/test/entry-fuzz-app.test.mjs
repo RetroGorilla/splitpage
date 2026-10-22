@@ -6,6 +6,7 @@ import {
   TABLE_304, chance, judge, pick, rawObject, seeded, table304Document, text, upTo
 } from "../../tests/application/raw-inputs.ts";
 import { cloneState } from "../core/document/clone.ts";
+import { confirmSavedNow, unsavedChanges } from "../legacy/save-bridge.ts";
 
 await bootApp();
 
@@ -341,13 +342,13 @@ test("a comment createdAt whose toString is not a function migrates to null, so 
   ];
   const epoch = session.epoch();
   heard.length = 0;
-  S.dirty = false;
+  confirmSavedNow();
   applyMerge({ base: cloneState(before), mine: cloneState(before), theirs: theirs, source: "server-resume", report: true, noAutoSave: true });
   assert.notEqual(S.state, before);
   assert.equal(held(), S.state);
   assert.equal(heard[0], "recovery");
   assert.equal(session.epoch(), epoch + 1);
-  assert.equal(S.dirty, true, "the merge was reported, so it is marked unsaved");
+  assert.equal(unsavedChanges(), true, "the merge was reported, so it is marked unsaved");
   assert.equal(S.state.comments.find((c) => c.id === "c2").createdAt, null);
   assert.deepEqual(judge(S.state, migrate, allowed).problems, []);
   settle(startingDocument("After half"));
@@ -408,11 +409,11 @@ test("applyMerge refuses a theirs or a mine that is no document, and nothing cha
       const epoch = session.epoch(), gen = session.generation();
       const undo = mergeUndo().last();
       heard.length = 0;
-      S.dirty = false;
+      confirmSavedNow();
       const out = applyMerge(opts);
       unchangedBy(where, start, epoch, gen);
       assert.deepEqual([out.state, out.result, out.snapshot], [S.state, null, null], where + ": answers the document it kept");
-      assert.equal(S.dirty, false, where + ": not marked unsaved");
+      assert.equal(unsavedChanges(), false, where + ": not marked unsaved");
       assert.equal(mergeUndo().last(), undo, where + ": no merge to undo");
       assert.deepEqual(S.state.rows.map((row) => row.id), ["r1", "r2"], where + ": both scenes stay");
     }

@@ -19,6 +19,7 @@ export interface StartupPorts<Draft, Loaded extends WrittenMarks, Doc, Report> {
 
 export interface Startup {
   readonly openDocument: () => Promise<unknown>;
+  readonly ready: () => Promise<unknown> | null;
   readonly finish: () => void;
   readonly dispose: () => void;
 }
@@ -32,6 +33,7 @@ export function beginStartup<Draft, Loaded extends WrittenMarks, Doc, Report>(
   let disposed = false;
   let opened = false;
   let finished = false;
+  let opening: Promise<unknown> | null = null;
   const disposers: (() => void)[] = [];
   const current = (): boolean => !disposed;
   const draft = takeDesktopDraft(ports.draft);
@@ -40,11 +42,13 @@ export function beginStartup<Draft, Loaded extends WrittenMarks, Doc, Report>(
     openDocument: () => {
       if (opened) throw new Error("the initial document is already opening");
       opened = true;
-      return openInitialDocument(ports.document, ports.desktop, current).then(() => {
+      opening = openInitialDocument(ports.document, ports.desktop, current).then(() => {
         if (disposed) return undefined;
         return draft.resume(current);
       });
+      return opening;
     },
+    ready: () => opening,
     finish: () => {
       if (finished) throw new Error("startup has already finished");
       finished = true;

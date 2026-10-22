@@ -1,6 +1,7 @@
 import "./_dom.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import { startupReady } from "../legacy/startup-bridge.ts";
 
 const frames = new Map();
 let nextFrame = 1;
@@ -23,7 +24,6 @@ function runFrames(n) {
 }
 
 const { bootApp, closeApp, rewireApp } = await import("./_app-boot.mjs");
-const { S } = await import("../js/_state.js");
 const { rowDrag } = await import("../legacy/editor-bridge.ts");
 await bootApp();
 const app = await import("../bootstrap/app.ts");
@@ -63,7 +63,7 @@ test("stopping the app mid edge-drag ends the drag: the auto-scroll stops, the m
   assert.equal(scrolled, 2, "nothing scrolls after dispose");
 
   app.startApp(await rewireApp());
-  await S.initialStateReady;
+  await startupReady();
   assert.equal(rowDrag().dragging(), null, "the remount inherits no dragged scene");
   document.body.dispatchEvent(new window.MouseEvent("dragover", { bubbles: true, cancelable: true, clientX: 10, clientY: 2 }));
   assert.equal(frames.size, 0, "an edge dragover with no drag does not scroll");

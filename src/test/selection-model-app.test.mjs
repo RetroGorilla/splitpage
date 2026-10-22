@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { cloneState } from "../core/document/clone.ts";
+import { unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -80,7 +81,7 @@ function observe(run) {
   const generation = session.generation(), sizes = undoSizes();
   const value = run();
   flushEdits();
-  return { value: value, generation: session.generation() - generation, undo: undoSizes().undo - sizes.undo, dirty: S.dirty };
+  return { value: value, generation: session.generation() - generation, undo: undoSizes().undo - sizes.undo, dirty: unsavedChanges() };
 }
 
 const NO_EDIT = { generation: 0, undo: 0, dirty: false };

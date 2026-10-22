@@ -24,6 +24,7 @@ import {
   useBrowserDraftFactory
 } from "../legacy/recovery-bridge.ts";
 import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
+import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 import { applyStashedWork } from "./14-export.js";
 import {
   adoptProjectState,
@@ -253,8 +254,9 @@ function captureAndSendDraft(keepClean) {
   if (draftResume().restorePending()) { draftSchedule.keepPending(); return Promise.resolve(null); }
   if (draftInFlight) { draftSchedule.keepPending(); return draftInFlight; }
 
-  var keepCleanFile = !S.dirty && keepClean === true && !!S.DESKTOP && draftOriginOf().kind === "file";
-  if (!S.dirty && !keepCleanFile) {
+  var unsaved = unsavedChanges();
+  var keepCleanFile = !unsaved && keepClean === true && !!S.DESKTOP && draftOriginOf().kind === "file";
+  if (!unsaved && !keepCleanFile) {
     draftSchedule.dropPending();
     if (!draftOnDisk || !draftBackendCanDiscard()) return Promise.resolve(null);
     var discardSeq = ++draftSeq;
@@ -278,7 +280,7 @@ function captureAndSendDraft(keepClean) {
   }
   var signature = draftOriginSignature(origin);
   if ((draftOnDisk || !keepCleanFile) &&
-      S.editSeq === draftSentEditSeq && draftSentBase === S.baseState && signature === draftSentSignature) {
+      saveChanges() === draftSentEditSeq && draftSentBase === S.baseState && signature === draftSentSignature) {
     draftSchedule.dropPending();
     return Promise.resolve(null);
   }
@@ -295,7 +297,7 @@ function captureAndSendDraft(keepClean) {
   var elapsed = Date.now() - startedAt;
   draftSchedule.setSlow(stateJson.length > draftTiming.largeBytes || elapsed > draftTiming.slowStringifyMs);
 
-  var editSeqAtCapture = S.editSeq;
+  var editSeqAtCapture = saveChanges();
   var baseAtCapture = S.baseState;
   var sendBase = S.baseState !== draftSentBase;
   var baseTextCache = null;
@@ -874,7 +876,7 @@ export function armBrowserServerDraft(docId) {
 
 export function offerBrowserDraftAfterLinkOff(docId) {
   var resume = draftResume();
-  if (S.DESKTOP || browserDraftsOff || resume.restorePending() || onServerDoc() || S.dirty) return Promise.resolve(false);
+  if (S.DESKTOP || browserDraftsOff || resume.restorePending() || onServerDoc() || unsavedChanges()) return Promise.resolve(false);
   var base = draftBaseOf(conn.serverUrl, location.href);
   if (!base) return Promise.resolve(false);
   var store = browserDraftStore();
@@ -894,7 +896,7 @@ export function offerBrowserDraftAfterLinkOff(docId) {
   }).then(function (pick) {
     return pick ? store.get(pick.key) : null;
   }).then(function (rec) {
-    if (!rec || onServerDoc() || S.dirty || resume.restorePending()) return false;
+    if (!rec || onServerDoc() || unsavedChanges() || resume.restorePending()) return false;
     var mine = draftMigrate(rec.stateJson);
     if (!mine) return false;
     var t = takenFromBrowserDraft(rec, rec.key);

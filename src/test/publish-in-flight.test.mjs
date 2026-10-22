@@ -10,8 +10,8 @@ const { setHome } = homeMod;
 const { publishToServer, publishAndCopyShareLink, saveToServer } = await import("../js/13-hosted.js");
 const { setBaseState } = await import("../js/03-sync.js");
 const { markDirty, clearDirty } = await import("../js/12-dirty-toast.js");
-const { setAutoSaveEnabled, autoSaveTiming, legacySavePorts } = await import("../js/14-export.js");
-const { startSaves } = await import("../legacy/save-bridge.ts");
+const { setAutoSaveEnabled, legacySavePorts } = await import("../js/14-export.js");
+const { autoSavePolicy, noteSaveChange, startSaves, unsavedChanges } = await import("../legacy/save-bridge.ts");
 const { NO_DESTINATION, documentTransitions, startTransitions } = await import("../legacy/transition-bridge.ts");
 const { documentIdentityPort, liveDocumentPort } = await import("../js/02b-doc-id.js");
 const { documentDestinationPort } = await import("../js/03-sync.js");
@@ -26,7 +26,7 @@ startTransitions({ live: liveDocumentPort, destination: documentDestinationPort,
 startSaves(legacySavePorts({
   capture: () => Object.freeze({ epoch: 0, docId: S.state && S.state.docId, destination: homeMod.home, destinationGeneration: 0, generation: 0, connection: homeMod.conn, revision: null }),
   stillOwns: (ctx) => ctx.destination === homeMod.home && ctx.docId === (S.state && S.state.docId)
-}));
+}), { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });
 
 dom.window.document.body.innerHTML =
   '<div id="toast-host"></div>' +
@@ -77,7 +77,6 @@ function startOn(state, opts) {
   S.serverMode.available = true;
   documentTransitions().open({ from: { document: state }, reason: "test: the document as opened", destination: NO_DESTINATION, writtenOut: !!opts.written });
   clearDirty();
-  S.editSeq = 0;
   if (opts.dirty) markDirty();
   stubServer();
   stubTimers();
@@ -101,7 +100,7 @@ test("control: an undisturbed publish adopts the server copy and is clean", asyn
   assert.equal(await p, true);
   assert.equal(homeMod.home.kind, "server");
   assert.equal(homeMod.home.id, "server-a");
-  assert.equal(S.dirty, false);
+  assert.equal(unsavedChanges(), false);
   assert.equal(S.baseState.rows[0].audioText, "one");
 });
 
@@ -116,7 +115,7 @@ test("#247: a document opened during the upload keeps its own home, base, id and
   const bHome = setHome("file", { handle: { name: "b.md" }, format: "md", name: "b.md" });
   const bBase = setBaseState(cloneState(b), "test: B as opened");
   S.docIdWrittenOut = true;
-  S.dirty = true;
+  noteSaveChange();
 
   postGate();
   const ok = await p;
@@ -126,7 +125,7 @@ test("#247: a document opened during the upload keeps its own home, base, id and
   assert.equal(S.baseState, bBase, "B's base is untouched");
   assert.equal(S.state, b);
   assert.equal(S.state.docId, DOC_IDS["doc-b"]);
-  assert.equal(S.dirty, true, "B's unsaved work is still unsaved");
+  assert.equal(unsavedChanges(), true, "B's unsaved work is still unsaved");
   assert.equal(S.docIdWrittenOut, true);
   assert.equal(calls.filter((c) => c.method === "PUT").length, 0, "nothing was saved anywhere on B's behalf");
 });
@@ -148,7 +147,7 @@ test("#247: a server document opened during the upload is not re-homed onto the 
   assert.equal(homeMod.home.id, "server-b");
   assert.equal(homeMod.home.rev, 7);
   assert.equal(S.baseState, bBase);
-  assert.equal(S.dirty, false);
+  assert.equal(unsavedChanges(), false);
 });
 
 test("#247: the fork's new id is not put on the document that replaced this one", async () => {
@@ -160,7 +159,7 @@ test("#247: the fork's new id is not put on the document that replaced this one"
   loadTestDocument(b);
   setHome("none");
   setBaseState(cloneState(b), "test: B as opened");
-  S.dirty = true;
+  noteSaveChange();
 
   postGate();
   assert.equal(await p, false);
@@ -201,14 +200,14 @@ test("#248: text typed during the upload stays dirty, and the next save carries 
   assert.equal(await p, true);
 
   assert.equal(homeMod.home.kind, "server", "the publish itself still succeeded");
-  assert.equal(S.dirty, true, "the editor does not claim the newer text is saved");
+  assert.equal(unsavedChanges(), true, "the editor does not claim the newer text is saved");
   assert.equal(S.baseState.rows[0].audioText, "before", "the base is what the server was given");
-  assert.ok(timers.includes(autoSaveTiming.hostedIdle), "an autosave to the new server home is scheduled");
+  assert.ok(timers.includes(autoSavePolicy().timing.hostedIdle), "an autosave to the new server home is scheduled");
 
   assert.equal(await saveToServer(), true);
   const put = calls.filter((c) => c.method === "PUT")[0];
   assert.ok(put, "a PUT went to the server document");
   assert.equal(put.body.state.rows[0].audioText, "typed DURING upload");
   assert.equal(put.body.baseRev, 1, "judged against the rev the publish came back with");
-  assert.equal(S.dirty, false);
+  assert.equal(unsavedChanges(), false);
 });

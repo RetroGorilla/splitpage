@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { createHeldFetch, mockClock } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
+import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
 
 await bootApp();
 
@@ -131,7 +132,7 @@ test("a hosted save that lands after a same-id reopen is not adopted, and the ne
     baseText: textOf(S.baseState.rows[0]),
     shown: textOf(S.state.rows[0]),
     warned: warnToasts().slice(warnedBefore),
-    halted: exportModule.autoSaveHalt
+    halted: autoSavePolicy().halted()
   };
   assert.equal(server.docs.get("srv-a").rev, 2, "the late save reached the server");
 
@@ -311,7 +312,7 @@ test("a plain hosted save adopts its revision and baseline and clears the unsave
 
   assert.equal(homeModule.home.rev, 2, "the revision moved to the saved one");
   assert.equal(textOf(S.baseState.rows[0]), "Saved plainly.", "the baseline is the saved text");
-  assert.equal(S.dirty, false, "the document reads as saved");
+  assert.equal(unsavedChanges(), false, "the document reads as saved");
   assert.deepEqual(warnToasts().slice(warnedBefore), [], "no late-save warning");
   leave();
 });

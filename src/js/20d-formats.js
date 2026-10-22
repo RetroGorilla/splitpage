@@ -18,12 +18,7 @@ import { handleImportFile, parseMarkdownTable } from "./11-import.js";
 import { captureExportDocument, exportDocumentOf } from "./14b-export-kit.js";
 import { audioDirectionsHtml } from "./15-docx.js";
 import {
-  autoSaveEnabled,
-  autoSaveHalt,
-  autoSaveIdleTimer,
-  autoSaveMaxTimer,
   autoSaveTarget,
-  autoSaveTiming,
   flushAutoSave,
   saveDoc,
   toggleAutoSave
@@ -32,6 +27,7 @@ import { mdSceneCellSource, toMarkdownTableDoc } from "./14d-export-text.js";
 import { openProjectFile } from "./18-local-files.js";
 import { cappedLongText, plainText, safeImageSrc } from "../core/document/text-policy.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";
+import { autoSavePolicy } from "../legacy/save-bridge.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
@@ -249,11 +245,11 @@ export function __init() {
     importFile: function (file) { return handleImportFile(file); },
     save: function (opts) { return saveDoc(opts || {}); },
     autosave: {
-      timing: function () { return autoSaveTiming; },
-      enabled: function () { return autoSaveEnabled; },
-      halt: function () { return autoSaveHalt; },
+      timing: function () { return autoSavePolicy().timing; },
+      enabled: function () { return autoSavePolicy().enabled(); },
+      halt: function () { return autoSavePolicy().halted(); },
       target: function () { return autoSaveTarget(); },
-      pending: function () { return !!(autoSaveIdleTimer || autoSaveMaxTimer); },
+      pending: function () { return autoSavePolicy().pending(); },
       toggle: toggleAutoSave,
       flush: flushAutoSave
     },

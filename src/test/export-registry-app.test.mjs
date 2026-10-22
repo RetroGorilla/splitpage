@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { S } from "../js/_state.js";
+import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 await bootApp();
 after(closeApp);
@@ -63,9 +64,9 @@ function exportItems(query) {
 test("one provider and one registration put a new exporter in the menu, the palette, the dialog and Export Again", async () => {
   const demo = demoExporter();
   const docBefore = JSON.stringify(S.state);
-  const dirtyBefore = S.dirty;
+  const dirtyBefore = unsavedChanges();
   const baseBefore = JSON.stringify(S.baseState);
-  const seqBefore = S.editSeq;
+  const seqBefore = saveChanges();
   const idBefore = S.state.docId;
   const files = delivered();
   const dropCard = exportFormats.defineCard(CARD);
@@ -112,9 +113,9 @@ test("one provider and one registration put a new exporter in the menu, the pale
     assert.equal(files.files.length, 4, "the menu entry ran it");
 
     assert.equal(JSON.stringify(S.state), docBefore, "exporting left the document as it was");
-    assert.equal(S.dirty, dirtyBefore);
+    assert.equal(unsavedChanges(), dirtyBefore);
     assert.equal(JSON.stringify(S.baseState), baseBefore, "no baseline was confirmed");
-    assert.equal(S.editSeq, seqBefore);
+    assert.equal(saveChanges(), seqBefore);
     assert.equal(S.state.docId, idBefore);
   } finally {
     closeExportDialog();

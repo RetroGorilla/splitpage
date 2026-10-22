@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { saveChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -74,7 +75,7 @@ function watch() {
 }
 
 function counters() {
-  return { generation: liveSession().generation(), seq: S.editSeq, sizes: undoSizes() };
+  return { generation: liveSession().generation(), seq: saveChanges(), sizes: undoSizes() };
 }
 
 function cutEvent(clipboardData) {
@@ -103,7 +104,7 @@ test("pasting copied scenes is one paste-scenes transaction: one generation, one
   assert.notEqual(pasted, "r1");
   assert.equal(S.state.comments.length, 2, "the comment came with its scene");
   assert.equal(liveSession().generation(), was.generation + 1);
-  assert.equal(S.editSeq, was.seq + 1);
+  assert.equal(saveChanges(), was.seq + 1);
   assert.deepEqual(undoSizes(), { undo: was.sizes.undo + 1, redo: 0 });
   assert.equal(w.seen.length, 1);
   const change = w.seen[0];
@@ -265,7 +266,7 @@ test("a scene paste that fails part way is thrown and leaves the document, the e
   }
   assert.equal(JSON.stringify(S.state), before);
   assert.equal(liveSession().generation(), was.generation);
-  assert.equal(S.editSeq, was.seq);
+  assert.equal(saveChanges(), was.seq);
   assert.deepEqual(undoSizes(), was.sizes);
   assert.deepEqual(w.seen, []);
 });

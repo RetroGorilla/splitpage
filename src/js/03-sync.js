@@ -47,7 +47,7 @@ import { reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { haltAutoSave, queueAutoSave } from "./14-export.js";
 import { updateFileChip } from "./18-local-files.js";
-import { confirmBaseline } from "../legacy/save-bridge.ts";
+import { confirmBaseline, saveChanges } from "../legacy/save-bridge.ts";
 import { captureRestore, conflictStash, stillRestoring } from "../legacy/recovery-bridge.ts";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { driveFormatSize } from "../../shared/text.js";
@@ -95,13 +95,13 @@ async function restoreSnapshot(id, opts) {
     var stored = false;
     for (var attempt = 0; attempt < RESTORE_BACKUP_ATTEMPTS; attempt++) {
       var stateAtCapture = S.state;
-      var seqAtCapture = S.editSeq;
+      var seqAtCapture = saveChanges();
       var ticket = captureSnapshot("Before restoring an earlier version", S.state, { allowSeedSkip: false });
       if (!ticket) { stored = false; break; }
       var result = await ticket.done;
       if (moved()) return "changed";
       stored = !!(result && result.stored);
-      if (S.state === stateAtCapture && S.editSeq === seqAtCapture) break;
+      if (S.state === stateAtCapture && saveChanges() === seqAtCapture) break;
       stored = false;
     }
     if (!stored && !opts.force) return "no-backup";

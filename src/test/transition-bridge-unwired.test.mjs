@@ -78,8 +78,9 @@ test("captureOperation and stillOwns follow the live session, document, destinat
     keyOf: (h) => ({ owner: h, name: "" }),
     obsolete: () => {},
     running: () => {},
-    ownership: { capture: bridge.captureOperation, stillOwns: bridge.stillOwns }
-  });
+    ownership: { capture: bridge.captureOperation, stillOwns: bridge.stillOwns },
+    autosave: { enabledAtStart: () => false, due: () => {}, changed: () => {} }
+  }, { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });
   try {
     bridge.documentTransitions().open({ from: { document: script("Owned") }, reason: "opened" });
     saves.noteSaveChange();

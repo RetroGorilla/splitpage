@@ -12,12 +12,13 @@ import {
   traceFields
 } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
+import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
 
 const { liveSession, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../legacy/session-bridge.ts");
 
 const session = liveSession();
 const probe = { epoch: () => (sessionStarted() ? session.epoch() : null), held: () => (sessionStarted() ? session.read((doc) => doc) : null) };
-const TRACED = ["state", "baseState", "docIdWrittenOut", "dirty", "editSeq"];
+const TRACED = ["state", "baseState", "docIdWrittenOut"];
 
 const bootTrace = traceFields(S, TRACED, probe);
 await bootApp();
@@ -197,7 +198,7 @@ function assertReportedAfterCommit(inject, message) {
     assert.notEqual(row.status, before, "the committed change stays in the document");
     assert.equal(thrown, null, "a throw after the commit does not escape the command: " + (thrown && thrown.message));
     assert.ok(outcome && !COMMITTED.includes(outcome.kind), "a distinct outcome, got " + JSON.stringify(outcome && outcome.kind));
-    assert.equal(S.dirty, true, "the document stays marked unsaved");
+    assert.equal(unsavedChanges(), true, "the document stays marked unsaved");
     assert.deepEqual(reported.map((e) => e && e.message), [message], "the error reaches the existing error reporting");
   };
 }
@@ -359,7 +360,7 @@ rightToday("T2c-resume-switch", "a late server resume leaves a document opened d
     assert.equal(JSON.stringify(S.state), opened, "the opened document's contents and identity are unchanged");
     assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
     assert.equal(JSON.stringify(S.baseState), baseline, "the opened document's baseline is unchanged");
-    assert.equal(S.dirty, false, "the opened document stays clean");
+    assert.equal(unsavedChanges(), false, "the opened document stays clean");
     assert.equal(homeModule.home, destination, "the opened document keeps its file destination");
     assert.equal(target.commits.length, 0, "the resume writes nothing to the opened file");
     assert.deepEqual(held.requests.map((r) => r.method), ["GET"], "the resume sends no server write");
@@ -435,7 +436,7 @@ rightToday("T2c-reopen-switch", "a late sign-in resume leaves a document opened 
     assert.equal(JSON.stringify(S.state), opened, "the opened document's contents and identity are unchanged");
     assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
     assert.equal(JSON.stringify(S.baseState), baseline, "the opened document's baseline is unchanged");
-    assert.equal(S.dirty, false, "the opened document stays clean");
+    assert.equal(unsavedChanges(), false, "the opened document stays clean");
     assert.equal(homeModule.home, destination, "the opened document keeps its file destination");
     assert.equal(target.commits.length, 0, "the resume writes nothing to the opened file");
     assert.equal(held.requests.filter((r) => r.method !== "GET").length, 0, "the resume sends no server write");
@@ -488,7 +489,7 @@ rightToday("T2c-reopen-stale", "a sign-in resume dropped for a newly opened docu
     assert.equal(JSON.stringify(S.state), opened, "the opened document's contents and identity are unchanged");
     assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
     assert.equal(JSON.stringify(S.baseState), baseline, "the opened document's baseline is unchanged");
-    assert.equal(S.dirty, false, "the opened document stays clean");
+    assert.equal(unsavedChanges(), false, "the opened document stays clean");
     assert.equal(homeModule.home, destination, "the opened document keeps its file destination");
     assert.equal(target.commits.length, 0, "nothing is written to the opened file");
     assert.equal(held.requests.filter((r) => r.method !== "GET").length, 0, "no server write is sent");
@@ -656,7 +657,7 @@ rightToday("T5", "restoring a draft onto an unchanged file schedules no save and
     assert.equal(restored.writes().length, 0, "nothing was written to the file after the restore");
     assert.equal(await restored.onDisk(), fileBefore, "the file holds what it held");
     assert.equal(JSON.stringify(S.baseState), baselineBefore, "the baseline did not move");
-    assert.equal(S.dirty, true, "the recovered work is still unsaved");
+    assert.equal(unsavedChanges(), true, "the recovered work is still unsaved");
     assert.equal(homeModule.home.kind, "file", "the destination is still the file");
     assert.equal(homeModule.home.handle._desktopId, restored.fileId, "and it is the same file");
   });
@@ -676,8 +677,8 @@ rightToday("T5-merge", "restoring a draft onto a changed file merges, halts auto
     assert.equal(restored.writes().length, 0, "the merge did not autosave");
     assert.equal(await restored.onDisk(), fileBefore);
     assert.equal(JSON.stringify(S.baseState), baselineBefore);
-    assert.match(exportModule.autoSaveHalt, /Autosave is paused/);
-    assert.equal(S.dirty, true, "the merged work is still unsaved");
+    assert.match(autoSavePolicy().halted(), /Autosave is paused/);
+    assert.equal(unsavedChanges(), true, "the merged work is still unsaved");
     assert.equal(homeModule.home.handle._desktopId, restored.fileId, "the destination is still the file");
   });
 });
@@ -694,7 +695,7 @@ rightToday("T6", "with autosave off, nothing is scheduled after a restore or an 
       markDirty();
       await settleSaves(clock);
       assert.equal(await restored.onDisk(), fileBefore, "the file holds what it held: no automatic write with autosave off");
-      assert.equal(S.dirty, true, "the work is still unsaved");
+      assert.equal(unsavedChanges(), true, "the work is still unsaved");
     });
   } finally {
     setAutoSaveEnabled(true);
@@ -730,7 +731,7 @@ rightToday("L1b", "an autosave or draft the old document armed writes nothing fo
     const fileBefore = new TextDecoder().decode((await fake.readFile(picked.id)).bytes);
     S.state.rows[0].audioText = "Typed in the old document.";
     markDirty();
-    assert.ok(exportModule.autoSaveIdleTimer, "an autosave is armed for the old document");
+    assert.ok(autoSavePolicy().pending(), "an autosave is armed for the old document");
     startNewScript();
     await settleSaves(clock);
     assert.equal(new TextDecoder().decode((await fake.readFile(picked.id)).bytes), fileBefore, "the old document's file holds what it held after the replacement");

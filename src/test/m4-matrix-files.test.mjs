@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
 import {
   createGates,
   createHeldDesktop,
@@ -106,7 +107,6 @@ function scene(run) {
       closeFileConflict();
       document.getElementById("save-error-banner").hidden = true;
       setHome("none");
-      S.saveButtonBusy = false;
     }
   };
 }
@@ -121,14 +121,14 @@ function homeRecord() {
 }
 
 function observed() {
-  return { docId: S.state.docId, rev: S.state.rev, base: JSON.stringify(S.baseState), dirty: S.dirty, home: homeRecord() };
+  return { docId: S.state.docId, rev: S.state.rev, base: JSON.stringify(S.baseState), dirty: unsavedChanges(), home: homeRecord() };
 }
 
 function assertSame(before, who) {
   assert.equal(S.state.docId, before.docId, "the " + who + "'s document id is unchanged");
   assert.equal(S.state.rev, before.rev, "the " + who + "'s rev is unchanged");
   assert.equal(JSON.stringify(S.baseState), before.base, "the " + who + "'s baseline is unchanged");
-  assert.equal(S.dirty, before.dirty, "the " + who + "'s dirty state is unchanged");
+  assert.equal(unsavedChanges(), before.dirty, "the " + who + "'s dirty state is unchanged");
   const now = homeRecord();
   assert.equal(now.record, before.home.record, "the " + who + "'s home is the same record");
   assert.equal(now.lastModified, before.home.lastModified, "the " + who + "'s home keeps its timestamp");
@@ -225,7 +225,7 @@ rightToday("F2", "a file save that completes after a same-id reopen leaves the r
   const baselineBefore = JSON.stringify(S.baseState);
   target.releaseOp("close");
   await saving;
-  assert.equal(S.dirty, true, "the reopened session is still unsaved");
+  assert.equal(unsavedChanges(), true, "the reopened session is still unsaved");
   assert.equal(JSON.stringify(S.baseState), baselineBefore, "the reopened session's baseline is the one it opened with");
 }));
 
@@ -272,7 +272,7 @@ rightToday("F4", "an edit during the write leaves the document dirty, and the fi
   assert.equal(target.commits.length, 1, "the file was written once");
   assert.ok(target.text().includes("Typed before the save."), "the file holds what was captured");
   assert.ok(!target.text().includes("Typed during the write."), "and not the edit made during the write");
-  assert.equal(S.dirty, true, "the document is still unsaved");
+  assert.equal(unsavedChanges(), true, "the document is still unsaved");
   assert.equal(S.state.rows[0].audioText, "Typed during the write.", "the edit is still on screen");
 }));
 
@@ -282,7 +282,7 @@ rightToday("F5-one", "a save with nothing else running writes once", scene(async
   edit("Typed once.");
   await saveDoc();
   assert.equal(writers(target), 1, "one writer was opened");
-  assert.equal(S.dirty, false, "and the document is saved");
+  assert.equal(unsavedChanges(), false, "and the document is saved");
 }));
 
 async function firstSaveInFlight() {
@@ -292,7 +292,7 @@ async function firstSaveInFlight() {
   target.holdOp("write");
   document.getElementById("btn-save").click();
   await target.arrivedAt("write");
-  assert.equal(S.saveButtonBusy, true, "the first save is in flight");
+  assert.equal(saveBusy(), true, "the first save is in flight");
   edit("Second save's text.");
   return target;
 }
@@ -341,7 +341,7 @@ rightToday("F5-stale", "overlapping saves never leave the file older than the do
   document.getElementById("save-error-retry").click();
   await turns(60);
   await finishSaves(target);
-  assert.ok(S.dirty || target.text().includes(S.state.rows[0].audioText), "the document is not marked saved while its file holds older text");
+  assert.ok(unsavedChanges() || target.text().includes(S.state.rows[0].audioText), "the document is not marked saved while its file holds older text");
 }));
 
 rightToday("F5-link", "the turned-off link's copy waits for the save that is running", scene(async () => {
@@ -401,7 +401,7 @@ rightToday("F5-saveas", "a save asked for while a Save As is writing its new fil
   copy.gates.releaseAll("file.write");
   await turns(80);
   assert.ok(copy.text().includes("Second save's text."), "the file ends with the later save's text");
-  assert.equal(S.dirty, false, "and the document is saved");
+  assert.equal(unsavedChanges(), false, "and the document is saved");
 }));
 
 rightToday("F5-replaced", "a save waiting behind a running save is dropped when the document is replaced, not run against the replacement", scene(async () => {
@@ -503,7 +503,7 @@ rightToday("F9-warn", "a Save As that gives the copy a new document id is not re
   await saveDoc({ saveAs: true });
   assert.equal(copy.commits.length, 1, "setup: the copy was written");
   assert.notEqual(S.state.docId, ID("8"), "setup: the copy has its own document id");
-  assert.equal(S.dirty, false, "the document is saved");
+  assert.equal(unsavedChanges(), false, "the document is saved");
   assert.equal(/after you reopened it/.test(document.getElementById("toast-host").textContent), false, "no reopen warning was shown");
 }));
 
@@ -548,7 +548,7 @@ rightToday("I2", "import writeback acknowledges only the import home", scene(asy
   assert.equal(target.commits.length, 1, "the file was written");
   assert.equal(imported.dirty, false, "the import home is saved");
   assert.equal(homeModule.home, before.home.record, "the home is the same record");
-  assert.equal(S.dirty, before.dirty, "the document's dirty state is unchanged");
+  assert.equal(unsavedChanges(), before.dirty, "the document's dirty state is unchanged");
   assert.equal(JSON.stringify(S.baseState), before.base, "the document's baseline is unchanged");
   assert.equal(S.state.rev, before.rev, "the document's rev is unchanged");
   assert.equal(S.state.docId, before.docId, "the document's id is unchanged");

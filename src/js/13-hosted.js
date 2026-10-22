@@ -52,7 +52,7 @@ import {
 import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { maybeAskGuestName, updateCollaborateMenu } from "./13b-collaborate.js";
 import { saveDoc, scheduleAutoSave } from "./14-export.js";
-import { requestSave } from "../legacy/save-bridge.ts";
+import { requestSave, saveBusy, saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 import { conflictStash, draftResume } from "../legacy/recovery-bridge.ts";
 import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
@@ -461,7 +461,7 @@ async function resumeServerDoc() {
   var pending = pendingServerResume();
   if (!pending || !pending.id) return false;
 
-  var seqAtStart = S.editSeq;
+  var seqAtStart = saveChanges();
   var stateAtStart = S.state ? cloneState(S.state) : null;
   var op = captureOperation();
 
@@ -513,7 +513,7 @@ async function resumeServerDoc() {
   resetProductionPanelState();
   applyReviewMode();
 
-  var typedDuringResume = stateAtStart && S.editSeq !== seqAtStart;
+  var typedDuringResume = stateAtStart && saveChanges() !== seqAtStart;
 
   if (!stash || !stash.mine || !Array.isArray(stash.mine.rows)) {
     if (typedDuringResume) {
@@ -587,7 +587,7 @@ function handleApiError(err, whatFailed) {
     joinWithLinkKey().then(function (r) {
       if (r === "ok") {
         showToast(whatFailed + " — the connection to the server was renewed. " +
-          (S.dirty ? "Save again to send your latest changes." : "Try again."), "warn");
+          (unsavedChanges() ? "Save again to send your latest changes." : "Try again."), "warn");
       } else if (r === "none" || r === "gone") {
         flagLinkOff("gone");
       } else if (r === "failed") {
@@ -741,7 +741,7 @@ async function joinWithLinkKey() {
     return "ok";
   }
   if (joined && joined.error === "link-off") {
-    flagLinkOff(onServerDoc() || S.dirty ? "off" : "arrived");
+    flagLinkOff(onServerDoc() || unsavedChanges() ? "off" : "arrived");
     return "off";
   }
   if (joined && joined.error === "bad-pin") { forgetLinkKey(conn.serverUrl); return "gone"; }
@@ -992,7 +992,7 @@ export async function publishToServer(opts) {
     return false;
   }
   var published = cloneState(S.state);
-  var seqAtPublish = S.editSeq;
+  var seqAtPublish = saveChanges();
   var oldId = S.state.docId;
   var forkDocId = S.docIdWrittenOut ? mintDocId() : null;
   if (forkDocId) published.docId = forkDocId;
@@ -1033,7 +1033,7 @@ export async function publishToServer(opts) {
     return false;
   }
   if (outcome.forkedFrom) copyDocHistorySafe(outcome.forkedFrom, forkDocId);
-  if (S.editSeq === seqAtPublish) clearDirty();
+  if (saveChanges() === seqAtPublish) clearDirty();
   else scheduleAutoSave();
   updateFileChip();
   if (!opts.quiet) {
@@ -1090,7 +1090,7 @@ export async function publishAndCopyShareLink() {
     return false;
   }
   if (onServerDoc()) {
-    if (S.dirty) {
+    if (unsavedChanges()) {
       var shared = await requestSave({ kind: "server" });
       if (shared.kind !== "saved" && !(shared.kind === "obsolete" && shared.here)) return false;
     }
@@ -1272,7 +1272,7 @@ async function writeToServer(job) {
     S.state.lastEditedBy = getEditorName();
     S.state.lastEditedAt = nowIso();
     var published = cloneState(S.state);
-    var seqAtSave = S.editSeq;
+    var seqAtSave = saveChanges();
     var baseRevAtSave = home.rev;
 
     try {
@@ -1290,7 +1290,7 @@ async function writeToServer(job) {
         reportIfLandedHere(op, docId, body.rev);
       }
       if (!job.owns()) return true;
-      if (S.editSeq === seqAtSave) clearDirty();
+      if (saveChanges() === seqAtSave) clearDirty();
       updateFileChip();
       if (mergeResult) reportMerge(mergeResult, { alreadySaved: true, undo: "saved" });
       return true;
@@ -1633,7 +1633,7 @@ export function notePresenceRev(body) {
   if (!docId || body.docId !== docId) return;
   if (typeof body.rev !== "number") return;
   if (body.rev <= (home.rev || 0)) return;
-  if (S.saveButtonBusy) return;
+  if (saveBusy()) return;
   pullInFlight = true;
   pullServerDoc(docId).catch(function () {}).then(function () { pullInFlight = false; });
 }
@@ -1648,7 +1648,7 @@ async function pullServerDoc(docId) {
   }
   if (!body || !isDocumentObject(body.state)) return;
   if (serverHomeId() !== docId || !stillOwns(op)) return;
-  if (S.saveButtonBusy || reviewWriting) return;
+  if (saveBusy() || reviewWriting) return;
   var rev = body.rev || 0;
   if (rev <= (home.rev || 0)) return;
   forgetRemoteMisses();
@@ -2507,7 +2507,7 @@ export function __init() {
     home: function () { return Object.assign({}, home); },
     noteRev: notePresenceRev,
     base: function () { return S.baseState ? cloneState(S.baseState) : null; },
-    dirty: function () { return !!S.dirty; },
+    dirty: unsavedChanges,
     detect: detectServer,
     caps: function () { return Object.assign({}, capsOf(conn)); },
     fetchBlob: fetchBlob
