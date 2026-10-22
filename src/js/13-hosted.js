@@ -1,7 +1,7 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { mintDocId, nowIso } from "../adapters/identity/ids.ts";
 import { editStamp } from "../application/commands/save-stamps.ts";
-import { stampDocument } from "../legacy/session-bridge.ts";
+import { mergeBase, stampDocument } from "../legacy/session-bridge.ts";
 import { S } from "./_state.js";
 import { authorityOf, isLinkGuest as guestAuthority, isReviewer } from "../application/collaboration/authority.ts";
 import {
@@ -1307,7 +1307,7 @@ async function writeToServer(job) {
           fallbackId: S.state.docId
         });
         mergeResult = applyMerge({
-          base: S.baseState,
+          base: mergeBase(),
           mine: S.state,
           theirs: theirs,
           source: "server-conflict",
@@ -1353,7 +1353,7 @@ function rowIn(state, id) {
 function jsonCopy(v) { return JSON.parse(JSON.stringify(v)); }
 
 function nextReviewWrite() {
-  var base = (S.baseState && S.baseState.comments) || [];
+  var base = (mergeBase() && mergeBase().comments) || [];
   var list = (S.state && S.state.comments) || [];
   for (var i = 0; i < list.length; i++) {
     var c = list[i];
@@ -1377,7 +1377,7 @@ function nextReviewWrite() {
 }
 
 function dropLocalResolves() {
-  var base = (S.baseState && S.baseState.comments) || [];
+  var base = (mergeBase() && mergeBase().comments) || [];
   var changed = false;
   ((S.state && S.state.comments) || []).forEach(function (c) {
     if (!c || c.kind === "conflict") return;
@@ -1396,7 +1396,7 @@ function dropLocalResolves() {
 function reviewAnchorFor(c) {
   if (c.field !== "visualText" && c.field !== "audioText") return null;
   var row = rowIn(S.state, c.rowId);
-  var baseRow = rowIn(S.baseState, c.rowId);
+  var baseRow = rowIn(mergeBase(), c.rowId);
   if (!row || !baseRow) return null;
   var body = inertBody(row[c.field] || "");
   if (!body.querySelector('.cmt-anchor[data-cmt="' + cssAttr(c.id) + '"]')) return null;
@@ -1424,7 +1424,7 @@ function dropLocalAnchor(c) {
   if (!span) return false;
   unwrapElement(span);
   row[c.field] = body.innerHTML;
-  var baseRow = rowIn(S.baseState, c.rowId);
+  var baseRow = rowIn(mergeBase(), c.rowId);
   if (baseRow && baseRow[c.field] === row[c.field]) {
     row.updatedAt = baseRow.updatedAt;
     row.updatedBy = baseRow.updatedBy;
@@ -1475,7 +1475,8 @@ function sendReviewRequest(req) {
 
 function adoptReviewAnswer(op, sent, body) {
   var stored = body.comment;
-  var baseList = S.baseState.comments || (S.baseState.comments = []);
+  var base = mergeBase();
+  var baseList = base.comments || (base.comments = []);
   var bi = commentIndexIn(baseList, stored.id);
   if (bi === -1) baseList.push(jsonCopy(stored));
   else baseList[bi] = jsonCopy(stored);
@@ -1495,7 +1496,7 @@ function adoptReviewAnswer(op, sent, body) {
   var redraw = false;
   if (op.kind === "comment" && sent.anchor) {
     if (body.anchored === true) {
-      var baseRow = rowIn(S.baseState, sent.anchor.rowId);
+      var baseRow = rowIn(mergeBase(), sent.anchor.rowId);
       if (baseRow) {
         baseRow[sent.anchor.field] = sent.anchor.html;
         baseRow.updatedAt = body.updatedAt;
@@ -1546,7 +1547,7 @@ function permanentReviewRefusal(err) {
 
 async function sendReviewWrites() {
   var docId = serverHomeId();
-  if (!S.baseState) return false;
+  if (!mergeBase()) return false;
   var redraw = dropLocalResolves();
   var sentAny = false;
   var sentKeys = {};
@@ -1661,7 +1662,7 @@ async function pullServerDoc(docId) {
   });
 
   home.rev = rev;
-  if (sameDocumentContent(theirs, S.baseState)) {
+  if (sameDocumentContent(theirs, mergeBase())) {
     setBaseState(cloneState(theirs), "pullServerDoc: their save says what ours already said");
     updateFileChip();
     return;
@@ -1669,7 +1670,7 @@ async function pullServerDoc(docId) {
 
   var prevDocId = S.state.docId;
   var merged = applyMerge({
-    base: S.baseState,
+    base: mergeBase(),
     mine: S.state,
     theirs: theirs,
     historyFrom: prevDocId,
@@ -2507,7 +2508,7 @@ export function __init() {
     reviewLink: fetchReviewLink,
     home: function () { return Object.assign({}, home); },
     noteRev: notePresenceRev,
-    base: function () { return S.baseState ? cloneState(S.baseState) : null; },
+    base: function () { return mergeBase() ? cloneState(mergeBase()) : null; },
     dirty: unsavedChanges,
     detect: detectServer,
     caps: function () { return Object.assign({}, capsOf(conn)); },
