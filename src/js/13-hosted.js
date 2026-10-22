@@ -41,7 +41,7 @@ import {
   forgetRemoteMisses
 } from "../adapters/storage/02c-blobs.js";
 import { cssAttr, inertBody } from "./04-richtext.js";
-import { withBusyBar } from "./04b-busy.js";
+import { withBusyBar } from "../features/notices/busy.js";
 import { render, renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import {
