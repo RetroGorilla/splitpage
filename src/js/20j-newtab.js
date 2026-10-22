@@ -17,11 +17,11 @@ import { openLocalFile, openProjectFile, updateFileChip } from "./18-local-files
 import { desktopAppUrl, desktopAppOffered } from "./20a-update.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
 import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
-import { draftRestorePending } from "./20g-drafts.js";
 import { STARTERS, starterById } from "./_starters.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
+import { draftResume } from "../legacy/recovery-bridge.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
 
 var newTabPageShown = false;
@@ -306,7 +306,7 @@ async function newTabEligibleForAutoShow() {
   if (newTabSuppressed()) return false;
   if (!seedCheckPasses()) return false;
   if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
-  if (S.DESKTOP && typeof draftRestorePending !== "undefined" && draftRestorePending) return false;
+  if (S.DESKTOP && draftResume().restorePending()) return false;
   if (home.kind === "server" || home.kind === "file") return false;
   if (S.DESKTOP) {
     if ((S.DESKTOP.launchIntent && S.DESKTOP.launchIntent.type !== "blank") ||

@@ -3,16 +3,15 @@ import { S } from "./_state.js";
 import { setHome } from "./_home.js";
 import { PERSON_COLORS, PERSON_COLOR_NAMES, formatClock, readMyColor, writePref, PERSON_COLOR_KEY } from "./00p-prefs.js";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
-import { dataUrlForSync, internDataUrl, isDurableSync } from "../adapters/storage/02c-blobs.js";
+import { dataUrlForSync, isDurableSync } from "../adapters/storage/02c-blobs.js";
 import { noteMerged, noteRecovery, noteServerUpdate } from "../legacy/session-bridge.ts";
 import { applyIncomingMerge } from "../application/session/apply-merge.ts";
 import { mergeIncoming } from "../application/session/merge-incoming.ts";
-import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
+import { refsIn } from "../../shared/blob-policy.js";
 import { randomIds, systemClock, nowIso } from "../adapters/identity/ids.ts";
 import { DEFAULT_WPM } from "../core/document/timing.ts";
 import { mergeStates as mergeStatesWith } from "../core/merge-states.ts";
 import { isDocumentObject } from "../core/migrate.ts";
-import { byId } from "../core/merge/rows.ts";
 import { textMergeContext as coreTextMergeContext } from "../core/merge/text-field.ts";
 import { withDocumentPorts } from "../legacy/document-ports.ts";
 import { fromHtml } from "../legacy/richtext.ts";
@@ -49,16 +48,12 @@ import { personColor } from "./13a-presence.js";
 import { haltAutoSave, queueAutoSave } from "./14-export.js";
 import { updateFileChip } from "./18-local-files.js";
 import { confirmBaseline } from "../legacy/save-bridge.ts";
-import { captureRestore, stillRestoring } from "../legacy/recovery-bridge.ts";
+import { captureRestore, conflictStash, stillRestoring } from "../legacy/recovery-bridge.ts";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { driveFormatSize } from "../../shared/text.js";
 import { cloneState } from "../core/document/clone.ts";
 export { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
 export { mergeTargetLength } from "../core/merge/scalars.ts";
-
-var STASH_KEY = "splitpage-conflict-stash";
-export var SNAPSHOT_KEY = "splitpage-snapshots";
-export var RELOAD_GUARD_KEY = "splitpage-conflict-reloaded";
 
 S.baseState = null;
 
@@ -69,13 +64,6 @@ export function getEditorName() {
 export function stampRow(row) {
   row.updatedAt = nowIso();
   row.updatedBy = getEditorName();
-}
-
-export function readLegacySnapshotsRaw() {
-  try {
-    var raw = localStorage.getItem(SNAPSHOT_KEY);
-    return typeof raw === "string" ? raw : null;
-  } catch (e) { return null; }
 }
 
 export function pushSnapshot(label, snapshotState) {
@@ -231,44 +219,7 @@ export function stashLocalWork() {
   var payload = { at: nowIso(), by: getEditorName(), base: S.baseState, mine: S.state };
   var blobs = stashBlobsFor([S.state, S.baseState]);
   if (blobs) payload.blobs = blobs;
-  try {
-    sessionStorage.setItem(STASH_KEY, JSON.stringify(payload));
-    return true;
-  } catch (e) { return false; }
-}
-
-export function acceptStash(stash, theirs) {
-  if (!stash || typeof stash !== "object") return stash;
-  if (stash.blobs && typeof stash.blobs === "object") {
-    Object.keys(stash.blobs).forEach(function (sha) {
-      if (isSha256Hex(sha) && typeof stash.blobs[sha] === "string") internDataUrl(stash.blobs[sha]);
-    });
-  }
-  if (stash.imagesStripped) {
-    var theirRows = byId(theirs && Array.isArray(theirs.rows) ? theirs.rows : []);
-    [stash.mine, stash.base].forEach(function (doc) {
-      if (!doc || !Array.isArray(doc.rows)) return;
-      doc.rows.forEach(function (r) {
-        if (!r || r.visualImage !== "__IMAGE__") return;
-        var t = theirRows[r.id];
-        delete r.visualImage;
-        r.imageRef = t && t.imageRef ? JSON.parse(JSON.stringify(t.imageRef)) : null;
-      });
-    });
-    delete stash.imagesStripped;
-  }
-  return stash;
-}
-
-export function clearStash() {
-  try { sessionStorage.removeItem(STASH_KEY); } catch (e) {}
-}
-
-export function readStash() {
-  try {
-    var raw = sessionStorage.getItem(STASH_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch (e) { return null; }
+  return conflictStash().save(payload);
 }
 
 export function updateIdentityChip() {

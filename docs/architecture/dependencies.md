@@ -357,7 +357,7 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `02c-blobs.js` | adapters/storage | none |
 | `02d-gallery.js` | features/gallery | none |
 | `03-sync.js` | composition root (destination, merge) | `document-ports`, `editor-bridge`, `recovery-bridge`, `richtext`, `save-bridge`, `session-bridge` |
-| `03a-history-store.js` | features/history | none |
+| `03a-history-store.js` | features/history | `recovery-bridge` |
 | `03b-side-panels.js` | features/panels | none |
 | `04-richtext.js` | adapters/richtext | `richtext` |
 | `04a-row-motion.js` | features/rows | none |
@@ -389,10 +389,10 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `11-import.js` | features/imports | `session-bridge`, `transition-bridge` |
 | `12-dirty-toast.js` | features/notices (session effects: composition root) | `save-bridge`, `session-bridge` |
 | `12a-undo.js` | features/undo | `richtext` |
-| `13-hosted.js` | adapters/transport | `review-wording`, `save-bridge`, `transition-bridge` |
+| `13-hosted.js` | adapters/transport | `recovery-bridge`, `review-wording`, `save-bridge`, `transition-bridge` |
 | `13a-presence.js` | adapters/transport | `transition-bridge` |
 | `13b-collaborate.js` | features/file-menu | `app-actions` |
-| `14-export.js` | adapters/files (save writer) | `save-bridge` |
+| `14-export.js` | adapters/files (save writer) | `recovery-bridge`, `save-bridge` |
 | `14b-export-kit.js` | adapters/formats | `cache-freeze`, `document-ports`, `plain-text`, `richtext`, `session-bridge` |
 | `15-docx.js` | adapters/formats | `document-ports`, `plain-text`, `richtext` |
 | `16-csv.js` | adapters/formats | `richtext` |
@@ -406,15 +406,15 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `19-writer.js` | features/writer | `editor-bridge`, `plain-text`, `review-wording`, `session-bridge` |
 | `20-teleprompter.js` | features/prompter | `editor-bridge`, `richtext` |
 | `20a-update.js` | features/notices | none |
-| `20b-onboarding.js` | composition root (onboarding) | `app-actions` |
+| `20b-onboarding.js` | composition root (onboarding) | `app-actions`, `recovery-bridge` |
 | `20c-help.js` | features/settings | `app-actions`, `tour-pause` |
 | `20d-formats.js` | adapters/formats | `richtext` |
 | `20e-connect.js` | adapters/transport | `app-actions`, `tour-pause` |
-| `20f-desktop.js` | composition root (desktop host) | none |
+| `20f-desktop.js` | composition root (desktop host) | `recovery-bridge` |
 | `20g-drafts.js` | adapters/storage (draft recovery) | `recovery-bridge`, `transition-bridge` |
 | `20h-appdata.js` | adapters/storage | none |
 | `20i-topbar.js` | features/title | none |
-| `20j-newtab.js` | composition root (desktop host) | `app-actions`, `transition-bridge` |
+| `20j-newtab.js` | composition root (desktop host) | `app-actions`, `recovery-bridge`, `transition-bridge` |
 | `20k-phone-bar.js` | features/notices | none |
 | `20s-settings.js` | features/settings | `app-actions` |
 
