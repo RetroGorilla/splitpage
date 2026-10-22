@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
-import { flushEdits, noteEdit, redo, trackDocument, undo } from "../js/12a-undo.js";
+import { flushEdits, noteEdit, redo, undo } from "../js/12a-undo.js";
 import { startTestSession } from "./_session.mjs";
 import { appSessionDeps } from "./_app-session.mjs";
 import { loadTestDocument } from "./_document.mjs";
@@ -19,13 +19,13 @@ const shot = (id, name, owner) => ({ id, name, owner: owner || "" });
 const ownerOf = (list, name) => (list.find((e) => e.name === name) || {}).owner;
 
 function boot() {
-  loadTestDocument(migrateRows({ schema: 2, title: "Fold", comments: [], rows: [
+  const opening = migrateRows({ schema: 2, title: "Fold", comments: [], rows: [
     { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-  ] }));
-  S.state.people.push(person("pM", "Ada"));
-  S.state.productionTags.push(tag("t_kettle", "Kettle", ""));
-  S.state.brollShots.push(shot("bs_pier", "Pier", ""));
-  trackDocument();
+  ] });
+  opening.people.push(person("pM", "Ada"));
+  opening.productionTags.push(tag("t_kettle", "Kettle", ""));
+  opening.brollShots.push(shot("bs_pier", "Pier", ""));
+  loadTestDocument(opening);
 }
 
 function assign(list, name, owner) {
@@ -87,12 +87,12 @@ const NAMES = ["Ada", "Bo", "Cy"];
 const ITEMS = [["productionTags", "Kettle"], ["productionTags", "Lamp"], ["brollShots", "Pier"], ["brollShots", "Dock"]];
 
 function boot2() {
-  loadTestDocument(migrateRows({ schema: 2, title: "Prop", comments: [], rows: [
+  const opening = migrateRows({ schema: 2, title: "Prop", comments: [], rows: [
     { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-  ] }));
-  S.state.productionTags.push(tag("t_kettle", "Kettle", ""), tag("t_lamp", "Lamp", ""));
-  S.state.brollShots.push(shot("bs_pier", "Pier", ""), shot("bs_dock", "Dock", ""));
-  trackDocument();
+  ] });
+  opening.productionTags.push(tag("t_kettle", "Kettle", ""), tag("t_lamp", "Lamp", ""));
+  opening.brollShots.push(shot("bs_pier", "Pier", ""), shot("bs_dock", "Dock", ""));
+  loadTestDocument(opening);
 }
 
 function nameMap() {

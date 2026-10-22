@@ -4,7 +4,6 @@ export { SCHEMA_VERSION } from "../core/document/fields.ts";
 export var PAGE_SHELL;
 export var SpeechRecognitionCtor;
 
-S.state = null;
 export var suppressUnloadWarning = false;
 
 var LAST_FILE_DB = "splitpage-files", LAST_FILE_STORE = "handles", LAST_FILE_KEY = "last";

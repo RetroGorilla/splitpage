@@ -3,7 +3,7 @@ import { S } from "./_state.js";
 import { setHome } from "./_home.js";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, isDurableSync } from "../adapters/storage/02c-blobs.js";
-import { noteMerged, noteRecovery, noteServerUpdate, runDocumentEdit } from "../legacy/session-bridge.ts";
+import { currentDocument, holdMergeBase, mergeBase, noteMerged, noteRecovery, noteServerUpdate, runDocumentEdit } from "../legacy/session-bridge.ts";
 import { wordsPerMinuteCommand } from "../application/commands/document-settings.ts";
 import { applyIncomingMerge } from "../application/session/apply-merge.ts";
 import { mergeIncoming } from "../application/session/merge-incoming.ts";
@@ -19,7 +19,6 @@ import { panelWidths, preferences } from "../legacy/preferences-bridge.ts";
 import { fromHtml } from "../legacy/richtext.ts";
 import {
   adoptRestoredState,
-  liveDocumentPort,
   noteMergedDocId
 } from "./02b-doc-id.js";
 import {
@@ -57,7 +56,6 @@ import { cloneState } from "../core/document/clone.ts";
 export { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
 export { mergeTargetLength } from "../core/merge/scalars.ts";
 
-S.baseState = null;
 
 export function getEditorName() {
   return getSavedAuthorName() || "Anonymous";
@@ -218,8 +216,8 @@ function stashBlobsFor(docs) {
 
 export function stashLocalWork() {
   if (!S.state) return false;
-  var payload = { at: nowIso(), by: getEditorName(), base: S.baseState, mine: S.state };
-  var blobs = stashBlobsFor([S.state, S.baseState]);
+  var payload = { at: nowIso(), by: getEditorName(), base: mergeBase(), mine: S.state };
+  var blobs = stashBlobsFor([S.state, mergeBase()]);
   if (blobs) payload.blobs = blobs;
   return conflictStash().save(payload);
 }
@@ -731,11 +729,10 @@ var mergePorts = {
     });
   },
   snapshot: function (label, doc) { return pushSnapshot(label, doc); },
-  current: function () { return S.state; },
+  current: function () { return currentDocument(); },
   adopt: function (kind, next, merged) {
     if (merged) next = noteMerged(kind, next);
     else next = kind === "recovery" ? noteRecovery(next) : noteServerUpdate(next);
-    liveDocumentPort.assign(next);
     return next;
   },
   documentId: function (doc) { return doc.docId; },
@@ -761,7 +758,7 @@ var baseStateWhy = "";
 
 export function setBaseState(next, why) {
   baseStateWhy = String(why || "");
-  S.baseState = confirmBaseline(next);
+  holdMergeBase(confirmBaseline(next));
   return next;
 }
 

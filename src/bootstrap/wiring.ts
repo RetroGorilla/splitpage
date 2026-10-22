@@ -19,11 +19,11 @@ import { startRecovery } from "../legacy/recovery-bridge.ts";
 import type { LegacyRecoveryPorts } from "../legacy/recovery-bridge.ts";
 import { startSaves } from "../legacy/save-bridge.ts";
 import type { LegacyAutoSavePorts, LegacySavePorts } from "../legacy/save-bridge.ts";
-import { liveSession, startSessionBridge } from "../legacy/session-bridge.ts";
+import { liveDocumentPort, liveSession, startSessionBridge } from "../legacy/session-bridge.ts";
 import type { RecordsReconciler, SessionBridgePorts, SessionUndoPorts } from "../legacy/session-bridge.ts";
 import { captureOperation, startTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import type { LegacyTransitionPorts } from "../legacy/transition-bridge.ts";
-import { createUndoAdapter, routeReplays, watchUndoAdoption } from "../legacy/undo-adapter.ts";
+import { createUndoAdapter, routeReplays } from "../legacy/undo-adapter.ts";
 
 export interface SessionEffects {
   readonly dirty: (change: SessionChange) => void;
@@ -40,7 +40,7 @@ export interface WiringDeps {
   readonly refresh: (jobs: ReadonlySet<string>) => void;
   readonly records: RecordsReconciler;
   readonly saves: (ownership: SaveOwnershipPort) => LegacySavePorts;
-  readonly transitions: LegacyTransitionPorts;
+  readonly transitions: TransitionDeps;
   readonly recovery: () => LegacyRecoveryPorts;
   readonly keyTarget: EventTarget;
   readonly actions?: (() => ActionRegistry) | undefined;
@@ -105,8 +105,9 @@ const OPTIONAL: readonly (readonly [keyof WiringDeps, "function" | "object"])[] 
   ["report", "function"]
 ];
 
-const TRANSITION_PORTS: { readonly [P in keyof LegacyTransitionPorts]: readonly (keyof LegacyTransitionPorts[P])[] } = {
-  live: ["current", "assign"],
+export type TransitionDeps = Omit<LegacyTransitionPorts, "live">;
+
+const TRANSITION_PORTS: { readonly [P in keyof TransitionDeps]: readonly (keyof TransitionDeps[P])[] } = {
   destination: ["set", "confirm"],
   identity: ["mint", "writtenOut", "markWrittenOut"]
 };
@@ -117,7 +118,7 @@ const OWNERSHIP_PORTS: readonly (keyof SaveOwnershipPort)[] = ["capture", "still
 
 const AUTOSAVE_PORTS: readonly (keyof LegacyAutoSavePorts)[] = ["enabledAtStart", "due", "changed"];
 
-const UNDO_PORTS: readonly (keyof SessionUndoPorts)[] = ["adapter", "route", "watch"];
+const UNDO_PORTS: readonly (keyof SessionUndoPorts)[] = ["adapter", "route"];
 
 const SESSION_EFFECTS: readonly (keyof SessionEffects)[] = ["dirty", "draft", "save", "edit", "attribute"];
 
@@ -192,7 +193,7 @@ function validate(deps: WiringDeps | null | undefined): void {
   for (const effect of SESSION_EFFECTS) {
     if (!present(deps.effects[effect], "function")) throw new WiringError("effects", "Wiring: the effects dependency has no " + effect + " effect");
   }
-  for (const [port, methods] of Object.entries(TRANSITION_PORTS) as [keyof LegacyTransitionPorts, readonly string[]][]) {
+  for (const [port, methods] of Object.entries(TRANSITION_PORTS) as [keyof TransitionDeps, readonly string[]][]) {
     const given: unknown = deps.transitions[port];
     if (!present(given, "object")) throw new WiringError("transitions", "Wiring: the transitions dependency has no " + port + " port");
     for (const method of methods) {
@@ -222,7 +223,7 @@ const SYSTEM_TIMERS: TimerPort = Object.freeze({
   stop: function (handle: unknown) { clearTimeout(handle as number); }
 });
 
-const LEGACY_UNDO: Omit<SessionUndoPorts, "adapter"> = Object.freeze({ route: routeReplays, watch: watchUndoAdoption });
+const LEGACY_UNDO: Omit<SessionUndoPorts, "adapter"> = Object.freeze({ route: routeReplays });
 
 function reportError(error: unknown): void {
   console.error(error);
@@ -283,9 +284,9 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("built-in exporters", () => checkedExporters((deps.exporters ?? registerBuiltInExporters)(exports)), (drop) => drop);
   build("session", () => startSessionBridge(legacySessionPorts(deps)), (stop) => stop);
   build("saves", () => startSaves(checkedSaves(deps.saves({ capture: captureOperation, stillOwns: stillOwns })), deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
-  build("transitions", () => startTransitions(deps.transitions), (stop) => stop);
+  build("transitions", () => startTransitions({ ...deps.transitions, live: liveDocumentPort }), (stop) => stop);
   build("recovery", () => startRecovery(checkedRecovery(deps.recovery())), (stop) => stop);
-  build("editor", () => startEditor(deps.transitions.live), (stop) => stop);
+  build("editor", () => startEditor(liveDocumentPort), (stop) => stop);
   build("production editing", () => wireProductionEditing(deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
   build("preferences", () => startPreferences(), (stop) => stop);
   let disposed = false;

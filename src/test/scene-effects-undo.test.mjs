@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
-import { lastUndoEntry, redo, resetUndo, trackDocument, undo, undoSizes } from "../js/12a-undo.js";
+import { lastUndoEntry, redo, resetUndo, undo, undoSizes } from "../js/12a-undo.js";
 
 register("./_fanout-hooks.mjs", import.meta.url);
 
@@ -26,7 +26,6 @@ function fresh() {
     ]
   }));
   resetUndo();
-  trackDocument();
   return S.state;
 }
 

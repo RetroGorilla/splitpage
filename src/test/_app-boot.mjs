@@ -1,31 +1,15 @@
 import "./_dom.mjs";
 import "fake-indexeddb/auto";
 import { readFileSync } from "node:fs";
-import { S } from "../js/_state.js";
 import { checksumText } from "../../shared/text.js";
 import { startupReady } from "../legacy/startup-bridge.ts";
+import { currentDocument, onDocumentReplaced } from "../legacy/session-bridge.ts";
 
 export const seen = [];
-let held = S.state;
 
-function siteOf(stack) {
-  for (const line of String(stack).split("\n").slice(1)) {
-    const named = /^\s*at (?:async )?([\w$.<>]+)(?: \[as [\w$]+\])? \(.*\/src\/js\/([\w.-]+\.js):\d+:\d+\)$/.exec(line);
-    if (named) return named[2] + "#" + named[1].replace(/^Object\./, "");
-    const bare = /^\s*at (?:async )?.*\/src\/js\/([\w.-]+\.js):\d+:\d+$/.exec(line);
-    if (bare) return bare[1] + "#(anonymous)";
-  }
-  return "(not from src/js)";
-}
-
-Object.defineProperty(S, "state", {
-  configurable: true,
-  enumerable: true,
-  get() { return held; },
-  set(v) {
-    held = v;
-    seen.push({ site: siteOf(new Error().stack), value: v === null || v === undefined ? v : JSON.parse(JSON.stringify(v)) });
-  }
+onDocumentReplaced(function () {
+  const doc = currentDocument();
+  seen.push({ site: "replaced", value: doc === null || doc === undefined ? doc : JSON.parse(JSON.stringify(doc)) });
 });
 
 const timers = new Set();
@@ -121,7 +105,7 @@ export async function appWiringDeps() {
     refresh: production.runIdleRefresh,
     records: broll.derivedRecordsPlan,
     saves: exporting.legacySavePorts,
-    transitions: { live: docId.liveDocumentPort, destination: sync.documentDestinationPort, identity: docId.documentIdentityPort },
+    transitions: { destination: sync.documentDestinationPort, identity: docId.documentIdentityPort },
     recovery: drafts.draftRecoveryPorts,
     keyTarget: window
   };
