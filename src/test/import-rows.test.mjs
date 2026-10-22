@@ -13,7 +13,7 @@ const { listDocHistory } = await import("../js/03a-history-store.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits, redo, undo } = await import("../js/12a-undo.js");
 const { closeImportModal, handleImportFile, openImportModal } = await import("../js/11-import.js");
-const homeModule = await import("../js/_home.js");
+const homeModule = await import("../legacy/location-bridge.ts");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
@@ -71,8 +71,8 @@ function observed() {
   return {
     state: S.state,
     docId: S.state.docId,
-    home: homeModule.home,
-    homeKind: homeModule.home.kind,
+    home: homeModule.currentHome(),
+    homeKind: homeModule.currentHome().kind,
     base: JSON.stringify(mergeBase()),
     rev: S.state.rev
   };
@@ -85,8 +85,8 @@ function rowsJson() {
 function assertSameDocument(before) {
   assert.equal(S.state, before.state, "the open document is the same object");
   assert.equal(S.state.docId, before.docId, "its id is unchanged");
-  assert.equal(homeModule.home, before.home, "its destination is the same record");
-  assert.equal(homeModule.home.kind, before.homeKind, "of the same kind");
+  assert.equal(homeModule.currentHome(), before.home, "its destination is the same record");
+  assert.equal(homeModule.currentHome().kind, before.homeKind, "of the same kind");
   assert.equal(JSON.stringify(mergeBase()), before.base, "its baseline is unchanged");
   assert.equal(S.state.rev, before.rev, "its rev is unchanged");
 }

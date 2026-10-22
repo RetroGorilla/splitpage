@@ -11,7 +11,6 @@ import { cssAttr, inertBody, sanitizeHtml } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import { bulkTagRows } from "./07-production-tags.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
-import { reviewBlocked } from "./13-hosted.js";
 import { BROLL_MARKER_RE } from "../core/document/broll.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml, withoutLoneSurrogates } from "../core/document/text-policy.ts";
@@ -22,6 +21,7 @@ import { cellOf } from "../legacy/richtext.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { findMatchesCase } from "../application/find-options.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
+import { reviewBlocked } from "../legacy/location-bridge.ts";
 
 var findMatches = [];
 var findIndex = -1;

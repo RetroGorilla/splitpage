@@ -11,6 +11,7 @@ import {
   mockClock,
   rightToday
 } from "./_m4-matrix.mjs";
+import { documentLocation } from "../legacy/location-bridge.ts";
 import { mergeBase } from "../legacy/session-bridge.ts";
 
 await bootApp();
@@ -27,7 +28,7 @@ const { saveDoc, setAutoSaveEnabled } = await import("../js/14-export.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { closeFileConflict, exportAs, openProjectFile, saveBackToFile, showFileConflict } = await import("../js/18-local-files.js");
 const { finishServerDetect } = await import("../js/13-hosted.js");
-const homeModule = await import("../js/_home.js");
+const homeModule = await import("../legacy/location-bridge.ts");
 const { makeDesktopHandle, openPrompterInBrowser } = await import("../js/20f-desktop.js");
 const { loadTestDocument } = await import("./_document.mjs");
 
@@ -63,8 +64,8 @@ function useDocument(doc) {
 async function openFrom(target) {
   useDocument(script("Placeholder"));
   await openProjectFile(await target.handle.getFile(), target.handle, { skipSnapshot: true, silent: true });
-  assert.equal(homeModule.home.kind, "file", "the document is open from the file");
-  assert.equal(homeModule.home.handle, target.handle, "and its home holds the file's handle");
+  assert.equal(homeModule.currentHome().kind, "file", "the document is open from the file");
+  assert.equal(homeModule.currentHome().handle, target.handle, "and its home holds the file's handle");
 }
 
 function edit(text) {
@@ -91,7 +92,7 @@ async function openFromDesktop(fake, doc) {
   const handle = makeDesktopHandle(picked);
   useDocument(script("Placeholder"));
   await openProjectFile(await handle.getFile(), handle, { skipSnapshot: true, silent: true });
-  assert.equal(homeModule.home.kind, "file", "the document is open from the desktop file");
+  assert.equal(homeModule.currentHome().kind, "file", "the document is open from the desktop file");
   return picked;
 }
 
@@ -117,7 +118,7 @@ function setHome(kind, fields) {
 }
 
 function homeRecord() {
-  const h = homeModule.home;
+  const h = homeModule.currentHome();
   return { record: h, kind: h.kind, name: h.name, handle: h.handle, lastModified: h.lastModified, diskBase: JSON.stringify(h.diskBase || null), dirty: h.dirty };
 }
 
@@ -253,7 +254,7 @@ rightToday("F3", "a Save As that is cancelled or fails leaves Save's target and 
   delete window.showSaveFilePicker;
   fake._cancelNextSave = true;
   useDocument(script("Desktop", { docId: ID("1") }));
-  S.docIdWrittenOut = true;
+  documentLocation().markWrittenOut(true);
   edit("Typed before the dialog.");
   const desktopBefore = observed();
   await saveDoc({ saveAs: true });
@@ -306,7 +307,7 @@ async function finishSaves(target, others) {
 }
 
 function assertEndsWithLaterSave(target, copy) {
-  const file = homeModule.home.handle === copy.handle ? copy : target;
+  const file = homeModule.currentHome().handle === copy.handle ? copy : target;
   assert.ok(file.text().includes("Second save's text."), "the file ends with the later save's text");
 }
 
@@ -380,7 +381,7 @@ rightToday("F5-prompter", "the prompter's save waits for the save that is runnin
   held.gates.releaseAll("desktop.writeFile");
   await prompting;
   await turns(40);
-  assert.ok(new TextDecoder().decode((await fake.readFile(homeModule.home.handle._desktopId)).bytes).includes("Second save's text."), "the file ends with the later save's text");
+  assert.ok(new TextDecoder().decode((await fake.readFile(homeModule.currentHome().handle._desktopId)).bytes).includes("Second save's text."), "the file ends with the later save's text");
 }));
 
 rightToday("F5-saveas", "a save asked for while a Save As is writing its new file waits for it", scene(async () => {
@@ -391,7 +392,7 @@ rightToday("F5-saveas", "a save asked for while a Save As is writing its new fil
   copy.holdOp("write");
   const saving = saveDoc({ saveAs: true });
   await copy.arrivedAt("write");
-  assert.equal(homeModule.home.handle, copy.handle, "setup: Save As already points Save at the new file");
+  assert.equal(homeModule.currentHome().handle, copy.handle, "setup: Save As already points Save at the new file");
   edit("Second save's text.");
   document.getElementById("save-error-retry").click();
   await turns(60);
@@ -470,14 +471,14 @@ rightToday("F8", "after a desktop write the baseline timestamp is the one that w
     await saving;
   }
   held.gates.releaseAll("desktop.readFile");
-  assert.equal(homeModule.home.lastModified, written, "the baseline timestamp is the one the write produced");
+  assert.equal(homeModule.currentHome().lastModified, written, "the baseline timestamp is the one the write produced");
   assert.equal(held.calls.filter((c) => c.op === "readFile").length, readsBefore, "and no second full read followed the write");
 }));
 
 rightToday("F9", "no history copy happens before the write is confirmed, and a save never waits on a history copy that does not resolve", scene(async () => {
   const { fake, held } = withHeldDesktop({ history: true });
   await openFromDesktop(fake, script("Forked", { docId: ID("8") }));
-  S.docIdWrittenOut = true;
+  documentLocation().markWrittenOut(true);
   edit("Typed before Save As.");
   held.holdOp("writeFile");
   held.holdOp("historyCopy");
@@ -498,7 +499,7 @@ rightToday("F9-warn", "a Save As that gives the copy a new document id is not re
   const copy = createHeldFileHandle({ name: "copy.splitpage" });
   window.showSaveFilePicker = async () => copy.handle;
   useDocument(script("Forked", { docId: ID("8") }));
-  S.docIdWrittenOut = true;
+  documentLocation().markWrittenOut(true);
   edit("Typed before Save As.");
   document.getElementById("toast-host").textContent = "";
   await saveDoc({ saveAs: true });
@@ -515,15 +516,15 @@ function importDocument() {
 async function importFrom(target) {
   useDocument(script("Placeholder"));
   await openProjectFile(await target.handle.getFile(), target.handle);
-  assert.equal(homeModule.home.kind, "import", "the text file opened as an import");
-  assert.equal(homeModule.home.handle, target.handle, "with its handle");
-  assert.equal(homeModule.home.dirty, false, "and nothing unsaved");
+  assert.equal(homeModule.currentHome().kind, "import", "the text file opened as an import");
+  assert.equal(homeModule.currentHome().handle, target.handle, "with its handle");
+  assert.equal(homeModule.currentHome().dirty, false, "and nothing unsaved");
 }
 
 rightToday("I1", "an edit while import writeback awaits its bytes leaves the import home unsaved", scene(async () => {
   const target = importDocument();
   await importFrom(target);
-  const imported = homeModule.home;
+  const imported = homeModule.currentHome();
   S.state.rows[0].imageRef = { sha256: "a".repeat(64), width: 4, height: 4, mime: "image/png" };
   markDirty();
   assert.equal(imported.dirty, true, "the import home has unsaved changes");
@@ -542,13 +543,13 @@ rightToday("I1", "an edit while import writeback awaits its bytes leaves the imp
 rightToday("I2", "import writeback acknowledges only the import home", scene(async () => {
   const target = importDocument();
   await importFrom(target);
-  const imported = homeModule.home;
+  const imported = homeModule.currentHome();
   edit("Typed before the write back.");
   const before = observed();
   await saveBackToFile();
   assert.equal(target.commits.length, 1, "the file was written");
   assert.equal(imported.dirty, false, "the import home is saved");
-  assert.equal(homeModule.home, before.home.record, "the home is the same record");
+  assert.equal(homeModule.currentHome(), before.home.record, "the home is the same record");
   assert.equal(unsavedChanges(), before.dirty, "the document's dirty state is unchanged");
   assert.equal(JSON.stringify(mergeBase()), before.base, "the document's baseline is unchanged");
   assert.equal(S.state.rev, before.rev, "the document's rev is unchanged");
@@ -575,7 +576,7 @@ rightToday("I3", "import writeback stores the document as it stood when the writ
   for (const [kind, name, source] of WRITEBACK_SOURCES) {
     const target = createHeldFileHandle({ name: name, text: source(), lastModified: 1000 });
     await importFrom(target);
-    assert.equal(homeModule.home.format, kind, "setup: the " + kind + " file is the import home's format");
+    assert.equal(homeModule.currentHome().format, kind, "setup: the " + kind + " file is the import home's format");
     S.state.rows[0].imageRef = { sha256: "a".repeat(64), width: 4, height: 4, mime: "image/png" };
     edit("Captured words.");
     const gates = createGates();
@@ -592,7 +593,7 @@ rightToday("I3", "import writeback stores the document as it stood when the writ
     assert.match(stored, /Captured words\./, "the stored " + kind + " holds the words typed before the write back");
     assert.doesNotMatch(stored, /Typed while held/, "the stored " + kind + " leaves out the words typed while its bytes were held");
     assert.match(S.state.rows[0].audioText, /Typed while held/, "the live document keeps the later words");
-    assert.equal(homeModule.home.dirty, true, "and the " + kind + " import home is still unsaved");
+    assert.equal(homeModule.currentHome().dirty, true, "and the " + kind + " import home is still unsaved");
   }
 }));
 
@@ -674,7 +675,7 @@ test("import writeback is the import destination's save: it waits behind a write
   await first;
   await second;
   assert.equal(target.commits.length, 2, "both write backs reached the file, one after the other");
-  assert.equal(homeModule.home.dirty, false, "the import home is saved once the second has landed");
+  assert.equal(homeModule.currentHome().dirty, false, "the import home is saved once the second has landed");
 }));
 
 test("an import writeback that lands after another file was imported leaves the new import home's unsaved state alone", scene(async () => {
@@ -687,13 +688,13 @@ test("an import writeback that lands after another file was imported leaves the 
   await gates.arrived("file.close");
   const other = createHeldFileHandle({ name: "other.txt", text: "Gamma line.\n\nDelta line.\n", lastModified: 2000 });
   await openProjectFile(await other.handle.getFile(), other.handle);
-  const replaced = homeModule.home;
+  const replaced = homeModule.currentHome();
   edit("Typed in the other file.");
   assert.equal(replaced.dirty, true);
   gates.release("file.close");
   await saving;
   assert.equal(target.commits.length, 1, "the first file was written");
-  assert.equal(homeModule.home, replaced, "the other file is still the import home");
+  assert.equal(homeModule.currentHome(), replaced, "the other file is still the import home");
   assert.equal(replaced.dirty, true, "and still unsaved");
 }));
 
@@ -708,14 +709,14 @@ test("a writeback queued behind another writes nothing once a different file was
   const second = saveBackToFile();
   const other = createHeldFileHandle({ name: "other.txt", text: "Gamma line.\n\nDelta line.\n", lastModified: 2000 });
   await openProjectFile(await other.handle.getFile(), other.handle);
-  const replaced = homeModule.home;
+  const replaced = homeModule.currentHome();
   edit("Typed in the other file.");
   gates.release("file.close");
   await first;
   await second;
   assert.equal(target.commits.length, 1, "the first write back reached its own file");
   assert.equal(other.commits.length, 0, "the queued write back did not write the file imported after it was asked for");
-  assert.equal(homeModule.home, replaced, "the other file is still the import home");
+  assert.equal(homeModule.currentHome(), replaced, "the other file is still the import home");
   assert.equal(replaced.dirty, true, "and still unsaved");
 }));
 

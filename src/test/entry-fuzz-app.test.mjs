@@ -7,6 +7,7 @@ import {
 } from "../../tests/application/raw-inputs.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { confirmSavedNow, unsavedChanges } from "../legacy/save-bridge.ts";
+import { serverStatus } from "../legacy/location-bridge.ts";
 
 await bootApp();
 
@@ -16,7 +17,8 @@ const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { applyMerge } = await import("../js/03-sync.js");
 const { mergeUndo } = await import("../legacy/editor-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const { SERVER_RESUME_KEY, finishServerDetect, openServerDoc, saveToServer } = await import("../js/13-hosted.js");
+const { finishServerDetect, openServerDoc, saveToServer } = await import("../js/13-hosted.js");
+const { SERVER_RESUME_KEY } = await import("../application/location/server-status.ts");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 const { openProjectFile, reloadFileFromDisk } = await import("../js/18-local-files.js");
@@ -628,7 +630,7 @@ test("a server open that takes a pending browser draft and finds a state that is
   const start = holding("Server pick");
   const modal = document.getElementById("server-modal");
   modal.hidden = false;
-  S.serverMode.checked = true;
+  serverStatus().recordMode({ checked: true });
   const opened = await withServer((ask) => ask === "GET api/docs/doc-draft" ? reply(200, { id: "doc-draft", rev: 2, state: [] }) : null, async (asked) => {
     const result = await openServerDoc("doc-draft");
     assert.deepEqual(asked, ["GET api/docs/doc-draft"]);

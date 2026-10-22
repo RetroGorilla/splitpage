@@ -13,10 +13,10 @@ import {
   sceneFacts
 } from "./14b-export-kit.js";
 import { breakdownRows, commentBodyText, commentEntries } from "./14c-export-projections.js";
+import { exportServices } from "../application/export/services.ts";
 import { base64Encode } from "../core/document/media.ts";
 import { pad2 } from "../core/production/timing.ts";
 import { toMarkdown, toPlainText } from "../core/text/projections.ts";
-import { cellOf, htmlToMarkdown } from "../legacy/richtext.ts";
 
 function mdCell(value) {
   return String(value == null ? "" : value)
@@ -86,7 +86,7 @@ function mdMarkerRun(numbers, marks) {
 }
 
 function markdownWithMarkers(html, nums) {
-  var cell = cellOf(html);
+  var cell = exportServices().cellOf(html);
   if (!cell.some(function (r) { return r.marks && r.marks.cmt; })) return toMarkdown(cell);
   var out = [];
   cell.forEach(function (r, i) {
@@ -300,7 +300,7 @@ function capturedRowDataUrl(assets, row) {
 }
 
 export function mdSceneCellSource(row, i, model, assets) {
-  var toMd = model ? function (html) { return toMarkdown(cellOf(html)); } : htmlToMarkdown;
+  var toMd = model ? function (html) { return toMarkdown(exportServices().cellOf(html)); } : exportServices().htmlToMarkdown;
   var text = toMd(row.visualText);
   var visual = text;
   var image = assets ? capturedRowDataUrl(assets, row) : rowImageDataUrl(row);
@@ -356,9 +356,9 @@ export function toMarkdownTableDoc(doc, opts) {
 export function htmlToPlainScript(doc) {
   var lines = [doc.title || "Untitled Script", ""];
   doc.scenes.forEach(function (row, i) {
-    lines.push("[" + pad2(i + 1) + "] VISUAL: " + toPlainText(cellOf(row.visualText)));
+    lines.push("[" + pad2(i + 1) + "] VISUAL: " + toPlainText(exportServices().cellOf(row.visualText)));
     rowVideoLinks(row).forEach(function (l) { lines.push("      VIDEO: " + videoLinkText(l)); });
-    lines.push("      AUDIO: " + toPlainText(cellOf(row.audioText)));
+    lines.push("      AUDIO: " + toPlainText(exportServices().cellOf(row.audioText)));
     lines.push("");
   });
 

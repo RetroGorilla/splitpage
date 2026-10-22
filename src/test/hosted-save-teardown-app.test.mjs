@@ -3,6 +3,7 @@ import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { createHeldFetch, mockClock } from "./_m4-matrix.mjs";
+import { documentLocation } from "../legacy/location-bridge.ts";
 import { holdMergeBase, liveDocumentPort, mergeBase } from "../legacy/session-bridge.ts";
 
 await bootApp();
@@ -11,7 +12,7 @@ const { migrateRows } = await import("../js/02-state.js");
 const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { saveDoc } = await import("../js/14-export.js");
-const homeModule = await import("../js/_home.js");
+const homeModule = await import("../legacy/location-bridge.ts");
 const app = await import("../bootstrap/app.ts");
 const { confirmedSave } = await import("../legacy/save-bridge.ts");
 const { saveInProgress } = await import("../legacy/screen-state.ts");
@@ -71,7 +72,7 @@ function openOnServer(docId) {
   clearDirty();
   homeModule.setHome("none");
   window.__hostedTest.setSession({ docId: docId, rev: 1 });
-  S.docIdWrittenOut = true;
+  documentLocation().markWrittenOut(true);
   clearDirty();
 }
 
@@ -88,11 +89,11 @@ test("a hosted save that lands after its wiring was disposed and the app rewired
   mockClock(t);
   const server = createServer();
   server.docs.set("srv-t", { rev: 1, state: script() });
-  const held = createHeldFetch({ connection: () => homeModule.conn, answer: server.answer });
+  const held = createHeldFetch({ connection: () => homeModule.currentConn(), answer: server.answer });
   t.after(held.install());
 
   openOnServer("srv-t");
-  const opened = homeModule.home;
+  const opened = homeModule.currentHome();
   const baseline = mergeBase();
   assert.equal(textOf(baseline.rows[0]), "One.", "the baseline is the server's revision 1");
 
@@ -109,7 +110,7 @@ test("a hosted save that lands after its wiring was disposed and the app rewired
   assert.equal(mergeBase(), null, "nor a merge base");
   liveDocumentPort.assign(doc);
   holdMergeBase(baseline);
-  assert.equal(homeModule.home, opened, "the rewired app keeps the same home record");
+  assert.equal(homeModule.currentHome(), opened, "the rewired app keeps the same home record");
   assert.equal(confirmedSave().baseline, null, "the replacement coordinator starts with no baseline");
   const warnedBefore = warnToasts().length;
 
@@ -118,7 +119,7 @@ test("a hosted save that lands after its wiring was disposed and the app rewired
   await settle();
 
   assert.equal(server.docs.get("srv-t").rev, 2, "the late save reached the server");
-  assert.equal(homeModule.home.rev, 1, "the late save did not move the replacement's revision");
+  assert.equal(homeModule.currentHome().rev, 1, "the late save did not move the replacement's revision");
   assert.equal(mergeBase(), baseline, "the late save did not replace the baseline");
   assert.equal(confirmedSave().baseline, null, "the late save's baseline did not reach the replacement coordinator");
   assert.deepEqual(warnToasts().slice(warnedBefore), ["An earlier save of this script arrived late. Your next save will merge both versions."], "the late save is reported once");
@@ -133,14 +134,14 @@ test("a hosted save that lands after its wiring was disposed and the app rewired
   assert.deepEqual(server.answered, ["1:200", "1:409", "2:200"], "the next save was refused once and retried after a merge");
   assert.equal(textOf(stored.state.rows[0]), "Typed before the teardown.", "the server keeps the text the late save sent");
   assert.equal(textOf(stored.state.rows[1]), "Typed after the rewire.", "the server holds the edit made after the rewire");
-  assert.equal(homeModule.home.rev, 3, "the replacement adopts the revision of its own save");
+  assert.equal(homeModule.currentHome().rev, 3, "the replacement adopts the revision of its own save");
 });
 
 test("a hosted save that lands after its wiring was disposed leaves the replacement's running save busy", async (t) => {
   mockClock(t);
   const server = createServer();
   server.docs.set("srv-b", { rev: 1, state: script() });
-  const held = createHeldFetch({ connection: () => homeModule.conn, answer: server.answer });
+  const held = createHeldFetch({ connection: () => homeModule.currentConn(), answer: server.answer });
   t.after(held.install());
   await rewireRunningApp();
   t.after(() => app.stopApp());

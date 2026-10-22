@@ -1,5 +1,6 @@
 import { targetLengthOf } from "../core/document/timing.ts";
 import "./_dom.mjs";
+import "./_export-services-started.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
