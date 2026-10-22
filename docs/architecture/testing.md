@@ -236,7 +236,13 @@ S.state.comments; list.push(...)`) needs the guard.
   together with `SPLITPAGE_FREEZE_CACHES=1`.
 - **What it does not cover.** A write through `currentDocument()` or
   `liveDocumentPort.current()`, which hand out the raw document for the
-  session's own ports; pages opened without the flag, as for frozen caches.
+  session's own ports; the suites' `__splitpageFormats.state()` hook, which
+  hands scripts the raw document so they can seed fixtures; pages opened
+  without the flag, as for frozen caches.
+- **Identity.** A raw document and its view are different objects, so code
+  that compares a document handed in by the session with `S.state` must
+  compare it with `currentDocument()` (B-roll and tag records,
+  `derivedRecordsPlan`).
 
 ## Golden fixtures
 

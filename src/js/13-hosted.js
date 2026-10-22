@@ -2,6 +2,7 @@ import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { mintDocId, nowIso } from "../adapters/identity/ids.ts";
 import { editStamp } from "../application/commands/save-stamps.ts";
 import { mergeBase, stampDocument } from "../legacy/session-bridge.ts";
+import { changeSet } from "../application/session/change-set.ts";
 import { S } from "./_state.js";
 import { authorityOf, isLinkGuest as guestAuthority, isReviewer } from "../application/collaboration/authority.ts";
 import {
@@ -1376,21 +1377,39 @@ function nextReviewWrite() {
   return null;
 }
 
-function dropLocalResolves() {
+function baseResolution(base, c) {
+  var bi = commentIndexIn(base, c.id);
+  var was = bi === -1 ? null : base[bi];
+  return {
+    resolved: !!(was && was.resolved),
+    resolvedBy: was ? (was.resolvedBy || null) : null,
+    resolvedAt: was ? (was.resolvedAt || null) : null
+  };
+}
+
+function localResolvesStamp() {
   var base = (mergeBase() && mergeBase().comments) || [];
-  var changed = false;
-  ((S.state && S.state.comments) || []).forEach(function (c) {
-    if (!c || c.kind === "conflict") return;
-    var bi = commentIndexIn(base, c.id);
-    var was = bi === -1 ? null : base[bi];
-    var wasResolved = !!(was && was.resolved);
-    if (!!c.resolved === wasResolved) return;
-    c.resolved = wasResolved;
-    c.resolvedBy = was ? (was.resolvedBy || null) : null;
-    c.resolvedAt = was ? (was.resolvedAt || null) : null;
-    changed = true;
-  });
-  return changed;
+  function differs(c) {
+    return !!c && c.kind !== "conflict" && !!c.resolved !== baseResolution(base, c).resolved;
+  }
+  return {
+    name: "drop-local-resolves",
+    plan: function (doc) {
+      if (!(doc.comments || []).some(differs)) return null;
+      return {
+        changes: changeSet({ docFields: ["comments"] }),
+        apply: function (live) {
+          live.comments = live.comments.map(function (c) {
+            return differs(c) ? Object.assign({}, c, baseResolution(base, c)) : c;
+          });
+        }
+      };
+    }
+  };
+}
+
+function dropLocalResolves() {
+  return stampDocument(localResolvesStamp()).kind === "applied";
 }
 
 function reviewAnchorFor(c) {
@@ -1416,20 +1435,73 @@ function unwrapElement(el) {
   el.parentNode.removeChild(el);
 }
 
-function dropLocalAnchor(c) {
-  var row = rowIn(S.state, c.rowId);
-  if (!row || (c.field !== "visualText" && c.field !== "audioText")) return false;
+function withoutLocalAnchor(doc, c) {
+  var row = rowIn(doc, c.rowId);
+  if (!row || (c.field !== "visualText" && c.field !== "audioText")) return null;
   var body = inertBody(row[c.field] || "");
   var span = body.querySelector('.cmt-anchor[data-cmt="' + cssAttr(c.id) + '"]');
-  if (!span) return false;
+  if (!span) return null;
   unwrapElement(span);
-  row[c.field] = body.innerHTML;
+  var html = body.innerHTML;
   var baseRow = rowIn(mergeBase(), c.rowId);
-  if (baseRow && baseRow[c.field] === row[c.field]) {
-    row.updatedAt = baseRow.updatedAt;
-    row.updatedBy = baseRow.updatedBy;
-  }
-  return true;
+  var settled = !!baseRow && baseRow[c.field] === html;
+  return {
+    rowId: c.rowId,
+    field: c.field,
+    html: html,
+    updatedAt: settled ? baseRow.updatedAt : row.updatedAt,
+    updatedBy: settled ? baseRow.updatedBy : row.updatedBy
+  };
+}
+
+function rowStamped(rowId, fields) {
+  return fields.map(function (field) { return { rowId: rowId, field: field }; });
+}
+
+function reviewAnswerStamp(op, sent, body) {
+  var stored = body.comment;
+  var anchored = op.kind === "comment" && !!sent.anchor && body.anchored === true;
+  return {
+    name: "adopt-review-answer",
+    plan: function (doc) {
+      var list = doc.comments || [];
+      var si = commentIndexIn(list, stored.id);
+      var local = si === -1 ? null : list[si];
+      var next = null;
+      if (local) {
+        next = jsonCopy(stored);
+        if (!Array.isArray(next.replies)) next.replies = [];
+        var have = idMap();
+        next.replies.forEach(function (r) { if (r) have[r.id] = true; });
+        (local.replies || []).forEach(function (r) { if (r && !have[r.id]) next.replies.push(r); });
+      }
+      var row = anchored ? rowIn(doc, sent.anchor.rowId) : null;
+      var dropped = !anchored && local && op.kind === "comment" && sent.anchor ? withoutLocalAnchor(doc, local) : null;
+      var cells = [];
+      if (row) cells = rowStamped(row.id, ["updatedAt", "updatedBy"]);
+      if (dropped) cells = rowStamped(dropped.rowId, [dropped.field, "updatedAt", "updatedBy"]);
+      if (!next && !cells.length) return null;
+      return {
+        changes: changeSet({ docFields: next ? ["comments"] : [], cells: cells }),
+        apply: function (live) {
+          if (next) {
+            live.comments = live.comments.slice();
+            live.comments[si] = next;
+          }
+          var target = row ? rowIn(live, row.id) : dropped ? rowIn(live, dropped.rowId) : null;
+          if (target && row) {
+            target.updatedAt = body.updatedAt;
+            target.updatedBy = stored.author;
+          }
+          if (target && dropped) {
+            target[dropped.field] = dropped.html;
+            target.updatedAt = dropped.updatedAt;
+            target.updatedBy = dropped.updatedBy;
+          }
+        }
+      };
+    }
+  };
 }
 
 function reviewRequest(op, c) {
@@ -1481,36 +1553,17 @@ function adoptReviewAnswer(op, sent, body) {
   if (bi === -1) baseList.push(jsonCopy(stored));
   else baseList[bi] = jsonCopy(stored);
 
-  var list = S.state.comments;
-  var si = commentIndexIn(list, stored.id);
-  var local = si === -1 ? null : list[si];
-  if (local) {
-    var next = jsonCopy(stored);
-    if (!Array.isArray(next.replies)) next.replies = [];
-    var have = idMap();
-    next.replies.forEach(function (r) { if (r) have[r.id] = true; });
-    (local.replies || []).forEach(function (r) { if (r && !have[r.id]) next.replies.push(r); });
-    list[si] = next;
-  }
-
   var redraw = false;
-  if (op.kind === "comment" && sent.anchor) {
-    if (body.anchored === true) {
-      var baseRow = rowIn(mergeBase(), sent.anchor.rowId);
-      if (baseRow) {
-        baseRow[sent.anchor.field] = sent.anchor.html;
-        baseRow.updatedAt = body.updatedAt;
-        baseRow.updatedBy = stored.author;
-      }
-      var row = rowIn(S.state, sent.anchor.rowId);
-      if (row) {
-        row.updatedAt = body.updatedAt;
-        row.updatedBy = stored.author;
-      }
-    } else if (local) {
-      redraw = dropLocalAnchor(local);
+  if (op.kind === "comment" && sent.anchor && body.anchored === true) {
+    var baseRow = rowIn(mergeBase(), sent.anchor.rowId);
+    if (baseRow) {
+      baseRow[sent.anchor.field] = sent.anchor.html;
+      baseRow.updatedAt = body.updatedAt;
+      baseRow.updatedBy = stored.author;
     }
   }
+  var outcome = stampDocument(reviewAnswerStamp(op, sent, body));
+  if (outcome.kind === "applied") redraw = outcome.changes.cells.some(function (c) { return c.field === "visualText" || c.field === "audioText"; });
 
   if (typeof body.rev === "number" && body.rev === (home.rev || 0) + (body.changed ? 1 : 0)) {
     home.rev = body.rev;

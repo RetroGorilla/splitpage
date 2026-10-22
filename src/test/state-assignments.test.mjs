@@ -117,7 +117,7 @@ test("there is no S.state assignment left in src, and assigning it throws: the s
   assert.deepEqual(assignments().map((a) => a.site), []);
   const held = currentDocument();
   assert.ok(held, "the session holds the boot document");
-  assert.throws(() => Reflect.set(S, "state", migrated("Assigned")), /S\.state is read-only/, "an assignment throws, in sloppy code too");
+  assert.throws(() => Reflect.set(S, "state", migrated("Assigned")), /The document is read-only here: the document session holds it/, "an assignment throws, in sloppy code too");
   assert.equal(currentDocument(), held);
 });
 
