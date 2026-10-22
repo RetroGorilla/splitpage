@@ -12,6 +12,7 @@ var target = 1;
 var frame = 0;
 var anchor = null;
 var readoutTimer = 0;
+let storing = false;
 
 export function clampScriptScale(v) {
   v = Number(v);
@@ -55,7 +56,13 @@ function step() {
   paintScale(scale);
   holdAnchor();
   if (scale !== target) frame = requestAnimationFrame(step);
-  else { preferences().setScriptScale(scale); settleAnchor(); }
+  else { storeScale(); settleAnchor(); }
+}
+
+function storeScale() {
+  storing = true;
+  try { preferences().setScriptScale(scale); }
+  finally { storing = false; }
 }
 
 function settleAnchor() {
@@ -77,7 +84,7 @@ export function setScriptScale(v, opts) {
     paintScale(scale);
     holdAnchor();
     settleAnchor();
-    if (!opts.noStore) preferences().setScriptScale(scale);
+    if (!opts.noStore) storeScale();
   } else {
     scheduleStep();
   }
@@ -192,6 +199,7 @@ export function __init() {
   if (rowsEl) rowsEl.addEventListener("wheel", onWheel, { passive: false });
   document.addEventListener("keydown", onKeydown, true);
   document.addEventListener(PREF_EVENT, function (e) {
+    if (storing) return;
     var d = e && e.detail;
     if (!d || preferences().nameOf(d.key) !== "scriptScale") return;
     var v = d.value == null ? preferences().scriptScale() : clampScriptScale(parseFloat(d.value));
