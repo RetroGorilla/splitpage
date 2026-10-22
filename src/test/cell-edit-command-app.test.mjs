@@ -12,7 +12,7 @@ const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
-const { editCell } = await import("../js/05b-cell-edit.js");
+const { cellEditing } = await import("../legacy/editor-bridge.ts");
 const { toggleCellFormat, maybeCueShortcut } = await import("../js/05-render.js");
 const { undo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
@@ -150,7 +150,7 @@ test("an edit that leaves the stored cell as it is makes no command, no stamp an
   const stamp = row("r1").updatedAt;
   const w = watch();
   try {
-    editCell(el, (cell, sel) => ({ cell: cell, sel: sel }));
+    cellEditing().edit(el, (cell, sel) => ({ cell: cell, sel: sel }));
   } finally {
     w.stop();
   }
@@ -173,7 +173,7 @@ test("in review mode the session refuses a formatting edit: the document, the ce
     const w = watch();
     let out;
     try {
-      out = editCell(el, bold);
+      out = cellEditing().edit(el, bold);
     } finally {
       w.stop();
     }
@@ -199,7 +199,7 @@ test("a command that fails is thrown, and leaves the document, the cell on scree
   const real = Date.prototype.toISOString;
   Date.prototype.toISOString = function () { throw new Error("no clock"); };
   try {
-    assert.throws(() => editCell(el, bold), /no clock/);
+    assert.throws(() => cellEditing().edit(el, bold), /no clock/);
   } finally {
     Date.prototype.toISOString = real;
   }

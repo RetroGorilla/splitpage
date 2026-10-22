@@ -14,7 +14,6 @@ import {
   cellFormatState,
   editableCellHtml,
   renderAbsorbed,
-  syncFieldFromDom,
   toggleCellDirection,
   toggleCellFormat,
   whilePainting
@@ -30,10 +29,11 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { editAllowed, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
-import { editorSelection, focusMemory } from "../legacy/editor-bridge.ts";
+import { cellEditing, editorSelection, focusMemory } from "../legacy/editor-bridge.ts";
 import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { placeEditorSelection, rememberCellSelection } from "../features/editing/cell-selection.ts";
+import { placeCaretAtTextOffset } from "../features/editing/caret.ts";
 import { gallerySize } from "../core/document/gallery.ts";
 import { escapeHtml, truncateForPreview } from "../core/document/text-policy.ts";
 
@@ -119,44 +119,6 @@ export function scheduleWriterStats() {
   scheduleIdleRefresh("writerStats");
 }
 
-export function caretTextOffset(el) {
-  var sel = window.getSelection();
-  if (!sel.rangeCount) return 0;
-  var range = sel.getRangeAt(0);
-  if (!el.contains(range.startContainer)) return 0;
-  var probe = document.createRange();
-  probe.selectNodeContents(el);
-  probe.setEnd(range.startContainer, range.startOffset);
-  return probe.toString().length;
-}
-
-export function placeCaretAtTextOffset(el, offset) {
-  var walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null);
-  var node, seen = 0, target = null, targetOffset = 0;
-  while ((node = walker.nextNode())) {
-    var len = node.nodeValue.length;
-    if (seen + len >= offset) { target = node; targetOffset = offset - seen; break; }
-    seen += len;
-  }
-  var range = document.createRange();
-  var atomic = target && target.parentNode.closest && target.parentNode.closest(".tag-anchor");
-  if (atomic) {
-    if (targetOffset <= 0 && target === atomic.firstChild) {
-      range.setStartBefore(atomic);
-    } else {
-      range.setStartAfter(atomic);
-    }
-  } else if (target) {
-    range.setStart(target, Math.min(targetOffset, target.nodeValue.length));
-  } else {
-    range.selectNodeContents(el);
-  }
-  range.collapse(true);
-  var sel = window.getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
-}
-
 function focusWriterBlock(rowId, offset) {
   var el = document.querySelector('#writer-doc .wr-para[data-id="' + cssAttr(rowId) + '"]');
   if (!el) return;
@@ -236,12 +198,12 @@ export function onWriterKeydown(e) {
   if (e.key === "Backspace" && idx > 0 && caretAtEdge(cellEl, range, "start")) {
     e.preventDefault();
     e.stopPropagation();
-    syncFieldFromDom(cellEl);
+    cellEditing().sync(cellEl);
     mergeWriterRows(idx - 1);
   } else if (e.key === "Delete" && idx < S.state.rows.length - 1 && caretAtEdge(cellEl, range, "end")) {
     e.preventDefault();
     e.stopPropagation();
-    syncFieldFromDom(cellEl);
+    cellEditing().sync(cellEl);
     mergeWriterRows(idx);
   }
 }
@@ -335,7 +297,7 @@ export function closeWriter() {
   if (active && active.classList && active.classList.contains("wr-para")) {
     var clean = sanitizeHtml(active.innerHTML);
     if (clean !== storedHtmlFromDom(active.innerHTML)) active.innerHTML = clean;
-    syncFieldFromDom(active);
+    cellEditing().sync(active);
   }
   if (el.contains(document.activeElement)) document.activeElement.blur();
   el.inert = true;

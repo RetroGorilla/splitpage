@@ -15,8 +15,8 @@ const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { legacySessionEffects } = await import("../js/12-dirty-toast.js");
-const { addRow, moveRowTo } = await import("../js/06-rows.js");
-const { rowDrag } = await import("../legacy/editor-bridge.ts");
+const { addRow } = await import("../js/06-rows.js");
+const { cellEditing, rowDrag } = await import("../legacy/editor-bridge.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 
@@ -176,7 +176,7 @@ test("rows: a drop that leaves the order as it was makes no edit", async () => {
   const generation = liveSession().generation();
   const sizes = undoSizes();
   const wasDirty = unsavedChanges();
-  moveRowTo("r2", "r1", true);
+  cellEditing().moveRow("r2", "r1", true);
   await settle();
   assert.equal(liveSession().generation(), generation);
   assert.deepEqual(undoSizes(), sizes);
@@ -210,7 +210,7 @@ test("rows: when the session refuses edits, a strip drop and an add leave the sc
   const generation = liveSession().generation();
   effects.edit = () => ({ allowed: false, reason: "review" });
   try {
-    moveRowTo("r1", "r3", true);
+    cellEditing().moveRow("r1", "r3", true);
     addRow("r1");
     await settle();
   } finally {
