@@ -1,4 +1,3 @@
-import { S } from "./_state.js";
 import { attachDesktop } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
 export { SCHEMA_VERSION } from "../core/document/fields.ts";
