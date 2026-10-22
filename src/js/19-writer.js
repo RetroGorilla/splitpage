@@ -2,7 +2,7 @@ import { formatDuration, pad2 } from "../core/production/timing.ts";
 import { S } from "./_state.js";
 import { totalSeconds } from "./01-scene-status.js";
 import { renderRowGroups } from "./01b-hide-shot.js";
-import { findRowIndex } from "./03-sync.js";
+import { rowIndexOf } from "../core/document/rows.ts";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import {
   cssAttr,
@@ -230,7 +230,7 @@ export function onWriterKeydown(e) {
   if (!sel.rangeCount) return;
   var range = sel.getRangeAt(0);
   if (!range.collapsed || !cellEl.contains(range.startContainer)) return;
-  var idx = findRowIndex(cellEl.getAttribute("data-id"));
+  var idx = readSession(function (doc) { return rowIndexOf(doc, cellEl.getAttribute("data-id")); });
   if (idx === -1) return;
 
   if (e.key === "Backspace" && idx > 0 && caretAtEdge(cellEl, range, "start")) {
