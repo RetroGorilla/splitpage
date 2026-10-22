@@ -31,7 +31,7 @@ import {
   voiceIsFollowing
 } from "../../application/prompter-state.ts";
 import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
-import { importHome } from "../../js/_home.js";
+import { importHome } from "../../legacy/location-bridge.ts";
 import { expandHiddenShotStrip } from "../../js/01b-hide-shot.js";
 import {
   closeHistoryPanel,

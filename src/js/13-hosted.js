@@ -6,17 +6,19 @@ import { changeSet } from "../application/session/change-set.ts";
 import { S } from "./_state.js";
 import { authorityOf, isLinkGuest as guestAuthority, isReviewer } from "../application/collaboration/authority.ts";
 import {
-  conn,
-  home,
-  homeConn,
-  normalizeServerUrl,
+  amendHome,
+  currentConn,
+  currentHome,
+  documentLocation,
+  handServerCheckTo,
+  reviewMode,
   serverHomeId,
-  setConnection,
-  serverOf,
+  serverStatus,
   setHome,
-  stillOnServer,
-  updateConnection
-} from "./_home.js";
+  stillOnServer
+} from "../legacy/location-bridge.ts";
+import { SERVER_RESUME_KEY } from "../application/location/server-status.ts";
+import { shortHost } from "../adapters/transport/server-address.ts";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import {
   copyDocHistorySafe,
@@ -61,12 +63,11 @@ import { captureOperation, documentTransitions, stillOwns } from "../legacy/tran
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import {
-  joinServer,
   openPinDialog,
   openServersDialog,
-  shortHost,
   updateConnectMenu
 } from "./20e-connect.js";
+import { joinServer } from "../adapters/transport/server-join.ts";
 import { setMenuItemReason } from "./18b-file-menu.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { armBrowserServerDraft, offerBrowserDraftAfterLinkOff } from "./20g-drafts.js";
@@ -75,7 +76,7 @@ import { idMap } from "../core/document/id-map.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { cloneState } from "../core/document/clone.ts";
-import { parseLinkFragment, tunnelCommand } from "../../shared/server-links.js";
+import { normalizeServerUrl, parseLinkFragment, tunnelCommand } from "../../shared/server-links.js";
 import { driveFormatSize } from "../../shared/text.js";
 
 var sharedDocId;
@@ -91,19 +92,10 @@ var LINK_KEYS_KEY = "splitpage-invites";
 var launchToken = "";
 var linkKey = "";
 var linkKeyFresh = false;
-export var linkTurnedOff = false;
-
-S.serverMode = { available: false, readOnly: false, checked: false,
-                   authRequired: false, reviewAvailable: false, version: null };
 var serverIdentity = null;
-export var serverSessionExpired = false;
 var serverDocs = [];
 
-export function onServerDoc() { return home.kind === "server"; }
-
-export function reviewMode() {
-  return isReviewer(authorityOf(homeConn()));
-}
+export function onServerDoc() { return currentHome().kind === "server"; }
 
 var ApiError = apiError;
 
@@ -158,9 +150,9 @@ function sessionTokenFor(serverUrl) {
 
 function saveTabServer() {
   try {
-    sessionStorage.setItem(TAB_SERVER_KEY, JSON.stringify({ serverUrl: conn.serverUrl, tunnel: conn.tunnel }));
-    if (conn.token) {
-      sessionStorage.setItem(SERVER_TOKEN_KEY, JSON.stringify({ serverUrl: conn.serverUrl, token: conn.token }));
+    sessionStorage.setItem(TAB_SERVER_KEY, JSON.stringify({ serverUrl: currentConn().serverUrl, tunnel: currentConn().tunnel }));
+    if (currentConn().token) {
+      sessionStorage.setItem(SERVER_TOKEN_KEY, JSON.stringify({ serverUrl: currentConn().serverUrl, token: currentConn().token }));
     } else {
       sessionStorage.removeItem(SERVER_TOKEN_KEY);
     }
@@ -185,9 +177,9 @@ function loadTabConnection() {
   var token = (typeof from.token === "string" && from.token) || sessionTokenFor(serverUrl) ||
               rememberedTokenFor(serverUrl);
   try {
-    setConnection({ serverUrl: serverUrl, token: token, tunnel: from.tunnel || null });
+    documentLocation().setConnection({ serverUrl: serverUrl, token: token, tunnel: from.tunnel || null });
   } catch (e) {
-    setConnection({});
+    documentLocation().setConnection({});
   }
   saveTabServer();
 }
@@ -195,7 +187,7 @@ function loadTabConnection() {
 export function pointTabAt(serverUrl, opts) {
   opts = opts || {};
   var url = normalizeServerUrl(serverUrl);
-  setConnection({
+  documentLocation().setConnection({
     serverUrl: url,
     token: opts.token || rememberedTokenFor(url),
     tunnel: opts.tunnel || null
@@ -207,34 +199,34 @@ export function pointTabAt(serverUrl, opts) {
       else localStorage.removeItem(SERVER_BASE_KEY);
     } catch (e) { }
   }
-  return conn;
+  return currentConn();
 }
 
 export function apiUrl(path) {
-  return serverTransport(conn).url(path);
+  return serverTransport(currentConn()).url(path);
 }
 
 export function setServerToken(token, remember) {
-  updateConnection({ token: String(token || "") });
+  documentLocation().updateConnection({ token: String(token || "") });
   saveTabServer();
   var map = rememberedTokens();
-  if (remember) map[conn.serverUrl] = conn.token;
-  else delete map[conn.serverUrl];
+  if (remember) map[currentConn().serverUrl] = currentConn().token;
+  else delete map[currentConn().serverUrl];
   writeRememberedTokens(map);
 }
 
 export function clearServerToken() {
-  updateConnection({ token: "", role: "", scope: "" });
+  documentLocation().updateConnection({ token: "", role: "", scope: "" });
   saveTabServer();
   var map = rememberedTokens();
-  if (Object.prototype.hasOwnProperty.call(map, conn.serverUrl)) {
-    delete map[conn.serverUrl];
+  if (Object.prototype.hasOwnProperty.call(map, currentConn().serverUrl)) {
+    delete map[currentConn().serverUrl];
     writeRememberedTokens(map);
   }
 }
 
 function setLinkToken(token) {
-  updateConnection({ token: String(token || "") });
+  documentLocation().updateConnection({ token: String(token || "") });
   saveTabServer();
 }
 
@@ -264,7 +256,7 @@ function readLinkKey() {
   }
   try { linkKey = sessionStorage.getItem(REVIEW_KEY_KEY) || ""; } catch (e) { linkKey = ""; }
   if (linkKey) return;
-  var saved = deviceLinkKeys()[conn.serverUrl];
+  var saved = deviceLinkKeys()[currentConn().serverUrl];
   if (saved && typeof saved.key === "string") linkKey = saved.key;
 }
 
@@ -304,22 +296,22 @@ export function arrivingOnLink() {
 }
 
 export function isLinkGuest() {
-  return guestAuthority(authorityOf(conn));
+  return guestAuthority(authorityOf(currentConn()));
 }
 
 function holdsOwnerSignIn() {
-  return !!conn.token && conn.token === rememberedTokenFor(conn.serverUrl);
+  return !!currentConn().token && currentConn().token === rememberedTokenFor(currentConn().serverUrl);
 }
 
 var serverCaps = new WeakMap();
 
 function capsOf(c) {
-  var server = serverOf(c);
+  var server = documentLocation().serverOf(c);
   return (server && serverCaps.get(server)) || { blobs: false, noClientHeader: false, known: false };
 }
 
 function noteCaps(c, health, noClientHeader) {
-  var server = serverOf(c);
+  var server = documentLocation().serverOf(c);
   if (!server) return;
   serverCaps.set(server, {
     blobs: !!(health && Number(health.blobs) >= 1),
@@ -349,14 +341,13 @@ function otherServerTransport(base, token) {
 
 export function apiFetch(path, opts) {
   opts = opts || {};
-  var token = opts.token !== undefined ? opts.token : conn.token;
+  var token = opts.token !== undefined ? opts.token : currentConn().token;
   var transport;
   if (opts.base !== undefined) transport = otherServerTransport(opts.base, token);
-  else transport = serverTransport(conn, token);
+  else transport = serverTransport(currentConn(), token);
   return transport.request(path, opts);
 }
 
-export var SERVER_RESUME_KEY = "splitpage-server-resume";
 
 var resumeKeyOwner = null;
 
@@ -382,7 +373,7 @@ function stashForReload() {
   var stashed = false;
   if (onServerDoc()) {
     try {
-      var raw = JSON.stringify({ id: home.id, rev: home.rev });
+      var raw = JSON.stringify({ id: currentHome().id, rev: currentHome().rev });
       sessionStorage.setItem(SERVER_RESUME_KEY, raw);
       stashed = stashLocalWork();
       if (stashed) ownResumeKey(raw);
@@ -393,8 +384,7 @@ function stashForReload() {
 }
 
 function flagServerSessionExpired() {
-  if (serverSessionExpired) return;
-  serverSessionExpired = true;
+  if (!serverStatus().expireSession()) return;
   var stashed = stashForReload();
   showToast(stashed
     ? "Your sign-in expired. Reload the page to sign in again — your unsaved edits are kept and will be merged back in."
@@ -417,10 +407,9 @@ function flagClientTooOld() {
 }
 
 function flagLinkOff(kind) {
-  if (linkTurnedOff) return;
-  linkTurnedOff = true;
+  if (!serverStatus().turnLinkOff()) return;
   if (kind === "arrived") {
-    forgetLinkKey(conn.serverUrl);
+    forgetLinkKey(currentConn().serverUrl);
     showToast("This link has been turned off. Ask whoever sent it for a new one.", "warn", true);
     updateFileChip();
     updateSaveStatus();
@@ -429,7 +418,7 @@ function flagLinkOff(kind) {
     return;
   }
   stashForReload();
-  forgetLinkKey(conn.serverUrl);
+  forgetLinkKey(currentConn().serverUrl);
   var saveCopy = function () { saveDoc({ saveAs: true }); };
   showActionToast(kind === "gone"
     ? "This link no longer works — ask whoever sent it for a new one. Your changes can't be saved to it any more."
@@ -443,7 +432,7 @@ function flagLinkOff(kind) {
 
 function offerDraftAfterLinkOff() {
   if (S.DESKTOP || onServerDoc()) return;
-  offerBrowserDraftAfterLinkOff(conn.scope || sharedDocId || linkDocId || "");
+  offerBrowserDraftAfterLinkOff(currentConn().scope || sharedDocId || linkDocId || "");
 }
 
 function pendingServerResume() {
@@ -469,7 +458,7 @@ async function resumeServerDoc() {
   var op = captureOperation();
 
   var body;
-  var via = conn;
+  var via = currentConn();
   try {
     body = await apiFetch("api/docs/" + encodeURIComponent(pending.id));
     if (!stillOnServer(via)) return false;
@@ -512,7 +501,7 @@ async function resumeServerDoc() {
   });
   if (stash) stashes.accept(stash, theirs);
   setHome("server", { id: body.id, rev: body.rev || 0 });
-  S.docIdWrittenOut = true;
+  documentLocation().markWrittenOut(true);
   resetProductionPanelState();
   applyReviewMode();
 
@@ -663,37 +652,37 @@ export function plainReason(err) {
 }
 
 export async function detectServer() {
-  if (!conn.serverUrl && location.protocol === "file:") { S.serverMode.checked = true; return; }
-  var probing = conn;
+  if (!currentConn().serverUrl && location.protocol === "file:") { serverStatus().recordMode({ checked: true }); return; }
+  var probing = currentConn();
   try {
     var health = await probeHealth(probing);
     if (!stillOnServer(probing)) return;
     applyHealth(health);
   } catch (e) {
     if (!stillOnServer(probing)) return;
-    S.serverMode.available = false;
+    serverStatus().recordMode({ available: false });
   }
   if (!stillOnServer(probing)) return;
-  S.serverMode.checked = true;
+  serverStatus().recordMode({ checked: true });
   updateConnectMenu();
   updateServerMenu();
-  if (!S.serverMode.available) {
-    if (conn.serverUrl) {
-      showToast("Could not reach " + conn.serverUrl +
-        (conn.tunnel ? " — is the SSH tunnel to " + conn.tunnel.userHost + " running? (" +
-          tunnelCommand(conn.tunnel) + ") Or" : " —") +
+  if (!serverStatus().mode().available) {
+    if (currentConn().serverUrl) {
+      showToast("Could not reach " + currentConn().serverUrl +
+        (currentConn().tunnel ? " — is the SSH tunnel to " + currentConn().tunnel.userHost + " running? (" +
+          tunnelCommand(currentConn().tunnel) + ") Or" : " —") +
         " use File ▸ Servers… to pick another, or go back to this copy.", "warn");
     }
     return;
   }
 
-  var useKey = !!linkKey && (!conn.token || (linkKeyFresh && !holdsOwnerSignIn()));
+  var useKey = !!linkKey && (!currentConn().token || (linkKeyFresh && !holdsOwnerSignIn()));
   if (linkKeyFresh && holdsOwnerSignIn()) {
     linkKey = "";
     linkKeyFresh = false;
     try { sessionStorage.removeItem(REVIEW_KEY_KEY); } catch (e) {}
   }
-  if (S.serverMode.authRequired && (!conn.token || useKey)) {
+  if (serverStatus().mode().authRequired && (!currentConn().token || useKey)) {
     var reason = null;
     if (useKey) {
       var r = await joinWithLinkKey();
@@ -702,10 +691,10 @@ export async function detectServer() {
       if (r === "off") { updateServerMenu(); return; }
       if (r === "gone") reason = "This link no longer works — ask whoever sent it for a new one. " +
         "If you have this server's join PIN or key, enter it here.";
-      if (conn.token) { finishServerDetect(); return; }
+      if (currentConn().token) { finishServerDetect(); return; }
     }
     updateServerMenu();
-    openPinDialog({ reason: reason || ((conn.serverUrl ? shortHost(conn.serverUrl) : "This server") +
+    openPinDialog({ reason: reason || ((currentConn().serverUrl ? shortHost(currentConn().serverUrl) : "This server") +
       " asks for a join PIN or key before it will show you anything.") });
     return;
   }
@@ -714,22 +703,15 @@ export async function detectServer() {
 }
 
 export function applyHealth(health) {
-  S.serverMode.available = !!(health && health.ok);
-  S.serverMode.readOnly = !!(health && health.readOnly);
-  S.serverMode.authRequired = !!(health && health.authRequired);
-  S.serverMode.reviewAvailable = !!(health && health.reviewAvailable);
-  S.serverMode.version = (health && health.version) || null;
-  S.serverMode.links = !!(health && Number(health.links) >= 1);
-  S.serverMode.linksPersist = !!(health && health.linksPersist === true);
-  S.serverMode.checked = true;
-  if (!capsOf(conn).known && health) noteCaps(conn, health, false);
+  serverStatus().applyHealth(health);
+  if (!capsOf(currentConn()).known && health) noteCaps(currentConn(), health, false);
 }
 
 async function joinWithLinkKey() {
-  if (!linkKey || linkTurnedOff) return "none";
+  if (!linkKey || serverStatus().linkTurnedOff()) return "none";
   var key = linkKey;
-  var via = conn;
-  var joined = await joinServer(conn.serverUrl, null, key);
+  var via = currentConn();
+  var joined = await joinServer(currentConn().serverUrl, null, key);
   if (!stillOnServer(via)) return "moved";
   if (joined && joined.ok) {
     linkKeyFresh = false;
@@ -737,17 +719,17 @@ async function joinWithLinkKey() {
     var scope = typeof joined.scope === "string" ? joined.scope
       : typeof joined.docId === "string" && joined.role === "review" ? joined.docId : "";
     try {
-      updateConnection({ role: joined.role === "review" ? "review" : "edit", scope: scope });
+      documentLocation().updateConnection({ role: joined.role === "review" ? "review" : "edit", scope: scope });
     } catch (e) {}
     linkDocId = joined.docId || scope || "";
-    rememberLinkKey(conn.serverUrl, key, linkDocId, !!S.serverMode.linksPersist);
+    rememberLinkKey(currentConn().serverUrl, key, linkDocId, !!serverStatus().mode().linksPersist);
     return "ok";
   }
   if (joined && joined.error === "link-off") {
     flagLinkOff(onServerDoc() || unsavedChanges() ? "off" : "arrived");
     return "off";
   }
-  if (joined && joined.error === "bad-pin") { forgetLinkKey(conn.serverUrl); return "gone"; }
+  if (joined && joined.error === "bad-pin") { forgetLinkKey(currentConn().serverUrl); return "gone"; }
   return "failed";
 }
 
@@ -768,16 +750,16 @@ async function probeHealth(probing) {
 }
 
 export async function finishServerDetect() {
-  var asking = conn;
+  var asking = currentConn();
   try {
     var me = await apiFetch("api/me");
     if (!stillOnServer(asking)) return;
     serverIdentity = me;
     var role = (serverIdentity && serverIdentity.role) === "review" ? "review" : "edit";
     var scope = serverIdentity && typeof serverIdentity.scope === "string" ? serverIdentity.scope
-      : (role === "review" ? conn.scope : "");
-    try { updateConnection({ role: role, scope: scope }); }
-    catch (e2) { updateConnection({ role: role, scope: "" }); }
+      : (role === "review" ? currentConn().scope : "");
+    try { documentLocation().updateConnection({ role: role, scope: scope }); }
+    catch (e2) { documentLocation().updateConnection({ role: role, scope: "" }); }
     if (serverIdentity && serverIdentity.name && !getSavedAuthorName()) {
       saveAuthorName(serverIdentity.name);
       updateIdentityChip();
@@ -785,8 +767,8 @@ export async function finishServerDetect() {
   } catch (e) {
     if (!stillOnServer(asking)) return;
     if (e && e.code === "link-off") { flagLinkOff("off"); updateServerMenu(); return; }
-    if (e && e.code === "pin" && linkKey && !linkTurnedOff) {
-      updateConnection({ token: "", role: "", scope: "" });
+    if (e && e.code === "pin" && linkKey && !serverStatus().linkTurnedOff()) {
+      documentLocation().updateConnection({ token: "", role: "", scope: "" });
       saveTabServer();
       var again = await joinWithLinkKey();
       if (!stillOnServer(asking)) return;
@@ -799,7 +781,7 @@ export async function finishServerDetect() {
 
   updateServerMenu();
   applyReviewMode();
-  var draftFor = S.DESKTOP ? "" : (conn.scope || sharedDocId || linkDocId || "");
+  var draftFor = S.DESKTOP ? "" : (currentConn().scope || sharedDocId || linkDocId || "");
   (draftFor ? armBrowserServerDraft(draftFor) : Promise.resolve(false)).then(function () {
     return resumeServerDoc().then(function (resumed) {
       if (resumed === true || resumed === "replaced") return;
@@ -811,18 +793,18 @@ export async function finishServerDetect() {
 
 export function serverOpenItemState() {
   var guest = isLinkGuest();
-  return { hidden: !S.serverMode.available, disabled: guest, reason: guest ? "Your link opens this one script" : "" };
+  return { hidden: !serverStatus().mode().available, disabled: guest, reason: guest ? "Your link opens this one script" : "" };
 }
 
 export function serverPublishItemState() {
   var guest = isLinkGuest();
-  var disabled = !!(S.serverMode.readOnly || conn.role === "review" || guest);
+  var disabled = !!(serverStatus().mode().readOnly || currentConn().role === "review" || guest);
   return {
-    hidden: !S.serverMode.available,
+    hidden: !serverStatus().mode().available,
     disabled: disabled,
     reason: !disabled ? ""
       : guest ? "Your link opens this one script"
-      : conn.role === "review" ? "Viewing only — publishing needs the editing code"
+      : currentConn().role === "review" ? "Viewing only — publishing needs the editing code"
       : "This server is read-only"
   };
 }
@@ -852,21 +834,15 @@ export function applyReviewMode() {
 
 export { VIEWING_ONLY };
 
-export function reviewBlocked() {
-  if (!reviewMode()) return false;
-  showToast(VIEWING_ONLY, "warn");
-  return true;
-}
-
 export async function fetchReviewLink() {
-  if (!S.serverMode.available || !S.serverMode.reviewAvailable || isReviewer(authorityOf(conn))) return "";
-  if (S.serverMode.links || isLinkGuest()) return "";
+  if (!serverStatus().mode().available || !serverStatus().mode().reviewAvailable || isReviewer(authorityOf(currentConn()))) return "";
+  if (serverStatus().mode().links || isLinkGuest()) return "";
   if (!onServerDoc()) return "";
   var body;
-  try { body = await apiFetch("api/share?doc=" + encodeURIComponent(home.id)); } catch (e) { return ""; }
+  try { body = await apiFetch("api/share?doc=" + encodeURIComponent(currentHome().id)); } catch (e) { return ""; }
   if (!body || !body.reviewKey) return "";
-  var base = conn.serverUrl || (location.origin + "/");
-  return base + "?doc=" + encodeURIComponent(body.docId || home.id) +
+  var base = currentConn().serverUrl || (location.origin + "/");
+  return base + "?doc=" + encodeURIComponent(body.docId || currentHome().id) +
          "#review=" + body.reviewKey;
 }
 
@@ -922,7 +898,7 @@ function renderServerPicker() {
         '</span>' +
       '</button>' +
       (isOpen ? '<span class="server-doc-current">Open</span>' : '') +
-      (S.serverMode.readOnly || isReviewer(authorityOf(conn)) ? '' :
+      (serverStatus().mode().readOnly || isReviewer(authorityOf(currentConn())) ? '' :
         '<button type="button" class="server-doc-delete" data-action="server-delete" data-id="' +
           escapeHtml(d.id) + '" title="Delete this document from the server" aria-label="Delete from the server">' +
           spriteIcon("i-trash") + '</button>') +
@@ -941,7 +917,7 @@ export async function openServerDoc(id) {
     return resumed;
   }
   var body;
-  var via = conn;
+  var via = currentConn();
   try {
     body = await apiFetch("api/docs/" + encodeURIComponent(id));
   } catch (err) {
@@ -985,8 +961,8 @@ function reportPublishOnLeftServer(title, via) {
 
 export async function publishToServer(opts) {
   opts = opts && typeof opts === "object" && !(opts instanceof Event) ? opts : {};
-  if (S.serverMode.readOnly) { showToast("This server is published read-only.", "warn"); return false; }
-  if (conn.role === "review") {
+  if (serverStatus().mode().readOnly) { showToast("This server is published read-only.", "warn"); return false; }
+  if (currentConn().role === "review") {
     showToast("You are viewing this session — publishing a script needs the editing code.", "warn");
     return false;
   }
@@ -997,7 +973,7 @@ export async function publishToServer(opts) {
   var published = cloneState(S.state);
   var seqAtPublish = saveChanges();
   var oldId = S.state.docId;
-  var forkDocId = S.docIdWrittenOut ? mintDocId() : null;
+  var forkDocId = documentLocation().writtenOut() ? mintDocId() : null;
   if (forkDocId) published.docId = forkDocId;
   var body;
   var op = captureOperation();
@@ -1047,14 +1023,14 @@ export async function publishToServer(opts) {
 
 export function serverDocShareUrl(id) {
   try {
-    return new URL("?doc=" + encodeURIComponent(id), conn.serverUrl || location.href).href;
+    return new URL("?doc=" + encodeURIComponent(id), currentConn().serverUrl || location.href).href;
   } catch (e) {
-    return (conn.serverUrl || "") + "?doc=" + encodeURIComponent(id);
+    return (currentConn().serverUrl || "") + "?doc=" + encodeURIComponent(id);
   }
 }
 
 export function shareAccessNote() {
-  if (S.serverMode.authRequired) return "They'll need the join PIN to open it.";
+  if (serverStatus().mode().authRequired) return "They'll need the join PIN to open it.";
   if (serverIdentity && serverIdentity.email) return "They'll need to sign in the same way you did.";
   return "Anyone who can reach that address can open it.";
 }
@@ -1082,13 +1058,13 @@ function copyShareTextFallback(text) {
 }
 
 export async function publishAndCopyShareLink() {
-  if (!S.serverMode.available) {
+  if (!serverStatus().mode().available) {
     showToast("A share link needs a Splitpage server to publish to. " +
       "Pick or add one under Servers…, then try again.", "warn");
     if (typeof openServersDialog === "function") openServersDialog();
     return false;
   }
-  if (S.serverMode.readOnly) {
+  if (serverStatus().mode().readOnly) {
     showToast("This server is published read-only — nothing new can be put on it.", "warn");
     return false;
   }
@@ -1100,7 +1076,7 @@ export async function publishAndCopyShareLink() {
   } else if (!(await publishToServer()) || !onServerDoc()) {
     return false;
   }
-  var url = serverDocShareUrl(home.id);
+  var url = serverDocShareUrl(currentHome().id);
   var copied = await copyShareText(url);
   showToast(copied
     ? "Link copied — " + shareAccessNote()
@@ -1122,7 +1098,7 @@ function readSharedDocParam() {
 }
 
 async function openSharedDocFromLink(refusedId) {
-  var id = conn.scope || sharedDocId || linkDocId;
+  var id = currentConn().scope || sharedDocId || linkDocId;
   sharedDocId = "";
   if (!id || id === refusedId) return false;
   if (onServerDoc()) return false;
@@ -1219,12 +1195,12 @@ async function sendWithBlobs(transport, state, send, canAccept) {
 }
 
 export function fetchBlob(sha) {
-  return fetchBlobVia(serverTransport(conn), sha);
+  return fetchBlobVia(serverTransport(currentConn()), sha);
 }
 
 export function blobSourceNow() {
   if (!onServerDoc()) return null;
-  var transport = serverTransport(conn);
+  var transport = serverTransport(currentConn());
   return function (sha) { return fetchBlobVia(transport, sha); };
 }
 
@@ -1248,7 +1224,7 @@ function reportLateServerSave() {
 
 function reportIfLandedHere(op, docId, rev) {
   if (serverHomeId() !== docId || !stillOnServer(op.connection)) return;
-  if (home.rev < rev) reportLateServerSave();
+  if (currentHome().rev < rev) reportLateServerSave();
 }
 
 var SENT_OUTCOMES = ["saved", "obsolete"];
@@ -1261,7 +1237,7 @@ export function saveToServer(job) {
 }
 
 async function writeToServer(job) {
-  if (serverSessionExpired || clientTooOld || linkTurnedOff) return false;
+  if (serverStatus().sessionExpired() || clientTooOld || serverStatus().linkTurnedOff()) return false;
   if (reviewMode()) return sendReviewWrites();
   var docId = serverHomeId();
   var op = job.operation();
@@ -1275,7 +1251,7 @@ async function writeToServer(job) {
     stampDocument(editStamp({ lastEditedBy: getEditorName(), lastEditedAt: nowIso() }));
     var published = cloneState(S.state);
     var seqAtSave = saveChanges();
-    var baseRevAtSave = home.rev;
+    var baseRevAtSave = currentHome().rev;
 
     try {
       var body = await withBusyBar("Saving to the server…", function () {
@@ -1285,8 +1261,8 @@ async function writeToServer(job) {
           return transport.request("api/docs/" + encodeURIComponent(docId), { method: "PUT", body: put });
         }, true);
       });
-      if (home === op.destination && job.alive()) {
-        home.rev = body.rev;
+      if (currentHome() === op.destination && job.alive()) {
+        amendHome(currentHome(), { rev: body.rev });
         setBaseState(published, "saveToServer: what the server just accepted");
       } else {
         reportIfLandedHere(op, docId, body.rev);
@@ -1316,7 +1292,7 @@ async function writeToServer(job) {
           historyFrom: prevDocId,
           report: false
         }).result;
-        home.rev = err.payload.rev || home.rev;
+        amendHome(currentHome(), { rev: err.payload.rev || currentHome().rev });
         job.moved();
         op = job.operation();
         continue;
@@ -1505,7 +1481,7 @@ function reviewAnswerStamp(op, sent, body) {
 }
 
 function reviewRequest(op, c) {
-  var path = "api/docs/" + encodeURIComponent(home.id) + "/comments";
+  var path = "api/docs/" + encodeURIComponent(currentHome().id) + "/comments";
   var by = getEditorName();
   if (op.kind === "reply") {
     var reply = null;
@@ -1533,7 +1509,7 @@ function reviewRequest(op, c) {
 function sendReviewRequest(req) {
   var isReply = !!req.body.reply;
   var probe = { comments: [{ body: isReply ? req.body.reply.body : req.body.comment.body }] };
-  var transport = serverTransport(conn);
+  var transport = serverTransport(currentConn());
   return sendWithBlobs(transport, probe, function (sending) {
     var body = req.body;
     if (sending !== probe) {
@@ -1565,8 +1541,8 @@ function adoptReviewAnswer(op, sent, body) {
   var outcome = stampDocument(reviewAnswerStamp(op, sent, body));
   if (outcome.kind === "applied") redraw = outcome.changes.cells.some(function (c) { return c.field === "visualText" || c.field === "audioText"; });
 
-  if (typeof body.rev === "number" && body.rev === (home.rev || 0) + (body.changed ? 1 : 0)) {
-    home.rev = body.rev;
+  if (typeof body.rev === "number" && body.rev === (currentHome().rev || 0) + (body.changed ? 1 : 0)) {
+    amendHome(currentHome(), { rev: body.rev });
   }
   return redraw;
 }
@@ -1683,11 +1659,11 @@ function sameDocumentContent(a, b) {
 }
 
 export function notePresenceRev(body) {
-  if (!body || pullInFlight || serverSessionExpired || linkTurnedOff || reviewWriting) return;
+  if (!body || pullInFlight || serverStatus().sessionExpired() || serverStatus().linkTurnedOff() || reviewWriting) return;
   var docId = serverHomeId();
   if (!docId || body.docId !== docId) return;
   if (typeof body.rev !== "number") return;
-  if (body.rev <= (home.rev || 0)) return;
+  if (body.rev <= (currentHome().rev || 0)) return;
   if (saveBusy()) return;
   pullInFlight = true;
   pullServerDoc(docId).catch(function () {}).then(function () { pullInFlight = false; });
@@ -1705,7 +1681,7 @@ async function pullServerDoc(docId) {
   if (serverHomeId() !== docId || !stillOwns(op)) return;
   if (saveBusy() || reviewWriting) return;
   var rev = body.rev || 0;
-  if (rev <= (home.rev || 0)) return;
+  if (rev <= (currentHome().rev || 0)) return;
   forgetRemoteMisses();
 
   var theirs = migrateDocument(cloneState(body.state), {
@@ -1714,7 +1690,7 @@ async function pullServerDoc(docId) {
     fallbackId: S.state.docId
   });
 
-  home.rev = rev;
+  amendHome(currentHome(), { rev: rev });
   if (sameDocumentContent(theirs, mergeBase())) {
     setBaseState(cloneState(theirs), "pullServerDoc: their save says what ours already said");
     updateFileChip();
@@ -2503,6 +2479,7 @@ export function driveSignOut() {
 }
 
 export function __init() {
+  handServerCheckTo(detectServer);
   loadTabConnection();
 
   setRemoteSource(function (sha) { return onServerDoc() ? fetchBlob(sha) : null; });
@@ -2518,7 +2495,7 @@ export function __init() {
     url: serverDocShareUrl,
     note: shareAccessNote,
     publishAndCopy: publishAndCopyShareLink,
-    mode: function () { return S.serverMode; },
+    mode: function () { return serverStatus().mode(); },
     updateMenu: updateServerMenu,
     sharedDocId: function () { return sharedDocId; },
     setIdentity: function (who) { serverIdentity = who; }
@@ -2529,42 +2506,40 @@ export function __init() {
   window.__hostedTest = {
     setSession: function (opts) {
       opts = opts || {};
-      S.serverMode.available = true;
-      S.serverMode.checked = true;
-      S.serverMode.authRequired = true;
-      S.serverMode.reviewAvailable = opts.reviewAvailable !== false;
-      updateConnection({ role: opts.role || "edit", scope: opts.scope || "" });
-      if (opts.docId === null) { if (home.kind === "server") setHome("none"); }
+      serverStatus().recordMode({ available: true, checked: true, authRequired: true, reviewAvailable: opts.reviewAvailable !== false });
+      documentLocation().updateConnection({ role: opts.role || "edit", scope: opts.scope || "" });
+      if (opts.docId === null) { if (currentHome().kind === "server") setHome("none"); }
       else setHome("server", { id: opts.docId || "doc-test", rev: opts.rev || 1 });
       if (onServerDoc() && opts.base !== false) setBaseState(cloneState(S.state), "__hostedTest.setSession: as openServerDoc would");
-      if (opts.blobs !== undefined) noteCaps(conn, { blobs: opts.blobs ? 1 : 0 }, false);
+      if (opts.blobs !== undefined) noteCaps(currentConn(), { blobs: opts.blobs ? 1 : 0 }, false);
       applyReviewMode();
       updateServerMenu();
       render();
     },
-    role: function () { return conn.role; },
+    role: function () { return currentConn().role; },
     conn: function () {
-      return { serverUrl: conn.serverUrl, hasToken: !!conn.token, role: conn.role, scope: conn.scope,
-               tunnel: conn.tunnel ? Object.assign({}, conn.tunnel) : null,
-               homeHoldsIt: home.kind === "server" && home.conn === conn };
+      var c = currentConn();
+      return { serverUrl: c.serverUrl, hasToken: !!c.token, role: c.role, scope: c.scope,
+               tunnel: c.tunnel ? Object.assign({}, c.tunnel) : null,
+               homeHoldsIt: currentHome().kind === "server" && currentHome().conn === c };
     },
     link: function () {
-      return { hasKey: !!linkKey, fresh: linkKeyFresh, turnedOff: linkTurnedOff,
+      return { hasKey: !!linkKey, fresh: linkKeyFresh, turnedOff: serverStatus().linkTurnedOff(),
                deviceServers: Object.keys(deviceLinkKeys()), docId: linkDocId,
                arriving: arrivingOnLink(), guest: isLinkGuest() };
     },
-    serverMode: function () { return Object.assign({}, S.serverMode); },
-    pointTabAt: function (url, opts) { if (home.kind === "server") setHome("none"); return pointTabAt(url, opts).serverUrl; },
+    serverMode: function () { return Object.assign({}, serverStatus().mode()); },
+    pointTabAt: function (url, opts) { if (currentHome().kind === "server") setHome("none"); return pointTabAt(url, opts).serverUrl; },
     setToken: setServerToken,
     clearToken: clearServerToken,
     reviewMode: reviewMode,
     reviewLink: fetchReviewLink,
-    home: function () { return Object.assign({}, home); },
+    home: function () { return Object.assign({}, currentHome()); },
     noteRev: notePresenceRev,
     base: function () { return mergeBase() ? cloneState(mergeBase()) : null; },
     dirty: unsavedChanges,
     detect: detectServer,
-    caps: function () { return Object.assign({}, capsOf(conn)); },
+    caps: function () { return Object.assign({}, capsOf(currentConn())); },
     fetchBlob: fetchBlob
   };
 }

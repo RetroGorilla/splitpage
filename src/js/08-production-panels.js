@@ -23,7 +23,6 @@ import {
   updateProductionBadge
 } from "./07-production-tags.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
-import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { breakdownRows, breakdownTable } from "./14c-export-projections.js";
 import { idMap } from "../core/document/id-map.ts";
@@ -36,6 +35,7 @@ import { readSession, runDocumentEdit, sessionStamps } from "../legacy/session-b
 import { retagMentions, retagRewrites } from "../legacy/tag-rewrites.ts";
 import { rewrittenCopies } from "../application/commands/document-edit.ts";
 import { gearGroupBy, productionGroupBy, setTagAddingPerson, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../application/tag-panel-state.ts";
+import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
 
 export { breakdownRows, breakdownTable };
 
