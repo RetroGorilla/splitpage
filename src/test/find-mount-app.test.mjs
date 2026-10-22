@@ -6,7 +6,7 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 const { findMatchesCase, setFindMatchCase } = await import("../application/find-options.ts");
-const { mountFindFeature } = await import("../js/22b-production-wiring.js");
+const { mountFindFeature } = await import("../bootstrap/wiring/production.ts");
 after(closeApp);
 
 const targets = {

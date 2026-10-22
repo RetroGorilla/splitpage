@@ -1,3 +1,5 @@
-    .save-state { grid-column: 2; grid-row: 3; margin-left: 5px; }
-    .save-btn { height: auto; margin: 0 0 -8px; padding: 0 0 var(--space-8); }
-    .save-btn::before { font-size: 12px; line-height: 16px; }
+@media (max-width: 760px) {
+      .save-state { grid-column: 2; grid-row: 3; margin-left: 5px; }
+      .save-btn { height: auto; margin: 0 0 -8px; padding: 0 0 var(--space-8); }
+      .save-btn::before { font-size: 12px; line-height: 16px; }
+}
