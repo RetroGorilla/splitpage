@@ -10,8 +10,9 @@ const cases = [
   ["Windows ARM64 processor fallback", { PROCESSOR_ARCHITECTURE: "ARM64" }, "win32", "x64", "arm64"],
   ["Windows Node fallback", {}, "win32", "x64", "x64"],
   ["Linux ignores Windows hints", { PROCESSOR_ARCHITECTURE: "ARM64" }, "linux", "x64", "x64"],
-  ["npm override wins", { npm_config_arch: "x64", ELECTRON_ARCH: "arm64", PROCESSOR_ARCHITECTURE: "ARM64" }, "win32", "arm64", "x64"],
-  ["Electron override wins", { ELECTRON_ARCH: "x64", PROCESSOR_ARCHITEW6432: "ARM64" }, "win32", "arm64", "x64"],
+  ["npm override wins", { npm_config_arch: "x64", ELECTRON_ARCH: "arm64", ELECTRON_INSTALL_ARCH: "ia32", PROCESSOR_ARCHITECTURE: "ARM64" }, "win32", "arm64", "x64"],
+  ["Electron override wins", { ELECTRON_ARCH: "x64", ELECTRON_INSTALL_ARCH: "ia32", PROCESSOR_ARCHITEW6432: "ARM64" }, "win32", "arm64", "x64"],
+  ["Electron install override wins", { ELECTRON_INSTALL_ARCH: "ia32", PROCESSOR_ARCHITECTURE: "ARM64" }, "win32", "x64", "ia32"],
   ["ARM Linux", {}, "linux", "arm", "armv7l"],
   ["Windows x86", { PROCESSOR_ARCHITECTURE: "x86" }, "win32", "ia32", "ia32"]
 ];

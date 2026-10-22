@@ -118,8 +118,10 @@ node test/smoke.mjs --only-target dev   # dev only, fastest loop
 
 Electron 44 has no postinstall. Run `npm run fetch-electron` after `npm ci`
 on both x64 and ARM64 Windows. The script detects native ARM64 even when
-Node runs as x64 under emulation. Explicit `npm_config_arch` or
-`ELECTRON_ARCH` overrides detection, in that order; unknown values fail.
+Node runs as x64 under emulation. Explicit `npm_config_arch`,
+`ELECTRON_ARCH` or `ELECTRON_INSTALL_ARCH` overrides detection, in that
+order; unknown values fail.
+Electron's `install.js` skips installation when a same-version dist already exists regardless of its architecture, so switching architecture requires `npm ci` first.
 
 Never launch the app directly — always through `smoke.mjs`'s `launchApp`, which
 sets `SPLITPAGE_TEST=1` and a temp profile.
