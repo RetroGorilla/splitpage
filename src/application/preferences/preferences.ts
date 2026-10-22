@@ -94,6 +94,8 @@ export interface Preferences {
   readonly setPrompterFlag: (name: PrompterFlag, on: boolean) => void;
   readonly collabServer: () => string | null;
   readonly setCollabServer: (url: string | null) => void;
+  readonly desktopNoticeDismissed: () => boolean;
+  readonly dismissDesktopNotice: () => void;
   readonly resetDesktopNotice: () => void;
   readonly exportDirections: () => boolean;
   readonly setExportDirections: (on: boolean) => void;
@@ -278,11 +280,15 @@ export function createPreferences(ports: PreferencePorts): Preferences {
       const n = Number(read(KEYS.scriptScale));
       return isFinite(n) && n >= SCRIPT_SCALE_MIN && n <= SCRIPT_SCALE_MAX ? n : 1;
     },
-    setScriptScale: function (scale: number): void { announce(KEYS.scriptScale, String(scale)); },
+    setScriptScale: function (scale: number): void {
+      announce(KEYS.scriptScale, Math.abs(scale - 1) < 0.005 ? null : String(Math.round(scale * 100) / 100));
+    },
     prompterFlag: function (name: PrompterFlag): boolean { return read(KEYS[name]) === "1"; },
     setPrompterFlag: function (name: PrompterFlag, on: boolean): void { announce(KEYS[name], on ? "1" : "0"); },
     collabServer: function (): string | null { return read(KEYS.collabServer); },
     setCollabServer: function (url: string | null): void { announce(KEYS.collabServer, url); },
+    desktopNoticeDismissed: function (): boolean { return read(KEYS.desktopNotice) === "1"; },
+    dismissDesktopNotice: function (): void { announce(KEYS.desktopNotice, "1"); },
     resetDesktopNotice: function (): void { announce(KEYS.desktopNotice, null); },
     exportDirections: function (): boolean { return read(KEYS.exportDirections) !== "0"; },
     setExportDirections: function (on: boolean): void { announce(KEYS.exportDirections, on ? null : "0"); },

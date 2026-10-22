@@ -1,9 +1,8 @@
 import { S } from "./_state.js";
 import { prompterIsOpen } from "../application/prompter-state.ts";
 import { appActions } from "../legacy/app-actions.ts";
-import { viewFlags } from "../legacy/preferences-bridge.ts";
+import { PREF_EVENT, preferences, viewFlags } from "../legacy/preferences-bridge.ts";
 
-export var SCRIPT_SCALE_KEY = "splitpage-script-scale";
 export var SCRIPT_SCALE_MIN = 0.7;
 export var SCRIPT_SCALE_MAX = 2;
 var KEY_STEPS = [0.7, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
@@ -13,6 +12,7 @@ var target = 1;
 var frame = 0;
 var anchor = null;
 var readoutTimer = 0;
+let storing = false;
 
 export function clampScriptScale(v) {
   v = Number(v);
@@ -21,20 +21,6 @@ export function clampScriptScale(v) {
 }
 
 export function scriptScale() { return scale; }
-
-function readStored() {
-  try {
-    var raw = localStorage.getItem(SCRIPT_SCALE_KEY);
-    return raw == null ? 1 : clampScriptScale(parseFloat(raw));
-  } catch (e) { return 1; }
-}
-
-function store(v) {
-  try {
-    if (Math.abs(v - 1) < 0.005) localStorage.removeItem(SCRIPT_SCALE_KEY);
-    else localStorage.setItem(SCRIPT_SCALE_KEY, String(Math.round(v * 100) / 100));
-  } catch (e) { }
-}
 
 function paintScale(v) {
   var root = document.getElementById("root");
@@ -70,7 +56,13 @@ function step() {
   paintScale(scale);
   holdAnchor();
   if (scale !== target) frame = requestAnimationFrame(step);
-  else { store(scale); settleAnchor(); }
+  else { storeScale(); settleAnchor(); }
+}
+
+function storeScale() {
+  storing = true;
+  try { preferences().setScriptScale(scale); }
+  finally { storing = false; }
 }
 
 function settleAnchor() {
@@ -92,7 +84,7 @@ export function setScriptScale(v, opts) {
     paintScale(scale);
     holdAnchor();
     settleAnchor();
-    if (!opts.noStore) store(scale);
+    if (!opts.noStore) storeScale();
   } else {
     scheduleStep();
   }
@@ -201,21 +193,22 @@ function onKeydown(e) {
 }
 
 export function __init() {
-  scale = target = readStored();
+  scale = target = preferences().scriptScale();
   paintScale(scale);
   var rowsEl = document.getElementById("rows");
   if (rowsEl) rowsEl.addEventListener("wheel", onWheel, { passive: false });
   document.addEventListener("keydown", onKeydown, true);
-  document.addEventListener("splitpage:pref", function (e) {
+  document.addEventListener(PREF_EVENT, function (e) {
+    if (storing) return;
     var d = e && e.detail;
-    if (!d || d.key !== SCRIPT_SCALE_KEY) return;
-    var v = d.value == null ? readStored() : clampScriptScale(parseFloat(d.value));
+    if (!d || preferences().nameOf(d.key) !== "scriptScale") return;
+    var v = d.value == null ? preferences().scriptScale() : clampScriptScale(parseFloat(d.value));
     anchorAtCaretOrMiddle();
     setScriptScale(v, { now: true, quiet: true, noStore: true });
   });
   window.addEventListener("storage", function (e) {
-    if (e.key !== SCRIPT_SCALE_KEY) return;
+    if (preferences().nameOf(e.key) !== "scriptScale") return;
     anchorAtCaretOrMiddle();
-    setScriptScale(readStored(), { now: true, quiet: true, noStore: true });
+    setScriptScale(preferences().scriptScale(), { now: true, quiet: true, noStore: true });
   });
 }
