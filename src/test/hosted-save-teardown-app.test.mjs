@@ -115,6 +115,8 @@ test("a hosted save that lands after its wiring was disposed and the app rewired
   assert.equal(S.baseState, baseline, "the late save did not replace the baseline");
   assert.equal(confirmedSave().baseline, null, "the late save's baseline did not reach the replacement coordinator");
   assert.deepEqual(warnToasts().slice(warnedBefore), ["An earlier save of this script arrived late. Your next save will merge both versions."], "the late save is reported once");
+  assert.equal(saveInProgress(), false, "the late save leaves the idle replacement not busy");
+  assert.equal(document.getElementById("btn-save").disabled, false, "the header Save button is enabled after the late save");
 
   type(1, "Typed after the rewire.");
   await saveDoc();
