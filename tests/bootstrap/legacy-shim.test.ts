@@ -19,8 +19,7 @@ const FROZEN_SHIM_IMPORTS: readonly string[] = [
   "./05r-read-time.js", "./05s-script-zoom.js", "./05t-target.js", "./05v-video.js", "./05w-annotate.js",
   "./06-rows.js", "./07-production-tags.js", "./07b-plain-tags.js", "./08-production-panels.js", "./08c-broll.js", "./08d-broll-panel.js",
   "./09-find-replace.js", "./10-comments.js", "./11-import.js", "./12-dirty-toast.js", "./12a-undo.js", "./13-hosted.js",
-  "./13a-presence.js", "./13b-collaborate.js", "./14-export.js", "./14b-export-kit.js", "../adapters/formats/docx.ts",
-  "../adapters/formats/pdf.ts", "./18-local-files.js", "./18a-local-merge.js", "./18b-file-menu.js",
+  "./13a-presence.js", "./13b-collaborate.js", "./14-export.js", "./14b-export-kit.js", "./18-local-files.js", "./18a-local-merge.js", "./18b-file-menu.js",
   "./18c-export-dialog.js", "./18d-command-menu.js", "./19-writer.js", "./20-teleprompter.js", "./20a-update.js", "./20b-onboarding.js",
   "./20c-help.js", "./20d-formats.js", "./20e-connect.js", "./20f-desktop.js", "./20g-drafts.js", "./20h-appdata.js",
   "./20j-newtab.js", "./20s-settings.js",
@@ -38,9 +37,9 @@ function importsOf(path: string): readonly Import[] {
   return analysis.imports;
 }
 
-test("the frozen shim import set has the 61 started modules and the two bootstrap modules", () => {
+test("the frozen shim import set has the 59 started modules and the two bootstrap modules", () => {
   assert.equal(new Set(FROZEN_SHIM_IMPORTS).size, FROZEN_SHIM_IMPORTS.length);
-  assert.equal(FROZEN_SHIM_IMPORTS.length, 63);
+  assert.equal(FROZEN_SHIM_IMPORTS.length, 61);
   assert.equal(FROZEN_SHIM_IMPORTS.filter((s) => /^\.\/\d/.test(s)).length, 57);
   assert.ok(!FROZEN_SHIM_IMPORTS.includes("./14e-export-formats.js"));
 });
