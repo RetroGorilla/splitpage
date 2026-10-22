@@ -286,7 +286,7 @@ var IMPORT_SCANS = [
     id: "broll",
     label: "Look for B-roll lines and track them",
     hint: "A line starting “B-roll:” becomes a shot on the b-roll list, and keeps its status when the line is reworded.",
-    apply: function (rows, doc) { return anchorBrollInRows(rows, doc); },
+    apply: function (rows, doc) { return anchorBrollInRows(doc, rows); },
     decline: function (rows) { declineBrollAnchoring(rows); },
     found: function (n) {
       return n + " B-roll line" + (n === 1 ? "" : "s") + " found and tracked.";
