@@ -43,6 +43,7 @@ const saves = await import("../legacy/save-bridge.ts");
 const recovery = await import("../legacy/recovery-bridge.ts");
 const transitions = await import("../legacy/transition-bridge.ts");
 const editor = await import("../legacy/editor-bridge.ts");
+const productionEditing = await import("../legacy/production-editing-bridge.ts");
 const effects = await import("../legacy/effects-bridge.ts");
 const actions = await import("../legacy/app-actions.ts");
 const exports = await import("../legacy/export-formats.ts");
@@ -51,6 +52,7 @@ const owners = {
   saves: saves.savesStarted(),
   recovery: recovery.recoveryStarted(),
   editor: editor.editorStarted(),
+  productionEditing: productionEditing.productionEditingStarted(),
   effects: effects.effectsStarted(),
   transitions: started(() => transitions.documentTransitions()),
   actions: started(() => actions.appActions.list()),

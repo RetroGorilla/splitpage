@@ -1,3 +1,4 @@
+import { bulkDeleteArmed, clearProductionSelection, deleteConfirmation, disarmBulkDelete, productionSelection, pruneProductionSelection, selectedKeys } from "../legacy/production-editing-bridge.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { nextTagStatus, normalizeTagName } from "../core/document/tags.ts";
@@ -11,23 +12,17 @@ import { cssAttr, plainText, safeId } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import {
   addRegistryTags,
-  bulkDeleteArmed,
   bulkTagRows,
-  clearProductionSelection,
   currentProductionIndex,
   deletePerson,
   deleteProductionTagEntry,
-  disarmBulkDelete,
   findOrAddPerson,
   personById,
   productionEntries,
-  productionSelection,
-  pruneProductionSelection,
   registerProductionTag,
   registryEntry,
   removeTag,
   renameTag,
-  selectedKeys,
   tagStatusLampHtml,
   tagsByCategory,
   updateProductionBadge
@@ -247,7 +242,7 @@ function dropEditingForReview() {
   setTagRenaming(null);
   setTagAddingPerson(null);
   if (selectedKeys().length) clearProductionSelection();
-  if (bulkDeleteArmed) disarmBulkDelete();
+  if (bulkDeleteArmed()) disarmBulkDelete();
 }
 
 function untaggedMentionCount(item) {
@@ -393,7 +388,7 @@ function tagEntityHtml(item, opts) {
   var renaming = tagRenamingKey() === item.key;
   var expanded = tagExpandedKey() === item.key || renaming;
   var k = escapeHtml(item.key);
-  var selected = opts.selection && !reviewMode() && productionSelection[item.key];
+  var selected = opts.selection && !reviewMode() && productionSelection().selected(item.key);
   var detailId = tagFieldId("detail", gear, item.key);
   var dot = '<span class="tag-row-dot" data-tag-cat="' + item.cat.id + '" aria-hidden="true"></span>';
   return '<li class="tag-entity' + (gear ? ' is-gear' : '') + (item.orphaned ? ' is-orphaned' : '') +
@@ -689,9 +684,8 @@ export function jumpToTag(rowId, key) {
 }
 
 export function armRemoveTag(btn, key) {
-  if (S.tagDeleteArmId === key) {
-    clearTimeout(S.tagDeleteArmTimer);
-    S.tagDeleteArmId = null;
+  if (deleteConfirmation().armedId("tag") === key) {
+    deleteConfirmation().disarm("tag");
     var item = findTagByKey(key);
     if (!item) return;
     breakUndoCoalescing();
@@ -703,13 +697,10 @@ export function armRemoveTag(btn, key) {
     showToast("Removed " + item.name + " from " + n + " mention" + (n === 1 ? "" : "s"), "ok");
     return;
   }
-  S.tagDeleteArmId = key;
-  var disarm = armButton(btn);
-  clearTimeout(S.tagDeleteArmTimer);
-  S.tagDeleteArmTimer = setTimeout(function () {
-    S.tagDeleteArmId = null;
+  var disarm;
+  deleteConfirmation().arm("tag", key, function () {
     disarm();
-  }, 2800);
+  }, function () { disarm = armButton(btn); });
 }
 
 function armButton(btn) {
@@ -727,9 +718,8 @@ function armButton(btn) {
 }
 
 export function armDeleteTag(btn, key) {
-  if (S.tagDeleteArmId === key) {
-    clearTimeout(S.tagDeleteArmTimer);
-    S.tagDeleteArmId = null;
+  if (deleteConfirmation().armedId("tag") === key) {
+    deleteConfirmation().disarm("tag");
     var item = findTagByKey(key);
     if (!item) return;
     deleteProductionTagEntry(item.cat.id, item.name);
@@ -739,20 +729,15 @@ export function armDeleteTag(btn, key) {
     showToast("Deleted " + item.name + " from the production list", "ok");
     return;
   }
-  S.tagDeleteArmId = key;
-  var disarm = armButton(btn);
-  clearTimeout(S.tagDeleteArmTimer);
-  S.tagDeleteArmTimer = setTimeout(function () {
-    S.tagDeleteArmId = null;
+  var disarm;
+  deleteConfirmation().arm("tag", key, function () {
     disarm();
-  }, 2800);
+  }, function () { disarm = armButton(btn); });
 }
 
 export function toggleCardSelection(key) {
   if (reviewMode()) return;
-  if (productionSelection[key]) delete productionSelection[key];
-  else productionSelection[key] = true;
-  S.selectionAnchorKey = key;
+  productionSelection().toggle(key);
   disarmBulkDelete();
   renderProduction();
 }
@@ -764,18 +749,7 @@ export function handleSelectionClick(e, card) {
   var order = Array.prototype.map.call(
     document.querySelectorAll("#production-list .tag-entity"),
     function (el) { return el.getAttribute("data-key"); });
-  var here = order.indexOf(key);
-  if (here === -1) return false;
-
-  var anchor = S.selectionAnchorKey ? order.indexOf(S.selectionAnchorKey) : -1;
-  if (e.shiftKey && anchor !== -1) {
-    var lo = Math.min(anchor, here), hi = Math.max(anchor, here);
-    for (var i = lo; i <= hi; i++) productionSelection[order[i]] = true;
-  } else {
-    if (productionSelection[key]) delete productionSelection[key];
-    else productionSelection[key] = true;
-    S.selectionAnchorKey = key;
-  }
+  if (!productionSelection().select(key, order, e.shiftKey)) return false;
 
   var sel = window.getSelection();
   if (sel && sel.removeAllRanges) sel.removeAllRanges();
@@ -901,9 +875,9 @@ function renderBulkBar(entries) {
           }).join("") +
         '</select>' + iconHtml("i-chevron-down", "ev-chevron") +
       '</span>' +
-      '<button type="button" class="bulk-btn btn-outline is-small danger' + (bulkDeleteArmed ? ' armed' : '') + '" ' +
+      '<button type="button" class="bulk-btn btn-outline is-small danger' + (bulkDeleteArmed() ? ' armed' : '') + '" ' +
         'data-action="bulk-delete">' + iconHtml("i-trash") +
-        (bulkDeleteArmed
+        (bulkDeleteArmed()
           ? 'Delete ' + n + (liveMentions ? ' + ' + liveMentions + ' label' +
               (liveMentions === 1 ? '' : 's') : '') + '?'
           : 'Delete') +
@@ -917,7 +891,7 @@ function renderBulkBar(entries) {
           '<button type="button" class="tag-quiet-btn" data-action="bulk-person-cancel">Cancel</button>' +
         '</div>'
       : '') +
-    (bulkDeleteArmed
+    (bulkDeleteArmed()
       ? '<div class="bulk-note">Removes ' + n + ' item' + (n === 1 ? '' : 's') +
           ' from the breakdown' +
           (liveMentions ? ', and their labels from the script — the words stay, the labels go' : '') +
@@ -983,9 +957,8 @@ export function addPersonForTag(key) {
 }
 
 export function armPersonDelete(btn, personId) {
-  if (S.tagDeleteArmId === "person:" + personId) {
-    clearTimeout(S.tagDeleteArmTimer);
-    S.tagDeleteArmId = null;
+  if (deleteConfirmation().armedId("tag") === "person:" + personId) {
+    deleteConfirmation().disarm("tag");
     var person = personById(personId);
     deletePerson(personId);
     markDirty();
@@ -995,13 +968,10 @@ export function armPersonDelete(btn, personId) {
       " — their items are now unassigned", "ok");
     return;
   }
-  S.tagDeleteArmId = "person:" + personId;
-  var disarm = armButton(btn);
-  clearTimeout(S.tagDeleteArmTimer);
-  S.tagDeleteArmTimer = setTimeout(function () {
-    S.tagDeleteArmId = null;
+  var disarm;
+  deleteConfirmation().arm("tag", "person:" + personId, function () {
     disarm();
-  }, 2800);
+  }, function () { disarm = armButton(btn); });
 }
 
 export function saveTagRename(key) {
