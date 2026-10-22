@@ -196,15 +196,15 @@ node test/smoke.mjs --only-target dev  # dev only, fastest loop
 
 On Linux (#89) the same dev target runs, and CI runs it on every pull
 request. It needs a display of its own and, on a first checkout, an explicit
-fetch of the Electron binary — Electron 44 has no postinstall, and going
-through npm would obey `desktop/.npmrc`'s ARM64 pin and fetch a build this
-machine cannot execute:
+fetch of the Electron binary — Electron 44 has no postinstall. The fetch
+script selects the machine architecture, including Windows ARM64 with x64
+Node running under emulation:
 
 ```bash
 node build.mjs                           # main.js serves index.html from APP_ROOT
 cd desktop
 npm ci
-node node_modules/electron/install.js    # NOT npx — see .npmrc
+npm run fetch-electron
 xvfb-run -a node test/smoke.mjs --only-target dev
 ```
 
@@ -227,10 +227,12 @@ tab are torn down with `expectForceKill` — the same 15 needed the kill on
 Windows as on Linux, so it is how those cases end, not a platform quirk;
 any other teardown that needs it is listed under `FORCE-KILLED (n)`.
 
-Dev Electron is pinned to native ARM64 (`desktop/.npmrc`, `arch=arm64`); a
-plain `npm install` in `desktop/` on the Windows machine fetches the right
-one. Never run `npm run dist`/`dist:win` outside a deliberate release build.
-`desktop/drafts.test.mjs` unit-tests `desktop/drafts.js` directly, no
+After `npm ci` in `desktop/`, run `npm run fetch-electron` on every machine.
+`desktop/electron-arch.mjs` detects native Windows ARM64 even under x64 Node
+emulation; elsewhere it uses Node's architecture. Explicit `npm_config_arch`
+or `ELECTRON_ARCH` overrides detection, in that order; unknown values fail.
+Never run `npm run dist`/`dist:win` outside a deliberate release build.
+`desktop/test/drafts.test.mjs` unit-tests `desktop/drafts.js` directly, no
 Electron. `tools/test-server.mjs` drives real `server.js` processes.
 
 ### The test harness lies to you — suspect the test before the code
@@ -2045,7 +2047,8 @@ evaluation order via `_entry.js`):
 | `desktop/history-fs-backend.js` | version history on disk (#83, §3.13): `<userData>/history` index in two durable generations + content-addressed bodies, the backend `shared/history-store.js` runs over in main; plain CommonJS, no Electron dependency; a raw v1 `docs/`/`older/` is left dormant (#100) |
 | `desktop/google-drive.js` | Google Drive for the desktop app: loopback OAuth listener + PKCE, token storage (safeStorage), Drive list/download/upload, plain CommonJS, no Electron dependency (§3.13, #10) |
 | `desktop/test/google-drive.test.mjs` | unit suite for `desktop/google-drive.js` against `desktop/test/fake-google.mjs` (a strict fake of Google's token, revoke and Drive endpoints, shared with smoke.mjs); also checks every `./module` main.js requires is in electron-builder.yml's `files` |
-| `desktop/.npmrc` | pins `npm install` to native ARM64 Electron (§2) |
+| `desktop/electron-arch.mjs` | pure architecture selection and the `fetch-electron` entry point; passes the selected architecture to Electron's installer (§2) |
+| `desktop/electron-arch.test.mjs` | pure architecture and override tests, including Windows ARM64 under x64 Node emulation |
 | `desktop/electron-builder.yml` | packaging config, x64 + ARM64 Windows |
 | `desktop/build/installer.nsh` | NSIS include: "Splitpage (shared session)" Start Menu shortcut (`--host --pin`); 1.0.x removal (`customInit`); the running-app check (`customCheckAppRunning`), which never force-kills while the app has a visible window, so a save prompt is waited for, not killed (#198) |
 | `desktop/stage.mjs` | build step: runs `build.mjs`, verifies version, stages files for packaging |
