@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { home } from "./_home.js";
+import { currentHome } from "../legacy/location-bridge.ts";
 import { loadLastFileHandle } from "./00-prelude.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
@@ -249,7 +249,7 @@ async function onboardEligibleForAutoShow() {
   if (preferences().onboarding()) return false;
   if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
   if (S.DESKTOP && draftResume().restorePending()) return false;
-  if (home.kind === "server" || home.kind === "file") return false;
+  if (currentHome().kind === "server" || currentHome().kind === "file") return false;
   if (S.DESKTOP) {
     if (!S.DESKTOP.firstTabOfLaunch || S.DESKTOP.hadPriorSession ||
         (S.DESKTOP.launchIntent && S.DESKTOP.launchIntent.type !== "blank") ||
@@ -260,7 +260,7 @@ async function onboardEligibleForAutoShow() {
     if (handle) return false;
   }
   if (preferences().onboarding()) return false;
-  if (home.kind === "server" || home.kind === "file") return false;
+  if (currentHome().kind === "server" || currentHome().kind === "file") return false;
   return true;
 }
 

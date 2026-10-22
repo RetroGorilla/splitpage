@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import "./_export-services-started.mjs";
 import "./_preferences-started.mjs";
 import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";

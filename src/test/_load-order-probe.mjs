@@ -45,9 +45,11 @@ const transitions = await import("../legacy/transition-bridge.ts");
 const editor = await import("../legacy/editor-bridge.ts");
 const productionEditing = await import("../legacy/production-editing-bridge.ts");
 const preferences = await import("../legacy/preferences-bridge.ts");
+const location = await import("../legacy/location-bridge.ts");
 const effects = await import("../legacy/effects-bridge.ts");
 const actions = await import("../legacy/app-actions.ts");
 const exports = await import("../legacy/export-formats.ts");
+const exportServices = await import("../application/export/services.ts");
 const owners = {
   session: session.sessionStarted(),
   saves: saves.savesStarted(),
@@ -55,10 +57,12 @@ const owners = {
   editor: editor.editorStarted(),
   productionEditing: productionEditing.productionEditingStarted(),
   preferences: preferences.preferencesStarted(),
+  location: location.locationStarted(),
   effects: effects.effectsStarted(),
   transitions: started(() => transitions.documentTransitions()),
   actions: started(() => actions.appActions.list()),
-  exports: started(() => exports.exportFormats.cards())
+  exports: started(() => exports.exportFormats.cards()),
+  exportServices: exportServices.exportServicesStarted()
 };
 process.stdout.write(JSON.stringify({ target, calls, error, owners }) + "\n");
 process.exit(0);

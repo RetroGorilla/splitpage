@@ -13,6 +13,7 @@ import {
 } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { documentLocation, serverStatus } from "../legacy/location-bridge.ts";
 
 const { currentDocument, liveSession, mergeBase, onDocumentReplaced, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../legacy/session-bridge.ts");
 
@@ -68,8 +69,9 @@ const { saveAuthorName } = await import("../js/10-comments.js");
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { startNewScript } = await import("../js/18b-file-menu.js");
 const { openProjectFile, parseProjectFileState } = await import("../js/18-local-files.js");
-const { SERVER_RESUME_KEY, finishServerDetect, openServerDoc, publishToServer } = await import("../js/13-hosted.js");
-const homeModule = await import("../js/_home.js");
+const { finishServerDetect, openServerDoc, publishToServer } = await import("../js/13-hosted.js");
+const { SERVER_RESUME_KEY } = await import("../application/location/server-status.ts");
+const homeModule = await import("../legacy/location-bridge.ts");
 const { setHome } = homeModule;
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
@@ -331,8 +333,8 @@ rightToday("T2c-resume", "a resumed server draft opens its epoch at the transiti
   }), { ok: true, evicted: 0 });
   const held = serverFetch((r) => (r.method === "GET" && r.url.includes("api/docs/server-r") ? { status: 200, body: { id: "server-r", rev: 3, state: theirs } } : null));
   const uninstall = held.install();
-  const available = S.serverMode.available;
-  S.serverMode.available = true;
+  const available = serverStatus().mode().available;
+  serverStatus().recordMode({ available: true });
   try {
     const epoch = session.epoch();
     const events = await traced(async () => { assert.equal(await openServerDoc("server-r"), true); });
@@ -340,7 +342,7 @@ rightToday("T2c-resume", "a resumed server draft opens its epoch at the transiti
     assert.equal(S.state.rows[1].audioText, "Changed on the server.");
     assertAdoptedAtOnce(events, epoch);
   } finally {
-    S.serverMode.available = available;
+    serverStatus().recordMode({ available: available });
     uninstall();
     await store.remove(key, "another-tab");
     setHome("none");
@@ -363,23 +365,23 @@ rightToday("T2c-resume-switch", "a late server resume leaves a document opened d
     ? { status: 200, body: { id: "server-late-resume", rev: 3, state: base } } : null));
   held.holdWhen((r) => r.method === "GET" && r.url.includes("api/docs/server-late-resume"));
   const uninstall = held.install();
-  const available = S.serverMode.available;
-  S.serverMode.available = true;
+  const available = serverStatus().mode().available;
+  serverStatus().recordMode({ available: true });
   let resuming;
   try {
     resuming = openServerDoc("server-late-resume");
     await held.gates.arrived("fetch");
     assert.equal(draftResume().serverResume().id, "server-late-resume", "setup: the held fetch belongs to a server draft resume");
-    const connection = homeModule.conn;
+    const connection = homeModule.currentConn();
     const replacement = script("Opened during resume", { docId: "d" + "f".repeat(32) });
     const file = splitpageFile(replacement, "opened-during-resume.splitpage");
     const target = createHeldFileHandle({ name: file.name });
     await openProjectFile(file, target.handle, { skipSnapshot: true, silent: true });
     assert.equal(S.state.title, replacement.title, "setup: the replacement document opened while the resume fetch was held");
-    assert.equal(homeModule.conn, connection, "setup: opening the file kept the same connection");
+    assert.equal(homeModule.currentConn(), connection, "setup: opening the file kept the same connection");
     const opened = JSON.stringify(S.state);
     const baseline = JSON.stringify(mergeBase());
-    const destination = homeModule.home;
+    const destination = homeModule.currentHome();
     const epoch = session.epoch();
     held.gates.release("fetch");
     await resuming;
@@ -388,13 +390,13 @@ rightToday("T2c-resume-switch", "a late server resume leaves a document opened d
     assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
     assert.equal(JSON.stringify(mergeBase()), baseline, "the opened document's baseline is unchanged");
     assert.equal(unsavedChanges(), false, "the opened document stays clean");
-    assert.equal(homeModule.home, destination, "the opened document keeps its file destination");
+    assert.equal(homeModule.currentHome(), destination, "the opened document keeps its file destination");
     assert.equal(target.commits.length, 0, "the resume writes nothing to the opened file");
     assert.deepEqual(held.requests.map((r) => r.method), ["GET"], "the resume sends no server write");
   } finally {
     held.gates.releaseAll("fetch");
     if (resuming) await resuming;
-    S.serverMode.available = available;
+    serverStatus().recordMode({ available: available });
     uninstall();
     await store.remove(key, "another-tab");
     setHome("none");
@@ -445,16 +447,16 @@ rightToday("T2c-reopen-switch", "a late sign-in resume leaves a document opened 
   try {
     const detecting = finishServerDetect();
     await held.gates.arrived("fetch");
-    const connection = homeModule.conn;
+    const connection = homeModule.currentConn();
     const replacement = script("Opened during sign-in resume", { docId: "d" + "b".repeat(32) });
     const file = splitpageFile(replacement, "opened-during-sign-in.splitpage");
     const target = createHeldFileHandle({ name: file.name });
     await openProjectFile(file, target.handle, { skipSnapshot: true, silent: true });
     assert.equal(S.state.title, replacement.title, "setup: the replacement document opened while the resume fetch was held");
-    assert.equal(homeModule.conn, connection, "setup: opening the file kept the same connection");
+    assert.equal(homeModule.currentConn(), connection, "setup: opening the file kept the same connection");
     const opened = JSON.stringify(S.state);
     const baseline = JSON.stringify(mergeBase());
-    const destination = homeModule.home;
+    const destination = homeModule.currentHome();
     const epoch = session.epoch();
     held.gates.release("fetch");
     await detecting;
@@ -464,7 +466,7 @@ rightToday("T2c-reopen-switch", "a late sign-in resume leaves a document opened 
     assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
     assert.equal(JSON.stringify(mergeBase()), baseline, "the opened document's baseline is unchanged");
     assert.equal(unsavedChanges(), false, "the opened document stays clean");
-    assert.equal(homeModule.home, destination, "the opened document keeps its file destination");
+    assert.equal(homeModule.currentHome(), destination, "the opened document keeps its file destination");
     assert.equal(target.commits.length, 0, "the resume writes nothing to the opened file");
     assert.equal(held.requests.filter((r) => r.method !== "GET").length, 0, "the resume sends no server write");
     assert.equal(sessionStorage.getItem("splitpage-conflict-stash"), stash, "the edits typed before signing in are kept");
@@ -508,7 +510,7 @@ rightToday("T2c-reopen-stale", "a sign-in resume dropped for a newly opened docu
     assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending, "setup: the dropped resume kept its key");
     const opened = JSON.stringify(S.state);
     const baseline = JSON.stringify(mergeBase());
-    const destination = homeModule.home;
+    const destination = homeModule.currentHome();
     const epoch = session.epoch();
     await finishServerDetect();
     for (let turn = 0; turn < 50; turn++) await new Promise((resolve) => setImmediate(resolve));
@@ -517,7 +519,7 @@ rightToday("T2c-reopen-stale", "a sign-in resume dropped for a newly opened docu
     assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
     assert.equal(JSON.stringify(mergeBase()), baseline, "the opened document's baseline is unchanged");
     assert.equal(unsavedChanges(), false, "the opened document stays clean");
-    assert.equal(homeModule.home, destination, "the opened document keeps its file destination");
+    assert.equal(homeModule.currentHome(), destination, "the opened document keeps its file destination");
     assert.equal(target.commits.length, 0, "nothing is written to the opened file");
     assert.equal(held.requests.filter((r) => r.method !== "GET").length, 0, "no server write is sent");
     assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending, "the key stays for the next page load");
@@ -566,7 +568,7 @@ rightToday("T1", "Save As, publish and detached recovery fork the id; open, rest
   const idOf = (letter) => "d" + letter.repeat(32);
 
   useDocument(script("Fork by Save As", { docId: idOf("1") }));
-  S.docIdWrittenOut = true;
+  documentLocation().markWrittenOut(true);
   const target = createHeldFileHandle({ name: "forked.md" });
   window.showSaveFilePicker = async () => target.handle;
   try {
@@ -581,9 +583,8 @@ rightToday("T1", "Save As, publish and detached recovery fork the id; open, rest
   assert.ok(target.text().includes(S.state.docId) && !target.text().includes(idOf("1")), "the file carries the new id, not the old one");
 
   useDocument(script("Fork by publish", { docId: idOf("2") }));
-  S.docIdWrittenOut = true;
-  S.serverMode.available = true;
-  S.serverMode.readOnly = false;
+  documentLocation().markWrittenOut(true);
+  serverStatus().recordMode({ available: true, readOnly: false });
   const held = serverFetch((r) => (r.method === "POST" && r.url.endsWith("api/docs") ? { status: 200, body: { id: "srv-1", rev: 1 } } : null));
   const uninstall = held.install();
   try {
@@ -685,8 +686,8 @@ rightToday("T5", "restoring a draft onto an unchanged file schedules no save and
     assert.equal(await restored.onDisk(), fileBefore, "the file holds what it held");
     assert.equal(JSON.stringify(mergeBase()), baselineBefore, "the baseline did not move");
     assert.equal(unsavedChanges(), true, "the recovered work is still unsaved");
-    assert.equal(homeModule.home.kind, "file", "the destination is still the file");
-    assert.equal(homeModule.home.handle._desktopId, restored.fileId, "and it is the same file");
+    assert.equal(homeModule.currentHome().kind, "file", "the destination is still the file");
+    assert.equal(homeModule.currentHome().handle._desktopId, restored.fileId, "and it is the same file");
   });
 });
 
@@ -706,7 +707,7 @@ rightToday("T5-merge", "restoring a draft onto a changed file merges, halts auto
     assert.equal(JSON.stringify(mergeBase()), baselineBefore);
     assert.match(autoSavePolicy().halted(), /Autosave is paused/);
     assert.equal(unsavedChanges(), true, "the merged work is still unsaved");
-    assert.equal(homeModule.home.handle._desktopId, restored.fileId, "the destination is still the file");
+    assert.equal(homeModule.currentHome().handle._desktopId, restored.fileId, "the destination is still the file");
   });
 });
 

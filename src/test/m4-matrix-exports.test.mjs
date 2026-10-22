@@ -15,12 +15,12 @@ const { clearDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { captureExportDocument, exportAssetsNow } = await import("../js/14b-export-kit.js");
 const { buildDocx, buildNarrationDocx, buildNarrationText } = await import("../js/15-docx.js");
-const { narrationIncludesDirections, setNarrationIncludesDirections } = await import("../js/14e-export-formats.js");
+const { narrationIncludesDirections, setNarrationIncludesDirections } = await import("../bootstrap/wiring/exporters.ts");
 const { buildBreakdownCsv, buildBrollCsv, buildCsv } = await import("../js/16-csv.js");
 const { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } = await import("../js/16b-xlsx.js");
 const { buildPackingListPdf, buildPdf, buildShotListPdf } = await import("../js/17-pdf.js");
 const { buildFileData } = await import("../js/18-local-files.js");
-const homeModule = await import("../js/_home.js");
+const homeModule = await import("../legacy/location-bridge.ts");
 const hosted = await import("../js/13-hosted.js");
 const { loadTestDocument } = await import("./_document.mjs");
 
@@ -216,11 +216,11 @@ rightToday("X19", "an export whose local picture reads are held keeps the captur
       await gates.arrived("blob.get");
       mutateLive();
       swapPictures(replacement);
-      homeModule.setConnection({ serverUrl: "http://elsewhere.test/", token: "t-other", role: "edit" });
+      homeModule.documentLocation().setConnection({ serverUrl: "http://elsewhere.test/", token: "t-other", role: "edit" });
       const replaced = liveJson();
       gates.releaseAll("blob.get");
       const built = await building;
-      homeModule.setConnection({});
+      homeModule.documentLocation().setConnection({});
       assert.deepEqual(held.reads.slice().sort(), [row.ref.sha256, more.ref.sha256, comment.ref.sha256].sort(), kind + ": the held reads were for the captured pictures");
       sameBytes(built.data, reference.data, kind + ": the export holds the captured pictures where they were");
       assert.equal(liveJson(), replaced, kind + ": the replacement document is as it was left");
@@ -318,7 +318,7 @@ rightToday("X21", "an export of a server document fetches its missing pictures f
   const comment = freshPicture(jpegBytes, 40, 30, 53);
   const gates = createGates();
   const local = heldBackend(gates, () => false);
-  const held = createHeldFetch({ connection: () => homeModule.conn, answer: blobServer([row, more, comment]) });
+  const held = createHeldFetch({ connection: () => homeModule.currentConn(), answer: blobServer([row, more, comment]) });
   const uninstall = held.install();
   try {
     useDocument(picturedScript({ row: row.ref, more: more.ref, comment: comment.ref }));
@@ -347,9 +347,9 @@ rightToday("X21", "an export of a server document fetches its missing pictures f
     gates.releaseAll("blob.get");
     held.gates.releaseAll("fetch");
     uninstall();
-    if (homeModule.home.kind === "server") homeModule.setHome("none");
+    if (homeModule.currentHome().kind === "server") homeModule.setHome("none");
     hosted.pointTabAt("");
-    homeModule.updateConnection({ token: "", role: "", scope: "" });
+    homeModule.documentLocation().updateConnection({ token: "", role: "", scope: "" });
     setBackend(createMemoryBackend());
     clearDirty();
   }

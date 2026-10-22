@@ -163,3 +163,17 @@ export function createExportRegistry<Request = unknown, Doc = unknown>(): Export
     }
   };
 }
+
+export function exportToggleOptions<Request, Doc>(
+  registry: Pick<ExportRegistry<Request, Doc>, "card">,
+  exporter: Exporter<Request, Doc> | null | undefined,
+  overrides?: Readonly<Record<string, unknown>> | null
+): Record<string, boolean> {
+  const out: Record<string, boolean> = {};
+  const toggle = exporter?.card ? registry.card(exporter.card)?.toggle : undefined;
+  if (toggle) {
+    const given = overrides?.[toggle.id];
+    out[toggle.id] = typeof given === "boolean" ? given : toggle.on();
+  }
+  return out;
+}
