@@ -35,7 +35,7 @@ import { editableCellHtml, render } from "./05-render.js";
 import { resetDraftHistory } from "./05d-draft-edit.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave, resumeAutoSave } from "./14-export.js";
-import { commentBodyText, commentEntries, formatTimestampAbsolute } from "./14c-export-projections.js";
+import { commentBodyText, commentEntries, formatTimestampAbsolute } from "../adapters/formats/export-projections.ts";
 import { makeId, nowIso } from "../adapters/identity/ids.ts";
 import {
   commentMatchesFilterMode,

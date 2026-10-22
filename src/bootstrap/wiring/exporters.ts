@@ -5,23 +5,24 @@ import { strBytes } from "../../adapters/formats/bytes.ts";
 import { zipWrite } from "../../adapters/formats/zip.ts";
 import { tagCategory } from "../../core/production/looks.ts";
 import { preferences } from "../../legacy/preferences-bridge.ts";
-import { exportBrollScenes, exportDay, exportFacts } from "../../js/14b-export-kit.js";
-import { brollShotListForPrint } from "../../js/14c-export-projections.js";
+import { exportServices } from "../../application/export/services.ts";
+import { exportBrollScenes, exportDay, exportFacts } from "../../adapters/formats/export-kit.ts";
+import { brollShotListForPrint } from "../../adapters/formats/export-projections.ts";
 import {
   exportMetaLine,
   htmlToPlainScript,
   markdownExportImages,
   toMarkdownDoc,
   toMarkdownTableDoc
-} from "../../js/14d-export-text.js";
+} from "../../adapters/formats/export-text.ts";
 import {
   buildDocx,
   buildNarrationDocx,
   buildNarrationText,
   narrationRows
 } from "../../js/15-docx.js";
-import { buildBreakdownCsv, buildBrollCsv, buildCsv } from "../../js/16-csv.js";
-import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } from "../../js/16b-xlsx.js";
+import { buildBreakdownCsv, buildBrollCsv, buildCsv } from "../../adapters/formats/csv.ts";
+import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } from "../../adapters/formats/xlsx.ts";
 import {
   buildPackingListPdf,
   buildPdf,
@@ -73,7 +74,7 @@ function narrationReason(doc: ExportDocument): string {
 }
 
 function brollReason(doc: ExportDocument): string {
-  return exportBrollScenes(doc).length ? "" : "No b-roll yet — start a Visual line with \"B-roll:\"";
+  return exportBrollScenes(doc, exportServices()).length ? "" : "No b-roll yet — start a Visual line with \"B-roll:\"";
 }
 
 const CARDS: readonly ExportCardDecl[] = [
@@ -118,25 +119,25 @@ const EXPORTERS: readonly BuiltInExporter[] = [
       if (ctx.options.allowImageBundle) {
         const images = markdownExportImages(ctx.doc, ctx.assets);
         if (images.length) {
-          const entries: { name: string; data: Uint8Array }[] = [{ name: base + ".md", data: strBytes(toMarkdownDoc(ctx.doc, { assets: ctx.assets })) }];
+          const entries: { name: string; data: Uint8Array }[] = [{ name: base + ".md", data: strBytes(toMarkdownDoc(ctx.doc, { assets: ctx.assets }, exportServices())) }];
           images.forEach((img: { path: string; bytes: Uint8Array }) => { entries.push({ name: img.path, data: img.bytes }); });
           return { data: zipWrite(entries, exportDay(ctx.doc)), imageBundle: true };
         }
       }
-      return product(toMarkdownDoc(ctx.doc, { assets: ctx.assets }));
+      return product(toMarkdownDoc(ctx.doc, { assets: ctx.assets }, exportServices()));
     } },
   { id: "md-table", action: "export-md-table", card: "md", choice: { value: "table", label: "Two columns" },
     name: "Markdown, two columns", menuLabel: "Markdown, two columns (.md)",
     words: "markdown md table two columns side by side", fileName: suffixed(" - two column.md"),
-    build: (ctx) => product(toMarkdownTableDoc(ctx.doc, { export: true, assets: ctx.assets })) },
+    build: (ctx) => product(toMarkdownTableDoc(ctx.doc, { export: true, assets: ctx.assets }, exportServices())) },
   { id: "xlsx", action: "export-xlsx", card: "csv", choice: { value: "xlsx", label: "Excel (.xlsx)" },
     name: "Excel", menuLabel: "Spreadsheet (.xlsx)",
     words: "excel xlsx spreadsheet workbook sheets numbers table", fileName: suffixed(".xlsx"),
-    build: (ctx) => product(buildScriptXlsx(ctx.doc)) },
+    build: (ctx) => product(buildScriptXlsx(ctx.doc, exportServices())) },
   { id: "csv", action: "export-csv", card: "csv", choice: { value: "csv", label: "CSV (.csv)" },
     name: "CSV", menuLabel: "Spreadsheet (.csv)", words: "spreadsheet csv excel sheets table",
     writeback: true, fileName: suffixed(".csv"),
-    build: (ctx) => product(buildCsv(ctx.doc)) },
+    build: (ctx) => product(buildCsv(ctx.doc, exportServices())) },
   { id: "html", action: "export-html", card: "html", name: "SplitShare", menuLabel: "SplitShare (.html)",
     words: "splitshare share standalone page html web browser send any device app",
     fileName: suffixed(" - SplitShare.html"),
@@ -144,7 +145,7 @@ const EXPORTERS: readonly BuiltInExporter[] = [
       return {
         data: ctx.ports.standaloneHtml(ctx.doc, {
           title: (ctx.doc.title || "Untitled Script") + " — SplitShare",
-          description: exportMetaLine(exportFacts(ctx.doc))
+          description: exportMetaLine(exportFacts(ctx.doc, exportServices()))
         }, ctx.assets),
         diagnostics: { imagesLeftOut: ctx.assets.missing.length }
       };
@@ -166,11 +167,11 @@ const EXPORTERS: readonly BuiltInExporter[] = [
     menuLabel: "Breakdown (.xlsx)",
     words: "breakdown excel xlsx spreadsheet workbook tags props locations cast list",
     fileName: suffixed(" - breakdown.xlsx"),
-    build: (ctx) => product(buildBreakdownXlsx(ctx.doc)) },
+    build: (ctx) => product(buildBreakdownXlsx(ctx.doc, exportServices())) },
   { id: "breakdown", action: "export-breakdown", card: "breakdown",
     choice: { value: "csv", label: "CSV (.csv)" }, name: "Breakdown (.csv)", menuLabel: "Breakdown (.csv)",
     words: "breakdown csv tags props locations cast list", fileName: suffixed(" - breakdown.csv"),
-    build: (ctx) => product(buildBreakdownCsv(ctx.doc)) },
+    build: (ctx) => product(buildBreakdownCsv(ctx.doc, exportServices())) },
   { id: "packing-gear", action: "export-packing-gear", card: "packing",
     choice: { value: "gear", label: "Gear" }, name: "Gear packing list", menuLabel: "Gear packing list (.pdf)",
     words: "packing list checklist gear equipment kit pdf", reason: packingReason("gear"),
@@ -188,22 +189,22 @@ const EXPORTERS: readonly BuiltInExporter[] = [
     defaults: { brollView: { filter: "all", group: "scene" } },
     fileName: suffixed(" - b-roll shot list.pdf"),
     build: (ctx) => {
-      return product(buildShotListPdf(ctx.doc, brollShotListForPrint(ctx.doc, ctx.options.brollView)));
+      return product(buildShotListPdf(ctx.doc, brollShotListForPrint(ctx.doc, ctx.options.brollView, exportServices())));
     } },
   { id: "b-roll xlsx", action: "export-broll-xlsx", card: "broll", choice: { value: "xlsx", label: "Excel (.xlsx)" },
     name: "B-roll shot list (Excel)", menuLabel: "B-roll shot list (.xlsx)",
     words: "b-roll broll shot list shots excel xlsx spreadsheet workbook sheets",
     reason: brollReason, refusal: "There is no b-roll to export yet — start a Visual line with B-roll:",
     fileName: suffixed(" - b-roll shot list.xlsx"),
-    build: (ctx) => product(buildBrollXlsx(ctx.doc)) },
+    build: (ctx) => product(buildBrollXlsx(ctx.doc, exportServices())) },
   { id: "b-roll csv", action: "export-broll-csv", card: "broll", choice: { value: "csv", label: "CSV (.csv)" },
     name: "B-roll shot list (.csv)", menuLabel: "B-roll shot list (.csv)",
     words: "b-roll broll shot list shots spreadsheet csv excel sheets",
     reason: brollReason, refusal: "There is no b-roll to export yet — start a Visual line with B-roll:",
     fileName: suffixed(" - b-roll shot list.csv"),
-    build: (ctx) => product(buildBrollCsv(ctx.doc)) },
+    build: (ctx) => product(buildBrollCsv(ctx.doc, exportServices())) },
   { id: "txt", writeback: true, fileName: suffixed(".txt"),
-    build: (ctx) => product(htmlToPlainScript(ctx.doc)) }
+    build: (ctx) => product(htmlToPlainScript(ctx.doc, exportServices())) }
 ];
 
 export function registerBuiltInExporters(registry: ExportRegistry): () => void {

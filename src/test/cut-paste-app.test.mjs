@@ -15,7 +15,8 @@ const { liveSession } = await import("../legacy/session-bridge.ts");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { copyFromCell, pasteIntoCell } = await import("../js/05c-clipboard.js");
-const { render, syncFieldFromDom } = await import("../js/05-render.js");
+const { render } = await import("../js/05-render.js");
+const { cellEditing } = await import("../legacy/editor-bridge.ts");
 const { cellSelection } = await import("../features/editing/cell-selection.ts");
 const { armDeleteComment } = await import("../js/10-comments.js");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
@@ -59,7 +60,7 @@ async function open(doc) {
 function holdMedia() {
   row("r5").visualText = "Holds " + CARD;
   render();
-  syncFieldFromDom(cellOf("r5", "visualText"));
+  cellEditing().sync(cellOf("r5", "visualText"));
   row("r5").updatedAt = OLD;
   row("r5").updatedBy = "Sam";
   flushEdits();

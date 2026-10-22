@@ -4,7 +4,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readBuiltCss } from "../../tools/css-colours.mjs";
 import { TAG_PRINT_COLORS, tagPrintColor } from "../adapters/formats/print-colors.ts";
-import { PRINT_COLORS, PRINT_TOKENS } from "../js/14b-export-kit.js";
+import { PRINT_COLORS } from "../adapters/formats/export-kit.ts";
+import { PRINT_TOKENS } from "../js/14b-export-kit.js";
 
 const { css } = readBuiltCss();
 

@@ -20,8 +20,10 @@ const { standaloneHtmlFor } = await import("../js/02b-doc-id.js");
 const { intern } = await import("../adapters/storage/02c-blobs.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
-const { exportMetaLine, markdownExportImages, toMarkdownDoc, toMarkdownTableDoc } = await import("../js/14d-export-text.js");
-const { captureExportDocument, exportAssetsNow, exportFacts } = await import("../js/14b-export-kit.js");
+const { exportMetaLine, markdownExportImages, toMarkdownDoc, toMarkdownTableDoc } = await import("../adapters/formats/export-text.ts");
+const { captureExportDocument } = await import("../js/14b-export-kit.js");
+const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts");
+const { exportFacts } = await import("../adapters/formats/export-kit.ts");
 const { buildMarkdownProject, buildSplitpageFile } = await import("../js/20d-formats.js");
 const { loadTestDocument } = await import("./_document.mjs");
 

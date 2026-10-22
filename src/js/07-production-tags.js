@@ -7,8 +7,7 @@ import {
   safeId,
   sanitizeHtml
 } from "./04-richtext.js";
-import { render, syncFieldFromDom } from "./05-render.js";
-import { editCell } from "./05b-cell-edit.js";
+import { render } from "./05-render.js";
 import { plainTagOpen } from "./07b-plain-tags.js";
 import { renderProduction, updateGearCount } from "./08-production-panels.js";
 import { runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
@@ -49,7 +48,7 @@ import { retagMentions, retagRewrites } from "../legacy/tag-rewrites.ts";
 import { changeSet } from "../application/session/change-set.ts";
 import { addPersonCommand, registerTagCommand, retagCommand, tagCellsCommand } from "../application/commands/production-records.ts";
 import { personById as personByIdIn, personNamed, registryEntryById as registryEntryByIdIn, registryEntryOf } from "../core/production/records.ts";
-import { focusMemory } from "../legacy/editor-bridge.ts";
+import { cellEditing, focusMemory } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
 export {
@@ -326,7 +325,7 @@ export function maybeAutoTagShortcut(e, cellEl) {
 }
 
 function tagTextRange(cellEl, node, a, b, text, cat, name) {
-  editCell(cellEl, function (cell) {
+  cellEditing().edit(cellEl, function (cell) {
     var from = domToPos(cellEl, node, a), to = domToPos(cellEl, node, b);
     if (from === null || to === null) return null;
     if (projection(cell).slice(from, to) !== node.data.slice(a, b).replace(/\u200B/g, "")) return null;
@@ -751,7 +750,7 @@ export function applyTag() {
 
   var idx = readSession(function (doc) { return rowIndexOf(doc, ctx.rowId); });
   if (idx === -1) return;
-  syncFieldFromDom(cellEl);
+  cellEditing().sync(cellEl);
   breakUndoCoalescing();
   function tagged(doc) {
     var row = doc ? doc.rows[rowIndexOf(doc, ctx.rowId)] : null;
