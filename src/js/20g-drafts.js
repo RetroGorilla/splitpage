@@ -1,6 +1,6 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { S } from "./_state.js";
-import { conn, fileHome, home, importHome, stillOnServer } from "./_home.js";
+import { currentConn, currentHome, documentLocation, fileHome, importHome, reviewMode, serverStatus, stillOnServer } from "../legacy/location-bridge.ts";
 import { migrateRows } from "./02-state.js";
 import { inlineStateJson, internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
@@ -12,7 +12,7 @@ import { updateIdentityChip } from "./03-sync.js";
 import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
-import { onServerDoc, reviewMode } from "./13-hosted.js";
+import { onServerDoc } from "./13-hosted.js";
 import { DRAFT_LIMITS, browserDraftKey, draftBaseOf } from "../adapters/storage/draft-store-idb.ts";
 import {
   browserDrafts,
@@ -112,9 +112,9 @@ function browserDraftTarget() {
   if (runningOnDesktop() || browserDraftsOff) return null;
   if (onServerDoc()) {
     if (reviewMode()) return null;
-    return { base: (home.conn && home.conn.serverUrl) || "", docId: String(home.id), rev: home.rev || 0, copy: false };
+    return { base: (currentHome().conn && currentHome().conn.serverUrl) || "", docId: String(currentHome().id), rev: currentHome().rev || 0, copy: false };
   }
-  if (browserCopyOf && home.kind === "none" && S.state && S.state.docId === browserCopyOf.docId) {
+  if (browserCopyOf && currentHome().kind === "none" && S.state && S.state.docId === browserCopyOf.docId) {
     return { base: browserCopyOf.server.base, docId: browserCopyOf.server.docId, rev: browserCopyOf.server.rev, copy: true };
   }
   browserCopyOf = null;
@@ -221,7 +221,7 @@ function draftOriginOf() {
   }
   if (onServerDoc()) {
     origin.kind = "server";
-    origin.server = { base: home.conn.serverUrl || "", docId: home.id, rev: home.rev || 0 };
+    origin.server = { base: currentHome().conn.serverUrl || "", docId: currentHome().id, rev: currentHome().rev || 0 };
     return origin;
   }
   var file = fileHome();
@@ -247,7 +247,7 @@ function draftOriginSignature(origin) {
   return [
     origin.kind, origin.fileId || "", origin.fileKind || "", origin.importName || "",
     origin.server ? (origin.server.docId + "@" + origin.server.rev + "@" + origin.server.base) : "",
-    (S.state && S.state.docId) || "", S.docIdWrittenOut ? "1" : "0"
+    (S.state && S.state.docId) || "", documentLocation().writtenOut() ? "1" : "0"
   ].join("|");
 }
 
@@ -317,7 +317,7 @@ function captureAndSendDraft(keepClean) {
     editSeq: editSeqAtCapture,
     title: (S.state.title || ""),
     docId: normalizeDocId(S.state.docId) || null,
-    docIdWrittenOut: !!S.docIdWrittenOut,
+    docIdWrittenOut: documentLocation().writtenOut(),
     schema: SCHEMA_VERSION,
     originKind: origin.kind,
     fileId: origin.fileId,
@@ -617,7 +617,7 @@ function draftWaitForServerDetect() {
   var deadline = Date.now() + draftTiming.serverWait;
   return new Promise(function (resolve) {
     (function tick() {
-      if (S.serverMode.checked || Date.now() > deadline) { resolve(); return; }
+      if (serverStatus().mode().checked || Date.now() > deadline) { resolve(); return; }
       setTimeout(tick, 50);
     })();
   });
@@ -644,7 +644,7 @@ async function restoreServerDraft(t, mine, origin) {
   await draftWaitForServerDetect();
 
   var headerBase = draftNormalizeBase(server.base);
-  if (headerBase && headerBase !== draftNormalizeBase(conn.serverUrl)) {
+  if (headerBase && headerBase !== draftNormalizeBase(currentConn().serverUrl)) {
     resume.dropServerResume();
     if (draftServerSettle) draftServerSettle.settle("server-copy");
     recoverDraftAsUnsavedCopy(t,
@@ -653,7 +653,7 @@ async function restoreServerDraft(t, mine, origin) {
     return "server-copy";
   }
 
-  if (S.serverMode.checked && !S.serverMode.available) {
+  if (serverStatus().mode().checked && !serverStatus().mode().available) {
     resume.dropServerResume();
     if (draftServerSettle) draftServerSettle.settle("server-copy");
     recoverDraftAsUnsavedCopy(t,
@@ -670,7 +670,7 @@ async function restoreServerDraft(t, mine, origin) {
     return "server-copy";
   }
 
-  var waitMs = (S.serverMode.authRequired && !conn.token) ? 0 : draftTiming.serverWait;
+  var waitMs = (serverStatus().mode().authRequired && !currentConn().token) ? 0 : draftTiming.serverWait;
   var outcome = await draftRaceTimeout(draftServerSettle.promise, waitMs);
   if (outcome === null) {
     showDraftPendingBanner(t, title);
@@ -734,7 +734,7 @@ async function restoreFileDraft(t, mine, base, origin, ctx) {
   var diskCopy = cloneState(disk);
 
   if (sameDocContent(mine, disk)) {
-    S.docIdWrittenOut = !!t.header.docIdWrittenOut;
+    documentLocation().markWrittenOut(!!t.header.docIdWrittenOut);
     showToast("Opened " + (disk.title || file.name) + " — the changes from the last session were already saved", "ok");
     return "nothing-unsaved";
   }
@@ -744,7 +744,7 @@ async function restoreFileDraft(t, mine, base, origin, ctx) {
     renderAbsorbed();
     updateIdentityChip();
     updateFileChip();
-    S.docIdWrittenOut = !!t.header.docIdWrittenOut;
+    documentLocation().markWrittenOut(!!t.header.docIdWrittenOut);
     markAbsorbedDirty("recovery");
     showToast("Restored your unsaved changes to " + (S.state.title || file.name) +
       (draftWhenText(t) ? " " + draftWhenText(t) : ""), "ok", true);
@@ -767,7 +767,7 @@ async function restoreFileDraft(t, mine, base, origin, ctx) {
     }
   });
   if (merged && merged.replaced) return keptForNextLaunch();
-  S.docIdWrittenOut = !!t.header.docIdWrittenOut;
+  documentLocation().markWrittenOut(!!t.header.docIdWrittenOut);
   return "merged";
 }
 
@@ -830,7 +830,7 @@ function takenFromBrowserDraft(rec, key) {
   var at = Number(rec.writtenAt) || 0;
   return {
     header: {
-      origin: { kind: "server", server: { base: conn.serverUrl || "", docId: String(rec.docId), rev: rec.rev || 0 } },
+      origin: { kind: "server", server: { base: currentConn().serverUrl || "", docId: String(rec.docId), rev: rec.rev || 0 } },
       writtenAt: at,
       title: rec.title || "",
       docIdWrittenOut: !!rec.docIdWrittenOut
@@ -847,7 +847,7 @@ function browserDraftRestoreDone(t, outcome) {
   var key = t.browserKey;
   if (outcome === "server-copy") {
     var server = t.header.origin.server;
-    browserCopyOf = home.kind === "none" && S.state
+    browserCopyOf = currentHome().kind === "none" && S.state
       ? { key: key, docId: S.state.docId, server: { base: server.base, docId: server.docId, rev: server.rev } }
       : null;
   }
@@ -858,11 +858,11 @@ function browserDraftRestoreDone(t, outcome) {
 export function armBrowserServerDraft(docId) {
   var resume = draftResume();
   if (runningOnDesktop() || browserDraftsOff || !docId || resume.restorePending() || resume.serverResume()) return Promise.resolve(false);
-  if (conn.role === "review") return Promise.resolve(false);
-  var base = draftBaseOf(conn.serverUrl, location.href);
+  if (currentConn().role === "review") return Promise.resolve(false);
+  var base = draftBaseOf(currentConn().serverUrl, location.href);
   if (!base) return Promise.resolve(false);
   var key = browserDraftKey(base, docId);
-  var via = conn;
+  var via = currentConn();
   return browserDraftStore().get(key).then(function (rec) {
     if (!rec) return false;
     return browserWriterIsLive(rec.writerId).then(function (live) {
@@ -880,7 +880,7 @@ export function armBrowserServerDraft(docId) {
 export function offerBrowserDraftAfterLinkOff(docId) {
   var resume = draftResume();
   if (runningOnDesktop() || browserDraftsOff || resume.restorePending() || onServerDoc() || unsavedChanges()) return Promise.resolve(false);
-  var base = draftBaseOf(conn.serverUrl, location.href);
+  var base = draftBaseOf(currentConn().serverUrl, location.href);
   if (!base) return Promise.resolve(false);
   var store = browserDraftStore();
   return store.list().then(function (metas) {
@@ -997,7 +997,7 @@ export function __init() {
       browser: {
         list: function () { return browserDraftStore().list(); },
         get: function (docId, serverUrl) {
-          var base = draftBaseOf(serverUrl === undefined ? conn.serverUrl : serverUrl, location.href);
+          var base = draftBaseOf(serverUrl === undefined ? currentConn().serverUrl : serverUrl, location.href);
           return browserDraftStore().get(browserDraftKey(base, docId));
         },
         all: function () {

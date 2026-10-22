@@ -25,6 +25,8 @@ import * as mergeUndo from "../../src/application/session/merge-undo.ts";
 import * as preferences from "../../src/application/preferences/preferences.ts";
 import * as viewFlags from "../../src/application/preferences/view-flags.ts";
 import * as panelWidths from "../../src/application/preferences/panel-widths.ts";
+import * as documentLocation from "../../src/application/location/document-location.ts";
+import * as serverStatus from "../../src/application/location/server-status.ts";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -42,7 +44,8 @@ const OWNERS = [
   "src/application/session/merge-undo.ts",
   "src/application/preferences/preferences.ts",
   "src/application/preferences/view-flags.ts",
-  "src/application/preferences/panel-widths.ts"
+  "src/application/preferences/panel-widths.ts",
+  "src/application/location"
 ];
 
 function sourcesOf(path: string): string[] {
@@ -97,7 +100,8 @@ test("E12: importing the owners constructs nothing: each export is a constructor
     draftResume: draftResume, conflictStash: conflictStash, legacySnapshots: legacySnapshots,
     saveCoordinator: saveCoordinator, saveStatus: saveStatus, autoSave: autoSave,
     rowDrag: rowDrag, focusMemory: focusMemory, paintGuard: paintGuard, selection: selection, deleteConfirm: deleteConfirm, productionSelection: productionSelection, mergeUndo: mergeUndo,
-    preferences: preferences, viewFlags: viewFlags, panelWidths: panelWidths
+    preferences: preferences, viewFlags: viewFlags, panelWidths: panelWidths,
+    documentLocation: documentLocation, serverStatus: serverStatus
   };
   for (const [module, exports] of Object.entries(loaded)) {
     for (const [name, value] of Object.entries(exports)) {

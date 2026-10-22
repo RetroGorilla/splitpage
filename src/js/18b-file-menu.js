@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { home } from "./_home.js";
+import { currentHome, reviewMode, serverStatus } from "../legacy/location-bridge.ts";
 import { savedStatusText, savedWhenText } from "../../shared/clock.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
@@ -7,7 +7,7 @@ import { pushSnapshot, updateIdentityChip } from "./03-sync.js";
 import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { clearDirty, updateSaveStatus } from "./12-dirty-toast.js";
-import { applyReviewMode, linkTurnedOff, reviewMode, serverSessionExpired, updateServerMenu } from "./13-hosted.js";
+import { applyReviewMode, updateServerMenu } from "./13-hosted.js";
 import { openProjectFile, updateFileChip } from "./18-local-files.js";
 import {
   canOpenPrompterInBrowser,
@@ -114,23 +114,23 @@ function savedWord(at) {
 
 export function fileCardView() {
   if (!S.state) return { name: "Loading…", bits: [] };
-  if (home.kind === "server") {
-    var srv = serverSessionExpired ? { text: "Signed out — reload to sign in", unsaved: true }
-      : linkTurnedOff ? { text: "Link turned off — not saving", unsaved: true }
+  if (currentHome().kind === "server") {
+    var srv = serverStatus().sessionExpired() ? { text: "Signed out — reload to sign in", unsaved: true }
+      : serverStatus().linkTurnedOff() ? { text: "Link turned off — not saving", unsaved: true }
       : savedWord(null);
-    return { name: S.state.title || "Untitled Script", bits: [srv, { text: "On the server · v" + home.rev }] };
+    return { name: S.state.title || "Untitled Script", bits: [srv, { text: "On the server · v" + currentHome().rev }] };
   }
-  if (home.kind === "file") {
+  if (currentHome().kind === "file") {
     return {
-      name: home.name || (home.handle && home.handle.name) || "Untitled",
-      bits: [savedWord(home.lastModified), { text: FORMAT_NAMES[home.format] || home.format }]
+      name: currentHome().name || (currentHome().handle && currentHome().handle.name) || "Untitled",
+      bits: [savedWord(currentHome().lastModified), { text: FORMAT_NAMES[currentHome().format] || currentHome().format }]
     };
   }
-  if (home.kind === "import") {
+  if (currentHome().kind === "import") {
     return {
-      name: home.name,
-      bits: [home.dirty ? { text: "Not written back yet", unsaved: true } : { text: "Up to date" },
-             { text: FORMAT_NAMES[home.format] || home.format }]
+      name: currentHome().name,
+      bits: [currentHome().dirty ? { text: "Not written back yet", unsaved: true } : { text: "Up to date" },
+             { text: FORMAT_NAMES[currentHome().format] || currentHome().format }]
     };
   }
   return { name: "Not saved yet", bits: [{ text: "Save to choose where it’s kept" }] };

@@ -21,7 +21,6 @@ import { embedRefusal, fetchThumbnailRecord, playerSrc, thumbnailsAllowed } from
 import { openAnnotator, refreshAnnotator } from "./05w-annotate.js";
 import { hasSessionVideo, openGalleryLink, sessionVideoUrl } from "./06-rows.js";
 import { breakUndoCoalescing, lastUndoEntry, undo } from "./12a-undo.js";
-import { reviewMode } from "./13-hosted.js";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
@@ -32,6 +31,7 @@ import { formatVideoLength } from "../../shared/text.js";
 import { embeddableVideo } from "../../shared/video-embed.js";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
 import { PREF_EVENT, preferences } from "../legacy/preferences-bridge.ts";
+import { reviewMode } from "../legacy/location-bridge.ts";
 
 var view = null;
 var returnFocus = null;
