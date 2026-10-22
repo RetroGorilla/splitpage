@@ -340,16 +340,15 @@ resolved entry.
 
 ## The legacy initializer shim
 
-`src/js/_entry.js` is the legacy initializer shim, the build entry until plan §8's 4.x composition root replaces it. Since milestone 7's step 7.1 it does three things, in this order: it calls `wireApp` (`src/bootstrap/wiring.ts`) with the dependencies the numbered modules export, which builds the action and export registries, the document session, the save coordinator, the transitions, the draft recovery, the editor's owners and the preferences; it calls the 69 numbered modules' `__init` in numbered order; and it hands the wiring to `startAppWhenReady` (`src/bootstrap/app.ts`), which mounts the features and starts the actions on DOM ready. If `wireApp` throws, the shim reports the `WiringError` with `console.error` and calls no `__init` and no mount. Since 7.2 the session's effects come the same way: the shim imports `legacySessionEffects` (12), `getEditorName` (03), `runIdleRefresh` (07) and `derivedRecordsPlan` (08c) from modules already in its set and passes them to `wireApp`, and no numbered module configures a bridge while it loads (the load-order check in the same test file).
+`src/js/_entry.js` is the legacy initializer shim, the build entry until plan §8's 4.x composition root replaces it. Since milestone 7's step 7.1 it does three things, in this order: it calls `wireApp` (`src/bootstrap/wiring.ts`) with the dependencies the numbered modules export, which builds the action and export registries, the document session, the save coordinator, the transitions, the draft recovery, the editor's owners and the preferences; it calls the 68 numbered modules' `__init` in numbered order; and it hands the wiring to `startAppWhenReady` (`src/bootstrap/app.ts`), which mounts the features and starts the actions on DOM ready. If `wireApp` throws, the shim reports the `WiringError` with `console.error` and calls no `__init` and no mount. Since 7.2 the session's effects come the same way: the shim imports `legacySessionEffects` (12), `getEditorName` (03), `runIdleRefresh` (07) and `derivedRecordsPlan` (08c) from modules already in its set and passes them to `wireApp`, and no numbered module configures a bridge while it loads (the load-order check in the same test file).
 
-Its import specifiers are a frozen set of 71 (the 69 modules it starts, `../bootstrap/wiring.ts` and `../bootstrap/app.ts`). The built-in exporters' registration left the set with `14e-export-formats.js` (L4b PR 1): `wireApp` registers them from `src/bootstrap/wiring/exporters.ts` itself. `tests/bootstrap/legacy-shim.test.ts` fails if the shim imports anything outside that set, so the list can only shrink, and if any file under `src/application`, `src/features` or `src/bootstrap` imports the shim (resolved with this tool's resolver). `tools/modularize.mjs` generated the first version of the shim; rerunning it would overwrite the wiring call, so it is not rerun.
+Its import specifiers are a frozen set of 70 (the 68 modules it starts, `../bootstrap/wiring.ts` and `../bootstrap/app.ts`). The built-in exporters' registration left the set with `14e-export-formats.js` (L4b PR 1): `wireApp` registers them from `src/bootstrap/wiring/exporters.ts` itself. `tests/bootstrap/legacy-shim.test.ts` fails if the shim imports anything outside that set, so the list can only shrink, and if any file under `src/application`, `src/features` or `src/bootstrap` imports the shim (resolved with this tool's resolver). `tools/modularize.mjs` generated the first version of the shim; rerunning it would overwrite the wiring call, so it is not rerun.
 
 The modules it starts, the owner each is expected to move to in 4.x (a planning label: a feature folder, an adapter, or the composition root), and the bridges under `src/legacy/` each imports:
 
 | Module | Owner it waits for in 4.x | Bridges it imports |
 | --- | --- | --- |
 | `00-prelude.js` | composition root | none |
-| `00p-prefs.js` | features/settings | none |
 | `01-scene-status.js` | features/rows | `preferences-bridge`, `session-bridge` |
 | `01b-hide-shot.js` | features/rows | `preferences-bridge` |
 | `02-state.js` | core document entry (composition root) | `document-ports` |
@@ -367,7 +366,7 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `05b-cell-edit.js` | features/editing | `richtext`, `session-bridge` |
 | `05c-clipboard.js` | features/clipboard | `richtext`, `session-bridge` |
 | `05d-draft-edit.js` | features/editing | `richtext` |
-| `05e-gallery-overlay.js` | features/overlay | `editor-bridge`, `session-bridge`, `transition-bridge` |
+| `05e-gallery-overlay.js` | features/overlay | `editor-bridge`, `preferences-bridge`, `session-bridge`, `transition-bridge` |
 | `05f-rundown.js` | features/panels | `app-actions`, `cache-freeze`, `editor-bridge`, `richtext` |
 | `05g-scene-clip.js` | features/clipboard | `richtext` |
 | `05h-scene-select.js` | features/rows | `editor-bridge`, `preferences-bridge`, `review-wording`, `session-bridge` |
@@ -376,7 +375,7 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `05r-read-time.js` | features/rows | `session-bridge` |
 | `05s-script-zoom.js` | features/settings | `app-actions`, `preferences-bridge` |
 | `05t-target.js` | features/panels | none |
-| `05v-video.js` | features/video | `transition-bridge` |
+| `05v-video.js` | features/video | `preferences-bridge`, `transition-bridge` |
 | `05w-annotate.js` | features/gallery | `transition-bridge` |
 | `06-rows.js` | features/rows | `editor-bridge`, `review-wording`, `session-bridge`, `transition-bridge` |
 | `07-production-tags.js` | features/tags | `cache-freeze`, `document-ports`, `editor-bridge`, `preferences-bridge`, `richtext`, `session-bridge` |
@@ -387,20 +386,20 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `09-find-replace.js` | features/find | `preferences-bridge`, `richtext` |
 | `10-comments.js` | features/comments | `editor-bridge`, `preferences-bridge`, `transition-bridge` |
 | `11-import.js` | features/imports | `session-bridge`, `transition-bridge` |
-| `12-dirty-toast.js` | features/notices (session effects: composition root) | `save-bridge`, `session-bridge` |
+| `12-dirty-toast.js` | features/notices (session effects: composition root) | `preferences-bridge`, `save-bridge`, `session-bridge` |
 | `12a-undo.js` | features/undo | `richtext` |
 | `13-hosted.js` | adapters/transport | `recovery-bridge`, `review-wording`, `save-bridge`, `transition-bridge` |
-| `13a-presence.js` | adapters/transport | `transition-bridge` |
+| `13a-presence.js` | adapters/transport | `preferences-bridge`, `transition-bridge` |
 | `13b-collaborate.js` | features/file-menu | `app-actions`, `preferences-bridge` |
 | `14-export.js` | adapters/files (save writer) | `preferences-bridge`, `recovery-bridge`, `save-bridge` |
-| `14b-export-kit.js` | adapters/formats | `cache-freeze`, `document-ports`, `plain-text`, `richtext`, `session-bridge` |
+| `14b-export-kit.js` | adapters/formats | `cache-freeze`, `document-ports`, `plain-text`, `preferences-bridge`, `richtext`, `session-bridge` |
 | `15-docx.js` | adapters/formats | none (decodes through the export services port) |
 | `16-csv.js` | adapters/formats | none (decodes through the export services port) |
 | `16b-xlsx.js` | adapters/formats | none |
 | `17-pdf.js` | adapters/formats | none |
 | `18-local-files.js` | adapters/files | `app-actions`, `export-formats`, `richtext`, `save-bridge`, `session-bridge`, `transition-bridge` |
 | `18a-local-merge.js` | features/merge | `plain-text` |
-| `18b-file-menu.js` | features/file-menu | `save-bridge`, `transition-bridge` |
+| `18b-file-menu.js` | features/file-menu | `preferences-bridge`, `save-bridge`, `transition-bridge` |
 | `18c-export-dialog.js` | features/file-menu | `export-formats`, `richtext` |
 | `18d-command-menu.js` | features/shortcuts | `app-actions`, `editor-bridge`, `export-formats`, `screen` |
 | `19-writer.js` | features/writer | `document-ports`, `editor-bridge`, `plain-text`, `preferences-bridge`, `review-wording`, `session-bridge` |
@@ -414,7 +413,7 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `20g-drafts.js` | adapters/storage (draft recovery) | `recovery-bridge`, `save-bridge`, `transition-bridge` |
 | `20h-appdata.js` | adapters/storage | `preferences-bridge` |
 | `20i-topbar.js` | features/title | none |
-| `20j-newtab.js` | composition root (desktop host) | `app-actions`, `document-ports`, `recovery-bridge`, `seed-check`, `startup-bridge`, `transition-bridge` |
+| `20j-newtab.js` | composition root (desktop host) | `app-actions`, `document-ports`, `preferences-bridge`, `recovery-bridge`, `seed-check`, `startup-bridge`, `transition-bridge` |
 | `20k-phone-bar.js` | features/notices | none |
 | `20s-settings.js` | features/settings | `app-actions`, `preferences-bridge` |
 

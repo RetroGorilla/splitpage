@@ -1,12 +1,13 @@
 import { S } from "./_state.js";
-import { videoThumbsOn } from "./00p-prefs.js";
 import { intern, persist } from "../adapters/storage/02c-blobs.js";
-import { findRowIndex } from "./03-sync.js";
+import { rowIndexOf } from "../core/document/rows.ts";
+import { readSession } from "../legacy/session-bridge.ts";
 import { render, renderRow } from "./05-render.js";
 import { foldIntoEdit } from "./12a-undo.js";
 import { fetchVideoThumbnail, parseVideoLink, playerUrl, videoRef } from "../../shared/video-embed.js";
 import { normalizeVideoLink, setVideoThumbnail, videoLinkKey } from "../core/document/gallery.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 
 var testHooks = { fetch: null, bases: null, protocol: null };
 
@@ -69,7 +70,7 @@ function allDark(px) {
 }
 
 export function thumbnailsAllowed() {
-  return videoThumbsOn();
+  return preferences().videoThumbs();
 }
 
 export function fetchThumbnailRecord(href) {
@@ -113,9 +114,9 @@ export function thumbnailsAfterPaste(rowId, hrefs, entry) {
     if (!link || !parseVideoLink(link.href)) return;
     var key = videoLinkKey(link);
     fetchThumbnailRecord(link.href).then(function (rec) {
-      if (!rec || !stillOwns(ctx) || findRowIndex(rowId) === -1) return;
+      if (!rec || !stillOwns(ctx) || readSession(function (doc) { return rowIndexOf(doc, rowId); }) === -1) return;
       var done = foldIntoEdit(entry, touchesGallery(rowId), function (state) {
-        var idx = findRowIndex(rowId);
+        var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
         return idx !== -1 && setVideoThumbnail(state.rows[idx], key, rec);
       });
       if (done && !renderRow(rowId)) render();

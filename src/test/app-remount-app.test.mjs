@@ -94,6 +94,7 @@ const CONDITIONAL = {
 };
 
 const RESOURCE_ROWS = {
+  appearance: ["window storage/B"],
   shortcuts: ["window keydown/B"],
   S13: ["#production-list click/C", "#production-list contextmenu/B", "#production-list pointercancel/B", "#production-list pointerdown/B", "#production-list pointermove/B", "#production-list pointerup/B"],
   S26: ["#production-panel change/B", "#production-panel click/B", "#production-panel focusout/B", "#production-panel input/B", "#production-panel keydown/B"],

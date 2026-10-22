@@ -1,5 +1,4 @@
 import { __init as init_00_prelude } from "./00-prelude.js";
-import { __init as init_00p_prefs } from "./00p-prefs.js";
 import { __init as init_01_scene_status } from "./01-scene-status.js";
 import { __init as init_01b_hide_shot } from "./01b-hide-shot.js";
 import { __init as init_02_state } from "./02-state.js";
@@ -96,7 +95,6 @@ try {
 }
 if (wiring) {
   init_00_prelude();
-  init_00p_prefs();
   init_01_scene_status();
   init_01b_hide_shot();
   init_02_state();

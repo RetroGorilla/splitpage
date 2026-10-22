@@ -1,6 +1,7 @@
 import { S } from "./_state.js";
 import { ensureBytes, intern, persist, urlForSync } from "../adapters/storage/02c-blobs.js";
-import { findRowIndex } from "./03-sync.js";
+import { rowIndexOf } from "../core/document/rows.ts";
+import { readSession } from "../legacy/session-bridge.ts";
 import { slotPoster } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
 import { reviewMode } from "./13-hosted.js";
@@ -46,7 +47,7 @@ export function annotatorOpen() { return !!ed; }
 
 export function openAnnotator(rowId, at) {
   if (ed || reviewMode() || !S.state) return false;
-  var idx = findRowIndex(rowId);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
   if (idx === -1) return false;
   var slot = rowSlots(S.state.rows[idx])[at];
   if (!slot || !slot.ref || slotPoster(slot)) return false;
@@ -139,7 +140,7 @@ export function closeAnnotator() {
 }
 
 function locate() {
-  var idx = findRowIndex(ed.rowId);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, ed.rowId); });
   if (idx === -1) return -1;
   var slots = rowSlots(S.state.rows[idx]);
   var s = slots[ed.at];

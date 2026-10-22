@@ -1,4 +1,4 @@
-import { formatDateClock } from "./00p-prefs.js";
+import { formatDateClock } from "../../shared/clock.js";
 import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
 import { exportServices } from "../application/export/services.ts";
 import { compareCommentPositions } from "../core/document/comments.ts";

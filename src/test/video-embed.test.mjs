@@ -3,7 +3,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { S } from "../js/_state.js";
-import { SETTINGS_APPDATA_PREFS, VIDEO_THUMBS_KEY, videoThumbsOn } from "../js/00p-prefs.js";
+import "./_preferences-started.mjs";
+import { settingsAppData } from "../application/preferences/preferences.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { intern } from "../adapters/storage/02c-blobs.js";
 import { addGalleryPicture, addGalleryVideo, setVideoThumbnail, videoLinkKey } from "../adapters/storage/02d-gallery.js";
@@ -214,14 +216,15 @@ test("a fake host stands in for all five, as the suites and the desktop's test m
 });
 
 test("Settings ▸ Fetch video thumbnails: on unless switched off, and carried by Export app data", () => {
+  const VIDEO_THUMBS_KEY = "splitpage-video-thumbs";
   localStorage.removeItem(VIDEO_THUMBS_KEY);
-  assert.equal(videoThumbsOn(), true);
+  assert.equal(preferences().videoThumbs(), true);
   localStorage.setItem(VIDEO_THUMBS_KEY, "0");
-  assert.equal(videoThumbsOn(), false);
+  assert.equal(preferences().videoThumbs(), false);
   localStorage.setItem(VIDEO_THUMBS_KEY, "1");
-  assert.equal(videoThumbsOn(), true);
+  assert.equal(preferences().videoThumbs(), true);
   localStorage.removeItem(VIDEO_THUMBS_KEY);
-  const row = SETTINGS_APPDATA_PREFS.filter((p) => p.key === VIDEO_THUMBS_KEY)[0];
+  const row = settingsAppData().filter((p) => p.key === VIDEO_THUMBS_KEY)[0];
   assert.ok(row, "in the bundle's prefs");
   assert.equal(row.valid("0"), true);
   assert.equal(row.valid("1"), true);

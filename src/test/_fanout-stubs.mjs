@@ -36,11 +36,6 @@ function rowCopy(row) {
   return JSON.parse(JSON.stringify(row));
 }
 
-export function findRowIndex(id) {
-  calls.push("findRowIndex");
-  return S.state.rows.findIndex((r) => r.id === id);
-}
-
 export function stampRow(row) {
   calls.push("stampRow");
   stamped.push(rowCopy(row));

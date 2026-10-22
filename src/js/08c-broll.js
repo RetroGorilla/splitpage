@@ -2,7 +2,7 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
 import { domToPos } from "../features/editing/cell-dom.ts";
 import { S } from "./_state.js";
-import { findRowIndex } from "./03-sync.js";
+import { rowIndexOf } from "../core/document/rows.ts";
 import {
   ensureTrailingCaretSpot,
   inertBody,
@@ -52,7 +52,7 @@ import { toHtml } from "../core/text/html.ts";
 import { projection } from "../core/text/runs.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { cellOf, scriptCellOf } from "../legacy/richtext.ts";
-import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 export {
   BROLL_MARKER_RE,
   BROLL_PROPS_MAX,
@@ -120,7 +120,7 @@ function brollHtmlLineText(nodes) {
 }
 
 function brollRow(rowId) {
-  var i = rowId ? findRowIndex(rowId) : -1;
+  var i = rowId ? readSession(function (doc) { return rowIndexOf(doc, rowId); }) : -1;
   return i === -1 ? null : S.state.rows[i];
 }
 

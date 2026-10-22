@@ -144,7 +144,11 @@ test("--broll is defined in every theme, off every other hue, and readable as te
 });
 
 import { tagIconCss, tagIconSvg } from "../js/07-production-tags.js";
-import { SETTINGS_APPDATA_PREFS, TAG_ICONS_KEY, tagIconsOn } from "../js/00p-prefs.js";
+import "./_preferences-started.mjs";
+import { settingsAppData } from "../application/preferences/preferences.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
+
+const TAG_ICONS_KEY = "splitpage-tag-icons";
 
 test("every category has its own icon, given as --tag-icon on its data-tag-cat", () => {
   const icons = new Set();
@@ -169,12 +173,12 @@ test("icons are drawn only under data-tag-icons, as ::before, and not in the tel
 
 test("Show icons on tags is off by default and carried in the app data bundle", () => {
   localStorage.removeItem(TAG_ICONS_KEY);
-  assert.equal(tagIconsOn(), false);
+  assert.equal(preferences().tagIcons(), false);
   localStorage.setItem(TAG_ICONS_KEY, "1");
-  assert.equal(tagIconsOn(), true);
+  assert.equal(preferences().tagIcons(), true);
   localStorage.setItem(TAG_ICONS_KEY, "0");
-  assert.equal(tagIconsOn(), false);
+  assert.equal(preferences().tagIcons(), false);
   localStorage.removeItem(TAG_ICONS_KEY);
-  const row = SETTINGS_APPDATA_PREFS.filter((p) => p.key === TAG_ICONS_KEY)[0];
+  const row = settingsAppData().filter((p) => p.key === TAG_ICONS_KEY)[0];
   assert.ok(row && row.valid("1") && row.valid("0") && !row.valid("yes"));
 });

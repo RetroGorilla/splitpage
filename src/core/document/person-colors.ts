@@ -73,3 +73,33 @@ export function mergePersonColors(base: unknown, mine: unknown, theirs: unknown)
   Object.keys(b).forEach(function (name) { put(name, b[name] as string); });
   return normalizePersonColors(out);
 }
+
+export const PERSON_COLOR_NAMES: readonly string[] = ["Blue", "Amber", "Violet", "Green", "Pink", "Lime", "Coral", "Teal"];
+
+export interface PersonColorContext {
+  readonly self?: unknown;
+  readonly selfColor?: unknown;
+  readonly live?: Record<string, unknown> | null | undefined;
+  readonly doc?: Readonly<Record<string, unknown>> | null | undefined;
+}
+
+export function hashedPersonColor(seed: unknown): string {
+  const text = String(seed || "");
+  let hash = 0;
+  for (let i = 0; i < text.length; i++) hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+  return PERSON_COLORS[Math.abs(hash) % PERSON_COLORS.length] as string;
+}
+
+export function resolvePersonColor(name: unknown, ctx?: PersonColorContext | null): string {
+  const given = ctx || {};
+  const key = personKey(name);
+  if (key) {
+    const mine = paletteColor(given.selfColor);
+    if (mine && given.self && personKey(given.self) === key) return mine;
+    const live = given.live && Object.prototype.hasOwnProperty.call(given.live, key) ? paletteColor(given.live[key]) : "";
+    if (live) return live;
+    const doc = lookupByName(given.doc, name as string);
+    if (doc) return doc;
+  }
+  return hashedPersonColor(name);
+}

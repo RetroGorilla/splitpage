@@ -2,7 +2,8 @@ import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
 import { S } from "./_state.js";
 import { rowSeconds } from "./01-scene-status.js";
 import { revealRow } from "./01b-hide-shot.js";
-import { findRowIndex } from "./03-sync.js";
+import { rowIndexOf } from "../core/document/rows.ts";
+import { readSession } from "../legacy/session-bridge.ts";
 import { cssAttr } from "./04-richtext.js";
 import { clearDropMarkers, moveRowTo } from "./06-rows.js";
 import { reviewMode } from "./13-hosted.js";
@@ -817,7 +818,7 @@ export function toggleRundownMinimized() {
 
 function dragIndex() {
   var id = rowDrag().dragging();
-  return id ? findRowIndex(id) : -1;
+  return id ? readSession(function (doc) { return rowIndexOf(doc, id); }) : -1;
 }
 
 function dropAllowed() {

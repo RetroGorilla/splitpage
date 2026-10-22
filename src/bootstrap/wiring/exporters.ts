@@ -4,7 +4,7 @@ import type { ExportDocument } from "../../core/document/export-document.ts";
 import { strBytes } from "../../adapters/formats/bytes.ts";
 import { zipWrite } from "../../adapters/formats/zip.ts";
 import { tagCategory } from "../../core/production/looks.ts";
-import { readPref, writePref } from "../../js/00p-prefs.js";
+import { preferences } from "../../legacy/preferences-bridge.ts";
 import { exportBrollScenes, exportDay, exportFacts } from "../../js/14b-export-kit.js";
 import { brollShotListForPrint } from "../../js/14c-export-projections.js";
 import {
@@ -39,14 +39,12 @@ export interface ExportBuild {
 
 type BuiltInExporter = ExporterDecl<ExportBuild, ExportDocument>;
 
-const NARRATION_DIRECTIONS_KEY = "splitpage-export-directions";
-
 export function narrationIncludesDirections(): boolean {
-  return readPref(NARRATION_DIRECTIONS_KEY) !== "0";
+  return preferences().exportDirections();
 }
 
 export function setNarrationIncludesDirections(on: boolean): void {
-  writePref(NARRATION_DIRECTIONS_KEY, on ? null : "0");
+  preferences().setExportDirections(on);
 }
 
 function suffixed(suffix: string): (base: string) => string {
