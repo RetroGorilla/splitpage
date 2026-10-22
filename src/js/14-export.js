@@ -64,7 +64,8 @@ var FAILED = Object.freeze({ kind: "failed" });
 var CONFLICTED = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
 var NOT_AUTOSAVING = Object.freeze({ kind: "refused", reason: "Autosave is off, paused, has nowhere to write or nothing to write" });
 
-function finishWriting() {
+function finishWriting(job) {
+  if (!job.alive()) return;
   S.saveButtonBusy = false;
   setSaveButtons(S.dirty ? "Save •" : "Save", false);
 }
@@ -122,7 +123,7 @@ async function writeDoc(opts, job) {
                      "Press Save to try again.");
       }
     } finally {
-      finishWriting();
+      finishWriting(job);
     }
     return sentToServer === false ? FAILED : SAVED;
   }
@@ -236,7 +237,7 @@ async function writeDoc(opts, job) {
     }
   } finally {
     undoRetarget();
-    finishWriting();
+    finishWriting(job);
   }
   return written;
 }
