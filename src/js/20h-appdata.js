@@ -8,7 +8,6 @@ import {
   importHistoryBundle,
   normalizeLegacySnapshots
 } from "./03a-history-store.js";
-import { COMMENTS_SORT_KEY, readCommentSortMode } from "./10-comments.js";
 import { showToast } from "./12-dirty-toast.js";
 import { deliverFile } from "./18-local-files.js";
 import { applyWriterSize, readWriterSize } from "./19-writer.js";
@@ -305,16 +304,13 @@ function appDataMergeBookmarks(list) {
 }
 
 function appDataExtraPrefs() {
-  return [
-    { name: "commentsSort", key: COMMENTS_SORT_KEY,
-      valid: function (v) { return v === "recent" || v === "position"; } }
-  ].concat(settingsAppData());
+  return settingsAppData();
 }
 
 function appDataMergePrefs(prefs) {
   var written = preferences().appDataImport(prefs, appDataExtraPrefs());
   try {
-    if (written.indexOf("commentsSort") !== -1) setCommentSort(readCommentSortMode());
+    if (written.indexOf("commentsSort") !== -1) setCommentSort(preferences().commentsSort());
     if (written.indexOf("writerSize") !== -1) applyWriterSize(readWriterSize(), false);
   } catch (e) {}
   return written;
