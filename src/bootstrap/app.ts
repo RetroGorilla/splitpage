@@ -32,6 +32,7 @@ import {
 import { mountFindFeature, mountTagsFeature, stopFindFeature, stopTagsFeature } from "./wiring/production.ts";
 import { mountCommentsFeature, stopCommentsFeature } from "./wiring/comments.ts";
 import {
+  mountAppearanceFeature,
   mountConflictsFeature,
   mountDriveFeature,
   mountFileMenuFeature,
@@ -84,6 +85,7 @@ export function startApp(wiring: Wiring): () => void {
     stops.push(startActions(wiring.actions, wiring.keyTarget));
     const startup = beginStartup(startupPorts());
     stops.push(startup.dispose);
+    run(view("mountAppearance", mountAppearanceFeature));
     run(view("mountNotices", mountNoticesFeature));
     run([mountTagsFeature, stopTagsFeature]);
     run(view("mountPrompterVisibility", mountPrompterVisibilityFeature));

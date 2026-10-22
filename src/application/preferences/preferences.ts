@@ -1,20 +1,41 @@
+import { paletteColor } from "../../core/document/person-colors.ts";
 import { cappedLongText } from "../../core/document/text-policy.ts";
 import type { KeyValueStorage } from "../recovery/conflict-stash.ts";
 
 export const WRITER_SIZE_MIN = 16;
 export const WRITER_SIZE_MAX = 34;
+export const SCRIPT_SCALE_MIN = 0.7;
+export const SCRIPT_SCALE_MAX = 2;
+export const CLOCK_MODES: readonly string[] = Object.freeze(["system", "12", "24"]);
+export const THEME_MODES: readonly string[] = Object.freeze(["system", "light", "dark"]);
 
 const KEYS = Object.freeze({
   autosave: "splitpage-autosave",
+  clock: "splitpage-clock",
+  collabServer: "splitpage-collab-server",
   commentAuthor: "splitpage-comment-author",
+  defaultWpm: "splitpage-default-wpm",
+  desktopNotice: "splitpage-desktop-notice-dismissed",
+  exportDirections: "splitpage-export-directions",
   hideShot: "splitpage-hide-shot",
   onboarding: "splitpage-onboarding",
+  personColor: "splitpage-person-color",
+  prompterFlip: "splitpage-prompter-flip",
+  prompterMirror: "splitpage-prompter-mirror",
+  prompterSceneMode: "splitpage-prompter-scene-mode",
+  rundownMin: "splitpage-rundown-min",
+  scriptScale: "splitpage-script-scale",
+  tagIcons: "splitpage-tag-icons",
   taggingHelp: "splitpage-tagging-help-dismissed",
+  theme: "splitpage-theme",
   tourDone: "splitpage-tour-done",
+  videoThumbs: "splitpage-video-thumbs",
   writerSize: "splitpage-writer-size"
 });
 
 export type PreferenceName = keyof typeof KEYS;
+
+export type PrompterFlag = "prompterMirror" | "prompterFlip" | "prompterSceneMode";
 
 export interface PreferenceChange {
   readonly key: string;
@@ -53,12 +74,62 @@ export interface Preferences {
   readonly skipOnboardingForPrompter: () => void;
   readonly writerSize: () => number | null;
   readonly setWriterSize: (px: number) => void;
+  readonly clock: () => string;
+  readonly setClock: (mode: string) => void;
+  readonly theme: () => string;
+  readonly setTheme: (mode: string) => void;
+  readonly myColor: () => string;
+  readonly setMyColor: (color: string | null) => void;
+  readonly defaultWpm: () => number;
+  readonly setDefaultWpm: (wpm: number) => void;
+  readonly rundownMin: () => boolean;
+  readonly setRundownMin: (on: boolean) => void;
+  readonly tagIcons: () => boolean;
+  readonly setTagIcons: (on: boolean) => void;
+  readonly videoThumbs: () => boolean;
+  readonly setVideoThumbs: (on: boolean) => void;
+  readonly scriptScale: () => number;
+  readonly setScriptScale: (scale: number) => void;
+  readonly prompterFlag: (name: PrompterFlag) => boolean;
+  readonly setPrompterFlag: (name: PrompterFlag, on: boolean) => void;
+  readonly collabServer: () => string | null;
+  readonly setCollabServer: (url: string | null) => void;
+  readonly resetDesktopNotice: () => void;
+  readonly exportDirections: () => boolean;
+  readonly setExportDirections: (on: boolean) => void;
   readonly appDataExport: (extra: readonly AppDataPref[]) => Record<string, unknown>;
   readonly appDataImport: (incoming: unknown, extra: readonly AppDataPref[]) => string[];
 }
 
 function isFlag(value: string): boolean {
   return value === "0" || value === "1";
+}
+
+function inRangeWpm(value: string): boolean {
+  const n = /^\d{2,3}$/.test(value) ? parseInt(value, 10) : NaN;
+  return n >= 60 && n <= 400;
+}
+
+function isScriptScale(value: string): boolean {
+  const n = Number(value);
+  return /^\d(\.\d{1,3})?$/.test(value) && n >= SCRIPT_SCALE_MIN && n <= SCRIPT_SCALE_MAX;
+}
+
+export function settingsAppData(): readonly AppDataPref[] {
+  return [
+    { name: "theme", key: KEYS.theme, valid: function (v: string) { return THEME_MODES.indexOf(v) !== -1; } },
+    { name: "clock", key: KEYS.clock, valid: function (v: string) { return CLOCK_MODES.indexOf(v) !== -1; } },
+    { name: "personColor", key: KEYS.personColor, valid: function (v: string) { return !!paletteColor(v); } },
+    { name: "defaultWpm", key: KEYS.defaultWpm, valid: inRangeWpm },
+    { name: "hideShot", key: KEYS.hideShot, valid: isFlag },
+    { name: "prompterMirror", key: KEYS.prompterMirror, valid: isFlag },
+    { name: "prompterFlip", key: KEYS.prompterFlip, valid: isFlag },
+    { name: "prompterSceneMode", key: KEYS.prompterSceneMode, valid: isFlag },
+    { name: "rundownMin", key: KEYS.rundownMin, valid: isFlag },
+    { name: "videoThumbs", key: KEYS.videoThumbs, valid: isFlag },
+    { name: "tagIcons", key: KEYS.tagIcons, valid: isFlag },
+    { name: "scriptScale", key: KEYS.scriptScale, valid: isScriptScale }
+  ];
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -180,6 +251,41 @@ export function createPreferences(ports: PreferencePorts): Preferences {
       return isFinite(n) ? Math.min(WRITER_SIZE_MAX, Math.max(WRITER_SIZE_MIN, n)) : null;
     },
     setWriterSize: function (px: number): void { announce(KEYS.writerSize, String(px)); },
+    clock: function (): string {
+      const v = read(KEYS.clock);
+      return v !== null && CLOCK_MODES.indexOf(v) !== -1 ? v : "system";
+    },
+    setClock: function (mode: string): void { announce(KEYS.clock, mode === "system" ? null : mode); },
+    theme: function (): string {
+      const v = read(KEYS.theme);
+      return v !== null && THEME_MODES.indexOf(v) !== -1 ? v : "system";
+    },
+    setTheme: function (mode: string): void { announce(KEYS.theme, mode === "system" ? null : mode); },
+    myColor: function (): string { return paletteColor(read(KEYS.personColor)); },
+    setMyColor: function (color: string | null): void { announce(KEYS.personColor, color); },
+    defaultWpm: function (): number {
+      const n = parseInt(read(KEYS.defaultWpm) ?? "", 10);
+      return isFinite(n) && n >= 60 && n <= 400 ? n : 150;
+    },
+    setDefaultWpm: function (wpm: number): void { announce(KEYS.defaultWpm, wpm === 150 ? null : String(wpm)); },
+    rundownMin: function (): boolean { return read(KEYS.rundownMin) === "1"; },
+    setRundownMin: function (on: boolean): void { announce(KEYS.rundownMin, on ? "1" : "0"); },
+    tagIcons: function (): boolean { return read(KEYS.tagIcons) === "1"; },
+    setTagIcons: function (on: boolean): void { announce(KEYS.tagIcons, on ? "1" : null); },
+    videoThumbs: function (): boolean { return read(KEYS.videoThumbs) !== "0"; },
+    setVideoThumbs: function (on: boolean): void { announce(KEYS.videoThumbs, on ? null : "0"); },
+    scriptScale: function (): number {
+      const n = Number(read(KEYS.scriptScale));
+      return isFinite(n) && n >= SCRIPT_SCALE_MIN && n <= SCRIPT_SCALE_MAX ? n : 1;
+    },
+    setScriptScale: function (scale: number): void { announce(KEYS.scriptScale, String(scale)); },
+    prompterFlag: function (name: PrompterFlag): boolean { return read(KEYS[name]) === "1"; },
+    setPrompterFlag: function (name: PrompterFlag, on: boolean): void { announce(KEYS[name], on ? "1" : "0"); },
+    collabServer: function (): string | null { return read(KEYS.collabServer); },
+    setCollabServer: function (url: string | null): void { announce(KEYS.collabServer, url); },
+    resetDesktopNotice: function (): void { announce(KEYS.desktopNotice, null); },
+    exportDirections: function (): boolean { return read(KEYS.exportDirections) !== "0"; },
+    setExportDirections: function (on: boolean): void { announce(KEYS.exportDirections, on ? null : "0"); },
     appDataExport: function (extra: readonly AppDataPref[]): Record<string, unknown> {
       const out: Record<string, unknown> = { onboarding: readJson(KEYS.onboarding) ?? null };
       ownAppData().concat(extra).forEach(function (spec) { out[spec.name] = read(spec.key); });

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WRITER_SIZE_MAX, WRITER_SIZE_MIN, createPreferences } from "../../../src/application/preferences/preferences.ts";
+import { WRITER_SIZE_MAX, WRITER_SIZE_MIN, createPreferences, settingsAppData } from "../../../src/application/preferences/preferences.ts";
 import type { AppDataPref, PreferenceChange } from "../../../src/application/preferences/preferences.ts";
 import type { KeyValueStorage } from "../../../src/application/recovery/conflict-stash.ts";
 
@@ -30,7 +30,176 @@ test("the stored keys keep the 3.x names, and each key maps back to its preferen
   assert.equal(prefs.nameOf("splitpage-tagging-help-dismissed"), "taggingHelp");
   assert.equal(prefs.nameOf("splitpage-tour-done"), "tourDone");
   assert.equal(prefs.nameOf("splitpage-writer-size"), "writerSize");
-  assert.equal(prefs.nameOf("splitpage-theme"), null);
+  assert.equal(prefs.nameOf("splitpage-clock"), "clock");
+  assert.equal(prefs.nameOf("splitpage-collab-server"), "collabServer");
+  assert.equal(prefs.nameOf("splitpage-default-wpm"), "defaultWpm");
+  assert.equal(prefs.nameOf("splitpage-desktop-notice-dismissed"), "desktopNotice");
+  assert.equal(prefs.nameOf("splitpage-export-directions"), "exportDirections");
+  assert.equal(prefs.nameOf("splitpage-person-color"), "personColor");
+  assert.equal(prefs.nameOf("splitpage-prompter-flip"), "prompterFlip");
+  assert.equal(prefs.nameOf("splitpage-prompter-mirror"), "prompterMirror");
+  assert.equal(prefs.nameOf("splitpage-prompter-scene-mode"), "prompterSceneMode");
+  assert.equal(prefs.nameOf("splitpage-rundown-min"), "rundownMin");
+  assert.equal(prefs.nameOf("splitpage-script-scale"), "scriptScale");
+  assert.equal(prefs.nameOf("splitpage-tag-icons"), "tagIcons");
+  assert.equal(prefs.nameOf("splitpage-theme"), "theme");
+  assert.equal(prefs.nameOf("splitpage-video-thumbs"), "videoThumbs");
+  assert.equal(prefs.nameOf("splitpage-comments-sort"), null);
+});
+
+test("the clock and the theme read as system unless a known mode is stored, and choosing system removes the key", () => {
+  const { prefs, storage, announced } = setup();
+  assert.equal(prefs.clock(), "system");
+  assert.equal(prefs.theme(), "system");
+  storage.items.set("splitpage-clock", "13");
+  storage.items.set("splitpage-theme", "blue");
+  assert.equal(prefs.clock(), "system");
+  assert.equal(prefs.theme(), "system");
+  prefs.setClock("24");
+  prefs.setTheme("dark");
+  assert.equal(prefs.clock(), "24");
+  assert.equal(prefs.theme(), "dark");
+  assert.equal(storage.items.get("splitpage-clock"), "24");
+  assert.equal(storage.items.get("splitpage-theme"), "dark");
+  prefs.setClock("system");
+  prefs.setTheme("system");
+  assert.equal(storage.items.has("splitpage-clock"), false);
+  assert.equal(storage.items.has("splitpage-theme"), false);
+  assert.deepEqual(announced, [
+    { key: "splitpage-clock", value: "24" },
+    { key: "splitpage-theme", value: "dark" },
+    { key: "splitpage-clock", value: null },
+    { key: "splitpage-theme", value: null }
+  ]);
+});
+
+test("my colour reads only a palette colour, upper-cased, and setting none removes it", () => {
+  const { prefs, storage, announced } = setup();
+  assert.equal(prefs.myColor(), "");
+  storage.items.set("splitpage-person-color", "#80bdfb");
+  assert.equal(prefs.myColor(), "#80BDFB");
+  storage.items.set("splitpage-person-color", "#000000");
+  assert.equal(prefs.myColor(), "");
+  prefs.setMyColor("#F9B64F");
+  assert.equal(storage.items.get("splitpage-person-color"), "#F9B64F");
+  prefs.setMyColor(null);
+  assert.equal(storage.items.has("splitpage-person-color"), false);
+  assert.deepEqual(announced, [
+    { key: "splitpage-person-color", value: "#F9B64F" },
+    { key: "splitpage-person-color", value: null }
+  ]);
+});
+
+test("the default reading speed is 150 unless 60 to 400 is stored, and 150 is stored as no value", () => {
+  const { prefs, storage, announced } = setup();
+  assert.equal(prefs.defaultWpm(), 150);
+  storage.items.set("splitpage-default-wpm", "59");
+  assert.equal(prefs.defaultWpm(), 150);
+  storage.items.set("splitpage-default-wpm", "401");
+  assert.equal(prefs.defaultWpm(), 150);
+  storage.items.set("splitpage-default-wpm", "180wpm");
+  assert.equal(prefs.defaultWpm(), 180);
+  prefs.setDefaultWpm(220);
+  assert.equal(storage.items.get("splitpage-default-wpm"), "220");
+  prefs.setDefaultWpm(150);
+  assert.equal(storage.items.has("splitpage-default-wpm"), false);
+  assert.deepEqual(announced, [
+    { key: "splitpage-default-wpm", value: "220" },
+    { key: "splitpage-default-wpm", value: null }
+  ]);
+});
+
+test("each switch keeps its stored form: rundown 1 or 0, tag icons 1 or none, video thumbnails none or 0, export directions none or 0", () => {
+  const { prefs, storage, announced } = setup();
+  assert.deepEqual([prefs.rundownMin(), prefs.tagIcons(), prefs.videoThumbs(), prefs.exportDirections()], [false, false, true, true]);
+  prefs.setRundownMin(true);
+  prefs.setTagIcons(true);
+  prefs.setVideoThumbs(false);
+  prefs.setExportDirections(false);
+  assert.deepEqual([prefs.rundownMin(), prefs.tagIcons(), prefs.videoThumbs(), prefs.exportDirections()], [true, true, false, false]);
+  assert.deepEqual([...storage.items], [
+    ["splitpage-rundown-min", "1"],
+    ["splitpage-tag-icons", "1"],
+    ["splitpage-video-thumbs", "0"],
+    ["splitpage-export-directions", "0"]
+  ]);
+  prefs.setRundownMin(false);
+  prefs.setTagIcons(false);
+  prefs.setVideoThumbs(true);
+  prefs.setExportDirections(true);
+  assert.deepEqual([...storage.items], [["splitpage-rundown-min", "0"]]);
+  assert.deepEqual(announced.map((c) => c.value), ["1", "1", "0", "0", "0", null, null, null]);
+});
+
+test("the prompter's three switches read on only for 1 and store 1 or 0", () => {
+  const { prefs, storage, announced } = setup();
+  assert.equal(prefs.prompterFlag("prompterMirror"), false);
+  prefs.setPrompterFlag("prompterMirror", true);
+  prefs.setPrompterFlag("prompterFlip", false);
+  prefs.setPrompterFlag("prompterSceneMode", true);
+  assert.deepEqual([prefs.prompterFlag("prompterMirror"), prefs.prompterFlag("prompterFlip"), prefs.prompterFlag("prompterSceneMode")], [true, false, true]);
+  assert.deepEqual(announced, [
+    { key: "splitpage-prompter-mirror", value: "1" },
+    { key: "splitpage-prompter-flip", value: "0" },
+    { key: "splitpage-prompter-scene-mode", value: "1" }
+  ]);
+  storage.items.set("splitpage-prompter-mirror", "true");
+  assert.equal(prefs.prompterFlag("prompterMirror"), false);
+});
+
+test("the script zoom reads 1 unless a value in range is stored, and is stored as written", () => {
+  const { prefs, storage, announced } = setup();
+  assert.equal(prefs.scriptScale(), 1);
+  storage.items.set("splitpage-script-scale", "2.5");
+  assert.equal(prefs.scriptScale(), 1);
+  storage.items.set("splitpage-script-scale", "0.7");
+  assert.equal(prefs.scriptScale(), 0.7);
+  prefs.setScriptScale(1.3);
+  assert.equal(storage.items.get("splitpage-script-scale"), "1.3");
+  prefs.setScriptScale(1);
+  assert.equal(storage.items.get("splitpage-script-scale"), "1");
+  assert.deepEqual(announced.map((c) => c.value), ["1.3", "1"]);
+});
+
+test("the collaboration server is read as stored, and the desktop notice is shown again by removing its key", () => {
+  const { prefs, storage, announced } = setup();
+  assert.equal(prefs.collabServer(), null);
+  prefs.setCollabServer("https://mine.example.com/");
+  assert.equal(prefs.collabServer(), "https://mine.example.com/");
+  prefs.setCollabServer(null);
+  assert.equal(storage.items.has("splitpage-collab-server"), false);
+  storage.items.set("splitpage-desktop-notice-dismissed", "1");
+  prefs.resetDesktopNotice();
+  assert.equal(storage.items.has("splitpage-desktop-notice-dismissed"), false);
+  assert.deepEqual(announced, [
+    { key: "splitpage-collab-server", value: "https://mine.example.com/" },
+    { key: "splitpage-collab-server", value: null },
+    { key: "splitpage-desktop-notice-dismissed", value: null }
+  ]);
+});
+
+test("the settings carried by Export app data keep their names, keys, order and checks", () => {
+  assert.deepEqual(settingsAppData().map((p) => [p.name, p.key]), [
+    ["theme", "splitpage-theme"],
+    ["clock", "splitpage-clock"],
+    ["personColor", "splitpage-person-color"],
+    ["defaultWpm", "splitpage-default-wpm"],
+    ["hideShot", "splitpage-hide-shot"],
+    ["prompterMirror", "splitpage-prompter-mirror"],
+    ["prompterFlip", "splitpage-prompter-flip"],
+    ["prompterSceneMode", "splitpage-prompter-scene-mode"],
+    ["rundownMin", "splitpage-rundown-min"],
+    ["videoThumbs", "splitpage-video-thumbs"],
+    ["tagIcons", "splitpage-tag-icons"],
+    ["scriptScale", "splitpage-script-scale"]
+  ]);
+  const valid = (name: string, value: string): boolean => settingsAppData().filter((p) => p.name === name)[0]?.valid(value) ?? false;
+  assert.deepEqual(["system", "light", "dark", "dim"].map((v) => valid("theme", v)), [true, true, true, false]);
+  assert.deepEqual(["system", "12", "24", "13"].map((v) => valid("clock", v)), [true, true, true, false]);
+  assert.deepEqual(["#80bdfb", "#000000"].map((v) => valid("personColor", v)), [true, false]);
+  assert.deepEqual(["60", "400", "59", "401", "150.5", "0150"].map((v) => valid("defaultWpm", v)), [true, true, false, false, false, false]);
+  assert.deepEqual(["0", "1", "yes"].map((v) => valid("rundownMin", v)), [true, true, false]);
+  assert.deepEqual(["0.7", "2", "1.125", "0.6", "1.1234", "2.1"].map((v) => valid("scriptScale", v)), [true, true, true, false, false, false]);
 });
 
 test("autosave is on until it is switched off, and switching announces the change", () => {

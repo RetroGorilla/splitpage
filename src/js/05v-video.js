@@ -1,5 +1,4 @@
 import { S } from "./_state.js";
-import { videoThumbsOn } from "./00p-prefs.js";
 import { intern, persist } from "../adapters/storage/02c-blobs.js";
 import { findRowIndex } from "./03-sync.js";
 import { render, renderRow } from "./05-render.js";
@@ -7,6 +6,7 @@ import { foldIntoEdit } from "./12a-undo.js";
 import { fetchVideoThumbnail, parseVideoLink, playerUrl, videoRef } from "../../shared/video-embed.js";
 import { normalizeVideoLink, setVideoThumbnail, videoLinkKey } from "../core/document/gallery.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 
 var testHooks = { fetch: null, bases: null, protocol: null };
 
@@ -69,7 +69,7 @@ function allDark(px) {
 }
 
 export function thumbnailsAllowed() {
-  return videoThumbsOn();
+  return preferences().videoThumbs();
 }
 
 export function fetchThumbnailRecord(href) {
