@@ -109,8 +109,9 @@ export function mountTopbar({ window }: { window: Window }) {
   }
 
   (function setupCondensingTopbar() {
-    const topbar = document.querySelector<HTMLElement>(".topbar");
-    if (!topbar) return;
+    const topbarElement = document.querySelector<HTMLElement>(".topbar");
+    if (!topbarElement) return;
+    const topbar: HTMLElement = topbarElement;
 
     const ENTER_AT = 64;
     const LEAVE_AT = 24;
