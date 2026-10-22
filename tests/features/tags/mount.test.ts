@@ -237,3 +237,53 @@ for (const work of ["card", "touch"] as const) {
     h.win.close();
   });
 }
+
+test("tags: disposal removes every listener newest first and silences retained callbacks", () => {
+  const h = harness();
+  const added: { target: EventTarget; type: string; fn: EventListenerOrEventListenerObject | null; options: boolean | AddEventListenerOptions | undefined }[] = [];
+  const removed: typeof added = [];
+  for (const target of Object.keys(targets).map((id) => id === "window" ? h.win : h.el(id))) {
+    const add = target.addEventListener.bind(target);
+    const remove = target.removeEventListener.bind(target);
+    target.addEventListener = (type: string, fn: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions): void => {
+      added.push({ target, type, fn, options });
+      assert.ok(fn);
+      add(type, fn, options);
+    };
+    target.removeEventListener = (type: string, fn: EventListenerOrEventListenerObject | null, options?: boolean | EventListenerOptions): void => {
+      removed.push({ target, type, fn, options });
+      assert.ok(fn);
+      remove(type, fn, options);
+    };
+  }
+  const owner = h.mount();
+  try {
+    assert.equal(added.length, 41);
+    assert.deepEqual(added.filter((entry) => entry.options === true).map((entry) => [entry.target, entry.type]), [[h.el("production-list"), "click"], [h.win, "scroll"], [h.win, "scroll"], [h.win, "scroll"]]);
+    owner.dispose();
+    owner.dispose();
+    assert.equal(removed.length, 41);
+    assert.deepEqual(removed, [...added].reverse());
+    h.calls.length = 0;
+    for (const entry of added) {
+      assert.equal(typeof entry.fn, "function");
+      (entry.fn as EventListener)(new h.win.Event(entry.type));
+    }
+    assert.deepEqual(h.calls, []);
+  } finally { owner.dispose(); h.win.close(); }
+});
+
+test("tags: detached entity targets remain live until their lifetime is disposed", () => {
+  const h = harness();
+  const owner = h.mount();
+  const target = h.el("production-panel");
+  target.replaceWith(target.cloneNode(true));
+  try {
+    h.fire(target, "click");
+    assert.deepEqual(h.calls, ["root"]);
+    owner.dispose();
+    h.calls.length = 0;
+    h.fire(target, "click");
+    assert.deepEqual(h.calls, []);
+  } finally { owner.dispose(); h.win.close(); }
+});

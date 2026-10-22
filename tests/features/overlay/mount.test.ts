@@ -236,3 +236,50 @@ test("overlay: every row acts once after remount and retained handlers stop at d
     assert.deepEqual(h.calls, []);
   } finally { owner.dispose(); h.win.close(); }
 });
+
+test("overlay: disposal removes every listener newest first and silences retained callbacks", () => {
+  const h = harness();
+  const added: { target: EventTarget; type: string; fn: EventListenerOrEventListenerObject | null; options: boolean | AddEventListenerOptions | undefined }[] = [];
+  const removed: typeof added = [];
+  for (const target of [h.doc, h.win, h.el("toolbar"), h.el("writer-bar")]) {
+    const add = target.addEventListener.bind(target);
+    const remove = target.removeEventListener.bind(target);
+    target.addEventListener = (type: string, fn: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions): void => {
+      added.push({ target, type, fn, options });
+      assert.ok(fn);
+      add(type, fn, options);
+    };
+    target.removeEventListener = (type: string, fn: EventListenerOrEventListenerObject | null, options?: boolean | EventListenerOptions): void => {
+      removed.push({ target, type, fn, options });
+      assert.ok(fn);
+      remove(type, fn, options);
+    };
+  }
+  const owner = h.mount();
+  try {
+    assert.equal(added.length, 6);
+    assert.deepEqual(added.filter((entry) => entry.options === true).map((entry) => [entry.target, entry.type]), [[h.doc, "mousedown"]]);
+    owner.dispose();
+    owner.dispose();
+    assert.equal(removed.length, 6);
+    assert.deepEqual(removed, [...added].reverse());
+    h.calls.length = 0;
+    for (const entry of added) {
+      assert.equal(typeof entry.fn, "function");
+      (entry.fn as EventListener)(new h.win.Event(entry.type));
+    }
+    assert.deepEqual(h.calls, []);
+  } finally { owner.dispose(); h.win.close(); }
+});
+
+test("overlay: detached targets keep their open-only behavior until disposal", () => {
+  const h = harness();
+  const owner = h.mount();
+  const button = h.el("toolbar-button");
+  h.el("toolbar").remove();
+  try {
+    assert.equal(h.fire(button, "mousedown").defaultPrevented, true);
+    owner.dispose();
+    assert.equal(h.fire(button, "mousedown").defaultPrevented, false);
+  } finally { owner.dispose(); h.win.close(); }
+});

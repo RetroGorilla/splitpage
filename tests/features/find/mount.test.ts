@@ -175,3 +175,50 @@ test("find: Escape closes bulk tagging and returns focus before leaving the matc
     assert.deepEqual(h.calls, ["category:prop"]);
   } finally { owner.dispose(); h.win.close(); }
 });
+
+test("find: disposal removes every listener newest first and silences retained callbacks", () => {
+  const h = harness();
+  const added: { target: EventTarget; type: string; fn: EventListenerOrEventListenerObject | null; options: boolean | AddEventListenerOptions | undefined }[] = [];
+  const removed: typeof added = [];
+  for (const target of Object.keys(targets).map((id) => h.el(id))) {
+    const add = target.addEventListener.bind(target);
+    const remove = target.removeEventListener.bind(target);
+    target.addEventListener = (type: string, fn: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void => {
+      added.push({ target, type, fn, options });
+      add(type, fn, options);
+    };
+    target.removeEventListener = (type: string, fn: EventListenerOrEventListenerObject, options?: boolean | EventListenerOptions): void => {
+      removed.push({ target, type, fn, options });
+      remove(type, fn, options);
+    };
+  }
+  const owner = h.mount();
+  try {
+    assert.equal(added.length, 12);
+    owner.dispose();
+    owner.dispose();
+    assert.equal(removed.length, 12);
+    assert.deepEqual(removed, [...added].reverse());
+    h.calls.length = 0;
+    for (const entry of added) {
+      assert.equal(typeof entry.fn, "function");
+      (entry.fn as EventListener)(new h.win.Event(entry.type));
+    }
+    assert.deepEqual(h.calls, []);
+  } finally { owner.dispose(); h.win.close(); }
+});
+
+test("find: detached targets remain live until disposal without a connectivity guard", () => {
+  const h = harness();
+  const owner = h.mount();
+  const target = h.el("find-close");
+  target.replaceWith(target.cloneNode(true));
+  try {
+    h.fire(target, "click");
+    assert.deepEqual(h.calls, ["close"]);
+    owner.dispose();
+    h.calls.length = 0;
+    h.fire(target, "click");
+    assert.deepEqual(h.calls, []);
+  } finally { owner.dispose(); h.win.close(); }
+});

@@ -1,9 +1,10 @@
-export type ViewEvent = MouseEvent & KeyboardEvent & {
-  readonly target: HTMLInputElement;
+export type ViewEvent = MouseEvent & KeyboardEvent & PointerEvent & InputEvent & ClipboardEvent & {
+  readonly target: HTMLInputElement & { readonly files?: FileList };
   readonly currentTarget: HTMLElement;
 };
 
-export function createViewLifetime(window: Window): {
+export function createViewLifetime(window: Window, guard: (target: EventTarget) => boolean = (target) =>
+  target === window || target === window.document || !!(target as Node).isConnected): {
   active: () => boolean;
   listen: (target: EventTarget | null, type: string, handler: (event: ViewEvent) => void, options?: boolean | AddEventListenerOptions) => void;
   release: (dispose: () => void) => void;
@@ -17,7 +18,7 @@ export function createViewLifetime(window: Window): {
       if (!target) return;
       const listener: EventListener = (event) => {
         if (!active) return;
-        if (target !== window && target !== window.document && !(target as Node).isConnected) return;
+        if (!guard(target)) return;
         handler(event as ViewEvent);
       };
       target.addEventListener(type, listener, options);
