@@ -1,7 +1,6 @@
 import { productionReaders } from "../legacy/document-ports.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
 import { domToPos } from "../features/editing/cell-dom.ts";
-import { S } from "./_state.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import {
   ensureTrailingCaretSpot,
@@ -47,7 +46,7 @@ import { toHtml } from "../core/text/html.ts";
 import { projection } from "../core/text/runs.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { cellOf, scriptCellOf } from "../legacy/richtext.ts";
-import { heldDocument, readSession, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { currentDocument, heldDocument, readSession, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { addShotCommand, addShotPropCommand, removeShotPropCommand } from "../application/commands/broll-records.ts";
 import { rewriteCellsCommand } from "../application/commands/document-edit.ts";
 import { addBrollRecord, brollRecord } from "../core/production/records.ts";
@@ -119,7 +118,8 @@ function brollHtmlLineText(nodes) {
 
 function brollRow(rowId) {
   var i = rowId ? readSession(function (doc) { return rowIndexOf(doc, rowId); }) : -1;
-  return i === -1 ? null : S.state.rows[i];
+  const doc = currentDocument();
+  return i === -1 || !doc ? null : doc.rows[i];
 }
 
 function seedRef(row) {
@@ -153,7 +153,8 @@ export function recordPastedBroll(doc, rowId, cell, ids) {
 }
 
 export function brollEntries() {
-  return readBrollEntries(S.state, productionReaders, randomIds, htmlToPlainText);
+  const doc = currentDocument();
+  return doc ? readBrollEntries(doc, productionReaders, randomIds, htmlToPlainText) : [];
 }
 
 function unkeyedScope(changes) {
@@ -191,7 +192,7 @@ export function removeBrollProp(shotId, ref) {
 
 export function brollShotsByProp() {
   var out = Object.create(null);
-  if (!S.state || !S.state.brollShots) return out;
+  if (!currentDocument()?.brollShots) return out;
   brollSortedForList(brollEntries()).forEach(function (e) {
     e.props.forEach(function (p) {
       var k = "prop " + normalizeTagName(p.name);
@@ -203,7 +204,7 @@ export function brollShotsByProp() {
 }
 
 function brollUnshotCount() {
-  if (!S.state || !S.state.brollShots) return 0;
+  if (!currentDocument()?.brollShots) return 0;
   return brollEntries().filter(function (e) { return e.status !== "shot"; }).length;
 }
 
@@ -351,7 +352,7 @@ export function anchorBrollInRows(doc, only) {
 }
 
 export function anchorBrollInLeftCell(cellEl) {
-  if (!S.state || cellEl.getAttribute("data-field") !== "visualText") return 0;
+  if (!currentDocument() || cellEl.getAttribute("data-field") !== "visualText") return 0;
   var row = brollRow(cellEl.getAttribute("data-id"));
   if (!row) return 0;
   var copy = { id: row.id, visualText: row.visualText };
@@ -407,7 +408,7 @@ export function renameBrollInScript(entry, newName) {
 
 export function updateBrollBadge() {
   var badge = document.getElementById("broll-badge");
-  if (!badge || !S.state) return;
+  if (!badge || !currentDocument()) return;
   var n = brollUnshotCount();
   if (n > 0) { badge.hidden = false; badge.textContent = n > 99 ? "99+" : String(n); }
   else badge.hidden = true;

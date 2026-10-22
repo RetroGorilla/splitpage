@@ -34,7 +34,7 @@ import {
   onServerDoc
 } from "./13-hosted.js";
 import { warnImagesLeftOut } from "./14-export.js";
-import { docxToRows } from "./15-docx.js";
+import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { refreshFileMenu, toggleFileMenu } from "./18b-file-menu.js";

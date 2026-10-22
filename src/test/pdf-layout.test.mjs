@@ -9,7 +9,7 @@ import { migrateRows } from "../js/02-state.js";
 import { intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { commentEntries } from "../js/10-comments.js";
-import { buildPdf, pdfCommentImagesFor } from "../js/17-pdf.js";
+import { buildPdf, pdfCommentImagesFor } from "../adapters/formats/pdf.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { loadTestDocument } from "./_document.mjs";
 
