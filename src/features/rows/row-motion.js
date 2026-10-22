@@ -108,4 +108,3 @@ export function withRowMotion(rowsEl, paint) {
   }
 }
 
-export function __init() {}

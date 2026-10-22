@@ -17,6 +17,9 @@ import { mountSaveRecovery, mountConflicts, mountSave, mountFileMenu } from "../
 import { mountImports, mountGdoc } from "../../features/imports/mount.ts";
 import { mountWriterOpen, mountWriterNavigation, mountWriterClose } from "../../features/writer/mount.ts";
 import { mountHistoryGallery } from "../../features/gallery/mount.ts";
+import { mountTopbar } from "../../features/title/topbar.js";
+import { mountCellReach } from "../../features/editing/cell-reach.js";
+import { mountPhoneBar } from "../../features/notices/phone-bar.js";
 import { touchImportMode } from "../../application/import-mode.ts";
 import {
   prompterIsOpen,
@@ -144,6 +147,24 @@ export function stopViewFeature(key: string): void {
 function captureViewDocument(): () => boolean {
   const context = captureOperation();
   return function () { return stillOwns(context); };
+}
+
+export function mountTopbarFeature(): Disposable {
+  return replaceViewMount("mountTopbar", function () {
+    return mountTopbar({ window: window });
+  });
+}
+
+export function mountCellReachFeature(): Disposable {
+  return replaceViewMount("mountCellReach", function () {
+    return mountCellReach({ window: window });
+  });
+}
+
+export function mountPhoneBarFeature(): Disposable {
+  return replaceViewMount("mountPhoneBar", function () {
+    return mountPhoneBar({ window: window });
+  });
 }
 
 export function mountNoticesFeature(): ReturnType<typeof mountNotices> {
