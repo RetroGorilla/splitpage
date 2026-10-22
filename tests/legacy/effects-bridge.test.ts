@@ -60,6 +60,10 @@ test("started ports receive each effect's arguments, and the stop function takes
   }
   assert.equal(effectsStarted(), false);
   assert.throws(() => showToast("x"), /not started yet/);
+  assert.throws(() => copyShareText("x"), /not started yet/);
+  assert.doesNotThrow(() => setMenuItemLabel(null, "late"));
+  assert.doesNotThrow(() => setMenuItemReason(null, "late"));
+  assert.equal(calls.length, 5, "a menu update that arrives after the stop is dropped");
 });
 
 test("a second start is refused until the first is stopped, and an old stop leaves a newer start in place", () => {

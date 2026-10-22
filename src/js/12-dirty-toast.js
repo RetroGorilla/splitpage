@@ -21,7 +21,6 @@ import { confirmSavedNow, noteSaveChange, saveRunning, savesStarted, unsavedFor 
 import { saveButtonView, saveStatus } from "../application/save/status.ts";
 import { changeSet } from "../application/session/change-set.ts";
 import { authorityOf, editCapability } from "../application/collaboration/authority.ts";
-import { startPageEffects } from "../bootstrap/effects.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 
 S.saveButtonBusy = false;
@@ -188,6 +187,4 @@ if (typeof document !== "undefined" && document.addEventListener) {
 
 export { showActionToast, showToast };
 
-export function __init() {
-  startPageEffects(window);
-}
+export function __init() {}
