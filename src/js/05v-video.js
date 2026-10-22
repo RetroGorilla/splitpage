@@ -7,6 +7,8 @@ import { foldIntoEdit } from "./12a-undo.js";
 import { fetchVideoThumbnail, parseVideoLink, playerUrl, videoRef } from "../../shared/video-embed.js";
 import { normalizeVideoLink, setVideoThumbnail, videoLinkKey } from "../core/document/gallery.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
+import { desktopPort } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 
 var testHooks = { fetch: null, bases: null, protocol: null };
@@ -77,9 +79,9 @@ export function fetchThumbnailRecord(href) {
   var v = parseVideoLink(href);
   if (!v) return Promise.resolve(null);
   var got;
-  if (S.DESKTOP) {
-    if (typeof S.DESKTOP.videoThumbnail !== "function") return Promise.resolve(null);
-    try { got = Promise.resolve(S.DESKTOP.videoThumbnail(v.host, videoRef(v))); } catch (e) { return Promise.resolve(null); }
+  if (runningOnDesktop()) {
+    if (typeof desktopPort().videoThumbnail !== "function") return Promise.resolve(null);
+    try { got = Promise.resolve(desktopPort().videoThumbnail(v.host, videoRef(v))); } catch (e) { return Promise.resolve(null); }
   } else {
     var f = testHooks.fetch || (noRemote() ? null : (typeof fetch === "function" ? fetch.bind(window) : null));
     if (!f) return Promise.resolve(null);

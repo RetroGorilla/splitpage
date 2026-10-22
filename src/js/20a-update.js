@@ -1,6 +1,7 @@
 import { preferences } from "../legacy/preferences-bridge.ts";
-import { S } from "./_state.js";
 import { arrivingOnLink } from "./13-hosted.js";
+import { desktopPort } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 var updateStatus = null;
 var updateNotice = null;
@@ -17,7 +18,7 @@ var stopUpdateStatus = null;
 export function loadUpdateStatus() {
   if (stopUpdateStatus) stopUpdateStatus();
   var active = true;
-  var desktop = S.DESKTOP;
+  var desktop = desktopPort();
   updatePolls = 0;
   function apply(status) { if (active) applyUpdateStatus(status); }
   function fetchStatus() {
@@ -87,7 +88,7 @@ function startDesktopDownload() {
   updateBusy = true;
   updateNotice = null;
   renderUpdateNotice();
-  S.DESKTOP.downloadUpdate().then(function (result) {
+  desktopPort().downloadUpdate().then(function (result) {
     updateBusy = false;
     if (result && result.ok) {
       updateNotice = null;
@@ -108,7 +109,7 @@ function startDesktopInstall() {
   updateBusy = true;
   updateNotice = "Starting the installer\u2026";
   renderUpdateNotice();
-  S.DESKTOP.installUpdate().then(function (result) {
+  desktopPort().installUpdate().then(function (result) {
     if (result && result.ok) return;
     updateBusy = false;
     if (result && result.error === "quit-cancelled") {
@@ -130,7 +131,7 @@ function startDesktopInstall() {
 
 function openReleasesPage() {
   var url = releasesUrl();
-  if (S.DESKTOP && S.DESKTOP.openExternal) { S.DESKTOP.openExternal(url); return; }
+  if (runningOnDesktop() && desktopPort().openExternal) { desktopPort().openExternal(url); return; }
   window.open(url, "_blank", "noopener");
 }
 
@@ -138,7 +139,7 @@ function updateBarPlan() {
   if (!updateStatus) return null;
   var version = updateStatus.version || "?";
 
-  if (S.DESKTOP && updateStatus.desktop) {
+  if (runningOnDesktop() && updateStatus.desktop) {
     var dl = updateStatus.download || { state: "idle" };
     if (dl.state === "ready") {
       return {
@@ -163,7 +164,7 @@ function updateBarPlan() {
     if (!updateStatus.canInstall) {
       return {
         text: available,
-        action: function () { S.DESKTOP.openExternal(updateStatus.releaseUrl); },
+        action: function () { desktopPort().openExternal(updateStatus.releaseUrl); },
         label: "Open release page"
       };
     }
@@ -217,7 +218,7 @@ export function dismissUpdateNotice() {
 }
 
 export function desktopAppOffered() {
-  if (S.DESKTOP) return false;
+  if (runningOnDesktop()) return false;
   if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
   var ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
   return /Windows/.test(ua) && !/Mobi|Android/.test(ua);
@@ -265,7 +266,7 @@ export function showAbout() {
   var version = (updateStatus && updateStatus.version) || readEmbeddedVersion();
   var link = null;
 
-  if (S.DESKTOP) {
+  if (runningOnDesktop()) {
     var dl = (updateStatus && updateStatus.download) || { state: "idle" };
     if (!updateStatus) {
       lines.push("Could not check for updates.");

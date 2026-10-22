@@ -1,4 +1,5 @@
-import { S } from "./_state.js";
+import { attachDesktop } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 export { SCHEMA_VERSION } from "../core/document/fields.ts";
 
 export var PAGE_SHELL;
@@ -20,7 +21,7 @@ function openHandleDb() {
 
 export async function rememberLastFileHandle(handle) {
   if (!handle) return;
-  if (S.DESKTOP) return;
+  if (runningOnDesktop()) return;
   try {
     var db = await openHandleDb();
     await new Promise(function (resolve, reject) {
@@ -53,7 +54,7 @@ export function __init() {
     link.addEventListener("load", function () { link.media = "all"; });
   })();
 
-  S.DESKTOP = window.splitpageDesktop || null;
+  attachDesktop(window.splitpageDesktop);
 
   SpeechRecognitionCtor = window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
