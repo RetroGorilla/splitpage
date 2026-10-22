@@ -3,7 +3,9 @@ import { isBlankTagName } from "../core/production/tags.ts";
 import { TAG_CATEGORIES, tagCategory } from "../core/production/looks.ts";
 import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
+import { rowIndexOf } from "../core/document/rows.ts";
+import { readSession } from "../legacy/session-bridge.ts";
+import { stampRow } from "./03-sync.js";
 import { cssAttr, inertBody, sanitizeHtml } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import {
@@ -231,7 +233,7 @@ function currentMatchRange() {
   var m = findMatches[findIndex];
   var cell = document.querySelector('#rows .row[data-id="' + cssAttr(m.rowId) + '"] .cell-editable[data-field="' + m.field + '"]');
   if (!cell) return null;
-  var idx = findRowIndex(m.rowId);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, m.rowId); });
   if (idx === -1) return null;
   var model = cellOf(S.state.rows[idx][m.field]);
   var hit = findInCell(model, findNeedle(), findMatchesCase())[m.nth];
@@ -276,7 +278,7 @@ export function replaceCurrent() {
   var needle = findNeedle();
   if (!needle || findIndex < 0 || !findMatches[findIndex]) return;
   var m = findMatches[findIndex];
-  var idx = findRowIndex(m.rowId);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, m.rowId); });
   if (idx === -1) return;
   var replacement = document.getElementById("replace-input").value || "";
   var res = replaceInHtml(S.state.rows[idx][m.field], needle, replacement, m.nth, findMatchesCase(),
@@ -472,7 +474,7 @@ function firstMatchFrom(range) {
   var el = node.nodeType === 1 ? node : node.parentNode;
   var cell = el && el.closest ? el.closest("#rows .cell-editable[data-field]") : null;
   var rowEl = cell && cell.closest(".row");
-  var rowIdx = rowEl ? findRowIndex(rowEl.getAttribute("data-id")) : -1;
+  var rowIdx = rowEl ? readSession(function (doc) { return rowIndexOf(doc, rowEl.getAttribute("data-id")); }) : -1;
   if (rowIdx === -1) return 0;
   var field = cell.getAttribute("data-field");
   var model = cellOf(S.state.rows[rowIdx][field]);

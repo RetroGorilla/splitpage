@@ -1,7 +1,9 @@
 import { domToPos } from "../features/editing/cell-dom.ts";
 import { S } from "./_state.js";
 import { updateScriptStats } from "./01-scene-status.js";
-import { findRowIndex, stampRow } from "./03-sync.js";
+import { rowIndexOf } from "../core/document/rows.ts";
+import { readSession } from "../legacy/session-bridge.ts";
+import { stampRow } from "./03-sync.js";
 import {
   inertBody,
   safeId,
@@ -821,7 +823,7 @@ export function applyTag() {
     '"] .' + (ctx.field === "visualText" ? "visual" : "audio") + '-cell .cell-editable');
   if (!cellEl) { showToast("That scene is no longer here.", "warn"); return; }
 
-  var idx = findRowIndex(ctx.rowId);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, ctx.rowId); });
   if (idx === -1) return;
   syncFieldFromDom(cellEl);
   breakUndoCoalescing();
