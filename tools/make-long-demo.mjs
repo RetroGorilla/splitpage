@@ -3,7 +3,9 @@ import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { S } from "../src/js/_state.js";
-import { __init as initSceneStatus, rowSeconds } from "../src/js/01-scene-status.js";
+import { __init as initSceneStatus } from "../src/js/01-scene-status.js";
+import { rowSeconds } from "../src/core/production/timing.ts";
+import { productionReaders } from "../src/legacy/document-ports.ts";
 import { migrateRows } from "../src/js/02-state.js";
 import { __init as initTags } from "../src/js/07-production-tags.js";
 import { brollEntries } from "../src/js/08c-broll.js";
@@ -252,7 +254,7 @@ S.state.brollShots.forEach((r) => { if (shotBroll.includes(r.id)) r.status = "sh
 const flagged = S.state.brollShots.find((r) => r.id === "bs_ld_02");
 if (flagged) { flagged.reshoot = true; flagged.notes = "Soft focus — grab it again on the macro day."; }
 
-const total = S.state.rows.reduce((n, r) => n + rowSeconds(r), 0);
+const total = S.state.rows.reduce((n, r) => n + rowSeconds(r, S.state, productionReaders), 0);
 S.state.targetSeconds = Math.floor(total / 60) * 60;
 
 const doc = migrateRows(JSON.parse(JSON.stringify(S.state)));

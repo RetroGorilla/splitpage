@@ -3,7 +3,8 @@ import { ensureBytes } from "../adapters/storage/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import { stampRow } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";
-import { isScriptCell, render, syncFieldFromDom } from "./05-render.js";
+import { render } from "./05-render.js";
+import { isScriptCell } from "../features/editing/cell-page.ts";
 import {
   SCENES_MIME, buildScenePayload, parseScenePayload, scenePaste, scenesOnClipboard, setLiveCut
 } from "./05g-scene-clip.js";
@@ -21,7 +22,7 @@ import { addHeldCommentsCommand, pasteScenesCommand, removeScenesCommand } from 
 import { cappedLongText } from "../core/document/text-policy.ts";
 import { REVIEW_ONLY, runCommand } from "../legacy/session-bridge.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
-import { rowDrag } from "../legacy/editor-bridge.ts";
+import { cellEditing, rowDrag } from "../legacy/editor-bridge.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
 import { reviewMode } from "../legacy/location-bridge.ts";
@@ -382,7 +383,7 @@ export function pasteScenesAt(cd, cellEl) {
   var clip = scenesOnClipboard(function (t) { return cd.getData(t); });
   if (!clip) return false;
   if (refused("pasted into")) return true;
-  syncFieldFromDom(cellEl);
+  cellEditing().sync(cellEl);
   pasteClip(clip, cellEl.getAttribute("data-id"));
   return true;
 }

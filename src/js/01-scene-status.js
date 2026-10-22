@@ -15,9 +15,8 @@ import {
   targetLengthOf
 } from "../core/document/timing.ts";
 import {
-  estimatedSeconds as estimatedSecondsIn,
   formatDuration,
-  rowSeconds as rowSecondsIn,
+  rowSeconds,
   targetClock,
   totalSeconds as totalSecondsIn
 } from "../core/production/timing.ts";
@@ -27,14 +26,6 @@ export {
   normalizeTargetLength,
   targetClock
 };
-
-export function estimatedSeconds(row) {
-  return estimatedSecondsIn(row, S.state, productionReaders);
-}
-
-export function rowSeconds(row) {
-  return rowSecondsIn(row, S.state, productionReaders);
-}
 
 export function totalSeconds() {
   return totalSecondsIn(S.state, productionReaders);
@@ -56,7 +47,7 @@ export function updateScriptStats() {
   var target = targetLengthOf(S.state);
   var total = totalSeconds();
   var remaining = viewFlags().hideShot() ? S.state.rows.reduce(function (n, r) {
-    return n + (r.status === "shot" ? 0 : rowSeconds(r));
+    return n + (r.status === "shot" ? 0 : rowSeconds(r, S.state, productionReaders));
   }, 0) : 0;
   var totalText = formatDuration(total);
   var totalHtml = totalText;

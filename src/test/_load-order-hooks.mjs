@@ -13,7 +13,7 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/transition-bridge.ts": { functions: ["startTransitions"] },
   "src/legacy/recovery-bridge.ts": { functions: ["startRecovery", "useBrowserDraftFactory"] },
   "src/legacy/production-editing-bridge.ts": { functions: ["startProductionEditing"] },
-  "src/legacy/editor-bridge.ts": { functions: ["startEditor", "installPicturePicker"] },
+  "src/legacy/editor-bridge.ts": { functions: ["startEditor", "installPicturePicker", "installCellEditing"] },
   "src/legacy/preferences-bridge.ts": { functions: ["startPreferences"] },
   "src/legacy/location-bridge.ts": { functions: ["startLocation", "handServerCheckTo"] },
   "src/legacy/effects-bridge.ts": { functions: ["startEffects"] },

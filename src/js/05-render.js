@@ -3,20 +3,16 @@ import { disarmDeleteButton } from "../features/rows/delete-button.ts";
 import { hasSetLength } from "../core/document/timing.ts";
 import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
 import { S } from "./_state.js";
-import {
-  estimatedSeconds,
-  rowSeconds,
-  updateScriptStats
-} from "./01-scene-status.js";
+import { updateScriptStats } from "./01-scene-status.js";
 import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "../adapters/storage/02d-gallery.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession } from "../legacy/session-bridge.ts";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
-import { editCell } from "./05b-cell-edit.js";
 import { refreshGalleryOverlay } from "./05e-gallery-overlay.js";
-import { appendDraftMedia, draftModel, editDraft, isDraftBox } from "./05d-draft-edit.js";
+import { appendDraftMedia, draftModel, editDraft } from "./05d-draft-edit.js";
+import { isDraftBox, isScriptCell } from "../features/editing/cell-page.ts";
 import { trackDocument } from "./12a-undo.js";
 import { rowMotionKey, withRowMotion } from "../features/rows/row-motion.js";
 import {
@@ -43,7 +39,8 @@ import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
-import { pad2, formatDuration, formatTimecode } from "../core/production/timing.ts";
+import { estimatedSeconds, pad2, formatDuration, formatTimecode, rowSeconds } from "../core/production/timing.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
 import { cueShortcut } from "../core/text/cues.ts";
 import { directionRangeAt, directionShortcut, directionToggleRange, toggleDirection } from "../core/text/directions.ts";
 import {
@@ -57,10 +54,9 @@ import {
   typingMarks
 } from "../core/text/edits.ts";
 import { cellLength, projection } from "../core/text/runs.ts";
-import { cellRuns, cellTextCommand } from "../application/commands/cell-text.ts";
 import { fromHtml } from "../legacy/richtext.ts";
 import { createPaintGuard } from "../application/editing/paint-guard.ts";
-import { editorSelection, undoGuard } from "../legacy/editor-bridge.ts";
+import { cellEditing, editorSelection } from "../legacy/editor-bridge.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
 import { cellSelection, placeEditorSelection, rememberCellSelection } from "../features/editing/cell-selection.ts";
@@ -202,28 +198,29 @@ function rowGutterHtml(row, index, review) {
 
 export function paintRowTimes() {
   var rowsEl = document.getElementById("rows");
-  if (!rowsEl || !S.state) return;
+  var doc = currentDocument();
+  if (!rowsEl || !doc) return;
   var byId = idMap();
   for (var c = rowsEl.firstElementChild; c; c = c.nextElementSibling) {
     if (c.classList.contains("row")) byId[c.getAttribute("data-id")] = c;
   }
   var t = 0;
   var review = reviewMode();
-  S.state.rows.forEach(function (row) {
-    var secs = rowSeconds(row);
+  doc.rows.forEach(function (row) {
+    var secs = rowSeconds(row, doc, productionReaders);
     var el = byId[row.id];
     if (el) {
       setTextIfChanged(el.querySelector(".row-start"), formatTimecode(t));
-      paintReadTime(el.querySelector(".row-read"), row, secs, review);
+      paintReadTime(el.querySelector(".row-read"), row, secs, review, doc);
     }
     t += secs;
   });
 }
 
-function paintReadTime(btn, row, secs, review) {
+function paintReadTime(btn, row, secs, review, doc) {
   if (!btn) return;
   var set = hasSetLength(row);
-  var est = set ? estimatedSeconds(row) : secs;
+  var est = set ? estimatedSeconds(row, doc, productionReaders) : secs;
   var over = set && Math.round(est) > Math.round(secs);
   setTextIfChanged(btn, set || secs >= 0.5 ? formatDuration(secs) : "");
   btn.classList.toggle("is-set", set);
@@ -487,7 +484,7 @@ function paintOneRow(rowId) {
   return true;
 }
 
-function noteFieldPainted(cellEl, field, row) {
+export function noteFieldPainted(cellEl, field, row) {
   var rowEl = cellEl.closest(".row");
   if (!rowEl || !rowEl[ROW_SIG] || !rowEl.parentNode || rowEl.parentNode.id !== "rows") return;
   if (rowEl.getAttribute("data-id") !== row.id) return;
@@ -788,26 +785,6 @@ export function renderFirstDraw() {
   return absorbRender(FIRST_DRAW_FAILED);
 }
 
-var SCRIPT_CELL = Object.freeze({ media: true });
-
-export function syncFieldFromDom(cellEl) {
-  if (!cellEl.isConnected || undoGuard().applying() || screenStale) return;
-  var id = cellEl.getAttribute("data-id");
-  var field = cellEl.getAttribute("data-field");
-  var idx = readSession(function (doc) { return rowIndexOf(doc, id); });
-  if (idx !== -1) {
-    var html = cellEl.innerHTML.indexOf("\u200B") === -1 ? cellEl.innerHTML : cellEl.innerHTML.replace(/\u200B/g, "");
-    html = storedHtmlFromDom(html);
-    var outcome = runCommand(cellTextCommand(id, field, cellRuns(fromHtml(html, SCRIPT_CELL)), sessionTextPorts));
-    if (outcome.kind === "failed") throw outcome.error;
-    noteFieldPainted(cellEl, field, S.state.rows[idx]);
-  }
-}
-
-export function isScriptCell(cellEl) {
-  return !!(cellEl && cellEl.closest("#rows, #writer-doc") && cellEl.getAttribute("data-field"));
-}
-
 var FORMAT_MARKS = { bold: "b", italic: "i", underline: "u", strikeThrough: "s", highlight: "hl" };
 
 function throughModel(cellEl, fn) {
@@ -816,7 +793,7 @@ function throughModel(cellEl, fn) {
     ran = true;
     return fn(cell, sel, media);
   }
-  var fresh = isScriptCell(cellEl) ? editCell(cellEl, run) : isDraftBox(cellEl) ? editDraft(cellEl, run) : null;
+  var fresh = isScriptCell(cellEl) ? cellEditing().edit(cellEl, run) : isDraftBox(cellEl) ? editDraft(cellEl, run) : null;
   return ran ? (fresh || cellEl) : null;
 }
 
@@ -913,7 +890,7 @@ export function maybeDirectionShortcut(e, cellEl) {
   var node = r.startContainer, offset = r.startOffset;
   if (node.nodeType !== 3 || offset < 2 || node.data.slice(offset - 2, offset) !== "))") return;
   if (cellEl.textContent.indexOf("((") === -1) return;
-  editCell(cellEl, function (cell, sel) {
+  cellEditing().edit(cellEl, function (cell, sel) {
     if (!sel || sel.from !== sel.to) return null;
     var got = directionShortcut(cell, sel.from);
     return got ? { cell: got.cell, sel: { from: got.end, to: got.end } } : null;
@@ -930,7 +907,7 @@ export function maybeCueShortcut(e, cellEl) {
   var r = s.getRangeAt(0);
   var node = r.startContainer, offset = r.startOffset;
   if (node.nodeType !== 3 || !CUE_HINT_RE.test(node.data.slice(0, offset).replace(/\u200B/g, ""))) return;
-  editCell(cellEl, function (cell, sel) {
+  cellEditing().edit(cellEl, function (cell, sel) {
     if (!sel || sel.from !== sel.to) return null;
     var next = cueShortcut(cell, sel.from);
     return next ? { cell: next, sel: sel } : null;
@@ -1069,7 +1046,7 @@ export function handleToolbarCmd(btn) {
     afterC.setStartAfter(anchorSpanEl);
     afterC.collapse(true);
     csel.addRange(afterC);
-    syncFieldFromDom(cellEl);
+    cellEditing().sync(cellEl);
     openCommentComposer({
       id: cmtId,
       rowId: cellEl.getAttribute("data-id"),
