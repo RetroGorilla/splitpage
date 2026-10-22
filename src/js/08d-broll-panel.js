@@ -4,7 +4,6 @@ import { tagCategory, tagStatus } from "../core/production/looks.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
 import { formatTimecode, rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
-import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
@@ -146,8 +145,8 @@ function plural(n, one, many) {
 
 function sceneStarts() {
   var t = 0, out = Object.create(null);
-  var doc = currentDocument();
-  doc.rows.forEach(function (row) { out[row.id] = t; t += rowSeconds(row, doc, productionReaders); });
+  const doc = currentDocument();
+  (doc?.rows || []).forEach(function (row) { out[row.id] = t; t += rowSeconds(row, doc, productionReaders); });
   return out;
 }
 
@@ -236,7 +235,7 @@ function knownLocations() {
     out.push(clean);
   }
   productionEntries().forEach(function (t) { if (t.cat.id === "location") add(t.name); });
-  (S.state.brollShots || []).forEach(function (r) { add(r.location); });
+  (currentDocument()?.brollShots || []).forEach(function (r) { add(r.location); });
   return out.sort(function (a, b) { return a.localeCompare(b); });
 }
 
@@ -314,7 +313,7 @@ function groupMenuHtml() {
 export { brollShotListForPrint, brollTable, shotRecordForFile };
 
 export function brollGroups(entries, by, from) {
-  return brollGroupsFrom(entries, by, from || { rows: S.state.rows, people: S.state.people });
+  return brollGroupsFrom(entries, by, from || { rows: currentDocument()?.rows || [], people: currentDocument()?.people || [] });
 }
 
 function doneCountHtml(items, cls) {
@@ -461,7 +460,7 @@ function cardHtml(e, starts) {
       '<span class="ev-field broll-owner-field">' + (who ? avatarHtml(who) : '') +
         '<select class="broll-owner-select' + (who ? '' : ' is-empty') + '" data-id="' + id + '" aria-label="Assigned to"' + off + '>' +
           '<option value=""' + (e.owner ? '' : ' selected') + '>Unassigned</option>' +
-          S.state.people.map(function (p) {
+          (currentDocument()?.people || []).map(function (p) {
             return '<option value="' + escapeHtml(p.id) + '"' + (p.id === e.owner ? ' selected' : '') + '>' +
               escapeHtml(p.name) + '</option>';
           }).join("") +
@@ -554,7 +553,7 @@ function bulkBarHtml(entries) {
       '<select class="broll-bulk-select" id="broll-bulk-owner" aria-label="Assign the selected shots">' +
         '<option value="__none__" selected>Assign</option>' +
         '<option value="">Unassigned</option>' +
-        S.state.people.map(function (p) {
+        (currentDocument()?.people || []).map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '">' + escapeHtml(p.name) + '</option>';
         }).join("") +
         '<option value="__new__">+ Person…</option>' +
@@ -675,7 +674,7 @@ function emptyListHtml(entries) {
 export function renderBroll() {
   updateBrollBadge();
   var panel = document.getElementById("broll-panel");
-  if (!panel || panel.hidden || !S.state) return;
+  if (!panel || panel.hidden || !currentDocument()) return;
   dropEditingForReview();
   var summary = document.getElementById("broll-summary");
   var controls = document.getElementById("broll-controls");
@@ -1126,7 +1125,7 @@ function onBrollInput(e) {
 }
 
 export function openBrollPanel() {
-  if (!S.state) return;
+  if (!currentDocument()) return;
   openSidePanel("broll-panel");
   renderBroll();
 }
@@ -1215,7 +1214,7 @@ export function brollPageOpen() {
 
 export function openBrollPage() {
   var page = brollPageEl();
-  if (!page || !S.state) return;
+  if (!page || !currentDocument()) return;
   pageReturnFocus = document.activeElement;
   var panel = document.getElementById("broll-panel");
   pagePanelWasOpen = !!panel && !panel.hidden;
@@ -1284,7 +1283,7 @@ function pageRowHtml(e) {
     '<td class="broll-page-c-owner" data-label="Assigned">' +
       '<select class="broll-owner-select broll-page-owner" data-id="' + id + '" aria-label="' + escapeHtml("Assigned to, " + (e.name || "Untitled shot")) + '"' + (ro ? ' disabled' : '') + '>' +
         '<option value=""' + (e.owner ? '' : ' selected') + '>Unassigned</option>' +
-        S.state.people.map(function (p) {
+        (currentDocument()?.people || []).map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '"' + (p.id === e.owner ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
         }).join("") +
       '</select></td>' +
@@ -1298,7 +1297,7 @@ function pageRowHtml(e) {
 
 export function renderBrollPage() {
   var page = brollPageEl();
-  if (!page || page.hidden || !S.state) return;
+  if (!page || page.hidden || !currentDocument()) return;
   dropEditingForReview();
   keepingFocus(page, function () {
     var entries = brollEntries();
