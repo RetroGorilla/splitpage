@@ -1,11 +1,10 @@
 import { parseSceneLength, targetLengthOf } from "../core/document/timing.ts";
 import { formatDuration } from "../core/production/timing.ts";
-import { S } from "./_state.js";
 import { updateScriptStats } from "./01-scene-status.js";
 import { onRundownPaint, rundownLayout } from "./05f-rundown.js";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { targetLengthCommand } from "../application/commands/document-settings.ts";
-import { runDocumentEdit } from "../legacy/session-bridge.ts";
+import { currentDocument, runDocumentEdit } from "../legacy/session-bridge.ts";
 import { reviewMode } from "../legacy/location-bridge.ts";
 
 export var TARGET_PRESETS = [30, 60, 120, 180, 300, 600];
@@ -51,7 +50,7 @@ var LABEL_GAP_PX = 4;
 export function paintTargetOverlay() {
   var layer = document.getElementById("rundown-overlay");
   if (!layer) return;
-  var target = targetLengthOf(S.state);
+  var target = targetLengthOf(currentDocument());
   var L = rundownLayout();
   var parts = target && L.pxPerSecond > 0 ? targetOverlayParts(L.totalSeconds, target, L.x) : null;
   var html = parts ? overlayHtml(parts) : "";
@@ -64,14 +63,14 @@ export function paintTargetOverlay() {
 }
 
 export function setTargetLength(seconds) {
-  if (!S.state || reviewMode()) return false;
+  if (!currentDocument() || reviewMode()) return false;
   if (!runDocumentEdit(targetLengthCommand(seconds))) return false;
   updateScriptStats();
   return true;
 }
 
 export function targetSectionHtml() {
-  var current = targetLengthOf(S.state);
+  var current = targetLengthOf(currentDocument());
   var viewing = reviewMode();
   var off = viewing ? " disabled" : "";
   return '<div class="target-section" role="group" aria-labelledby="target-heading">' +
