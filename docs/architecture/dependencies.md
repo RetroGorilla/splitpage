@@ -381,7 +381,7 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `06-rows.js` | features/rows | `editor-bridge`, `production-editing-bridge`, `review-wording`, `session-bridge`, `transition-bridge` |
 | `07-production-tags.js` | features/tags | `cache-freeze`, `document-ports`, `editor-bridge`, `preferences-bridge`, `richtext`, `session-bridge` |
 | `07b-plain-tags.js` | features/tags | `richtext` |
-| `08-production-panels.js` | features/panels | `document-ports`, `effects-bridge`, `production-editing-bridge` |
+| `08-production-panels.js` | features/panels | `document-ports`, `effects-bridge`, `production-editing-bridge`, `session-bridge`, `tag-rewrites` |
 | `08c-broll.js` | features/broll | `plain-text`, `richtext`, `session-bridge` |
 | `08d-broll-panel.js` | features/broll | `app-actions` |
 | `09-find-replace.js` | features/find | `preferences-bridge`, `richtext` |
