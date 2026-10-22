@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createExportRegistry } from "../../src/application/export/registry.ts";
+import { createExportRegistry, exportToggleOptions } from "../../src/application/export/registry.ts";
 import type { ExporterDecl } from "../../src/application/export/registry.ts";
 
 const CARD = { id: "demo", group: "part", name: "Demo", ext: ".demo", icon: "i-file", purpose: "A throwaway format" } as const;
@@ -96,4 +96,22 @@ test("the registry hands out frozen exporters so a caller cannot edit a declarat
   registry.register(exporter("one"));
   const found = registry.byAction("export-one");
   assert.ok(found && Object.isFrozen(found));
+});
+
+test("toggle options: a card's toggle gives its stored value unless the caller passes a boolean for it", () => {
+  const registry = createExportRegistry();
+  let stored = true;
+  registry.defineCard({ ...CARD, toggle: { id: "directions", label: "Include", on: () => stored, set: (on) => { stored = on; } } });
+  registry.defineCard({ ...CARD, id: "plain" });
+  registry.register(exporter("a"));
+  registry.register(exporter("b", { card: "plain" }));
+  const a = registry.byId("a");
+  assert.deepEqual(exportToggleOptions(registry, a), { directions: true });
+  stored = false;
+  assert.deepEqual(exportToggleOptions(registry, a), { directions: false });
+  assert.deepEqual(exportToggleOptions(registry, a, { directions: true }), { directions: true });
+  assert.deepEqual(exportToggleOptions(registry, a, { directions: "yes" }), { directions: false });
+  assert.deepEqual(exportToggleOptions(registry, registry.byId("b"), { directions: true }), {});
+  assert.deepEqual(exportToggleOptions(registry, undefined), {});
+  assert.deepEqual(exportToggleOptions(registry, registry.byId("missing")), {});
 });
