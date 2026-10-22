@@ -2,6 +2,9 @@ export interface PaintGuard {
   readonly whilePainting: <T>(draw: () => T) => T;
   readonly painting: () => boolean;
   readonly afterThisPaint: (fn: () => void, ifFailed?: () => void) => void;
+  readonly whileShown: <T>(edit: () => T) => T;
+  readonly shown: () => boolean;
+  readonly afterShown: (fn: () => void) => void;
 }
 
 interface Queued {
@@ -12,6 +15,8 @@ interface Queued {
 export function createPaintGuard(): PaintGuard {
   let depth = 0;
   let queued: Queued[] = [];
+  let showing = 0;
+  let afterShowing: (() => void)[] = [];
 
   function settle(drawn: boolean): void {
     const taken = queued;
@@ -40,6 +45,24 @@ export function createPaintGuard(): PaintGuard {
     painting: () => depth > 0,
     afterThisPaint(fn: () => void, ifFailed?: () => void): void {
       if (depth) queued.push({ fn: fn, ifFailed: ifFailed });
+      else fn();
+    },
+    whileShown<T>(edit: () => T): T {
+      showing++;
+      try {
+        return edit();
+      } finally {
+        showing--;
+        if (!showing) {
+          const taken = afterShowing;
+          afterShowing = [];
+          taken.forEach((fn) => { fn(); });
+        }
+      }
+    },
+    shown: () => showing > 0,
+    afterShown(fn: () => void): void {
+      if (showing) afterShowing.push(fn);
       else fn();
     }
   };

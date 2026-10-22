@@ -33,14 +33,13 @@ import {
   sidePanelOpening
 } from "./03b-side-panels.js";
 import { safeId } from "./04-richtext.js";
-import { render, renderAbsorbed } from "./05-render.js";
 import { targetSectionHtml, wireTargetSection } from "./05t-target.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import {
   formatTimestamp,
-  getSavedAuthorName,
-  saveAuthorName
+  getSavedAuthorName
 } from "./10-comments.js";
+import { cleanAuthorName } from "../core/document/people.ts";
 import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
 import { personColor } from "./13a-presence.js";
 import { haltAutoSave, queueAutoSave } from "./14-export.js";
@@ -105,10 +104,9 @@ async function restoreSnapshot(id, opts) {
     }
     if (!stored && !opts.force) return "no-backup";
 
-    adoptRestoredState(parsed);
     resetProductionPanelState();
+    adoptRestoredState(parsed);
     markAbsorbedDirty("recovery");
-    renderAbsorbed();
     closeHistoryPanel();
     showToast(opts.restoredText || "Restored the version from " + formatTimestamp(snap.meta && snap.meta.at), "ok");
     if (!opts.local) queueAutoSave();
@@ -320,7 +318,6 @@ export function personSwatchesHtml(name, radioName, legendClass) {
 export function setMyColor(color) {
   preferences().setMyColor(color);
   updateIdentityChip();
-  render();
 }
 
 export function promptForName() {
@@ -339,10 +336,9 @@ export function promptForName() {
   input.select();
   function commit() {
     var v = (input.value || "").trim();
-    if (v) saveAuthorName(v);
+    if (v) preferences().setCommentAuthor(cleanAuthorName(v));
     closeAnchorPopover();
     updateIdentityChip();
-    render();
   }
   document.getElementById("identity-save").addEventListener("click", commit);
   input.addEventListener("keydown", function (e) {
@@ -390,7 +386,7 @@ function openClockPopover(focusOn) {
   else { first.focus(); first.select(); }
   function commit() {
     if (reviewMode()) { closeAnchorPopover(); return; }
-    if (runDocumentEdit(wordsPerMinuteCommand(Number(input.value)))) render();
+    runDocumentEdit(wordsPerMinuteCommand(Number(input.value)));
     closeAnchorPopover();
   }
   document.getElementById("wpm-save").addEventListener("click", commit);
@@ -741,7 +737,6 @@ var mergePorts = {
   capture: function () { return captureRestore(); },
   stillOwns: function (ctx) { return stillRestoring(ctx); },
   view: {
-    redraw: function () { renderAbsorbed(); },
     chips: function () { updateIdentityChip(); updateFileChip(); },
     report: function (result, opts) { reportMerge(result, opts); },
     absorbedDirty: function (kind) { markAbsorbedDirty(kind); },

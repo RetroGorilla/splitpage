@@ -9,7 +9,6 @@ import {
   syncDocIdentity
 } from "./02b-doc-id.js";
 import { updateIdentityChip } from "./03-sync.js";
-import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
 import { onServerDoc } from "./13-hosted.js";
@@ -556,6 +555,7 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
   var origin = t.header.origin || {};
   var wasUntitled = origin.kind === "untitled";
 
+  resetProductionPanelState();
   var arrived = documentTransitions().recover({
     from: { document: mine },
     reason: "recoverDraftAsUnsavedCopy: a copy with no home has no ancestor",
@@ -565,8 +565,6 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
     writtenOut: wasUntitled ? !!t.header.docIdWrittenOut : false
   });
   if (arrived.forkedFrom) copyDocHistorySafe(arrived.forkedFrom, arrived.document.docId);
-  resetProductionPanelState();
-  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   syncDocIdentity();
@@ -741,7 +739,6 @@ async function restoreFileDraft(t, mine, base, origin, ctx) {
 
   if (sameDocContent(base, disk)) {
     documentTransitions().restore({ from: { document: mine } });
-    renderAbsorbed();
     updateIdentityChip();
     updateFileChip();
     documentLocation().markWrittenOut(!!t.header.docIdWrittenOut);
@@ -772,6 +769,7 @@ async function restoreFileDraft(t, mine, base, origin, ctx) {
 }
 
 function adoptUntitledDraft(t, mine, base) {
+  resetProductionPanelState();
   documentTransitions().recover({
     from: { document: mine },
     reason: "adoptUntitledDraft: the draft's own base, if it had one",
@@ -780,8 +778,6 @@ function adoptUntitledDraft(t, mine, base) {
     detached: false,
     writtenOut: !!t.header.docIdWrittenOut
   });
-  resetProductionPanelState();
-  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   syncDocIdentity();

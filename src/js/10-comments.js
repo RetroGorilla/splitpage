@@ -32,7 +32,7 @@ import {
   safeId,
   sanitizeHtml
 } from "./04-richtext.js";
-import { editableCellHtml, render } from "./05-render.js";
+import { editableCellHtml } from "./05-render.js";
 import { resetDraftHistory } from "./05d-draft-edit.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave, resumeAutoSave } from "./14-export.js";
@@ -336,7 +336,6 @@ export function setCommentAssignee(id, name) {
   if (idx === -1) return;
   if (reviewBlocked()) { renderComments(); return; }
   runDocumentEdit(setCommentAssigneeCommand(id, name, sessionStamps.clock));
-  render();
 }
 
 function commentAssigneeOptionsHtml(current) {
@@ -550,7 +549,6 @@ export function closeCommentComposer(cancelled) {
   document.getElementById("comment-modal").hidden = true;
   if (cancelled && pendingComment) {
     runDocumentEdit(unwrapCommentAnchorCommand(anchorUnwrapped(pendingComment.rowId, pendingComment.field, pendingComment.id)));
-    render();
   }
   pendingComment = null;
   editorSelection().dropLink();
@@ -593,7 +591,6 @@ export function postComment() {
   pendingComment = null;
   bodyEl.innerHTML = "";
   resetDraftHistory(bodyEl);
-  render();
   sendNow();
 }
 
@@ -620,19 +617,17 @@ export function closeCommentsPanel() {
 
 export function toggleResolve(id) {
   if (reviewMode()) return;
-  if (!runDocumentEdit(toggleResolveCommand(id, sessionStamps))) return;
-  render();
+  runDocumentEdit(toggleResolveCommand(id, sessionStamps));
 }
 
 function deleteComment(id) {
   var idx = findCommentIndex(id);
   if (idx === -1) return;
   var c = S.state.comments[idx];
-  runDocumentEdit(deleteCommentCommand(id, anchorUnwrapped(c.rowId, c.field, c.anchorId)));
   delete expandedReplyIds[id];
   delete replyDrafts[id];
   if (commentMenuFor === id) commentMenuFor = null;
-  render();
+  runDocumentEdit(deleteCommentCommand(id, anchorUnwrapped(c.rowId, c.field, c.anchorId)));
 }
 
 export function armDeleteComment(btn, id) {
@@ -673,15 +668,14 @@ export function postReply(id) {
     showToast("Write a reply before posting.", "warn");
     return;
   }
+  delete expandedReplyIds[id];
+  delete replyDrafts[id];
   runDocumentEdit(addReplyCommand(id, {
     id: makeId("rp"),
     author: author,
     body: bodyHtml,
     createdAt: nowIso()
   }, sessionStamps.clock));
-  delete expandedReplyIds[id];
-  delete replyDrafts[id];
-  render();
   sendNow();
 }
 
@@ -982,7 +976,6 @@ export function restoreConflictValue(commentId) {
   if (c.field === "title") {
     pushSnapshot("Before using your version of the title");
     runDocumentEdit(restoreConflictCommand(commentId, { kind: "title", title: c.emptyValue ? "" : (c.titleValue || "") }, sessionStamps));
-    render();
     showToast("Restored your version of the title", "ok");
     return;
   }
@@ -994,7 +987,6 @@ export function restoreConflictValue(commentId) {
     ? { kind: "image", imageRef: c.emptyValue ? null : (normalizeImageRef(c.imageValue) || null) }
     : { kind: "text", html: c.emptyValue ? "" : sanitizeHtml(c.body) };
   runDocumentEdit(restoreConflictCommand(commentId, value, sessionStamps));
-  render();
   showToast("Restored your version of " + (c.conflictField || "the field"), "ok");
 }
 

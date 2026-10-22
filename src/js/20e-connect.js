@@ -1,6 +1,4 @@
-import { S } from "./_state.js";
 import { checkServer, currentConn, currentHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
-import { render } from "./05-render.js";
 import {
   applyReviewMode,
   fetchReviewLink,
@@ -326,7 +324,6 @@ async function useServer(bookmark, opts) {
   renderConnect();
   await checkServer();
   applyReviewMode();
-  if (S.state) render();
   updateFileChip();
   renderConnect();
   renderReviewLink();
@@ -374,7 +371,6 @@ async function backToThisCopy() {
   updateConnectMenu();
   await checkServer();
   applyReviewMode();
-  if (S.state) render();
   updateFileChip();
   renderConnect();
   renderReviewLink();
