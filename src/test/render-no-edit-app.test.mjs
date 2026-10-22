@@ -15,6 +15,7 @@ const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
+const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 
 after(closeApp);
 
@@ -41,7 +42,7 @@ function fixture(title) {
 }
 
 function fresh(title) {
-  if (writer.writerOpen) writer.closeWriter();
+  if (viewFlags().writerOpen()) writer.closeWriter();
   window.__hostedTest.setSession({ role: "edit", docId: null });
   clock += 10_000;
   S.state = migrateRows(fixture(title));
@@ -482,7 +483,7 @@ for (const place of PLACES) {
         if (place.writer) assert.ok(document.getElementById("writer").contains(document.activeElement), "the focus is in the Writer");
         else assert.equal(document.activeElement, gridCell("r2", "audioText"), "the focus is back in the cell");
       } finally {
-        if (writer.writerOpen) writer.closeWriter();
+        if (viewFlags().writerOpen()) writer.closeWriter();
         if (screenIsStale()) renderAbsorbed();
       }
     });
@@ -521,7 +522,7 @@ test("R4w: a render that throws when the title is read, between the grid and the
     const run = failingRender(PLACES[1], THROWS[2]);
     sameScreen(screenMarkup(), run.before, "after the failed render");
   } finally {
-    if (writer.writerOpen) writer.closeWriter();
+    if (viewFlags().writerOpen()) writer.closeWriter();
     renderAbsorbed();
   }
 });
@@ -559,7 +560,7 @@ for (const place of PLACES) {
         sameScreen(screenMarkup(), before, "after the failed render");
         assert.equal(screenIsStale(), true);
       } finally {
-        if (writer.writerOpen) writer.closeWriter();
+        if (viewFlags().writerOpen()) writer.closeWriter();
         renderAbsorbed();
       }
     });

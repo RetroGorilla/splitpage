@@ -8,38 +8,11 @@ import { addServerBookmark } from "./20e-connect.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 import { draftResume } from "../legacy/recovery-bridge.ts";
+import { seedCheckPasses } from "../legacy/seed-check.ts";
 import { joinErrorText } from "../../shared/server-links.js";
-import { checksumText } from "../../shared/text.js";
 
-export var ONBOARD_KEY = "splitpage-onboarding";
-
-function readOnboardKey() {
-  var raw;
-  try { raw = localStorage.getItem(ONBOARD_KEY); } catch (e) { return null; }
-  if (!raw) return null;
-  try {
-    var parsed = JSON.parse(raw);
-    return (parsed && typeof parsed === "object") ? parsed : null;
-  } catch (e) { return null; }
-}
-
-function writeOnboardKey(skipped) {
-  try {
-    localStorage.setItem(ONBOARD_KEY, JSON.stringify({
-      v: 1, done: true, skipped: !!skipped, at: new Date().toISOString()
-    }));
-  } catch (e) { }
-}
-
-export function seedCheckPasses() {
-  var meta = document.querySelector('meta[name="splitpage-seed-check"]');
-  var el = document.getElementById("state-data");
-  if (!meta || !el) return false;
-  var text = el.textContent || "";
-  var expected = text.length + "-" + checksumText(text);
-  return meta.getAttribute("content") === expected;
-}
 
 var onboardStep = 1;
 var onboardReturnFocus = null;
@@ -109,7 +82,7 @@ function closeOnboarding() {
 }
 
 function finishOnboarding(skipped) {
-  writeOnboardKey(skipped);
+  preferences().recordOnboarding(!!skipped, new Date().toISOString());
   closeOnboarding();
 }
 
@@ -273,7 +246,7 @@ async function submitOnboardJoin() {
 
 async function onboardEligibleForAutoShow() {
   if (!seedCheckPasses()) return false;
-  if (readOnboardKey()) return false;
+  if (preferences().onboarding()) return false;
   if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
   if (S.DESKTOP && draftResume().restorePending()) return false;
   if (home.kind === "server" || home.kind === "file") return false;
@@ -286,7 +259,7 @@ async function onboardEligibleForAutoShow() {
     try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
     if (handle) return false;
   }
-  if (readOnboardKey()) return false;
+  if (preferences().onboarding()) return false;
   if (home.kind === "server" || home.kind === "file") return false;
   return true;
 }

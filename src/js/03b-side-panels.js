@@ -1,59 +1,22 @@
+import { SIDE_PANEL_IDS } from "../application/preferences/panel-widths.ts";
 import { mountPanels } from "../features/panels/mount.ts";
+import { panelWidths } from "../legacy/preferences-bridge.ts";
 import { closeHistoryPanel, syncPanelClass } from "./03-sync.js";
 import { closeGearPanel, closeProductionPanel } from "./08-production-panels.js";
 import { closeBrollPanel } from "./08d-broll-panel.js";
 import { closeCommentsPanel } from "./10-comments.js";
 
-export var SIDE_PANEL_IDS;
-
-var SIDE_PANEL_WIDTHS_KEY = "splitpage-panel-widths";
-var LEGACY_COMMENTS_PANEL_WIDTH_KEY = "splitpage-comments-panel-width";
-var SIDE_PANEL_WIDTH_MIN = 280;
-var SIDE_PANEL_WIDTH_MAX = 720;
-var SIDE_PANEL_WIDTH_DEFAULTS = {
-  "comments-panel": 488,
-  "production-panel": 488,
-  "gear-panel": 488,
-  "broll-panel": 488,
-  "history-panel": 488
-};
-
-function sidePanelWidthDefault(id) {
-  return SIDE_PANEL_WIDTH_DEFAULTS[id] || 488;
-}
-function clampSidePanelWidth(w, id) {
-  if (!isFinite(w)) return sidePanelWidthDefault(id);
-  return Math.max(SIDE_PANEL_WIDTH_MIN, Math.min(SIDE_PANEL_WIDTH_MAX, Math.round(w)));
-}
-function readSidePanelWidthMap() {
-  try {
-    var raw = localStorage.getItem(SIDE_PANEL_WIDTHS_KEY);
-    if (!raw) return {};
-    var parsed = JSON.parse(raw);
-    return (parsed && typeof parsed === "object") ? parsed : {};
-  } catch (e) { return {}; }
-}
-function writeSidePanelWidthMap(map) {
-  try { localStorage.setItem(SIDE_PANEL_WIDTHS_KEY, JSON.stringify(map)); } catch (e) {}
-}
-export function readSidePanelWidth(id) {
-  var map = readSidePanelWidthMap();
-  if (Object.prototype.hasOwnProperty.call(map, id)) {
-    var w = parseFloat(map[id]);
-    return isFinite(w) ? clampSidePanelWidth(w, id) : sidePanelWidthDefault(id);
-  }
-  if (id === "comments-panel") {
-    try {
-      var legacy = parseFloat(localStorage.getItem(LEGACY_COMMENTS_PANEL_WIDTH_KEY));
-      if (isFinite(legacy)) return clampSidePanelWidth(legacy, id);
-    } catch (e) {}
-  }
-  return sidePanelWidthDefault(id);
+function readSidePanelWidth(id) {
+  return panelWidths().read(id);
 }
 function saveSidePanelWidth(id, w) {
-  var map = readSidePanelWidthMap();
-  map[id] = clampSidePanelWidth(w, id);
-  writeSidePanelWidthMap(map);
+  panelWidths().save(id, w);
+}
+function sidePanelWidthDefault(id) {
+  return panelWidths().defaultWidth(id);
+}
+function clampSidePanelWidth(w, id) {
+  return panelWidths().clamp(w, id);
 }
 
 export function applySidePanelWidth(id, w) {
@@ -152,7 +115,6 @@ export function closeAllSidePanels() {
 }
 
 export function __init() {
-  SIDE_PANEL_IDS = Object.keys(SIDE_PANEL_WIDTH_DEFAULTS);
   window.addEventListener("wheel", letGoOfScriptPlace, { passive: true });
   window.addEventListener("touchmove", letGoOfScriptPlace, { passive: true });
   window.addEventListener("keydown", letGoOfScriptPlace, true);

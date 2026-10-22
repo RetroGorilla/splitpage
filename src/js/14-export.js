@@ -1,7 +1,6 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { mintDocId, nowIso } from "../adapters/identity/ids.ts";
 import { S } from "./_state.js";
-import { writePref } from "./00p-prefs.js";
 import { fileHome, home, restoreHome, serverOf, setHome } from "./_home.js";
 import { rememberLastFileHandle } from "./00-prelude.js";
 import { migrateRows } from "./02-state.js";
@@ -37,6 +36,7 @@ import { makeDesktopHandle } from "./20f-desktop.js";
 import { existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
 import { requestSave, saveRunning } from "../legacy/save-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 import { conflictStash } from "../legacy/recovery-bridge.ts";
 import { autoSaveMay, autoSaveWhere } from "../application/save/autosave.ts";
 import { cloneState } from "../core/document/clone.ts";
@@ -289,7 +289,6 @@ export function applyStashedWork(loaded, override, apply) {
   });
 }
 
-export var AUTOSAVE_KEY = "splitpage-autosave";
 export var autoSaveTiming = { idle: 2000, hostedIdle: 5000, max: 15000 };
 
 export function autoSaveIdleFor(target) {
@@ -300,7 +299,7 @@ export var autoSaveMaxTimer = null;
 export var autoSaveHalt = "";
 
 function readAutoSavePref() {
-  try { return localStorage.getItem(AUTOSAVE_KEY) !== "0"; } catch (e) { return true; }
+  return preferences().autosave();
 }
 
 export function autoSaveTarget() {
@@ -319,7 +318,7 @@ function autoSaveAllowed() {
 
 export function setAutoSaveEnabled(on) {
   autoSaveEnabled = !!on;
-  writePref(AUTOSAVE_KEY, autoSaveEnabled ? "1" : "0");
+  preferences().setAutosave(autoSaveEnabled);
   if (!autoSaveEnabled) clearAutoSaveTimers();
   else if (S.dirty) scheduleAutoSave();
   updateAutoSaveMenu();

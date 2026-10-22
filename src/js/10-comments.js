@@ -2,6 +2,7 @@ import { pad2 } from "../core/production/timing.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { editorSelection } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 import { S } from "./_state.js";
 import { formatClock, formatDateClock } from "./00p-prefs.js";
 import { revealRow } from "./01b-hide-shot.js";
@@ -46,8 +47,6 @@ export { commentBodyText, commentEntries };
 
 var commentFilter;
 
-export var TAGGING_HELP_KEY = "splitpage-tagging-help-dismissed";
-
 var taggingHelpReturn = null;
 
 export function showTaggingHelp() {
@@ -63,7 +62,7 @@ export function showTaggingHelp() {
     taggingHelpReturn = { el: active, range: range };
   }
   card.hidden = false;
-  try { localStorage.setItem(TAGGING_HELP_KEY, "0"); } catch (e) {}
+  preferences().taggingHelpShown();
   card.focus({ preventScroll: true });
   updateTaggingHelpCover();
 }
@@ -74,7 +73,7 @@ export function hideTaggingHelp() {
   var hadFocus = card.contains(document.activeElement);
   card.hidden = true;
   card.classList.remove("is-covering");
-  try { localStorage.setItem(TAGGING_HELP_KEY, "1"); } catch (e) {}
+  preferences().taggingHelpDismissed();
   var back = taggingHelpReturn;
   taggingHelpReturn = null;
   if (!hadFocus || !back || !document.contains(back.el)) return;
@@ -170,7 +169,6 @@ function initTaggingHelp() {
   if (bar && typeof ResizeObserver === "function") new ResizeObserver(scheduleTaggingHelpCover).observe(bar);
 }
 
-export var COMMENT_NAME_KEY = "splitpage-comment-author";
 var pendingComment = null;
 var composerVersion = 0;
 var bindingsVersion = 0;
@@ -252,10 +250,10 @@ export function limitAuthorNameField(field) {
   field.setSelectionRange(cut, cut);
 }
 export function getSavedAuthorName() {
-  try { return cleanAuthorName(localStorage.getItem(COMMENT_NAME_KEY)); } catch (e) { return ""; }
+  return cleanAuthorName(preferences().commentAuthor());
 }
 export function saveAuthorName(name) {
-  try { localStorage.setItem(COMMENT_NAME_KEY, cleanAuthorName(name)); } catch (e) {}
+  preferences().rememberCommentAuthor(cleanAuthorName(name));
 }
 
 export var COMMENTS_SORT_KEY = "splitpage-comments-sort";

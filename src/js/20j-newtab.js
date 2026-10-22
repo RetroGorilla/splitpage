@@ -4,7 +4,6 @@ import { S } from "./_state.js";
 import { readDefaultWpm } from "./00p-prefs.js";
 import { home } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
-import { wordCount } from "./01-scene-status.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { updateIdentityChip } from "./03-sync.js";
@@ -15,10 +14,11 @@ import { clearDirty, updateSaveStatus } from "./12-dirty-toast.js";
 import { arrivingOnLink } from "./13-hosted.js";
 import { openLocalFile, openProjectFile, updateFileChip } from "./18-local-files.js";
 import { desktopAppUrl, desktopAppOffered } from "./20a-update.js";
-import { seedCheckPasses } from "./20b-onboarding.js";
+import { seedCheckPasses } from "../legacy/seed-check.ts";
 import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
 import { STARTERS, starterById } from "./_starters.js";
 import { appActions } from "../legacy/app-actions.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
 import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { draftResume } from "../legacy/recovery-bridge.ts";
@@ -148,7 +148,7 @@ function newTabOpenDropped(file) {
 
 function starterSceneSeconds(state) {
   var wpm = state.wordsPerMinute || DEFAULT_WPM;
-  return state.rows.map(function (row) { return wordCount(row.audioText) / wpm * 60; });
+  return state.rows.map(function (row) { return productionReaders.wordCount(row.audioText) / wpm * 60; });
 }
 
 function starterPreviewHtml(state) {
