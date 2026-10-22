@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { saveChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -142,10 +143,10 @@ test("markup that changes nothing in a media cell's runs stores nothing new and 
   const el = cellOf("r1", "audioText");
   store(el, "Hello <strong>there</strong> " + CARD);
   const first = row("r1").audioText;
-  const seq = S.editSeq, generation = liveSession().generation(), undos = undoSizes().undo;
+  const seq = saveChanges(), generation = liveSession().generation(), undos = undoSizes().undo;
   store(el, "Hello <strong>the</strong><strong>re</strong> " + CARD + ZW);
   assert.equal(row("r1").audioText, first);
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
   assert.equal(liveSession().generation(), generation);
   assert.equal(undoSizes().undo, undos);
 });
@@ -156,11 +157,11 @@ test("a stored media cell is a fixed point of the sanitiser and of a second sync
   store(el, "<u><mark>Look</mark></u> " + PICTURE + " <s>and</s> " + CARD + " done");
   const stored = row("r1").audioText;
   assert.equal(sanitizeHtml(stored), stored);
-  const seq = S.editSeq;
+  const seq = saveChanges();
   el.innerHTML = stored;
   syncFieldFromDom(el);
   assert.equal(row("r1").audioText, stored);
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
 });
 
 test("a split of a media cell cuts the runs at the caret: both halves are in canonical form", async () => {

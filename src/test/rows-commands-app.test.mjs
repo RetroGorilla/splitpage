@@ -2,6 +2,7 @@ import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -174,12 +175,12 @@ test("rows: a drop that leaves the order as it was makes no edit", async () => {
   await open();
   const generation = liveSession().generation();
   const sizes = undoSizes();
-  const wasDirty = !!S.dirty;
+  const wasDirty = unsavedChanges();
   moveRowTo("r2", "r1", true);
   await settle();
   assert.equal(liveSession().generation(), generation);
   assert.deepEqual(undoSizes(), sizes);
-  assert.equal(!!S.dirty, wasDirty, "nothing to save");
+  assert.equal(unsavedChanges(), wasDirty, "nothing to save");
 });
 
 test("rows: deleting a blank scene goes through the session in one click", async () => {

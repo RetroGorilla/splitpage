@@ -44,6 +44,7 @@ import { focusMemory } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
 import { setTagAddingPerson, setTagRenaming } from "../application/tag-panel-state.ts";
+import { startupReady } from "../legacy/startup-bridge.ts";
 
 export var prompterMirror;
 export var prompterFlip;
@@ -966,7 +967,8 @@ function readPrompterLaunch() {
 function whenInitialStateReady() {
   return new Promise(function (resolve) {
     (function check() {
-      if (S.initialStateReady) S.initialStateReady.then(resolve, resolve);
+      var ready = startupReady();
+      if (ready) ready.then(resolve, resolve);
       else setTimeout(check, 50);
     })();
   });

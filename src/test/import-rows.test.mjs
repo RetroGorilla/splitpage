@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { unsavedChanges } from "../legacy/save-bridge.ts";
 
 await bootApp();
 after(closeApp);
@@ -110,7 +111,7 @@ test("appending pasted rows keeps the document, its destination and baseline, ma
   assert.match(S.state.rows[3].audioText, /Beta line\./);
   S.state.rows.slice(2).forEach(assertStamped);
   assertSameDocument(before);
-  assert.equal(S.dirty, true, "the document has unsaved changes");
+  assert.equal(unsavedChanges(), true, "the document has unsaved changes");
   assert.ok(toasts().some((t) => /^Imported 2 rows\./.test(t)), "the toast counts the imported rows");
   const imported = rowsJson();
   undo();
@@ -130,7 +131,7 @@ test("replacing rows keeps the document, keeps a history version of the replaced
   assert.match(S.state.rows[0].audioText, /Only line\./);
   assertStamped(S.state.rows[0]);
   assertSameDocument(before);
-  assert.equal(S.dirty, true, "the document has unsaved changes");
+  assert.equal(unsavedChanges(), true, "the document has unsaved changes");
   const listed = await listDocHistory(DOC_ID);
   const kept = listed.entries.filter((e) => e.label === "Before replacing rows on import");
   assert.equal(kept.length, 1, "one history version was kept before the replace");
@@ -158,7 +159,7 @@ test("an import with nothing to import changes nothing and keeps the modal open"
   confirm();
   assert.equal(el("import-modal").hidden, false, "the modal stays open");
   assert.equal(rowsJson(), rowsBefore, "the document is unchanged");
-  assert.equal(S.dirty, false, "and has nothing unsaved");
+  assert.equal(unsavedChanges(), false, "and has nothing unsaved");
   assert.ok(toasts().some((t) => /Paste or choose some text first/.test(t)), "the user is asked for text");
   closeImportModal();
 });
@@ -196,12 +197,12 @@ test("a decoded file waits in the modal without touching the document, then appe
   await handleImportFile(new File(["Visual,Audio\nCrane,Up we go.\nDolly,In we come.\n"], "plan.csv"));
   assert.match(el("import-preview").textContent, /plan\.csv — this will create 2 rows/, "the preview names the file");
   assert.equal(rowsJson(), rowsBefore, "decoding left the document alone");
-  assert.equal(S.dirty, false, "and marked nothing unsaved");
+  assert.equal(unsavedChanges(), false, "and marked nothing unsaved");
   confirm();
   assert.equal(S.state.rows.length, 4, "the decoded scenes were appended");
   assert.match(S.state.rows[2].visualText, /Crane/);
   assertSameDocument(before);
-  assert.equal(S.dirty, true);
+  assert.equal(unsavedChanges(), true);
 });
 
 test("a pasted script imported as a new document is adopted through the new-document transition and left unsaved", () => {
@@ -219,7 +220,7 @@ test("a pasted script imported as a new document is adopted through the new-docu
   assert.equal(S.state.rows.length, 1, "holding the imported scene only");
   assertStamped(S.state.rows[0]);
   assert.match(S.state.rows[0].visualText, /broll-key/, "the b-roll scan ran on the new document");
-  assert.equal(S.dirty, true, "the new document has unsaved changes");
+  assert.equal(unsavedChanges(), true, "the new document has unsaved changes");
   assert.equal(old.rows.length, 2, "the previous document is untouched");
   const imported = rowsJson();
   undo();

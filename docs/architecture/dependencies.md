@@ -50,7 +50,7 @@ Until then it counts as production for the `S` rules below, and core,
 `contracts`, `application`, `adapters`, features, `legacy` and `shared` may
 not import it.
 
-Bootstrap imports of `src/js/_state.js` are `layer` violations, including side-effect imports, re-exports, dynamic imports and type imports. The wiring uses the live-document and save ports, the initial-ready setter in `00-prelude.js`, and the desktop bridge in `20f-desktop.js`. `tools/test-dep-report.mjs` has fail-first cases for this boundary and a positive case for a numbered module supplying a port.
+Bootstrap imports of `src/js/_state.js` are `layer` violations, including side-effect imports, re-exports, dynamic imports and type imports. The wiring uses the live-document and save ports, the startup bridge (`src/legacy/startup-bridge.ts`), and the desktop bridge in `20f-desktop.js`. `tools/test-dep-report.mjs` has fail-first cases for this boundary and a positive case for a numbered module supplying a port.
 
 Core, `contracts`, `application`, `shared` and feature layers may not import a
 Node built-in or a package (`platform-import`). Core, `contracts`,
@@ -357,7 +357,7 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `02c-blobs.js` | adapters/storage | none |
 | `02d-gallery.js` | features/gallery | none |
 | `03-sync.js` | composition root (destination, merge) | `document-ports`, `editor-bridge`, `preferences-bridge`, `recovery-bridge`, `richtext`, `save-bridge`, `session-bridge` |
-| `03a-history-store.js` | features/history | `recovery-bridge`, `seed-check` |
+| `03a-history-store.js` | features/history | `recovery-bridge`, `save-bridge`, `seed-check` |
 | `03b-side-panels.js` | features/panels | `preferences-bridge` |
 | `04-richtext.js` | adapters/richtext | `richtext` |
 | `04a-row-motion.js` | features/rows | none |
@@ -400,21 +400,21 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `17-pdf.js` | adapters/formats | none |
 | `18-local-files.js` | adapters/files | `app-actions`, `export-formats`, `richtext`, `save-bridge`, `session-bridge`, `transition-bridge` |
 | `18a-local-merge.js` | features/merge | `plain-text` |
-| `18b-file-menu.js` | features/file-menu | `transition-bridge` |
+| `18b-file-menu.js` | features/file-menu | `save-bridge`, `transition-bridge` |
 | `18c-export-dialog.js` | features/file-menu | `export-formats`, `richtext` |
 | `18d-command-menu.js` | features/shortcuts | `app-actions`, `editor-bridge`, `export-formats`, `screen` |
 | `19-writer.js` | features/writer | `document-ports`, `editor-bridge`, `plain-text`, `preferences-bridge`, `review-wording`, `session-bridge` |
-| `20-teleprompter.js` | features/prompter | `editor-bridge`, `preferences-bridge`, `richtext` |
+| `20-teleprompter.js` | features/prompter | `editor-bridge`, `preferences-bridge`, `richtext`, `startup-bridge` |
 | `20a-update.js` | features/notices | none |
 | `20b-onboarding.js` | composition root (onboarding) | `app-actions`, `preferences-bridge`, `recovery-bridge`, `seed-check` |
 | `20c-help.js` | features/settings | `app-actions`, `preferences-bridge`, `tour-pause` |
-| `20d-formats.js` | adapters/formats | `richtext` |
+| `20d-formats.js` | adapters/formats | `richtext`, `save-bridge` |
 | `20e-connect.js` | adapters/transport | `app-actions`, `tour-pause` |
-| `20f-desktop.js` | composition root (desktop host) | `recovery-bridge` |
-| `20g-drafts.js` | adapters/storage (draft recovery) | `recovery-bridge`, `transition-bridge` |
+| `20f-desktop.js` | composition root (desktop host) | `recovery-bridge`, `save-bridge`, `startup-bridge` |
+| `20g-drafts.js` | adapters/storage (draft recovery) | `recovery-bridge`, `save-bridge`, `transition-bridge` |
 | `20h-appdata.js` | adapters/storage | `preferences-bridge` |
 | `20i-topbar.js` | features/title | none |
-| `20j-newtab.js` | composition root (desktop host) | `app-actions`, `document-ports`, `recovery-bridge`, `seed-check`, `transition-bridge` |
+| `20j-newtab.js` | composition root (desktop host) | `app-actions`, `document-ports`, `recovery-bridge`, `seed-check`, `startup-bridge`, `transition-bridge` |
 | `20k-phone-bar.js` | features/notices | none |
 | `20s-settings.js` | features/settings | `app-actions`, `preferences-bridge` |
 

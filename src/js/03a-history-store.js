@@ -8,6 +8,7 @@ import {
   renderHistory
 } from "./03-sync.js";
 import { legacySnapshots } from "../legacy/recovery-bridge.ts";
+import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 import { createIdbHistoryBackend, hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
 import { showToast } from "./12-dirty-toast.js";
 import { seedCheckPasses } from "../legacy/seed-check.ts";
@@ -504,7 +505,7 @@ function resolveHistoryBackend() {
 }
 
 export function isPristineSeedDocument() {
-  return !!S.state && S.editSeq === 0 && !S.dirty && home.kind === "none" && seedCheckPasses();
+  return !!S.state && saveChanges() === 0 && !unsavedChanges() && home.kind === "none" && seedCheckPasses();
 }
 
 var historyLocal = {};
