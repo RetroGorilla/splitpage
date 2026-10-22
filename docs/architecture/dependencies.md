@@ -359,12 +359,12 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `02b-doc-id.js` | composition root (initial load, identity) | `document-ports`, `transition-bridge` |
 | `02c-blobs.js` | adapters/storage | none |
 | `02d-gallery.js` | features/gallery | none |
-| `03-sync.js` | composition root (destination, merge) | `document-ports`, `editor-bridge`, `preferences-bridge`, `recovery-bridge`, `richtext`, `save-bridge`, `session-bridge` |
+| `03-sync.js` | composition root (destination, merge) | `document-ports`, `editor-bridge`, `preferences-bridge`, `production-editing-bridge`, `recovery-bridge`, `richtext`, `save-bridge`, `session-bridge` |
 | `03a-history-store.js` | features/history | `recovery-bridge`, `save-bridge`, `seed-check` |
 | `03b-side-panels.js` | features/panels | `preferences-bridge` |
 | `04-richtext.js` | adapters/richtext | `richtext` |
 | `04c-doc-model.js` | adapters/richtext | `richtext` |
-| `05-render.js` | features/rows | `editor-bridge`, `preferences-bridge`, `richtext`, `session-bridge` |
+| `05-render.js` | features/rows | `editor-bridge`, `preferences-bridge`, `production-editing-bridge`, `richtext`, `session-bridge` |
 | `05b-cell-edit.js` | features/editing | `richtext`, `session-bridge` |
 | `05c-clipboard.js` | features/clipboard | `richtext`, `session-bridge` |
 | `05d-draft-edit.js` | features/editing | `richtext` |
@@ -378,18 +378,18 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `05t-target.js` | features/panels | none |
 | `05v-video.js` | features/video | `preferences-bridge`, `transition-bridge` |
 | `05w-annotate.js` | features/gallery | `transition-bridge` |
-| `06-rows.js` | features/rows | `editor-bridge`, `review-wording`, `session-bridge`, `transition-bridge` |
+| `06-rows.js` | features/rows | `editor-bridge`, `production-editing-bridge`, `review-wording`, `session-bridge`, `transition-bridge` |
 | `07-production-tags.js` | features/tags | `cache-freeze`, `document-ports`, `editor-bridge`, `preferences-bridge`, `richtext`, `session-bridge` |
 | `07b-plain-tags.js` | features/tags | `richtext` |
-| `08-production-panels.js` | features/panels | none |
+| `08-production-panels.js` | features/panels | `document-ports`, `effects-bridge`, `production-editing-bridge`, `session-bridge`, `tag-rewrites` |
 | `08c-broll.js` | features/broll | `plain-text`, `richtext`, `session-bridge` |
 | `08d-broll-panel.js` | features/broll | `app-actions` |
 | `09-find-replace.js` | features/find | `preferences-bridge`, `richtext` |
-| `10-comments.js` | features/comments | `editor-bridge`, `preferences-bridge`, `transition-bridge` |
+| `10-comments.js` | features/comments | `editor-bridge`, `preferences-bridge`, `production-editing-bridge`, `transition-bridge` |
 | `11-import.js` | features/imports | `session-bridge`, `transition-bridge` |
 | `12-dirty-toast.js` | features/notices (session effects: composition root) | `preferences-bridge`, `save-bridge`, `session-bridge` |
 | `12a-undo.js` | features/undo | `richtext` |
-| `13-hosted.js` | adapters/transport | `recovery-bridge`, `review-wording`, `save-bridge`, `transition-bridge` |
+| `13-hosted.js` | adapters/transport | `production-editing-bridge`, `recovery-bridge`, `review-wording`, `save-bridge`, `transition-bridge` |
 | `13a-presence.js` | adapters/transport | `preferences-bridge`, `transition-bridge` |
 | `13b-collaborate.js` | features/file-menu | `app-actions`, `preferences-bridge` |
 | `14-export.js` | adapters/files (save writer) | `preferences-bridge`, `recovery-bridge`, `save-bridge` |
@@ -398,9 +398,9 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `16-csv.js` | adapters/formats | `richtext` |
 | `16b-xlsx.js` | adapters/formats | none |
 | `17-pdf.js` | adapters/formats | none |
-| `18-local-files.js` | adapters/files | `app-actions`, `export-formats`, `richtext`, `save-bridge`, `session-bridge`, `transition-bridge` |
+| `18-local-files.js` | adapters/files | `app-actions`, `export-formats`, `production-editing-bridge`, `richtext`, `save-bridge`, `session-bridge`, `transition-bridge` |
 | `18a-local-merge.js` | features/merge | `plain-text` |
-| `18b-file-menu.js` | features/file-menu | `preferences-bridge`, `save-bridge`, `transition-bridge` |
+| `18b-file-menu.js` | features/file-menu | `preferences-bridge`, `production-editing-bridge`, `save-bridge`, `transition-bridge` |
 | `18c-export-dialog.js` | features/file-menu | `export-formats`, `richtext` |
 | `18d-command-menu.js` | features/shortcuts | `app-actions`, `editor-bridge`, `export-formats`, `screen` |
 | `19-writer.js` | features/writer | `document-ports`, `editor-bridge`, `plain-text`, `preferences-bridge`, `review-wording`, `session-bridge` |
@@ -411,9 +411,9 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `20d-formats.js` | adapters/formats | `richtext`, `save-bridge` |
 | `20e-connect.js` | adapters/transport | `app-actions`, `tour-pause` |
 | `20f-desktop.js` | composition root (desktop host) | `recovery-bridge`, `save-bridge`, `startup-bridge` |
-| `20g-drafts.js` | adapters/storage (draft recovery) | `recovery-bridge`, `save-bridge`, `transition-bridge` |
+| `20g-drafts.js` | adapters/storage (draft recovery) | `production-editing-bridge`, `recovery-bridge`, `save-bridge`, `transition-bridge` |
 | `20h-appdata.js` | adapters/storage | `preferences-bridge` |
-| `20j-newtab.js` | composition root (desktop host) | `app-actions`, `document-ports`, `preferences-bridge`, `recovery-bridge`, `seed-check`, `startup-bridge`, `transition-bridge` |
+| `20j-newtab.js` | composition root (desktop host) | `app-actions`, `document-ports`, `preferences-bridge`, `production-editing-bridge`, `recovery-bridge`, `seed-check`, `startup-bridge`, `transition-bridge` |
 | `20s-settings.js` | features/settings | `app-actions`, `preferences-bridge` |
 
 

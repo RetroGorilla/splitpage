@@ -19,6 +19,8 @@ import * as rowDrag from "../../src/application/editing/row-drag.ts";
 import * as focusMemory from "../../src/application/editing/focus-memory.ts";
 import * as paintGuard from "../../src/application/editing/paint-guard.ts";
 import * as selection from "../../src/application/editing/selection.ts";
+import * as deleteConfirm from "../../src/application/editing/delete-confirm.ts";
+import * as productionSelection from "../../src/application/editing/production-selection.ts";
 import * as mergeUndo from "../../src/application/session/merge-undo.ts";
 import * as preferences from "../../src/application/preferences/preferences.ts";
 import * as viewFlags from "../../src/application/preferences/view-flags.ts";
@@ -35,6 +37,8 @@ const OWNERS = [
   "src/application/editing/focus-memory.ts",
   "src/application/editing/paint-guard.ts",
   "src/application/editing/selection.ts",
+  "src/application/editing/delete-confirm.ts",
+  "src/application/editing/production-selection.ts",
   "src/application/session/merge-undo.ts",
   "src/application/preferences/preferences.ts",
   "src/application/preferences/view-flags.ts",
@@ -92,7 +96,7 @@ test("E12: importing the owners constructs nothing: each export is a constructor
     operation: operation, transitionPorts: transitionPorts, transitions: transitions, recoveryPorts: recoveryPorts, draftWriter: draftWriter,
     draftResume: draftResume, conflictStash: conflictStash, legacySnapshots: legacySnapshots,
     saveCoordinator: saveCoordinator, saveStatus: saveStatus, autoSave: autoSave,
-    rowDrag: rowDrag, focusMemory: focusMemory, paintGuard: paintGuard, selection: selection, mergeUndo: mergeUndo,
+    rowDrag: rowDrag, focusMemory: focusMemory, paintGuard: paintGuard, selection: selection, deleteConfirm: deleteConfirm, productionSelection: productionSelection, mergeUndo: mergeUndo,
     preferences: preferences, viewFlags: viewFlags, panelWidths: panelWidths
   };
   for (const [module, exports] of Object.entries(loaded)) {
