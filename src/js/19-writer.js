@@ -20,7 +20,6 @@ import { splitRowFieldCore } from "./06-rows.js";
 import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
 import { closeFindBar } from "./09-find-replace.js";
 import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "./12a-undo.js";
-import { mirrorFileChipToWriter } from "./18-local-files.js";
 import { bothScenesHaveVisual, joinScenesCommand } from "../application/commands/split-join.ts";
 import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../application/preferences/preferences.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
@@ -270,7 +269,6 @@ export function openWriter(keepMark) {
   closeAllSidePanels();
   if (viewFlags().findOpen()) closeFindBar();
   document.getElementById("writer-title").value = S.state.title || "";
-  mirrorFileChipToWriter();
   applyWriterSize(readWriterSize(), false);
   setWriterGutter(writerGutterMode);
   el.inert = false;

@@ -11,8 +11,7 @@ import { cloneState } from "../../core/document/clone.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
 import {
   reportMerge,
-  toastLastEditor,
-  updateIdentityChip
+  toastLastEditor
 } from "../../js/03-sync.js";
 import { startHistoryMigration } from "../../js/03a-history-store.js";
 import { renderFirstDraw } from "../../js/05-render.js";
@@ -44,7 +43,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
       liveDocument: function () { return heldDocument(); },
       open: function (doc, reason) { documentTransitions().open({ from: { document: doc }, reason: reason }); },
       firstDraw: renderFirstDraw,
-      refreshChrome: [updateIdentityChip, updateAutoSaveMenu, updateHideShotMenu, updateSaveStatus],
+      refreshChrome: [updateAutoSaveMenu, updateHideShotMenu, updateSaveStatus],
       reportRecovery: function (report) { reportMerge(report, { kind: "recovery" }); },
       toastLastEditor: toastLastEditor,
       resumeLastProject: tryResumeLastProject,

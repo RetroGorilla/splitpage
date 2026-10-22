@@ -8,6 +8,7 @@ import type {
   SaveJob,
   SaveOutcome,
   SaveOwnershipPort,
+  SaveStatusChange,
   WriterResult
 } from "../application/save/coordinator.ts";
 import type { TimerPort } from "../application/session/ports.ts";
@@ -46,6 +47,22 @@ interface Started {
 
 let started: Started | null = null;
 
+export type SaveChange = SaveStatusChange | AutoSaveChange;
+
+const changeListeners: ((change: SaveChange) => void)[] = [];
+
+export function onSaveChange(listener: (change: SaveChange) => void): () => void {
+  changeListeners.push(listener);
+  return function () {
+    const at = changeListeners.indexOf(listener);
+    if (at !== -1) changeListeners.splice(at, 1);
+  };
+}
+
+function announce(change: SaveChange): void {
+  changeListeners.slice().forEach(function (listener) { listener(change); });
+}
+
 function live(): Started {
   if (!started) throw new Error("The save coordinator is not started yet");
   return started;
@@ -79,11 +96,16 @@ export function startSaves(ports: LegacySavePorts, timers: Pick<TimerPort, "star
       timers: timers,
       enabledAtStart: ports.autosave.enabledAtStart,
       due: ports.autosave.due,
-      changed: ports.autosave.changed
+      changed: function (change) {
+        ports.autosave.changed(change);
+        announce(change);
+      }
     })
   });
   started = mine;
+  const stopChanges = mine.coordinator.onChange(announce);
   return function () {
+    stopChanges();
     if (started === mine) started = null;
     mine.autosave.stop();
     mine.coordinator.stop();

@@ -43,7 +43,6 @@ import { cleanAuthorName } from "../core/document/people.ts";
 import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
 import { personColor } from "./13a-presence.js";
 import { haltAutoSave, queueAutoSave } from "./14-export.js";
-import { updateFileChip } from "./18-local-files.js";
 import { confirmBaseline, saveChanges } from "../legacy/save-bridge.ts";
 import { captureRestore, conflictStash, stillRestoring } from "../legacy/recovery-bridge.ts";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
@@ -232,6 +231,19 @@ export function updateIdentityChip() {
   }
 }
 
+export function identityChipListeners() {
+  return {
+    session: function (change) {
+      if (change.changes.whole || change.changes.docFields.indexOf("personColors") !== -1) updateIdentityChip();
+    },
+    preference: function (change) {
+      var name = preferences().nameOf(change.key);
+      if (name === "commentAuthor" || name === "personColor") updateIdentityChip();
+    },
+    colours: updateIdentityChip
+  };
+}
+
 var anchorPopover = null;
 
 function closeAnchorPopover(opts) {
@@ -317,7 +329,6 @@ export function personSwatchesHtml(name, radioName, legendClass) {
 
 export function setMyColor(color) {
   preferences().setMyColor(color);
-  updateIdentityChip();
 }
 
 export function promptForName() {
@@ -338,7 +349,6 @@ export function promptForName() {
     var v = (input.value || "").trim();
     if (v) preferences().setCommentAuthor(cleanAuthorName(v));
     closeAnchorPopover();
-    updateIdentityChip();
   }
   document.getElementById("identity-save").addEventListener("click", commit);
   input.addEventListener("keydown", function (e) {
@@ -737,7 +747,6 @@ var mergePorts = {
   capture: function () { return captureRestore(); },
   stillOwns: function (ctx) { return stillRestoring(ctx); },
   view: {
-    chips: function () { updateIdentityChip(); updateFileChip(); },
     report: function (result, opts) { reportMerge(result, opts); },
     absorbedDirty: function (kind) { markAbsorbedDirty(kind); },
     toast: function (text, tone, sticky) { showToast(text, tone, sticky); }
