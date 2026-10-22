@@ -1224,7 +1224,7 @@ builds two fields.
 
 **`personColors`** (#194) is the colour each person picked for themselves,
 `{name: colour}`: a name (trimmed, ≤80 characters) to one of the eight
-`PERSON_COLORS` (`00p-prefs.js`), at most 200 of them. It has **no
+`PERSON_COLORS` (`src/core/document/person-colors.ts`), at most 200 of them. It has **no
 default**: a document nobody picked in has no key at all, so a file from
 before #194 reads, merges and saves byte for byte as it did, and an older
 client that meets the key just carries it. Your pick lives in your prefs
@@ -1485,20 +1485,21 @@ bytes, #82 — nothing deletes them yet, D4).
 localStorage, none in the document: `splitpage-theme` (`light`/`dark`,
 absent = system; sets `data-theme` on `<html>` and, in the desktop app,
 `nativeTheme.themeSource` through `splitpage:set-theme`), `splitpage-clock`
-(`12`/`24`, absent = system; `formatClock()` in `00p-prefs.js` is the one
+(`12`/`24`, absent = system; `formatClock()` in `shared/clock.js` is the one
 clock formatter, #180), `splitpage-person-color` (#194),
 `splitpage-default-wpm` (the reading speed a NEW script starts at),
 `splitpage-video-thumbs` (#141: `"0"` = don't fetch a pasted YouTube or
-Vimeo link's thumbnail; absent = fetch, the default — `videoThumbsOn()`),
+Vimeo link's thumbnail; absent = fetch, the default — `preferences().videoThumbs()`),
 `splitpage-rundown-min` and `splitpage-script-scale` (other lanes' own
 controls; Settings only reads and writes them), plus the keys that already
 had homes (`splitpage-hide-shot`, `splitpage-autosave`,
 `splitpage-writer-size`, `splitpage-prompter-mirror`/`-flip`/`-scene-mode`,
-`splitpage-comment-author`). Every write goes through `writePref(key,
-value)`, which stores it and then fires `document`'s
+`splitpage-comment-author`). The keys are private to the preferences owner
+(`src/application/preferences/preferences.ts`); every announced write
+stores the value and then fires `document`'s
 `"splitpage:pref"` CustomEvent (`{detail: {key, value}}`); whatever draws a
 setting listens for its key, so a change made anywhere shows everywhere.
-File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
+File ▸ Export app data carries them (`settingsAppData()`).
 
 ---
 
@@ -1960,7 +1961,6 @@ evaluation order via `_entry.js`):
 | `_home.js` | where the document lives: the one tagged `home` record (`none` / `file` / `import` / `server`) and `setHome()`, its only writer (#73); and this tab's connection `conn` (`serverUrl`, `token`, `role`, `scope`, `tunnel`) with `setConnection()` / `updateConnection()` — a server home holds `conn` itself (#11); `scope` (Collaborate) is the one document id a link's token opens, `""` for the owner's, as the server said and never stored |
 | `_entry.js` | the bundle entry: calls every module's `__init()` in order |
 | `00-prelude.js` | `PAGE_SHELL`, module-wide vars |
-| `00p-prefs.js` | per-person preferences with no DOM or document behind them (#180, #181, #194): `writePref` (store + the `"splitpage:pref"` event), the one clock formatter (`formatClock`, `formatDateClock`; the save status's words `savedStatusText` and tooltip time `savedWhenText`, #208), the theme (`applyTheme`, run at boot right after `PAGE_SHELL` is captured), the eight `PERSON_COLORS` and the pure half of a person's colour (`resolvePersonColor`, `normalizePersonColors`, `mergePersonColors`), and the settings Export app data carries |
 | `01-scene-status.js` | scene status and runtime estimates |
 | `02-state.js` | `defaultState`, `migrateRows`, `legacyMdToHtml`, `buildPublishHtml` |
 | `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId` (over `sha256Bytes`, the synchronous SHA-256 core), `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel; `standaloneHtmlFor(s, head)` and `withPageHead`, which give the Standalone page export the script's `<title>` and a `<meta name="description">` (the app's own page and `buildPublishHtml` unchanged) |

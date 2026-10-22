@@ -1,5 +1,4 @@
 import { S } from "./_state.js";
-import { PREF_EVENT, VIDEO_THUMBS_KEY } from "./00p-prefs.js";
 import {
   annotateGallerySlot,
   moveGallerySlot,
@@ -32,6 +31,7 @@ import { galleryCommand } from "../application/commands/gallery.ts";
 import { formatVideoLength } from "../../shared/text.js";
 import { embeddableVideo } from "../../shared/video-embed.js";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
+import { PREF_EVENT, preferences } from "../legacy/preferences-bridge.ts";
 
 var view = null;
 var returnFocus = null;
@@ -711,6 +711,6 @@ export function __init() {
     paint();
   });
   document.addEventListener(PREF_EVENT, function (e) {
-    if (e.detail && e.detail.key === VIDEO_THUMBS_KEY) refreshGalleryOverlay();
+    if (e.detail && preferences().nameOf(e.detail.key) === "videoThumbs") refreshGalleryOverlay();
   });
 }
