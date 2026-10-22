@@ -277,7 +277,7 @@ Exit: no numbered file imports the 10 names from another numbered file; each is 
 
 Exit: 0 modules in any frontend loop, and `tools/test-dep-report.mjs` fails if one returns; a throwaway test destination saves through Save, autosave and Save As with no other edit; the race matrix with `SPLITPAGE_M4_GATE=1` passes with no case demoted; the desktop smoke passes on PR 2.
 
-**L3i. Reads of the document go through the session** (5 PRs, by area; after L3d).
+**L3i. Reads of the document go through the session** (6 PRs, by area; after L3d).
 
 The remaining `S.state` references in `src/` (about 400 after L3d, all reads) become `currentDocument()`, which L3d PR 3 adds to the session bridge. The guard from L3d stays on in the full browser run, so a read that writes still fails.
 
@@ -288,6 +288,7 @@ The remaining `S.state` references in `src/` (about 400 after L3d, all reads) be
 | 3 | Production, b-roll and comments | Codex, Sol high |
 | 4 | Hosted, drafts, history, sync and desktop | Codex, Sol high |
 | 5 | The rest of `src/` | Codex, Sol high |
+| Guard | `currentDocument()` returns the guard's read-only view, so the reads PRs 1 to 5 move off `S.state` stay covered. Undo, the live-document port, the records reconciler's identity check and the suites' fixture hook read the raw object through `heldDocument()` | cloud, Opus (session ingress) |
 
 **Structure:** the document has one way to be read, from its one holder. **Long term:** a file that later becomes TypeScript reads a typed, read-only document without a second change.
 
@@ -358,7 +359,7 @@ L1 is done.
 
 **One open PR per shared file.** A PR that would change a `src/js`, `src/bootstrap/` or `src/test/` file another open PR in this plan changes waits for it to merge, then merges the base. The coordinator holds that queue. Only one Codex job runs at a time on the PC.
 
-Size: 51 PRs. 29 are cloud threads (20 of them Opus) and 22 are Codex jobs. The perf runs, the desktop smokes and the gate runs are on the PC.
+Size: 52 PRs. 30 are cloud threads (21 of them Opus) and 22 are Codex jobs. The perf runs, the desktop smokes and the gate runs are on the PC.
 
 ## Performance
 

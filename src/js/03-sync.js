@@ -3,7 +3,7 @@ import { S } from "./_state.js";
 import { reviewMode, setHome } from "../legacy/location-bridge.ts";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, isDurableSync } from "../adapters/storage/02c-blobs.js";
-import { currentDocument, holdMergeBase, mergeBase, noteMerged, noteRecovery, noteServerUpdate, runDocumentEdit } from "../legacy/session-bridge.ts";
+import { heldDocument, holdMergeBase, mergeBase, noteMerged, noteRecovery, noteServerUpdate, runDocumentEdit } from "../legacy/session-bridge.ts";
 import { wordsPerMinuteCommand } from "../application/commands/document-settings.ts";
 import { applyIncomingMerge } from "../application/session/apply-merge.ts";
 import { mergeIncoming } from "../application/session/merge-incoming.ts";
@@ -724,7 +724,7 @@ var mergePorts = {
     });
   },
   snapshot: function (label, doc) { return pushSnapshot(label, doc); },
-  current: function () { return currentDocument(); },
+  current: function () { return heldDocument(); },
   adopt: function (kind, next, merged) {
     if (merged) next = noteMerged(kind, next);
     else next = kind === "recovery" ? noteRecovery(next) : noteServerUpdate(next);
