@@ -1,5 +1,4 @@
 import { migrateRows } from "./02-state.js";
-import { tagPrintColor } from "../adapters/formats/print-colors.ts";
 import { randomIds, systemClock } from "../adapters/identity/ids.ts";
 import { exportServices } from "../application/export/services.ts";
 import { resolveExportAssets } from "../application/export/assets.ts";
@@ -9,7 +8,6 @@ import { buildExportDocument } from "../core/document/export-document.ts";
 import { contentMemo } from "../core/document/memo.ts";
 import { deriveProductionIndex } from "../core/production/tags.ts";
 import { toHtml } from "../core/text/html.ts";
-import { toDocxRuns } from "../core/text/projections.ts";
 import { readSession } from "../legacy/session-bridge.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 
@@ -90,24 +88,6 @@ function numberComments(state) {
     });
   });
   return nums;
-}
-
-export function exportRuns(html, nums) {
-  var runs = toDocxRuns(exportServices().cellOf(html), { annotate: true });
-  runs.forEach(function (r, i) {
-    if (r.tag) r.tag = { cat: r.tag.cat, name: r.tag.name, color: tagPrintColor(r.tag.cat) };
-    if (!r.cmt) return;
-    var next = null;
-    for (var k = i + 1; k < runs.length; k++) {
-      if (runs[k].dir && (runs[k].text === "(" || runs[k].text === ")") && !runs[k].cmt) continue;
-      next = runs[k];
-      break;
-    }
-    var nextIds = (next && next.cmt) || [];
-    var ending = r.cmt.filter(function (id) { return nextIds.indexOf(id) === -1 && nums[id]; }).reverse();
-    if (ending.length) r.markers = ending.map(function (id) { return nums[id]; });
-  });
-  return runs;
 }
 
 export function __init() {}

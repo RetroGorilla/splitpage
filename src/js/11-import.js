@@ -4,7 +4,7 @@ import { pushSnapshot, stampRow } from "./03-sync.js";
 import { cssAttr, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
 import { anchorBrollInRows, declineBrollAnchoring } from "./08c-broll.js";
 import { markDirty } from "./12-dirty-toast.js";
-import { audioDirectionsHtml, docxToRows } from "./15-docx.js";
+import { audioDirectionsHtml, docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
 import { importModeTouched, resetImportMode } from "../application/import-mode.ts";
 import { importRowsCommand } from "../application/commands/import-rows.ts";
