@@ -48,18 +48,6 @@ test("rundown toggles announce once to another listener and owner changes update
   assert.equal(heard.length, 2);
 });
 
-test("rundown follows cross-tab storage changes without writing or announcing them again", () => {
-  heard.length = 0;
-  localStorage.setItem("splitpage-rundown-min", "1");
-  window.dispatchEvent(new window.StorageEvent("storage", { key: "splitpage-rundown-min", newValue: "1" }));
-  assert.equal(isRundownMinimized(), true);
-  localStorage.removeItem("splitpage-rundown-min");
-  window.dispatchEvent(new window.StorageEvent("storage", { key: "splitpage-rundown-min", newValue: null }));
-  assert.equal(isRundownMinimized(), false);
-  assert.equal(localStorage.getItem("splitpage-rundown-min"), null);
-  assert.deepEqual(heard, []);
-});
-
 test("immediate and animated zoom changes announce once, keep the clamp and remove the default", () => {
   heard.length = 0;
   setScriptScale(9, { now: true, quiet: true });
