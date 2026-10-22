@@ -95,7 +95,7 @@ function sweep(container: object, seen: WeakSet<object>): void {
   });
 }
 
-export function unwrapped<T>(value: T): T {
+function unwrapAll<T>(value: T): T {
   const raw = rawOf(value);
   if (isObject(raw)) sweep(raw, new WeakSet());
   return raw;
@@ -108,3 +108,5 @@ function same<T>(value: T): T {
 export const documentGuardOn: boolean = askedAtStart();
 
 export const documentView: <T>(doc: T) => T = documentGuardOn ? viewOf : same;
+
+export const unwrapped: <T>(value: T) => T = documentGuardOn ? unwrapAll : same;
