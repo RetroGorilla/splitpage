@@ -1,5 +1,6 @@
 import { S } from "./_state.js";
-import { findRowIndex } from "./03-sync.js";
+import { rowIndexOf } from "../core/document/rows.ts";
+import { readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { ensureTrailingCaretSpot } from "./04-richtext.js";
 import { screenIsStale, syncFieldFromDom } from "./05-render.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
@@ -8,7 +9,6 @@ import { cellRuns, cellTextCommand } from "../application/commands/cell-text.ts"
 import { posToDom } from "../features/editing/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
 import { fromHtml } from "../legacy/richtext.ts";
-import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 
 export { posToDom };
 
@@ -16,7 +16,7 @@ export function openCellEdit(cellEl) {
   if (screenIsStale()) return null;
   var rowId = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
-  var idx = findRowIndex(rowId);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
   if (idx === -1 || (field !== "visualText" && field !== "audioText")) return null;
   syncFieldFromDom(cellEl);
   var row = S.state.rows[idx];

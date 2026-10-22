@@ -22,6 +22,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "document/people.ts": await import("../../src/core/document/people.ts"),
   "document/person-colors.ts": await import("../../src/core/document/person-colors.ts"),
   "document/ports.ts": await import("../../src/core/document/ports.ts"),
+  "document/rows.ts": await import("../../src/core/document/rows.ts"),
   "document/tags.ts": await import("../../src/core/document/tags.ts"),
   "document/text-policy.ts": await import("../../src/core/document/text-policy.ts"),
   "document/timing.ts": await import("../../src/core/document/timing.ts"),
