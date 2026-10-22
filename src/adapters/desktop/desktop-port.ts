@@ -170,9 +170,9 @@ export const UNUSED_DESKTOP_MEMBERS = [
 let attached: DesktopPort | null = null;
 let current: DesktopPort | null = null;
 
-function use(port: DesktopPort | null): void {
-  current = port;
-  setRunningOnDesktop(port !== null);
+function use(port: DesktopPort | null | undefined): void {
+  current = port || null;
+  setRunningOnDesktop(current !== null);
 }
 
 export function attachDesktop(bridge: DesktopPort | null | undefined): void {
@@ -184,8 +184,8 @@ export function desktopPort(): DesktopPort | null {
   return current;
 }
 
-export function useDesktopForTest(fake: Partial<DesktopPort> | null): void {
-  use(fake as DesktopPort | null);
+export function useDesktopForTest(fake: Partial<DesktopPort> | null | undefined): void {
+  use(fake as DesktopPort | null | undefined);
 }
 
 export function restoreDesktop(): void {
