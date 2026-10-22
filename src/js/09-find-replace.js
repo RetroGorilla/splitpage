@@ -1,10 +1,9 @@
 import { normalizeTagName, registryTagHooks } from "../core/document/tags.ts";
 import { isBlankTagName } from "../core/production/tags.ts";
 import { TAG_CATEGORIES, tagCategory } from "../core/production/looks.ts";
-import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
 import { rewriteCellsCommand, rewrittenCopies } from "../application/commands/document-edit.ts";
 import { tagCellsCommand } from "../application/commands/production-records.ts";
 import { cssAttr, inertBody, sanitizeHtml } from "./04-richtext.js";
@@ -198,7 +197,7 @@ export function replaceInHtml(html, needle, replacement, nth, matchCase, hooks) 
 }
 
 export function refreshFindMatches(keepIndex) {
-  var found = findInRows(S.state ? S.state.rows : [], findNeedle(), findMatchesCase());
+  var found = findInRows(currentDocument()?.rows ?? [], findNeedle(), findMatchesCase());
   findMatches = found.matches;
   findInTags = found.inTags;
   if (!findMatches.length) findIndex = -1;
@@ -231,7 +230,7 @@ function currentMatchRange() {
   if (!cell) return null;
   var idx = readSession(function (doc) { return rowIndexOf(doc, m.rowId); });
   if (idx === -1) return null;
-  var model = cellOf(S.state.rows[idx][m.field]);
+  var model = cellOf(currentDocument().rows[idx][m.field]);
   var hit = findInCell(model, findNeedle(), findMatchesCase())[m.nth];
   if (!hit) return null;
   var range = domRangeFor(cell, hit.from, hit.to, projection(model));
@@ -310,7 +309,7 @@ export function replaceAll() {
     return out;
   }
   var total = readSession(replacedAll).total;
-  var inTags = S.state.rows.reduce(function (n, row) {
+  var inTags = currentDocument().rows.reduce(function (n, row) {
     return n + countInTags(cellOf(row.visualText), needle, findMatchesCase()) +
                countInTags(cellOf(row.audioText), needle, findMatchesCase());
   }, 0);
@@ -360,7 +359,7 @@ function bulkTagRefusal(needle, plan) {
 
 function renderBulkTagRow() {
   var needle = bulkTagNeedle();
-  var plan = bulkTagRows(S.state ? S.state.rows : [], needle, bulkTagCat, needle, findMatchesCase(), true);
+  var plan = bulkTagRows(currentDocument()?.rows ?? [], needle, bulkTagCat, needle, findMatchesCase(), true);
   var why = bulkTagRefusal(needle, plan);
   var ask = document.getElementById("find-tag-ask");
   var go = document.getElementById("find-tag-go");
@@ -388,7 +387,7 @@ function renderBulkTagRow() {
 
 function defaultBulkTagCat(needle) {
   var key = normalizeTagName(needle);
-  var tags = (S.state && S.state.productionTags) || [];
+  var tags = currentDocument()?.productionTags || [];
   for (var i = 0; i < tags.length; i++) {
     if (normalizeTagName(tags[i].name) === key && tagCategory(tags[i].cat)) return tags[i].cat;
   }
@@ -397,7 +396,7 @@ function defaultBulkTagCat(needle) {
 
 export function openBulkTag() {
   if (reviewBlocked()) return;
-  if (!S.state) return;
+  if (!currentDocument()) return;
   bulkTagCat = defaultBulkTagCat(bulkTagNeedle());
   var row = bulkTagRowEl();
   row.hidden = false;
@@ -426,10 +425,11 @@ function refreshBulkTagRow() {
 
 export function runBulkTag() {
   if (reviewBlocked()) return;
-  if (!S.state) return;
+  var doc = currentDocument();
+  if (!doc) return;
   var needle = bulkTagNeedle();
   var cat = tagCategory(bulkTagCat) || TAG_CATEGORIES[0];
-  var plan = bulkTagRows(S.state.rows, needle, cat.id, needle, findMatchesCase(), true);
+  var plan = bulkTagRows(doc.rows, needle, cat.id, needle, findMatchesCase(), true);
   var why = bulkTagRefusal(needle, plan);
   if (why) { showToast(why, "warn"); return; }
   breakUndoCoalescing();
@@ -478,7 +478,8 @@ function firstMatchFrom(range) {
   var rowIdx = rowEl ? readSession(function (doc) { return rowIndexOf(doc, rowEl.getAttribute("data-id")); }) : -1;
   if (rowIdx === -1) return 0;
   var field = cell.getAttribute("data-field");
-  var model = cellOf(S.state.rows[rowIdx][field]);
+  var rows = currentDocument().rows;
+  var model = cellOf(rows[rowIdx][field]);
   var expect = projection(model);
   var hits = findInCell(model, findNeedle(), findMatchesCase());
   var nth = 0;
@@ -488,7 +489,7 @@ function firstMatchFrom(range) {
     nth++;
   }
   var order = idMap();
-  S.state.rows.forEach(function (row, i) { order[row.id] = i; });
+  rows.forEach(function (row, i) { order[row.id] = i; });
   var at = field === "visualText" ? 0 : 1;
   for (var i = 0; i < findMatches.length; i++) {
     var m = findMatches[i], mi = order[m.rowId], mf = m.field === "visualText" ? 0 : 1;
