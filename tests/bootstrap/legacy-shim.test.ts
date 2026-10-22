@@ -79,7 +79,7 @@ interface LoadReport {
   readonly owners: Readonly<Record<string, boolean | string>>;
 }
 
-const NOTHING_STARTED = { session: false, saves: false, recovery: false, editor: false, effects: false, transitions: false, actions: false, exports: false };
+const NOTHING_STARTED = { session: false, saves: false, recovery: false, editor: false, productionEditing: false, effects: false, transitions: false, actions: false, exports: false };
 const CONFIGURES = /^(?:start|install|register|provide|configure|route|watch|hand|use|on)[A-Z]/;
 const run = promisify(execFile);
 
@@ -134,9 +134,9 @@ test("the load-order check catches a module that configures a bridge while it lo
 
 test("no numbered module configures a bridge or starts an owner while it loads: each is imported alone, with fresh module state", { timeout: 600_000 }, async () => {
   assert.equal(NUMBERED.length, 70, "every remaining numbered module");
-  const targets = [...NUMBERED, "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts"];
-  assert.equal(targets.length, 79);
-  for (const loadOnly of ["src/adapters/storage/03c-history-idb.js", "src/js/14c-export-projections.js", "src/js/14d-export-text.js", "src/js/14e-export-formats.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts"]) {
+  const targets = [...NUMBERED, "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts"];
+  assert.equal(targets.length, 80);
+  for (const loadOnly of ["src/adapters/storage/03c-history-idb.js", "src/js/14c-export-projections.js", "src/js/14d-export-text.js", "src/js/14e-export-formats.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts"]) {
     assert.ok(targets.includes(loadOnly), loadOnly);
   }
   const reports = await loadEachAlone(targets);

@@ -13,8 +13,6 @@ setInitialStateReady(null);
 S.editSeq = 0;
 S.dirty = false;
 export var suppressUnloadWarning = false;
-S.deleteArmId = null;
-S.deleteArmTimer = null;
 
 var LAST_FILE_DB = "splitpage-files", LAST_FILE_STORE = "handles", LAST_FILE_KEY = "last";
 

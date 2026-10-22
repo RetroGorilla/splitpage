@@ -54,7 +54,6 @@ import { cellOf } from "../legacy/richtext.ts";
 import { requestRefresh } from "../legacy/session-bridge.ts";
 import { focusMemory } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
-import { resetTagPanel } from "../application/tag-panel-state.ts";
 export {
   contentMemo,
   ensureTagIds,
@@ -738,54 +737,6 @@ export function removeTag(cat, name) {
 }
 
 var pendingTag = null;
-S.tagDeleteArmId = null;
-S.tagDeleteArmTimer = null;
-
-export var productionSelection = {};
-S.selectionAnchorKey = null;
-export var bulkDeleteArmed = false;
-var bulkDeleteArmTimer = null;
-
-export function selectedKeys() { return Object.keys(productionSelection); }
-
-export function armBulkDelete() {
-  bulkDeleteArmed = true;
-  clearTimeout(bulkDeleteArmTimer);
-  bulkDeleteArmTimer = setTimeout(function () {
-    bulkDeleteArmed = false;
-    renderProduction();
-  }, 2800);
-}
-
-export function disarmBulkDelete() {
-  clearTimeout(bulkDeleteArmTimer);
-  bulkDeleteArmed = false;
-}
-
-export function clearProductionSelection() {
-  productionSelection = {};
-  S.selectionAnchorKey = null;
-  disarmBulkDelete();
-}
-
-export function pruneProductionSelection(entries) {
-  var live = {};
-  entries.forEach(function (e) { live[e.key] = true; });
-  var dropped = false;
-  selectedKeys().forEach(function (k) {
-    if (!live[k]) { delete productionSelection[k]; dropped = true; }
-  });
-  if (dropped) disarmBulkDelete();
-  if (S.selectionAnchorKey && !live[S.selectionAnchorKey]) S.selectionAnchorKey = null;
-}
-
-export function resetProductionPanelState() {
-  resetTagPanel();
-  clearTimeout(S.tagDeleteArmTimer);
-  S.tagDeleteArmId = null;
-  clearProductionSelection();
-}
-
 export function renderTagCategories(selected) {
   document.getElementById("tag-cats").innerHTML = TAG_CATEGORIES.map(function (c) {
     return '<button type="button" class="tag-cat-btn' + (c.id === selected ? ' is-active' : '') +

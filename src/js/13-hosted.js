@@ -41,7 +41,7 @@ import {
 import { cssAttr, inertBody } from "./04-richtext.js";
 import { withBusyBar } from "./04b-busy.js";
 import { render, renderAbsorbed } from "./05-render.js";
-import { resetProductionPanelState } from "./07-production-tags.js";
+import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import {
   captureReplyDrafts,
   formatTimestamp,
