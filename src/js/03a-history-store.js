@@ -4,11 +4,10 @@ import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { dataUrlForSync, ensureBytes, inlineStateJson, intern, persist, recordFor } from "../adapters/storage/02c-blobs.js";
 import {
-  SNAPSHOT_KEY,
   getEditorName,
-  readLegacySnapshotsRaw,
   renderHistory
 } from "./03-sync.js";
+import { legacySnapshots } from "../legacy/recovery-bridge.ts";
 import { createIdbHistoryBackend, hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
 import { showToast } from "./12-dirty-toast.js";
 import { seedCheckPasses } from "./20b-onboarding.js";
@@ -28,7 +27,6 @@ import { imageDims, isSha256Hex, refsIn, sniffImageMime } from "../../shared/blo
 import { makeId, mintDocId } from "../adapters/identity/ids.ts";
 import { checksumText } from "../../shared/text.js";
 export {
-  HISTORY_OLDER_KEY,
   HISTORY_OLDER_TTL_MS,
   HISTORY_PER_DOC,
   historyStampAfter,
@@ -1154,8 +1152,7 @@ export async function importHistoryBundle(bundle) {
 }
 
 function historyLegacyRaw() {
-  if (typeof readLegacySnapshotsRaw === "function") return readLegacySnapshotsRaw();
-  try { return localStorage.getItem(SNAPSHOT_KEY); } catch (e) { return null; }
+  return legacySnapshots().readRaw();
 }
 
 export function normalizeLegacySnapshots(raw) {
@@ -1234,10 +1231,7 @@ function runHistoryMigration() {
           var confirmed = entries.every(function (e) { return have[e.meta.id]; });
           if (!confirmed) return result;
           if (historyLegacyRaw() !== raw) return loop();
-          try {
-            localStorage.removeItem(SNAPSHOT_KEY);
-            result.removedKey = true;
-          } catch (e) { }
+          if (legacySnapshots().remove()) result.removedKey = true;
           historyRenderSoon();
           return result;
         });

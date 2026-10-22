@@ -1,4 +1,4 @@
-export type NoticeKind = string;
+export type NoticeKind = "" | "ok" | "warn" | "error";
 
 export interface Notice {
   readonly isConnected: boolean;
