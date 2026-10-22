@@ -1,3 +1,5 @@
+import { cssDurationMs } from "../common/css-duration.js";
+
 export function rowMotionKey(el) {
   if (!el || !el.classList) return null;
   if (el.classList.contains("row")) return "row:" + el.getAttribute("data-id");
@@ -35,16 +37,6 @@ function measureRowMotion(rowsEl) {
   return out;
 }
 
-export function rowMotionMs(name, fallback) {
-  try {
-    var raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    if (!raw) return fallback;
-    var n = parseFloat(raw);
-    if (!isFinite(n)) return fallback;
-    return /ms$/.test(raw) ? n : n * 1000;
-  } catch (e) { return fallback; }
-}
-
 export function withRowMotion(rowsEl, paint) {
   if (!rowsEl || !rowMotionEnabled() || rowsEl.children.length > ROW_MOTION_MAX_ROWS) {
     paint();
@@ -60,8 +52,8 @@ export function withRowMotion(rowsEl, paint) {
     if (rowsEl.children.length > ROW_MOTION_MAX_ROWS) return;
     var after = measureRowMotion(rowsEl);
 
-    var moveMs = rowMotionMs("--dur-move", 180);
-    var enterMs = rowMotionMs("--dur-enter", 180);
+    var moveMs = cssDurationMs(window, "--dur-move", 180);
+    var enterMs = cssDurationMs(window, "--dur-enter", 180);
     var easeStandard = "cubic-bezier(0.2, 0, 0, 1)";
     var easeEnter = "cubic-bezier(0.05, 0.7, 0.1, 1)";
 
@@ -108,4 +100,3 @@ export function withRowMotion(rowsEl, paint) {
   }
 }
 
-export function __init() {}
