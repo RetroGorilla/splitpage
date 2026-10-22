@@ -1,6 +1,6 @@
 # The Production and Gear panels in a review session (#30;
 # src/js/08-production-panels.js, 20-teleprompter.js wireTagEntityContainer,
-# 22b-production-wiring.js): the breakdown to read, not to change.
+# src/bootstrap/wiring/production.ts): the breakdown to read, not to change.
 #
 # Their clicks were already refused by the click guard (src/features/review/click-gate.ts
 # REVIEW_SAFE_ACTIONS), but their form fields were not: a reviewer could
