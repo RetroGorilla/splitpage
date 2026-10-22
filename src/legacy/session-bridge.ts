@@ -174,7 +174,7 @@ function viewedDocument(): ValidatedDocument | null {
 export const currentDocument: () => ValidatedDocument | null = documentGuardOn ? viewedDocument : heldDocument;
 
 export const liveDocumentPort: LiveDocumentPort = Object.freeze({
-  current: heldDocument,
+  current: currentDocument,
   assign: adoptReplacement,
   stamp: stampDocument
 });
