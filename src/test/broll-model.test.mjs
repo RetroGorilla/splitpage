@@ -13,9 +13,10 @@ import {
   brollShotsByProp, recordPastedBroll, removeBrollProp, renameBrollInScript
 } from "../js/08c-broll.js";
 import { renameTag } from "../js/07-production-tags.js";
-import { buildBreakdownCsv, buildBrollCsv } from "../js/16-csv.js";
+import { buildBreakdownCsv, buildBrollCsv } from "../adapters/formats/csv.ts";
 import { buildShotListPdf } from "../js/17-pdf.js";
-import { exportDocumentOf, sceneFacts } from "../js/14b-export-kit.js";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 import { loadTestDocument } from "./_document.mjs";
 
