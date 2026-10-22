@@ -149,10 +149,11 @@ function captureViewDocument(): () => boolean {
   return function () { return stillOwns(context); };
 }
 
+let topbar: Disposable | null = null;
+
 export function mountTopbarFeature(): Disposable {
-  return replaceViewMount("mountTopbar", function () {
-    return mountTopbar({ window: window });
-  });
+  if (!topbar) topbar = mountTopbar({ window: window });
+  return topbar;
 }
 
 export function mountCellReachFeature(): Disposable {

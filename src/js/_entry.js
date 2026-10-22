@@ -72,7 +72,7 @@ import { legacySavePorts } from "./14-export.js";
 import { registerBuiltInExporters } from "./14e-export-formats.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { wireApp } from "../bootstrap/wiring.ts";
-import { startAppWhenReady } from "../bootstrap/app.ts";
+import { mountTopbarFeature, startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
 try {
@@ -154,6 +154,7 @@ if (wiring) {
   init_20f_desktop();
   init_20g_drafts();
   init_20h_appdata();
+  mountTopbarFeature();
   init_20j_newtab();
   init_20s_settings();
   startAppWhenReady(document, wiring);
