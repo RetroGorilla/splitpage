@@ -7,11 +7,11 @@ import {
 } from "./01-scene-status.js";
 import { cssAttr } from "./04-richtext.js";
 import { afterThisPaint, render, renderRow } from "./05-render.js";
-import { showToast } from "./12-dirty-toast.js";
 import { redo, undo } from "./12a-undo.js";
 import { reviewMode } from "./13-hosted.js";
 import { sceneAt, sceneLengthCommand } from "../application/commands/scene-length.ts";
 import { REVIEW_ONLY, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
+import { showToast } from "../legacy/effects-bridge.ts";
 
 var REVIEW_REFUSAL = "This is a review copy — comment on a scene instead of changing its length.";
 

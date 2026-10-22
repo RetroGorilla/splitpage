@@ -1,5 +1,4 @@
 import { S } from "./_state.js";
-import { showToast } from "./12-dirty-toast.js";
 import {
   brollSummaryText, captureExportDocument, exportBrollScenes, exportComments, exportFacts, exportRuns, sceneFacts
 } from "./14b-export-kit.js";
@@ -8,7 +7,7 @@ import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "./14d-export-
 import { exportToggleOptions } from "./14e-export-formats.js";
 import { narrationRows } from "./15-docx.js";
 import { exportBaseName, exportFileName, handleFileMenuAction, runExportAction } from "./18-local-files.js";
-import { onFileMenuRefresh, setMenuItemLabel, setMenuItemReason } from "./18b-file-menu.js";
+import { onFileMenuRefresh } from "./18b-file-menu.js";
 import { tagPrintColor } from "../adapters/formats/print-colors.ts";
 import { rowImage } from "../core/document/media.ts";
 import { tagCategory } from "../core/production/looks.ts";
@@ -16,6 +15,7 @@ import { escapeHtml, unitSafePrefix } from "../core/document/text-policy.ts";
 import { toPlainText } from "../core/text/projections.ts";
 import { exportFormats } from "../legacy/export-formats.ts";
 import { cellOf } from "../legacy/richtext.ts";
+import { setMenuItemLabel, setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
 
 var LAST_EXPORT_KEY = "splitpage-last-export";
 

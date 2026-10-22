@@ -6,12 +6,12 @@ import { cappedLongText, plainText } from "../core/document/text-policy.ts";
 import { migrateDocument as migrateDocumentWith } from "../core/migrate.ts";
 import { withDocumentPorts } from "../legacy/document-ports.ts";
 import { documentTransitions } from "../legacy/transition-bridge.ts";
+import { showToast } from "../legacy/effects-bridge.ts";
 import { neverWrittenOut } from "../application/recovery/pristine.ts";
 import { base64Encode } from "../core/document/media.ts";
 import { STATE_FIELDS, buildPublishHtml, defaultState, migrateRows } from "./02-state.js";
 import { inlineStateImages } from "../adapters/storage/02c-blobs.js";
 import { copyHistory, historyDocumentChanged } from "./03a-history-store.js";
-import { showToast } from "./12-dirty-toast.js";
 import { onServerDoc } from "./13-hosted.js";
 import {
   decideDuplicateLoser,

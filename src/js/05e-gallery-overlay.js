@@ -20,7 +20,6 @@ import {
 import { embedRefusal, fetchThumbnailRecord, playerSrc, thumbnailsAllowed } from "./05v-video.js";
 import { openAnnotator, refreshAnnotator } from "./05w-annotate.js";
 import { hasSessionVideo, openGalleryLink, sessionVideoUrl } from "./06-rows.js";
-import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, lastUndoEntry, undo } from "./12a-undo.js";
 import { reviewMode } from "./13-hosted.js";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
@@ -28,6 +27,7 @@ import { escapeHtml } from "../core/document/text-policy.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { pickPictureFor } from "../legacy/editor-bridge.ts";
+import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 import { galleryCommand } from "../application/commands/gallery.ts";
 import { formatVideoLength } from "../../shared/text.js";
 import { embeddableVideo } from "../../shared/video-embed.js";

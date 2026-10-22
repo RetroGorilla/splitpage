@@ -13,7 +13,7 @@ import { plainTagOpen } from "./07b-plain-tags.js";
 import { renderProduction, updateGearCount } from "./08-production-panels.js";
 import { brollPropsRenamed, runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
 import { domRangeFor } from "./09-find-replace.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
 import { updateWriterStats, writerOpen } from "./19-writer.js";
@@ -53,6 +53,7 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { requestRefresh } from "../legacy/session-bridge.ts";
 import { focusMemory } from "../legacy/editor-bridge.ts";
+import { showToast } from "../legacy/effects-bridge.ts";
 import { resetTagPanel } from "../application/tag-panel-state.ts";
 export {
   contentMemo,

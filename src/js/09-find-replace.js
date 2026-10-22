@@ -10,7 +10,7 @@ import {
   bulkTagRows,
   registerProductionTag
 } from "./07-production-tags.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
@@ -21,6 +21,7 @@ import { replaceText } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
 import { projection } from "../core/text/runs.ts";
 import { cellOf } from "../legacy/richtext.ts";
+import { showToast } from "../legacy/effects-bridge.ts";
 import { findMatchesCase } from "../application/find-options.ts";
 
 export var findOpen = false;
