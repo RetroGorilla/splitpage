@@ -1,3 +1,5 @@
+import { createViewLifetime } from "../common/view-lifetime.ts";
+
 export interface FindPorts {
   readonly closeFindBar: () => void;
   readonly stepFind: (direction: number) => void;
@@ -19,13 +21,9 @@ type FindEvent = KeyboardEvent & { readonly target: HTMLElement; readonly curren
 export function mountFind(mount: { window: Window; ports: FindPorts }): { dispose: () => void } {
   const doc = mount.window.document;
   const ports = mount.ports;
-  const releases: (() => void)[] = [];
+  const life = createViewLifetime<FindEvent>(mount.window, () => true);
   function listen(id: string, type: string, fn: (event: FindEvent) => void): void {
-    const target = doc.getElementById(id);
-    if (!target) return;
-    const handler = fn as EventListener;
-    target.addEventListener(type, handler, false);
-    releases.push(() => target.removeEventListener(type, handler, false));
+    life.listen(doc.getElementById(id), type, fn);
   }
   listen("find-close", "click", ports.closeFindBar);
   listen("find-next", "click", function () { ports.stepFind(1); });
@@ -62,5 +60,5 @@ export function mountFind(mount: { window: Window; ports: FindPorts }): { dispos
     if (e.target.id === "replace-input") { ports.replaceCurrent(); return; }
     ports.stepFind(e.shiftKey ? -1 : 1);
   });
-  return { dispose: () => { releases.splice(0).reverse().forEach((release) => release()); } };
+  return { dispose: life.dispose };
 }

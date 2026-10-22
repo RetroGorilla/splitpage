@@ -1,3 +1,5 @@
+import { createViewLifetime } from "../common/view-lifetime.ts";
+
 type BrollEvent = Event & { readonly target: HTMLElement & { value: string }; readonly key: string };
 
 export interface BrollPorts {
@@ -26,21 +28,12 @@ export function mountBroll(mount: { window: Window; ports: BrollPorts }): { disp
   const ports = mount.ports;
   const panel = doc.getElementById("broll-panel");
   const page = doc.getElementById("broll-page");
-  const releases: (() => void)[] = [];
-  let open = true;
   function current(target: HTMLElement): boolean {
     return doc.getElementById(target.id) === target;
   }
-  function listen(target: EventTarget | null, type: string, fn: (event: BrollEvent) => void): void {
-    if (!target) return;
-    const handler: EventListener = (event) => {
-      if (!open || !panel || !current(panel)) return;
-      if (target !== win && target !== doc && !current(target as HTMLElement)) return;
-      fn(event as BrollEvent);
-    };
-    target.addEventListener(type, handler, false);
-    releases.push(() => target.removeEventListener(type, handler, false));
-  }
+  const life = createViewLifetime<BrollEvent>(win, (target) =>
+    !!panel && current(panel) && (target === win || target === doc || current(target as HTMLElement)));
+  const { listen } = life;
   function rootListeners(root: HTMLElement): void {
     listen(root, "click", (event) => ports.click(event, root));
     listen(root, "change", ports.change);
@@ -94,9 +87,8 @@ export function mountBroll(mount: { window: Window; ports: BrollPorts }): { disp
   }
   return {
     dispose(): void {
-      if (!open) return;
-      open = false;
-      releases.splice(0).reverse().forEach((release) => release());
+      if (!life.active()) return;
+      life.dispose();
       ports.reset();
     }
   };
