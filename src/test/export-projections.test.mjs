@@ -3,7 +3,8 @@ import "./_export-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
-import { CLOCK_KEY, writePref } from "../js/00p-prefs.js";
+import "./_preferences-started.mjs";
+import { preferences } from "../legacy/preferences-bridge.ts";
 import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
@@ -60,7 +61,7 @@ test("the projections give the same answer after the live document changes, beca
 
 test("a comment's time is formatted with the clock the caller names, not the stored preference", () => {
   demo();
-  writePref(CLOCK_KEY, "12");
+  preferences().setClock("12");
   try {
     const doc = exportDocumentOf(S.state);
     const stamped = (opts) => commentEntries(doc, opts).map((c) => c.when);
@@ -69,13 +70,14 @@ test("a comment's time is formatted with the clock the caller names, not the sto
     assert.ok(twentyFour.length > 0);
     assert.ok(twentyFour.every((w) => !/\b[AP]M\b/i.test(w)), twentyFour.join(" | "));
     assert.ok(twelve.every((w) => /\b[AP]M\b/i.test(w)), twelve.join(" | "));
-    assert.deepEqual(stamped({}), twelve, "with no clock named, the stored preference decides");
-    writePref(CLOCK_KEY, "24");
-    assert.deepEqual(stamped({}), twentyFour, "setup: the stored preference now says 24-hour");
+    const system = stamped({ clockMode: "system" });
+    assert.deepEqual(stamped({}), system, "with no clock named, the projection uses the system clock and reads no preference");
+    preferences().setClock("24");
+    assert.deepEqual(stamped({}), system, "changing the stored preference does not reach the projection");
     assert.deepEqual(exportComments(doc).map((c) => c.when), twelve, "the writers use the clock captured with the document");
     assert.deepEqual(stamped({ clockMode: "12" }), twelve, "a clock named by the caller ignores the stored preference");
   } finally {
-    writePref(CLOCK_KEY, null);
+    preferences().setClock("system");
   }
 });
 

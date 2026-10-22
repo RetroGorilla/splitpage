@@ -3,7 +3,8 @@ import "./_export-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
-import { CLOCK_KEY, writePref } from "../js/00p-prefs.js";
+import "./_preferences-started.mjs";
+import { preferences } from "../legacy/preferences-bridge.ts";
 import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { blobStore, intern } from "../adapters/storage/02c-blobs.js";
@@ -48,18 +49,18 @@ test("a Markdown export of a scene that holds only a picture writes the picture,
 
 test("plain-text and project-Markdown comment times use the clock captured with the document, not the setting at serialization", () => {
   loadTestDocument(migrateRows(copy(LONG_DEMO.state)));
-  writePref(CLOCK_KEY, "12");
+  preferences().setClock("12");
   try {
     const doc = exportDocumentOf(S.state);
     const text = htmlToPlainScript(doc);
     const project = toMarkdownTableDoc(doc);
     assert.ok(MARKS_PM.test(text), "setup: the captured clock is 12-hour");
     assert.ok(MARKS_PM.test(project), "setup: the captured clock is 12-hour");
-    writePref(CLOCK_KEY, "24");
+    preferences().setClock("24");
     assert.equal(htmlToPlainScript(doc), text, "plain text keeps the captured clock");
     assert.equal(toMarkdownTableDoc(doc), project, "project Markdown keeps the captured clock");
   } finally {
-    writePref(CLOCK_KEY, null);
+    preferences().setClock("system");
   }
 });
 

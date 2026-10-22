@@ -1,6 +1,5 @@
 import { normalizeServerUrl } from "./_home.js";
 import { S } from "./_state.js";
-import { SETTINGS_APPDATA_PREFS } from "./00p-prefs.js";
 import { setBackend as setBlobBackend } from "../adapters/storage/02c-blobs.js";
 import { LEGACY_SNAPSHOTS_KEY } from "../application/recovery/legacy-snapshots.ts";
 import {
@@ -25,6 +24,7 @@ import {
 } from "./20e-connect.js";
 import { cappedName } from "../core/document/text-policy.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
+import { settingsAppData } from "../application/preferences/preferences.ts";
 import { setCommentSort } from "../application/comment-sort.ts";
 
 var APPDATA_FORMAT = "splitpage-app-data";
@@ -213,7 +213,7 @@ function appDataNormalizePrefs(p) {
     taggingHelpDismissed: str(p.taggingHelpDismissed),
     autosave: str(p.autosave)
   };
-  SETTINGS_APPDATA_PREFS.forEach(function (spec) { out[spec.name] = str(p[spec.name]); });
+  settingsAppData().forEach(function (spec) { out[spec.name] = str(p[spec.name]); });
   return out;
 }
 
@@ -308,7 +308,7 @@ function appDataExtraPrefs() {
   return [
     { name: "commentsSort", key: COMMENTS_SORT_KEY,
       valid: function (v) { return v === "recent" || v === "position"; } }
-  ].concat(SETTINGS_APPDATA_PREFS);
+  ].concat(settingsAppData());
 }
 
 function appDataMergePrefs(prefs) {
