@@ -4,18 +4,14 @@ import { TAG_CATEGORIES, tagCategory } from "../core/production/looks.ts";
 import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession } from "../legacy/session-bridge.ts";
-import { stampRow } from "./03-sync.js";
+import { readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
+import { rewriteCellsCommand, rewrittenCopies } from "../application/commands/document-edit.ts";
+import { tagCellsCommand } from "../application/commands/production-records.ts";
 import { cssAttr, inertBody, sanitizeHtml } from "./04-richtext.js";
 import { render } from "./05-render.js";
-import {
-  bulkTagRows,
-  registerProductionTag
-} from "./07-production-tags.js";
-import { markDirty } from "./12-dirty-toast.js";
+import { bulkTagRows } from "./07-production-tags.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked } from "./13-hosted.js";
-import { queueAutoSave } from "./14-export.js";
 import { BROLL_MARKER_RE } from "../core/document/broll.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml, withoutLoneSurrogates } from "../core/document/text-policy.ts";
@@ -281,16 +277,17 @@ export function replaceCurrent() {
   var idx = readSession(function (doc) { return rowIndexOf(doc, m.rowId); });
   if (idx === -1) return;
   var replacement = document.getElementById("replace-input").value || "";
-  var res = replaceInHtml(S.state.rows[idx][m.field], needle, replacement, m.nth, findMatchesCase(),
-    registryTagHooks(S.state.productionTags));
-  if (!res.changed) return;
-  S.state.rows[idx][m.field] = res.html;
-  stampRow(S.state.rows[idx]);
-  markDirty();
+  var matchCase = findMatchesCase();
+  function replaced(doc) {
+    var row = doc.rows[rowIndexOf(doc, m.rowId)];
+    if (!row) return [];
+    var res = replaceInHtml(row[m.field], needle, replacement, m.nth, matchCase, registryTagHooks(doc.productionTags));
+    return res.changed ? [{ rowId: m.rowId, field: m.field, html: res.html }] : [];
+  }
+  if (!runDocumentEdit(rewriteCellsCommand("replace-match", replaced, sessionStamps, { needs: "edit", stamped: true }))) return;
   render();
   refreshFindMatches(true);
   revealFindMatch();
-  queueAutoSave();
 }
 
 export function replaceAll() {
@@ -298,17 +295,21 @@ export function replaceAll() {
   var needle = findNeedle();
   if (!needle) return;
   var replacement = document.getElementById("replace-input").value || "";
-  var hooks = registryTagHooks(S.state.productionTags);
-  var total = 0;
-  S.state.rows.forEach(function (row) {
-    ["visualText", "audioText"].forEach(function (field) {
-      var res = replaceInHtml(row[field], needle, replacement, -1, findMatchesCase(), hooks);
-      if (!res.changed) return;
-      total += res.changed;
-      row[field] = res.html;
-      stampRow(row);
+  var matchCase = findMatchesCase();
+  function replacedAll(doc) {
+    var hooks = registryTagHooks(doc.productionTags);
+    var out = { total: 0, rewrites: [] };
+    doc.rows.forEach(function (row) {
+      ["visualText", "audioText"].forEach(function (field) {
+        var res = replaceInHtml(row[field], needle, replacement, -1, matchCase, hooks);
+        if (!res.changed) return;
+        out.total += res.changed;
+        out.rewrites.push({ rowId: row.id, field: field, html: res.html });
+      });
     });
-  });
+    return out;
+  }
+  var total = readSession(replacedAll).total;
   var inTags = S.state.rows.reduce(function (n, row) {
     return n + countInTags(cellOf(row.visualText), needle, findMatchesCase()) +
                countInTags(cellOf(row.audioText), needle, findMatchesCase());
@@ -316,17 +317,15 @@ export function replaceAll() {
   var tagNote = inTags
     ? " · " + inTags + " left inside tag" + (inTags === 1 ? "" : "s") + " — rename those in Production"
     : "";
-  if (!total) {
+  if (!total || !runDocumentEdit(rewriteCellsCommand("replace-all", function (doc) { return replacedAll(doc).rewrites; }, sessionStamps, { needs: "edit", stamped: true }))) {
     showToast(inTags
       ? "Only found inside tags — rename it in Production instead."
       : "Nothing to replace.", "warn");
     return;
   }
-  markDirty();
   render();
   refreshFindMatches(false);
   revealFindMatch();
-  queueAutoSave();
   showToast("Replaced " + total + " match" + (total === 1 ? "" : "es") + tagNote, "ok");
 }
 
@@ -434,16 +433,18 @@ export function runBulkTag() {
   var why = bulkTagRefusal(needle, plan);
   if (why) { showToast(why, "warn"); return; }
   breakUndoCoalescing();
-  var done = bulkTagRows(S.state.rows, needle, cat.id, needle, findMatchesCase(), false);
-  if (!done.hits) { showToast(bulkTagRefusal(needle, done) || "Nothing to tag.", "warn"); return; }
-  registerProductionTag(cat.id, needle);
-  markDirty();
+  var done = plan;
+  var matchCase = findMatchesCase();
+  var tagged = rewrittenCopies(["visualText"], function (rows) { bulkTagRows(rows, needle, cat.id, needle, matchCase, false); });
+  if (!done.hits || !runDocumentEdit(tagCellsCommand("bulk-tag", tagged, { cat: cat.id, name: needle }, sessionStamps))) {
+    showToast(bulkTagRefusal(needle, done) || "Nothing to tag.", "warn");
+    return;
+  }
   breakUndoCoalescing();
   render();
   closeBulkTag();
   refreshFindMatches(false);
   revealFindMatch();
-  queueAutoSave();
   var note = "";
   if (done.inTags) note += " \u00b7 " + done.inTags + " already tagged";
   if (done.skipped) note += " \u00b7 " + done.skipped + " skipped";

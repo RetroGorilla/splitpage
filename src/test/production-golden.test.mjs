@@ -142,7 +142,7 @@ function repairAll(out) {
   out.brollRepair = sameAsOr("brollRead", out.brollRead, repair);
   out.shotsAfterRepair = unchangedOr(shotsBefore, S.state.brollShots);
   const rowsBefore = jsonCopy(S.state.rows.map((r) => r.visualText));
-  out.anchored = anchorBrollInRows(S.state.rows);
+  out.anchored = anchorBrollInRows(S.state);
   out.visualAfterAnchoring = unchangedOr(rowsBefore, S.state.rows.map((r) => r.visualText));
   out.brollAfterAnchoring = sameAsOr("brollRepair", repair, brollView(brollEntries()));
   return out;
