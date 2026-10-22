@@ -7,6 +7,7 @@ import { S } from "../js/_state.js";
 import { table304Document } from "../../tests/application/raw-inputs.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -431,13 +432,12 @@ test("a desktop file draft over an untouched file whose render throws still rest
     const disk = table304Document("On disk");
     const mine = table304Document("On disk");
     mine.rows[0].audioText = "Typed before the crash.";
-    const was = S.DESKTOP;
-    S.DESKTOP = {
+    useDesktopForTest({
       readFile: async () => {
-        S.DESKTOP = was;
+        restoreDesktop();
         return { name: "guard.splitpage", bytes: new TextEncoder().encode(JSON.stringify(disk)), lastModified: 5 };
       }
-    };
+    });
     return {
       draft: { header: { origin: { kind: "file", fileName: "guard.splitpage" }, docIdWrittenOut: true }, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(disk), file: { id: "f-guard", name: "guard.splitpage" } },
       observe: () => { const book = unsavedChanges(); clearDirty(); setHome("none"); return book; }

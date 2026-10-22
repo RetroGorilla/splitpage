@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import ts from "typescript";
 import { S } from "../js/_state.js";
 import { cloneState } from "../core/document/clone.ts";
+import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 
 const atBoot = await bootApp();
@@ -165,16 +166,15 @@ test("03-sync applyMerge's adopt, nothing to merge: the session absorbs theirs a
 
 test("13-hosted openServerDoc: migrateDocument's answer through the live-document port, a migrateRows fixed point", async () => {
   const realFetch = globalThis.fetch;
-  const desktop = S.DESKTOP;
   globalThis.fetch = async () => new Response(JSON.stringify({ id: "doc1", rev: 3, state: rawDoc("From the server") }),
     { status: 200, headers: { "content-type": "application/json" } });
-  S.DESKTOP = {};
+  useDesktopForTest({});
   try {
     const got = await drive(() => openServerDoc("doc1"));
     assert.equal(fixedPoint(only(got, "replaced")), true);
   } finally {
     globalThis.fetch = realFetch;
-    S.DESKTOP = desktop;
+    restoreDesktop();
   }
 });
 
@@ -208,12 +208,11 @@ test("20g restoreFileDraft, a desktop file untouched since the draft's base: the
   const docId = "d" + "2".repeat(32);
   const disk = migrateRows(Object.assign(rawDoc("On disk"), { docId }));
   const bytes = new TextEncoder().encode(buildSplitpageFile(exportDocumentOf(disk)));
-  const desktop = S.DESKTOP;
-  S.DESKTOP = {
+  useDesktopForTest({
     readFile: async () => ({ name: "disk.splitpage", bytes, lastModified: 1 }),
     setDocumentState: () => {},
     draftRestoreDone: () => {}
-  };
+  });
   const t = {
     header: { origin: { kind: "file", fileName: "disk.splitpage" }, docIdWrittenOut: true },
     file: { id: "f1", name: "disk.splitpage" },
@@ -226,7 +225,7 @@ test("20g restoreFileDraft, a desktop file untouched since the draft's base: the
     assert.equal(fixedPoint(value), true);
     assert.equal(value.title, "Edited since");
   } finally {
-    S.DESKTOP = desktop;
+    restoreDesktop();
   }
 });
 

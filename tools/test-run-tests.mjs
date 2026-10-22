@@ -34,13 +34,14 @@ console.log("\ndiscover():\n");
     "src/features/rows/view.test.mts",
     "tests/application/session.test.ts",
     "desktop/test/drafts.test.mjs",
+    "desktop/electron-arch.test.mjs",
     "desktop/test/smoke.mjs",
     "tools/test-x.mjs"
   ]);
   eq("frontend tests are found", groupFiles(found, "frontend"), ["src/test/a.test.mjs"]);
   eq("colocated TypeScript tests are found", groupFiles(found, "source"), ["src/core/text/runs.test.ts", "src/features/rows/view.test.mts"]);
   eq("tests/ is found", groupFiles(found, "tests"), ["tests/application/session.test.ts"]);
-  eq("desktop scripts that are not tests are left alone", groupFiles(found, "desktop"), ["desktop/test/drafts.test.mjs"]);
+  eq("desktop scripts that are not tests are left alone", groupFiles(found, "desktop"), ["desktop/electron-arch.test.mjs", "desktop/test/drafts.test.mjs"]);
   eq("nothing is orphaned", found.orphans, []);
 }
 

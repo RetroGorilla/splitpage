@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 
 await bootApp();
 const { mountNoticesFeature } = await import("../bootstrap/wiring/views.ts");
@@ -10,7 +10,6 @@ after(closeApp);
 for (const source of ["browser", "desktop"]) {
   for (const scenario of ["dispose while held", "stale completion after remount", "normal completion"]) {
     test("notices app: " + source + " update status, " + scenario, async () => {
-      const priorDesktop = S.DESKTOP;
       const priorFetch = globalThis.fetch;
       let finish;
       let callback;
@@ -18,12 +17,12 @@ for (const source of ["browser", "desktop"]) {
       let activePending = pending;
       mountNoticesFeature().dispose();
       if (source === "desktop") {
-        S.DESKTOP = {
+        useDesktopForTest({
           getUpdateStatus: () => activePending,
           onUpdateStatus: (fn) => { callback = fn; }
-        };
+        });
       } else {
-        S.DESKTOP = null;
+        useDesktopForTest(null);
         globalThis.fetch = (url, ...args) => url === "update-status.json" ? activePending : priorFetch(url, ...args);
       }
       const owner = mountNoticesFeature();
@@ -54,7 +53,7 @@ for (const source of ["browser", "desktop"]) {
       } finally {
         owner.dispose();
         replacement?.dispose();
-        S.DESKTOP = priorDesktop;
+        restoreDesktop();
         globalThis.fetch = priorFetch;
       }
     });

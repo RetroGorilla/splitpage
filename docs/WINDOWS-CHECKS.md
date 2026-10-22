@@ -110,19 +110,18 @@ Then, for the desktop shell:
 
 ```
 cd desktop
-npm install          # .npmrc pins native ARM64; a plain install gets the right one
-node node_modules/electron/install.js  # x64 machines only — see below
+npm ci
+npm run fetch-electron
 node test/smoke.mjs                    # dev + every packaged exe in dist/
 node test/smoke.mjs --only-target dev   # dev only, fastest loop
 ```
 
-**On an x64 Windows machine, `npm install` leaves no Electron binary**, and
-the dev smoke says "No target found". Electron 44 fetches its binary
-lazily, and anything routed through npm picks up `desktop/.npmrc`'s
-`arch=arm64` (it is there for the ARM machine). Run
-`node node_modules\electron\install.js` once in `desktop\`: invoked
-directly it falls back to the machine's own architecture and fetches x64.
-The ARM machine does not need this. (Found in run 2b.)
+Electron 44 has no postinstall. Run `npm run fetch-electron` after `npm ci`
+on both x64 and ARM64 Windows. The script detects native ARM64 even when
+Node runs as x64 under emulation. Explicit `npm_config_arch`,
+`ELECTRON_ARCH` or `ELECTRON_INSTALL_ARCH` overrides detection, in that
+order; unknown values fail.
+Electron's `install.js` skips installation when a same-version dist already exists regardless of its architecture, so switching architecture requires `npm ci` first.
 
 Never launch the app directly — always through `smoke.mjs`'s `launchApp`, which
 sets `SPLITPAGE_TEST=1` and a temp profile.
@@ -133,18 +132,15 @@ sets `SPLITPAGE_TEST=1` and a temp profile.
 node build.mjs                          # main.js serves index.html from APP_ROOT
 cd desktop
 npm ci
-node node_modules/electron/install.js   # NOT npx — see below
+npm run fetch-electron
 xvfb-run -a node test/smoke.mjs --only-target dev
 ```
 
 Three things to know:
 
-- **`node install.js`, not `npx install-electron`.** Electron 44 has no
-  postinstall — the binary is fetched lazily — and anything routed through
-  npm picks up `desktop/.npmrc`'s `arch=arm64` (which is there for the
-  Windows-on-ARM machine) as `npm_config_arch` and downloads a build an x64
-  Linux box cannot run. Invoked directly, `install.js` falls back to
-  `process.arch`.
+- **Run `npm run fetch-electron` after `npm ci`.** Electron 44 has no
+  postinstall. The script selects `process.arch` on Linux unless an explicit
+  architecture override is set.
 - **A display is required.** Electron has no headless mode for a real
   `BrowserWindow`; `xvfb-run -a` picks a free display number itself.
 - **The suite adds `--no-sandbox` for the Linux dev target, by itself.**
