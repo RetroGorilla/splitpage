@@ -40,7 +40,6 @@ import {
   serverSessionExpired
 } from "./13-hosted.js";
 import { warnImagesLeftOut } from "./14-export.js";
-import { exportToggleOptions } from "./14e-export-formats.js";
 import { docxToRows } from "./15-docx.js";
 import { csvToRows } from "./16-csv.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
@@ -55,6 +54,7 @@ import {
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { strBytes } from "../adapters/formats/bytes.ts";
+import { exportToggleOptions } from "../application/export/registry.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { exportFormats } from "../legacy/export-formats.ts";
@@ -151,7 +151,7 @@ export function exportRequest(kind, opts) {
   return Object.freeze({
     kind: kind,
     doc: doc,
-    options: Object.freeze(Object.assign(exportToggleOptions(exporter, opts), {
+    options: Object.freeze(Object.assign(exportToggleOptions(exportFormats, exporter, opts), {
       allowImageBundle: !!opts.allowImageBundle,
       brollView: Object.freeze(brollPrintView(opts.brollView))
     })),

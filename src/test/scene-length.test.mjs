@@ -1,6 +1,7 @@
 import { rowContentEqual } from "../core/merge/rows.ts";
 import { hasSetLength, parseSceneLength } from "../core/document/timing.ts";
 import "./_dom.mjs";
+import "./_export-services-started.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
