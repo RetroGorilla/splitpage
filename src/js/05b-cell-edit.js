@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession } from "../legacy/session-bridge.ts";
+import { readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { ensureTrailingCaretSpot } from "./04-richtext.js";
 import { screenIsStale, syncFieldFromDom } from "./05-render.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
@@ -9,7 +9,6 @@ import { cellRuns, cellTextCommand } from "../application/commands/cell-text.ts"
 import { posToDom } from "../features/editing/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
 import { fromHtml } from "../legacy/richtext.ts";
-import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 
 export { posToDom };
 

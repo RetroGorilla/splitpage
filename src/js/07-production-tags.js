@@ -2,7 +2,6 @@ import { domToPos } from "../features/editing/cell-dom.ts";
 import { S } from "./_state.js";
 import { updateScriptStats } from "./01-scene-status.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession } from "../legacy/session-bridge.ts";
 import { stampRow } from "./03-sync.js";
 import {
   inertBody,
@@ -53,7 +52,7 @@ import { namedTagId, projection } from "../core/text/runs.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
-import { requestRefresh } from "../legacy/session-bridge.ts";
+import { readSession, requestRefresh } from "../legacy/session-bridge.ts";
 import { focusMemory } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
