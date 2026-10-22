@@ -1,7 +1,6 @@
 import { formatDuration } from "../core/production/timing.ts";
 import { DEFAULT_WPM } from "../core/document/timing.ts";
 import { S } from "./_state.js";
-import { readDefaultWpm } from "./00p-prefs.js";
 import { home } from "./_home.js";
 import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
@@ -26,6 +25,7 @@ import { fileKindFromName } from "../../shared/file-names.js";
 import { startupReady } from "../legacy/startup-bridge.ts";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 
 var newTabPageShown = false;
 
@@ -70,7 +70,7 @@ function blankDocumentState() {
   return migrateRows({
     title: "Untitled Script",
     rows: [{ id: makeId("r"), visualText: "", imageRef: null, audioText: "" }],
-    wordsPerMinute: readDefaultWpm()
+    wordsPerMinute: preferences().defaultWpm()
   });
 }
 

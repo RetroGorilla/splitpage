@@ -1,9 +1,11 @@
 import "./_dom.mjs";
+import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { parseLinkFragment } from "../../shared/server-links.js";
 
-const { DEFAULT_COLLAB_SERVER, COLLAB_SERVER_KEY, inviteLink, normalizeCollabServer, readCollabServer } = await import("../js/13b-collaborate.js");
+const COLLAB_SERVER_KEY = "splitpage-collab-server";
+const { DEFAULT_COLLAB_SERVER, inviteLink, normalizeCollabServer, readCollabServer } = await import("../js/13b-collaborate.js");
 
 test("the built-in server is Adam's, over https, as a base", () => {
   assert.equal(DEFAULT_COLLAB_SERVER, "https://script.bigmanonline.uk/");

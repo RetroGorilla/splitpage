@@ -1,7 +1,7 @@
 import { S } from "./_state.js";
 import { home, homeConn } from "./_home.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
-import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "./00p-prefs.js";
+import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "../../shared/clock.js";
 import { linkTurnedOff, onServerDoc, reviewMode, serverSessionExpired } from "./13-hosted.js";
 import { personColorsWithMine } from "./13a-presence.js";
 import {
@@ -21,6 +21,7 @@ import { changeSet } from "../application/session/change-set.ts";
 import { authorityOf, editCapability } from "../application/collaboration/authority.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 
 var MY_COLOR = changeSet({ docFields: ["personColors"] });
 
@@ -98,7 +99,7 @@ export function noteSaveStatus() {
 }
 
 function savedTitle(where) {
-  var when = savedWhenText(savedAt, Date.now());
+  var when = savedWhenText(savedAt, Date.now(), preferences().clock());
   if (when) return "Last saved " + (where ? "to " + where + " " : "") + "at " + when + ".";
   return where ? "Up to date with " + where + "." : "Everything is saved.";
 }

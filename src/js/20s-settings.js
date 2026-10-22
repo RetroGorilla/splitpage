@@ -1,34 +1,10 @@
 import { S } from "./_state.js";
-import {
-  CLOCK_KEY,
-  DEFAULT_WPM_KEY,
-  PERSON_COLOR_KEY,
-  PREF_EVENT,
-  RUNDOWN_MIN_KEY,
-  SCRIPT_SCALE_KEY,
-  SCRIPT_SCALE_MAX,
-  SCRIPT_SCALE_MIN,
-  TAG_ICONS_KEY,
-  THEME_KEY,
-  VIDEO_THUMBS_KEY,
-  applyTagIcons,
-  applyTheme,
-  formatClock,
-  readClockPref,
-  readDefaultWpm,
-  readPref,
-  readThemePref,
-  tagIconsOn,
-  videoThumbsOn,
-  writePref
-} from "./00p-prefs.js";
 import { setHideShotScenes } from "./01b-hide-shot.js";
 import { personSwatchesHtml, renderHistory, setMyColor, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { getSavedAuthorName, renderComments } from "./10-comments.js";
 import { updateSaveStatus } from "./12-dirty-toast.js";
 import {
-  COLLAB_SERVER_KEY,
   DEFAULT_COLLAB_SERVER,
   collabServerView,
   normalizeCollabServer,
@@ -40,41 +16,24 @@ import { setAutoSaveEnabled } from "./14-export.js";
 import { applyWriterSize, readWriterSize } from "./19-writer.js";
 import { setPrompterFlip, setPrompterMirror, setPrompterSceneMode } from "./20-teleprompter.js";
 import { renderDesktopAppNotice } from "./20a-update.js";
-import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../application/preferences/preferences.ts";
+import { SCRIPT_SCALE_MAX, SCRIPT_SCALE_MIN, WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../application/preferences/preferences.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
-import { preferences } from "../legacy/preferences-bridge.ts";
+import { PREF_EVENT, preferences } from "../legacy/preferences-bridge.ts";
+import { applyTagIcons, applyTheme } from "../features/settings/appearance.ts";
+import { formatClock } from "../../shared/clock.js";
 import { cleanAuthorName } from "../core/document/people.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 var SETTINGS_ID = "settings-modal";
 var settingsReturnFocus = null;
 
-var DESKTOP_NOTICE_KEY = "splitpage-desktop-notice-dismissed";
-var PROMPTER_KEYS = {
-  mirror: "splitpage-prompter-mirror",
-  flip: "splitpage-prompter-flip",
-  scene: "splitpage-prompter-scene-mode"
-};
-
 function modal() { return document.getElementById(SETTINGS_ID); }
 
 export function settingsOpen() {
   var m = modal();
   return !!(m && !m.hidden);
-}
-
-function flagOn(key, dflt) {
-  var v = readPref(key);
-  if (v === "1") return true;
-  if (v === "0") return false;
-  return !!dflt;
-}
-
-function readScriptScale() {
-  var n = Number(readPref(SCRIPT_SCALE_KEY));
-  return isFinite(n) && n >= SCRIPT_SCALE_MIN && n <= SCRIPT_SCALE_MAX ? n : 1;
 }
 
 function currentWriterSize() {
@@ -147,26 +106,26 @@ function collaborationHtml() {
 }
 
 function bodyHtml() {
-  var clock = readClockPref();
-  var scale = readScriptScale();
+  var clock = preferences().clock();
+  var scale = preferences().scriptScale();
   var wsize = currentWriterSize();
   var name = getSavedAuthorName();
   return section("Appearance",
-      segHtml("theme", "Theme", [["system", "System"], ["light", "Light"], ["dark", "Dark"]], readThemePref()) +
+      segHtml("theme", "Theme", [["system", "System"], ["light", "Light"], ["dark", "Dark"]], preferences().theme()) +
       segHtml("clock", "Clock", [["system", "System"], ["12", "12-hour"], ["24", "24-hour"]], clock) +
       '<p class="settings-hint settings-clock-example" id="settings-clock-example">' + escapeHtml(clockExample(clock)) + '</p>' +
-      switchHtml("settings-rundown-min", "Minimise the rundown strip", "Keep the strip of scenes under the header small.", flagOn(RUNDOWN_MIN_KEY)) +
+      switchHtml("settings-rundown-min", "Minimise the rundown strip", "Keep the strip of scenes under the header small.", preferences().rundownMin()) +
       switchHtml("settings-tag-icons", "Show icons on tags",
-        "Put a small icon for its category before each tag, as well as its colour.", tagIconsOn())) +
+        "Put a small icon for its category before each tag, as well as its colour.", preferences().tagIcons())) +
     section("Editor",
       switchHtml("settings-hide-shot", "Hide shot scenes", "Collapse scenes marked Shot into a thin strip.", preferences().hideShot()) +
       switchHtml("settings-autosave", "Autosave", "Write each change to the file you saved to, a moment after you stop typing.", preferences().autosave()) +
       switchHtml("settings-video-thumbs", "Fetch video thumbnails",
-        "When you paste a YouTube or Vimeo link, ask the site for its picture once and keep it with the script.", videoThumbsOn()) +
+        "When you paste a YouTube or Vimeo link, ask the site for its picture once and keep it with the script.", preferences().videoThumbs()) +
       '<div class="settings-field settings-inline">' +
         '<label class="settings-label" for="settings-default-wpm">Reading speed for new scripts</label>' +
         '<span class="settings-inline-control"><input type="number" id="settings-default-wpm" min="60" max="400" step="5" value="' +
-          readDefaultWpm() + '"><span class="settings-unit">words a minute</span></span>' +
+          preferences().defaultWpm() + '"><span class="settings-unit">words a minute</span></span>' +
       '</div>' +
       '<p class="settings-hint">Each script keeps its own speed — click its length on the rundown to change it.</p>' +
       '<div class="settings-field settings-inline">' +
@@ -183,9 +142,9 @@ function bodyHtml() {
           '<button type="button" class="btn-outline is-small" data-settings-action="scale-reset"' + (scale === 1 ? " disabled" : "") + '>Reset to 100 %</button></span>' +
       '</div>') +
     section("Present",
-      switchHtml("settings-prompter-mirror", "Mirror", "Flip the teleprompter left to right, for a beam-splitter glass.", flagOn(PROMPTER_KEYS.mirror)) +
-      switchHtml("settings-prompter-flip", "Flip", "Turn it upside down, for a monitor mounted that way.", flagOn(PROMPTER_KEYS.flip)) +
-      switchHtml("settings-prompter-scene", "One scene at a time", "Pause at the end of each scene.", flagOn(PROMPTER_KEYS.scene))) +
+      switchHtml("settings-prompter-mirror", "Mirror", "Flip the teleprompter left to right, for a beam-splitter glass.", preferences().prompterFlag("prompterMirror")) +
+      switchHtml("settings-prompter-flip", "Flip", "Turn it upside down, for a monitor mounted that way.", preferences().prompterFlag("prompterFlip")) +
+      switchHtml("settings-prompter-scene", "One scene at a time", "Pause at the end of each scene.", preferences().prompterFlag("prompterSceneMode"))) +
     section("You",
       '<div class="settings-field settings-inline">' +
         '<label class="settings-label" for="settings-name">Your name</label>' +
@@ -235,8 +194,8 @@ function ensureModal() {
 function typedFields() {
   return {
     "settings-name": function (key) { return preferences().nameOf(key) === "commentAuthor"; },
-    "settings-default-wpm": function (key) { return key === DEFAULT_WPM_KEY; },
-    "settings-collab-server": function (key) { return key === COLLAB_SERVER_KEY; }
+    "settings-default-wpm": function (key) { return preferences().nameOf(key) === "defaultWpm"; },
+    "settings-collab-server": function (key) { return preferences().nameOf(key) === "collabServer"; }
   };
 }
 
@@ -301,12 +260,12 @@ export function closeSettings() {
 
 function applyChange(target) {
   var id = target.id, name = target.name;
-  if (name === "settings-theme") { writePref(THEME_KEY, target.value === "system" ? null : target.value); return; }
-  if (name === "settings-clock") { writePref(CLOCK_KEY, target.value === "system" ? null : target.value); return; }
+  if (name === "settings-theme") { preferences().setTheme(target.value); return; }
+  if (name === "settings-clock") { preferences().setClock(target.value); return; }
   if (name === "settings-person-color") { setMyColor(target.value); return; }
-  if (id === "settings-rundown-min") { writePref(RUNDOWN_MIN_KEY, target.checked ? "1" : "0"); return; }
-  if (id === "settings-tag-icons") { writePref(TAG_ICONS_KEY, target.checked ? "1" : null); return; }
-  if (id === "settings-video-thumbs") { writePref(VIDEO_THUMBS_KEY, target.checked ? null : "0"); return; }
+  if (id === "settings-rundown-min") { preferences().setRundownMin(target.checked); return; }
+  if (id === "settings-tag-icons") { preferences().setTagIcons(target.checked); return; }
+  if (id === "settings-video-thumbs") { preferences().setVideoThumbs(target.checked); return; }
   if (id === "settings-hide-shot") { setHideShotScenes(target.checked); return; }
   if (id === "settings-autosave") { setAutoSaveEnabled(target.checked); return; }
   if (id === "settings-prompter-mirror") { setPrompterMirror(target.checked); return; }
@@ -314,14 +273,14 @@ function applyChange(target) {
   if (id === "settings-prompter-scene") { setPrompterSceneMode(target.checked); return; }
   if (id === "settings-default-wpm") {
     var n = Math.round(Number(target.value));
-    if (isFinite(n) && n >= 60 && n <= 400) writePref(DEFAULT_WPM_KEY, n === 150 ? null : String(n));
-    else target.value = readDefaultWpm();
+    if (isFinite(n) && n >= 60 && n <= 400) preferences().setDefaultWpm(n);
+    else target.value = preferences().defaultWpm();
     return;
   }
   if (id === "settings-writer-size") { applyWriterSize(Number(target.value), true); return; }
   if (id === "settings-script-scale") {
     var s = Math.round(Number(target.value)) / 100;
-    if (isFinite(s) && s >= SCRIPT_SCALE_MIN && s <= SCRIPT_SCALE_MAX) writePref(SCRIPT_SCALE_KEY, String(s));
+    if (isFinite(s) && s >= SCRIPT_SCALE_MIN && s <= SCRIPT_SCALE_MAX) preferences().setScriptScale(s);
     return;
   }
   if (id === "settings-name") {
@@ -340,7 +299,7 @@ function applyChange(target) {
       return;
     }
     if (url === readCollabServer()) { target.value = url; return; }
-    writePref(COLLAB_SERVER_KEY, url === DEFAULT_COLLAB_SERVER ? null : url);
+    preferences().setCollabServer(url === DEFAULT_COLLAB_SERVER ? null : url);
   }
 }
 
@@ -356,7 +315,7 @@ function applyInput(target) {
 
 function runAction(action) {
   if (action === "close") { closeSettings(); return; }
-  if (action === "scale-reset") { writePref(SCRIPT_SCALE_KEY, "1"); return; }
+  if (action === "scale-reset") { preferences().setScriptScale(1); return; }
   if (action === "tagging-help") {
     closeSettings();
     appActions.invoke("tagging-help", "button");
@@ -370,12 +329,12 @@ function runAction(action) {
     return;
   }
   if (action === "desktop-notice") {
-    writePref(DESKTOP_NOTICE_KEY, null);
+    preferences().resetDesktopNotice();
     if (typeof renderDesktopAppNotice === "function") renderDesktopAppNotice();
     showToast(runningOnDesktop() ? "The desktop-app notice only shows in the browser." : "The desktop-app notice will show again.", "ok");
     return;
   }
-  if (action === "collab-default") { writePref(COLLAB_SERVER_KEY, null); return; }
+  if (action === "collab-default") { preferences().setCollabServer(null); return; }
   if (action === "collab-signout") {
     signOutCollab();
     renderSettings();
@@ -416,16 +375,17 @@ function wireModal(m) {
 }
 
 function onPrefChanged(key) {
-  if (key === THEME_KEY) applyTheme();
-  if (key === TAG_ICONS_KEY) applyTagIcons();
-  if (key === CLOCK_KEY) {
+  var name = preferences().nameOf(key);
+  if (name === "theme") applyTheme(window, preferences().theme());
+  if (name === "tagIcons") applyTagIcons(window, preferences().tagIcons());
+  if (name === "clock") {
     updateSaveStatus();
     if (S.state) { render(); renderComments(); }
     var hist = document.getElementById("history-panel");
     if (hist && !hist.hidden) renderHistory();
   }
-  if (preferences().nameOf(key) === "commentAuthor" || key === PERSON_COLOR_KEY) updateIdentityChip();
-  if (key === COLLAB_SERVER_KEY) updateCollaborateMenu();
+  if (name === "commentAuthor" || name === "personColor") updateIdentityChip();
+  if (name === "collabServer") updateCollaborateMenu();
   if (settingsOpen()) renderSettings(key);
 }
 

@@ -1,15 +1,17 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import "./_preferences-started.mjs";
 import {
-  CLOCK_KEY,
   clockCycle,
   formatClock,
   formatDateClock,
-  readClockPref,
   savedStatusText,
   savedWhenText
-} from "../js/00p-prefs.js";
+} from "../../shared/clock.js";
+import { preferences } from "../legacy/preferences-bridge.ts";
+
+const CLOCK_KEY = "splitpage-clock";
 
 const AFTERNOON = new Date(2026, 8, 24, 14, 52);
 const MORNING = new Date(2026, 8, 24, 9, 5);
@@ -75,13 +77,13 @@ test("the save status's tooltip time: the clock the same day, a date after midni
 
 test("the preference: system unless it says 12 or 24", () => {
   localStorage.removeItem(CLOCK_KEY);
-  assert.equal(readClockPref(), "system");
+  assert.equal(preferences().clock(), "system");
   localStorage.setItem(CLOCK_KEY, "12");
-  assert.equal(readClockPref(), "12");
-  assert.match(formatClock(AFTERNOON), /PM/i);
+  assert.equal(preferences().clock(), "12");
+  assert.match(formatClock(AFTERNOON, preferences().clock()), /PM/i);
   localStorage.setItem(CLOCK_KEY, "24");
-  assert.equal(formatClock(AFTERNOON), "14:52");
+  assert.equal(formatClock(AFTERNOON, preferences().clock()), "14:52");
   localStorage.setItem(CLOCK_KEY, "13");
-  assert.equal(readClockPref(), "system");
+  assert.equal(preferences().clock(), "system");
   localStorage.removeItem(CLOCK_KEY);
 });

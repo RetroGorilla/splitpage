@@ -13,7 +13,7 @@ const { addBrollProp } = await import("../js/08c-broll.js");
 const { closeBrollPanel, openBrollPanel } = await import("../js/08d-broll-panel.js");
 const { renderComments, setCommentAssignee } = await import("../js/10-comments.js");
 const NAME_KEY = "splitpage-comment-author";
-const { PERSON_COLOR_KEY, writePref } = await import("../js/00p-prefs.js");
+const { preferences } = await import("../legacy/preferences-bridge.ts");
 const { personColorsWithMine } = await import("../js/13a-presence.js");
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
@@ -152,7 +152,7 @@ for (const [what, c] of CASES) {
 
   test("13b the guest's name: " + what + " (#344, #419)", () => {
     load();
-    writePref(NAME_KEY, null);
+    localStorage.removeItem(NAME_KEY);
     sessionStorage.clear();
     assert.ok(maybeAskGuestName());
     document.getElementById("guest-name").value = c.typed(30);
@@ -163,8 +163,8 @@ for (const [what, c] of CASES) {
 
 test("13a my colour is recorded under my name cut by code point (#344)", () => {
   load();
-  writePref(NAME_KEY, x(29) + GRIN + "y");
-  writePref(PERSON_COLOR_KEY, PERSON_COLORS[1]);
+  preferences().setCommentAuthor(x(29) + GRIN + "y");
+  preferences().setMyColor(PERSON_COLORS[1]);
   const state = { personColors: null };
   assert.deepEqual(personColorsWithMine(state), { [x(29) + GRIN]: PERSON_COLORS[1] });
   assert.equal(state.personColors, null, "working out the colours writes nothing");

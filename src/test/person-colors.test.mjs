@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -9,7 +10,7 @@ import {
   normalizePersonColors,
   paletteColor,
   resolvePersonColor
-} from "../js/00p-prefs.js";
+} from "../core/document/person-colors.ts";
 import { S } from "../js/_state.js";
 import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
