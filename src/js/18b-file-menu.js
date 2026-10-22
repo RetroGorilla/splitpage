@@ -6,7 +6,7 @@ import { syncDocIdentity } from "./02b-doc-id.js";
 import { pushSnapshot, updateIdentityChip } from "./03-sync.js";
 import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "./07-production-tags.js";
-import { clearDirty, showToast, updateSaveStatus } from "./12-dirty-toast.js";
+import { clearDirty, updateSaveStatus } from "./12-dirty-toast.js";
 import { applyReviewMode, linkTurnedOff, reviewMode, serverSessionExpired, updateServerMenu } from "./13-hosted.js";
 import { openProjectFile, updateFileChip } from "./18-local-files.js";
 import {
@@ -18,6 +18,7 @@ import {
 import { closeNewTabPage } from "./20j-newtab.js";
 import { LONG_DEMO } from "./_starters.js";
 import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
+import { setMenuItemLabel, setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
 
 function el(id) { return document.getElementById(id); }
 
@@ -69,22 +70,11 @@ function renderKeyChips(root) {
   });
 }
 
-export function setMenuItemReason(item, reason) {
-  var why = item && item.querySelector(".mi-why");
-  if (!why) return;
-  why.textContent = reason || "";
-  why.hidden = !reason;
-}
+export { setMenuItemLabel, setMenuItemReason };
 
 export function menuItemReason(item) {
   var why = item && item.querySelector(".mi-why");
   return why && !why.hidden ? why.textContent : "";
-}
-
-export function setMenuItemLabel(item, text) {
-  var label = item && item.querySelector(".mi-label");
-  if (label) label.textContent = text;
-  else if (item) item.textContent = text;
 }
 
 var FORMAT_NAMES = {

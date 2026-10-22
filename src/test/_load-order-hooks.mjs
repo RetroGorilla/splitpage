@@ -13,6 +13,7 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/transition-bridge.ts": { functions: ["startTransitions"] },
   "src/legacy/recovery-bridge.ts": { functions: ["startRecovery", "useBrowserDraftFactory"] },
   "src/legacy/editor-bridge.ts": { functions: ["startEditor", "installPicturePicker"] },
+  "src/legacy/effects-bridge.ts": { functions: ["startEffects"] },
   "src/legacy/tour-pause.ts": { functions: ["handTourPauseTo"] },
   "src/legacy/file-actions.ts": { functions: ["registerFileActions"] },
   "src/legacy/help-actions.ts": { functions: ["registerHelpActions"] },
@@ -24,6 +25,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring.ts": { functions: ["wireApp"] },
   "src/bootstrap/wiring/editor.ts": { functions: ["routeRootClick", "routeRootMouseDown", "onRootClick", "onRootMouseDown", "onRootInput", "onRootPaste", "onRootKeydown"] },
   "src/bootstrap/app.ts": { functions: ["startApp", "startAppWhenReady"] },
+  "src/bootstrap/effects.ts": { functions: ["startPageEffects"] },
   "src/bootstrap/actions.ts": { functions: ["startActions"] },
   "src/bootstrap/startup/page-lifetime.ts": { functions: ["watchHistoryMigration", "registerServiceWorker"] }
 });

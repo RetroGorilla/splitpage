@@ -21,7 +21,6 @@ import {
   setTagNotes,
   setTagOwner
 } from "./08-production-panels.js";
-import { showToast } from "./12-dirty-toast.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { adoptProjectState, parseProjectFileState } from "./18-local-files.js";
@@ -44,6 +43,7 @@ import { toPlainText } from "../core/text/projections.ts";
 import { projection } from "../core/text/runs.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { focusMemory } from "../legacy/editor-bridge.ts";
+import { showToast } from "../legacy/effects-bridge.ts";
 import { setTagAddingPerson, setTagRenaming } from "../application/tag-panel-state.ts";
 
 export var prompterMirror;

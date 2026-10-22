@@ -32,7 +32,7 @@ import {
   normalizeImportedRows,
   parseImportRows
 } from "./11-import.js";
-import { clearDirty, markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
+import { clearDirty, markAbsorbedDirty } from "./12-dirty-toast.js";
 import {
   blobSourceNow,
   linkTurnedOff,
@@ -44,7 +44,7 @@ import { exportToggleOptions } from "./14e-export-formats.js";
 import { docxToRows } from "./15-docx.js";
 import { csvToRows } from "./16-csv.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
-import { refreshFileMenu, setMenuItemLabel, toggleFileMenu } from "./18b-file-menu.js";
+import { refreshFileMenu, toggleFileMenu } from "./18b-file-menu.js";
 import { isExportAction, rememberExport } from "./18c-export-dialog.js";
 import {
   applyMarkdownProject,
@@ -58,6 +58,7 @@ import { strBytes } from "../adapters/formats/bytes.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { exportFormats } from "../legacy/export-formats.ts";
+import { setMenuItemLabel, showToast } from "../legacy/effects-bridge.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { slugify } from "../../shared/text.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";

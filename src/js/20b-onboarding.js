@@ -2,13 +2,13 @@ import { S } from "./_state.js";
 import { home } from "./_home.js";
 import { loadLastFileHandle } from "./00-prelude.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
-import { showToast } from "./12-dirty-toast.js";
 import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
 import { deliverFile, onFileMenuChoice } from "./18-local-files.js";
 import { addServerBookmark } from "./20e-connect.js";
 import { draftRestorePending } from "./20g-drafts.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
+import { showToast } from "../legacy/effects-bridge.ts";
 import { joinErrorText } from "../../shared/server-links.js";
 import { checksumText } from "../../shared/text.js";
 

@@ -4,9 +4,9 @@ import { armShotHideGrace, clearShotHideGrace, hideShotScenes } from "./01b-hide
 import { paintRowTimes, render, renderRow } from "./05-render.js";
 import { renderRundown, setRundownExtraSeconds } from "./05f-rundown.js";
 import { paintTargetOverlay } from "./05t-target.js";
-import { showToast } from "./12-dirty-toast.js";
 import { sceneStatus, sceneStatusCommand, shotGrace } from "../application/commands/scene-status.ts";
 import { REVIEW_ONLY, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
+import { showToast } from "../legacy/effects-bridge.ts";
 import {
   SCENE_LENGTH_MAX,
   normalizeSceneLength,

@@ -1,8 +1,8 @@
 import { S } from "./_state.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
-import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { handTourPauseTo } from "../legacy/tour-pause.ts";
+import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 
 function scrollHelpTo(id) {
   var body = document.getElementById("help-body");
