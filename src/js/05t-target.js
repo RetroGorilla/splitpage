@@ -3,10 +3,10 @@ import { formatDuration } from "../core/production/timing.ts";
 import { S } from "./_state.js";
 import { updateScriptStats } from "./01-scene-status.js";
 import { onRundownPaint, rundownLayout } from "./05f-rundown.js";
-import { reviewMode } from "./13-hosted.js";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { targetLengthCommand } from "../application/commands/document-settings.ts";
 import { runDocumentEdit } from "../legacy/session-bridge.ts";
+import { reviewMode } from "../legacy/location-bridge.ts";
 
 export var TARGET_PRESETS = [30, 60, 120, 180, 300, 600];
 

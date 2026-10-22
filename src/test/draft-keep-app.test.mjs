@@ -12,7 +12,7 @@ const { markDirty, clearDirty } = await import("../js/12-dirty-toast.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { flushDraftNow } = await import("../js/20g-drafts.js");
-const { setHome } = await import("../js/_home.js");
+const { setHome } = await import("../legacy/location-bridge.ts");
 
 after(closeApp);
 

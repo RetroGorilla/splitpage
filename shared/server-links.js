@@ -23,8 +23,16 @@ function joinErrorText(code) {
   return "Could not join: " + code + ".";
 }
 
+function normalizeServerUrl(input) {
+  var url = String(input || "").trim();
+  if (!url) return "";
+  if (!/^https?:\/\//i.test(url)) url = "http://" + url;
+  return url.replace(/\/+$/, "") + "/";
+}
+
 module.exports = {
   joinErrorText,
+  normalizeServerUrl,
   parseLinkFragment,
   tunnelCommand
 };

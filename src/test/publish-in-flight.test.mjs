@@ -1,11 +1,13 @@
 import "./_preferences-started.mjs";
+import "./_location-started.mjs";
 import { dom } from "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { cloneState } from "../core/document/clone.ts";
+import { documentLocation, serverStatus } from "../legacy/location-bridge.ts";
 
 const { S } = await import("../js/_state.js");
-const homeMod = await import("../js/_home.js");
+const homeMod = await import("../legacy/location-bridge.ts");
 const { setHome } = homeMod;
 const { publishToServer, publishAndCopyShareLink, saveToServer } = await import("../js/13-hosted.js");
 const { setBaseState } = await import("../js/03-sync.js");
@@ -25,8 +27,8 @@ startTestSession(appSessionDeps());
 startTransitions({ live: liveDocumentPort, destination: documentDestinationPort, identity: documentIdentityPort });
 
 startSaves(legacySavePorts({
-  capture: () => Object.freeze({ epoch: 0, docId: S.state && S.state.docId, destination: homeMod.home, destinationGeneration: 0, generation: 0, connection: homeMod.conn, revision: null }),
-  stillOwns: (ctx) => ctx.destination === homeMod.home && ctx.docId === (S.state && S.state.docId)
+  capture: () => Object.freeze({ epoch: 0, docId: S.state && S.state.docId, destination: homeMod.currentHome(), destinationGeneration: 0, generation: 0, connection: homeMod.currentConn(), revision: null }),
+  stillOwns: (ctx) => ctx.destination === homeMod.currentHome() && ctx.docId === (S.state && S.state.docId)
 }), { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });
 
 dom.window.document.body.innerHTML =
@@ -74,8 +76,7 @@ function stubTimers() {
 
 function startOn(state, opts) {
   opts = opts || {};
-  S.serverMode.readOnly = false;
-  S.serverMode.available = true;
+  serverStatus().recordMode({ readOnly: false, available: true });
   documentTransitions().open({ from: { document: state }, reason: "test: the document as opened", destination: NO_DESTINATION, writtenOut: !!opts.written });
   clearDirty();
   if (opts.dirty) markDirty();
@@ -99,8 +100,8 @@ test("control: an undisturbed publish adopts the server copy and is clean", asyn
   await flush();
   postGate();
   assert.equal(await p, true);
-  assert.equal(homeMod.home.kind, "server");
-  assert.equal(homeMod.home.id, "server-a");
+  assert.equal(homeMod.currentHome().kind, "server");
+  assert.equal(homeMod.currentHome().id, "server-a");
   assert.equal(unsavedChanges(), false);
   assert.equal(mergeBase().rows[0].audioText, "one");
 });
@@ -115,19 +116,19 @@ test("#247: a document opened during the upload keeps its own home, base, id and
   loadTestDocument(b);
   const bHome = setHome("file", { handle: { name: "b.md" }, format: "md", name: "b.md" });
   const bBase = setBaseState(cloneState(b), "test: B as opened");
-  S.docIdWrittenOut = true;
+  documentLocation().markWrittenOut(true);
   noteSaveChange();
 
   postGate();
   const ok = await p;
 
   assert.equal(ok, false, "publishToServer says the copy was not adopted");
-  assert.equal(homeMod.home, bHome, "B's home is still B's file");
+  assert.equal(homeMod.currentHome(), bHome, "B's home is still B's file");
   assert.equal(mergeBase(), bBase, "B's base is untouched");
   assert.equal(S.state, b);
   assert.equal(S.state.docId, DOC_IDS["doc-b"]);
   assert.equal(unsavedChanges(), true, "B's unsaved work is still unsaved");
-  assert.equal(S.docIdWrittenOut, true);
+  assert.equal(documentLocation().writtenOut(), true);
   assert.equal(calls.filter((c) => c.method === "PUT").length, 0, "nothing was saved anywhere on B's behalf");
 });
 
@@ -144,9 +145,9 @@ test("#247: a server document opened during the upload is not re-homed onto the 
 
   postGate();
   assert.equal(await p, false);
-  assert.equal(homeMod.home, bHome);
-  assert.equal(homeMod.home.id, "server-b");
-  assert.equal(homeMod.home.rev, 7);
+  assert.equal(homeMod.currentHome(), bHome);
+  assert.equal(homeMod.currentHome().id, "server-b");
+  assert.equal(homeMod.currentHome().rev, 7);
   assert.equal(mergeBase(), bBase);
   assert.equal(unsavedChanges(), false);
 });
@@ -200,7 +201,7 @@ test("#248: text typed during the upload stays dirty, and the next save carries 
   postGate();
   assert.equal(await p, true);
 
-  assert.equal(homeMod.home.kind, "server", "the publish itself still succeeded");
+  assert.equal(homeMod.currentHome().kind, "server", "the publish itself still succeeded");
   assert.equal(unsavedChanges(), true, "the editor does not claim the newer text is saved");
   assert.equal(mergeBase().rows[0].audioText, "before", "the base is what the server was given");
   assert.ok(timers.includes(autoSavePolicy().timing.hostedIdle), "an autosave to the new server home is scheduled");

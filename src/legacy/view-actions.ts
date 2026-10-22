@@ -3,11 +3,12 @@ import { registerAll } from "../application/actions.ts";
 import { closeProductionPanel, closeGearPanel, openGearPanel, openProductionPanel } from "../js/08-production-panels.js";
 import { closeBrollPanel, openBrollPanel } from "../js/08d-broll-panel.js";
 import { closeCommentsPanel, openCommentsPanel } from "../js/10-comments.js";
-import { VIEWING_ONLY, reviewMode } from "../js/13-hosted.js";
+import { VIEWING_ONLY } from "../js/13-hosted.js";
 import { openWriter } from "../js/19-writer.js";
 import { openPrompter } from "../js/20-teleprompter.js";
 import { EVERY_OVERLAY, availableUnless, everyOverlayBut, firstRefusal } from "./screen.ts";
 import { screenNow } from "./screen-state.ts";
+import { reviewMode } from "./location-bridge.ts";
 
 const VIEWING_ONLY_LISTED = "Viewing only — the writer changes the script";
 
