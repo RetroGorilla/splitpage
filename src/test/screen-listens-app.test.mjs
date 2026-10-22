@@ -9,6 +9,8 @@ await bootApp();
 const { adoptReplacement, liveSession, onSessionChange, runCommand, sessionStamps } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
+const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
+const { registerTagCommand } = await import("../application/commands/production-records.ts");
 const { wordsPerMinuteCommand } = await import("../application/commands/document-settings.ts");
 const { addSceneCommand } = await import("../application/commands/rows.ts");
 const { cellEditing, paintGuard } = await import("../legacy/editor-bridge.ts");
@@ -96,6 +98,26 @@ test("a scene status change repaints only that row, and its read times, with no 
   assert.equal(counts().rowsPainted, 1);
   assert.notEqual(statusWord("r3"), "To do");
   assert.deepEqual([rowEl("r1"), rowEl("r3")].map((el) => el.querySelector(".gutter").outerHTML)[0], others[0]);
+});
+
+test("a row change the screen cannot paint as one row, because the row is not on screen, repaints the whole screen once", () => {
+  open();
+  setHideShotScenes(true);
+  reset();
+  assert.equal(rowEl("r2"), null);
+  runCommand(sceneLengthCommand("r2", 40, sessionStamps));
+  assert.equal(counts().render, 1);
+  setHideShotScenes(false);
+});
+
+test("a change to the tag list alone repaints the production views in the same call, with no whole-screen paint", () => {
+  open();
+  const badge = document.getElementById("production-badge");
+  const before = badge.hidden ? "" : badge.textContent;
+  runCommand(registerTagCommand({ cat: "prop", name: "Lamp" }));
+  assert.equal(counts().render, 0);
+  assert.equal(badge.hidden, false);
+  assert.notEqual(badge.textContent, before);
 });
 
 test("a words-per-minute change repaints the screen and its read times once", () => {

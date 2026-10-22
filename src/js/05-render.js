@@ -634,8 +634,21 @@ export function syncPageTitle() {
   document.title = !name || name === "Untitled Script" ? "Splitpage" : name + " — Splitpage";
 }
 
+var paintBroke = false;
+
 export function render() {
-  paintGuard().whilePainting(paintAll);
+  try {
+    paintGuard().whilePainting(function () {
+      try {
+        paintAll();
+      } catch (e) {
+        paintBroke = true;
+        throw e;
+      }
+    });
+  } finally {
+    paintBroke = false;
+  }
 }
 
 export function paintingScreen() {
@@ -779,6 +792,7 @@ export function renderAbsorbed() {
 }
 
 export function renderFirstDraw() {
+  screen.drawn = true;
   return absorbRender(FIRST_DRAW_FAILED);
 }
 
@@ -819,6 +833,7 @@ function paintsWhole(change) {
 function paintSessionChange(change) {
   if (!screen.drawn) return;
   if (ABSORBED[change.kind]) { absorbRender(REDRAW_FAILED); return; }
+  if (screenStale || paintBroke) return;
   var c = change.changes;
   if (paintGuard().shown()) {
     if (c.cells.some(function (cell) { return cell.field === "visualText" || cell.field === "audioText"; })) requestRefresh("rowTimes");
@@ -830,6 +845,12 @@ function paintSessionChange(change) {
   if (paintsWhole(change)) { render(); return; }
   var rows = rowsTouched(c.cells, null);
   if (rows.length) paintRows(rows);
+  if (c.docFields.indexOf("productionTags") !== -1) paintProductionViews();
+}
+
+function paintProductionViews() {
+  updateTagBadges();
+  renderProduction();
 }
 
 export function screenListeners() {
