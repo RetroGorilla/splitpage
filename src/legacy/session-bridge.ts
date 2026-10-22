@@ -7,7 +7,7 @@ import type { LiveDocumentPort } from "../application/transitions/ports.ts";
 import { syncCommentAnchors } from "../core/text/anchors.ts";
 import { systemClock } from "../adapters/identity/ids.ts";
 import { cellOf, scriptCellOf } from "./richtext.ts";
-import { documentGuardOn, unwrapped } from "./document-guard.ts";
+import { documentGuardOn, documentView, unwrapped } from "./document-guard.ts";
 
 export type RecordsReconciler = (doc: ValidatedDocument, changes: ChangeSet) => RecordsPlan | null;
 
@@ -85,7 +85,7 @@ export function onDocumentReplaced(listener: () => void): void {
 }
 
 function swept<T>(outcome: T): T {
-  if (documentGuardOn) unwrapped(currentDocument());
+  if (documentGuardOn) unwrapped(heldDocument());
   return outcome;
 }
 
@@ -163,12 +163,18 @@ export function adoptReplacement(doc: ValidatedDocument): void {
   announceReplaced();
 }
 
-export function currentDocument(): ValidatedDocument | null {
+export function heldDocument(): ValidatedDocument | null {
   return started ? started.current.held() : null;
 }
 
+function viewedDocument(): ValidatedDocument | null {
+  return documentView(heldDocument());
+}
+
+export const currentDocument: () => ValidatedDocument | null = documentGuardOn ? viewedDocument : heldDocument;
+
 export const liveDocumentPort: LiveDocumentPort = Object.freeze({
-  current: currentDocument,
+  current: heldDocument,
   assign: adoptReplacement,
   stamp: stampDocument
 });

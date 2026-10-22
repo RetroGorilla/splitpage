@@ -8,7 +8,7 @@ import { toHtml } from "../core/text/html.ts";
 import { commentIds, normalizeCell } from "../core/text/runs.ts";
 import { applySteps, invertSteps } from "../core/text/steps.ts";
 import { fromHtml } from "../legacy/richtext.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { heldDocument } from "../legacy/session-bridge.ts";
 
 var SKIP_DOC_KEYS = {};
 FIELD_POLICIES.forEach(function (f) { if (!f.undo) SKIP_DOC_KEYS[f.key] = true; });
@@ -728,7 +728,7 @@ export function routeUndoReplays(run, stamps, amend) {
 }
 
 function replayUnwired(task) {
-  var live = currentDocument();
+  var live = heldDocument();
   var plan = task.plan(live);
   if (!plan) return { kind: "noop" };
   if (plan.refused) return { kind: "rejected", reason: plan.refused };
@@ -751,14 +751,14 @@ export function adoptDocument(doc) {
 }
 
 export function trackDocument() {
-  adoptDocument(currentDocument());
+  adoptDocument(heldDocument());
 }
 
 export function flushEdits() {
   var reported = flushQueued;
   flushQueued = false;
   if (applying) return;
-  var live = currentDocument();
+  var live = heldDocument();
   if (!live || live !== tracked || !base) { restart(live); return; }
   var skip = {};
   if (commentsAreSent()) skip.comments = true;
@@ -789,7 +789,7 @@ export function noteRemoteChange(next) {
 }
 
 export function absorbRemoteChange() {
-  var live = currentDocument();
+  var live = heldDocument();
   if (!live || live !== tracked || !base) { restart(live); return; }
   history.forget(changedBetween(base, live));
   base = clone(live);
@@ -797,7 +797,7 @@ export function absorbRemoteChange() {
 }
 
 export function resetUndo() {
-  restart(currentDocument());
+  restart(heldDocument());
 }
 
 function announceCleared(count) {
@@ -845,7 +845,7 @@ function replayTask(dir, seen) {
 
 function run(dir) {
   flushEdits();
-  if (!currentDocument()) return { ok: false, empty: true };
+  if (!heldDocument()) return { ok: false, empty: true };
   var seen = { prepared: null, result: null };
   var outcome;
   applying = true;
@@ -864,7 +864,7 @@ function run(dir) {
   }
   if (p && p.refused) {
     p.drop();
-    base = clone(currentDocument());
+    base = clone(heldDocument());
     if (hooks.onRefused) hooks.onRefused(p.refused, dir);
     return { ok: false, reason: p.refused, steps: p.steps };
   }
@@ -873,7 +873,7 @@ function run(dir) {
 }
 
 export function settleAfterApply() {
-  var live = currentDocument();
+  var live = heldDocument();
   if (!live || live !== tracked) return;
   base = clone(live);
 }
@@ -910,7 +910,7 @@ function foldTask(entry, touches, change) {
 
 export function foldIntoEdit(entry, touches, change) {
   flushEdits();
-  var live = currentDocument();
+  var live = heldDocument();
   if (!live || live !== tracked || !base) return false;
   var outcome;
   applying = true;
@@ -945,7 +945,7 @@ export function undoSerial() { flushEdits(); return history.mark(); }
 
 export function compositionUndoMark(rowId, key) {
   flushEdits();
-  var live = currentDocument();
+  var live = heldDocument();
   var rows = (live && live.rows) || [], value;
   for (var i = 0; i < rows.length; i++) if (rows[i] && rows[i].id === rowId) value = rows[i][key];
   return history.markCell(rowId, key, value);
