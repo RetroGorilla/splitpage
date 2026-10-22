@@ -19,9 +19,9 @@ import { mountSaveRecovery, mountConflicts, mountSave, mountFileMenu } from "../
 import { mountImports, mountGdoc } from "../../features/imports/mount.ts";
 import { mountWriterOpen, mountWriterNavigation, mountWriterClose } from "../../features/writer/mount.ts";
 import { mountHistoryGallery } from "../../features/gallery/mount.ts";
-import { mountTopbar } from "../../features/title/topbar.js";
+import { mountTopbar } from "../../features/title/topbar.ts";
 import { mountCellReach } from "../../features/editing/cell-reach.js";
-import { mountPhoneBar } from "../../features/notices/phone-bar.js";
+import { mountPhoneBar } from "../../features/notices/phone-bar.ts";
 import { touchImportMode } from "../../application/import-mode.ts";
 import {
   prompterIsOpen,
