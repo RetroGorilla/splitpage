@@ -171,3 +171,56 @@ test("b-roll: an absent panel installs no resources and an absent page omits onl
   owner.dispose();
   h.win.close();
 });
+
+test("broll: disposal removes every listener newest first and silences retained callbacks", () => {
+  const h = harness();
+  const added: { target: EventTarget; type: string; fn: EventListenerOrEventListenerObject | null; options: boolean | AddEventListenerOptions | undefined }[] = [];
+  const removed: typeof added = [];
+  for (const target of h.records.map((record) => record.target)) {
+    const add = target.addEventListener.bind(target);
+    const remove = target.removeEventListener.bind(target);
+    target.addEventListener = (type: string, fn: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions): void => {
+      added.push({ target, type, fn, options });
+      add(type, fn, options);
+    };
+    target.removeEventListener = (type: string, fn: EventListenerOrEventListenerObject | null, options?: boolean | EventListenerOptions): void => {
+      removed.push({ target, type, fn, options });
+      remove(type, fn, options);
+    };
+  }
+  const owner = h.mount();
+  try {
+    assert.equal(added.length, 19);
+    owner.dispose();
+    owner.dispose();
+    assert.equal(removed.length, 19);
+    assert.deepEqual(removed, [...added].reverse());
+    h.calls.length = 0;
+    for (const entry of added) {
+      assert.equal(typeof entry.fn, "function");
+      (entry.fn as EventListener)(new h.win.Event(entry.type));
+    }
+    assert.deepEqual(h.calls, []);
+  } finally { owner.dispose(); h.win.close(); }
+});
+
+test("b-roll: stale connected controls and a missing panel block callbacks including window and document", () => {
+  const h = harness();
+  const owner = h.mount();
+  const target = h.el("broll-add-save");
+  target.removeAttribute("id");
+  try {
+    h.fire(target, "click");
+    assert.deepEqual(h.calls, []);
+    h.state.menus = true;
+    h.fire(h.doc, "mousedown");
+    assert.deepEqual(h.calls, ["close-menus", "render"]);
+    h.calls.length = 0;
+    h.state.menus = true;
+    h.state.selected = true;
+    h.el("broll-panel").remove();
+    h.fire(h.doc, "mousedown");
+    h.fire(h.win, "keydown", { key: "Escape" });
+    assert.deepEqual(h.calls, []);
+  } finally { owner.dispose(); h.win.close(); }
+});

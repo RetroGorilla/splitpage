@@ -46,7 +46,7 @@ import { toHtml } from "../core/text/html.ts";
 import { projection } from "../core/text/runs.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { cellOf, scriptCellOf } from "../legacy/richtext.ts";
-import { currentDocument, readSession, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { heldDocument, readSession, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { addShotCommand, addShotPropCommand, removeShotPropCommand } from "../application/commands/broll-records.ts";
 import { rewriteCellsCommand } from "../application/commands/document-edit.ts";
 import { addBrollRecord, brollRecord } from "../core/production/records.ts";
@@ -165,7 +165,7 @@ function unkeyedScope(changes) {
 }
 
 export function derivedRecordsPlan(doc, changes) {
-  if (!doc || doc !== currentDocument()) return null;
+  if (!doc || doc !== heldDocument()) return null;
   var tags = tagRecordsPlan(doc);
   var shots = planBrollRecords(doc, productionReaders, randomIds, htmlToPlainText, unkeyedScope(changes));
   var fields = [];

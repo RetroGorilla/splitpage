@@ -274,3 +274,52 @@ test("comments: stale image rejection is silent, live rejection reports once, an
   assert.deepEqual(h.calls, []);
   h.win.close();
 });
+
+test("comments: disposal removes every listener newest first and silences retained callbacks", () => {
+  const h = harness();
+  const added: { target: EventTarget; type: string; fn: EventListenerOrEventListenerObject | null; options: boolean | AddEventListenerOptions | undefined }[] = [];
+  const removed: typeof added = [];
+  for (const target of h.records.map((record) => record.target)) {
+    const add = target.addEventListener.bind(target);
+    const remove = target.removeEventListener.bind(target);
+    target.addEventListener = (type: string, fn: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions): void => {
+      added.push({ target, type, fn, options });
+      add(type, fn, options);
+    };
+    target.removeEventListener = (type: string, fn: EventListenerOrEventListenerObject | null, options?: boolean | EventListenerOptions): void => {
+      removed.push({ target, type, fn, options });
+      remove(type, fn, options);
+    };
+  }
+  const owner = h.mount();
+  try {
+    assert.equal(added.length, 37);
+    owner.dispose();
+    owner.dispose();
+    assert.equal(removed.length, 37);
+    assert.deepEqual(removed, [...added].reverse());
+    h.calls.length = 0;
+    for (const entry of added) {
+      assert.equal(typeof entry.fn, "function");
+      (entry.fn as EventListener)(new h.win.Event(entry.type));
+    }
+    assert.deepEqual(h.calls, []);
+  } finally { owner.dispose(); h.win.close(); }
+});
+
+test("comments: connected targets with a stale id are ignored while document listeners stay live", () => {
+  const h = harness();
+  const owner = h.mount();
+  const target = h.el("comment-post");
+  const replacement = target.cloneNode(true);
+  target.removeAttribute("id");
+  h.doc.body.append(replacement);
+  try {
+    h.fire(target, "click");
+    assert.deepEqual(h.calls, []);
+    const author = h.el("comment-name");
+    h.doc.body.append(author);
+    h.fire(author, "input");
+    assert.deepEqual(h.calls, ["author"]);
+  } finally { owner.dispose(); h.win.close(); }
+});
