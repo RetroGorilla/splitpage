@@ -994,10 +994,6 @@ export function __init() {
     var on = v === true || v === "1" || v === 1 ? true : v === false || v === "0" || v === 0 ? false : preferences().rundownMin();
     setRundownMinimized(on, false);
   });
-  window.addEventListener("storage", function (e) {
-    if (preferences().nameOf(e.key) !== "rundownMin") return;
-    setRundownMinimized(preferences().rundownMin(), false);
-  });
 
   if (rowsEl) rowsEl.addEventListener("focusin", function (e) { noteCurrentRow(e.target); });
   document.addEventListener("selectionchange", function () { noteCurrentRow(document.activeElement); });
