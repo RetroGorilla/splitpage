@@ -5,7 +5,7 @@ import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { pushSnapshot, updateIdentityChip } from "./03-sync.js";
 import { renderAbsorbed } from "./05-render.js";
-import { resetProductionPanelState } from "./07-production-tags.js";
+import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { clearDirty, updateSaveStatus } from "./12-dirty-toast.js";
 import { applyReviewMode, linkTurnedOff, reviewMode, serverSessionExpired, updateServerMenu } from "./13-hosted.js";
 import { openProjectFile, updateFileChip } from "./18-local-files.js";

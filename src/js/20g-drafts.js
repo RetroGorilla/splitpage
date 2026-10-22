@@ -10,7 +10,7 @@ import {
 } from "./02b-doc-id.js";
 import { updateIdentityChip } from "./03-sync.js";
 import { renderAbsorbed } from "./05-render.js";
-import { resetProductionPanelState } from "./07-production-tags.js";
+import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
 import { onServerDoc, reviewMode } from "./13-hosted.js";
 import { DRAFT_LIMITS, browserDraftKey, draftBaseOf } from "../adapters/storage/draft-store-idb.ts";

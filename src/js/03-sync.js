@@ -36,7 +36,7 @@ import {
 import { safeId } from "./04-richtext.js";
 import { render, renderAbsorbed } from "./05-render.js";
 import { targetSectionHtml, wireTargetSection } from "./05t-target.js";
-import { resetProductionPanelState } from "./07-production-tags.js";
+import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import {
   formatTimestamp,
   getSavedAuthorName,
