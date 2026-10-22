@@ -1,7 +1,9 @@
-    .comments-panel {
-      overflow-x: hidden;
-      left: 0;
-      width: auto;
-      bottom: calc(72px + env(safe-area-inset-bottom));
-      border-left: 0;
-    }
+@media (max-width: 760px) {
+      .comments-panel {
+        overflow-x: hidden;
+        left: 0;
+        width: auto;
+        bottom: calc(72px + env(safe-area-inset-bottom));
+        border-left: 0;
+      }
+}

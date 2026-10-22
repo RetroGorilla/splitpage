@@ -1,0 +1,87 @@
+@media (min-width: 761px) {
+  #rows .mini-toolbar {
+    position: absolute;
+    left: -4px;
+    bottom: calc(100% + 8px);
+    z-index: 25;
+    height: 36px;
+    margin: 0;
+    padding: 0 1px;
+    width: max-content;
+  }
+}
+.modal-header h2 { font-family: var(--font-body); font-size: 18px; line-height: 24px; font-weight: 700; margin: 0; color: var(--text); }
+.export-head h2 { font-family: var(--font-body); font-size: 18px; line-height: 24px; font-weight: 700; margin: 0; color: var(--text); }
+.export-seg label {
+  flex: 1 1 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 26px;
+  font-size: 13px;
+  line-height: 16px;
+  color: var(--text-dim);
+  padding: 5px 9px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.notice-actions button.armed { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
+body.is-review .cell-editable { cursor: text; }
+.btn-outline {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-6);
+  flex: none;
+  height: 32px;
+  padding: 0 11px 0 var(--space-10);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-body); font-size: 14px; line-height: 20px; font-weight: 450;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.btn-outline svg {
+  width: 16px; height: 16px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+}
+.ev-field {
+  position: relative;
+  display: inline-flex; align-items: center;
+  min-height: 28px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-body); font-size: 14px; line-height: 20px;
+}
+input.ev-field, textarea.ev-field { display: block; padding: var(--space-4) var(--space-8); }
+input.ev-field:focus, textarea.ev-field:focus { outline: none; }
+input.ev-field:focus-visible, textarea.ev-field:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.ev-field > select, .ev-field > input, .ev-field > button {
+  -webkit-appearance: none; appearance: none;
+  min-height: 26px;
+  padding: 0 var(--space-8);
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 1px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  outline: none;
+}
+.ev-field:has(> .ev-chevron) > select, .ev-field:has(> .ev-chevron) > button { padding-right: 26px; }
+.jump-link {
+  display: inline-flex; align-items: center; gap: var(--space-6);
+  padding: 0; border: 0; background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.jump-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.jump-link svg {
+  width: 14px; height: 14px; flex: none;
+  fill: none; stroke: currentColor; stroke-width: 1.75; stroke-linecap: round; stroke-linejoin: round;
+}

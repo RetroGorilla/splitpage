@@ -1,12 +1,14 @@
-    #btn-present {
-      width: 44px;
-      height: 44px;
-      padding: var(--space-2);
-      border-radius: 8px;
-      background-clip: content-box;
-      justify-content: center;
-      gap: 0;
-      font-size: 0;
-    }
-    #btn-present .tally-dot { display: none; }
-    #btn-present .btn-phone-icon { display: block; width: 20px; height: 20px; }
+@media (max-width: 760px) {
+      #btn-present {
+        width: 44px;
+        height: 44px;
+        padding: var(--space-2);
+        border-radius: 8px;
+        background-clip: content-box;
+        justify-content: center;
+        gap: 0;
+        font-size: 0;
+      }
+      #btn-present .tally-dot { display: none; }
+      #btn-present .btn-phone-icon { display: block; width: 20px; height: 20px; }
+}

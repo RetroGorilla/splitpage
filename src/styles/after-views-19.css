@@ -1,9 +1,0 @@
-  .notice-merge.notice-warn { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, var(--surface)); }
-  .notice-actions button.armed { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
-  .notice-body { flex: 1; min-width: 220px; }
-  .notice-actions { display: flex; align-items: center; gap: var(--space-8); }
-  .notice-close {
-    background: none; border: none; font-size: 18px; line-height: 1;
-    color: var(--text-faint); cursor: pointer; padding: var(--space-2) 5px; border-radius: 5px;
-  }
-  .notice-close:hover { color: var(--text); background: var(--surface-2); }
