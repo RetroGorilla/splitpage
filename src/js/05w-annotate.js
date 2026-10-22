@@ -4,11 +4,11 @@ import { rowIndexOf } from "../core/document/rows.ts";
 import { readSession } from "../legacy/session-bridge.ts";
 import { slotPoster } from "./05-render.js";
 import { galleryEdit } from "./05e-gallery-overlay.js";
-import { reviewMode } from "./13-hosted.js";
 import { ANNOTATION_COLORS, annotateGallerySlot, normalizeMarks, rowSlots, slotOriginal } from "../core/document/gallery.ts";
 import { cappedLongText, codePointPrefix } from "../core/document/text-policy.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
+import { reviewMode } from "../legacy/location-bridge.ts";
 
 var COLOR_NAMES = ["Red", "Yellow", "Green", "Blue", "Black", "White"];
 var SIZES = {

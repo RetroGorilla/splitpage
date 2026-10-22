@@ -1,7 +1,7 @@
 import { sha256Bytes } from "../core/document/ids.ts";
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { S } from "./_state.js";
-import { home } from "./_home.js";
+import { currentHome } from "../legacy/location-bridge.ts";
 import { dataUrlForSync, ensureBytes, inlineStateJson, intern, persist, recordFor } from "../adapters/storage/02c-blobs.js";
 import {
   getEditorName,
@@ -505,7 +505,7 @@ function resolveHistoryBackend() {
 }
 
 export function isPristineSeedDocument() {
-  return !!S.state && saveChanges() === 0 && !unsavedChanges() && home.kind === "none" && seedCheckPasses();
+  return !!S.state && saveChanges() === 0 && !unsavedChanges() && currentHome().kind === "none" && seedCheckPasses();
 }
 
 var historyLocal = {};

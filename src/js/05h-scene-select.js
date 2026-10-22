@@ -12,7 +12,7 @@ import { scheduleProductionRefresh } from "./07-production-tags.js";
 import { renderProduction } from "./08-production-panels.js";
 import { renderComments } from "./10-comments.js";
 import { breakUndoCoalescing, flushEdits, lastUndoEntry, undo } from "./12a-undo.js";
-import { onServerDoc, reviewMode } from "./13-hosted.js";
+import { onServerDoc } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { startNewScript } from "./18b-file-menu.js";
 import { renderWriter } from "./19-writer.js";
@@ -24,6 +24,7 @@ import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { rowDrag } from "../legacy/editor-bridge.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
+import { reviewMode } from "../legacy/location-bridge.ts";
 
 var TOLERANCE = 4;
 var SCROLL_ZONE = 120;

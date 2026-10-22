@@ -1,5 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { S } from "../js/_state.js";
+import { documentLocation } from "../legacy/location-bridge.ts";
 
 const pristine = process.argv[2] === "pristine";
 const saved = JSON.stringify({ title: "Saved", rev: 3, lastEditedBy: "Ann", rows: [{ id: "r1", visualText: "", audioText: "x", status: "todo" }] });
@@ -19,7 +20,7 @@ const report = {
   seedCheck: window.__onboarding ? window.__onboarding.seedCheckPasses() : null,
   title: S.state ? S.state.title : null,
   docIdIsTheFiles: Boolean(S.state && S.state.docId === deriveDocId("splitpage-file", saved)),
-  writtenOut: S.docIdWrittenOut
+  writtenOut: documentLocation().writtenOut()
 };
 closeApp();
 process.stdout.write(JSON.stringify(report) + "\n");

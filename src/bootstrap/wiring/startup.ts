@@ -17,19 +17,19 @@ import {
 import { startHistoryMigration } from "../../js/03a-history-store.js";
 import { renderFirstDraw } from "../../js/05-render.js";
 import { hasUnsavedChanges, updateSaveStatus } from "../../js/12-dirty-toast.js";
-import { detectServer } from "../../js/13-hosted.js";
 import { applyStashedWork, updateAutoSaveMenu } from "../../js/14-export.js";
 import { tryResumeLastProject } from "../../js/18-local-files.js";
 import { seedCheckPasses } from "../../legacy/seed-check.ts";
 import { desktopBridge, initDesktop, notifyDesktopDocumentState } from "../../js/20f-desktop.js";
 import { applyTakenDraft, armServerDraftResume, desktopDraftTaker } from "../../js/20g-drafts.js";
+import { checkServer } from "../../legacy/location-bridge.ts";
 
 export function startupPorts(): StartupPorts<unknown, ValidatedDocument, ValidatedDocument, unknown> {
   return {
     desktop: !!desktopBridge(),
     draft: {
       taker: desktopDraftTaker(),
-      detectServer: detectServer,
+      detectServer: checkServer,
       armServerResume: armServerDraftResume,
       applyDraft: applyTakenDraft
     },

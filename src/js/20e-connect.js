@@ -1,9 +1,8 @@
 import { S } from "./_state.js";
-import { conn, home, setHome, normalizeServerUrl } from "./_home.js";
+import { checkServer, currentConn, currentHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
 import { render } from "./05-render.js";
 import {
   applyReviewMode,
-  detectServer,
   fetchReviewLink,
   finishServerDetect,
   pointTabAt,
@@ -12,51 +11,28 @@ import {
 import { deliverFile, updateFileChip } from "./18-local-files.js";
 import { renderDesktopShareInfo } from "./20f-desktop.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
+import { joinServer } from "../adapters/transport/server-join.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { interruptTourForDialog, offerTourResumeAfterDialog } from "../legacy/tour-pause.ts";
 import { setMenuItemLabel, showToast } from "../legacy/effects-bridge.ts";
-import { joinErrorText, tunnelCommand } from "../../shared/server-links.js";
+import { joinErrorText, normalizeServerUrl, tunnelCommand } from "../../shared/server-links.js";
+import { shortHost } from "../adapters/transport/server-address.ts";
 
-export var SERVER_BOOKMARKS_KEY = "splitpage-server-bookmarks";
-
-S.serverBookmarks = [];
 var pinRequest = null;
 var sshShownFor = null;
 
-export function loadBookmarks() {
-  S.serverBookmarks = [];
-  var raw;
-  try { raw = localStorage.getItem(SERVER_BOOKMARKS_KEY); } catch (e) { return; }
-  if (!raw) return;
-  try {
-    var parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return;
-    S.serverBookmarks = parsed.filter(function (b) {
-      return b && typeof b === "object" && typeof b.url === "string";
-    });
-  } catch (e) { }
-}
-
 export function saveBookmarks() {
-  try { localStorage.setItem(SERVER_BOOKMARKS_KEY, JSON.stringify(S.serverBookmarks)); }
-  catch (e) { showToast("This browser would not save the server list.", "warn"); }
+  if (!serverStatus().saveBookmarks()) showToast("This browser would not save the server list.", "warn");
 }
 
 export function newBookmarkId() {
   return "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-function bookmarkById(id) {
-  for (var i = 0; i < S.serverBookmarks.length; i++) {
-    if (S.serverBookmarks[i].id === id) return S.serverBookmarks[i];
-  }
-  return null;
-}
-
 export function serversMenuLabel() {
-  if (!conn.serverUrl) return "Servers…";
-  var known = S.serverBookmarks.filter(function (b) { return b.url === conn.serverUrl; })[0];
-  return "Servers… (" + (known ? known.name : shortHost(conn.serverUrl)) + ")";
+  if (!currentConn().serverUrl) return "Servers…";
+  var known = serverStatus().bookmarks().filter(function (b) { return b.url === currentConn().serverUrl; })[0];
+  return "Servers… (" + (known ? known.name : shortHost(currentConn().serverUrl)) + ")";
 }
 
 export function updateConnectMenu() {
@@ -65,17 +41,13 @@ export function updateConnectMenu() {
   setMenuItemLabel(item, serversMenuLabel());
 }
 
-export function shortHost(url) {
-  try { return new URL(url).host; } catch (e) { return url; }
-}
-
 export function openPinDialog(opts) {
   opts = opts || {};
   var modal = document.getElementById("pin-modal");
   if (!modal) return;
   interruptTourForDialog();
   pinRequest = {
-    base: opts.base === undefined ? conn.serverUrl : opts.base,
+    base: opts.base === undefined ? currentConn().serverUrl : opts.base,
     onDone: opts.onDone || null
   };
   document.getElementById("pin-reason").textContent =
@@ -112,7 +84,7 @@ function closePinDialog() {
 function closePinDialogForAnotherServer() {
   var modal = document.getElementById("pin-modal");
   if (!modal || modal.hidden || !pinRequest) return;
-  if (normalizeServerUrl(pinRequest.base) === conn.serverUrl) return;
+  if (normalizeServerUrl(pinRequest.base) === currentConn().serverUrl) return;
   closePinDialog();
 }
 
@@ -121,33 +93,6 @@ function setPinError(message) {
   if (!el) return;
   el.textContent = message || "";
   el.hidden = !message;
-}
-
-export async function joinServer(base, pin, key) {
-  var url = (base ? String(base).replace(/\/+$/, "") + "/" : "") + "api/join";
-  var res;
-  try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify(key ? { key: String(key) } : { pin: String(pin || "") }),
-      credentials: base ? "omit" : "same-origin",
-      cache: "no-store"
-    });
-  } catch (e) {
-    return { ok: false, error: "offline" };
-  }
-  var body = null;
-  try { body = await res.json(); } catch (e) { }
-  if (res.ok && body && body.token) {
-    var joined = { ok: true, token: body.token, role: body.role || "edit" };
-    if (typeof body.docId === "string") joined.docId = body.docId;
-    if (typeof body.scope === "string") joined.scope = body.scope;
-    return joined;
-  }
-  if (res.status === 429) return { ok: false, error: "too-many-attempts" };
-  if (res.status === 404 || !body) return { ok: false, error: "not-splitpage" };
-  return { ok: false, error: (body && body.error) || ("HTTP " + res.status) };
 }
 
 async function withBusy(button, label, work) {
@@ -178,20 +123,20 @@ async function submitPin() {
   var done = pinRequest.onDone;
   var base = pinRequest.base;
   closePinDialog();
-  var forThisTab = normalizeServerUrl(base) === conn.serverUrl;
+  var forThisTab = normalizeServerUrl(base) === currentConn().serverUrl;
   if (forThisTab) setServerToken(result.token, remember);
   showToast("Joined" + (base ? " " + shortHost(base) : "") +
     (result.role === "review" ? " — viewing and commenting only." : "."), "ok");
   if (done) { done({ token: result.token, remember: remember }); return; }
   if (!forThisTab) return;
-  if (S.serverMode.available) finishServerDetect();
-  else detectServer();
+  if (serverStatus().mode().available) finishServerDetect();
+  else checkServer();
 }
 
 export function openServersDialog() {
   var modal = document.getElementById("connect-modal");
   if (!modal) return;
-  loadBookmarks();
+  serverStatus().loadBookmarks();
   sshShownFor = null;
   document.getElementById("connect-ssh-out").hidden = true;
   setConnectError("");
@@ -221,8 +166,8 @@ var reviewLinkUrl = "";
 async function renderReviewLink() {
   var box = document.getElementById("connect-review");
   if (!box) return;
-  if (S.serverMode.available && S.serverMode.links && home.kind === "server" &&
-      conn.role !== "review" && !conn.scope) {
+  if (serverStatus().mode().available && serverStatus().mode().links && currentHome().kind === "server" &&
+      currentConn().role !== "review" && !currentConn().scope) {
     reviewLinkUrl = "";
     box.innerHTML = '<div class="connect-add-title">Invite people to this script</div>' +
       '<div class="modal-row">' +
@@ -248,28 +193,28 @@ async function renderReviewLink() {
 
 export function renderConnect() {
   var current = document.getElementById("connect-current");
-  var base = conn.serverUrl;
+  var base = currentConn().serverUrl;
   if (!base) {
     current.innerHTML = "This tab is using <strong>this copy of Splitpage</strong>" +
-      (S.serverMode.available
+      (serverStatus().mode().available
         ? " and the server that opened it."
         : " on its own — documents are files you save to disk.");
   } else {
-    var known = S.serverBookmarks.filter(function (b) { return b.url === base; })[0];
+    var known = serverStatus().bookmarks().filter(function (b) { return b.url === base; })[0];
     current.innerHTML = "This tab is using <strong>" + escapeHtml(known ? known.name : shortHost(base)) +
       "</strong> — " + escapeHtml(base) +
-      (conn.tunnel ? " through an SSH tunnel to " + escapeHtml(conn.tunnel.userHost) : "") +
-      (S.serverMode.available ? "" : " <em>(not answering)</em>");
+      (currentConn().tunnel ? " through an SSH tunnel to " + escapeHtml(currentConn().tunnel.userHost) : "") +
+      (serverStatus().mode().available ? "" : " <em>(not answering)</em>");
   }
   current.setAttribute("data-server-url", base);
 
   var list = document.getElementById("connect-list");
-  if (!S.serverBookmarks.length) {
+  if (!serverStatus().bookmarks().length) {
     list.innerHTML = '<div class="connect-empty">No servers saved yet.</div>';
     return;
   }
-  list.innerHTML = S.serverBookmarks.map(function (b) {
-    var isCurrent = b.url === conn.serverUrl;
+  list.innerHTML = serverStatus().bookmarks().map(function (b) {
+    var isCurrent = b.url === currentConn().serverUrl;
     return '<div class="connect-row' + (isCurrent ? ' is-current' : '') +
         '" data-id="' + escapeHtml(b.id) + '">' +
       '<span class="connect-row-main">' +
@@ -325,7 +270,7 @@ async function addBookmarkFromForm() {
 
   var bookmark = { id: newBookmarkId(), name: name || shortHost(url), url: url };
   if (ssh) bookmark.ssh = ssh;
-  S.serverBookmarks.push(bookmark);
+  serverStatus().addBookmarks([bookmark]);
   saveBookmarks();
 
   document.getElementById("connect-name").value = "";
@@ -351,7 +296,7 @@ export async function addServerBookmark(name, url, opts) {
     if (!joined.ok) return joined;
   }
   var bookmark = { id: newBookmarkId(), name: (name || "").trim() || shortHost(base), url: base };
-  S.serverBookmarks.push(bookmark);
+  serverStatus().addBookmarks([bookmark]);
   saveBookmarks();
   updateConnectMenu();
   if (joined && joined.ok) {
@@ -368,9 +313,8 @@ function tunnelOf(bookmark) {
 
 async function useServer(bookmark, opts) {
   opts = opts || {};
-  if (home.kind === "server") setHome("none");
-  S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
-                 reviewAvailable: false, version: null };
+  if (currentHome().kind === "server") setHome("none");
+  serverStatus().forgetMode();
   try {
     pointTabAt(bookmark.url, { token: opts.token, tunnel: tunnelOf(bookmark), makeDefault: true });
   } catch (e) {
@@ -380,26 +324,26 @@ async function useServer(bookmark, opts) {
   if (opts.token) setServerToken(opts.token, !!opts.remember);
   updateConnectMenu();
   renderConnect();
-  await detectServer();
+  await checkServer();
   applyReviewMode();
   if (S.state) render();
   updateFileChip();
   renderConnect();
   renderReviewLink();
-  if (S.serverMode.available && !(S.serverMode.authRequired && !conn.token)) {
+  if (serverStatus().mode().available && !(serverStatus().mode().authRequired && !currentConn().token)) {
     showToast("This tab is now using " + (bookmark.name || shortHost(bookmark.url)) +
       " — open a document from the File menu.", "ok");
   }
 }
 
 async function useBookmark(id) {
-  var b = bookmarkById(id);
+  var b = serverStatus().bookmarkById(id);
   if (!b) return;
   await useServer(b);
 }
 
 function askPinFor(id) {
-  var b = bookmarkById(id);
+  var b = serverStatus().bookmarkById(id);
   if (!b) return;
   openPinDialog({
     base: b.url,
@@ -409,9 +353,9 @@ function askPinFor(id) {
 }
 
 function removeBookmark(id) {
-  var b = bookmarkById(id);
+  var b = serverStatus().bookmarkById(id);
   if (!b) return;
-  S.serverBookmarks = S.serverBookmarks.filter(function (x) { return x.id !== id; });
+  serverStatus().removeBookmark(id);
   saveBookmarks();
   if (sshShownFor === id) {
     sshShownFor = null;
@@ -423,13 +367,12 @@ function removeBookmark(id) {
 }
 
 async function backToThisCopy() {
-  if (home.kind === "server") setHome("none");
-  S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
-                 reviewAvailable: false, version: null };
+  if (currentHome().kind === "server") setHome("none");
+  serverStatus().forgetMode();
   pointTabAt("", { makeDefault: true });
   closePinDialogForAnotherServer();
   updateConnectMenu();
-  await detectServer();
+  await checkServer();
   applyReviewMode();
   if (S.state) render();
   updateFileChip();
@@ -443,7 +386,7 @@ function sshCommandFor(bookmark) {
 }
 
 function showSshFor(id) {
-  var b = bookmarkById(id);
+  var b = serverStatus().bookmarkById(id);
   if (!b || !b.ssh) return;
   sshShownFor = id;
   document.getElementById("connect-ssh-cmd").textContent = sshCommandFor(b);
@@ -476,7 +419,7 @@ async function copyPlainText(text, okMsg, failMsg) {
 
 async function copySshCommand() {
   if (!sshShownFor) return;
-  var b = bookmarkById(sshShownFor);
+  var b = serverStatus().bookmarkById(sshShownFor);
   if (!b) return;
   await copyPlainText(sshCommandFor(b), "Command copied.",
     "Could not copy — select the command and copy it by hand.");
@@ -490,7 +433,7 @@ async function copyReviewLink() {
 
 function saveSshCmd() {
   if (!sshShownFor) return;
-  var b = bookmarkById(sshShownFor);
+  var b = serverStatus().bookmarkById(sshShownFor);
   if (!b) return;
   var safe = (b.name || "server").replace(/[^a-zA-Z0-9 _-]+/g, "").trim() || "server";
   var lines = [
@@ -509,7 +452,7 @@ function saveSshCmd() {
 }
 
 export function __init() {
-  loadBookmarks();
+  serverStatus().loadBookmarks();
 
   (function wireConnectUi() {
 

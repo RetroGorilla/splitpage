@@ -2,7 +2,7 @@ import type { ActionDefinition, ActionRegistry, Availability } from "../applicat
 import { registerAll } from "../application/actions.ts";
 import { promptForTarget } from "../js/03-sync.js";
 import { openGdocModal, openImportModal } from "../js/11-import.js";
-import { openDriveModal, openServerPicker, publishToServer, reviewMode, serverOpenItemState, serverPublishItemState } from "../js/13-hosted.js";
+import { openDriveModal, openServerPicker, publishToServer, serverOpenItemState, serverPublishItemState } from "../js/13-hosted.js";
 import { collaborateBlockedReason, openCollaborate } from "../js/13b-collaborate.js";
 import { toggleAutoSave } from "../js/14-export.js";
 import { autoSavePolicy, savesStarted } from "./save-bridge.ts";
@@ -20,6 +20,7 @@ import { greyedOut, itemAvailability, shownWhen } from "./menu-items.ts";
 import { OPENS_A_DIALOG, availableUnless, firstRefusal } from "./screen.ts";
 import type { Blocker } from "./screen.ts";
 import { inDesktopApp, screenNow } from "./screen-state.ts";
+import { reviewMode } from "./location-bridge.ts";
 
 const LOADED: readonly Blocker[] = ["loading"];
 
