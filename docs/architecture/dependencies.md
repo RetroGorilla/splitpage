@@ -530,10 +530,13 @@ with the comments each held on 30 September 2026:
 | --- | --- |
 | `.gitignore` | 31 |
 | `.gitattributes` | 5 |
-| `desktop/.npmrc` | 3 (why `arch=arm64` is pinned; [ci.md](ci.md) explains how CI overrides it) |
 | `.env.example` | 85, five of them commented-out optional settings. These are setup instructions for the person filling in `.env` on the server, so moving them out of the file is the owner's decision, not a mechanical cleanup |
 | `desktop/build/installer.nsh` | 178: 167 whole-line `;` comments and 11 trailing ones saying what each register saved by a `Push` holds |
 | `.dockerignore`, `.editorconfig`, `.nvmrc`, `desktop/.gitignore` | none |
+
+`desktop/.npmrc` was removed. Architecture selection now belongs to
+`desktop/electron-arch.mjs`, invoked by `npm run fetch-electron` after
+`npm ci`; dependency installation no longer carries the ARM64 pin.
 
 A workflow step run by another interpreter (`shell: python {0}`) is read with
 the shell rules.
