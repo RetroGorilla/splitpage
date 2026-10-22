@@ -79,7 +79,5 @@ export function cssAttr(v) { return String(v); }
 
 export const productionReaders = { wordCount: () => 0 };
 export function hasSetLength(row) { return coreHasSetLength(row); }
-export function estimatedSeconds() { return 0; }
-export function rowSeconds() { return 0; }
 export function formatDuration(s) { return String(s); }
 export function parseSceneLength() { return null; }

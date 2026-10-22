@@ -19,7 +19,7 @@ const { joinScenesCommand, splitSceneCommand, textCut } = await import("../appli
 const { htmlToPlainText } = await import("../legacy/plain-text.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
-const { syncFieldFromDom } = await import("../js/05-render.js");
+const { cellEditing } = await import("../legacy/editor-bridge.ts");
 
 after(closeApp);
 
@@ -537,7 +537,7 @@ test("in review mode, a Writer paragraph whose text differs from the model is no
   await writerInReview();
   const p = para("r2");
   p.innerHTML = "Alpha bravo CHANGED";
-  untouched(() => syncFieldFromDom(p));
+  untouched(() => cellEditing().sync(p));
   untouched(() => p.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true })));
   p.setAttribute("contenteditable", "true");
   p.focus();
@@ -556,7 +556,7 @@ test("in review mode, a grid cell whose text or formatting differs from the mode
   cell.innerHTML = "Hello there CHANGED";
   untouched(() => cell.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true })));
   cell.innerHTML = "Hello <strong>there</strong>";
-  untouched(() => syncFieldFromDom(cell));
+  untouched(() => cellEditing().sync(cell));
   assert.equal(S.state.rows[0].audioText, "Hello there");
   toEdit();
 });
@@ -568,7 +568,7 @@ test("in review mode, a comment anchor reaching the grid through the same sync i
   const cell = document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');
   const generation = liveSession().generation();
   cell.innerHTML = 'Hello <span class="cmt-anchor" data-cmt="c-review">there</span>';
-  syncFieldFromDom(cell);
+  cellEditing().sync(cell);
   assert.equal(S.state.rows[0].audioText, 'Hello <span class="cmt-anchor" data-cmt="c-review">there</span>');
   assert.equal(liveSession().generation(), generation + 1);
   toEdit();
