@@ -1,9 +1,13 @@
 import { S } from "./_state.js";
 import {
-  brollSummaryText, captureExportDocument, exportBrollScenes, exportComments, exportFacts, exportRuns, sceneFacts
-} from "./14b-export-kit.js";
-import { breakdownRows } from "./14c-export-projections.js";
-import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "./14d-export-text.js";
+  brollSummaryText,
+  exportBrollScenes,
+  exportComments,
+  exportFacts
+} from "../adapters/formats/export-kit.ts";
+import { captureExportDocument, exportRuns } from "./14b-export-kit.js";
+import { breakdownRows, sceneFacts } from "../adapters/formats/export-projections.ts";
+import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
 import { narrationRows } from "./15-docx.js";
 import { exportBaseName, exportFileName, handleFileMenuAction, runExportAction } from "./18-local-files.js";
 import { onFileMenuRefresh } from "./18b-file-menu.js";

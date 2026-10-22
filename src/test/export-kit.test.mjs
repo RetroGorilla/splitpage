@@ -10,15 +10,17 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import {
   breakdownGroups,
   brollSummaryText,
-  commentNumbers,
   exportBrollScenes,
   exportComments,
-  exportDocumentOf,
   exportFacts,
-  exportRuns,
-  exportSummaryParts,
-  sceneFacts
+  exportSummaryParts
+} from "../adapters/formats/export-kit.ts";
+import {
+  commentNumbers,
+  exportDocumentOf,
+  exportRuns
 } from "../js/14b-export-kit.js";
+import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { assemblePdf, pdfLampOp, pdfTextWidth, pdfWrapRuns } from "../js/17-pdf.js";
 import { LONG_DEMO } from "../js/_starters.js";
 import { loadTestDocument } from "./_document.mjs";
