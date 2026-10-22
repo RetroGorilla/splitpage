@@ -6,7 +6,7 @@ import type { DestinationPort, IdentityPort, LiveDocumentPort } from "../applica
 import { migrateRows } from "../js/02-state.js";
 import { currentConn, currentHome, documentLocation } from "./location-bridge.ts";
 import { confirmedGeneration } from "./save-bridge.ts";
-import { adoptReplacement, liveSession } from "./session-bridge.ts";
+import { liveSession } from "./session-bridge.ts";
 
 export interface LegacyDestination {
   readonly kind: string;
@@ -64,7 +64,6 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
   const transitions = createTransitions<LegacyDestination>({
     entry: migrateRows,
     live: ports.live,
-    session: { adopt: adoptReplacement },
     destination: ports.destination,
     identity: ports.identity,
     ownership: operations

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { S } from "../js/_state.js";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
+import { mergeBase } from "../legacy/session-bridge.ts";
 
 await bootApp();
 after(closeApp);
@@ -65,7 +66,7 @@ test("one provider and one registration put a new exporter in the menu, the pale
   const demo = demoExporter();
   const docBefore = JSON.stringify(S.state);
   const dirtyBefore = unsavedChanges();
-  const baseBefore = JSON.stringify(S.baseState);
+  const baseBefore = JSON.stringify(mergeBase());
   const seqBefore = saveChanges();
   const idBefore = S.state.docId;
   const files = delivered();
@@ -114,7 +115,7 @@ test("one provider and one registration put a new exporter in the menu, the pale
 
     assert.equal(JSON.stringify(S.state), docBefore, "exporting left the document as it was");
     assert.equal(unsavedChanges(), dirtyBefore);
-    assert.equal(JSON.stringify(S.baseState), baseBefore, "no baseline was confirmed");
+    assert.equal(JSON.stringify(mergeBase()), baseBefore, "no baseline was confirmed");
     assert.equal(saveChanges(), seqBefore);
     assert.equal(S.state.docId, idBefore);
   } finally {

@@ -26,11 +26,13 @@ param(
   # still gets its own scope instead of an empty/shared one.
   [string]$RunId,
   [string]$ResultToken,
-  [switch]$FreezeCaches
+  [switch]$FreezeCaches,
+  [switch]$DocumentGuard
 )
 
 $ErrorActionPreference = 'Stop'
 if ($env:SPLITPAGE_FREEZE_CACHES -eq '1') { $FreezeCaches = [switch]$true }
+if ($env:SPLITPAGE_DOCUMENT_GUARD -eq '1') { $DocumentGuard = [switch]$true }
 if (-not $Root)    { $Root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path }
 if (-not $ShotDir) { $ShotDir = Join-Path $env:TEMP 'splitpage-shots' }
 if (-not $RunId)   { $RunId = [guid]::NewGuid().ToString('N').Substring(0, 8) }
@@ -39,6 +41,7 @@ New-Item -ItemType Directory -Force -Path $ShotDir | Out-Null
 function Log($m)  { [Console]::Error.WriteLine("[driver] $m") }
 function Out1($m) { [Console]::Out.WriteLine($m) }
 if ($FreezeCaches) { Log 'cache freezing on: every page opened here gets freeze-caches=1' }
+if ($DocumentGuard) { Log 'document guard on: every page opened here gets document-guard=1' }
 
 # ---------------------------------------------------------------- static server
 # Own HttpListener rather than start.ps1: start.ps1 also does Start-Process on
@@ -240,6 +243,7 @@ if (!/[?&]newtab=1(&|$)/.test(location.search)) { window.__splitpageNoNewTab = t
 window.__splitpageNoRemote = true;
 '@ }
   if ($FreezeCaches) { $null = Send-Cdp 'Page.addScriptToEvaluateOnNewDocument' @{ source = 'window.__splitpageFreezeRun = true;' } }
+  if ($DocumentGuard) { $null = Send-Cdp 'Page.addScriptToEvaluateOnNewDocument' @{ source = 'window.__splitpageGuardRun = true;' } }
   $null = Send-Cdp 'Log.enable'
 }
 
@@ -354,11 +358,21 @@ function Add-FreezeFlag([string]$Url) {
   return "$head${sep}freeze-caches=1$tail"
 }
 
+function Add-GuardFlag([string]$Url) {
+  $hash = $Url.IndexOf('#')
+  $head = if ($hash -ge 0) { $Url.Substring(0, $hash) } else { $Url }
+  $tail = if ($hash -ge 0) { $Url.Substring($hash) } else { '' }
+  if ($head -match '[?&]document-guard=') { return $Url }
+  $sep = if ($head.Contains('?')) { '&' } else { '?' }
+  return "$head${sep}document-guard=1$tail"
+}
+
 function Go([string]$Target) {
   $url = if ($Target -match '^https?://') { $Target }
          elseif ($Target -match '^/')     { "http://localhost:$Port$Target" }
          else                             { "http://localhost:$Port/$Target" }
   if ($FreezeCaches -and $Target -notmatch '^https?://') { $url = Add-FreezeFlag $url }
+  if ($DocumentGuard -and $Target -notmatch '^https?://') { $url = Add-GuardFlag $url }
   $null = Send-Cdp 'Page.navigate' @{ url = $url }
   Wait-For 'document.readyState === "complete"' 30000 | Out-Null
   Out1 "at $url"
@@ -675,6 +689,15 @@ function Test-FrozenWrites {
   $hits | Select-Object -First 5 | ForEach-Object { Out1 "     $_" }
 }
 
+function Test-GuardedWrites {
+  $script:Checks++
+  $hits = @($script:Console | Where-Object { $_ -match 'DocumentWriteError' })
+  if ($hits.Count -eq 0) { Out1 'PASS no write into the guarded document was refused'; return }
+  $script:Failures++
+  Out1 'FAIL a write into the guarded document was refused'
+  $hits | Select-Object -First 5 | ForEach-Object { Out1 "     $_" }
+}
+
 function Get-ResultLine {
   # Built in pieces on purpose: PS 5.1 cannot parse a double-quoted string
   # inside a $() subexpression inside another double-quoted string. Kept
@@ -715,6 +738,10 @@ try {
   if ($FreezeCaches -and $script:Ws -and ($script:Checks -gt 0 -or $script:Failures -gt 0)) {
     try { $null = Invoke-Js '0' } catch {}
     Test-FrozenWrites
+  }
+  if ($DocumentGuard -and $script:Ws -and ($script:Checks -gt 0 -or $script:Failures -gt 0)) {
+    try { $null = Invoke-Js '0' } catch {}
+    Test-GuardedWrites
   }
   Out1 ''
   Out1 (Get-ResultLine)

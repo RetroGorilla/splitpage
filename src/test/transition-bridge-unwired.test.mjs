@@ -5,7 +5,7 @@ import { S } from "../js/_state.js";
 import "./_location-started.mjs";
 
 const bridge = await import("../legacy/transition-bridge.ts");
-const { liveSession, requestRefresh } = await import("../legacy/session-bridge.ts");
+const { liveDocumentPort, liveSession, requestRefresh } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");
 
@@ -24,7 +24,7 @@ test("before the transitions are started, every accessor throws instead of runni
 
 function startWith(log) {
   return bridge.startTransitions({
-    live: { current: () => S.state || null, assign: (doc) => { log.push("assign"); S.state = doc; } },
+    live: { current: liveDocumentPort.current, assign: (doc) => { log.push("assign"); liveDocumentPort.assign(doc); }, stamp: liveDocumentPort.stamp },
     destination: { set: (d) => log.push("destination:" + d.kind), confirm: (doc, why) => log.push("baseline:" + why) },
     identity: { mint: () => "d" + "9".repeat(32), writtenOut: () => false, markWrittenOut: (out) => log.push("writtenOut:" + out) }
   });

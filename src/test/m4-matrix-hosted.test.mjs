@@ -9,7 +9,7 @@ import { documentLocation, serverStatus } from "../legacy/location-bridge.ts";
 
 const { refsIn } = blobPolicy;
 
-const { runCommand, sessionStamps } = await import("../legacy/session-bridge.ts");
+const { mergeBase, runCommand, sessionStamps } = await import("../legacy/session-bridge.ts");
 
 await bootApp();
 
@@ -198,7 +198,7 @@ function summary() {
     rev: homeModule.currentHome().rev,
     dirty: unsavedChanges(),
     texts: S.state.rows.map((r) => r.audioText),
-    baseTexts: S.baseState ? S.baseState.rows.map((r) => r.audioText) : null
+    baseTexts: mergeBase() ? mergeBase().rows.map((r) => r.audioText) : null
   };
 }
 
@@ -468,13 +468,13 @@ rightToday("P2", "a publish that completes after another document was opened lea
   await held.gates.arrived("fetch");
   startNewScript();
   assert.equal(S.state.title, "Untitled Script");
-  const other = { dirty: unsavedChanges(), homeKind: homeModule.currentHome().kind, base: JSON.stringify(S.baseState) };
+  const other = { dirty: unsavedChanges(), homeKind: homeModule.currentHome().kind, base: JSON.stringify(mergeBase()) };
   held.gates.releaseAll("fetch");
   assert.equal(await publishing, false, "the publish reports that it did not adopt the copy");
   await settle();
   assert.equal(homeModule.currentHome().kind, other.homeKind, "the new document has no server home");
   assert.equal(unsavedChanges(), other.dirty, "the new document's dirty state is unchanged");
-  assert.equal(JSON.stringify(S.baseState), other.base, "the new document's baseline is unchanged");
+  assert.equal(JSON.stringify(mergeBase()), other.base, "the new document's baseline is unchanged");
   assert.ok(newToasts(before).some((text) => /another script/.test(text)), "the user is told the copy was published and the other script left alone");
 }));
 
@@ -489,7 +489,7 @@ rightToday("P3", "typing during a publish leaves the document dirty (#248)", hos
   await settle();
   assert.equal(homeModule.currentHome().kind, "server", "the document was published");
   assert.equal(unsavedChanges(), true, "the edit made during the publish is still unsaved");
-  assert.deepEqual(S.baseState.rows.map((r) => r.audioText), ["One.", "Two."], "the baseline is what the server accepted");
+  assert.deepEqual(mergeBase().rows.map((r) => r.audioText), ["One.", "Two."], "the baseline is what the server accepted");
 }));
 
 rightToday("P1", "a publish whose connection changed reports the document it created on the old server", hostedCase(async ({ server, held }) => {
@@ -527,7 +527,7 @@ rightToday("C1", "hosted Save As acknowledges no server edit and keeps the merge
   server.put("srv-a", script("A", idOf("a")), 1);
   openHosted(script("A", idOf("a")), "srv-a", 1);
   editRow(0, "Typed before Save As.");
-  const baseBefore = JSON.stringify(S.baseState);
+  const baseBefore = JSON.stringify(mergeBase());
   const target = createHeldFileHandle({ name: "copy.md" });
   window.showSaveFilePicker = async () => target.handle;
   try {
@@ -539,7 +539,7 @@ rightToday("C1", "hosted Save As acknowledges no server edit and keeps the merge
   assert.equal(target.commits.length, 1, "the copy was written once");
   assert.ok(target.text().includes("Typed before Save As."), "the copy holds the unsaved text");
   assert.equal(held.requests.filter((r) => r.method === "PUT" || r.method === "POST").length, 0, "nothing was sent to the server");
-  assert.equal(JSON.stringify(S.baseState), baseBefore, "the merge ancestor is the one the server last sent");
+  assert.equal(JSON.stringify(mergeBase()), baseBefore, "the merge ancestor is the one the server last sent");
   assert.equal(homeModule.currentHome().kind, "server", "the document is still on the server");
   assert.equal(homeModule.currentHome().id, "srv-a");
   assert.equal(homeModule.currentHome().rev, 1, "the server revision did not move");

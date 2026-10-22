@@ -23,10 +23,10 @@ const { seedCheckPasses } = await import("../legacy/seed-check.ts");
 
 after(closeApp);
 
-test("boot from a saved file's state-data: init assigns the file's script through migrateDocument, a migrateRows fixed point", () => {
+test("boot from a saved file's state-data: the session's document is replaced once, with the file's script through migrateDocument, a migrateRows fixed point", () => {
   assert.equal(seedCheckPasses(), false, "a saved file is not the pristine seed");
-  assert.deepEqual(atBoot.map((r) => r.site), ["00-prelude.js#(anonymous)", "02b-doc-id.js#loadInitialDocument", "02b-doc-id.js#assign"]);
-  const loaded = atBoot[2].value;
+  assert.deepEqual(atBoot.map((r) => r.site), ["replaced"]);
+  const loaded = atBoot[0].value;
   assert.equal(loaded.title, "Saved in the file");
   assert.equal(loaded.rows[1].status, "todo", "an unknown status was normalised on the way in");
   assert.match(loaded.docId, /^d[0-9a-f]{32}$/);

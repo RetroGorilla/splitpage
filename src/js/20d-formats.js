@@ -28,6 +28,7 @@ import { openProjectFile } from "./18-local-files.js";
 import { cappedLongText, plainText, safeImageSrc } from "../core/document/text-policy.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";
 import { autoSavePolicy } from "../legacy/save-bridge.ts";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
@@ -256,7 +257,7 @@ export function __init() {
     migrate: migrateRows,
     stash: stashLocalWork,
     clone: cloneState,
-    state: function () { return S.state; },
+    state: function () { return currentDocument(); },
     docFile: function () {
       var f = fileHome();
       return { name: f && f.handle ? f.handle.name : null, kind: f ? f.format : null,

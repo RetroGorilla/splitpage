@@ -192,6 +192,58 @@ under the test-only freeze flag (milestone 3, decisions D2 and D3).
     it still reports `0/0` with the "proved nothing" warning and fails, as in
     a plain run.
 
+## Document guard
+
+The document session (`src/application/session/document-session.ts`) is the
+document's only holder (legacy reduction L3d PR 3). The session bridge hands
+it out through `currentDocument()` and `liveDocumentPort`, and `S.state` is a
+getter onto it with a setter that throws, so a legacy file can still read the
+document through `S.state` but can no longer replace it. A write into the
+document must be a session command (`runDocumentEdit`, `stampDocument`, an
+undo replay), so that undo, dirty, drafts, saves and displays see it. The
+appendix grep of [legacy-reduction.md](legacy-reduction.md) finds direct
+writes through `S.state`; a write through an alias (`var list =
+S.state.comments; list.push(...)`) needs the guard.
+
+- **The switch.** `src/legacy/document-guard.ts` reads the page's query once,
+  when the bundle starts: `document-guard=1`, and nothing else, makes the
+  `S.state` getter hand out a read-only view of the session's document;
+  otherwise it hands out the document itself and nothing else runs.
+- **The view.** A `Proxy` whose `set`, `deleteProperty`, `defineProperty`,
+  `setPrototypeOf` and `preventExtensions` traps throw a
+  `DocumentWriteError` (a `TypeError`) in any mode, after writing it to the
+  console. Reads give views of nested objects and arrays. Views are cached
+  one per raw object in a `WeakMap`, so the same object always gives the same
+  view and identity comparisons among views behave as among raw objects. A
+  view is a `Proxy`, so `structuredClone` and `postMessage` refuse it.
+- **No view reaches the session.** The bridge unwraps what it is handed
+  (a replacement through `liveDocumentPort`, a server, recovery, merged or
+  reloaded document, a merge base) and, after each command, stamp, replay or
+  noted edit, replaces any view left in the document with its raw object.
+  Commands change the session's own object. `currentDocument()` and
+  `liveDocumentPort.current()` always give the raw document.
+  `src/test/document-guard.test.mjs` covers the switch, the view, every kind
+  of write and the unwrapping.
+- **The runs.** `SPLITPAGE_DOCUMENT_GUARD=1` makes `run-tests.ps1`,
+  `driver.ps1`, `driver.mjs` and `tools/run-suites.mjs` add the flag to every
+  page a suite opens with `open` or `goto`, and set
+  `window.__splitpageGuardRun` on every page. In that mode each driver ends
+  every suite that asserted anything with one more check: no console line
+  names a `DocumentWriteError`, whether the app caught it or not.
+  `381-document-guard.txt` checks, in either mode, that the flag reaches the
+  page exactly in a guard run and that writes through the view are refused
+  exactly then. The full browser run passes with the guard on; it can run
+  together with `SPLITPAGE_FREEZE_CACHES=1`.
+- **What it does not cover.** A write through `currentDocument()` or
+  `liveDocumentPort.current()`, which hand out the raw document for the
+  session's own ports; the suites' `__splitpageFormats.state()` hook, which
+  hands scripts the raw document so they can seed fixtures; pages opened
+  without the flag, as for frozen caches.
+- **Identity.** A raw document and its view are different objects, so code
+  that compares a document handed in by the session with `S.state` must
+  compare it with `currentDocument()` (B-roll and tag records,
+  `derivedRecordsPlan`).
+
 ## Golden fixtures
 
 Characterisation tests named `src/test/<name>-golden.test.mjs` compare

@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { createHeldFileHandle, mockClock } from "./_m4-matrix.mjs";
+import { mergeBase } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
@@ -143,5 +144,5 @@ test("clearDirty confirms the open destination at the current generation, and an
   await saveDoc();
   assert.equal(saves.confirmedGeneration(), saves.saveChanges());
   assert.equal(saves.unsavedFor(), false);
-  assert.equal(saves.confirmedSave().baseline, S.baseState, "S.baseState is the destination's confirmed baseline");
+  assert.equal(saves.confirmedSave().baseline, mergeBase(), "mergeBase() is the destination's confirmed baseline");
 }));

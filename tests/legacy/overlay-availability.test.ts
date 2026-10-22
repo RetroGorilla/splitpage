@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { createActionRegistry } from "../../src/application/actions.ts";
 import type { ActionRegistry, ActionSource } from "../../src/application/actions.ts";
 import { S } from "../../src/js/_state.js";
+import { loadTestDocument } from "../../src/test/_document.mjs";
 import { prompterIsOpen, setPrompterOpen } from "../../src/application/prompter-state.ts";
 import { registerFileActions } from "../../src/legacy/file-actions.ts";
 import { registerHelpActions } from "../../src/legacy/help-actions.ts";
@@ -60,12 +61,12 @@ function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
   const disposers = [registerFileActions(registry), registerThisDocumentActions(registry), registerViewActions(registry),
     registerShareActions(registry)];
   const was = { state: S.state as unknown, prompterOpen: prompterIsOpen() };
-  Object.assign(S, { state: { rows: [] } });
+  loadTestDocument({ rows: [] });
   setPrompterOpen(false);
   return {
     registry,
     restore: () => {
-      Object.assign(S, { state: was.state });
+      loadTestDocument(was.state);
       setPrompterOpen(was.prompterOpen);
       document.body.innerHTML = "";
       for (const dispose of disposers) dispose();

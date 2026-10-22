@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { createHeldFetch, mockClock } from "./_m4-matrix.mjs";
 import { documentLocation } from "../legacy/location-bridge.ts";
+import { holdMergeBase, liveDocumentPort, mergeBase } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
@@ -93,7 +94,7 @@ test("a hosted save that lands after its wiring was disposed and the app rewired
 
   openOnServer("srv-t");
   const opened = homeModule.currentHome();
-  const baseline = S.baseState;
+  const baseline = mergeBase();
   assert.equal(textOf(baseline.rows[0]), "One.", "the baseline is the server's revision 1");
 
   type(0, "Typed before the teardown.");
@@ -101,9 +102,14 @@ test("a hosted save that lands after its wiring was disposed and the app rewired
   const saving = saveDoc({ auto: true });
   await held.gates.arrived("fetch");
 
+  const doc = S.state;
   app.stopApp();
   const wiring = await rewireApp();
   t.after(() => wiring.dispose());
+  assert.equal(S.state, null, "the replacement's session holds no document until one is handed to it");
+  assert.equal(mergeBase(), null, "nor a merge base");
+  liveDocumentPort.assign(doc);
+  holdMergeBase(baseline);
   assert.equal(homeModule.currentHome(), opened, "the rewired app keeps the same home record");
   assert.equal(confirmedSave().baseline, null, "the replacement coordinator starts with no baseline");
   const warnedBefore = warnToasts().length;
@@ -114,7 +120,7 @@ test("a hosted save that lands after its wiring was disposed and the app rewired
 
   assert.equal(server.docs.get("srv-t").rev, 2, "the late save reached the server");
   assert.equal(homeModule.currentHome().rev, 1, "the late save did not move the replacement's revision");
-  assert.equal(S.baseState, baseline, "the late save did not replace the baseline");
+  assert.equal(mergeBase(), baseline, "the late save did not replace the baseline");
   assert.equal(confirmedSave().baseline, null, "the late save's baseline did not reach the replacement coordinator");
   assert.deepEqual(warnToasts().slice(warnedBefore), ["An earlier save of this script arrived late. Your next save will merge both versions."], "the late save is reported once");
   assert.equal(saveInProgress(), false, "the late save leaves the idle replacement not busy");
