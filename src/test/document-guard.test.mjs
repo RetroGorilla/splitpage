@@ -73,7 +73,8 @@ test("shown() is a read-only view of the session's document, one view per object
   assert.equal(JSON.stringify(shown()), JSON.stringify(raw));
   assert.deepEqual(shown().rows.map((row) => row.id), ["r1", "r2"]);
   assert.equal(shown().rows.filter((row) => row.status === "todo").length, 2);
-  assert.equal(liveDocumentPort.current(), raw, "the live-document port hands out the session's own object");
+  assert.equal(isDocumentView(liveDocumentPort.current()), true, "the live-document port hands outside readers a view");
+  assert.equal(rawOf(liveDocumentPort.current()), raw);
   assert.equal(isDocumentView(currentDocument()), true, "outside readers get a view");
   assert.equal(rawOf(currentDocument()), raw);
   assert.equal(currentDocument(), currentDocument());
