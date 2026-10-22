@@ -1,5 +1,4 @@
 import { domToPos } from "../features/editing/cell-dom.ts";
-import { S } from "./_state.js";
 import { updateScriptStats } from "./01-scene-status.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { stampRow } from "./03-sync.js";
@@ -45,8 +44,9 @@ import { namedTagId, projection } from "../core/text/runs.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
-import { currentDocument, readSession, requestRefresh, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession, requestRefresh, runDocumentEdit, sessionStamps, stampDocument } from "../legacy/session-bridge.ts";
 import { retagMentions, retagRewrites } from "../legacy/tag-rewrites.ts";
+import { changeSet } from "../application/session/change-set.ts";
 import { addPersonCommand, registerTagCommand, retagCommand, tagCellsCommand } from "../application/commands/production-records.ts";
 import { personById as personByIdIn, personNamed, registryEntryById as registryEntryByIdIn, registryEntryOf } from "../core/production/records.ts";
 import { focusMemory } from "../legacy/editor-bridge.ts";
@@ -212,10 +212,22 @@ export function tagRecordsPlan(doc) {
   };
 }
 
+const REGISTRY_CHANGE = changeSet({ docFields: ["productionTags"] });
+
+function registryHealingStamp(plan, counted) {
+  return {
+    name: "stamp-tag-registry",
+    plan: function () {
+      return { changes: REGISTRY_CHANGE, apply: function (live) { counted(plan.apply(live)); } };
+    }
+  };
+}
+
 export function healTagRegistry() {
   const plan = tagRecordsPlan(currentDocument());
   if (!plan) return 0;
-  var count = plan.apply ? plan.apply(S.state) : 0;
+  let count = 0;
+  if (plan.apply) stampDocument(registryHealingStamp(plan, function (n) { count = n; }));
   plan.commit();
   return count;
 }
