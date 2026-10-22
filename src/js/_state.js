@@ -1,5 +1,4 @@
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { documentView } from "../legacy/document-guard.ts";
 
 export const S = {
   docIdWrittenOut: undefined,
@@ -8,7 +7,7 @@ export const S = {
 
   serverMode: undefined,
 
-  get state() { return documentView(currentDocument()); },
+  get state() { return currentDocument(); },
 
   set state(doc) { throw new TypeError("The document is read-only here: the document session holds it"); }
 };
