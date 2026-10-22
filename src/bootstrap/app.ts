@@ -59,6 +59,8 @@ import {
 import { mountOverlayFeature, stopOverlayFeature } from "./wiring/overlay.ts";
 import { openInitialDocument, startupPorts } from "./wiring/startup.ts";
 
+export { mountTopbarFeature };
+
 let running: (() => void) | null = null;
 
 function view(key: string, mount: () => unknown): [() => unknown, () => void] {
@@ -88,7 +90,6 @@ export function startApp(wiring: Wiring): () => void {
     const startup = beginStartup(startupPorts());
     stops.push(startup.dispose);
     run(view("mountCellReach", mountCellReachFeature));
-    run(view("mountTopbar", mountTopbarFeature));
     run(view("mountPhoneBar", mountPhoneBarFeature));
     run(view("mountNotices", mountNoticesFeature));
     run([mountTagsFeature, stopTagsFeature]);
