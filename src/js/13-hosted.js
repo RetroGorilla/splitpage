@@ -78,6 +78,8 @@ import { isDocumentObject } from "../core/migrate.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { normalizeServerUrl, parseLinkFragment, tunnelCommand } from "../../shared/server-links.js";
 import { driveFormatSize } from "../../shared/text.js";
+import { desktopDrive, desktopPort } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 var sharedDocId;
 
@@ -162,7 +164,7 @@ function saveTabServer() {
 function loadTabConnection() {
   migrateLegacyRememberedToken();
   var from = null;
-  var boot = S.DESKTOP && S.DESKTOP.connection;
+  var boot = runningOnDesktop() ? desktopPort().connection : null;
   if (boot && typeof boot === "object") from = boot;
   if (!from) {
     var mine = readJsonFrom(sessionStorage, TAB_SERVER_KEY);
@@ -431,7 +433,7 @@ function flagLinkOff(kind) {
 }
 
 function offerDraftAfterLinkOff() {
-  if (S.DESKTOP || onServerDoc()) return;
+  if (runningOnDesktop() || onServerDoc()) return;
   offerBrowserDraftAfterLinkOff(currentConn().scope || sharedDocId || linkDocId || "");
 }
 
@@ -781,7 +783,7 @@ export async function finishServerDetect() {
 
   updateServerMenu();
   applyReviewMode();
-  var draftFor = S.DESKTOP ? "" : (currentConn().scope || sharedDocId || linkDocId || "");
+  var draftFor = runningOnDesktop() ? "" : (currentConn().scope || sharedDocId || linkDocId || "");
   (draftFor ? armBrowserServerDraft(draftFor) : Promise.resolve(false)).then(function () {
     return resumeServerDoc().then(function (resumed) {
       if (resumed === true || resumed === "replaced") return;
@@ -907,7 +909,7 @@ function renderServerPicker() {
 }
 
 export async function openServerDoc(id) {
-  if (!S.DESKTOP && !draftResume().serverResume() && await armBrowserServerDraft(id)) {
+  if (!runningOnDesktop() && !draftResume().serverResume() && await armBrowserServerDraft(id)) {
     if (S.state && S.state.rows.length) pushSnapshot("Before opening a script from the server");
     var resumed = await resumeServerDoc() === true;
     if (resumed) {
@@ -1795,7 +1797,7 @@ function saveDriveCreds(apiKey, clientId) {
 var driveDesktopStatus = null;
 
 function driveDesktopBridge() {
-  return !!(S.DESKTOP && typeof S.DESKTOP.driveStatus === "function");
+  return !!(runningOnDesktop() && typeof desktopPort().driveStatus === "function");
 }
 
 var DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
@@ -1833,15 +1835,6 @@ function driveDesktopMessage(res) {
   return "something went wrong" + (code ? " (" + code + ")" : "") + ".";
 }
 
-async function driveDesktopCall(method, arg) {
-  try {
-    var res = await (arguments.length > 1 ? S.DESKTOP[method](arg) : S.DESKTOP[method]());
-    return res || { ok: false, code: "FAILED" };
-  } catch (e) {
-    return { ok: false, code: "FAILED" };
-  }
-}
-
 async function driveDesktopSignedOut(res) {
   if (!res || res.code !== "SIGNED_OUT") return false;
   driveResetBrowse();
@@ -1857,7 +1850,7 @@ function driveResetBrowse() {
 }
 
 async function refreshDriveDesktop() {
-  var st = await driveDesktopCall("driveStatus");
+  var st = await desktopDrive.status();
   driveDesktopStatus = st;
   renderDriveDesktop();
   if (st.ok && st.configured && st.signedIn && !driveState.connected) await driveConnect("");
@@ -1904,7 +1897,7 @@ async function driveSignInDesktop() {
   if (driveDesktopStatus && driveDesktopStatus.signingIn) return;
   driveDesktopStatus = Object.assign({}, driveDesktopStatus, { signingIn: true });
   renderDriveAccount();
-  var res = await driveDesktopCall("driveSignIn");
+  var res = await desktopDrive.signIn();
   if (res.ok) {
     driveDesktopStatus = res;
     driveResetBrowse();
@@ -1927,9 +1920,9 @@ async function driveSignInDesktop() {
 }
 
 async function driveSignOutDesktop() {
-  var res = await driveDesktopCall("driveSignOut");
+  var res = await desktopDrive.signOut();
   driveResetBrowse();
-  driveDesktopStatus = res && res.status ? Object.assign({ ok: true }, res.status) : await driveDesktopCall("driveStatus");
+  driveDesktopStatus = res && res.status ? Object.assign({ ok: true }, res.status) : await desktopDrive.status();
   renderDriveDesktop();
   showToast("Signed out of Google Drive.", "ok");
 }
@@ -1941,7 +1934,7 @@ async function driveConnectDesktop(rawInput) {
   var btn = document.getElementById("drive-connect-btn");
   if (btn) { btn.disabled = true; btn.textContent = "Opening…"; }
   try {
-    var res = await driveDesktopCall("driveList", id);
+    var res = await desktopDrive.list(id);
     if (!res.ok) {
       if (await driveDesktopSignedOut(res)) return;
       showToast("Could not open that folder — " + driveDesktopMessage(res), res.code === "NOT_A_FOLDER" ? "warn" : "error");
@@ -1967,7 +1960,7 @@ async function driveListCurrentDesktop() {
   var list = document.getElementById("drive-list");
   list.innerHTML = '<div class="drive-empty">Loading…</div>';
   var epoch = driveModalEpoch;
-  var res = await driveDesktopCall("driveList", folder.id);
+  var res = await desktopDrive.list(folder.id);
   if (epoch !== driveModalEpoch) return;
   if (!res.ok) {
     if (await driveDesktopSignedOut(res)) return;
@@ -1981,10 +1974,10 @@ async function driveListCurrentDesktop() {
 
 async function driveDownloadDesktop(it) {
   if (it.mimeType !== DRIVE_DOC_MIME && /^application\/vnd\.google-apps\./.test(it.mimeType)) {
-    S.DESKTOP.openExternal("https://drive.google.com/open?id=" + encodeURIComponent(it.id));
+    desktopPort().openExternal("https://drive.google.com/open?id=" + encodeURIComponent(it.id));
     return;
   }
-  var res = await driveDesktopCall("driveDownload", it.id);
+  var res = await desktopDrive.download(it.id);
   if (!res.ok) {
     if (await driveDesktopSignedOut(res)) return;
     showToast("Could not download " + it.name + " — " + driveDesktopMessage(res), "error");
@@ -2002,7 +1995,7 @@ async function driveUploadOneDesktop(file, parentId) {
   });
   var req = same.length === 1 ? { fileId: same[0].id, bytes: bytes } : { parentId: parentId, name: file.name, bytes: bytes };
   if (file.type) req.mimeType = file.type;
-  var res = await driveDesktopCall("driveUpload", req);
+  var res = await desktopDrive.upload(req);
   if (!res.ok) {
     var err = new Error(driveDesktopMessage(res));
     err.driveResult = res;
@@ -2015,7 +2008,7 @@ var driveModalEpoch = 0;
 
 export function openDriveModal() {
   driveModalEpoch++;
-  if (S.DESKTOP) {
+  if (runningOnDesktop()) {
     if (!driveDesktopBridge()) {
       showToast("Google Drive isn't available in this version of the desktop app. Use File ▸ Open… instead.", "warn");
       return;
@@ -2040,7 +2033,7 @@ export function closeDriveModal() {
 }
 
 export function driveShowCredsForm() {
-  if (S.DESKTOP) return;
+  if (runningOnDesktop()) return;
   document.getElementById("drive-setup").hidden = false;
   document.getElementById("drive-main").hidden = true;
 }
@@ -2079,7 +2072,7 @@ function parseDriveFolderId(input) {
 function driveApiKeyParam() { return "key=" + encodeURIComponent(driveCreds.apiKey); }
 
 async function driveFetch(url, opts) {
-  if (S.DESKTOP) throw new Error("not available in the desktop app");
+  if (runningOnDesktop()) throw new Error("not available in the desktop app");
   opts = opts || {};
   var headers = opts.headers || {};
   if (driveState.accessToken && driveState.tokenExpiresAt > Date.now()) {

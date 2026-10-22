@@ -170,11 +170,9 @@ jobs:
       - name: Install desktop dependencies
         run: npm ci
         working-directory: desktop
-        env:
-          npm_config_arch: ${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}
 
       - name: Fetch the dev Electron binary
-        run: node node_modules/electron/install.js
+        run: npm run fetch-electron
         working-directory: desktop
 
       - name: Xvfb and Chromium's shared libraries
