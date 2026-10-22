@@ -61,6 +61,8 @@ import { cloneState } from "../core/document/clone.ts";
 import { slugify } from "../../shared/text.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { fileKindFromName, mimeForFilename } from "../../shared/file-names.js";
+import { desktopPort } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 export function updateFileChip() {
   updateHeaderFileChip();
@@ -449,7 +451,7 @@ async function loadFileIntoEditor(file, handle, opts) {
   updateIdentityChip();
   updateFileChip();
   if (typeof syncDocIdentity === "function") syncDocIdentity();
-  if (S.DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
+  if (runningOnDesktop() && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
   showToast(opts.reload
     ? "Reloaded " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s")
     : "Opened " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s") +
@@ -457,10 +459,10 @@ async function loadFileIntoEditor(file, handle, opts) {
 }
 
 export async function openLocalFile() {
-  if (S.DESKTOP) {
-    var entry = await S.DESKTOP.openFileDialog();
+  if (runningOnDesktop()) {
+    var entry = await desktopPort().openFileDialog();
     if (!entry) return;
-    var r = await S.DESKTOP.routeOpen({ kind: "file", fileId: entry.id });
+    var r = await desktopPort().routeOpen({ kind: "file", fileId: entry.id });
     if (!r || r.where !== "this-tab") return;
     var desktopHandle = makeDesktopHandle(entry);
     var desktopFile = await desktopHandle.getFile();
@@ -495,10 +497,10 @@ export async function openLocalFile() {
 
 export async function deliverFile(filename, data, opts) {
   opts = opts || {};
-  if (S.DESKTOP) {
+  if (runningOnDesktop()) {
     try {
       var ext = (/\.([a-z0-9]+)$/i.exec(filename) || ["", ""])[1].toLowerCase();
-      var picked = await S.DESKTOP.saveFileDialog({
+      var picked = await desktopPort().saveFileDialog({
         suggestedName: filename,
         filters: [{ name: ext ? ext.toUpperCase() + " file" : "File", extensions: ext ? [ext] : [] }]
       });
@@ -509,7 +511,7 @@ export async function deliverFile(filename, data, opts) {
       else if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
       else if (ArrayBuffer.isView(data)) bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
       else bytes = strBytes(String(data));
-      await S.DESKTOP.writeFile(picked.id, bytes);
+      await desktopPort().writeFile(picked.id, bytes);
       showToast(opts.savedMsg || ("Saved " + filename), "ok");
       return true;
     } catch (err) {

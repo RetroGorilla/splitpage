@@ -1,5 +1,4 @@
 import { MD_IMAGE_PREFIX_RE } from "../adapters/formats/markdown-image.ts";
-import { S } from "./_state.js";
 import { internDataUrl, queuePersist } from "../adapters/storage/02c-blobs.js";
 import { pushSnapshot, stampRow } from "./03-sync.js";
 import { cssAttr, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
@@ -16,6 +15,8 @@ import { REVIEW_ONLY, editAllowed, readSession, runCommand, sessionStamps } from
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
+import { desktopPort } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 function splitImportText(text, mode) {
   var norm = String(text || "").replace(/\r\n/g, "\n").trim();
@@ -577,8 +578,8 @@ export function confirmGdocImport() {
   var id = extractGoogleDocId(document.getElementById("gdoc-url-input").value);
   if (!id) { showToast("That doesn't look like a Google Doc link.", "warn"); return; }
   var url = "https://docs.google.com/document/d/" + id + "/export?format=docx";
-  if (S.DESKTOP) {
-    S.DESKTOP.openExternal(url);
+  if (runningOnDesktop()) {
+    desktopPort().openExternal(url);
     closeGdocModal();
     showToast("Opening the Doc as a .docx download in your browser — once it's in your Downloads " +
       "folder, use File ▸ Open… to bring it in.", "ok", true);

@@ -947,14 +947,11 @@ fileId, and no secret ever reaching disk).
 **Dev Electron is native ARM64**, switched on 2026-09-15. From `desktop/`:
 
 ```powershell
-Remove-Item -Recurse -Force node_modules\electron\dist
-$env:npm_config_arch = "arm64"
-$env:npm_config_platform = "win32"
-node node_modules\electron\install.js
+npm ci
+npm run fetch-electron
 ```
 
-The version pin (`^44.3.0`) is unchanged. A plain `npm install` reverts to
-x64 unless `desktop/.npmrc` has `arch=arm64`. Measured dev smoke: 7m43s
+The version pin (`^44.3.0`) is unchanged. Measured dev smoke: 7m43s
 (x64 emulated) vs. 7m25s (ARM64) for the same suite — the suite is
 wait-bound, not CPU-bound, so don't expect a dramatic speedup from the
 switch.

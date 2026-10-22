@@ -20,6 +20,8 @@ import { LONG_DEMO } from "./_starters.js";
 import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
 import { setMenuItemLabel, setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
 import { saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { desktopPort } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 
 function el(id) { return document.getElementById(id); }
@@ -47,7 +49,7 @@ export function keyChipsHtml(spec) {
 
 export function keysWorkHere(item) {
   var only = item.getAttribute("data-keys-only");
-  return !only || (only === "desktop" && !!S.DESKTOP);
+  return !only || (only === "desktop" && runningOnDesktop());
 }
 
 function renderKeyChips(root) {
@@ -148,7 +150,7 @@ function refreshFileCard() {
 }
 
 function recentsSupported() {
-  return !!(S.DESKTOP && typeof S.DESKTOP.listRecents === "function");
+  return !!(runningOnDesktop() && typeof desktopPort().listRecents === "function");
 }
 
 export function pasteItemState() {
@@ -273,7 +275,7 @@ async function refreshRecents(focusFirst) {
   var sub = el("menu-sub-recent");
   if (!sub || !recentsSupported()) return;
   var entries;
-  try { entries = await S.DESKTOP.listRecents(); } catch (e) { entries = []; }
+  try { entries = await desktopPort().listRecents(); } catch (e) { entries = []; }
   if (!Array.isArray(entries)) entries = [];
   if (!entries.length) {
     sub.innerHTML = '<div class="menu-sub-empty">Nothing yet — what you open shows up here.</div>';
@@ -297,9 +299,9 @@ async function openRecentFile(fileId) {
   if (!fileId || !recentsSupported()) return;
   var entry;
   try {
-    var r = await S.DESKTOP.routeOpen({ kind: "file", fileId: fileId });
+    var r = await desktopPort().routeOpen({ kind: "file", fileId: fileId });
     if (!r || r.where !== "this-tab") return;
-    entry = await S.DESKTOP.readFile(fileId);
+    entry = await desktopPort().readFile(fileId);
   } catch (e) {
     showToast("That file isn't there any more — it may have been moved or deleted.", "warn");
     return;
@@ -344,7 +346,7 @@ function replaceWithNewDocument(next, reason, keepLabel) {
   updateFileChip();
   updateSaveStatus();
   if (typeof syncDocIdentity === "function") syncDocIdentity();
-  if (S.DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
+  if (runningOnDesktop() && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
   if (typeof closeNewTabPage === "function") closeNewTabPage();
   return kept;
 }
