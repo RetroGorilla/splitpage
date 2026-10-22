@@ -1,13 +1,14 @@
 import { S } from "./_state.js";
 import { authorityOf, isOwner } from "../application/collaboration/authority.ts";
 import { runIsStale } from "../application/collaboration/workflow.ts";
-import { conn, home, normalizeServerUrl, serverHomeId, updateConnection } from "./_home.js";
+import { currentConn, currentHome, documentLocation, reviewMode, serverHomeId, serverStatus } from "../legacy/location-bridge.ts";
+import { normalizeServerUrl } from "../../shared/server-links.js";
 import { personSwatchesHtml, setMyColor, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { getSavedAuthorName } from "./10-comments.js";
-import { apiFetch, applyHealth, applyReviewMode, clearServerToken, finishServerDetect, isLinkGuest, linkTurnedOff, onServerDoc, pointTabAt, publishToServer, rememberTokenForServer, rememberedTokenForServer, reviewMode, serverDocShareUrl, setServerToken, shareAccessNote, updateServerMenu } from "./13-hosted.js";
+import { apiFetch, applyHealth, applyReviewMode, clearServerToken, finishServerDetect, isLinkGuest, onServerDoc, pointTabAt, publishToServer, rememberTokenForServer, rememberedTokenForServer, serverDocShareUrl, setServerToken, shareAccessNote, updateServerMenu } from "./13-hosted.js";
 import { updateFileChip } from "./18-local-files.js";
-import { joinServer, updateConnectMenu } from "./20e-connect.js";
+import { updateConnectMenu } from "./20e-connect.js";
 import { openSettings } from "./20s-settings.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
@@ -17,6 +18,7 @@ import { cleanAuthorName } from "../core/document/people.ts";
 import { parseLinkFragment } from "../../shared/server-links.js";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
+import { joinServer } from "../adapters/transport/server-join.ts";
 
 export var DEFAULT_COLLAB_SERVER = "https://script.bigmanonline.uk/";
 
@@ -57,23 +59,23 @@ export function readCollabServer() {
 }
 
 function servedByServer() {
-  return !conn.serverUrl && !!S.serverMode.available;
+  return !currentConn().serverUrl && !!serverStatus().mode().available;
 }
 
 function collabTarget() {
-  if (onServerDoc()) return { url: conn.serverUrl, onTab: true };
+  if (onServerDoc()) return { url: currentConn().serverUrl, onTab: true };
   if (servedByServer()) return { url: "", onTab: true };
   var url = readCollabServer();
-  var maybeHere = !conn.serverUrl && !S.serverMode.checked && !runningOnDesktop() &&
+  var maybeHere = !currentConn().serverUrl && !serverStatus().mode().checked && !runningOnDesktop() &&
     /^https?:$/.test(location.protocol);
-  return { url: url, onTab: url === conn.serverUrl, maybeHere: maybeHere };
+  return { url: url, onTab: url === currentConn().serverUrl, maybeHere: maybeHere };
 }
 
 export function collabServerView() {
   var here = servedByServer();
   var url = here ? "" : readCollabServer();
   var signedIn = !!rememberedTokenForServer(url) ||
-    (conn.serverUrl === url && isOwner(authorityOf(conn)));
+    (currentConn().serverUrl === url && isOwner(authorityOf(currentConn())));
   return { servedHere: here, url: url, label: serverLabel(url), signedIn: signedIn,
            isDefault: !here && url === DEFAULT_COLLAB_SERVER };
 }
@@ -81,7 +83,7 @@ export function collabServerView() {
 export function signOutCollab() {
   var view = collabServerView();
   rememberTokenForServer(view.url, "");
-  if (conn.serverUrl === view.url && conn.token && !isLinkGuest()) {
+  if (currentConn().serverUrl === view.url && currentConn().token && !isLinkGuest()) {
     clearServerToken();
     updateServerMenu();
   }
@@ -89,10 +91,10 @@ export function signOutCollab() {
 }
 
 export function collaborateBlockedReason() {
-  if (isLinkGuest() || linkTurnedOff || conn.role === "review" || reviewMode()) {
+  if (isLinkGuest() || serverStatus().linkTurnedOff() || currentConn().role === "review" || reviewMode()) {
     return "Only the script's owner can invite people";
   }
-  if ((onServerDoc() || servedByServer()) && S.serverMode.readOnly) return "This server is read-only";
+  if ((onServerDoc() || servedByServer()) && serverStatus().mode().readOnly) return "This server is read-only";
   return "";
 }
 
@@ -203,7 +205,7 @@ async function connectStep(c) {
   c.error = null;
   if (t.maybeHere) {
     try {
-      var own = await apiFetch("api/health", { base: "", token: conn.token });
+      var own = await apiFetch("api/health", { base: "", token: currentConn().token });
       if (stale(c)) return;
       if (own && own.ok) {
         t.url = ""; t.onTab = true;
@@ -232,7 +234,7 @@ async function connectStep(c) {
     return;
   }
   if (health.authRequired) {
-    var token = t.onTab ? conn.token : rememberedTokenForServer(t.url);
+    var token = t.onTab ? currentConn().token : rememberedTokenForServer(t.url);
     if (!token) { go(c, "sign-in"); return; }
     var me;
     try {
@@ -287,7 +289,7 @@ async function signInStep(c) {
   }
   if (t.onTab) {
     setServerToken(joined.token, remember);
-    updateConnection({ role: "edit", scope: "" });
+    documentLocation().updateConnection({ role: "edit", scope: "" });
     updateServerMenu();
     applyReviewMode();
     finishServerDetect();
@@ -320,12 +322,11 @@ async function publishStep(c) {
   var t = c.target;
   go(c, "publishing");
   if (!t.onTab) {
-    if (home.kind === "server") { c.error = { code: "moved" }; go(c, "error"); return; }
-    S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
-                     reviewAvailable: false, version: null };
+    if (currentHome().kind === "server") { c.error = { code: "moved" }; go(c, "error"); return; }
+    serverStatus().forgetMode();
     pointTabAt(t.url, { token: c.token || "" });
     applyHealth(c.health);
-    if (c.token || !c.health.authRequired) updateConnection({ role: "edit", scope: "" });
+    if (c.token || !c.health.authRequired) documentLocation().updateConnection({ role: "edit", scope: "" });
     t.onTab = true;
     updateConnectMenu();
     updateServerMenu();
@@ -333,7 +334,7 @@ async function publishStep(c) {
   var failure = null;
   var ok = await publishToServer({ quiet: true, onError: function (e) { failure = e; } });
   if (stale(c)) {
-    if (ok) showToast("“" + (S.state.title || "Untitled script") + "” is on " + serverLabel(conn.serverUrl) +
+    if (ok) showToast("“" + (S.state.title || "Untitled script") + "” is on " + serverLabel(currentConn().serverUrl) +
       " — File ▸ Collaborate… has its links.", "ok");
     return;
   }
@@ -401,7 +402,7 @@ function linksFailure(c, e) {
 }
 
 async function linkBase() {
-  if (conn.serverUrl) return conn.serverUrl;
+  if (currentConn().serverUrl) return currentConn().serverUrl;
   if (runningOnDesktop() && typeof desktopPort().getSessionInfo === "function") {
     try {
       var info = await desktopPort().getSessionInfo();
@@ -467,7 +468,7 @@ async function linkAction(c, role, action) {
       return;
     }
     if (linksFailure(c, e)) return;
-    showToast(collabErrorText(e, conn.serverUrl), "warn", true);
+    showToast(collabErrorText(e, currentConn().serverUrl), "warn", true);
     paint();
     return;
   }

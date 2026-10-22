@@ -1,8 +1,8 @@
 import { S } from "./_state.js";
-import { home, homeConn } from "./_home.js";
+import { amendHome, currentHome, homeConn, reviewMode, serverStatus } from "../legacy/location-bridge.ts";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "../../shared/clock.js";
-import { linkTurnedOff, onServerDoc, reviewMode, serverSessionExpired } from "./13-hosted.js";
+import { onServerDoc } from "./13-hosted.js";
 import { personColorsWithMine } from "./13a-presence.js";
 import {
   autoSaveTarget,
@@ -51,7 +51,7 @@ export function legacySessionEffects() {
     save: function (change) {
       if (!saveBusy()) setSaveButtons();
       if (change.kind !== "recovery") scheduleAutoSave();
-      if (home.kind === "import") { home.dirty = true; updateFileChip(); }
+      if (currentHome().kind === "import") { amendHome(currentHome(), { dirty: true }); updateFileChip(); }
       else if (onServerDoc()) { updateFileChip(); }
       if (change.changes.saveNow) queueAutoSave();
     },
@@ -107,8 +107,8 @@ function savedTitle(where) {
 function saveStatusView() {
   var target = typeof autoSaveTarget === "function" ? autoSaveTarget() : null;
   var where = target === "server" ? "the server"
-    : home.kind === "file" ? (home.handle && home.handle.name) || ""
-    : home.kind === "import" ? home.name || ""
+    : currentHome().kind === "file" ? (currentHome().handle && currentHome().handle.name) || ""
+    : currentHome().kind === "import" ? currentHome().name || ""
     : "";
 
   var onServer = typeof onServerDoc === "function" && onServerDoc();
@@ -120,10 +120,10 @@ function saveStatusView() {
     autoSaveOn: autosave.enabled(),
     target: target,
     where: where,
-    homeKind: home.kind,
+    homeKind: currentHome().kind,
     onServer: !!onServer,
-    signedOut: !!serverSessionExpired,
-    linkOff: !!linkTurnedOff
+    signedOut: !!serverStatus().sessionExpired(),
+    linkOff: !!serverStatus().linkTurnedOff()
   }).line;
   return line ? Object.assign({}, line) : null;
 }

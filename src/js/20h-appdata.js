@@ -1,5 +1,5 @@
-import { normalizeServerUrl } from "./_home.js";
-import { S } from "./_state.js";
+import { normalizeServerUrl } from "../../shared/server-links.js";
+import { shortHost } from "../adapters/transport/server-address.ts";
 import { setBackend as setBlobBackend } from "../adapters/storage/02c-blobs.js";
 import { LEGACY_SNAPSHOTS_KEY } from "../application/recovery/legacy-snapshots.ts";
 import {
@@ -13,13 +13,10 @@ import { deliverFile } from "./18-local-files.js";
 import { applyWriterSize, readWriterSize } from "./19-writer.js";
 import { readEmbeddedVersion } from "./20a-update.js";
 import {
-  SERVER_BOOKMARKS_KEY,
   connectPortOr,
-  loadBookmarks,
   newBookmarkId,
   renderConnect,
   saveBookmarks,
-  shortHost,
   updateConnectMenu
 } from "./20e-connect.js";
 import { cappedName } from "../core/document/text-policy.ts";
@@ -28,6 +25,8 @@ import { settingsAppData } from "../application/preferences/preferences.ts";
 import { setCommentSort } from "../application/comment-sort.ts";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
+import { SERVER_BOOKMARKS_KEY } from "../application/location/server-status.ts";
+import { serverStatus } from "../legacy/location-bridge.ts";
 
 var APPDATA_FORMAT = "splitpage-app-data";
 var APPDATA_VERSION = 1;
@@ -265,9 +264,9 @@ function parseAppDataBundle(text) {
 function appDataMergeBookmarks(list) {
   var out = { added: 0, skipped: 0, failed: 0 };
   if (!list || !list.length) return out;
-  loadBookmarks();
+  serverStatus().loadBookmarks();
   var byUrl = {}, ids = {};
-  S.serverBookmarks.forEach(function (b) {
+  serverStatus().bookmarks().forEach(function (b) {
     var u = normalizeServerUrl(b.url);
     if (u) byUrl[u] = true;
     if (typeof b.id === "string") ids[b.id] = true;
@@ -295,7 +294,7 @@ function appDataMergeBookmarks(list) {
     out.added++;
   });
   if (fresh.length) {
-    S.serverBookmarks = S.serverBookmarks.concat(fresh);
+    serverStatus().addBookmarks(fresh);
     saveBookmarks();
     try {
       var modal = document.getElementById("connect-modal");
