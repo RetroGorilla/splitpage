@@ -59,4 +59,3 @@ export async function withBusyBar(label, fn) {
   }
 }
 
-export function __init() {}
