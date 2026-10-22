@@ -145,8 +145,9 @@ function caretAtEdge(cellEl, range, edge) {
 }
 
 function splitWriterRow(cellEl) {
-  var res = splitRowFieldCore(cellEl);
+  var res = paintGuard().whileShown(function () { return splitRowFieldCore(cellEl); });
   if (!res) return;
+  renderWriter();
   focusWriterBlock(res.id, 0);
 }
 
@@ -164,9 +165,10 @@ function mergeWriterRows(intoIdx) {
 
   breakUndoCoalescing();
   var ports = Object.assign({}, sessionTextPorts, { plainText: htmlToPlainText });
-  var outcome = runCommand(joinScenesCommand(prev.id, ports));
+  var outcome = paintGuard().whileShown(function () { return runCommand(joinScenesCommand(prev.id, ports)); });
   if (outcome.kind === "failed") throw outcome.error;
   if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
+  renderWriter();
   focusWriterBlock(prev.id, joinAt);
 }
 

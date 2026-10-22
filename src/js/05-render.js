@@ -836,7 +836,7 @@ function paintSessionChange(change) {
   if (screenStale || paintBroke) return;
   var c = change.changes;
   if (paintGuard().shown()) {
-    if (c.cells.some(function (cell) { return cell.field === "visualText" || cell.field === "audioText"; })) requestRefresh("rowTimes");
+    if (!viewFlags().writerOpen() && c.cells.some(function (cell) { return cell.field === "visualText" || cell.field === "audioText"; })) requestRefresh("rowTimes");
     var left = rowsTouched(c.cells, ON_SCREEN_ALREADY);
     if (left.length) paintGuard().afterShown(function () { paintRows(left); });
     return;
