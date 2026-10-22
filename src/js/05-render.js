@@ -18,7 +18,7 @@ import { editCell } from "./05b-cell-edit.js";
 import { refreshGalleryOverlay } from "./05e-gallery-overlay.js";
 import { appendDraftMedia, draftModel, editDraft, isDraftBox } from "./05d-draft-edit.js";
 import { trackDocument } from "./12a-undo.js";
-import { rowMotionKey, withRowMotion } from "./04a-row-motion.js";
+import { rowMotionKey, withRowMotion } from "../features/rows/row-motion.js";
 import {
   openTagComposer,
   productionIndexStats,
