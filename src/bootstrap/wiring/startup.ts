@@ -1,7 +1,6 @@
 import type { Startup, StartupPorts } from "../startup.ts";
 import type { StashResult } from "../startup/initial-document.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
-import { unsavedFor } from "../../legacy/save-bridge.ts";
 import { documentTransitions } from "../../legacy/transition-bridge.ts";
 import { setInitialStateReady, suppressUnloadWarning } from "../../js/00-prelude.js";
 import { updateHideShotMenu } from "../../js/01b-hide-shot.js";
@@ -15,7 +14,7 @@ import {
 } from "../../js/03-sync.js";
 import { startHistoryMigration } from "../../js/03a-history-store.js";
 import { renderFirstDraw } from "../../js/05-render.js";
-import { updateSaveStatus } from "../../js/12-dirty-toast.js";
+import { hasUnsavedChanges, updateSaveStatus } from "../../js/12-dirty-toast.js";
 import { detectServer } from "../../js/13-hosted.js";
 import { applyStashedWork, updateAutoSaveMenu } from "../../js/14-export.js";
 import { tryResumeLastProject } from "../../js/18-local-files.js";
@@ -55,7 +54,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
     page: {
       window: window,
       snapshotKey: SNAPSHOT_KEY,
-      unsaved: function () { return unsavedFor() && !suppressUnloadWarning; }
+      unsaved: function () { return hasUnsavedChanges() && !suppressUnloadWarning; }
     },
     startDesktop: initDesktop
   };
