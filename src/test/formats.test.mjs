@@ -12,7 +12,7 @@ import { htmlToMarkdown } from "../js/04-richtext.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { breakdownRows } from "../js/08-production-panels.js";
 import { commentBodyText, commentEntries } from "../js/10-comments.js";
-import { mdSceneCellSource, toMarkdownTableDoc } from "../js/14d-export-text.js";
+import { mdSceneCellSource, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
 import { LONG_DEMO } from "../js/_starters.js";
 import {
   applyMarkdownProject,

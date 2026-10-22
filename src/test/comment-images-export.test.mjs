@@ -10,9 +10,9 @@ import { intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { commentBodyText, commentEntries } from "../js/10-comments.js";
 import { zipRead } from "../adapters/formats/zip.ts";
-import { toMarkdownDoc, toMarkdownTableDoc } from "../js/14d-export-text.js";
+import { toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
 import { __init as initDocx, buildDocx } from "../js/15-docx.js";
-import { buildCsv } from "../js/16-csv.js";
+import { buildCsv } from "../adapters/formats/csv.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { loadTestDocument } from "./_document.mjs";
 

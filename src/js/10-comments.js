@@ -36,7 +36,7 @@ import { editableCellHtml } from "./05-render.js";
 import { resetDraftHistory } from "./05d-draft-edit.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave, resumeAutoSave } from "./14-export.js";
-import { commentBodyText, commentEntries, formatTimestampAbsolute } from "./14c-export-projections.js";
+import { commentBodyText, commentEntries, formatTimestampAbsolute } from "../adapters/formats/export-projections.ts";
 import { makeId, nowIso } from "../adapters/identity/ids.ts";
 import {
   commentMatchesFilterMode,
@@ -260,51 +260,24 @@ export function saveAuthorName(name) {
   preferences().rememberCommentAuthor(cleanAuthorName(name));
 }
 
-export var COMMENTS_SORT_KEY = "splitpage-comments-sort";
-export function readCommentSortMode() {
-  try { return localStorage.getItem(COMMENTS_SORT_KEY) === "recent" ? "recent" : "position"; }
-  catch (e) { return "position"; }
-}
 export function setCommentSortMode(mode) {
   const chosen = setCommentSort(mode);
-  try { localStorage.setItem(COMMENTS_SORT_KEY, chosen); } catch (e) {}
+  preferences().setCommentsSort(chosen);
   captureReplyDrafts();
   renderComments();
 }
 
-var COMMENTS_FILTER_KEY = "splitpage-comments-filter";
-var COMMENTS_FILTER_LEGACY_KEY = "splitpage-comments-hide-resolved";
 var COMMENT_FILTER_MODES = { open: true, resolved: true, all: true };
 
-function readCommentFilter() {
-  try {
-    var raw = localStorage.getItem(COMMENTS_FILTER_KEY);
-    if (raw) {
-      var parsed = JSON.parse(raw);
-      if (parsed && typeof parsed === "object") {
-        return {
-          mode: COMMENT_FILTER_MODES[parsed.mode] ? parsed.mode : "open",
-          assignee: typeof parsed.assignee === "string" ? parsed.assignee : ""
-        };
-      }
-    }
-    var legacy = localStorage.getItem(COMMENTS_FILTER_LEGACY_KEY);
-    if (legacy != null) return { mode: legacy === "true" ? "open" : "all", assignee: "" };
-  } catch (e) {}
-  return { mode: "open", assignee: "" };
-}
-function saveCommentFilter() {
-  try { localStorage.setItem(COMMENTS_FILTER_KEY, JSON.stringify(commentFilter)); } catch (e) {}
-}
 export function setCommentFilterMode(mode) {
   commentFilter.mode = COMMENT_FILTER_MODES[mode] ? mode : "open";
-  saveCommentFilter();
+  preferences().setCommentFilter(commentFilter);
   captureReplyDrafts();
   renderComments();
 }
 export function setCommentAssigneeFilter(value) {
   commentFilter.assignee = value || "";
-  saveCommentFilter();
+  preferences().setCommentFilter(commentFilter);
   captureReplyDrafts();
   renderComments();
 }
@@ -700,7 +673,7 @@ export function jumpToComment(cmtId) {
       !commentMatchesAssigneeFilter(target, commentFilter.assignee))) {
     commentFilter.mode = "all";
     commentFilter.assignee = "";
-    saveCommentFilter();
+    preferences().setCommentFilter(commentFilter);
     captureReplyDrafts();
     renderComments();
   }
@@ -1029,9 +1002,9 @@ export function renderComments() {
 }
 
 export function __init() {
-  setCommentSort(readCommentSortMode());
+  setCommentSort(preferences().commentsSort());
 
-  commentFilter = readCommentFilter();
+  commentFilter = preferences().commentFilter();
 
   document.addEventListener("mousedown", onCommentMenuMouseDown, true);
   document.addEventListener("keydown", onCommentMenuKeydown, true);

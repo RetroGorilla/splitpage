@@ -2,6 +2,7 @@ import { TAG_CATEGORIES } from "../core/production/looks.ts";
 import { hasSetLength } from "../core/document/timing.ts";
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
+import "./_export-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { __init as initSceneStatus } from "../js/01-scene-status.js";

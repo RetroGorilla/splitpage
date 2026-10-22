@@ -14,7 +14,7 @@ import {
 } from "../adapters/storage/02d-gallery.js";
 import { mergeStates } from "../js/03-sync.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { toMarkdownDoc } from "../js/14d-export-text.js";
+import { toMarkdownDoc } from "../adapters/formats/export-text.ts";
 import { __init as initDocx, buildDocx, docxToRows } from "../js/15-docx.js";
 import { buildPdf } from "../js/17-pdf.js";
 import { buildSplitpageFile } from "../js/20d-formats.js";

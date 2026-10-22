@@ -344,9 +344,9 @@ resolved entry.
 
 Its import specifiers are a frozen set of 65 (the 63 modules it starts, `../bootstrap/wiring.ts` and `../bootstrap/app.ts`). The built-in exporters' registration left the set with `14e-export-formats.js` (L4b PR 1): `wireApp` registers them from `src/bootstrap/wiring/exporters.ts` itself. `tests/bootstrap/legacy-shim.test.ts` fails if the shim imports anything outside that set, so the list can only shrink, and if any file under `src/application`, `src/features` or `src/bootstrap` imports the shim (resolved with this tool's resolver). `tools/modularize.mjs` generated the first version of the shim; rerunning it would overwrite the wiring call, so it is not rerun.
 
-L4a PR 3 moves row reconciliation animation from `04a-row-motion.js` to `src/features/rows/row-motion.js`, the delayed busy indicator from `04b-busy.js` to `src/features/notices/busy.js`, cell press targeting from `05q-cell-reach.js` to `src/features/editing/cell-reach.js`, header labels and condensing from `20i-topbar.js` to `src/features/title/topbar.js`, and phone navigation and badge mirroring from `20k-phone-bar.js` to `src/features/notices/phone-bar.js`.
+L4a PR 3 moves row reconciliation animation from `04a-row-motion.js` to `src/features/rows/row-motion.js`, the delayed busy indicator from `04b-busy.js` to `src/features/notices/busy.js`, cell press targeting from `05q-cell-reach.js` to `src/features/editing/cell-reach.js`, header labels and condensing from `20i-topbar.js` to `src/features/title/topbar.ts`, and phone navigation and badge mirroring from `20k-phone-bar.js` to `src/features/notices/phone-bar.ts`.
 
-Bootstrap owns the disposable topbar, cell-reach and phone-bar mounts through `mountTopbarFeature`, `mountCellReachFeature` and `mountPhoneBarFeature` in `src/bootstrap/wiring/views.ts`, called by `startApp` in `src/bootstrap/app.ts`. Each mount uses `replaceViewMount`, and app stop disposes its owner. The topbar owner registers and releases its label, resize and passive scroll handlers, disconnects its observer and cancels pending animation frames, animations and timers; a subsequent app start creates a fresh owner. Row motion and busy have no startup work, so their empty initializers are removed. The header and row motion share the CSS duration reader in `src/features/common/css-duration.js`, without a feature-to-feature dependency outside common. All five modules remain free of legacy state and legacy imports; their presentation behavior and mount lifetimes can be exercised independently of the initializer shim. Rendering, hosted operations and local-file operations now import the owning feature helpers directly. The baseline loses five legacy-file entries and seven numbered-import entries; those imports no longer qualify as numbered-to-numbered dependencies.
+Bootstrap owns the disposable topbar, cell-reach and phone-bar mounts through `mountTopbarFeature`, `mountCellReachFeature` and `mountPhoneBarFeature` in `src/bootstrap/wiring/views.ts`, called by `startApp` in `src/bootstrap/app.ts`. Each mount uses `replaceViewMount`, and app stop disposes its owner. The topbar owner registers and releases its label, resize and passive scroll handlers, disconnects its observer and cancels pending animation frames, animations and timers; a subsequent app start creates a fresh owner. Row motion and busy have no startup work, so their empty initializers are removed. The header and row motion share the CSS duration reader in `src/features/common/css-duration.ts`, without a feature-to-feature dependency outside common. All five modules remain free of legacy state and legacy imports; their presentation behavior and mount lifetimes can be exercised independently of the initializer shim. Rendering, hosted operations and local-file operations now import the owning feature helpers directly. The baseline loses five legacy-file entries and seven numbered-import entries; those imports no longer qualify as numbered-to-numbered dependencies.
 
 The modules it starts, the owner each is expected to move to in 4.x (a planning label: a feature folder, an adapter, or the composition root), and the bridges under `src/legacy/` each imports:
 
@@ -393,7 +393,7 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `13a-presence.js` | adapters/transport | `location-bridge`, `preferences-bridge`, `transition-bridge` |
 | `13b-collaborate.js` | features/file-menu | `app-actions`, `location-bridge`, `preferences-bridge` |
 | `14-export.js` | adapters/files (save writer) | `location-bridge`, `preferences-bridge`, `recovery-bridge`, `save-bridge` |
-| `14b-export-kit.js` | adapters/formats | `cache-freeze`, `document-ports`, `plain-text`, `preferences-bridge`, `richtext`, `session-bridge` |
+| `14b-export-kit.js` | adapters/formats | `preferences-bridge`, `session-bridge` (the capture binding; decodes through the export services port) |
 | `15-docx.js` | adapters/formats | none (decodes through the export services port) |
 | `16-csv.js` | adapters/formats | none (decodes through the export services port) |
 | `16b-xlsx.js` | adapters/formats | none |
@@ -530,10 +530,13 @@ with the comments each held on 30 September 2026:
 | --- | --- |
 | `.gitignore` | 31 |
 | `.gitattributes` | 5 |
-| `desktop/.npmrc` | 3 (why `arch=arm64` is pinned; [ci.md](ci.md) explains how CI overrides it) |
 | `.env.example` | 85, five of them commented-out optional settings. These are setup instructions for the person filling in `.env` on the server, so moving them out of the file is the owner's decision, not a mechanical cleanup |
 | `desktop/build/installer.nsh` | 178: 167 whole-line `;` comments and 11 trailing ones saying what each register saved by a `Push` holds |
 | `.dockerignore`, `.editorconfig`, `.nvmrc`, `desktop/.gitignore` | none |
+
+`desktop/.npmrc` was removed. Architecture selection now belongs to
+`desktop/electron-arch.mjs`, invoked by `npm run fetch-electron` after
+`npm ci`; dependency installation no longer carries the ARM64 pin.
 
 A workflow step run by another interpreter (`shell: python {0}`) is read with
 the shell rules.
