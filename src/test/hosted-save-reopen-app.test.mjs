@@ -5,6 +5,7 @@ import { S } from "../js/_state.js";
 import { createHeldFetch, mockClock } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { mergeBase } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
@@ -129,7 +130,7 @@ test("a hosted save that lands after a same-id reopen is not adopted, and the ne
   await settle();
   const late = {
     rev: homeModule.home.rev,
-    baseText: textOf(S.baseState.rows[0]),
+    baseText: textOf(mergeBase().rows[0]),
     shown: textOf(S.state.rows[0]),
     warned: warnToasts().slice(warnedBefore),
     halted: autoSavePolicy().halted()
@@ -176,7 +177,7 @@ test("a hosted save that lands after another server document was opened is not r
   assert.equal(server.docs.get("srv-e").rev, 2, "the save of E reached the server");
   assert.equal(homeModule.home.id, "srv-f", "F stays open");
   assert.equal(homeModule.home.rev, 4, "F keeps its own revision");
-  assert.equal(textOf(S.baseState.rows[0]), "One.", "F keeps its own baseline");
+  assert.equal(textOf(mergeBase().rows[0]), "One.", "F keeps its own baseline");
   assert.deepEqual(warnToasts().slice(warnedBefore), [], "a save that went to another document's place is not reported");
   leave();
 });
@@ -268,7 +269,7 @@ test("a pull noticed while a hosted save waits for its reply does not run, and t
   await settle();
 
   assert.equal(homeModule.home.rev, 2, "the session takes the revision its save produced");
-  assert.equal(textOf(S.baseState.rows[0]), "Typed and saved.", "the baseline is what the server accepted");
+  assert.equal(textOf(mergeBase().rows[0]), "Typed and saved.", "the baseline is what the server accepted");
   assert.deepEqual(warnToasts().slice(warnedBefore), [], "no late-save warning in the session that saved");
   leave();
 });
@@ -311,7 +312,7 @@ test("a plain hosted save adopts its revision and baseline and clears the unsave
   await settle();
 
   assert.equal(homeModule.home.rev, 2, "the revision moved to the saved one");
-  assert.equal(textOf(S.baseState.rows[0]), "Saved plainly.", "the baseline is the saved text");
+  assert.equal(textOf(mergeBase().rows[0]), "Saved plainly.", "the baseline is the saved text");
   assert.equal(unsavedChanges(), false, "the document reads as saved");
   assert.deepEqual(warnToasts().slice(warnedBefore), [], "no late-save warning");
   leave();

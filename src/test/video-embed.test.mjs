@@ -9,7 +9,7 @@ import { preferences } from "../legacy/preferences-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { intern } from "../adapters/storage/02c-blobs.js";
 import { addGalleryPicture, addGalleryVideo, setVideoThumbnail, videoLinkKey } from "../adapters/storage/02d-gallery.js";
-import { flushEdits, foldIntoEdit, lastUndoEntry, noteEdit, redo, resetUndo, trackDocument, undo, undoSizes } from "../js/12a-undo.js";
+import { flushEdits, foldIntoEdit, lastUndoEntry, noteEdit, redo, resetUndo, undo, undoSizes } from "../js/12a-undo.js";
 import videoEmbed from "../../shared/video-embed.js";
 import { loadTestDocument } from "./_document.mjs";
 
@@ -261,7 +261,6 @@ function freshDoc() {
     { id: "r2", visualText: "two", audioText: "Bravo", status: "todo" }
   ] }));
   resetUndo();
-  trackDocument();
 }
 
 function edit(fn) {
@@ -314,7 +313,6 @@ test("with no entry about it at all (the stack was cleared), it is taken in with
   freshDoc();
   edit((s) => { addGalleryVideo(s.rows[0], { href: "https://youtu.be/dQw4w9WgXcQ" }); });
   resetUndo();
-  trackDocument();
   assert.equal(foldIntoEdit(null, touchesR1, giveThumb(T1)), true);
   noteEdit();
   flushEdits();

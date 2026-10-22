@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
-import { applyStepsLive, diffStates, flushEdits, noteEdit, redo, trackDocument, undo } from "../js/12a-undo.js";
+import { applyStepsLive, diffStates, flushEdits, noteEdit, redo, undo } from "../js/12a-undo.js";
 import { invertSteps } from "../js/04c-doc-model.js";
 import { loadTestDocument } from "./_document.mjs";
 
@@ -100,10 +100,10 @@ test("a replayed list merge judges owners against the people the replay leaves, 
 });
 
 test("redo after a same-named person reached the document without an undo entry keeps that person's items assigned (#353)", () => {
-  loadTestDocument(migrateRows({ schema: 2, title: "Replay", comments: [], rows: [
+  const opening = migrateRows({ schema: 2, title: "Replay", comments: [], rows: [
     { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-  ] }));
-  trackDocument();
+  ] });
+  loadTestDocument(opening);
   S.state.people.push(person("pM", "Ada"));
   S.state.productionTags.push(tag("t_kettle", "Kettle", "pM"));
   noteEdit();

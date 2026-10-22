@@ -1,4 +1,3 @@
-import { S } from "./_state.js";
 import { STATE_FIELDS } from "./02-state.js";
 import { changeSet } from "../application/session/change-set.ts";
 import { STATE_FIELDS as FIELD_POLICIES } from "../core/document/fields.ts";
@@ -9,6 +8,7 @@ import { toHtml } from "../core/text/html.ts";
 import { commentIds, normalizeCell } from "../core/text/runs.ts";
 import { applySteps, invertSteps } from "../core/text/steps.ts";
 import { fromHtml } from "../legacy/richtext.ts";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 var SKIP_DOC_KEYS = {};
 FIELD_POLICIES.forEach(function (f) { if (!f.undo) SKIP_DOC_KEYS[f.key] = true; });
@@ -703,7 +703,7 @@ var tracked = null;
 var flushQueued = false;
 var applying = false;
 var commentsAreSent = function () { return false; };
-var hooks = { afterApply: null, onRefused: null, adopted: null };
+var hooks = { afterApply: null, onRefused: null };
 var UNROUTED = Object.freeze({ run: replayUnwired, amend: replayUnwired, stamps: null });
 var replays = UNROUTED;
 
@@ -712,12 +712,10 @@ export function configureUndo(opts) {
   if (opts.commentsAreSent) commentsAreSent = opts.commentsAreSent;
   if (opts.afterApply) hooks.afterApply = opts.afterApply;
   if (opts.onRefused) hooks.onRefused = opts.onRefused;
-  if (opts.adopted) hooks.adopted = opts.adopted;
   return function () {
     if (opts.commentsAreSent && commentsAreSent === opts.commentsAreSent) commentsAreSent = was.commentsAreSent;
     if (opts.afterApply && hooks.afterApply === opts.afterApply) hooks.afterApply = was.afterApply;
     if (opts.onRefused && hooks.onRefused === opts.onRefused) hooks.onRefused = was.onRefused;
-    if (opts.adopted && hooks.adopted === opts.adopted) hooks.adopted = null;
   };
 }
 
@@ -730,42 +728,45 @@ export function routeUndoReplays(run, stamps, amend) {
 }
 
 function replayUnwired(task) {
-  var plan = task.plan(S.state);
+  var live = currentDocument();
+  var plan = task.plan(live);
   if (!plan) return { kind: "noop" };
   if (plan.refused) return { kind: "rejected", reason: plan.refused };
-  plan.apply(S.state);
+  plan.apply(live);
   plan.settle();
   return { kind: "applied" };
 }
 
-function restart() {
-  var was = tracked;
+function restart(doc) {
   history.clear();
   lifetime++;
-  tracked = S.state || null;
-  if (hooks.adopted && tracked !== was) hooks.adopted(tracked);
+  tracked = doc || null;
   base = tracked ? clone(tracked) : null;
 }
 
-export function trackDocument() {
-  if (applying || S.state === tracked) return;
+export function adoptDocument(doc) {
+  if (applying || (doc || null) === tracked) return;
   flushQueued = false;
-  restart();
+  restart(doc);
+}
+
+export function trackDocument() {
+  adoptDocument(currentDocument());
 }
 
 export function flushEdits() {
   var reported = flushQueued;
   flushQueued = false;
   if (applying) return;
-  if (!S.state) { restart(); return; }
-  if (S.state !== tracked || !base) { restart(); return; }
+  var live = currentDocument();
+  if (!live || live !== tracked || !base) { restart(live); return; }
   var skip = {};
   if (commentsAreSent()) skip.comments = true;
-  var steps = diffStates(base, S.state);
+  var steps = diffStates(base, live);
   var sent = skip.comments && steps.some(function (s) { return s.op === "docField" && s.key === "comments"; });
   var content = steps.filter(function (s) { return !cosmetic(s); });
   if (reported && !sent && content.length) history.record(content, Date.now());
-  try { base = applySteps(base, steps); } catch (e) { base = clone(S.state); }
+  try { base = applySteps(base, steps); } catch (e) { base = clone(live); }
 }
 
 function cosmetic(step) {
@@ -781,22 +782,22 @@ export function noteEdit() {
 
 export function noteRemoteChange(next) {
   flushEdits();
-  if (!next) { restart(); return; }
+  if (!next) { restart(null); return; }
   if (base) history.forget(changedBetween(base, next));
   tracked = next;
   base = clone(next);
 }
 
 export function absorbRemoteChange() {
-  if (!S.state || S.state !== tracked || !base) { restart(); return; }
-  history.forget(changedBetween(base, S.state));
-  base = clone(S.state);
+  var live = currentDocument();
+  if (!live || live !== tracked || !base) { restart(live); return; }
+  history.forget(changedBetween(base, live));
+  base = clone(live);
   lifetime++;
 }
 
 export function resetUndo() {
-  tracked = null;
-  restart();
+  restart(currentDocument());
 }
 
 function announceCleared(count) {
@@ -844,12 +845,12 @@ function replayTask(dir, seen) {
 
 function run(dir) {
   flushEdits();
-  if (!S.state) return { ok: false, empty: true };
+  if (!currentDocument()) return { ok: false, empty: true };
   var seen = { prepared: null, result: null };
   var outcome;
   applying = true;
   try {
-    outcome = replays.run(replayTask(dir, seen), S.state);
+    outcome = replays.run(replayTask(dir, seen));
   } finally {
     applying = false;
   }
@@ -863,7 +864,7 @@ function run(dir) {
   }
   if (p && p.refused) {
     p.drop();
-    base = clone(S.state);
+    base = clone(currentDocument());
     if (hooks.onRefused) hooks.onRefused(p.refused, dir);
     return { ok: false, reason: p.refused, steps: p.steps };
   }
@@ -872,8 +873,9 @@ function run(dir) {
 }
 
 export function settleAfterApply() {
-  if (!S.state || S.state !== tracked) return;
-  base = clone(S.state);
+  var live = currentDocument();
+  if (!live || live !== tracked) return;
+  base = clone(live);
 }
 
 function foldTask(entry, touches, change) {
@@ -908,11 +910,12 @@ function foldTask(entry, touches, change) {
 
 export function foldIntoEdit(entry, touches, change) {
   flushEdits();
-  if (!S.state || S.state !== tracked || !base) return false;
+  var live = currentDocument();
+  if (!live || live !== tracked || !base) return false;
   var outcome;
   applying = true;
   try {
-    outcome = replays.amend(foldTask(entry, touches, change), S.state);
+    outcome = replays.amend(foldTask(entry, touches, change));
   } finally {
     applying = false;
   }
@@ -942,7 +945,8 @@ export function undoSerial() { flushEdits(); return history.mark(); }
 
 export function compositionUndoMark(rowId, key) {
   flushEdits();
-  var rows = (S.state && S.state.rows) || [], value;
+  var live = currentDocument();
+  var rows = (live && live.rows) || [], value;
   for (var i = 0; i < rows.length; i++) if (rows[i] && rows[i].id === rowId) value = rows[i][key];
   return history.markCell(rowId, key, value);
 }
