@@ -393,7 +393,7 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `13a-presence.js` | adapters/transport | `preferences-bridge`, `transition-bridge` |
 | `13b-collaborate.js` | features/file-menu | `app-actions`, `preferences-bridge` |
 | `14-export.js` | adapters/files (save writer) | `preferences-bridge`, `recovery-bridge`, `save-bridge` |
-| `14b-export-kit.js` | adapters/formats | `cache-freeze`, `document-ports`, `plain-text`, `preferences-bridge`, `richtext`, `session-bridge` |
+| `14b-export-kit.js` | adapters/formats | `preferences-bridge`, `session-bridge` (the capture binding; decodes through the export services port) |
 | `15-docx.js` | adapters/formats | none (decodes through the export services port) |
 | `16-csv.js` | adapters/formats | none (decodes through the export services port) |
 | `16b-xlsx.js` | adapters/formats | none |
