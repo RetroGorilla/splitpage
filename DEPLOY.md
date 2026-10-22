@@ -636,11 +636,12 @@ Since the tabs build, the title-bar tab strip (`desktop/tabstrip/`: `index.html`
 `electron-builder.yml`'s `extraResources` ships them to
 `resources/splitpage/tabstrip` in the packaged app, staged there by
 `stage.mjs`, and `main.js` resolves that same path (vs. `__dirname/tabstrip`
-in dev) so both layouts serve identical files under the same allowlist. This
-machine's dev Electron is pinned to a native ARM64 binary rather than the x64
-build `npm install` fetches by default (`desktop/.npmrc`, `arch=arm64` — see
-HANDOFF.md §2); `desktop/test/smoke.mjs`'s dev-target runs, including the
-tabs cases, execute against that native ARM64 Electron, not under emulation.
+in dev) so both layouts serve identical files under the same allowlist. Run
+`npm ci` followed by `npm run fetch-electron` in `desktop/` to fetch the
+machine's dev Electron (see HANDOFF.md §2). The script detects native ARM64
+on Windows even under x64 Node emulation, so dev smoke runs, including the
+tabs cases, use native Electron. Explicit `npm_config_arch` or `ELECTRON_ARCH`
+overrides detection, in that order; unknown values fail.
 
 ### Where they differ from the IExpress recipe that used to be here
 

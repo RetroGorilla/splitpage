@@ -22,7 +22,7 @@ import {
 } from "./07-production-tags.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { personColor } from "./13a-presence.js";
-import { breakdownRows, breakdownTable } from "./14c-export-projections.js";
+import { breakdownRows, breakdownTable } from "../adapters/formats/export-projections.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
 import { planQuickAdd } from "../core/production/tags.ts";

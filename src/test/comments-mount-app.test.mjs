@@ -55,6 +55,36 @@ function fire(target, type, props = {}) {
   return event;
 }
 
+test("comments app: panel sort and filter changes announce to another preference listener", () => {
+  open();
+  const owner = mount();
+  const announced = [];
+  const listen = (event) => { announced.push(event.detail); };
+  const nodeCustomEvent = globalThis.CustomEvent;
+  globalThis.CustomEvent = window.CustomEvent;
+  document.addEventListener("splitpage:pref", listen);
+  try {
+    openCommentsPanel();
+    const sort = document.getElementById("comments-sort");
+    sort.value = "recent";
+    fire(sort, "change");
+    fire(document.querySelector('#comments-filter-seg [data-filter="all"]'), "click");
+    assert.equal(commentSortMode(), "recent");
+    assert.equal(localStorage.getItem("splitpage-comments-sort"), "recent");
+    assert.equal(localStorage.getItem("splitpage-comments-filter"), '{"mode":"all","assignee":""}');
+    assert.deepEqual(announced, [
+      { key: "splitpage-comments-sort", value: "recent" },
+      { key: "splitpage-comments-filter", value: '{"mode":"all","assignee":""}' }
+    ]);
+  } finally {
+    document.removeEventListener("splitpage:pref", listen);
+    globalThis.CustomEvent = nodeCustomEvent;
+    localStorage.removeItem("splitpage-comments-sort");
+    localStorage.removeItem("splitpage-comments-filter");
+    owner.dispose();
+  }
+});
+
 test("comments app: every document, root and control registration is removed and installed once on remount", () => {
   mountCommentsFeature().dispose();
   const order = [];

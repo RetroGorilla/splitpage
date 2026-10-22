@@ -69,7 +69,7 @@ export const GROUPS = [
     name: "desktop",
     set: "desktop",
     runner: "script",
-    matches: (p) => /^desktop\/test\/[^/]+\.test\.mjs$/.test(p),
+    matches: (p) => /^desktop\/(?:test\/)?[^/]+\.test\.mjs$/.test(p),
     requiredWhen: () => true
   },
   {

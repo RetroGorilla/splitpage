@@ -7,16 +7,15 @@ import {
   TAG_STATUS_PRINT,
   breakdownGroups,
   brollSummaryText,
-  capturedPicture,
-  capturedRowPicture,
   exportBrollScenes,
   exportDay,
   exportComments,
   exportFacts,
-  exportRuns,
-  exportSummaryParts,
-  sceneFacts
-} from "./14b-export-kit.js";
+  exportSummaryParts
+} from "../adapters/formats/export-kit.ts";
+import { capturedPicture, capturedRowPicture } from "../adapters/formats/export-assets.ts";
+import { exportRuns } from "./14b-export-kit.js";
+import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { xmlEscape } from "../adapters/formats/xml.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";

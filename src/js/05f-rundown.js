@@ -14,6 +14,7 @@ import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { cellEditing, rowDrag } from "../legacy/editor-bridge.ts";
 import { brollCountIn } from "../core/production/broll.ts";
+import { PREF_EVENT, preferences } from "../legacy/preferences-bridge.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { reviewMode } from "../legacy/location-bridge.ts";
 
@@ -305,7 +306,6 @@ function gapX(knots, g) {
   return g === 0 ? knots[0] : knots[g] - BLOCK_GAP_PX / 2;
 }
 
-var MIN_KEY = "splitpage-rundown-min";
 var extraSeconds = 0;
 var currentRowId = null;
 var lastBlocksHtml = "";
@@ -780,10 +780,6 @@ function lensOff(src) {
   if (lens.Z) { lens.easeNext = true; lensKick(); }
 }
 
-function readMinFlag() {
-  try { return localStorage.getItem(MIN_KEY) === "1"; } catch (e) { return false; }
-}
-
 function updateRundownMinControls() {
   var item = document.getElementById("menu-rundown-min");
   if (item) item.setAttribute("aria-checked", minimized ? "true" : "false");
@@ -801,7 +797,7 @@ function updateRundownMinControls() {
 
 function setRundownMinimized(on, persist) {
   on = !!on;
-  if (persist !== false) { try { localStorage.setItem(MIN_KEY, on ? "1" : "0"); } catch (e) {} }
+  if (persist !== false) preferences().setRundownMin(on);
   if (on === minimized) { updateRundownMinControls(); return; }
   minimized = on;
   lensReset();
@@ -987,15 +983,15 @@ export function __init() {
   var rowsEl = document.getElementById("rows");
   if (!strip) return;
   try { noHover = !!(window.matchMedia && window.matchMedia("(hover: none)").matches); } catch (e) {}
-  minimized = readMinFlag();
+  minimized = preferences().rundownMin();
   var toggle = ensureToggle(strip);
   updateRundownMinControls();
   toggle.addEventListener("click", function () { appActions.invoke("toggle-rundown-min", "button"); });
-  document.addEventListener("splitpage:pref", function (e) {
+  document.addEventListener(PREF_EVENT, function (e) {
     var d = e && e.detail;
-    if (!d || d.key !== MIN_KEY) return;
+    if (!d || preferences().nameOf(d.key) !== "rundownMin") return;
     var v = d.value;
-    var on = v === true || v === "1" || v === 1 ? true : v === false || v === "0" || v === 0 ? false : readMinFlag();
+    var on = v === true || v === "1" || v === 1 ? true : v === false || v === "0" || v === 0 ? false : preferences().rundownMin();
     setRundownMinimized(on, false);
   });
 
