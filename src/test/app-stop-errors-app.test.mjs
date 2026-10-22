@@ -60,6 +60,15 @@ await bootApp();
 const app = await import("../bootstrap/app.ts");
 const { rootRoutesTaken } = await import("../bootstrap/wiring/editor.ts");
 
+async function restart() {
+  app.startApp(await rewireApp());
+  await settled();
+}
+
+function settled() {
+  return S.initialStateReady;
+}
+
 after(() => {
   proto.addEventListener = realAdd;
   proto.removeEventListener = realRemove;
@@ -70,8 +79,7 @@ after(() => {
 test("one throwing disposer does not stop the rest: every other mount is released, the app counts as stopped, and the failure is reported", async () => {
   app.stopApp();
   const stopped = snapshot();
-  app.startApp(await rewireApp());
-  await S.initialStateReady;
+  await restart();
 
   const rows = document.getElementById("rows");
   const failure = new Error("rows cleanup failed");
@@ -99,14 +107,13 @@ test("one throwing disposer does not stop the rest: every other mount is release
 
   const wiring = await rewireApp();
   assert.doesNotThrow(() => app.startApp(wiring), "the app is not left marked as running");
-  await S.initialStateReady;
+  await settled();
 });
 
 test("two throwing disposers are both reported, each cuts only its own feature short, and the app can be started again", async () => {
   app.stopApp();
   const stopped = snapshot();
-  app.startApp(await rewireApp());
-  await S.initialStateReady;
+  await restart();
 
   const rows = document.getElementById("rows");
   const title = document.getElementById("doc-title");
@@ -144,5 +151,5 @@ test("two throwing disposers are both reported, each cuts only its own feature s
 
   const wiring = await rewireApp();
   assert.doesNotThrow(() => app.startApp(wiring), "the app is not left marked as running");
-  await S.initialStateReady;
+  await settled();
 });
