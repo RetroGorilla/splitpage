@@ -20,11 +20,11 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import { replaceInHtml } from "../js/09-find-replace.js";
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
-import { toMarkdownDoc } from "../js/14d-export-text.js";
+import { toMarkdownDoc } from "../adapters/formats/export-text.ts";
 import {
   __init as initDocx, audioDirectionsHtml, buildDocx, buildNarrationDocx, buildNarrationText, docxToRows, narrationRows
 } from "../js/15-docx.js";
-import { buildCsv } from "../js/16-csv.js";
+import { buildCsv } from "../adapters/formats/csv.ts";
 import { prompterSceneHtml } from "../js/20-teleprompter.js";
 import {
   applyMarkdownProject,

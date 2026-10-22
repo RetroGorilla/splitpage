@@ -10,14 +10,13 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import {
   PRINT_COLORS,
-  commentNumbers,
   exportBrollScenes,
   exportComments,
-  exportDocumentOf,
   exportFacts,
-  exportSummaryParts,
-  sceneFacts
-} from "../js/14b-export-kit.js";
+  exportSummaryParts
+} from "../adapters/formats/export-kit.ts";
+import { commentNumbers, exportDocumentOf } from "../js/14b-export-kit.js";
+import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { buildPdf, pdfTextWidth } from "../js/17-pdf.js";
 import { LONG_DEMO } from "../js/_starters.js";
 import { loadTestDocument } from "./_document.mjs";

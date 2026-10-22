@@ -4,17 +4,15 @@ import {
   STATUS_PRINT,
   TAG_STATUS_PRINT,
   breakdownGroups,
-  capturedPicture,
-  capturedRowPicture,
   exportComments,
   exportDateText,
   exportDay,
   exportFacts,
-  exportRuns,
-  exportSummaryParts,
-  sceneFacts
-} from "./14b-export-kit.js";
-import { brollShotListForPrint, commentEntries } from "./14c-export-projections.js";
+  exportSummaryParts
+} from "../adapters/formats/export-kit.ts";
+import { capturedPicture, capturedRowPicture } from "../adapters/formats/export-assets.ts";
+import { exportRuns } from "./14b-export-kit.js";
+import { brollShotListForPrint, commentEntries, sceneFacts } from "../adapters/formats/export-projections.ts";
 import { jpegSize, safeAspect } from "./15-docx.js";
 import { concatBytes, latin1Bytes } from "../adapters/formats/bytes.ts";
 import { tagPrintColor } from "../adapters/formats/print-colors.ts";

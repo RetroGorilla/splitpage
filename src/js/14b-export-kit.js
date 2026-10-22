@@ -15,16 +15,6 @@ import { preferences } from "../legacy/preferences-bridge.ts";
 
 import { brollEntries } from "../core/production/broll.ts";
 
-export { sceneFacts } from "../adapters/formats/export-projections.ts";
-export {
-  PRINT_COLORS, STATUS_PRINT, TAG_STATUS_PRINT, exportDateText, exportDay,
-  exportFacts, exportSummaryParts, exportComments, breakdownGroups,
-  exportBrollScenes, brollSummaryText
-} from "../adapters/formats/export-kit.ts";
-export {
-  exportAssetsRequest, exportAssetsNow, capturedPicture, capturedRowPicture
-} from "../adapters/formats/export-assets.ts";
-
 export var PRINT_TOKENS = {
   text: "--text",
   dim: "--text-dim",
