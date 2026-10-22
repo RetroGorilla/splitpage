@@ -6,6 +6,7 @@ import { tourShowing } from "../js/20c-help.js";
 import { dialogOpen, launcherOpen } from "./screen.ts";
 import type { ScreenState } from "./screen.ts";
 import { saveBusy } from "./save-bridge.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 export function screenNow(): ScreenState {
   return {
@@ -20,7 +21,7 @@ export function screenNow(): ScreenState {
 }
 
 export function inDesktopApp(): boolean {
-  return Boolean(S.DESKTOP);
+  return runningOnDesktop();
 }
 
 export function saveInProgress(): boolean {
