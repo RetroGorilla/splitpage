@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -107,12 +108,12 @@ function selectAll(el) {
 
 function record(run) {
   flushEdits();
-  const seq0 = S.editSeq, gen0 = session.generation(), undo0 = undoSizes().undo, top0 = lastUndoEntry();
+  const seq0 = saveChanges(), gen0 = session.generation(), undo0 = undoSizes().undo, top0 = lastUndoEntry();
   const heard = [];
   const stop = session.subscribe((c) => heard.push(c.kind));
   const out = run();
   stop();
-  const seq = S.editSeq - seq0, generation = session.generation() - gen0;
+  const seq = saveChanges() - seq0, generation = session.generation() - gen0;
   flushEdits();
   const top = lastUndoEntry();
   const steps = top && top !== top0 ? top.steps.map((s) => s.op + ":" + (s.op === "rowField" ? s.rowId + "." + s.key : s.op === "docField" ? s.key : s.row ? s.row.id : "")) : [];
@@ -149,7 +150,7 @@ test("a cut dirties once, stamps only the cut scene, and records one entry for t
   assert.equal(row("r1").audioText, "there");
   assert.notEqual(row("r1").updatedAt, OLD);
   assert.equal(row("r2").updatedAt, OLD);
-  assert.equal(S.dirty, true);
+  assert.equal(unsavedChanges(), true);
   assert.equal(document.activeElement, cellOf("r1", "audioText"));
 });
 
@@ -287,12 +288,12 @@ test("pasteIntoCell reports what it did: done, the words, what it attached and w
 test("a video file with no name adds no tile, so nothing is edited, stamped or dirtied", async () => {
   await open();
   const to = cellOf("r1", "audioText");
-  assert.equal(S.dirty, false);
+  assert.equal(unsavedChanges(), false);
   const got = record(() => pasteIntoCell(to, "", "", { attach: [{ kind: "videoFile", name: "", size: 3 }] }));
   assert.equal(got.out.done, true);
   assert.equal(got.out.attached, null);
   assert.deepEqual({ seq: got.seq, generation: got.generation, heard: got.heard, undo: got.undo }, { seq: 0, generation: 0, heard: [], undo: 0 });
-  assert.equal(S.dirty, false);
+  assert.equal(unsavedChanges(), false);
   assert.equal(row("r1").updatedAt, OLD);
   assert.equal(row("r1").moreImages, undefined);
 });
@@ -749,7 +750,7 @@ test("a stamp that throws fails a paste or a cut whole: the call throws and the 
   selectText(el, 0, 6);
   flushEdits();
   const before = JSON.stringify(S.state);
-  const seq = S.editSeq, generation = session.generation(), entries = undoSizes().undo;
+  const seq = saveChanges(), generation = session.generation(), entries = undoSizes().undo;
   const real = Date.prototype.toISOString;
   Date.prototype.toISOString = function () { throw new Error("no clock"); };
   try {
@@ -766,7 +767,7 @@ test("a stamp that throws fails a paste or a cut whole: the call throws and the 
   }
   flushEdits();
   assert.equal(JSON.stringify(S.state), before);
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
   assert.equal(session.generation(), generation);
   assert.equal(undoSizes().undo, entries);
 });

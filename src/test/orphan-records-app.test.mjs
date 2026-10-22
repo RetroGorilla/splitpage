@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { saveChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -87,13 +88,13 @@ function watch() {
 }
 
 function snapshot() {
-  return { doc: JSON.stringify(S.state), generation: liveSession().generation(), seq: S.editSeq };
+  return { doc: JSON.stringify(S.state), generation: liveSession().generation(), seq: saveChanges() };
 }
 
 function assertUntouched(before, seen) {
   assert.equal(JSON.stringify(S.state), before.doc, "the document, its tag registry and its b-roll list are as they were");
   assert.equal(liveSession().generation(), before.generation);
-  assert.equal(S.editSeq, before.seq);
+  assert.equal(saveChanges(), before.seq);
   assert.deepEqual(seen, []);
 }
 

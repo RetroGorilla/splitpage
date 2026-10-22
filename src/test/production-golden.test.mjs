@@ -36,7 +36,7 @@ import { __init as initHistory } from "../js/03a-history-store.js";
 import { applyGearQuickAdd } from "../js/08-production-panels.js";
 import { LONG_DEMO } from "../js/_starters.js";
 import { assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, newTokens } from "./golden-helpers.mjs";
-import { startSaves } from "../legacy/save-bridge.ts";
+import { confirmSavedNow, startSaves, unsavedChanges } from "../legacy/save-bridge.ts";
 import { WHOLE_DOCUMENT } from "../application/session/change-set.ts";
 import { startTestSession } from "./_session.mjs";
 import { appSessionDeps } from "./_app-session.mjs";
@@ -50,8 +50,9 @@ startSaves({
   keyOf: () => ({ owner: null, name: "none" }),
   obsolete: () => {},
   running: () => {},
-  ownership: { capture: () => { throw new Error("no save runs here"); }, stillOwns: () => false }
-});
+  ownership: { capture: () => { throw new Error("no save runs here"); }, stillOwns: () => false },
+  autosave: { enabledAtStart: () => false, due: () => {}, changed: () => {} }
+}, { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });
 initBroll();
 initHistory();
 
@@ -541,7 +542,7 @@ function quickAdd(label, lines, eol) {
   host.innerHTML = "";
   const text = lines.join(eol || "\n");
   box.value = text;
-  S.dirty = false;
+  confirmSavedNow();
   const others = jsonCopy(S.state.productionTags.filter((t) => t.cat !== "gear"));
   applyGearQuickAdd();
   return {
@@ -550,7 +551,7 @@ function quickAdd(label, lines, eol) {
     otherTagsUntouched: JSON.stringify(others) === JSON.stringify(S.state.productionTags.filter((t) => t.cat !== "gear")),
     toasts: Array.from(host.children).map((el) => el.textContent),
     boxAfter: box.value,
-    dirty: !!S.dirty,
+    dirty: unsavedChanges(),
     personColors: S.state.personColors === undefined ? null : jsonCopy(S.state.personColors)
   };
 }

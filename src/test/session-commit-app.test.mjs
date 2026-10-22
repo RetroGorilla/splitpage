@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 await bootApp();
 
@@ -132,7 +133,7 @@ test("a legacy edit records the colour as it marks the document unsaved, and its
   S.state.title = "Renamed by hand";
   markDirty();
   assert.equal(colorOf(S.state), COLOR);
-  assert.equal(S.dirty, true);
+  assert.equal(unsavedChanges(), true);
   assert.deepEqual(lastUndoEntry().steps.map((s) => s.key), ["title"]);
 });
 
@@ -141,7 +142,7 @@ test("an absorbed change that marks the document unsaved records the colour as b
   fresh();
   markAbsorbedDirty("server");
   assert.equal(colorOf(S.state), COLOR);
-  assert.equal(S.dirty, true);
+  assert.equal(unsavedChanges(), true);
 });
 
 test("the dirty effect itself writes no document content, for a named editor too", () => {
@@ -151,13 +152,13 @@ test("the dirty effect itself writes no document content, for a named editor too
   liveSession().settle("server");
   liveSession().noteEdit();
   assert.equal(JSON.stringify(S.state), before);
-  assert.equal(S.dirty, true);
+  assert.equal(unsavedChanges(), true);
 });
 
 test("a status click whose listener throws after the commit repaints the scene, keeps it unsaved, reports once and shows nothing new", () => {
   unnamed();
   fresh();
-  const seq = S.editSeq;
+  const seq = saveChanges();
   const toasts = liveToasts();
   const off = liveSession().subscribe(() => { throw new Error("listener broke"); });
   let reported;
@@ -167,8 +168,8 @@ test("a status click whose listener throws after the commit repaints the scene, 
     off();
   }
   assert.equal(S.state.rows[1].status, "ready");
-  assert.equal(S.dirty, true);
-  assert.equal(S.editSeq, seq + 1);
+  assert.equal(unsavedChanges(), true);
+  assert.equal(saveChanges(), seq + 1);
   assert.deepEqual(reported.map((e) => e.message), ["listener broke"]);
   assert.deepEqual(liveToasts(), toasts, "no new toast");
   const lamp = document.querySelector('#rows .status-btn[data-id="r2"]');
@@ -189,7 +190,7 @@ test("a scene length whose effect throws after the commit still closes as applie
   }
   assert.equal(result, true);
   assert.equal(S.state.rows[0].lengthSeconds, 45);
-  assert.equal(S.dirty, true);
+  assert.equal(unsavedChanges(), true);
   assert.deepEqual(reported.map((e) => e.message), ["effect broke"]);
 });
 

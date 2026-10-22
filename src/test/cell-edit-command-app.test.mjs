@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { saveChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -83,7 +84,7 @@ test("a model edit in a script cell is one set-cell-text command: one generation
   const el = cellOf("r1", "audioText");
   select(el, 6, 11);
   const generation = liveSession().generation();
-  const seq = S.editSeq;
+  const seq = saveChanges();
   const stamp = row("r1").updatedAt;
   const w = watch();
   try {
@@ -94,7 +95,7 @@ test("a model edit in a script cell is one set-cell-text command: one generation
   assert.equal(row("r1").audioText, "Hello <strong>there</strong>");
   assert.notEqual(row("r1").updatedAt, stamp);
   assert.equal(liveSession().generation(), generation + 1);
-  assert.equal(S.editSeq, seq + 1);
+  assert.equal(saveChanges(), seq + 1);
   assert.equal(w.seen.length, 1);
   const change = w.seen[0];
   assert.equal(change.kind, "edit");
@@ -145,7 +146,7 @@ test("an edit that leaves the stored cell as it is makes no command, no stamp an
   const el = cellOf("r1", "audioText");
   select(el, 0, 5);
   const generation = liveSession().generation();
-  const seq = S.editSeq;
+  const seq = saveChanges();
   const stamp = row("r1").updatedAt;
   const w = watch();
   try {
@@ -154,7 +155,7 @@ test("an edit that leaves the stored cell as it is makes no command, no stamp an
     w.stop();
   }
   assert.equal(liveSession().generation(), generation);
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
   assert.equal(row("r1").updatedAt, stamp);
   assert.deepEqual(w.seen, []);
 });
@@ -168,7 +169,7 @@ test("in review mode the session refuses a formatting edit: the document, the ce
     const before = JSON.stringify(S.state);
     const shown = el.innerHTML;
     const generation = liveSession().generation();
-    const seq = S.editSeq;
+    const seq = saveChanges();
     const w = watch();
     let out;
     try {
@@ -180,7 +181,7 @@ test("in review mode the session refuses a formatting edit: the document, the ce
     assert.equal(JSON.stringify(S.state), before);
     assert.equal(el.innerHTML, shown);
     assert.equal(liveSession().generation(), generation);
-    assert.equal(S.editSeq, seq);
+    assert.equal(saveChanges(), seq);
     assert.deepEqual(w.seen, []);
   } finally {
     window.__hostedTest.setSession({ role: "edit", docId: null });
@@ -194,7 +195,7 @@ test("a command that fails is thrown, and leaves the document, the cell on scree
   await settle();
   const before = JSON.stringify(S.state);
   const shown = el.innerHTML;
-  const seq = S.editSeq, generation = liveSession().generation(), sizes = undoSizes();
+  const seq = saveChanges(), generation = liveSession().generation(), sizes = undoSizes();
   const real = Date.prototype.toISOString;
   Date.prototype.toISOString = function () { throw new Error("no clock"); };
   try {
@@ -205,7 +206,7 @@ test("a command that fails is thrown, and leaves the document, the cell on scree
   await settle();
   assert.equal(JSON.stringify(S.state), before);
   assert.equal(el.innerHTML, shown);
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
   assert.equal(liveSession().generation(), generation);
   assert.deepEqual(undoSizes(), sizes);
 });

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import zlib from "node:zlib";
 import { S } from "../js/_state.js";
 import { createHeldImageDecode } from "./_m4-matrix.mjs";
+import { saveChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -117,7 +118,7 @@ beforeEach(() => { clock += 10_000; });
 
 test("a picture added through the picker is one gallery command: one declared edit, one undo entry, and undo takes it off", async () => {
   await open();
-  const seq = S.editSeq, generation = liveSession().generation(), undos = undoSizes().undo;
+  const seq = saveChanges(), generation = liveSession().generation(), undos = undoSizes().undo;
   const w = watch();
   try {
     click(button("r1", "image-add"));
@@ -129,7 +130,7 @@ test("a picture added through the picker is one gallery command: one declared ed
   assertGalleryEdit(w.seen, "r1");
   assert.equal(rowSlots(row("r1")).length, 1);
   assert.equal(row("r1").imageName, "shot.png");
-  assert.equal(S.editSeq, seq + 1);
+  assert.equal(saveChanges(), seq + 1);
   assert.equal(liveSession().generation(), generation + 1);
   assert.equal(undoSizes().undo, undos + 1);
   undo();
@@ -141,10 +142,10 @@ test("the picker's pending scene and slot are used once: a second change with no
   click(button("r1", "image-add"));
   pick(new window.File(["picture"], "shot.png", { type: "image/png" }));
   await settle();
-  const seq = S.editSeq;
+  const seq = saveChanges();
   pick(new window.File(["again"], "again.png", { type: "image/png" }));
   await settle();
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
   assert.equal(document.getElementById("file-input").value, "");
 });
 
@@ -226,7 +227,7 @@ test("a click on a video link opens it and edits nothing", async () => {
   const opens = [];
   const realOpen = window.open;
   window.open = (href) => { opens.push(href); return {}; };
-  const seq = S.editSeq;
+  const seq = saveChanges();
   try {
     const link = document.querySelector('#rows [data-action="gallery-link"][data-id="r3"]');
     const ev = new window.MouseEvent("click", { bubbles: true, cancelable: true });
@@ -236,14 +237,14 @@ test("a click on a video link opens it and edits nothing", async () => {
     window.open = realOpen;
   }
   assert.deepEqual(opens, [VIDEO]);
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
 });
 
 test("when the session refuses edits, a gallery change writes nothing", async () => {
   await open();
   const { removeImage } = await import("../js/06-rows.js");
   const before = JSON.stringify(row("r2"));
-  const seq = S.editSeq;
+  const seq = saveChanges();
   window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
   try {
     removeImage("r2", 0);
@@ -251,5 +252,5 @@ test("when the session refuses edits, a gallery change writes nothing", async ()
     window.__hostedTest.setSession({ role: "edit", docId: null });
   }
   assert.equal(JSON.stringify(row("r2")), before);
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
 });

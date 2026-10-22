@@ -21,6 +21,8 @@ import { effectsStarted, startEffects } from "../../src/legacy/effects-bridge.ts
 import type { EffectPorts } from "../../src/application/effects/ports.ts";
 import { recoveryStarted } from "../../src/legacy/recovery-bridge.ts";
 import { requestSave, savesStarted, savesWaiting } from "../../src/legacy/save-bridge.ts";
+import { startupReady } from "../../src/legacy/startup-bridge.ts";
+import { S } from "../../src/js/_state.js";
 import type { LegacySaveJob, LegacySavePorts } from "../../src/legacy/save-bridge.ts";
 import type { SaveOutcome, WriterResult } from "../../src/application/save/coordinator.ts";
 import {
@@ -36,7 +38,6 @@ import { documentTransitions, startTransitions } from "../../src/legacy/transiti
 import type { LegacyTransitionPorts } from "../../src/legacy/transition-bridge.ts";
 import { routeReplays, watchUndoAdoption } from "../../src/legacy/undo-adapter.ts";
 import { sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
-import { S } from "../../src/js/_state.js";
 import { migrateRows } from "../../src/js/02-state.js";
 
 after(closeApp);
@@ -173,7 +174,8 @@ function fakes(): Fakes {
         keyOf: () => ({ owner: null, name: "none" }),
         obsolete: () => {},
         running: () => {},
-        ownership
+        ownership,
+        autosave: { enabledAtStart: () => false, due: () => {}, changed: () => {} }
       };
     },
     transitions: transitionPorts(),
@@ -318,7 +320,13 @@ test("failed partial startup: a save factory that returns malformed ports fails 
     ...(["capture", "stillOwns"] as const).map((method): [string, (ports: LegacySavePorts) => unknown, string] =>
       [method, (ports) => ({ ...ports, ownership: without(ports.ownership, method) }), "the saves dependency's ownership port has no " + method + " function"]),
     ...(["capture", "stillOwns"] as const).map((method): [string, (ports: LegacySavePorts) => unknown, string] =>
-      [method + " not a function", (ports) => ({ ...ports, ownership: { ...ports.ownership, [method]: "x" } }), "the saves dependency's ownership port has no " + method + " function"])
+      [method + " not a function", (ports) => ({ ...ports, ownership: { ...ports.ownership, [method]: "x" } }), "the saves dependency's ownership port has no " + method + " function"]),
+    ["autosave not an object", (ports) => ({ ...ports, autosave: 7 }), "the saves dependency returned no autosave port"],
+    ["autosave", (ports) => without(ports, "autosave"), "the saves dependency returned no autosave port"],
+    ...(["enabledAtStart", "due", "changed"] as const).map((method): [string, (ports: LegacySavePorts) => unknown, string] =>
+      [method, (ports) => ({ ...ports, autosave: without(ports.autosave, method) }), "the saves dependency's autosave port has no " + method + " function"]),
+    ...(["enabledAtStart", "due", "changed"] as const).map((method): [string, (ports: LegacySavePorts) => unknown, string] =>
+      [method + " not a function", (ports) => ({ ...ports, autosave: { ...ports.autosave, [method]: "x" } }), "the saves dependency's autosave port has no " + method + " function"])
   ];
   for (const [what, spoil, message] of malformed) {
     const f = fakes();
@@ -579,7 +587,8 @@ function heldSaves(name: string): HeldSaves {
     ownership: {
       capture: () => { call("capture"); return ownership.capture(); },
       stillOwns: (ctx) => { call("stillOwns"); return ownership.stillOwns(ctx); }
-    }
+    },
+    autosave: { enabledAtStart: () => false, due: () => { call("autosave due"); }, changed: () => {} }
   });
   return { calls, jobs, finish, saves };
 }
@@ -753,7 +762,7 @@ test("lifecycle: the booted app's actions start before startup and every mount, 
   const probe = probeActions();
   const wiring: Wiring = await wireReal(probe);
   app.startApp(wiring);
-  await S.initialStateReady;
+  await startupReady();
   assert.ok(listenerCount() > baseline + 100, "the features mounted");
   app.stopApp();
   assert.deepEqual(probe.events, [
@@ -821,7 +830,7 @@ test("lifecycle: start, stop and start again three times with the same owners an
   for (let round = 0; round < 3; round++) {
     const wiring = await wireReal();
     app.startApp(wiring);
-    await S.initialStateReady;
+    await startupReady();
     assert.deepEqual(started(), EVERYTHING);
     const now = windowListeners();
     const added = Object.fromEntries(Object.entries(now).map(([k, n]) => [k, n - (baseWindow[k] ?? 0)]).filter(([, n]) => n));
@@ -857,7 +866,7 @@ test("cleanup: the app-lifetime registrations that survive a stop are the ones m
   const app = await import("../../src/bootstrap/app.ts");
   const wiring = await wireReal();
   app.startApp(wiring);
-  await S.initialStateReady;
+  await startupReady();
   app.stopApp();
   const survivors = survivorNames();
   assert.deepEqual(globalOnly(survivors), SURVIVING_GLOBAL_LISTENERS, "the window and document listeners the initializers registered, by event, stay");
@@ -866,7 +875,7 @@ test("cleanup: the app-lifetime registrations that survive a stop are the ones m
   onDocumentReplaced(() => { replaced++; });
   const again = await wireReal();
   app.startApp(again);
-  await S.initialStateReady;
+  await startupReady();
   const { NO_DESTINATION } = await import("../../src/legacy/transition-bridge.ts");
   documentTransitions().startNew({ from: { document: migrateRows({ title: "Fresh", rows: [] }) }, reason: "test: a new script", destination: NO_DESTINATION });
   assert.ok(replaced > 0, "document-replaced listeners registered on the bridge survive a rewire");
