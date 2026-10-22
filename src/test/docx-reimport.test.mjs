@@ -12,7 +12,7 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
-import { __init as initDocx, buildDocx, buildNarrationDocx, docxToRows } from "../js/15-docx.js";
+import { __init as initDocx, buildDocx, buildNarrationDocx, docxToRows } from "../adapters/formats/docx.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();

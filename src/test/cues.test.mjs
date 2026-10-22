@@ -18,7 +18,7 @@ import {
   __init as initTags, healTagRegistry, productionEntries, removeTag, renameTag, tagsInField
 } from "../js/07-production-tags.js";
 import { zipRead } from "../adapters/formats/zip.ts";
-import { __init as initDocx, audioDirectionsHtml, buildDocx, buildNarrationText } from "../js/15-docx.js";
+import { __init as initDocx, audioDirectionsHtml, buildDocx, buildNarrationText } from "../adapters/formats/docx.ts";
 import { prompterSceneHtml, trimPrompterCell } from "../js/20-teleprompter.js";
 import { loadTestDocument } from "./_document.mjs";
 

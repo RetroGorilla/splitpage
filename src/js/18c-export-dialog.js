@@ -5,10 +5,11 @@ import {
   exportComments,
   exportFacts
 } from "../adapters/formats/export-kit.ts";
-import { captureExportDocument, exportRuns } from "./14b-export-kit.js";
+import { captureExportDocument } from "./14b-export-kit.js";
+import { exportRuns } from "../adapters/formats/export-kit.ts";
 import { breakdownRows, sceneFacts } from "../adapters/formats/export-projections.ts";
 import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
-import { narrationRows } from "./15-docx.js";
+import { narrationRows } from "../adapters/formats/docx.ts";
 import { exportBaseName, exportFileName, handleFileMenuAction, runExportAction } from "./18-local-files.js";
 import { onFileMenuRefresh } from "./18b-file-menu.js";
 import { tagPrintColor } from "../adapters/formats/print-colors.ts";

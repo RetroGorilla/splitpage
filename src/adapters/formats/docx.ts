@@ -1,6 +1,15 @@
-import { internDataUrl, queuePersist, rowImage } from "../adapters/storage/02c-blobs.js";
-import { morePictureRefs, rowVideoLinks } from "../adapters/storage/02d-gallery.js";
-import { imageDims, sniffImageMime } from "../../shared/blob-policy.js";
+import type { ExportAssets } from "../../application/export/assets.ts";
+import type { ExportDocument } from "../../core/document/export-document.ts";
+import type { GalleryItem, VideoLink } from "../../core/document/gallery.ts";
+import type { ImageRef } from "../../core/document/ports.ts";
+import type { Frozen } from "../../core/document/freeze.ts";
+import type { DocumentRow } from "../../core/document/validated.ts";
+import type { PlainTextOptions } from "../../core/text/projections.ts";
+import type { ExportRun } from "./export-kit.ts";
+import type { BreakdownRow, CommentBody, SceneFacts } from "./export-projections.ts";
+import { internDataUrl, queuePersist, rowImage } from "../storage/02c-blobs.js";
+import { morePictureRefs, rowVideoLinks } from "../storage/02d-gallery.js";
+import { imageDims, sniffImageMime } from "../../../shared/blob-policy.js";
 import {
   PRINT_COLORS,
   STATUS_PRINT,
@@ -11,90 +20,142 @@ import {
   exportDay,
   exportComments,
   exportFacts,
+  exportRuns,
   exportSummaryParts
-} from "../adapters/formats/export-kit.ts";
-import { capturedPicture, capturedRowPicture } from "../adapters/formats/export-assets.ts";
-import { exportRuns } from "./14b-export-kit.js";
-import { sceneFacts } from "../adapters/formats/export-projections.ts";
-import { strBytes } from "../adapters/formats/bytes.ts";
-import { xmlEscape } from "../adapters/formats/xml.ts";
-import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
-import { makeId } from "../adapters/identity/ids.ts";
-import { exportServices } from "../application/export/services.ts";
-import { escapeHtml, safeHref, unitSafePrefix } from "../core/document/text-policy.ts";
-import { DEFAULT_WPM } from "../core/document/timing.ts";
-import { formatDuration, pad2 } from "../core/production/timing.ts";
-import { flattenCues, importCues, withoutCues } from "../core/text/cues.ts";
-import { importDirections } from "../core/text/directions.ts";
-import { setMark } from "../core/text/edits.ts";
-import { toHtml } from "../core/text/html.ts";
-import { OMIT_CLOSES, toDocxRuns, toPlainText } from "../core/text/projections.ts";
-import { cellLength } from "../core/text/runs.ts";
+} from "./export-kit.ts";
+import { capturedPicture, capturedRowPicture } from "./export-assets.ts";
+import { sceneFacts } from "./export-projections.ts";
+import { strBytes } from "./bytes.ts";
+import { xmlEscape } from "./xml.ts";
+import { zipRead, zipWrite } from "./zip.ts";
+import { makeId } from "../identity/ids.ts";
+import { exportServices } from "../../application/export/services.ts";
+import { escapeHtml, safeHref, unitSafePrefix } from "../../core/document/text-policy.ts";
+import { DEFAULT_WPM } from "../../core/document/timing.ts";
+import { formatDuration, pad2 } from "../../core/production/timing.ts";
+import { flattenCues, importCues, withoutCues } from "../../core/text/cues.ts";
+import { importDirections } from "../../core/text/directions.ts";
+import { setMark } from "../../core/text/edits.ts";
+import { toHtml } from "../../core/text/html.ts";
+import { OMIT_CLOSES, toDocxRuns, toPlainText } from "../../core/text/projections.ts";
+import { cellLength } from "../../core/text/runs.ts";
 
-var DOCX_CATEGORY_DOT = "● ";
+type Row = Frozen<DocumentRow>;
+type Margins = Partial<Record<"top" | "left" | "bottom" | "right", number>>;
+interface RunProperties {
+  style?: string;
+  b?: boolean | undefined;
+  i?: boolean | undefined;
+  s?: boolean | undefined;
+  mark?: boolean | undefined;
+  color?: string;
+  position?: number;
+  sz?: number;
+  u?: string;
+  uColor?: string;
+  bdr?: string;
+  shd?: string;
+  vertAlign?: string;
+}
+interface Relationships { addLink: (href: string) => string }
+interface Drawing { rid: string; name: string }
+interface PicturePart extends Drawing { w: number; h: number }
+interface Media { bytes: Uint8Array; ext: string }
+interface RunOptions {
+  annotate?: { nums: Readonly<Record<string, number>>; open: Record<string, boolean> };
+  cues?: string | null | undefined;
+  directions?: string | null | undefined;
+  pPr?: string;
+  lead?: string;
+  sz?: number;
+}
+interface CellOptions { mar?: Margins; span?: number; bottom?: { sz: number; color: string } }
+interface ParaOptions { keepNext?: boolean; before?: number; after?: number; jc?: string | undefined }
+interface HeadOptions { jc?: string; mar?: Margins }
+interface NarrationOptions { directions?: unknown }
+interface ImportOptions { ownExport: boolean }
+type LinkMap = Record<string, string | null>;
+interface ImportedRow {
+  id: string;
+  visualText: string;
+  imageRef: ImageRef | null;
+  audioText: string;
+  moreImages?: GalleryItem[];
+  _pendingImage?: string | null;
+  _pendingMore?: string[] | null;
+  _links?: VideoLink[] | null;
+}
 
-var STYLES_XML;
+function required<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error("Missing DOCX value");
+  return value;
+}
 
-var EXPORT_TABLE_STYLE_ID = "SplitpageTable";
+const DOCX_CATEGORY_DOT = "● ";
 
-export function dataUrlToBytes(dataUrl) {
-  var comma = dataUrl.indexOf(",");
-  var b64 = dataUrl.slice(comma + 1);
-  var bin = atob(b64);
-  var out = new Uint8Array(bin.length);
-  for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+let STYLES_XML: string | undefined;
+
+const EXPORT_TABLE_STYLE_ID = "SplitpageTable";
+
+export function dataUrlToBytes(dataUrl: string): Uint8Array<ArrayBuffer> {
+  const comma = dataUrl.indexOf(",");
+  const b64 = dataUrl.slice(comma + 1);
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
 }
 
-var DOCX_IMAGE_EXT = { "image/jpeg": "jpeg", "image/png": "png", "image/gif": "gif", "image/webp": "webp" };
+const DOCX_IMAGE_EXT: Record<string, string> = { "image/jpeg": "jpeg", "image/png": "png", "image/gif": "gif", "image/webp": "webp" };
 
-export function jpegSize(bytes) {
-  var i = 2;
+export function jpegSize(bytes: Uint8Array): { w: number; h: number } {
+  let i = 2;
   while (i < bytes.length - 9) {
     if (bytes[i] !== 0xFF) { i++; continue; }
-    var marker = bytes[i + 1];
+    const marker = bytes[i + 1] ?? 0;
     if (marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC) {
-      return { h: (bytes[i + 5] << 8) | bytes[i + 6], w: (bytes[i + 7] << 8) | bytes[i + 8] };
+      return { h: ((bytes[i + 5] ?? 0) << 8) | (bytes[i + 6] ?? 0), w: ((bytes[i + 7] ?? 0) << 8) | (bytes[i + 8] ?? 0) };
     }
-    var len = (bytes[i + 2] << 8) | bytes[i + 3];
+    const len = ((bytes[i + 2] ?? 0) << 8) | (bytes[i + 3] ?? 0);
     i += 2 + len;
   }
   return { w: 800, h: 450 };
 }
 
-export function safeAspect(dim) {
-  var w = dim && dim.w > 0 ? dim.w : 800;
-  var h = dim && dim.h > 0 ? dim.h : 450;
+export function safeAspect(dim?: { w: number; h: number } | null) {
+  const w = dim && dim.w > 0 ? dim.w : 800;
+  const h = dim && dim.h > 0 ? dim.h : 450;
   return { w: w, h: h, ratio: h / w };
 }
 
-function fitColumnWidths(totalWidth, minChars, headers, rowsCells, maxChars) {
-  var weights = headers.map(function (h, i) {
-    var longest = String(h).length;
+function fitColumnWidths(totalWidth: number, minChars: readonly number[], headers: readonly string[], rowsCells: readonly (readonly string[])[], maxChars?: readonly number[]): number[] {
+  const weights = headers.map(function (h, i) {
+    let longest = String(h).length;
     rowsCells.forEach(function (r) {
-      var len = String(r[i] == null ? "" : r[i]).length;
+      const len = String(r[i] == null ? "" : r[i]).length;
       if (len > longest) longest = len;
     });
-    return Math.max(minChars[i], Math.min(maxChars && maxChars[i] || 40, longest));
+    return Math.max(required(minChars[i]), Math.min(maxChars && maxChars[i] || 40, longest));
   });
-  var sum = weights.reduce(function (a, b) { return a + b; }, 0);
-  var widths = weights.map(function (w) { return Math.floor(totalWidth * w / sum); });
-  var used = widths.reduce(function (a, b) { return a + b; }, 0);
-  widths[widths.length - 1] += totalWidth - used;
+  const sum = weights.reduce(function (a, b) { return a + b; }, 0);
+  const widths = weights.map(function (w) { return Math.floor(totalWidth * w / sum); });
+  const used = widths.reduce(function (a, b) { return a + b; }, 0);
+  widths[widths.length - 1] = required(widths[widths.length - 1]) + totalWidth - used;
   return widths;
 }
 
-var DIRECTION_STYLE = "SplitpageDirection";
-var DIRECTION_COLOR = "6B6A65";
+const DIRECTION_STYLE = "SplitpageDirection";
+const DIRECTION_COLOR = "6B6A65";
 
-function omitDirectionRuns(runs) {
-  var out = [], gap = false;
+function omitDirectionRuns(runs: ExportRun[]): ExportRun[] {
+  const out: ExportRun[] = [];
+  let gap = false;
   runs.forEach(function (r) {
     if (r.dir) { gap = true; return; }
     if (r.text === "\n") { gap = false; out.push(r); return; }
     if (gap) {
-      var last = out[out.length - 1];
-      var t = r.text;
+      const last = out[out.length - 1];
+      let t = r.text;
       if (OMIT_CLOSES.test(t)) {
         if (last && last.text !== "\n") out[out.length - 1] = Object.assign({}, last, { text: last.text.replace(/[ \t]+$/, "") });
       } else if (!last || /\s$/.test(last.text)) {
@@ -111,21 +172,21 @@ function omitDirectionRuns(runs) {
   return out;
 }
 
-var CUE_STYLE = "SplitpageCue";
-var CUE_COLOR = "AB413E";
-var CUE_SIZE = 18;
+const CUE_STYLE = "SplitpageCue";
+const CUE_COLOR = "AB413E";
+const CUE_SIZE = 18;
 
-var TAG_STYLE = "SplitpageTag";
-var MARKER_STYLE = "SplitpageMarker";
-var BROLL_STYLE = "SplitpageBroll";
-var MARKER_SIZE = 15;
-var BROLL_SIZE = 16;
-var CHIP_PAD = String.fromCharCode(0x2009);
-var CHIP_PAD_ENDS = new RegExp("^" + CHIP_PAD + "+|" + CHIP_PAD + "+$", "g");
-var NBSP = String.fromCharCode(0xA0);
+const TAG_STYLE = "SplitpageTag";
+const MARKER_STYLE = "SplitpageMarker";
+const BROLL_STYLE = "SplitpageBroll";
+const MARKER_SIZE = 15;
+const BROLL_SIZE = 16;
+const CHIP_PAD = String.fromCharCode(0x2009);
+const CHIP_PAD_ENDS = new RegExp("^" + CHIP_PAD + "+|" + CHIP_PAD + "+$", "g");
+const NBSP = String.fromCharCode(0xA0);
 
-function rPrXml(p) {
-  var out = "";
+function rPrXml(p: RunProperties): string {
+  let out = "";
   if (p.style) out += '<w:rStyle w:val="' + p.style + '"/>';
   if (p.b) out += "<w:b/>";
   if (p.i) out += "<w:i/>";
@@ -141,11 +202,11 @@ function rPrXml(p) {
   return out ? "<w:rPr>" + out + "</w:rPr>" : "";
 }
 
-function textRunXml(text, p) {
+function textRunXml(text: string, p?: RunProperties): string {
   return "<w:r>" + rPrXml(p || {}) + '<w:t xml:space="preserve">' + xmlEscape(text) + "</w:t></w:r>";
 }
 
-function markerRunsXml(nums) {
+function markerRunsXml(nums: readonly number[]): string {
   return nums.map(function (n) {
     return textRunXml(CHIP_PAD + n + CHIP_PAD, {
       style: MARKER_STYLE, b: true, color: PRINT_COLORS.audio, sz: MARKER_SIZE, position: 6, bdr: PRINT_COLORS.audio
@@ -153,24 +214,24 @@ function markerRunsXml(nums) {
   }).join("");
 }
 
-function docxRunsXml(html, rels, opts) {
+function docxRunsXml(html: unknown, rels: Relationships, opts?: RunOptions): string {
   opts = opts || {};
-  var ann = opts.annotate;
-  var runs;
+  const ann = opts.annotate;
+  let runs: ExportRun[];
   if (ann) {
     runs = exportRuns(html, ann.nums);
   } else {
-    var cell = exportServices().cellOf(html);
+    let cell = exportServices().cellOf(html);
     if (opts.cues === "omit") cell = withoutCues(cell);
     runs = toDocxRuns(cell);
   }
   if (opts.directions === "omit") runs = omitDirectionRuns(runs);
-  var out = "<w:p>" + (opts.pPr ? "<w:pPr>" + opts.pPr + "</w:pPr>" : "") + (opts.lead || "");
+  let out = "<w:p>" + (opts.pPr ? "<w:pPr>" + opts.pPr + "</w:pPr>" : "") + (opts.lead || "");
   runs.forEach(function (r) {
     if (r.text === "\n") { out += "<w:r><w:br/></w:r>"; return; }
-    var tag = ann && r.tag;
-    var p = { b: r.b, i: r.i || r.dir, s: r.s, mark: r.mark };
-    var text = r.text;
+    const tag = ann && r.tag;
+    const p: RunProperties = { b: r.b, i: r.i || r.dir, s: r.s, mark: r.mark };
+    let text = r.text;
     if (ann && r.broll) {
       p.style = BROLL_STYLE;
       p.b = true;
@@ -191,17 +252,17 @@ function docxRunsXml(html, rels, opts) {
     if (r.href) p.color = "1155CC";
     if (r.cue) p.sz = CUE_SIZE;
     else if (!p.sz && opts.sz) p.sz = opts.sz;
-    var cmt = ann && r.cmt ? r.cmt.filter(function (id) { return id in ann.open; }) : [];
+    const cmt = ann && r.cmt ? r.cmt.filter(function (id) { return id in ann.open; }) : [];
     if (r.u || r.href) {
       p.u = "single";
     } else if (cmt.length) {
       p.u = "dotted";
-      p.uColor = cmt.some(function (id) { return ann.open[id]; }) ? PRINT_COLORS.audio : PRINT_COLORS.faint;
+      p.uColor = cmt.some(function (id) { return ann && ann.open[id]; }) ? PRINT_COLORS.audio : PRINT_COLORS.faint;
     } else if (tag && tag.color) {
       p.u = "single";
       p.uColor = tag.color;
     }
-    var run = textRunXml(text, p);
+    const run = textRunXml(text, p);
     if (r.href) out += '<w:hyperlink r:id="' + rels.addLink(r.href) + '">' + run + "</w:hyperlink>";
     else out += run;
     if (ann && r.markers) out += markerRunsXml(r.markers);
@@ -209,7 +270,7 @@ function docxRunsXml(html, rels, opts) {
   return out + "</w:p>";
 }
 
-function docxDrawingRun(img, id, cx, cy) {
+function docxDrawingRun(img: Drawing, id: number, cx: number, cy: number): string {
   return '<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0">' +
     '<wp:extent cx="' + cx + '" cy="' + cy + '"/><wp:effectExtent l="0" t="0" r="0" b="0"/>' +
     '<wp:docPr id="' + id + '" name="' + img.name + '"/><wp:cNvGraphicFramePr/>' +
@@ -221,16 +282,16 @@ function docxDrawingRun(img, id, cx, cy) {
     '</a:graphicData></a:graphic></wp:inline></w:drawing></w:r>';
 }
 
-var VIDEO_LINKS_MARK = "▶ ";
+const VIDEO_LINKS_MARK = "▶ ";
 
-function shortHref(href) {
+function shortHref(href: string): string {
   return String(href).replace(/^https?:\/\/(www\.)?/i, "");
 }
 
-function docxVideoLinksXml(links, rels) {
+function docxVideoLinksXml(links: readonly VideoLink[], rels: Relationships): string {
   if (!links.length) return "";
-  var rPr = '<w:rPr><w:sz w:val="18"/></w:rPr>';
-  var out = '<w:p><w:pPr><w:spacing w:after="80"/></w:pPr><w:r>' + rPr + '<w:t xml:space="preserve">' + VIDEO_LINKS_MARK + '</w:t></w:r>';
+  const rPr = '<w:rPr><w:sz w:val="18"/></w:rPr>';
+  let out = '<w:p><w:pPr><w:spacing w:after="80"/></w:pPr><w:r>' + rPr + '<w:t xml:space="preserve">' + VIDEO_LINKS_MARK + '</w:t></w:r>';
   links.forEach(function (l, i) {
     if (i) out += '<w:r>' + rPr + '<w:t xml:space="preserve">  ·  </w:t></w:r>';
     if (l.href) {
@@ -243,29 +304,31 @@ function docxVideoLinksXml(links, rels) {
   return out + '</w:p>';
 }
 
-function docxVideoLinksOf(pEl, linkMap) {
-  var html = docxParaToHtml(pEl, linkMap);
-  var text = exportServices().htmlToPlainText(html);
+function docxVideoLinksOf(pEl: Element, linkMap: LinkMap): VideoLink[] | null {
+  const html = docxParaToHtml(pEl, linkMap);
+  const text = exportServices().htmlToPlainText(html);
   if (text.indexOf(VIDEO_LINKS_MARK) !== 0) return null;
-  var hrefs = [];
-  exportServices().inertBody(html).querySelectorAll("a[href]").forEach(function (a) { hrefs.push(a.getAttribute("href")); });
-  var parts = text.slice(VIDEO_LINKS_MARK.length).split("  ·  ");
-  var links = [];
-  for (var i = 0; i < parts.length; i++) {
-    var p = parts[i].trim();
-    var file = /^(.+) \(video file\)$/.exec(p);
-    if (file) { links.push({ name: file[1] }); continue; }
-    var at = hrefs.findIndex(function (h) { return h === p || shortHref(h) === p; });
+  const hrefs: string[] = [];
+  const root = exportServices().inertBody(html);
+  if (!(root instanceof Element)) throw new Error("Export inertBody must return an element");
+  root.querySelectorAll("a[href]").forEach(function (a) { hrefs.push(a.getAttribute("href") || ""); });
+  const parts = text.slice(VIDEO_LINKS_MARK.length).split("  ·  ");
+  const links: VideoLink[] = [];
+  for (let i = 0; i < parts.length; i++) {
+    const p = required(parts[i]).trim();
+    const file = /^(.+) \(video file\)$/.exec(p);
+    if (file) { links.push({ name: required(file[1]) }); continue; }
+    const at = hrefs.findIndex(function (h) { return h === p || shortHref(h) === p; });
     if (at === -1) return null;
-    links.push({ href: hrefs.splice(at, 1)[0] });
+    links.push({ href: required(hrefs.splice(at, 1)[0]) });
   }
   return links.length ? links : null;
 }
 
-function docxCellXml(inner, widthDxa, opts) {
+function docxCellXml(inner: string, widthDxa: number, opts?: CellOptions): string {
   opts = opts || {};
-  var mar = opts.mar || {};
-  var marXml = ["top", "left", "bottom", "right"].map(function (side) {
+  const mar = opts.mar || {};
+  const marXml = (["top", "left", "bottom", "right"] as const).map(function (side) {
     return mar[side] === undefined ? "" : '<w:' + side + ' w:w="' + mar[side] + '" w:type="dxa"/>';
   }).join("");
   return '<w:tc><w:tcPr><w:tcW w:w="' + widthDxa + '" w:type="dxa"/>' +
@@ -275,36 +338,36 @@ function docxCellXml(inner, widthDxa, opts) {
     (inner || cellParaXml("")) + "</w:tc>";
 }
 
-function cellParaXml(runs, o) {
+function cellParaXml(runs: string, o?: ParaOptions): string {
   o = o || {};
   return "<w:p><w:pPr>" + (o.keepNext ? "<w:keepNext/>" : "") +
     '<w:spacing w:before="' + (o.before || 0) + '" w:after="' + (o.after || 0) + '"/>' +
     (o.jc ? '<w:jc w:val="' + o.jc + '"/>' : "") + "</w:pPr>" + runs + "</w:p>";
 }
 
-function docxLineBreakParagraph(text, indentDxa, rPr) {
-  var runXml = String(text || "").split(/\r\n|\r|\n/).map(function (line, i) {
+function docxLineBreakParagraph(text: string | undefined, indentDxa: number, rPr: string): string {
+  const runXml = String(text || "").split(/\r\n|\r|\n/).map(function (line, i) {
     return (i > 0 ? '<w:br/>' : '') + '<w:t xml:space="preserve">' + xmlEscape(line) + '</w:t>';
   }).join('');
   return '<w:p><w:pPr><w:spacing w:after="120"/><w:ind w:left="' + indentDxa + '"/></w:pPr>' +
     '<w:r>' + (rPr ? '<w:rPr>' + rPr + '</w:rPr>' : '') + runXml + '</w:r></w:p>';
 }
 
-var PAGE_W = 10080;
-var COL_SCENE = 1080, COL_VISUAL = 3880, COL_AUDIO = 4400, COL_READ = 720;
-var VISUAL_SZ = 20;
-var HEAD_SZ = 17;
-var GUTTER_SZ = 16;
+const PAGE_W = 10080;
+const COL_SCENE = 1080, COL_VISUAL = 3880, COL_AUDIO = 4400, COL_READ = 720;
+const VISUAL_SZ = 20;
+const HEAD_SZ = 17;
+const GUTTER_SZ = 16;
 
-var LAMP_CHARS = { outline: "○", fill: "●", half: "◐", check: "✓", ring: "↩" };
+const LAMP_CHARS: Record<string, string> = { outline: "○", fill: "●", half: "◐", check: "✓", ring: "↩" };
 
-function lampRunsXml(status, label, sz) {
-  return textRunXml(LAMP_CHARS[status.lamp] || LAMP_CHARS.outline, { color: status.color, sz: sz }) +
+function lampRunsXml(status: { lamp: string; color: string }, label: string, sz: number): string {
+  return textRunXml(LAMP_CHARS[status.lamp] || required(LAMP_CHARS.outline), { color: status.color, sz: sz }) +
     textRunXml(" " + label, { color: status.lamp === "outline" ? PRINT_COLORS.faint : PRINT_COLORS.dim, sz: sz });
 }
 
-function sceneCellXml(f) {
-  var st = STATUS_PRINT[f.status.id] || STATUS_PRINT.todo;
+function sceneCellXml(f: SceneFacts): string {
+  const st = STATUS_PRINT[f.status.id] || STATUS_PRINT.todo;
   return docxCellXml(
     cellParaXml(textRunXml(f.number, { b: true, sz: 26 })) +
     cellParaXml(textRunXml(f.start, { color: PRINT_COLORS.faint, sz: GUTTER_SZ }), { after: 80 }) +
@@ -312,56 +375,56 @@ function sceneCellXml(f) {
     COL_SCENE, { mar: { left: 0 } });
 }
 
-function readCellXml(f) {
-  var p = { color: PRINT_COLORS.dim, sz: 18 };
+function readCellXml(f: SceneFacts): string {
+  const p: RunProperties = { color: PRINT_COLORS.dim, sz: 18 };
   if (f.readSet) p.bdr = PRINT_COLORS.borderStrong;
   return docxCellXml(cellParaXml(textRunXml(f.readSet ? CHIP_PAD + f.read + CHIP_PAD : f.read, p), { jc: "right" }),
     COL_READ, { mar: { right: 0 } });
 }
 
-var HEAD_RULE_SZ = 8;
+const HEAD_RULE_SZ = 8;
 
-function headCellXml(text, width, color, opts) {
+function headCellXml(text: string, width: number, color?: string | null, opts?: HeadOptions): string {
   opts = opts || {};
   return docxCellXml(cellParaXml(textRunXml(text, { b: true, color: color || PRINT_COLORS.dim, sz: HEAD_SZ }), { jc: opts.jc }),
     width, { mar: Object.assign({ top: 0, bottom: 80 }, opts.mar), bottom: { sz: HEAD_RULE_SZ, color: PRINT_COLORS.borderStrong } });
 }
 
-var KEEP_WHOLE_LINES = 10;
+const KEEP_WHOLE_LINES = 10;
 
-function sceneLineEstimate(row) {
-  function lines(html) {
+function sceneLineEstimate(row: Row): number {
+  function lines(html: unknown): number {
     return toPlainText(exportServices().cellOf(html)).split("\n").reduce(function (n, l) { return n + Math.max(1, Math.ceil(l.length / 40)); }, 0);
   }
-  var pics = (rowImage(row) ? 1 : 0) + morePictureRefs(row).length;
+  const pics = (rowImage(row) ? 1 : 0) + morePictureRefs(row).length;
   return Math.max(lines(row.visualText) + pics * 8, lines(row.audioText));
 }
 
-function commentOpenness(doc) {
-  var out = Object.create(null);
+function commentOpenness(doc: ExportDocument): Record<string, boolean> {
+  const out: Record<string, boolean> = Object.create(null);
   (doc.comments || []).forEach(function (c) { if (c && c.id) out[c.id] = !c.resolved; });
   return out;
 }
 
-var META_STYLE = "SplitpageMeta";
+const META_STYLE = "SplitpageMeta";
 
-function metaParaXml(text) {
+function metaParaXml(text: string): string {
   return '<w:p><w:pPr><w:pStyle w:val="' + META_STYLE + '"/></w:pPr>' + textRunXml(text) + "</w:p>";
 }
 
-function titleParaXml(title) {
+function titleParaXml(title: string): string {
   return '<w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr>' + textRunXml(title) + "</w:p>";
 }
 
-function headingParaXml(text, newPage) {
+function headingParaXml(text: string, newPage: boolean): string {
   return '<w:p><w:pPr><w:pStyle w:val="Heading1"/>' + (newPage ? "<w:pageBreakBefore/>" : "") + "</w:pPr>" +
     textRunXml(text) + "</w:p>";
 }
 
-function plural(n, one, many) { return n + " " + (n === 1 ? one : (many || one + "s")); }
+function plural(n: number, one: string, many?: string): string { return n + " " + (n === 1 ? one : (many || one + "s")); }
 
-function tableXml(cols, rowsXml) {
-  var width = cols.reduce(function (a, b) { return a + b; }, 0);
+function tableXml(cols: readonly number[], rowsXml: string): string {
+  const width = cols.reduce(function (a, b) { return a + b; }, 0);
   return '<w:tbl><w:tblPr><w:tblStyle w:val="' + EXPORT_TABLE_STYLE_ID + '"/><w:tblW w:w="' + width + '" w:type="dxa"/>' +
     tableBordersXml() + '<w:tblLayout w:type="fixed"/>' +
     '<w:tblLook w:val="0620" w:firstRow="1" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>' +
@@ -370,38 +433,38 @@ function tableXml(cols, rowsXml) {
 }
 
 function tableBordersXml() {
-  var hair = 'w:val="single" w:sz="4" w:space="0" w:color="' + PRINT_COLORS.border + '"';
+  const hair = 'w:val="single" w:sz="4" w:space="0" w:color="' + PRINT_COLORS.border + '"';
   return "<w:tblBorders>" +
     '<w:top w:val="nil"/><w:left w:val="nil"/><w:bottom ' + hair + '/><w:right w:val="nil"/>' +
     '<w:insideH ' + hair + '/><w:insideV w:val="nil"/></w:tblBorders>';
 }
 
-var BREAKDOWN_HEAD_WORDS = ["Item", "Status", "Scenes", "Assigned to", "Notes"];
+const BREAKDOWN_HEAD_WORDS = ["Item", "Status", "Scenes", "Assigned to", "Notes"];
 
-var FLAG_COLOR = "C4302A";
-var SHOT_INDENT = 400;
+const FLAG_COLOR = "C4302A";
+const SHOT_INDENT = 400;
 
-export function buildDocx(doc, assets) {
-  var media = [];
-  var links = [];
-  var rels = {
-    addLink: function (href) {
+export function buildDocx(doc: ExportDocument, assets?: ExportAssets | null): Uint8Array<ArrayBuffer> {
+  const media: Media[] = [];
+  const links: string[] = [];
+  const rels = {
+    addLink: function (href: string) {
       links.push(href);
       return "rIdL" + links.length;
     },
-    addImage: function (bytes, mime) {
-      var ext = DOCX_IMAGE_EXT[mime] || "jpeg";
+    addImage: function (bytes: Uint8Array, mime: string): Drawing {
+      const ext = DOCX_IMAGE_EXT[mime] || "jpeg";
       media.push({ bytes: bytes, ext: ext });
       return { rid: "rIdM" + media.length, name: "image" + media.length + "." + ext };
     }
   };
 
-  var pictureParts = {};
+  const pictureParts: Record<string, PicturePart | null> = {};
 
-  var facts = exportFacts(doc);
-  var body = titleParaXml(facts.title) + metaParaXml(exportSummaryParts(facts).concat(facts.date).join(" · "));
+  const facts = exportFacts(doc);
+  let body = titleParaXml(facts.title) + metaParaXml(exportSummaryParts(facts).concat(facts.date).join(" · "));
 
-  var rowsXml = "";
+  let rowsXml = "";
   rowsXml += "<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>" +
     headCellXml("Scene", COL_SCENE, null, { mar: { left: 0 } }) +
     headCellXml("Visual", COL_VISUAL, PRINT_COLORS.visual) +
@@ -409,70 +472,71 @@ export function buildDocx(doc, assets) {
     headCellXml("Read", COL_READ, null, { jc: "right", mar: { right: 0 } }) +
     "</w:tr>";
 
-  var scenes = sceneFacts(doc);
-  var ann = { nums: doc.commentNumbers, open: commentOpenness(doc) };
-  var maxW = (COL_VISUAL - 200) * 635;
+  const scenes = sceneFacts(doc);
+  const ann = { nums: doc.commentNumbers, open: commentOpenness(doc) };
+  const maxW = (COL_VISUAL - 200) * 635;
   doc.scenes.forEach(function (row, idx) {
-    var visual = "";
-    var pic = rowImage(row) && capturedRowPicture(assets, row);
+    let visual = "";
+    const rowPic = rowImage(row);
+    const pic = rowPic && capturedRowPicture(assets, row);
     if (pic) {
       try {
-        var bytes = pic.bytes;
-        var dim = safeAspect(rowImage(row).ref ? { w: pic.width, h: pic.height } : jpegSize(bytes));
-        var img = rels.addImage(bytes, pic.mime);
-        var cx = Math.round(Math.min(maxW, dim.w * 9525));
-        var cy = Math.round(cx * dim.ratio);
+        const bytes = pic.bytes;
+        const dim = safeAspect(rowPic?.ref ? { w: pic.width, h: pic.height } : jpegSize(bytes));
+        const img = rels.addImage(bytes, pic.mime);
+        const cx = Math.round(Math.min(maxW, dim.w * 9525));
+        const cy = Math.round(cx * dim.ratio);
         visual += cellParaXml(docxDrawingRun(img, media.length, cx, cy), { after: 80 });
-        if (rowImage(row).ref) pictureParts[rowImage(row).ref.sha256] = { rid: img.rid, name: img.name, w: dim.w, h: dim.h };
+        if (rowPic?.ref) pictureParts[rowPic.ref.sha256] = { rid: img.rid, name: img.name, w: dim.w, h: dim.h };
       } catch (e) { }
     }
     morePictureRefs(row).forEach(function (ref) {
-      var more = capturedPicture(assets, ref);
+      const more = capturedPicture(assets, ref);
       if (!more) return;
       try {
-        var mdim = safeAspect({ w: more.width, h: more.height });
-        var mimg = rels.addImage(more.bytes, more.mime);
-        var mcx = Math.round(Math.min(maxW, mdim.w * 9525));
+        const mdim = safeAspect({ w: more.width, h: more.height });
+        const mimg = rels.addImage(more.bytes, more.mime);
+        const mcx = Math.round(Math.min(maxW, mdim.w * 9525));
         visual += cellParaXml(docxDrawingRun(mimg, media.length, mcx, Math.round(mcx * mdim.ratio)), { after: 80 });
         pictureParts[ref.sha256] = { rid: mimg.rid, name: mimg.name, w: mdim.w, h: mdim.h };
       } catch (e) { }
     });
     visual += docxVideoLinksXml(rowVideoLinks(row), rels);
     visual += docxRunsXml(row.visualText, rels, { annotate: ann, sz: VISUAL_SZ, pPr: '<w:spacing w:after="0"/>' });
-    var audio = docxRunsXml(row.audioText, rels, { annotate: ann, pPr: '<w:spacing w:after="0"/>' });
+    const audio = docxRunsXml(row.audioText, rels, { annotate: ann, pPr: '<w:spacing w:after="0"/>' });
     rowsXml += "<w:tr>" + (sceneLineEstimate(row) <= KEEP_WHOLE_LINES ? "<w:trPr><w:cantSplit/></w:trPr>" : "") +
-      sceneCellXml(scenes[idx]) + docxCellXml(visual, COL_VISUAL) + docxCellXml(audio, COL_AUDIO) +
-      readCellXml(scenes[idx]) + "</w:tr>";
+      sceneCellXml(required(scenes[idx])) + docxCellXml(visual, COL_VISUAL) + docxCellXml(audio, COL_AUDIO) +
+      readCellXml(required(scenes[idx])) + "</w:tr>";
   });
 
   body += tableXml([COL_SCENE, COL_VISUAL, COL_AUDIO, COL_READ], rowsXml);
-  var appendix = 0;
-  var groups = breakdownGroups(doc);
+  let appendix = 0;
+  const groups = breakdownGroups(doc);
   if (groups.length) {
-    var itemCount = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
+    const itemCount = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
     body += headingParaXml("Production breakdown", !appendix++) +
       metaParaXml(plural(itemCount, "tracked item") + " · " + plural(groups.length, "category", "categories"));
 
-    var bHeaders = BREAKDOWN_HEAD_WORDS;
-    var items = [];
+    const bHeaders = BREAKDOWN_HEAD_WORDS;
+    let items: BreakdownRow[] = [];
     groups.forEach(function (g) { items = items.concat(g.items); });
-    var bMins = [12, 13, 10, 13, 14];
-    var bMaxes = [28, 13, 16, 18, 40];
-    var bCellRows = items.map(function (r) {
+    const bMins = [12, 13, 10, 13, 14];
+    const bMaxes = [28, 13, 16, 18, 40];
+    const bCellRows = items.map(function (r) {
       return [r.name, "● " + r.statusLabel, r.scenes.join(", "), r.owner,
         r.notes + (r.broll.length ? " B-roll: " + r.broll.join("; ") : "")];
     });
-    var bCols = fitColumnWidths(PAGE_W, bMins, bHeaders, bCellRows, bMaxes);
-    var BD_SZ = 19;
-    var edge = function (i) {
+    const bCols = fitColumnWidths(PAGE_W, bMins, bHeaders, bCellRows, bMaxes);
+    const BD_SZ = 19;
+    const edge = function (i: number): Margins {
       return i === 0 ? { left: 0 } : i === bHeaders.length - 1 ? { right: 0 } : {};
     };
 
-    var bRows = "<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>" +
-      bHeaders.map(function (h, i) { return headCellXml(h, bCols[i], null, { mar: edge(i) }); }).join("") + "</w:tr>";
+    let bRows = "<w:tr><w:trPr><w:cantSplit/><w:tblHeader/></w:trPr>" +
+      bHeaders.map(function (h, i) { return headCellXml(h, required(bCols[i]), null, { mar: edge(i) }); }).join("") + "</w:tr>";
 
     groups.forEach(function (g) {
-      var color = g.color || PRINT_COLORS.text;
+      const color = g.color || PRINT_COLORS.text;
       bRows += "<w:tr><w:trPr><w:cantSplit/></w:trPr>" +
         docxCellXml(cellParaXml(
           textRunXml(DOCX_CATEGORY_DOT, { color: color, sz: 20 }) +
@@ -480,13 +544,13 @@ export function buildDocx(doc, assets) {
           textRunXml("  " + g.items.length, { color: PRINT_COLORS.faint, sz: 18 }), { keepNext: true }),
         PAGE_W, { span: bHeaders.length, mar: { top: 240, left: 0, right: 0, bottom: 80 } }) + "</w:tr>";
       g.items.forEach(function (r) {
-        var st = TAG_STATUS_PRINT[r.status] || TAG_STATUS_PRINT.needed;
-        var notes = r.notes ? cellParaXml(textRunXml(r.notes, { color: PRINT_COLORS.dim, sz: BD_SZ })) : "";
+        const st = r.status === "sourcing" || r.status === "have" || r.status === "returned" ? TAG_STATUS_PRINT[r.status] : TAG_STATUS_PRINT.needed;
+        let notes = r.notes ? cellParaXml(textRunXml(r.notes, { color: PRINT_COLORS.dim, sz: BD_SZ })) : "";
         r.broll.forEach(function (shot) {
           notes += cellParaXml(textRunXml("B-roll ", { b: true, color: PRINT_COLORS.broll, sz: 16 }) +
             textRunXml(shot, { color: PRINT_COLORS.dim, sz: 17 }), { before: notes ? 40 : 0 });
         });
-        var cells = [
+        const cells = [
           cellParaXml(textRunXml(r.name, { sz: BD_SZ })),
           cellParaXml(lampRunsXml(st, r.statusLabel, BD_SZ)),
           cellParaXml(textRunXml(r.scenes.join(", "), { color: PRINT_COLORS.dim, sz: BD_SZ })),
@@ -494,7 +558,7 @@ export function buildDocx(doc, assets) {
           notes
         ];
         bRows += "<w:tr><w:trPr><w:cantSplit/></w:trPr>" + cells.map(function (inner, i) {
-          return docxCellXml(inner, bCols[i], { mar: Object.assign({ top: 70, bottom: 90 }, edge(i)) });
+          return docxCellXml(inner, required(bCols[i]), { mar: Object.assign({ top: 70, bottom: 90 }, edge(i)) });
         }).join("") + "</w:tr>";
       });
     });
@@ -502,7 +566,7 @@ export function buildDocx(doc, assets) {
     body += tableXml(bCols, bRows);
   }
 
-  var shots = exportBrollScenes(doc);
+  const shots = exportBrollScenes(doc);
   if (shots.length) {
     body += headingParaXml("B-roll shot list", !appendix++) + metaParaXml(brollSummaryText(shots));
     shots.forEach(function (g) {
@@ -513,17 +577,17 @@ export function buildDocx(doc, assets) {
         "<w:r><w:tab/></w:r>" +
         textRunXml(g.done + "/" + g.total + " shot", { color: PRINT_COLORS.faint, sz: 18 }) + "</w:p>";
       g.items.forEach(function (it, k) {
-        var details = [];
+        const details = [];
         if (it.location) details.push(textRunXml(it.location, { color: PRINT_COLORS.dim, sz: 17 }));
         if (it.owner) details.push(textRunXml(it.owner, { color: PRINT_COLORS.dim, sz: 17 }));
         if (it.propsWithStatus.length) details.push(textRunXml(it.propsWithStatus.join(", "), { color: PRINT_COLORS.dim, sz: 17 }));
         if (it.flagged) details.push(textRunXml("Flagged", { b: true, color: FLAG_COLOR, sz: 17 }));
-        var more = details.length || it.note;
+        const more = details.length || it.note;
         body += '<w:p><w:pPr>' + (more ? "<w:keepNext/>" : "") + '<w:spacing w:before="' + (k ? 120 : 0) + '" w:after="0"/>' +
           '<w:ind w:left="' + SHOT_INDENT + '" w:hanging="' + SHOT_INDENT + '"/></w:pPr>' +
           textRunXml(it.shot ? "☑" : "☐", { color: it.shot ? PRINT_COLORS.broll : PRINT_COLORS.faint, sz: 22 }) +
           "<w:r><w:tab/></w:r>" + textRunXml(it.name, { sz: 20 }) + "</w:p>";
-        var sep = textRunXml("  ·  ", { color: PRINT_COLORS.faint, sz: 17 });
+        const sep = textRunXml("  ·  ", { color: PRINT_COLORS.faint, sz: 17 });
         if (details.length) {
           body += '<w:p><w:pPr>' + (it.note ? "<w:keepNext/>" : "") + '<w:spacing w:before="20" w:after="0"/><w:ind w:left="' + SHOT_INDENT + '"/></w:pPr>' +
             details.join(sep) + "</w:p>";
@@ -536,41 +600,39 @@ export function buildDocx(doc, assets) {
     });
   }
 
-  var comments = exportComments(doc, { pieces: true });
+  const comments = exportComments(doc, { pieces: true });
   if (comments.length) {
-    var openCount = comments.filter(function (c) { return !c.resolved; }).length;
+    const openCount = comments.filter(function (c) { return !c.resolved; }).length;
     body += headingParaXml("Comments", !appendix) +
       metaParaXml([openCount ? openCount + " open" : "", comments.length - openCount ? (comments.length - openCount) + " resolved" : ""]
         .filter(Boolean).join(" · "));
 
-    var CIMG_MAXW = 0.6, CIMG_MAXH = 3302000;
-    var drawingId = media.length;
+    const CIMG_MAXW = 0.6, CIMG_MAXH = 3302000;
+    let drawingId = media.length;
 
-    function commentPictureXml(sha, indentDxa) {
-      var img = pictureParts[sha];
+    function commentPictureXml(sha: string, indentDxa: number): string {
+      let img = pictureParts[sha];
       if (img === undefined) {
         img = null;
-        var held = assets ? assets.picture(sha) : null;
-        var bytes = held && held.bytes;
-        var mime = bytes && sniffImageMime(bytes);
-        var dims = mime && imageDims(bytes);
-        if (dims && dims.width > 0 && dims.height > 0) {
-          img = rels.addImage(bytes, mime);
-          img.w = dims.width;
-          img.h = dims.height;
+        const held = assets ? assets.picture(sha) : null;
+        const bytes = held && held.bytes;
+        const mime = bytes && sniffImageMime(bytes);
+        const dims = bytes && mime && imageDims(bytes);
+        if (bytes && mime && dims && dims.width > 0 && dims.height > 0) {
+          img = { ...rels.addImage(bytes, mime), w: dims.width, h: dims.height };
         }
         pictureParts[sha] = img;
       }
       if (!img) return docxLineBreakParagraph("[image unavailable]", indentDxa, "<w:i/>");
-      var scale = Math.min(9525, (10080 - indentDxa) * 635 * CIMG_MAXW / img.w, CIMG_MAXH / img.h);
-      var cx = Math.max(1, Math.round(img.w * scale));
-      var cy = Math.max(1, Math.round(img.h * scale));
+      const scale = Math.min(9525, (10080 - indentDxa) * 635 * CIMG_MAXW / img.w, CIMG_MAXH / img.h);
+      const cx = Math.max(1, Math.round(img.w * scale));
+      const cy = Math.max(1, Math.round(img.h * scale));
       return '<w:p><w:pPr><w:spacing w:after="120"/><w:ind w:left="' + indentDxa + '"/></w:pPr>' +
         docxDrawingRun(img, ++drawingId, cx, cy) + '</w:p>';
     }
 
-    function commentBodyXml(entry, indentDxa) {
-      var pieces = entry.pieces || [];
+    function commentBodyXml(entry: CommentBody, indentDxa: number): string {
+      const pieces = entry.pieces || [];
       if (!pieces.some(function (p) { return p.image; })) {
         return docxLineBreakParagraph(entry.body || '(empty)', indentDxa, '');
       }
@@ -580,7 +642,7 @@ export function buildDocx(doc, assets) {
     }
 
     comments.forEach(function (c) {
-      var head = "";
+      let head = "";
       if (c.number) {
         head += textRunXml(NBSP + c.number + NBSP, { b: true, color: "FFFFFF", sz: 18, shd: PRINT_COLORS.audio }) +
           textRunXml("  ");
@@ -610,7 +672,7 @@ export function buildDocx(doc, assets) {
   return packDocx(doc, body, links, media);
 }
 
-var THEME_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+const THEME_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Splitpage">' +
   '<a:themeElements>' +
   '<a:clrScheme name="Splitpage">' +
@@ -656,12 +718,12 @@ var THEME_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '</a:themeElements>' +
   '</a:theme>';
 
-var FOOTER_TITLE_MAX = 90;
+const FOOTER_TITLE_MAX = 90;
 
-function footerXml(title) {
-  var rPr = '<w:rPr><w:color w:val="' + PRINT_COLORS.faint + '"/><w:sz w:val="16"/></w:rPr>';
-  var t = function (s) { return "<w:r>" + rPr + '<w:t xml:space="preserve">' + xmlEscape(s) + "</w:t></w:r>"; };
-  var field = function (name) {
+function footerXml(title: string): string {
+  const rPr = '<w:rPr><w:color w:val="' + PRINT_COLORS.faint + '"/><w:sz w:val="16"/></w:rPr>';
+  const t = function (s: string) { return "<w:r>" + rPr + '<w:t xml:space="preserve">' + xmlEscape(s) + "</w:t></w:r>"; };
+  const field = function (name: string) {
     return "<w:r>" + rPr + '<w:fldChar w:fldCharType="begin"/></w:r>' +
       "<w:r>" + rPr + '<w:instrText xml:space="preserve"> ' + name + " </w:instrText></w:r>" +
       "<w:r>" + rPr + '<w:fldChar w:fldCharType="separate"/></w:r>' + t("1") +
@@ -676,8 +738,8 @@ function footerXml(title) {
     "</w:p></w:ftr>";
 }
 
-function corePropsXml(title, d) {
-  var day = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T00:00:00Z";
+function corePropsXml(title: string, d: Date): string {
+  const day = d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()) + "T00:00:00Z";
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties"' +
     ' xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/"' +
@@ -689,25 +751,25 @@ function corePropsXml(title, d) {
     "</cp:coreProperties>";
 }
 
-var APP_PROPS_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+const APP_PROPS_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"' +
   ' xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">' +
   "<Application>Splitpage</Application></Properties>";
 
-var SETTINGS_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+const SETTINGS_XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
   '<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">' +
   '<w:defaultTabStop w:val="720"/><w:characterSpacingControl w:val="doNotCompress"/>' +
   '<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat>' +
   "</w:settings>";
 
-function packDocx(doc, body, links, media) {
-  var title = doc.title || "Untitled Script";
-  var day = exportDay(doc);
+function packDocx(doc: ExportDocument, body: string, links: readonly string[], media: readonly Media[]): Uint8Array<ArrayBuffer> {
+  const title = doc.title || "Untitled Script";
+  const day = exportDay(doc);
   body += '<w:sectPr><w:footerReference w:type="default" r:id="rIdFooter1"/>' +
     '<w:pgSz w:w="12240" w:h="15840"/>' +
     '<w:pgMar w:top="1260" w:right="1080" w:bottom="1260" w:left="1080" w:header="720" w:footer="600" w:gutter="0"/></w:sectPr>';
 
-  var documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  const documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"' +
     ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"' +
     ' xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"' +
@@ -715,7 +777,7 @@ function packDocx(doc, body, links, media) {
     ' xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">' +
     '<w:body>' + body + '</w:body></w:document>';
 
-  var relsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  let relsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
     '<Relationship Id="rIdStyles" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>' +
     '<Relationship Id="rIdSettings" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/settings" Target="settings.xml"/>' +
@@ -731,7 +793,7 @@ function packDocx(doc, body, links, media) {
       ' Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"' +
       ' Target="media/image' + (idx + 1) + '.' + m.ext + '"/>';
   });
-  var extraTypes = "";
+  let extraTypes = "";
   ["png", "gif", "webp"].forEach(function (ext) {
     if (media.some(function (m) { return m.ext === ext; })) {
       extraTypes += '<Default Extension="' + ext + '" ContentType="image/' + ext + '"/>';
@@ -739,7 +801,7 @@ function packDocx(doc, body, links, media) {
   });
   relsXml += '</Relationships>';
 
-  var entries = [
+  const entries = [
     { name: "[Content_Types].xml", data: strBytes(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
@@ -764,7 +826,7 @@ function packDocx(doc, body, links, media) {
     { name: "docProps/core.xml", data: strBytes(corePropsXml(title, day)) },
     { name: "docProps/app.xml", data: strBytes(APP_PROPS_XML) },
     { name: "word/document.xml", data: strBytes(documentXml) },
-    { name: "word/styles.xml", data: strBytes(STYLES_XML) },
+    { name: "word/styles.xml", data: strBytes(STYLES_XML ?? "") },
     { name: "word/settings.xml", data: strBytes(SETTINGS_XML) },
     { name: "word/theme/theme1.xml", data: strBytes(THEME_XML) },
     { name: "word/footer1.xml", data: strBytes(footerXml(title)) },
@@ -777,18 +839,18 @@ function packDocx(doc, body, links, media) {
   return zipWrite(entries, day);
 }
 
-function narrationTextOpts(opts) {
+function narrationTextOpts(opts?: NarrationOptions | null): PlainTextOptions {
   return opts && opts.directions === false ? { directions: "omit", cues: "omit" } : { cues: "omit" };
 }
 
-export function narrationRows(doc, opts) {
-  var t = narrationTextOpts(opts);
+export function narrationRows(doc: ExportDocument, opts?: NarrationOptions | null): Row[] {
+  const t = narrationTextOpts(opts);
   return doc.scenes.filter(function (row) { return toPlainText(exportServices().cellOf(row.audioText), t); });
 }
 
-export function buildNarrationText(doc, opts) {
-  var t = narrationTextOpts(opts);
-  var out = [doc.title || "Untitled Script", ""];
+export function buildNarrationText(doc: ExportDocument, opts?: NarrationOptions | null): string {
+  const t = narrationTextOpts(opts);
+  const out = [doc.title || "Untitled Script", ""];
   narrationRows(doc, opts).forEach(function (row) {
     out.push(toPlainText(exportServices().cellOf(row.audioText), t).replace(/\n[ \t]*(\n[ \t]*)+/g, "\n"));
     out.push("");
@@ -796,28 +858,28 @@ export function buildNarrationText(doc, opts) {
   return out.join("\n");
 }
 
-var NARRATION_STYLE = "SplitpageNarration";
-var SCENE_NO_STYLE = "SplitpageSceneNo";
-var SCENE_NO_HANG = 560;
+const NARRATION_STYLE = "SplitpageNarration";
+const SCENE_NO_STYLE = "SplitpageSceneNo";
+const SCENE_NO_HANG = 560;
 
-function groupDigits(n) {
+function groupDigits(n: number): string {
   return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
-export function buildNarrationDocx(doc, opts) {
-  var t = narrationTextOpts(opts);
-  var links = [];
-  var rels = { addLink: function (href) { links.push(href); return "rIdL" + links.length; } };
-  var rows = narrationRows(doc, opts);
-  var words = rows.reduce(function (n, row) { return n + exportServices().productionReaders.wordCount(row.audioText); }, 0);
-  var wpm = doc.document.wordsPerMinute || DEFAULT_WPM;
+export function buildNarrationDocx(doc: ExportDocument, opts?: NarrationOptions | null): Uint8Array<ArrayBuffer> {
+  const t = narrationTextOpts(opts);
+  const links: string[] = [];
+  const rels = { addLink: function (href: string) { links.push(href); return "rIdL" + links.length; } };
+  const rows = narrationRows(doc, opts);
+  const words = rows.reduce(function (n, row) { return n + exportServices().productionReaders.wordCount(row.audioText); }, 0);
+  const wpm = doc.document.wordsPerMinute || DEFAULT_WPM;
 
-  var body = titleParaXml(doc.title || "Untitled Script") +
+  let body = titleParaXml(doc.title || "Untitled Script") +
     metaParaXml(["Narration", plural(rows.length, "scene"), groupDigits(words) + (words === 1 ? " word" : " words"),
-      "about " + formatDuration(words / wpm * 60) + " at " + wpm + " wpm"].join(" · "));
+      "about " + formatDuration(words / Number(wpm) * 60) + " at " + String(wpm) + " wpm"].join(" · "));
 
   rows.forEach(function (row) {
-    var number = pad2(doc.scenes.indexOf(row) + 1);
+    const number = pad2(doc.scenes.indexOf(row) + 1);
     body += docxRunsXml(row.audioText, rels, Object.assign({
       pPr: '<w:pStyle w:val="' + NARRATION_STYLE + '"/><w:ind w:left="0" w:hanging="' + SCENE_NO_HANG + '"/>',
       lead: '<w:r><w:rPr><w:rStyle w:val="' + SCENE_NO_STYLE + '"/><w:color w:val="' + PRINT_COLORS.faint + '"/><w:sz w:val="16"/></w:rPr>' +
@@ -828,65 +890,63 @@ export function buildNarrationDocx(doc, opts) {
   return packDocx(doc, body, links, []);
 }
 
-var W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-var R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
-var A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
+const W_NS = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const R_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
 
-function directChildren(el, localName) {
-  return Array.prototype.filter.call(el.childNodes, function (n) {
-    return n.nodeType === 1 && n.localName === localName;
-  });
+function directChildren(el: Element, localName: string): Element[] {
+  return Array.from(el.children).filter(function (n) { return n.localName === localName; });
 }
 
-function docxFlag(props, name) {
+function docxFlag(props: Element | null | undefined, name: string): boolean {
   if (!props) return false;
-  var el = props.getElementsByTagNameNS(W_NS, name)[0];
+  const el = props.getElementsByTagNameNS(W_NS, name)[0];
   if (!el) return false;
-  var val = el.getAttributeNS(W_NS, "val");
+  let val = el.getAttributeNS(W_NS, "val");
   if (val === null || val === undefined) val = el.getAttribute("w:val");
   if (val === null || val === undefined || val === "") return true;
-  var v = String(val).toLowerCase();
+  const v = String(val).toLowerCase();
   return !(v === "0" || v === "false" || v === "none" || v === "off");
 }
 
-function runStyleName(rEl) {
-  var props = rEl.getElementsByTagNameNS(W_NS, "rPr")[0];
-  var rs = props && props.getElementsByTagNameNS(W_NS, "rStyle")[0];
+function runStyleName(rEl: Element): string {
+  const props = rEl.getElementsByTagNameNS(W_NS, "rPr")[0];
+  const rs = props && props.getElementsByTagNameNS(W_NS, "rStyle")[0];
   return rs ? (rs.getAttributeNS(W_NS, "val") || rs.getAttribute("w:val") || "").toLowerCase() : "";
 }
 
-function isDroppedRun(rEl) {
-  var st = runStyleName(rEl);
+function isDroppedRun(rEl: Element): boolean {
+  const st = runStyleName(rEl);
   return st === MARKER_STYLE.toLowerCase() || st === SCENE_NO_STYLE.toLowerCase();
 }
 
-function colouredUnderline(props) {
-  var el = props.getElementsByTagNameNS(W_NS, "u")[0];
+function colouredUnderline(props: Element): boolean {
+  const el = props.getElementsByTagNameNS(W_NS, "u")[0];
   return !!el && !!(el.getAttributeNS(W_NS, "color") || el.getAttribute("w:color"));
 }
 
-function docxParaToHtml(pEl, linkMap, opts) {
-  var html = "";
-  var own = !!(opts && opts.ownExport);
-  function runToHtml(rEl, href) {
+function docxParaToHtml(pEl: Element, linkMap: LinkMap, opts?: ImportOptions): string {
+  let html = "";
+  const own = !!(opts && opts.ownExport);
+  function runToHtml(rEl: Element, href: string | null | undefined): string {
     if (isDroppedRun(rEl)) return "";
-    var props = rEl.getElementsByTagNameNS(W_NS, "rPr")[0];
-    var b = false, i = false, u = false, s = false, mark = false, dir = false, chip = false;
+    const props = rEl.getElementsByTagNameNS(W_NS, "rPr")[0];
+    let b = false, i = false, u = false, s = false, mark = false, dir = false, chip = false;
     if (props) {
       b = docxFlag(props, "b");
       i = docxFlag(props, "i");
       u = docxFlag(props, "u");
       s = docxFlag(props, "strike");
       mark = docxFlag(props, "highlight");
-      var rsv = runStyleName(rEl);
+      const rsv = runStyleName(rEl);
       if (rsv === DIRECTION_STYLE.toLowerCase()) { dir = true; i = false; }
       if (rsv === BROLL_STYLE.toLowerCase()) { b = false; chip = true; }
       if (u && own && colouredUnderline(props)) u = false;
     }
-    var piece = "";
-    Array.prototype.forEach.call(rEl.childNodes, function (child) {
-      if (child.nodeType !== 1) return;
-      var ln = child.localName;
+    let piece = "";
+    Array.from(rEl.childNodes).forEach(function (child) {
+      if (!(child instanceof Element)) return;
+      const ln = child.localName;
       if (ln === "t") piece += escapeHtml(child.textContent || "");
       else if (ln === "br" || ln === "cr") piece += "<br>";
       else if (ln === "tab") piece += " ";
@@ -899,91 +959,91 @@ function docxParaToHtml(pEl, linkMap, opts) {
     if (i) piece = "<em>" + piece + "</em>";
     if (b) piece = "<strong>" + piece + "</strong>";
     if (dir) piece = '<span class="stage-dir">' + piece + "</span>";
-    var safe = href ? safeHref(href) : null;
+    const safe = href ? safeHref(href) : null;
     if (safe) piece = '<a href="' + escapeHtml(safe) + '" target="_blank" rel="noopener">' + piece + "</a>";
     return piece;
   }
 
-  Array.prototype.forEach.call(pEl.childNodes, function (child) {
-    if (child.nodeType !== 1) return;
+  Array.from(pEl.childNodes).forEach(function (child) {
+    if (!(child instanceof Element)) return;
     if (child.localName === "r") { html += runToHtml(child, null); return; }
     if (child.localName === "hyperlink") {
-      var rid = child.getAttributeNS(R_NS, "id");
-      var href = rid && linkMap[rid] ? linkMap[rid] : null;
-      var runs = child.getElementsByTagNameNS(W_NS, "r");
-      for (var k = 0; k < runs.length; k++) html += runToHtml(runs[k], href);
+      const rid = child.getAttributeNS(R_NS, "id");
+      const href = rid && linkMap[rid] ? linkMap[rid] : null;
+      const runs = child.getElementsByTagNameNS(W_NS, "r");
+      for (let k = 0; k < runs.length; k++) html += runToHtml(required(runs[k]), href);
     }
   });
   return html;
 }
 
-function paraStyleName(pEl) {
-  var pPr = directChildren(pEl, "pPr")[0];
+function paraStyleName(pEl: Element): string {
+  const pPr = directChildren(pEl, "pPr")[0];
   if (!pPr) return "";
-  var st = directChildren(pPr, "pStyle")[0];
+  const st = directChildren(pPr, "pStyle")[0];
   if (!st) return "";
   return (st.getAttributeNS(R_NS, "val") || st.getAttribute("w:val") || st.getAttribute("val") || "").toLowerCase();
 }
 
-function isHeadingPara(pEl) {
+function isHeadingPara(pEl: Element): boolean {
   return /^heading|^title$/.test(paraStyleName(pEl));
 }
 
-function isAllBoldPara(pEl) {
-  var runs = pEl.getElementsByTagNameNS(W_NS, "r");
-  var sawText = false;
-  for (var i = 0; i < runs.length; i++) {
-    if (isDroppedRun(runs[i])) continue;
-    var texts = runs[i].getElementsByTagNameNS(W_NS, "t");
-    var hasText = false;
-    for (var j = 0; j < texts.length; j++) {
-      if ((texts[j].textContent || "").trim()) { hasText = true; break; }
+function isAllBoldPara(pEl: Element): boolean {
+  const runs = pEl.getElementsByTagNameNS(W_NS, "r");
+  let sawText = false;
+  for (let i = 0; i < runs.length; i++) {
+    if (isDroppedRun(required(runs[i]))) continue;
+    const texts = required(runs[i]).getElementsByTagNameNS(W_NS, "t");
+    let hasText = false;
+    for (let j = 0; j < texts.length; j++) {
+      if ((required(texts[j]).textContent || "").trim()) { hasText = true; break; }
     }
     if (!hasText) continue;
     sawText = true;
-    if (!docxFlag(runs[i].getElementsByTagNameNS(W_NS, "rPr")[0], "b")) return false;
+    if (!docxFlag(required(runs[i]).getElementsByTagNameNS(W_NS, "rPr")[0], "b")) return false;
   }
   return sawText;
 }
 
-function allEmbedIds(el) {
-  return Array.prototype.map.call(el.getElementsByTagNameNS(A_NS, "blip"), function (b) {
+function allEmbedIds(el: Element): string[] {
+  return Array.from(el.getElementsByTagNameNS(A_NS, "blip"), function (b) {
     return b.getAttributeNS(R_NS, "embed");
-  }).filter(Boolean);
+  }).filter((id): id is string => !!id);
 }
 
-function firstEmbedId(el) {
-  var blip = el.getElementsByTagNameNS(A_NS, "blip")[0];
+function firstEmbedId(el: Element): string | null {
+  const blip = el.getElementsByTagNameNS(A_NS, "blip")[0];
   return blip ? blip.getAttributeNS(R_NS, "embed") : null;
 }
 
-var VISUAL_HEAD = /^(video|visual|picture|image|shot|shots|action|camera|b-?roll|screen|graphics?)\b/;
-var AUDIO_HEAD = /^(audio|voice|vo|narration|narrator|dialogue|dialog|script|line|lines|copy|speech)\b/;
+const VISUAL_HEAD = /^(video|visual|picture|image|shot|shots|action|camera|b-?roll|screen|graphics?)\b/;
+const AUDIO_HEAD = /^(audio|voice|vo|narration|narrator|dialogue|dialog|script|line|lines|copy|speech)\b/;
 
-var BREAKDOWN_HEADERS = [
+const BREAKDOWN_HEADERS = [
   ["category", "item", "status", "assigned to", "mentions", "scenes", "notes"],
   ["item", "status", "scenes", "assigned to", "notes"]
 ];
-function isBreakdownHeader(head) {
+function isBreakdownHeader(head: readonly string[]): boolean {
   return BREAKDOWN_HEADERS.some(function (words) {
     return words.length === head.length && words.every(function (w, i) { return head[i] === w; });
   });
 }
 
-var EXPORT_TABLE_STYLE = EXPORT_TABLE_STYLE_ID.toLowerCase();
-var EXPORT_SECTION_HEADINGS = ["Production breakdown", "B-roll shot list", "Comments"];
+const EXPORT_TABLE_STYLE = EXPORT_TABLE_STYLE_ID.toLowerCase();
+const EXPORT_SECTION_HEADINGS = ["Production breakdown", "B-roll shot list", "Comments"];
 
-function tableStyleName(tblEl) {
-  var tblPr = directChildren(tblEl, "tblPr")[0];
-  var st = tblPr && directChildren(tblPr, "tblStyle")[0];
+function tableStyleName(tblEl: Element): string {
+  const tblPr = directChildren(tblEl, "tblPr")[0];
+  const st = tblPr && directChildren(tblPr, "tblStyle")[0];
   if (!st) return "";
   return (st.getAttributeNS(W_NS, "val") || st.getAttribute("w:val") || "").toLowerCase();
 }
 
-function exportTailStart(blocks) {
-  var sawExportTable = false;
-  for (var i = 0; i < blocks.length; i++) {
-    var n = blocks[i];
+function exportTailStart(blocks: readonly Element[]): number {
+  let sawExportTable = false;
+  for (let i = 0; i < blocks.length; i++) {
+    const n = required(blocks[i]);
     if (n.localName === "tbl") {
       if (tableStyleName(n) === EXPORT_TABLE_STYLE) sawExportTable = true;
       continue;
@@ -994,67 +1054,69 @@ function exportTailStart(blocks) {
   return blocks.length;
 }
 
-function mapTableColumns(rowsText) {
-  var head = (rowsText[0] || []).map(function (t) { return t.toLowerCase().trim(); });
+function mapTableColumns(rowsText: readonly (readonly string[])[]): { vi: number; ai: number; skipHeader: boolean } | null {
+  const head = (rowsText[0] || []).map(function (t) { return t.toLowerCase().trim(); });
   if (isBreakdownHeader(head)) return null;
-  var vi = head.findIndex(function (t) { return VISUAL_HEAD.test(t); });
-  var ai = head.findIndex(function (t) { return AUDIO_HEAD.test(t); });
+  const vi = head.findIndex(function (t) { return VISUAL_HEAD.test(t); });
+  const ai = head.findIndex(function (t) { return AUDIO_HEAD.test(t); });
   if (vi !== -1 && ai !== -1 && vi !== ai) return { vi: vi, ai: ai, skipHeader: true };
 
-  var width = 0;
+  let width = 0;
   rowsText.forEach(function (r) { width = Math.max(width, r.length); });
-  var used = [];
-  for (var c = 0; c < width; c++) {
-    var any = rowsText.some(function (r) { return (r[c] || "").trim(); });
-    if (any) used.push(c);
+  const used: number[] = [];
+  for (let c = 0; c < width; c++) {
+    const hasText = rowsText.some(function (r) { return (r[c] || "").trim(); });
+    if (hasText) used.push(c);
   }
   if (used.length < 2) return null;
-  return { vi: used[0], ai: used[1], skipHeader: false };
+  return { vi: required(used[0]), ai: required(used[1]), skipHeader: false };
 }
 
-export async function docxToRows(file) {
-  var zip = await zipRead(await file.arrayBuffer());
-  var docBytes = await zip.get("word/document.xml");
+export async function docxToRows(file: { arrayBuffer: () => Promise<ArrayBuffer> }): Promise<{ title: string | null; rows: ImportedRow[]; looseText: string }> {
+  const zip = await zipRead(await file.arrayBuffer());
+  const docBytes = await zip.get("word/document.xml");
   if (!docBytes) throw new Error("no-document-xml");
-  var xml = new DOMParser().parseFromString(new TextDecoder().decode(docBytes), "application/xml");
+  const xml = new DOMParser().parseFromString(new TextDecoder().decode(docBytes), "application/xml");
   if (xml.getElementsByTagName("parsererror").length) throw new Error("bad-xml");
 
-  var linkMap = {}, imageMap = {};
-  var relBytes = await zip.get("word/_rels/document.xml.rels");
+  const linkMap: LinkMap = {}, imageMap: LinkMap = {};
+  const relBytes = await zip.get("word/_rels/document.xml.rels");
   if (relBytes) {
-    var relXml = new DOMParser().parseFromString(new TextDecoder().decode(relBytes), "application/xml");
-    Array.prototype.forEach.call(relXml.getElementsByTagName("Relationship"), function (rel) {
-      var type = rel.getAttribute("Type") || "";
-      if (type.indexOf("/hyperlink") !== -1) linkMap[rel.getAttribute("Id")] = rel.getAttribute("Target");
-      else if (type.indexOf("/image") !== -1) imageMap[rel.getAttribute("Id")] = rel.getAttribute("Target");
+    const relXml = new DOMParser().parseFromString(new TextDecoder().decode(relBytes), "application/xml");
+    Array.from(relXml.getElementsByTagName("Relationship")).forEach(function (rel) {
+      const type = rel.getAttribute("Type") || "";
+      const id = rel.getAttribute("Id") || "";
+      if (type.indexOf("/hyperlink") !== -1) linkMap[id] = rel.getAttribute("Target");
+      else if (type.indexOf("/image") !== -1) imageMap[id] = rel.getAttribute("Target");
     });
   }
 
-  var bodyEl = xml.getElementsByTagNameNS(W_NS, "body")[0];
+  const bodyEl = xml.getElementsByTagNameNS(W_NS, "body")[0];
   if (!bodyEl) throw new Error("no-body");
 
-  var blocks = Array.prototype.filter.call(bodyEl.childNodes, function (n) {
-    return n.nodeType === 1 && (n.localName === "p" || n.localName === "tbl");
+  let blocks = Array.from(bodyEl.children).filter(function (n) {
+    return n.localName === "p" || n.localName === "tbl";
   });
-  var ownExport = blocks.some(function (n) {
+  const ownExport = blocks.some(function (n) {
     return n.localName === "tbl" ? tableStyleName(n) === EXPORT_TABLE_STYLE : paraStyleName(n) === META_STYLE.toLowerCase();
   });
-  var paraOpts = { ownExport: ownExport };
+  const paraOpts = { ownExport: ownExport };
   blocks = blocks.slice(0, exportTailStart(blocks)).filter(function (n) {
     return !(n.localName === "p" && paraStyleName(n) === META_STYLE.toLowerCase());
   });
 
-  var loose = blocks.filter(function (n) { return n.localName === "p" && !isHeadingPara(n); });
-  var withText = loose.filter(function (n) { return exportServices().htmlToPlainText(docxParaToHtml(n, linkMap, paraOpts)); });
-  var boldCount = withText.filter(isAllBoldPara).length;
-  var boldMeansVisual = boldCount > 0 && boldCount < withText.length * 0.7;
+  const loose = blocks.filter(function (n) { return n.localName === "p" && !isHeadingPara(n); });
+  const withText = loose.filter(function (n) { return exportServices().htmlToPlainText(docxParaToHtml(n, linkMap, paraOpts)); });
+  const boldCount = withText.filter(isAllBoldPara).length;
+  const boldMeansVisual = boldCount > 0 && boldCount < withText.length * 0.7;
 
-  var rows = [], title = null, pending = null;
+  const rows: ImportedRow[] = [];
+  let title: string | null = null, pending: ImportedRow | null = null;
 
   function flush() {
     if (pending) { rows.push(pending); pending = null; }
   }
-  function newRow(fields) {
+  function newRow(fields: Partial<ImportedRow>): ImportedRow {
     return {
       id: makeId(),
       visualText: fields.visualText || "",
@@ -1069,53 +1131,54 @@ export async function docxToRows(file) {
   blocks.forEach(function (node) {
     if (node.localName === "tbl") {
       flush();
-      var trs = directChildren(node, "tr");
-      var cellHtml = [], cellEls = [], cellLinks = [];
-      for (var t = 0; t < trs.length; t++) {
-        var tcs = directChildren(trs[t], "tc");
-        var rowLinks = [];
+      const trs = directChildren(node, "tr");
+      const cellHtml: string[][] = [], cellEls: Element[][] = [], cellLinks: VideoLink[][] = [];
+      for (let t = 0; t < trs.length; t++) {
+        const tcs = directChildren(required(trs[t]), "tc");
+        const rowLinks: VideoLink[] = [];
         cellEls.push(tcs);
         cellLinks.push(rowLinks);
         cellHtml.push(tcs.map(function (tc) {
-          var parts = [];
+          const parts: string[] = [];
           directChildren(tc, "p").forEach(function (pEl) {
-            var vl = docxVideoLinksOf(pEl, linkMap);
+            const vl = docxVideoLinksOf(pEl, linkMap);
             if (vl) { vl.forEach(function (l) { rowLinks.push(l); }); return; }
-            var h = docxParaToHtml(pEl, linkMap, paraOpts);
+            const h = docxParaToHtml(pEl, linkMap, paraOpts);
             if (h) parts.push(h);
           });
           return parts.join("<br>");
         }));
       }
-      var mapping = mapTableColumns(cellHtml.map(function (r) {
+      const mapping = mapTableColumns(cellHtml.map(function (r) {
         return r.map(function (h) { return exportServices().htmlToPlainText(h); });
       }));
       if (!mapping) return;
 
-      for (var i = mapping.skipHeader ? 1 : 0; i < cellHtml.length; i++) {
-        var v = cellHtml[i][mapping.vi] || "";
-        var a = cellHtml[i][mapping.ai] || "";
-        var targets = [];
-        for (var c = 0; c < cellEls[i].length; c++) {
-          allEmbedIds(cellEls[i][c]).forEach(function (id) {
-            if (imageMap[id] && targets.indexOf(imageMap[id]) === -1) targets.push(imageMap[id]);
+      for (let i = mapping.skipHeader ? 1 : 0; i < cellHtml.length; i++) {
+        const v = required(cellHtml[i])[mapping.vi] || "";
+        const a = required(cellHtml[i])[mapping.ai] || "";
+        const targets: string[] = [];
+        for (let c = 0; c < required(cellEls[i]).length; c++) {
+          allEmbedIds(required(required(cellEls[i])[c])).forEach(function (id) {
+            const target = imageMap[id];
+            if (target && targets.indexOf(target) === -1) targets.push(target);
           });
         }
-        if (!exportServices().htmlToPlainText(v) && !exportServices().htmlToPlainText(a) && !targets.length && !cellLinks[i].length) continue;
+        if (!exportServices().htmlToPlainText(v) && !exportServices().htmlToPlainText(a) && !targets.length && !required(cellLinks[i]).length) continue;
         rows.push(newRow({
           visualText: v, audioText: a,
           _pendingImage: targets[0] || null,
           _pendingMore: targets.length > 1 ? targets.slice(1) : null,
-          _links: cellLinks[i].length ? cellLinks[i] : null
+          _links: required(cellLinks[i]).length ? required(cellLinks[i]) : null
         }));
       }
       return;
     }
 
-    var html = docxParaToHtml(node, linkMap, paraOpts);
-    var plain = exportServices().htmlToPlainText(html);
-    var embedId = firstEmbedId(node);
-    var target = embedId && imageMap[embedId] ? imageMap[embedId] : null;
+    const html = docxParaToHtml(node, linkMap, paraOpts);
+    const plain = exportServices().htmlToPlainText(html);
+    const embedId = firstEmbedId(node);
+    const target = embedId ? imageMap[embedId] || null : null;
     if (!plain && !target) return;
 
     if (isHeadingPara(node)) {
@@ -1136,7 +1199,7 @@ export async function docxToRows(file) {
       return;
     }
 
-    var bracketed = /^\s*[[(].*[\])]\s*$/.test(plain) && plain.length < 200;
+    const bracketed = /^\s*[[(].*[\])]\s*$/.test(plain) && plain.length < 200;
     if ((boldMeansVisual && isAllBoldPara(node)) || bracketed) {
       flush();
       pending = newRow({ visualText: html });
@@ -1153,68 +1216,69 @@ export async function docxToRows(file) {
   });
   flush();
 
-  async function pictureAt(target) {
+  async function pictureAt(target: string): Promise<ImageRef | null> {
     try {
-      var path = target.indexOf("/") === 0 ? target.slice(1) : "word/" + target;
-      var imgBytes = await zip.get(path);
+      const path = target.indexOf("/") === 0 ? target.slice(1) : "word/" + target;
+      const imgBytes = await zip.get(path);
       if (!imgBytes) return null;
-      var raw = bytesToDataUrl(imgBytes, mimeForPath(path));
-      var rec = internDataUrl(await toJpegDataUrl(raw));
+      const raw = bytesToDataUrl(imgBytes, mimeForPath(path));
+      const rec = internDataUrl(await toJpegDataUrl(raw));
       if (rec) queuePersist([rec.sha256]);
       return rec;
     } catch (e) { return null; }
   }
-  for (var ri = 0; ri < rows.length; ri++) {
-    var pendingTarget = rows[ri]._pendingImage;
-    var pendingMore = rows[ri]._pendingMore || [];
-    var pendingLinks = rows[ri]._links;
-    delete rows[ri]._pendingImage;
-    delete rows[ri]._pendingMore;
-    delete rows[ri]._links;
-    if (pendingTarget) rows[ri].imageRef = await pictureAt(pendingTarget);
-    var more = [];
-    for (var mi = 0; mi < pendingMore.length; mi++) {
-      var mrec = await pictureAt(pendingMore[mi]);
+  for (const row of rows) {
+    const pendingTarget = row._pendingImage;
+    const pendingMore = row._pendingMore || [];
+    const pendingLinks = row._links;
+    delete row._pendingImage;
+    delete row._pendingMore;
+    delete row._links;
+    if (pendingTarget) row.imageRef = await pictureAt(pendingTarget);
+    const more: NonNullable<ImportedRow["moreImages"]> = [];
+    for (let mi = 0; mi < pendingMore.length; mi++) {
+      const mrec = await pictureAt(required(pendingMore[mi]));
       if (mrec) more.push({ imageRef: mrec });
     }
     (pendingLinks || []).forEach(function (l) { more.push({ links: [Object.assign({}, l, { poster: true })] }); });
-    if (more.length) rows[ri].moreImages = more;
-    rows[ri].audioText = audioDirectionsHtml(rows[ri].audioText);
-    rows[ri].visualText = noDirectionsHtml(rows[ri].visualText);
+    if (more.length) row.moreImages = more;
+    row.audioText = audioDirectionsHtml(row.audioText);
+    row.visualText = noDirectionsHtml(row.visualText);
   }
 
   return { title: title, rows: rows, looseText: "" };
 }
 
-export function audioDirectionsHtml(html) {
+export function audioDirectionsHtml(html: string): string {
   if (!html) return html;
-  var dirs = html.indexOf("((") !== -1 || html.indexOf("stage-dir") !== -1;
-  var cues = /(sfx|music)[ \t\u00a0]*:/i.test(html);
+  const dirs = html.indexOf("((") !== -1 || html.indexOf("stage-dir") !== -1;
+  const cues = /(sfx|music)[ \t\u00a0]*:/i.test(html);
   if (!dirs && !cues) return html;
-  var c = exportServices().fromHtml(html);
+  let c = exportServices().fromHtml(html);
   if (dirs) c = importDirections(c);
   if (cues) c = importCues(c);
   return toHtml(c);
 }
 
-function noDirectionsHtml(html) {
+function noDirectionsHtml(html: string): string {
   if (!html || (html.indexOf("stage-dir") === -1 && html.indexOf("audio-cue") === -1)) return html;
-  var c = exportServices().fromHtml(html);
+  const c = exportServices().fromHtml(html);
   return toHtml(flattenCues(setMark(c, 0, cellLength(c), "dir", false)));
 }
 
-function toJpegDataUrl(dataUrl) {
-  return new Promise(function (resolve) {
+function toJpegDataUrl(dataUrl: string | null): Promise<string | null> {
+  return new Promise<string | null>(function (resolve) {
     if (!dataUrl) { resolve(null); return; }
     if (dataUrl.indexOf("data:image/jpeg") === 0) { resolve(dataUrl); return; }
-    var img = new Image();
+    const img = new Image();
     img.onload = function () {
       try {
-        var scale = Math.min(1, 1000 / Math.max(img.width, img.height));
-        var canvas = document.createElement("canvas");
+        const scale = Math.min(1, 1000 / Math.max(img.width, img.height));
+        const canvas = document.createElement("canvas");
         canvas.width = Math.max(1, Math.round(img.width * scale));
         canvas.height = Math.max(1, Math.round(img.height * scale));
-        var ctx = canvas.getContext("2d");
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { resolve(null); return; }
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
@@ -1226,32 +1290,33 @@ function toJpegDataUrl(dataUrl) {
   });
 }
 
-function mimeForPath(path) {
-  var ext = (/\.([a-z0-9]+)$/i.exec(path) || ["", ""])[1].toLowerCase();
+function mimeForPath(path: string): string {
+  const ext = (/\.([a-z0-9]+)$/i.exec(path)?.[1] || "").toLowerCase();
   if (ext === "png") return "image/png";
   if (ext === "gif") return "image/gif";
   if (ext === "webp") return "image/webp";
   return "image/jpeg";
 }
 
-function bytesToDataUrl(bytes, mime) {
-  var bin = "", CHUNK = 0x8000;
-  for (var i = 0; i < bytes.length; i += CHUNK) {
-    bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
+  let bin = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
   }
   return "data:" + mime + ";base64," + btoa(bin);
 }
 
 export function __init() {
-  var C = PRINT_COLORS;
-  var font = function (which) {
+  const C = PRINT_COLORS;
+  const font = function (which: string) {
     return '<w:rFonts w:asciiTheme="' + which + 'HAnsi" w:hAnsiTheme="' + which + 'HAnsi" w:cstheme="' + which + 'HAnsi"/>';
   };
-  var charStyle = function (id, name, rPr) {
+  const charStyle = function (id: string, name: string, rPr: string) {
     return '<w:style w:type="character" w:customStyle="1" w:styleId="' + id + '"><w:name w:val="' + name + '"/>' +
       "<w:rPr>" + rPr + "</w:rPr></w:style>";
   };
-  var paraStyle = function (id, name, pPr, rPr, custom) {
+  const paraStyle = function (id: string, name: string, pPr: string, rPr: string, custom?: boolean) {
     return '<w:style w:type="paragraph"' + (custom ? ' w:customStyle="1"' : "") + ' w:styleId="' + id + '"><w:name w:val="' + name + '"/>' +
       '<w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:qFormat/>' +
       "<w:pPr>" + pPr + "</w:pPr><w:rPr>" + rPr + "</w:rPr></w:style>";
