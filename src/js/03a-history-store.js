@@ -1,6 +1,7 @@
 import { sha256Bytes } from "../core/document/ids.ts";
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { S } from "./_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { currentHome } from "../legacy/location-bridge.ts";
 import { dataUrlForSync, ensureBytes, inlineStateJson, intern, persist, recordFor } from "../adapters/storage/02c-blobs.js";
 import {
@@ -507,7 +508,7 @@ function resolveHistoryBackend() {
 }
 
 export function isPristineSeedDocument() {
-  return !!S.state && saveChanges() === 0 && !unsavedChanges() && currentHome().kind === "none" && seedCheckPasses();
+  return !!currentDocument() && saveChanges() === 0 && !unsavedChanges() && currentHome().kind === "none" && seedCheckPasses();
 }
 
 var historyLocal = {};
@@ -728,7 +729,7 @@ function historyTouchDocument(docId, title) {
 }
 
 export function historyDocumentChanged() {
-  if (S.state && normalizeDocId(S.state.docId)) historyTouchDocument(S.state.docId, S.state.title);
+  if (currentDocument() && normalizeDocId(currentDocument().docId)) historyTouchDocument(currentDocument().docId, currentDocument().title);
   historyRenderSoon();
 }
 
