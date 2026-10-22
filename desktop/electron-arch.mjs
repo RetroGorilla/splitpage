@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export function electronArch(env, platform, nodeArch) {
-  let arch = env.npm_config_arch || env.ELECTRON_ARCH;
+  let arch = env.npm_config_arch || env.ELECTRON_ARCH || env.ELECTRON_INSTALL_ARCH;
   if (!arch && platform === "win32") {
     const processor = env.PROCESSOR_ARCHITEW6432 || env.PROCESSOR_ARCHITECTURE;
     if (processor) {
@@ -21,6 +21,7 @@ export function electronArch(env, platform, nodeArch) {
 
 function main() {
   process.env.npm_config_arch = electronArch(process.env, process.platform, process.arch);
+  process.env.ELECTRON_INSTALL_ARCH = process.env.npm_config_arch;
   const here = dirname(fileURLToPath(import.meta.url));
   const result = spawnSync(process.execPath, [resolve(here, "node_modules/electron/install.js")], {
     cwd: here,
