@@ -2,12 +2,10 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
-import {
-  currentProductionIndex,
-  healTagRegistry,
-  productionEntries,
-  productionIndexStats
-} from "../js/07-production-tags.js";
+import { healTagRegistry, productionIndexStats } from "../js/07-production-tags.js";
+import { currentProductionIndex, productionEntries } from "../core/production/index.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
+import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { deriveProductionIndex } from "../core/production/tags.ts";
 import { loadTestDocument } from "./_document.mjs";
 
@@ -31,8 +29,8 @@ export function seededHealRounds(seed, rounds) {
   };
   const check = (handed, handedIds, label) => {
     const fresh = deriveProductionIndex(S.state, productionReaders);
-    assert.deepEqual(currentProductionIndex(), fresh, label);
-    assert.deepEqual(productionEntries().map((e) => [e.key, e.id, e.name, e.orphaned]),
+    assert.deepEqual(currentProductionIndex(currentDocument(), productionReaders, cacheSeal), fresh, label);
+    assert.deepEqual(productionEntries(currentDocument(), productionReaders, cacheSeal).map((e) => [e.key, e.id, e.name, e.orphaned]),
       fresh.entries.map((e) => [e.key, e.id, e.name, e.orphaned]), label);
     assert.deepEqual(handed.map((e) => e.id), handedIds, label + ": an entry handed out before the heal keeps its id");
     const handedKeys = handed.map((e) => e.key), freshKeys = fresh.entries.map((e) => e.key);
@@ -41,7 +39,7 @@ export function seededHealRounds(seed, rounds) {
     const derived = productionIndexStats().derived;
     assert.equal(healTagRegistry(), 0, label + ": a heal right after counted names again");
     assert.equal(productionIndexStats().derived, derived, label + ": a heal right after re-derived the index");
-    assert.deepEqual(currentProductionIndex(), fresh, label + ": a heal right after changed the index");
+    assert.deepEqual(currentProductionIndex(currentDocument(), productionReaders, cacheSeal), fresh, label + ": a heal right after changed the index");
   };
   let healedRounds = 0, retitledRounds = 0, idsMoved = 0, refusedRounds = 0, reorderedHeals = 0;
   for (let round = 0; round < rounds; round++) {
@@ -59,22 +57,22 @@ export function seededHealRounds(seed, rounds) {
     loadTestDocument(migrateRows({ schema: 2, title: "Shims", docId: "d" + "6".repeat(32), rows, comments: [] }));
     S.state.productionTags = productionTags;
     const label = "round " + round;
-    const first = productionEntries();
+    const first = productionEntries(currentDocument(), productionReaders, cacheSeal);
     const firstIds = first.map((e) => e.id);
     if (healTagRegistry()) healedRounds++;
     check(first, firstIds, label + " first heal");
-    if (currentProductionIndex().unregistered.length) refusedRounds++;
+    if (currentProductionIndex(currentDocument(), productionReaders, cacheSeal).unregistered.length) refusedRounds++;
 
     const target = S.state.rows[rand(rows.length)];
     const newCue = cues[rand(cues.length)] + [" piano", "s", " storm"][rand(3)];
     target.audioText = target.audioText.replace(/<br><span class="audio-cue">.*<\/span>$/, "") + "<br>" + cue(newCue);
     if (rand(2)) target.visualText += tag(cats[rand(cats.length)], names[rand(names.length)]);
-    const handed = productionEntries();
+    const handed = productionEntries(currentDocument(), productionReaders, cacheSeal);
     const handedIds = handed.map((e) => e.id);
     const namesBefore = new Map(S.state.productionTags.map((t) => [t.id, t.name]));
     healTagRegistry();
     if (S.state.productionTags.some((t) => namesBefore.has(t.id) && namesBefore.get(t.id) !== t.name)) retitledRounds++;
-    if (productionEntries().some((e, i) => handed[i] && handed[i].key === e.key && handed[i].id !== e.id)) idsMoved++;
+    if (productionEntries(currentDocument(), productionReaders, cacheSeal).some((e, i) => handed[i] && handed[i].key === e.key && handed[i].id !== e.id)) idsMoved++;
     check(handed, handedIds, label + " second heal");
   }
   return { healedRounds, retitledRounds, idsMoved, refusedRounds, reorderedHeals };
