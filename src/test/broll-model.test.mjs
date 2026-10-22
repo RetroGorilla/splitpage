@@ -16,6 +16,7 @@ import { buildBreakdownCsv, buildBrollCsv } from "../js/16-csv.js";
 import { buildShotListPdf } from "../js/17-pdf.js";
 import { exportDocumentOf, sceneFacts } from "../js/14b-export-kit.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
+import { loadTestDocument } from "./_document.mjs";
 
 brollInit();
 initStatus();
@@ -263,14 +264,14 @@ test("reading: where the model reads differently, by design", () => {
 
 test("anchoring: a key a comment covers keeps its id and its comment, and a repeated one keeps the comment", () => {
   const commented = sanitizeHtml('<span class="cmt-anchor" data-cmt="c1">' + KEY("bsA") + " the gulls</span>");
-  S.state = {
+  loadTestDocument({
     rows: [
       { id: "r0", visualText: commented, audioText: "" },
       { id: "r1", visualText: "B-roll: drone", audioText: "" }
     ],
     brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
     productionTags: []
-  };
+  });
   assert.equal(anchorBrollInRows(S.state.rows), 1);
   assert.equal(S.state.rows[0].visualText, commented);
   assert.match(S.state.rows[1].visualText, /^<span class="broll-key"/);
@@ -296,7 +297,7 @@ function bareBreaks(cell) {
 }
 
 function withRow(html, fn) {
-  S.state = { rows: [{ id: "r0", visualText: html, audioText: "" }], brollShots: [], productionTags: [] };
+  loadTestDocument({ rows: [{ id: "r0", visualText: html, audioText: "" }], brollShots: [], productionTags: [] });
   return fn(S.state.rows[0]);
 }
 
@@ -375,14 +376,14 @@ test("anchoring: a key repeating an id an earlier line holds gets an id of its o
   }
   assert.ok(healed > 10, "healed " + healed);
 
-  S.state = {
+  loadTestDocument({
     rows: [
       { id: "r0", visualText: KEY("bsA") + " the gulls", audioText: "" },
       { id: "r1", visualText: "intro<br>" + KEY("bsA") + " the gulls", audioText: "" }
     ],
     brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
     productionTags: []
-  };
+  });
   assert.equal(anchorBrollInRows(S.state.rows), 1);
   const ids = S.state.rows.map((r) => brollInCell(cellOf(r.visualText))[0].id);
   assert.equal(ids[0], "bsA");
@@ -398,14 +399,14 @@ test("anchoring: a key repeating an id an earlier line holds gets an id of its o
 });
 
 test("anchoring: an unanchored line never takes the record a keyed line further down holds", () => {
-  S.state = {
+  loadTestDocument({
     rows: [
       { id: "r0", visualText: "B-roll: the gulls", audioText: "" },
       { id: "r1", visualText: KEY("bsA") + " the gulls", audioText: "" }
     ],
     brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
     productionTags: []
-  };
+  });
   assert.equal(anchorBrollInRows(S.state.rows), 1);
   const id = brollInCell(cellOf(S.state.rows[0].visualText))[0].id;
   assert.ok(id && id !== "bsA", "a new id, not the keyed line's: " + id);
@@ -454,7 +455,7 @@ test("anchoring and renaming in a cell still holding a video card keep the card"
 
 test("a pasted key's record is a new shot seeded from its scene; a moved one keeps the record it had", () => {
   const moved = { id: "bsMoved", name: "old name", desc: "", status: "shot", reshoot: false, notes: "got it", owner: "", audioRef: "", location: "", origin: "script" };
-  S.state = {
+  loadTestDocument({
     rows: [{
       id: "r0",
       visualText: KEY("bsNew") + " the gulls<br>over the pier<br>" + KEY("bsMoved") + " drone<br>mid-line " + KEY("bsLoose"),
@@ -462,7 +463,7 @@ test("a pasted key's record is a new shot seeded from its scene; a moved one kee
     }],
     brollShots: [moved],
     productionTags: []
-  };
+  });
   recordPastedBroll("r0", cellOf(S.state.rows[0].visualText), ["bsNew", "bsMoved", "bsLoose"]);
   assert.deepEqual(S.state.brollShots.map((r) => r.id), ["bsMoved", "bsNew"]);
   assert.equal(S.state.brollShots[0], moved);
@@ -493,7 +494,7 @@ test("brollPropsInCell: the prop tags on each item's own lines, one array per it
 });
 
 function propsDoc() {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2,
     rows: [
       { id: "r0", visualText: KEY("b1") + " the " + tagSpan("prop", "Red mug", "red mug") + " on the sill", audioText: "Morning." },
@@ -501,7 +502,7 @@ function propsDoc() {
     ],
     productionTags: [{ cat: "prop", name: "Red mug", status: "have" }, { cat: "prop", name: "Kettle" }],
     brollShots: [{ id: "b1", name: "the red mug on the sill" }, { id: "b2", name: "drone over the pier" }]
-  });
+  }));
   return S.state;
 }
 const shotsBy = () => {

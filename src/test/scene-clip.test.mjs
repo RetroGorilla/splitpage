@@ -13,6 +13,7 @@ import {
   SCENES_ATTR, SCENES_MIME, buildScenePayload, insertScenes, isBlankScene, isMove, parseScenePayload, removeScenes,
   scenesOnClipboard, setLiveCut
 } from "../js/05g-scene-clip.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initStatus();
@@ -173,7 +174,7 @@ test("a payload is untrusted: only ours is read, every cell sanitised, every pic
 });
 
 test("a copy pasted into another document: every id its own, the details that belong to it along", () => {
-  S.state = target();
+  loadTestDocument(target());
   const c = clip(buildScenePayload(source(), ["r2", "r3"]));
   n = 0;
   const res = insertScenes(c, { afterRowId: "t1", mint });
@@ -217,7 +218,7 @@ test("a copy pasted into another document: every id its own, the details that be
 });
 
 test("a copy pasted into its own document: a new b-roll shot, new comments, the originals untouched", () => {
-  S.state = source();
+  loadTestDocument(source());
   const before = JSON.stringify(S.state.rows.find((r) => r.id === "r2"));
   const c = clip(buildScenePayload(S.state, ["r2"]));
   n = 0;
@@ -238,7 +239,7 @@ test("a copy pasted into its own document: a new b-roll shot, new comments, the 
 });
 
 test("a cut then its paste in the same document is a move: ids kept, comments not copied, records found", () => {
-  S.state = source();
+  loadTestDocument(source());
   const nonce = "ab12";
   const built = buildScenePayload(S.state, ["r2", "r3"], { cut: nonce });
   assert.equal(built.payload.cut, nonce);
@@ -263,7 +264,7 @@ test("a cut then its paste in the same document is a move: ids kept, comments no
 });
 
 test("a move whose rows came back meanwhile (the cut undone) is a copy where it has to be", () => {
-  S.state = source();
+  loadTestDocument(source());
   const built = buildScenePayload(S.state, ["r2"], { cut: "cd34" });
   setLiveCut("cd34", S.state.docId);
   n = 0;
@@ -289,7 +290,7 @@ const markedIn = (state) => {
 };
 
 test("the live cut follows undo: the move's paste undone, the next paste is the move again", () => {
-  S.state = source();
+  loadTestDocument(source());
   const history = createUndoHistory();
   const built = buildScenePayload(S.state, ["r2", "r3"], { cut: "ef56" });
   setLiveCut("ef56", S.state.docId);
@@ -317,7 +318,7 @@ test("the live cut follows undo: the move's paste undone, the next paste is the 
 });
 
 test("the cut undone, its paste is a copy: comments and b-roll records of its own, never the originals' marks", () => {
-  S.state = source();
+  loadTestDocument(source());
   const history = createUndoHistory();
   const built = buildScenePayload(S.state, ["r2", "r3"], { cut: "ab78" });
   setLiveCut("ab78", S.state.docId);
@@ -345,7 +346,7 @@ test("the cut undone, its paste is a copy: comments and b-roll records of its ow
 });
 
 test("deleting or cutting a scene points a comment split across it at the words that stay", () => {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "Split",
     rows: [
       { id: "r1", visualText: "", audioText: "Every " + cmt("c1", "morn"), status: "todo" },
@@ -353,7 +354,7 @@ test("deleting or cutting a scene points a comment split across it at the words 
       { id: "r3", visualText: "", audioText: "Bye.", status: "todo" }
     ],
     comments: [{ id: "c1", rowId: "r1", field: "audioText", anchorId: "c1", quotedText: "morning", author: "Ann", body: "Warmer?" }]
-  });
+  }));
   assert.equal(removeScenes(["r1"]), 1);
   assert.equal(S.state.comments[0].rowId, "r2", "its surviving words");
   assert.equal(S.state.comments[0].field, "audioText");
@@ -365,7 +366,7 @@ test("a paste onto a blank scene takes its place; comments can be held back for 
   const t = target();
   assert.equal(isBlankScene(t, t.rows[1]), true);
   assert.equal(isBlankScene(t, t.rows[0]), false);
-  S.state = t;
+  loadTestDocument(t);
   n = 0;
   const res = insertScenes(clip(buildScenePayload(source(), ["r2"])), { replaceRowId: "t2", holdComments: true, mint });
   assert.deepEqual(S.state.rows.map((r) => r.id), ["t1", "rnew1"]);
@@ -375,7 +376,7 @@ test("a paste onto a blank scene takes its place; comments can be held back for 
 });
 
 test("a paste, a cut and a delete are each one undo entry that puts the document back", () => {
-  S.state = target();
+  loadTestDocument(target());
   const history = createUndoHistory();
   let base = JSON.parse(JSON.stringify(S.state));
   const c = clip(buildScenePayload(source(), ["r2", "r3"]));

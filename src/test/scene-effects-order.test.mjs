@@ -12,6 +12,7 @@ const { setSceneLength } = await import("../js/05r-read-time.js");
 const bridge = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { trackDocument } = await import("../js/12a-undo.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 const STATS = ["paintRowTimes", "setRundownExtraSeconds", "renderRundown", "paintTargetOverlay"];
 
@@ -29,7 +30,7 @@ const wired = stubs.wireSession({
 bridge.liveSession().subscribe(function (change) { published.push(change); });
 
 function lengthDoc(rows) {
-  S.state = migrateRows({ title: "Order", rows: rows.map((r) => Object.assign({ visualText: "", audioText: "", updatedAt: "" }, r)) });
+  loadTestDocument(migrateRows({ title: "Order", rows: rows.map((r) => Object.assign({ visualText: "", audioText: "", updatedAt: "" }, r)) }));
   trackDocument();
   published.length = 0;
   return S.state;
@@ -122,7 +123,7 @@ test("in review mode a status click only warns, with hidden shot scenes too; no 
   assert.deepEqual(published, []);
 
   stubs.resetFanout();
-  S.state = null;
+  loadTestDocument(null);
   cycleRowStatus("r1");
   assert.deepEqual(stubs.calls, []);
 });
@@ -213,7 +214,7 @@ test("a scene length that changes nothing or a missing scene has no effect; revi
   assert.deepEqual(published, []);
 
   stubs.resetFanout();
-  S.state = null;
+  loadTestDocument(null);
   assert.equal(setSceneLength("r1", 30), false);
   assert.deepEqual(stubs.calls, []);
 });

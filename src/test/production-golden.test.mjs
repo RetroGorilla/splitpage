@@ -39,6 +39,7 @@ import { startSaves } from "../legacy/save-bridge.ts";
 import { WHOLE_DOCUMENT } from "../application/session/change-set.ts";
 import { startTestSession } from "./_session.mjs";
 import { appSessionDeps } from "./_app-session.mjs";
+import { loadTestDocument } from "./_document.mjs";
 
 startTestSession(appSessionDeps());
 
@@ -76,7 +77,7 @@ const shot = (id, name, extra) => Object.assign({
 }, extra || {});
 
 function load(spec) {
-  S.state = migrateRows(jsonCopy(spec));
+  loadTestDocument(migrateRows(jsonCopy(spec)));
   S.state.brollShots = migrateRows(Object.assign(jsonCopy(spec), { rows: [] })).brollShots;
   return jsonCopy(S.state);
 }
@@ -350,10 +351,10 @@ SCENARIOS.push({
     const docA = migrateRows(jsonCopy(cueDoc("d" + "0".repeat(31) + "a")));
     const docB = migrateRows(jsonCopy(cueDoc("d" + "0".repeat(31) + "b")));
     out.anotherDocumentBetweenHeals = steps([
-      ["document A healed", () => { S.state = docA; return healTagRegistry(); }],
-      ["document B healed", () => { S.state = docB; return healTagRegistry(); }],
+      ["document A healed", () => { loadTestDocument(docA); return healTagRegistry(); }],
+      ["document B healed", () => { loadTestDocument(docB); return healTagRegistry(); }],
       ["back to A with its cue edited", () => {
-        S.state = docA;
+        loadTestDocument(docA);
         S.state.rows[1].audioText = cue("Music: upbeat intros");
         return healTagRegistry();
       }]

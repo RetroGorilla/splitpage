@@ -1,7 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import { createHash } from "node:crypto";
-import { S } from "../js/_state.js";
 import { mockClock } from "./_m4-matrix.mjs";
 import { assertGolden, image, jsonCopy } from "./golden-helpers.mjs";
 
@@ -24,6 +23,7 @@ const { flushEdits } = await import("../js/12a-undo.js");
 const { exportMetaLine, markdownExportImages, toMarkdownDoc, toMarkdownTableDoc } = await import("../js/14d-export-text.js");
 const { captureExportDocument, exportAssetsNow, exportFacts } = await import("../js/14b-export-kit.js");
 const { buildMarkdownProject, buildSplitpageFile } = await import("../js/20d-formats.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 const EM_DASH = String.fromCharCode(0x2014);
 const CAPTURED_AT = Date.UTC(2026, 9, 13, 17, 30);
@@ -90,7 +90,7 @@ const FIXTURES = [
 ];
 
 function useDocument(raw) {
-  S.state = migrateRows(Object.assign({ docId: "d" + "5".repeat(32) }, jsonCopy(raw)));
+  loadTestDocument(migrateRows(Object.assign({ docId: "d" + "5".repeat(32) }, jsonCopy(raw))));
   flushEdits();
   clearDirty();
 }

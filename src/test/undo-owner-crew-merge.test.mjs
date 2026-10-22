@@ -7,6 +7,7 @@ import { mergeStates } from "../js/03-sync.js";
 import { flushEdits, noteEdit, noteRemoteChange, redo, trackDocument, undo } from "../js/12a-undo.js";
 import { startTestSession } from "./_session.mjs";
 import { appSessionDeps } from "./_app-session.mjs";
+import { loadTestDocument } from "./_document.mjs";
 
 startTestSession(appSessionDeps());
 
@@ -17,9 +18,9 @@ const shot = (id, name, owner) => ({ id, name, owner: owner || "" });
 const ownerOf = (list, name) => (list.find((e) => e.name === name) || {}).owner;
 
 function boot(names) {
-  S.state = migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
+  loadTestDocument(migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
     { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-  ] });
+  ] }));
   names.forEach((n) => S.state.people.push(person("p_" + n, n)));
   S.state.productionTags.push(tag("t_kettle", "Kettle", ""));
   S.state.brollShots.push(shot("bs_dock", "Dock", ""));
@@ -41,7 +42,7 @@ function remoteCrew(mutate) {
   const next = clone(S.state);
   mutate(next);
   noteRemoteChange(next);
-  S.state = next;
+  loadTestDocument(next);
 }
 
 function dangling() {
@@ -126,9 +127,9 @@ test("undo of an entry that only added a person clears the item a collaborator g
 
 for (const list of ["brollShots", "productionTags"]) {
   test("redo of my own unassignment lands after a crew-only undo cleared a collaborator's owner, in " + list + " (#476 review)", () => {
-    S.state = migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
+    loadTestDocument(migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
       { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-    ] });
+    ] }));
     S.state.people.push(person("p_Cy", "Cy"));
     const item = list === "brollShots" ? shot : (id, name, owner) => tag(id, name, owner);
     S.state[list].push(item("i_dock", "Dock", ""), item("i_pier", "Pier", "p_Cy"));
@@ -282,7 +283,7 @@ function mergeFold(name, mixedCase) {
   next.productionTags = merged.productionTags;
   next.brollShots = merged.brollShots;
   noteRemoteChange(next);
-  S.state = next;
+  loadTestDocument(next);
   return true;
 }
 
@@ -314,7 +315,7 @@ function remoteItems(synced, mutate) {
   next.productionTags = merged.productionTags;
   next.brollShots = merged.brollShots;
   noteRemoteChange(next);
-  S.state = next;
+  loadTestDocument(next);
   return { lost, ownerDeleted, reassigned: mineOnly.filter(([l, n]) => nameOfOwner(mine, l, n)).length };
 }
 
@@ -349,9 +350,9 @@ test("seeded: through noteRemoteChange, with crew-changing, item-assigning and m
   for (let seed = 1; seed <= 400; seed++) {
     const r = rng(seed);
     const pick = (list) => list[Math.floor(r() * list.length)];
-    S.state = migrateRows({ schema: 2, title: "Prop", comments: [], rows: [
+    loadTestDocument(migrateRows({ schema: 2, title: "Prop", comments: [], rows: [
       { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-    ] });
+    ] }));
     S.state.productionTags.push(tag("t_kettle", "Kettle", ""), tag("t_lamp", "Lamp", ""));
     S.state.brollShots.push(shot("bs_pier", "Pier", ""), shot("bs_dock", "Dock", ""));
     trackDocument();

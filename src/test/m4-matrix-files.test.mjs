@@ -27,6 +27,7 @@ const { closeFileConflict, exportAs, openProjectFile, saveBackToFile, showFileCo
 const { finishServerDetect } = await import("../js/13-hosted.js");
 const homeModule = await import("../js/_home.js");
 const { makeDesktopHandle, openPrompterInBrowser } = await import("../js/20f-desktop.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -51,7 +52,7 @@ function heldFile(doc, name) {
 }
 
 function useDocument(doc) {
-  S.state = doc;
+  loadTestDocument(doc);
   flushEdits();
   clearDirty();
   return doc;

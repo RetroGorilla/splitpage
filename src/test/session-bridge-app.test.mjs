@@ -19,6 +19,7 @@ const { openProjectFile, reloadFileFromDisk } = await import("../js/18-local-fil
 const { startNewScript } = await import("../js/18b-file-menu.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -87,7 +88,7 @@ test("opening another document, or restoring one with the same id, opens a new e
 
 test("a merge right after a document was swapped in, with no flush between, leaves the session holding the merged document", () => {
   const base = script("Merge");
-  S.state = cloneState(base);
+  loadTestDocument(cloneState(base));
   const epoch = session.epoch(), gen = session.generation();
   const theirs = cloneState(base);
   theirs.rows[1].audioText = "Theirs.";
@@ -103,7 +104,7 @@ test("a merge right after a document was swapped in, with no flush between, leav
 });
 
 test("a server update over undo entries forgets the ones on a field their side changed and keeps the rest", () => {
-  S.state = cloneState(script("Forget"));
+  loadTestDocument(cloneState(script("Forget")));
   flushEdits();
   S.state.rows[0].audioText = "Mine, one.";
   markDirty();
@@ -126,7 +127,7 @@ test("a server update over undo entries forgets the ones on a field their side c
 
 test("a reported merge marks the document dirty and advances S.editSeq as before, but adds no edit generation", () => {
   const base = script("Reported");
-  S.state = cloneState(base);
+  loadTestDocument(cloneState(base));
   flushEdits();
   const theirs = cloneState(base);
   theirs.rows[1].audioText = "Theirs.";
@@ -164,7 +165,7 @@ test("a reload in place is its own kind: same epoch, no generation, S.editSeq an
 test("a reload into a document swapped in with no flush lands in the document the app shows", () => {
   const before = held();
   const beforeText = JSON.stringify(before);
-  S.state = cloneState(script("Swapped"));
+  loadTestDocument(cloneState(script("Swapped")));
   const doc = S.state;
   listen();
   const taken = noteReload({ title: "Reloaded", rows: [{ id: "r1", visualText: "Wide", audioText: "Reloaded." }] });
@@ -182,7 +183,7 @@ test("E4: resumeServerDoc's merge is a recovery: a new epoch, the undo stack kep
   const body = source.slice(source.indexOf("async function resumeServerDoc"), source.indexOf("\n}\n", source.indexOf("async function resumeServerDoc")));
   assert.equal(body.split('source: "server-resume"').length - 1, 2, "both of resumeServerDoc's merges name the server-resume source");
   const base = script("Resume");
-  S.state = cloneState(base);
+  loadTestDocument(cloneState(base));
   flushEdits();
   S.state.rows[0].audioText = "Typed while reopening.";
   markDirty();
@@ -256,7 +257,7 @@ test("importing a file is an adoption at the transition that marks the document 
 });
 
 test("restoring a version from history is an adoption at the transition that marks the document dirty as before, with no edit generation", async () => {
-  S.state = cloneState(script("History"));
+  loadTestDocument(cloneState(script("History")));
   flushEdits();
   const point = cloneState(S.state);
   point.rows[0].audioText = "As it was.";

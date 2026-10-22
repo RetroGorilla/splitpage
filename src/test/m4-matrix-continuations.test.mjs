@@ -22,6 +22,7 @@ const { openGalleryOverlay } = await import("../js/05e-gallery-overlay.js");
 const { thumbnailsAfterPaste } = await import("../js/05v-video.js");
 const annotate = await import("../js/05w-annotate.js");
 const { addGalleryVideo, rowSlots } = await import("../core/document/gallery.ts");
+const { loadTestDocument } = await import("./_document.mjs");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 function pngDataUrl(red, green, blue) {
@@ -75,7 +76,7 @@ function script(title, docId, ids, texts) {
 function showDocument(doc) {
   decode.gates.releaseAll("image.decode");
   decode.gates.releaseAll("image.encode");
-  S.state = doc;
+  loadTestDocument(doc);
   flushEdits();
   renderAbsorbed();
   clearDirty();

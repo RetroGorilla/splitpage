@@ -31,6 +31,7 @@ import {
 } from "../js/20d-formats.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
+import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initSceneStatus();
@@ -46,8 +47,8 @@ const BROLL = '<span class="broll-key" data-broll-id="bs_1" contenteditable="fal
 
 function withState(s, fn) {
   const was = S.state;
-  S.state = s;
-  try { return fn(s); } finally { S.state = was; }
+  loadTestDocument(s);
+  try { return fn(s); } finally { loadTestDocument(was); }
 }
 
 test("stored as a span of its own, read back as the dir mark, a fixed point of the sanitiser", () => {
@@ -259,7 +260,7 @@ test(".md: the table shows ((beat)), an untouched file reopens unchanged, a hand
   const s = directionDoc();
   const md = withState(s, () => buildMarkdownProject(exportDocumentOf(s)));
   assert.ok(md.includes("| Welcome back. ((beat)) Today, the kettle. |"), "the table cell");
-  S.state = s;
+  loadTestDocument(s);
   try {
     const same = await applyMarkdownProject(parseMarkdownProject(md), { noAsk: true });
     assert.equal(same.rows[0].audioText, s.rows[0].audioText);
@@ -268,7 +269,7 @@ test(".md: the table shows ((beat)), an untouched file reopens unchanged, a hand
     const back = await applyMarkdownProject(parseMarkdownProject(edited), { noAsk: true });
     assert.equal(back.rows[1].audioText, "Pour it " + DIR("very slowly") + ", then " + DIR("smile") + ".");
   } finally {
-    S.state = null;
+    loadTestDocument(null);
   }
 });
 

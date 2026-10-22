@@ -24,6 +24,7 @@ import {
 } from "../js/20d-formats.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
+import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initSceneStatus();
@@ -32,8 +33,8 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 
 function withState(s, fn) {
   const was = S.state;
-  S.state = s;
-  try { return fn(s); } finally { S.state = was; }
+  loadTestDocument(s);
+  try { return fn(s); } finally { loadTestDocument(was); }
 }
 
 const TEN = "one two three four five six seven eight nine ten";

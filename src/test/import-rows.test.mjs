@@ -15,6 +15,7 @@ const homeModule = await import("../js/_home.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 if (!window.Element.prototype.scrollIntoView) window.Element.prototype.scrollIntoView = function () {};
 
@@ -32,7 +33,7 @@ function script(extra) {
 }
 
 function useDocument(doc) {
-  S.state = doc;
+  loadTestDocument(doc);
   flushEdits();
   clearDirty();
   return doc;

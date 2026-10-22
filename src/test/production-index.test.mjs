@@ -10,12 +10,13 @@ import {
   productionIndexStats,
   resetProductionIndexStats
 } from "../js/07-production-tags.js";
+import { loadTestDocument } from "./_document.mjs";
 
 const tag = (cat, name) =>
   `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${name}</span>`;
 
 function load(over) {
-  S.state = migrateRows(Object.assign({ schema: 2, title: "T", rows: [], comments: [] }, over));
+  loadTestDocument(migrateRows(Object.assign({ schema: 2, title: "T", rows: [], comments: [] }, over)));
   resetProductionIndexStats();
 }
 
@@ -64,7 +65,7 @@ test("the index is kept through prose edits and re-derived by any change to what
   assert.equal(productionIndexStats().derived, 4);
 
   const entries = productionEntries();
-  S.state = JSON.parse(JSON.stringify(S.state));
+  loadTestDocument(JSON.parse(JSON.stringify(S.state)));
   assert.deepEqual(productionEntries().map((e) => e.key), entries.map((e) => e.key));
   assert.equal(productionIndexStats().derived, 5);
 });

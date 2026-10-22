@@ -11,6 +11,7 @@ import { __init as initBroll } from "../js/08c-broll.js";
 import { exportAssetsNow, exportDocumentOf } from "../js/14b-export-kit.js";
 import { htmlToPlainScript, toMarkdownDoc, toMarkdownTableDoc } from "../js/14d-export-text.js";
 import { LONG_DEMO } from "../js/_starters.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initSceneStatus();
 initTags();
@@ -22,10 +23,10 @@ const MARKS_PM = /\b[AP]M\b/i;
 
 function withPicture(salt, visualText) {
   const rec = intern(jpegBytes(30, 20, salt));
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 5, title: "Pictures", docId: "d" + "8".repeat(32),
     rows: [{ id: "r1", visualText: visualText || "", audioText: "", status: "todo", imageRef: rec.ref || rec }]
-  });
+  }));
   return S.state;
 }
 
@@ -45,7 +46,7 @@ test("a Markdown export of a scene that holds only a picture writes the picture,
 });
 
 test("plain-text and project-Markdown comment times use the clock captured with the document, not the setting at serialization", () => {
-  S.state = migrateRows(copy(LONG_DEMO.state));
+  loadTestDocument(migrateRows(copy(LONG_DEMO.state)));
   writePref(CLOCK_KEY, "12");
   try {
     const doc = exportDocumentOf(S.state);

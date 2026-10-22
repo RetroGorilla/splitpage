@@ -19,6 +19,7 @@ import { buildSplitpageFile } from "../js/20d-formats.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
+import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initStatus();
@@ -126,11 +127,11 @@ test("a .splitpage file carries every picture inline and reads back the same gal
 });
 
 test("Word: every picture in the Visual cell, the video links under them, and back again as items", async () => {
-  S.state = doc([
+  loadTestDocument(doc([
     { visualText: "Wide", audioText: "Hello.", imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc", poster: true }],
       moreImages: [{ imageRef: P2 }, { links: [{ name: "take one.mp4", size: 3, poster: true }] }, { imageRef: P3 }] },
     { visualText: "▶ not a caption, just words", audioText: "Two." }
-  ]);
+  ]));
   const parsed = await docxToRows(new File([buildDocx(...liveWithAssets())], "g.docx"));
   const r0 = parsed.rows[0];
   assert.equal(r0.imageRef.sha256, P1.sha256);
@@ -142,8 +143,8 @@ test("Word: every picture in the Visual cell, the video links under them, and ba
 });
 
 test("Markdown and PDF name every picture and every link", () => {
-  S.state = doc([{ visualText: "Wide", audioText: "Hello.", imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc" }],
-    moreImages: [{ imageRef: P2, links: [{ name: "b.mov", size: 3 }] }] }]);
+  loadTestDocument(doc([{ visualText: "Wide", audioText: "Hello.", imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc" }],
+    moreImages: [{ imageRef: P2, links: [{ name: "b.mov", size: 3 }] }] }]));
   const md = toMarkdownDoc(exportDocumentOf(S.state));
   assert.ok(md.indexOf("](images/scene-01.jpg)") !== -1);
   assert.ok(md.indexOf("](images/scene-01-2.jpg)") !== -1);

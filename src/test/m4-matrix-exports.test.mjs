@@ -22,6 +22,7 @@ const { buildPackingListPdf, buildPdf, buildShotListPdf } = await import("../js/
 const { buildFileData } = await import("../js/18-local-files.js");
 const homeModule = await import("../js/_home.js");
 const hosted = await import("../js/13-hosted.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 const KINDS = [
   "docx", "csv", "breakdown", "b-roll csv", "xlsx", "breakdown xlsx", "b-roll xlsx", "b-roll pdf", "pdf", "txt",
@@ -35,7 +36,7 @@ function demo() {
 }
 
 function useDocument(doc) {
-  S.state = doc;
+  loadTestDocument(doc);
   flushEdits();
   clearDirty();
   return doc;

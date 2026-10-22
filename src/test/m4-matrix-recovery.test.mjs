@@ -37,6 +37,7 @@ const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DR
 const { bytesForSync, createMemoryBackend, ensureBytes, has, internDataUrl, isDurableSync, persist, setBackend: setBlobBackend } = await import("../adapters/storage/02c-blobs.js");
 const { addGalleryPicture } = await import("../core/document/gallery.ts");
 const homeModule = await import("../js/_home.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 const require = createRequire(import.meta.url);
 const { createDraftStore } = require("../../desktop/drafts.js");
@@ -77,7 +78,7 @@ function splitpageFile(doc, name) {
 }
 
 function useDocument(doc) {
-  S.state = doc;
+  loadTestDocument(doc);
   flushEdits();
   clearDirty();
   return doc;

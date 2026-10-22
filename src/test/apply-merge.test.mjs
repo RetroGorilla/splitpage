@@ -9,11 +9,12 @@ import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { getHistorySnapshot, listDocHistory } from "../js/03a-history-store.js";
 import { personById } from "../js/07-production-tags.js";
 import { cloneState } from "../core/document/clone.ts";
+import { loadTestDocument } from "./_document.mjs";
 
 await bootApp();
 await window.__historyTest.forceBackend("memory");
 after(() => {
-  S.state = mk(freshId());
+  loadTestDocument(mk(freshId()));
   closeApp();
 });
 
@@ -41,7 +42,7 @@ function unstamped(s) {
 
 function reset() {
   clearTimers();
-  S.state = { sentinel: "state" };
+  loadTestDocument({ sentinel: "state" });
   S.baseState = { sentinel: "base" };
   mergeUndo().arm({ id: "s-earlier", docId: "d-earlier" });
 }
@@ -110,7 +111,7 @@ test("a recovered stash where both sides added the same person: the merged scrip
   theirs.people = [{ id: "pTheirs", name: "ada" }];
 
   const out = applyMerge({ base: base, mine: mine, theirs: theirs, source: "stash", mergeOnly: true });
-  S.state = out.state;
+  loadTestDocument(out.state);
   assert.deepEqual(S.state.people, [{ id: "pTheirs", name: "ada" }]);
   assert.equal(personById(S.state.productionTags.find((t) => t.name === "Lamp").owner).name, "ada");
   assert.equal(personById(S.state.brollShots[0].owner).name, "ada");
