@@ -247,10 +247,12 @@ test("tags: disposal removes every listener newest first and silences retained c
     const remove = target.removeEventListener.bind(target);
     target.addEventListener = (type: string, fn: EventListenerOrEventListenerObject | null, options?: boolean | AddEventListenerOptions): void => {
       added.push({ target, type, fn, options });
+      assert.ok(fn);
       add(type, fn, options);
     };
     target.removeEventListener = (type: string, fn: EventListenerOrEventListenerObject | null, options?: boolean | EventListenerOptions): void => {
       removed.push({ target, type, fn, options });
+      assert.ok(fn);
       remove(type, fn, options);
     };
   }
