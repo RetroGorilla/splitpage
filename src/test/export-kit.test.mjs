@@ -17,11 +17,11 @@ import {
 } from "../adapters/formats/export-kit.ts";
 import {
   commentNumbers,
-  exportDocumentOf,
-  exportRuns
+  exportDocumentOf
 } from "../js/14b-export-kit.js";
+import { exportRuns } from "../adapters/formats/export-kit.ts";
 import { sceneFacts } from "../adapters/formats/export-projections.ts";
-import { assemblePdf, pdfLampOp, pdfTextWidth, pdfWrapRuns } from "../js/17-pdf.js";
+import { assemblePdf, pdfLampOp, pdfTextWidth, pdfWrapRuns } from "../adapters/formats/pdf.ts";
 import { LONG_DEMO } from "../js/_starters.js";
 import { loadTestDocument } from "./_document.mjs";
 

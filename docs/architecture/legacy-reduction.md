@@ -277,7 +277,7 @@ Exit: no numbered file imports the 10 names from another numbered file; each is 
 
 Exit: 0 modules in any frontend loop, and `tools/test-dep-report.mjs` fails if one returns; a throwaway test destination saves through Save, autosave and Save As with no other edit; the race matrix with `SPLITPAGE_M4_GATE=1` passes with no case demoted; the desktop smoke passes on PR 2.
 
-**L3i. Reads of the document go through the session** (5 PRs, by area; after L3d).
+**L3i. Reads of the document go through the session** (6 PRs, by area; after L3d).
 
 The remaining `S.state` references in `src/` (about 400 after L3d, all reads) become `currentDocument()`, which L3d PR 3 adds to the session bridge. The guard from L3d stays on in the full browser run, so a read that writes still fails.
 
@@ -288,6 +288,7 @@ The remaining `S.state` references in `src/` (about 400 after L3d, all reads) be
 | 3 | Production, b-roll and comments | Codex, Sol high |
 | 4 | Hosted, drafts, history, sync and desktop | Codex, Sol high |
 | 5 | The rest of `src/` | Codex, Sol high |
+| Guard | `currentDocument()` returns the guard's read-only view, so the reads PRs 1 to 5 move off `S.state` stay covered. Undo, the live-document port, the records reconciler's identity check and the suites' fixture hook read the raw object through `heldDocument()` | cloud, Opus (session ingress) |
 
 **Structure:** the document has one way to be read, from its one holder. **Long term:** a file that later becomes TypeScript reads a typed, read-only document without a second change.
 
@@ -329,9 +330,9 @@ PR 2 is done: the projection helpers in `14b` (`exportFacts`, `exportRuns` and t
 
 Exit: none of `14c`, `14d`, `15`, `16`, `16b` and `17` imports `src/legacy/` or `02-state.js`; `14e` is gone; the byte goldens, `export-capture-app.test.mjs` and the INV-60 cases pass unchanged, and a changed golden stops the PR; the frozen-cache browser run passes on the PC.
 
-**L4c. Move the writers** (2 PRs; Codex, Sol high): `14c`, `14d`, `16` and `16b`, then `15` and `17`, into `src/adapters/formats/` in strict TypeScript, with the same tests unchanged.
+**L4c. Move the writers** (2 PRs, complete): `14c`, `14d`, `16` and `16b`, then `15` and `17`, moved into `src/adapters/formats/` in strict TypeScript.
 
-**Structure (PR 1):** `14c-export-projections.js`, `14d-export-text.js`, `16-csv.js` and `16b-xlsx.js` are deleted. Their implementations live in `export-projections.ts`, `export-text.ts`, `csv.ts` and `xlsx.ts` under `src/adapters/formats/`. The projection helpers those writers use from `14b` live in `export-kit.ts`; their held-asset and captured-picture helpers live in `export-assets.ts`. Decoding takes `ExportServices`, and the exporters wiring imports the new paths and passes the services. The capture binding, its read models and comment numbering, `loadExportAssets`, `exportRuns` and `PRINT_TOKENS` stay in `14b`, with the compatibility re-exports removed. Consumers and writer tests import the adapters directly. The frozen shim has 63 imports (59 numbered); the numbered load-order count is 59, with all six new adapter paths bringing load-order targets to 81. The dependency baseline has 1,175 exceptions, down from 1,269; removing the CSV suppression leaves 245 comments across 14 files, down from 246 across 15. Byte goldens and writer assertions are unchanged.
+**Structure:** all six numbered writer files, `14c-export-projections.js`, `14d-export-text.js`, `15-docx.js`, `16-csv.js`, `16b-xlsx.js` and `17-pdf.js`, are deleted, with no compatibility re-exports at their old paths. Their implementations live in `export-projections.ts`, `export-text.ts`, `docx.ts`, `csv.ts`, `xlsx.ts` and `pdf.ts` under `src/adapters/formats/`. The projection helpers those writers need, including `exportRuns`, live in `export-kit.ts`; their held-asset and captured-picture helpers live in `export-assets.ts`. The DOCX formatting, packaging and reimport helpers move with DOCX, and the PDF layout, image conversion and assembly helpers move with PDF. Decoding goes through `ExportServices` and `exportServices()`, with no writer adapter importing `src/legacy/` or `02-state.js`. The capture binding, its read models and comment numbering, `loadExportAssets` and `PRINT_TOKENS` stay in `14b`. Consumers, exporter wiring and writer tests import the adapters directly. The frozen shim has 60 imports (56 numbered: PR 2 removes `15` and `17`, and L3d PR 4 removed `05b`), and the DOCX styles are built on first use instead of by an init call; the numbered load-order count is 56, and the eight adapter paths bring load-order targets to 80. The dependency baseline has 1,161 exceptions, down from 1,269 before L4c; removing the CSV suppression in PR 1 leaves 245 comments across 14 files, down from 246 across 15. Byte goldens and writer assertions are unchanged apart from import paths and exact module counts.
 
 Exit: the 6 files are gone (−4,165 numbered lines). With L4b, L4 removes 16 files and 5,804 lines; with L2, the plan removes 22 files and 7,256 lines.
 
@@ -358,7 +359,7 @@ L1 is done.
 
 **One open PR per shared file.** A PR that would change a `src/js`, `src/bootstrap/` or `src/test/` file another open PR in this plan changes waits for it to merge, then merges the base. The coordinator holds that queue. Only one Codex job runs at a time on the PC.
 
-Size: 51 PRs. 29 are cloud threads (20 of them Opus) and 22 are Codex jobs. The perf runs, the desktop smokes and the gate runs are on the PC.
+Size: 52 PRs. 30 are cloud threads (21 of them Opus) and 22 are Codex jobs. The perf runs, the desktop smokes and the gate runs are on the PC.
 
 ## Performance
 
