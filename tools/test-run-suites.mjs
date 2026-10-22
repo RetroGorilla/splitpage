@@ -64,6 +64,7 @@ for (const name of KINDS) writeFileSync(join(suites, `${name}.txt`), "");
 const fakeDriver = join(work, "fake-driver.mjs");
 writeFileSync(fakeDriver, `
 import { spawn } from "node:child_process";
+import { createServer } from "node:net";
 import { appendFileSync, writeFileSync, existsSync } from "node:fs";
 import { basename, join } from "node:path";
 const arg = (name) => process.argv[process.argv.indexOf(name) + 1];
@@ -81,7 +82,41 @@ const waitForFile = (name, then) => {
     if (existsSync(join(state, name)) || Date.now() - started > 20000) { clearInterval(poll); then(); }
   }, 50);
 };
+const listen = (server, port) => new Promise((resolve, reject) => {
+  server.once("error", reject);
+  server.listen(port, "127.0.0.1", resolve);
+});
 switch (kind) {
+  case "cdp0": case "cdp1": {
+    const launch = async () => {
+      let staticCollision = null;
+      if (kind === "cdp0") {
+        const staticServer = createServer((socket) => socket.end("static"));
+        try { await listen(staticServer, Number(arg("--cdp-port")) + 10); }
+        catch (e) { staticCollision = e.code; }
+      }
+      const browser = createServer((socket) => socket.end(kind));
+      try {
+        await listen(browser, process.argv.includes("--cdp-proxy") ? 0 : Number(arg("--cdp-port")));
+      } catch (e) {
+        record({ cdpPort: null, error: e.code });
+        done(["RESULT: 0/1 checks passed - 1 FAILED"], 1);
+        return;
+      }
+      const cdpPort = browser.address().port;
+      if (process.argv.includes("--cdp-proxy")) {
+        await new Promise((resolve) => {
+          process.once("message", resolve);
+          process.send({ cdpPort });
+        });
+      }
+      record({ cdpPort, staticCollision });
+      waitForFile("release", () => done(["RESULT: 1/1 checks passed"], 0));
+    };
+    if (kind === "cdp1") waitForFile("cdp0.json", launch);
+    else await launch();
+    break;
+  }
   case "pass": done(["RESULT: 3/3 checks passed"], 0); break;
   case "crlf": process.stdout.write("PASS a\\r\\n\\r\\nRESULT: 4/4 checks passed\\r\\n"); process.exit(0); break;
   case "split": process.stdout.write("RESU"); setTimeout(() => done(["LT: 2/2 checks passed"], 0), 200); break;
@@ -250,10 +285,10 @@ function run(args, { portBase, timeout = 60000, runner = RUNNER, ...rest } = {})
   return r;
 }
 
-function start(args, { portBase, runner = RUNNER }) {
+function start(args, { portBase, runner = RUNNER, suiteDir = suites }) {
   const dir = join(work, "out-" + Math.random().toString(16).slice(2, 10));
   const state = newState();
-  const child = spawn(process.execPath, [runner, dir, ...args, "--suites", suites, "--driver", fakeDriver, "--port-base", String(portBase)], {
+  const child = spawn(process.execPath, [runner, dir, ...args, "--suites", suiteDir, "--driver", fakeDriver, "--port-base", String(portBase)], {
     cwd: REPO,
     env: { ...process.env, FAKE_DRIVER_STATE: state },
     stdio: ["ignore", "pipe", "pipe"]
@@ -333,6 +368,17 @@ function idleClient(port) {
   });
 }
 
+function cdpReply(port) {
+  return new Promise((resolveReply, rejectReply) => {
+    const socket = connect(port, "127.0.0.1");
+    let reply = "";
+    socket.setEncoding("utf8");
+    socket.on("data", (data) => { reply += data; });
+    socket.once("error", rejectReply);
+    socket.once("end", () => resolveReply(reply));
+  });
+}
+
 function unitChecks() {
   console.log("\nclassify():\n");
 
@@ -396,6 +442,9 @@ function unitChecks() {
   check("port base 5001 is a config error", argsError(["o", "--port-base", "5001"]), null);
   check("PORT_BASE 5009 is a config error", argsError(["o"], { PORT_BASE: "5009" }), null);
   eq("port base 5000 is accepted", parsed(["o", "--port-base", "5000"]).portBase, 5000);
+  eq("port base defaults to zero", parsed(["o"], {}).portBase, 0);
+  eq("env PORT_BASE is read when no flag is given", parsed(["o"], { PORT_BASE: "100" }).portBase, 100);
+  eq("--port-base wins over env", parsed(["o", "--port-base", "5000"], { PORT_BASE: "100" }).portBase, 5000);
   check("a port base is not rejected for lanes a run will not use", !argsError(["o", "--port-base", "46230"]), null);
   check("port base 46230 fits one lane", !configError(() => portPlan(46230, 1)), null);
   check("port base 46230 does not fit two lanes", configError(() => portPlan(46230, 2)), null);
@@ -426,6 +475,7 @@ function unitChecks() {
     const config = parsed(["o"], env);
     return driverCommand({ ...config, ports: portPlan(0, 1) }, "x.txt", 0).args;
   };
+  eq("the runner asks for a held CDP proxy once", command({}).filter((a) => a === "--cdp-proxy").length, 1);
   eq("with freezing on, the driver gets --freeze-caches once", command({ SPLITPAGE_FREEZE_CACHES: "1" }).filter((a) => a === "--freeze-caches").length, 1);
   eq("with it off, the driver's arguments are as before", command({}).includes("--freeze-caches"), false);
   eq("the flag goes into the query", withFreezeFlag("http://localhost:1/index.html"), "http://localhost:1/index.html?freeze-caches=1");
@@ -473,6 +523,41 @@ function unitChecks() {
 
 async function processChecks() {
   console.log("\nrun-suites.mjs as a process:\n");
+
+  {
+    const cdpSuites = join(work, "cdp-suites");
+    mkdirSync(cdpSuites);
+    for (const kind of ["cdp0", "cdp1"]) writeFileSync(join(cdpSuites, kind + ".txt"), "");
+    const portBase = await freePortBase([0, 10]);
+    const running = start(["^cdp", "--lanes", "2", "--timeout", "60"], { portBase, suiteDir: cdpSuites });
+    try {
+      const ready = await waitFor(() => recorded(running.state, "cdp0") !== null && recorded(running.state, "cdp1") !== null, 10000);
+      check("both CDP lanes reported their bound ports", ready, null);
+      const first = recorded(running.state, "cdp0");
+      const second = recorded(running.state, "cdp1");
+      eq("a static server cannot take the other lane's CDP port before Chromium binds", first?.staticCollision, "EADDRINUSE");
+      check("parallel browsers keep different bound CDP ports", first?.cdpPort > 0 && second?.cdpPort > 0 && first.cdpPort !== second.cdpPort, JSON.stringify([first, second]));
+      if (first?.cdpPort > 0 && second?.cdpPort > 0) {
+        eq("the first planned CDP port reaches its browser", await cdpReply(19300 + portBase), "cdp0");
+        eq("the second planned CDP port reaches its browser", await cdpReply(19310 + portBase), "cdp1");
+      }
+      for (const port of [19300 + portBase, 19310 + portBase]) {
+        let collision = null;
+        try { const server = await hold(port); await new Promise((resolveClose) => server.close(resolveClose)); }
+        catch (e) { collision = e.code; }
+        eq(`CDP port ${port} stays held after Chromium binds`, collision, "EADDRINUSE");
+      }
+    } finally {
+      writeFileSync(join(running.state, "release"), "");
+    }
+    const done = await within(running.closed, 20000);
+    eq("both CDP lanes pass without a port handoff gap", done?.code, EXIT.OK);
+    for (const port of [19300 + portBase, 19310 + portBase]) {
+      const server = await hold(port);
+      await new Promise((resolveClose) => server.close(resolveClose));
+      check(`CDP port ${port} is released when the run ends`, true, null);
+    }
+  }
 
   {
     const r = run(["^pass"]);
