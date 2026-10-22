@@ -35,7 +35,6 @@ import {
   syncAnchorResolvedClasses,
   updateCommentsCount
 } from "./10-comments.js";
-import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { reviewMode } from "./13-hosted.js";
 import { paintPresence, personColor } from "./13a-presence.js";
 import { drawWriter, paintWriterDraw, writerOpen } from "./19-writer.js";
@@ -62,6 +61,7 @@ import { fromHtml } from "../legacy/richtext.ts";
 import { createPaintGuard } from "../application/editing/paint-guard.ts";
 import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { editorSelection, undoGuard } from "../legacy/editor-bridge.ts";
+import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 import { cellSelection, placeEditorSelection, rememberCellSelection } from "../features/editing/cell-selection.ts";
 import { setTagAddingPerson } from "../application/tag-panel-state.ts";
 import { formatVideoLength } from "../../shared/text.js";

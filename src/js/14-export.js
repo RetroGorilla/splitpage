@@ -16,13 +16,7 @@ import {
   getEditorName,
   setBaseState
 } from "./03-sync.js";
-import {
-  clearDirty,
-  noteSaveStatus,
-  setSaveButtons,
-  showToast,
-  updateSaveStatus
-} from "./12-dirty-toast.js";
+import { clearDirty, noteSaveStatus, setSaveButtons, updateSaveStatus } from "./12-dirty-toast.js";
 import {
   SERVER_RESUME_KEY,
   linkTurnedOff,
@@ -42,6 +36,7 @@ import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./2
 import { makeDesktopHandle } from "./20f-desktop.js";
 import { existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
 import { requestSave, saveRunning } from "../legacy/save-bridge.ts";
+import { showToast } from "../legacy/effects-bridge.ts";
 import { conflictStash } from "../legacy/recovery-bridge.ts";
 import { autoSaveMay, autoSaveWhere } from "../application/save/autosave.ts";
 import { cloneState } from "../core/document/clone.ts";

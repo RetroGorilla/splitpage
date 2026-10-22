@@ -119,7 +119,7 @@ import {
   renderComments,
   syncAnchorResolvedClasses
 } from "../../js/10-comments.js";
-import { showActionToast, showToast } from "../../js/12-dirty-toast.js";
+import { showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import {
   caretAfterStep,
   compositionUndoMark,

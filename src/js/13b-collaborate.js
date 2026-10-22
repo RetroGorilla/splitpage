@@ -6,33 +6,13 @@ import { readPref, writePref } from "./00p-prefs.js";
 import { personSwatchesHtml, setMyColor, updateIdentityChip } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { COMMENT_NAME_KEY, getSavedAuthorName } from "./10-comments.js";
-import { showToast } from "./12-dirty-toast.js";
-import {
-  apiFetch,
-  applyHealth,
-  applyReviewMode,
-  clearServerToken,
-  copyShareText,
-  finishServerDetect,
-  isLinkGuest,
-  linkTurnedOff,
-  onServerDoc,
-  pointTabAt,
-  publishToServer,
-  rememberTokenForServer,
-  rememberedTokenForServer,
-  reviewMode,
-  serverDocShareUrl,
-  setServerToken,
-  shareAccessNote,
-  updateServerMenu
-} from "./13-hosted.js";
+import { apiFetch, applyHealth, applyReviewMode, clearServerToken, finishServerDetect, isLinkGuest, linkTurnedOff, onServerDoc, pointTabAt, publishToServer, rememberTokenForServer, rememberedTokenForServer, reviewMode, serverDocShareUrl, setServerToken, shareAccessNote, updateServerMenu } from "./13-hosted.js";
 import { updateFileChip } from "./18-local-files.js";
-import { setMenuItemReason } from "./18b-file-menu.js";
 import { joinServer, updateConnectMenu } from "./20e-connect.js";
 import { openSettings } from "./20s-settings.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
+import { copyShareText, setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
 import { cleanAuthorName } from "../core/document/people.ts";
 import { parseLinkFragment } from "../../shared/server-links.js";
 

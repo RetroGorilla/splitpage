@@ -21,6 +21,7 @@ import { confirmSavedNow, noteSaveChange, saveRunning, savesStarted, unsavedFor 
 import { saveButtonView, saveStatus } from "../application/save/status.ts";
 import { changeSet } from "../application/session/change-set.ts";
 import { authorityOf, editCapability } from "../application/collaboration/authority.ts";
+import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 
 S.saveButtonBusy = false;
 
@@ -179,26 +180,6 @@ export function showRefusal(outcome) {
   showToast(/[.!?…]$/.test(text) ? text : text + ".", "warn");
 }
 
-export function showToast(msg, kind, sticky) {
-  var host = document.getElementById("toast-host");
-  var el = document.createElement("div");
-  el.className = "toast" + (kind ? " " + kind : "") + (sticky ? " is-sticky" : "");
-  el.textContent = msg;
-  function dismiss() {
-    el.classList.add("is-leaving");
-    setTimeout(function () { el.remove(); }, 220);
-  }
-  if (sticky) {
-    el.title = "Click to dismiss";
-    el.addEventListener("click", dismiss);
-  } else {
-    setTimeout(dismiss, 2600);
-  }
-  el.dismiss = dismiss;
-  host.appendChild(el);
-  return el;
-}
-
 if (typeof document !== "undefined" && document.addEventListener) {
   document.addEventListener("undo-owner-cleared", function (e) {
     var n = (e.detail && e.detail.count) || 0;
@@ -206,25 +187,6 @@ if (typeof document !== "undefined" && document.addEventListener) {
   });
 }
 
-export function showActionToast(msg, kind, label, onAction, sticky) {
-  var el = showToast(msg, kind, true);
-  if (!sticky) {
-    el.classList.remove("is-sticky");
-    el.removeAttribute("title");
-  }
-  el.classList.add("has-action");
-  var btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "toast-action";
-  btn.textContent = label;
-  btn.addEventListener("click", function (e) {
-    e.stopPropagation();
-    el.dismiss();
-    onAction();
-  });
-  el.appendChild(btn);
-  if (!sticky) setTimeout(el.dismiss, 6000);
-  return el;
-}
+export { showActionToast, showToast };
 
 export function __init() {}

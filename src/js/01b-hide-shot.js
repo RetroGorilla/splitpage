@@ -2,9 +2,9 @@ import { S } from "./_state.js";
 import { writePref } from "./00p-prefs.js";
 import { findRowIndex } from "./03-sync.js";
 import { render } from "./05-render.js";
-import { showToast } from "./12-dirty-toast.js";
 import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
+import { showToast } from "../legacy/effects-bridge.ts";
 
 export var hideShotScenes;
 

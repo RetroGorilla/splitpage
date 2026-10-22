@@ -1,3 +1,4 @@
+import type { NoticeKind } from "../../application/effects/ports.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
 export interface ResumeHandle {
@@ -7,7 +8,7 @@ export interface ResumeHandle {
 export interface SaveRecoveryPorts {
   readonly hideResumeBanner: () => void;
   readonly resumeFromHandle: (handle: ResumeHandle) => Promise<void>;
-  readonly showToast: (message: string, kind: string) => void;
+  readonly showToast: (message: string, kind: NoticeKind) => void;
   readonly saveDoc: () => void;
   readonly exportAs: (format: string) => void;
   readonly pendingHandle: () => ResumeHandle | null;
