@@ -3,7 +3,6 @@ import { normalizeTagName } from "../core/document/tags.ts";
 import { domToPos } from "../features/editing/cell-dom.ts";
 import { S } from "./_state.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession } from "../legacy/session-bridge.ts";
 import {
   ensureTrailingCaretSpot,
   inertBody,
@@ -53,7 +52,7 @@ import { toHtml } from "../core/text/html.ts";
 import { projection } from "../core/text/runs.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { cellOf, scriptCellOf } from "../legacy/richtext.ts";
-import { runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 export {
   BROLL_MARKER_RE,
   BROLL_PROPS_MAX,

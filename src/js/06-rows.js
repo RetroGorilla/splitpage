@@ -1,7 +1,6 @@
 import { S } from "./_state.js";
 import { internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession } from "../legacy/session-bridge.ts";
 import { safeHref, safeId, storedHtmlFromDom } from "./04-richtext.js";
 import { render, syncFieldFromDom } from "./05-render.js";
 import { armDeleteButton, disarmDeleteButton } from "../features/rows/delete-button.ts";
@@ -14,7 +13,7 @@ import { placeCaretAtTextOffset } from "./19-writer.js";
 import { makeId } from "../adapters/identity/ids.ts";
 import { addSceneCommand, deleteSceneCommand, moveSceneCommand, swapScenesCommand } from "../application/commands/rows.ts";
 import { splitSceneCommand, textCut } from "../application/commands/split-join.ts";
-import { REVIEW_ONLY, onDocumentReplaced, runCommand, sessionStamps, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { REVIEW_ONLY, onDocumentReplaced, readSession, runCommand, sessionStamps, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { rowDrag } from "../legacy/editor-bridge.ts";
