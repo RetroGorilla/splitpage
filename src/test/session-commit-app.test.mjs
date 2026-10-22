@@ -13,7 +13,8 @@ const { render } = await import("../js/05-render.js");
 const { setSceneLength } = await import("../js/05r-read-time.js");
 const { clearDirty, markAbsorbedDirty, markDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits, lastUndoEntry, undo, undoSizes } = await import("../js/12a-undo.js");
-const { PERSON_COLORS, PERSON_COLOR_KEY, writePref } = await import("../js/00p-prefs.js");
+const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
+const { preferences } = await import("../legacy/preferences-bridge.ts");
 const { saveAuthorName } = await import("../js/10-comments.js");
 const NAME_KEY = "splitpage-comment-author";
 const { loadTestDocument } = await import("./_document.mjs");
@@ -25,12 +26,12 @@ const COLOR = PERSON_COLORS[2];
 
 function named() {
   saveAuthorName(NAME);
-  writePref(PERSON_COLOR_KEY, COLOR);
+  preferences().setMyColor(COLOR);
 }
 
 function unnamed() {
-  writePref(NAME_KEY, null);
-  writePref(PERSON_COLOR_KEY, null);
+  localStorage.removeItem(NAME_KEY);
+  preferences().setMyColor(null);
 }
 
 let docs = 0;

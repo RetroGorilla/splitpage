@@ -8,7 +8,6 @@ import {
   voiceIsFollowing
 } from "../application/prompter-state.ts";
 import { S } from "./_state.js";
-import { writePref } from "./00p-prefs.js";
 import { serverHomeId } from "./_home.js";
 import { SpeechRecognitionCtor } from "./00-prelude.js";
 import { rowSeconds } from "./01-scene-status.js";
@@ -306,16 +305,6 @@ export function disposePrompterView() {
   releaseWakeLock();
 }
 
-var PROMPTER_MIRROR_KEY = "splitpage-prompter-mirror";
-var PROMPTER_FLIP_KEY = "splitpage-prompter-flip";
-
-function readPrompterOrientationFlag(key) {
-  try { return localStorage.getItem(key) === "1"; } catch (e) { return false; }
-}
-function writePrompterOrientationFlag(key, on) {
-  writePref(key, on ? "1" : "0");
-}
-
 function applyPrompterOrientation() {
   var scroller = document.getElementById("prompter-scroll");
   scroller.classList.toggle("mirror", prompterMirror);
@@ -335,16 +324,15 @@ function setToggle(btn, on) {
 
 export function setPrompterMirror(on) {
   prompterMirror = on;
-  writePrompterOrientationFlag(PROMPTER_MIRROR_KEY, on);
+  preferences().setPrompterFlag("prompterMirror", on);
   applyPrompterOrientation();
 }
 export function setPrompterFlip(on) {
   prompterFlip = on;
-  writePrompterOrientationFlag(PROMPTER_FLIP_KEY, on);
+  preferences().setPrompterFlag("prompterFlip", on);
   applyPrompterOrientation();
 }
 
-var PROMPTER_SCENE_MODE_KEY = "splitpage-prompter-scene-mode";
 var sceneRowIds = [];
 var sceneWordStart = [];
 var sceneWordEnd = [];
@@ -425,7 +413,7 @@ export function setPrompterSceneMode(on) {
   on = !!on;
   if (on === promptSceneMode) return;
   promptSceneMode = on;
-  writePrompterOrientationFlag(PROMPTER_SCENE_MODE_KEY, on);
+  preferences().setPrompterFlag("prompterSceneMode", on);
   updatePrompterSceneModeUI();
   if (on) cueSceneForCurrentPosition();
   else { promptSceneIndex = -1; promptSceneEndWordOffset = null; }
@@ -1040,11 +1028,11 @@ export function wireTagEntityContainer(id, rootClick) {
 }
 
 export function __init() {
-  prompterMirror = readPrompterOrientationFlag(PROMPTER_MIRROR_KEY);
+  prompterMirror = preferences().prompterFlag("prompterMirror");
 
-  prompterFlip = readPrompterOrientationFlag(PROMPTER_FLIP_KEY);
+  prompterFlip = preferences().prompterFlag("prompterFlip");
 
-  promptSceneMode = readPrompterOrientationFlag(PROMPTER_SCENE_MODE_KEY);
+  promptSceneMode = preferences().prompterFlag("prompterSceneMode");
 
   window.__prompterTest = {
     checkSceneBoundaryNow: function () {

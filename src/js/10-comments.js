@@ -7,7 +7,7 @@ import { editorSelection } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 import { S } from "./_state.js";
-import { formatClock, formatDateClock } from "./00p-prefs.js";
+import { formatClock, formatDateClock } from "../../shared/clock.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { normalizeImageRef } from "../../shared/blob-policy.js";
@@ -408,7 +408,8 @@ export function formatTimestamp(iso) {
     var d = new Date(iso);
     if (isNaN(d.getTime())) return "";
     var sameDay = d.toDateString() === new Date().toDateString();
-    return sameDay ? formatClock(d) : formatDateClock(d);
+    var clock = preferences().clock();
+    return sameDay ? formatClock(d, clock) : formatDateClock(d, null, clock);
   } catch (e) { return ""; }
 }
 
@@ -462,7 +463,7 @@ function commentAvatarHtml(name) {
 
 function commentTimeHtml(iso, cls) {
   return '<time class="' + cls + '" datetime="' + escapeHtml(iso || "") + '" title="' +
-    escapeHtml(formatTimestampAbsolute(iso)) + '">' + escapeHtml(formatRelativeTime(iso)) + '</time>';
+    escapeHtml(formatTimestampAbsolute(iso, preferences().clock())) + '">' + escapeHtml(formatRelativeTime(iso)) + '</time>';
 }
 
 function commentPositionCompare(a, b) {

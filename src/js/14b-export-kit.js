@@ -1,4 +1,3 @@
-import { readClockPref } from "./00p-prefs.js";
 import { migrateRows } from "./02-state.js";
 import { bytesForSync, dataUrlPicture, ensureBytes, recordFor } from "../adapters/storage/02c-blobs.js";
 import { breakdownRows, commentEntries, sceneFacts, shotRecordForFile } from "./14c-export-projections.js";
@@ -22,6 +21,7 @@ import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { cellOf, inertBody } from "../legacy/richtext.ts";
 import { readSession } from "../legacy/session-bridge.ts";
 import { refsIn, sniffImageMime } from "../../shared/blob-policy.js";
+import { preferences } from "../legacy/preferences-bridge.ts";
 
 export { sceneFacts };
 
@@ -87,7 +87,7 @@ function exportReadModels(doc) {
 var capturePorts = { read: readSession, readModels: exportReadModels, clock: systemClock };
 
 function withClock(opts) {
-  return Object.assign({ clockMode: readClockPref() }, opts);
+  return Object.assign({ clockMode: preferences().clock() }, opts);
 }
 
 export function captureExportDocument(opts) {
