@@ -38,10 +38,10 @@ function importsOf(path: string): readonly Import[] {
   return analysis.imports;
 }
 
-test("the frozen shim import set has the 63 started modules and the two bootstrap modules", () => {
+test("the frozen shim import set has the 62 started modules and the two bootstrap modules", () => {
   assert.equal(new Set(FROZEN_SHIM_IMPORTS).size, FROZEN_SHIM_IMPORTS.length);
-  assert.equal(FROZEN_SHIM_IMPORTS.length, 65);
-  assert.equal(FROZEN_SHIM_IMPORTS.filter((s) => /^\.\/\d/.test(s)).length, 61);
+  assert.equal(FROZEN_SHIM_IMPORTS.length, 64);
+  assert.equal(FROZEN_SHIM_IMPORTS.filter((s) => /^\.\/\d/.test(s)).length, 60);
   assert.ok(!FROZEN_SHIM_IMPORTS.includes("./14e-export-formats.js"));
 });
 
@@ -133,9 +133,9 @@ test("the load-order check catches a module that configures a bridge while it lo
 });
 
 test("no numbered module configures a bridge or starts an owner while it loads: each is imported alone, with fresh module state", { timeout: 600_000 }, async () => {
-  assert.equal(NUMBERED.length, 63, "every remaining numbered module");
+  assert.equal(NUMBERED.length, 62, "every remaining numbered module");
   const targets = [...NUMBERED, "src/features/rows/row-motion.js", "src/features/title/topbar.js", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/notices/phone-bar.js", "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts", "src/bootstrap/wiring/exporters.ts"];
-  assert.equal(targets.length, 79);
+  assert.equal(targets.length, 78);
   for (const loadOnly of ["src/features/rows/row-motion.js", "src/features/title/topbar.js", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/notices/phone-bar.js", "src/adapters/storage/03c-history-idb.js", "src/js/14c-export-projections.js", "src/js/14d-export-text.js", "src/bootstrap/wiring/exporters.ts", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts"]) {
     assert.ok(targets.includes(loadOnly), loadOnly);
   }
