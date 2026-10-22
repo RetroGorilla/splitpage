@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { createActionRegistry } from "../../src/application/actions.ts";
 import type { ActionRegistry, ActionSource } from "../../src/application/actions.ts";
 import { S } from "../../src/js/_state.js";
+import { loadTestDocument } from "../../src/test/_document.mjs";
 import { registerFileActions } from "../../src/legacy/file-actions.ts";
 import { registerThisDocumentActions } from "../../src/legacy/this-document-actions.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
@@ -13,11 +14,11 @@ function loadingRegistry(): { registry: ActionRegistry; restore: () => void } {
   const registry = createActionRegistry();
   const disposers = [registerFileActions(registry), registerThisDocumentActions(registry), registerViewActions(registry)];
   const was: unknown = S.state;
-  Object.assign(S, { state: null });
+  loadTestDocument(null);
   return {
     registry,
     restore: () => {
-      Object.assign(S, { state: was });
+      loadTestDocument(was);
       for (const dispose of disposers) dispose();
     }
   };

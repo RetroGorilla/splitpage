@@ -5,6 +5,7 @@ import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { frozenWrites, withFreezeFlag } from "../.claude/skills/run-splitpage-app/freeze-flag.mjs";
+import { guardedWrites, withGuardFlag } from "../.claude/skills/run-splitpage-app/guard-flag.mjs";
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 const RUNNER = join(REPO, "tools", "run-suites.mjs");
@@ -444,6 +445,29 @@ function unitChecks() {
     "exception: TypeError: Cannot assign to read only property 'id' of object '#<Object>'",
     "exception: TypeError: Cannot add property 3, object is not extensible",
     "exception: TypeError: Cannot delete property 'x' of #<Object>"
+  ]));
+  console.log("\ndocument guard:\n");
+
+  eq("the document is not guarded by default", parsed(["o"], {}).documentGuard, false);
+  eq("SPLITPAGE_DOCUMENT_GUARD=1 guards it", parsed(["o"], { SPLITPAGE_DOCUMENT_GUARD: "1" }).documentGuard, true);
+  eq("any other value does not", [parsed(["o"], { SPLITPAGE_DOCUMENT_GUARD: "0" }).documentGuard, parsed(["o"], { SPLITPAGE_DOCUMENT_GUARD: "true" }).documentGuard].join(), "false,false");
+  eq("with the guard on, the driver gets --document-guard once", command({ SPLITPAGE_DOCUMENT_GUARD: "1" }).filter((a) => a === "--document-guard").length, 1);
+  eq("with it off, the driver's arguments are as before", command({}).includes("--document-guard"), false);
+  eq("both switches together hand the driver both flags", ["--freeze-caches", "--document-guard"].map((f) => command({ SPLITPAGE_FREEZE_CACHES: "1", SPLITPAGE_DOCUMENT_GUARD: "1" }).includes(f)).join(), "true,true");
+  eq("the guard flag goes into the query", withGuardFlag("http://localhost:1/index.html"), "http://localhost:1/index.html?document-guard=1");
+  eq("after a query the page already has", withGuardFlag("http://localhost:1/index.html?freeze-caches=1"), "http://localhost:1/index.html?freeze-caches=1&document-guard=1");
+  eq("and before the fragment", withGuardFlag("http://localhost:1/index.html?teleprompter=1#script=ab&voice=1"), "http://localhost:1/index.html?teleprompter=1&document-guard=1#script=ab&voice=1");
+  eq("a fragment with no query", withGuardFlag("http://localhost:1/index.html#review=abc"), "http://localhost:1/index.html?document-guard=1#review=abc");
+  eq("a page that names the flag itself is left as it is", withGuardFlag("http://localhost:1/index.html?document-guard=0"), "http://localhost:1/index.html?document-guard=0");
+  eq("a question mark inside the fragment is not a query", withGuardFlag("http://localhost:1/index.html#a?b"), "http://localhost:1/index.html?document-guard=1#a?b");
+  eq("any console line that names a refused document write counts, caught or not", JSON.stringify(guardedWrites([
+    "log: fine",
+    "error: DocumentWriteError: The document is read-only outside a session command: a write to title was refused",
+    "exception: DocumentWriteError: The document is read-only outside a session command: a write to length was refused",
+    "exception: TypeError: Cannot assign to read only property 'id' of object '#<Object>'"
+  ])), JSON.stringify([
+    "error: DocumentWriteError: The document is read-only outside a session command: a write to title was refused",
+    "exception: DocumentWriteError: The document is read-only outside a session command: a write to length was refused"
   ]));
 }
 

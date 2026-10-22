@@ -6,6 +6,7 @@ import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawn, execFileSync } from "node:child_process";
 import { freezeAsked, frozenWrites, withFreezeFlag } from "./freeze-flag.mjs";
+import { guardAsked, guardedWrites, withGuardFlag } from "./guard-flag.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -15,6 +16,7 @@ function parseArgs(argv) {
     shotDir: path.join(os.tmpdir(), "splitpage-shots"),
     headed: false, script: null, runId: null, chrome: null, bind: "127.0.0.1",
     freezeCaches: freezeAsked(process.env),
+    documentGuard: guardAsked(process.env),
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -31,8 +33,9 @@ function parseArgs(argv) {
       case "bind": out.bind = argv[++i]; break;
       case "headed": out.headed = true; break;
       case "freezecaches": case "freeze-caches": out.freezeCaches = true; break;
+      case "documentguard": case "document-guard": out.documentGuard = true; break;
       case "h": case "help":
-        console.log("usage: node driver.mjs --script <file> [--port N] [--cdp-port N] [--root DIR] [--shot-dir DIR] [--chrome PATH] [--bind ADDRESS] [--headed] [--freeze-caches]");
+        console.log("usage: node driver.mjs --script <file> [--port N] [--cdp-port N] [--root DIR] [--shot-dir DIR] [--chrome PATH] [--bind ADDRESS] [--headed] [--freeze-caches] [--document-guard]");
         process.exit(0);
         break;
       default: throw new Error(`unknown option: ${a}`);
@@ -47,6 +50,7 @@ fs.mkdirSync(opts.shotDir, { recursive: true });
 
 const log = (m) => process.stderr.write(`[driver] ${m}\n`);
 if (opts.freezeCaches) log("cache freezing on: every page opened here gets freeze-caches=1");
+if (opts.documentGuard) log("document guard on: every page opened here gets document-guard=1");
 const out1 = (m) => process.stdout.write(`${m}\n`);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -284,6 +288,7 @@ window.__splitpageNoRemote = true;
 `,
   });
   if (opts.freezeCaches) await send("Page.addScriptToEvaluateOnNewDocument", { source: "window.__splitpageFreezeRun = true;" });
+  if (opts.documentGuard) await send("Page.addScriptToEvaluateOnNewDocument", { source: "window.__splitpageGuardRun = true;" });
   await send("Log.enable");
 }
 
@@ -368,7 +373,8 @@ async function go(target) {
   const local = absolute ? target
     : target.startsWith("/") ? `http://localhost:${opts.port}${target}`
     : `http://localhost:${opts.port}/${target}`;
-  const url = opts.freezeCaches && !absolute ? withFreezeFlag(local) : local;
+  const frozen = opts.freezeCaches && !absolute ? withFreezeFlag(local) : local;
+  const url = opts.documentGuard && !absolute ? withGuardFlag(frozen) : frozen;
   await send("Page.navigate", { url });
   await waitFor('document.readyState === "complete"', 30000);
   out1(`at ${url}`);
@@ -664,6 +670,17 @@ async function main() {
       else {
         failures++;
         out1("FAIL a write into a frozen cache value threw");
+        for (const h of hits.slice(0, 5)) out1(`     ${h}`);
+      }
+    }
+    if (opts.documentGuard && ws && (checks > 0 || failures > 0)) {
+      try { await js("0"); } catch {}
+      checks++;
+      const hits = guardedWrites(consoleLines);
+      if (hits.length === 0) out1("PASS no write into the guarded document was refused");
+      else {
+        failures++;
+        out1("FAIL a write into the guarded document was refused");
         for (const h of hits.slice(0, 5)) out1(`     ${h}`);
       }
     }

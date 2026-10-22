@@ -1,6 +1,5 @@
-import { liveDocumentPort } from "../js/02b-doc-id.js";
 import { preferencesStarted, startPreferences } from "../legacy/preferences-bridge.ts";
-import { sessionStarted } from "../legacy/session-bridge.ts";
+import { liveSession, sessionStarted } from "../legacy/session-bridge.ts";
 import { appSessionDeps } from "./_app-session.mjs";
 import { startTestSession } from "./_session.mjs";
 
@@ -15,12 +14,6 @@ function startSession() {
 
 export function loadTestDocument(doc) {
   if (!sessionStarted()) startSession();
-  liveDocumentPort.assign(doc);
-  return doc;
-}
-
-export function loadDocumentWithoutSession(doc) {
-  if (sessionStarted()) throw new Error("loadDocumentWithoutSession: a session is running, so use loadTestDocument");
-  liveDocumentPort.assign(doc);
+  liveSession().adopt(doc);
   return doc;
 }
