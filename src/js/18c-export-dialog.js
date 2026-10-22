@@ -4,11 +4,11 @@ import {
 } from "./14b-export-kit.js";
 import { breakdownRows } from "./14c-export-projections.js";
 import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "./14d-export-text.js";
-import { exportToggleOptions } from "./14e-export-formats.js";
 import { narrationRows } from "./15-docx.js";
 import { exportBaseName, exportFileName, handleFileMenuAction, runExportAction } from "./18-local-files.js";
 import { onFileMenuRefresh } from "./18b-file-menu.js";
 import { tagPrintColor } from "../adapters/formats/print-colors.ts";
+import { exportToggleOptions } from "../application/export/registry.ts";
 import { rowImage } from "../core/document/media.ts";
 import { tagCategory } from "../core/production/looks.ts";
 import { escapeHtml, unitSafePrefix } from "../core/document/text-policy.ts";
@@ -62,7 +62,7 @@ export function rememberExport(action) {
 }
 
 function exportOptionsFor(action) {
-  return exportToggleOptions(exportFormats.byAction(action));
+  return exportToggleOptions(exportFormats, exportFormats.byAction(action));
 }
 
 export function exportActionReason(action) {

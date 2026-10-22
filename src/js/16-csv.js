@@ -1,9 +1,9 @@
 import { breakdownRows, breakdownTable, brollTable, commentBodyText } from "./14c-export-projections.js";
 import { exportBrollScenes, exportComments, exportFacts, sceneFacts } from "./14b-export-kit.js";
 import { makeId } from "../adapters/identity/ids.ts";
+import { exportServices } from "../application/export/services.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { toPlainText } from "../core/text/projections.ts";
-import { cellOf } from "../legacy/richtext.ts";
 
 export function csvEscape(v) {
   var s = String(v == null ? "" : v);
@@ -87,8 +87,8 @@ export function scriptTable(doc) {
       f.status.label,
       f.read,
       f.readSet ? "yes" : "",
-      toPlainText(cellOf(row.visualText)),
-      toPlainText(cellOf(row.audioText)),
+      toPlainText(exportServices().cellOf(row.visualText)),
+      toPlainText(exportServices().cellOf(row.audioText)),
       (tags[i] || []).join("; "),
       (broll[i] || []).join("; "),
       (open[i] || []).sort(function (a, b) { return a - b; }).join(", ")
