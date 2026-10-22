@@ -8,7 +8,6 @@ import { S } from "./_state.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { cssAttr, plainText, safeId } from "./04-richtext.js";
-import { render } from "./05-render.js";
 import {
   bulkTagRows,
   currentProductionIndex,
@@ -267,7 +266,6 @@ export function tagAllMentions(key) {
     return;
   }
   breakUndoCoalescing();
-  render();
   showToast("Tagged " + done.hits + " mention" + (done.hits === 1 ? "" : "s") + " of " + item.name, "ok");
 }
 
@@ -689,7 +687,6 @@ export function armRemoveTag(btn, key) {
     breakUndoCoalescing();
     var n = removeTag(item.cat.id, item.name);
     breakUndoCoalescing();
-    render();
     showToast("Removed " + item.name + " from " + n + " mention" + (n === 1 ? "" : "s"), "ok");
     return;
   }
@@ -719,7 +716,6 @@ export function armDeleteTag(btn, key) {
     var item = findTagByKey(key);
     if (!item) return;
     runDocumentEdit(deleteTagsCommand([{ cat: item.cat.id, name: item.name, unlabel: false }], function () { return []; }, sessionStamps));
-    render();
     showToast("Deleted " + item.name + " from the production list", "ok");
     return;
   }
@@ -803,13 +799,12 @@ export function bulkDeleteSelected() {
   breakUndoCoalescing();
   var labelled = items.filter(function (item) { return !item.orphaned; }).map(tagRef);
   var unlabelled = readSession(function (doc) { return retagMentions(doc, labelled); });
+  clearProductionSelection();
   runDocumentEdit(deleteTagsCommand(items.map(function (item) {
     return { cat: item.cat.id, name: item.name, unlabel: !item.orphaned };
   }), retagRewrites(labelled, null), sessionStamps));
   var n = items.length;
-  clearProductionSelection();
   breakUndoCoalescing();
-  render();
   showToast("Deleted " + n + " item" + (n === 1 ? "" : "s") +
     (unlabelled ? " and removed " + unlabelled + " label" + (unlabelled === 1 ? "" : "s") +
       " from the script" : ""), "ok");
@@ -932,13 +927,13 @@ export function saveTagRename(key) {
   var input = document.querySelector('.tag-rename-input[data-key="' + cssAttr(key) + '"]');
   var item = findTagByKey(key);
   if (!input || !item) { setTagRenaming(null); renderProduction(); return; }
-  breakUndoCoalescing();
-  var changed = renameTag(item.cat.id, item.name, input.value);
+  var renamed = input.value;
   setTagRenaming(null);
+  breakUndoCoalescing();
+  var changed = renameTag(item.cat.id, item.name, renamed);
   if (changed) {
     breakUndoCoalescing();
-    render();
-    showToast("Renamed to " + plainText(input.value).trim(), "ok");
+    showToast("Renamed to " + plainText(renamed).trim(), "ok");
   } else {
     renderProduction();
   }

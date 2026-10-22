@@ -51,7 +51,7 @@ export interface CellEditingPorts<E> {
   readonly undo: CellUndoPorts;
   readonly stale: () => boolean;
   readonly painted: (cell: E, field: string, row: ShownRow) => void;
-  readonly redraw: () => void;
+  readonly shown: <T>(edit: () => T) => T;
   readonly announce: (message: string, before: unknown) => void;
   readonly refused: (reason: string) => void;
 }
@@ -97,6 +97,10 @@ export function createCellEditing<E>(ports: CellEditingPorts<E>): CellEditing<E>
   const page = ports.page;
 
   function sync(cell: E): void {
+    ports.shown(function () { syncShown(cell); });
+  }
+
+  function syncShown(cell: E): void {
     if (!page.attached(cell) || ports.undo.applying() || ports.stale()) return;
     const at = page.address(cell);
     const idx = rowIndexOf(ports.document(), at.rowId);
@@ -133,6 +137,10 @@ export function createCellEditing<E>(ports: CellEditingPorts<E>): CellEditing<E>
   }
 
   function edit(cell: E, change: CellEdit): E | null {
+    return ports.shown(function () { return editShown(cell, change); });
+  }
+
+  function editShown(cell: E, change: CellEdit): E | null {
     const opened = open(cell);
     if (!opened) return null;
     const out = change(ports.decode.text(opened.html), opened.sel);
@@ -151,7 +159,6 @@ export function createCellEditing<E>(ports: CellEditingPorts<E>): CellEditing<E>
     const before = ports.undo.latest();
     ports.undo.breakCoalescing();
     if (!took(ports.run(galleryCommand(rowId, change, ports.text)))) return false;
-    ports.redraw();
     ports.announce(message, before);
     return true;
   }
@@ -159,7 +166,7 @@ export function createCellEditing<E>(ports: CellEditingPorts<E>): CellEditing<E>
   function moveRow(rowId: string, targetId: string, after: boolean): void {
     const outcome = ports.run(moveSceneCommand(rowId, targetId, !!after));
     if (outcome.kind === "rejected") ports.refused(outcome.reason);
-    if (took(outcome)) ports.redraw();
+    took(outcome);
   }
 
   return { open, close, edit, sync, editGallery, moveRow };

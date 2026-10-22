@@ -65,3 +65,44 @@ test("each undo guard is its own: one applying leaves another, and the paint gua
     assert.equal(paint.painting(), false);
   });
 });
+
+test("an edit the page already shows is marked for its whole length, nested edits included, and returns what it made", () => {
+  const guard = createPaintGuard();
+  assert.equal(guard.shown(), false);
+  const seen: boolean[] = [];
+  const out = guard.whileShown(() => {
+    seen.push(guard.shown());
+    guard.whileShown(() => { seen.push(guard.shown()); });
+    seen.push(guard.shown());
+    return "typed";
+  });
+  assert.equal(out, "typed");
+  assert.deepEqual(seen, [true, true, true]);
+  assert.equal(guard.shown(), false);
+  assert.equal(guard.painting(), false, "marking an edit as shown is not a paint");
+});
+
+test("work left for after a shown edit runs once, when the outermost one ends, and at once outside one", () => {
+  const guard = createPaintGuard();
+  const runs: string[] = [];
+  guard.afterShown(() => { runs.push("now"); });
+  guard.whileShown(() => {
+    guard.afterShown(() => { runs.push("gallery"); });
+    guard.whileShown(() => { guard.afterShown(() => { runs.push("nested"); }); });
+    assert.deepEqual(runs, ["now"], "a nested edit ending does not run the work");
+  });
+  assert.deepEqual(runs, ["now", "gallery", "nested"]);
+  guard.whileShown(() => {});
+  assert.equal(runs.length, 3, "nothing runs twice");
+});
+
+test("a shown edit that throws still runs the work left for after it, ends the mark and passes the throw on", () => {
+  const guard = createPaintGuard();
+  const runs: string[] = [];
+  assert.throws(() => guard.whileShown(() => {
+    guard.afterShown(() => { runs.push("row"); });
+    throw new Error("edit failed");
+  }), /edit failed/);
+  assert.equal(guard.shown(), false);
+  assert.deepEqual(runs, ["row"]);
+});

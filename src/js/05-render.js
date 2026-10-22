@@ -8,7 +8,7 @@ import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "../adapters/storage/02d-gallery.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { currentDocument, readSession } from "../legacy/session-bridge.ts";
+import { currentDocument, editAllowed, readSession, requestRefresh } from "../legacy/session-bridge.ts";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
 import { refreshGalleryOverlay } from "./05e-gallery-overlay.js";
 import { appendDraftMedia, draftModel, editDraft } from "./05d-draft-edit.js";
@@ -55,8 +55,7 @@ import {
 } from "../core/text/edits.ts";
 import { cellLength, projection } from "../core/text/runs.ts";
 import { fromHtml } from "../legacy/richtext.ts";
-import { createPaintGuard } from "../application/editing/paint-guard.ts";
-import { cellEditing, editorSelection } from "../legacy/editor-bridge.ts";
+import { cellEditing, editorSelection, paintGuard, undoGuard } from "../legacy/editor-bridge.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
 import { cellSelection, placeEditorSelection, rememberCellSelection } from "../features/editing/cell-selection.ts";
@@ -448,14 +447,8 @@ function commitRowPatch(rowEl, patch) {
   return patch.parts.length > 0;
 }
 
-var paintGuard = createPaintGuard();
-
-export var whilePainting = paintGuard.whilePainting;
-
-export var afterThisPaint = paintGuard.afterThisPaint;
-
 export function renderRow(rowId) {
-  return whilePainting(function () { return paintOneRow(rowId); });
+  return paintGuard().whilePainting(function () { return paintOneRow(rowId); });
 }
 
 function paintOneRow(rowId) {
@@ -642,11 +635,11 @@ export function syncPageTitle() {
 }
 
 export function render() {
-  whilePainting(paintAll);
+  paintGuard().whilePainting(paintAll);
 }
 
 export function paintingScreen() {
-  return paintGuard.painting();
+  return paintGuard().painting();
 }
 
 function paintAll() {
@@ -672,6 +665,7 @@ function paintAll() {
   if (writerDraw) paintWriterDraw(writerDraw);
   syncPageTitle();
   syncAnchorResolvedClasses();
+  paintRowTimes();
   updateScriptStats();
   updateCommentsCount();
   updateTagBadges();
@@ -684,6 +678,9 @@ function paintAll() {
   refreshGalleryOverlay();
   var link = editorSelection().heldLink();
   if (link && !link.cell.isConnected) editorSelection().dropLink();
+  screen.drawn = true;
+  screen.review = reviewMode();
+  screen.edit = editAllowed();
 }
 
 var REDRAW_FAILED = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
@@ -783,6 +780,81 @@ export function renderAbsorbed() {
 
 export function renderFirstDraw() {
   return absorbRender(FIRST_DRAW_FAILED);
+}
+
+var screen = { drawn: false, review: false, edit: true };
+
+var ABSORBED = { adopt: true, server: true, recovery: true, reload: true };
+
+var ON_SCREEN_ALREADY = { visualText: true, audioText: true, updatedAt: true, updatedBy: true };
+
+var ONE_ROW = { status: true, lengthSeconds: true, updatedAt: true, updatedBy: true };
+
+var SHOWN_DOC_FIELDS = { title: true, wordsPerMinute: true, comments: true };
+
+var SHOWN_PREFERENCES = { clock: true, commentAuthor: true, personColor: true };
+
+function rowsTouched(cells, skip) {
+  var ids = [];
+  cells.forEach(function (cell) {
+    if (skip && skip[cell.field]) return;
+    if (ids.indexOf(cell.rowId) === -1) ids.push(cell.rowId);
+  });
+  return ids;
+}
+
+function paintRows(ids) {
+  var all = true;
+  ids.forEach(function (id) { if (!renderRow(id)) all = false; });
+  if (!all) render();
+}
+
+function paintsWhole(change) {
+  var c = change.changes;
+  if (change.kind === "replay" || c.whole || c.rowsInserted.length || c.rowsRemoved.length || c.rowsMoved) return true;
+  if (c.docFields.some(function (field) { return SHOWN_DOC_FIELDS[field]; })) return true;
+  return change.kind !== "amend" && c.cells.some(function (cell) { return !ONE_ROW[cell.field]; });
+}
+
+function paintSessionChange(change) {
+  if (!screen.drawn) return;
+  if (ABSORBED[change.kind]) { absorbRender(REDRAW_FAILED); return; }
+  var c = change.changes;
+  if (paintGuard().shown()) {
+    if (c.cells.some(function (cell) { return cell.field === "visualText" || cell.field === "audioText"; })) requestRefresh("rowTimes");
+    var left = rowsTouched(c.cells, ON_SCREEN_ALREADY);
+    if (left.length) paintGuard().afterShown(function () { paintRows(left); });
+    return;
+  }
+  if (change.kind === "replay") { undoGuard().whileApplying(render); return; }
+  if (paintsWhole(change)) { render(); return; }
+  var rows = rowsTouched(c.cells, null);
+  if (rows.length) paintRows(rows);
+}
+
+export function screenListeners() {
+  screen.drawn = false;
+  return {
+    session: paintSessionChange,
+    refresh: function (jobs) {
+      if (screen.drawn && jobs.has("rowTimes")) paintRowTimes();
+    },
+    hiding: function () {
+      if (screen.drawn) render();
+    },
+    colours: function () {
+      if (screen.drawn) render();
+    },
+    preference: function (name) {
+      if (screen.drawn && SHOWN_PREFERENCES[name]) render();
+    },
+    location: function () {
+      if (screen.drawn && (reviewMode() !== screen.review || editAllowed() !== screen.edit)) render();
+    },
+    flag: function (change) {
+      if (screen.drawn && change.flag === "writerOpen" && !change.value) absorbRender(REDRAW_FAILED);
+    }
+  };
 }
 
 var FORMAT_MARKS = { bold: "b", italic: "i", underline: "u", strikeThrough: "s", highlight: "hl" };

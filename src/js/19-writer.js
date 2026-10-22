@@ -13,10 +13,8 @@ import {
 import {
   cellFormatState,
   editableCellHtml,
-  renderAbsorbed,
   toggleCellDirection,
-  toggleCellFormat,
-  whilePainting
+  toggleCellFormat
 } from "./05-render.js";
 import { splitRowFieldCore } from "./06-rows.js";
 import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
@@ -29,7 +27,7 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { editAllowed, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
-import { cellEditing, editorSelection, focusMemory } from "../legacy/editor-bridge.ts";
+import { cellEditing, editorSelection, focusMemory, paintGuard } from "../legacy/editor-bridge.ts";
 import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { placeEditorSelection, rememberCellSelection } from "../features/editing/cell-selection.ts";
@@ -68,7 +66,7 @@ function writerBlockHtml(row, i) {
 }
 
 export function renderWriter() {
-  whilePainting(function () { paintWriterDraw(drawWriter()); });
+  paintGuard().whilePainting(function () { paintWriterDraw(drawWriter()); });
 }
 
 export function drawWriter() {
@@ -149,7 +147,6 @@ function caretAtEdge(cellEl, range, edge) {
 function splitWriterRow(cellEl) {
   var res = splitRowFieldCore(cellEl);
   if (!res) return;
-  renderWriter();
   focusWriterBlock(res.id, 0);
 }
 
@@ -170,7 +167,6 @@ function mergeWriterRows(intoIdx) {
   var outcome = runCommand(joinScenesCommand(prev.id, ports));
   if (outcome.kind === "failed") throw outcome.error;
   if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
-  renderWriter();
   focusWriterBlock(prev.id, joinAt);
 }
 
@@ -305,7 +301,6 @@ export function closeWriter() {
   viewFlags().setWriterOpen(false);
   focusMemory().focusedParagraph(null);
   hideTagGhost();
-  renderAbsorbed();
 }
 
 export function writerUndoStep(dir) {
