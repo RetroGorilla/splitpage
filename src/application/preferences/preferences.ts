@@ -14,6 +14,8 @@ const KEYS = Object.freeze({
   clock: "splitpage-clock",
   collabServer: "splitpage-collab-server",
   commentAuthor: "splitpage-comment-author",
+  commentsSort: "splitpage-comments-sort",
+  commentFilter: "splitpage-comments-filter",
   defaultWpm: "splitpage-default-wpm",
   desktopNotice: "splitpage-desktop-notice-dismissed",
   exportDirections: "splitpage-export-directions",
@@ -32,6 +34,13 @@ const KEYS = Object.freeze({
   videoThumbs: "splitpage-video-thumbs",
   writerSize: "splitpage-writer-size"
 });
+
+const COMMENTS_FILTER_LEGACY_KEY = "splitpage-comments-hide-resolved";
+
+export interface CommentFilter {
+  mode: string;
+  assignee: string;
+}
 
 export type PreferenceName = keyof typeof KEYS;
 
@@ -62,6 +71,10 @@ export interface Preferences {
   readonly commentAuthor: () => string;
   readonly setCommentAuthor: (name: string) => void;
   readonly rememberCommentAuthor: (name: string) => void;
+  readonly commentsSort: () => "recent" | "position";
+  readonly setCommentsSort: (mode: string) => void;
+  readonly commentFilter: () => CommentFilter;
+  readonly setCommentFilter: (filter: CommentFilter) => void;
   readonly hideShot: () => boolean;
   readonly setHideShot: (on: boolean) => void;
   readonly taggingHelpShown: () => void;
@@ -151,7 +164,8 @@ function ownAppData(): readonly AppDataPref[] {
       }
     },
     { name: "taggingHelpDismissed", key: KEYS.taggingHelp, valid: isFlag },
-    { name: "autosave", key: KEYS.autosave, valid: isFlag }
+    { name: "autosave", key: KEYS.autosave, valid: isFlag },
+    { name: "commentsSort", key: KEYS.commentsSort, valid: function (v: string) { return v === "recent" || v === "position"; } }
   ];
 }
 
@@ -229,6 +243,29 @@ export function createPreferences(ports: PreferencePorts): Preferences {
     commentAuthor: function (): string { return read(KEYS.commentAuthor) ?? ""; },
     setCommentAuthor: function (name: string): void { announce(KEYS.commentAuthor, name); },
     rememberCommentAuthor: function (name: string): void { put(KEYS.commentAuthor, name); },
+    commentsSort: function (): "recent" | "position" { return read(KEYS.commentsSort) === "recent" ? "recent" : "position"; },
+    setCommentsSort: function (mode: string): void { announce(KEYS.commentsSort, mode === "recent" ? "recent" : "position"); },
+    commentFilter: function (): CommentFilter {
+      try {
+        const raw = read(KEYS.commentFilter);
+        if (raw) {
+          const value: unknown = JSON.parse(raw);
+          if (value && typeof value === "object") {
+            const parsed = value as Record<string, unknown>;
+            const modes: Record<string, boolean> = { open: true, resolved: true, all: true };
+            const mode = parsed["mode"];
+            return {
+              mode: typeof mode === "string" && modes[mode] ? mode : "open",
+              assignee: typeof parsed["assignee"] === "string" ? parsed["assignee"] : ""
+            };
+          }
+        }
+        const legacy = read(COMMENTS_FILTER_LEGACY_KEY);
+        if (legacy !== null) return { mode: legacy === "true" ? "open" : "all", assignee: "" };
+      } catch (e) { }
+      return { mode: "open", assignee: "" };
+    },
+    setCommentFilter: function (filter: CommentFilter): void { announce(KEYS.commentFilter, JSON.stringify(filter)); },
     hideShot: function (): boolean { return read(KEYS.hideShot) === "1"; },
     setHideShot: function (on: boolean): void { announce(KEYS.hideShot, on ? "1" : "0"); },
     taggingHelpShown: function (): void { put(KEYS.taggingHelp, "0"); },
