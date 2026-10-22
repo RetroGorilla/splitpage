@@ -21,7 +21,7 @@ type FindEvent = KeyboardEvent & { readonly target: HTMLElement; readonly curren
 export function mountFind(mount: { window: Window; ports: FindPorts }): { dispose: () => void } {
   const doc = mount.window.document;
   const ports = mount.ports;
-  const life = createViewLifetime<FindEvent>(mount.window, () => true);
+  const life = createViewLifetime(mount.window, () => true);
   function listen(id: string, type: string, fn: (event: FindEvent) => void): void {
     life.listen(doc.getElementById(id), type, fn);
   }

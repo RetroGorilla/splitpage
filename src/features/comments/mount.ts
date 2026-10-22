@@ -63,7 +63,7 @@ export function mountComments(mount: { window: Window; ports: CommentsPorts }): 
   const win = mount.window;
   const doc = win.document;
   const ports = mount.ports;
-  const life = createViewLifetime<CommentEvent>(win, (target) =>
+  const life = createViewLifetime(win, (target) =>
     target === doc || doc.getElementById((target as HTMLElement).id) === target);
   const { listen } = life;
   let rootsMounted = false;

@@ -31,7 +31,7 @@ export function mountBroll(mount: { window: Window; ports: BrollPorts }): { disp
   function current(target: HTMLElement): boolean {
     return doc.getElementById(target.id) === target;
   }
-  const life = createViewLifetime<BrollEvent>(win, (target) =>
+  const life = createViewLifetime(win, (target) =>
     !!panel && current(panel) && (target === win || target === doc || current(target as HTMLElement)));
   const { listen } = life;
   function rootListeners(root: HTMLElement): void {
