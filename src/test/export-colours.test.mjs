@@ -1,5 +1,6 @@
 import { TAG_CATEGORIES } from "../core/production/looks.ts";
 import "./_dom.mjs";
+import "./_export-services-started.mjs";
 import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";

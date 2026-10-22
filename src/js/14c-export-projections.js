@@ -1,5 +1,6 @@
 import { formatDateClock } from "./00p-prefs.js";
 import { isSha256Hex, normalizeImageRef } from "../../shared/blob-policy.js";
+import { exportServices } from "../application/export/services.ts";
 import { compareCommentPositions } from "../core/document/comments.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
 import { hasSetLength } from "../core/document/timing.ts";
@@ -13,14 +14,11 @@ import {
   tagStatus
 } from "../core/production/looks.ts";
 import { formatDuration, formatTimecode, pad2, rowSeconds as rowSecondsIn } from "../core/production/timing.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
-import { htmlToPlainText } from "../legacy/plain-text.ts";
-import { inertBody } from "../legacy/richtext.ts";
 
 export function sceneFacts(doc) {
   var at = 0;
   return (doc.scenes || []).map(function (r, i) {
-    var sec = rowSecondsIn(r, doc.document, productionReaders);
+    var sec = rowSecondsIn(r, doc.document, exportServices().productionReaders);
     var st = rowStatus(r.status) || ROW_STATUSES[0];
     var out = {
       index: i,
@@ -177,7 +175,7 @@ export function startOf(e, starts) {
 
 export function capturedStarts(doc) {
   var t = 0, out = Object.create(null);
-  doc.scenes.forEach(function (row) { out[row.id] = t; t += rowSecondsIn(row, doc.document, productionReaders); });
+  doc.scenes.forEach(function (row) { out[row.id] = t; t += rowSecondsIn(row, doc.document, exportServices().productionReaders); });
   return out;
 }
 
@@ -315,7 +313,7 @@ export function commentEntries(doc, opts) {
       field: c.field,
       location: capturedLocationLabel(rowIndex, c.field),
       author: c.author || "Anonymous",
-      body: htmlToPlainText(c.body),
+      body: exportServices().htmlToPlainText(c.body),
       quoted: c.quotedText || "",
       resolved: !!c.resolved,
       resolvedBy: c.resolved ? (c.resolvedBy || "") : "",
@@ -324,7 +322,7 @@ export function commentEntries(doc, opts) {
       replies: (c.replies || []).map(function (rp) {
         var reply = {
           author: rp.author || "Anonymous",
-          body: htmlToPlainText(rp.body),
+          body: exportServices().htmlToPlainText(rp.body),
           when: formatTimestampAbsolute(rp.createdAt, clockMode)
         };
         if (pieces) reply.pieces = bodyPieces(rp.body);
@@ -339,9 +337,9 @@ export function commentEntries(doc, opts) {
 export function bodyPieces(html) {
   var out = [];
   if (!html) return out;
-  var root = inertBody(String(html).replace(/<br\s*\/?>/gi, "\n"));
+  var root = exportServices().inertBody(String(html).replace(/<br\s*\/?>/gi, "\n"));
   if (!root.querySelector("img[data-blob]")) {
-    var only = htmlToPlainText(html);
+    var only = exportServices().htmlToPlainText(html);
     if (only) out.push({ text: only });
     return out;
   }
