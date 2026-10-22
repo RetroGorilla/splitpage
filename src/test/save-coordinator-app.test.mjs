@@ -15,6 +15,7 @@ const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const homeModule = await import("../js/_home.js");
 const saves = await import("../legacy/save-bridge.ts");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -32,7 +33,7 @@ function heldFile(doc, name) {
 }
 
 async function openFrom(target) {
-  S.state = script("Placeholder", ID("0"));
+  loadTestDocument(script("Placeholder", ID("0")));
   flushEdits();
   clearDirty();
   await openProjectFile(await target.handle.getFile(), target.handle, { skipSnapshot: true, silent: true });

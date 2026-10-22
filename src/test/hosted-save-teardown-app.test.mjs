@@ -13,6 +13,7 @@ const { saveDoc } = await import("../js/14-export.js");
 const homeModule = await import("../js/_home.js");
 const app = await import("../bootstrap/app.ts");
 const { confirmedSave } = await import("../legacy/save-bridge.ts");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -73,7 +74,7 @@ test("a hosted save that lands after its wiring was disposed and the app rewired
   const held = createHeldFetch({ connection: () => homeModule.conn, answer: server.answer });
   t.after(held.install());
 
-  S.state = script();
+  loadTestDocument(script());
   flushEdits();
   clearDirty();
   homeModule.setHome("none");

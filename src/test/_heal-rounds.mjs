@@ -9,6 +9,7 @@ import {
   productionIndexStats
 } from "../js/07-production-tags.js";
 import { deriveProductionIndex } from "../core/production/tags.ts";
+import { loadTestDocument } from "./_document.mjs";
 
 const tag = (cat, name) =>
   `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${name}</span>`;
@@ -55,7 +56,7 @@ export function seededHealRounds(seed, rounds) {
       const cat = cats[rand(cats.length)], name = names[rand(names.length)];
       productionTags.push({ id: "t_" + round + "_" + t, cat, name, owner: "", notes: "", status: "needed" });
     }
-    S.state = migrateRows({ schema: 2, title: "Shims", docId: "d" + "6".repeat(32), rows, comments: [] });
+    loadTestDocument(migrateRows({ schema: 2, title: "Shims", docId: "d" + "6".repeat(32), rows, comments: [] }));
     S.state.productionTags = productionTags;
     const label = "round " + round;
     const first = productionEntries();

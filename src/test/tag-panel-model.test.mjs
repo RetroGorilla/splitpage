@@ -14,6 +14,7 @@ import {
 } from "../js/07-production-tags.js";
 import { domProjection } from "../js/09-find-replace.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
+import { loadTestDocument } from "./_document.mjs";
 
 function isInsideTagOrLink(el) {
   return !!(el && el.closest && el.closest(".tag-anchor, a"));
@@ -231,7 +232,7 @@ test("tagging: a cell still holding a video card is tagged in place, the card ke
 });
 
 function withRows(cells, fn) {
-  S.state = { rows: cells.map((html, i) => ({ id: "r" + i, visualText: html, audioText: "" })), productionTags: [] };
+  loadTestDocument({ rows: cells.map((html, i) => ({ id: "r" + i, visualText: html, audioText: "" })), productionTags: [] });
   return fn();
 }
 

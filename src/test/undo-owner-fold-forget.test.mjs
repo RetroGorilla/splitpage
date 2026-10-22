@@ -7,6 +7,7 @@ import { mergeStates } from "../js/03-sync.js";
 import { flushEdits, noteEdit, noteRemoteChange, redo, trackDocument, undo } from "../js/12a-undo.js";
 import { startTestSession } from "./_session.mjs";
 import { appSessionDeps } from "./_app-session.mjs";
+import { loadTestDocument } from "./_document.mjs";
 
 startTestSession(appSessionDeps());
 
@@ -27,7 +28,7 @@ function remote(mutate) {
   const next = clone(S.state);
   mutate(next);
   noteRemoteChange(next);
-  S.state = next;
+  loadTestDocument(next);
 }
 
 function dangling() {
@@ -37,9 +38,9 @@ function dangling() {
 }
 
 function foldedCrewEntry(list) {
-  S.state = migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
+  loadTestDocument(migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
     { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-  ] });
+  ] }));
   S.state.people.push(person("p_Cy", "Cy"));
   const item = list === "brollShots" ? shot : tag;
   S.state[list].push(item("i_dock", "Dock", ""), item("i_quay", "Quay", ""), item("i_pier", "Pier", ""));
@@ -170,9 +171,9 @@ for (const list of ["brollShots", "productionTags"]) {
 }
 
 test("the folded owner change leaves alone an owner I unassigned later, and does not count it as cleared (#518)", () => {
-  S.state = migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
+  loadTestDocument(migrateRows({ schema: 2, title: "Crew", comments: [], rows: [
     { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-  ] });
+  ] }));
   S.state.people.push(person("p_Cy", "Cy"));
   S.state.brollShots.push(shot("bs_dock", "Dock", ""), shot("bs_quay", "Quay", ""));
   trackDocument();
@@ -231,9 +232,9 @@ test("seeded: with collaborators editing other items, undo and redo of folded ow
   for (let seed = 1; seed <= 1000; seed++) {
     const r = rng(seed);
     const pick = (list) => list[Math.floor(r() * list.length)];
-    S.state = migrateRows({ schema: 2, title: "Prop", comments: [], rows: [
+    loadTestDocument(migrateRows({ schema: 2, title: "Prop", comments: [], rows: [
       { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
-    ] });
+    ] }));
     S.state.productionTags.push(tag("t_kettle", "Kettle"), tag("t_lamp", "Lamp"));
     S.state.brollShots.push(shot("bs_pier", "Pier"), shot("bs_dock", "Dock"), shot("bs_quay", "Quay"));
     trackDocument();

@@ -11,18 +11,19 @@ register("./_fanout-hooks.mjs", import.meta.url);
 const stubs = await import("./_fanout-stubs.mjs");
 const { cycleRowStatus } = await import("../js/01-scene-status.js");
 const { setSceneLength } = await import("../js/05r-read-time.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 stubs.wireSession();
 
 function fresh() {
   stubs.resetFanout({ noteEdit: true });
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     title: "Undo groups",
     rows: [
       { id: "r1", visualText: "Wide", audioText: "One.", status: "todo" },
       { id: "r2", visualText: "Close", audioText: "Two.", status: "todo" }
     ]
-  });
+  }));
   resetUndo();
   trackDocument();
   return S.state;

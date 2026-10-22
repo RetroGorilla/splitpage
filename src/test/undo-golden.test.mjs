@@ -5,6 +5,7 @@ import { S } from "../js/_state.js";
 import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
 import { changedBetween, flushEdits, lastUndoEntry, noteEdit, trackDocument, undo, undoSizes } from "../js/12a-undo.js";
 import { assertGolden, goldenNames, jsonCopy } from "./golden-helpers.mjs";
+import { loadDocumentWithoutSession } from "./_document.mjs";
 
 const at = (day) => "2026-04-" + String(day).padStart(2, "0") + "T09:00:00.000Z";
 
@@ -53,7 +54,7 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 test("undo golden: state-fields", () => {
   const out = EDITS.map(([key, label, edit]) => {
-    S.state = fresh();
+    loadDocumentWithoutSession(fresh());
     trackDocument();
     const before = jsonCopy(S.state);
     edit(S.state);

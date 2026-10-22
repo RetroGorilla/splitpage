@@ -7,6 +7,7 @@ import {
   absorbRemoteChange, flushEdits, lastUndoEntry, noteEdit, noteRemoteChange, redo, resetUndo, trackDocument,
   undo, undoLifetime, undoMark, undoSizes
 } from "../js/12a-undo.js";
+import { loadTestDocument } from "./_document.mjs";
 
 function doc(title) {
   return migrateRows({ schema: 2, title: title || "Lifetime", comments: [], rows: [
@@ -16,7 +17,7 @@ function doc(title) {
 }
 
 function open(state) {
-  S.state = state;
+  loadTestDocument(state);
   trackDocument();
 }
 
@@ -48,14 +49,14 @@ test("the history's lifetime moves on with every reset: a new document, the same
   assert.deepEqual(undoSizes(), { undo: 0, redo: 0 });
   assert.equal(lastUndoEntry(), null);
 
-  S.state = doc("Third");
+  loadTestDocument(doc("Third"));
   flushEdits();
   life = moved(life, "a document swapped in without a render: flushEdits' restart()");
 
   resetUndo();
   life = moved(life, "resetUndo()");
 
-  S.state = null;
+  loadTestDocument(null);
   flushEdits();
   life = moved(life, "no document: the !S.state clear in flushEdits");
   open(doc("Fourth"));
@@ -64,7 +65,7 @@ test("the history's lifetime moves on with every reset: a new document, the same
   noteRemoteChange(null);
   life = moved(life, "noteRemoteChange(null)");
 
-  S.state = doc("Fifth");
+  loadTestDocument(doc("Fifth"));
   absorbRemoteChange();
   moved(life, "absorbRemoteChange() over a document it was not tracking");
 });
@@ -99,7 +100,7 @@ test("the history's lifetime holds through ordinary edits, undo, redo, a mark, a
   const merged = JSON.parse(JSON.stringify(S.state));
   merged.rows[1].audioText = "Bravo from elsewhere";
   noteRemoteChange(merged);
-  S.state = merged;
+  loadTestDocument(merged);
   trackDocument();
   assert.equal(undoLifetime(), life, "a merge keeps the history it forgets from");
   assert.equal(undoSizes().undo, 1);

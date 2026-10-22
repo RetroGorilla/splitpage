@@ -16,6 +16,7 @@ import { S } from "../js/_state.js";
 import { changedBetween } from "../js/12a-undo.js";
 import { personIdRemap } from "../core/merge/lists.ts";
 import { cloneState } from "../core/document/clone.ts";
+import { loadTestDocument } from "./_document.mjs";
 
 startRecovery({
   indexedDB: null, limits: DRAFT_LIMITS, now: () => Date.now(), writerId: "w-merge-states", desktop: () => null,
@@ -651,7 +652,7 @@ test("stashLocalWork writes refs, plus the bytes of every picture not durably st
   setBackend(createMemoryBackend());
   const b = pic(60, 10), c = pic(61, 10);
   const was = { state: S.state, base: S.baseState };
-  S.state = imgDoc(b);
+  loadTestDocument(imgDoc(b));
   S.baseState = imgDoc(c);
   try {
     assert.equal(stashLocalWork(), true);
@@ -662,7 +663,7 @@ test("stashLocalWork writes refs, plus the bytes of every picture not durably st
     assert.equal(st.blobs[b.sha256], dataUrlForSync(b.sha256));
     assert.equal(st.imagesStripped, undefined);
   } finally {
-    S.state = was.state;
+    loadTestDocument(was.state);
     S.baseState = was.base;
     sessionStorage.clear();
   }
