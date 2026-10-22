@@ -40,8 +40,6 @@ import { __init as init_13a_presence } from "./13a-presence.js";
 import { __init as init_13b_collaborate } from "./13b-collaborate.js";
 import { __init as init_14_export } from "./14-export.js";
 import { __init as init_14b_export_kit } from "./14b-export-kit.js";
-import { __init as init_15_docx } from "../adapters/formats/docx.ts";
-import { __init as init_17_pdf } from "../adapters/formats/pdf.ts";
 import { __init as init_18_local_files } from "./18-local-files.js";
 import { __init as init_18a_local_merge } from "./18a-local-merge.js";
 import { __init as init_18b_file_menu } from "./18b-file-menu.js";
@@ -129,8 +127,6 @@ if (wiring) {
   init_13b_collaborate();
   init_14_export();
   init_14b_export_kit();
-  init_15_docx();
-  init_17_pdf();
   init_18_local_files();
   init_18a_local_merge();
   init_18b_file_menu();

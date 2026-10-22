@@ -1604,5 +1604,3 @@ function listPinOp(cx: number, cy: number, r: number, hex: string): string {
     n2(cx - r * 0.88) + " " + n2(cy - r * 0.476) + " m " + n2(cx) + " " + n2(cy - r * 2.1) + " l " +
     n2(cx + r * 0.88) + " " + n2(cy - r * 0.476) + " l h f 1 1 1 rg " + pdfCirclePath(cx, cy, r * 0.4) + " f Q";
 }
-
-export function __init() {}
