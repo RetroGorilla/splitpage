@@ -20,6 +20,8 @@ import { concatBytes, strBytes } from "../adapters/formats/bytes.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { mimeForFilename } from "../../shared/file-names.js";
 import { startupReady } from "../legacy/startup-bridge.ts";
+import { desktopPort, restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 export function makeDesktopHandle(entry) {
   var id = entry.id;
@@ -29,7 +31,7 @@ export function makeDesktopHandle(entry) {
     name: name,
     _desktopId: id,
     getFile: function () {
-      return S.DESKTOP.readFile(id).then(function (fresh) {
+      return desktopPort().readFile(id).then(function (fresh) {
         name = fresh.name || name;
         handle.name = name;
         var bytes = fresh.bytes instanceof Uint8Array ? fresh.bytes : new Uint8Array(fresh.bytes || []);
@@ -53,7 +55,7 @@ export function makeDesktopHandle(entry) {
           return Promise.resolve();
         },
         close: function () {
-          return S.DESKTOP.writeFile(id, concatBytes(chunks)).then(function (written) {
+          return desktopPort().writeFile(id, concatBytes(chunks)).then(function (written) {
             var stamp = written && written.lastModified;
             return typeof stamp === "number" && isFinite(stamp) ? { lastModified: stamp } : undefined;
           });
@@ -76,11 +78,11 @@ export function handedDocumentSettled() {
 }
 
 export function notifyDesktopDocumentState() {
-  if (!S.DESKTOP || !S.state) return;
+  if (!runningOnDesktop() || !S.state) return;
   if (awaitingHandedDocument) return;
   var restoring = recoveryStarted() && draftResume().restorePending();
   var c = homeConn();
-  S.DESKTOP.setDocumentState({
+  desktopPort().setDocumentState({
     title: S.state.title || "Untitled Script",
     dirty: unsavedChanges() || restoring,
     pristine: (typeof isPristineSeedDocument === "function" && isPristineSeedDocument()) && !restoring,
@@ -111,15 +113,15 @@ function runDesktopMenuCommand(cmd) {
 var prompterBrowserBusy = false;
 
 export function canOpenPrompterInBrowser() {
-  return !!(S.DESKTOP && typeof S.DESKTOP.openPrompterInBrowser === "function");
+  return !!(runningOnDesktop() && typeof desktopPort().openPrompterInBrowser === "function");
 }
 
 export function canOpenPrompterInChromium() {
-  return !!(S.DESKTOP && typeof S.DESKTOP.openPrompterInChromium === "function");
+  return !!(runningOnDesktop() && typeof desktopPort().openPrompterInChromium === "function");
 }
 
 export function driveOpenShown() {
-  return !S.DESKTOP || typeof S.DESKTOP.driveStatus === "function";
+  return !runningOnDesktop() || typeof desktopPort().driveStatus === "function";
 }
 
 export function appDataImportShown() {
@@ -127,7 +129,7 @@ export function appDataImportShown() {
 }
 
 export function desktopBridge() {
-  return S.DESKTOP;
+  return desktopPort();
 }
 
 export function routeServerOpen(id) {
@@ -193,7 +195,7 @@ async function openPrompterElsewhere(chromium) {
       if (unsavedChanges()) return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.SAVE_FAILED);
     }
     var answer;
-    try { answer = await (chromium ? S.DESKTOP.openPrompterInChromium() : S.DESKTOP.openPrompterInBrowser()); }
+    try { answer = await (chromium ? desktopPort().openPrompterInChromium() : desktopPort().openPrompterInBrowser()); }
     catch (e) { answer = { ok: false, code: "OPEN_FAILED" }; }
     if (answer && answer.ok && chromium) {
       var browserName = typeof answer.browser === "string" && answer.browser ? answer.browser : "a Chromium browser";
@@ -228,7 +230,7 @@ export function desktopVoiceAvailable() {
 export function loadDesktopVoice() {
   if (desktopVoice) return Promise.resolve(desktopVoice);
   if (desktopVoiceAsking) return desktopVoiceAsking;
-  var bridge = S.DESKTOP;
+  var bridge = desktopPort();
   if (!bridge || typeof bridge.voiceStatus !== "function" || typeof bridge.voiceStart !== "function") {
     desktopVoice = { available: false };
     return Promise.resolve(desktopVoice);
@@ -239,7 +241,7 @@ export function loadDesktopVoice() {
           function () { return { available: false }; })
     .then(function (known) {
       desktopVoiceAsking = null;
-      if (S.DESKTOP === bridge) desktopVoice = known;
+      if (desktopPort() === bridge) desktopVoice = known;
       return known;
     });
   return desktopVoiceAsking;
@@ -267,7 +269,7 @@ function wireVoiceEvents(bridge) {
 var VOICE_START_ERRORS = { UNAVAILABLE: "unavailable", SPAWN_FAILED: "helper-failed", NO_TAB: "helper-failed" };
 
 export function createDesktopRecognition() {
-  var bridge = S.DESKTOP;
+  var bridge = desktopPort();
   wireVoiceEvents(bridge);
   var rec = {
     continuous: true,
@@ -349,9 +351,9 @@ export function createDesktopRecognition() {
 
 export async function renderDesktopShareInfo() {
   var el = document.getElementById("desktop-share-info");
-  if (!el || !S.DESKTOP) return;
+  if (!el || !runningOnDesktop()) return;
   var info;
-  try { info = await S.DESKTOP.getSessionInfo(); } catch (e) { info = null; }
+  try { info = await desktopPort().getSessionInfo(); } catch (e) { info = null; }
   if (!info || !info.hosting) { el.hidden = true; el.innerHTML = ""; return; }
   var lanUrls = info.lanUrls || [];
   var addrs = lanUrls.length
@@ -385,17 +387,17 @@ export async function renderDesktopShareInfo() {
 }
 
 function wireReassignDocId() {
-  if (!S.DESKTOP || typeof S.DESKTOP.onReassignDocId !== "function") return;
-  S.DESKTOP.onReassignDocId(function (msg) {
+  if (!runningOnDesktop() || typeof desktopPort().onReassignDocId !== "function") return;
+  desktopPort().onReassignDocId(function (msg) {
     if (!msg) return;
     if (reassignDocId(msg.toId, msg)) notifyDesktopDocumentState();
   });
 }
 
 export function initDesktop() {
-  if (!S.DESKTOP) return;
+  if (!runningOnDesktop()) return;
 
-  wireDesktopBlobs(S.DESKTOP);
+  wireDesktopBlobs(desktopPort());
 
   var driveItem = document.getElementById("menu-drive-open");
   if (driveItem) driveItem.hidden = !driveOpenShown();
@@ -405,10 +407,10 @@ export function initDesktop() {
   var importAppItem = document.getElementById("menu-import-app-data");
   if (importAppItem) importAppItem.hidden = !appDataImportShown();
 
-  var intent = S.DESKTOP.launchIntent && S.DESKTOP.launchIntent.type;
+  var intent = desktopPort().launchIntent && desktopPort().launchIntent.type;
   awaitingHandedDocument = intent === "open-file" || intent === "open-server";
 
-  S.DESKTOP.onOpenFile(function (entry) {
+  desktopPort().onOpenFile(function (entry) {
     function proceed() {
       var handle = makeDesktopHandle(entry);
       handle.getFile().then(function (file) {
@@ -422,7 +424,7 @@ export function initDesktop() {
     else proceed();
   });
 
-  S.DESKTOP.onOpenServerDoc(function (payload) {
+  desktopPort().onOpenServerDoc(function (payload) {
     var serverDocId = payload && payload.serverDocId;
     if (!serverDocId) return;
     function proceed() {
@@ -434,7 +436,7 @@ export function initDesktop() {
     else proceed();
   });
 
-  S.DESKTOP.onRestoreNotice(function (notice) {
+  desktopPort().onRestoreNotice(function (notice) {
     var skipped = (notice && notice.skipped) || [];
     if (!skipped.length) return;
     var reasonWord = { missing: "missing", unreadable: "unreadable", "server-unreachable": "server unreachable" };
@@ -446,13 +448,13 @@ export function initDesktop() {
 
   wireReassignDocId();
 
-  S.DESKTOP.onMenuCommand(runDesktopMenuCommand);
+  desktopPort().onMenuCommand(runDesktopMenuCommand);
 
-  if (typeof S.DESKTOP.onDraftFlush === "function") S.DESKTOP.onDraftFlush(flushDraftNow);
+  if (typeof desktopPort().onDraftFlush === "function") desktopPort().onDraftFlush(flushDraftNow);
 
   notifyDesktopDocumentState();
 
-  S.DESKTOP.getSessionInfo().then(function (info) {
+  desktopPort().getSessionInfo().then(function (info) {
     if (info && info.hosting && typeof openServersDialog === "function") openServersDialog();
   }).catch(function () {});
 }
@@ -1007,7 +1009,7 @@ function addFakeDesktopHistory(backend) {
 }
 
 export function __init() {
-  if (S.DESKTOP) wireDesktopBlobs(S.DESKTOP);
+  if (runningOnDesktop()) wireDesktopBlobs(desktopPort());
   window.__desktopTest = {
     makeHandle: makeDesktopHandle,
     runMenuCommand: runDesktopMenuCommand,
@@ -1015,17 +1017,17 @@ export function __init() {
     makeBlobBackend: makeDesktopBlobBackend,
     initDesktop: initDesktop,
     setBackend: function (fake) {
-      S.DESKTOP = fake;
+      useDesktopForTest(fake);
       forgetDesktopVoice();
       if (fake && typeof fake.blobPut === "function") wireDesktopBlobs(fake);
       wireReassignDocId();
     },
     restoreBackend: function () {
-      S.DESKTOP = window.splitpageDesktop || null;
+      restoreDesktop();
       forgetDesktopVoice();
-      wireDesktopBlobs(S.DESKTOP);
+      wireDesktopBlobs(desktopPort());
     },
-    get tabId() { return S.DESKTOP && S.DESKTOP.tabId; },
+    get tabId() { var port = desktopPort(); return port && port.tabId; },
     markDirtyForTest: function () { markDirty(); }
   };
 }

@@ -46,6 +46,7 @@ import { appActions } from "../legacy/app-actions.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 import { cleanAuthorName } from "../core/document/people.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 var SETTINGS_ID = "settings-modal";
 var settingsReturnFocus = null;
@@ -371,7 +372,7 @@ function runAction(action) {
   if (action === "desktop-notice") {
     writePref(DESKTOP_NOTICE_KEY, null);
     if (typeof renderDesktopAppNotice === "function") renderDesktopAppNotice();
-    showToast(S.DESKTOP ? "The desktop-app notice only shows in the browser." : "The desktop-app notice will show again.", "ok");
+    showToast(runningOnDesktop() ? "The desktop-app notice only shows in the browser." : "The desktop-app notice will show again.", "ok");
     return;
   }
   if (action === "collab-default") { writePref(COLLAB_SERVER_KEY, null); return; }

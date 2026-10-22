@@ -20,6 +20,7 @@ import {
   normalizeDocId
 } from "../../shared/doc-id-policy.js";
 import { cloneState } from "../core/document/clone.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 export { decideDuplicateLoser };
 export { mergedDocId, randomHexBytes, sha256Hex, withPageHead };
 
@@ -120,7 +121,7 @@ export function syncDocIdentity() {
   if (typeof historyDocumentChanged === "function") {
     try { historyDocumentChanged(); } catch (e) { if (window.console) console.error(e); }
   }
-  if (!S.DESKTOP) announceDocIdentity();
+  if (!runningOnDesktop()) announceDocIdentity();
 }
 
 export function reassignDocId(toId, opts) {
@@ -143,7 +144,7 @@ var DOC_ID_CHANNEL_NAME = "splitpage-doc-ids";
 var docIdChannel = null;
 
 export function initDocIdentityChannel(factory) {
-  if (S.DESKTOP) return null;
+  if (runningOnDesktop()) return null;
   if (docIdChannel) {
     try { if (typeof docIdChannel.close === "function") docIdChannel.close(); } catch (e) {}
     docIdChannel = null;
@@ -172,7 +173,7 @@ function currentDocIdClaim(type) {
 }
 
 function announceDocIdentity() {
-  if (S.DESKTOP || !docIdChannel) return false;
+  if (runningOnDesktop() || !docIdChannel) return false;
   var claim = currentDocIdClaim("claim");
   if (!claim) return false;
   try { docIdChannel.postMessage(claim); } catch (e) { return false; }
@@ -180,7 +181,7 @@ function announceDocIdentity() {
 }
 
 function onDocIdentityMessage(msg) {
-  if (S.DESKTOP || !msg || typeof msg !== "object") return;
+  if (runningOnDesktop() || !msg || typeof msg !== "object") return;
   if (msg.type !== "claim" && msg.type !== "here") return;
   if (msg.nonce === PAGE_NONCE) return;
   var mine = currentDocIdClaim("here");
