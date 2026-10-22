@@ -1,7 +1,6 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { S } from "./_state.js";
 import { setHome } from "./_home.js";
-import { PERSON_COLORS, PERSON_COLOR_NAMES, formatClock, readMyColor, writePref, PERSON_COLOR_KEY } from "./00p-prefs.js";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, isDurableSync } from "../adapters/storage/02c-blobs.js";
 import { noteMerged, noteRecovery, noteServerUpdate } from "../legacy/session-bridge.ts";
@@ -15,7 +14,7 @@ import { isDocumentObject } from "../core/migrate.ts";
 import { textMergeContext as coreTextMergeContext } from "../core/merge/text-field.ts";
 import { SIDE_PANEL_IDS } from "../application/preferences/panel-widths.ts";
 import { withDocumentPorts } from "../legacy/document-ports.ts";
-import { panelWidths } from "../legacy/preferences-bridge.ts";
+import { panelWidths, preferences } from "../legacy/preferences-bridge.ts";
 import { fromHtml } from "../legacy/richtext.ts";
 import {
   adoptRestoredState,
@@ -51,6 +50,8 @@ import { confirmBaseline, saveChanges } from "../legacy/save-bridge.ts";
 import { captureRestore, conflictStash, stillRestoring } from "../legacy/recovery-bridge.ts";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { driveFormatSize } from "../../shared/text.js";
+import { formatClock } from "../../shared/clock.js";
+import { PERSON_COLORS, PERSON_COLOR_NAMES } from "../core/document/person-colors.ts";
 import { cloneState } from "../core/document/clone.ts";
 export { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
 export { mergeTargetLength } from "../core/merge/scalars.ts";
@@ -305,7 +306,7 @@ function openAnchorPopover(host, id, label, html) {
 }
 
 export function personSwatchesHtml(name, radioName, legendClass) {
-  var current = readMyColor() || personColor(name || "");
+  var current = preferences().myColor() || personColor(name || "");
   return '<fieldset class="swatch-group" role="radiogroup" aria-label="Your colour">' +
     '<legend class="' + (legendClass || "anchor-popover-label") + '">Your colour</legend>' +
     '<div class="swatch-row">' +
@@ -319,7 +320,7 @@ export function personSwatchesHtml(name, radioName, legendClass) {
 }
 
 export function setMyColor(color) {
-  writePref(PERSON_COLOR_KEY, color);
+  preferences().setMyColor(color);
   updateIdentityChip();
   render();
 }
@@ -491,11 +492,11 @@ function historyDay(d) {
 }
 
 function historyClock(d) {
-  return d ? formatClock(d) : "";
+  return d ? formatClock(d, preferences().clock()) : "";
 }
 
 function historyClockWide() {
-  return formatClock(new Date(2000, 0, 1, 12, 52)).length > 5;
+  return formatClock(new Date(2000, 0, 1, 12, 52), preferences().clock()).length > 5;
 }
 
 function historySavedHtml(d) {

@@ -5,7 +5,8 @@ import type { PreferenceChange, Preferences } from "../application/preferences/p
 import { createViewFlags } from "../application/preferences/view-flags.ts";
 import type { ViewFlags } from "../application/preferences/view-flags.ts";
 import type { KeyValueStorage } from "../application/recovery/conflict-stash.ts";
-import { PREF_EVENT } from "../js/00p-prefs.js";
+
+export const PREF_EVENT = "splitpage:pref";
 
 export interface LegacyPreferencePorts {
   readonly storage: () => KeyValueStorage | null | undefined;
