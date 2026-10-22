@@ -329,6 +329,8 @@ Exit: none of `14c`, `14d`, `15`, `16`, `16b` and `17` imports `src/legacy/` or 
 
 **L4c. Move the writers** (2 PRs; Codex, Sol high): `14c`, `14d`, `16` and `16b`, then `15` and `17`, into `src/adapters/formats/` in strict TypeScript, with the same tests unchanged.
 
+**Structure (PR 1):** the implementations of `14c`, `14d`, `16` and `16b` live in `export-projections.ts`, `export-text.ts`, `csv.ts` and `xlsx.ts` under `src/adapters/formats/`. The projection helpers those writers use from `14b` live in `export-kit.ts`; their held-asset and captured-picture helpers live in `export-assets.ts`. Decoding takes `ExportServices`, and the exporters wiring imports the new paths and passes the services. The capture binding, its read models and comment numbering, `loadExportAssets`, `exportRuns` and `PRINT_TOKENS` stay in `14b`. Compatibility re-exports preserve protected importers and unchanged writer tests, so the four old paths remain until those importers can move. The frozen shim remains 65 imports (61 numbered); the numbered load-order count remains 63, with all six new adapter paths increasing load-order targets from 79 to 85. Only the 32 removed writer/projection loop imports leave the dependency baseline (1,269 to 1,237 exceptions); removing the CSV suppression leaves 245 comments across 14 files, down from 246 across 15. Byte goldens and writer tests are unchanged. No checks or tests were run for this edit.
+
 Exit: the 6 files are gone (−4,165 numbered lines). With L4b, L4 removes 16 files and 5,804 lines; with L2, the plan removes 22 files and 7,256 lines.
 
 ### L5. Moving the remaining numbered files into feature folders
