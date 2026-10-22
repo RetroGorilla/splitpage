@@ -20,13 +20,10 @@ import {
   migrateDocument
 } from "./02b-doc-id.js";
 import {
-  acceptStash,
   applyMerge,
-  clearStash,
   getEditorName,
   mergeStates,
   pushSnapshot,
-  readStash,
   reportMerge,
   setBaseState,
   stashLocalWork,
@@ -56,6 +53,7 @@ import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-d
 import { maybeAskGuestName, updateCollaborateMenu } from "./13b-collaborate.js";
 import { saveDoc, scheduleAutoSave } from "./14-export.js";
 import { requestSave } from "../legacy/save-bridge.ts";
+import { conflictStash, draftResume } from "../legacy/recovery-bridge.ts";
 import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
@@ -357,8 +355,6 @@ export function apiFetch(path, opts) {
 
 export var SERVER_RESUME_KEY = "splitpage-server-resume";
 
-S.draftServerResume = null;
-
 var resumeKeyOwner = null;
 
 function ownResumeKey(raw) {
@@ -448,7 +444,7 @@ function offerDraftAfterLinkOff() {
 }
 
 function pendingServerResume() {
-  var override = S.draftServerResume;
+  var override = draftResume().serverResume();
   if (override) return { id: override.id, rev: override.rev || 0 };
   return keptServerResume();
 }
@@ -459,7 +455,9 @@ function sameDocumentAs(op) {
 }
 
 async function resumeServerDoc() {
-  var override = S.draftServerResume;
+  var resume = draftResume();
+  var stashes = conflictStash();
+  var override = resume.serverResume();
   var pending = pendingServerResume();
   if (!pending || !pending.id) return false;
 
@@ -474,7 +472,7 @@ async function resumeServerDoc() {
     if (!stillOnServer(via)) return false;
     if (!sameDocumentAs(op)) {
       if (override) {
-        S.draftServerResume = null;
+        resume.dropServerResume();
         try { override.onDone("replaced"); } catch (e) {}
       }
       return "replaced";
@@ -482,14 +480,14 @@ async function resumeServerDoc() {
     forgetRemoteMisses();
   } catch (err) {
     if (override && err && err.code === "not-found") {
-      S.draftServerResume = null;
+      resume.dropServerResume();
       try { override.onDone("not-found"); } catch (e2) {}
     }
     return false;
   }
   if (!body || !isDocumentObject(body.state)) { showToast("That document is empty.", "warn"); return "empty"; }
   if (override) {
-    S.draftServerResume = null;
+    resume.dropServerResume();
     var samePending;
     try {
       var rawPending = sessionStorage.getItem(SERVER_RESUME_KEY);
@@ -497,19 +495,19 @@ async function resumeServerDoc() {
     } catch (e) { samePending = null; }
     if (samePending && samePending.id === pending.id) {
       dropResumeKey();
-      clearStash();
+      stashes.clear();
     }
   } else {
     dropResumeKey();
   }
 
-  var stash = override || readStash();
+  var stash = override || stashes.read();
   var theirs = migrateDocument(cloneState(body.state), {
     kind: "server",
     serverId: body.id,
     fallbackId: normalizeDocId(stash && stash.mine && stash.mine.docId) || null
   });
-  if (stash) acceptStash(stash, theirs);
+  if (stash) stashes.accept(stash, theirs);
   setHome("server", { id: body.id, rev: body.rev || 0 });
   S.docIdWrittenOut = true;
   resetProductionPanelState();
@@ -553,7 +551,7 @@ async function resumeServerDoc() {
     return true;
   }
 
-  if (!override) clearStash();
+  if (!override) stashes.clear();
   var mine = migrateRows(cloneState(stash.mine));
   if (typedDuringResume) {
     mine = mergeStates(stateAtStart, migrateRows(cloneState(S.state)), mine).merged;
@@ -930,7 +928,7 @@ function renderServerPicker() {
 }
 
 export async function openServerDoc(id) {
-  if (!S.DESKTOP && !S.draftServerResume && await armBrowserServerDraft(id)) {
+  if (!S.DESKTOP && !draftResume().serverResume() && await armBrowserServerDraft(id)) {
     if (S.state && S.state.rows.length) pushSnapshot("Before opening a script from the server");
     var resumed = await resumeServerDoc() === true;
     if (resumed) {

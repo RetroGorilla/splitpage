@@ -25,6 +25,7 @@ bootTrace.stop();
 
 const { LONG_DEMO } = await import("../js/_starters.js");
 const { migrateRows } = await import("../js/02-state.js");
+const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { adoptRestoredState, migrateDocument, standaloneHtmlFor } = await import("../js/02b-doc-id.js");
 const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
@@ -339,7 +340,7 @@ rightToday("T2c-resume-switch", "a late server resume leaves a document opened d
   try {
     resuming = openServerDoc("server-late-resume");
     await held.gates.arrived("fetch");
-    assert.equal(S.draftServerResume.id, "server-late-resume", "setup: the held fetch belongs to a server draft resume");
+    assert.equal(draftResume().serverResume().id, "server-late-resume", "setup: the held fetch belongs to a server draft resume");
     const connection = homeModule.conn;
     const replacement = script("Opened during resume", { docId: "d" + "f".repeat(32) });
     const file = splitpageFile(replacement, "opened-during-resume.splitpage");
