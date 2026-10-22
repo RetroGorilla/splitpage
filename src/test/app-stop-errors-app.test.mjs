@@ -101,3 +101,48 @@ test("one throwing disposer does not stop the rest: every other mount is release
   assert.doesNotThrow(() => app.startApp(wiring), "the app is not left marked as running");
   await S.initialStateReady;
 });
+
+test("two throwing disposers are both reported, each cuts only its own feature short, and the app can be started again", async () => {
+  app.stopApp();
+  const stopped = snapshot();
+  app.startApp(await rewireApp());
+  await S.initialStateReady;
+
+  const rows = document.getElementById("rows");
+  const title = document.getElementById("doc-title");
+  const rowsFailure = new Error("rows cleanup failed");
+  const titleFailure = new Error("title cleanup failed");
+  rows.removeEventListener = function (type, listener, options) {
+    if (type === "dragstart") throw rowsFailure;
+    return proto.removeEventListener.call(this, type, listener, options);
+  };
+  title.removeEventListener = function (type, listener, options) {
+    if (type === "input") throw titleFailure;
+    return proto.removeEventListener.call(this, type, listener, options);
+  };
+  let thrown = null;
+  try {
+    app.stopApp();
+  } catch (error) {
+    thrown = error;
+  }
+  delete rows.removeEventListener;
+  delete title.removeEventListener;
+
+  assert.ok(thrown instanceof AggregateError, "stop reports the collected failures");
+  assert.equal(thrown.errors.length, 2, "both failures are reported");
+  assert.ok(thrown.errors.includes(rowsFailure) && thrown.errors.includes(titleFailure), "each failure is the one its disposer threw");
+  assert.deepEqual(rootRoutesTaken(), { click: [], mousedown: [] }, "the other features released their routes");
+  assert.deepEqual(minus(snapshot(), stopped), {
+    "#rows dragstart/B": 1,
+    "#rows dragend/B": 1,
+    "document mouseup/B": 1,
+    "window dragover/B": 1,
+    "#doc-title input/B": 1,
+    "#writer-title input/B": 1
+  }, "only the listeners of the two disposers that threw survive");
+
+  const wiring = await rewireApp();
+  assert.doesNotThrow(() => app.startApp(wiring), "the app is not left marked as running");
+  await S.initialStateReady;
+});

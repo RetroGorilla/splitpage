@@ -73,3 +73,22 @@ test("stopping the app mid edge-drag ends the drag: the auto-scroll stops, the m
   document.getElementById("rows").dispatchEvent(new window.MouseEvent("dragend", { bubbles: true }));
   assert.equal(frames.size, 0);
 });
+
+test("stopping the app while a drop marker is showing removes the marker", async () => {
+  const target = document.querySelectorAll("#rows .row[data-id]")[1];
+  assert.ok(target, "the script has a second row to drop on");
+  window.document.elementFromPoint = () => target;
+  try {
+    const dragged = startEdgeDrag();
+    assert.notEqual(dragged, target);
+    runFrames(1);
+    assert.ok(target.classList.contains("drop-before") || target.classList.contains("drop-after"), "the auto-scroll frame marks the row under the pointer");
+    assert.equal(document.querySelectorAll("#rows .row.drop-before, #rows .row.drop-after").length, 1, "one marker is showing");
+
+    app.stopApp();
+    assert.equal(document.querySelectorAll("#rows .row.drop-before, #rows .row.drop-after, #rows .row.is-dragging").length, 0, "dispose removes the drop markers");
+    assert.equal(frames.size, 0);
+  } finally {
+    window.document.elementFromPoint = () => null;
+  }
+});
