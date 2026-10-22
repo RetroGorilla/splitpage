@@ -40,8 +40,6 @@ import { __init as init_13b_collaborate } from "./13b-collaborate.js";
 import { __init as init_14_export } from "./14-export.js";
 import { __init as init_14b_export_kit } from "./14b-export-kit.js";
 import { __init as init_15_docx } from "./15-docx.js";
-import { __init as init_16_csv } from "./16-csv.js";
-import { __init as init_16b_xlsx } from "./16b-xlsx.js";
 import { __init as init_17_pdf } from "./17-pdf.js";
 import { __init as init_18_local_files } from "./18-local-files.js";
 import { __init as init_18a_local_merge } from "./18a-local-merge.js";
@@ -130,8 +128,6 @@ if (wiring) {
   init_14_export();
   init_14b_export_kit();
   init_15_docx();
-  init_16_csv();
-  init_16b_xlsx();
   init_17_pdf();
   init_18_local_files();
   init_18a_local_merge();

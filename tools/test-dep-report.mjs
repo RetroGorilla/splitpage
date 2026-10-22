@@ -1505,8 +1505,8 @@ for (const [label, text, names] of [
 }
 
 const WRITERS_OUT_OF_THE_CYCLE = [
-  "src/js/14b-export-kit.js", "src/js/14c-export-projections.js", "src/js/15-docx.js", "src/js/16-csv.js",
-  "src/js/16b-xlsx.js", "src/js/17-pdf.js", "src/js/14d-export-text.js", "src/bootstrap/wiring/exporters.ts"
+  "src/js/14b-export-kit.js", "src/adapters/formats/export-projections.ts", "src/js/15-docx.js", "src/adapters/formats/csv.ts",
+  "src/adapters/formats/xlsx.ts", "src/js/17-pdf.js", "src/adapters/formats/export-text.ts", "src/bootstrap/wiring/exporters.ts"
 ];
 const repoGraph = loadGraph(ROOT);
 const inCycle = new Set(stronglyConnected(repoGraph, false).flat());
