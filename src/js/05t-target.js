@@ -4,9 +4,9 @@ import { S } from "./_state.js";
 import { updateScriptStats } from "./01-scene-status.js";
 import { onRundownPaint, rundownLayout } from "./05f-rundown.js";
 import { markDirty } from "./12-dirty-toast.js";
-import { reviewMode } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { showToast } from "../legacy/effects-bridge.ts";
+import { reviewMode } from "../legacy/location-bridge.ts";
 
 export var TARGET_PRESETS = [30, 60, 120, 180, 300, 600];
 

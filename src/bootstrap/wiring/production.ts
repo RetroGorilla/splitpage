@@ -56,13 +56,13 @@ import {
   stepFind,
   toggleBulkTag
 } from "../../js/09-find-replace.js";
-import { reviewBlocked, reviewMode } from "../../js/13-hosted.js";
 import { queueAutoSave } from "../../js/14-export.js";
 import { exportAs, runExport } from "../../js/18-local-files.js";
 import { wireTagEntityContainer } from "../../js/20-teleprompter.js";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";
 import { productionGroupBy, setGearGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey } from "../../application/tag-panel-state.ts";
 import { findMatchesCase, setFindMatchCase } from "../../application/find-options.ts";
+import { reviewBlocked, reviewMode } from "../../legacy/location-bridge.ts";
 
 const find = owned<ReturnType<typeof mountFind>>();
 

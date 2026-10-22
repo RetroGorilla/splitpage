@@ -13,7 +13,7 @@ const { flushEdits } = await import("../js/12a-undo.js");
 const { obsoleteSaveText, saveDoc, setAutoSaveEnabled } = await import("../js/14-export.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
-const homeModule = await import("../js/_home.js");
+const homeModule = await import("../legacy/location-bridge.ts");
 const saves = await import("../legacy/save-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
@@ -104,7 +104,7 @@ test("D10: a file save that lands after a connection refresh is saved, not repor
   target.holdOp("close");
   const saving = saveDoc();
   await target.arrivedAt("close");
-  homeModule.updateConnection({ role: "edit", scope: "" });
+  homeModule.documentLocation().updateConnection({ role: "edit", scope: "" });
   const before = warnings().length;
   target.releaseOp("close");
   await saving;

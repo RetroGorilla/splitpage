@@ -131,7 +131,7 @@ import {
   settleAfterApply,
   undo
 } from "../../js/12a-undo.js";
-import { onServerDoc, reviewBlocked, reviewMode } from "../../js/13-hosted.js";
+import { onServerDoc } from "../../js/13-hosted.js";
 import { runExport } from "../../js/18-local-files.js";
 import {
   caretTextOffset,
@@ -144,6 +144,7 @@ import {
   updateWriterFormatState,
   writerUndoStep
 } from "../../js/19-writer.js";
+import { reviewBlocked, reviewMode } from "../../legacy/location-bridge.ts";
 
 type RootInput = Pick<Event, "target">;
 

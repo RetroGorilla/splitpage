@@ -29,7 +29,6 @@ import {
 } from "./08c-broll.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
-import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave } from "./14-export.js";
 import { brollGroups as brollGroupsFrom, brollShotListForPrint, brollTable, filterCounts, FILTERS, matchesFilter, oneOf, PAGE_GROUPS, pageSummaryText, sceneLabel, shotRecordForFile, startOf } from "./14c-export-projections.js";
@@ -38,6 +37,7 @@ import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-po
 import { appActions } from "../legacy/app-actions.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { mountBroll } from "../features/broll/mount.ts";
+import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
 
 var VIEW_KEY = "splitpage-broll-view";
 

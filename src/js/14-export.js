@@ -1,7 +1,7 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { mintDocId, nowIso } from "../adapters/identity/ids.ts";
 import { S } from "./_state.js";
-import { fileHome, home, restoreHome, serverOf, setHome } from "./_home.js";
+import { amendHome, currentHome, documentLocation, fileHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
 import { rememberLastFileHandle } from "./00-prelude.js";
 import { migrateRows } from "./02-state.js";
 import {
@@ -17,11 +17,8 @@ import {
 } from "./03-sync.js";
 import { clearDirty, noteSaveStatus, setSaveButtons, updateSaveStatus } from "./12-dirty-toast.js";
 import {
-  SERVER_RESUME_KEY,
-  linkTurnedOff,
   onServerDoc,
-  saveToServer,
-  serverSessionExpired
+  saveToServer
 } from "./13-hosted.js";
 import { captureExportDocument } from "./14b-export-kit.js";
 import {
@@ -42,6 +39,7 @@ import { autoSaveWhere } from "../application/save/autosave.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
 import { slugify } from "../../shared/text.js";
+import { SERVER_RESUME_KEY } from "../application/location/server-status.ts";
 
 function saveKind(opts) {
   if (opts.saveAs) return "saveAs";
@@ -92,8 +90,9 @@ function confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, co
   S.state.lastEditedAt = stamp.lastEditedAt;
   if (!copyOfHosted) setBaseState(published, "saveDoc: the bytes just written");
   if (landed) {
-    landed.home.diskBase = published;
-    if (landed.lastModified !== null) landed.home.lastModified = landed.lastModified;
+    amendHome(landed.home, landed.lastModified !== null
+      ? { diskBase: published, lastModified: landed.lastModified }
+      : { diskBase: published });
   }
   adoptSavedCopyDocId(forkDocId, docIdAtSave, true);
   if (!copyOfHosted && saveChanges() === seqAtSave) clearDirty();
@@ -118,15 +117,15 @@ async function writeDoc(opts, job) {
     return sentToServer === false ? FAILED : SAVED;
   }
 
-  var converting = !saveAs && home.kind === "file" && home.format === "html";
+  var converting = !saveAs && currentHome().kind === "file" && currentHome().format === "html";
   if (converting) {
     saveAs = true;
     showToast("Older .html projects are saved as Markdown from now on — choose where to keep it.", "ok");
   }
 
-  var forkDocId = (saveAs && opts.saveAs && S.docIdWrittenOut) ? mintDocId() : null;
+  var forkDocId = (saveAs && opts.saveAs && documentLocation().writtenOut()) ? mintDocId() : null;
   var docIdAtSave = S.state.docId;
-  var homeAtSave = home;
+  var homeAtSave = currentHome();
   var copyOfHosted = homeAtSave.kind === "server";
   var captured = captureExportDocument({
     docId: forkDocId,
@@ -144,16 +143,16 @@ async function writeDoc(opts, job) {
 
   function retargetTo(handle, k) {
     if (!job.owns()) return;
-    if (home.kind === "server") { pickedFor = home; return; }
-    prevHome = home;
+    if (currentHome().kind === "server") { pickedFor = currentHome(); return; }
+    prevHome = currentHome();
     retarget = setHome("file", { handle: handle, format: k, name: handle.name });
     pickedFor = retarget;
     job.moved();
     if (prevHome.kind === "import") updateFileChip();
   }
   function undoRetarget() {
-    if (retarget && !wrote && home === retarget) {
-      restoreHome(prevHome);
+    if (retarget && !wrote && currentHome() === retarget) {
+      documentLocation().restoreHome(prevHome);
       if (prevHome.kind === "import") updateFileChip();
     }
     retarget = null;
@@ -195,12 +194,12 @@ async function writeDoc(opts, job) {
       var landedOn = await writeToHandle(handle, body);
       wrote = true;
       if (job.owns()) {
-        var landedHome = fileHome() && fileHome().handle === handle ? home : null;
+        var landedHome = fileHome() && fileHome().handle === handle ? currentHome() : null;
         confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted,
           landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null);
         if (forkDocId) job.moved();
       } else adoptSavedCopyDocId(forkDocId, docIdAtSave, false);
-      if (pickedFor && home === pickedFor) rememberLastFileHandle(handle);
+      if (pickedFor && currentHome() === pickedFor) rememberLastFileHandle(handle);
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
       else noteSaveStatus();
       warnImagesLeftOut(imagesLeftOut, handle.name);
@@ -243,7 +242,7 @@ function adoptSavedCopyDocId(forkDocId, docIdAtSave, owned) {
   if (forkDocId) copyDocHistorySafe(docIdAtSave, forkDocId);
   if (!owned) return;
   if (forkDocId && !onServerDoc()) S.state.docId = forkDocId;
-  S.docIdWrittenOut = true;
+  documentLocation().markWrittenOut(true);
   syncDocIdentity();
 }
 
@@ -259,7 +258,7 @@ export function applyStashedWork(loaded, override, apply) {
     } catch (e) {}
 
     var stashId = normalizeDocId(stash.mine.docId);
-    if (stashId) { loaded.docId = stashId; S.docIdWrittenOut = true; }
+    if (stashId) { loaded.docId = stashId; documentLocation().markWrittenOut(true); }
 
     stashes.clear();
   }
@@ -289,8 +288,8 @@ export function autoSaveTarget() {
   var file = fileHome();
   return autoSaveWhere({
     onServer: onServerDoc(),
-    signedOut: !!serverSessionExpired,
-    linkOff: !!linkTurnedOff,
+    signedOut: !!serverStatus().sessionExpired(),
+    linkOff: !!serverStatus().linkTurnedOff(),
     file: file ? { handle: file.handle, format: file.format || null } : null
   });
 }
@@ -389,7 +388,7 @@ var NO_DESTINATION_KEY = Object.freeze({});
 
 export function destinationKeyOf(h) {
   if (!h || h.kind === "none") return { owner: NO_DESTINATION_KEY, name: "none" };
-  if (h.kind === "server") return { owner: serverOf(h.conn) || h, name: "doc:" + String(h.id) };
+  if (h.kind === "server") return { owner: documentLocation().serverOf(h.conn) || h, name: "doc:" + String(h.id) };
   var handle = h.handle;
   if (handle && handle._desktopId) return { owner: "desktop:" + String(handle._desktopId), name: "handle" };
   if (handle) return { owner: handle, name: "handle" };
@@ -397,7 +396,7 @@ export function destinationKeyOf(h) {
 }
 
 function reportObsoleteSave(request, here) {
-  if (!here || home.kind === "server" || !S.state) return;
+  if (!here || currentHome().kind === "server" || !S.state) return;
   showToast(obsoleteSaveText(S.state.title), "warn");
 }
 
@@ -424,7 +423,7 @@ function saveOwnership(ownership) {
 export function legacySavePorts(ownership) {
   return {
     write: writeQueued,
-    destination: function () { return home; },
+    destination: function () { return currentHome(); },
     keyOf: destinationKeyOf,
     obsolete: reportObsoleteSave,
     running: showSaveRunning,

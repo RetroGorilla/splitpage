@@ -1,7 +1,8 @@
 import { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE, historyUtf8Length, sanitizeHistoryMeta } from "../../shared/history-policy.js";
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { S } from "./_state.js";
-import { conn, fileHome, home, homeConn, serverHomeId, setHome, normalizeServerUrl } from "./_home.js";
+import { checkServer, currentConn, currentHome, fileHome, homeConn, serverHomeId, serverStatus, setHome } from "../legacy/location-bridge.ts";
+import { normalizeServerUrl } from "../../shared/server-links.js";
 import { reassignDocId } from "./02b-doc-id.js";
 import { setBackend as setBlobBackend } from "../adapters/storage/02c-blobs.js";
 import { isPristineSeedDocument } from "./03a-history-store.js";
@@ -9,7 +10,7 @@ import { hashText as historyHashText } from "../adapters/storage/03c-history-idb
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "./04-richtext.js";
 import { markDirty, showToast } from "./12-dirty-toast.js";
-import { detectServer, openServerDoc, pointTabAt } from "./13-hosted.js";
+import { openServerDoc, pointTabAt } from "./13-hosted.js";
 import { saveDoc } from "./14-export.js";
 import { openProjectFile } from "./18-local-files.js";
 import { openServersDialog } from "./20e-connect.js";
@@ -85,7 +86,7 @@ export function notifyDesktopDocumentState() {
     dirty: unsavedChanges() || restoring,
     pristine: (typeof isPristineSeedDocument === "function" && isPristineSeedDocument()) && !restoring,
     docId: S.state.docId || null,
-    fileId: (home.kind === "file" && home.handle && home.handle._desktopId) || null,
+    fileId: (currentHome().kind === "file" && currentHome().handle && currentHome().handle._desktopId) || null,
     serverKey: serverHomeId(),
     serverUrl: c ? c.serverUrl : null,
     tunnel: c ? c.tunnel : null,
@@ -132,7 +133,7 @@ export function desktopBridge() {
 
 export function routeServerOpen(id) {
   var bridge = desktopBridge();
-  return bridge ? bridge.routeOpen({ kind: "server", serverDocId: id, serverUrl: conn.serverUrl, token: conn.token, tunnel: conn.tunnel }).then(function (result) { return !!result && result.where === "this-tab"; }) : null;
+  return bridge ? bridge.routeOpen({ kind: "server", serverDocId: id, serverUrl: currentConn().serverUrl, token: currentConn().token, tunnel: currentConn().tunnel }).then(function (result) { return !!result && result.where === "this-tab"; }) : null;
 }
 
 var PROMPTER_BROWSER_MESSAGES = {
@@ -460,16 +461,15 @@ export function initDesktop() {
 function adoptPayloadServer(payload) {
   if (typeof payload.serverUrl !== "string") return;
   var url = normalizeServerUrl(payload.serverUrl);
-  if (url === conn.serverUrl) return;
-  if (home.kind === "server") setHome("none");
-  S.serverMode = { available: false, readOnly: false, checked: false, authRequired: false,
-                   reviewAvailable: false, version: null };
+  if (url === currentConn().serverUrl) return;
+  if (currentHome().kind === "server") setHome("none");
+  serverStatus().forgetMode();
   try {
     pointTabAt(url, { token: typeof payload.token === "string" ? payload.token : "", tunnel: payload.tunnel || null });
   } catch (e) {
     pointTabAt(url, { token: typeof payload.token === "string" ? payload.token : "" });
   }
-  detectServer();
+  checkServer();
 }
 
 function openPendingServerDocForTab(serverDocId) {
@@ -478,9 +478,9 @@ function openPendingServerDocForTab(serverDocId) {
   var POLL_MS = 500;
   var checkStart = Date.now();
 
-  function isChecked() { return typeof S.serverMode !== "undefined" && S.serverMode && S.serverMode.checked; }
+  function isChecked() { return serverStatus().mode().checked; }
   function needsAuth() {
-    return typeof S.serverMode !== "undefined" && S.serverMode && S.serverMode.authRequired && !conn.token;
+    return serverStatus().mode().authRequired && !currentConn().token;
   }
   var retried = false;
   function openIt() {
