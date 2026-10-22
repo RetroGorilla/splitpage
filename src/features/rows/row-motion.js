@@ -1,4 +1,4 @@
-import { cssDurationMs } from "../common/css-duration.js";
+import { cssDurationMs } from "../common/css-duration.ts";
 
 export function rowMotionKey(el) {
   if (!el || !el.classList) return null;

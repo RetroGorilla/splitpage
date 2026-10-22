@@ -1,6 +1,5 @@
 import { normalizeServerUrl } from "../../shared/server-links.js";
 import { shortHost } from "../adapters/transport/server-address.ts";
-import { S } from "./_state.js";
 import { setBackend as setBlobBackend } from "../adapters/storage/02c-blobs.js";
 import { LEGACY_SNAPSHOTS_KEY } from "../application/recovery/legacy-snapshots.ts";
 import {
@@ -24,6 +23,8 @@ import { cappedName } from "../core/document/text-policy.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 import { settingsAppData } from "../application/preferences/preferences.ts";
 import { setCommentSort } from "../application/comment-sort.ts";
+import { desktopPort } from "../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 import { SERVER_BOOKMARKS_KEY } from "../application/location/server-status.ts";
 import { serverStatus } from "../legacy/location-bridge.ts";
 
@@ -45,7 +46,7 @@ function appDataReadJson(key, fallback) {
 }
 
 function appDataVersionString() {
-  if (S.DESKTOP && typeof S.DESKTOP.appVersion === "string" && S.DESKTOP.appVersion) return S.DESKTOP.appVersion;
+  if (runningOnDesktop() && typeof desktopPort().appVersion === "string" && desktopPort().appVersion) return desktopPort().appVersion;
   var embedded = typeof readEmbeddedVersion === "function" ? readEmbeddedVersion() : null;
   return embedded || "";
 }
