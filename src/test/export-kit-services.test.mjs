@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import { installExportServices } from "../application/export/services.ts";
 import { legacyExportServices } from "../bootstrap/export-services.ts";
 import { migrateRows } from "../js/02-state.js";
-import { exportDocumentOf, exportFacts, exportRuns } from "../js/14b-export-kit.js";
+import { exportDocumentOf, exportRuns } from "../js/14b-export-kit.js";
+import { exportFacts } from "../adapters/formats/export-kit.ts";
 
 function counted() {
   const real = legacyExportServices();

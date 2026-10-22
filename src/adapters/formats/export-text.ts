@@ -121,9 +121,9 @@ function markdownWithMarkers(html: unknown, nums: Readonly<Record<string, number
     }
     out.push(r);
     const carried: Marks = {};
-    function carry<K extends keyof typeof own>(key: K): void {
+    function carry(key: keyof typeof own): void {
       const value = own[key];
-      if (key !== "tag" && next && !next.atom && next.marks[key] === value && value !== undefined) carried[key] = value;
+      if (key !== "tag" && next && !next.atom && next.marks[key] === value && value !== undefined) Object.assign(carried, { [key]: value });
     }
     carry("b"); carry("i"); carry("u"); carry("s"); carry("hl");
     carry("dir"); carry("cue"); carry("href");
