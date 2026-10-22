@@ -1,3 +1,4 @@
+import { wireProductionEditing } from "./wiring/production-editing.ts";
 import type { ActionRegistry } from "../application/actions.ts";
 import { createExportRegistry } from "../application/export/registry.ts";
 import type { ExportRegistry } from "../application/export/registry.ts";
@@ -74,6 +75,7 @@ export const WIRING_STEPS = Object.freeze([
   "transitions",
   "recovery",
   "editor",
+  "production editing",
   "preferences"
 ] as const);
 
@@ -273,6 +275,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("transitions", () => startTransitions(deps.transitions), (stop) => stop);
   build("recovery", () => startRecovery(checkedRecovery(deps.recovery())), (stop) => stop);
   build("editor", () => startEditor(deps.transitions.live), (stop) => stop);
+  build("production editing", () => wireProductionEditing(deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
   build("preferences", () => startPreferences(), (stop) => stop);
   let disposed = false;
   const dispose = (): void => {

@@ -1,3 +1,4 @@
+import { productionEditingStarted, startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
 import { bootApp, closeApp, rewireApp } from "../../src/test/_app-boot.mjs";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -40,7 +41,7 @@ import { migrateRows } from "../../src/js/02-state.js";
 
 after(closeApp);
 
-const OWNERS = ["effects", "actions", "exports", "session", "saves", "transitions", "recovery", "editor", "preferences"] as const;
+const OWNERS = ["effects", "actions", "exports", "session", "saves", "transitions", "recovery", "editor", "productionEditing", "preferences"] as const;
 
 type Owner = (typeof OWNERS)[number];
 type Started = Record<Owner, boolean>;
@@ -65,6 +66,7 @@ function started(): Started {
     transitions: live(() => documentTransitions()),
     recovery: recoveryStarted(),
     editor: editorStarted(),
+    productionEditing: productionEditingStarted(),
     preferences: preferencesStarted()
   };
 }
@@ -408,9 +410,10 @@ test("failed partial startup: a step that throws undoes every step before it, in
     transitions: (f) => ({ deps: f.deps, cleanup: startTransitions(transitionPorts()), cause: false }),
     recovery: (f) => ({ deps: { ...f.deps, recovery: () => { throw boom; } } }),
     editor: (f) => ({ deps: f.deps, cleanup: startEditor(f.deps.transitions.live), cause: false }),
+    "production editing": (f) => ({ deps: f.deps, cleanup: startProductionEditing(must(f.deps.timers)), cause: false }),
     preferences: (f) => ({ deps: f.deps, cleanup: startPreferences(), cause: false })
   };
-  const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { "page effects": "effects", "export registry": "exports", transitions: "transitions", editor: "editor", preferences: "preferences" };
+  const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { "page effects": "effects", "export registry": "exports", transitions: "transitions", editor: "editor", "production editing": "productionEditing", preferences: "preferences" };
   assert.deepEqual(Object.keys(breakers), [...WIRING_STEPS], "every step is broken once");
   for (const step of WIRING_STEPS) {
     const f = fakes();

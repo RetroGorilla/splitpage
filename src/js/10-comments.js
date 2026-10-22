@@ -1,3 +1,4 @@
+import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
 import { pad2 } from "../core/production/timing.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { editorSelection } from "../legacy/editor-bridge.ts";
@@ -208,9 +209,7 @@ export function resetCommentBindings() {
   composerVersion++;
   commentTimers.forEach(function (timer) { clearTimeout(timer); });
   commentTimers.clear();
-  clearTimeout(deleteCommentArmTimer);
-  deleteCommentArmTimer = null;
-  S.deleteCommentArmId = null;
+  deleteConfirmation().disarm("comment");
   closeCommentMenu(false);
   pendingComment = null;
   expandedReplyIds = idMap();
@@ -225,8 +224,6 @@ export function resetCommentBindings() {
 
 var expandedReplyIds = idMap();
 var replyDrafts = idMap();
-S.deleteCommentArmId = null;
-export var deleteCommentArmTimer = null;
 
 export var AUTHOR_NAME_FIELDS = "#settings-name, #comment-name, .reply-name-input, #identity-input, #guest-name";
 var EMOJI_PART = /[\p{Extended_Pictographic}\p{Regional_Indicator}⃣]/u;
@@ -647,18 +644,14 @@ function deleteComment(id) {
 }
 
 export function armDeleteComment(btn, id) {
-  if (S.deleteCommentArmId === id) {
-    clearTimeout(deleteCommentArmTimer);
-    S.deleteCommentArmId = null;
+  if (deleteConfirmation().armedId("comment") === id) {
+    deleteConfirmation().disarm("comment");
     deleteComment(id);
     return;
   }
-  S.deleteCommentArmId = id;
-  clearTimeout(deleteCommentArmTimer);
-  deleteCommentArmTimer = commentTimer(function () {
-    S.deleteCommentArmId = null;
+  deleteConfirmation().arm("comment", id, function () {
     renderComments();
-  }, 2800);
+  }, undefined, { start: commentTimer, stop: function (timer) { clearTimeout(timer); } });
   captureReplyDrafts();
   renderComments();
 }
@@ -788,7 +781,7 @@ var commentMenuFor = null;
 
 function commentMoreHtml(c) {
   var open = commentMenuFor === c.id;
-  var armed = S.deleteCommentArmId === c.id;
+  var armed = deleteConfirmation().armedId("comment") === c.id;
   return '<span class="comment-more-wrap">' +
     '<button type="button" class="btn-outline is-icon comment-more" data-action="comment-menu" data-id="' + c.id +
       '" aria-haspopup="menu" aria-expanded="' + (open ? 'true' : 'false') + '" aria-label="More actions for this thread" title="More">' +
@@ -830,7 +823,7 @@ function closeCommentMenu(refocus) {
   if (!id) return;
   var menu = commentMenuEl();
   commentMenuFor = null;
-  if (S.deleteCommentArmId === id) { clearTimeout(deleteCommentArmTimer); S.deleteCommentArmId = null; }
+  if (deleteConfirmation().armedId("comment") === id) { deleteConfirmation().disarm("comment"); }
   if (!menu) return;
   var btn = menu.parentNode.querySelector(".comment-more");
   menu.parentNode.removeChild(menu);

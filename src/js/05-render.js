@@ -1,3 +1,5 @@
+import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
+import { disarmDeleteButton } from "../features/rows/delete-button.ts";
 import { hasSetLength } from "../core/document/timing.ts";
 import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
 import { S } from "./_state.js";
@@ -28,7 +30,6 @@ import { renderProduction } from "./08-production-panels.js";
 import { scheduleBrollRefresh } from "./08c-broll.js";
 import {
   captureReplyDrafts,
-  deleteCommentArmTimer,
   formatTimestamp,
   openCommentComposer,
   renderComments,
@@ -239,18 +240,6 @@ function paintReadTime(btn, row, secs, review) {
 
 function setTextIfChanged(el, text) {
   if (el && el.textContent !== text) el.textContent = text;
-}
-
-export function armDeleteButton(btn) {
-  btn.classList.add("armed");
-  var label = btn.querySelector(".row-menu-label");
-  if (label) label.textContent = "Click again to delete";
-}
-
-export function disarmDeleteButton(btn) {
-  btn.classList.remove("armed");
-  var label = btn.querySelector(".row-menu-label");
-  if (label) label.textContent = "Delete";
 }
 
 var GALLERY_CELL_MAX = 4;
@@ -639,13 +628,10 @@ function restoreRenderFocus(rowsEl, f) {
 }
 
 function resetTransientUiState() {
-  clearTimeout(S.deleteArmTimer);
-  S.deleteArmId = null;
+  deleteConfirmation().disarm("row");
   document.querySelectorAll("#rows .gutter-btn.danger.armed").forEach(disarmDeleteButton);
-  clearTimeout(deleteCommentArmTimer);
-  S.deleteCommentArmId = null;
-  clearTimeout(S.tagDeleteArmTimer);
-  S.tagDeleteArmId = null;
+  deleteConfirmation().disarm("comment");
+  deleteConfirmation().disarm("tag");
   setTagAddingPerson(null);
 }
 

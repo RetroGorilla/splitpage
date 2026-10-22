@@ -8,7 +8,7 @@ import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { updateIdentityChip } from "./03-sync.js";
 import { renderAbsorbed } from "./05-render.js";
-import { resetProductionPanelState } from "./07-production-tags.js";
+import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { openGdocModal, openImportModal } from "./11-import.js";
 import { clearDirty, updateSaveStatus } from "./12-dirty-toast.js";
 import { arrivingOnLink } from "./13-hosted.js";
