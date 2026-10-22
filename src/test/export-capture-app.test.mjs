@@ -15,12 +15,13 @@ const { flushEdits } = await import("../js/12a-undo.js");
 const { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } = await import("../js/14d-export-text.js");
 const { captureExportDocument, exportFacts } = await import("../js/14b-export-kit.js");
 const { buildMarkdownProject, buildSplitpageFile } = await import("../js/20d-formats.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 const TOKEN = "tok-e15-0123456789abcdef";
 const FILE_NAME = "e15-private-plan.md";
 
 function useDemo() {
-  S.state = migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)));
+  loadTestDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))));
   flushEdits();
   clearDirty();
 }

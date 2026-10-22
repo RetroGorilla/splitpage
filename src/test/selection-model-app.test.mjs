@@ -20,6 +20,7 @@ const { closeCommandMenu, openCommandMenu } = await import("../js/18d-command-me
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -46,7 +47,7 @@ function fresh(title) {
   if (viewFlags().writerOpen()) writer.closeWriter();
   window.__hostedTest.setSession({ role: "edit", docId: null });
   clock += 10_000;
-  S.state = migrateRows(fixture(title));
+  loadTestDocument(migrateRows(fixture(title)));
   flushEdits();
   renderAbsorbed();
   clearDirty();
@@ -206,7 +207,7 @@ test("#464: a selection belongs to its document: a new document with the same sc
   select(gridCell("r2"), 5);
   const next = migrateRows(fixture("New document"));
   next.rows[1].audioText = "Another script entirely.";
-  S.state = next;
+  loadTestDocument(next);
   flushEdits();
   renderAbsorbed();
   assert.equal(audio("r2"), "Another script entirely.");

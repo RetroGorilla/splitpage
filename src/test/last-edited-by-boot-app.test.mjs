@@ -20,6 +20,7 @@ const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { openSettings } = await import("../js/20s-settings.js");
 const { render } = await import("../js/05-render.js");
 const { toastLastEditor } = await import("../js/03-sync.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -93,11 +94,11 @@ test("the comment name field takes 30 characters and never half an emoji", () =>
 });
 
 test("the reply name field takes 30 characters and never half an emoji", () => {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "T",
     rows: [{ id: "r1", status: "todo", audioText: "the mug", visualText: "" }],
     comments: [{ id: "c1", rowId: "r1", field: "audioText", anchorId: "c1", quotedText: "mug", author: "Ann", body: "x", createdAt: "2026-10-01T10:00:00Z", kind: "anchor", replies: [] }]
-  });
+  }));
   render();
   toggleReplyComposer("c1");
   const field = document.querySelector(".reply-composer .reply-name-input");

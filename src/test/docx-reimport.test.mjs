@@ -12,6 +12,7 @@ import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { __init as initDocx, buildDocx, buildNarrationDocx, docxToRows } from "../js/15-docx.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initStatus();
@@ -30,7 +31,7 @@ const plainRows = (rows) => rows.map((r) => ({ v: htmlToPlainText(r.visualText),
 test("a Splitpage export reopens as exactly its script: no comment rows, no comment pictures", async () => {
   const rowPic = pic(jpegBytes(300, 200, 1));
   const cPic = pic(jpegBytes(120, 80, 2)), rPic = pic(jpegBytes(640, 480, 3));
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "Round trip",
     rows: [
       { id: "r0", visualText: "Host on camera", audioText: "Welcome <strong>back</strong>.", status: "todo", imageRef: rowPic.rec },
@@ -44,7 +45,7 @@ test("a Splitpage export reopens as exactly its script: no comment rows, no comm
       { id: "c1", rowId: "r2", field: "visualText", author: "Cy", createdAt: "2026-09-03T10:00:00Z",
         body: cPic.html, resolved: true, resolvedBy: "Ann", replies: [] }
     ]
-  });
+  }));
   const expected = plainRows(S.state.rows);
   const bytes = buildDocx(...liveWithAssets());
 
@@ -64,11 +65,11 @@ test("an export with no comments reopens the same, and one with comments matches
     { id: "r0", visualText: "One", audioText: "First.", status: "todo" },
     { id: "r1", visualText: "Two", audioText: "Second.", status: "todo" }
   ];
-  S.state = migrateRows({ schema: 2, title: "Plain", rows, comments: [] });
+  loadTestDocument(migrateRows({ schema: 2, title: "Plain", rows, comments: [] }));
   const bare = await docxToRows(asFile(buildDocx(...liveWithAssets())));
-  S.state = migrateRows({ schema: 2, title: "Plain", rows, comments: [
+  loadTestDocument(migrateRows({ schema: 2, title: "Plain", rows, comments: [
     { id: "c0", rowId: "r0", field: "audioText", author: "Ann", createdAt: "2026-09-01T10:00:00Z", body: "A note", replies: [] }
-  ] });
+  ] }));
   const withComments = await docxToRows(asFile(buildDocx(...liveWithAssets())));
   assert.deepEqual(plainRows(withComments.rows), plainRows(bare.rows));
   assert.equal(withComments.rows.length, 2);
@@ -168,7 +169,7 @@ function roundTripState(pic) {
 }
 
 const PIC = intern(jpegBytes(320, 180, 7));
-const loadRoundTrip = () => { S.state = migrateRows(roundTripState(PIC)); };
+const loadRoundTrip = () => { loadTestDocument(migrateRows(roundTripState(PIC))); };
 
 const MANUAL = '<a href="https://example.com/k1000" target="_blank" rel="noopener">the manual</a>';
 const R0_AUDIO = 'Forty dollars. <span class="stage-dir">beat</span> The meter\'s <em>dead</em>, the seals are <u>gone</u>, <s>sadly</s> and the <mark>shutter</mark> sticks. See ' + MANUAL + ".";
@@ -294,7 +295,7 @@ test("the breakdown is grouped by category and no item's row splits across a pag
 test("the b-roll shot list, by scene, with a box for each shot", async () => {
   loadRoundTrip();
   S.state.brollShots = [{ id: "bs_1", name: "dust in the light", status: "shot", location: "Workbench", reshoot: true, notes: "Needs a haze.", props: [] }];
-  S.state = migrateRows(S.state);
+  loadTestDocument(migrateRows(S.state));
   const { body } = await parts(buildDocx(...liveWithAssets()));
   const paras = kids(body, "p").map((p) => p.textContent);
   const at = paras.indexOf("B-roll shot list");
@@ -343,20 +344,20 @@ test("the package says what it is: a title Word shows, Splitpage, the day; page 
 
 test("a title cut short in the footer never ends in half an emoji (#434)", async () => {
   const grin = String.fromCodePoint(0x1F600);
-  S.state = migrateRows({ schema: 2, title: "x".repeat(88) + grin + "tail", rows: [{ id: "r0", visualText: "V", audioText: "A.", status: "todo" }], comments: [] });
+  loadTestDocument(migrateRows({ schema: 2, title: "x".repeat(88) + grin + "tail", rows: [{ id: "r0", visualText: "V", audioText: "A.", status: "todo" }], comments: [] }));
   const { text, xml } = await parts(buildDocx(...liveWithAssets()));
   assert.equal(xml(await text("word/footer1.xml")).getElementsByTagNameNS(W, "t")[0].textContent, "x".repeat(88) + "…");
 });
 
 test("a long title wraps on the page and is cut short in the footer; an empty script reopens empty", async () => {
   const long = "A title that goes on and on: " + "and on ".repeat(20).trim();
-  S.state = migrateRows({ schema: 2, title: long, rows: [{ id: "r0", visualText: "V", audioText: "A.", status: "todo" }], comments: [] });
+  loadTestDocument(migrateRows({ schema: 2, title: long, rows: [{ id: "r0", visualText: "V", audioText: "A.", status: "todo" }], comments: [] }));
   const { text, xml, body } = await parts(buildDocx(...liveWithAssets()));
   assert.equal(kids(body, "p")[0].textContent, long);
   const foot = xml(await text("word/footer1.xml")).getElementsByTagNameNS(W, "t")[0].textContent;
   assert.ok(foot.length <= 90 && foot.endsWith("…") && long.startsWith(foot.slice(0, -1)), foot);
 
-  S.state = migrateRows({ schema: 2, title: "Empty", rows: [], comments: [] });
+  loadTestDocument(migrateRows({ schema: 2, title: "Empty", rows: [], comments: [] }));
   const empty = await parts(buildDocx(...liveWithAssets()));
   assert.match(kids(empty.body, "p")[1].textContent, /^0 scenes · 0:00 running time · /);
   const back = await docxToRows(asFile(buildDocx(...liveWithAssets())));

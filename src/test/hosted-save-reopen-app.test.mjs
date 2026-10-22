@@ -16,6 +16,7 @@ const { saveDoc } = exportModule;
 const hosted = await import("../js/13-hosted.js");
 const homeModule = await import("../js/_home.js");
 const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -87,7 +88,7 @@ async function settle() {
 }
 
 function openHosted(id, rev) {
-  S.state = script();
+  loadTestDocument(script());
   flushEdits();
   clearDirty();
   homeModule.setHome("none");

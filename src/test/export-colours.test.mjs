@@ -14,6 +14,7 @@ import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { __init as initDocx, buildDocx, docxToRows } from "../js/15-docx.js";
 import { buildPackingListPdf, buildPdf } from "../js/17-pdf.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initStatus();
@@ -24,7 +25,7 @@ const tag = (cat, name) =>
   `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${name}</span>`;
 
 function load() {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "Colours", comments: [],
     rows: [
       { id: "r0", visualText: "The " + tag("prop", "Mug") + " at the " + tag("location", "Kitchen"),
@@ -32,7 +33,7 @@ function load() {
       { id: "r1", visualText: tag("vfx", "Glow") + " and a " + tag("prop", "Kettle"),
         audioText: tag("sound", "Theme") + " over the " + tag("gear", "Tripod") + ".", status: "todo" }
     ]
-  });
+  }));
 }
 
 const rgb = (hex) => [0, 2, 4].map((i) => (parseInt(hex.slice(i, i + 2), 16) / 255).toFixed(3)).join(" ");

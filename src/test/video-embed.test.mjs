@@ -9,6 +9,7 @@ import { intern } from "../adapters/storage/02c-blobs.js";
 import { addGalleryPicture, addGalleryVideo, setVideoThumbnail, videoLinkKey } from "../adapters/storage/02d-gallery.js";
 import { flushEdits, foldIntoEdit, lastUndoEntry, noteEdit, redo, resetUndo, trackDocument, undo, undoSizes } from "../js/12a-undo.js";
 import videoEmbed from "../../shared/video-embed.js";
+import { loadTestDocument } from "./_document.mjs";
 
 const {
   PLAYER_ORIGINS, THUMB_MAX_BYTES, VIDEO_HOSTS, embeddableVideo, fetchVideoThumbnail, oembedThumbnailUrl, parseStart,
@@ -252,10 +253,10 @@ test("setVideoThumbnail gives a video with no picture its thumbnail, once, first
 });
 
 function freshDoc() {
-  S.state = migrateRows({ schema: 2, title: "Fold", comments: [], rows: [
+  loadTestDocument(migrateRows({ schema: 2, title: "Fold", comments: [], rows: [
     { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" },
     { id: "r2", visualText: "two", audioText: "Bravo", status: "todo" }
-  ] });
+  ] }));
   resetUndo();
   trackDocument();
 }

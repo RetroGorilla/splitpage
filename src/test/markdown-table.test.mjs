@@ -10,6 +10,7 @@ import { cellOf, toMarkdown } from "../js/04c-doc-model.js";
 import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "../js/14d-export-text.js";
 import { LONG_DEMO } from "../js/_starters.js";
 import { exportDocumentOf, exportFacts } from "../js/14b-export-kit.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initStatus();
@@ -129,7 +130,7 @@ test("a short row does not read a neighbour's column", () => {
 test("a Two columns export reads back as its scenes only, not its breakdown or comments", () => {
   const tag = (cat, name) =>
     `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${name}</span>`;
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "Two col",
     rows: [
       { id: "r1", visualText: "Wide " + tag("vfx", "explosion"), audioText: "Hello there.", status: "todo" },
@@ -137,7 +138,7 @@ test("a Two columns export reads back as its scenes only, not its breakdown or c
     ],
     comments: [{ id: "c1", rowId: "r1", field: "audioText", author: "Ann", body: "a | b | c",
       createdAt: "2026-09-01T10:00:00Z", replies: [] }]
-  });
+  }));
   const md = toMarkdownTableDoc(exportDocumentOf(S.state));
   assert.match(md, /## Production breakdown/);
   assert.match(md, /## Comments/);
@@ -153,7 +154,7 @@ test("someone else's table keeps what follows its own Comments heading", () => {
 });
 
 test("the stacked Markdown export of the long demo reads back as its 30 scenes", () => {
-  S.state = migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)));
+  loadTestDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))));
   const orig = S.state.rows;
   const md = toMarkdownDoc(exportDocumentOf(S.state));
   assert.match(md, /## Production breakdown/);
@@ -168,7 +169,7 @@ test("the stacked Markdown export of the long demo reads back as its 30 scenes",
 });
 
 test("a stacked export's blank scene, video link and multi-line cells", () => {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "Stack",
     rows: [
       { id: "r1", visualText: "Wide<br>then close", audioText: "Hello <strong>there</strong>.<br><br>Second para.", status: "todo",
@@ -176,7 +177,7 @@ test("a stacked export's blank scene, video link and multi-line cells", () => {
       { id: "r2", visualText: "", audioText: "", status: "todo" },
       { id: "r3", visualText: "", audioText: "Just audio.", status: "todo" }
     ]
-  });
+  }));
   const md = toMarkdownDoc(exportDocumentOf(S.state));
   assert.deepEqual(cells(parseImportRows(md, "twocolumn")), [
     ["Wide\nthen close", "Hello **there**.\n\nSecond para."],
@@ -190,7 +191,7 @@ test("Markdown that only looks like the stacked export reads as it always did", 
   assert.equal(detectTwoColumnFormat("### Scene 01\n\nWords.\n\n### Scene 02\n\nMore."), null);
 });
 
-const demo = () => { S.state = migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))); return S.state; };
+const demo = () => { loadTestDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)))); return S.state; };
 
 test("the stacked export of the long demo: meta line, scene headings, status and read time", () => {
   demo();
@@ -280,7 +281,7 @@ test("a thread's marker sits outside a mark that ends with it, inside one that g
       author: "Ann", body: id, resolved: id === "f", createdAt: "2026-09-01T10:00:00Z", replies: []
     }))
   });
-  S.state = doc;
+  loadTestDocument(doc);
   const md = toMarkdownDoc(exportDocumentOf(S.state));
   assert.ok(md.includes("**Bold words<sup>1</sup> run on** and *end here*<sup>2</sup>. Then trailing<sup>3</sup> space."), md);
   assert.ok(md.includes("*Visual —* Look one two<sup>4</sup><sup>5</sup> [1] stays"), md);
@@ -335,14 +336,14 @@ test("the two-column export: the meta line and the gutter's columns, reopened as
 });
 
 test("a tail that opens on the b-roll list ends the script too, in either shape", () => {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "Just b-roll",
     rows: [
       { id: "r0", visualText: '<span class="broll-key" data-broll-id="b1" contenteditable="false">B-roll:</span> gulls over the nets', audioText: "Morning.", status: "todo" },
       { id: "r1", visualText: "Close", audioText: "Evening.", status: "todo" }
     ],
     brollShots: [{ id: "b1", name: "gulls over the nets", status: "shot" }]
-  });
+  }));
   const stacked = toMarkdownDoc(exportDocumentOf(S.state)), table = toMarkdownTableDoc(exportDocumentOf(S.state), { export: true });
   for (const md of [stacked, table]) {
     assert.ok(!md.includes("## Production breakdown") && !md.includes("## Comments"));
@@ -352,13 +353,13 @@ test("a tail that opens on the b-roll list ends the script too, in either shape"
 });
 
 test("a script with no target, tags, b-roll or comments: the meta line says less, the tail is absent", () => {
-  S.state = migrateRows({ schema: 2, title: "Plain", rows: [{ id: "r0", visualText: "Wide", audioText: "Hello there.", status: "ready" }] });
+  loadTestDocument(migrateRows({ schema: 2, title: "Plain", rows: [{ id: "r0", visualText: "Wide", audioText: "Hello there.", status: "ready" }] }));
   const md = toMarkdownDoc(exportDocumentOf(S.state));
   assert.match(md, /^# Plain\n\n_1 scene · 0:0\d running time · 0 of 1 shot · [^_\n]+_\n\n### Scene 01 · 00:00\n\n\*\*Ready\*\* · Read 0:0\d\n\n\*Visual —\* Wide\n\nHello there\.\n\n---\n$/);
   assert.ok(!/^## /m.test(md));
   const table = toMarkdownTableDoc(exportDocumentOf(S.state), { export: true });
   assert.ok(!/^## /m.test(table) && !/Target/.test(table));
-  S.state = migrateRows({ schema: 2, title: "Empty", rows: [] });
+  loadTestDocument(migrateRows({ schema: 2, title: "Empty", rows: [] }));
   assert.equal(toMarkdownDoc(exportDocumentOf(S.state)), "# Empty\n\n_No scenes yet._\n");
   assert.equal(toMarkdownTableDoc(exportDocumentOf(S.state), { export: true }), "# Empty\n\n_No scenes yet._\n");
   assert.equal(toMarkdownTableDoc(exportDocumentOf(S.state)), "# Empty\n\n_No rows yet._\n", "the project's table, as it always was");

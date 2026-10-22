@@ -10,6 +10,7 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import { commentEntries } from "../js/10-comments.js";
 import { buildPdf, pdfCommentImagesFor } from "../js/17-pdf.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { loadTestDocument } from "./_document.mjs";
 
 initStatus();
 initTags();
@@ -28,10 +29,10 @@ const jpeg = (w, h) => {
 const lines = (n, word) => Array.from({ length: n }, (_, i) => (word || "Line") + " " + (i + 1)).join("<br>");
 
 function pdfFor(rows) {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "Layout", comments: [],
     rows: rows.map((r, i) => ({ id: "r" + i, visualText: r.v || "", audioText: r.a || "", status: "todo" }))
-  });
+  }));
   return buildPdf(liveDoc(), rows.map((r) => (r.pic ? jpeg(r.pic[0], r.pic[1]) : null)));
 }
 
@@ -143,14 +144,14 @@ const cimg = (w, h) => {
 const MISSING = "f".repeat(64);
 
 function commentPdf(comments) {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "Comment pictures",
     rows: [{ id: "r0", visualText: "A scene.", audioText: "Some audio.", status: "todo" }],
     comments: comments.map((c, i) => Object.assign({
       id: "c" + i, rowId: "r0", field: "audioText", author: "Ann",
       createdAt: "2026-09-0" + (i % 9 + 1) + "T10:00:00Z", replies: []
     }, c))
-  });
+  }));
   const [doc, assets] = liveWithAssets();
   return pdfCommentImagesFor(doc, assets).then((map) => buildPdf(doc, null, map));
 }
@@ -383,11 +384,11 @@ test("a comment near the bottom of a page carries on at the top of the next, nev
 
 test("commentEntries(exportDocumentOf(S.state)) keeps its plain-text shape; pieces only when asked", () => {
   const pic = cimg(120, 90);
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "t", rows: [{ id: "r0", visualText: "v", audioText: "a", status: "todo" }],
     comments: [{ id: "c0", rowId: "r0", field: "audioText", author: "Ann", body: "One&nbsp;" + pic.html + "<br>two <b>three</b>",
       replies: [{ id: "rp0", author: "Bob", body: "plain <i>reply</i>" }] }]
-  });
+  }));
   const [plain] = commentEntries(exportDocumentOf(S.state));
   assert.equal(plain.body, "One \ntwo three");
   assert.ok(!("pieces" in plain) && !("pieces" in plain.replies[0]));
@@ -439,7 +440,7 @@ function drawnRows(pages) {
 const migrated = new Map();
 function rowPdf(specs) {
   const base = migrateRows({ schema: 2, title: "Layout", comments: [], rows: [] });
-  S.state = Object.assign(base, {
+  loadTestDocument(Object.assign(base, {
     rows: specs.map((r, i) => {
       const key = r.v + "/" + r.a;
       if (!migrated.has(key)) {
@@ -447,7 +448,7 @@ function rowPdf(specs) {
       }
       return Object.assign({}, migrated.get(key), { id: "r" + i });
     })
-  });
+  }));
   return buildPdf(liveDoc(), specs.map((r) => (r.pic ? jpeg(r.pic[0], r.pic[1]) : null)));
 }
 

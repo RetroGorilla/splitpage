@@ -16,6 +16,7 @@ import { mergeStates } from "../js/03-sync.js";
 import { buildSplitpageFile, buildMarkdownProject, parseMarkdownProject } from "../js/20d-formats.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
+import { loadTestDocument } from "./_document.mjs";
 
 const [BLUE, AMBER, VIOLET, GREEN] = PERSON_COLORS;
 
@@ -128,7 +129,7 @@ test("both project formats round-trip the map, and an old file still has none", 
   const text = buildSplitpageFile(exportDocumentOf(without));
   assert.equal(text.indexOf("personColors"), -1);
   assert.equal("personColors" in migrateRows(parseSplitpageFile(text)), false);
-  const md = (s) => { const was = S.state; S.state = s; try { return buildMarkdownProject(exportDocumentOf(s)); } finally { S.state = was; } };
+  const md = (s) => { const was = S.state; loadTestDocument(s); try { return buildMarkdownProject(exportDocumentOf(s)); } finally { loadTestDocument(was); } };
   const fromMd = parseMarkdownProject(md(withMap));
   assert.ok(fromMd);
   assert.deepEqual(fromMd.state.personColors, { Adam: BLUE, "Priya M": AMBER });

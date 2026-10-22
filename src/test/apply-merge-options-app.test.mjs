@@ -11,6 +11,7 @@ import { clearDirty } from "../js/12-dirty-toast.js";
 import * as exporting from "../js/14-export.js";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { loadTestDocument } from "./_document.mjs";
 
 await bootApp();
 await window.__historyTest.forceBackend("memory");
@@ -45,7 +46,7 @@ const toasts = () => Array.from(document.querySelectorAll("#toast-host .toast"))
 function start(id) {
   clearTimers();
   const doc = mk(id);
-  S.state = cloneState(doc);
+  loadTestDocument(cloneState(doc));
   setBaseState(cloneState(doc), "a test: the document as opened");
   mergeUndo().arm(null);
   clearDirty();

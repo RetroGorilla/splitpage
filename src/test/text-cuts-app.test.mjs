@@ -21,6 +21,7 @@ const { closeBrollPanel, openBrollPanel } = await import("../js/08d-broll-panel.
 const { closeExportDialog, openExportDialog } = await import("../js/18c-export-dialog.js");
 const { presenceInitials } = await import("../js/13a-presence.js");
 const { buildMarkdownProject, parseMarkdownProject, applyMarkdownProject } = await import("../js/20d-formats.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -31,7 +32,7 @@ const LONE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uD
 const x = (n) => "x".repeat(n);
 
 function load() {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "Cuts",
     rows: [
       { id: "r1", status: "todo", audioText: "the mug", visualText: '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> Old shot' },
@@ -40,7 +41,7 @@ function load() {
     comments: [], people: [],
     productionTags: [{ cat: "prop", name: "Kettle" }],
     brollShots: [{ id: "bs1", name: "Old shot", origin: "script" }, { id: "bs2", name: "Listed shot", origin: "list" }]
-  });
+  }));
   render();
 }
 

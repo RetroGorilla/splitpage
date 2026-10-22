@@ -3,7 +3,6 @@ import { hasSetLength } from "../core/document/timing.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { __init as initSceneStatus, rowSeconds } from "../js/01-scene-status.js";
 import { STATE_FIELDS, migrateRows, missingStateFields } from "../js/02-state.js";
 import { cellOf } from "../js/04c-doc-model.js";
@@ -13,6 +12,7 @@ import { buildSplitpageFile } from "../js/20d-formats.js";
 import { LONG_DEMO, STARTERS, starterById } from "../js/_starters.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
+import { loadTestDocument } from "./_document.mjs";
 
 initSceneStatus();
 initTags();
@@ -91,7 +91,7 @@ test("a few comments anchored in the script, one resolved, one with a reply", ()
 test("stage directions, set read times, a target it runs over, and scenes of very different lengths", () => {
   assert.ok(doc.rows.filter((r) => r.audioText.includes('class="stage-dir"')).length >= 3);
   assert.ok(doc.rows.some(hasSetLength));
-  S.state = doc;
+  loadTestDocument(doc);
   const secs = doc.rows.map((r) => rowSeconds(r));
   const total = secs.reduce((a, b) => a + b, 0);
   assert.ok(total >= 8 * 60 && total <= 10 * 60, "8–10 minutes: " + total);

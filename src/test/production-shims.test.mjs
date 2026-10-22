@@ -19,6 +19,7 @@ import { __init as initBroll, brollEntries, newBrollRecord, updateBrollBadge } f
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { planBrollRecords } from "../core/production/broll.ts";
 import { seededHealRounds } from "./_heal-rounds.mjs";
+import { loadTestDocument } from "./_document.mjs";
 
 initBroll();
 
@@ -30,7 +31,7 @@ const shot = (id, name, extra) => Object.assign({
 }, extra || {});
 
 function load(over) {
-  S.state = migrateRows(Object.assign({ schema: 2, title: "Shims", docId: "d" + "6".repeat(32), rows: [], comments: [] }, over));
+  loadTestDocument(migrateRows(Object.assign({ schema: 2, title: "Shims", docId: "d" + "6".repeat(32), rows: [], comments: [] }, over)));
   return S.state;
 }
 

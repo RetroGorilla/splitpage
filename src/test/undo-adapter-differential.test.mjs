@@ -7,6 +7,7 @@ import { flushEdits, lastUndoEntry, nextRedoEntry, noteEdit, noteRemoteChange, r
 import { cellEdit, changeSet } from "../application/session/change-set.ts";
 import { createDocumentSession } from "../application/session/document-session.ts";
 import { createUndoAdapter, watchUndoAdoption } from "../legacy/undo-adapter.ts";
+import { loadDocumentWithoutSession } from "./_document.mjs";
 
 const SEEDS = 60;
 const OPS = 40;
@@ -92,7 +93,7 @@ async function drive(seed, perform) {
   const r = seeded(seed);
   clock = 1e6;
   resetUndo();
-  S.state = script(seed);
+  loadDocumentWithoutSession(script(seed));
   perform.open();
   const out = [];
   for (let n = 0; n < OPS; n++) {
@@ -101,7 +102,7 @@ async function drive(seed, perform) {
     if (p.name === "wait") clock += p.ms;
     else if (p.name === "undo") undo();
     else if (p.name === "redo") redo();
-    else if (p.name === "remote") { const next = p.theirs(S.state); perform.remote(next); S.state = next; }
+    else if (p.name === "remote") { const next = p.theirs(S.state); perform.remote(next); loadDocumentWithoutSession(next); }
     else perform.edit(p);
     await Promise.resolve();
     flushEdits();

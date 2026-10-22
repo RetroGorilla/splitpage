@@ -13,6 +13,7 @@ import {
   registryEntryById,
   renameTag
 } from "../js/07-production-tags.js";
+import { loadTestDocument } from "./_document.mjs";
 
 const span = (cat, name, text) =>
   `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${text || name}</span>`;
@@ -50,10 +51,10 @@ test("migrateRows: every entry, old or back-filled or healed, has an id, and a s
 });
 
 test("a rename keeps the id, and a rename onto an existing name folds into that entry's id", () => {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "T",
     rows: [{ id: "r1", audioText: span("prop", "Mug") + " and " + span("prop", "Cup") }]
-  });
+  }));
   const mugId = S.state.productionTags.find((t) => t.name === "Mug").id;
   const cupId = S.state.productionTags.find((t) => t.name === "Cup").id;
   assert.ok(renameTag("prop", "Mug", "Big mug"));

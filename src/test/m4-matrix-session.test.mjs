@@ -54,6 +54,7 @@ const { normalizeVideoLink } = await import("../core/document/gallery.ts");
 after(closeApp);
 
 const { runIdleRefresh } = await import("../js/07-production-tags.js");
+const { loadTestDocument } = await import("./_document.mjs");
 const refreshed = { into: null };
 await rewireRunningApp({ refresh: (due) => (refreshed.into ? refreshed.into.push(...due) : runIdleRefresh(due)) });
 
@@ -93,7 +94,7 @@ function demo() {
 }
 
 function useDocument(doc) {
-  S.state = doc;
+  loadTestDocument(doc);
   flushEdits();
   clearDirty();
   return doc;

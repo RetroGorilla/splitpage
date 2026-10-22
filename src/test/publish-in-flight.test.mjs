@@ -17,6 +17,7 @@ const { documentIdentityPort, liveDocumentPort } = await import("../js/02b-doc-i
 const { documentDestinationPort } = await import("../js/03-sync.js");
 const { startTestSession } = await import("./_session.mjs");
 const { appSessionDeps } = await import("./_app-session.mjs");
+const { loadTestDocument } = await import("./_document.mjs");
 
 startTestSession(appSessionDeps());
 
@@ -87,7 +88,7 @@ test.after(() => {
   globalThis.setTimeout = realSetTimeout;
   if (realNavigator) Object.defineProperty(globalThis, "navigator", realNavigator);
   setHome("none");
-  S.state = null;
+  loadTestDocument(null);
   clearDirty();
 });
 
@@ -110,7 +111,7 @@ test("#247: a document opened during the upload keeps its own home, base, id and
   assert.equal(calls.filter((c) => c.method === "POST").length, 1);
 
   const b = doc("doc-b", "B", "bee");
-  S.state = b;
+  loadTestDocument(b);
   const bHome = setHome("file", { handle: { name: "b.md" }, format: "md", name: "b.md" });
   const bBase = setBaseState(cloneState(b), "test: B as opened");
   S.docIdWrittenOut = true;
@@ -135,7 +136,7 @@ test("#247: a server document opened during the upload is not re-homed onto the 
   await flush();
 
   const b = doc("doc-b", "B", "bee");
-  S.state = b;
+  loadTestDocument(b);
   const bHome = setHome("server", { id: "server-b", rev: 7 });
   const bBase = setBaseState(cloneState(b), "test: B as the server sent it");
   clearDirty();
@@ -155,7 +156,7 @@ test("#247: the fork's new id is not put on the document that replaced this one"
   await flush();
 
   const b = doc("doc-b", "B", "bee");
-  S.state = b;
+  loadTestDocument(b);
   setHome("none");
   setBaseState(cloneState(b), "test: B as opened");
   noteSaveChange();
@@ -176,7 +177,7 @@ test("#247: a share link is not made for the document that replaced the one publ
   await flush();
 
   const b = doc("doc-b", "B", "bee");
-  S.state = b;
+  loadTestDocument(b);
   setHome("server", { id: "server-b", rev: 3 });
   setBaseState(cloneState(b), "test: B as the server sent it");
   clearDirty();

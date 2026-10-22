@@ -7,6 +7,7 @@ import { __init as initBroll, anchorBrollInRows, brollEntries, derivedRecordsPla
 import { WHOLE_DOCUMENT } from "../application/session/change-set.ts";
 import { __init as initHistory } from "../js/03a-history-store.js";
 import { freezeClockAndRandom } from "./golden-helpers.mjs";
+import { loadTestDocument } from "./_document.mjs";
 
 const SEED = 0x70726f64;
 
@@ -19,7 +20,7 @@ const row = (id, audioText, visualText) => ({
 const key = (id, text) => `<span class="broll-key" data-broll-id="${id}" contenteditable="false">${text}</span>`;
 
 function load(rows) {
-  S.state = migrateRows({ schema: 2, title: "Ids", docId: "d" + "7".repeat(32), rows, brollShots: [], productionTags: [] });
+  loadTestDocument(migrateRows({ schema: 2, title: "Ids", docId: "d" + "7".repeat(32), rows, brollShots: [], productionTags: [] }));
 }
 
 const shots = () => S.state.brollShots.map((s) => [s.name, s.id]);

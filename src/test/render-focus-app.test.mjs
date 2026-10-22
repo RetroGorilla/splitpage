@@ -20,6 +20,7 @@ const { clearDirty } = await import("../js/12-dirty-toast.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -51,7 +52,7 @@ function fresh(title, build = fixture) {
   if (viewFlags().writerOpen()) writer.closeWriter();
   window.__hostedTest.setSession({ role: "edit", docId: null });
   clock += 10_000;
-  S.state = migrateRows(build(title));
+  loadTestDocument(migrateRows(build(title)));
   flushEdits();
   renderAbsorbed();
   clearDirty();

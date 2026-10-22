@@ -11,6 +11,7 @@ const { registryKey } = await import("../core/document/tags.ts");
 const { openProductionPanel, closeProductionPanel } = await import("../js/08-production-panels.js");
 const { closeBrollPage, closeBrollPanel, openBrollPage, openBrollPanel } = await import("../js/08d-broll-panel.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
+const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
 
@@ -19,13 +20,13 @@ if (!window.Element.prototype.scrollIntoView) window.Element.prototype.scrollInt
 const LEAD = "\nSecond line first.";
 
 function load() {
-  S.state = migrateRows({
+  loadTestDocument(migrateRows({
     schema: 2, title: "Breaks",
     rows: [{ id: "r1", status: "todo", audioText: "the mug", visualText: "" }],
     comments: [], people: [],
     productionTags: [{ cat: "prop", name: "Kettle", notes: LEAD }],
     brollShots: [{ id: "bs1", name: "Harbour wide", origin: "list", notes: LEAD, audioRef: LEAD }]
-  });
+  }));
   render();
   clearDirty();
 }
