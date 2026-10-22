@@ -387,7 +387,7 @@ export function insertScenes(clip, opts) {
     shots.push(rec);
   });
   Object.keys(mintedByRow).forEach(function (rowId) {
-    recordPastedBroll(rowId, mintedByRow[rowId].cell, mintedByRow[rowId].ids);
+    recordPastedBroll(state, rowId, mintedByRow[rowId].cell, mintedByRow[rowId].ids);
   });
 
   if (!opts.holdComments) added.forEach(function (c) { comments.push(c); });
@@ -399,17 +399,6 @@ export function insertScenes(clip, opts) {
     held: opts.holdComments ? added : [],
     broll: { kept: kept, minted: minted }
   };
-}
-
-export function removeScenes(rowIds) {
-  var gone = Object.create(null);
-  (rowIds || []).forEach(function (id) { gone[id] = true; });
-  var n = 0;
-  for (var i = S.state.rows.length - 1; i >= 0; i--) {
-    if (gone[S.state.rows[i].id]) { S.state.rows.splice(i, 1); n++; }
-  }
-  if (n) syncCommentAnchors(S.state);
-  return n;
 }
 
 export function __init() {}

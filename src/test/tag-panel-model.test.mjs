@@ -233,7 +233,7 @@ test("tagging: a cell still holding a video card is tagged in place, the card ke
 });
 
 function withRows(cells, fn) {
-  loadTestDocument({ rows: cells.map((html, i) => ({ id: "r" + i, visualText: html, audioText: "" })), productionTags: [] });
+  loadTestDocument({ rows: cells.map((html, i) => ({ id: "r" + i, visualText: html, audioText: "" })), productionTags: [], brollShots: [], comments: [], people: [] });
   return fn();
 }
 

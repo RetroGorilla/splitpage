@@ -47,6 +47,11 @@ export interface Replay {
   readonly plan: (doc: ValidatedDocument) => ReplayPlan | Refusal | null;
 }
 
+export interface Stamp {
+  readonly name: string;
+  readonly plan: (doc: DocumentView) => Plan | null;
+}
+
 export interface AttributionPort {
   readonly attribute: (doc: DocumentView) => Plan | null;
 }
@@ -91,6 +96,7 @@ export interface DocumentSession {
   run: (command: Command) => CommandOutcome;
   replay: (replay: Replay) => CommandOutcome;
   amend: (amendment: Replay) => CommandOutcome;
+  stamp: (stamp: Stamp) => CommandOutcome;
   noteEdit: (changes?: ChangeSet) => void;
   refresh: (job: string) => void;
   subscribe: (listener: SessionListener) => () => void;
@@ -362,6 +368,28 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     return { kind: "applied", generation: done.generation, changes: changes };
   }
 
+  function stamp(task: Stamp): CommandOutcome {
+    if (disposed) return { kind: "rejected", reason: DISPOSED };
+    const doc = document;
+    if (!doc) return { kind: "rejected", reason: NO_DOCUMENT };
+    let plan: Plan | null;
+    try {
+      plan = task.plan(doc);
+    } catch (error) {
+      return { kind: "failed", error: error };
+    }
+    if (!plan || isEmpty(plan.changes)) return { kind: "noop" };
+    const changes = plan.changes;
+    const restore = rollbackPoint(doc, changes);
+    try {
+      plan.apply(doc);
+    } catch (error) {
+      restore();
+      return { kind: "failed", error: error };
+    }
+    return { kind: "applied", generation: generation, changes: changes };
+  }
+
   function dispose(): void {
     if (disposed) return;
     disposed = true;
@@ -387,6 +415,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     run: run,
     replay: replay,
     amend: function (task) { return replayAs("amend", task); },
+    stamp: stamp,
     noteEdit: function (changes) {
       if (disposed) return;
       let noted = changes || WHOLE_DOCUMENT;
