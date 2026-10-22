@@ -357,7 +357,7 @@
     {"rule":"legacy-state-refs","source":"src/test/scene-clip.test.mjs","target":"global:S","count":85},
     {"rule":"legacy-state-refs","source":"src/test/scene-clipboard-app.test.mjs","target":"global:S","count":19},
     {"rule":"legacy-state-refs","source":"src/test/scene-effects-app.test.mjs","target":"global:S","count":8},
-    {"rule":"legacy-state-refs","source":"src/test/scene-effects-order.test.mjs","target":"global:S","count":16},
+    {"rule":"legacy-state-refs","source":"src/test/scene-effects-order.test.mjs","target":"global:S","count":15},
     {"rule":"legacy-state-refs","source":"src/test/scene-effects-undo.test.mjs","target":"global:S","count":2},
     {"rule":"legacy-state-refs","source":"src/test/scene-length.test.mjs","target":"global:S","count":1},
     {"rule":"legacy-state-refs","source":"src/test/selection-model-app.test.mjs","target":"global:S","count":5},
