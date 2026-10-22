@@ -1,7 +1,7 @@
 import { formatDuration } from "../core/production/timing.ts";
 import { DEFAULT_WPM } from "../core/document/timing.ts";
 import { S } from "./_state.js";
-import { home } from "./_home.js";
+import { currentHome } from "../legacy/location-bridge.ts";
 import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
@@ -78,7 +78,7 @@ function starterDocumentState(id) {
 }
 
 function adoptNewDocument(next, reason) {
-  var leaves = home.kind === "file" || home.kind === "import";
+  var leaves = currentHome().kind === "file" || currentHome().kind === "import";
   documentTransitions().startNew({ from: { document: next }, reason: reason, destination: leaves ? NO_DESTINATION : undefined });
   clearDirty();
   resetProductionPanelState();
@@ -123,7 +123,7 @@ function openPasteAsNewDocument() {
 
 async function newTabOpenFile() {
   await openLocalFile();
-  if (home.kind === "import" || home.kind === "file") closeNewTabPage();
+  if (currentHome().kind === "import" || currentHome().kind === "file") closeNewTabPage();
 }
 
 function isFileDrag(e) {
@@ -309,7 +309,7 @@ async function newTabEligibleForAutoShow() {
   if (!seedCheckPasses()) return false;
   if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
   if (S.DESKTOP && draftResume().restorePending()) return false;
-  if (home.kind === "server" || home.kind === "file") return false;
+  if (currentHome().kind === "server" || currentHome().kind === "file") return false;
   if (S.DESKTOP) {
     if ((S.DESKTOP.launchIntent && S.DESKTOP.launchIntent.type !== "blank") ||
         S.DESKTOP.hasDraftToRestore) return false;
@@ -318,7 +318,7 @@ async function newTabEligibleForAutoShow() {
     try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
     if (handle) return false;
   }
-  if (home.kind !== "none") return false;
+  if (currentHome().kind !== "none") return false;
   return true;
 }
 

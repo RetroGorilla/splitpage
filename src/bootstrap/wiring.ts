@@ -14,6 +14,7 @@ import { legacyExportServices } from "./export-services.ts";
 import { createAppActions, installAppActions } from "../legacy/app-actions.ts";
 import { installExportFormats } from "../legacy/export-formats.ts";
 import { startEditor } from "../legacy/editor-bridge.ts";
+import { startLocation } from "../legacy/location-bridge.ts";
 import { startPreferences } from "../legacy/preferences-bridge.ts";
 import { startRecovery } from "../legacy/recovery-bridge.ts";
 import type { LegacyRecoveryPorts } from "../legacy/recovery-bridge.ts";
@@ -69,6 +70,7 @@ export class WiringError extends Error {
 }
 
 export const WIRING_STEPS = Object.freeze([
+  "location",
   "page effects",
   "action registry",
   "export services",
@@ -277,6 +279,7 @@ export function wireApp(deps: WiringDeps): Wiring {
       throw new WiringError(step, message, failures.length ? new AggregateError([error, ...failures], message) : error);
     }
   };
+  build("location", () => startLocation(), (stop) => stop);
   build("page effects", () => startPageEffects(window), (stop) => stop);
   const actions = build("action registry", () => checkedActions((deps.actions ?? createAppActions)()), installAppActions);
   build("export services", () => legacyExportServices(), installExportServices);

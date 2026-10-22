@@ -5,6 +5,7 @@ import { S } from "../js/_state.js";
 import { createHeldFetch, mockClock } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { documentLocation } from "../legacy/location-bridge.ts";
 import { mergeBase } from "../legacy/session-bridge.ts";
 
 await bootApp();
@@ -15,7 +16,7 @@ const { flushEdits } = await import("../js/12a-undo.js");
 const exportModule = await import("../js/14-export.js");
 const { saveDoc } = exportModule;
 const hosted = await import("../js/13-hosted.js");
-const homeModule = await import("../js/_home.js");
+const homeModule = await import("../legacy/location-bridge.ts");
 const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { loadTestDocument } = await import("./_document.mjs");
 
@@ -79,7 +80,7 @@ function createServer() {
 }
 
 function withServer(t, server) {
-  const held = createHeldFetch({ connection: () => homeModule.conn, answer: server.answer });
+  const held = createHeldFetch({ connection: () => homeModule.currentConn(), answer: server.answer });
   t.after(held.install());
   return held;
 }
@@ -94,7 +95,7 @@ function openHosted(id, rev) {
   clearDirty();
   homeModule.setHome("none");
   window.__hostedTest.setSession({ docId: id, rev: rev });
-  S.docIdWrittenOut = true;
+  documentLocation().markWrittenOut(true);
   clearDirty();
 }
 
@@ -129,7 +130,7 @@ test("a hosted save that lands after a same-id reopen is not adopted, and the ne
   await saving;
   await settle();
   const late = {
-    rev: homeModule.home.rev,
+    rev: homeModule.currentHome().rev,
     baseText: textOf(mergeBase().rows[0]),
     shown: textOf(S.state.rows[0]),
     warned: warnToasts().slice(warnedBefore),
@@ -175,8 +176,8 @@ test("a hosted save that lands after another server document was opened is not r
   await settle();
 
   assert.equal(server.docs.get("srv-e").rev, 2, "the save of E reached the server");
-  assert.equal(homeModule.home.id, "srv-f", "F stays open");
-  assert.equal(homeModule.home.rev, 4, "F keeps its own revision");
+  assert.equal(homeModule.currentHome().id, "srv-f", "F stays open");
+  assert.equal(homeModule.currentHome().rev, 4, "F keeps its own revision");
   assert.equal(textOf(mergeBase().rows[0]), "One.", "F keeps its own baseline");
   assert.deepEqual(warnToasts().slice(warnedBefore), [], "a save that went to another document's place is not reported");
   leave();
@@ -206,7 +207,7 @@ test("a history restore made while a hosted save is in flight sticks, on screen 
   held.gates.releaseAll("fetch");
   await saving;
   await settle();
-  const late = { rev: homeModule.home.rev, warned: warnToasts().slice(warnedBefore) };
+  const late = { rev: homeModule.currentHome().rev, warned: warnToasts().slice(warnedBefore) };
 
   await saveDoc();
   await settle();
@@ -241,7 +242,7 @@ test("a hosted save whose revision the reopen already fetched is not reported", 
   await saving;
   await settle();
 
-  assert.equal(homeModule.home.rev, 2, "the reopened session keeps the revision it fetched");
+  assert.equal(homeModule.currentHome().rev, 2, "the reopened session keeps the revision it fetched");
   assert.deepEqual(warnToasts().slice(warnedBefore), [], "a save the reopened copy already holds is not reported");
   leave();
 });
@@ -263,12 +264,12 @@ test("a pull noticed while a hosted save waits for its reply does not run, and t
   const warnedBefore = warnToasts().length;
   hosted.notePresenceRev({ docId: "srv-b", rev: 2 });
   await settle();
-  assert.equal(homeModule.home.rev, 1, "the pull waits while the save runs");
+  assert.equal(homeModule.currentHome().rev, 1, "the pull waits while the save runs");
   releaseReply();
   assert.equal(await saving, true, "the save reports success");
   await settle();
 
-  assert.equal(homeModule.home.rev, 2, "the session takes the revision its save produced");
+  assert.equal(homeModule.currentHome().rev, 2, "the session takes the revision its save produced");
   assert.equal(textOf(mergeBase().rows[0]), "Typed and saved.", "the baseline is what the server accepted");
   assert.deepEqual(warnToasts().slice(warnedBefore), [], "no late-save warning in the session that saved");
   leave();
@@ -289,11 +290,11 @@ test("a pull whose connection changes before the answer arrives merges nothing; 
   hosted.setServerToken("another-token");
   await settle();
   assert.equal(textOf(S.state.rows[0]), before, "nothing fetched under the old connection was merged into the document");
-  assert.equal(homeModule.home.rev, 1, "the tracked revision did not move");
+  assert.equal(homeModule.currentHome().rev, 1, "the tracked revision did not move");
   hosted.notePresenceRev({ docId: "srv-p", rev: 2 });
   await settle();
   assert.equal(textOf(S.state.rows[0]), "Saved by someone else.", "a pull under the current connection merges");
-  assert.equal(homeModule.home.rev, 2);
+  assert.equal(homeModule.currentHome().rev, 2);
   hosted.clearServerToken();
   leave();
 });
@@ -311,7 +312,7 @@ test("a plain hosted save adopts its revision and baseline and clears the unsave
   await saveDoc();
   await settle();
 
-  assert.equal(homeModule.home.rev, 2, "the revision moved to the saved one");
+  assert.equal(homeModule.currentHome().rev, 2, "the revision moved to the saved one");
   assert.equal(textOf(mergeBase().rows[0]), "Saved plainly.", "the baseline is the saved text");
   assert.equal(unsavedChanges(), false, "the document reads as saved");
   assert.deepEqual(warnToasts().slice(warnedBefore), [], "no late-save warning");

@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { homeConn, serverHomeId } from "./_home.js";
+import { homeConn, serverHomeId, serverStatus } from "../legacy/location-bridge.ts";
 import {
   normalizePersonColors,
   paletteColor,
@@ -12,10 +12,8 @@ import { paintRundownPresence } from "./05p-rundown-presence.js";
 import { getSavedAuthorName } from "./10-comments.js";
 import {
   apiUrl,
-  linkTurnedOff,
   notePresenceRev,
   onServerDoc,
-  serverSessionExpired,
   serverTransport
 } from "./13-hosted.js";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
@@ -109,7 +107,7 @@ export function presenceInitials(name) {
 }
 
 function presenceWanted() {
-  if (!onServerDoc() || !S.serverMode.available || serverSessionExpired || linkTurnedOff) return false;
+  if (!onServerDoc() || !serverStatus().mode().available || serverStatus().sessionExpired() || serverStatus().linkTurnedOff()) return false;
   if (document.hidden) return false;
   return (Date.now() - presenceLastActive) <= PRESENCE_IDLE_MS;
 }

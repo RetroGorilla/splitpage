@@ -19,6 +19,7 @@ import {
 } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { serverStatus } from "../legacy/location-bridge.ts";
 
 await bootApp();
 
@@ -37,7 +38,7 @@ const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = awai
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 const { bytesForSync, createMemoryBackend, ensureBytes, has, internDataUrl, isDurableSync, persist, setBackend: setBlobBackend } = await import("../adapters/storage/02c-blobs.js");
 const { addGalleryPicture } = await import("../core/document/gallery.ts");
-const homeModule = await import("../js/_home.js");
+const homeModule = await import("../legacy/location-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 const require = createRequire(import.meta.url);
@@ -387,8 +388,8 @@ rightToday("B8", "restoring a browser draft onto a server document, or an unsave
     answer: (r) => (r.method === "GET" && r.url.includes("api/docs/srv-r") ? { status: 200, body: { id: "srv-r", rev: 3, state: theirs } } : { status: 200, body: {} })
   });
   const uninstall = sent.install();
-  const available = S.serverMode.available;
-  S.serverMode.available = true;
+  const available = serverStatus().mode().available;
+  serverStatus().recordMode({ available: true });
   try {
     const idb = browserStore();
     await idb.store.put(record("srv-r", mine, OTHER, { baseJson: JSON.stringify(base) }));
@@ -408,10 +409,10 @@ rightToday("B8", "restoring a browser draft onto a server document, or an unsave
     assert.equal(unsavedChanges(), true, "and unsaved");
     await advance(clock, 40000);
     assert.deepEqual(sent.requests.filter((r) => r.method !== "GET").map((r) => r.method + " " + r.url), [], "still nothing written");
-    assert.equal(homeModule.home.kind, "none", "no file or server destination was set");
+    assert.equal(homeModule.currentHome().kind, "none", "no file or server destination was set");
     assert.equal(autoSavePolicy().pending(), false, "no autosave is armed");
   } finally {
-    S.serverMode.available = available;
+    serverStatus().recordMode({ available: available });
     uninstall();
   }
 }));
@@ -435,7 +436,7 @@ rightToday("B9", "a revoked link keeps the draft as an unsaved local copy and se
     await until(() => !drafts().restorePending(), "the restore settled");
     assert.equal(S.state.rows[0].audioText, "Kept for the user.", "the draft's work is open");
     assert.equal(unsavedChanges(), true, "as unsaved work");
-    assert.equal(homeModule.home.kind, "none", "with no server destination");
+    assert.equal(homeModule.currentHome().kind, "none", "with no server destination");
     assert.notEqual(S.state.docId, idOf("5"), "and its own new identity");
     assert.deepEqual(sent.requests.filter((r) => r.method !== "GET").map((r) => r.method + " " + r.url), [], "no write went to the server");
     assert.ok(toasts().some((x) => /unsaved copy/.test(x)), "the user is told it is an unsaved copy");
@@ -524,7 +525,7 @@ rightToday("B11", "after a restart, the unsaved work left by the closed session 
     assert.ok(toasts().some((x) => /Restored your unsaved script/.test(x) && /save it somewhere/.test(x)), "the user is told it was never saved");
     const gone = await applyTakenDraft({ header: { origin: { kind: "file", fileName: "gone.splitpage" }, docIdWrittenOut: true }, stateJson: JSON.stringify(left) });
     assert.equal(gone, "untitled-copy", "a draft of a file that is no longer there opens as an unsaved copy");
-    assert.equal(homeModule.home.kind, "none");
+    assert.equal(homeModule.currentHome().kind, "none");
     assert.equal(unsavedChanges(), true);
     assert.deepEqual(sent.requests, [], "nothing was sent anywhere");
   } finally {
@@ -601,7 +602,7 @@ rightToday("K1b", "a desktop file-draft merge whose document is replaced while i
     assert.equal(S.state.title, "Untitled Script", "the replacement document is still the open document");
     assert.equal(S.state.rows.some((r) => r.audioText === "Unsaved here." || r.audioText === "Changed on disk."), false,
       "the late merge put none of its text into the replacement");
-    assert.equal(homeModule.home.kind, "none", "and the replacement keeps its own destination");
+    assert.equal(homeModule.currentHome().kind, "none", "and the replacement keeps its own destination");
   } finally {
     window.__historyTest.injectFault(null);
     restore();
