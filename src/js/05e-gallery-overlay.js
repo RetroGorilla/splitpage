@@ -9,7 +9,8 @@ import {
   videoLinkKey,
   videoLinkLabel
 } from "../adapters/storage/02d-gallery.js";
-import { findRowIndex } from "./03-sync.js";
+import { rowIndexOf } from "../core/document/rows.ts";
+import { readSession } from "../legacy/session-bridge.ts";
 import { cssAttr } from "./04-richtext.js";
 import {
   galleryBadgeHtml,
@@ -39,7 +40,7 @@ var dragFrom = -1;
 function modal() { return document.getElementById("gallery-modal"); }
 
 function rowOf(rowId) {
-  var idx = findRowIndex(rowId);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
   return idx === -1 ? null : { row: S.state.rows[idx], index: idx };
 }
 

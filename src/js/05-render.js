@@ -11,7 +11,8 @@ import {
 import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "../adapters/storage/02d-gallery.js";
-import { findRowIndex } from "./03-sync.js";
+import { rowIndexOf } from "../core/document/rows.ts";
+import { readSession } from "../legacy/session-bridge.ts";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
 import { editCell } from "./05b-cell-edit.js";
 import { refreshGalleryOverlay } from "./05e-gallery-overlay.js";
@@ -463,7 +464,7 @@ export function renderRow(rowId) {
 
 function paintOneRow(rowId) {
   if (!S.state) return false;
-  var idx = findRowIndex(rowId);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
   var rowsEl = document.getElementById("rows");
   if (idx === -1 || !rowsEl) return false;
   var rowEl = rowsEl.querySelector(':scope > .row[data-id="' + cssAttr(rowId) + '"]');
@@ -794,7 +795,7 @@ export function syncFieldFromDom(cellEl) {
   if (!cellEl.isConnected || undoGuard().applying() || screenStale) return;
   var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
-  var idx = findRowIndex(id);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, id); });
   if (idx !== -1) {
     var html = cellEl.innerHTML.indexOf("\u200B") === -1 ? cellEl.innerHTML : cellEl.innerHTML.replace(/\u200B/g, "");
     html = storedHtmlFromDom(html);

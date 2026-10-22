@@ -782,11 +782,4 @@ export function restoreMergeSnapshot(id, request) {
   return restoreSnapshot(id, request);
 }
 
-export function findRowIndex(id) {
-  for (var i = 0; i < S.state.rows.length; i++) {
-    if (S.state.rows[i].id === id) return i;
-  }
-  return -1;
-}
-
 export function __init() {}

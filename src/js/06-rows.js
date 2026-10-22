@@ -1,6 +1,7 @@
 import { S } from "./_state.js";
 import { internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
-import { findRowIndex } from "./03-sync.js";
+import { rowIndexOf } from "../core/document/rows.ts";
+import { readSession } from "../legacy/session-bridge.ts";
 import { safeHref, safeId, storedHtmlFromDom } from "./04-richtext.js";
 import { render, syncFieldFromDom } from "./05-render.js";
 import { armDeleteButton, disarmDeleteButton } from "../features/rows/delete-button.ts";
@@ -55,7 +56,7 @@ export function addRowAndFocus(afterId, field) {
 export function splitRowFieldCore(cellEl) {
   var id = cellEl.getAttribute("data-id");
   var field = cellEl.getAttribute("data-field");
-  if (findRowIndex(id) === -1 || (field !== "visualText" && field !== "audioText")) return null;
+  if (readSession(function (doc) { return rowIndexOf(doc, id); }) === -1 || (field !== "visualText" && field !== "audioText")) return null;
   syncFieldFromDom(cellEl);
   var sel = cellSelection(cellEl);
   if (!sel) return null;
@@ -175,7 +176,7 @@ export function moveRow(id, dir) {
 }
 
 export function armDelete(btn, id) {
-  var idx = findRowIndex(id);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, id); });
   var rowEl = document.querySelector('#rows .row[data-id="' + safeId(id) + '"]');
   if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(syncFieldFromDom);
   if (idx !== -1 && isBlankScene(S.state, S.state.rows[idx])) {
@@ -312,7 +313,7 @@ export function handleImageFile(rowId, file, slot) {
   var ctx = captureOperation();
   compressImageFile(file, 1000, 0.78).then(function (dataUrl) {
     if (!stillOwns(ctx)) { showPictureNotAdded(); return; }
-    var idx = findRowIndex(rowId);
+    var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
     if (idx === -1) return;
     var rec = internDataUrl(dataUrl);
     if (!rec) throw new Error("not a picture the registry takes");
@@ -395,7 +396,7 @@ export function openVideoFile(link) {
 }
 
 export function openGalleryLink(rowId, slot, key) {
-  var idx = findRowIndex(rowId);
+  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
   if (idx === -1) return;
   var s = rowSlots(S.state.rows[idx])[slot];
   var link = s && s.links.filter(function (l) { return videoLinkKey(l) === key; })[0];
