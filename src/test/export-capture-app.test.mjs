@@ -12,8 +12,9 @@ const { migrateRows } = await import("../js/02-state.js");
 const { standaloneHtmlFor } = await import("../js/02b-doc-id.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits } = await import("../js/12a-undo.js");
-const { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } = await import("../js/14d-export-text.js");
-const { captureExportDocument, exportFacts } = await import("../js/14b-export-kit.js");
+const { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } = await import("../adapters/formats/export-text.ts");
+const { captureExportDocument } = await import("../js/14b-export-kit.js");
+const { exportFacts } = await import("../adapters/formats/export-kit.ts");
 const { buildMarkdownProject, buildSplitpageFile } = await import("../js/20d-formats.js");
 const { loadTestDocument } = await import("./_document.mjs");
 

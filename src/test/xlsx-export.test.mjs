@@ -11,9 +11,10 @@ import { breakdownTable } from "../js/08-production-panels.js";
 import { brollTable } from "../js/08d-broll-panel.js";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
-import { PRINT_COLORS, exportDocumentOf } from "../js/14b-export-kit.js";
-import { scriptTable } from "../js/16-csv.js";
-import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx, colName } from "../js/16b-xlsx.js";
+import { PRINT_COLORS } from "../adapters/formats/export-kit.ts";
+import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { scriptTable } from "../adapters/formats/csv.ts";
+import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx, colName } from "../adapters/formats/xlsx.ts";
 import { LONG_DEMO } from "../js/_starters.js";
 import { loadTestDocument } from "./_document.mjs";
 
