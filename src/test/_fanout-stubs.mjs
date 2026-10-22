@@ -1,3 +1,4 @@
+import { viewFlags } from "../legacy/preferences-bridge.ts";
 import { S } from "../js/_state.js";
 import { hasSetLength as coreHasSetLength } from "../core/document/timing.ts";
 import { noteEdit } from "../js/12a-undo.js";
@@ -21,8 +22,6 @@ export const stamped = [];
 export const dirtied = [];
 const answers = { renderRow: true, reviewMode: false, noteEdit: false };
 
-export let hideShotScenes = false;
-
 export function resetFanout(opts) {
   calls.length = 0;
   stamped.length = 0;
@@ -30,7 +29,7 @@ export function resetFanout(opts) {
   answers.renderRow = opts && "renderRow" in opts ? opts.renderRow : true;
   answers.reviewMode = !!(opts && opts.reviewMode);
   answers.noteEdit = !!(opts && opts.noteEdit);
-  hideShotScenes = !!(opts && opts.hideShot);
+  viewFlags().setHideShot(!!(opts && opts.hideShot));
 }
 
 function rowCopy(row) {

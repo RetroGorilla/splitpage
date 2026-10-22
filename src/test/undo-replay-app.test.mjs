@@ -15,6 +15,7 @@ const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
+const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
@@ -44,7 +45,7 @@ function fixture() {
 
 let opened = 0;
 async function open() {
-  if (writer.writerOpen) writer.closeWriter();
+  if (viewFlags().writerOpen()) writer.closeWriter();
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "replay-" + (++opened) + ".splitpage", { lastModified: opened });
   await openProjectFile(file, null, { skipSnapshot: true });
   flushEdits();

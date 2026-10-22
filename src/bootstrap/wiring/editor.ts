@@ -120,6 +120,7 @@ import {
   syncAnchorResolvedClasses
 } from "../../js/10-comments.js";
 import { showActionToast, showToast } from "../../legacy/effects-bridge.ts";
+import { viewFlags } from "../../legacy/preferences-bridge.ts";
 import {
   caretAfterStep,
   compositionUndoMark,
@@ -141,7 +142,6 @@ import {
   renderWriter,
   scheduleWriterStats,
   updateWriterFormatState,
-  writerOpen,
   writerUndoStep
 } from "../../js/19-writer.js";
 
@@ -435,13 +435,13 @@ function afterUndoApplied(steps: readonly unknown[]): void {
     if (!cellStep && (st.key === "visualText" || st.key === "audioText")) cellStep = st;
   }
   undoGuard().whileApplying(function () {
-    if (writerOpen) renderWriter(); else render();
+    if (viewFlags().writerOpen()) renderWriter(); else render();
     renderProduction();
   });
   settleAfterApply();
   if (cellStep) {
     const sel = '.cell-editable[data-id="' + cssAttr(cellStep.rowId) + '"][data-field="' + cellStep.key + '"]';
-    const cell = document.querySelector<HTMLElement>((writerOpen ? "#writer-doc " : "#rows ") + sel) || document.querySelector<HTMLElement>(sel);
+    const cell = document.querySelector<HTMLElement>((viewFlags().writerOpen() ? "#writer-doc " : "#rows ") + sel) || document.querySelector<HTMLElement>(sel);
     if (cell) {
       cell.focus();
       placeCaretAtTextOffset(cell, caretAfterStep(cellStep));
@@ -738,7 +738,7 @@ export function onRootKeydown(e: KeyboardEvent): void {
     const mvField = cellEl.getAttribute("data-field");
     const mvOffset = caretTextOffset(cellEl);
     if (swapAdjacentRows(mvId, e.key === "ArrowUp" ? -1 : 1)) {
-      if (writerOpen) {
+      if (viewFlags().writerOpen()) {
         renderWriter();
       } else {
         render();

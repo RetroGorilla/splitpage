@@ -16,7 +16,7 @@ import { domRangeFor } from "./09-find-replace.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { queueAutoSave } from "./14-export.js";
-import { updateWriterStats, writerOpen } from "./19-writer.js";
+import { updateWriterStats } from "./19-writer.js";
 import { makeId } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { contentMemo } from "../core/document/memo.ts";
@@ -54,6 +54,7 @@ import { cellOf } from "../legacy/richtext.ts";
 import { requestRefresh } from "../legacy/session-bridge.ts";
 import { focusMemory } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
+import { viewFlags } from "../legacy/preferences-bridge.ts";
 export {
   contentMemo,
   ensureTagIds,
@@ -522,7 +523,7 @@ function paintUntagged() {
 function scanUntaggedMentions(entries) {
   if (!S.state) return;
   untaggedList = [];
-  var index = writerOpen ? null : buildUntaggedIndex(entries || productionEntries());
+  var index = viewFlags().writerOpen() ? null : buildUntaggedIndex(entries || productionEntries());
   if (index) {
     var cells = document.querySelectorAll('#rows .visual-cell .cell-editable');
     Array.prototype.forEach.call(cells, function (cellEl) {

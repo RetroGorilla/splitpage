@@ -1,12 +1,13 @@
 import { productionReaders } from "../legacy/document-ports.ts";
 import { S } from "./_state.js";
-import { armShotHideGrace, clearShotHideGrace, hideShotScenes } from "./01b-hide-shot.js";
+import { armShotHideGrace, clearShotHideGrace } from "./01b-hide-shot.js";
 import { paintRowTimes, render, renderRow } from "./05-render.js";
 import { renderRundown, setRundownExtraSeconds } from "./05f-rundown.js";
 import { paintTargetOverlay } from "./05t-target.js";
 import { sceneStatus, sceneStatusCommand, shotGrace } from "../application/commands/scene-status.ts";
 import { REVIEW_ONLY, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
+import { viewFlags } from "../legacy/preferences-bridge.ts";
 import {
   SCENE_LENGTH_MAX,
   normalizeSceneLength,
@@ -26,8 +27,6 @@ export {
   normalizeTargetLength,
   targetClock
 };
-
-export var wordCount;
 
 export function estimatedSeconds(row) {
   return estimatedSecondsIn(row, S.state, productionReaders);
@@ -56,7 +55,7 @@ export function updateScriptStats() {
   if (!S.state) return;
   var target = targetLengthOf(S.state);
   var total = totalSeconds();
-  var remaining = hideShotScenes ? S.state.rows.reduce(function (n, r) {
+  var remaining = viewFlags().hideShot() ? S.state.rows.reduce(function (n, r) {
     return n + (r.status === "shot" ? 0 : rowSeconds(r));
   }, 0) : 0;
   var totalText = formatDuration(total);
@@ -70,9 +69,9 @@ export function updateScriptStats() {
       tc.delta + (tc.over ? ' over' : ' left') + '</span>';
     title = "Read time " + totalText + " against a " + tc.target + " target, " +
       tc.delta + (tc.over ? " over" : " left") +
-      (hideShotScenes ? " (" + formatDuration(remaining) + " still to shoot)" : "") +
+      (viewFlags().hideShot() ? " (" + formatDuration(remaining) + " still to shoot)" : "") +
       " — click to change the target or your reading speed";
-  } else if (hideShotScenes) {
+  } else if (viewFlags().hideShot()) {
     totalHtml = formatDuration(remaining) + '<span class="rd-length-of"> / ' + totalText + '</span>';
     title = formatDuration(remaining) + " still to shoot of " + totalText +
       " — click to set your reading speed or a target length";
@@ -101,7 +100,7 @@ export function cycleRowStatus(rowId) {
   if (outcome.kind === "failed") throw outcome.error;
   if (outcome.kind === "rejected" && outcome.reason === REVIEW_ONLY) showToast(STATUS_REVIEW_REFUSAL, "warn");
   if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
-  if (hideShotScenes) {
+  if (viewFlags().hideShot()) {
     var grace = shotGrace(before, readSession(sceneStatus(rowId)));
     if (grace === "arm") armShotHideGrace(rowId);
     else if (grace === "clear") clearShotHideGrace(rowId);
@@ -110,6 +109,4 @@ export function cycleRowStatus(rowId) {
   updateScriptStats();
 }
 
-export function __init() {
-  wordCount = productionReaders.wordCount;
-}
+export function __init() {}

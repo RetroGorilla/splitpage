@@ -10,7 +10,7 @@ import {
 import { legacySnapshots } from "../legacy/recovery-bridge.ts";
 import { createIdbHistoryBackend, hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
 import { showToast } from "./12-dirty-toast.js";
-import { seedCheckPasses } from "./20b-onboarding.js";
+import { seedCheckPasses } from "../legacy/seed-check.ts";
 import {
   HISTORY_OLDER_KEY,
   HISTORY_OLDER_TTL_MS,

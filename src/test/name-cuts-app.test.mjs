@@ -11,7 +11,8 @@ const { applyTag, findOrAddPerson, openTagComposer, registerProductionTag, renam
 const { plainTagPhrase } = await import("../js/07b-plain-tags.js");
 const { addBrollProp } = await import("../js/08c-broll.js");
 const { closeBrollPanel, openBrollPanel } = await import("../js/08d-broll-panel.js");
-const { COMMENT_NAME_KEY, renderComments, setCommentAssignee } = await import("../js/10-comments.js");
+const { renderComments, setCommentAssignee } = await import("../js/10-comments.js");
+const NAME_KEY = "splitpage-comment-author";
 const { PERSON_COLOR_KEY, writePref } = await import("../js/00p-prefs.js");
 const { personColorsWithMine } = await import("../js/13a-presence.js");
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
@@ -151,18 +152,18 @@ for (const [what, c] of CASES) {
 
   test("13b the guest's name: " + what + " (#344, #419)", () => {
     load();
-    writePref(COMMENT_NAME_KEY, null);
+    writePref(NAME_KEY, null);
     sessionStorage.clear();
     assert.ok(maybeAskGuestName());
     document.getElementById("guest-name").value = c.typed(30);
     document.querySelector('#guest-modal [data-guest-action="save"]').click();
-    assert.equal(localStorage.getItem(COMMENT_NAME_KEY), c.kept(30));
+    assert.equal(localStorage.getItem(NAME_KEY), c.kept(30));
   });
 }
 
 test("13a my colour is recorded under my name cut by code point (#344)", () => {
   load();
-  writePref(COMMENT_NAME_KEY, x(29) + GRIN + "y");
+  writePref(NAME_KEY, x(29) + GRIN + "y");
   writePref(PERSON_COLOR_KEY, PERSON_COLORS[1]);
   const state = { personColors: null };
   assert.deepEqual(personColorsWithMine(state), { [x(29) + GRIN]: PERSON_COLORS[1] });

@@ -19,7 +19,7 @@ const SAVED = {
 const atBoot = await bootApp("\n" + JSON.stringify(SAVED, null, 2) + "\n");
 
 const { migrateRows } = await import("../js/02-state.js");
-const { seedCheckPasses } = await import("../js/20b-onboarding.js");
+const { seedCheckPasses } = await import("../legacy/seed-check.ts");
 
 after(closeApp);
 

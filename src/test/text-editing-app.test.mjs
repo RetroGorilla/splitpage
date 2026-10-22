@@ -15,6 +15,7 @@ const { syncFieldFromDom, render } = await import("../js/05-render.js");
 const { undoGuard } = await import("../legacy/editor-bridge.ts");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 const writer = await import("../js/19-writer.js");
+const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 
 after(closeApp);
 
@@ -44,7 +45,7 @@ function fixture() {
 
 let opened = 0;
 async function open(doc) {
-  if (writer.writerOpen) writer.closeWriter();
+  if (viewFlags().writerOpen()) writer.closeWriter();
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(doc || fixture())))], "text-" + (++opened) + ".splitpage", { lastModified: opened });
   await openProjectFile(file, null, { skipSnapshot: true });
   flushEdits();

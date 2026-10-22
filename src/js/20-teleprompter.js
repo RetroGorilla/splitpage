@@ -12,7 +12,6 @@ import { writePref } from "./00p-prefs.js";
 import { serverHomeId } from "./_home.js";
 import { SpeechRecognitionCtor } from "./00-prelude.js";
 import { rowSeconds } from "./01-scene-status.js";
-import { hideShotScenes } from "./01b-hide-shot.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import {
   addPersonForTag,
@@ -24,7 +23,6 @@ import {
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { adoptProjectState, parseProjectFileState } from "./18-local-files.js";
-import { ONBOARD_KEY } from "./20b-onboarding.js";
 import {
   canOpenPrompterInBrowser,
   createDesktopRecognition,
@@ -44,6 +42,7 @@ import { projection } from "../core/text/runs.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { focusMemory } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
+import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
 import { setTagAddingPerson, setTagRenaming } from "../application/tag-panel-state.ts";
 
 export var prompterMirror;
@@ -96,7 +95,7 @@ export function trimPrompterCell(cell) {
 var SENTENCE_END_RE = /[.!?]["'’”)\]]*$/;
 
 export function buildPrompterContent() {
-  var skippingShot = prompterSkipsShot() || hideShotScenes;
+  var skippingShot = prompterSkipsShot() || viewFlags().hideShot();
   var source = skippingShot
     ? S.state.rows.filter(function (row) { return row.status !== "shot"; })
     : S.state.rows;
@@ -1011,11 +1010,7 @@ function launchPrompterForServerDoc() {
 }
 
 function startPrompterLaunch(launch) {
-  try {
-    if (!localStorage.getItem(ONBOARD_KEY)) {
-      localStorage.setItem(ONBOARD_KEY, JSON.stringify({ v: 1, done: true, skipped: true, at: "prompter-launch" }));
-    }
-  } catch (e) { }
+  preferences().skipOnboardingForPrompter();
   whenInitialStateReady().then(function () {
     if (launch.token) return launchPrompterFromScript(launch.token);
     launchPrompterForServerDoc();

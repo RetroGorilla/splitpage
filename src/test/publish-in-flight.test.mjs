@@ -1,3 +1,4 @@
+import "./_preferences-started.mjs";
 import { dom } from "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
