@@ -11,7 +11,6 @@ import { __init as init_03b_side_panels } from "./03b-side-panels.js";
 import { __init as init_04_richtext } from "./04-richtext.js";
 import { __init as init_04c_doc_model } from "./04c-doc-model.js";
 import { __init as init_05_render } from "./05-render.js";
-import { __init as init_05b_cell_edit } from "./05b-cell-edit.js";
 import { __init as init_05c_clipboard } from "./05c-clipboard.js";
 import { __init as init_05d_draft_edit } from "./05d-draft-edit.js";
 import { __init as init_05e_gallery_overlay } from "./05e-gallery-overlay.js";
@@ -102,7 +101,6 @@ if (wiring) {
   init_04_richtext();
   init_04c_doc_model();
   init_05_render();
-  init_05b_cell_edit();
   init_05c_clipboard();
   init_05d_draft_edit();
   init_05e_gallery_overlay();

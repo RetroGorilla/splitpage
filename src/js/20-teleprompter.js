@@ -7,10 +7,8 @@ import {
   setVoiceFollowing,
   voiceIsFollowing
 } from "../application/prompter-state.ts";
-import { S } from "./_state.js";
 import { reviewBlocked, reviewMode, serverHomeId } from "../legacy/location-bridge.ts";
 import { SpeechRecognitionCtor } from "./00-prelude.js";
-import { rowSeconds } from "./01-scene-status.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import {
   addPersonForTag,
@@ -31,7 +29,8 @@ import {
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "./_voice-relay.js";
-import { pad2, formatTimecode } from "../core/production/timing.ts";
+import { pad2, formatTimecode, rowSeconds } from "../core/production/timing.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
 import { withoutCues } from "../core/text/cues.ts";
 import { sliceCell } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
@@ -39,6 +38,7 @@ import { toPlainText } from "../core/text/projections.ts";
 import { projection } from "../core/text/runs.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { focusMemory } from "../legacy/editor-bridge.ts";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
 import { setTagAddingPerson, setTagRenaming } from "../application/tag-panel-state.ts";
@@ -96,9 +96,10 @@ var SENTENCE_END_RE = /[.!?]["'’”)\]]*$/;
 
 export function buildPrompterContent() {
   var skippingShot = prompterSkipsShot() || viewFlags().hideShot();
+  var doc = currentDocument();
   var source = skippingShot
-    ? S.state.rows.filter(function (row) { return row.status !== "shot"; })
-    : S.state.rows;
+    ? doc.rows.filter(function (row) { return row.status !== "shot"; })
+    : doc.rows;
   var sceneEntries = source.map(function (row) {
     var cell = trimPrompterCell(withoutCues(cellOf(row.audioText)));
     return { id: row.id, cell: cell, view: cell.length ? prompterSceneHtml(cell) : null };
@@ -154,7 +155,7 @@ export function buildPrompterContent() {
   sceneStartSec = [];
   var t = 0;
   source.forEach(function (row) {
-    var secs = rowSeconds(row);
+    var secs = rowSeconds(row, doc, productionReaders);
     sceneStartSec.push(t);
     sceneSeconds.push(secs);
     t += secs;

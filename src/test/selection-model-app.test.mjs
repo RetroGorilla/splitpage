@@ -12,7 +12,7 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { applyMerge } = await import("../js/03-sync.js");
 const { renderAbsorbed, renderRow } = await import("../js/05-render.js");
-const { posToDom } = await import("../js/05b-cell-edit.js");
+const { posToDom } = await import("../features/editing/cell-dom.ts");
 const { domToPos } = await import("../features/editing/cell-dom.ts");
 const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
 const { clearDirty } = await import("../js/12-dirty-toast.js");

@@ -14,7 +14,7 @@ const SHIM = "src/js/_entry.js";
 const FROZEN_SHIM_IMPORTS: readonly string[] = [
   "./00-prelude.js", "./01-scene-status.js", "./01b-hide-shot.js", "./02-state.js", "./02b-doc-id.js",
   "../adapters/storage/02c-blobs.js", "../adapters/storage/02d-gallery.js", "./03-sync.js", "./03a-history-store.js", "./03b-side-panels.js", "./04-richtext.js",
-  "./04c-doc-model.js", "./05-render.js", "./05b-cell-edit.js", "./05c-clipboard.js",
+  "./04c-doc-model.js", "./05-render.js", "./05c-clipboard.js",
   "./05d-draft-edit.js", "./05e-gallery-overlay.js", "./05f-rundown.js", "./05g-scene-clip.js", "./05h-scene-select.js", "./05p-rundown-presence.js",
   "./05r-read-time.js", "./05s-script-zoom.js", "./05t-target.js", "./05v-video.js", "./05w-annotate.js",
   "./06-rows.js", "./07-production-tags.js", "./07b-plain-tags.js", "./08-production-panels.js", "./08c-broll.js", "./08d-broll-panel.js",

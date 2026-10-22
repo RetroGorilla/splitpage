@@ -3,7 +3,7 @@ import { ensureBytes, intern, persist, urlForSync } from "../adapters/storage/02
 import { rowIndexOf } from "../core/document/rows.ts";
 import { readSession } from "../legacy/session-bridge.ts";
 import { slotPoster } from "./05-render.js";
-import { galleryEdit } from "./05e-gallery-overlay.js";
+import { cellEditing } from "../legacy/editor-bridge.ts";
 import { ANNOTATION_COLORS, annotateGallerySlot, normalizeMarks, rowSlots, slotOriginal } from "../core/document/gallery.ts";
 import { cappedLongText, codePointPrefix } from "../core/document/text-policy.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
@@ -686,7 +686,7 @@ function save(rec, marks) {
   if (at === -1) { lost(); return; }
   var original = ed.original;
   ed.committing = true;
-  var ok = galleryEdit(ed.rowId, marks.length ? "Picture annotated" : "Annotations removed", function (row) {
+  var ok = cellEditing().editGallery(ed.rowId, marks.length ? "Picture annotated" : "Annotations removed", function (row) {
     return annotateGallerySlot(row, at, rec, original, marks);
   });
   if (!ed) return;

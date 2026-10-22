@@ -8,7 +8,7 @@ import {
   inertBody,
   sanitizeHtml
 } from "./04-richtext.js";
-import { editCell } from "./05b-cell-edit.js";
+import { cellEditing } from "../legacy/editor-bridge.ts";
 import {
   isInsideTagOrLink,
   scheduleIdleRefresh,
@@ -241,7 +241,7 @@ export function maybeCaptureBroll(e, cellEl) {
   if (!m || m[0].length !== head.length) return;
 
   var id = makeId("bs"), keyText = m[1] + m[2];
-  editCell(cellEl, function (cell) {
+  cellEditing().edit(cellEl, function (cell) {
     var from = domToPos(cellEl, node, 0), to = domToPos(cellEl, node, offset);
     if (from === null || to === null) return null;
     if (projection(cell).slice(from, to) !== head.replace(/\u200B/g, "")) return null;

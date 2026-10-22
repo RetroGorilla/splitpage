@@ -1,19 +1,18 @@
 import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
 import { S } from "./_state.js";
-import { rowSeconds } from "./01-scene-status.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession } from "../legacy/session-bridge.ts";
 import { cssAttr } from "./04-richtext.js";
-import { clearDropMarkers, moveRowTo } from "./06-rows.js";
+import { clearDropMarkers } from "./06-rows.js";
 import { contentMemo } from "../core/document/memo.ts";
 import { escapeHtml, unitSafePrefix } from "../core/document/text-policy.ts";
-import { pad2, formatDuration } from "../core/production/timing.ts";
+import { pad2, formatDuration, rowSeconds } from "../core/production/timing.ts";
 import { toPlainText } from "../core/text/projections.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { cellOf } from "../legacy/richtext.ts";
-import { rowDrag } from "../legacy/editor-bridge.ts";
+import { cellEditing, rowDrag } from "../legacy/editor-bridge.ts";
 import { brollCountIn } from "../core/production/broll.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { reviewMode } from "../legacy/location-bridge.ts";
@@ -446,7 +445,8 @@ export function renderRundown() {
   var trackWidth = track.clientWidth;
   if (!trackWidth) return;
 
-  var scenes = rows.map(function (r) { return { seconds: rowSeconds(r), status: r.status }; });
+  var doc = currentDocument();
+  var scenes = rows.map(function (r) { return { seconds: rowSeconds(r, doc, productionReaders), status: r.status }; });
   var total = scenes.reduce(function (n, sc) { return n + sc.seconds; }, 0);
   var width = placeLength(strip, total, trackWidth);
   var lay = rundownRestLayout(scenes, total, extraSeconds, width, REST_MIN_PX);
@@ -938,8 +938,8 @@ function onStripDrop(e) {
   lensOff();
   if (g < 0 || !S.state) return;
   var rows = S.state.rows;
-  if (g === 0) moveRowTo(id, rows[0].id, false);
-  else moveRowTo(id, rows[g - 1].id, true);
+  if (g === 0) cellEditing().moveRow(id, rows[0].id, false);
+  else cellEditing().moveRow(id, rows[g - 1].id, true);
   followMovedScene(id);
 }
 

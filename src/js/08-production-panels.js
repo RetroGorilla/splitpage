@@ -2,10 +2,9 @@ import { bulkDeleteArmed, clearProductionSelection, deleteConfirmation, disarmBu
 import { productionReaders } from "../legacy/document-ports.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { nextTagStatus, normalizeTagName } from "../core/document/tags.ts";
-import { formatDuration, pad2 } from "../core/production/timing.ts";
+import { formatDuration, pad2, rowSeconds } from "../core/production/timing.ts";
 import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, tagStatus } from "../core/production/looks.ts";
 import { S } from "./_state.js";
-import { rowSeconds } from "./01-scene-status.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { cssAttr, plainText, safeId } from "./04-richtext.js";
@@ -31,7 +30,7 @@ import { planQuickAdd } from "../core/production/tags.ts";
 import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddCommand, tagCellsCommand, updateTagsCommand } from "../application/commands/production-records.ts";
 import { PERSON_NAME_MAX, personNamed } from "../core/production/records.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
-import { readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
 import { retagMentions, retagRewrites } from "../legacy/tag-rewrites.ts";
 import { rewrittenCopies } from "../application/commands/document-edit.ts";
 import { gearGroupBy, productionGroupBy, setTagAddingPerson, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../application/tag-panel-state.ts";
@@ -469,6 +468,7 @@ function renderProductionByPerson(all) {
 }
 
 function renderProductionByShoot(entries) {
+  var doc = currentDocument();
   var live = entries || productionEntries();
   var byRow = {};
   live.forEach(function (item) {
@@ -507,7 +507,7 @@ function renderProductionByShoot(entries) {
   return order.map(function (key) {
     var g = groups[key];
     var shot = g.rows.filter(function (i) { return S.state.rows[i].status === "shot"; }).length;
-    var secs = g.rows.reduce(function (n, i) { return n + rowSeconds(S.state.rows[i]); }, 0);
+    var secs = g.rows.reduce(function (n, i) { return n + rowSeconds(doc.rows[i], doc, productionReaders); }, 0);
     var done = shot === g.rows.length;
     return '<section class="shoot-group" style="--dot:' + (key ? TAG_CATEGORIES[1].color : "var(--border-strong)") + '">' +
       '<h3 class="shoot-head">' +

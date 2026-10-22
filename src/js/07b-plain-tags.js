@@ -1,7 +1,7 @@
 import { tagCategory } from "../core/production/looks.ts";
 import { isBlankTagName } from "../core/production/tags.ts";
 import { domToPos } from "../features/editing/cell-dom.ts";
-import { editCell } from "./05b-cell-edit.js";
+import { cellEditing } from "../legacy/editor-bridge.ts";
 import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
 import {
   isInsideTagOrLink,
@@ -235,7 +235,7 @@ export function closePlainTag() {
   clearPaint();
   var entry = registryEntry(o.cat, phrase.name);
   var name = entry ? entry.name : phrase.name;
-  var done = editCell(o.cellEl, function (cell) {
+  var done = cellEditing().edit(o.cellEl, function (cell) {
     var from = domToPos(o.cellEl, o.span.firstChild, 0), to = domToPos(o.cellEl, o.tail, at);
     if (from === null || to === null) return null;
     if (projection(cell).slice(from, to) !== o.keyword + typed.replace(ZWSP_RE, "")) return null;
