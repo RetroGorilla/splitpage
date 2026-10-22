@@ -1,4 +1,4 @@
-import { bootApp, closeApp, rewireApp } from "./_app-boot.mjs";
+import { bootApp, closeApp, rewireApp, rewireRunningApp } from "./_app-boot.mjs";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
@@ -13,6 +13,7 @@ const { saveDoc } = await import("../js/14-export.js");
 const homeModule = await import("../js/_home.js");
 const app = await import("../bootstrap/app.ts");
 const { confirmedSave } = await import("../legacy/save-bridge.ts");
+const { saveInProgress } = await import("../legacy/screen-state.ts");
 
 after(closeApp);
 
@@ -62,6 +63,21 @@ async function settle() {
   for (let turn = 0; turn < 40; turn++) await new Promise((resolve) => setImmediate(resolve));
 }
 
+function openOnServer(docId) {
+  S.state = script();
+  flushEdits();
+  clearDirty();
+  homeModule.setHome("none");
+  window.__hostedTest.setSession({ docId: docId, rev: 1 });
+  S.docIdWrittenOut = true;
+  clearDirty();
+}
+
+function type(row, text) {
+  S.state.rows[row].audioText = text;
+  markDirty();
+}
+
 function warnToasts() {
   return Array.from(document.querySelectorAll("#toast-host .toast.warn")).map((el) => el.textContent);
 }
@@ -73,19 +89,12 @@ test("a hosted save that lands after its wiring was disposed and the app rewired
   const held = createHeldFetch({ connection: () => homeModule.conn, answer: server.answer });
   t.after(held.install());
 
-  S.state = script();
-  flushEdits();
-  clearDirty();
-  homeModule.setHome("none");
-  window.__hostedTest.setSession({ docId: "srv-t", rev: 1 });
-  S.docIdWrittenOut = true;
-  clearDirty();
+  openOnServer("srv-t");
   const opened = homeModule.home;
   const baseline = S.baseState;
   assert.equal(textOf(baseline.rows[0]), "One.", "the baseline is the server's revision 1");
 
-  S.state.rows[0].audioText = "Typed before the teardown.";
-  markDirty();
+  type(0, "Typed before the teardown.");
   held.holdWhen((r) => r.method === "PUT");
   const saving = saveDoc({ auto: true });
   await held.gates.arrived("fetch");
@@ -106,9 +115,10 @@ test("a hosted save that lands after its wiring was disposed and the app rewired
   assert.equal(S.baseState, baseline, "the late save did not replace the baseline");
   assert.equal(confirmedSave().baseline, null, "the late save's baseline did not reach the replacement coordinator");
   assert.deepEqual(warnToasts().slice(warnedBefore), ["An earlier save of this script arrived late. Your next save will merge both versions."], "the late save is reported once");
+  assert.equal(saveInProgress(), false, "the late save leaves the idle replacement not busy");
+  assert.equal(document.getElementById("btn-save").disabled, false, "the header Save button is enabled after the late save");
 
-  S.state.rows[1].audioText = "Typed after the rewire.";
-  markDirty();
+  type(1, "Typed after the rewire.");
   await saveDoc();
   await settle();
 
@@ -117,4 +127,43 @@ test("a hosted save that lands after its wiring was disposed and the app rewired
   assert.equal(textOf(stored.state.rows[0]), "Typed before the teardown.", "the server keeps the text the late save sent");
   assert.equal(textOf(stored.state.rows[1]), "Typed after the rewire.", "the server holds the edit made after the rewire");
   assert.equal(homeModule.home.rev, 3, "the replacement adopts the revision of its own save");
+});
+
+test("a hosted save that lands after its wiring was disposed leaves the replacement's running save busy", async (t) => {
+  mockClock(t);
+  const server = createServer();
+  server.docs.set("srv-b", { rev: 1, state: script() });
+  const held = createHeldFetch({ connection: () => homeModule.conn, answer: server.answer });
+  t.after(held.install());
+  await rewireRunningApp();
+  t.after(() => app.stopApp());
+
+  openOnServer("srv-b");
+  type(0, "Typed before the teardown.");
+  held.holdWhen((r) => r.method === "PUT", 2);
+  const late = saveDoc({ auto: true });
+  await held.gates.arrived("fetch");
+
+  await rewireRunningApp();
+
+  type(1, "Typed after the rewire.");
+  const current = saveDoc();
+  await held.gates.arrived("fetch", 2);
+  assert.equal(saveInProgress(), true, "the replacement's save shows as busy");
+
+  held.gates.release("fetch");
+  await late;
+  await settle();
+
+  const button = document.getElementById("btn-save");
+  assert.equal(saveInProgress(), true, "the late save did not clear the replacement's busy state");
+  assert.equal(button.textContent, "Saving…", "the header Save button still says Saving…");
+  assert.equal(button.disabled, true, "the header Save button stays disabled");
+
+  held.gates.releaseAll("fetch");
+  await current;
+  await settle();
+
+  assert.equal(saveInProgress(), false, "the replacement's save clears the busy state when it finishes");
+  assert.equal(button.disabled, false, "the header Save button is enabled again");
 });
