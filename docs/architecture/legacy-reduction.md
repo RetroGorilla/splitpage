@@ -23,7 +23,7 @@ The layers the steps move code into, with dependencies pointing down only (`laye
 | `src/application/` | The session, commands, the save coordinator, the action registry, the state owners, and ports for effects other areas trigger (notices, menu items, the clipboard, cell editing). No platform globals: timers, storage and the clock come in as ports | Core, contracts, shared |
 | `src/features/` | Views and panels. They get owners and ports from the wiring and listen for changes | Core, application, contracts, shared |
 | `src/adapters/` | Storage, file formats, transport, and the desktop bridge | Core, application, contracts, shared |
-| `src/bootstrap/` | The one place that builds and connects everything at startup | Anything |
+| `src/bootstrap/` | The one place that builds and connects everything at startup | Anything except `src/js/_state.js` |
 
 **How numbered files reach an owner.** An owner that more than one area uses lives in `src/application/` and is constructed by the wiring at startup; nothing creates one at module evaluation. Numbered files reach it through one named bridge in `src/legacy/`, which throws before startup and after teardown, as `session-bridge.ts` does with `running()`. Each new bridge joins plan §8's list of bridges to retire, and goes when its last numbered importer becomes a feature. Features receive owners as ports from the wiring, as `features/file-menu/mount.ts` receives `showToast` today. Nothing goes into a feature or adapter folder that another area will import, because no feature may import another feature or an adapter.
 
@@ -159,18 +159,22 @@ Exit per PR: its fields have no `S.` reference in `src/` or `src/test/`, and `le
 
 Exit: no `src/js/22*.js`; 0 `S.` references in `src/bootstrap/`; a layer rule forbids `src/bootstrap/` to import `_state.js`, with a fail-first case; 6 numbered files and 1,452 numbered lines removed; the remount test passes 4/4.
 
+The five remaining wiring files now live in `src/bootstrap/wiring/production.ts`, `comments.ts`, `views.ts`, `overlay.ts` and `startup.ts`, alongside `editor.ts`. Bootstrap owns their mount lifetimes and typed feature ports. Startup reads the live document through `liveDocumentPort`, unsaved work through `unsavedFor`, and the desktop bridge through `desktopBridge`; the initial-ready assignment stays with the prelude through `setInitialStateReady`. Server-picker routing goes through `routeServerOpen` in the desktop owner. Bootstrap has no direct dependency on `_state.js`, enforced by the layer rule and its fail-first cases. All 13 click slots and the tags-anchor mousedown keep their order, and the load-order probe retains all 79 targets, including all six typed wiring modules. This port deletes 762 numbered lines and adds 13 lines at the existing prelude and desktop boundaries, a net reduction of 749 numbered lines; the remaining numbered-file count is 70.
+
 ### L3. Give every shared job an owner (fixes the core of F1)
 
 **L3a. Rules, helpers and effect ports** (4 PRs; after L0, beside L2a). The appendix's [L3a destinations](#l3a-destinations) list every `rule` and `page-helper` name with where it goes; PR 3 lists the values.
 
 | PR | What moves | Who |
 | --- | --- | --- |
-| 1 | The `rule` functions: document and people rules to `src/core/`; text, time, file-name and link helpers to `shared/`; the project-file codec to `src/adapters/formats/`. Also `rowSeconds`, `estimatedSeconds` and `brollCountInRow`, whose only loop call is a name this step moves | Codex, Sol high |
+| 1 | The `rule` functions: document and people rules to `src/core/`; text, time, file-name and link helpers to `shared/`; the project-file codec to `src/adapters/formats/`. Also `brollCountInRow`, whose only loop call is a name this step moves. `rowSeconds` and `estimatedSeconds` move to L3d instead (see below) | Codex, Sol high |
 | 2 | Effects other areas trigger become ports in `src/application/`, implemented by a feature and wired at startup: notices (`showToast`, `showActionToast`), menu items (`setMenuItemLabel`, `setMenuItemReason`) and the clipboard (`copyShareText`). Numbered files reach each through its bridge | cloud, Sonnet |
 | 3 | Values. 44 of the 61 are pass-through names, which files import instead from where they are defined, mostly `src/core/`. Of the 17 defined in a loop file: `normalizeServerBase` is an alias of `normalizeServerUrl`, and `MD_IMAGE_PREFIX_RE` goes to `src/adapters/formats/`. The other 15 are state and move with their owners: the 12 storage keys, server defaults and writer size limits (L3b PRs 2 and 6, L3c PR 1), `autoSaveTiming` (L3b PR 1), `liveDocumentPort` (L3d PR 3) and `whilePainting` (L3e PR 1) | Codex, Sol high |
 | 4 | `findRowIndex(id)`, which reads `S.state`, becomes `rowIndexOf(doc, id)` in `src/core/document/`, and its 14 callers pass the document they hold | cloud, Sonnet |
 
 View helpers (functions that build markup or adjust an element they are given) stay with the area that draws that view, and are listed with their owning area in the appendix.
+
+`rowSeconds` and `estimatedSeconds` moved from L3a PR 1 to L3d, because they need the live-document port, which L3a does not yet have.
 
 **Structure:** rules depend on nothing; effects are requested through a port, so the code asking for a notice does not import the code that draws it.
 

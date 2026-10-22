@@ -1,0 +1,25 @@
+.scene-menu { position: fixed; top: 0; left: 0; z-index: 140; min-width: 248px; }
+@media (max-width: 760px) {
+  .mini-toolbar button { padding: 9px var(--space-12); font-size: 13px; flex: none; }
+  .phone-tab {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 71px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-4);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text-dim);
+    font-family: var(--font-body);
+    font-size: 11.5px;
+    line-height: 14px;
+    font-weight: 450;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+}

@@ -1,6 +1,0 @@
-  @media (min-width: 761px) {
-    .doc-meta {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, max-content)) auto;
-      min-width: auto;
-    }

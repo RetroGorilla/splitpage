@@ -37,7 +37,7 @@ resolved edge (static imports, re-exports, literal `require`, literal dynamic
 | `features/<name>` | `src/features/<name>/` | itself, `features/common`, core, `application`, `contracts`, `shared` |
 | `features/common` | `src/features/common/` | DOM helpers used by more than one feature; same imports as `features/<name>`, imported by every feature |
 | `legacy` | `src/legacy/` | itself, core, `legacy-js`, `application`, `contracts`, `adapters`, `shared` |
-| `bootstrap` | `src/bootstrap/` | anything |
+| `bootstrap` | `src/bootstrap/` | anything except `src/js/_state.js` |
 | `shared` | `shared/` | itself |
 | `tests` | `src/test/`, `tests/`, `*.test.*` | anything |
 | `legacy-js`, `server`, `desktop` | `src/js/`, `server/`, `desktop/` | anything except tests |
@@ -49,6 +49,8 @@ directly under it): add the folder to the table (`layerOf`) or move the file.
 Until then it counts as production for the `S` rules below, and core,
 `contracts`, `application`, `adapters`, features, `legacy` and `shared` may
 not import it.
+
+Bootstrap imports of `src/js/_state.js` are `layer` violations, including side-effect imports, re-exports, dynamic imports and type imports. The wiring uses the live-document and save ports, the initial-ready setter in `00-prelude.js`, and the desktop bridge in `20f-desktop.js`. `tools/test-dep-report.mjs` has fail-first cases for this boundary and a positive case for a numbered module supplying a port.
 
 Core, `contracts`, `application`, `shared` and feature layers may not import a
 Node built-in or a package (`platform-import`). Core, `contracts`,

@@ -43,6 +43,8 @@ function signLegacyEdit() {
   if (plan) plan.apply(S.state);
 }
 
+export function hasUnsavedChanges() { return !!S.dirty; }
+
 export function legacySessionEffects() {
   return {
     dirty: function () {
@@ -67,7 +69,7 @@ export function legacySessionEffects() {
 }
 
 export function setSaveButtons() {
-  var view = saveButtonView({ busy: saveBusy(), dirty: !!S.dirty });
+  var view = saveButtonView({ busy: saveBusy(), dirty: hasUnsavedChanges() });
   ["btn-save", "wr-save"].forEach(function (id) {
     var btn = document.getElementById(id);
     if (!btn) return;
