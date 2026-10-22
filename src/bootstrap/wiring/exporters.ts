@@ -20,7 +20,7 @@ import {
   buildNarrationDocx,
   buildNarrationText,
   narrationRows
-} from "../../js/15-docx.js";
+} from "../../adapters/formats/docx.ts";
 import { buildBreakdownCsv, buildBrollCsv, buildCsv } from "../../adapters/formats/csv.ts";
 import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } from "../../adapters/formats/xlsx.ts";
 import {
@@ -29,7 +29,7 @@ import {
   buildShotListPdf,
   pdfCommentImagesFor,
   pdfImagesFor
-} from "../../js/17-pdf.js";
+} from "../../adapters/formats/pdf.ts";
 
 export interface ExportBuild {
   readonly doc: ExportDocument;

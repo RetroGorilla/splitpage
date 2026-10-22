@@ -16,7 +16,7 @@ import { setBaseState, stashLocalWork } from "./03-sync.js";
 import { tagFieldOccurrences } from "./07-production-tags.js";
 import { handleImportFile, parseMarkdownTable } from "./11-import.js";
 import { captureExportDocument, exportDocumentOf } from "./14b-export-kit.js";
-import { audioDirectionsHtml } from "./15-docx.js";
+import { audioDirectionsHtml } from "../adapters/formats/docx.ts";
 import {
   autoSaveTarget,
   flushAutoSave,
@@ -28,7 +28,7 @@ import { openProjectFile } from "./18-local-files.js";
 import { cappedLongText, plainText, safeImageSrc } from "../core/document/text-policy.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";
 import { autoSavePolicy } from "../legacy/save-bridge.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { heldDocument } from "../legacy/session-bridge.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
@@ -257,7 +257,7 @@ export function __init() {
     migrate: migrateRows,
     stash: stashLocalWork,
     clone: cloneState,
-    state: function () { return currentDocument(); },
+    state: function () { return heldDocument(); },
     docFile: function () {
       var f = fileHome();
       return { name: f && f.handle ? f.handle.name : null, kind: f ? f.format : null,

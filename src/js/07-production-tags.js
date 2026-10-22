@@ -1,5 +1,4 @@
 import { domToPos } from "../features/editing/cell-dom.ts";
-import { S } from "./_state.js";
 import { updateScriptStats } from "./01-scene-status.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { stampRow } from "./03-sync.js";
@@ -44,8 +43,9 @@ import { namedTagId, projection } from "../core/text/runs.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
-import { readSession, requestRefresh, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession, requestRefresh, runDocumentEdit, sessionStamps, stampDocument } from "../legacy/session-bridge.ts";
 import { retagMentions, retagRewrites } from "../legacy/tag-rewrites.ts";
+import { changeSet } from "../application/session/change-set.ts";
 import { addPersonCommand, registerTagCommand, retagCommand, tagCellsCommand } from "../application/commands/production-records.ts";
 import { personById as personByIdIn, personNamed, registryEntryById as registryEntryByIdIn, registryEntryOf } from "../core/production/records.ts";
 import { cellEditing, focusMemory } from "../legacy/editor-bridge.ts";
@@ -153,12 +153,14 @@ function holdIndex(core, entries, state) {
 }
 
 function productionIndex() {
-  var kept = prodIndex && prodIndex.state === S.state ? refreshedProductionIndex(prodIndex.core, S.state, productionReaders) : null;
+  const doc = currentDocument();
+  if (!doc) return { core: null, entries: [] };
+  const kept = prodIndex && prodIndex.state === doc ? refreshedProductionIndex(prodIndex.core, doc, productionReaders) : null;
   if (kept && kept === prodIndex.core) return prodIndex;
   if (kept) return holdIndex(kept, prodIndex.entries, prodIndex.state);
   prodIndexDerived++;
-  var core = deriveProductionIndex(S.state, productionReaders);
-  return holdIndex(core, core.entries.map(presentEntry), S.state);
+  const core = deriveProductionIndex(doc, productionReaders);
+  return holdIndex(core, core.entries.map(presentEntry), doc);
 }
 
 export function productionEntries() {
@@ -209,10 +211,22 @@ export function tagRecordsPlan(doc) {
   };
 }
 
+const REGISTRY_CHANGE = changeSet({ docFields: ["productionTags"] });
+
+function registryHealingStamp(plan, counted) {
+  return {
+    name: "stamp-tag-registry",
+    plan: function () {
+      return { changes: REGISTRY_CHANGE, apply: function (live) { counted(plan.apply(live)); } };
+    }
+  };
+}
+
 export function healTagRegistry() {
-  var plan = tagRecordsPlan(S.state);
+  const plan = tagRecordsPlan(currentDocument());
   if (!plan) return 0;
-  var count = plan.apply ? plan.apply(S.state) : 0;
+  let count = 0;
+  if (plan.apply) stampDocument(registryHealingStamp(plan, function (n) { count = n; }));
   plan.commit();
   return count;
 }
@@ -243,7 +257,7 @@ export function scheduleIdleRefresh(job) {
 }
 
 export function runIdleRefresh(jobs) {
-  if (!S.state) return;
+  if (!currentDocument()) return;
   idleFlushes++;
   if (jobs.has("production")) refreshProductionNow();
   if (jobs.has("writerStats")) updateWriterStats();
@@ -271,7 +285,7 @@ export function updateProductionBadge(n) {
 }
 
 function updateProductionCount() {
-  updateProductionBadge(S.state ? productionEntries().length : 0);
+  updateProductionBadge(currentDocument() ? productionEntries().length : 0);
 }
 
 export function updateTagBadges() {
@@ -485,7 +499,7 @@ function paintUntagged() {
 }
 
 function scanUntaggedMentions(entries) {
-  if (!S.state) return;
+  if (!currentDocument()) return;
   untaggedList = [];
   var index = viewFlags().writerOpen() ? null : buildUntaggedIndex(entries || productionEntries());
   if (index) {
@@ -626,9 +640,9 @@ function allOccurrencesTagged(doc, phrase, cat, name) {
 
 function countPhraseMatches(phrase) {
   var needle = String(phrase || "").trim();
-  if (!needle || !S.state) return 0;
+  if (!needle || !currentDocument()) return 0;
   var total = 0;
-  S.state.rows.forEach(function (row) {
+  currentDocument().rows.forEach(function (row) {
     ["visualText", "audioText"].forEach(function (field) {
       total += tagOccurrences(cellOf(row[field]), needle).length;
     });

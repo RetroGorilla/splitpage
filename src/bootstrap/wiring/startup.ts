@@ -6,7 +6,7 @@ import { documentTransitions } from "../../legacy/transition-bridge.ts";
 import { suppressUnloadWarning } from "../../js/00-prelude.js";
 import { updateHideShotMenu } from "../../js/01b-hide-shot.js";
 import { initDocIdentityChannel, loadInitialState, syncDocIdentity } from "../../js/02b-doc-id.js";
-import { liveDocumentPort } from "../../legacy/session-bridge.ts";
+import { heldDocument } from "../../legacy/session-bridge.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
 import {
@@ -41,7 +41,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
         const applied: StashResult<ValidatedDocument, unknown> = applyStashedWork(loaded, null, options);
         return applied;
       },
-      liveDocument: function () { return liveDocumentPort.current(); },
+      liveDocument: function () { return heldDocument(); },
       open: function (doc, reason) { documentTransitions().open({ from: { document: doc }, reason: reason }); },
       firstDraw: renderFirstDraw,
       refreshChrome: [updateIdentityChip, updateAutoSaveMenu, updateHideShotMenu, updateSaveStatus],
