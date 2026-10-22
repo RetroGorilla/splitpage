@@ -28,6 +28,7 @@ import { sceneFacts } from "./export-projections.ts";
 import { strBytes } from "./bytes.ts";
 import { xmlEscape } from "./xml.ts";
 import { zipRead, zipWrite } from "./zip.ts";
+import type { ZipEntry } from "./zip.ts";
 import { makeId } from "../identity/ids.ts";
 import { exportServices } from "../../application/export/services.ts";
 import { escapeHtml, safeHref, unitSafePrefix } from "../../core/document/text-policy.ts";
@@ -801,7 +802,7 @@ function packDocx(doc: ExportDocument, body: string, links: readonly string[], m
   });
   relsXml += '</Relationships>';
 
-  const entries = [
+  const entries: ZipEntry[] = [
     { name: "[Content_Types].xml", data: strBytes(
       '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
       '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
@@ -826,7 +827,7 @@ function packDocx(doc: ExportDocument, body: string, links: readonly string[], m
     { name: "docProps/core.xml", data: strBytes(corePropsXml(title, day)) },
     { name: "docProps/app.xml", data: strBytes(APP_PROPS_XML) },
     { name: "word/document.xml", data: strBytes(documentXml) },
-    { name: "word/styles.xml", data: strBytes(STYLES_XML ?? "") },
+    { name: "word/styles.xml", data: strBytes(stylesXml()) },
     { name: "word/settings.xml", data: strBytes(SETTINGS_XML) },
     { name: "word/theme/theme1.xml", data: strBytes(THEME_XML) },
     { name: "word/footer1.xml", data: strBytes(footerXml(title)) },
@@ -1307,7 +1308,8 @@ function bytesToDataUrl(bytes: Uint8Array, mime: string): string {
   return "data:" + mime + ";base64," + btoa(bin);
 }
 
-export function __init() {
+function stylesXml(): string {
+  if (STYLES_XML !== undefined) return STYLES_XML;
   const C = PRINT_COLORS;
   const font = function (which: string) {
     return '<w:rFonts w:asciiTheme="' + which + 'HAnsi" w:hAnsiTheme="' + which + 'HAnsi" w:cstheme="' + which + 'HAnsi"/>';
@@ -1359,4 +1361,5 @@ export function __init() {
       '<w:tblStylePr w:type="firstRow"><w:rPr><w:b/></w:rPr></w:tblStylePr>' +
       "</w:style>" +
     "</w:styles>";
+  return STYLES_XML;
 }

@@ -15,7 +15,7 @@ import {
 import { mergeStates } from "../js/03-sync.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { toMarkdownDoc } from "../adapters/formats/export-text.ts";
-import { __init as initDocx, buildDocx, docxToRows } from "../adapters/formats/docx.ts";
+import { buildDocx, docxToRows } from "../adapters/formats/docx.ts";
 import { buildPdf } from "../adapters/formats/pdf.ts";
 import { buildSplitpageFile } from "../js/20d-formats.js";
 import { refsIn } from "../../shared/blob-policy.js";
@@ -25,7 +25,6 @@ import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initStatus();
-initDocx();
 
 const jpegBytes = (w, h, salt) => new Uint8Array([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, salt || 0, 0xFF, 0xD9]);
 const P1 = intern(jpegBytes(300, 200, 1));

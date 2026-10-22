@@ -16,7 +16,6 @@ import {
   toMarkdownTableDoc
 } from "../../adapters/formats/export-text.ts";
 import {
-  __init as initDocxStyles,
   buildDocx,
   buildNarrationDocx,
   buildNarrationText,
@@ -209,7 +208,6 @@ const EXPORTERS: readonly BuiltInExporter[] = [
 ];
 
 export function registerBuiltInExporters(registry: ExportRegistry): () => void {
-  initDocxStyles();
   const drops: (() => void)[] = [];
   CARDS.forEach((card) => { drops.push(registry.defineCard(card)); });
   EXPORTERS.forEach((exporter) => { drops.push(registry.register(exporter as ExporterDecl)); });

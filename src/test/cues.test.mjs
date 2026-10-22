@@ -18,13 +18,12 @@ import {
   __init as initTags, healTagRegistry, productionEntries, removeTag, renameTag, tagsInField
 } from "../js/07-production-tags.js";
 import { zipRead } from "../adapters/formats/zip.ts";
-import { __init as initDocx, audioDirectionsHtml, buildDocx, buildNarrationText } from "../adapters/formats/docx.ts";
+import { audioDirectionsHtml, buildDocx, buildNarrationText } from "../adapters/formats/docx.ts";
 import { prompterSceneHtml, trimPrompterCell } from "../js/20-teleprompter.js";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initSceneStatus();
-initDocx();
 
 const T = (text, marks) => ({ text, marks: marks || {} });
 const C = (text, marks) => ({ text, marks: Object.assign({ cue: true }, marks || {}) });

@@ -11,14 +11,13 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import { commentBodyText, commentEntries } from "../js/10-comments.js";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
-import { __init as initDocx, buildDocx } from "../adapters/formats/docx.ts";
+import { buildDocx } from "../adapters/formats/docx.ts";
 import { buildCsv } from "../adapters/formats/csv.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
 initStatus();
-initDocx();
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
