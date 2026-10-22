@@ -3,9 +3,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
-import { changedBetween, flushEdits, lastUndoEntry, noteEdit, trackDocument, undo, undoSizes } from "../js/12a-undo.js";
+import { changedBetween, flushEdits, lastUndoEntry, noteEdit, undo, undoSizes } from "../js/12a-undo.js";
 import { assertGolden, goldenNames, jsonCopy } from "./golden-helpers.mjs";
-import { loadDocumentWithoutSession } from "./_document.mjs";
+import { loadTestDocument } from "./_document.mjs";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 const at = (day) => "2026-04-" + String(day).padStart(2, "0") + "T09:00:00.000Z";
 
@@ -52,10 +53,14 @@ const EDITS = [
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+function unstamped(key, value) {
+  if (key !== "rows" || !Array.isArray(value)) return value;
+  return value.map((row) => Object.fromEntries(Object.entries(row).filter(([field]) => field !== "updatedAt" && field !== "updatedBy")));
+}
+
 test("undo golden: state-fields", () => {
   const out = EDITS.map(([key, label, edit]) => {
-    loadDocumentWithoutSession(fresh());
-    trackDocument();
+    loadTestDocument(fresh());
     const before = jsonCopy(S.state);
     edit(S.state);
     const touched = changedBetween(before, S.state);
@@ -64,11 +69,13 @@ test("undo golden: state-fields", () => {
     const entry = lastUndoEntry();
     const entries = undoSizes().undo;
     const r = undo();
+    const after = currentDocument();
     return {
       key, edit: label, undoEntries: entries,
       steps: entry ? entry.steps.map((s) => s.op + (s.key ? ":" + s.key : "")) : [],
       undo: r.ok ? "applied" : r.empty ? "nothing to undo" : "refused: " + r.reason,
-      restored: same(S.state[key], before[key]),
+      restored: same(unstamped(key, after[key]), unstamped(key, before[key])),
+      restamped: key === "rows" && !same(after[key], unstamped(key, after[key])) && !same(after[key], before[key]),
       changedBetween: { doc: Object.keys(touched.doc), rowFields: Object.keys(touched.rowFields), structure: touched.structure }
     };
   });

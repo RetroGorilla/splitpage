@@ -28,6 +28,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $FreezeCaches = $env:SPLITPAGE_FREEZE_CACHES -eq '1'
+$DocumentGuard = $env:SPLITPAGE_DOCUMENT_GUARD -eq '1'
 $here  = $PSScriptRoot
 $tests = Join-Path $here 'tests'
 $logs  = Join-Path $env:TEMP 'splitpage-testlogs'
@@ -128,6 +129,7 @@ if ($autoPort -or $autoCdp) {
 }
 Write-Host ("running {0} suite(s), {1} at a time" -f $files.Count, $Parallel)
 if ($FreezeCaches) { Write-Host 'cache freezing on (SPLITPAGE_FREEZE_CACHES=1): every suite opens the app with freeze-caches=1' }
+if ($DocumentGuard) { Write-Host 'document guard on (SPLITPAGE_DOCUMENT_GUARD=1): every suite opens the app with document-guard=1' }
 
 # One lane record per suite. Lanes are started in file order as slots free
 # up; results are printed in the order lanes FINISH, each line prefixed with
@@ -156,6 +158,7 @@ function Get-DriverArgs($lane) {
   )
   if ($Headed) { $a += '-Headed' }
   if ($FreezeCaches) { $a += '-FreezeCaches' }
+  if ($DocumentGuard) { $a += '-DocumentGuard' }
   return ,$a
 }
 
@@ -280,6 +283,7 @@ function Write-Verdict([int]$SuiteCount) {
   Write-Host ''
   $passed = $script:totalChecks - $script:totalFail
   if ($FreezeCaches) { Write-Host 'caches were frozen (freeze-caches=1) for every suite' }
+  if ($DocumentGuard) { Write-Host 'the document was guarded (document-guard=1) for every suite' }
   if ($script:suiteFail -gt 0) {
     Write-Host "FAILED - $passed/$($script:totalChecks) checks passed across $SuiteCount suite(s), $($script:suiteFail) suite(s) failed" -ForegroundColor Red
     if ($script:notStarted.Count -gt 0) {

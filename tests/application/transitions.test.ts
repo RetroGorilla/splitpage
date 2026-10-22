@@ -55,14 +55,18 @@ function world(opened?: { doc: ValidatedDocument; writtenOut: boolean; destinati
     entry: function (raw) { log.push("entry"); return migrateRows(raw, migration.ports); },
     live: {
       current: function () { return live; },
-      assign: function (doc) { log.push("assign:" + doc.title); live = doc; }
-    },
-    session: {
-      adopt: function (doc) {
-        log.push("adopt:" + doc.title);
-        assert.equal(doc, live, "the session adopts the document the port just assigned");
+      assign: function (doc) {
+        log.push("assign:" + doc.title);
+        live = doc;
         held = doc;
         epoch++;
+      },
+      stamp: function (task) {
+        const doc = live;
+        const plan = doc ? task.plan(doc) : null;
+        if (!doc || !plan) return { kind: "noop" };
+        plan.apply(doc);
+        return { kind: "applied", generation: 0, changes: plan.changes };
       }
     },
     destination: {
@@ -98,13 +102,13 @@ function opened(writtenOut: boolean, destination: Destination = FILE): World {
   return world({ doc: scriptWith("Open", idOf("1")), writtenOut: writtenOut, destination: destination });
 }
 
-test("startNew assigns the document and adopts it at once, before any destination, baseline or identity write", () => {
+test("startNew hands the document to the live-document port, which replaces the held one, before any destination, baseline or identity write", () => {
   const w = opened(true);
   const next = scriptWith("New", idOf("2"));
   const arrived = w.transitions.startNew({ from: { document: next }, reason: "a new script", destination: NOWHERE });
   assert.equal(arrived.document, next);
   assert.equal(arrived.forkedFrom, null);
-  assert.deepEqual(w.log, ["assign:New", "adopt:New", "destination:none", "baseline:New:a new script", "writtenOut:false"]);
+  assert.deepEqual(w.log, ["assign:New", "destination:none", "baseline:New:a new script", "writtenOut:false"]);
   assert.equal(w.live(), next);
   assert.equal(w.epoch(), 2, "a new epoch");
   assert.equal(w.baseline(), JSON.stringify(next), "the new document is its own confirmed baseline");
@@ -122,7 +126,7 @@ test("startNew with no destination leaves the destination as it was", () => {
 test("open migrates raw input once, keeps its id, and sets the destination, baseline and written-out flag it is given", () => {
   const w = opened(false);
   const arrived = w.transitions.open({ from: { raw: { ...rawScript("From disk"), docId: idOf("3") } }, reason: "opened", destination: FILE, writtenOut: true });
-  assert.deepEqual(w.log, ["entry", "assign:From disk", "adopt:From disk", "destination:file", "baseline:From disk:opened", "writtenOut:true"]);
+  assert.deepEqual(w.log, ["entry", "assign:From disk", "destination:file", "baseline:From disk:opened", "writtenOut:true"]);
   assert.equal(arrived.document.docId, idOf("3"), "open keeps the file's id");
   assert.equal(w.writtenOut(), true);
 });
@@ -130,7 +134,7 @@ test("open migrates raw input once, keeps its id, and sets the destination, base
 test("open with no written-out flag leaves it as it was (the boot document decides it before it opens)", () => {
   const w = opened(true);
   w.transitions.open({ from: { document: scriptWith("Boot", idOf("3")) }, reason: "boot" });
-  assert.deepEqual(w.log, ["assign:Boot", "adopt:Boot", "baseline:Boot:boot"]);
+  assert.deepEqual(w.log, ["assign:Boot", "baseline:Boot:boot"]);
   assert.equal(w.writtenOut(), true);
 });
 
@@ -147,7 +151,7 @@ test("restore keeps the open document's id and writes no destination, baseline o
   const version = scriptWith("An older version", idOf("6"));
   const arrived = w.transitions.restore({ from: { document: version } });
   assert.equal(arrived.document.docId, idOf("1"), "restore keeps the open document's id");
-  assert.deepEqual(w.log, ["assign:An older version", "adopt:An older version"]);
+  assert.deepEqual(w.log, ["assign:An older version"]);
   assert.equal(w.destination(), FILE);
   assert.equal(w.writtenOut(), true);
 });

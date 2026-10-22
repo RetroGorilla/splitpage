@@ -3,19 +3,19 @@ import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentVi
 import type { ChangeSet } from "../application/session/change-set.ts";
 import type { CapabilityPort, CellTextPorts, DocumentEntry, EditorPort, EffectPort, RecordsPlan, ReportPort, StampPorts, TimerPort, UndoPort } from "../application/session/ports.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
+import type { LiveDocumentPort } from "../application/transitions/ports.ts";
 import { syncCommentAnchors } from "../core/text/anchors.ts";
 import { systemClock } from "../adapters/identity/ids.ts";
 import { cellOf, scriptCellOf } from "./richtext.ts";
-import { followLiveDocument } from "./undo-adapter.ts";
+import { documentGuardOn, unwrapped } from "./document-guard.ts";
 
 export type RecordsReconciler = (doc: ValidatedDocument, changes: ChangeSet) => RecordsPlan | null;
 
-export type ReplayRunner = (replay: Replay, live: ValidatedDocument | null) => CommandOutcome;
+export type ReplayRunner = (replay: Replay) => CommandOutcome;
 
 export interface SessionUndoPorts {
   readonly adapter: UndoPort;
   readonly route: (run: ReplayRunner, stamps: StampPorts, amend: ReplayRunner) => () => void;
-  readonly watch: (adopted: (doc: unknown) => void) => () => void;
 }
 
 export interface SessionBridgePorts {
@@ -36,6 +36,7 @@ interface Started {
   readonly ports: SessionBridgePorts;
   current: DocumentSession;
   ended: boolean;
+  mergeBase: ValidatedDocument | null;
 }
 
 let started: Started | null = null;
@@ -83,21 +84,27 @@ export function onDocumentReplaced(listener: () => void): void {
   replacedListeners.push(listener);
 }
 
+function swept<T>(outcome: T): T {
+  if (documentGuardOn) unwrapped(currentDocument());
+  return outcome;
+}
+
 const session: DocumentSession = {
   epoch: function () { return running().current.epoch(); },
   generation: function () { return running().current.generation(); },
   read: function <T>(select: (doc: DocumentView | null) => T): T { return running().current.read(select); },
-  adopt: function (raw: unknown) { return running().current.adopt(raw); },
-  absorbServer: function (raw: unknown) { return running().current.absorbServer(raw); },
-  absorbRecovery: function (raw: unknown) { return running().current.absorbRecovery(raw); },
-  absorbMerged: function (kind: "server" | "recovery", merged: ValidatedDocument) { return running().current.absorbMerged(kind, merged); },
-  absorbReload: function (content: ReloadedContent) { return running().current.absorbReload(content); },
+  held: function () { return running().current.held(); },
+  adopt: function (raw: unknown) { return running().current.adopt(unwrapped(raw)); },
+  absorbServer: function (raw: unknown) { return running().current.absorbServer(unwrapped(raw)); },
+  absorbRecovery: function (raw: unknown) { return running().current.absorbRecovery(unwrapped(raw)); },
+  absorbMerged: function (kind: "server" | "recovery", merged: ValidatedDocument) { return running().current.absorbMerged(kind, unwrapped(merged)); },
+  absorbReload: function (content: ReloadedContent) { return running().current.absorbReload(unwrapped(content)); },
   settle: function (kind: AbsorbedKind) { running().current.settle(kind); },
-  run: function (command: Command) { return running().current.run(command); },
-  replay: function (task: Replay) { return running().current.replay(task); },
-  amend: function (task: Replay) { return running().current.amend(task); },
-  stamp: function (task: Stamp) { return running().current.stamp(task); },
-  noteEdit: function (changes?: ChangeSet) { running().current.noteEdit(changes); },
+  run: function (command: Command) { return swept(running().current.run(command)); },
+  replay: function (task: Replay) { return swept(running().current.replay(task)); },
+  amend: function (task: Replay) { return swept(running().current.amend(task)); },
+  stamp: function (task: Stamp) { return swept(running().current.stamp(task)); },
+  noteEdit: function (changes?: ChangeSet) { running().current.noteEdit(changes); swept(null); },
   refresh: function (job: string) { running().current.refresh(job); },
   subscribe: function (listener: SessionListener) { return running().current.subscribe(listener); },
   dispose: function () {
@@ -107,15 +114,11 @@ const session: DocumentSession = {
   }
 };
 
-function holdLive(owner: Started, live: ValidatedDocument | null): void {
-  if (live && owner.current.read(function (held) { return held; }) !== live) owner.current.adopt(live);
-}
-
 const STALE: CommandOutcome = Object.freeze({ kind: "noop" });
 
 export function startSessionBridge(ports: SessionBridgePorts): () => void {
   if (started) throw new Error("The document session is already started; stop it first");
-  const mine: Started = { ports: ports, current: createSession(ports, { epoch: 0, generation: 0 }), ended: false };
+  const mine: Started = { ports: ports, current: createSession(ports, { epoch: 0, generation: 0 }), ended: false, mergeBase: null };
   const releases: (() => void)[] = [];
   const release = (): void => {
     if (started === mine) started = null;
@@ -127,19 +130,12 @@ export function startSessionBridge(ports: SessionBridgePorts): () => void {
   };
   started = mine;
   try {
-    releases.push(ports.undo.watch(function (doc) {
-      if (started !== mine) return;
-      mine.current.adopt(doc);
-      announceReplaced();
-    }));
-    releases.push(ports.undo.route(function (task, live) {
+    releases.push(ports.undo.route(function (task) {
       if (started !== mine) return STALE;
-      holdLive(mine, live);
-      return mine.current.replay(task);
-    }, sessionStamps, function (task, live) {
+      return swept(mine.current.replay(task));
+    }, sessionStamps, function (task) {
       if (started !== mine) return STALE;
-      holdLive(mine, live);
-      return mine.current.amend(task);
+      return swept(mine.current.amend(task));
     }));
   } catch (error) {
     release();
@@ -163,20 +159,33 @@ export function adoptReplacement(doc: ValidatedDocument): void {
   const old = now.current;
   now.current = createSession(now.ports, { epoch: old.epoch(), generation: old.generation() });
   old.dispose();
-  followLiveDocument();
-  if (now.current.read(function (held) { return held; }) !== doc) now.current.adopt(doc);
+  now.current.adopt(unwrapped(doc));
   announceReplaced();
 }
 
+export function currentDocument(): ValidatedDocument | null {
+  return started ? started.current.held() : null;
+}
+
+export const liveDocumentPort: LiveDocumentPort = Object.freeze({
+  current: currentDocument,
+  assign: adoptReplacement,
+  stamp: stampDocument
+});
+
+export function mergeBase(): ValidatedDocument | null {
+  return started ? started.mergeBase : null;
+}
+
+export function holdMergeBase(base: ValidatedDocument | null): void {
+  running().mergeBase = unwrapped(base);
+}
+
 export function readSession<T>(select: (doc: DocumentView | null) => T): T {
-  running();
-  followLiveDocument();
   return session.read(select);
 }
 
 export function runCommand(command: Command): CommandOutcome {
-  running();
-  followLiveDocument();
   return session.run(command);
 }
 
@@ -187,8 +196,6 @@ export function runDocumentEdit(command: Command): boolean {
 }
 
 export function stampDocument(task: Stamp): CommandOutcome {
-  running();
-  followLiveDocument();
   return session.stamp(task);
 }
 
@@ -213,8 +220,6 @@ export function noteMerged(kind: "server" | "recovery", merged: ValidatedDocumen
 }
 
 export function noteReload(content: ReloadedContent): ValidatedDocument | null {
-  running();
-  followLiveDocument();
   return session.absorbReload(content);
 }
 

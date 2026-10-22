@@ -12,7 +12,7 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { liveSession, mergeBase } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { applyMerge, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { renderAbsorbed, syncFieldFromDom } = await import("../js/05-render.js");
@@ -281,7 +281,7 @@ test("a draft of an imported file whose render throws still opens as an unsaved 
 });
 
 test("a new blank script whose render throws still replaces the document, as a clean one does (#418)", async () => {
-  const seen = await bothWays("new blank script", () => { fresh("Before the blank"); return { observe: () => S.baseState && S.baseState.docId === S.state.docId }; }, async () => {
+  const seen = await bothWays("new blank script", () => { fresh("Before the blank"); return { observe: () => mergeBase() && mergeBase().docId === S.state.docId }; }, async () => {
     document.querySelector('#newtab-page [data-newtab-action="new"]').click();
     await idle();
   });

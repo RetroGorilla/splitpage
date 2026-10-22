@@ -27,6 +27,7 @@
       ],
       "undo": "applied",
       "restored": true,
+      "restamped": false,
       "changedBetween": {
         "doc": [
           "title"
@@ -42,6 +43,7 @@
       "steps": [],
       "undo": "nothing to undo",
       "restored": false,
+      "restamped": false,
       "changedBetween": {
         "doc": [],
         "rowFields": [],
@@ -57,6 +59,7 @@
       ],
       "undo": "applied",
       "restored": true,
+      "restamped": true,
       "changedBetween": {
         "doc": [],
         "rowFields": [
@@ -74,6 +77,7 @@
       ],
       "undo": "applied",
       "restored": true,
+      "restamped": false,
       "changedBetween": {
         "doc": [],
         "rowFields": [],
@@ -89,6 +93,7 @@
       ],
       "undo": "applied",
       "restored": true,
+      "restamped": false,
       "changedBetween": {
         "doc": [
           "comments"
@@ -106,6 +111,7 @@
       ],
       "undo": "applied",
       "restored": true,
+      "restamped": false,
       "changedBetween": {
         "doc": [
           "people"
@@ -123,6 +129,7 @@
       ],
       "undo": "applied",
       "restored": true,
+      "restamped": false,
       "changedBetween": {
         "doc": [
           "productionTags"
@@ -140,6 +147,7 @@
       ],
       "undo": "applied",
       "restored": true,
+      "restamped": false,
       "changedBetween": {
         "doc": [
           "brollShots"
@@ -157,6 +165,7 @@
       ],
       "undo": "applied",
       "restored": true,
+      "restamped": false,
       "changedBetween": {
         "doc": [
           "wordsPerMinute"
@@ -172,6 +181,7 @@
       "steps": [],
       "undo": "nothing to undo",
       "restored": false,
+      "restamped": false,
       "changedBetween": {
         "doc": [],
         "rowFields": [],
@@ -185,6 +195,7 @@
       "steps": [],
       "undo": "nothing to undo",
       "restored": false,
+      "restamped": false,
       "changedBetween": {
         "doc": [],
         "rowFields": [],
@@ -198,6 +209,7 @@
       "steps": [],
       "undo": "nothing to undo",
       "restored": false,
+      "restamped": false,
       "changedBetween": {
         "doc": [],
         "rowFields": [],
@@ -211,6 +223,7 @@
       "steps": [],
       "undo": "nothing to undo",
       "restored": false,
+      "restamped": false,
       "changedBetween": {
         "doc": [],
         "rowFields": [],
@@ -224,6 +237,7 @@
       "steps": [],
       "undo": "nothing to undo",
       "restored": false,
+      "restamped": false,
       "changedBetween": {
         "doc": [],
         "rowFields": [],
@@ -239,6 +253,7 @@
       ],
       "undo": "applied",
       "restored": true,
+      "restamped": false,
       "changedBetween": {
         "doc": [
           "targetSeconds"
@@ -256,6 +271,7 @@
       ],
       "undo": "applied",
       "restored": true,
+      "restamped": false,
       "changedBetween": {
         "doc": [
           "targetSeconds"
@@ -271,6 +287,7 @@
       "steps": [],
       "undo": "nothing to undo",
       "restored": false,
+      "restamped": false,
       "changedBetween": {
         "doc": [],
         "rowFields": [],
