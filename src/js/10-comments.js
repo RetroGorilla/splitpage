@@ -1,6 +1,7 @@
 import { pad2 } from "../core/production/timing.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { editorSelection } from "../legacy/editor-bridge.ts";
+import { showToast } from "../legacy/effects-bridge.ts";
 import { S } from "./_state.js";
 import { formatClock, formatDateClock } from "./00p-prefs.js";
 import { revealRow } from "./01b-hide-shot.js";
@@ -23,7 +24,7 @@ import {
 } from "./04-richtext.js";
 import { editableCellHtml, render } from "./05-render.js";
 import { resetDraftHistory } from "./05d-draft-edit.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { markDirty } from "./12-dirty-toast.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave, resumeAutoSave } from "./14-export.js";

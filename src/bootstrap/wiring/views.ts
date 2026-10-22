@@ -47,7 +47,8 @@ import {
   maybeAutoDetectTwoColumn,
   updateImportPreview
 } from "../../js/11-import.js";
-import { showToast, updateSaveStatus } from "../../js/12-dirty-toast.js";
+import { updateSaveStatus } from "../../js/12-dirty-toast.js";
+import { showToast } from "../../legacy/effects-bridge.ts";
 import {
   armDriveDelete,
   armServerDelete,
