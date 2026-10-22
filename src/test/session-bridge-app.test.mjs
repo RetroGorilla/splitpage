@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { S } from "../js/_state.js";
 import { cloneState } from "../core/document/clone.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
+import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 
 await bootApp();
 
@@ -210,12 +211,11 @@ test("E4: a file draft restored onto a changed file is a recovery merge; an unti
   changed.rows[1].audioText = "Changed on disk.";
   const mine = cloneState(original);
   mine.rows[0].audioText = "Unsaved here.";
-  const desktop = S.DESKTOP;
-  S.DESKTOP = {
+  useDesktopForTest({
     readFile: async () => ({ name: "disk.splitpage", bytes: new TextEncoder().encode(buildSplitpageFile(exportDocumentOf(changed))), lastModified: 2 }),
     setDocumentState: () => {},
     draftRestoreDone: () => {}
-  };
+  });
   try {
     const epoch = session.epoch(), gen = session.generation();
     listen();
@@ -232,7 +232,7 @@ test("E4: a file draft restored onto a changed file is a recovery merge; an unti
     assert.equal(S.state.rows[0].audioText, "Unsaved here.");
     assert.equal(S.state.rows[1].audioText, "Changed on disk.");
   } finally {
-    S.DESKTOP = desktop;
+    restoreDesktop();
   }
   const epoch = session.epoch(), gen = session.generation(), seq = saveChanges();
   listen();

@@ -20,6 +20,7 @@ import { saveButtonView, saveStatus } from "../application/save/status.ts";
 import { changeSet } from "../application/session/change-set.ts";
 import { authorityOf, editCapability } from "../application/collaboration/authority.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 
 var MY_COLOR = changeSet({ docFields: ["personColors"] });
@@ -70,7 +71,7 @@ export function setSaveButtons() {
     btn.classList.toggle("is-dirty", view.dirty);
   });
   if (typeof syncDocIdentity === "function") syncDocIdentity();
-  if (S.DESKTOP && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
+  if (runningOnDesktop() && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
   if (typeof noteDraftChange === "function") noteDraftChange();
   updateSaveStatus();
 }

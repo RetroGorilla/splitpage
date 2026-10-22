@@ -3,6 +3,7 @@ import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { confirmSavedNow, saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
+import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -637,14 +638,13 @@ test("the gutter-mode and export buttons keep working in the Writer in review mo
   document.getElementById("wr-gutter-mode").click();
   document.getElementById("wr-gutter-mode").click();
   assert.equal(writerEl.getAttribute("data-gutter"), before);
-  const realDesktop = S.DESKTOP;
   let asked = 0;
-  S.DESKTOP = { saveFileDialog: async () => { asked++; return null; } };
+  useDesktopForTest({ saveFileDialog: async () => { asked++; return null; } });
   try {
     document.getElementById("wr-export").click();
     for (let i = 0; i < 400 && !asked; i++) await settle();
   } finally {
-    S.DESKTOP = realDesktop;
+    restoreDesktop();
   }
   assert.equal(asked, 1);
   assert.equal(toasts().length, 0);

@@ -24,6 +24,7 @@ import { PREF_EVENT, preferences } from "../legacy/preferences-bridge.ts";
 import { applyTagIcons, applyTheme } from "../features/settings/appearance.ts";
 import { formatClock } from "../../shared/clock.js";
 import { cleanAuthorName } from "../core/document/people.ts";
+import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 var SETTINGS_ID = "settings-modal";
 var settingsReturnFocus = null;
@@ -330,7 +331,7 @@ function runAction(action) {
   if (action === "desktop-notice") {
     preferences().resetDesktopNotice();
     if (typeof renderDesktopAppNotice === "function") renderDesktopAppNotice();
-    showToast(S.DESKTOP ? "The desktop-app notice only shows in the browser." : "The desktop-app notice will show again.", "ok");
+    showToast(runningOnDesktop() ? "The desktop-app notice only shows in the browser." : "The desktop-app notice will show again.", "ok");
     return;
   }
   if (action === "collab-default") { preferences().setCollabServer(null); return; }
