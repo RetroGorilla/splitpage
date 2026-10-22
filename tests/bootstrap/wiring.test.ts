@@ -858,7 +858,7 @@ const SURVIVING_GLOBAL_LISTENERS: Record<string, number> = {
   "window blur/B": 2, "window click/C": 3, "window compositionstart/C": 1, "window cut/C": 1, "window dragstart/C": 1, "window drop/C": 1,
   "window focus/C": 2, "window focusin/C": 3, "window hashchange/B": 1, "window input/C": 1, "window keydown/B": 3, "window keydown/C": 8,
   "window keyup/C": 2, "window mousedown/C": 3, "window mouseout/C": 2, "window mouseover/C": 2, "window mouseup/C": 2, "window pagehide/B": 2,
-  "window pageshow/B": 1, "window paste/C": 1, "window pointerdown/C": 1, "window pointerup/C": 1, "window resize/B": 7, "window scroll/B": 1,
+  "window pageshow/B": 1, "window paste/C": 1, "window pointerdown/C": 1, "window pointerup/C": 1, "window resize/B": 6,
   "window scroll/C": 2, "window storage/B": 2, "window touchmove/B": 1, "window wheel/B": 1
 };
 

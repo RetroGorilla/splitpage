@@ -17,7 +17,7 @@ import {
   stampRow,
   updateIdentityChip
 } from "./03-sync.js";
-import { beginBusy, endBusy, withBusyBar } from "./04b-busy.js";
+import { beginBusy, endBusy, withBusyBar } from "../features/notices/busy.js";
 import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { brollPrintView } from "./08d-broll-panel.js";
