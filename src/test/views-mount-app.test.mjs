@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 
 await bootApp();
-const views = await import("../js/22d-views-wiring.js");
+const views = await import("../bootstrap/wiring/views.ts");
 const { appActions } = await import("../legacy/app-actions.ts");
 after(closeApp);
 

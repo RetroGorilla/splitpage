@@ -1,9 +1,10 @@
-import { owned } from "../features/routing/owned.ts";
-import { runFromButton } from "../legacy/app-actions.ts";
-import { mountComments } from "../features/comments/mount.ts";
-import { internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
-import { storedImageHtml } from "./04-richtext.js";
-import { typePendingMarks } from "./05-render.js";
+import type { CommentsPorts } from "../../features/comments/mount.ts";
+import { owned } from "../../features/routing/owned.ts";
+import { runFromButton } from "../../legacy/app-actions.ts";
+import { mountComments } from "../../features/comments/mount.ts";
+import { internDataUrl, persist } from "../../adapters/storage/02c-blobs.js";
+import { storedImageHtml } from "../../js/04-richtext.js";
+import { typePendingMarks } from "../../js/05-render.js";
 import {
   appendDraftMedia,
   draftRedo,
@@ -13,8 +14,8 @@ import {
   noteDraftComposition,
   noteDraftFocus,
   pasteIntoDraft
-} from "./05d-draft-edit.js";
-import { compressImageFile } from "./06-rows.js";
+} from "../../js/05d-draft-edit.js";
+import { compressImageFile } from "../../js/06-rows.js";
 import {
   AUTHOR_NAME_FIELDS,
   armDeleteComment,
@@ -35,8 +36,8 @@ import {
   toggleCommentMenu,
   toggleReplyComposer,
   toggleResolve
-} from "./10-comments.js";
-import { showToast } from "./12-dirty-toast.js";
+} from "../../js/10-comments.js";
+import { showToast } from "../../js/12-dirty-toast.js";
 import {
   onRootClick,
   onRootFocusOut,
@@ -45,16 +46,14 @@ import {
   onRootMouseDown,
   onRootPaste,
   routeRootClick
-} from "../bootstrap/wiring/editor.ts";
-import { commentSortMode } from "../application/comment-sort.ts";
+} from "./editor.ts";
+import { commentSortMode } from "../../application/comment-sort.ts";
 
-var comments = owned();
+const comments = owned<ReturnType<typeof mountComments>>();
 
-export function mountCommentsFeature() {
+export function mountCommentsFeature(): ReturnType<typeof mountComments> {
   return comments.replace(function () {
-    return mountComments({
-    window: window,
-    ports: {
+    const ports: CommentsPorts = {
       rootClick: onRootClick,
       rootMouseDown: onRootMouseDown,
       rootInput: onRootInput,
@@ -91,15 +90,15 @@ export function mountCommentsFeature() {
       captureComposer: captureCommentComposer,
       compressImage: compressImageFile,
       appendImage: function (box, dataUrl) {
-        var rec = internDataUrl(dataUrl);
+        const rec = internDataUrl(dataUrl);
         if (!rec) throw new Error("not a picture the registry takes");
         persist([rec.sha256]);
         appendDraftMedia(box, storedImageHtml(rec));
       },
       imageError: function () { showToast("Could not use that image.", "error"); },
       reset: resetCommentBindings
-    }
-    });
+    };
+    return mountComments({ window: window, ports: ports });
   }, function (owner) {
     return [
       function () { return routeRootClick("comments", function (e) { return owner.click(e); }); },
@@ -108,4 +107,4 @@ export function mountCommentsFeature() {
   });
 }
 
-export var stopCommentsFeature = comments.stop;
+export const stopCommentsFeature = comments.stop;
