@@ -1,3 +1,5 @@
+import { createViewLifetime } from "../common/view-lifetime.ts";
+
 export interface OverlayPorts {
   readonly closeRowMenus: () => void;
   readonly selectedKeys: () => readonly string[];
@@ -21,23 +23,15 @@ export interface OverlayMount {
   readonly dispose: () => void;
 }
 
-type OverlayEvent = Event & { readonly key?: string; readonly target: HTMLElement | null };
-
 export function mountOverlay(mount: { window: Window; ports: OverlayPorts }): OverlayMount {
   const win = mount.window;
   const doc = win.document;
   const ports = mount.ports;
-  const releases: (() => void)[] = [];
+  const life = createViewLifetime(win, () => true);
+  const { listen } = life;
   const stages = new Set<string>();
-  let open = true;
-  function listen(target: EventTarget | null, type: string, fn: (event: OverlayEvent) => void, capture = false): void {
-    if (!target) return;
-    const handler: EventListener = (event) => { if (open) fn(event as OverlayEvent); };
-    target.addEventListener(type, handler, capture);
-    releases.push(() => target.removeEventListener(type, handler, capture));
-  }
   function stage(name: string, install: () => void): void {
-    if (!open || stages.has(name)) return;
+    if (!life.active() || stages.has(name)) return;
     stages.add(name);
     install();
   }
@@ -84,10 +78,6 @@ export function mountOverlay(mount: { window: Window; ports: OverlayPorts }): Ov
         ports.closeWriter();
       });
     }),
-    dispose: () => {
-      if (!open) return;
-      open = false;
-      releases.splice(0).reverse().forEach((release) => release());
-    }
+    dispose: life.dispose
   };
 }
