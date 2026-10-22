@@ -1,5 +1,6 @@
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
+import "./_export-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";

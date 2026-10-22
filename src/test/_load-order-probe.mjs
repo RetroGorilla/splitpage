@@ -48,6 +48,7 @@ const preferences = await import("../legacy/preferences-bridge.ts");
 const effects = await import("../legacy/effects-bridge.ts");
 const actions = await import("../legacy/app-actions.ts");
 const exports = await import("../legacy/export-formats.ts");
+const exportServices = await import("../application/export/services.ts");
 const owners = {
   session: session.sessionStarted(),
   saves: saves.savesStarted(),
@@ -58,7 +59,8 @@ const owners = {
   effects: effects.effectsStarted(),
   transitions: started(() => transitions.documentTransitions()),
   actions: started(() => actions.appActions.list()),
-  exports: started(() => exports.exportFormats.cards())
+  exports: started(() => exports.exportFormats.cards()),
+  exportServices: exportServices.exportServicesStarted()
 };
 process.stdout.write(JSON.stringify({ target, calls, error, owners }) + "\n");
 process.exit(0);
