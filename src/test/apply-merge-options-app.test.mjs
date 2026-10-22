@@ -10,6 +10,7 @@ import { listDocHistory } from "../js/03a-history-store.js";
 import { clearDirty } from "../js/12-dirty-toast.js";
 import * as exporting from "../js/14-export.js";
 import { cloneState } from "../core/document/clone.ts";
+import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
 
 await bootApp();
 await window.__historyTest.forceBackend("memory");
@@ -81,8 +82,8 @@ test("characterization: an adopted merge redraws, shows the banner, marks the do
   assert.equal(summary(), " Kept 1 row you edited, 1 changed by someone else.");
   assert.equal(undoBtn().hidden, true, "nothing to undo");
   assert.equal(reviewBtn().hidden, true, "no conflicts");
-  assert.ok(S.dirty, "unsaved");
-  assert.equal(exporting.autoSaveHalt, "");
+  assert.ok(unsavedChanges(), "unsaved");
+  assert.equal(autoSavePolicy().halted(), "");
   assert.equal(S.baseState, baseBefore, "no newBase, no baseline move");
 });
 
@@ -96,8 +97,8 @@ test("characterization: `report: false` merges silently: no banner, no unsaved m
   assert.equal(S.state.rows[1].audioText, "theirs");
   assert.equal(window.__renderTest.counts().render, 1);
   assert.equal(banner().hidden, true);
-  assert.ok(!S.dirty, "report: false leaves the unsaved mark to the caller");
-  assert.equal(exporting.autoSaveHalt, "", "and the autosave decision too");
+  assert.ok(!unsavedChanges(), "report: false leaves the unsaved mark to the caller");
+  assert.equal(autoSavePolicy().halted(), "", "and the autosave decision too");
 });
 
 test("characterization: `report: false` with nothing merged adopts theirs without marking it unsaved", () => {
@@ -112,7 +113,7 @@ test("characterization: `report: false` with nothing merged adopts theirs withou
   assert.equal(S.state.title, "As the server has it");
   assert.equal(window.__renderTest.counts().render, 1, "adopting theirs redraws");
   assert.equal(banner().hidden, true);
-  assert.ok(!S.dirty);
+  assert.ok(!unsavedChanges());
 });
 
 test("characterization: `unchanged` with reporting marks the adopted document unsaved, with no banner and no snapshot", async () => {
@@ -126,7 +127,7 @@ test("characterization: `unchanged` with reporting marks the adopted document un
   assert.equal(out.snapshot, null, "an unchanged apply takes no undo point even when given one");
   assert.equal(mergeUndo().last(), null, "and arms no Undo merge");
   assert.equal(banner().hidden, true);
-  assert.ok(S.dirty);
+  assert.ok(unsavedChanges());
   const listed = await listDocHistory(id);
   assert.equal(listed.entries.length, 0);
 });
@@ -138,8 +139,8 @@ test("characterization: `noAutoSave` halts autosave with its reason and still ma
 
   applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "server-resume", noAutoSave: true });
   assert.equal(banner().hidden, false);
-  assert.ok(S.dirty);
-  assert.equal(exporting.autoSaveHalt,
+  assert.ok(unsavedChanges());
+  assert.equal(autoSavePolicy().halted(),
     "Autosave is paused — changes recovered for you are on screen but not in your file yet. Press Save once you have looked them over.");
 });
 
@@ -154,8 +155,8 @@ test("characterization: a merge where nothing differs row by row still marks uns
   assert.ok(out.result);
   assert.equal(S.state.title, "Mine");
   assert.equal(banner().hidden, true);
-  assert.ok(S.dirty);
-  assert.ok(exporting.autoSaveHalt, "the no-autosave rule applies here too");
+  assert.ok(unsavedChanges());
+  assert.ok(autoSavePolicy().halted(), "the no-autosave rule applies here too");
 });
 
 test("characterization: a conflict warns on the banner, offers Review conflicts and marks the row", () => {
@@ -231,7 +232,7 @@ test("characterization: `alreadySaved` shows the banner without marking unsaved;
 
   reportMerge(merged.result, { alreadySaved: true, undo: "saved" });
   assert.equal(banner().hidden, false);
-  assert.ok(!S.dirty, "already on its destination");
+  assert.ok(!unsavedChanges(), "already on its destination");
   assert.equal(undoBtn().hidden, false);
   assert.match(summary(), /Undo merge puts your version back here; the next save replaces the merged copy on the server\.$/);
   assert.notEqual(undoBtn().title, defaultTitle);
@@ -247,11 +248,11 @@ test("characterization: the boot path reports a recovery as unsaved through repo
   start(id);
   const s = sides(id);
   const merged = applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "stash", recovery: true, report: false });
-  assert.ok(!S.dirty);
+  assert.ok(!unsavedChanges());
   reportMerge(merged.result, { kind: "recovery" });
   assert.equal(banner().hidden, false);
-  assert.ok(S.dirty);
-  assert.equal(exporting.autoSaveHalt, "");
+  assert.ok(unsavedChanges());
+  assert.equal(autoSavePolicy().halted(), "");
 });
 
 test("characterization: the banner's ×, Review conflicts and Undo merge", async () => {
@@ -281,7 +282,7 @@ test("characterization: the banner's ×, Review conflicts and Undo merge", async
   assert.ok(!undoBtn().classList.contains("armed"));
   for (let i = 0; i < 50 && S.state.rows[0].audioText !== "mine said this"; i++) await new Promise((r) => setTimeout(r, 10));
   assert.equal(S.state.rows[0].audioText, "mine said this", "the second restores the undo point");
-  assert.ok(S.dirty, "locally, unsaved");
+  assert.ok(unsavedChanges(), "locally, unsaved");
 });
 
 test("characterization: Undo merge with nothing armed, or armed for another document, only says so", () => {

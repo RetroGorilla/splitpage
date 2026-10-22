@@ -5,13 +5,6 @@ export var PAGE_SHELL;
 export var SpeechRecognitionCtor;
 
 S.state = null;
-export function setInitialStateReady(ready) {
-  S.initialStateReady = ready;
-}
-
-setInitialStateReady(null);
-S.editSeq = 0;
-S.dirty = false;
 export var suppressUnloadWarning = false;
 
 var LAST_FILE_DB = "splitpage-files", LAST_FILE_STORE = "handles", LAST_FILE_KEY = "last";

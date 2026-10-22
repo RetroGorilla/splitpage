@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 await bootApp();
 
@@ -26,33 +27,33 @@ await openProjectFile(new File([buildSplitpageFile(exportDocumentOf(doc))], "cou
 
 test("the booted app holds the opened script, saved", () => {
   assert.equal(S.state.title, "Edit counts");
-  assert.equal(S.dirty, false);
+  assert.equal(unsavedChanges(), false);
 });
 
-test("a status click advances S.editSeq by exactly one and marks the document dirty", () => {
-  const seq = S.editSeq;
+test("a status click advances saveChanges() by exactly one and marks the document dirty", () => {
+  const seq = saveChanges();
   cycleRowStatus("r2");
-  assert.equal(S.editSeq, seq + 1);
-  assert.equal(S.dirty, true);
+  assert.equal(saveChanges(), seq + 1);
+  assert.equal(unsavedChanges(), true);
   cycleRowStatus("r2");
-  assert.equal(S.editSeq, seq + 2, "and one more for the next click");
+  assert.equal(saveChanges(), seq + 2, "and one more for the next click");
 });
 
-test("a scene length advances S.editSeq by exactly one; setting it again or clearing nothing adds none", () => {
-  const seq = S.editSeq;
+test("a scene length advances saveChanges() by exactly one; setting it again or clearing nothing adds none", () => {
+  const seq = saveChanges();
   assert.equal(setSceneLength("r2", 90), true);
-  assert.equal(S.editSeq, seq + 1);
+  assert.equal(saveChanges(), seq + 1);
   assert.equal(setSceneLength("r2", 90), false);
   assert.equal(setSceneLength("r1", null), false);
-  assert.equal(S.editSeq, seq + 1);
+  assert.equal(saveChanges(), seq + 1);
   assert.equal(setSceneLength("r2", null), true);
-  assert.equal(S.editSeq, seq + 2);
+  assert.equal(saveChanges(), seq + 2);
 });
 
 test("a status click on a scene that is gone adds none", () => {
-  const seq = S.editSeq;
+  const seq = saveChanges();
   cycleRowStatus("gone");
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
 });
 
 test("in review mode a scene length is refused with a warning toast and has no other effect", async () => {
@@ -62,7 +63,7 @@ test("in review mode a scene length is refused with a warning toast and has no o
   flushEdits();
   const host = document.getElementById("toast-host");
   host.textContent = "";
-  const seq = S.editSeq, dirty = S.dirty, generation = liveSession().generation(), sizes = undoSizes();
+  const seq = saveChanges(), dirty = unsavedChanges(), generation = liveSession().generation(), sizes = undoSizes();
   const before = JSON.stringify(S.state);
   assert.equal(setSceneLength("r1", 30), false);
   const toasts = host.querySelectorAll(".toast");
@@ -72,8 +73,8 @@ test("in review mode a scene length is refused with a warning toast and has no o
   await Promise.resolve();
   flushEdits();
   assert.equal(JSON.stringify(S.state), before);
-  assert.equal(S.editSeq, seq);
-  assert.equal(S.dirty, dirty);
+  assert.equal(saveChanges(), seq);
+  assert.equal(unsavedChanges(), dirty);
   assert.equal(liveSession().generation(), generation);
   assert.deepEqual(undoSizes(), sizes);
 });
@@ -85,7 +86,7 @@ test("in review mode a status click is refused with a warning toast and has no o
   flushEdits();
   const host = document.getElementById("toast-host");
   host.textContent = "";
-  const seq = S.editSeq, dirty = S.dirty, generation = liveSession().generation(), sizes = undoSizes();
+  const seq = saveChanges(), dirty = unsavedChanges(), generation = liveSession().generation(), sizes = undoSizes();
   const before = JSON.stringify(S.state);
   cycleRowStatus("r1");
   const toasts = host.querySelectorAll(".toast");
@@ -95,8 +96,8 @@ test("in review mode a status click is refused with a warning toast and has no o
   await Promise.resolve();
   flushEdits();
   assert.equal(JSON.stringify(S.state), before);
-  assert.equal(S.editSeq, seq);
-  assert.equal(S.dirty, dirty);
+  assert.equal(saveChanges(), seq);
+  assert.equal(unsavedChanges(), dirty);
   assert.equal(liveSession().generation(), generation);
   assert.deepEqual(undoSizes(), sizes);
 });
@@ -110,7 +111,7 @@ async function reviewClick(selector, wording) {
   assert.ok(target, selector + " is on the page");
   const host = document.getElementById("toast-host");
   host.textContent = "";
-  const seq = S.editSeq, dirty = S.dirty, generation = liveSession().generation(), sizes = undoSizes();
+  const seq = saveChanges(), dirty = unsavedChanges(), generation = liveSession().generation(), sizes = undoSizes();
   const before = JSON.stringify(S.state);
   target.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
   const toasts = host.querySelectorAll(".toast");
@@ -120,8 +121,8 @@ async function reviewClick(selector, wording) {
   await Promise.resolve();
   flushEdits();
   assert.equal(JSON.stringify(S.state), before);
-  assert.equal(S.editSeq, seq);
-  assert.equal(S.dirty, dirty);
+  assert.equal(saveChanges(), seq);
+  assert.equal(unsavedChanges(), dirty);
   assert.equal(liveSession().generation(), generation);
   assert.deepEqual(undoSizes(), sizes);
 }
@@ -166,9 +167,9 @@ test("in edit mode a click on the status button cycles the status and shows no t
   const target = document.querySelector('#rows .row[data-id="r1"] [data-action="cycle-status"]');
   assert.ok(target, "the status button is on the page");
   const statusOf = () => S.state.rows.find(r => r.id === "r1").status;
-  const before = statusOf(), seq = S.editSeq;
+  const before = statusOf(), seq = saveChanges();
   target.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
   assert.notEqual(statusOf(), before);
-  assert.equal(S.editSeq, seq + 1);
+  assert.equal(saveChanges(), seq + 1);
   assert.equal(host.querySelectorAll(".toast").length, 0);
 });

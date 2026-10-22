@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
+import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -138,16 +139,16 @@ function selectText(el, from, to) {
 
 beforeEach(() => { clock += 10_000; });
 
-test("a keystroke stores the cell through the run model, stamps the row and advances S.editSeq once", async () => {
+test("a keystroke stores the cell through the run model, stamps the row and advances saveChanges() once", async () => {
   await open();
   const el = cellOf("r1", "audioText");
   const stamp = row("r1").updatedAt;
-  const seq = S.editSeq;
+  const seq = saveChanges();
   clock += 5;
   typeChar(el, "!");
   assert.equal(row("r1").audioText, "Hello there!");
-  assert.equal(S.editSeq, seq + 1);
-  assert.equal(S.dirty, true);
+  assert.equal(saveChanges(), seq + 1);
+  assert.equal(unsavedChanges(), true);
   assert.notEqual(row("r1").updatedAt, stamp);
   await settle();
   assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
@@ -157,15 +158,15 @@ test("a keystroke stores the cell through the run model, stamps the row and adva
 test("the zero-width caret spot is stripped before storing; an input that only adds one changes nothing", async () => {
   await open();
   const el = cellOf("r1", "audioText");
-  const seq = S.editSeq;
+  const seq = saveChanges();
   el.appendChild(document.createTextNode(ZW));
   input(el, ZW);
   assert.equal(row("r1").audioText, "Hello there");
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
   lastText(el).data = ZW + "!";
   input(el, "!");
   assert.equal(row("r1").audioText, "Hello there!");
-  assert.equal(S.editSeq, seq + 1);
+  assert.equal(saveChanges(), seq + 1);
 });
 
 test("in a cell ending in a video card, the caret spot after the card is not stored", async () => {
@@ -182,10 +183,10 @@ test("in a cell ending in a video card, the caret spot after the card is not sto
 test("while an undo applies, a cell's input stores nothing", async () => {
   await open();
   const el = cellOf("r1", "audioText");
-  const seq = S.editSeq;
+  const seq = saveChanges();
   undoGuard().whileApplying(() => typeChar(el, "x"));
   assert.equal(row("r1").audioText, "Hello there");
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
   input(el, "x");
   assert.equal(row("r1").audioText, "Hello therex", "the next input outside the guard stores it");
 });
@@ -193,12 +194,12 @@ test("while an undo applies, a cell's input stores nothing", async () => {
 test("a cell no longer in the page stores nothing", async () => {
   await open();
   const el = cellOf("r1", "audioText").cloneNode(true);
-  const seq = S.editSeq;
+  const seq = saveChanges();
   lastText(el).data += "x";
   assert.equal(el.isConnected, false);
   syncFieldFromDom(el);
   assert.equal(row("r1").audioText, "Hello there");
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
 });
 
 test("after a keystroke the row's paint record holds the stored field, so the next render repaints no cell", async () => {
@@ -295,13 +296,13 @@ test("a change to a media cell's markup that leaves the runs alone stores nothin
   const first = row("r1").audioText;
   assert.match(first, /^Hello <strong>there<\/strong> <a class="video-embed-card"/, "a cell holding media is stored as the canonical form of its runs");
   assert.equal(undoSizes().undo, 1);
-  const seq = S.editSeq;
+  const seq = saveChanges();
   const entry = lastUndoEntry();
   clock += 5000;
   el.innerHTML = "Hello <strong>the</strong><strong>re</strong> " + card;
   input(el, "");
   assert.equal(row("r1").audioText, first, "the same runs are the same stored cell");
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
   await settle();
   assert.equal(undoSizes().undo, 1, "five seconds later a real change would be an entry of its own");
   assert.equal(lastUndoEntry(), entry);
@@ -311,7 +312,7 @@ test("a change to a media cell's markup that leaves the runs alone stores nothin
 test("during a composition every input stores the composing text at once; the composed word is one entry", async () => {
   await open();
   const el = cellOf("r1", "audioText");
-  const seq = S.editSeq;
+  const seq = saveChanges();
   el.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true, data: "" }));
   clock += 5;
   typeChar(el, "か", { inputType: "insertCompositionText", isComposing: true });
@@ -325,7 +326,7 @@ test("during a composition every input stores the composing text at once; the co
   assert.equal(row("r1").audioText, "Hello thereかな");
   await settle();
   el.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "かな" }));
-  assert.equal(S.editSeq, seq + 2, "one per composition update that changed the cell");
+  assert.equal(saveChanges(), seq + 2, "one per composition update that changed the cell");
   assert.equal(lastText(el), node, "the cell was never repainted under the composition");
   assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
   assert.equal(undo().ok, true);
@@ -335,12 +336,12 @@ test("during a composition every input stores the composing text at once; the co
 
 function record(run) {
   flushEdits();
-  const seq0 = S.editSeq;
+  const seq0 = saveChanges();
   const undo0 = undoSizes().undo;
   const top0 = lastUndoEntry();
   window.__renderTest.reset();
   run();
-  const seq = S.editSeq - seq0;
+  const seq = saveChanges() - seq0;
   const render = window.__renderTest.counts().render;
   flushEdits();
   const top = lastUndoEntry();

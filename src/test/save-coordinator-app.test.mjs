@@ -108,8 +108,8 @@ test("D10: a file save that lands after a connection refresh is saved, not repor
   target.releaseOp("close");
   await saving;
   assert.deepEqual(warnings().slice(before), [], "nothing was reopened");
-  assert.equal(S.dirty, false);
-  assert.equal(saves.confirmedGeneration(), S.editSeq, "the save is acknowledged for the file");
+  assert.equal(saves.unsavedChanges(), false);
+  assert.equal(saves.confirmedGeneration(), saves.saveChanges(), "the save is acknowledged for the file");
 }));
 
 test("INV-20: while a save waits behind another, both Save buttons stay busy until the last one finishes, then read saved", scene(async () => {
@@ -127,7 +127,7 @@ test("INV-20: while a save waits behind another, both Save buttons stay busy unt
   await first;
   assert.equal(saves.saveRunning(), true, "the waiting save started as the first finished");
   await second;
-  assert.equal(S.dirty, false);
+  assert.equal(saves.unsavedChanges(), false);
   assert.deepEqual(buttons(), [{ text: "Save", disabled: false, dirty: false }, { text: "Save", disabled: false, dirty: false }]);
   assert.ok(target.text().includes("Second."), "the file ends with the later save");
 }));
@@ -137,10 +137,10 @@ test("clearDirty confirms the open destination at the current generation, and an
   await openFrom(target);
   assert.equal(saves.unsavedFor(), false);
   edit("Typed.");
-  assert.equal(S.editSeq, saves.saveChanges(), "S.editSeq is the coordinator's change generation");
+  assert.equal(saves.unsavedChanges(), true, "the edit is unsaved on the coordinator");
   assert.equal(saves.unsavedFor(), true);
   await saveDoc();
-  assert.equal(saves.confirmedGeneration(), S.editSeq);
+  assert.equal(saves.confirmedGeneration(), saves.saveChanges());
   assert.equal(saves.unsavedFor(), false);
   assert.equal(saves.confirmedSave().baseline, S.baseState, "S.baseState is the destination's confirmed baseline");
 }));

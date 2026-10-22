@@ -3,6 +3,7 @@ import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { cloneState } from "../core/document/clone.ts";
+import { saveChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -112,7 +113,7 @@ test("a keystroke is one typing command: one generation, and the change it publi
   await open();
   const el = cellOf("r1", "audioText");
   const generation = liveSession().generation();
-  const seq = S.editSeq;
+  const seq = saveChanges();
   const w = watch();
   try {
     typeChar(el, "!");
@@ -121,7 +122,7 @@ test("a keystroke is one typing command: one generation, and the change it publi
   }
   assert.equal(row("r1").audioText, "Hello there!");
   assert.equal(liveSession().generation(), generation + 1);
-  assert.equal(S.editSeq, seq + 1);
+  assert.equal(saveChanges(), seq + 1);
   assert.equal(w.seen.length, 1);
   const change = w.seen[0];
   assert.equal(change.kind, "edit");
@@ -925,7 +926,7 @@ test("a typing command that fails is thrown from the view and leaves the cell, t
   await open();
   const el = cellOf("r1", "audioText");
   flushEdits();
-  const seq = S.editSeq, generation = liveSession().generation(), sizes = undoSizes();
+  const seq = saveChanges(), generation = liveSession().generation(), sizes = undoSizes();
   const before = JSON.stringify(S.state);
   const real = Date.prototype.toISOString;
   Date.prototype.toISOString = function () { throw new Error("no clock"); };
@@ -938,7 +939,7 @@ test("a typing command that fails is thrown from the view and leaves the cell, t
   }
   await settle();
   assert.equal(JSON.stringify(S.state), before);
-  assert.equal(S.editSeq, seq);
+  assert.equal(saveChanges(), seq);
   assert.equal(liveSession().generation(), generation);
   assert.deepEqual(undoSizes(), sizes);
 });
@@ -986,19 +987,19 @@ test("differential (seeded): the stored cell is toHtml of the decoded runs, medi
     el.innerHTML = r() < 0.2 ? row("r1")[field] : randomCell(r);
     const want = oracle(el.innerHTML);
     const was = row("r1")[field];
-    const seq = S.editSeq, generation = liveSession().generation();
+    const seq = saveChanges(), generation = liveSession().generation();
     clock += 1000;
     const stamp = "unstamped " + seed;
     row("r1").updatedAt = stamp;
     syncFieldFromDom(el);
     assert.equal(row("r1")[field], want, "seed " + seed);
     const moved = was !== want;
-    assert.equal(S.editSeq - seq, moved ? 1 : 0, "seed " + seed + ": one edit exactly when the stored cell changes");
+    assert.equal(saveChanges() - seq, moved ? 1 : 0, "seed " + seed + ": one edit exactly when the stored cell changes");
     assert.equal(liveSession().generation() - generation, moved ? 1 : 0, "seed " + seed);
     assert.equal(row("r1").updatedAt !== stamp, moved, "seed " + seed + ": stamped exactly when it changes");
     if (moved) changed++; else same++;
     syncFieldFromDom(el);
-    assert.equal(S.editSeq - seq, moved ? 1 : 0, "seed " + seed + ": the same cell again is a no-op");
+    assert.equal(saveChanges() - seq, moved ? 1 : 0, "seed " + seed + ": the same cell again is a no-op");
   }
   assert.ok(changed > 150 && same > 10, "both paths were exercised: " + changed + " changed, " + same + " unchanged");
 });

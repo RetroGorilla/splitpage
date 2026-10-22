@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { createHeldFileHandle, mockClock } from "./_m4-matrix.mjs";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
+import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -64,14 +65,14 @@ function lagging() {
 }
 
 function snapshot() {
-  return { doc: JSON.stringify(S.state), generation: liveSession().generation(), seq: S.editSeq, dirty: S.dirty };
+  return { doc: JSON.stringify(S.state), generation: liveSession().generation(), seq: saveChanges(), dirty: unsavedChanges() };
 }
 
 function assertUntouched(before, seen, where) {
   assert.equal(JSON.stringify(S.state), before.doc, where + ": the document, its tag registry and its b-roll list are as they were");
   assert.equal(liveSession().generation(), before.generation, where + ": generation");
-  assert.equal(S.editSeq, before.seq, where + ": edit sequence");
-  assert.equal(S.dirty, before.dirty, where + ": unsaved state");
+  assert.equal(saveChanges(), before.seq, where + ": edit sequence");
+  assert.equal(unsavedChanges(), before.dirty, where + ": unsaved state");
   assert.deepEqual(seen, [], where + ": published");
 }
 
@@ -128,7 +129,7 @@ test("6.5: a save changes nothing in the held document; the file carries the ent
     assert.deepEqual(seen, []);
     assert.equal(liveSession().generation(), gen);
     assert.equal(JSON.stringify(S.state.rows) + JSON.stringify(S.state.productionTags) + JSON.stringify(S.state.brollShots), held);
-    assert.equal(S.dirty, false);
+    assert.equal(unsavedChanges(), false);
     const saved = parseSplitpageFile(await (await target.handle.getFile()).text());
     assert.deepEqual(saved.productionTags.map((x) => x.cat + " " + x.name), entry.productionTags.map((x) => x.cat + " " + x.name));
     assert.deepEqual(saved.brollShots.map((x) => x.name), entry.brollShots.map((x) => x.name));

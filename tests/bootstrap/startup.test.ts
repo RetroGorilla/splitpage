@@ -428,3 +428,38 @@ test("DOM-ready dispatch: immediate when ready, deferred once while loading, and
   cancelled.dispatchEvent(new Event("DOMContentLoaded"));
   assert.equal(ran, 2);
 });
+
+test("the ready signal is null until the document opens, then the open's own promise, settled after the draft resumes", async () => {
+  const r = rig({ desktop: true, taker: () => Promise.resolve("d") });
+  const startup = beginStartup(r.ports);
+  try {
+    assert.equal(startup.ready(), null);
+    const opening = startup.openDocument();
+    assert.equal(startup.ready(), opening);
+    await startup.ready();
+    assert.ok(r.log.includes("apply-draft:d"), "the draft resumed before the signal settled");
+  } finally {
+    startup.dispose();
+  }
+});
+
+test("the startup bridge answers the connected startup's ready signal, and nothing before it connects or after it disconnects", async () => {
+  const { connectStartup, startupReady } = await import("../../src/legacy/startup-bridge.ts");
+  assert.equal(startupReady(), null);
+  const startup = beginStartup(rig().ports);
+  const disconnect = connectStartup(startup);
+  try {
+    assert.equal(startupReady(), null, "connected, but the document has not started opening");
+    assert.throws(() => connectStartup(startup), /already connected/);
+    const opening = startup.openDocument();
+    assert.equal(startupReady(), opening);
+    await opening;
+  } finally {
+    disconnect();
+    startup.dispose();
+  }
+  assert.equal(startupReady(), null);
+  disconnect();
+  const again = connectStartup({ ready: () => null });
+  again();
+});

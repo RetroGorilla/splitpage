@@ -2,6 +2,7 @@ import "./_dom.mjs";
 import { readFileSync } from "node:fs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import { startupReady } from "../legacy/startup-bridge.ts";
 
 const live = new Map();
 const proto = window.EventTarget.prototype;
@@ -108,7 +109,6 @@ const RESOURCE_ROWS = {
 };
 
 const { bootApp, closeApp, rewireApp } = await import("./_app-boot.mjs");
-const { S } = await import("../js/_state.js");
 await bootApp();
 const app = await import("../bootstrap/app.ts");
 const { rootRoutesTaken } = await import("../bootstrap/wiring/editor.ts");
@@ -124,13 +124,13 @@ app.stopApp();
 const stopped = snapshot();
 const stoppedRoutes = rootRoutesTaken();
 app.startApp(await rewireApp());
-await S.initialStateReady;
+await startupReady();
 const first = minus(snapshot(), stopped);
 const firstRoutes = rootRoutesTaken();
 app.stopApp();
 const afterStop = minus(snapshot(), stopped);
 app.startApp(await rewireApp());
-await S.initialStateReady;
+await startupReady();
 const second = minus(snapshot(), stopped);
 
 test("the ledger has 294 rows: 204 registrations, and 90 delegated branches and startup or resource rows", () => {

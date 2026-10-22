@@ -320,3 +320,34 @@ test("stop: a writer that rejects after the stop settles failed, and a stop with
   idle.coordinator.stop();
   assert.equal(idle.calls, 0, "stopping an idle coordinator calls no port");
 });
+
+test("unsaved: a change noted since the last confirmClean is unsaved, wherever the document saves to", () => {
+  const w = world();
+  const c = w.coordinator;
+  assert.equal(c.unsaved(), false, "nothing has changed yet");
+  c.noteChange();
+  assert.equal(c.unsaved(), true, "an edit is unsaved");
+  c.confirmClean();
+  assert.equal(c.unsaved(), false, "confirming clean saves it");
+  c.noteChange();
+  w.destination = place("file-b");
+  assert.equal(c.unsaved(), true, "moving the document does not confirm the edit");
+  c.confirmClean();
+  assert.equal(c.unsaved(), false);
+  w.destination = place("file-a");
+  assert.equal(c.dirty(), true, "the first place never confirmed either edit");
+  assert.equal(c.unsaved(), false, "but the document has no change since it was last confirmed clean");
+});
+
+test("unsaved: an acknowledged save does not confirm the document clean; only confirmClean does", async () => {
+  const w = world();
+  const c = w.coordinator;
+  c.noteChange();
+  const saving = c.request({ kind: "save" });
+  nth(w, 0).answer({ kind: "saved" });
+  assert.deepEqual(await saving, { kind: "saved", acknowledged: true });
+  assert.equal(c.dirty(), false, "the destination is acknowledged");
+  assert.equal(c.unsaved(), true, "the writer has not confirmed the document clean");
+  c.confirmClean();
+  assert.equal(c.unsaved(), false);
+});

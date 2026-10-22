@@ -3,6 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { cloneState } from "../core/document/clone.ts";
+import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -131,7 +132,7 @@ function chromiumRemoval(run) {
 
 function observe(run) {
   flushEdits();
-  const seq = S.editSeq, generation = session.generation(), sizes = undoSizes();
+  const seq = saveChanges(), generation = session.generation(), sizes = undoSizes();
   published.length = 0;
   publishedWhilePainting.length = 0;
   const value = chromiumRemoval(run);
@@ -139,7 +140,7 @@ function observe(run) {
   return {
     value: value,
     edits: published.filter((k) => k === "edit").length,
-    seq: S.editSeq - seq,
+    seq: saveChanges() - seq,
     generation: session.generation() - generation,
     undo: undoSizes().undo - sizes.undo
   };
@@ -163,7 +164,7 @@ test("an update drawn while a Writer paragraph has focus keeps the incoming text
   assert.deepEqual(noEdit(got), NO_EDIT);
   assert.equal(audio("r1"), "Theirs one.");
   assert.equal(audio("r2"), "Theirs two.");
-  assert.equal(S.dirty, false);
+  assert.equal(unsavedChanges(), false);
   assert.ok(removals.some((r) => r.id === "r2" && r.text === "Mine two."), "the old paragraph lost focus while it held the old text");
   const active = document.activeElement;
   assert.equal(active, para("r2"), "the focus stays in the Writer, on the same scene");
@@ -181,7 +182,7 @@ test("an update drawn while a grid cell has focus keeps the incoming text in tha
   const got = observe(() => merge(theirs));
   assert.deepEqual(noEdit(got), NO_EDIT);
   assert.equal(audio("r1"), "Theirs one, longer.");
-  assert.equal(S.dirty, false);
+  assert.equal(unsavedChanges(), false);
   assert.ok(removals.some((r) => r.id === "r1" && r.connected && r.text === "Mine one."), "the old cell lost focus while it held the old text");
   const active = document.activeElement;
   assert.equal(active, gridCell("r1"));
@@ -379,7 +380,7 @@ for (const f of PANEL_FIELDS) {
       assert.ok(removals.some((r) => r.id === "bs1"), "the redraw took the focused box away");
       assert.deepEqual(noEdit(got), NO_EDIT);
       assert.equal(shot()[f.key], "Theirs " + f.name + ".");
-      assert.equal(S.dirty, false);
+      assert.equal(unsavedChanges(), false);
       assert.equal(document.activeElement, shotBox(f.cls), "the redrawn box has the focus");
       observe(() => runBrollRefresh());
       const box = shotBox(f.cls);
@@ -388,7 +389,7 @@ for (const f of PANEL_FIELDS) {
       const blurred = observe(() => box.blur());
       assert.deepEqual(noEdit(blurred), NO_EDIT);
       assert.equal(shot()[f.key], "Theirs " + f.name + ".");
-      assert.equal(S.dirty, false);
+      assert.equal(unsavedChanges(), false);
       if (f.open) assert.equal(shotBox(f.cls), null, "a blur closes the " + f.name + " editor");
     } finally {
       leavePanel();
@@ -405,7 +406,7 @@ for (const f of PANEL_FIELDS) {
       });
       assert.deepEqual(noEdit(got), NO_EDIT);
       assert.equal(shot()[f.key], "Theirs " + f.name + ".");
-      assert.equal(S.dirty, false);
+      assert.equal(unsavedChanges(), false);
     } finally {
       leavePanel();
     }
@@ -420,7 +421,7 @@ for (const f of PANEL_FIELDS) {
         runBrollRefresh();
       });
       assert.equal(shot()[f.key], "Typed " + f.name + ".");
-      assert.equal(S.dirty, true);
+      assert.equal(unsavedChanges(), true);
       observe(() => runBrollRefresh());
       const box = shotBox(f.cls);
       assert.equal(document.activeElement, box, "the box is still open and focused after the next redraw");
@@ -447,7 +448,7 @@ for (const f of PANEL_FIELDS) {
       });
       assert.deepEqual([got.edits, got.seq], [0, 0]);
       assert.equal(shot()[f.key], "Theirs later " + f.name + ".");
-      assert.equal(S.dirty, false);
+      assert.equal(unsavedChanges(), false);
       assert.equal(shotBox(f.cls).value, "Theirs later " + f.name + ".");
     } finally {
       leavePanel();
@@ -478,7 +479,7 @@ for (const n of NORMALISED) {
         });
         assert.deepEqual([got.edits, got.seq], [0, 0]);
         assert.equal(shot()[f.key], "Theirs.");
-        assert.equal(S.dirty, false);
+        assert.equal(unsavedChanges(), false);
       } finally {
         leavePanel();
       }
@@ -524,7 +525,7 @@ test("typing in the b-roll page note box that a redraw already saved is not writ
     });
     assert.deepEqual([got.edits, got.seq], [0, 0]);
     assert.equal(shot().notes, "Theirs later.");
-    assert.equal(S.dirty, false);
+    assert.equal(unsavedChanges(), false);
     assert.equal(pageBox().value, "Theirs later.");
   } finally {
     leavePage();
@@ -544,7 +545,7 @@ for (const n of NORMALISED.filter((v) => v.fields.includes("page note"))) {
       });
       assert.deepEqual([got.edits, got.seq], [0, 0]);
       assert.equal(shot().notes, "Theirs.");
-      assert.equal(S.dirty, false);
+      assert.equal(unsavedChanges(), false);
     } finally {
       leavePage();
     }
@@ -561,7 +562,7 @@ test("an update redrawn while an untouched b-roll page note box with a line brea
     });
     assert.deepEqual(noEdit(got), NO_EDIT);
     assert.equal(shot().notes, "Theirs note.");
-    assert.equal(S.dirty, false);
+    assert.equal(unsavedChanges(), false);
     assert.equal(pageBox().value, "Theirs note.");
   } finally {
     leavePage();
@@ -574,7 +575,7 @@ test("a blur from the untouched b-roll page note box keeps the line breaks of a 
     const got = observe(() => pageBox().blur());
     assert.deepEqual(noEdit(got), NO_EDIT);
     assert.equal(shot().notes, "Line one\nLine two");
-    assert.equal(S.dirty, false);
+    assert.equal(unsavedChanges(), false);
     assert.equal(pageBox().value, "Line one\nLine two");
   } finally {
     leavePage();
@@ -682,7 +683,7 @@ test("a length typed into an editor that a failing redraw removed is set in the 
   assert.ok(removals.length > 0, "the editor was removed before the redraw failed");
   assert.equal(got.edits, 1);
   assert.equal(lengthOf("r1"), 120);
-  assert.equal(S.dirty, true);
+  assert.equal(unsavedChanges(), true);
   assert.deepEqual(editsWhilePainting(), [false], "the length is set with no paint running");
   const toast = Array.from(document.querySelectorAll("#toast-host .toast:not(.is-leaving)"))
     .find((el) => el.firstChild && el.firstChild.nodeValue === REDRAW);

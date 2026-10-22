@@ -1,8 +1,9 @@
 import type { Startup, StartupPorts } from "../startup.ts";
 import type { StashResult } from "../startup/initial-document.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
+import { connectStartup } from "../../legacy/startup-bridge.ts";
 import { documentTransitions } from "../../legacy/transition-bridge.ts";
-import { setInitialStateReady, suppressUnloadWarning } from "../../js/00-prelude.js";
+import { suppressUnloadWarning } from "../../js/00-prelude.js";
 import { updateHideShotMenu } from "../../js/01b-hide-shot.js";
 import { initDocIdentityChannel, liveDocumentPort, loadInitialDocument, syncDocIdentity } from "../../js/02b-doc-id.js";
 import { cloneState } from "../../core/document/clone.ts";
@@ -60,6 +61,8 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
   };
 }
 
-export function openInitialDocument(startup: Startup): void {
-  setInitialStateReady(startup.openDocument());
+export function openInitialDocument(startup: Startup): () => void {
+  const disconnect = connectStartup(startup);
+  void startup.openDocument();
+  return disconnect;
 }

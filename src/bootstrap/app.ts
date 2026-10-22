@@ -87,7 +87,7 @@ export function startApp(wiring: Wiring): () => void {
     run(view("mountNotices", mountNoticesFeature));
     run([mountTagsFeature, stopTagsFeature]);
     run(view("mountPrompterVisibility", mountPrompterVisibilityFeature));
-    openInitialDocument(startup);
+    stops.push(openInitialDocument(startup));
     const comments = mountCommentsFeature();
     stops.push(stopCommentsFeature);
     run([mountVideoFeature, stopVideoFeature]);
