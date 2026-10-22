@@ -1489,16 +1489,17 @@ absent = system; sets `data-theme` on `<html>` and, in the desktop app,
 clock formatter, #180), `splitpage-person-color` (#194),
 `splitpage-default-wpm` (the reading speed a NEW script starts at),
 `splitpage-video-thumbs` (#141: `"0"` = don't fetch a pasted YouTube or
-Vimeo link's thumbnail; absent = fetch, the default — `videoThumbsOn()`),
+Vimeo link's thumbnail; absent = fetch, the default — `preferences().videoThumbs()`),
 `splitpage-rundown-min` and `splitpage-script-scale` (other lanes' own
 controls; Settings only reads and writes them), plus the keys that already
 had homes (`splitpage-hide-shot`, `splitpage-autosave`,
 `splitpage-writer-size`, `splitpage-prompter-mirror`/`-flip`/`-scene-mode`,
-`splitpage-comment-author`). Every write goes through `writePref(key,
-value)`, which stores it and then fires `document`'s
+`splitpage-comment-author`). The keys are private to the preferences owner
+(`src/application/preferences/preferences.ts`); every announced write
+stores the value and then fires `document`'s
 `"splitpage:pref"` CustomEvent (`{detail: {key, value}}`); whatever draws a
 setting listens for its key, so a change made anywhere shows everywhere.
-File ▸ Export app data carries them (`SETTINGS_APPDATA_PREFS`).
+File ▸ Export app data carries them (`settingsAppData()`).
 
 ---
 

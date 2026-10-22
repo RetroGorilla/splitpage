@@ -63,6 +63,12 @@ function view(key: string, mount: () => unknown): [() => unknown, () => void] {
   return [mount, () => stopViewFeature(key)];
 }
 
+let appearanceMountedEarly = false;
+
+function stopAppearance(): void {
+  stopViewFeature("mountAppearance");
+}
+
 export function startApp(wiring: Wiring): () => void {
   if (running) throw new Error("the app is already started; stop it first");
   const stops: (() => void)[] = [wiring.dispose];
@@ -82,10 +88,13 @@ export function startApp(wiring: Wiring): () => void {
     mount();
   };
   try {
+    const appearance = appearanceMountedEarly;
+    appearanceMountedEarly = false;
+    if (appearance) stops.push(stopAppearance);
     stops.push(startActions(wiring.actions, wiring.keyTarget));
     const startup = beginStartup(startupPorts());
     stops.push(startup.dispose);
-    run(view("mountAppearance", mountAppearanceFeature));
+    if (!appearance) run([mountAppearanceFeature, stopAppearance]);
     run(view("mountNotices", mountNoticesFeature));
     run([mountTagsFeature, stopTagsFeature]);
     run(view("mountPrompterVisibility", mountPrompterVisibilityFeature));
@@ -161,6 +170,8 @@ export function stopApp(): void {
 
 export function startAppWhenReady(doc: Document, wiring: Wiring): void {
   if (running || cancelReady) throw new Error("the app is already started or waiting to start; stop it first");
+  mountAppearanceFeature();
+  appearanceMountedEarly = true;
   let started = false;
   const cancel = whenDocumentReady(doc, () => {
     started = true;
@@ -172,7 +183,12 @@ export function startAppWhenReady(doc: Document, wiring: Wiring): void {
       try {
         cancel();
       } finally {
-        wiring.dispose();
+        appearanceMountedEarly = false;
+        try {
+          stopAppearance();
+        } finally {
+          wiring.dispose();
+        }
       }
     };
   }
