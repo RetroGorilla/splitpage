@@ -1,3 +1,4 @@
+import { bulkDeleteArmed, clearProductionSelection, disarmBulkDelete, productionSelection, selectedKeys } from "../../legacy/production-editing-bridge.ts";
 import type { FindPorts } from "../../features/find/mount.ts";
 import type { TagsPorts } from "../../features/tags/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -10,15 +11,10 @@ import {
   acceptTagGhost,
   acceptUntaggedMention,
   applyTag,
-  armBulkDelete,
-  bulkDeleteArmed,
-  clearProductionSelection,
   closeTagComposer,
-  disarmBulkDelete,
   hideTagGhost,
   hideUntaggedPrompt,
   renderTagCategories,
-  selectedKeys,
   tagKey
 } from "../../js/07-production-tags.js";
 import { closePlainTag, plainTagOpen, refreshPlainTag } from "../../js/07b-plain-tags.js";
@@ -101,7 +97,7 @@ export function mountTagsFeature(): ReturnType<typeof mountTags> {
       acceptTagGhost: acceptTagGhost,
       acceptUntaggedMention: acceptUntaggedMention,
       applyTag: applyTag,
-      armBulkDelete: armBulkDelete,
+      armBulkDelete: function () { productionSelection().arm(renderProduction); },
       clearProductionSelection: clearProductionSelection,
       closeTagComposer: closeTagComposer,
       disarmBulkDelete: disarmBulkDelete,
@@ -143,7 +139,7 @@ export function mountTagsFeature(): ReturnType<typeof mountTags> {
       runFromButton: runFromButton,
       setTagOwner: setTagOwner,
       setTagNotes: setTagNotes,
-      bulkDeleteArmed: function () { return bulkDeleteArmed; },
+      bulkDeleteArmed: bulkDeleteArmed,
       isTouch: function () { return IS_TOUCH as boolean; },
       addingPerson: function () { return tagAddingPersonKey(); },
       expanded: function () { return tagExpandedKey(); },

@@ -1,3 +1,4 @@
+import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
@@ -181,9 +182,9 @@ test("comments app: remount posts and replies once and dispose clears menus, dra
   assert.equal(S.state.comments[0].replies.length, 1);
   fire(document.querySelector('[data-action="comment-menu"][data-id="c_one"]'), "click");
   fire(document.querySelector('[data-action="delete-comment"][data-id="c_one"]'), "click");
-  assert.equal(S.deleteCommentArmId, "c_one");
+  assert.equal(deleteConfirmation().armedId("comment"), "c_one");
   owner.dispose();
-  assert.equal(S.deleteCommentArmId, null);
+  assert.equal(deleteConfirmation().armedId("comment"), null);
   assert.equal(document.querySelector(".comment-menu"), null);
   owner = mount();
   try {
