@@ -14,8 +14,7 @@ import {
 } from "./02b-doc-id.js";
 import {
   pushSnapshot,
-  stampRow,
-  updateIdentityChip
+  stampRow
 } from "./03-sync.js";
 import { beginBusy, endBusy, withBusyBar } from "../features/notices/busy.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
@@ -44,7 +43,7 @@ import {
   parseMarkdownProject
 } from "./20d-formats.js";
 import {
-  makeDesktopHandle, notifyDesktopDocumentState
+  makeDesktopHandle
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { strBytes } from "../adapters/formats/bytes.ts";
@@ -62,10 +61,26 @@ import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 export function updateFileChip() {
   updateHeaderFileChip();
-  mirrorFileChipToWriter();
   updateReadonlyBanner();
   var menu = document.getElementById("file-menu");
   if (menu && !menu.hidden) refreshFileMenu();
+}
+
+export function fileChipListeners(refresh) {
+  return {
+    session: function (change) {
+      if (change.kind === "adopt" || change.kind === "server" || change.kind === "recovery" || change.kind === "reload") refresh();
+    },
+    location: function (change) {
+      if (change !== "writtenOut") refresh();
+    },
+    status: function (change) {
+      if (change !== "bookmarks") refresh();
+    },
+    save: function (change) {
+      if (change === "clean" || change === "halt" || (change === "change" && onServerDoc())) refresh();
+    }
+  };
 }
 
 function updateReadonlyBanner() {
@@ -321,8 +336,6 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
   });
 
   clearDirty();
-  updateIdentityChip();
-  updateFileChip();
   var commentNote = S.state.comments.length
     ? ", " + S.state.comments.length + " comment" + (S.state.comments.length === 1 ? "" : "s") : "";
   if (!opts.silent) showToast((opts.resumed ? "Resumed " : "Opened ") + (S.state.title || file.name) + " — " +
@@ -442,10 +455,7 @@ async function loadFileIntoEditor(file, handle, opts) {
   markAbsorbedDirty(opts.reload ? "reload" : "adopt");
   amendHome(imported, { dirty: false });
   if (typeof closeNewTabPage === "function") closeNewTabPage();
-  updateIdentityChip();
-  updateFileChip();
   if (typeof syncDocIdentity === "function") syncDocIdentity();
-  if (runningOnDesktop() && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
   showToast(opts.reload
     ? "Reloaded " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s")
     : "Opened " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s") +
@@ -564,7 +574,6 @@ export function saveBackToFile(opts) {
   if (!imported) return Promise.resolve();
   return requestSave({ kind: opts && opts.force ? "writebackForce" : "writeback", target: imported }).then(function (outcome) {
     if (outcome.kind === "saved" && outcome.acknowledged) amendHome(imported, { dirty: unsavedFor(imported) });
-    updateFileChip();
   });
 }
 
@@ -608,7 +617,6 @@ export async function writeBackToFile(job) {
     } catch (err) {
       if (err && err.name === "AbortError") return WRITEBACK_CANCELLED;
       amendHome(imported, { inPlace: false });
-      updateFileChip();
     }
   }
 

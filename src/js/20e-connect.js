@@ -6,7 +6,7 @@ import {
   pointTabAt,
   setServerToken
 } from "./13-hosted.js";
-import { deliverFile, updateFileChip } from "./18-local-files.js";
+import { deliverFile } from "./18-local-files.js";
 import { renderDesktopShareInfo } from "./20f-desktop.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { joinServer } from "../adapters/transport/server-join.ts";
@@ -324,7 +324,6 @@ async function useServer(bookmark, opts) {
   renderConnect();
   await checkServer();
   applyReviewMode();
-  updateFileChip();
   renderConnect();
   renderReviewLink();
   if (serverStatus().mode().available && !(serverStatus().mode().authRequired && !currentConn().token)) {
@@ -371,7 +370,6 @@ async function backToThisCopy() {
   updateConnectMenu();
   await checkServer();
   applyReviewMode();
-  updateFileChip();
   renderConnect();
   renderReviewLink();
   showToast("This tab is back on this copy of Splitpage.", "ok");
