@@ -1027,8 +1027,6 @@
     {"rule":"loop-import","source":"src/js/20h-appdata.js","target":"src/js/03a-history-store.js#exportHistoryAll"},
     {"rule":"loop-import","source":"src/js/20h-appdata.js","target":"src/js/03a-history-store.js#importHistoryBundle"},
     {"rule":"loop-import","source":"src/js/20h-appdata.js","target":"src/js/03a-history-store.js#normalizeLegacySnapshots"},
-    {"rule":"loop-import","source":"src/js/20h-appdata.js","target":"src/js/10-comments.js#COMMENTS_SORT_KEY"},
-    {"rule":"loop-import","source":"src/js/20h-appdata.js","target":"src/js/10-comments.js#readCommentSortMode"},
     {"rule":"loop-import","source":"src/js/20h-appdata.js","target":"src/js/12-dirty-toast.js#showToast"},
     {"rule":"loop-import","source":"src/js/20h-appdata.js","target":"src/js/18-local-files.js#deliverFile"},
     {"rule":"loop-import","source":"src/js/20h-appdata.js","target":"src/js/19-writer.js#applyWriterSize"},
