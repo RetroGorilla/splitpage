@@ -37,7 +37,7 @@ import {
   toggleReplyComposer,
   toggleResolve
 } from "../../js/10-comments.js";
-import { showToast } from "../../js/12-dirty-toast.js";
+import { showToast } from "../../legacy/effects-bridge.ts";
 import {
   onRootClick,
   onRootFocusOut,

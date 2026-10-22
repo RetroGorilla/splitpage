@@ -6,7 +6,6 @@ import { armDeleteButton, disarmDeleteButton, render, syncFieldFromDom } from ".
 import { galleryEdit } from "./05e-gallery-overlay.js";
 import { isBlankScene } from "./05g-scene-clip.js";
 import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
-import { showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { placeCaretAtTextOffset } from "./19-writer.js";
 import { makeId } from "../adapters/identity/ids.ts";
@@ -16,6 +15,7 @@ import { REVIEW_ONLY, onDocumentReplaced, runCommand, sessionStamps, sessionText
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { rowDrag } from "../legacy/editor-bridge.ts";
+import { showToast } from "../legacy/effects-bridge.ts";
 import {
   addGalleryPicture, normalizeVideoLink, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, rowSlots, videoLinkKey
 } from "../core/document/gallery.ts";
