@@ -1,3 +1,5 @@
+import { createViewLifetime } from "../common/view-lifetime.ts";
+
 type TagEvent = MouseEvent & { readonly target: HTMLElement & { value: string }; readonly key: string; readonly pointerType: string };
 interface EntityPorts {
   readonly rootClick: (e: MouseEvent) => void;
@@ -66,16 +68,6 @@ export interface TagsRoutes {
   readonly anchorMouseDown: (e: MouseEvent) => void;
   readonly dispose: () => void;
 }
-function listeners() {
-  const releases: (() => void)[] = [];
-  function listen(target: EventTarget | null, type: string, fn: (e: TagEvent) => void, capture = false): void {
-    if (!target) return;
-    const handler = fn as EventListener;
-    target.addEventListener(type, handler, capture);
-    releases.push(() => target.removeEventListener(type, handler, capture));
-  }
-  return { listen, releases };
-}
 function isTagField(t: HTMLElement): boolean {
   return !!t.classList && (t.classList.contains("tag-owner-select") || t.classList.contains("tag-notes-input") ||
   t.classList.contains("tag-rename-input") || t.classList.contains("tag-person-input"));
@@ -84,7 +76,8 @@ export function mountTagEntityContainer(mount: { window: Window; id: string; por
   const doc = mount.window.document;
   const ports = mount.ports;
   const el = doc.getElementById(mount.id);
-  const { listen, releases } = listeners();
+  const life = createViewLifetime(mount.window, () => true);
+  const { listen } = life;
   listen(el, "click", ports.rootClick);
   listen(el, "keydown", function (e) {
     if (!e.target.classList) return;
@@ -127,15 +120,15 @@ export function mountTagEntityContainer(mount: { window: Window; id: string; por
     if (ports.reviewMode()) return;
     if (e.target.classList && e.target.classList.contains("tag-notes-input")) ports.queueAutoSave();
   });
-  return () => { releases.splice(0).reverse().forEach((release) => release()); };
+  return life.dispose;
 }
 export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRoutes {
   const realm = mount.window as Window & typeof globalThis;
   const doc = realm.document;
   const ports = mount.ports;
-  const { listen, releases } = listeners();
+  const life = createViewLifetime(mount.window, () => true);
+  const { listen } = life;
   const timers = new Set<number>();
-  let open = true;
   const touchPress = { timer: null as number | null, key: null as string | null, fired: false, x: 0, y: 0 };
   function cancelTouchPress(): void {
     if (touchPress.timer !== null) realm.clearTimeout(touchPress.timer);
@@ -154,7 +147,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
       cancelTouchPress();
       const owns = ports.capture();
       touchPress.timer = realm.setTimeout(function () {
-        if (!open || !owns() || !card.isConnected) return;
+        if (!life.active() || !owns() || !card.isConnected) return;
         touchPress.timer = null;
         touchPress.fired = true;
         ports.toggleCardSelection(touchPress.key || "");
@@ -205,7 +198,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
 
   listen(doc.getElementById("btn-production"), "click", function () { ports.runFromButton("panel-production"); });
   listen(doc.getElementById("production-close"), "click", ports.closeProductionPanel);
-  releases.push(ports.installEntity("production-panel"));
+  life.release(ports.installEntity("production-panel"));
   listen(doc.getElementById("production-panel"), "keydown", function (e) {
     if (!e.target.classList) return;
     if (e.target.id === "bulk-person-input") {
@@ -237,7 +230,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
 
   listen(doc.getElementById("btn-gear"), "click", function () { ports.runFromButton("panel-gear"); });
   listen(doc.getElementById("gear-close"), "click", ports.closeGearPanel);
-  releases.push(ports.installEntity("gear-panel"));
+  life.release(ports.installEntity("gear-panel"));
   listen(doc.getElementById("gear-modes"), "click", function (e) {
     const btn = e.target.closest("[data-group]");
     if (!btn) return;
@@ -263,7 +256,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
 
   return {
     jumpClick(event): boolean {
-      if (!open) return false;
+      if (!life.active()) return false;
       const e = event as TagEvent;
       const jumpTagBtn = e.target.closest('[data-action="jump-tag"]');
       if (jumpTagBtn) {
@@ -275,7 +268,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
       return false;
     },
     click(event): boolean {
-      if (!open) return false;
+      if (!life.active()) return false;
       const e = event as TagEvent;
       const selCard = (e.ctrlKey || e.metaKey || e.shiftKey)
       ? e.target.closest("#production-list .tag-entity") : null;
@@ -391,7 +384,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
       return false;
     },
     anchorMouseDown(event): void {
-      if (!open) return;
+      if (!life.active()) return;
       const e = event as TagEvent;
       const tagEl = e.target.closest(".tag-anchor");
       if (tagEl) {
@@ -403,7 +396,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
         ports.openProductionPanel();
         const timer = realm.setTimeout(function () {
           timers.delete(timer);
-          if (!open || !owns() || !panel?.isConnected || doc.getElementById("production-panel") !== panel) return;
+          if (!life.active() || !owns() || !panel?.isConnected || doc.getElementById("production-panel") !== panel) return;
           const card = doc.querySelector<HTMLElement>('.tag-entity[data-key="' + ports.cssAttr(key) + '"]');
           if (card) {
             card.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -416,14 +409,13 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
       }
     },
     dispose(): void {
-      if (!open) return;
-      open = false;
+      if (!life.active()) return;
+      life.dispose();
       cancelTouchPress();
       touchPress.fired = false;
       touchPress.key = null;
       timers.forEach((timer) => realm.clearTimeout(timer));
       timers.clear();
-      releases.splice(0).reverse().forEach((release) => release());
     }
   };
 }
