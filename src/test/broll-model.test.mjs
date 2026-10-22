@@ -273,12 +273,12 @@ test("anchoring: a key a comment covers keeps its id and its comment, and a repe
     brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
     productionTags: []
   });
-  assert.equal(anchorBrollInRows(S.state.rows), 1);
+  assert.equal(anchorBrollInRows(S.state), 1);
   assert.equal(S.state.rows[0].visualText, commented);
   assert.match(S.state.rows[1].visualText, /^<span class="broll-key"/);
 
   S.state.rows.push({ id: "r2", visualText: commented, audioText: "" });
-  assert.equal(anchorBrollInRows(S.state.rows), 1);
+  assert.equal(anchorBrollInRows(S.state), 1);
   assert.equal(S.state.rows[0].visualText, commented);
   const after = S.state.rows[2].visualText;
   assert.match(after, /data-cmt="c1"/);
@@ -299,7 +299,7 @@ function bareBreaks(cell) {
 
 function withRow(html, fn) {
   loadTestDocument({ rows: [{ id: "r0", visualText: html, audioText: "" }], brollShots: [], productionTags: [] });
-  return fn(S.state.rows[0]);
+  return fn(S.state.rows[0], S.state);
 }
 
 test("anchoring: every unanchored line gets its key where the old pass put it", () => {
@@ -308,8 +308,8 @@ test("anchoring: every unanchored line gets its key where the old pass put it", 
     const before = brollInCell(cellOf(html));
     if (!before.some((b) => !b.id)) continue;
     if (repeatsAnId(before) || commentsAKeyOrBlank(html)) continue;
-    const after = withRow(html, (row) => {
-      const n = anchorBrollInRows([row]);
+    const after = withRow(html, (row, doc) => {
+      const n = anchorBrollInRows(doc, [row]);
       assert.equal(n, before.filter((b) => !b.id).length, html);
       return row.visualText;
     });
@@ -350,8 +350,8 @@ test("anchoring: a key repeating an id an earlier line holds gets an id of its o
       if (b.id && seen.has(b.id)) repeats.push(k);
       if (b.id) seen.add(b.id);
     });
-    const after = withRow(html, (row) => {
-      assert.equal(anchorBrollInRows([row]), repeats.length + before.filter((b) => !b.id).length, html);
+    const after = withRow(html, (row, doc) => {
+      assert.equal(anchorBrollInRows(doc, [row]), repeats.length + before.filter((b) => !b.id).length, html);
       return row.visualText;
     });
     const read = brollInCell(cellOf(after));
@@ -385,14 +385,14 @@ test("anchoring: a key repeating an id an earlier line holds gets an id of its o
     brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
     productionTags: []
   });
-  assert.equal(anchorBrollInRows(S.state.rows), 1);
+  assert.equal(anchorBrollInRows(S.state), 1);
   const ids = S.state.rows.map((r) => brollInCell(cellOf(r.visualText))[0].id);
   assert.equal(ids[0], "bsA");
   assert.ok(ids[1] && ids[1] !== "bsA");
   assert.equal(S.state.rows[1].visualText, "intro<br>" + KEY(ids[1]) + " the gulls");
   const card = '<a class="video-embed-card" href="https://youtu.be/x">x</a>';
   S.state.rows[1].visualText = sanitizeHtml(card + "<br>" + KEY("bsA") + " the gulls");
-  assert.equal(anchorBrollInRows(S.state.rows), 1);
+  assert.equal(anchorBrollInRows(S.state), 1);
   assert.match(S.state.rows[1].visualText, /video-embed-card/);
   const moved = brollInCell(cellOf(S.state.rows[1].visualText));
   assert.deepEqual(moved.map((b) => b.name), ["the gulls"]);
@@ -408,7 +408,7 @@ test("anchoring: an unanchored line never takes the record a keyed line further 
     brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
     productionTags: []
   });
-  assert.equal(anchorBrollInRows(S.state.rows), 1);
+  assert.equal(anchorBrollInRows(S.state), 1);
   const id = brollInCell(cellOf(S.state.rows[0].visualText))[0].id;
   assert.ok(id && id !== "bsA", "a new id, not the keyed line's: " + id);
   assert.equal(S.state.rows[1].visualText, KEY("bsA") + " the gulls");
@@ -442,8 +442,8 @@ test("renaming: the line becomes the key and the new name, as the old rename wro
 test("anchoring and renaming in a cell still holding a video card keep the card", () => {
   const card = '<a class="video-embed-card" href="https://youtu.be/x">x</a>';
   const html = sanitizeHtml("intro " + card + "<br><strong>B-roll:</strong> the gulls<br>" + KEY("b9") + " drone");
-  withRow(html, (row) => {
-    assert.equal(anchorBrollInRows([row]), 1);
+  withRow(html, (row, doc) => {
+    assert.equal(anchorBrollInRows(doc, [row]), 1);
     assert.match(row.visualText, /video-embed-card/);
     const read = brollInCell(cellOf(row.visualText));
     assert.deepEqual(read.map((b) => b.name), ["the gulls", "drone"]);
@@ -456,7 +456,7 @@ test("anchoring and renaming in a cell still holding a video card keep the card"
 
 test("a pasted key's record is a new shot seeded from its scene; a moved one keeps the record it had", () => {
   const moved = { id: "bsMoved", name: "old name", desc: "", status: "shot", reshoot: false, notes: "got it", owner: "", audioRef: "", location: "", origin: "script" };
-  loadTestDocument({
+  const doc = {
     rows: [{
       id: "r0",
       visualText: KEY("bsNew") + " the gulls<br>over the pier<br>" + KEY("bsMoved") + " drone<br>mid-line " + KEY("bsLoose"),
@@ -464,8 +464,9 @@ test("a pasted key's record is a new shot seeded from its scene; a moved one kee
     }],
     brollShots: [moved],
     productionTags: []
-  });
-  recordPastedBroll("r0", cellOf(S.state.rows[0].visualText), ["bsNew", "bsMoved", "bsLoose"]);
+  };
+  loadTestDocument(doc);
+  recordPastedBroll(doc, "r0", cellOf(doc.rows[0].visualText), ["bsNew", "bsMoved", "bsLoose"]);
   assert.deepEqual(S.state.brollShots.map((r) => r.id), ["bsMoved", "bsNew"]);
   assert.equal(S.state.brollShots[0], moved);
   assert.equal(moved.status, "shot");
@@ -577,7 +578,7 @@ test("a pasted copy of a shot's line gets none of its hand-added props", () => {
   const s = propsDoc();
   addBrollProp("b1", "Kettle");
   s.rows[1].visualText = KEY("bsPasted") + " the " + tagSpan("prop", "Red mug", "red mug") + " on the sill";
-  recordPastedBroll("r1", cellOf(s.rows[1].visualText), ["bsPasted"]);
+  recordPastedBroll(s, "r1", cellOf(s.rows[1].visualText), ["bsPasted"]);
   const rec = s.brollShots.find((r) => r.id === "bsPasted");
   assert.ok(rec);
   assert.deepEqual(rec.props, []);

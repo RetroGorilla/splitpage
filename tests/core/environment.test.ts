@@ -40,6 +40,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "production/looks.ts": await import("../../src/core/production/looks.ts"),
   "production/ports.ts": await import("../../src/core/production/ports.ts"),
   "production/readers.ts": await import("../../src/core/production/readers.ts"),
+  "production/records.ts": await import("../../src/core/production/records.ts"),
   "production/tags.ts": await import("../../src/core/production/tags.ts"),
   "production/timing.ts": await import("../../src/core/production/timing.ts"),
   "text/anchors.ts": await import("../../src/core/text/anchors.ts"),

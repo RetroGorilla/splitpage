@@ -11,8 +11,6 @@ import {
 import { editCell } from "./05b-cell-edit.js";
 import {
   isInsideTagOrLink,
-  registerProductionTag,
-  registryEntry,
   scheduleIdleRefresh,
   tagRecordsPlan
 } from "./07-production-tags.js";
@@ -21,14 +19,12 @@ import { makeId, randomIds } from "../adapters/identity/ids.ts";
 import {
   BROLL_CLOSERS,
   BROLL_MARKER_RE,
-  BROLL_PROP_NAME_MAX,
   BROLL_PROPS_MAX,
   BROLL_STATUS_IDS,
   brollPropKey,
   newBrollShot,
-  normalizeBrollProps
 } from "../core/document/broll.ts";
-import { cappedText, escapeHtml } from "../core/document/text-policy.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
 import { cellRuns, cellTextCommand } from "../application/commands/cell-text.ts";
 import {
   anchorBrollCell,
@@ -38,7 +34,6 @@ import {
   brollInCell,
   brollMarkerLines,
   brollPropsInCell,
-  brollPropsRenamed as renamedBrollProps,
   brollSeedLocation,
   brollSeedRef,
   brollSortedForList,
@@ -52,7 +47,10 @@ import { toHtml } from "../core/text/html.ts";
 import { projection } from "../core/text/runs.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { cellOf, scriptCellOf } from "../legacy/richtext.ts";
-import { readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { readSession, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { addShotCommand, addShotPropCommand, removeShotPropCommand } from "../application/commands/broll-records.ts";
+import { rewriteCellsCommand } from "../application/commands/document-edit.ts";
+import { addBrollRecord, brollRecord } from "../core/production/records.ts";
 export {
   BROLL_MARKER_RE,
   BROLL_PROPS_MAX,
@@ -132,17 +130,9 @@ function seedLocation(row) {
   return brollSeedLocation(row, productionReaders);
 }
 
-export function brollRecord(id) {
-  if (!id) return null;
-  for (var i = 0; i < S.state.brollShots.length; i++) {
-    if (S.state.brollShots[i].id === id) return S.state.brollShots[i];
-  }
-  return null;
-}
-
 export function newBrollRecord(fields) {
   var rec = newBrollShot(makeId("bs"), fields || {});
-  S.state.brollShots.push(rec);
+  runDocumentEdit(addShotCommand(rec));
   return rec;
 }
 
@@ -150,22 +140,16 @@ export function brollSeedOf(row) {
   return { audioRef: seedRef(row), location: seedLocation(row) };
 }
 
-export function recordPastedBroll(rowId, cell, ids) {
-  if (!S.state || !ids || !ids.length) return;
-  var row = brollRow(rowId);
+export function recordPastedBroll(doc, rowId, cell, ids) {
+  if (!doc || !ids || !ids.length) return;
+  var row = doc.rows[rowIndexOf(doc, rowId)] || null;
   brollInCell(cell).forEach(function (found) {
-    if (!found.id || ids.indexOf(found.id) === -1 || brollRecord(found.id)) return;
-    newBrollRecord({
+    if (!found.id || ids.indexOf(found.id) === -1 || brollRecord(doc, found.id)) return;
+    addBrollRecord(doc, newBrollShot(makeId("bs"), {
       id: found.id, name: found.name, desc: found.desc,
       audioRef: seedRef(row), location: seedLocation(row)
-    });
+    }));
   });
-}
-
-export function deleteBrollRecord(id) {
-  var before = S.state.brollShots.length;
-  S.state.brollShots = S.state.brollShots.filter(function (r) { return r.id !== id; });
-  return before !== S.state.brollShots.length;
 }
 
 export function brollEntries() {
@@ -181,7 +165,7 @@ function unkeyedScope(changes) {
 
 export function derivedRecordsPlan(doc, changes) {
   if (!doc || doc !== S.state) return null;
-  var tags = tagRecordsPlan();
+  var tags = tagRecordsPlan(doc);
   var shots = planBrollRecords(doc, productionReaders, randomIds, htmlToPlainText, unkeyedScope(changes));
   var fields = [];
   if (tags && tags.apply) fields.push("productionTags");
@@ -190,7 +174,7 @@ export function derivedRecordsPlan(doc, changes) {
   return {
     fields: fields,
     apply: function (into) {
-      if (tags && tags.apply) tags.apply();
+      if (tags && tags.apply) tags.apply(into);
       applyBrollRecords(into.brollShots, shots);
     },
     commit: tags ? tags.commit : undefined
@@ -198,37 +182,11 @@ export function derivedRecordsPlan(doc, changes) {
 }
 
 export function addBrollProp(shotId, rawName) {
-  var rec = brollRecord(shotId);
-  var name = cappedText(rawName, BROLL_PROP_NAME_MAX);
-  if (!rec || !name) return false;
-  var entry = registryEntry("prop", name);
-  if (!entry) {
-    registerProductionTag("prop", name);
-    entry = registryEntry("prop", name);
-  }
-  if (!entry) return false;
-  rec.props = normalizeBrollProps(rec.props, S.state.productionTags);
-  var key = brollPropKey(entry.id, entry.name);
-  var already = rec.props.some(function (p) {
-    return brollPropKey(p.id, p.name) === key || (!p.id && normalizeTagName(p.name) === normalizeTagName(entry.name));
-  });
-  if (already || rec.props.length >= BROLL_PROPS_MAX) return false;
-  rec.props.push({ id: entry.id, name: entry.name });
-  return true;
+  return runDocumentEdit(addShotPropCommand(shotId, rawName));
 }
 
 export function removeBrollProp(shotId, ref) {
-  var rec = brollRecord(shotId);
-  if (!rec || !ref || !Array.isArray(rec.props)) return false;
-  var before = rec.props.length;
-  rec.props = rec.props.filter(function (p) { return brollPropKey(p.id, p.name) !== ref; });
-  return rec.props.length !== before;
-}
-
-export function brollPropsRenamed(fromId, oldName, toId, toName) {
-  renamedBrollProps(S.state, fromId, oldName, toId, toName).forEach(function (c) {
-    S.state.brollShots[c.at].props = c.props;
-  });
+  return runDocumentEdit(removeShotPropCommand(shotId, ref));
 }
 
 export function brollShotsByProp() {
@@ -361,8 +319,8 @@ export function declineBrollAnchoring(rows) {
   (rows || []).forEach(function (row) { brollAnchorDeclined[row.id] = true; });
 }
 
-export function anchorBrollInRows(rows, doc) {
-  doc = doc || S.state;
+export function anchorBrollInRows(doc, only) {
+  var rows = only || (doc && doc.rows);
   if (!doc || !rows || !rows.length) return 0;
   var plan = planBrollAnchors(doc, productionReaders, randomIds);
   var total = 0;
@@ -397,7 +355,7 @@ export function anchorBrollInLeftCell(cellEl) {
   var row = brollRow(cellEl.getAttribute("data-id"));
   if (!row) return 0;
   var copy = { id: row.id, visualText: row.visualText };
-  var n = anchorBrollInRows([copy]);
+  var n = readSession(function (doc) { return anchorBrollInRows(doc, [copy]); });
   if (!n) return 0;
   var outcome = runCommand(cellTextCommand(row.id, "visualText", cellRuns(scriptCellOf(copy.visualText)), sessionTextPorts));
   if (outcome.kind === "failed") throw outcome.error;
@@ -408,33 +366,38 @@ export function anchorBrollInLeftCell(cellEl) {
   return n;
 }
 
-export function renameBrollInScript(entry, newName) {
-  var row = brollRow(entry.rowId);
-  if (!row) return false;
+function brollRenamed(doc, entry, newName) {
+  var row = doc.rows[rowIndexOf(doc, entry.rowId)];
+  if (!row) return [];
   var html = row.visualText;
   var target = entry.ordinal >= 0 ? brollMarkerLines(cellOf(html))[entry.ordinal] : null;
-  if (!target) return false;
+  if (!target) return [];
   var keyText = target.marker.key ? (target.marker.key.text || "B-roll:") : "B-roll:";
 
   if (holdsMedia(html)) {
     var body = inertBody(html);
     var line = brollHtmlLines(body)[target.index];
-    if (!line) return false;
+    if (!line) return [];
     var holder = document.createElement("div");
     holder.innerHTML = brollKeyHtml(entry.id, keyText) + " " + escapeHtml(newName);
     line.nodes.forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); });
     Array.prototype.slice.call(holder.childNodes).forEach(function (n) {
       body.insertBefore(n, line.br);
     });
-    row.visualText = sanitizeHtml(body.innerHTML);
-    return true;
+    return [{ rowId: row.id, field: "visualText", html: sanitizeHtml(body.innerHTML) }];
   }
 
   var at = target.line.start;
   var cell = deleteRange(cellOf(html), at, target.line.end);
   cell = insertBrollKey(cell, at, entry.id, keyText, {});
   cell = insertText(cell, at + 1, " " + newName, {});
-  row.visualText = toHtml(cell);
+  return [{ rowId: row.id, field: "visualText", html: toHtml(cell) }];
+}
+
+export function renameBrollInScript(entry, newName) {
+  var planned = readSession(function (doc) { return doc ? brollRenamed(doc, entry, newName) : []; });
+  if (!planned.length) return false;
+  runDocumentEdit(rewriteCellsCommand("rename-broll-shot", function (doc) { return brollRenamed(doc, entry, newName); }, sessionStamps, { needs: "edit", stamped: false }));
   return true;
 }
 

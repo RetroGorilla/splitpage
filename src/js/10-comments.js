@@ -1,7 +1,16 @@
 import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
 import { pad2 } from "../core/production/timing.ts";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession } from "../legacy/session-bridge.ts";
+import { readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
+import {
+  addCommentCommand,
+  addReplyCommand,
+  deleteCommentCommand,
+  restoreConflictCommand,
+  setCommentAssigneeCommand,
+  toggleResolveCommand,
+  unwrapCommentAnchorCommand
+} from "../application/commands/comments.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { editorSelection } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
@@ -12,10 +21,8 @@ import { revealRow } from "./01b-hide-shot.js";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { normalizeImageRef } from "../../shared/blob-policy.js";
 import {
-  getEditorName,
   openSidePanel,
   pushSnapshot,
-  stampRow,
   syncPanelClass
 } from "./03-sync.js";
 import {
@@ -27,7 +34,6 @@ import {
 } from "./04-richtext.js";
 import { editableCellHtml, render } from "./05-render.js";
 import { resetDraftHistory } from "./05d-draft-edit.js";
-import { markDirty } from "./12-dirty-toast.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
 import { queueAutoSave, resumeAutoSave } from "./14-export.js";
@@ -42,7 +48,7 @@ import {
 import { idMap } from "../core/document/id-map.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
 import { EDITOR_NAME_MAX } from "../core/document/fields.ts";
-import { cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
+import { codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
 import { commentSortMode, setCommentSort } from "../application/comment-sort.ts";
 import { cleanAuthorName } from "../core/document/people.ts";
 export { commentBodyText, commentEntries };
@@ -329,11 +335,8 @@ export function setCommentAssignee(id, name) {
   var idx = findCommentIndex(id);
   if (idx === -1) return;
   if (reviewBlocked()) { renderComments(); return; }
-  S.state.comments[idx].assignee = cappedText(name || "", 80);
-  S.state.comments[idx].updatedAt = nowIso();
-  markDirty();
+  runDocumentEdit(setCommentAssigneeCommand(id, name, sessionStamps.clock));
   render();
-  queueAutoSave();
 }
 
 function commentAssigneeOptionsHtml(current) {
@@ -488,17 +491,17 @@ function anchorLiveText(cmtId) {
   return anchorTextFromState(cmtId);
 }
 
-function unwrapAnchorInState(rowId, field, cmtId) {
-  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
-  if (idx === -1) return;
-  var html = S.state.rows[idx][field] || "";
-  var container = inertBody(html);
-  var anchor = container.querySelector('.cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
-  if (anchor) {
+function anchorUnwrapped(rowId, field, cmtId) {
+  return function (doc) {
+    var row = doc.rows[rowIndexOf(doc, rowId)];
+    if (!row) return [];
+    var container = inertBody(row[field] || "");
+    var anchor = container.querySelector('.cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
+    if (!anchor) return [];
     while (anchor.firstChild) anchor.parentNode.insertBefore(anchor.firstChild, anchor);
     anchor.parentNode.removeChild(anchor);
-    S.state.rows[idx][field] = container.innerHTML;
-  }
+    return [{ rowId: rowId, field: field, html: container.innerHTML }];
+  };
 }
 
 export function syncAnchorResolvedClasses() {
@@ -546,8 +549,7 @@ export function closeCommentComposer(cancelled) {
   composerVersion++;
   document.getElementById("comment-modal").hidden = true;
   if (cancelled && pendingComment) {
-    unwrapAnchorInState(pendingComment.rowId, pendingComment.field, pendingComment.id);
-    markDirty();
+    runDocumentEdit(unwrapCommentAnchorCommand(anchorUnwrapped(pendingComment.rowId, pendingComment.field, pendingComment.id)));
     render();
   }
   pendingComment = null;
@@ -569,7 +571,7 @@ export function postComment() {
     showToast("Write a comment before posting.", "warn");
     return;
   }
-  S.state.comments.push({
+  runDocumentEdit(addCommentCommand({
     id: pendingComment.id,
     rowId: pendingComment.rowId,
     field: pendingComment.field,
@@ -585,8 +587,7 @@ export function postComment() {
     updatedAt: nowIso(),
     kind: "anchor",
     replies: []
-  });
-  markDirty();
+  }));
   document.getElementById("comment-modal").hidden = true;
   composerVersion++;
   pendingComment = null;
@@ -619,30 +620,19 @@ export function closeCommentsPanel() {
 
 export function toggleResolve(id) {
   if (reviewMode()) return;
-  var idx = findCommentIndex(id);
-  if (idx === -1) return;
-  var c = S.state.comments[idx];
-  c.resolved = !c.resolved;
-  c.updatedAt = nowIso();
-  if (c.resolved) { c.resolvedBy = getEditorName(); c.resolvedAt = c.updatedAt; }
-  else { c.resolvedBy = null; c.resolvedAt = null; }
-  markDirty();
+  if (!runDocumentEdit(toggleResolveCommand(id, sessionStamps))) return;
   render();
-  queueAutoSave();
 }
 
 function deleteComment(id) {
   var idx = findCommentIndex(id);
   if (idx === -1) return;
   var c = S.state.comments[idx];
-  unwrapAnchorInState(c.rowId, c.field, c.anchorId);
-  S.state.comments.splice(idx, 1);
+  runDocumentEdit(deleteCommentCommand(id, anchorUnwrapped(c.rowId, c.field, c.anchorId)));
   delete expandedReplyIds[id];
   delete replyDrafts[id];
   if (commentMenuFor === id) commentMenuFor = null;
-  markDirty();
   render();
-  queueAutoSave();
 }
 
 export function armDeleteComment(btn, id) {
@@ -683,16 +673,14 @@ export function postReply(id) {
     showToast("Write a reply before posting.", "warn");
     return;
   }
-  S.state.comments[idx].replies.push({
+  runDocumentEdit(addReplyCommand(id, {
     id: makeId("rp"),
     author: author,
     body: bodyHtml,
     createdAt: nowIso()
-  });
-  S.state.comments[idx].updatedAt = nowIso();
+  }, sessionStamps.clock));
   delete expandedReplyIds[id];
   delete replyDrafts[id];
-  markDirty();
   render();
   sendNow();
 }
@@ -993,11 +981,8 @@ export function restoreConflictValue(commentId) {
   var c = S.state.comments[ci];
   if (c.field === "title") {
     pushSnapshot("Before using your version of the title");
-    S.state.title = c.emptyValue ? "" : (c.titleValue || "");
-    S.state.comments.splice(ci, 1);
-    markDirty();
+    runDocumentEdit(restoreConflictCommand(commentId, { kind: "title", title: c.emptyValue ? "" : (c.titleValue || "") }, sessionStamps));
     render();
-    queueAutoSave();
     showToast("Restored your version of the title", "ok");
     return;
   }
@@ -1005,17 +990,11 @@ export function restoreConflictValue(commentId) {
   if (ri === -1) { showToast("That scene no longer exists.", "warn"); return; }
 
   pushSnapshot("Before using your version of " + (c.conflictField || "a field"));
-  if (c.field === "visualImage") {
-    delete S.state.rows[ri].visualImage;
-    S.state.rows[ri].imageRef = c.emptyValue ? null : (normalizeImageRef(c.imageValue) || null);
-  } else {
-    S.state.rows[ri][c.field] = c.emptyValue ? "" : sanitizeHtml(c.body);
-  }
-  stampRow(S.state.rows[ri]);
-  S.state.comments.splice(ci, 1);
-  markDirty();
+  var value = c.field === "visualImage"
+    ? { kind: "image", imageRef: c.emptyValue ? null : (normalizeImageRef(c.imageValue) || null) }
+    : { kind: "text", html: c.emptyValue ? "" : sanitizeHtml(c.body) };
+  runDocumentEdit(restoreConflictCommand(commentId, value, sessionStamps));
   render();
-  queueAutoSave();
   showToast("Restored your version of " + (c.conflictField || "the field"), "ok");
 }
 
