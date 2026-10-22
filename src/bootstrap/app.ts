@@ -33,6 +33,7 @@ import { mountFindFeature, mountTagsFeature, stopFindFeature, stopTagsFeature } 
 import { mountCommentsFeature, stopCommentsFeature } from "./wiring/comments.ts";
 import {
   mountConflictsFeature,
+  mountCellReachFeature,
   mountDriveFeature,
   mountFileMenuFeature,
   mountGdocFeature,
@@ -42,12 +43,14 @@ import {
   mountImportsFeature,
   mountNoticesFeature,
   mountPanelsFeature,
+  mountPhoneBarFeature,
   mountPrompterFeature,
   mountPrompterOpenFeature,
   mountPrompterVisibilityFeature,
   mountSaveFeature,
   mountSaveRecoveryFeature,
   mountServerFeature,
+  mountTopbarFeature,
   mountWriterCloseFeature,
   mountWriterNavigationFeature,
   mountWriterOpenFeature,
@@ -84,6 +87,9 @@ export function startApp(wiring: Wiring): () => void {
     stops.push(startActions(wiring.actions, wiring.keyTarget));
     const startup = beginStartup(startupPorts());
     stops.push(startup.dispose);
+    run(view("mountCellReach", mountCellReachFeature));
+    run(view("mountTopbar", mountTopbarFeature));
+    run(view("mountPhoneBar", mountPhoneBarFeature));
     run(view("mountNotices", mountNoticesFeature));
     run([mountTagsFeature, stopTagsFeature]);
     run(view("mountPrompterVisibility", mountPrompterVisibilityFeature));

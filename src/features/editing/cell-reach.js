@@ -18,14 +18,17 @@ export function placeCaretAtEnd(el) {
   sel.addRange(range);
 }
 
-export function __init() {
+export function mountCellReach({ window }) {
+  var document = window.document;
   var rowsEl = document.getElementById("rows");
-  if (!rowsEl) return;
-  rowsEl.addEventListener("mousedown", function (e) {
+  if (!rowsEl) return { dispose: function () {} };
+  function onMouseDown(e) {
     if (e.button !== 0 || e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
     var field = reachTarget(e.target);
     if (!field) return;
     e.preventDefault();
     placeCaretAtEnd(field);
-  });
+  }
+  rowsEl.addEventListener("mousedown", onMouseDown);
+  return { dispose: function () { rowsEl.removeEventListener("mousedown", onMouseDown); } };
 }
