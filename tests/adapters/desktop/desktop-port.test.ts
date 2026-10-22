@@ -234,6 +234,9 @@ test("the attached bridge is the port, and the test seam swaps it and restores i
   useDesktopForTest(null);
   assert.equal(desktopPort(), null);
   assert.equal(runningOnDesktop(), false);
+  useDesktopForTest(undefined);
+  assert.equal(desktopPort(), null);
+  assert.equal(runningOnDesktop(), false);
   restoreDesktop();
   assert.equal(desktopPort(), real);
   assert.equal(runningOnDesktop(), true);
