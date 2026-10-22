@@ -17,7 +17,7 @@ const { applyMerge } = await import("../js/03-sync.js");
 const { openServerDoc } = await import("../js/13-hosted.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { openLongDemo, startNewScript } = await import("../js/18b-file-menu.js");
-const { seedCheckPasses } = await import("../js/20b-onboarding.js");
+const { seedCheckPasses } = await import("../legacy/seed-check.ts");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 

@@ -1,7 +1,7 @@
 import { S } from "../js/_state.js";
 import { prompterIsOpen } from "../application/prompter-state.ts";
 import { brollPageOpen } from "../js/08d-broll-panel.js";
-import { writerOpen } from "../js/19-writer.js";
+import { viewFlags } from "./preferences-bridge.ts";
 import { tourShowing } from "../js/20c-help.js";
 import { dialogOpen, launcherOpen } from "./screen.ts";
 import type { ScreenState } from "./screen.ts";
@@ -13,7 +13,7 @@ export function screenNow(): ScreenState {
     launcher: launcherOpen(),
     tour: tourShowing(),
     prompter: prompterIsOpen(),
-    writer: Boolean(writerOpen),
+    writer: viewFlags().writerOpen(),
     shotlist: brollPageOpen()
   };
 }

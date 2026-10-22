@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import "./_preferences-started.mjs";
 import { register } from "node:module";
 import test from "node:test";
 import assert from "node:assert/strict";

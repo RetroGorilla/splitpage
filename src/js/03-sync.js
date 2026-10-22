@@ -13,7 +13,9 @@ import { DEFAULT_WPM } from "../core/document/timing.ts";
 import { mergeStates as mergeStatesWith } from "../core/merge-states.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { textMergeContext as coreTextMergeContext } from "../core/merge/text-field.ts";
+import { SIDE_PANEL_IDS } from "../application/preferences/panel-widths.ts";
 import { withDocumentPorts } from "../legacy/document-ports.ts";
+import { panelWidths } from "../legacy/preferences-bridge.ts";
 import { fromHtml } from "../legacy/richtext.ts";
 import {
   adoptRestoredState,
@@ -27,10 +29,8 @@ import {
   protectHistorySnapshot
 } from "./03a-history-store.js";
 import {
-  SIDE_PANEL_IDS,
   applySidePanelWidth,
   holdScriptPlace,
-  readSidePanelWidth,
   sidePanelOpening
 } from "./03b-side-panels.js";
 import { safeId } from "./04-richtext.js";
@@ -415,7 +415,7 @@ export function openSidePanel(id) {
     }
   });
   document.getElementById(id).hidden = false;
-  applySidePanelWidth(id, readSidePanelWidth(id));
+  applySidePanelWidth(id, panelWidths().read(id));
   syncPanelClass();
 }
 

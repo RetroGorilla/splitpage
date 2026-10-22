@@ -1,4 +1,5 @@
 import "../../src/test/_dom.mjs";
+import "../../src/test/_preferences-started.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createActionRegistry } from "../../src/application/actions.ts";

@@ -23,8 +23,8 @@ import { projection } from "../core/text/runs.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { findMatchesCase } from "../application/find-options.ts";
+import { viewFlags } from "../legacy/preferences-bridge.ts";
 
-export var findOpen = false;
 var findMatches = [];
 var findIndex = -1;
 var findInTags = 0;
@@ -449,7 +449,7 @@ export function runBulkTag() {
 }
 
 export function openFindBar() {
-  findOpen = true;
+  viewFlags().setFindOpen(true);
   document.getElementById("findbar").hidden = false;
   var input = document.getElementById("find-input");
   var sel = window.getSelection();
@@ -495,7 +495,7 @@ function firstMatchFrom(range) {
 }
 
 export function closeFindBar() {
-  findOpen = false;
+  viewFlags().setFindOpen(false);
   document.getElementById("findbar").hidden = true;
   findMatches = [];
   findIndex = -1;

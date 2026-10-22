@@ -7,7 +7,8 @@ import { hideTagGhost, tagGhost } from "../../js/07-production-tags.js";
 import { clearProductionSelection, selectedKeys } from "../../legacy/production-editing-bridge.ts";
 import { renderProduction } from "../../js/08-production-panels.js";
 import { closeCommentComposer, closeCommentsPanel } from "../../js/10-comments.js";
-import { closeWriter, writerOpen } from "../../js/19-writer.js";
+import { closeWriter } from "../../js/19-writer.js";
+import { viewFlags } from "../../legacy/preferences-bridge.ts";
 
 const overlay = owned<ReturnType<typeof mountOverlay>>();
 
@@ -20,7 +21,7 @@ export function mountOverlayFeature(): ReturnType<typeof mountOverlay> {
       renderProduction: renderProduction,
       closeCommentComposer: closeCommentComposer,
       closeCommentsPanel: closeCommentsPanel,
-      writerOpen: function () { return writerOpen; },
+      writerOpen: function () { return viewFlags().writerOpen(); },
       paintingScreen: paintingScreen,
       hasTagGhost: function () { return !!tagGhost; },
       hideTagGhost: hideTagGhost,

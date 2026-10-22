@@ -1,45 +1,42 @@
 import { S } from "./_state.js";
-import { writePref } from "./00p-prefs.js";
 import { findRowIndex } from "./03-sync.js";
 import { render } from "./05-render.js";
 import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
+import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
 
-export var hideShotScenes;
-
-var HIDE_SHOT_KEY = "splitpage-hide-shot";
 var HIDE_SHOT_GRACE_MS = 1400;
 
-function readHideShotFlag() {
-  try { return localStorage.getItem(HIDE_SHOT_KEY) === "1"; } catch (e) { return false; }
+function hideShotOn() {
+  return viewFlags().hideShot();
 }
 var expandedShotRowIds = idMap();
 var shotHideTimers = idMap();
 
 function isRowHiddenByShotToggle(row) {
-  return !!(hideShotScenes && row.status === "shot" && !expandedShotRowIds[row.id]);
+  return !!(hideShotOn() && row.status === "shot" && !expandedShotRowIds[row.id]);
 }
 
 export function updateHideShotMenu() {
   var item = document.getElementById("menu-hide-shot");
   if (!item) return;
-  item.setAttribute("aria-checked", hideShotScenes ? "true" : "false");
+  item.setAttribute("aria-checked", hideShotOn() ? "true" : "false");
 }
 
 export function setHideShotScenes(on) {
   on = !!on;
-  if (on === hideShotScenes) return;
-  hideShotScenes = on;
+  if (on === hideShotOn()) return;
+  viewFlags().setHideShot(on);
   if (on) expandedShotRowIds = idMap();
-  writePref(HIDE_SHOT_KEY, on ? "1" : "0");
+  preferences().setHideShot(on);
   updateHideShotMenu();
   if (S.state) render();
 }
 
 export function toggleHideShotScenes() {
-  setHideShotScenes(!hideShotScenes);
-  showToast(hideShotScenes
+  setHideShotScenes(!hideShotOn());
+  showToast(hideShotOn()
     ? "Hiding shot scenes — collapsed into strips you can click open."
     : "Showing every scene again.", "ok");
 }
@@ -59,7 +56,7 @@ export function clearShotHideGrace(rowId) {
 }
 
 export function revealRow(rowId) {
-  if (!hideShotScenes || !S.state) return;
+  if (!hideShotOn() || !S.state) return;
   var idx = findRowIndex(rowId);
   if (idx === -1 || !isRowHiddenByShotToggle(S.state.rows[idx])) return;
   var start = idx, end = idx;
@@ -110,6 +107,4 @@ export function renderRowGroups(rows, rowRenderer) {
   }).join("");
 }
 
-export function __init() {
-  hideShotScenes = readHideShotFlag();
-}
+export function __init() {}

@@ -1,9 +1,11 @@
 import "./_dom.mjs";
+import "./_preferences-started.mjs";
 import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
-import { __init as initSceneStatus, rowSeconds, wordCount } from "../js/01-scene-status.js";
+import { __init as initSceneStatus, rowSeconds } from "../js/01-scene-status.js";
+import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
 import { sanitizeHtml } from "../js/04-richtext.js";
@@ -144,7 +146,7 @@ test("read time: a cue takes none", () => {
     { id: "r2", audioText: TEN + "<br>" + CUE("SFX: a long and winding rumble of thunder over the hills") }
   ] });
   withState(s, () => {
-    assert.equal(wordCount(s.rows[1].audioText), 10);
+    assert.equal(productionReaders.wordCount(s.rows[1].audioText), 10);
     assert.equal(rowSeconds(s.rows[0]), rowSeconds(s.rows[1]));
   });
 });
