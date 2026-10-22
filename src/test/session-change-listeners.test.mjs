@@ -73,3 +73,13 @@ test("a refresh listener hears the jobs that come due, after the app's refresh r
   t.mock.timers.tick(1000);
   assert.deepEqual(mine, [["rowTimes", "production"]]);
 });
+
+test("a listener stopped and registered again on the same session hears each change once", () => {
+  heard.length = 0;
+  const again = (change) => { heard.push(["again", change.kind]); };
+  bridge.onSessionChange(again)();
+  const stop = bridge.onSessionChange(again);
+  bridge.runCommand(sceneLengthCommand("r1", 55, bridge.sessionStamps));
+  stop();
+  assert.deepEqual(heard.filter((h) => h[0] === "again"), [["again", "edit"]]);
+});

@@ -57,13 +57,17 @@ export const sessionTextPorts: CellTextPorts = Object.freeze({
   cells: function (html: string) { return scriptCellOf(html); }
 });
 
-const changeListeners: SessionListener[] = [];
+interface Hearing {
+  readonly listener: SessionListener;
+}
+
+const changeListeners: Hearing[] = [];
 
 const refreshListeners: ((jobs: ReadonlySet<string>) => void)[] = [];
 
-function hearing(listener: SessionListener): SessionListener {
+function hearing(entry: Hearing): SessionListener {
   return function (change) {
-    if (changeListeners.includes(listener)) listener(change);
+    if (changeListeners.includes(entry)) entry.listener(change);
   };
 }
 
@@ -90,7 +94,7 @@ function createSession(ports: SessionBridgePorts, after: SessionCounters): Docum
     timers: ports.timers,
     after: after
   });
-  changeListeners.forEach(function (listener) { made.subscribe(hearing(listener)); });
+  changeListeners.forEach(function (entry) { made.subscribe(hearing(entry)); });
   return made;
 }
 
@@ -113,10 +117,11 @@ export function onRefresh(listener: (jobs: ReadonlySet<string>) => void): () => 
 }
 
 export function onSessionChange(listener: SessionListener): () => void {
-  changeListeners.push(listener);
-  if (started) started.current.subscribe(hearing(listener));
+  const entry: Hearing = { listener: listener };
+  changeListeners.push(entry);
+  if (started) started.current.subscribe(hearing(entry));
   return function () {
-    const at = changeListeners.indexOf(listener);
+    const at = changeListeners.indexOf(entry);
     if (at !== -1) changeListeners.splice(at, 1);
   };
 }
