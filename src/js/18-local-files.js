@@ -1,7 +1,7 @@
 import { docIdEmbeddedIn } from "../core/document/ids.ts";
 import { S } from "./_state.js";
 import { flushEdits } from "./12a-undo.js";
-import { inertBody } from "../legacy/richtext.ts";
+import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { noteReload } from "../legacy/session-bridge.ts";
 import { documentTransitions } from "../legacy/transition-bridge.ts";
 import { autoSavePolicy, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
@@ -26,7 +26,6 @@ import { captureExportDocument, loadExportAssets } from "./14b-export-kit.js";
 import { exportAssetsRequest } from "../adapters/formats/export-assets.ts";
 import {
   detectTwoColumnFormat,
-  normalizeImportedRows,
   parseImportRows
 } from "./11-import.js";
 import { clearDirty, markAbsorbedDirty } from "./12-dirty-toast.js";
@@ -37,6 +36,7 @@ import {
 import { warnImagesLeftOut } from "./14-export.js";
 import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
+import { normalizeImportedRows } from "../adapters/formats/import-rows.js";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
 import { refreshFileMenu, toggleFileMenu } from "./18b-file-menu.js";
 import { isExportAction, rememberExport } from "./18c-export-dialog.js";
@@ -388,14 +388,14 @@ async function loadFileIntoEditor(file, handle, opts) {
       newRows = parsed.rows;
       if (!newRows.length && parsed.looseText) {
         var looseMode = detectTwoColumnFormat(parsed.looseText) ? "twocolumn" : "paragraph";
-        newRows = normalizeImportedRows(parseImportRows(parsed.looseText, looseMode));
+        newRows = normalizeImportedRows(parseImportRows(parsed.looseText, looseMode), sanitizeHtml);
       }
     } else if (kind === "csv") {
       newRows = csvToRows(await file.text());
     } else {
       var text = await file.text();
       var mode = detectTwoColumnFormat(text) ? "twocolumn" : "paragraph";
-      newRows = normalizeImportedRows(parseImportRows(text, mode));
+      newRows = normalizeImportedRows(parseImportRows(text, mode), sanitizeHtml);
       var firstHeading = /^#\s+(.+)$/m.exec(text);
       if (firstHeading) newTitle = firstHeading[1].trim();
     }

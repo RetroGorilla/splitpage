@@ -6,13 +6,9 @@ globalThis.location = new URL("https://splitpage.test/index.html?freeze-caches=1
 
 const { S } = await import("../js/_state.js");
 const { migrateRows } = await import("../js/02-state.js");
-const {
-  currentProductionIndex,
-  healTagRegistry,
-  productionEntries,
-  productionIndexStats,
-  resetProductionIndexStats
-} = await import("../js/07-production-tags.js");
+const { healTagRegistry, productionIndexStats, resetProductionIndexStats } = await import("../js/07-production-tags.js");
+const { currentProductionIndex, productionEntries } = await import("../core/production/index.js");
+const { currentDocument } = await import("../legacy/session-bridge.ts");
 const { mintTagId } = await import("../core/document/tags.ts");
 const { productionReaders } = await import("../legacy/document-ports.ts");
 const { TAG_CATEGORIES } = await import("../core/production/looks.ts");
@@ -84,8 +80,8 @@ test("with the flag, the cell reader and every production reader hand out deep-f
 test("with the flag, the index and the entries it presents are deep-frozen, and a write throws a TypeError", () => {
   load([row("r1", "Put the " + tag("prop", "kettle") + " on.", "Wide on the " + tag("location", "kitchen"))],
     [{ id: "t_kettle", cat: "prop", name: "kettle", owner: "", notes: "", status: "needed" }]);
-  const entries = productionEntries();
-  const index = currentProductionIndex();
+  const entries = productionEntries(currentDocument(), productionReaders, cacheSeal);
+  const index = currentProductionIndex(currentDocument(), productionReaders, cacheSeal);
   assert.deepEqual(frozenThrough(index), []);
   entries.forEach((e) => assert.deepEqual(frozenThrough(e), [], e.key));
   assert.throws(() => { index.entries[0].id = "x"; }, TypeError);
@@ -95,13 +91,13 @@ test("with the flag, the index and the entries it presents are deep-frozen, and 
   assert.throws(() => { entries[0].mentions.push({}); }, TypeError);
   entries.reverse();
   entries.push({ key: "junk" });
-  assert.deepEqual(productionEntries().map((e) => e.key), ["prop kettle", "location kitchen"], "the array a caller gets is still its own");
+  assert.deepEqual(productionEntries(currentDocument(), productionReaders, cacheSeal).map((e) => e.key), ["prop kettle", "location kitchen"], "the array a caller gets is still its own");
 });
 
 test("with the flag, sloppy code's plain assignments, deletes and length writes into a cached value throw too", () => {
   load([row("r1", "Put the " + tag("prop", "kettle") + " on.", "")], []);
-  const entry = productionEntries()[0];
-  const index = currentProductionIndex();
+  const entry = productionEntries(currentDocument(), productionReaders, cacheSeal)[0];
+  const index = currentProductionIndex(currentDocument(), productionReaders, cacheSeal);
   const cell = cellOf("<b>sloppy</b> probe");
   const writes = [
     [entry, "o.id = 'x';"],
@@ -113,13 +109,13 @@ test("with the flag, sloppy code's plain assignments, deletes and length writes 
     [cell, "delete o[0].marks.b;"]
   ];
   writes.forEach(([target, body]) => assert.throws(() => sloppyWrite(body)(target), TypeError, body));
-  assert.equal(productionEntries()[0].id, null);
+  assert.equal(productionEntries(currentDocument(), productionReaders, cacheSeal)[0].id, null);
   assert.equal(cellOf("<b>sloppy</b> probe")[0].text, "sloppy");
 });
 
 test("with the flag, the shared tag categories an entry points to are not frozen; the entry holds a locked copy", () => {
   load([row("r1", "Put the " + tag("prop", "kettle") + " on.", "")], []);
-  const entry = productionEntries()[0];
+  const entry = productionEntries(currentDocument(), productionReaders, cacheSeal)[0];
   assert.ok(Object.isFrozen(entry.cat));
   assert.deepEqual(entry.cat, TAG_CATEGORIES.find((c) => c.id === "prop"));
   assert.equal(TAG_CATEGORIES.some((c) => Object.isFrozen(c)), false);
@@ -127,29 +123,29 @@ test("with the flag, the shared tag categories an entry points to are not frozen
 
 test("with the flag, prose edits keep the index without writing into it", () => {
   load([row("r1", "Put the " + tag("prop", "kettle") + " on.", "")], []);
-  const index = currentProductionIndex();
+  const index = currentProductionIndex(currentDocument(), productionReaders, cacheSeal);
   const sig = JSON.stringify(index);
   S.state.rows[0].audioText = "Now put the " + tag("prop", "kettle") + " on, slowly.";
-  assert.doesNotThrow(() => productionEntries());
+  assert.doesNotThrow(() => productionEntries(currentDocument(), productionReaders, cacheSeal));
   assert.equal(productionIndexStats().derived, 1, "a prose edit re-derived the index");
   assert.equal(JSON.stringify(index), sig, "the index handed out before the edit is unchanged");
-  assert.equal(currentProductionIndex().rowSig[2], S.state.rows[0].audioText);
-  assert.deepEqual(currentProductionIndex(), deriveProductionIndex(S.state, productionReaders));
+  assert.equal(currentProductionIndex(currentDocument(), productionReaders, cacheSeal).rowSig[2], S.state.rows[0].audioText);
+  assert.deepEqual(currentProductionIndex(currentDocument(), productionReaders, cacheSeal), deriveProductionIndex(S.state, productionReaders));
 });
 
 test("with the flag, a heal leaves what it handed out alone, and both views take the new ids (#326)", () => {
   load([row("r1", "Put the " + tag("prop", "kettle") + " on.", "Wide on the " + tag("location", "kitchen"))],
     [{ id: "t_kitchen", cat: "location", name: "kitchen", owner: "", notes: "", status: "have" }]);
-  const shown = productionEntries();
-  const index = currentProductionIndex();
+  const shown = productionEntries(currentDocument(), productionReaders, cacheSeal);
+  const index = currentProductionIndex(currentDocument(), productionReaders, cacheSeal);
   assert.equal(healTagRegistry(), 1);
   assert.equal(productionIndexStats().derived, 1, "the heal re-derived the index");
   assert.deepEqual(shown.map((e) => [e.key, e.id]), [["location kitchen", "t_kitchen"], ["prop kettle", null]]);
   assert.deepEqual(index.entries.map((e) => e.id), ["t_kitchen", null]);
   assert.equal(index.unregistered.length, 1);
-  assert.deepEqual(productionEntries().map((e) => [e.key, e.id]), [["location kitchen", "t_kitchen"], ["prop kettle", mintTagId("prop", "kettle")]]);
-  assert.deepEqual(currentProductionIndex(), deriveProductionIndex(S.state, productionReaders));
-  assert.deepEqual(frozenThrough(currentProductionIndex()), []);
+  assert.deepEqual(productionEntries(currentDocument(), productionReaders, cacheSeal).map((e) => [e.key, e.id]), [["location kitchen", "t_kitchen"], ["prop kettle", mintTagId("prop", "kettle")]]);
+  assert.deepEqual(currentProductionIndex(currentDocument(), productionReaders, cacheSeal), deriveProductionIndex(S.state, productionReaders));
+  assert.deepEqual(frozenThrough(currentProductionIndex(currentDocument(), productionReaders, cacheSeal)), []);
   assert.equal(healTagRegistry(), 0);
 });
 

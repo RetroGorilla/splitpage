@@ -8,11 +8,14 @@ import { __init as initStatus } from "../js/01-scene-status.js";
 import { escapeHtml, migrateRows } from "../js/02-state.js";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { cellOf, normalizeCell } from "../js/04c-doc-model.js";
-import {
-  BROLL_MARKER_RE, __init as brollInit, addBrollProp, anchorBrollInRows, brollInCell, brollPropKey, brollPropsInCell,
-  brollShotsByProp, recordPastedBroll, removeBrollProp, renameBrollInScript
-} from "../js/08c-broll.js";
-import { renameTag } from "../js/07-production-tags.js";
+import { BROLL_MARKER_RE, __init as brollInit, addBrollProp, brollInCell, brollPropKey, brollPropsInCell, brollShotsByProp, recordPastedBroll, renameBrollInScript } from "../js/08c-broll.js";
+import { anchorBrollInRows } from "../adapters/production/broll-anchors.js";
+import { productionReaders } from "../legacy/document-ports.ts";
+import { randomIds } from "../adapters/identity/ids.ts";
+import { removeBrollProp, renameTag } from "../application/commands/production-actions.js";
+import { runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
+import { retagRewrites } from "../legacy/tag-rewrites.ts";
+
 import { buildBreakdownCsv, buildBrollCsv } from "../adapters/formats/csv.ts";
 import { buildShotListPdf } from "../adapters/formats/pdf.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
@@ -274,12 +277,12 @@ test("anchoring: a key a comment covers keeps its id and its comment, and a repe
     brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
     productionTags: []
   });
-  assert.equal(anchorBrollInRows(S.state), 1);
+  assert.equal(anchorBrollInRows(S.state, undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml }), 1);
   assert.equal(S.state.rows[0].visualText, commented);
   assert.match(S.state.rows[1].visualText, /^<span class="broll-key"/);
 
   S.state.rows.push({ id: "r2", visualText: commented, audioText: "" });
-  assert.equal(anchorBrollInRows(S.state), 1);
+  assert.equal(anchorBrollInRows(S.state, undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml }), 1);
   assert.equal(S.state.rows[0].visualText, commented);
   const after = S.state.rows[2].visualText;
   assert.match(after, /data-cmt="c1"/);
@@ -310,7 +313,7 @@ test("anchoring: every unanchored line gets its key where the old pass put it", 
     if (!before.some((b) => !b.id)) continue;
     if (repeatsAnId(before) || commentsAKeyOrBlank(html)) continue;
     const after = withRow(html, (row, doc) => {
-      const n = anchorBrollInRows(doc, [row]);
+      const n = anchorBrollInRows(doc, [row], { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml });
       assert.equal(n, before.filter((b) => !b.id).length, html);
       return row.visualText;
     });
@@ -352,7 +355,7 @@ test("anchoring: a key repeating an id an earlier line holds gets an id of its o
       if (b.id) seen.add(b.id);
     });
     const after = withRow(html, (row, doc) => {
-      assert.equal(anchorBrollInRows(doc, [row]), repeats.length + before.filter((b) => !b.id).length, html);
+      assert.equal(anchorBrollInRows(doc, [row], { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml }), repeats.length + before.filter((b) => !b.id).length, html);
       return row.visualText;
     });
     const read = brollInCell(cellOf(after));
@@ -386,14 +389,14 @@ test("anchoring: a key repeating an id an earlier line holds gets an id of its o
     brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
     productionTags: []
   });
-  assert.equal(anchorBrollInRows(S.state), 1);
+  assert.equal(anchorBrollInRows(S.state, undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml }), 1);
   const ids = S.state.rows.map((r) => brollInCell(cellOf(r.visualText))[0].id);
   assert.equal(ids[0], "bsA");
   assert.ok(ids[1] && ids[1] !== "bsA");
   assert.equal(S.state.rows[1].visualText, "intro<br>" + KEY(ids[1]) + " the gulls");
   const card = '<a class="video-embed-card" href="https://youtu.be/x">x</a>';
   S.state.rows[1].visualText = sanitizeHtml(card + "<br>" + KEY("bsA") + " the gulls");
-  assert.equal(anchorBrollInRows(S.state), 1);
+  assert.equal(anchorBrollInRows(S.state, undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml }), 1);
   assert.match(S.state.rows[1].visualText, /video-embed-card/);
   const moved = brollInCell(cellOf(S.state.rows[1].visualText));
   assert.deepEqual(moved.map((b) => b.name), ["the gulls"]);
@@ -409,7 +412,7 @@ test("anchoring: an unanchored line never takes the record a keyed line further 
     brollShots: [{ id: "bsA", name: "the gulls", desc: "", status: "shot", origin: "script" }],
     productionTags: []
   });
-  assert.equal(anchorBrollInRows(S.state), 1);
+  assert.equal(anchorBrollInRows(S.state, undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml }), 1);
   const id = brollInCell(cellOf(S.state.rows[0].visualText))[0].id;
   assert.ok(id && id !== "bsA", "a new id, not the keyed line's: " + id);
   assert.equal(S.state.rows[1].visualText, KEY("bsA") + " the gulls");
@@ -444,7 +447,7 @@ test("anchoring and renaming in a cell still holding a video card keep the card"
   const card = '<a class="video-embed-card" href="https://youtu.be/x">x</a>';
   const html = sanitizeHtml("intro " + card + "<br><strong>B-roll:</strong> the gulls<br>" + KEY("b9") + " drone");
   withRow(html, (row, doc) => {
-    assert.equal(anchorBrollInRows(doc, [row]), 1);
+    assert.equal(anchorBrollInRows(doc, [row], { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml }), 1);
     assert.match(row.visualText, /video-embed-card/);
     const read = brollInCell(cellOf(row.visualText));
     assert.deepEqual(read.map((b) => b.name), ["the gulls", "drone"]);
@@ -533,10 +536,10 @@ test("removeBrollProp takes a hand-added prop off by its key and leaves the brea
   const s = propsDoc();
   addBrollProp("b2", "Kettle");
   const key = brollPropKey(s.brollShots[1].props[0].id, "Kettle");
-  assert.equal(removeBrollProp("b2", key), true);
+  assert.equal(removeBrollProp("b2", key, { run: runDocumentEdit }), true);
   assert.deepEqual(s.brollShots[1].props, []);
   assert.ok(s.productionTags.some((t) => t.name === "Kettle"));
-  assert.equal(removeBrollProp("b2", key), false);
+  assert.equal(removeBrollProp("b2", key, { run: runDocumentEdit }), false);
 });
 
 test("the shots a prop is needed by: tagged on the line or added by hand, each once", () => {
@@ -554,7 +557,7 @@ test("renaming a prop in the breakdown carries through to the shots that need it
   const s = propsDoc();
   addBrollProp("b2", "Kettle");
   const id = s.brollShots[1].props[0].id;
-  assert.ok(renameTag("prop", "Kettle", "Whistling kettle"));
+  assert.ok(renameTag("prop", "Kettle", "Whistling kettle", { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }));
   assert.deepEqual(s.brollShots[1].props, [{ id: id, name: "Whistling kettle" }]);
   assert.deepEqual(shotsBy()["prop whistling kettle"], ["drone over the pier"]);
 });
@@ -563,7 +566,7 @@ test("renaming a prop onto another's name re-points the shots at the one it fold
   const s = propsDoc();
   addBrollProp("b2", "Kettle");
   const mug = s.productionTags.find((t) => t.name === "Red mug");
-  renameTag("prop", "Kettle", "red mug");
+  renameTag("prop", "Kettle", "red mug", { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps });
   assert.equal(s.productionTags.filter((t) => t.cat === "prop").length, 1);
   assert.deepEqual(s.brollShots[1].props, [{ id: mug.id, name: "Red mug" }]);
 });
