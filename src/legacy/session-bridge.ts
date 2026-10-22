@@ -59,6 +59,7 @@ export const sessionTextPorts: CellTextPorts = Object.freeze({
 
 interface Hearing {
   readonly listener: SessionListener;
+  on: boolean;
 }
 
 const changeListeners: Hearing[] = [];
@@ -67,7 +68,7 @@ const refreshListeners: ((jobs: ReadonlySet<string>) => void)[] = [];
 
 function hearing(entry: Hearing): SessionListener {
   return function (change) {
-    if (changeListeners.includes(entry)) entry.listener(change);
+    if (entry.on) entry.listener(change);
   };
 }
 
@@ -117,10 +118,11 @@ export function onRefresh(listener: (jobs: ReadonlySet<string>) => void): () => 
 }
 
 export function onSessionChange(listener: SessionListener): () => void {
-  const entry: Hearing = { listener: listener };
+  const entry: Hearing = { listener: listener, on: true };
   changeListeners.push(entry);
   if (started) started.current.subscribe(hearing(entry));
   return function () {
+    entry.on = false;
     const at = changeListeners.indexOf(entry);
     if (at !== -1) changeListeners.splice(at, 1);
   };

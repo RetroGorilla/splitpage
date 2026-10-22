@@ -8,7 +8,7 @@ import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "../adapters/storage/02d-gallery.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { currentDocument, editAllowed, readSession, requestRefresh } from "../legacy/session-bridge.ts";
+import { currentDocument, editAllowed, readSession } from "../legacy/session-bridge.ts";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
 import { refreshGalleryOverlay } from "./05e-gallery-overlay.js";
 import { appendDraftMedia, draftModel, editDraft } from "./05d-draft-edit.js";
@@ -836,7 +836,6 @@ function paintSessionChange(change) {
   if (screenStale || paintBroke) return;
   var c = change.changes;
   if (paintGuard().shown()) {
-    if (!viewFlags().writerOpen() && c.cells.some(function (cell) { return cell.field === "visualText" || cell.field === "audioText"; })) requestRefresh("rowTimes");
     var left = rowsTouched(c.cells, ON_SCREEN_ALREADY);
     if (left.length) paintGuard().afterShown(function () { paintRows(left); });
     return;
@@ -858,7 +857,7 @@ export function screenListeners() {
   return {
     session: paintSessionChange,
     refresh: function (jobs) {
-      if (screen.drawn && jobs.has("rowTimes")) paintRowTimes();
+      if (screen.drawn && jobs.has("production")) paintRowTimes();
     },
     hiding: function () {
       if (screen.drawn) render();
