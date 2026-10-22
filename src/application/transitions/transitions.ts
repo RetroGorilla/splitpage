@@ -1,4 +1,5 @@
 import type { ValidatedDocument } from "../../core/document/validated.ts";
+import { documentIdStamp } from "../commands/save-stamps.ts";
 import type { OperationContext } from "../session/operation.ts";
 import type { TransitionPorts } from "./ports.ts";
 
@@ -58,7 +59,6 @@ export function createTransitions<D>(ports: TransitionPorts<D>): Transitions<D> 
 
   function arrive(doc: ValidatedDocument, forkedFrom: string | null): Arrived {
     ports.live.assign(doc);
-    ports.session.adopt(doc);
     return Object.freeze({ document: doc, forkedFrom: forkedFrom });
   }
 
@@ -100,7 +100,7 @@ export function createTransitions<D>(ports: TransitionPorts<D>): Transitions<D> 
     const was = live.docId;
     ports.destination.set(publication.destination);
     ports.destination.confirm(publication.baseline, publication.reason);
-    live.docId = publication.docId;
+    ports.live.stamp(documentIdStamp(was, publication.docId));
     ports.identity.markWrittenOut(true);
     return Object.freeze({ kind: "published", forkedFrom: was === publication.docId ? null : was });
   }

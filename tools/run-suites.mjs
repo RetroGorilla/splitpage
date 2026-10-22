@@ -18,6 +18,7 @@ const PORT_MAX = 65535;
 const TIMEOUT_MAX = 86400;
 const FLAGS = ["lanes", "port-base", "timeout", "suites", "driver", "node"];
 const FREEZE_ENV = "SPLITPAGE_FREEZE_CACHES";
+const GUARD_ENV = "SPLITPAGE_DOCUMENT_GUARD";
 const SUMMARY = /^RESULT: (0|-?[1-9]\d{0,8})\/(0|[1-9]\d{0,8}) checks passed(?: - ([1-9]\d{0,8}) FAILED)?$/;
 
 export const DRAIN_MS = 2000;
@@ -39,6 +40,8 @@ export const USAGE = `usage: node tools/run-suites.mjs [out-dir] [filter] [optio
 
 Env SPLITPAGE_FREEZE_CACHES=1 opens every suite's page with freeze-caches=1, so the app's caches
 deep-freeze what they hand out and a write into one throws.
+Env SPLITPAGE_DOCUMENT_GUARD=1 opens every suite's page with document-guard=1, so S.state is a
+read-only view of the session's document and a write through it is refused and fails the suite.
 
 Numbers are plain decimal digits. --option=value works too.
 Exit status: 0 every suite PASS; 1 any other suite status; 2 a bad option, nothing matched,
@@ -144,7 +147,8 @@ export function parseArgs(argv, env = {}) {
     suiteDir: resolve(flags.suites ?? env.SPLITPAGE_SUITE_DIR ?? join(SKILL_DIR, "tests")),
     driver: resolve(flags.driver ?? env.SPLITPAGE_SUITE_DRIVER ?? join(SKILL_DIR, "driver.mjs")),
     node: flags.node ?? env.SPLITPAGE_SUITE_NODE ?? process.execPath,
-    freezeCaches: env[FREEZE_ENV] === "1"
+    freezeCaches: env[FREEZE_ENV] === "1",
+    documentGuard: env[GUARD_ENV] === "1"
   };
 }
 
@@ -165,7 +169,8 @@ export function driverCommand(config, file, lane) {
       "--cdp-port", String(cdp),
       "--script", join(config.suiteDir, file),
       "--shot-dir", join(config.out, "shots"),
-      ...(config.freezeCaches ? ["--freeze-caches"] : [])
+      ...(config.freezeCaches ? ["--freeze-caches"] : []),
+      ...(config.documentGuard ? ["--document-guard"] : [])
     ]
   };
 }
@@ -435,6 +440,7 @@ export async function runSuites(config, files, { print = console.log, owned = ne
   try {
     print(`${files.length} suites in ${config.suiteDir}, ${laneCount} lanes on HTTP ${ports[0]?.http}+ and CDP ${ports[0]?.cdp}+, logs in ${config.out}`);
     if (config.freezeCaches) print(`cache freezing on (${FREEZE_ENV}=1): every suite opens the app with freeze-caches=1`);
+    if (config.documentGuard) print(`document guard on (${GUARD_ENV}=1): every suite opens the app with document-guard=1`);
     mkdirSync(config.out, { recursive: true });
     const results = [];
     let next = 0;

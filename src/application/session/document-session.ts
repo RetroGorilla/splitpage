@@ -87,6 +87,7 @@ export interface DocumentSession {
   epoch: () => number;
   generation: () => number;
   read: <T>(select: (doc: DocumentView | null) => T) => T;
+  held: () => ValidatedDocument | null;
   adopt: (raw: unknown) => ValidatedDocument | null;
   absorbServer: (raw: unknown) => ValidatedDocument | null;
   absorbRecovery: (raw: unknown) => ValidatedDocument | null;
@@ -402,6 +403,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     epoch: function () { return epoch; },
     generation: function () { return generation; },
     read: function (select) { return select(document); },
+    held: function () { return document; },
     adopt: adopt,
     absorbServer: function (raw) { return absorb("server", raw); },
     absorbRecovery: function (raw) { return absorb("recovery", raw); },

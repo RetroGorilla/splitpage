@@ -12,7 +12,6 @@ const { cycleRowStatus, updateScriptStats } = await import("../js/01-scene-statu
 const { setSceneLength } = await import("../js/05r-read-time.js");
 const bridge = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
-const { trackDocument } = await import("../js/12a-undo.js");
 const { loadTestDocument } = await import("./_document.mjs");
 
 const STATS = ["paintRowTimes", "setRundownExtraSeconds", "renderRundown", "paintTargetOverlay"];
@@ -31,8 +30,8 @@ const wired = stubs.wireSession({
 bridge.liveSession().subscribe(function (change) { published.push(change); });
 
 function lengthDoc(rows) {
-  loadTestDocument(migrateRows({ title: "Order", rows: rows.map((r) => Object.assign({ visualText: "", audioText: "", updatedAt: "" }, r)) }));
-  trackDocument();
+  const opening = migrateRows({ title: "Order", rows: rows.map((r) => Object.assign({ visualText: "", audioText: "", updatedAt: "" }, r)) });
+  loadTestDocument(opening);
   published.length = 0;
   return S.state;
 }

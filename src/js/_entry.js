@@ -62,7 +62,7 @@ import { __init as init_20h_appdata } from "./20h-appdata.js";
 import { __init as init_20j_newtab } from "./20j-newtab.js";
 import { __init as init_20s_settings } from "./20s-settings.js";
 import { migrateRows } from "./02-state.js";
-import { documentIdentityPort, liveDocumentPort } from "./02b-doc-id.js";
+import { documentIdentityPort } from "./02b-doc-id.js";
 import { documentDestinationPort, getEditorName } from "./03-sync.js";
 import { runIdleRefresh } from "./07-production-tags.js";
 import { derivedRecordsPlan } from "./08c-broll.js";
@@ -81,7 +81,7 @@ try {
     refresh: runIdleRefresh,
     records: derivedRecordsPlan,
     saves: legacySavePorts,
-    transitions: { live: liveDocumentPort, destination: documentDestinationPort, identity: documentIdentityPort },
+    transitions: { destination: documentDestinationPort, identity: documentIdentityPort },
     recovery: draftRecoveryPorts,
     keyTarget: window
   });

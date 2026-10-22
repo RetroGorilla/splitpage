@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import ts from "typescript";
 import { S } from "../js/_state.js";
 import { cloneState } from "../core/document/clone.ts";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 const atBoot = await bootApp();
 
@@ -24,12 +25,6 @@ const { applyTakenDraft } = await import("../js/20g-drafts.js");
 after(closeApp);
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
-
-const SITES = [
-  "00-prelude.js#(anonymous)",
-  "02b-doc-id.js#assign",
-  "02b-doc-id.js#loadInitialDocument"
-];
 
 function sourceFiles(dir) {
   const out = [];
@@ -118,50 +113,57 @@ function migrated(title) {
   return migrateRows(rawDoc(title));
 }
 
-test("there are three S.state assignments, in these functions", () => {
-  assert.deepEqual(assignments().map((a) => a.site).sort(), SITES.slice().sort());
+test("there is no S.state assignment left in src, and assigning it throws: the session is the document's only holder", () => {
+  assert.deepEqual(assignments().map((a) => a.site), []);
+  const held = currentDocument();
+  assert.ok(held, "the session holds the boot document");
+  assert.throws(() => Reflect.set(S, "state", migrated("Assigned")), /The document is read-only here: the document session holds it/, "an assignment throws, in sloppy code too");
+  assert.equal(currentDocument(), held);
 });
 
-test("boot from the seed: 00-prelude and the initial load assign null, then the transition API's live-document port the seed script, a migrateRows fixed point", () => {
+test("boot from the seed: the transition API's live-document port replaces the session's document once, with the seed script, a migrateRows fixed point", () => {
   assert.equal(seedCheckPasses(), true, "the page's seed check matches its state-data, as a fresh build's does");
-  assert.deepEqual(atBoot.map((r) => r.site), ["00-prelude.js#(anonymous)", "02b-doc-id.js#loadInitialDocument", "02b-doc-id.js#assign"]);
-  assert.equal(atBoot[0].value, null);
-  assert.equal(atBoot[1].value, null);
+  assert.deepEqual(atBoot.map((r) => r.site), ["replaced"]);
   const seed = JSON.parse(readFileSync(new URL("../seed-state.json", import.meta.url), "utf8"));
-  assert.equal(atBoot[2].value.title, seed.title);
-  assert.equal(atBoot[2].value.rows.length, seed.rows.length);
-  assert.equal(fixedPoint(atBoot[2].value), true);
+  assert.equal(atBoot[0].value.title, seed.title);
+  assert.equal(atBoot[0].value.rows.length, seed.rows.length);
+  assert.equal(fixedPoint(atBoot[0].value), true);
 });
 
-test("02b adoptRestoredState, through the transition API's live-document port: a migrateRows fixed point, its docId kept", async () => {
+test("02b adoptRestoredState, through the live-document port: a migrateRows fixed point, its docId kept", async () => {
   const before = S.state.docId;
-  const value = only(await drive(() => adoptRestoredState(rawDoc("Restored"))), "02b-doc-id.js#assign");
+  const value = only(await drive(() => adoptRestoredState(rawDoc("Restored"))), "replaced");
   assert.equal(fixedPoint(value), true);
-  assert.equal(S.state.docId, before, "the docId is put back after the assignment");
+  assert.equal(currentDocument().docId, before, "the docId is put back before the replacement");
   assert.equal(fixedPoint(S.state), true);
 });
 
-test("03-sync applyMerge's adopt, after a merge, through the live-document port: a migrateRows fixed point", async () => {
+test("03-sync applyMerge's adopt, after a merge: the session absorbs the merged document, a migrateRows fixed point, with no replacement", async () => {
   const base = migrated("Merge");
   const mine = cloneState(base);
   const theirs = cloneState(base);
   mine.rows[0].audioText = "Mine.";
   theirs.rows[1].audioText = "Theirs.";
   const got = await drive(() => applyMerge({ base, mine, theirs, source: "stash", report: false }));
-  assert.equal(fixedPoint(only(got, "02b-doc-id.js#assign")), true);
+  assert.deepEqual(got.records, [], String(got.thrown || ""));
+  assert.equal(currentDocument().rows[0].audioText, "Mine.");
+  assert.equal(currentDocument().rows[1].audioText, "Theirs.");
+  assert.equal(fixedPoint(currentDocument()), true);
 });
 
-test("03-sync applyMerge's adopt, nothing to merge, through the live-document port: theirs as handed over, migrated in place by the session as it enters", async () => {
+test("03-sync applyMerge's adopt, nothing to merge: the session absorbs theirs as handed over, migrated in place as it enters, with no replacement", async () => {
   const fromMigrated = await drive(() => applyMerge({ theirs: migrated("Same"), source: "stash", unchanged: true, report: false }));
-  assert.equal(fixedPoint(only(fromMigrated, "02b-doc-id.js#assign")), true);
+  assert.deepEqual(fromMigrated.records, [], String(fromMigrated.thrown || ""));
+  assert.equal(currentDocument().title, "Same");
+  assert.equal(fixedPoint(currentDocument()), true);
   const raw = rawDoc("Raw");
   const fromRaw = await drive(() => applyMerge({ theirs: raw, source: "stash", unchanged: true, report: false }));
-  const value = only(fromRaw, "02b-doc-id.js#assign");
-  assert.equal(fixedPoint(value), true, "the session's server update migrated the unchanged theirs before it was assigned");
+  assert.deepEqual(fromRaw.records, [], String(fromRaw.thrown || ""));
+  assert.equal(currentDocument(), raw, "the session holds the very object handed over");
   assert.equal(fixedPoint(raw), true, "in place: the very object handed over is now a migrateRows fixed point");
 });
 
-test("13-hosted openServerDoc: migrateDocument's answer through the transition API's live-document port, a migrateRows fixed point", async () => {
+test("13-hosted openServerDoc: migrateDocument's answer through the live-document port, a migrateRows fixed point", async () => {
   const realFetch = globalThis.fetch;
   const desktop = S.DESKTOP;
   globalThis.fetch = async () => new Response(JSON.stringify({ id: "doc1", rev: 3, state: rawDoc("From the server") }),
@@ -169,7 +171,7 @@ test("13-hosted openServerDoc: migrateDocument's answer through the transition A
   S.DESKTOP = {};
   try {
     const got = await drive(() => openServerDoc("doc1"));
-    assert.equal(fixedPoint(only(got, "02b-doc-id.js#assign")), true);
+    assert.equal(fixedPoint(only(got, "replaced")), true);
   } finally {
     globalThis.fetch = realFetch;
     S.DESKTOP = desktop;
@@ -179,24 +181,24 @@ test("13-hosted openServerDoc: migrateDocument's answer through the transition A
 test("18-local-files adoptProjectState, from a .splitpage file, through the live-document port: a migrateRows fixed point", async () => {
   const file = new File([buildSplitpageFile(exportDocumentOf(migrated("On disk")))], "disk.splitpage", { lastModified: 1 });
   const got = await drive(() => openProjectFile(file, null, { skipSnapshot: true }));
-  assert.equal(fixedPoint(only(got, "02b-doc-id.js#assign")), true);
+  assert.equal(fixedPoint(only(got, "replaced")), true);
 });
 
 test("18-local-files loadFileIntoEditor, from a .txt import, through the live-document port: a migrateRows fixed point", async () => {
   const file = new File(["Wide on the harbour\tEvery morning.\nClose\tMara mends nets."], "import.txt", { lastModified: 1 });
   const got = await drive(() => openProjectFile(file, null, { skipSnapshot: true }));
-  assert.equal(fixedPoint(only(got, "02b-doc-id.js#assign")), true);
+  assert.equal(fixedPoint(only(got, "replaced")), true);
 });
 
 test("18b replaceWithNewDocument, a new script and the long demo, through the live-document port: migrateRows fixed points", async () => {
-  assert.equal(fixedPoint(only(await drive(() => startNewScript()), "02b-doc-id.js#assign")), true);
-  assert.equal(fixedPoint(only(await drive(() => openLongDemo()), "02b-doc-id.js#assign")), true);
+  assert.equal(fixedPoint(only(await drive(() => startNewScript()), "replaced")), true);
+  assert.equal(fixedPoint(only(await drive(() => openLongDemo()), "replaced")), true);
 });
 
 test("20g recoverDraftAsUnsavedCopy, an imported file's draft, through the live-document port: a migrateRows fixed point with a minted docId", async () => {
   const draftId = "d" + "1".repeat(32);
   const t = { header: { origin: { kind: "import", importName: "a.docx" } }, stateJson: JSON.stringify(Object.assign(rawDoc("Import draft"), { docId: draftId })) };
-  const value = only(await drive(() => applyTakenDraft(t)), "02b-doc-id.js#assign");
+  const value = only(await drive(() => applyTakenDraft(t)), "replaced");
   assert.equal(fixedPoint(value), true);
   assert.match(value.docId, /^d[0-9a-f]{32}$/);
   assert.notEqual(value.docId, draftId, "the copy is given a docId of its own before it is assigned");
@@ -220,7 +222,7 @@ test("20g restoreFileDraft, a desktop file untouched since the draft's base: the
   };
   try {
     const got = await drive(() => applyTakenDraft(t));
-    const value = got.records.filter((r) => r.site === "02b-doc-id.js#assign").pop().value;
+    const value = got.records.filter((r) => r.site === "replaced").pop().value;
     assert.equal(fixedPoint(value), true);
     assert.equal(value.title, "Edited since");
   } finally {
@@ -230,12 +232,12 @@ test("20g restoreFileDraft, a desktop file untouched since the draft's base: the
 
 test("20g adoptUntitledDraft, through the live-document port: a migrateRows fixed point", async () => {
   const t = { header: { origin: { kind: "untitled" } }, stateJson: JSON.stringify(rawDoc("Untitled draft")) };
-  assert.equal(fixedPoint(only(await drive(() => applyTakenDraft(t)), "02b-doc-id.js#assign")), true);
+  assert.equal(fixedPoint(only(await drive(() => applyTakenDraft(t)), "replaced")), true);
 });
 
 test("20j adoptNewDocument, from the new-tab page's New script, through the live-document port: a migrateRows fixed point", async () => {
   const button = document.querySelector('#newtab-page [data-newtab-action="new"]');
   assert.ok(button, "the page has the button");
   const got = await drive(() => button.dispatchEvent(new window.MouseEvent("click", { bubbles: true })));
-  assert.equal(fixedPoint(only(got, "02b-doc-id.js#assign")), true);
+  assert.equal(fixedPoint(only(got, "replaced")), true);
 });

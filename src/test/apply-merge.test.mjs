@@ -10,6 +10,7 @@ import { getHistorySnapshot, listDocHistory } from "../js/03a-history-store.js";
 import { personById } from "../js/07-production-tags.js";
 import { cloneState } from "../core/document/clone.ts";
 import { loadTestDocument } from "./_document.mjs";
+import { holdMergeBase, mergeBase } from "../legacy/session-bridge.ts";
 
 await bootApp();
 await window.__historyTest.forceBackend("memory");
@@ -40,10 +41,13 @@ function unstamped(s) {
   return c;
 }
 
+let untouched = null;
+
 function reset() {
   clearTimers();
   loadTestDocument({ sentinel: "state" });
-  S.baseState = { sentinel: "base" };
+  untouched = { held: S.state, json: JSON.stringify(S.state) };
+  holdMergeBase({ sentinel: "base" });
   mergeUndo().arm({ id: "s-earlier", docId: "d-earlier" });
 }
 
@@ -62,8 +66,9 @@ test("mergeOnly merges and hands the result back, touching nothing on screen", (
   });
   assert.deepEqual(unstamped(out.state), unstamped(direct));
   assert.equal(out.result.merged, out.state);
-  assert.deepEqual(S.state, { sentinel: "state" });
-  assert.deepEqual(S.baseState, { sentinel: "base" });
+  assert.equal(S.state, untouched.held);
+  assert.equal(JSON.stringify(S.state), untouched.json);
+  assert.deepEqual(mergeBase(), { sentinel: "base" });
 });
 
 test("`base` and `mine` are normalised, so a caller hands over what it holds", () => {
@@ -282,8 +287,9 @@ test("awaitUndoPoint adopts nothing until the undo point is written", async () =
     assert.equal(typeof p.then, "function", "a Promise, not the answer");
 
     await ticks(5);
-    assert.deepEqual(S.state, { sentinel: "state" });
-    assert.deepEqual(S.baseState, { sentinel: "base" });
+    assert.equal(S.state, untouched.held);
+  assert.equal(JSON.stringify(S.state), untouched.json);
+    assert.deepEqual(mergeBase(), { sentinel: "base" });
     assert.deepEqual(mergeUndo().last(), { id: "s-earlier", docId: "d-earlier" });
     assert.equal(baseAsked, 0, "newBase is not even read yet");
 
@@ -295,7 +301,7 @@ test("awaitUndoPoint adopts nothing until the undo point is written", async () =
 
   assert.equal(S.state.rows[0].audioText, "mine");
   assert.equal(S.state.rows[1].audioText, "theirs");
-  assert.equal(S.baseState, newBase, "the function's answer, as it is");
+  assert.equal(mergeBase(), newBase, "the function's answer, as it is");
   assert.equal(baseAsked, 1);
   assert.equal(baseStateReason(), "merge: stash");
   assert.equal(mergeUndo().last().docId, id);
@@ -315,18 +321,18 @@ test("awaitUndoPoint answers a Promise even with no undo point to wait for", asy
   assert.equal(typeof p.then, "function");
   await p.then(null, () => {});
   assert.equal(S.state, theirs);
-  assert.deepEqual(S.baseState, { sentinel: "base" });
+  assert.deepEqual(mergeBase(), { sentinel: "base" });
 });
 
 test("setBaseState stores what it is given, as it is, with its reason", () => {
   reset();
   const doc = mk(freshId());
   assert.equal(setBaseState(doc, "a test: adopt what was confirmed"), doc);
-  assert.equal(S.baseState, doc, "not a copy");
+  assert.equal(mergeBase(), doc, "not a copy");
   assert.equal(baseStateReason(), "a test: adopt what was confirmed");
 
   setBaseState(null, "a test: no ancestor");
-  assert.equal(S.baseState, null);
+  assert.equal(mergeBase(), null);
   assert.equal(baseStateReason(), "a test: no ancestor");
 });
 

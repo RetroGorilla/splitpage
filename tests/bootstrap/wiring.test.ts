@@ -12,9 +12,9 @@ import type { ExportRegistry } from "../../src/application/export/registry.ts";
 import { exportServicesStarted, installExportServices } from "../../src/application/export/services.ts";
 import type { CommandOutcome, Replay } from "../../src/application/session/document-session.ts";
 import type { StampPorts, TimerPort } from "../../src/application/session/ports.ts";
-import { WIRING_STEPS, WiringError, wireApp } from "../../src/bootstrap/wiring.ts";
+import { WIRING_STEPS, WiringError, legacySessionPorts, wireApp } from "../../src/bootstrap/wiring.ts";
 import { legacyExportServices } from "../../src/bootstrap/export-services.ts";
-import type { Wiring, WiringDeps } from "../../src/bootstrap/wiring.ts";
+import type { TransitionDeps, Wiring, WiringDeps } from "../../src/bootstrap/wiring.ts";
 import { appActions } from "../../src/legacy/app-actions.ts";
 import { exportFormats, installExportFormats } from "../../src/legacy/export-formats.ts";
 import { editorStarted, startEditor } from "../../src/legacy/editor-bridge.ts";
@@ -24,21 +24,21 @@ import type { EffectPorts } from "../../src/application/effects/ports.ts";
 import { recoveryStarted } from "../../src/legacy/recovery-bridge.ts";
 import { requestSave, savesStarted, savesWaiting } from "../../src/legacy/save-bridge.ts";
 import { startupReady } from "../../src/legacy/startup-bridge.ts";
-import { S } from "../../src/js/_state.js";
 import type { LegacySaveJob, LegacySavePorts } from "../../src/legacy/save-bridge.ts";
 import type { SaveOutcome, WriterResult } from "../../src/application/save/coordinator.ts";
 import {
+  liveDocumentPort,
   liveSession,
   onDocumentReplaced,
   requestRefresh,
   runCommand,
   sessionStamps,
-  sessionStarted
+  sessionStarted,
+  startSessionBridge
 } from "../../src/legacy/session-bridge.ts";
 import type { ReplayRunner, SessionUndoPorts } from "../../src/legacy/session-bridge.ts";
 import { documentTransitions, startTransitions } from "../../src/legacy/transition-bridge.ts";
-import type { LegacyTransitionPorts } from "../../src/legacy/transition-bridge.ts";
-import { routeReplays, watchUndoAdoption } from "../../src/legacy/undo-adapter.ts";
+import { createUndoAdapter, routeReplays } from "../../src/legacy/undo-adapter.ts";
 import { sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
 import { migrateRows } from "../../src/js/02-state.js";
 
@@ -111,9 +111,8 @@ class FakeTimers implements TimerPort {
 
 const NO_DOCUMENT = { kind: "none" };
 
-function transitionPorts(): LegacyTransitionPorts {
+function transitionPorts(): TransitionDeps {
   return {
-    live: { current: () => null, assign: () => {} },
     destination: { set: () => {}, confirm: () => {} },
     identity: { mint: () => "d" + "0".repeat(32), writtenOut: () => false, markWrittenOut: () => {} }
   };
@@ -121,7 +120,7 @@ function transitionPorts(): LegacyTransitionPorts {
 
 interface Fakes {
   readonly log: (readonly [string, Started])[];
-  readonly held: { adopted: ((doc: unknown) => void) | null; run: ReplayRunner | null };
+  readonly held: { run: ReplayRunner | null };
   readonly live: { exporters: number; undo: number };
   readonly timers: FakeTimers;
   readonly refreshed: string[];
@@ -130,19 +129,13 @@ interface Fakes {
 
 function fakes(): Fakes {
   const log: (readonly [string, Started])[] = [];
-  const held: Fakes["held"] = { adopted: null, run: null };
+  const held: Fakes["held"] = { run: null };
   const counts = { exporters: 0, undo: 0 };
   const timers = new FakeTimers();
   const refreshed: string[] = [];
   const note = (what: string): void => { log.push([what, started()]); };
   const undo: SessionUndoPorts = {
     adapter: { adopt: () => {}, record: () => {}, absorbServer: () => {}, absorbReload: () => {} },
-    watch: (adopted) => {
-      note("undo watch");
-      counts.undo++;
-      held.adopted = adopted;
-      return () => { counts.undo--; };
-    },
     route: (run: ReplayRunner) => {
       note("undo route");
       counts.undo++;
@@ -227,7 +220,6 @@ test("startup: wireApp builds every owner in order, each step sees only the owne
   assert.deepEqual(f.log, [
     ["actions", only("effects")],
     ["exporters", only("effects", "actions", "exportServices", "exports")],
-    ["undo watch", only("effects", "actions", "exportServices", "exports", "session")],
     ["undo route", only("effects", "actions", "exportServices", "exports", "session")],
     ["saves", only("effects", "actions", "exportServices", "exports", "session")],
     ["recovery", only("effects", "actions", "exportServices", "exports", "session", "saves", "transitions")]
@@ -236,7 +228,7 @@ test("startup: wireApp builds every owner in order, each step sees only the owne
   assert.equal(wiring.session, liveSession());
   assert.equal(wiring.keyTarget, f.deps.keyTarget);
   assert.equal(exportFormats.byId("probe")?.id, "probe");
-  assert.deepEqual(f.live, { exporters: 1, undo: 2 });
+  assert.deepEqual(f.live, { exporters: 1, undo: 1 });
   wiring.dispose();
   assert.deepEqual(started(), NOTHING);
   assert.deepEqual(f.live, { exporters: 0, undo: 0 });
@@ -263,14 +255,14 @@ test("failed partial startup: each missing dependency is named and nothing is bu
     assert.deepEqual(f.log, [], effect + ": nothing is built");
     assert.deepEqual(started(), NOTHING, effect + ": no facade is started");
   }
-  for (const port of ["live", "destination", "identity"] as const) {
+  for (const port of ["destination", "identity"] as const) {
     const f = fakes();
     const error = refused(() => wireLoose({ ...f.deps, transitions: without(f.deps.transitions, port) }));
     assert.equal(error.step, "transitions");
     assert.match(error.message, new RegExp("no " + port + " port"));
     assert.deepEqual(f.log, []);
   }
-  for (const port of ["adapter", "route", "watch"] as const) {
+  for (const port of ["adapter", "route"] as const) {
     const f = fakes();
     const error = refused(() => wireLoose({ ...f.deps, undo: without(must(f.deps.undo), port) }));
     assert.equal(error.step, "undo");
@@ -286,12 +278,11 @@ test("failed partial startup: each missing dependency is named and nothing is bu
 });
 
 test("failed partial startup: a port that is present but lacks a function is named and nothing is built", () => {
-  const methods: Record<keyof LegacyTransitionPorts, readonly string[]> = {
-    live: ["current", "assign"],
+  const methods: Record<keyof TransitionDeps, readonly string[]> = {
     destination: ["set", "confirm"],
     identity: ["mint", "writtenOut", "markWrittenOut"]
   };
-  for (const [port, names] of Object.entries(methods) as [keyof LegacyTransitionPorts, readonly string[]][]) {
+  for (const [port, names] of Object.entries(methods) as [keyof TransitionDeps, readonly string[]][]) {
     for (const method of names) {
       for (const spoilt of [(given: object) => without(given, method), (given: object) => ({ ...given, [method]: 7 })]) {
         const f = fakes();
@@ -305,8 +296,8 @@ test("failed partial startup: a port that is present but lacks a function is nam
     }
   }
   const f = fakes();
-  const empty = refused(() => wireLoose({ ...f.deps, transitions: { live: {}, destination: {}, identity: {} } }));
-  assert.equal(empty.message, "Wiring: the transitions dependency's live port has no current function", "empty port objects are refused");
+  const empty = refused(() => wireLoose({ ...f.deps, transitions: { destination: {}, identity: {} } }));
+  assert.equal(empty.message, "Wiring: the transitions dependency's destination port has no set function", "empty port objects are refused");
   assert.deepEqual(f.log, []);
   assert.deepEqual(started(), NOTHING);
 });
@@ -419,9 +410,9 @@ test("failed partial startup: a step that throws undoes every step before it, in
     "built-in exporters": (f) => ({ deps: { ...f.deps, exporters: () => { throw boom; } } }),
     session: (f) => ({ deps: { ...f.deps, undo: { ...must(f.deps.undo), route: () => { throw boom; } } } }),
     saves: (f) => ({ deps: { ...f.deps, saves: () => { throw boom; } } }),
-    transitions: (f) => ({ deps: f.deps, cleanup: startTransitions(transitionPorts()), cause: false }),
+    transitions: (f) => ({ deps: f.deps, cleanup: startTransitions({ ...transitionPorts(), live: liveDocumentPort }), cause: false }),
     recovery: (f) => ({ deps: { ...f.deps, recovery: () => { throw boom; } } }),
-    editor: (f) => ({ deps: f.deps, cleanup: startEditor(f.deps.transitions.live), cause: false }),
+    editor: (f) => ({ deps: f.deps, cleanup: startEditor(liveDocumentPort), cause: false }),
     "production editing": (f) => ({ deps: f.deps, cleanup: startProductionEditing(must(f.deps.timers)), cause: false }),
     preferences: (f) => ({ deps: f.deps, cleanup: startPreferences(), cause: false })
   };
@@ -449,29 +440,19 @@ test("failed partial startup: a step that throws undoes every step before it, in
 test("undo teardown: callbacks retained from the routing do nothing after dispose", () => {
   const f = fakes();
   const wiring = wireApp(f.deps);
-  const adopted = must(f.held.adopted);
   const run = must(f.held.run);
   wiring.dispose();
-  let replaced = 0;
-  onDocumentReplaced(() => { replaced++; });
-  adopted({ rows: [] });
-  assert.equal(replaced, 0);
   const task = { plan: () => { throw new Error("a stale replay must not plan"); } } as unknown as Replay;
-  const outcome: CommandOutcome = run(task, null);
+  const outcome: CommandOutcome = run(task);
   assert.equal(outcome.kind, "noop");
   assert.deepEqual(started(), NOTHING);
 });
 
 test("undo teardown: an old uninstall run after a newer installation leaves the newer one in place", async () => {
-  const { flushEdits, noteEdit, trackDocument, undo } = await import("../../src/js/12a-undo.js");
-  const heard: string[] = [];
-  const unwatchOld = watchUndoAdoption(() => { heard.push("old"); });
-  const unwatchNew = watchUndoAdoption(() => { heard.push("new"); });
-  unwatchOld();
+  const { flushEdits, noteEdit, undo } = await import("../../src/js/12a-undo.js");
+  const stopSession = startSessionBridge(legacySessionPorts({ ...fakes().deps, undo: { adapter: createUndoAdapter(), route: () => () => {} } }));
   const doc = migrateRows({ title: "Undo", rows: [{ id: "r1", visualText: "", audioText: "a", status: "todo" }] });
-  Reflect.set(S, "state", doc);
-  trackDocument();
-  assert.deepEqual(heard, ["new"]);
+  liveDocumentPort.assign(doc);
   const ran: string[] = [];
   const replay = (who: string): ReplayRunner => () => { ran.push(who); return { kind: "noop" }; };
   const stamps = { clock: { now: () => "" }, editor: { name: () => "Ann" } } as unknown as StampPorts;
@@ -484,10 +465,7 @@ test("undo teardown: an old uninstall run after a newer installation leaves the 
   undo();
   assert.deepEqual(ran, ["new"]);
   unrouteNew();
-  unwatchNew();
-  Reflect.set(S, "state", migrateRows({ title: "Undo 2", rows: [{ id: "r2", visualText: "", audioText: "", status: "todo" }] }));
-  trackDocument();
-  assert.deepEqual(heard, ["new"], "a released watch hears nothing");
+  stopSession();
 });
 
 test("a session built by wireApp runs exactly the effects it was handed: a probe counts one call of each per edit", () => {
@@ -511,11 +489,11 @@ test("a session built by wireApp runs exactly the effects it was handed: a probe
   });
   try {
     const doc = migrateRows({ title: "Probe", rows: [{ id: "r1", visualText: "", audioText: "", status: "todo" }] });
-    Reflect.set(S, "state", doc);
+    liveDocumentPort.assign(doc);
     Object.assign(must(doc.rows[0]), { audioText: "typed" });
     calls.clear();
     liveSession().noteEdit();
-    assert.deepEqual(counted(), { dirty: 1, draft: 1, save: 1 }, "a legacy edit runs each change effect once");
+    assert.deepEqual(counted(), { dirty: 1, draft: 1, records: 1, save: 1 }, "a legacy edit to the held document reconciles its records and runs each change effect once");
     calls.clear();
     const outcome = runCommand(sceneLengthCommand("r1", 30, sessionStamps));
     assert.equal(outcome.kind, "applied");
@@ -537,7 +515,7 @@ test("session release: a session dispose that throws still runs the undo uninsta
   const stopFails = new Error("timer stop failed");
   const wiring = wireApp({ ...f.deps, timers: { now: () => 0, start: () => 1, stop: () => { throw stopFails; } } });
   requestRefresh("probe");
-  assert.deepEqual(f.live, { exporters: 1, undo: 2 });
+  assert.deepEqual(f.live, { exporters: 1, undo: 1 });
   assert.throws(() => wiring.dispose(), (error) => error instanceof AggregateError && error.errors.includes(stopFails));
   assert.deepEqual(f.live, { exporters: 0, undo: 0 }, "the undo routing and adoption watch were uninstalled");
   assert.deepEqual(started(), NOTHING);
