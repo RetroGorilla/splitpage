@@ -18,6 +18,7 @@ const { openCommentComposer, closeCommentComposer } = await import("../js/10-com
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { addGalleryVideo } = await import("../core/document/gallery.ts");
 const writer = await import("../js/19-writer.js");
+const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const decode = createHeldImageDecode({ dataUrl: PNG, encodedDataUrl: PNG });
@@ -47,7 +48,7 @@ function fixture() {
 
 let opened = 0;
 async function open() {
-  if (writer.writerOpen) writer.closeWriter();
+  if (viewFlags().writerOpen()) writer.closeWriter();
   closeGalleryOverlay();
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "video-" + (++opened) + ".splitpage", { lastModified: opened });
   await openProjectFile(file, null, { skipSnapshot: true });

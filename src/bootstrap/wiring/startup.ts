@@ -18,7 +18,7 @@ import { hasUnsavedChanges, updateSaveStatus } from "../../js/12-dirty-toast.js"
 import { detectServer } from "../../js/13-hosted.js";
 import { applyStashedWork, updateAutoSaveMenu } from "../../js/14-export.js";
 import { tryResumeLastProject } from "../../js/18-local-files.js";
-import { seedCheckPasses } from "../../js/20b-onboarding.js";
+import { seedCheckPasses } from "../../legacy/seed-check.ts";
 import { desktopBridge, initDesktop, notifyDesktopDocumentState } from "../../js/20f-desktop.js";
 import { applyTakenDraft, armServerDraftResume, desktopDraftTaker } from "../../js/20g-drafts.js";
 

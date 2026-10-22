@@ -1,6 +1,7 @@
 import { rowContentEqual } from "../core/merge/rows.ts";
 import { mergeTextField } from "../core/merge/text-field.ts";
 import "./_dom.mjs";
+import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";

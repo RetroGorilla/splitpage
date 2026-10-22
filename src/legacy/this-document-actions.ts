@@ -1,9 +1,10 @@
 import type { ActionRegistry } from "../application/actions.ts";
 import { registerAll } from "../application/actions.ts";
-import { hideShotScenes, toggleHideShotScenes } from "../js/01b-hide-shot.js";
+import { toggleHideShotScenes } from "../js/01b-hide-shot.js";
 import { openHistoryPanel } from "../js/03-sync.js";
 import { isRundownMinimized, toggleRundownMinimized } from "../js/05f-rundown.js";
-import { findOpen, openFindBar } from "../js/09-find-replace.js";
+import { openFindBar } from "../js/09-find-replace.js";
+import { viewFlags } from "./preferences-bridge.ts";
 import { EVERY_OVERLAY, availableUnless, everyOverlayBut } from "./screen.ts";
 import { screenNow } from "./screen-state.ts";
 
@@ -16,7 +17,7 @@ export function registerThisDocumentActions(registry: ActionRegistry): () => voi
       icon: "i-eye-off",
       keys: ["mod+alt+h", "mod+alt+shift+h"],
       words: "collapse done finished filter shot scenes",
-      availability: () => availableUnless(["loading", "dialog"], screenNow(), Boolean(hideShotScenes)),
+      availability: () => availableUnless(["loading", "dialog"], screenNow(), viewFlags().hideShot()),
       run: () => { toggleHideShotScenes(); }
     },
     {
@@ -47,7 +48,7 @@ export function registerThisDocumentActions(registry: ActionRegistry): () => voi
       availability: () => availableUnless(["loading", ...everyOverlayBut("launcher")], screenNow()),
       run: (source) => {
         const input = document.getElementById("find-input");
-        if (source === "shortcut" && findOpen && input instanceof HTMLInputElement) input.select();
+        if (source === "shortcut" && viewFlags().findOpen() && input instanceof HTMLInputElement) input.select();
         else openFindBar();
       }
     }

@@ -1,5 +1,6 @@
 import { byId } from "../core/merge/rows.ts";
 import "./_dom.mjs";
+import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";

@@ -13,7 +13,8 @@ const { setSceneLength } = await import("../js/05r-read-time.js");
 const { clearDirty, markAbsorbedDirty, markDirty } = await import("../js/12-dirty-toast.js");
 const { flushEdits, lastUndoEntry, undo, undoSizes } = await import("../js/12a-undo.js");
 const { PERSON_COLORS, PERSON_COLOR_KEY, writePref } = await import("../js/00p-prefs.js");
-const { COMMENT_NAME_KEY, saveAuthorName } = await import("../js/10-comments.js");
+const { saveAuthorName } = await import("../js/10-comments.js");
+const NAME_KEY = "splitpage-comment-author";
 
 after(closeApp);
 
@@ -26,7 +27,7 @@ function named() {
 }
 
 function unnamed() {
-  writePref(COMMENT_NAME_KEY, null);
+  writePref(NAME_KEY, null);
   writePref(PERSON_COLOR_KEY, null);
 }
 

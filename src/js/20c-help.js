@@ -3,6 +3,7 @@ import { closeAllSidePanels } from "./03b-side-panels.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { handTourPauseTo } from "../legacy/tour-pause.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 
 function scrollHelpTo(id) {
   var body = document.getElementById("help-body");
@@ -84,7 +85,6 @@ function injectTaggingHelpGuideLink() {
   body.appendChild(wrap);
 }
 
-export var TOUR_DONE_KEY = "splitpage-tour-done";
 
 var TOUR_STEPS = [
   {
@@ -133,7 +133,7 @@ export function tourShowing() {
 }
 
 function markTourDone() {
-  try { localStorage.setItem(TOUR_DONE_KEY, "1"); } catch (e) {}
+  preferences().tourFinished();
 }
 
 function tourTarget(step) {

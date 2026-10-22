@@ -16,6 +16,7 @@ const { liveSession, runCommand, sessionTextPorts, REVIEW_ONLY } = await import(
 const { joinScenesCommand, splitSceneCommand, textCut } = await import("../application/commands/split-join.ts");
 const { htmlToPlainText } = await import("../legacy/plain-text.ts");
 const writer = await import("../js/19-writer.js");
+const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { syncFieldFromDom } = await import("../js/05-render.js");
 
 after(closeApp);
@@ -42,7 +43,7 @@ function fixture() {
 
 let opened = 0;
 async function open() {
-  if (writer.writerOpen) writer.closeWriter();
+  if (viewFlags().writerOpen()) writer.closeWriter();
   window.__hostedTest.setSession({ role: "edit", docId: null });
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "writer-review-" + (++opened) + ".splitpage", { lastModified: opened });
   await openProjectFile(file, null, { skipSnapshot: true });
@@ -154,7 +155,7 @@ test("a Writer open when the session turns review keeps its paragraphs and title
   await writerInReview();
   ["r1", "r2", "r3", "r4"].forEach((id) => assert.equal(para(id).getAttribute("contenteditable"), "false", id));
   assert.equal(document.getElementById("writer-title").readOnly, true);
-  assert.equal(writer.writerOpen, true);
+  assert.equal(viewFlags().writerOpen(), true);
   toEdit();
   ["r1", "r2", "r3", "r4"].forEach((id) => assert.equal(para(id).getAttribute("contenteditable"), "true", id));
   assert.equal(document.getElementById("writer-title").readOnly, false);
@@ -301,7 +302,7 @@ test("Ctrl+Z and Ctrl+Y in the Writer in review mode refuse and leave the undo s
   assert.equal(redone.defaultPrevented, true);
   oneRefusal();
   assert.equal(S.state.rows[0].audioText, "Hello there!");
-  assert.equal(writer.writerOpen, true);
+  assert.equal(viewFlags().writerOpen(), true);
   toEdit();
   writer.closeWriter();
 });
@@ -368,7 +369,7 @@ test("clicking a scene's gutter in the Writer in review mode still jumps to it, 
   await writerInReview();
   host().textContent = "";
   document.querySelector('#writer-doc .wr-gutter[data-action="writer-jump"]').click();
-  assert.equal(writer.writerOpen, false);
+  assert.equal(viewFlags().writerOpen(), false);
   assert.equal(toasts().length, 0);
   toEdit();
 });
@@ -513,7 +514,7 @@ test("composition text that lands in a Writer paragraph not yet redrawn read-onl
     composeInto(para("r2"), COMPOSED);
     writer.closeWriter();
   });
-  assert.equal(writer.writerOpen, false);
+  assert.equal(viewFlags().writerOpen(), false);
   assert.equal(S.state.rows[1].audioText, "Alpha bravo");
   toEdit();
 });
@@ -539,7 +540,7 @@ test("in review mode, a Writer paragraph whose text differs from the model is no
   p.setAttribute("contenteditable", "true");
   p.focus();
   untouched(() => writer.closeWriter());
-  assert.equal(writer.writerOpen, false);
+  assert.equal(viewFlags().writerOpen(), false);
   assert.equal(S.state.rows[1].audioText, "Alpha bravo");
   toEdit();
 });
