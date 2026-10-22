@@ -6,7 +6,6 @@ import { rowIndexOf } from "../core/document/rows.ts";
 import { readSession } from "../legacy/session-bridge.ts";
 import { cssAttr } from "./04-richtext.js";
 import { clearDropMarkers, moveRowTo } from "./06-rows.js";
-import { reviewMode } from "./13-hosted.js";
 import { contentMemo } from "../core/document/memo.ts";
 import { escapeHtml, unitSafePrefix } from "../core/document/text-policy.ts";
 import { pad2, formatDuration } from "../core/production/timing.ts";
@@ -18,6 +17,7 @@ import { rowDrag } from "../legacy/editor-bridge.ts";
 import { brollCountIn } from "../core/production/broll.ts";
 import { PREF_EVENT, preferences } from "../legacy/preferences-bridge.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
+import { reviewMode } from "../legacy/location-bridge.ts";
 
 export var RUNDOWN_TAIL_SECONDS = 10;
 var BLOCK_GAP_PX = 2;

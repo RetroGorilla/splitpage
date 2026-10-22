@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { home } from "./_home.js";
+import { currentHome, documentLocation } from "../legacy/location-bridge.ts";
 import { mintDocId, randomHexBytes } from "../adapters/identity/ids.ts";
 import { documentIdStamp } from "../application/commands/save-stamps.ts";
 import { currentDocument, stampDocument } from "../legacy/session-bridge.ts";
@@ -43,10 +43,10 @@ export async function loadInitialState(pristine) {
     ? null
     : migrateDocument(raw, { kind: "file" });
   if (!loaded || neverWrittenOut(loaded)) {
-    S.docIdWrittenOut = false;
+    documentLocation().markWrittenOut(false);
     return migrateRows(defaultState());
   }
-  S.docIdWrittenOut = true;
+  documentLocation().markWrittenOut(true);
   return loaded;
 }
 
@@ -63,11 +63,10 @@ export function adoptRestoredState(snap) {
 
 export var documentIdentityPort = Object.freeze({
   mint: mintDocId,
-  writtenOut: function () { return !!S.docIdWrittenOut; },
-  markWrittenOut: function (writtenOut) { S.docIdWrittenOut = writtenOut; }
+  writtenOut: function () { return documentLocation().writtenOut(); },
+  markWrittenOut: function (writtenOut) { documentLocation().markWrittenOut(writtenOut); }
 });
 
-S.docIdWrittenOut = false;
 var identityAdoptedAt = 0;
 var lastIdentityKey = "";
 var docIdEventLog = [];
@@ -97,6 +96,7 @@ export function copyDocHistorySafe(from, to) {
 }
 
 function docHomeKey() {
+  var home = currentHome();
   if (home.kind === "server") return "server:" + home.id;
   if (home.kind === "file") {
     return "file:" + ((home.handle && home.handle.name) || home.name || "");
@@ -123,7 +123,7 @@ export function reassignDocId(toId, opts) {
   if (!toId || !fromId || toId === fromId || !S.state || S.state.docId !== fromId) return false;
   if (onServerDoc()) return false;
   stampDocument(documentIdStamp(fromId, toId));
-  S.docIdWrittenOut = false;
+  documentLocation().markWrittenOut(false);
   copyDocHistorySafe(fromId, toId);
   syncDocIdentity();
   var other = cappedLongText(plainText(opts.otherTitle == null ? "" : opts.otherTitle).trim(), 300) || "Untitled Script";

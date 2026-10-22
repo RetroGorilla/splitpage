@@ -12,7 +12,7 @@ const { commentSortMode } = await import("../application/comment-sort.ts");
 const { mountCommentsFeature } = await import("../bootstrap/wiring/comments.ts");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../js/05-render.js");
-const { updateConnection } = await import("../js/_home.js");
+const { documentLocation } = await import("../legacy/location-bridge.ts");
 const { openCommentComposer, openCommentsPanel, closeCommentComposer } = await import("../js/10-comments.js");
 after(closeApp);
 
@@ -139,7 +139,7 @@ for (const scenario of ["dispose and reopen", "same-ID document replacement", "s
         closeCommentComposer(false);
         composer();
       } else if (scenario === "token change while held") {
-        updateConnection({ token: "refreshed-" + Math.random() });
+        documentLocation().updateConnection({ token: "refreshed-" + Math.random() });
       } else if (scenario === "same-ID body replacement") {
         const body = document.getElementById("comment-body-editable");
         body.replaceWith(body.cloneNode(true));

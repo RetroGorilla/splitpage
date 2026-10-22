@@ -5,7 +5,7 @@ import { GALLERY_FIELDS, ROW_FIELDS } from "../core/document/fields.ts";
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { rowStatus, tagCategory, tagStatus } from "../core/production/looks.ts";
 import { S } from "./_state.js";
-import { fileHome } from "./_home.js";
+import { amendHome, fileHome } from "../legacy/location-bridge.ts";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import { blobImgHtml, rowImage, rowImageKey } from "../adapters/storage/02c-blobs.js";
 import { videoLinkLabel } from "../adapters/storage/02d-gallery.js";
@@ -361,8 +361,9 @@ export function confirmFileMerge() {
   var diskCopy = cloneState(cand.theirs);
   var prevDocId = S.state.docId;
   if (cand.home) {
-    cand.home.diskBase = diskCopy;
-    if (cand.lastModified) cand.home.lastModified = cand.lastModified;
+    amendHome(cand.home, cand.lastModified
+      ? { diskBase: diskCopy, lastModified: cand.lastModified }
+      : { diskBase: diskCopy });
   }
   applyStashedWork(migrateRows(cloneState(cand.theirs)), {
     base: cand.base, mine: cloneState(S.state)

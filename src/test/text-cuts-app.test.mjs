@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
-import { home } from "../js/_home.js";
+import { setHome } from "../legacy/location-bridge.ts";
 import { truncateForPreview } from "../core/document/text-policy.ts";
 
 await bootApp();
@@ -56,8 +56,7 @@ test("02b the identity claim and the copy toast cut the title by code point (#43
   load();
   const posted = [];
   let channel = null;
-  home.kind = "file";
-  home.name = "cuts.html";
+  setHome("file", { format: "html", name: "cuts.html" });
   try {
     S.state.title = x(299) + GRIN + "y";
     syncDocIdentity();
@@ -76,8 +75,7 @@ test("02b the identity claim and the copy toast cut the title by code point (#43
     const again = toasts().filter((t) => t.indexOf("is a copy of") !== -1);
     assert.ok(again[0].indexOf('"' + x(299) + "a" + '"') !== -1, again[0]);
   } finally {
-    home.kind = "none";
-    home.name = null;
+    setHome("none");
     initDocIdentityChannel(function () { return null; });
   }
 });
