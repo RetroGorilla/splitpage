@@ -1,4 +1,5 @@
 import { productionReaders } from "../legacy/document-ports.ts";
+import { showToast } from "../legacy/effects-bridge.ts";
 import { nextTagStatus, normalizeTagName } from "../core/document/tags.ts";
 import { formatDuration, pad2 } from "../core/production/timing.ts";
 import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, tagStatus } from "../core/production/looks.ts";
@@ -31,7 +32,7 @@ import {
   tagsByCategory,
   updateProductionBadge
 } from "./07-production-tags.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";

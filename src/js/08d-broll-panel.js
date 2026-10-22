@@ -27,7 +27,7 @@ import {
   renameBrollInScript,
   updateBrollBadge
 } from "./08c-broll.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { markDirty } from "./12-dirty-toast.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { reviewBlocked, reviewMode } from "./13-hosted.js";
 import { personColor } from "./13a-presence.js";
@@ -36,6 +36,7 @@ import { brollGroups as brollGroupsFrom, brollShotListForPrint, brollTable, filt
 import { exportAs } from "./18-local-files.js";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
+import { showToast } from "../legacy/effects-bridge.ts";
 import { mountBroll } from "../features/broll/mount.ts";
 
 var VIEW_KEY = "splitpage-broll-view";

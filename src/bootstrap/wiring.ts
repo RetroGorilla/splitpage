@@ -6,6 +6,7 @@ import type { ChangeSet, SessionChange } from "../application/session/change-set
 import type { ValidatedDocument } from "../core/document/validated.ts";
 import type { Capability, DocumentEntry, ReportPort, TimerPort, UndoPort } from "../application/session/ports.ts";
 import type { SaveOwnershipPort } from "../application/save/coordinator.ts";
+import { startPageEffects } from "./effects.ts";
 import { createAppActions, installAppActions } from "../legacy/app-actions.ts";
 import { installExportFormats } from "../legacy/export-formats.ts";
 import { startEditor } from "../legacy/editor-bridge.ts";
@@ -63,6 +64,7 @@ export class WiringError extends Error {
 }
 
 export const WIRING_STEPS = Object.freeze([
+  "page effects",
   "action registry",
   "export registry",
   "built-in exporters",
@@ -260,6 +262,7 @@ export function wireApp(deps: WiringDeps): Wiring {
       throw new WiringError(step, message, failures.length ? new AggregateError([error, ...failures], message) : error);
     }
   };
+  build("page effects", () => startPageEffects(window), (stop) => stop);
   const actions = build("action registry", () => checkedActions((deps.actions ?? createAppActions)()), installAppActions);
   const exports = build("export registry", () => createExportRegistry(), installExportFormats);
   build("built-in exporters", () => checkedExporters(deps.exporters(exports)), (drop) => drop);

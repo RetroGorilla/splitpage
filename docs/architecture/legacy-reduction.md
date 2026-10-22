@@ -172,6 +172,8 @@ The five remaining wiring files now live in `src/bootstrap/wiring/production.ts`
 | 3 | Values. 44 of the 61 are pass-through names, which files import instead from where they are defined, mostly `src/core/`. Of the 17 defined in a loop file: `normalizeServerBase` is an alias of `normalizeServerUrl`, and `MD_IMAGE_PREFIX_RE` goes to `src/adapters/formats/`. The other 15 are state and move with their owners: the 12 storage keys, server defaults and writer size limits (L3b PRs 2 and 6, L3c PR 1), `autoSaveTiming` (L3b PR 1), `liveDocumentPort` (L3d PR 3) and `whilePainting` (L3e PR 1) | Codex, Sol high |
 | 4 | `findRowIndex(id)`, which reads `S.state`, becomes `rowIndexOf(doc, id)` in `src/core/document/`, and its 14 callers pass the document they hold | cloud, Sonnet |
 
+PR 2 is done except for files another step was changing: `03-sync`, `03a-history-store`, `13-hosted`, `20f-desktop`, `20g-drafts` and `20h-appdata` still import `showToast` (and `13-hosted` `showActionToast`, `setMenuItemReason` and its own `copyShareText`) from `12-dirty-toast` and `18b-file-menu`, which re-export the bridge until those files move to it (L3b PR 2 and the follow-up that deletes the re-exports and `13-hosted`'s copy).
+
 View helpers (functions that build markup or adjust an element they are given) stay with the area that draws that view, and are listed with their owning area in the appendix.
 
 `rowSeconds` and `estimatedSeconds` moved from L3a PR 1 to L3d, because they need the live-document port, which L3a does not yet have.

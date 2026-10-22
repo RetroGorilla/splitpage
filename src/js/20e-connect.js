@@ -1,7 +1,6 @@
 import { S } from "./_state.js";
 import { conn, home, setHome, normalizeServerUrl } from "./_home.js";
 import { render } from "./05-render.js";
-import { showToast } from "./12-dirty-toast.js";
 import {
   applyReviewMode,
   detectServer,
@@ -11,11 +10,11 @@ import {
   setServerToken
 } from "./13-hosted.js";
 import { deliverFile, updateFileChip } from "./18-local-files.js";
-import { setMenuItemLabel } from "./18b-file-menu.js";
 import { renderDesktopShareInfo } from "./20f-desktop.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { interruptTourForDialog, offerTourResumeAfterDialog } from "../legacy/tour-pause.ts";
+import { setMenuItemLabel, showToast } from "../legacy/effects-bridge.ts";
 import { joinErrorText, tunnelCommand } from "../../shared/server-links.js";
 
 export var SERVER_BOOKMARKS_KEY = "splitpage-server-bookmarks";

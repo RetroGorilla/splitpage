@@ -11,7 +11,6 @@ import { closeRowMenus } from "./06-rows.js";
 import { scheduleProductionRefresh } from "./07-production-tags.js";
 import { renderProduction } from "./08-production-panels.js";
 import { renderComments } from "./10-comments.js";
-import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { breakUndoCoalescing, flushEdits, lastUndoEntry, undo } from "./12a-undo.js";
 import { onServerDoc, reviewMode } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
@@ -23,6 +22,7 @@ import { cappedLongText } from "../core/document/text-policy.ts";
 import { REVIEW_ONLY, runCommand } from "../legacy/session-bridge.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { rowDrag } from "../legacy/editor-bridge.ts";
+import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 
 var TOLERANCE = 4;
 var SCROLL_ZONE = 120;
