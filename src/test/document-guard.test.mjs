@@ -13,6 +13,10 @@ const { sceneLengthCommand } = await import("../application/commands/scene-lengt
 const { flushEdits, undo, undoSizes } = await import("../js/12a-undo.js");
 const { loadTestDocument } = await import("./_document.mjs");
 
+function shown() {
+  return S.state;
+}
+
 function script(title) {
   return migrateRows({
     schema: 2, title: title, docId: "d" + "4".repeat(32), comments: [],
@@ -55,27 +59,27 @@ test("the guard is read once from the page's query: document-guard=1 and nothing
   assert.equal(documentGuardAsked("?document-guard=true"), false);
 });
 
-test("S.state is a read-only view of the session's document, one view per object at every depth", () => {
+test("shown() is a read-only view of the session's document, one view per object at every depth", () => {
   loadTestDocument(script("Viewed"));
   const raw = currentDocument();
-  assert.notEqual(S.state, raw);
-  assert.equal(isDocumentView(S.state), true);
-  assert.equal(rawOf(S.state), raw);
-  assert.equal(S.state, S.state, "the same view each time");
-  assert.equal(S.state.rows, S.state.rows);
-  assert.equal(S.state.rows[0], S.state.rows[0]);
-  assert.equal(rawOf(S.state.rows[1]), raw.rows[1]);
-  assert.equal(S.state.rows.indexOf(S.state.rows[1]), 1, "identity comparisons among views behave as among raw objects");
-  assert.equal(JSON.stringify(S.state), JSON.stringify(raw));
-  assert.deepEqual(S.state.rows.map((row) => row.id), ["r1", "r2"]);
-  assert.equal(S.state.rows.filter((row) => row.status === "todo").length, 2);
+  assert.notEqual(shown(), raw);
+  assert.equal(isDocumentView(shown()), true);
+  assert.equal(rawOf(shown()), raw);
+  assert.equal(shown(), shown(), "the same view each time");
+  assert.equal(shown().rows, shown().rows);
+  assert.equal(shown().rows[0], shown().rows[0]);
+  assert.equal(rawOf(shown().rows[1]), raw.rows[1]);
+  assert.equal(shown().rows.indexOf(shown().rows[1]), 1, "identity comparisons among views behave as among raw objects");
+  assert.equal(JSON.stringify(shown()), JSON.stringify(raw));
+  assert.deepEqual(shown().rows.map((row) => row.id), ["r1", "r2"]);
+  assert.equal(shown().rows.filter((row) => row.status === "todo").length, 2);
   assert.equal(liveDocumentPort.current(), raw, "the live-document port hands out the session's own object");
 });
 
 test("every kind of write through the view is refused, and the document is unchanged", () => {
   loadTestDocument(script("Refused"));
   const before = JSON.stringify(currentDocument());
-  const view = S.state;
+  const view = shown();
   const writes = {
     assign: () => { view.title = "Changed"; },
     nested: () => { view.rows[0].audioText = "Changed."; },
@@ -95,7 +99,7 @@ test("every kind of write through the view is refused, and the document is uncha
 test("a command changes the session's own object, and values read through views reach the document raw", () => {
   loadTestDocument(script("Commanded"));
   const raw = currentDocument();
-  const ada = S.state.people[0];
+  const ada = shown().people[0];
   assert.equal(isDocumentView(ada), true);
   const edited = runDocumentEdit({
     name: "copy a person through the view",
@@ -111,19 +115,19 @@ test("a command changes the session's own object, and values read through views 
   assert.equal(raw.people[1], raw.people[0], "the view was replaced by the object it shows");
   assert.equal(raw.people[2].crew[0], raw.people[0]);
   assert.equal(runDocumentEdit(sceneLengthCommand("r1", 30, sessionStamps)), true);
-  assert.equal(S.state.rows[0].lengthSeconds, 30);
+  assert.equal(shown().rows[0].lengthSeconds, 30);
   assert.deepEqual(viewsIn(currentDocument()), []);
 });
 
 test("a view handed to the session is unwrapped: a replacement and a server update hold raw objects", () => {
   loadTestDocument(script("Before"));
   const next = script("Next");
-  next.people.push(S.state.people[0]);
+  next.people.push(shown().people[0]);
   liveDocumentPort.assign(next);
   assert.equal(currentDocument(), next);
   assert.deepEqual(viewsIn(currentDocument()), []);
   const theirs = script("Theirs");
-  theirs.rows.push(S.state.rows[1]);
+  theirs.rows.push(shown().rows[1]);
   liveSession().absorbServer(theirs);
   assert.equal(currentDocument(), theirs);
   assert.deepEqual(viewsIn(currentDocument()), []);
@@ -136,6 +140,6 @@ test("undo and redo of a command run through the session under the guard", () =>
   flushEdits();
   assert.equal(undoSizes().undo, 1);
   assert.equal(undo().ok, true);
-  assert.equal(S.state.rows[1].lengthSeconds, undefined);
+  assert.equal(shown().rows[1].lengthSeconds, undefined);
   assert.deepEqual(viewsIn(currentDocument()), []);
 });

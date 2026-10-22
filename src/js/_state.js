@@ -12,5 +12,5 @@ export const S = {
 
   get state() { return documentView(currentDocument()); },
 
-  set state(doc) { throw new TypeError("S.state is read-only: the document session holds the document"); }
+  set state(doc) { throw new TypeError("The document is read-only here: the document session holds it"); }
 };
