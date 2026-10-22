@@ -2,9 +2,9 @@ import { brollSortedForList } from "../core/production/broll.ts";
 import { BROLL_NAME_MAX, BROLL_TEXT_MAX } from "../core/document/broll.ts";
 import { tagCategory, tagStatus } from "../core/production/looks.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
-import { formatTimecode } from "../core/production/timing.ts";
+import { formatTimecode, rowSeconds } from "../core/production/timing.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
 import { S } from "./_state.js";
-import { rowSeconds } from "./01-scene-status.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
@@ -32,7 +32,7 @@ import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
 import { deleteShotCommand, setShotsCommand } from "../application/commands/broll-records.ts";
 import { brollRecord as shotIn, personById as personIn, personNamed } from "../core/production/records.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
-import { readSession, runDocumentEdit } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession, runDocumentEdit } from "../legacy/session-bridge.ts";
 
 var VIEW_KEY = "splitpage-broll-view";
 
@@ -146,7 +146,8 @@ function plural(n, one, many) {
 
 function sceneStarts() {
   var t = 0, out = Object.create(null);
-  S.state.rows.forEach(function (row) { out[row.id] = t; t += rowSeconds(row); });
+  var doc = currentDocument();
+  doc.rows.forEach(function (row) { out[row.id] = t; t += rowSeconds(row, doc, productionReaders); });
   return out;
 }
 

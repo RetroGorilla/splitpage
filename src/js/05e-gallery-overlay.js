@@ -9,12 +9,11 @@ import {
   videoLinkLabel
 } from "../adapters/storage/02d-gallery.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { readSession } from "../legacy/session-bridge.ts";
 import { cssAttr } from "./04-richtext.js";
 import {
   galleryBadgeHtml,
   gallerySlotPictureHtml,
-  render,
   slotPoster
 } from "./05-render.js";
 import { embedRefusal, fetchThumbnailRecord, playerSrc, thumbnailsAllowed } from "./05v-video.js";
@@ -24,9 +23,8 @@ import { breakUndoCoalescing, lastUndoEntry, undo } from "./12a-undo.js";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
-import { pickPictureFor } from "../legacy/editor-bridge.ts";
+import { cellEditing, pickPictureFor } from "../legacy/editor-bridge.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
-import { galleryCommand } from "../application/commands/gallery.ts";
 import { formatVideoLength } from "../../shared/text.js";
 import { embeddableVideo } from "../../shared/video-embed.js";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
@@ -321,7 +319,7 @@ function retryThumbnail() {
       if (view) refreshGalleryOverlay();
       return;
     }
-    var done = rec && rowOf(rowId) && galleryEdit(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); });
+    var done = rec && rowOf(rowId) && cellEditing().editGallery(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); });
     if (!done) showToast("Could not get this video’s thumbnail — you may be offline, or the video is private or gone.", "warn");
     if (view && view.rowId === rowId) refreshGalleryOverlay();
   });
@@ -335,18 +333,6 @@ function revealPicked(grid) {
   var room = 4;
   if (t.top - room < g.top) grid.scrollTop -= g.top - t.top + room;
   else if (t.bottom + room > g.bottom) grid.scrollTop += t.bottom - g.bottom + room;
-}
-
-export function galleryEdit(rowId, msg, fn) {
-  if (!rowOf(rowId)) return false;
-  var before = lastUndoEntry();
-  breakUndoCoalescing();
-  var outcome = runCommand(galleryCommand(rowId, fn, sessionTextPorts));
-  if (outcome.kind === "failed") throw outcome.error;
-  if (outcome.kind !== "applied" && outcome.kind !== "committed") return false;
-  render();
-  announceGalleryEdit(msg, before);
-  return true;
 }
 
 export function announceGalleryEdit(msg, before) {
@@ -376,7 +362,7 @@ function step(by) {
 function moveTo(from, to) {
   if (reviewMode() || from === to) return;
   var rowId = view.rowId;
-  if (galleryEdit(rowId, "Moved to " + (to + 1), function (row) { return moveGallerySlot(row, from, to); })) {
+  if (cellEditing().editGallery(rowId, "Moved to " + (to + 1), function (row) { return moveGallerySlot(row, from, to); })) {
     view.sel = to;
     refreshGalleryOverlay();
   }
@@ -386,7 +372,7 @@ function makeCover() {
   if (reviewMode() || !view.sel) return;
   var from = view.sel;
   var rowId = view.rowId;
-  if (galleryEdit(rowId, "Made the cover", function (row) { return moveGallerySlot(row, from, 0); })) {
+  if (cellEditing().editGallery(rowId, "Made the cover", function (row) { return moveGallerySlot(row, from, 0); })) {
     view.sel = 0;
     refreshGalleryOverlay();
   }
@@ -398,7 +384,7 @@ function removeSelected() {
   var rowId = view.rowId;
   var slot = rowSlots(rowOf(rowId).row)[at];
   var what = slotPoster(slot) ? "Video" : "Picture";
-  galleryEdit(rowId, what + " removed", function (row) { return removeGallerySlot(row, at); });
+  cellEditing().editGallery(rowId, what + " removed", function (row) { return removeGallerySlot(row, at); });
   if (view) {
     view.sel = Math.max(0, at - 1);
     refreshGalleryOverlay();
@@ -411,7 +397,7 @@ function removeAnnotations() {
   var slot = rowSlots(rowOf(view.rowId).row)[at];
   if (!slot || !slot.annotation) return;
   var original = slot.annotation.imageRef;
-  if (!galleryEdit(view.rowId, "Annotations removed", function (row) { return annotateGallerySlot(row, at, null, original, []); })) {
+  if (!cellEditing().editGallery(view.rowId, "Annotations removed", function (row) { return annotateGallerySlot(row, at, null, original, []); })) {
     showToast("Could not go back to the original — the gallery already shows that picture.", "warn");
     return;
   }

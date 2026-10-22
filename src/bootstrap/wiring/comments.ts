@@ -9,12 +9,12 @@ import {
   appendDraftMedia,
   draftRedo,
   draftUndo,
-  isDraftBox,
   noteDraftBeforeInput,
   noteDraftComposition,
   noteDraftFocus,
   pasteIntoDraft
 } from "../../js/05d-draft-edit.js";
+import { isDraftBox } from "../../features/editing/cell-page.ts";
 import { compressImageFile } from "../../js/06-rows.js";
 import {
   AUTHOR_NAME_FIELDS,

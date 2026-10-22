@@ -11,8 +11,8 @@ import {
   sliceCell,
   toHtml
 } from "./04c-doc-model.js";
-import { closeCellEdit, openCellEdit } from "./05b-cell-edit.js";
 import { cellSelection } from "../features/editing/cell-selection.ts";
+import { cellEditing } from "../legacy/editor-bridge.ts";
 import { brollSeedOf } from "./08c-broll.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
 import { makeId, randomHexBytes, randomIds } from "../adapters/identity/ids.ts";
@@ -262,13 +262,13 @@ function caretOf(caret) {
 }
 
 function cutSelection(cellEl) {
-  var open = openCellEdit(cellEl);
+  var open = cellEditing().open(cellEl);
   if (!open || !open.sel || open.sel.from === open.sel.to) return;
   var cut = cutCommand(open.rowId, open.field, open.sel, clipboardPorts());
   var outcome = runCommand(cut.command);
   if (outcome.kind === "failed") throw outcome.error;
   if (outcome.kind === "rejected") return;
-  closeCellEdit(cellEl, storedField(open.rowId, open.field), caretOf(cut.report().caret));
+  cellEditing().close(cellEl, storedField(open.rowId, open.field), caretOf(cut.report().caret));
 }
 
 function pasteRequest(rowId, field, range, pasted, got, attach) {
@@ -301,7 +301,7 @@ export function pasteIntoCell(cellEl, html, text, extra) {
     breakUndoCoalescing();
     return result;
   }
-  var open = openCellEdit(cellEl);
+  var open = cellEditing().open(cellEl);
   if (!open) {
     result.done = false;
     return result;
@@ -320,7 +320,7 @@ export function pasteIntoCell(cellEl, html, text, extra) {
   }
   var report = paste.report();
   result.attached = report.attached;
-  result.cellEl = closeCellEdit(cellEl, storedField(rowId, field), caretOf(report.caret));
+  result.cellEl = cellEditing().close(cellEl, storedField(rowId, field), caretOf(report.caret));
   return result;
 }
 

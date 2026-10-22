@@ -13,7 +13,8 @@ const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
-const { syncFieldFromDom, handleToolbarCmd } = await import("../js/05-render.js");
+const { handleToolbarCmd } = await import("../js/05-render.js");
+const { cellEditing } = await import("../legacy/editor-bridge.ts");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { fromHtml, sanitizeHtml, storedHtmlFromDom } = await import("../legacy/richtext.ts");
@@ -141,7 +142,7 @@ test("an input that leaves the stored cell as it is makes no command", async () 
   try {
     el.appendChild(document.createTextNode(ZW));
     input(el, ZW);
-    syncFieldFromDom(el);
+    cellEditing().sync(el);
   } finally {
     w.stop();
   }
@@ -933,7 +934,7 @@ test("a typing command that fails is thrown from the view and leaves the cell, t
   try {
     el.focus();
     lastText(el).data += "!";
-    assert.throws(() => syncFieldFromDom(el), /no clock/);
+    assert.throws(() => cellEditing().sync(el), /no clock/);
   } finally {
     Date.prototype.toISOString = real;
   }
@@ -991,14 +992,14 @@ test("differential (seeded): the stored cell is toHtml of the decoded runs, medi
     clock += 1000;
     const stamp = "unstamped " + seed;
     row("r1").updatedAt = stamp;
-    syncFieldFromDom(el);
+    cellEditing().sync(el);
     assert.equal(row("r1")[field], want, "seed " + seed);
     const moved = was !== want;
     assert.equal(saveChanges() - seq, moved ? 1 : 0, "seed " + seed + ": one edit exactly when the stored cell changes");
     assert.equal(liveSession().generation() - generation, moved ? 1 : 0, "seed " + seed);
     assert.equal(row("r1").updatedAt !== stamp, moved, "seed " + seed + ": stamped exactly when it changes");
     if (moved) changed++; else same++;
-    syncFieldFromDom(el);
+    cellEditing().sync(el);
     assert.equal(saveChanges() - seq, moved ? 1 : 0, "seed " + seed + ": the same cell again is a no-op");
   }
   assert.ok(changed > 150 && same > 10, "both paths were exercised: " + changed + " changed, " + same + " unchanged");

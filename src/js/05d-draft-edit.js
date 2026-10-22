@@ -1,4 +1,5 @@
 import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
+import { isDraftBox } from "../features/editing/cell-page.ts";
 import { clamp, clampRange, deleteRange, insertCell, insertText, markThroughout, setMark } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
 import { cellLength, normalizeCell, projection } from "../core/text/runs.ts";
@@ -145,11 +146,6 @@ export function historyRedo(h, now) {
 var histories = new WeakMap();
 var timers = new WeakMap();
 var composing = new WeakSet();
-
-export function isDraftBox(el) {
-  return !!(el && el.classList && el.classList.contains("cell-editable") &&
-    el.getAttribute("contenteditable") === "true" && !el.closest("#rows, #writer-doc"));
-}
 
 function boxHtml(box) {
   var html = box.innerHTML;
