@@ -5,7 +5,7 @@ import { S } from "../js/_state.js";
 
 await bootApp();
 const { setPrompterOpen } = await import("../application/prompter-state.ts");
-const { mountPrompterVisibilityFeature } = await import("../js/22d-views-wiring.js");
+const { mountPrompterVisibilityFeature } = await import("../bootstrap/wiring/views.ts");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 after(closeApp);
 

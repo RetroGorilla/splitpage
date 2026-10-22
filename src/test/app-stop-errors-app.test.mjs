@@ -59,6 +59,7 @@ const { S } = await import("../js/_state.js");
 await bootApp();
 const app = await import("../bootstrap/app.ts");
 const { rootRoutesTaken } = await import("../bootstrap/wiring/editor.ts");
+const { ROOT_CLICK_ORDER, ROOT_MOUSEDOWN_ORDER } = await import("../features/routing/root-router.ts");
 
 async function restart() {
   app.startApp(await rewireApp());
@@ -108,6 +109,7 @@ test("one throwing disposer does not stop the rest: every other mount is release
   const wiring = await rewireApp();
   assert.doesNotThrow(() => app.startApp(wiring), "the app is not left marked as running");
   await settled();
+  assert.deepEqual(rootRoutesTaken(), { click: [...ROOT_CLICK_ORDER], mousedown: [...ROOT_MOUSEDOWN_ORDER] });
 });
 
 test("two throwing disposers are both reported, each cuts only its own feature short, and the app can be started again", async () => {

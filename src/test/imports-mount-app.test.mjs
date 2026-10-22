@@ -5,7 +5,7 @@ import { S } from "../js/_state.js";
 
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
-const { mountImportsFeature } = await import("../js/22d-views-wiring.js");
+const { mountImportsFeature } = await import("../bootstrap/wiring/views.ts");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../js/05-render.js");
 const { openImportModal, closeImportModal } = await import("../js/11-import.js");
