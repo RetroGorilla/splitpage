@@ -1,12 +1,8 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { reviewMode, setHome } from "../legacy/location-bridge.ts";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
-import { dataUrlForSync, isDurableSync } from "../adapters/storage/02c-blobs.js";
-import { currentDocument, heldDocument, holdMergeBase, mergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteServerUpdate, runDocumentEdit } from "../legacy/session-bridge.ts";
+import { currentDocument, heldDocument, holdMergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteServerUpdate, runDocumentEdit } from "../legacy/session-bridge.ts";
 import { wordsPerMinuteCommand } from "../application/commands/document-settings.ts";
-import { applyIncomingMerge } from "../application/session/apply-merge.ts";
-import { mergeIncoming } from "../application/session/merge-incoming.ts";
-import { refsIn } from "../../shared/blob-policy.js";
 import { randomIds, systemClock, nowIso } from "../adapters/identity/ids.ts";
 import { DEFAULT_WPM } from "../core/document/timing.ts";
 import { mergeStates as mergeStatesWith } from "../core/merge-states.ts";
@@ -35,9 +31,9 @@ import {
 } from "./10-comments.js";
 import { cleanAuthorName } from "../core/document/people.ts";
 import { showToast } from "./12-dirty-toast.js";
-import { personColor } from "./13a-presence.js";
-import { autoSavePolicy, confirmBaseline, haltAutoSave, saveChanges } from "../legacy/save-bridge.ts";
-import { captureRestore, conflictStash, stillRestoring } from "../legacy/recovery-bridge.ts";
+import { presence } from "../legacy/presence-bridge.ts";
+import { autoSavePolicy, confirmBaseline, saveChanges } from "../legacy/save-bridge.ts";
+import { captureRestore, stillRestoring } from "../legacy/recovery-bridge.ts";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { driveFormatSize } from "../../shared/text.js";
 import { formatClock } from "../../shared/clock.js";
@@ -178,7 +174,7 @@ export function textMergeContext(base, mine, theirs, mergedTags) {
   return coreTextMergeContext(fromHtml, base, mine, theirs, mergedTags);
 }
 
-export function mergeStates(base, mine, theirs) {
+function mergeStates(base, mine, theirs) {
   return withDocumentPorts(STATE_FIELDS, function (migrate) {
     return mergeStatesWith(base, mine, theirs, {
       decode: fromHtml,
@@ -191,26 +187,6 @@ export function mergeStates(base, mine, theirs) {
   });
 }
 
-function stashBlobsFor(docs) {
-  var blobs = {}, any = false;
-  docs.forEach(function (d) {
-    refsIn(d).forEach(function (sha) {
-      if (blobs[sha] || isDurableSync(sha)) return;
-      var url = dataUrlForSync(sha);
-      if (url) { blobs[sha] = url; any = true; }
-    });
-  });
-  return any ? blobs : null;
-}
-
-export function stashLocalWork() {
-  if (!currentDocument()) return false;
-  var payload = { at: nowIso(), by: getEditorName(), base: mergeBase(), mine: currentDocument() };
-  var blobs = stashBlobsFor([currentDocument(), mergeBase()]);
-  if (blobs) payload.blobs = blobs;
-  return conflictStash().save(payload);
-}
-
 export function updateIdentityChip() {
   var name = getSavedAuthorName();
   var chip = document.getElementById("identity-chip");
@@ -219,7 +195,7 @@ export function updateIdentityChip() {
   var dot = chip.querySelector(".identity-dot");
   if (dot) {
     dot.setAttribute("aria-hidden", "true");
-    if (name) dot.style.setProperty("--person", personColor(name));
+    if (name) dot.style.setProperty("--person", presence().personColor(name));
     else dot.style.removeProperty("--person");
   }
 }
@@ -307,7 +283,7 @@ function openAnchorPopover(host, id, label, html) {
 }
 
 export function personSwatchesHtml(name, radioName, legendClass) {
-  var current = preferences().myColor() || personColor(name || "");
+  var current = preferences().myColor() || presence().personColor(name || "");
   return '<fieldset class="swatch-group" role="radiogroup" aria-label="Your colour">' +
     '<legend class="' + (legendClass || "anchor-popover-label") + '">Your colour</legend>' +
     '<div class="swatch-row">' +
@@ -481,7 +457,7 @@ function historyInitials(name) {
 function historyPersonHtml(name) {
   name = String(name || "").trim();
   if (!name) return '<span class="history-none">—</span>';
-  return '<span class="person-avatar" style="--size: 20px; --presence: ' + escapeHtml(personColor(name)) + '" aria-hidden="true">' +
+  return '<span class="person-avatar" style="--size: 20px; --presence: ' + escapeHtml(presence().personColor(name)) + '" aria-hidden="true">' +
       escapeHtml(historyInitials(name)) + '</span>' +
     '<span class="history-person">' + escapeHtml(name) + '</span>';
 }
@@ -654,61 +630,31 @@ export async function renderHistory() {
   }
 }
 
-var mergeBanner = null;
-
-export function installMergeBanner(banner) {
-  mergeBanner = banner;
-  return function () { if (mergeBanner === banner) mergeBanner = null; };
-}
-
 export function toastLastEditor(loaded) {
   if (loaded.lastEditedBy && loaded.lastEditedBy !== getEditorName()) {
     showToast("Opened the latest version — last edited by " + loaded.lastEditedBy, "ok");
   }
 }
 
-export function reportMerge(result, opts) {
-  opts = opts || {};
-  if (mergeBanner) mergeBanner.show(result, { undo: opts.undo });
-  if (!opts.alreadySaved) { noteAbsorbedDirty(opts.kind || "server"); noteMergeAutoSave(opts); }
-}
-
-function noteMergeAutoSave(opts) {
-  if (!opts.noAutoSave) { autoSavePolicy().dueNow(); return; }
-  haltAutoSave("Autosave is paused — changes recovered for you are on screen but not in your file yet. " +
-               "Press Save once you have looked them over.");
-}
-
-var mergePorts = {
-  isDocument: function (raw) { return isDocumentObject(raw); },
-  merge: function (input) {
-    return mergeIncoming(input, isDocumentObject, {
-      entry: function (raw, lines) { return migrateRows(cloneState(raw), lines); },
-      merge: mergeStates
-    });
-  },
-  snapshot: function (label, doc) { return pushSnapshot(label, doc); },
-  current: function () { return heldDocument(); },
-  adopt: function (kind, next, merged) {
-    if (merged) next = noteMerged(kind, next);
-    else next = kind === "recovery" ? noteRecovery(next) : noteServerUpdate(next);
-    return next;
-  },
-  documentId: function (doc) { return doc.docId; },
-  noteHistoryFrom: function (prevDocId) { noteMergedDocId(prevDocId); },
-  armUndo: function (record) { mergeUndo().arm(record); },
-  setBase: function (next, why) { setBaseState(next, why); },
-  capture: function () { return captureRestore(); },
-  stillOwns: function (ctx) { return stillRestoring(ctx); },
-  view: {
-    report: function (result, opts) { reportMerge(result, opts); },
-    absorbedDirty: function (kind) { noteAbsorbedDirty(kind); },
-    toast: function (text, tone, sticky) { showToast(text, tone, sticky); }
-  }
-};
-
-export function applyMerge(opts) {
-  return applyIncomingMerge(opts || {}, mergePorts);
+export function legacyMergePorts() {
+  return {
+    states: mergeStates,
+    entry: function (raw, lines) { return migrateRows(cloneState(raw), lines); },
+    isDocument: function (raw) { return isDocumentObject(raw); },
+    snapshot: function (label, doc) { return pushSnapshot(label, doc); },
+    current: function () { return heldDocument(); },
+    adopt: function (kind, next, merged) {
+      if (merged) next = noteMerged(kind, next);
+      else next = kind === "recovery" ? noteRecovery(next) : noteServerUpdate(next);
+      return next;
+    },
+    documentId: function (doc) { return doc.docId; },
+    noteHistoryFrom: function (prevDocId) { noteMergedDocId(prevDocId); },
+    armUndo: function (record) { mergeUndo().arm(record); },
+    setBase: function (next, why) { setBaseState(next, why); },
+    capture: function () { return captureRestore(); },
+    stillOwns: function (ctx) { return stillRestoring(ctx); }
+  };
 }
 
 var baseStateWhy = "";

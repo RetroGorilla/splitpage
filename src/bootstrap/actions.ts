@@ -3,9 +3,9 @@ import { registerAll } from "../application/actions.ts";
 import { mountShortcuts } from "../features/shortcuts/mount.ts";
 import { showRefusal } from "../js/12-dirty-toast.js";
 import { runMenuCommandsWith } from "../js/20f-desktop.js";
-import { registerEditorOpenActions } from "../legacy/editor-open-actions.ts";
+import { editorOpenActions } from "../legacy/editor-open-actions.ts";
 import { registerFileActions } from "../legacy/file-actions.ts";
-import { registerHelpActions } from "../legacy/help-actions.ts";
+import { helpMenuActions } from "../legacy/help-actions.ts";
 import { nativeMenuRunner } from "../legacy/native-menu.ts";
 import { registerShareActions } from "../legacy/share-actions.ts";
 import { hideShotActions, thisDocumentActions } from "../legacy/this-document-actions.ts";
@@ -13,6 +13,8 @@ import { registerViewActions } from "../legacy/view-actions.ts";
 import { rowsActions } from "./wiring/editor.ts";
 import { rundownMinimizeActions, rundownSceneActions } from "./wiring/rundown.ts";
 import { scriptZoomActions } from "./wiring/script-zoom.ts";
+import { helpActions } from "./wiring/help.ts";
+import { galleryActions } from "./wiring/gallery.ts";
 
 let running: (() => void) | null = null;
 
@@ -27,11 +29,13 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]),
     () => registerFileActions(registry),
     () => registerViewActions(registry),
-    () => registerHelpActions(registry),
+    () => {
+      const menu = helpMenuActions();
+      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]);
+    },
     () => registerShareActions(registry),
     () => registerAll(registry, scriptZoomActions()),
-    () => registerAll(registry, rundownSceneActions()),
-    () => registerEditorOpenActions(registry),
+    () => registerAll(registry, [...rundownSceneActions(), ...galleryActions(), ...editorOpenActions()]),
     () => registerAll(registry, rowsActions()),
     () => runMenuCommandsWith(nativeMenuRunner(registry, presentRefusal)),
     () => mountShortcuts({ target: keyTarget, registry })

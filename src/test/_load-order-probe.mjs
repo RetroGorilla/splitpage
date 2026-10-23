@@ -41,6 +41,7 @@ function started(read) {
 const session = await import("../legacy/session-bridge.ts");
 const saves = await import("../legacy/save-bridge.ts");
 const recovery = await import("../legacy/recovery-bridge.ts");
+const merge = await import("../legacy/merge-bridge.ts");
 const transitions = await import("../legacy/transition-bridge.ts");
 const editor = await import("../legacy/editor-bridge.ts");
 const productionEditing = await import("../legacy/production-editing-bridge.ts");
@@ -51,10 +52,13 @@ const actions = await import("../legacy/app-actions.ts");
 const exports = await import("../legacy/export-formats.ts");
 const exportServices = await import("../application/export/services.ts");
 const projectFileServices = await import("../application/formats/project-file-services.ts");
+const shotHiding = await import("../legacy/shot-hiding-bridge.ts");
+const presence = await import("../legacy/presence-bridge.ts");
 const owners = {
   session: session.sessionStarted(),
   saves: saves.savesStarted(),
   recovery: recovery.recoveryStarted(),
+  merge: merge.mergeStarted(),
   editor: editor.editorStarted(),
   productionEditing: productionEditing.productionEditingStarted(),
   preferences: preferences.preferencesStarted(),
@@ -64,7 +68,9 @@ const owners = {
   actions: started(() => actions.appActions.list()),
   exports: started(() => exports.exportFormats.cards()),
   exportServices: exportServices.exportServicesStarted(),
-  projectFileServices: projectFileServices.projectFileServicesStarted()
+  projectFileServices: projectFileServices.projectFileServicesStarted(),
+  shotHiding: shotHiding.shotHidingStarted(),
+  presence: presence.presenceStarted()
 };
 process.stdout.write(JSON.stringify({ target, calls, error, owners }) + "\n");
 process.exit(0);

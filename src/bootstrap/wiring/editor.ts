@@ -17,6 +17,7 @@ import { mountClipboardRoutes } from "../../features/clipboard/routes.ts";
 import { mountMediaRoutes } from "../../features/media/routes.ts";
 import type { MediaRoutePorts } from "../../features/media/routes.ts";
 import { mountMergeBanner } from "../../features/merge/banner.ts";
+import type { MergeReport } from "../../features/merge/banner.ts";
 import { mountRowsEditor } from "../../features/rows/editor.ts";
 import type { RowsEditorPorts } from "../../features/rows/editor.ts";
 import { mountRowRoutes } from "../../features/rows/routes.ts";
@@ -33,8 +34,10 @@ import { REVIEW_ONLY, liveDocumentPort, liveSession, runCommand, sessionTextPort
 import { fromHtml } from "../../legacy/richtext.ts";
 import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 import { cycleRowStatus } from "../../js/01-scene-status.js";
-import { expandHiddenShotStrip, revealRow } from "../../js/01b-hide-shot.js";
-import { installMergeBanner, restoreMergeSnapshot } from "../../js/03-sync.js";
+import { expandHiddenShotStrip } from "../../js/01b-hide-shot.js";
+import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
+import { restoreMergeSnapshot } from "../../js/03-sync.js";
+import { installMergeBanner } from "../../legacy/merge-bridge.ts";
 import { ensureTrailingCaretSpot, safeId, sanitizeHtml, storedHtmlFromDom } from "../../js/04-richtext.js";
 import { cssAttr } from "../../features/common/dom.ts";
 import { announceGalleryEdit } from "../../js/05e-gallery-overlay.js";
@@ -370,7 +373,9 @@ export function mountMergeBannerFeature(): ReturnType<typeof mountMergeBanner> {
         openComments: openCommentsPanel,
         rowElement: function (rowId) { return document.querySelector('#rows .row[data-id="' + safeId(rowId, "r") + '"]'); },
         logError: function (e) { if (window.console) console.error(e); },
-        install: installMergeBanner
+        install: function (banner) {
+          return installMergeBanner({ show: function (result, opts) { return banner.show(result as MergeReport, opts); } });
+        }
       }
     });
   });
@@ -418,7 +423,7 @@ const rowRoutePorts: RowRoutePorts = {
   armDelete: armDelete,
   cycleStatus: cycleRowStatus,
   expandHidden: expandHiddenShotStrip,
-  reveal: revealRow,
+  reveal: function (rowId) { shotHiding().reveal(rowId); },
   gone: function () { showToast("That scene is no longer here.", "warn"); }
 };
 
@@ -438,7 +443,7 @@ export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
 export const stopRowsFeature = rowRoutes.stop;
 
 export function rowsActions(): ActionDefinition[] {
-  return rowActions({ reveal: revealRow });
+  return rowActions({ reveal: (rowId) => { shotHiding().reveal(rowId); } });
 }
 
 const rowsEditor = owned<ReturnType<typeof mountRowsEditor>>();

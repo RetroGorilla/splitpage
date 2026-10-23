@@ -4,9 +4,9 @@ import { rundownMinimizeActions as minimizeDefinitions, rundownSceneActions as s
 import type { RundownPorts, RundownPresencePorts } from "../../features/rundown/ports.ts";
 import { __init as mountPresence } from "../../features/rundown/presence.js";
 import { __init as mountRundown } from "../../features/rundown/rundown.js";
-import { presenceShown } from "../../js/13a-presence.js";
 import { cellEditing, rowDrag } from "../../legacy/editor-bridge.ts";
 import { preferences } from "../../legacy/preferences-bridge.ts";
+import { presence as presenceOwner } from "../../legacy/presence-bridge.ts";
 import { sharedPorts } from "./shared-ports.ts";
 
 const rundown = owned<ReturnType<typeof mountRundown>>();
@@ -37,7 +37,7 @@ export function mountRundownPresenceFeature(): ReturnType<typeof mountPresence> 
     const shared = sharedPorts();
     const ports: RundownPresencePorts = {
       document: shared.document,
-      presence: { shown: presenceShown },
+      presence: { shown: () => presenceOwner().shown() },
       actions: shared.actions
     };
     return mountPresence(ports);
