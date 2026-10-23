@@ -2,16 +2,21 @@ import type { ActionRegistry, ActionSource } from "../../src/application/actions
 import type { PreferenceChanges, PreferenceNotice, Preferences } from "../../src/application/preferences/preferences.ts";
 import type { SaveChange, SaveState } from "../../src/application/save/save-state.ts";
 import type { Blocker, ScreenState } from "../../src/application/screen.ts";
+import type { DocumentDestination } from "../../src/application/transitions/ports.ts";
+import type { Arrived, Incoming, Transitions } from "../../src/application/transitions/transitions.ts";
+import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import type { ReviewFacts } from "../../src/application/collaboration/review.ts";
 import type { PictureStore } from "../../src/application/media/picture-store.ts";
 import type { SaveOwnershipPort } from "../../src/application/save/coordinator.ts";
 import type { OperationContext } from "../../src/application/session/operation.ts";
 import type { ImageRef } from "../../src/core/document/ports.ts";
-import type { DocumentView, SessionListener } from "../../src/application/session/document-session.ts";
 import type { DocumentReader } from "../../src/application/session/document-reader.ts";
-import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
 import type { ViewFlags } from "../../src/application/preferences/view-flags.ts";
 import type { SidePanels } from "../../src/application/side-panels.ts";
+import type { Command, CommandOutcome, DocumentView, SessionListener } from "../../src/application/session/document-session.ts";
+import type { UndoControl } from "../../src/application/editing/undo-control.ts";
+import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
+import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
 
 export function fakeNotices() {
   const shown: { message: string; kind: NoticeKind | undefined; label?: string; action?: () => void; sticky: boolean | undefined; notice: ReturnType<typeof notice> }[] = [];
@@ -129,6 +134,32 @@ export function fakePreferences(initialScale = 1) {
   };
 }
 
+export function fakeTransitions(arriving: (from: Incoming) => ValidatedDocument) {
+  const calls: { kind: "open" | "startNew" | "restore" | "recover"; reason: string | null; destination: DocumentDestination | undefined }[] = [];
+  const arrive = (from: Incoming): Arrived => ({ document: arriving(from), forkedFrom: null, kept: false });
+  const transitions: Transitions<DocumentDestination> = {
+    open: (opening) => {
+      calls.push({ kind: "open", reason: opening.reason, destination: opening.destination });
+      return arrive(opening.from);
+    },
+    startNew: (arrival) => {
+      calls.push({ kind: "startNew", reason: arrival.reason, destination: arrival.destination });
+      return arrive(arrival.from);
+    },
+    restore: (restoration) => {
+      calls.push({ kind: "restore", reason: null, destination: undefined });
+      return arrive(restoration.from);
+    },
+    recover: (recovery) => {
+      calls.push({ kind: "recover", reason: recovery.reason, destination: recovery.destination });
+      return arrive(recovery.from);
+    },
+    publish: () => ({ kind: "obsolete" }),
+    copyId: () => "d" + "0".repeat(32)
+  };
+  return { transitions, calls };
+}
+
 function listenerSet<L>() {
   const listeners = new Set<L>();
   return {
@@ -181,6 +212,28 @@ export function fakeReview(initial = false) {
     setReviewing: (on: boolean): void => { reviewing = on; },
     refusals: (): number => refusals
   };
+}
+
+export function fakeEdits(answer: CommandOutcome = { kind: "noop" }) {
+  const ran: Command[] = [];
+  let outcome = answer;
+  const edits: Pick<DocumentEdits, "run" | "stamps"> = {
+    run: (command) => {
+      ran.push(command);
+      return outcome;
+    },
+    stamps: { clock: { nowIso: () => "2026-01-01T00:00:00.000Z" }, editor: { name: () => "Tester" } }
+  };
+  return { edits, ran, answer: (next: CommandOutcome): void => { outcome = next; } };
+}
+
+export function fakeUndo() {
+  const calls: string[] = [];
+  const undo: Pick<UndoControl, "undo" | "redo"> = {
+    undo: () => { calls.push("undo"); },
+    redo: () => { calls.push("redo"); }
+  };
+  return { undo, calls };
 }
 
 export function fakeSaveState(initial: { unsaved?: boolean; busy?: boolean } = {}) {

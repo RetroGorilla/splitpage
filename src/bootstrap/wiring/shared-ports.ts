@@ -16,6 +16,8 @@ import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import type { DocumentDestination } from "../../application/transitions/ports.ts";
+import type { Transitions } from "../../application/transitions/transitions.ts";
 import { normalizeTagName } from "../../core/document/tags.ts";
 import { breakUndoCoalescing, flushEdits, lastUndoEntry, redo, undo } from "../../js/12a-undo.js";
 import type { ProductionIndexOwner } from "../../core/production/index.ts";
@@ -38,7 +40,7 @@ import { productionIndex } from "../../legacy/production-index-bridge.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
 import { currentDocument, editAllowed, onDocumentReplaced, onRefresh, onSessionChange, readSession, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../../legacy/session-bridge.ts";
-import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
+import { captureOperation, documentTransitions, stillOwns } from "../../legacy/transition-bridge.ts";
 
 const actions: Pick<ActionRegistry, "invoke" | "view"> = {
   invoke: (id, source, input) => appActions.invoke(id, source, input),
@@ -196,6 +198,15 @@ const recents: RecentFiles = {
   routeOpen: (request) => desktopPort()?.routeOpen(request)
 };
 
+const transitions: Transitions<DocumentDestination> = {
+  open: (opening) => documentTransitions().open(opening),
+  startNew: (arrival) => documentTransitions().startNew(arrival),
+  restore: (restoration) => documentTransitions().restore(restoration),
+  recover: (recovery) => documentTransitions().recover(recovery),
+  publish: (ctx, publication) => documentTransitions().publish(ctx, publication),
+  copyId: () => documentTransitions().copyId()
+};
+
 const shared = {
   ...effects,
   actions,
@@ -214,7 +225,8 @@ const shared = {
   ownership,
   pictures,
   recents,
-  undo: undoControl
+  undo: undoControl,
+  transitions
 };
 
 export function sharedPorts(): typeof shared {
