@@ -21,7 +21,8 @@ import {
   stillRestoring,
   useBrowserDraftFactory
 } from "../legacy/recovery-bridge.ts";
-import { NO_DESTINATION, documentTransitions, openDocument } from "../legacy/transition-bridge.ts";
+import { documentTransitions, openDocument } from "../legacy/transition-bridge.ts";
+import { NO_DESTINATION } from "../application/transitions/ports.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 import { parseProjectFileState } from "../adapters/formats/project-file.ts";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";

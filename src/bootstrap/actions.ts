@@ -3,16 +3,19 @@ import { registerAll } from "../application/actions.ts";
 import { mountShortcuts } from "../features/shortcuts/mount.ts";
 import { showRefusal } from "../js/12-dirty-toast.js";
 import { runMenuCommandsWith } from "../js/20f-desktop.js";
-import { registerEditorOpenActions } from "../legacy/editor-open-actions.ts";
+import { editorOpenActions } from "../legacy/editor-open-actions.ts";
 import { registerFileActions } from "../legacy/file-actions.ts";
 import { helpMenuActions } from "../legacy/help-actions.ts";
 import { nativeMenuRunner } from "../legacy/native-menu.ts";
 import { registerShareActions } from "../legacy/share-actions.ts";
-import { registerThisDocumentActions } from "../legacy/this-document-actions.ts";
+import { hideShotActions, thisDocumentActions } from "../legacy/this-document-actions.ts";
 import { registerViewActions } from "../legacy/view-actions.ts";
+import { rowsActions } from "./wiring/editor.ts";
+import { rundownMinimizeActions, rundownSceneActions } from "./wiring/rundown.ts";
 import { scriptZoomActions } from "./wiring/script-zoom.ts";
 import { helpActions } from "./wiring/help.ts";
 import { updateActions } from "./wiring/update.ts";
+import { galleryActions } from "./wiring/gallery.ts";
 
 let running: (() => void) | null = null;
 
@@ -24,7 +27,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
   if (running) throw new Error("the actions are already started; stop them first");
   const steps: readonly (() => () => void)[] = [
     () => registry.presentRefusals(presentRefusal),
-    () => registerThisDocumentActions(registry),
+    () => registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]),
     () => registerFileActions(registry),
     () => registerViewActions(registry),
     () => {
@@ -33,7 +36,8 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     },
     () => registerShareActions(registry),
     () => registerAll(registry, scriptZoomActions()),
-    () => registerEditorOpenActions(registry),
+    () => registerAll(registry, [...rundownSceneActions(), ...galleryActions(), ...editorOpenActions()]),
+    () => registerAll(registry, rowsActions()),
     () => runMenuCommandsWith(nativeMenuRunner(registry, presentRefusal)),
     () => mountShortcuts({ target: keyTarget, registry })
   ];
