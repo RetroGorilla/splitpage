@@ -4,12 +4,18 @@ import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";
-import { mergeProductionTags, mergeStates } from "../js/03-sync.js";
+import { mergeProductionTags } from "../js/03-sync.js";
+import { mergeStates } from "../legacy/merge-bridge.ts";
+import "./_merge-started.mjs";
 import { fromHtml, toHtml } from "../js/04c-doc-model.js";
 import { ensureTagIds, isTagId, registryEntryById } from "../js/07-production-tags.js";
 import { renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, currentDocument } from "../legacy/session-bridge.ts";
-import { retagRewrites } from "../legacy/tag-rewrites.ts";
+import { retagRewrites as planRetagRewrites } from "../application/commands/tag-rewrites.ts";
+import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
+
+const retagText = sharedPorts().text;
+const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 import { loadTestDocument } from "./_document.mjs";
 
 const span = (cat, name, text) =>

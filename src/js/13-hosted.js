@@ -26,13 +26,10 @@ import {
   migrateDocument
 } from "./02b-doc-id.js";
 import {
-  applyMerge,
   getEditorName,
-  mergeStates,
-  reportMerge,
-  setBaseState,
-  stashLocalWork
+  setBaseState
 } from "./03-sync.js";
+import { applyMerge, mergeStates, reportMerge } from "../legacy/merge-bridge.ts";
 import {
   ensureBytes,
   inlineStateImages,
@@ -55,7 +52,7 @@ import {
 import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { confirmSavedNow, haltAutoSave, requestSave, resumeAutoSave, saveBusy, saveChanges, saveDoc, scheduleAutoSave, unsavedChanges } from "../legacy/save-bridge.ts";
 import { createServerDestination } from "../application/save/server-destination.ts";
-import { conflictStash, draftResume } from "../legacy/recovery-bridge.ts";
+import { armBrowserServerDraft, conflictStash, draftResume, offerBrowserDraftAfterLinkOff, stashLocalWork } from "../legacy/recovery-bridge.ts";
 import { captureOperation, documentTransitions, keepSnapshot, stillOwns } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
 import { deliverFile } from "../legacy/file-delivery.ts";
@@ -64,7 +61,6 @@ import { appActions } from "../legacy/app-actions.ts";
 import { joinServer } from "../adapters/transport/server-join.ts";
 import { setMenuItemReason } from "./18b-file-menu.js";
 import { sidePanels } from "../legacy/panels-bridge.ts";
-import { armBrowserServerDraft, offerBrowserDraftAfterLinkOff } from "./20g-drafts.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { idMap } from "../core/document/id-map.ts";
 import { VIEWING_ONLY } from "../application/collaboration/review.ts";

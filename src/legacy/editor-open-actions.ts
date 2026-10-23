@@ -1,6 +1,4 @@
-import type { ActionDefinition, ActionRegistry, Availability } from "../application/actions.ts";
-import { registerAll } from "../application/actions.ts";
-import { openAnnotator } from "../js/05w-annotate.js";
+import type { ActionDefinition, Availability } from "../application/actions.ts";
 import { openGalleryLink } from "../js/06-rows.js";
 import { openTagComposer } from "../js/07-production-tags.js";
 import { openCommentComposer } from "../js/10-comments.js";
@@ -31,12 +29,8 @@ function opener(id: string, label: string, run: (input: unknown) => void): Actio
   };
 }
 
-export function registerEditorOpenActions(registry: ActionRegistry): () => void {
-  return registerAll(registry, [
-    opener("annotate-picture", "Draw on picture", (input) => {
-      const at = fields("annotate-picture", input, ["rowId"], ["slot"]);
-      openAnnotator(at["rowId"], at["slot"]);
-    }),
+export function editorOpenActions(): ActionDefinition[] {
+  return [
     opener("open-picture-link", "Open picture link", (input) => {
       const at = fields("open-picture-link", input, ["rowId"], ["slot"]);
       openGalleryLink(at["rowId"], at["slot"], at["key"]);
@@ -47,5 +41,5 @@ export function registerEditorOpenActions(registry: ActionRegistry): () => void 
     opener("tag-selection", "Tag selection", (input) => {
       openTagComposer(fields("tag-selection", input, ["rowId", "field", "quotedText"], ["occurrenceIndex"]));
     })
-  ]);
+  ];
 }

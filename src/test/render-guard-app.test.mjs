@@ -14,11 +14,12 @@ await bootApp();
 
 const { currentDocument, liveSession, mergeBase } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
-const { applyMerge, restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { applyMerge } = await import("../legacy/merge-bridge.ts");
 const { renderAbsorbed } = await import("../js/05-render.js");
 const { cellSelection } = await import("../features/editing/cell-selection.ts");
 const { pasteIntoCell } = await import("../js/05c-clipboard.js");
-const annotate = await import("../js/05w-annotate.js");
+const annotate = await import("../features/gallery/annotate.js");
 const { flushEdits, lastUndoEntry, nextRedoEntry, undo, undoSizes } = await import("../js/12a-undo.js");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
