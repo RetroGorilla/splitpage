@@ -367,9 +367,10 @@ function onPrefChanged(key) {
 
 export function __init(given) {
   ports = given;
+  var unhear = ports.elsewhere(onPrefChanged);
   var unsubscribe = ports.changes.onChange(function (change) {
     onPrefChanged(change.name);
-  });
+  }, { elsewhere: false });
   var test = {
     open: openSettings,
     close: closeSettings,
@@ -380,6 +381,7 @@ export function __init(given) {
     openSettings: openSettings,
     dispose: function () {
       unsubscribe();
+      unhear();
       closeSettings();
       while (listeners.length) listeners.pop()();
       var m = modal();

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { jsdomWindow } from "../../../tests/features/editing/jsdom.mjs";
 import { createActionRegistry } from "../../application/actions.ts";
 import { createPreferences } from "../../application/preferences/preferences.ts";
-import type { PreferenceNotice } from "../../application/preferences/preferences.ts";
+import type { PreferenceName, PreferenceNotice } from "../../application/preferences/preferences.ts";
 import { __init as mountSettings } from "./settings.js";
 import type { SettingsMount, SettingsPorts } from "./ports.ts";
 
@@ -15,6 +15,8 @@ function setup() {
   win.document.body.innerHTML = '<button id="btn-file">File</button>';
   const storage = new Map<string, string>();
   const hearing = new Set<(change: PreferenceNotice) => void>();
+  const stored = new Set<(name: PreferenceName | null) => void>();
+  let signedIn = false;
   const preferences = createPreferences({
     storage: () => ({ getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => { storage.set(key, value); }, removeItem: (key) => { storage.delete(key); } }),
     announce: (change) => {
@@ -26,6 +28,7 @@ function setup() {
   const ports: SettingsPorts = {
     preferences,
     changes: { onChange: (listener) => { hearing.add(listener); return () => { hearing.delete(listener); }; } },
+    elsewhere: (listener) => { stored.add(listener); return () => { stored.delete(listener); }; },
     actions: createActionRegistry(),
     notices: { show: (message, kind) => {
       calls.push(["notice", message, kind]);
@@ -47,13 +50,13 @@ function setup() {
       defaultServer: "https://scripts.example.com",
       address: () => "https://scripts.example.com",
       normalize: () => null,
-      view: () => ({ servedHere: false, label: "", signedIn: false, isDefault: true }),
+      view: () => ({ servedHere: false, label: "", signedIn, isDefault: true }),
       signOut: () => { calls.push(["signout"]); }
     },
     desktop: { running: () => false, renderNotice: () => { calls.push(["desktop"]); } }
   };
   const mounted: SettingsMount = mountSettings(ports);
-  return { mounted, ports, preferences, calls, hearing };
+  return { mounted, ports, preferences, calls, hearing, stored, signIn: (on: boolean) => { signedIn = on; } };
 }
 
 function input(id: string): HTMLInputElement {
@@ -116,5 +119,27 @@ test("settings routes controls to their existing owners and disposal permits a f
     assert.equal(win.document.getElementById("settings-modal")?.hidden, true);
   } finally {
     fresh.dispose();
+  }
+});
+
+test("settings repaints when another tab changes stored app state, a preference or not, and stops hearing it once disposed", () => {
+  const h = setup();
+  const signInText = (): string | null | undefined => win.document.getElementById("settings-collab-signin")?.textContent;
+  try {
+    h.mounted.openSettings({ focus: "settings-name" });
+    input("settings-name").value = "Unsubmitted";
+    h.signIn(true);
+    for (const listener of h.stored) listener(null);
+    assert.equal(signInText(), "Signed in on this device");
+    assert.equal(input("settings-name").value, "Unsubmitted");
+    assert.equal(win.document.activeElement?.id, "settings-name");
+    h.preferences.setCommentAuthor("Saved");
+    input("settings-name").value = "Unsubmitted";
+    for (const listener of h.stored) listener("commentAuthor");
+    assert.equal(input("settings-name").value, "Saved");
+    h.mounted.dispose();
+    assert.equal(h.stored.size, 0);
+  } finally {
+    h.mounted.dispose();
   }
 });

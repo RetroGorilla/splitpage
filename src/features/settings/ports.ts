@@ -1,6 +1,6 @@
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
-import type { PreferenceChanges, Preferences } from "../../application/preferences/preferences.ts";
+import type { PreferenceChanges, PreferenceName, Preferences } from "../../application/preferences/preferences.ts";
 import type { ScreenState } from "../../application/screen.ts";
 
 export interface SettingsControls {
@@ -19,6 +19,7 @@ export interface SettingsPorts {
   readonly actions: Pick<ActionRegistry, "invoke" | "view">;
   readonly notices: Pick<NoticePort, "show">;
   readonly changes: PreferenceChanges;
+  readonly elsewhere: (listener: (name: PreferenceName | null) => void) => () => void;
   readonly preferences: Pick<Preferences,
     "theme" | "setTheme" | "clock" | "setClock" | "scriptScale" | "setScriptScale" |
     "rundownMin" | "setRundownMin" | "tagIcons" | "setTagIcons" | "hideShot" |
