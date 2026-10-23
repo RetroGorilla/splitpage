@@ -340,7 +340,7 @@ export function __init() {
       else if (action === "open") newTabOpenFile();
       else if (action === "join") appActions.invoke("servers", "button");
       else if (action === "paste") openPasteAsNewDocument();
-      else if (action === "gdoc") appActions.invoke("gdoc-import", "button");
+      else if (action === "gdoc") appActions.invoke("show-gdoc-import", "button");
       else if (action === "dismiss") closeNewTabPage();
       else if (action === "tour") { closeNewTabPage(); appActions.invoke("tour", "button"); }
       else if (action === "open-recent") openRecent(target.getAttribute("data-file-id"));

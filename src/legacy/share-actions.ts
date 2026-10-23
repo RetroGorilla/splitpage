@@ -95,6 +95,13 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       run: () => { openGdocModal(); }
     },
     {
+      id: "show-gdoc-import",
+      label: "Show the Google Docs import",
+      group: "File",
+      availability: () => ({ enabled: true, visible: false }),
+      run: () => { openGdocModal(); }
+    },
+    {
       id: "drive-open",
       label: "Import: Google Drive…",
       group: "File",

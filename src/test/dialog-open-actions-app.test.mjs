@@ -28,8 +28,8 @@ function open() {
   flushEdits();
 }
 
-test("the guest-name prompt and closing the file menu are actions no menu lists", () => {
-  for (const id of ["ask-guest-name", "close-file-menu"]) {
+test("the guest-name prompt, closing the file menu and the servers and Google Docs openers are actions no menu lists", () => {
+  for (const id of ["ask-guest-name", "close-file-menu", "show-servers-dialog", "show-gdoc-import"]) {
     assert.equal(appActions.view(id).visible, false, id);
     assert.equal(appActions.view(id).enabled, true, id);
   }
@@ -42,6 +42,20 @@ test("running servers opens the servers dialog", () => {
     assert.equal(el("connect-modal").hidden, false);
   } finally {
     el("connect-modal").querySelector(".modal-close").click();
+  }
+});
+
+test("show-servers-dialog opens the servers dialog over an open dialog, where servers refuses", () => {
+  open();
+  try {
+    assert.equal(appActions.invoke("gdoc-import", "button").kind, "ran");
+    assert.notEqual(appActions.invoke("servers", "button").kind, "ran");
+    assert.equal(el("connect-modal").hidden, true);
+    assert.equal(appActions.invoke("show-servers-dialog", "button").kind, "ran");
+    assert.equal(el("connect-modal").hidden, false);
+  } finally {
+    el("connect-modal").querySelector(".modal-close").click();
+    closeGdocModal();
   }
 });
 
@@ -70,6 +84,20 @@ test("running gdoc-import opens the Google Docs import", () => {
     assert.equal(el("gdoc-modal").hidden, false);
   } finally {
     closeGdocModal();
+  }
+});
+
+test("show-gdoc-import opens the Google Docs import over an open dialog, where gdoc-import refuses", () => {
+  open();
+  try {
+    assert.equal(appActions.invoke("servers", "button").kind, "ran");
+    assert.notEqual(appActions.invoke("gdoc-import", "button").kind, "ran");
+    assert.equal(el("gdoc-modal").hidden, true);
+    assert.equal(appActions.invoke("show-gdoc-import", "button").kind, "ran");
+    assert.equal(el("gdoc-modal").hidden, false);
+  } finally {
+    closeGdocModal();
+    el("connect-modal").querySelector(".modal-close").click();
   }
 });
 

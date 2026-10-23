@@ -470,7 +470,7 @@ export function initDesktop() {
   notifyDesktopDocumentState();
 
   desktopPort().getSessionInfo().then(function (info) {
-    if (info && info.hosting) appActions.invoke("servers", "button");
+    if (info && info.hosting) appActions.invoke("show-servers-dialog", "button");
   }).catch(function () {});
 }
 
