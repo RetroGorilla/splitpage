@@ -7,7 +7,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { __init as initBroll } from "../js/08c-broll.js";
+import "./_broll-mounted.mjs";
 import { __init as initBrollPanel } from "../js/08d-broll-panel.js";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import { PRINT_COLORS, exportDateText } from "../adapters/formats/export-kit.ts";
@@ -19,7 +19,6 @@ import { loadTestDocument } from "./_document.mjs";
 
 initStatus();
 initTags();
-initBroll();
 
 const PW = 612, M = 54;
 const copy = (o) => JSON.parse(JSON.stringify(o));

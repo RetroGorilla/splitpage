@@ -8,7 +8,7 @@ import { preferences } from "../legacy/preferences-bridge.ts";
 import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { __init as initBroll } from "../js/08c-broll.js";
+import "./_broll-mounted.mjs";
 import { exportComments } from "../adapters/formats/export-kit.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import {
@@ -26,7 +26,6 @@ import { loadTestDocument } from "./_document.mjs";
 
 initSceneStatus();
 initTags();
-initBroll();
 
 const copy = (o) => JSON.parse(JSON.stringify(o));
 const demo = () => { loadTestDocument(migrateRows(copy(LONG_DEMO.state))); };

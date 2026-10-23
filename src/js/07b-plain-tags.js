@@ -3,7 +3,7 @@ import { isBlankTagName } from "../core/production/tags.ts";
 import { domToPos } from "../features/editing/cell-dom.ts";
 import { cellEditing } from "../legacy/editor-bridge.ts";
 import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
-import { isInsideTagOrLink } from "./07-production-tags.js";
+import { isInsideTagOrLink } from "../features/common/dom.ts";
 import { cappedName, escapeHtml } from "../core/document/text-policy.ts";
 import { replaceText, replaceWithTag } from "../core/text/edits.ts";
 import { namedTagId, projection } from "../core/text/runs.ts";

@@ -2,7 +2,9 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { makeId, migrateRows } from "../js/02-state.js";
-import { __init as initBroll, brollEntries, derivedRecordsPlan } from "../js/08c-broll.js";
+import { derivedRecordsPlan } from "../bootstrap/wiring/broll.ts";
+import { brollEntries } from "../legacy/broll-bridge.ts";
+import "./_broll-mounted.mjs";
 import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
@@ -18,7 +20,6 @@ import { loadTestDocument } from "./_document.mjs";
 
 const SEED = 0x70726f64;
 
-initBroll();
 initHistory();
 
 const row = (id, audioText, visualText) => ({
