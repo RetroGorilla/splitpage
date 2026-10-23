@@ -321,7 +321,12 @@ export function rundownX(seconds) {
 }
 
 export function onRundownPaint(fn) {
-  if (typeof fn === "function") paintListeners.push(fn);
+  if (typeof fn !== "function") return function () {};
+  paintListeners.push(fn);
+  return function () {
+    var at = paintListeners.indexOf(fn);
+    if (at >= 0) paintListeners.splice(at, 1);
+  };
 }
 
 export function rundownLayout() {
