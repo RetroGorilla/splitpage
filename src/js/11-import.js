@@ -1,4 +1,5 @@
 import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
+import { MD_EXPORT_TAIL_RE, columnIndicesFromHeader, markdownExportScript, parseMarkdownTable } from "../adapters/formats/markdown-table.ts";
 import { stampRow } from "./03-sync.js";
 import { sanitizeHtml } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
@@ -36,8 +37,6 @@ function splitImportText(text, mode) {
 
 var VISUAL_LABEL_RE = /^\s*(visual|video|scene|shot|b-?roll|image|screen)\s*:\s*(.*)$/i;
 var AUDIO_LABEL_RE = /^\s*(audio|vo|voiceover|voice-over|narration|dialogue|script)\s*:\s*(.*)$/i;
-var VISUAL_HEADER_RE = /^(visual|video|scene|shot|b-?roll|image|screen)s?$/i;
-var AUDIO_HEADER_RE = /^(audio|vo|voiceover|voice-over|narration|dialogue|script)s?$/i;
 
 export function detectTwoColumnFormat(text) {
   if (parseStackedMarkdownExport(text)) return "stacked";
@@ -58,43 +57,6 @@ export function detectTwoColumnFormat(text) {
   if (hasVisualLabel && hasAudioLabel && firstIsLabel) return "labels";
 
   return null;
-}
-
-function columnIndicesFromHeader(header) {
-  var visualIdx = header.findIndex(function (c) { return VISUAL_HEADER_RE.test(c.trim()); });
-  var audioIdx = header.findIndex(function (c) { return AUDIO_HEADER_RE.test(c.trim()); });
-  if (visualIdx !== -1 && audioIdx === -1) audioIdx = visualIdx === 0 ? 1 : 0;
-  else if (audioIdx !== -1 && visualIdx === -1) visualIdx = audioIdx === 0 ? 1 : 0;
-  return { visualIdx: visualIdx, audioIdx: audioIdx };
-}
-
-function splitTableRowCells(line) {
-  var trimmed = line.replace(/^\|/, "").replace(/\|$/, "");
-  var cells = [], current = "";
-  for (var i = 0; i < trimmed.length; i++) {
-    if (trimmed[i] === "\\" && trimmed[i + 1] === "|") { current += "|"; i++; continue; }
-    if (trimmed[i] === "|") { cells.push(current.trim()); current = ""; continue; }
-    current += trimmed[i];
-  }
-  cells.push(current.trim());
-  return cells;
-}
-
-var MD_EXPORT_TAIL_RE = /^\s*##\s+(Production breakdown|B-roll shot list|Comments)\s*$/;
-var MD_OWN_TABLE_HEADERS = ["#|visual|audio|status", "#|start|status|visual|audio|read"];
-
-function markdownExportScript(text) {
-  var lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
-  var sawHeader = false;
-  for (var i = 0; i < lines.length; i++) {
-    if (!sawHeader) {
-      sawHeader = lines[i].indexOf("|") !== -1 &&
-        MD_OWN_TABLE_HEADERS.indexOf(splitTableRowCells(lines[i].trim()).join("|").toLowerCase()) !== -1;
-    } else if (MD_EXPORT_TAIL_RE.test(lines[i])) {
-      return lines.slice(0, i).join("\n");
-    }
-  }
-  return text;
 }
 
 var MD_SCENE_HEADING_RE = /^###\s+Scene\s+\d+(\s+·\s+\d+(:\d\d)+)?\s*$/;
@@ -146,39 +108,6 @@ function parseStackedMarkdownExport(text) {
       audioText: audio === "_(blank scene)_" ? "" : cellText(audio)
     };
   });
-}
-
-export function parseMarkdownTable(text, opts) {
-  opts = opts || {};
-  var lines = markdownExportScript(text).replace(/\r\n/g, "\n").split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
-  var rows = [];
-  lines.forEach(function (line) {
-    if (line.indexOf("|") === -1) return;
-    var cells = splitTableRowCells(line);
-    if (cells.every(function (c) { return /^:?-{2,}:?$/.test(c) || c === ""; })) return;
-    rows.push(cells);
-  });
-  if (!rows.length) return [];
-  var visualIdx = 0, audioIdx = 1, startIdx = 0, statusIdx = -1;
-  var header = rows[0].map(function (c) { return c.toLowerCase(); });
-  var idxs = columnIndicesFromHeader(header);
-  if (idxs.visualIdx !== -1 || idxs.audioIdx !== -1) {
-    startIdx = 1;
-    if (idxs.visualIdx !== -1) visualIdx = idxs.visualIdx;
-    if (idxs.audioIdx !== -1) audioIdx = idxs.audioIdx;
-    statusIdx = header.findIndex(function (c) { return c.trim() === "status"; });
-  }
-  var out = [];
-  for (var i = startIdx; i < rows.length; i++) {
-    var v = rows[i][visualIdx] || "", a = rows[i][audioIdx] || "";
-    if (!v && !a && !opts.keepEmpty) continue;
-    out.push({
-      visualText: v,
-      audioText: a,
-      statusText: statusIdx === -1 ? "" : (rows[i][statusIdx] || "")
-    });
-  }
-  return out;
 }
 
 function parseTabDelimited(text) {

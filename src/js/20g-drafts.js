@@ -23,7 +23,7 @@ import {
 } from "../legacy/recovery-bridge.ts";
 import { NO_DESTINATION, documentTransitions, openDocument } from "../legacy/transition-bridge.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
-import { parseProjectFileState } from "./18-local-files.js";
+import { parseProjectFileState } from "../adapters/formats/project-file.ts";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { SCHEMA_VERSION } from "../core/document/fields.ts";

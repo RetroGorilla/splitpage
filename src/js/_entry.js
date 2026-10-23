@@ -65,6 +65,7 @@ import { importDocumentSource } from "./11-import.js";
 import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
+import { legacyProjectFileServices } from "./20d-formats.js";
 import { wireApp, mountRundownFeature, mountScriptZoomFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
@@ -82,6 +83,7 @@ try {
     transitions: { destination: documentDestinationPort, identity: documentIdentityPort, history: documentHistoryPort },
     sources: function () { return [projectFileSource(), importDocumentSource(), serverDocumentSource()]; },
     recovery: function () { return Object.assign(draftRecoveryPorts(), { merge: applyMerge }); },
+    projectFiles: legacyProjectFileServices,
     keyTarget: window
   });
 } catch (error) {

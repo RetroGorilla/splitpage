@@ -1,15 +1,13 @@
 import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import {
   createHeldDesktop,
   createHeldFetch,
   createHeldFileHandle,
   firstWriteBeforeAdoption,
   mockClock,
-  rightToday,
-  traceFields
+  rightToday
 } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
@@ -19,7 +17,6 @@ const { currentDocument, liveSession, mergeBase, onDocumentReplaced, requestRefr
 
 const session = liveSession();
 const probe = { epoch: () => (sessionStarted() ? session.epoch() : null), held: () => (sessionStarted() ? session.read((doc) => doc) : null) };
-const TRACED = ["docIdWrittenOut"];
 const tracing = new Set();
 
 let unfollow = null;
@@ -41,10 +38,10 @@ onDocumentReplaced(function () {
 });
 
 function traceDocument() {
-  const trace = traceFields(S, TRACED, probe);
+  const events = [];
   followAbsorbs();
-  tracing.add(trace.events);
-  return { events: trace.events, stop: () => { tracing.delete(trace.events); trace.stop(); } };
+  tracing.add(events);
+  return { events, stop: () => { tracing.delete(events); } };
 }
 
 const bootTrace = traceDocument();
@@ -62,13 +59,13 @@ const { flushEdits } = await import("../js/12a-undo.js");
 const { exportMetaLine, toMarkdownDoc } = await import("../adapters/formats/export-text.ts");
 const { captureExportDocument, exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { exportFacts } = await import("../adapters/formats/export-kit.ts");
-const { buildMarkdownProject, buildSplitpageFile } = await import("../js/20d-formats.js");
+const { buildMarkdownProject, buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
 const { preferences } = await import("../legacy/preferences-bridge.ts");
 const { saveAuthorName } = await import("../js/10-comments.js");
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { startNewScript } = await import("../js/18b-file-menu.js");
-const { parseProjectFileState } = await import("../js/18-local-files.js");
+const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");
 const { finishServerDetect, publishToServer } = await import("../js/13-hosted.js");
 const { SERVER_RESUME_KEY } = await import("../application/location/server-status.ts");
 const homeModule = await import("../legacy/location-bridge.ts");

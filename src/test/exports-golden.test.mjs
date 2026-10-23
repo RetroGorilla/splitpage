@@ -24,7 +24,7 @@ const { exportMetaLine, markdownExportImages, toMarkdownDoc, toMarkdownTableDoc 
 const { captureExportDocument } = await import("../js/14b-export-kit.js");
 const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts");
 const { exportFacts } = await import("../adapters/formats/export-kit.ts");
-const { buildMarkdownProject, buildSplitpageFile } = await import("../js/20d-formats.js");
+const { buildMarkdownProject, buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 const EM_DASH = String.fromCharCode(0x2014);

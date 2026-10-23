@@ -994,11 +994,11 @@ export function __init(given) {
   updateRundownMinControls();
   listen(toggle, "click", function () { ports.actions.invoke("toggle-rundown-min", "button"); });
   offs.push(ports.changes.onChange(function (change) {
-    if (change.name !== "rundownMin" || change.elsewhere) return;
+    if (change.name !== "rundownMin") return;
     var v = change.value;
     var on = v === true || v === "1" || v === 1 ? true : v === false || v === "0" || v === 0 ? false : ports.minimized.rundownMin();
     setRundownMinimized(on, false);
-  }));
+  }, { elsewhere: false }));
 
   if (rowsEl) listen(rowsEl, "focusin", function (e) { noteCurrentRow(e.target); });
   listen(document, "selectionchange", function () { noteCurrentRow(document.activeElement); });

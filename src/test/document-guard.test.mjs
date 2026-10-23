@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 
 globalThis.location = new URL("https://splitpage.test/index.html?document-guard=1");
 
-const { S } = await import("../js/_state.js");
 const { migrateRows } = await import("../js/02-state.js");
 const { DocumentWriteError, documentGuardAsked, documentGuardOn, isDocumentView, quietly, rawOf } = await import("../legacy/document-guard.ts");
 const { currentDocument, heldDocument, liveDocumentPort, liveSession, runDocumentEdit, sessionStamps } = await import("../legacy/session-bridge.ts");
@@ -14,7 +13,7 @@ const { flushEdits, undo, undoSizes } = await import("../js/12a-undo.js");
 const { loadTestDocument } = await import("./_document.mjs");
 
 function shown() {
-  return S.state;
+  return currentDocument();
 }
 
 function script(title) {

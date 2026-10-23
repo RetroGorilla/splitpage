@@ -1,5 +1,6 @@
 import "./_dom.mjs";
 import "./_export-services-started.mjs";
+import "./_project-file-services-started.mjs";
 import "./_preferences-started.mjs";
 import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
@@ -27,12 +28,7 @@ import {
 } from "../adapters/formats/docx.ts";
 import { buildCsv } from "../adapters/formats/csv.ts";
 import { prompterSceneHtml } from "../js/20-teleprompter.js";
-import {
-  applyMarkdownProject,
-  buildMarkdownProject,
-  buildSplitpageFile,
-  parseMarkdownProject
-} from "../js/20d-formats.js";
+import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject } from "../adapters/formats/project-file.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
