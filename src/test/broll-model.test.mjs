@@ -13,7 +13,11 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { removeBrollProp, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, currentDocument } from "../legacy/session-bridge.ts";
-import { retagRewrites } from "../legacy/tag-rewrites.ts";
+import { retagRewrites as planRetagRewrites } from "../application/commands/tag-rewrites.ts";
+import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
+
+const retagText = sharedPorts().text;
+const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 
 import { buildBreakdownCsv, buildBrollCsv } from "../adapters/formats/csv.ts";
 import { buildShotListPdf } from "../adapters/formats/pdf.ts";

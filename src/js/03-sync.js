@@ -31,7 +31,7 @@ import {
 } from "./10-comments.js";
 import { cleanAuthorName } from "../core/document/people.ts";
 import { showToast } from "./12-dirty-toast.js";
-import { personColor } from "./13a-presence.js";
+import { presence } from "../legacy/presence-bridge.ts";
 import { autoSavePolicy, confirmBaseline, saveChanges } from "../legacy/save-bridge.ts";
 import { captureRestore, stillRestoring } from "../legacy/recovery-bridge.ts";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
@@ -195,7 +195,7 @@ export function updateIdentityChip() {
   var dot = chip.querySelector(".identity-dot");
   if (dot) {
     dot.setAttribute("aria-hidden", "true");
-    if (name) dot.style.setProperty("--person", personColor(name));
+    if (name) dot.style.setProperty("--person", presence().personColor(name));
     else dot.style.removeProperty("--person");
   }
 }
@@ -283,7 +283,7 @@ function openAnchorPopover(host, id, label, html) {
 }
 
 export function personSwatchesHtml(name, radioName, legendClass) {
-  var current = preferences().myColor() || personColor(name || "");
+  var current = preferences().myColor() || presence().personColor(name || "");
   return '<fieldset class="swatch-group" role="radiogroup" aria-label="Your colour">' +
     '<legend class="' + (legendClass || "anchor-popover-label") + '">Your colour</legend>' +
     '<div class="swatch-row">' +
@@ -457,7 +457,7 @@ function historyInitials(name) {
 function historyPersonHtml(name) {
   name = String(name || "").trim();
   if (!name) return '<span class="history-none">—</span>';
-  return '<span class="person-avatar" style="--size: 20px; --presence: ' + escapeHtml(personColor(name)) + '" aria-hidden="true">' +
+  return '<span class="person-avatar" style="--size: 20px; --presence: ' + escapeHtml(presence().personColor(name)) + '" aria-hidden="true">' +
       escapeHtml(historyInitials(name)) + '</span>' +
     '<span class="history-person">' + escapeHtml(name) + '</span>';
 }

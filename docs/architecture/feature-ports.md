@@ -183,20 +183,23 @@ Each is built in `sharedPorts()` from the owners and, until they retire, the bri
 | P9 Document edits | `DocumentEdits`, new, `application/session/document-edits.ts`: `run(command)`, `edit(command)` (throws on failure, as `runDocumentEdit` does), `allowed()`, `stamps`, `text` | | session bridge: `runCommand`, `runDocumentEdit`, `editAllowed`, `sessionStamps`, `sessionTextPorts`, `REVIEW_ONLY` | 17 | read time | Opus: edits and undo |
 | P10 Editing page | The owner types that exist in `application/editing/`: `CellEditing`, `PaintGuard`, `EditorSelection`, `RowDrag` (gains `onEnd`), `FocusMemory`, `DeleteConfirmation` | narrowed | editor and production-editing bridges | 18 | rundown | Opus: the editing hot path |
 | P11 Undo control | `UndoControl`, new, `application/editing/undo-control.ts`: `breakCoalescing()`, `flush()`, `undo()`, `redo()`, `last()` | | `12a-undo` until it becomes the undo owner (Wave 2) | 13 | read time | Opus: undo |
-| P12 Operation ownership | `SaveOwnershipPort` (`capture`, `stillOwns`), which exists in `application/save/coordinator.ts`: whether an async job still owns the document it started on | | transition bridge | 8 | gallery (`05e`) | Opus: async work against a replaced document |
-| P13 Picture store | `PictureStore`, new, `application/media/picture-store.ts`: intern, persist, read and render stored pictures | | `adapters/storage/02c-blobs.js`, `02d-gallery.js` | 16 | gallery (`05e`) | Opus: durable storage |
+| P12 Operation ownership | `SaveOwnershipPort` (`capture`, `stillOwns`), which exists in `application/save/coordinator.ts`: whether an async job still owns the document it started on | | transition bridge | 8 | its own Opus PR before `05w` (Codex), since `05e` waits on P11 | Opus: async work against a replaced document |
+| P13 Picture store | `PictureStore`, new, `application/media/picture-store.ts`: intern, persist, read and render stored pictures | | `adapters/storage/02c-blobs.js` | 16 | its own Opus PR before `05w` (Codex), since `05e` waits on P11 | Opus: durable storage |
 | P14 Side panels | `SidePanels`, from L3f (`application/side-panels.ts`) | | panels bridge | 6 | help | done in L3f |
-| P15 Save status | `SaveStatus`, new, `application/save/`: `unsaved()`, `busy()`, `onChange(listener)`, `dueNow()` | read only, plus "autosave now" and "resume autosave" | save bridge | 16 | copy, paste and scene selection (`05h` asks for an autosave now) | Opus |
+| P15 Save status | `SaveState`, `application/save/save-state.ts` (named so because `SaveStatus` is the status line's view in `status.ts`): `unsaved()`, `busy()`, `onChange(listener)`, `dueNow()`, `resume()`; `sharedPorts().saves` | read only, plus "autosave now" and "resume autosave" | save bridge | 16 | its own PR; first used by copy, paste and scene selection (`05h` asks for an autosave now) | Opus |
 | P16 Document place | `DocumentPlace`, new, `application/location/`: where the document lives, the server's status, and `arrivingOnLink()` (whether this page opened from a share link, used by `20a`, `20b` and `20j`), read only | | location bridge, and `arrivingOnLink` from `13-hosted` until it moves | 30 | its own PR at the start of Wave 3, since the first Wave 3 users (`13a`, `13b`, `20b`) are Codex | Opus |
 | P17 File delivery | `FileDelivery`, new, `application/files/file-delivery.ts`: `deliver(filename, data, options)` saves a file for the person and says whether it was saved, with the same saved or failed notice | | file-delivery bridge, which calls `adapters/files/deliver.ts` | 6 | onboarding (`20b`) | Codex, with the desktop smoke: on the desktop the adapter saves through the preload bridge, and the port only forwards to it |
 | P18 Draft resume | `DraftResume`, which exists in `application/recovery/draft-resume.ts`, narrowed. Onboarding and new tab need only `restorePending()` | | recovery bridge (`draftResume()`), forwarded at call time | 5 | onboarding (`20b`) | Codex for the read-only `restorePending()`. The Opus moves of `13`, `20f` and `20g` widen the `Pick` |
 | P19 Seed check | `SeedCheck`, new, beside `seedCheckMatches` in `application/preferences/seed-check.ts`: `passes()`, true while the page still holds its untouched starting document | | seed-check bridge | 3 | onboarding (`20b`) | Codex |
 | P20 Document transitions | `Transitions` (`application/transitions/transitions.ts`), narrowed. The destination type and `NO_DESTINATION` move from `legacy/transition-bridge.ts` to `application/transitions/ports.ts` | | transition bridge (`documentTransitions`) | 6 | its own Opus PR, before `18b` and `20j` (Wave 3) | Opus: bringing a document in |
-| P21 Production index | `ProductionIndexOwner` (`core/production/index.ts`), narrowed | | production-index bridge | 4 | b-roll records (`08c`) | Opus: the tag ghost reads it on every keystroke |
+| P21 Production index | `ProductionIndexOwner` (`core/production/index.ts`), narrowed | | production-index bridge, as `sharedPorts().production`, which forwards each call at call time | 4 | its own PR; first used by b-roll records (`08c`) | Opus: the tag ghost reads it on every keystroke |
 | P22 Export formats | `ExportRegistry` (`application/export/registry.ts`), narrowed | | export-formats bridge | 3 | the first of `18c` and `18d` | Codex |
 | P23 Startup signal | `StartupSignal` moves from `legacy/startup-bridge.ts` to `application/startup-signal.ts`: `ready()` | | startup bridge (`startupReady`) | 3 | the first of `20` and `20j` | Opus, with that move |
-| P24 Launch facts | `LaunchFacts`, new, beside `runningOnDesktop` in `application/desktop-presence.ts`: `firstTabOfLaunch()`, `hadPriorSession()`, `launchIntent()`, `hasDraftToRestore()`, read only | | `desktopPort()` (`adapters/desktop/desktop-port.ts`), read at call time | 4 (`20b`, `20f`, `20g`, `20j`) | onboarding (`20b`) | Codex, with the desktop smoke |
+| P24 Launch facts | `LaunchFacts`, new, beside `runningOnDesktop` in `application/desktop-presence.ts`: `firstTabOfLaunch()`, `hadPriorSession()`, `launchIntent()`, `hasDraftToRestore()`, `appVersion()` (`20h`), and `sessionInfo()` (`getSessionInfo`, `13b` and `20f`), read only | | `desktopPort()` (`adapters/desktop/desktop-port.ts`), read at call time | 6 (`13b`, `20b`, `20f`, `20g`, `20h`, `20j`) | onboarding (`20b`) | Codex, with the desktop smoke |
 | P25 Last file | `LastFile`, new, `application/files/last-file.ts`: `load()`, the file handle stored from the last session. The Opus moves of `14` and `18` add `remember(handle)` | | `loadLastFileHandle` in `00-prelude` until it moves (Wave 4) | 3 (`18`, `20b`, `20j`) | onboarding (`20b`) | Codex for the read-only `load()` |
+| P26 External links | `ExternalLinks`, new, beside `runningOnDesktop` in `application/desktop-presence.ts`: `available()` (the desktop offers `openExternal`) and `open(url)`, which opens the address in the system browser. Callers keep their own `runningOnDesktop()` checks and browser fallbacks | | `desktopPort().openExternal`, read at call time | 4 (`06`, `11`, `13`, `20a`) | the first of `06` and `20a` | Codex, with the desktop smoke |
+| P27 Recent files | `RecentFiles`, new, `application/files/recent-files.ts`: `list()`, `remove(fileId)`, `clear()`, `read(id)` and `routeOpen(request)` | | `desktopPort()`: `listRecents`, `removeRecent`, `clearRecents`, `readFile`, `routeOpen` | 4 (`18`, `18b`, `20f`, `20j`) | the first of `18b` and `20j` | Opus: opening files brings a document in |
+| P28 Desktop video | `DesktopVideo`, new, beside P13 in `application/media/`: `grant(file)`, `open(token)`, `thumbnail(host, ref)` | | `desktopPort()`: `grantVideoFile`, `openVideoFile`, `videoThumbnail` | 2 (`05v`, `06`) | gallery (`05v`) | Opus, with the gallery |
 
 Two existing ports grow:
 
@@ -231,6 +234,17 @@ Two existing ports grow:
 | `tag-rewrites` (`retagMentions`, `retagRewrites`, used by `08`) | The retag planners move to `application/commands/`, taking P8 as an argument instead of importing the richtext bridge. That happens in their own Codex PR, before `08` moves, and `08` then runs them through P9 |
 | the action files (`*-actions.ts`, `native-menu`) | [Rule 6](#rule-6-features-own-their-action-definitions-bootstrap-owns-their-order) |
 
+**Every desktop port member numbered files use**, and where each goes. A feature may not import `adapters/desktop/desktop-port.ts`, even for types:
+
+| Members | Used by | Goes to |
+| --- | --- | --- |
+| `getUpdateStatus`, `onUpdateStatus`, `downloadUpdate`, `installUpdate` | `20a` | Update's own port (see `20a` below) |
+| `openExternal` | `06`, `11`, `13`, `20a` | P26 |
+| `firstTabOfLaunch`, `hadPriorSession`, `launchIntent`, `hasDraftToRestore`, `appVersion`, `getSessionInfo` | `13b`, `20b`, `20f`, `20g`, `20h`, `20j` | P24 |
+| `listRecents`, `removeRecent`, `clearRecents`, `readFile`, `routeOpen` | `18`, `18b`, `20f`, `20j` | P27 |
+| `grantVideoFile`, `openVideoFile`, `videoThumbnail` | `05v`, `06` | P28 |
+| `history*` (`03a`), `connection` and `driveStatus` (`13`, `20f`), `saveFileDialog` (`14`), `openFileDialog` (`18`), the `on…` events, `setDocumentState`, `openPrompterIn…`, `voice…`, `tabId`, `blob…` and `drive…` (`20f`), `writeDraft`, `takeDraft` and `draftRestoreDone` (`20g`) | Wave 4 files | the Wave 4 adapter and owner moves into `adapters/desktop` and `application/`, on Opus |
+
 The pure page helpers move once, with their first user:
 
 | Helper | From | To | Used by |
@@ -253,10 +267,10 @@ A **move** is a group of numbered files that become one feature folder (or one o
 | 1 | Read time | `05r` | 155 | 3 | 0 | 5 | `features/rows` | Opus; lands P9 and P11 |
 | 1 | Find and replace | `09` | 518 | 5 | 3 | 5 | `features/find` | Codex |
 | 2 | Undo | `12a` | 981 | 1 | 16 | 2 | history and recording to `application/editing/undo`, caret and focus to `features/undo` | Opus |
-| 2 | Gallery | `05e`, `05w`, `05v` | 1,672 | 11 | 0 | 6 | `features/gallery` | Opus (`05w` alone is Codex, after `05e`); `05e` lands P12 and P13 |
+| 2 | Gallery | `05e`, `05w`, `05v` | 1,672 | 11 | 0 | 6 | `features/gallery` | Opus (`05w` alone is Codex, after `05e`); P12 and P13 land first in their own PR |
 | 2 | Copy, paste and scene selection | `05c`, `05g`, `05h`, and `04c` deleted | 1,380 | 15 | 1 | 8 | `features/clipboard` | Opus; `05h` lands P15 |
 | 2 | B-roll records | `08c` | 282 | 5 | 7 | 6 | `features/broll`; the records reconciler to `application/production` | Opus; lands P21 |
-| 2 | Rows, without the render | `06`, `01`, `01b` | 687 | 6 | 14 | 8 | `features/rows` | `01b`'s shot-hiding state goes to an owner in its own PR first; then `06` Opus, `01` and `01b` Codex |
+| 2 | Rows, without the render | `06`, `01`, `01b` | 687 | 6 | 14 | 8 | `features/rows` | `01b`'s shot-hiding state is in the shot-hiding owner (`application/shot-hiding.ts`); `06` Opus, `01` and `01b` Codex |
 | 3 | Document place port (P16) | none | | | | | `application/location/` | Opus, its own PR before the moves below that read where the document lives |
 | 3 | The render | `05-render` | 1,286 | 20 | 7 | 8 | `features/rows` | Opus, perf-ab; after L3g |
 | 3 | Tags | `07`, `07b`, `08` | 2,029 | 11 | 19 | 10 | `features/tags` | `07` and `07b` Opus (perf-ab), `08` Codex |
@@ -267,7 +281,7 @@ A **move** is a group of numbered files that become one feature folder (or one o
 | 3 | File menu and export dialog | `18b`, `18c` | 1,080 | 15 | 17 | 9 | `features/file-menu` | `18b` Opus, `18c` Codex |
 | 3 | Command menu | `18d` | 337 | 9 | 3 | 4 | `features/command-menu` | Codex |
 | 3 | Collaboration | `13a`, `13b`, `20e` | 1,760 | 23 | 19 | 8 | `features/collaboration` | `13a`'s presence state goes to an owner in its own PR first; then `13a` and `13b` Codex, `20e` Opus |
-| 3 | Update notices | `20a` | 384 | 1 | 5 | 1 | `features/update` | Codex, desktop smoke |
+| 3 | Update notices | `20a` | 384 | 1 | 5 | 1 | `features/update` | Codex, desktop smoke; after P16; lands P26 if `06` hasn't |
 | 3 | Onboarding | `20b` | 337 | 6 | 1 | 7 | `features/onboarding` | Codex, after P16; lands P17, P18, P19, P24 and P25 |
 | 3 | New tab | `20j` | 379 | 13 | 1 | 12 | `features/newtab` | Opus |
 | 3 | Settings and app data | `20s`, `20h` | 838 | 23 | 3 | 6 | `features/settings` | `20s` Codex, `20h` Opus |
@@ -298,7 +312,7 @@ Why this order:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `00-prelude` | 61 | | 0 | 0 | 6 | `bootstrap/startup`, `adapters/files`, identity owner | 4 | Opus | Close (unload warning), stored file handles, desktop attach |
 | `01-scene-status` | 114 | | 4 | 2 | 1 | `features/rows` | 2 | Codex | Runs one command through P9; tells the rundown its extra seconds through a callback |
-| `01b-hide-shot` | 125 | | 3 | 0 | 10 | `features/rows` | 2 | Codex | Its expanded strips and grace timers move to a shot-hiding owner in `src/application/` in their own PR first (Rule 5). 9 numbered importers; `revealRow` is already the `reveal-row` action by then |
+| `01b-hide-shot` | 125 | | 3 | 0 | 10 | `features/rows` | 2 | Codex | Its expanded strips and grace timers are in the shot-hiding owner (`application/shot-hiding.ts`, through `legacy/shot-hiding-bridge.ts`), which 7 former importers now call directly. 3 numbered importers left (`05-render`, `19-writer`, `20s-settings`) plus `legacy/this-document-actions.ts`; `revealRow` is already the `reveal-row` action by then |
 | `02-state` | 48 | | 1 | 1 | 13 | deleted: importers use `src/core/`, P7 and the document entry | 4 | Opus | `migrateRows` is the document entry |
 | `02b-doc-id` | 234 | yes | 6 | 3 | 10 | `application/` identity owner, adapters | 4 | Opus | State ingress |
 | `03-sync` | 781 | yes | 9 | 9 | 17 | `application/session` merge, `features/merge`, `features/history` | 4 | Opus | Merge |
@@ -342,7 +356,7 @@ Why this order:
 | `18d-command-menu` | 337 | | 4 | 3 | 1 | `features/command-menu` | 3 | Codex | |
 | `19-writer` | 383 | yes | 7 | 9 | 3 | `features/writer` | 3 | Opus | Writer typing; perf-ab |
 | `20-teleprompter` | 1,061 | yes | 9 | 6 | 2 | `features/prompter` | 3 | Opus | Opens a project in the prompter window |
-| `20a-update` | 384 | yes | 1 | 1 | 4 | `features/update` | 3 | Codex | Calls the desktop port; desktop smoke |
+| `20a-update` | 384 | yes | 1 | 1 | 4 | `features/update` | 3 | Codex | Desktop smoke. Update's own port, typed in `features/update/ports.ts` because only update uses it: `updates: { status(), onStatus(listener), stopStatus(), download(), install() }`, with an `UpdateStatus` type listing the fields the notices read (`version`, `latest`, `updateAvailable`, `canInstall`, `checking`, `error`, `download`, `releaseUrl`, `desktopAppUrl`, `desktop`). The update wiring forwards each call to `desktopPort()` at call time. Off the desktop, the calls resolve `null` and do nothing, as the old guards did. `stopStatus()` is today's `onUpdateStatus(null)`, and `dispose` calls it. Installing quits the app, but the quit happens in the desktop process, and update only calls it, unchanged, so the move stays Codex. `openExternal` is P26, and `arrivingOnLink` is P16. The About dialog (`showAbout`) stays with update and moves to `features/update`, not `features/help`, because it is built from update's own status (`updateStatus`, `download`) and the embedded version. Moving it to help would mean passing update's state across. The `about` action definition leaves `legacy/help-actions.ts` for `features/update/actions.ts`. Its group stays "Help", since the group is a menu heading, not the owner. `src/bootstrap/actions.ts` keeps it at its current position, between `setup` and `tagging-help`, which the action-order test checks |
 | `20b-onboarding` | 337 | | 7 | 5 | 1 | `features/onboarding` | 3 | Codex | After P16 (its own Opus PR), which also gives `arrivingOnLink()`. Lands P17 (`deliverFile`, with the desktop smoke), P18 (`restorePending()` only), P19 (`seedCheckPasses`), P24 (the desktop port's launch and session facts, with the desktop smoke) and P25 (`loadLastFileHandle`). Uses P14 for `sidePanels().closeAll()`. Three feature-local fields, filled by the wiring from files that move later (Rule 5): `launcherInfo()` from `13-hosted`'s `launcherFetch("api/launcher/info")`, `addServerBookmark(name, url, options)` from `20e-connect`, and `onFileMenuChoice(listener)` from `18-local-files`. `18` has no way to remove a listener, so the wiring registers once and passes each choice to the mounted onboarding, and `dispose` stops it |
 | `20c-help` | 351 | | 5 | 1 | 2 | `features/help` | 1 | Codex | After L3f and P1. First, in its own Codex PR, the tour's showing state goes to `ViewFlags` as `tourOpen`/`setTourOpen` (beside `writerOpen`), so `screen-state` reads the owner instead of `tourShowing()`. In the move: the `help` and `tour` definitions leave `legacy/help-actions.ts` for `features/help/actions.ts`. The tour pause is a hand-off: the mount returns `tour: { interrupt, offerResume }`, the help wiring hands it to `handTourPauseTo`, and `20e` keeps calling the bridge. When `20e` moves (Wave 3), connect gets an output callback for its dialog opening and closing, the wiring connects it to the tour, and `tour-pause.ts` goes |
 | `20d-formats` | 263 | yes | 4 | 7 | 2 | `adapters/formats`, `application/save` | 4 | Opus | L3h PR 4 moves its codecs |
