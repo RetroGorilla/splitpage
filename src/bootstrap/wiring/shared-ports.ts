@@ -1,5 +1,6 @@
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { ExportRegistry } from "../../application/export/registry.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
@@ -12,6 +13,7 @@ import { arrivingOnLink } from "../../js/13-hosted.js";
 import { appActions } from "../../legacy/app-actions.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
+import { exportFormats } from "../../legacy/export-formats.ts";
 import {
   currentConn, currentHome, documentLocation, fileHome, homeConn, importHome, reviewBlocked, reviewMode,
   serverHomeId, serverStatus, stillOnServer
@@ -111,6 +113,15 @@ const production: ProductionIndexOwner = {
   recordsPlan: (doc, viewed) => productionIndex().recordsPlan(doc, viewed)
 };
 
+const exports: Pick<ExportRegistry, "card" | "cards" | "exporters" | "byAction" | "isAction" | "onChange"> = {
+  card: (id) => exportFormats.card(id),
+  cards: () => exportFormats.cards(),
+  exporters: () => exportFormats.exporters(),
+  byAction: (action) => exportFormats.byAction(action),
+  isAction: (action) => exportFormats.isAction(action),
+  onChange: (listener) => exportFormats.onChange(listener)
+};
+
 const shared = {
   actions,
   changes,
@@ -121,7 +132,8 @@ const shared = {
   review,
   text,
   saves,
-  production
+  production,
+  exports
 };
 
 export function sharedPorts(): typeof shared {
