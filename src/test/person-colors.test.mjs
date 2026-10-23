@@ -15,7 +15,8 @@ import {
 } from "../core/document/person-colors.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
-import { mergeStates } from "../js/03-sync.js";
+import { mergeStates } from "../legacy/merge-bridge.ts";
+import "./_merge-started.mjs";
 import { buildSplitpageFile, buildMarkdownProject, parseMarkdownProject } from "../adapters/formats/project-file.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
