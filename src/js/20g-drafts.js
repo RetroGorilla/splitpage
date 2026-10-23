@@ -1,5 +1,4 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
-import { S } from "./_state.js";
 import { currentConn, currentHome, documentLocation, fileHome, importHome, reviewMode, serverStatus, stillOnServer } from "../legacy/location-bridge.ts";
 import { migrateRows } from "./02-state.js";
 import { inlineStateJson, internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
@@ -36,7 +35,7 @@ import { createCaptureSchedule } from "../application/recovery/capture-schedule.
 import { cloneState } from "../core/document/clone.ts";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
-import { mergeBase } from "../legacy/session-bridge.ts";
+import { currentDocument, mergeBase } from "../legacy/session-bridge.ts";
 
 var draftOnDisk;
 
@@ -113,7 +112,7 @@ function browserDraftTarget() {
     if (reviewMode()) return null;
     return { base: (currentHome().conn && currentHome().conn.serverUrl) || "", docId: String(currentHome().id), rev: currentHome().rev || 0, copy: false };
   }
-  if (browserCopyOf && currentHome().kind === "none" && S.state && S.state.docId === browserCopyOf.docId) {
+  if (browserCopyOf && currentHome().kind === "none" && currentDocument() && currentDocument().docId === browserCopyOf.docId) {
     return { base: browserCopyOf.server.base, docId: browserCopyOf.server.docId, rev: browserCopyOf.server.rev, copy: true };
   }
   browserCopyOf = null;
@@ -246,13 +245,13 @@ function draftOriginSignature(origin) {
   return [
     origin.kind, origin.fileId || "", origin.fileKind || "", origin.importName || "",
     origin.server ? (origin.server.docId + "@" + origin.server.rev + "@" + origin.server.base) : "",
-    (S.state && S.state.docId) || "", documentLocation().writtenOut() ? "1" : "0"
+    (currentDocument() && currentDocument().docId) || "", documentLocation().writtenOut() ? "1" : "0"
   ].join("|");
 }
 
 function captureAndSendDraft(keepClean) {
   draftSchedule.cancel();
-  if (!draftWriterLive() || !S.state) return Promise.resolve(null);
+  if (!draftWriterLive() || !currentDocument()) return Promise.resolve(null);
   if (draftResume().restorePending()) { draftSchedule.keepPending(); return Promise.resolve(null); }
   if (draftInFlight) { draftSchedule.keepPending(); return draftInFlight; }
 
@@ -290,7 +289,7 @@ function captureAndSendDraft(keepClean) {
   var startedAt = Date.now();
   var stateJson;
   try {
-    stateJson = JSON.stringify(S.state);
+    stateJson = JSON.stringify(currentDocument());
   } catch (e) {
     draftStopped = true;
     showDraftPaused("TOO_LARGE");
@@ -314,8 +313,8 @@ function captureAndSendDraft(keepClean) {
   var payload = {
     seq: ++draftSeq,
     editSeq: editSeqAtCapture,
-    title: (S.state.title || ""),
-    docId: normalizeDocId(S.state.docId) || null,
+    title: (currentDocument().title || ""),
+    docId: normalizeDocId(currentDocument().docId) || null,
     docIdWrittenOut: documentLocation().writtenOut(),
     schema: SCHEMA_VERSION,
     originKind: origin.kind,
@@ -331,7 +330,7 @@ function captureAndSendDraft(keepClean) {
 
   var captured = runningOnDesktop() ? null : browserDraftCapture(origin.server);
 
-  var draftRefs = refsIn(S.state);
+  var draftRefs = refsIn(currentDocument());
   if (sendBase && baseAtCapture) {
     refsIn(baseAtCapture).forEach(function (sha) { if (draftRefs.indexOf(sha) === -1) draftRefs.push(sha); });
   }
@@ -743,7 +742,7 @@ async function restoreFileDraft(t, mine, base, origin, ctx) {
     updateFileChip();
     documentLocation().markWrittenOut(!!t.header.docIdWrittenOut);
     markAbsorbedDirty("recovery");
-    showToast("Restored your unsaved changes to " + (S.state.title || file.name) +
+    showToast("Restored your unsaved changes to " + (currentDocument().title || file.name) +
       (draftWhenText(t) ? " " + draftWhenText(t) : ""), "ok", true);
     return "applied";
   }
@@ -843,8 +842,8 @@ function browserDraftRestoreDone(t, outcome) {
   var key = t.browserKey;
   if (outcome === "server-copy") {
     var server = t.header.origin.server;
-    browserCopyOf = currentHome().kind === "none" && S.state
-      ? { key: key, docId: S.state.docId, server: { base: server.base, docId: server.docId, rev: server.rev } }
+    browserCopyOf = currentHome().kind === "none" && currentDocument()
+      ? { key: key, docId: currentDocument().docId, server: { base: server.base, docId: server.docId, rev: server.rev } }
       : null;
   }
   draftOnDisk = true;
