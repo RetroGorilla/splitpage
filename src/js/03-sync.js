@@ -1,9 +1,8 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
-import { S } from "./_state.js";
 import { reviewMode, setHome } from "../legacy/location-bridge.ts";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, isDurableSync } from "../adapters/storage/02c-blobs.js";
-import { heldDocument, holdMergeBase, mergeBase, noteMerged, noteRecovery, noteServerUpdate, runDocumentEdit } from "../legacy/session-bridge.ts";
+import { currentDocument, heldDocument, holdMergeBase, mergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteServerUpdate, runDocumentEdit } from "../legacy/session-bridge.ts";
 import { wordsPerMinuteCommand } from "../application/commands/document-settings.ts";
 import { applyIncomingMerge } from "../application/session/apply-merge.ts";
 import { mergeIncoming } from "../application/session/merge-incoming.ts";
@@ -13,9 +12,8 @@ import { DEFAULT_WPM } from "../core/document/timing.ts";
 import { mergeStates as mergeStatesWith } from "../core/merge-states.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { textMergeContext as coreTextMergeContext } from "../core/merge/text-field.ts";
-import { SIDE_PANEL_IDS } from "../application/preferences/panel-widths.ts";
 import { withDocumentPorts } from "../legacy/document-ports.ts";
-import { panelWidths, preferences } from "../legacy/preferences-bridge.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 import { fromHtml } from "../legacy/richtext.ts";
 import {
   adoptRestoredState,
@@ -27,11 +25,7 @@ import {
   listDocHistory,
   protectHistorySnapshot
 } from "./03a-history-store.js";
-import {
-  applySidePanelWidth,
-  holdScriptPlace,
-  sidePanelOpening
-} from "./03b-side-panels.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { safeId } from "./04-richtext.js";
 import { targetSectionHtml, wireTargetSection } from "./05t-target.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
@@ -40,10 +34,9 @@ import {
   getSavedAuthorName
 } from "./10-comments.js";
 import { cleanAuthorName } from "../core/document/people.ts";
-import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
+import { showToast } from "./12-dirty-toast.js";
 import { personColor } from "./13a-presence.js";
-import { haltAutoSave, queueAutoSave } from "./14-export.js";
-import { confirmBaseline, saveChanges } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, confirmBaseline, haltAutoSave, saveChanges } from "../legacy/save-bridge.ts";
 import { captureRestore, conflictStash, stillRestoring } from "../legacy/recovery-bridge.ts";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { driveFormatSize } from "../../shared/text.js";
@@ -63,8 +56,8 @@ export function stampRow(row) {
   row.updatedBy = getEditorName();
 }
 
-export function pushSnapshot(label, snapshotState) {
-  return captureSnapshot(label, snapshotState || S.state, { allowSeedSkip: !snapshotState });
+function pushSnapshot(label, snapshotState) {
+  return captureSnapshot(label, snapshotState || currentDocument(), { allowSeedSkip: !snapshotState });
 }
 
 var restoreInFlight = false;
@@ -73,11 +66,11 @@ var RESTORE_BACKUP_ATTEMPTS = 3;
 async function restoreSnapshot(id, opts) {
   opts = opts || {};
   if (restoreInFlight) return "busy";
-  if (!S.state) return "missing";
+  if (!currentDocument()) return "missing";
   restoreInFlight = true;
-  var docIdAtStart = S.state.docId;
+  var docIdAtStart = currentDocument().docId;
   var ctx = captureRestore();
-  var moved = function () { return !S.state || !stillRestoring(ctx); };
+  var moved = function () { return !currentDocument() || !stillRestoring(ctx); };
   var releaseHold = function () {};
   try {
     releaseHold = protectHistorySnapshot({ docId: opts.older ? null : docIdAtStart, older: !!opts.older, id: id });
@@ -91,24 +84,24 @@ async function restoreSnapshot(id, opts) {
 
     var stored = false;
     for (var attempt = 0; attempt < RESTORE_BACKUP_ATTEMPTS; attempt++) {
-      var stateAtCapture = S.state;
+      var stateAtCapture = currentDocument();
       var seqAtCapture = saveChanges();
-      var ticket = captureSnapshot("Before restoring an earlier version", S.state, { allowSeedSkip: false });
+      var ticket = captureSnapshot("Before restoring an earlier version", currentDocument(), { allowSeedSkip: false });
       if (!ticket) { stored = false; break; }
       var result = await ticket.done;
       if (moved()) return "changed";
       stored = !!(result && result.stored);
-      if (S.state === stateAtCapture && saveChanges() === seqAtCapture) break;
+      if (currentDocument() === stateAtCapture && saveChanges() === seqAtCapture) break;
       stored = false;
     }
     if (!stored && !opts.force) return "no-backup";
 
     resetProductionPanelState();
     adoptRestoredState(parsed);
-    markAbsorbedDirty("recovery");
-    closeHistoryPanel();
+    noteAbsorbedDirty("recovery");
+    sidePanels().close("history-panel");
     showToast(opts.restoredText || "Restored the version from " + formatTimestamp(snap.meta && snap.meta.at), "ok");
-    if (!opts.local) queueAutoSave();
+    if (!opts.local) autoSavePolicy().dueNow();
     return "restored";
   } finally {
     releaseHold();
@@ -211,9 +204,9 @@ function stashBlobsFor(docs) {
 }
 
 export function stashLocalWork() {
-  if (!S.state) return false;
-  var payload = { at: nowIso(), by: getEditorName(), base: mergeBase(), mine: S.state };
-  var blobs = stashBlobsFor([S.state, mergeBase()]);
+  if (!currentDocument()) return false;
+  var payload = { at: nowIso(), by: getEditorName(), base: mergeBase(), mine: currentDocument() };
+  var blobs = stashBlobsFor([currentDocument(), mergeBase()]);
   if (blobs) payload.blobs = blobs;
   return conflictStash().save(payload);
 }
@@ -327,10 +320,6 @@ export function personSwatchesHtml(name, radioName, legendClass) {
     '</div></fieldset>';
 }
 
-export function setMyColor(color) {
-  preferences().setMyColor(color);
-}
-
 export function promptForName() {
   var current = getSavedAuthorName();
   var host = document.getElementById("identity-chip");
@@ -355,7 +344,7 @@ export function promptForName() {
     if (e.key === "Enter") { e.preventDefault(); commit(); }
   });
   wrap.addEventListener("change", function (e) {
-    if (e.target && e.target.name === "person-color") setMyColor(e.target.value);
+    if (e.target && e.target.name === "person-color") preferences().setMyColor(e.target.value);
   });
 }
 
@@ -374,7 +363,7 @@ export function promptForTarget() {
 }
 
 function openClockPopover(focusOn) {
-  if (!S.state) return;
+  if (!currentDocument()) return;
   var viewing = reviewMode();
   var off = viewing ? " disabled" : "";
   var host = lengthHost();
@@ -382,7 +371,7 @@ function openClockPopover(focusOn) {
     '<label class="anchor-popover-label" for="wpm-input">Reading speed</label>' +
     '<div class="anchor-popover-row">' +
       '<input type="number" id="wpm-input" min="60" max="400" step="5" value="' +
-        escapeHtml(String(S.state.wordsPerMinute || DEFAULT_WPM)) + '" aria-label="Words per minute"' + off + '>' +
+        escapeHtml(String(currentDocument().wordsPerMinute || DEFAULT_WPM)) + '" aria-label="Words per minute"' + off + '>' +
       '<span class="anchor-popover-unit">words a minute</span>' +
       '<button type="button" id="wpm-save" class="btn-outline"' + off + '>Set</button>' +
     '</div>' +
@@ -405,50 +394,10 @@ function openClockPopover(focusOn) {
   });
 }
 
-export function openSidePanel(id) {
-  holdScriptPlace();
-  SIDE_PANEL_IDS.forEach(function (pid) {
-    if (pid !== id) {
-      var el = document.getElementById(pid);
-      if (el) el.hidden = true;
-    }
-  });
-  document.getElementById(id).hidden = false;
-  applySidePanelWidth(id, panelWidths().read(id));
-  syncPanelClass();
-}
-
 export function openHistoryPanel() {
-  openSidePanel("history-panel");
+  sidePanels().open("history-panel");
   renderHistory();
 }
-export function closeHistoryPanel() {
-  var p = document.getElementById("history-panel");
-  if (p) p.hidden = true;
-  syncPanelClass();
-}
-
-var PANEL_TOGGLES = [
-  ["production-panel", "btn-production"],
-  ["gear-panel", "btn-gear"],
-  ["broll-panel", "btn-broll"],
-  ["comments-panel", "btn-comments"]
-];
-
-export function syncPanelClass() {
-  var open = SIDE_PANEL_IDS.some(function (pid) {
-    var el = document.getElementById(pid);
-    return el && !el.hidden;
-  });
-  if (open !== document.body.classList.contains("panel-open")) sidePanelOpening(open);
-  document.body.classList.toggle("panel-open", open);
-  PANEL_TOGGLES.forEach(function (pair) {
-    var panel = document.getElementById(pair[0]);
-    var btn = document.getElementById(pair[1]);
-    if (btn) btn.setAttribute("aria-pressed", panel && !panel.hidden ? "true" : "false");
-  });
-}
-
 var historyRenderToken = 0;
 var historyShownDocId = null;
 
@@ -645,13 +594,13 @@ function historyUsageHtml(backend, usage) {
 export async function renderHistory() {
   var listEl = document.getElementById("history-list");
   var panel = document.getElementById("history-panel");
-  if (!listEl || !panel || panel.hidden || !S.state) return;
+  if (!listEl || !panel || panel.hidden || !currentDocument()) return;
   if (!historyToggleBound) {
     historyToggleBound = true;
     listEl.addEventListener("toggle", onHistoryRowToggle, true);
   }
   var token = ++historyRenderToken;
-  var docId = normalizeDocId(S.state.docId);
+  var docId = normalizeDocId(currentDocument().docId);
   if (historyShownDocId !== docId) {
     historyShownDocId = docId;
     listEl.innerHTML = "";
@@ -664,8 +613,8 @@ export async function renderHistory() {
     return;
   }
   if (token !== historyRenderToken) return;
-  if (!S.state || panel.hidden) return;
-  if (normalizeDocId(S.state.docId) !== docId) {
+  if (!currentDocument() || panel.hidden) return;
+  if (normalizeDocId(currentDocument().docId) !== docId) {
     return renderHistory();
   }
   data = data || {};
@@ -721,11 +670,11 @@ export function toastLastEditor(loaded) {
 export function reportMerge(result, opts) {
   opts = opts || {};
   if (mergeBanner) mergeBanner.show(result, { undo: opts.undo });
-  if (!opts.alreadySaved) { markAbsorbedDirty(opts.kind || "server"); noteMergeAutoSave(opts); }
+  if (!opts.alreadySaved) { noteAbsorbedDirty(opts.kind || "server"); noteMergeAutoSave(opts); }
 }
 
 function noteMergeAutoSave(opts) {
-  if (!opts.noAutoSave) { queueAutoSave(); return; }
+  if (!opts.noAutoSave) { autoSavePolicy().dueNow(); return; }
   haltAutoSave("Autosave is paused — changes recovered for you are on screen but not in your file yet. " +
                "Press Save once you have looked them over.");
 }
@@ -753,7 +702,7 @@ var mergePorts = {
   stillOwns: function (ctx) { return stillRestoring(ctx); },
   view: {
     report: function (result, opts) { reportMerge(result, opts); },
-    absorbedDirty: function (kind) { markAbsorbedDirty(kind); },
+    absorbedDirty: function (kind) { noteAbsorbedDirty(kind); },
     toast: function (text, tone, sticky) { showToast(text, tone, sticky); }
   }
 };
@@ -773,6 +722,10 @@ export function setBaseState(next, why) {
 export var documentDestinationPort = Object.freeze({
   set: function (destination) { setHome(destination.kind, destination.fields); },
   confirm: function (baseline, why) { setBaseState(baseline ? cloneState(baseline) : null, why); }
+});
+
+export var documentHistoryPort = Object.freeze({
+  keep: function (label, doc) { return pushSnapshot(label, doc); }
 });
 
 export function baseStateReason() {

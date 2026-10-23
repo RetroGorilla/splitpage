@@ -1,7 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
 import {
   createGates,
@@ -12,7 +11,7 @@ import {
   rightToday
 } from "./_m4-matrix.mjs";
 import { documentLocation } from "../legacy/location-bridge.ts";
-import { mergeBase } from "../legacy/session-bridge.ts";
+import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
@@ -20,18 +19,20 @@ const { migrateRows } = await import("../js/02-state.js");
 const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { buildDocx } = await import("../adapters/formats/docx.ts");
-const { closeImportModal, handleImportFile, openImportModal } = await import("../js/11-import.js");
+const { closeImportModal, openImportModal } = await import("../js/11-import.js");
 const { zipRead } = await import("../adapters/formats/zip.ts");
 const { setBackend: setBlobBackend } = await import("../adapters/storage/02c-blobs.js");
-const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow, fileConflicts, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const { saveDoc, setAutoSaveEnabled } = await import("../js/14-export.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
-const { closeFileConflict, exportAs, openProjectFile, saveBackToFile, showFileConflict } = await import("../js/18-local-files.js");
+const { exportAs, saveBackToFile } = await import("../js/18-local-files.js");
 const { finishServerDetect } = await import("../js/13-hosted.js");
 const homeModule = await import("../legacy/location-bridge.ts");
-const { makeDesktopHandle, openPrompterInBrowser } = await import("../js/20f-desktop.js");
+const { openPrompterInBrowser } = await import("../js/20f-desktop.js");
+const { makeDesktopHandle } = await import("../adapters/desktop/desktop-handle.ts");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -58,20 +59,20 @@ function heldFile(doc, name) {
 function useDocument(doc) {
   loadTestDocument(doc);
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   return doc;
 }
 
 async function openFrom(target) {
   useDocument(script("Placeholder"));
-  await openProjectFile(await target.handle.getFile(), target.handle, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: await target.handle.getFile(), handle: target.handle, options: { skipSnapshot: true, silent: true } });
   assert.equal(homeModule.currentHome().kind, "file", "the document is open from the file");
   assert.equal(homeModule.currentHome().handle, target.handle, "and its home holds the file's handle");
 }
 
 function edit(text) {
-  S.state.rows[0].audioText = text;
-  markDirty();
+  currentDocument().rows[0].audioText = text;
+  noteSessionEdit();
 }
 
 async function turns(count) {
@@ -92,7 +93,7 @@ async function openFromDesktop(fake, doc) {
   await fake.writeFile(picked.id, new TextEncoder().encode(buildSplitpageFile(exportDocumentOf(doc))));
   const handle = makeDesktopHandle(picked);
   useDocument(script("Placeholder"));
-  await openProjectFile(await handle.getFile(), handle, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: await handle.getFile(), handle: handle, options: { skipSnapshot: true, silent: true } });
   assert.equal(homeModule.currentHome().kind, "file", "the document is open from the desktop file");
   return picked;
 }
@@ -107,7 +108,7 @@ function scene(run) {
       delete window.showSaveFilePicker;
       window.__desktopTest.restoreBackend();
       setBlobBackend(null);
-      closeFileConflict();
+      fileConflicts().close();
       document.getElementById("save-error-banner").hidden = true;
       setHome("none");
     }
@@ -124,12 +125,12 @@ function homeRecord() {
 }
 
 function observed() {
-  return { docId: S.state.docId, rev: S.state.rev, base: JSON.stringify(mergeBase()), dirty: unsavedChanges(), home: homeRecord() };
+  return { docId: currentDocument().docId, rev: currentDocument().rev, base: JSON.stringify(mergeBase()), dirty: unsavedChanges(), home: homeRecord() };
 }
 
 function assertSame(before, who) {
-  assert.equal(S.state.docId, before.docId, "the " + who + "'s document id is unchanged");
-  assert.equal(S.state.rev, before.rev, "the " + who + "'s rev is unchanged");
+  assert.equal(currentDocument().docId, before.docId, "the " + who + "'s document id is unchanged");
+  assert.equal(currentDocument().rev, before.rev, "the " + who + "'s rev is unchanged");
   assert.equal(JSON.stringify(mergeBase()), before.base, "the " + who + "'s baseline is unchanged");
   assert.equal(unsavedChanges(), before.dirty, "the " + who + "'s dirty state is unchanged");
   const now = homeRecord();
@@ -150,9 +151,9 @@ rightToday("F1", "a file save that fails after its document was replaced leaves 
   target.holdOp("close");
   const saving = saveDoc();
   await target.arrivedAt("close");
-  await openProjectFile(splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), null, { skipSnapshot: true, silent: true });
-  assert.equal(S.state.title, "Replacement", "the document was replaced");
-  assert.equal(S.state.rev, 7, "the replacement opened with its own rev");
+  await openDocument({ kind: "file", file: splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), handle: null, options: { skipSnapshot: true, silent: true } });
+  assert.equal(currentDocument().title, "Replacement", "the document was replaced");
+  assert.equal(currentDocument().rev, 7, "the replacement opened with its own rev");
   const before = observed();
   target.failNext("close", new Error("disk full"));
   target.releaseOp("close");
@@ -172,9 +173,9 @@ rightToday("F1-abort", "a Save As picker that is cancelled after its document wa
   picks.hold("picker");
   const saving = saveDoc({ saveAs: true });
   await picks.arrived("picker");
-  await openProjectFile(splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), null, { skipSnapshot: true, silent: true });
-  assert.equal(S.state.title, "Replacement", "the document was replaced");
-  assert.equal(S.state.rev, 7, "the replacement opened with its own rev");
+  await openDocument({ kind: "file", file: splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), handle: null, options: { skipSnapshot: true, silent: true } });
+  assert.equal(currentDocument().title, "Replacement", "the document was replaced");
+  assert.equal(currentDocument().rev, 7, "the replacement opened with its own rev");
   const before = observed();
   picks.release("picker");
   await saving;
@@ -188,9 +189,9 @@ rightToday("F1-dialog", "a desktop save dialog that is cancelled after its docum
   held.holdOp("saveFileDialog");
   const saving = saveDoc();
   await held.arrivedAt("saveFileDialog");
-  await openProjectFile(splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), null, { skipSnapshot: true, silent: true });
-  assert.equal(S.state.title, "Replacement", "the document was replaced");
-  assert.equal(S.state.rev, 7, "the replacement opened with its own rev");
+  await openDocument({ kind: "file", file: splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), handle: null, options: { skipSnapshot: true, silent: true } });
+  assert.equal(currentDocument().title, "Replacement", "the document was replaced");
+  assert.equal(currentDocument().rev, 7, "the replacement opened with its own rev");
   const before = observed();
   fake._cancelNextSave = true;
   held.releaseOp("saveFileDialog");
@@ -205,7 +206,7 @@ rightToday("F1-done", "a file save that completes after its document was replace
   target.holdOp("close");
   const saving = saveDoc();
   await target.arrivedAt("close");
-  await openProjectFile(splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), null, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), handle: null, options: { skipSnapshot: true, silent: true } });
   const before = observed();
   target.releaseOp("close");
   await saving;
@@ -221,9 +222,9 @@ rightToday("F2", "a file save that completes after a same-id reopen leaves the r
   target.holdOp("close");
   const saving = saveDoc();
   await target.arrivedAt("close");
-  await openProjectFile(await target.handle.getFile(), target.handle, { skipSnapshot: true, silent: true });
-  assert.equal(S.state.docId, ID("3"), "the reopened document has the same id");
-  assert.equal(S.state.rows[0].audioText, "One.", "and it was read before the write landed");
+  await openDocument({ kind: "file", file: await target.handle.getFile(), handle: target.handle, options: { skipSnapshot: true, silent: true } });
+  assert.equal(currentDocument().docId, ID("3"), "the reopened document has the same id");
+  assert.equal(currentDocument().rows[0].audioText, "One.", "and it was read before the write landed");
   edit("Typed after the reopen.");
   const baselineBefore = JSON.stringify(mergeBase());
   target.releaseOp("close");
@@ -276,7 +277,7 @@ rightToday("F4", "an edit during the write leaves the document dirty, and the fi
   assert.ok(target.text().includes("Typed before the save."), "the file holds what was captured");
   assert.ok(!target.text().includes("Typed during the write."), "and not the edit made during the write");
   assert.equal(unsavedChanges(), true, "the document is still unsaved");
-  assert.equal(S.state.rows[0].audioText, "Typed during the write.", "the edit is still on screen");
+  assert.equal(currentDocument().rows[0].audioText, "Typed during the write.", "the edit is still on screen");
 }));
 
 rightToday("F5-one", "a save with nothing else running writes once", scene(async () => {
@@ -330,12 +331,12 @@ directCaller("F5-retry", "the save-error retry waits for the save that is runnin
 });
 
 directCaller("F5-overwrite", "the conflict overwrite waits for the save that is running", async () => {
-  showFileConflict("held.splitpage", null, { kind: "project" });
+  fileConflicts().show({ fileName: "held.splitpage", current: null, kind: "project" });
   document.getElementById("file-conflict-overwrite").click();
 });
 
 directCaller("F5-copy", "the conflict copy waits for the save that is running", async () => {
-  showFileConflict("held.splitpage", null, { kind: "project" });
+  fileConflicts().show({ fileName: "held.splitpage", current: null, kind: "project" });
   document.getElementById("file-conflict-copy").click();
 });
 
@@ -344,7 +345,7 @@ rightToday("F5-stale", "overlapping saves never leave the file older than the do
   document.getElementById("save-error-retry").click();
   await turns(60);
   await finishSaves(target);
-  assert.ok(unsavedChanges() || target.text().includes(S.state.rows[0].audioText), "the document is not marked saved while its file holds older text");
+  assert.ok(unsavedChanges() || target.text().includes(currentDocument().rows[0].audioText), "the document is not marked saved while its file holds older text");
 }));
 
 rightToday("F5-link", "the turned-off link's copy waits for the save that is running", scene(async () => {
@@ -412,8 +413,8 @@ rightToday("F5-replaced", "a save waiting behind a running save is dropped when 
   document.getElementById("save-error-retry").click();
   await turns(20);
   const other = heldFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage");
-  await openProjectFile(await other.handle.getFile(), other.handle, { skipSnapshot: true, silent: true });
-  assert.equal(S.state.title, "Replacement", "setup: the document was replaced");
+  await openDocument({ kind: "file", file: await other.handle.getFile(), handle: other.handle, options: { skipSnapshot: true, silent: true } });
+  assert.equal(currentDocument().title, "Replacement", "setup: the document was replaced");
   const before = observed();
   await finishSaves(target);
   assert.equal(writers(other), 0, "the replacement's file was not written");
@@ -444,7 +445,7 @@ rightToday("F7", "a handle whose permission is refused fails without retargeting
   assert.equal(target.commits.length, 0, "an existing handle without permission wrote nothing");
   assert.equal(target.calls.includes("createWritable"), false, "and was not asked for a writer");
   assertSame(before, "document after a refused Save");
-  closeFileConflict();
+  fileConflicts().close();
 
   const refused = createHeldFileHandle({ name: "refused.splitpage", permission: "prompt" });
   window.showSaveFilePicker = async () => refused.handle;
@@ -505,7 +506,7 @@ rightToday("F9-warn", "a Save As that gives the copy a new document id is not re
   document.getElementById("toast-host").textContent = "";
   await saveDoc({ saveAs: true });
   assert.equal(copy.commits.length, 1, "setup: the copy was written");
-  assert.notEqual(S.state.docId, ID("8"), "setup: the copy has its own document id");
+  assert.notEqual(currentDocument().docId, ID("8"), "setup: the copy has its own document id");
   assert.equal(unsavedChanges(), false, "the document is saved");
   assert.equal(/after you reopened it/.test(document.getElementById("toast-host").textContent), false, "no reopen warning was shown");
 }));
@@ -516,7 +517,7 @@ function importDocument() {
 
 async function importFrom(target) {
   useDocument(script("Placeholder"));
-  await openProjectFile(await target.handle.getFile(), target.handle);
+  await openDocument({ kind: "file", file: await target.handle.getFile(), handle: target.handle });
   assert.equal(homeModule.currentHome().kind, "import", "the text file opened as an import");
   assert.equal(homeModule.currentHome().handle, target.handle, "with its handle");
   assert.equal(homeModule.currentHome().dirty, false, "and nothing unsaved");
@@ -526,8 +527,8 @@ rightToday("I1", "an edit while import writeback awaits its bytes leaves the imp
   const target = importDocument();
   await importFrom(target);
   const imported = homeModule.currentHome();
-  S.state.rows[0].imageRef = { sha256: "a".repeat(64), width: 4, height: 4, mime: "image/png" };
-  markDirty();
+  currentDocument().rows[0].imageRef = { sha256: "a".repeat(64), width: 4, height: 4, mime: "image/png" };
+  noteSessionEdit();
   assert.equal(imported.dirty, true, "the import home has unsaved changes");
   const gates = createGates();
   gates.hold("blob.get");
@@ -553,8 +554,8 @@ rightToday("I2", "import writeback acknowledges only the import home", scene(asy
   assert.equal(homeModule.currentHome(), before.home.record, "the home is the same record");
   assert.equal(unsavedChanges(), before.dirty, "the document's dirty state is unchanged");
   assert.equal(JSON.stringify(mergeBase()), before.base, "the document's baseline is unchanged");
-  assert.equal(S.state.rev, before.rev, "the document's rev is unchanged");
-  assert.equal(S.state.docId, before.docId, "the document's id is unchanged");
+  assert.equal(currentDocument().rev, before.rev, "the document's rev is unchanged");
+  assert.equal(currentDocument().docId, before.docId, "the document's id is unchanged");
 }));
 
 const WRITEBACK_SOURCES = [
@@ -578,7 +579,7 @@ rightToday("I3", "import writeback stores the document as it stood when the writ
     const target = createHeldFileHandle({ name: name, text: source(), lastModified: 1000 });
     await importFrom(target);
     assert.equal(homeModule.currentHome().format, kind, "setup: the " + kind + " file is the import home's format");
-    S.state.rows[0].imageRef = { sha256: "a".repeat(64), width: 4, height: 4, mime: "image/png" };
+    currentDocument().rows[0].imageRef = { sha256: "a".repeat(64), width: 4, height: 4, mime: "image/png" };
     edit("Captured words.");
     const gates = createGates();
     gates.hold("blob.get");
@@ -593,7 +594,7 @@ rightToday("I3", "import writeback stores the document as it stood when the writ
     const stored = await writtenText(kind, target.commits[0].bytes);
     assert.match(stored, /Captured words\./, "the stored " + kind + " holds the words typed before the write back");
     assert.doesNotMatch(stored, /Typed while held/, "the stored " + kind + " leaves out the words typed while its bytes were held");
-    assert.match(S.state.rows[0].audioText, /Typed while held/, "the live document keeps the later words");
+    assert.match(currentDocument().rows[0].audioText, /Typed while held/, "the live document keeps the later words");
     assert.equal(homeModule.currentHome().dirty, true, "and the " + kind + " import home is still unsaved");
   }
 }));
@@ -615,7 +616,7 @@ rightToday("I4", "a file decoded for an import that was closed and opened again 
   useDocument(script("Importing"));
   const late = heldTextFile("late.csv", "Visual,Audio\nLate,Late words.\n");
   openImportModal();
-  const decoding = handleImportFile(late.file);
+  const decoding = openDocument({ kind: "import", file: late.file });
   await late.gates.arrived("text");
   closeImportModal();
   openImportModal();
@@ -624,18 +625,18 @@ rightToday("I4", "a file decoded for an import that was closed and opened again 
   assert.equal(importModalShows(/late\.csv/), false, "the reopened import does not offer the earlier file");
   document.getElementById("import-textarea").value = "Typed line.";
   document.getElementById("import-confirm").click();
-  assert.equal(S.state.rows.length, 3, "only the typed scene was imported");
-  assert.doesNotMatch(JSON.stringify(S.state.rows), /Late words/, "the earlier file's scenes are not in the document");
+  assert.equal(currentDocument().rows.length, 3, "only the typed scene was imported");
+  assert.doesNotMatch(JSON.stringify(currentDocument().rows), /Late words/, "the earlier file's scenes are not in the document");
 }));
 
 rightToday("I5", "a file decoded for an import into a document that was replaced meanwhile fills nothing", scene(async () => {
   useDocument(script("Importing"));
   const late = heldTextFile("late.csv", "Visual,Audio\nLate,Late words.\n");
   openImportModal();
-  const decoding = handleImportFile(late.file);
+  const decoding = openDocument({ kind: "import", file: late.file });
   await late.gates.arrived("text");
-  await openProjectFile(splitpageFile(script("Replacement", { docId: ID("5") })), null, { skipSnapshot: true, silent: true });
-  assert.equal(S.state.docId, ID("5"), "setup: the other document is open");
+  await openDocument({ kind: "file", file: splitpageFile(script("Replacement", { docId: ID("5") })), handle: null, options: { skipSnapshot: true, silent: true } });
+  assert.equal(currentDocument().docId, ID("5"), "setup: the other document is open");
   late.gates.release("text");
   await decoding;
   assert.equal(importModalShows(/late\.csv/), false, "the import does not offer the file decoded for the replaced document");
@@ -646,14 +647,14 @@ rightToday("I6", "confirming an import after its document was replaced adds noth
   useDocument(script("Importing"));
   openImportModal();
   document.getElementById("import-textarea").value = "Meant for the first document.";
-  await openProjectFile(splitpageFile(script("Replacement", { docId: ID("6") })), null, { skipSnapshot: true, silent: true });
-  const replacement = S.state;
+  await openDocument({ kind: "file", file: splitpageFile(script("Replacement", { docId: ID("6") })), handle: null, options: { skipSnapshot: true, silent: true } });
+  const replacement = currentDocument();
   const before = observed();
   const rows = JSON.stringify(replacement.rows);
   document.getElementById("toast-host").textContent = "";
   document.getElementById("import-confirm").click();
-  assert.equal(S.state, replacement, "the replacement is still open");
-  assert.equal(JSON.stringify(S.state.rows), rows, "its scenes are unchanged");
+  assert.equal(currentDocument(), replacement, "the replacement is still open");
+  assert.equal(JSON.stringify(currentDocument().rows), rows, "its scenes are unchanged");
   assertSame(before, "replacement");
   assert.equal(document.getElementById("import-modal").hidden, true, "the import closed");
   const told = document.getElementById("toast-host").textContent;
@@ -688,7 +689,7 @@ test("an import writeback that lands after another file was imported leaves the 
   const saving = saveBackToFile();
   await gates.arrived("file.close");
   const other = createHeldFileHandle({ name: "other.txt", text: "Gamma line.\n\nDelta line.\n", lastModified: 2000 });
-  await openProjectFile(await other.handle.getFile(), other.handle);
+  await openDocument({ kind: "file", file: await other.handle.getFile(), handle: other.handle });
   const replaced = homeModule.currentHome();
   edit("Typed in the other file.");
   assert.equal(replaced.dirty, true);
@@ -709,7 +710,7 @@ test("a writeback queued behind another writes nothing once a different file was
   await gates.arrived("file.close");
   const second = saveBackToFile();
   const other = createHeldFileHandle({ name: "other.txt", text: "Gamma line.\n\nDelta line.\n", lastModified: 2000 });
-  await openProjectFile(await other.handle.getFile(), other.handle);
+  await openDocument({ kind: "file", file: await other.handle.getFile(), handle: other.handle });
   const replaced = homeModule.currentHome();
   edit("Typed in the other file.");
   gates.release("file.close");

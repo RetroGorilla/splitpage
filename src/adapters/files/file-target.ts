@@ -66,3 +66,21 @@ export async function writeToHandle(handle: FileHandle, body: unknown): Promise<
     return Object.freeze({ lastModified: null });
   }
 }
+
+export type FileCheck =
+  | { readonly ok: true }
+  | { readonly ok: false; readonly current: { readonly lastModified: number } | null };
+
+export async function checkFileConflict(handle: Pick<FileHandle, "getFile">, lastModified: number | null | undefined): Promise<FileCheck> {
+  if (!lastModified) return { ok: true };
+  let current: { readonly lastModified: number };
+  try {
+    current = await handle.getFile();
+  } catch {
+    return { ok: false, current: null };
+  }
+  if (current.lastModified && current.lastModified !== lastModified) {
+    return { ok: false, current: current };
+  }
+  return { ok: true };
+}

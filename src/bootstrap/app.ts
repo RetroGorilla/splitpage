@@ -64,6 +64,8 @@ import { openInitialDocument, startupPorts } from "./wiring/startup.ts";
 import { mountScreenFeature, stopScreenFeature } from "./wiring/screen.ts";
 import { mountPreferenceWatchFeature, stopPreferenceWatchFeature } from "./wiring/preference-watch.ts";
 import { mountDocumentChromeFeature, stopDocumentChromeFeature } from "./wiring/document-chrome.ts";
+import { mountPanelListenersFeature, stopPanelListenersFeature } from "./wiring/panels.ts";
+import { mountSidePanelsFeature, stopSidePanelsFeature } from "./wiring/side-panels.ts";
 
 let running: (() => void) | null = null;
 
@@ -106,6 +108,8 @@ export function startApp(wiring: Wiring): () => void {
     run([mountPreferenceWatchFeature, stopPreferenceWatchFeature]);
     run([mountScreenFeature, stopScreenFeature]);
     run([mountDocumentChromeFeature, stopDocumentChromeFeature]);
+    run([mountPanelListenersFeature, stopPanelListenersFeature]);
+    run([mountSidePanelsFeature, stopSidePanelsFeature]);
     if (!appearance) run([mountAppearanceFeature, stopAppearance]);
     run(view("mountTopbar", mountTopbarFeature));
     run(view("mountCellReach", mountCellReachFeature));

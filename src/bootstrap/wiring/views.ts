@@ -30,16 +30,14 @@ import {
   setPrompterSkipShot,
   voiceIsFollowing
 } from "../../application/prompter-state.ts";
-import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
+import { captureOperation, openDocument, stillOwns } from "../../legacy/transition-bridge.ts";
 import { importHome } from "../../legacy/location-bridge.ts";
 import { expandHiddenShotStrip } from "../../js/01b-hide-shot.js";
 import {
-  closeHistoryPanel,
   promptForName,
   promptForWpm,
   restoreSnapshotFromCard
 } from "../../js/03-sync.js";
-import { initSidePanelResizeHandles } from "../../js/03b-side-panels.js";
 import { openGalleryOverlay } from "../../js/05e-gallery-overlay.js";
 import {
   clearPendingFileRows,
@@ -48,13 +46,15 @@ import {
   closeImportModal,
   confirmGdocImport,
   confirmImport,
-  handleImportFile,
   maybeAutoDetectTwoColumn,
   updateImportPreview
 } from "../../js/11-import.js";
 import { updateSaveStatus } from "../../js/12-dirty-toast.js";
 import { showToast } from "../../legacy/effects-bridge.ts";
-import { preferences } from "../../legacy/preferences-bridge.ts";
+import { panelWidths, preferences } from "../../legacy/preferences-bridge.ts";
+import { sidePanels } from "../../legacy/panels-bridge.ts";
+import { SIDE_PANEL_IDS } from "../../application/preferences/panel-widths.ts";
+import { mountPanels } from "../../features/panels/mount.ts";
 import {
   armDriveDelete,
   armServerDelete,
@@ -75,24 +75,21 @@ import {
   driveSignOut,
   driveStartRename,
   driveUploadFiles,
-  openServerDoc,
   toggleDriveNewFolder
 } from "../../js/13-hosted.js";
-import { saveDoc } from "../../js/14-export.js";
+import { fileConflicts, saveDoc } from "../../legacy/save-bridge.ts";
+import { deliverFile } from "../../legacy/file-delivery.ts";
 import {
   buildFileData,
-  closeFileConflict,
-  deliverFile,
   exportAs,
-  fileConflictCtx,
   handleFileMenuAction,
   hideResumeBanner,
-  openProjectFile,
   pendingResumeHandle,
   reloadFileFromDisk,
   reloadProjectFromDisk,
   resumeFromHandle,
-  saveBackToFile
+  saveBackToFile,
+  showFileConflictView
 } from "../../js/18-local-files.js";
 import { cancelMergeReview, confirmFileMerge, openMergeReview } from "../../js/18a-local-merge.js";
 import { toggleFileMenu, toggleSubmenu } from "../../js/18b-file-menu.js";
@@ -220,7 +217,7 @@ export function mountHistoryFeature(): ReturnType<typeof mountHistory> {
   return replaceViewMount("mountHistory", function () {
     const ports: HistoryPorts = {
       promptForWpm: promptForWpm,
-      closeHistoryPanel: closeHistoryPanel,
+      closeHistoryPanel: () => { sidePanels().close("history-panel"); },
       onRootClick: onRootClick
     };
     return mountHistory({ window: window, ports: ports });
@@ -231,7 +228,7 @@ export function mountServerFeature(): ReturnType<typeof mountServer> {
   return replaceViewMount("mountServer", function () {
     const ports: ServerPorts = {
       closeServerPicker: closeServerPicker,
-      openServerDoc: openServerDoc,
+      openServerDoc: function (id) { void openDocument({ kind: "server", id: id }); },
       armServerDelete: armServerDelete,
       routeOpen: routeServerOpen,
       capture: function () {
@@ -290,7 +287,7 @@ export function mountSaveRecoveryFeature(): ReturnType<typeof mountSaveRecovery>
 export function mountConflictsFeature(): ReturnType<typeof mountConflicts> {
   return replaceViewMount("mountConflicts", function () {
     const ports: ConflictsPorts = {
-      closeFileConflict: closeFileConflict,
+      closeFileConflict: function () { fileConflicts().close(); },
       reloadProjectFromDisk: reloadProjectFromDisk,
       reloadFileFromDisk: reloadFileFromDisk,
       saveDoc: saveDoc,
@@ -301,19 +298,25 @@ export function mountConflictsFeature(): ReturnType<typeof mountConflicts> {
       importHome: importHome as unknown as ConflictsPorts["importHome"],
       buildFileData: buildFileData,
       deliverFile: deliverFile,
-      conflict: function () {
-        const conflict: ReturnType<ConflictsPorts["conflict"]> = fileConflictCtx;
-        return conflict;
-      },
+      conflict: function () { return fileConflicts().current(); },
       capture: captureViewDocument
     };
     return mountConflicts({ window: window, ports: ports });
+  }, function () {
+    return [function () { return fileConflicts().onChange(function () { showFileConflictView(fileConflicts().current()); }); }];
   });
 }
 
 export function mountPanelsFeature(): Disposable {
   return replaceViewMount("mountPanels", function () {
-    return { dispose: initSidePanelResizeHandles() };
+    return mountPanels({ window: window, ports: {
+      ids: SIDE_PANEL_IDS,
+      readWidth: (id) => panelWidths().read(id),
+      defaultWidth: (id) => panelWidths().defaultWidth(id),
+      clampWidth: (width, id) => panelWidths().clamp(width, id),
+      applyWidth: (id, width) => { sidePanels().applyWidth(id, width); },
+      saveWidth: (id, width) => { panelWidths().save(id, width); }
+    } });
   });
 }
 
@@ -342,7 +345,7 @@ export function mountFileMenuFeature(): ReturnType<typeof mountFileMenu> {
       toggleFileMenu: toggleFileMenu,
       toggleSubmenu: toggleSubmenu,
       handleFileMenuAction: handleFileMenuAction,
-      openProjectFile: openProjectFile
+      openProjectFile: function (file, handle) { void openDocument({ kind: "file", file: file, handle: handle }); }
     };
     return mountFileMenu({ window: window, ports: ports });
   });
@@ -357,7 +360,7 @@ export function mountImportsFeature(): ReturnType<typeof mountImports> {
       clearPendingFileRows: clearPendingFileRows,
       maybeAutoDetectTwoColumn: maybeAutoDetectTwoColumn,
       updateImportPreview: updateImportPreview,
-      handleImportFile: handleImportFile,
+      handleImportFile: function (file) { void openDocument({ kind: "import", file: file }); },
       touchMode: touchImportMode,
       capture: function () {
         const ownsDocument = captureViewDocument();

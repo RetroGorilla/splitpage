@@ -2,39 +2,25 @@ import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
 import { disarmDeleteButton } from "../features/rows/delete-button.ts";
 import { hasSetLength } from "../core/document/timing.ts";
 import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
-import { S } from "./_state.js";
-import { updateScriptStats } from "./01-scene-status.js";
 import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "../adapters/storage/02d-gallery.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { currentDocument, editAllowed, readSession } from "../legacy/session-bridge.ts";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
-import { refreshGalleryOverlay } from "./05e-gallery-overlay.js";
 import { appendDraftMedia, draftModel, editDraft } from "./05d-draft-edit.js";
 import { isDraftBox, isScriptCell } from "../features/editing/cell-page.ts";
 import { trackDocument } from "./12a-undo.js";
 import { rowMotionKey, withRowMotion } from "../features/rows/row-motion.js";
 import {
-  openTagComposer,
   productionIndexStats,
   resetProductionIndexStats,
   scheduleUntaggedScan,
-  tagFieldOccurrences,
-  updateTagBadges
+  tagFieldOccurrences
 } from "./07-production-tags.js";
-import { renderProduction } from "./08-production-panels.js";
-import { scheduleBrollRefresh } from "./08c-broll.js";
-import {
-  captureReplyDrafts,
-  formatTimestamp,
-  openCommentComposer,
-  renderComments,
-  syncAnchorResolvedClasses,
-  updateCommentsCount
-} from "./10-comments.js";
-import { paintPresence, personColor } from "./13a-presence.js";
-import { drawWriter, paintWriterDraw } from "./19-writer.js";
+import { formatTimestamp } from "./10-comments.js";
+import { appActions } from "../legacy/app-actions.ts";
+import { personColor } from "./13a-presence.js";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
@@ -452,14 +438,15 @@ export function renderRow(rowId) {
 }
 
 function paintOneRow(rowId) {
-  if (!S.state) return false;
-  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
+  var doc = currentDocument();
+  if (!doc) return false;
+  var idx = readSession(function (held) { return rowIndexOf(held, rowId); });
   var rowsEl = document.getElementById("rows");
   if (idx === -1 || !rowsEl) return false;
   var rowEl = rowsEl.querySelector(':scope > .row[data-id="' + cssAttr(rowId) + '"]');
   if (!rowEl) return false;
-  var patch = planRowPatch(rowEl, S.state.rows[idx], idx);
-  var whole = patch ? null : newRowEl(S.state.rows[idx], idx);
+  var patch = planRowPatch(rowEl, doc.rows[idx], idx);
+  var whole = patch ? null : newRowEl(doc.rows[idx], idx);
   var active = document.activeElement;
   var heldCell = active && active.classList && active.classList.contains("cell-editable") && rowEl.contains(active) &&
     rememberCellSelection(editorSelection(), active) ? active : null;
@@ -471,9 +458,10 @@ function paintOneRow(rowId) {
     cellsPainted += 2;
   }
   if (heldCell && !heldCell.isConnected) placeEditorSelection(editorSelection(), rowsEl);
-  if (touched) paintPresence();
-  if (touched) paintRowTimes();
-  if (touched) refreshGalleryOverlay();
+  if (touched) {
+    paintRowTimes();
+    announcePainted("row");
+  }
   return true;
 }
 
@@ -509,7 +497,7 @@ var EMPTY_ROWS_HTML =
   '</div>';
 
 function planRows(rowsEl) {
-  if (!S.state.rows.length) return { empty: true };
+  if (!currentDocument().rows.length) return { empty: true };
   var existing = new Map();
   var drop = [];
   Array.prototype.slice.call(rowsEl.children).forEach(function (el) {
@@ -519,7 +507,7 @@ function planRows(rowsEl) {
     else drop.push(el);
   });
 
-  var steps = rowGroupItems(S.state.rows).map(function (item) {
+  var steps = rowGroupItems(currentDocument().rows).map(function (item) {
     var key = item.strip ? "strip:" + item.strip.join(",") : "row:" + item.row.id;
     var el = existing.get(key);
     if (el) {
@@ -630,7 +618,7 @@ var rowsPainted = 0;
 var cellsPainted = 0;
 
 export function syncPageTitle() {
-  var name = ((S.state && S.state.title) || "").trim();
+  var name = (currentDocument()?.title || "").trim();
   document.title = !name || name === "Untitled Script" ? "Splitpage" : name + " — Splitpage";
 }
 
@@ -651,44 +639,48 @@ export function render() {
   }
 }
 
+var paintedListeners = [];
+
+export function onPainted(listener) {
+  paintedListeners.push(listener);
+  return function () {
+    var at = paintedListeners.indexOf(listener);
+    if (at !== -1) paintedListeners.splice(at, 1);
+  };
+}
+
+function announcePainted(kind) {
+  paintedListeners.slice().forEach(function (listener) { listener(kind); });
+}
+
 export function paintingScreen() {
   return paintGuard().painting();
 }
 
 function paintAll() {
   trackDocument();
-  if (!S.state) return;
+  if (!currentDocument()) return;
   renderCalls++;
   var rowsEl = document.getElementById("rows");
   var plan = planRows(rowsEl);
-  var title = S.state.title || "";
-  var writerDraw = viewFlags().writerOpen() ? drawWriter() : null;
+  var title = currentDocument().title || "";
 
   resetTransientUiState();
   var focus = captureRenderFocus(rowsEl);
   if (focus && focus.cell) rememberCellSelection(editorSelection(), focus.cell);
   withRowMotion(rowsEl, function () {
     commitRows(rowsEl, plan, focus && focus.rowEl);
+    announcePainted("rows");
   });
   editorSelection().notePainted(rowsEl);
   if (!viewFlags().writerOpen()) restoreRenderFocus(rowsEl, focus);
 
   var titleInput = document.getElementById("doc-title");
   if (document.activeElement !== titleInput) titleInput.value = title;
-  if (writerDraw) paintWriterDraw(writerDraw);
   syncPageTitle();
-  syncAnchorResolvedClasses();
   paintRowTimes();
-  updateScriptStats();
-  updateCommentsCount();
-  updateTagBadges();
-  scheduleBrollRefresh();
-  renderProduction();
-  captureReplyDrafts();
-  renderComments();
+  announcePainted("screen");
   scheduleUntaggedScan();
-  paintPresence();
-  refreshGalleryOverlay();
   var link = editorSelection().heldLink();
   if (link && !link.cell.isConnected) editorSelection().dropLink();
   screen.drawn = true;
@@ -850,8 +842,7 @@ function paintSessionChange(change) {
 }
 
 function paintProductionViews() {
-  updateTagBadges();
-  renderProduction();
+  announcePainted("tags");
 }
 
 export function screenListeners() {
@@ -1145,7 +1136,7 @@ export function handleToolbarCmd(btn) {
     afterC.collapse(true);
     csel.addRange(afterC);
     cellEditing().sync(cellEl);
-    openCommentComposer({
+    appActions.invoke("comment-on-selection", "button", {
       id: cmtId,
       rowId: cellEl.getAttribute("data-id"),
       field: cellEl.getAttribute("data-field"),
@@ -1169,7 +1160,7 @@ export function handleToolbarCmd(btn) {
     var tagOccurrenceIndex = tagQuoted
       ? tagFieldOccurrences(beforeDiv.innerHTML, tagQuoted, "x", "x", true).hits
       : 0;
-    openTagComposer({
+    appActions.invoke("tag-selection", "button", {
       rowId: cellEl.getAttribute("data-id"),
       field: cellEl.getAttribute("data-field"),
       quotedText: tagQuoted,

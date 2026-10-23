@@ -103,6 +103,7 @@ export interface Preferences {
   readonly setVideoThumbs: (on: boolean) => void;
   readonly scriptScale: () => number;
   readonly setScriptScale: (scale: number) => void;
+  readonly clearScriptScale: () => void;
   readonly prompterFlag: (name: PrompterFlag) => boolean;
   readonly setPrompterFlag: (name: PrompterFlag, on: boolean) => void;
   readonly collabServer: () => string | null;
@@ -317,9 +318,8 @@ export function createPreferences(ports: PreferencePorts): Preferences {
       const n = Number(read(KEYS.scriptScale));
       return isFinite(n) && n >= SCRIPT_SCALE_MIN && n <= SCRIPT_SCALE_MAX ? n : 1;
     },
-    setScriptScale: function (scale: number): void {
-      announce(KEYS.scriptScale, Math.abs(scale - 1) < 0.005 ? null : String(Math.round(scale * 100) / 100));
-    },
+    setScriptScale: function (scale: number): void { announce(KEYS.scriptScale, String(Math.round(scale * 100) / 100)); },
+    clearScriptScale: function (): void { announce(KEYS.scriptScale, null); },
     prompterFlag: function (name: PrompterFlag): boolean { return read(KEYS[name]) === "1"; },
     setPrompterFlag: function (name: PrompterFlag, on: boolean): void { announce(KEYS[name], on ? "1" : "0"); },
     collabServer: function (): string | null { return read(KEYS.collabServer); },

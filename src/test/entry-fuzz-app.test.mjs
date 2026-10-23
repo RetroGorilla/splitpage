@@ -1,12 +1,12 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import {
   TABLE_304, chance, judge, pick, rawObject, seeded, table304Document, text, upTo
 } from "../../tests/application/raw-inputs.ts";
 import { cloneState } from "../core/document/clone.ts";
-import { confirmSavedNow, unsavedChanges } from "../legacy/save-bridge.ts";
+import { confirmSavedNow, saveToServer, unsavedChanges } from "../legacy/save-bridge.ts";
 import { serverStatus } from "../legacy/location-bridge.ts";
 
 await bootApp();
@@ -17,13 +17,14 @@ const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { applyMerge } = await import("../js/03-sync.js");
 const { mergeUndo } = await import("../legacy/editor-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const { finishServerDetect, openServerDoc, saveToServer } = await import("../js/13-hosted.js");
+const { finishServerDetect } = await import("../js/13-hosted.js");
 const { SERVER_RESUME_KEY } = await import("../application/location/server-status.ts");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
-const { openProjectFile, reloadFileFromDisk } = await import("../js/18-local-files.js");
+const { reloadFileFromDisk } = await import("../js/18-local-files.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -112,11 +113,11 @@ function redrawOffered() {
 
 async function through(name, raw, where, tally, spoilMine, broken) {
   const entry = ENTRIES[name];
-  const base = cloneState(S.state);
-  const mine = cloneState(S.state);
+  const base = cloneState(currentDocument());
+  const mine = cloneState(currentDocument());
   if (mine.rows[0]) mine.rows[0].audioText = "Mine, " + where + ".";
   if (spoilMine) spoilMine(mine);
-  const before = S.state, beforeText = JSON.stringify(S.state);
+  const before = currentDocument(), beforeText = JSON.stringify(currentDocument());
   errors.length = 0;
   const epoch = session.epoch(), gen = session.generation();
   heard.length = 0;
@@ -140,9 +141,9 @@ async function through(name, raw, where, tally, spoilMine, broken) {
   if (failed) {
     bump(tally.typed, name + ":" + (refused ? "no document" : outcome));
     if (refused && name === "draft") assert.equal(outcome, "failed", where + ": a draft that is no document is a typed failure");
-    assert.equal(S.state, before, where + ": a failed entry keeps the document");
-    assert.equal(JSON.stringify(S.state), beforeText, where + ": and leaves it as it was");
-    assert.equal(held(), S.state, where + ": the session still holds it");
+    assert.equal(currentDocument(), before, where + ": a failed entry keeps the document");
+    assert.equal(JSON.stringify(currentDocument()), beforeText, where + ": and leaves it as it was");
+    assert.equal(held(), currentDocument(), where + ": the session still holds it");
     assert.deepEqual([session.epoch(), session.generation()], [epoch, gen], where + ": no epoch, no generation");
     assert.deepEqual(heard, [], where + ": nothing published");
     return;
@@ -156,10 +157,10 @@ async function through(name, raw, where, tally, spoilMine, broken) {
   }
   assert.equal(session.epoch(), epoch + (entry.opens ? 1 : 0), where + ": epoch");
   assert.equal(session.generation(), gen, where + ": generation");
-  assert.equal(held(), S.state, where + ": the session holds the document the app shows");
+  assert.equal(held(), currentDocument(), where + ": the session holds the document the app shows");
   assert.equal(JSON.stringify(before), beforeText, where + ": the replaced document was not written into");
-  const verdict = verdictOf(S.state);
-  assert.deepEqual(verdict.problems, [], where + ": " + JSON.stringify(S.state).slice(0, 400));
+  const verdict = verdictOf(currentDocument());
+  assert.deepEqual(verdict.problems, [], where + ": " + JSON.stringify(currentDocument()).slice(0, 400));
   verdict.known.forEach((k) => bump(tally.known, k));
 }
 
@@ -234,7 +235,7 @@ const handle = { kind: "file", name: "reload.txt", getFile: async () => disk };
 async function openImport() {
   disk = new File(["Wide\tOne.\nClose\tTwo."], "reload.txt", { lastModified: 1 });
   handle.name = "reload.txt";
-  await openProjectFile(disk, handle, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: disk, handle: handle, options: { skipSnapshot: true } });
   hearReplacement();
 }
 
@@ -256,22 +257,22 @@ test("booted app: seeded files reloaded in place keep the epoch and generation, 
     const file = fileText(r);
     const where = "reload seed " + seed + " (" + file.name + ")";
     flushEdits();
-    const before = S.state, beforeText = JSON.stringify(S.state);
+    const before = currentDocument(), beforeText = JSON.stringify(currentDocument());
     const epoch = session.epoch(), gen = session.generation();
     heard.length = 0;
     await reloadWith(file);
-    assert.equal(S.state, before, where + ": reloaded in place");
-    assert.equal(held(), S.state, where + ": the session holds it");
+    assert.equal(currentDocument(), before, where + ": reloaded in place");
+    assert.equal(held(), currentDocument(), where + ": the session holds it");
     assert.deepEqual([session.epoch(), session.generation()], [epoch, gen], where + ": no epoch, no generation");
     if (!heard.length) {
       bump(tally.typed, "refused");
-      assert.equal(JSON.stringify(S.state), beforeText, where + ": a refused reload changes nothing");
+      assert.equal(JSON.stringify(currentDocument()), beforeText, where + ": a refused reload changes nothing");
       continue;
     }
     bump(tally.kinds, "reload");
     assert.deepEqual(heard, ["reload"], where);
-    const verdict = verdictOf(S.state);
-    assert.deepEqual(verdict.problems, [], where + ": " + JSON.stringify(S.state).slice(0, 400));
+    const verdict = verdictOf(currentDocument());
+    assert.deepEqual(verdict.problems, [], where + ": " + JSON.stringify(currentDocument()).slice(0, 400));
     verdict.known.forEach((k) => bump(tally.known, k));
   }
   t.diagnostic(JSON.stringify(tally));
@@ -280,9 +281,9 @@ test("booted app: seeded files reloaded in place keep the epoch and generation, 
 
 test("a reload in place migrates the reloaded scenes: each has its status, and the held document is a migrateRows fixed point (#411)", async () => {
   await openImport();
-  const doc = S.state;
+  const doc = currentDocument();
   await reloadWith({ body: "Wide\tPut the #kettle on.\nClose\tTwo.", name: "reload.txt" });
-  assert.equal(S.state, doc);
+  assert.equal(currentDocument(), doc);
   assert.equal(held(), doc);
   assert.deepEqual(doc.rows.map((row) => row.status), ["todo", "todo"]);
   assert.deepEqual(judge(doc, migrate, allowed), { problems: [], known: [] });
@@ -290,20 +291,20 @@ test("a reload in place migrates the reloaded scenes: each has its status, and t
 
 test("a reload in place takes the title from the file's first heading (#411)", async () => {
   await openImport();
-  const doc = S.state;
+  const doc = currentDocument();
   assert.equal(doc.title, "reload");
   await reloadWith({ body: "# Harbour at dawn\n\nWide\tOne.\nClose\tTwo.", name: "reload.md" });
-  assert.equal(S.state, doc);
+  assert.equal(currentDocument(), doc);
   assert.equal(held(), doc);
   assert.equal(doc.title, "Harbour at dawn");
 });
 
 test("a reload in place of a file with no heading takes the title from the file's name (#411)", async () => {
   await openImport();
-  const doc = S.state;
+  const doc = currentDocument();
   assert.equal(doc.title, "reload");
   await reloadWith({ body: "Wide\tOne.\nClose\tTwo.", name: "Kettle notes.txt" });
-  assert.equal(S.state, doc);
+  assert.equal(currentDocument(), doc);
   assert.equal(held(), doc);
   assert.equal(doc.title, "Kettle notes");
 });
@@ -336,7 +337,7 @@ test("seed 400's recovery, which used to find a shot with no name, ends in a val
 
 test("a comment createdAt whose toString is not a function migrates to null, so applyMerge renders, reports the merge and marks it unsaved (#410)", async () => {
   settle(startingDocument("Half"));
-  const before = S.state;
+  const before = currentDocument();
   const theirs = table304Document("Theirs");
   theirs.comments = [
     { id: "c1", rowId: "r1", field: "audioText", body: "One", createdAt: "2026-10-07T09:00:00.000Z" },
@@ -346,13 +347,13 @@ test("a comment createdAt whose toString is not a function migrates to null, so 
   heard.length = 0;
   confirmSavedNow();
   applyMerge({ base: cloneState(before), mine: cloneState(before), theirs: theirs, source: "server-resume", report: true, noAutoSave: true });
-  assert.notEqual(S.state, before);
-  assert.equal(held(), S.state);
+  assert.notEqual(currentDocument(), before);
+  assert.equal(held(), currentDocument());
   assert.equal(heard[0], "recovery");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(unsavedChanges(), true, "the merge was reported, so it is marked unsaved");
-  assert.equal(S.state.comments.find((c) => c.id === "c2").createdAt, null);
-  assert.deepEqual(judge(S.state, migrate, allowed).problems, []);
+  assert.equal(currentDocument().comments.find((c) => c.id === "c2").createdAt, null);
+  assert.deepEqual(judge(currentDocument(), migrate, allowed).problems, []);
   settle(startingDocument("After half"));
 });
 
@@ -367,10 +368,10 @@ test("a merge whose raw theirs has a string rev migrates theirs first, so the me
   settle(start);
   const theirs = table304Document("Theirs");
   theirs.rev = "seven";
-  applyMerge({ base: cloneState(S.state), mine: cloneState(S.state), theirs: theirs, source: "server-conflict", report: false });
-  assert.equal(held(), S.state);
-  assert.equal(S.state.rev, 6);
-  assert.deepEqual(judge(S.state, migrate, allowed).problems, []);
+  applyMerge({ base: cloneState(currentDocument()), mine: cloneState(currentDocument()), theirs: theirs, source: "server-conflict", report: false });
+  assert.equal(held(), currentDocument());
+  assert.equal(currentDocument().rev, 6);
+  assert.deepEqual(judge(currentDocument(), migrate, allowed).problems, []);
 });
 
 test("seed 21's entries, whose merge found #412, now all land in a valid fixed point", async () => {
@@ -387,9 +388,9 @@ function twoScenes(title) {
 }
 
 function unchangedBy(where, start, epoch, gen) {
-  assert.equal(S.state, start.doc, where + ": the document on screen is kept");
-  assert.equal(JSON.stringify(S.state), start.text, where + ": and changes nothing");
-  assert.equal(held(), S.state, where + ": the session still holds it");
+  assert.equal(currentDocument(), start.doc, where + ": the document on screen is kept");
+  assert.equal(JSON.stringify(currentDocument()), start.text, where + ": and changes nothing");
+  assert.equal(held(), currentDocument(), where + ": the session still holds it");
   assert.deepEqual([session.epoch(), session.generation()], [epoch, gen], where + ": no epoch, no generation");
   assert.deepEqual(heard, [], where + ": nothing published");
 }
@@ -414,10 +415,10 @@ test("applyMerge refuses a theirs or a mine that is no document, and nothing cha
       confirmSavedNow();
       const out = applyMerge(opts);
       unchangedBy(where, start, epoch, gen);
-      assert.deepEqual([out.state, out.result, out.snapshot], [S.state, null, null], where + ": answers the document it kept");
+      assert.deepEqual([out.state, out.result, out.snapshot], [currentDocument(), null, null], where + ": answers the document it kept");
       assert.equal(unsavedChanges(), false, where + ": not marked unsaved");
       assert.equal(mergeUndo().last(), undo, where + ": no merge to undo");
-      assert.deepEqual(S.state.rows.map((row) => row.id), ["r1", "r2"], where + ": both scenes stay");
+      assert.deepEqual(currentDocument().rows.map((row) => row.id), ["r1", "r2"], where + ": both scenes stay");
     }
   }
   settle(startingDocument("After refusals"));
@@ -442,7 +443,7 @@ test("the reload seed that found #411 now ends in a migrateRows fixed point", as
   const r = seeded(0x3200 + 1);
   await openImport();
   await reloadWith(fileText(r));
-  assert.deepEqual(judge(S.state, migrate, allowed), { problems: [], known: [] });
+  assert.deepEqual(judge(currentDocument(), migrate, allowed), { problems: [], known: [] });
 });
 
 const toastHost = () => document.getElementById("toast-host");
@@ -476,7 +477,7 @@ function holding(title) {
   twoScenes(title);
   heard.length = 0;
   toastHost().textContent = "";
-  return { doc: S.state, text: JSON.stringify(S.state), epoch: session.epoch(), gen: session.generation() };
+  return { doc: currentDocument(), text: JSON.stringify(currentDocument()), epoch: session.epoch(), gen: session.generation() };
 }
 
 test("opening a legacy .html file whose state is no document is refused as not a Splitpage file, as a .splitpage file already is, and nothing changes (#407)", async () => {
@@ -486,7 +487,7 @@ test("opening a legacy .html file whose state is no document is refused as not a
       ["old.splitpage", JSON.stringify(raw)]
     ]) {
       const start = holding("Open " + name);
-      const opened = await openProjectFile(new File([body], name, { lastModified: 1 }), null, {});
+      const opened = await openDocument({ kind: "file", file: new File([body], name, { lastModified: 1 }), handle: null, options: {} });
       assert.equal(opened, false, name + " " + JSON.stringify(raw));
       assert.deepEqual(toasts(), [name + " doesn't look like a Splitpage file."]);
       unchangedBy(name + " " + JSON.stringify(raw), start, start.epoch, start.gen);
@@ -497,7 +498,7 @@ test("opening a legacy .html file whose state is no document is refused as not a
 test("opening a server document whose state is no document is refused like an empty one, and nothing changes (#407)", async () => {
   for (const raw of NOT_DOCUMENTS) {
     const start = holding("Server open");
-    const opened = await withServer((ask) => ask === "GET api/docs/doc-open" ? reply(200, { id: "doc-open", rev: 4, state: raw }) : null, () => openServerDoc("doc-open"));
+    const opened = await withServer((ask) => ask === "GET api/docs/doc-open" ? reply(200, { id: "doc-open", rev: 4, state: raw }) : null, () => openDocument({ kind: "server", id: "doc-open" }));
     assert.equal(opened, false, JSON.stringify(raw));
     assert.deepEqual(toasts(), ["That document is empty."]);
     unchangedBy("open " + JSON.stringify(raw), start, start.epoch, start.gen);
@@ -508,7 +509,7 @@ test("a server update whose state is no document is refused like one with no sta
   for (const raw of NOT_DOCUMENTS) {
     twoScenes("Pull");
     window.__hostedTest.setSession({ docId: "doc-pull", rev: 1 });
-    const start = { doc: S.state, text: JSON.stringify(S.state) };
+    const start = { doc: currentDocument(), text: JSON.stringify(currentDocument()) };
     const epoch = session.epoch(), gen = session.generation();
     heard.length = 0;
     await withServer((ask) => ask === "GET api/docs/doc-pull" ? reply(200, { id: "doc-pull", rev: 2, state: raw, updatedBy: "Ann" }) : null, async (asked) => {
@@ -526,15 +527,15 @@ test("a save conflict whose state is no document is not merged: the save fails a
   for (const raw of NOT_DOCUMENTS) {
     twoScenes("Conflict");
     window.__hostedTest.setSession({ docId: "doc-save", rev: 1 });
-    const doc = S.state, rows = JSON.stringify(S.state.rows);
+    const doc = currentDocument(), rows = JSON.stringify(currentDocument().rows);
     const epoch = session.epoch(), gen = session.generation();
     heard.length = 0;
     toastHost().textContent = "";
     const saved = await withServer((ask) => ask === "PUT api/docs/doc-save" ? reply(409, { error: "conflict", rev: 3, state: raw }) : null, () => saveToServer());
     assert.equal(saved, false, JSON.stringify(raw));
-    assert.equal(S.state, doc);
-    assert.equal(JSON.stringify(S.state.rows), rows);
-    assert.equal(held(), S.state);
+    assert.equal(currentDocument(), doc);
+    assert.equal(JSON.stringify(currentDocument().rows), rows);
+    assert.equal(held(), currentDocument());
     assert.deepEqual([session.epoch(), session.generation(), heard], [epoch, gen, []]);
     assert.deepEqual(toasts().map((t) => t.split(" — ")[0]), ["Could not save to the server"]);
     assert.equal(window.__hostedTest.home().rev, 1);
@@ -577,7 +578,7 @@ test("a reopen after a reload whose fetch fails still falls back to the link's d
     await idle();
     assert.deepEqual(asked, ["GET api/me", "GET api/docs/doc-resume", "GET api/docs/doc-resume"]);
   });
-  assert.equal(S.state, start.doc);
+  assert.equal(currentDocument(), start.doc);
   sessionStorage.removeItem(SERVER_RESUME_KEY);
   window.__hostedTest.setSession({ docId: null });
   settle(startingDocument("After the server"));
@@ -606,10 +607,10 @@ test("a reopen after a reload that is refused as no document does not stop the d
       assert.match(toasts()[1], /^Opened .* from the server — \d+ scenes?$/, where);
       assert.equal(window.__hostedTest.home().kind, "server", where);
       assert.equal(window.__hostedTest.home().id, "doc-other", where);
-      assert.notEqual(S.state, start.doc, where);
+      assert.notEqual(currentDocument(), start.doc, where);
     } else {
       assert.deepEqual(toasts(), ["That document is empty."], where);
-      assert.equal(S.state, start.doc, where);
+      assert.equal(currentDocument(), start.doc, where);
     }
     assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending, where);
     sessionStorage.removeItem(SERVER_RESUME_KEY);
@@ -632,7 +633,7 @@ test("a server open that takes a pending browser draft and finds a state that is
   modal.hidden = false;
   serverStatus().recordMode({ checked: true });
   const opened = await withServer((ask) => ask === "GET api/docs/doc-draft" ? reply(200, { id: "doc-draft", rev: 2, state: [] }) : null, async (asked) => {
-    const result = await openServerDoc("doc-draft");
+    const result = await openDocument({ kind: "server", id: "doc-draft" });
     assert.deepEqual(asked, ["GET api/docs/doc-draft"]);
     return result;
   });

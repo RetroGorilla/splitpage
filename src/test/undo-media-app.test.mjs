@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -9,7 +9,6 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { applyStepsLive, undo, redo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
 const { invertSteps } = await import("../js/04c-doc-model.js");
@@ -17,6 +16,7 @@ const { rememberCellSelection, placeEditorSelection, cellSelection } = await imp
 const { editorSelection } = await import("../legacy/editor-bridge.ts");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { sanitizeHtml } = await import("../legacy/richtext.ts");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -34,11 +34,11 @@ async function open(audio) {
   window.__hostedTest.setSession({ role: "edit", docId: null });
   const doc = { schema: 2, title: "Undo media", rows: [{ id: "r1", visualText: "", audioText: audio, status: "todo" }], comments: [] };
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(doc)))], "undo-media-" + (++opened) + ".splitpage", { lastModified: opened });
-  await openProjectFile(file, null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
 }
 
-const cell = () => S.state.rows[0].audioText;
+const cell = () => currentDocument().rows[0].audioText;
 const cellEl = () => document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');
 
 function store(html) {

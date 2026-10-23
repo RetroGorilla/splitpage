@@ -1,4 +1,5 @@
 import type { EffectPorts, Notice, NoticeKind } from "../application/effects/ports.ts";
+import { imagesLeftOutText } from "../application/export/diagnostics.ts";
 
 let started: EffectPorts<Element> | null = null;
 let stopped = false;
@@ -25,6 +26,11 @@ export function effectsStarted(): boolean {
 
 export function showToast(message: string, kind?: NoticeKind, sticky?: boolean): Notice {
   return running().notices.show(message, kind, sticky);
+}
+
+export function warnImagesLeftOut(count: number, name: string): void {
+  if (!count) return;
+  showToast(imagesLeftOutText(count, name), "warn");
 }
 
 export function showActionToast(message: string, kind: NoticeKind | undefined, label: string, onAction: () => void, sticky?: boolean): Notice {

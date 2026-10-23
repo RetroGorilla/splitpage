@@ -1,3 +1,4 @@
+import { groupTagsByCategory } from "../core/production/looks.ts";
 import { BROLL_NAME_MAX, BROLL_TEXT_MAX, normalizeBrollProps } from "../core/document/broll.ts";
 import { nextTagStatus, normalizeTagName, registryKey } from "../core/document/tags.ts";
 import { TAG_CATEGORIES, TAG_STATUSES, tagCategory, tagStatus } from "../core/production/looks.ts";
@@ -7,32 +8,18 @@ import "./_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { cellOf } from "../js/04c-doc-model.js";
-import {
-  bulkTagCell,
-  bulkTagRows,
-  healTagRegistry,
-  productionEntries,
-  tagKey,
-  tagOccurrences,
-  tagStatusRank,
-  tagsByCategory,
-  tagsInField
-} from "../js/07-production-tags.js";
-import {
-  BROLL_PROPS_MAX,
-  BROLL_STATUSES,
-  __init as initBroll,
-  anchorBrollInRows,
-  brollEntries,
-  derivedRecordsPlan,
-  brollInCell,
-  brollPropKey,
-  brollShotsByProp,
-  brollStatus
-} from "../js/08c-broll.js";
+import { bulkTagCell, healTagRegistry, tagKey, tagOccurrences, tagStatusRank, tagsInField } from "../js/07-production-tags.js";
+import { bulkTagRows } from "../application/commands/bulk-tags.ts";
+import { productionIndex } from "../legacy/production-index-bridge.ts";
+import { currentDocument } from "../legacy/session-bridge.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
+import { BROLL_PROPS_MAX, BROLL_STATUSES, __init as initBroll, brollEntries, derivedRecordsPlan, brollInCell, brollPropKey, brollShotsByProp, brollStatus } from "../js/08c-broll.js";
+import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
+import { randomIds } from "../adapters/identity/ids.ts";
+import { inertBody } from "../legacy/richtext.ts";
+import { sanitizeHtml } from "../legacy/richtext.ts";
 import { __init as initHistory } from "../js/03a-history-store.js";
 import { applyGearQuickAdd } from "../js/08-production-panels.js";
 import { LONG_DEMO } from "../js/_starters.js";
@@ -47,13 +34,11 @@ startTestSession(appSessionDeps());
 
 freezeClockAndRandom(0x70726f64);
 startSaves({
-  write: async () => ({ kind: "saved" }),
   destination: () => null,
   keyOf: () => ({ owner: null, name: "none" }),
   obsolete: () => {},
-  running: () => {},
   ownership: { capture: () => { throw new Error("no save runs here"); }, stillOwns: () => false },
-  autosave: { enabledAtStart: () => false, due: () => {}, changed: () => {} }
+  autosave: { enabledAtStart: () => false, changed: () => {} }
 }, { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });
 initBroll();
 initHistory();
@@ -81,8 +66,8 @@ const shot = (id, name, extra) => Object.assign({
 
 function load(spec) {
   loadTestDocument(migrateRows(jsonCopy(spec)));
-  S.state.brollShots = migrateRows(Object.assign(jsonCopy(spec), { rows: [] })).brollShots;
-  return jsonCopy(S.state);
+  currentDocument().brollShots = migrateRows(Object.assign(jsonCopy(spec), { rows: [] })).brollShots;
+  return jsonCopy(currentDocument());
 }
 
 const sha256 = (v) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
@@ -100,7 +85,7 @@ const categoriesView = (groups) => groups.map((g) => ({ cat: g.cat.id, items: g.
 
 function brollView(list) {
   return list.map((e) => {
-    const at = S.state.brollShots.indexOf(e.rec);
+    const at = currentDocument().brollShots.indexOf(e.rec);
     return Object.assign({}, e, { rec: at === -1 ? { fresh: jsonCopy(e.rec) } : { stored: at } });
   });
 }
@@ -108,43 +93,43 @@ function brollView(list) {
 function occurrencesOf(names) {
   return names.map(({ cat, name }) => {
     const hits = [];
-    S.state.rows.forEach((r) => {
+    currentDocument().rows.forEach((r) => {
       ["visualText", "audioText"].forEach((field) => {
         const found = tagOccurrences(cellOf(r[field]), name);
         if (found.length) hits.push({ rowId: r.id, field, ranges: found.map((m) => [m.from, m.to]) });
       });
     });
-    return { cat, name, hits, visualColumnCount: bulkTagRows(jsonCopy(S.state.rows), name, cat, name, false, true) };
+    return { cat, name, hits, visualColumnCount: bulkTagRows(jsonCopy(currentDocument().rows), name, cat, name, false, true) };
   });
 }
 
 function readAll() {
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   const out = {
-    entries: entriesView(productionEntries()),
-    byCategory: categoriesView(tagsByCategory()),
+    entries: entriesView(productionIndex().entries(currentDocument())),
+    byCategory: categoriesView(groupTagsByCategory(productionIndex().entries(currentDocument()))),
     brollRead: brollView(brollEntries()),
     shotsByProp: jsonCopy(brollShotsByProp())
   };
-  out.readsWroteNothing = JSON.stringify(S.state) === before;
+  out.readsWroteNothing = JSON.stringify(currentDocument()) === before;
   return out;
 }
 
 function repairAll(out) {
-  const registryBefore = jsonCopy(S.state.productionTags);
+  const registryBefore = jsonCopy(currentDocument().productionTags);
   out.healed = healTagRegistry();
-  out.registryAfterHeal = unchangedOr(registryBefore, S.state.productionTags);
-  out.entriesAfterHeal = sameAsOr("entries", out.entries, entriesView(productionEntries()));
+  out.registryAfterHeal = unchangedOr(registryBefore, currentDocument().productionTags);
+  out.entriesAfterHeal = sameAsOr("entries", out.entries, entriesView(productionIndex().entries(currentDocument())));
   out.healedAgain = healTagRegistry();
-  const shotsBefore = jsonCopy(S.state.brollShots);
-  const records = derivedRecordsPlan(S.state, WHOLE_DOCUMENT);
-  if (records) records.apply(S.state);
+  const shotsBefore = jsonCopy(currentDocument().brollShots);
+  const records = derivedRecordsPlan(currentDocument(), WHOLE_DOCUMENT);
+  if (records) records.apply(currentDocument());
   const repair = brollView(brollEntries());
   out.brollRepair = sameAsOr("brollRead", out.brollRead, repair);
-  out.shotsAfterRepair = unchangedOr(shotsBefore, S.state.brollShots);
-  const rowsBefore = jsonCopy(S.state.rows.map((r) => r.visualText));
-  out.anchored = anchorBrollInRows(S.state);
-  out.visualAfterAnchoring = unchangedOr(rowsBefore, S.state.rows.map((r) => r.visualText));
+  out.shotsAfterRepair = unchangedOr(shotsBefore, currentDocument().brollShots);
+  const rowsBefore = jsonCopy(currentDocument().rows.map((r) => r.visualText));
+  out.anchored = anchorBrollInRows(currentDocument(), undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml });
+  out.visualAfterAnchoring = unchangedOr(rowsBefore, currentDocument().rows.map((r) => r.visualText));
   out.brollAfterAnchoring = sameAsOr("brollRepair", repair, brollView(brollEntries()));
   return out;
 }
@@ -169,7 +154,7 @@ SCENARIOS.push({
     const input = load(demo());
     const out = { demoSha256: sha256(LONG_DEMO.state) };
     Object.assign(out, readAll());
-    out.occurrences = occurrencesOf(S.state.productionTags.map((t) => ({ cat: t.cat, name: t.name })));
+    out.occurrences = occurrencesOf(currentDocument().productionTags.map((t) => ({ cat: t.cat, name: t.name })));
     repairAll(out);
     return masked(out, input);
   }
@@ -179,7 +164,7 @@ SCENARIOS.push({
   name: "long-demo-registry-emptied",
   run() {
     const input = load(demo());
-    S.state.productionTags = [];
+    currentDocument().productionTags = [];
     const out = { demoSha256: sha256(LONG_DEMO.state) };
     Object.assign(out, readAll());
     repairAll(out);
@@ -191,7 +176,7 @@ SCENARIOS.push({
   name: "long-demo-shots-dropped",
   run() {
     const input = load(demo());
-    S.state.brollShots = [];
+    currentDocument().brollShots = [];
     const out = { demoSha256: sha256(LONG_DEMO.state) };
     Object.assign(out, readAll());
     repairAll(out);
@@ -249,12 +234,12 @@ SCENARIOS.push({
         row("r3", "", "Title card")
       ]
     });
-    S.state.rows[1].audioText = "Pour from the " + tag("prop", "kettle ", "KETTLE") + " into the " + tag("prop", "Mug", "mug") +
+    currentDocument().rows[1].audioText = "Pour from the " + tag("prop", "kettle ", "KETTLE") + " into the " + tag("prop", "Mug", "mug") +
       ", then rinse the kettle and the mug.<br>" + cue("SFX: whistle");
-    S.state.rows[1].visualText = "Mug and kettle on the side";
-    S.state.rows[2].visualText = tag("vfx", "Lower third") + ": “Step 1” " + tag("sound", "Whistle", "whistle") +
+    currentDocument().rows[1].visualText = "Mug and kettle on the side";
+    currentDocument().rows[2].visualText = tag("vfx", "Lower third") + ": “Step 1” " + tag("sound", "Whistle", "whistle") +
       " " + tag("bogus", "Thing") + " " + tag("cast", "  Ada  Lovelace ", "Ada");
-    const out = { input, edited: jsonCopy(S.state.rows) };
+    const out = { input, edited: jsonCopy(currentDocument().rows) };
     Object.assign(out, readAll());
     out.occurrences = occurrencesOf([{ cat: "prop", name: "kettle" }, { cat: "prop", name: "Mug" }, { cat: "sound", name: "whistle" }]);
     repairAll(out);
@@ -274,7 +259,7 @@ function cueDoc(docId, rows) {
 }
 
 function soundRegistry() {
-  return S.state.productionTags.filter((t) => t.cat === "sound").map((t) => [t.id, t.name, t.status, t.notes]);
+  return currentDocument().productionTags.filter((t) => t.cat === "sound").map((t) => [t.id, t.name, t.status, t.notes]);
 }
 
 function steps(list) {
@@ -282,14 +267,14 @@ function steps(list) {
     const healed = fn();
     return {
       step: label, healed: healed === undefined ? null : healed, sound: soundRegistry(),
-      orphaned: productionEntries().filter((e) => e.orphaned).map((e) => e.key)
+      orphaned: productionIndex().entries(currentDocument()).filter((e) => e.orphaned).map((e) => e.key)
     };
   });
 }
 
-const setAudio = (id, html) => () => { S.state.rows.find((r) => r.id === id).audioText = html; return healTagRegistry(); };
-const setVisual = (id, html) => () => { S.state.rows.find((r) => r.id === id).visualText = html; return healTagRegistry(); };
-const entryNamed = (name) => S.state.productionTags.find((t) => t.name === name);
+const setAudio = (id, html) => () => { currentDocument().rows.find((r) => r.id === id).audioText = html; return healTagRegistry(); };
+const setVisual = (id, html) => () => { currentDocument().rows.find((r) => r.id === id).visualText = html; return healTagRegistry(); };
+const entryNamed = (name) => currentDocument().productionTags.find((t) => t.name === name);
 
 SCENARIOS.push({
   name: "cue-retitle",
@@ -309,7 +294,7 @@ SCENARIOS.push({
 
     load(cueDoc("d" + "b".repeat(32)));
     out.oldNameStillInScript = steps([
-      ["open with the cue twice", () => { S.state.rows[1].audioText = cue("SFX: door slam"); return healTagRegistry(); }],
+      ["open with the cue twice", () => { currentDocument().rows[1].audioText = cue("SFX: door slam"); return healTagRegistry(); }],
       ["marked Have it", () => { entryNamed("door slam").status = "have"; }],
       ["one copy edited", setAudio("r2", cue("SFX: door slams"))]
     ]);
@@ -324,8 +309,8 @@ SCENARIOS.push({
     out.newNameAlreadyTracked = steps([
       ["open and heal", () => healTagRegistry()],
       ["the cue moved to another row", () => {
-        S.state.rows[1].audioText = cue("Music: door slam");
-        S.state.rows[0].audioText = "Welcome back.";
+        currentDocument().rows[1].audioText = cue("Music: door slam");
+        currentDocument().rows[0].audioText = "Welcome back.";
         return healTagRegistry();
       }],
       ["the first cue renamed to a tracked name", setAudio("r1", "Welcome back.<br>" + cue("SFX: upbeat intro"))]
@@ -345,8 +330,8 @@ SCENARIOS.push({
     out.cueMovedToAnotherRow = steps([
       ["open and heal", () => healTagRegistry()],
       ["removed from one row, a new one in another", () => {
-        S.state.rows[1].audioText = "";
-        S.state.rows[2].audioText = cue("Music: upbeat outro");
+        currentDocument().rows[1].audioText = "";
+        currentDocument().rows[2].audioText = cue("Music: upbeat outro");
         return healTagRegistry();
       }]
     ]);
@@ -358,7 +343,7 @@ SCENARIOS.push({
       ["document B healed", () => { loadTestDocument(docB); return healTagRegistry(); }],
       ["back to A with its cue edited", () => {
         loadTestDocument(docA);
-        S.state.rows[1].audioText = cue("Music: upbeat intros");
+        currentDocument().rows[1].audioText = cue("Music: upbeat intros");
         return healTagRegistry();
       }]
     ]);
@@ -418,11 +403,11 @@ function cueLimitRows() {
 function cueLimitRetitle() {
   const long = (ch) => "slow " + ch + " " + letters(80, "x");
   load(cueDoc("d" + "2".repeat(31) + "c", [row("r1", "Intro.<br>" + cue("Music: " + long("a"))), row("r2", "")]));
-  const sounds = () => S.state.productionTags.filter((t) => t.cat === "sound")
+  const sounds = () => currentDocument().productionTags.filter((t) => t.cat === "sound")
     .map((t) => ({ id: t.id, length: t.name.length, name: t.name, status: t.status }));
   return [
     ["open and heal", () => healTagRegistry()],
-    ["marked Have it", () => { S.state.productionTags.find((t) => t.cat === "sound").status = "have"; }],
+    ["marked Have it", () => { currentDocument().productionTags.find((t) => t.cat === "sound").status = "have"; }],
     ["a word inside the first 80 characters edited", setAudio("r1", "Intro.<br>" + cue("Music: " + long("b")))],
     ["only characters past 80 edited", setAudio("r1", "Intro.<br>" + cue("Music: " + long("b") + "zz"))]
   ].map(([label, fn]) => {
@@ -515,7 +500,7 @@ SCENARIOS.push({
       props: propLimitRows()
     };
     const input = load({ schema: 2, title: "Seeds", docId: "d" + "3".repeat(31) + "c", rows: [] });
-    S.state.rows = seedRows();
+    currentDocument().rows = seedRows();
     out.seeds = brollEntries().map((e) => ({
       rowId: e.rowId, name: e.name, location: e.location, locationLength: e.location.length, audioRefLength: e.audioRef.length
     }));
@@ -545,16 +530,16 @@ function quickAdd(label, lines, eol) {
   const text = lines.join(eol || "\n");
   box.value = text;
   confirmSavedNow();
-  const others = jsonCopy(S.state.productionTags.filter((t) => t.cat !== "gear"));
+  const others = jsonCopy(currentDocument().productionTags.filter((t) => t.cat !== "gear"));
   applyGearQuickAdd();
   return {
     step: label, typed: text,
-    gear: S.state.productionTags.filter((t) => t.cat === "gear").map((t) => [t.id, t.name, t.status, t.notes]),
-    otherTagsUntouched: JSON.stringify(others) === JSON.stringify(S.state.productionTags.filter((t) => t.cat !== "gear")),
+    gear: currentDocument().productionTags.filter((t) => t.cat === "gear").map((t) => [t.id, t.name, t.status, t.notes]),
+    otherTagsUntouched: JSON.stringify(others) === JSON.stringify(currentDocument().productionTags.filter((t) => t.cat !== "gear")),
     toasts: Array.from(host.children).map((el) => el.textContent),
     boxAfter: box.value,
     dirty: unsavedChanges(),
-    personColors: S.state.personColors === undefined ? null : jsonCopy(S.state.personColors)
+    personColors: currentDocument().personColors === undefined ? null : jsonCopy(currentDocument().personColors)
   };
 }
 

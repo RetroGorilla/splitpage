@@ -1,22 +1,22 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { createHeldFileHandle, mockClock } from "./_m4-matrix.mjs";
-import { mergeBase } from "../legacy/session-bridge.ts";
+import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const { obsoleteSaveText, saveDoc, setAutoSaveEnabled } = await import("../js/14-export.js");
+const { obsoleteSaveText } = await import("../js/14-export.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const homeModule = await import("../legacy/location-bridge.ts");
 const saves = await import("../legacy/save-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -36,13 +36,13 @@ function heldFile(doc, name) {
 async function openFrom(target) {
   loadTestDocument(script("Placeholder", ID("0")));
   flushEdits();
-  clearDirty();
-  await openProjectFile(await target.handle.getFile(), target.handle, { skipSnapshot: true, silent: true });
+  confirmSavedNow();
+  await openDocument({ kind: "file", file: await target.handle.getFile(), handle: target.handle, options: { skipSnapshot: true, silent: true } });
 }
 
 function edit(text) {
-  S.state.rows[0].audioText = text;
-  markDirty();
+  currentDocument().rows[0].audioText = text;
+  noteSessionEdit();
 }
 
 function warnings() {
@@ -64,7 +64,7 @@ function scene(run) {
       await run(t);
     } finally {
       homeModule.setHome("none");
-      clearDirty();
+      confirmSavedNow();
     }
   };
 }
@@ -76,7 +76,7 @@ test("D10: a file save that lands after the same file was reopened is reported o
   target.holdOp("close");
   const saving = saveDoc();
   await target.arrivedAt("close");
-  await openProjectFile(await target.handle.getFile(), target.handle, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: await target.handle.getFile(), handle: target.handle, options: { skipSnapshot: true, silent: true } });
   const before = warnings().length;
   target.releaseOp("close");
   await saving;
@@ -91,7 +91,7 @@ test("D10: a file save that lands after another file's document was opened says 
   const saving = saveDoc();
   await target.arrivedAt("close");
   const other = heldFile(script("Other", ID("c")), "other.splitpage");
-  await openProjectFile(await other.handle.getFile(), other.handle, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: await other.handle.getFile(), handle: other.handle, options: { skipSnapshot: true, silent: true } });
   const before = warnings().length;
   target.releaseOp("close");
   await saving;
@@ -134,7 +134,7 @@ test("INV-20: while a save waits behind another, both Save buttons stay busy unt
   assert.ok(target.text().includes("Second."), "the file ends with the later save");
 }));
 
-test("clearDirty confirms the open destination at the current generation, and an edit puts it behind again", scene(async () => {
+test("confirmSavedNow confirms the open destination at the current generation, and an edit puts it behind again", scene(async () => {
   const target = heldFile(script("Generations", ID("e")), "generations.splitpage");
   await openFrom(target);
   assert.equal(saves.unsavedFor(), false);

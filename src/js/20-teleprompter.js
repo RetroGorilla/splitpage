@@ -9,7 +9,7 @@ import {
 } from "../application/prompter-state.ts";
 import { reviewBlocked, reviewMode, serverHomeId } from "../legacy/location-bridge.ts";
 import { SpeechRecognitionCtor } from "./00-prelude.js";
-import { closeAllSidePanels } from "./03b-side-panels.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import {
   addPersonForTag,
   renderProduction,
@@ -17,8 +17,9 @@ import {
   setTagNotes,
   setTagOwner
 } from "./08-production-panels.js";
-import { queueAutoSave } from "./14-export.js";
-import { adoptProjectState, parseProjectFileState } from "./18-local-files.js";
+import { autoSavePolicy } from "../legacy/save-bridge.ts";
+import { parseProjectFileState } from "./18-local-files.js";
+import { openDocument } from "../legacy/transition-bridge.ts";
 import {
   canOpenPrompterInBrowser,
   createDesktopRecognition,
@@ -27,8 +28,7 @@ import {
   loadDesktopVoice,
   openPrompterInBrowser
 } from "./20f-desktop.js";
-import { closeNewTabPage } from "./20j-newtab.js";
-import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "./_voice-relay.js";
+import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "../adapters/desktop/voice-relay.js";
 import { pad2, formatTimecode, rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { withoutCues } from "../core/text/cues.ts";
@@ -432,7 +432,7 @@ function lockPageScrollWhenArrived(el) {
 }
 
 export function openPrompter() {
-  closeAllSidePanels();
+  sidePanels().closeAll();
   buildPrompterContent();
   var el = document.getElementById("prompter");
   prompterLeaveSeq++;
@@ -964,7 +964,7 @@ function whenInitialStateReady() {
 }
 
 function showPrompterForLaunch() {
-  closeNewTabPage();
+  sidePanels().close("newtab-page");
   if (!prompterIsOpen()) openPrompter();
 }
 
@@ -986,7 +986,7 @@ async function launchPrompterFromScript(token) {
     showToast("Could not read the script the desktop app sent.", "error", true);
     return false;
   }
-  adoptProjectState(parsed.state, file, null, parsed.kind, { skipSnapshot: true, silent: true });
+  openDocument({ kind: "file", file: file, handle: null, parsed: parsed, options: { skipSnapshot: true, silent: true } });
   showPrompterForLaunch();
   showToast("A copy from the desktop app, for reading — edit the script there; changes made here are not saved back.", "ok");
   return true;
@@ -1023,7 +1023,7 @@ export function wireTagEntityContainer(id, rootClick) {
       setAddingPerson: function (value) { setTagAddingPerson(value); },
       setTagOwner: setTagOwner,
       setTagNotes: setTagNotes,
-      queueAutoSave: queueAutoSave
+      queueAutoSave: function () { autoSavePolicy().dueNow(); }
     }
   });
 }

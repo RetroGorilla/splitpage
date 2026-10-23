@@ -1,8 +1,6 @@
-import { S } from "./_state.js";
 import { setHideShotScenes } from "./01b-hide-shot.js";
-import { personSwatchesHtml, renderHistory, setMyColor } from "./03-sync.js";
-import { getSavedAuthorName, renderComments } from "./10-comments.js";
-import { updateSaveStatus } from "./12-dirty-toast.js";
+import { personSwatchesHtml } from "./03-sync.js";
+import { getSavedAuthorName } from "./10-comments.js";
 import {
   DEFAULT_COLLAB_SERVER,
   collabServerView,
@@ -10,7 +8,7 @@ import {
   readCollabServer,
   signOutCollab
 } from "./13b-collaborate.js";
-import { setAutoSaveEnabled } from "./14-export.js";
+import { setAutoSaveEnabled } from "../legacy/save-bridge.ts";
 import { applyWriterSize, readWriterSize } from "./19-writer.js";
 import { setPrompterFlip, setPrompterMirror, setPrompterSceneMode } from "./20-teleprompter.js";
 import { renderDesktopAppNotice } from "./20a-update.js";
@@ -260,7 +258,7 @@ function applyChange(target) {
   var id = target.id, name = target.name;
   if (name === "settings-theme") { preferences().setTheme(target.value); return; }
   if (name === "settings-clock") { preferences().setClock(target.value); return; }
-  if (name === "settings-person-color") { setMyColor(target.value); return; }
+  if (name === "settings-person-color") { preferences().setMyColor(target.value); return; }
   if (id === "settings-rundown-min") { preferences().setRundownMin(target.checked); return; }
   if (id === "settings-tag-icons") { preferences().setTagIcons(target.checked); return; }
   if (id === "settings-video-thumbs") { preferences().setVideoThumbs(target.checked); return; }
@@ -374,12 +372,6 @@ function onPrefChanged(key) {
   var name = preferences().nameOf(key);
   if (name === "theme") applyTheme(window, preferences().theme());
   if (name === "tagIcons") applyTagIcons(window, preferences().tagIcons());
-  if (name === "clock") {
-    updateSaveStatus();
-    if (S.state) renderComments();
-    var hist = document.getElementById("history-panel");
-    if (hist && !hist.hidden) renderHistory();
-  }
   if (settingsOpen()) renderSettings(key);
 }
 
@@ -395,7 +387,6 @@ export function __init() {
   window.__settingsTest = {
     open: openSettings,
     close: closeSettings,
-    isOpen: settingsOpen,
-    refreshSaveStatus: updateSaveStatus
+    isOpen: settingsOpen
   };
 }
