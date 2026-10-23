@@ -1,7 +1,7 @@
 # Stage directions for the performer (#167): writing one in the editor.
 #
 # A direction is the `dir` mark on words of the Audio column
-# (04c-doc-model.js), stored as <span class="stage-dir"> and shown dim,
+# (src/core/text), stored as <span class="stage-dir"> and shown dim,
 # italic and bracketed. Typing "((beat))" makes one when the second ")"
 # is typed, and Ctrl+Z gives back the literal "((beat))" — the tag
 # shortcuts' rule; single brackets are prose; in the Visual column
