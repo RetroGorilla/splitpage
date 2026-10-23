@@ -16,6 +16,7 @@ import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import { normalizeTagName } from "../../core/document/tags.ts";
 import { breakUndoCoalescing, flushEdits, lastUndoEntry, redo, undo } from "../../js/12a-undo.js";
 import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import { blobImgHtml, bytesForSync, dataUrlForSync, ensureBytes, intern, internDataUrl, isDurableSync, persist, queuePersist, recordFor, urlForSync } from "../../adapters/storage/02c-blobs.js";
@@ -111,7 +112,19 @@ const place: DocumentPlace = {
 };
 
 const text: TextServices<HTMLElement> = {
-  cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal
+  cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal,
+  retagBody(body, cat, target, toName) {
+    body.querySelectorAll(".tag-anchor").forEach(function (el) {
+      if (el.getAttribute("data-tag-cat") !== cat) return;
+      if (normalizeTagName(el.getAttribute("data-tag-name")) !== target) return;
+      if (toName !== null) { el.setAttribute("data-tag-name", toName); return; }
+      const parent = el.parentNode;
+      if (!parent) return;
+      while (el.firstChild) parent.insertBefore(el.firstChild, el);
+      parent.removeChild(el);
+    });
+    return body.innerHTML;
+  }
 };
 
 const undoControl: UndoControl = {
