@@ -15,11 +15,11 @@ export function fakeScreen(initial: Partial<ScreenState> = {}) {
 }
 
 export function fakeActions(registry?: ActionRegistry) {
-  const calls: { id: string; source: ActionSource }[] = [];
+  const calls: { id: string; source: ActionSource; input?: unknown }[] = [];
   const actions: Pick<ActionRegistry, "invoke" | "view"> = {
-    invoke: (id, source) => {
-      calls.push({ id, source });
-      return registry ? registry.invoke(id, source) : { kind: "ran", id };
+    invoke: (id, source, input) => {
+      calls.push(input === undefined ? { id, source } : { id, source, input });
+      return registry ? registry.invoke(id, source, input) : { kind: "ran", id };
     },
     view: (id, source) => registry?.view(id, source)
   };

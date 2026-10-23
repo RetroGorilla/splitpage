@@ -1,9 +1,6 @@
-import { currentDocument } from "../legacy/session-bridge.ts";
-import { rundownEdge } from "../features/rundown/rundown.js";
-import { appActions } from "../legacy/app-actions.ts";
-import { presenceShown } from "./13a-presence.js";
-import { idMap } from "../core/document/id-map.ts";
-import { pad2 } from "../core/production/timing.ts";
+import { rundownEdge } from "./rundown.js";
+import { idMap } from "../../core/document/id-map.ts";
+import { pad2 } from "../../core/production/timing.ts";
 
 export var RUNDOWN_IDLE_MS = 60 * 1000;
 var DOT_PX = 10;
@@ -64,6 +61,7 @@ export function rundownDotXs(center, n, trackW, dot, step) {
   return out;
 }
 
+var ports = null;
 var activity = idMap();
 var lastKey = "";
 var groups = [];
@@ -126,10 +124,11 @@ function placeRundownPresence() {
 }
 
 export function paintRundownPresence(seen) {
+  if (!ports) return;
   var layer = layerEl();
   if (!layer) return;
-  var people = presenceShown();
-  var rows = currentDocument()?.rows ?? [];
+  var people = ports.presence.shown();
+  var rows = ports.document.current()?.rows ?? [];
   if (!people.length || !rows.length) {
     activity = idMap();
     groups = [];
@@ -165,24 +164,40 @@ export function paintRundownPresence(seen) {
   placeRundownPresence();
 }
 
-export function __init() {
+export function __init(given) {
+  ports = given;
+  activity = idMap();
+  lastKey = "";
+  groups = [];
+  var offs = [];
+  var disposed = false;
+  var owner = { dispose: function () {
+    if (disposed) return;
+    disposed = true;
+    while (offs.length) offs.pop()();
+    ports = null;
+  } };
   var strip = stripEl();
   var blocksEl = strip && strip.querySelector(".rundown-blocks");
   var layer = layerEl();
-  if (!strip || !blocksEl || !layer) return;
-  layer.addEventListener("click", function (e) {
+  if (!strip || !blocksEl || !layer) return owner;
+  function onDotClick(e) {
     var dot = e.target.closest ? e.target.closest(".rd-who") : null;
     if (!dot) return;
     e.preventDefault();
-    appActions.invoke("go-to-scene", "button", dot.getAttribute("data-row"));
-  });
+    ports.actions.invoke("go-to-scene", "button", dot.getAttribute("data-row"));
+  }
+  layer.addEventListener("click", onDotClick);
+  offs.push(function () { layer.removeEventListener("click", onDotClick); });
   if (typeof MutationObserver === "function") {
-    new MutationObserver(function (list) {
+    var watcher = new MutationObserver(function (list) {
       if (!groups.length && !lastKey) return;
       var rebuilt = list.some(function (m) { return m.type === "childList"; });
       if (rebuilt) paintRundownPresence(false);
       else placeRundownPresence();
-    }).observe(blocksEl, { childList: true, attributes: true, attributeFilter: ["style"], subtree: true });
+    });
+    watcher.observe(blocksEl, { childList: true, attributes: true, attributeFilter: ["style"], subtree: true });
+    offs.push(function () { watcher.disconnect(); });
   }
 
   window.__rundownPresenceTest = {
@@ -193,4 +208,5 @@ export function __init() {
     activity: function () { return JSON.parse(JSON.stringify(activity)); },
     idleMs: RUNDOWN_IDLE_MS
   };
+  return owner;
 }
