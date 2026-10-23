@@ -2,7 +2,7 @@ import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { createHeldImageDecode } from "./_m4-matrix.mjs";
 
 window.Element.prototype.scrollIntoView = function () {};
@@ -156,10 +156,10 @@ for (const scenario of ["dispose and reopen", "same-ID document replacement", "s
         open();
         composer();
       } else if (scenario === "same-ID document replacement") {
-        const before = S.state;
+        const before = currentDocument();
         open();
-        assert.notEqual(S.state, before);
-        assert.equal(S.state.docId, before.docId);
+        assert.notEqual(currentDocument(), before);
+        assert.equal(currentDocument().docId, before.docId);
         composer();
       } else if (scenario === "stale completion after remount") {
         owner.dispose();
@@ -176,13 +176,13 @@ for (const scenario of ["dispose and reopen", "same-ID document replacement", "s
       }
       const body = document.getElementById("comment-body-editable");
       body.innerHTML = "Replacement draft";
-      const before = JSON.stringify(S.state);
+      const before = JSON.stringify(currentDocument());
       const modal = document.getElementById("comment-modal").innerHTML;
       const toast = document.getElementById("toast-host").innerHTML;
       decode.releaseDecode();
       await new Promise(setImmediate);
       assert.equal(decode.gates.parked("image.decode").length, 0);
-      assert.equal(JSON.stringify(S.state), before);
+      assert.equal(JSON.stringify(currentDocument()), before);
       if (scenario === "normal completion" || scenario === "token change while held") {
         assert.equal(body.querySelectorAll("img").length, 1);
         assert.match(body.textContent, /Replacement draft/);
@@ -209,7 +209,7 @@ test("comments app: remount posts and replies once and dispose clears menus, dra
   reply.textContent = "Reply once";
   document.querySelector('.reply-composer[data-for="c_one"] .reply-name-input').value = "Ada";
   fire(document.querySelector('[data-action="reply-post"][data-id="c_one"]'), "click");
-  assert.equal(S.state.comments[0].replies.length, 1);
+  assert.equal(currentDocument().comments[0].replies.length, 1);
   fire(document.querySelector('[data-action="comment-menu"][data-id="c_one"]'), "click");
   fire(document.querySelector('[data-action="delete-comment"][data-id="c_one"]'), "click");
   assert.equal(deleteConfirmation().armedId("comment"), "c_one");
@@ -224,7 +224,7 @@ test("comments app: remount posts and replies once and dispose clears menus, dra
     document.getElementById("comment-body-editable").textContent = "Post once";
     document.getElementById("comment-name").value = "Ada";
     fire(document.getElementById("comment-post"), "click");
-    assert.equal(S.state.comments.filter((comment) => comment.body === "Post once").length, 1);
+    assert.equal(currentDocument().comments.filter((comment) => comment.body === "Post once").length, 1);
     const name = document.getElementById("comment-name");
     name.value = "A".repeat(100);
     fire(name, "input", { isComposing: true });

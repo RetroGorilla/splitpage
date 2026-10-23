@@ -1,4 +1,4 @@
-import { S } from "../js/_state.js";
+import { currentDocument } from "./session-bridge.ts";
 import { prompterIsOpen } from "../application/prompter-state.ts";
 import { brollPageOpen } from "../js/08d-broll-panel.js";
 import { viewFlags } from "./preferences-bridge.ts";
@@ -10,7 +10,7 @@ import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 export function screenNow(): ScreenState {
   return {
-    loading: !S.state,
+    loading: !currentDocument(),
     dialog: dialogOpen(),
     launcher: launcherOpen(),
     tour: tourShowing(),

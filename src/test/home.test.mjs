@@ -5,8 +5,11 @@ import "./_location-started.mjs";
 
 test("autoSaveTarget answers server, file or null off the home", async () => {
   await import("./_dom.mjs");
-  const { autoSaveTarget } = await import("../js/14-export.js");
-  const { onServerDoc } = await import("../js/13-hosted.js");
+  const { autoSaveTarget, saveDestinations, startSaves } = await import("../legacy/save-bridge.ts");
+  const { legacyFileDestination, legacySavePorts } = await import("../js/14-export.js");
+  const { onServerDoc, serverSaveDestination } = await import("../js/13-hosted.js");
+  const stopSaves = startSaves(legacySavePorts({ capture: () => Object.freeze({}), stillOwns: () => true }), { start: () => null, stop: () => {} });
+  const drops = [saveDestinations().register(legacyFileDestination()), saveDestinations().register(serverSaveDestination())];
 
   setHome("none");
   assert.equal(autoSaveTarget(), null);
@@ -30,4 +33,6 @@ test("autoSaveTarget answers server, file or null off the home", async () => {
   assert.equal(autoSaveTarget(), null);
 
   setHome("none");
+  drops.forEach((drop) => drop());
+  stopSaves();
 });

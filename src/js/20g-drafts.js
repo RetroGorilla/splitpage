@@ -8,10 +8,11 @@ import {
   syncDocIdentity
 } from "./02b-doc-id.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
-import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
+import { showToast } from "./12-dirty-toast.js";
 import { onServerDoc } from "./13-hosted.js";
 import { DRAFT_LIMITS, browserDraftKey, draftBaseOf } from "../adapters/storage/draft-store-idb.ts";
 import {
+  applyStashedWork,
   browserDrafts,
   captureRestore,
   desktopDrafts,
@@ -20,20 +21,17 @@ import {
   stillRestoring,
   useBrowserDraftFactory
 } from "../legacy/recovery-bridge.ts";
-import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
+import { NO_DESTINATION, documentTransitions, openDocument } from "../legacy/transition-bridge.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
-import { applyStashedWork } from "./14-export.js";
-import {
-  adoptProjectState,
-  parseProjectFileState
-} from "./18-local-files.js";
-import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
+import { parseProjectFileState } from "./18-local-files.js";
+import { notifyDesktopDocumentState } from "./20f-desktop.js";
+import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { SCHEMA_VERSION } from "../core/document/fields.ts";
 import { createCaptureSchedule } from "../application/recovery/capture-schedule.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
-import { currentDocument, mergeBase } from "../legacy/session-bridge.ts";
+import { currentDocument, mergeBase, noteAbsorbedDirty } from "../legacy/session-bridge.ts";
 
 var draftOnDisk;
 
@@ -563,7 +561,7 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
   });
   if (arrived.forkedFrom) copyDocHistorySafe(arrived.forkedFrom, arrived.document.docId);
   syncDocIdentity();
-  markAbsorbedDirty("recovery");
+  noteAbsorbedDirty("recovery");
   showToast(reasonText, "warn", true);
   return true;
 }
@@ -723,7 +721,7 @@ async function restoreFileDraft(t, mine, base, origin, ctx) {
   }
   if (refId) disk.docId = refId;
 
-  adoptProjectState(disk, file, handle, parsed.kind, { skipSnapshot: true, silent: true });
+  openDocument({ kind: "file", file: file, handle: handle, parsed: { state: disk, kind: parsed.kind }, options: { skipSnapshot: true, silent: true } });
   var diskCopy = cloneState(disk);
 
   if (sameDocContent(mine, disk)) {
@@ -735,7 +733,7 @@ async function restoreFileDraft(t, mine, base, origin, ctx) {
   if (sameDocContent(base, disk)) {
     documentTransitions().restore({ from: { document: mine } });
     documentLocation().markWrittenOut(!!t.header.docIdWrittenOut);
-    markAbsorbedDirty("recovery");
+    noteAbsorbedDirty("recovery");
     showToast("Restored your unsaved changes to " + (currentDocument().title || file.name) +
       (draftWhenText(t) ? " " + draftWhenText(t) : ""), "ok", true);
     return "applied";
@@ -772,7 +770,7 @@ function adoptUntitledDraft(t, mine, base) {
     writtenOut: !!t.header.docIdWrittenOut
   });
   syncDocIdentity();
-  markAbsorbedDirty("recovery");
+  noteAbsorbedDirty("recovery");
   showToast("Restored your unsaved script" + (draftWhenText(t) ? " " + draftWhenText(t) : "") +
     " — it has never been saved, so save it somewhere.", "warn", true);
   return "applied";

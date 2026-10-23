@@ -1,7 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { cloneState } from "../core/document/clone.ts";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
 
@@ -15,9 +14,9 @@ const { renderAbsorbed, renderRow } = await import("../js/05-render.js");
 const { posToDom } = await import("../features/editing/cell-dom.ts");
 const { domToPos } = await import("../features/editing/cell-dom.ts");
 const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
-const { clearDirty } = await import("../js/12-dirty-toast.js");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { closeCommandMenu, openCommandMenu } = await import("../js/18d-command-menu.js");
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
@@ -50,14 +49,14 @@ function fresh(title) {
   loadTestDocument(migrateRows(fixture(title)));
   flushEdits();
   renderAbsorbed();
-  clearDirty();
+  confirmSavedNow();
   document.activeElement && document.activeElement.blur && document.activeElement.blur();
-  return S.state;
+  return currentDocument();
 }
 
 const para = (id) => document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]');
 const gridCell = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + (field || "audioText") + '"]');
-const audio = (id) => S.state.rows.find((r) => r.id === id).audioText;
+const audio = (id) => currentDocument().rows.find((r) => r.id === id).audioText;
 
 function select(el, anchor, head = anchor) {
   el.focus();
@@ -106,7 +105,7 @@ test("#464: a line break and a b-roll key added before the caret each count as o
   merge(theirs);
   assert.deepEqual(selectionIn(gridCell("r2")), { anchor: 9, head: 9 }, "a space became a line break: the caret stays before \"words\"");
   select(gridCell("r2"), 9);
-  const again = cloneState(S.state);
+  const again = cloneState(currentDocument());
   again.rows[1].audioText = '<span class="broll-key" data-broll-id="bs7" contenteditable="false">B-roll:</span> Mine<br>two words.';
   again.brollShots = [{ id: "bs7", name: "", origin: "script" }];
   merge(again);
@@ -188,7 +187,7 @@ test("#464: when the update splits the selected scene before the caret, the care
   theirs.rows[1].audioText = "Mine two ";
   theirs.rows.splice(2, 0, { id: "r9", visualText: "", audioText: "words.", status: "todo" });
   merge(theirs);
-  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r9", "r3"]);
+  assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r9", "r3"]);
   assert.equal(document.activeElement, gridCell("r9"));
   assert.deepEqual(selectionIn(gridCell("r9")), { anchor: 3, head: 3 });
 });
@@ -196,7 +195,7 @@ test("#464: when the update splits the selected scene before the caret, the care
 test("#464: a scene redrawn on its own keeps the caret mapped in that scene", () => {
   fresh("Row redraw");
   select(gridCell("r2"), 5);
-  S.state.rows[1].audioText = "So Mine two words.";
+  currentDocument().rows[1].audioText = "So Mine two words.";
   assert.equal(renderRow("r2"), true);
   assert.equal(document.activeElement, gridCell("r2"));
   assert.deepEqual(selectionIn(gridCell("r2")), { anchor: 8, head: 8 });

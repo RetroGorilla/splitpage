@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import "./_export-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import "./_preferences-started.mjs";
 import { preferences } from "../legacy/preferences-bridge.ts";
 import { __init as initSceneStatus } from "../js/01-scene-status.js";
@@ -44,18 +44,18 @@ function projections(doc) {
 
 test("the projections give the same answer after the live document changes, because they read the captured one", () => {
   demo();
-  const doc = exportDocumentOf(S.state);
+  const doc = exportDocumentOf(currentDocument());
   const before = projections(doc);
   assert.ok(before.breakdown.length > 0, "the demo has labelled items");
   assert.ok(before.brollTable.rows.length > 0, "the demo has b-roll");
   assert.ok(before.comments.length > 0, "the demo has comments");
 
-  S.state.rows = S.state.rows.slice(0, 2);
-  S.state.comments = [];
-  S.state.brollShots = [];
-  S.state.productionTags = [];
-  S.state.people = [];
-  S.state.title = "Changed after the capture";
+  currentDocument().rows = currentDocument().rows.slice(0, 2);
+  currentDocument().comments = [];
+  currentDocument().brollShots = [];
+  currentDocument().productionTags = [];
+  currentDocument().people = [];
+  currentDocument().title = "Changed after the capture";
 
   assert.deepEqual(projections(doc), before);
 });
@@ -64,7 +64,7 @@ test("a comment's time is formatted with the clock the caller names, not the sto
   demo();
   preferences().setClock("12");
   try {
-    const doc = exportDocumentOf(S.state);
+    const doc = exportDocumentOf(currentDocument());
     const stamped = (opts) => commentEntries(doc, opts).map((c) => c.when);
     const twentyFour = stamped({ clockMode: "24" });
     const twelve = stamped({ clockMode: "12" });
@@ -84,7 +84,7 @@ test("a comment's time is formatted with the clock the caller names, not the sto
 
 test("b-roll groups come from the rows and people they are given, not from the open document", () => {
   demo();
-  const doc = exportDocumentOf(S.state);
+  const doc = exportDocumentOf(currentDocument());
   const from = { rows: doc.scenes, people: doc.people };
   const grouped = brollGroups(doc.broll, "scene", from);
   loadTestDocument(null);

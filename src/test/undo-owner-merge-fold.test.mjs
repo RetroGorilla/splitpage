@@ -3,7 +3,7 @@ import "./_preferences-started.mjs";
 import "./_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
 import { flushEdits, noteEdit, redo, undo } from "../js/12a-undo.js";
@@ -36,41 +36,41 @@ function assign(list, name, owner) {
 }
 
 function fold() {
-  S.state.people = [person("pT", "ada")];
+  currentDocument().people = [person("pT", "ada")];
 }
 
 test("redo of an owner assignment after a merge folded the person lands on the surviving same-named person (#391)", () => {
   boot();
-  assign(S.state.productionTags, "Kettle", "pM");
+  assign(currentDocument().productionTags, "Kettle", "pM");
   assert.equal(undo().ok, true);
   fold();
   assert.equal(redo().ok, true);
-  assert.equal(ownerOf(S.state.productionTags, "Kettle"), "pT");
-  assert.equal(ownerOf(migrateRows(clone(S.state)).productionTags, "Kettle"), "pT");
+  assert.equal(ownerOf(currentDocument().productionTags, "Kettle"), "pT");
+  assert.equal(ownerOf(migrateRows(clone(currentDocument())).productionTags, "Kettle"), "pT");
 });
 
 test("redo through two entries after a fold assigns the surviving person, then clears (#391)", () => {
   boot();
-  assign(S.state.brollShots, "Pier", "pM");
-  assign(S.state.brollShots, "Pier", "");
+  assign(currentDocument().brollShots, "Pier", "pM");
+  assign(currentDocument().brollShots, "Pier", "");
   assert.equal(undo().ok, true);
   assert.equal(undo().ok, true);
   fold();
   assert.equal(redo().ok, true);
-  assert.equal(ownerOf(S.state.brollShots, "Pier"), "pT");
+  assert.equal(ownerOf(currentDocument().brollShots, "Pier"), "pT");
   assert.equal(redo().ok, true);
-  assert.equal(ownerOf(S.state.brollShots, "Pier"), "");
+  assert.equal(ownerOf(currentDocument().brollShots, "Pier"), "");
   assert.equal(undo().ok, true);
-  assert.equal(ownerOf(S.state.brollShots, "Pier"), "pT");
+  assert.equal(ownerOf(currentDocument().brollShots, "Pier"), "pT");
 });
 
 test("redo of a b-roll owner assignment after a fold lands on the surviving person (#391)", () => {
   boot();
-  assign(S.state.brollShots, "Pier", "pM");
+  assign(currentDocument().brollShots, "Pier", "pM");
   assert.equal(undo().ok, true);
   fold();
   assert.equal(redo().ok, true);
-  assert.equal(ownerOf(S.state.brollShots, "Pier"), "pT");
+  assert.equal(ownerOf(currentDocument().brollShots, "Pier"), "pT");
 });
 
 function rng(seed) {
@@ -98,28 +98,28 @@ function boot2() {
 
 function nameMap() {
   const names = {};
-  S.state.people.forEach((p) => { names[p.id] = p.name; });
+  currentDocument().people.forEach((p) => { names[p.id] = p.name; });
   const out = {};
   ITEMS.forEach(([list, name]) => {
-    const owner = ownerOf(S.state[list], name);
+    const owner = ownerOf(currentDocument()[list], name);
     out[name] = owner ? names[owner] || "?dangling:" + owner : "";
   });
-  out.__people = S.state.people.map((p) => p.name).sort().join(",");
+  out.__people = currentDocument().people.map((p) => p.name).sort().join(",");
   return JSON.stringify(out);
 }
 
 function foldPerson(name) {
-  const mineP = S.state.people.find((p) => p.name === name && p.id.startsWith("pM_"));
+  const mineP = currentDocument().people.find((p) => p.name === name && p.id.startsWith("pM_"));
   if (!mineP) return false;
-  const base = clone(S.state);
+  const base = clone(currentDocument());
   base.people = base.people.filter((p) => p.id !== mineP.id);
   [].concat(base.productionTags, base.brollShots).forEach((e) => { if (e.owner === mineP.id) e.owner = ""; });
   const theirs = clone(base);
   theirs.people.push(person("pT_" + name, name));
-  const merged = mergeStates(clone(base), clone(S.state), theirs).merged;
-  S.state.people = merged.people;
-  S.state.productionTags = merged.productionTags;
-  S.state.brollShots = merged.brollShots;
+  const merged = mergeStates(clone(base), clone(currentDocument()), theirs).merged;
+  currentDocument().people = merged.people;
+  currentDocument().productionTags = merged.productionTags;
+  currentDocument().brollShots = merged.brollShots;
   return true;
 }
 
@@ -148,21 +148,21 @@ test("seeded: every undo and redo across assignments, crew changes and folds lan
       const op = r();
       if (op < 0.3) {
         const [list, name] = pick(ITEMS);
-        const owner = pick(["", ...S.state.people.map((p) => p.id)]);
-        const item = S.state[list].find((e) => e.name === name);
+        const owner = pick(["", ...currentDocument().people.map((p) => p.id)]);
+        const item = currentDocument()[list].find((e) => e.name === name);
         if (item.owner === owner) continue;
         item.owner = owner;
         commit();
       } else if (op < 0.45) {
         const n = pick(NAMES);
-        if (S.state.people.some((p) => p.name === n)) continue;
-        S.state.people.push(person("pM_" + n + "_" + step, n));
+        if (currentDocument().people.some((p) => p.name === n)) continue;
+        currentDocument().people.push(person("pM_" + n + "_" + step, n));
         commit();
       } else if (op < 0.55) {
-        if (!S.state.people.length) continue;
-        const p = pick(S.state.people);
-        S.state.people = S.state.people.filter((x) => x.id !== p.id);
-        [].concat(S.state.productionTags, S.state.brollShots).forEach((e) => { if (e.owner === p.id) e.owner = ""; });
+        if (!currentDocument().people.length) continue;
+        const p = pick(currentDocument().people);
+        currentDocument().people = currentDocument().people.filter((x) => x.id !== p.id);
+        [].concat(currentDocument().productionTags, currentDocument().brollShots).forEach((e) => { if (e.owner === p.id) e.owner = ""; });
         commit();
       } else if (op < 0.7) {
         if (foldPerson(pick(NAMES))) { folds++; snaps[k] = nameMap(); }

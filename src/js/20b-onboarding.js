@@ -1,8 +1,9 @@
 import { currentHome } from "../legacy/location-bridge.ts";
 import { loadLastFileHandle } from "./00-prelude.js";
-import { closeAllSidePanels } from "./03b-side-panels.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
-import { deliverFile, onFileMenuChoice } from "./18-local-files.js";
+import { onFileMenuChoice } from "./18-local-files.js";
+import { deliverFile } from "../legacy/file-delivery.ts";
 import { addServerBookmark } from "./20e-connect.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
@@ -63,7 +64,7 @@ function renderOnboardStep() {
 export function openOnboarding() {
   var modal = onboardModal();
   if (!modal) return;
-  closeAllSidePanels();
+  sidePanels().closeAll();
   onboardReturnFocus = document.activeElement;
   resetOnboardUi();
   modal.hidden = false;

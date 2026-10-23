@@ -1,7 +1,7 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { applyStepsLive, diffStates, flushEdits, noteEdit, redo, undo } from "../js/12a-undo.js";
 import { invertSteps } from "../js/04c-doc-model.js";
@@ -104,17 +104,17 @@ test("redo after a same-named person reached the document without an undo entry 
     { id: "r1", visualText: "one", audioText: "Alpha", status: "todo" }
   ] });
   loadTestDocument(opening);
-  S.state.people.push(person("pM", "Ada"));
-  S.state.productionTags.push(tag("t_kettle", "Kettle", "pM"));
+  currentDocument().people.push(person("pM", "Ada"));
+  currentDocument().productionTags.push(tag("t_kettle", "Kettle", "pM"));
   noteEdit();
   flushEdits();
   assert.equal(undo().ok, true);
-  assert.deepEqual(S.state.people, []);
-  S.state.people.push(person("pT", "ada"));
-  S.state.brollShots.push(shot("bs_pier", "Pier", "pT"));
+  assert.deepEqual(currentDocument().people, []);
+  currentDocument().people.push(person("pT", "ada"));
+  currentDocument().brollShots.push(shot("bs_pier", "Pier", "pT"));
   assert.equal(redo().ok, true);
-  assert.deepEqual(S.state.people, [person("pM", "Ada")]);
-  assert.equal(ownerOf(S.state.brollShots, "Pier"), "pM");
-  assert.equal(ownerOf(S.state.productionTags, "Kettle"), "pM");
-  assert.equal(ownerOf(migrateRows(clone(S.state)).brollShots, "Pier"), "pM");
+  assert.deepEqual(currentDocument().people, [person("pM", "Ada")]);
+  assert.equal(ownerOf(currentDocument().brollShots, "Pier"), "pM");
+  assert.equal(ownerOf(currentDocument().productionTags, "Kettle"), "pM");
+  assert.equal(ownerOf(migrateRows(clone(currentDocument())).brollShots, "Pier"), "pM");
 });

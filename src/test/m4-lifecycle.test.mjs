@@ -1,7 +1,6 @@
 import { bootApp, clearTimers, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
-import { S } from "../js/_state.js";
 import { mockClock } from "./_m4-matrix.mjs";
 
 const live = [];
@@ -60,16 +59,17 @@ const refreshed = { into: null };
 await rewireRunningApp({ refresh: (due) => (refreshed.into ? refreshed.into.push(...due) : runIdleRefresh(due)) });
 
 const { migrateRows } = await import("../js/02-state.js");
-const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { startNewScript } = await import("../js/18b-file-menu.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { grantVideoFile, hasSessionVideo, sessionVideoUrl } = await import("../js/06-rows.js");
 const { normalizeVideoLink } = await import("../core/document/gallery.ts");
 const { requestRefresh } = await import("../legacy/session-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 function script(title) {
   return migrateRows({
@@ -84,7 +84,7 @@ function script(title) {
 function useDocument(doc) {
   loadTestDocument(doc);
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   return doc;
 }
 
@@ -222,15 +222,15 @@ test("E9: a replaced document leaves no listener, observer, timer, refresh or ob
     grantVideoFile(new File(["12345"], "clip.mp4"), link);
     assert.ok(sessionVideoUrl(link), "the session video has an object URL while its document is open");
     requestRefresh("m4-lifecycle-" + round);
-    S.state.rows[0].audioText = "Typed in round " + round + ".";
-    markDirty();
+    currentDocument().rows[0].audioText = "Typed in round " + round + ".";
+    noteSessionEdit();
     startNewScript();
-    assert.equal(S.state.title, "Untitled Script", "the replacement happened");
+    assert.equal(currentDocument().title, "Untitled Script", "the replacement happened");
     assert.ok(hasSessionVideo(link), "the file grant survives the replacement");
   }
   jobs.length = 0;
-  await openProjectFile(new File([buildSplitpageFile(exportDocumentOf(script("Opened")))], "a.splitpage", { lastModified: 1 }), null, { skipSnapshot: true, silent: true });
-  await openProjectFile(new File([buildSplitpageFile(exportDocumentOf(script("Opened again")))], "b.splitpage", { lastModified: 1 }), null, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: new File([buildSplitpageFile(exportDocumentOf(script("Opened")))], "a.splitpage", { lastModified: 1 }), handle: null, options: { skipSnapshot: true, silent: true } });
+  await openDocument({ kind: "file", file: new File([buildSplitpageFile(exportDocumentOf(script("Opened again")))], "b.splitpage", { lastModified: 1 }), handle: null, options: { skipSnapshot: true, silent: true } });
   clock.tick(60 * 60 * 1000);
   await settle(clock);
 
@@ -257,15 +257,15 @@ test("E9: the session's own dispose stops its timers and drops its listeners", a
   refreshed.into = jobs;
   t.after(() => { refreshed.into = null; });
   session.subscribe((change) => heard.push(change.kind));
-  S.state.rows[0].audioText = "Before dispose.";
-  markDirty();
+  currentDocument().rows[0].audioText = "Before dispose.";
+  noteSessionEdit();
   assert.deepEqual(heard, ["edit"], "setup: the subscription hears an edit");
   requestRefresh("m4-lifecycle-disposed");
   const doc = currentDocument();
   session.dispose();
   assert.equal(currentDocument(), null, "a disposed session holds no document");
   doc.rows[0].audioText = "After dispose.";
-  markDirty();
+  noteSessionEdit();
   clock.tick(60 * 60 * 1000);
   await settle(clock);
   assert.deepEqual(heard, ["edit"], "nothing is heard after dispose");
