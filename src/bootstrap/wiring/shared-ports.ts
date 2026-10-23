@@ -3,6 +3,7 @@ import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { ExportRegistry } from "../../application/export/registry.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
+import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
@@ -19,7 +20,7 @@ import {
   serverHomeId, serverStatus, stillOnServer
 } from "../../legacy/location-bridge.ts";
 import { htmlToPlainText } from "../../legacy/plain-text.ts";
-import { PREF_EVENT, preferences } from "../../legacy/preferences-bridge.ts";
+import { PREF_EVENT, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { autoSavePolicy, onSaveChange, resumeAutoSave, saveBusy, unsavedChanges } from "../../legacy/save-bridge.ts";
 import { productionIndex } from "../../legacy/production-index-bridge.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
@@ -70,6 +71,11 @@ const edits: DocumentEdits = {
 };
 
 const review: ReviewFacts = { reviewing: reviewMode, refuseInReview: reviewBlocked };
+
+const flags: Pick<ViewFlags, "findOpen" | "setFindOpen"> = {
+  findOpen: () => viewFlags().findOpen(),
+  setFindOpen: (open) => viewFlags().setFindOpen(open)
+};
 
 const place: DocumentPlace = {
   home: () => currentHome(),
@@ -129,6 +135,7 @@ const shared = {
   edits,
   place,
   review,
+  flags,
   text,
   saves,
   production,
