@@ -78,13 +78,11 @@ import {
   openServerDoc,
   toggleDriveNewFolder
 } from "../../js/13-hosted.js";
-import { saveDoc } from "../../legacy/save-bridge.ts";
+import { fileConflicts, saveDoc } from "../../legacy/save-bridge.ts";
+import { deliverFile } from "../../legacy/file-delivery.ts";
 import {
   buildFileData,
-  closeFileConflict,
-  deliverFile,
   exportAs,
-  fileConflictCtx,
   handleFileMenuAction,
   hideResumeBanner,
   openProjectFile,
@@ -92,7 +90,8 @@ import {
   reloadFileFromDisk,
   reloadProjectFromDisk,
   resumeFromHandle,
-  saveBackToFile
+  saveBackToFile,
+  showFileConflictView
 } from "../../js/18-local-files.js";
 import { cancelMergeReview, confirmFileMerge, openMergeReview } from "../../js/18a-local-merge.js";
 import { toggleFileMenu, toggleSubmenu } from "../../js/18b-file-menu.js";
@@ -290,7 +289,7 @@ export function mountSaveRecoveryFeature(): ReturnType<typeof mountSaveRecovery>
 export function mountConflictsFeature(): ReturnType<typeof mountConflicts> {
   return replaceViewMount("mountConflicts", function () {
     const ports: ConflictsPorts = {
-      closeFileConflict: closeFileConflict,
+      closeFileConflict: function () { fileConflicts().close(); },
       reloadProjectFromDisk: reloadProjectFromDisk,
       reloadFileFromDisk: reloadFileFromDisk,
       saveDoc: saveDoc,
@@ -301,13 +300,12 @@ export function mountConflictsFeature(): ReturnType<typeof mountConflicts> {
       importHome: importHome as unknown as ConflictsPorts["importHome"],
       buildFileData: buildFileData,
       deliverFile: deliverFile,
-      conflict: function () {
-        const conflict: ReturnType<ConflictsPorts["conflict"]> = fileConflictCtx;
-        return conflict;
-      },
+      conflict: function () { return fileConflicts().current(); },
       capture: captureViewDocument
     };
     return mountConflicts({ window: window, ports: ports });
+  }, function () {
+    return [function () { return fileConflicts().onChange(function () { showFileConflictView(fileConflicts().current()); }); }];
   });
 }
 

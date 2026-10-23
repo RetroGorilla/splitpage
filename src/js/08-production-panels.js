@@ -8,10 +8,7 @@ import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { cssAttr, plainText, safeId } from "./04-richtext.js";
-import {
-  tagStatusLampHtml,
-  updateProductionBadge
-} from "./07-production-tags.js";
+import { tagStatusLampHtml } from "./07-production-tags.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { personColor } from "./13a-presence.js";
 import { breakdownRows, breakdownTable } from "../adapters/formats/export-projections.ts";
@@ -92,6 +89,23 @@ function updateGearBadge(n) {
 
 export function updateGearCount() {
   updateGearBadge(currentDocument() ? gearEntries().length : 0);
+}
+
+function updateProductionBadge(n) {
+  var badge = document.getElementById("production-badge");
+  if (!badge) return;
+  if (n > 0) { badge.hidden = false; badge.textContent = n > 99 ? "99+" : String(n); }
+  else badge.hidden = true;
+}
+
+export function updateProductionCount() {
+  updateProductionBadge(currentDocument() ? productionEntries().length : 0);
+}
+
+export function productionPanelsOpen() {
+  var panel = document.getElementById("production-panel");
+  var gearPanel = document.getElementById("gear-panel");
+  return !!((panel && !panel.hidden) || (gearPanel && !gearPanel.hidden));
 }
 
 function updateGearHeadCount(n) {

@@ -16,7 +16,7 @@ import {
   slotPoster
 } from "./05-render.js";
 import { embedRefusal, fetchThumbnailRecord, playerSrc, thumbnailsAllowed } from "./05v-video.js";
-import { openAnnotator, refreshAnnotator } from "./05w-annotate.js";
+import { openAnnotator } from "./05w-annotate.js";
 import { hasSessionVideo, openGalleryLink, sessionVideoUrl } from "./06-rows.js";
 import { breakUndoCoalescing, lastUndoEntry, undo } from "./12a-undo.js";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
@@ -78,7 +78,6 @@ export function closeGalleryOverlay() {
 }
 
 export function refreshGalleryOverlay() {
-  refreshAnnotator();
   if (!view) return;
   var got = rowOf(view.rowId);
   if (!got || !rowSlots(got.row).length) { closeGalleryOverlay(); return; }

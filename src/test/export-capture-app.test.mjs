@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 after(closeApp);
@@ -57,10 +57,10 @@ test("E15: a capture taken with a live connection and a file home holds no token
 test("a capture is taken from the live document at once and is frozen; the live document stays writable", () => {
   useDemo();
   const doc = captureExportDocument();
-  assert.equal(doc.document.title, S.state.title);
-  assert.notEqual(doc.document, S.state);
+  assert.equal(doc.document.title, currentDocument().title);
+  assert.notEqual(doc.document, currentDocument());
   assert.ok(Object.isFrozen(doc.document.rows[0]));
   assert.throws(() => { doc.document.rows[0].audioText = "x"; }, TypeError);
-  S.state.rows[0].audioText = "Still writable";
-  assert.equal(S.state.rows[0].audioText, "Still writable");
+  currentDocument().rows[0].audioText = "Still writable";
+  assert.equal(currentDocument().rows[0].audioText, "Still writable");
 });
