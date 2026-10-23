@@ -10,8 +10,8 @@ import { hashText as historyHashText } from "../adapters/storage/03c-history-idb
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "./04-richtext.js";
 import { showToast } from "./12-dirty-toast.js";
-import { openServerDoc, pointTabAt } from "./13-hosted.js";
-import { openProjectFile } from "./18-local-files.js";
+import { pointTabAt } from "./13-hosted.js";
+import { openDocument } from "../legacy/transition-bridge.ts";
 import { openServersDialog } from "./20e-connect.js";
 import { flushDraftNow } from "./20g-drafts.js";
 import { draftResume, recoveryStarted } from "../legacy/recovery-bridge.ts";
@@ -390,7 +390,7 @@ export function initDesktop() {
     function proceed() {
       var handle = makeDesktopHandle(entry);
       handle.getFile().then(function (file) {
-        return openProjectFile(file, handle);
+        return openDocument({ kind: "file", file: file, handle: handle });
       }).catch(function () {
         showToast("Could not open " + ((entry && entry.name) || "that file") + ".", "error");
       }).then(handedDocumentSettled);
@@ -461,8 +461,7 @@ function openPendingServerDocForTab(serverDocId) {
   }
   var retried = false;
   function openIt() {
-    if (typeof openServerDoc !== "function") { handedDocumentSettled(); return; }
-    Promise.resolve(openServerDoc(serverDocId)).then(function (ok) {
+    openDocument({ kind: "server", id: serverDocId }).then(function (ok) {
       if (ok === false && !retried && needsAuth()) { retried = true; afterDetect(); return; }
       handedDocumentSettled();
     }, handedDocumentSettled);

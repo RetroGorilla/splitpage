@@ -14,7 +14,7 @@ await bootApp();
 
 const { currentDocument, liveSession, mergeBase } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
-const { applyMerge, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { applyMerge, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { renderAbsorbed } = await import("../js/05-render.js");
 const { cellSelection } = await import("../features/editing/cell-selection.ts");
 const { pasteIntoCell } = await import("../js/05c-clipboard.js");
@@ -25,11 +25,11 @@ const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { cellEditing, focusMemory, mergeUndo } = await import("../legacy/editor-bridge.ts");
 const find = await import("../js/09-find-replace.js");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
-const { openServerDoc } = await import("../js/13-hosted.js");
-const { openProjectFile, reloadFileFromDisk, updateFileChip } = await import("../js/18-local-files.js");
+const { reloadFileFromDisk, updateFileChip } = await import("../js/18-local-files.js");
 const { openLongDemo } = await import("../js/18b-file-menu.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
 
 const REDRAW = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
 const BROKE = "render broke (#418)";
@@ -246,7 +246,7 @@ test("a reload in place whose render throws still marks the reload unsaved and s
   const seen = await bothWays("reload", async () => {
     fresh("Before reload");
     disk = new File(["Wide\tOne.\nClose\tTwo."], "guard.txt", { lastModified: 1 });
-    await openProjectFile(disk, fileHandle, { skipSnapshot: true });
+    await openDocument({ kind: "file", file: disk, handle: fileHandle, options: { skipSnapshot: true } });
     hearReplacement();
     flushEdits();
     quiet();
@@ -312,7 +312,7 @@ test("reopening a server document after a reload whose render throws still reope
 
 test("opening a .splitpage file whose render throws still opens it: the chips, the toast and the answer are a clean open's (#418)", async () => {
   const seen = await bothWays("open file", () => { fresh("Before the file"); return null; },
-    () => openProjectFile(new File([JSON.stringify(table304Document("From disk"))], "guard.splitpage", { lastModified: 3 }), null, { skipSnapshot: true }));
+    () => openDocument({ kind: "file", file: new File([JSON.stringify(table304Document("From disk"))], "guard.splitpage", { lastModified: 3 }), handle: null, options: { skipSnapshot: true } }));
   assert.equal(seen.value, true);
   assert.equal(seen.book.title, "From disk");
   assert.equal(seen.book.dirty, false);
@@ -325,7 +325,7 @@ test("opening a server document whose render throws still opens it and says so (
     answer = (ask) => ask === "GET api/docs/doc-open" ? reply(200, { id: "doc-open", rev: 4, state: table304Document("Hosted") }) : null;
     quiet();
     return { observe: () => [window.__hostedTest.home().kind, window.__hostedTest.home().id] };
-  }, () => openServerDoc("doc-open"));
+  }, () => openDocument({ kind: "server", id: "doc-open" }));
   assert.equal(seen.value, true);
   assert.deepEqual(seen.more, ["server", "doc-open"]);
   assert.equal(seen.book.fileChip, "On the server · v4, everyone sees this");
@@ -338,7 +338,7 @@ test("restoring a snapshot whose render throws still restores it, closes the his
     const doc = fresh("Before restore");
     const older = cloneState(doc);
     older.rows[0].audioText = "Older.";
-    const ticket = pushSnapshot("Guard snapshot", older);
+    const ticket = keepSnapshot("Guard snapshot", older);
     await ticket.done;
     quiet();
     const btn = document.createElement("button");
