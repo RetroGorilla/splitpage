@@ -9,7 +9,8 @@ import { currentDocument } from "../../src/legacy/session-bridge.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
 import { prompterIsOpen, setPrompterOpen } from "../../src/application/prompter-state.ts";
 import { registerFileActions } from "../../src/legacy/file-actions.ts";
-import { registerHelpActions } from "../../src/legacy/help-actions.ts";
+import { helpMenuActions } from "../../src/legacy/help-actions.ts";
+import { helpActions, mountHelpFeature, stopHelpFeature } from "../../src/bootstrap/wiring/help.ts";
 import { availableUnless, EVERY_OVERLAY, everyOverlayBut, inFront, OPENS_A_DIALOG } from "../../src/application/screen.ts";
 import type { Blocker, ScreenState } from "../../src/application/screen.ts";
 import { registerShareActions } from "../../src/legacy/share-actions.ts";
@@ -59,10 +60,11 @@ test("each blocker refuses with its own reason", () => {
 });
 
 function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
+  mountHelpFeature();
   const registry = createActionRegistry();
   mountRundownFeature();
   const disposers = [stopRundownFeature, registerFileActions(registry), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerViewActions(registry),
-    registerShareActions(registry)];
+    registerShareActions(registry), stopHelpFeature];
   const was = { state: currentDocument() as unknown, prompterOpen: prompterIsOpen() };
   loadTestDocument({ rows: [] });
   setPrompterOpen(false);
@@ -132,7 +134,8 @@ const DIALOG_OPENERS = ["about", "settings", "servers", "setup", "tagging-help",
 
 test("a command that opens a dialog, Help among them, is refused over a dialog but opens over Present", () => {
   const { registry, restore } = loadedRegistry();
-  const help = registerHelpActions(registry);
+  const menu = helpMenuActions();
+  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]);
   try {
     for (const id of [...DIALOG_OPENERS, "help"]) assert.equal(refusal(registry, id, "menu"), null, id);
     document.body.innerHTML = '<div class="modal-backdrop"></div>';
@@ -148,7 +151,8 @@ test("a command that opens a dialog, Help among them, is refused over a dialog b
 
 test("the tour is refused over a dialog and starts over Present and the shot list", () => {
   const { registry, restore } = loadedRegistry();
-  const help = registerHelpActions(registry);
+  const menu = helpMenuActions();
+  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]);
   try {
     assert.equal(refusal(registry, "tour", "menu"), null);
     document.body.innerHTML = '<div class="modal-backdrop"></div>';

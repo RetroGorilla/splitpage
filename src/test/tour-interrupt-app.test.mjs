@@ -7,7 +7,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { openPinDialog } = await import("../js/20e-connect.js");
-const { openHelp, startTour, tourShowing } = await import("../js/20c-help.js");
+const { openHelp, startTour, tourShowing } = await import("../features/help/help.js");
 const { appActions } = await import("../legacy/app-actions.ts");
 
 after(closeApp);

@@ -82,7 +82,6 @@
     {"rule":"legacy-file","source":"src/js/20-teleprompter.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/20a-update.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/20b-onboarding.js","target":"src/js"},
-    {"rule":"legacy-file","source":"src/js/20c-help.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/20d-formats.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/20e-connect.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/20f-desktop.js","target":"src/js"},
