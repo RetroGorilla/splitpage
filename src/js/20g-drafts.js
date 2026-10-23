@@ -32,6 +32,7 @@ import { cloneState } from "../core/document/clone.ts";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
 import { currentDocument, mergeBase, noteAbsorbedDirty } from "../legacy/session-bridge.ts";
+import { applyMerge } from "../legacy/merge-bridge.ts";
 
 var draftOnDisk;
 
@@ -90,7 +91,13 @@ export function draftRecoveryPorts() {
     desktop: desktopPort,
     sessionStorage: function () { return sessionStorage; },
     localStorage: function () { return localStorage; },
-    internImage: internDataUrl
+    internImage: internDataUrl,
+    merge: applyMerge,
+    drafts: {
+      flush: flushDraftNow,
+      armServer: armBrowserServerDraft,
+      offerAfterLinkOff: offerBrowserDraftAfterLinkOff
+    }
   };
 }
 
@@ -435,7 +442,7 @@ function noteDraftWriteRefused(code) {
   draftSchedule.refused();
 }
 
-export function flushDraftNow(opts) {
+function flushDraftNow(opts) {
   if (!draftWriterLive()) return Promise.resolve({ ok: true });
   var keepClean = !!(opts && opts.keep === true);
   draftSchedule.cancel();
@@ -840,7 +847,7 @@ function browserDraftRestoreDone(t, outcome) {
   browserDrafts().writer.take(key);
 }
 
-export function armBrowserServerDraft(docId) {
+function armBrowserServerDraft(docId) {
   var resume = draftResume();
   if (runningOnDesktop() || browserDraftsOff || !docId || resume.restorePending() || resume.serverResume()) return Promise.resolve(false);
   if (currentConn().role === "review") return Promise.resolve(false);
@@ -862,7 +869,7 @@ export function armBrowserServerDraft(docId) {
   }).then(null, function () { return false; });
 }
 
-export function offerBrowserDraftAfterLinkOff(docId) {
+function offerBrowserDraftAfterLinkOff(docId) {
   var resume = draftResume();
   if (runningOnDesktop() || browserDraftsOff || resume.restorePending() || onServerDoc() || unsavedChanges()) return Promise.resolve(false);
   var base = draftBaseOf(currentConn().serverUrl, location.href);

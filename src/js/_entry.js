@@ -57,7 +57,7 @@ import { __init as init_20j_newtab } from "./20j-newtab.js";
 import { __init as init_20s_settings } from "./20s-settings.js";
 import { migrateRows } from "./02-state.js";
 import { documentIdentityPort } from "./02b-doc-id.js";
-import { applyMerge, documentDestinationPort, documentHistoryPort, getEditorName, stampRow } from "./03-sync.js";
+import { documentDestinationPort, documentHistoryPort, getEditorName, legacyMergePorts, stampRow } from "./03-sync.js";
 import { bulkTagCell, runIdleRefresh } from "./07-production-tags.js";
 import { derivedRecordsPlan } from "./08c-broll.js";
 import { legacySessionEffects } from "./12-dirty-toast.js";
@@ -83,7 +83,8 @@ try {
     destinations: function () { return [legacyFileDestination(), importSaveDestination(), serverSaveDestination()]; },
     transitions: { destination: documentDestinationPort, identity: documentIdentityPort, history: documentHistoryPort },
     sources: function () { return [projectFileSource(), importDocumentSource(), serverDocumentSource()]; },
-    recovery: function () { return Object.assign(draftRecoveryPorts(), { merge: applyMerge }); },
+    merge: legacyMergePorts,
+    recovery: draftRecoveryPorts,
     projectFiles: legacyProjectFileServices,
     keyTarget: window
   });
