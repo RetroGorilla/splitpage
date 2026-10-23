@@ -29,7 +29,7 @@ eval window.__savedAt = Date.now()
 expect window.__tip() === 'Last saved to clock.md at ' + window.__sys(new Date(window.__savedAt)) + '.'
 
 # --- two minutes later: no age in the words, the time in the tooltip ---------
-eval (function(){window.__setClock(2*60000);window.__settingsTest.refreshSaveStatus();return window.__status();})()
+eval (function(){window.__setClock(2*60000);window.__saveStatusTest.refresh();return window.__status();})()
 expect window.__status() === 'All changes saved'
 expect window.__tip() === 'Last saved to clock.md at ' + window.__sys(new Date(window.__savedAt)) + '.'
 expect document.getElementById('btn-save').title.indexOf(window.__tip()) === 0

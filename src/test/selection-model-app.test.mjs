@@ -15,7 +15,7 @@ const { renderAbsorbed, renderRow } = await import("../js/05-render.js");
 const { posToDom } = await import("../features/editing/cell-dom.ts");
 const { domToPos } = await import("../features/editing/cell-dom.ts");
 const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
-const { clearDirty } = await import("../js/12-dirty-toast.js");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { closeCommandMenu, openCommandMenu } = await import("../js/18d-command-menu.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
@@ -50,7 +50,7 @@ function fresh(title) {
   loadTestDocument(migrateRows(fixture(title)));
   flushEdits();
   renderAbsorbed();
-  clearDirty();
+  confirmSavedNow();
   document.activeElement && document.activeElement.blur && document.activeElement.blur();
   return S.state;
 }

@@ -1,9 +1,9 @@
 import { docIdEmbeddedIn } from "../core/document/ids.ts";
 import { flushEdits } from "./12a-undo.js";
 import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
-import { currentDocument, noteReload } from "../legacy/session-bridge.ts";
+import { currentDocument, noteAbsorbedDirty, noteReload } from "../legacy/session-bridge.ts";
 import { documentTransitions } from "../legacy/transition-bridge.ts";
-import { autoSavePolicy, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, confirmSavedNow, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
 import { amendHome, currentHome, fileHome, importHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import {
@@ -25,7 +25,6 @@ import {
   detectTwoColumnFormat,
   parseImportRows
 } from "./11-import.js";
-import { clearDirty, markAbsorbedDirty } from "./12-dirty-toast.js";
 import {
   blobSourceNow,
   onServerDoc
@@ -35,7 +34,7 @@ import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
 import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
-import { refreshFileMenu, toggleFileMenu } from "./18b-file-menu.js";
+import { toggleFileMenu } from "./18b-file-menu.js";
 import { isExportAction, rememberExport } from "./18c-export-dialog.js";
 import {
   applyMarkdownProject,
@@ -61,8 +60,6 @@ import { runningOnDesktop } from "../application/desktop-presence.ts";
 export function updateFileChip() {
   updateHeaderFileChip();
   updateReadonlyBanner();
-  var menu = document.getElementById("file-menu");
-  if (menu && !menu.hidden) refreshFileMenu();
 }
 
 export function fileChipListeners(refresh) {
@@ -334,7 +331,7 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
     writtenOut: true
   });
 
-  clearDirty();
+  confirmSavedNow();
   var commentNote = currentDocument().comments.length
     ? ", " + currentDocument().comments.length + " comment" + (currentDocument().comments.length === 1 ? "" : "s") : "";
   if (!opts.silent) showToast((opts.resumed ? "Resumed " : "Opened ") + (currentDocument().title || file.name) + " — " +
@@ -451,7 +448,7 @@ async function loadFileIntoEditor(file, handle, opts) {
   }
   var imported = importHome();
 
-  markAbsorbedDirty(opts.reload ? "reload" : "adopt");
+  noteAbsorbedDirty(opts.reload ? "reload" : "adopt");
   amendHome(imported, { dirty: false });
   if (typeof closeNewTabPage === "function") closeNewTabPage();
   if (typeof syncDocIdentity === "function") syncDocIdentity();

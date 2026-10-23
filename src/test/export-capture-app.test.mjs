@@ -10,7 +10,7 @@ const { LONG_DEMO } = await import("../js/_starters.js");
 const { documentLocation, setHome } = await import("../legacy/location-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { standaloneHtmlFor } = await import("../js/02b-doc-id.js");
-const { clearDirty } = await import("../js/12-dirty-toast.js");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } = await import("../adapters/formats/export-text.ts");
 const { captureExportDocument } = await import("../js/14b-export-kit.js");
@@ -24,7 +24,7 @@ const FILE_NAME = "e15-private-plan.md";
 function useDemo() {
   loadTestDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))));
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
 }
 
 test("E15: a capture taken with a live connection and a file home holds no token, file name or handle", () => {

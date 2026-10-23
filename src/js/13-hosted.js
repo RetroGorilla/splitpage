@@ -52,10 +52,10 @@ import {
   getSavedAuthorName,
   renderComments
 } from "./10-comments.js";
-import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
+import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { maybeAskGuestName } from "./13b-collaborate.js";
 import { saveDoc, scheduleAutoSave } from "./14-export.js";
-import { requestSave, saveBusy, saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
+import { confirmSavedNow, requestSave, saveBusy, saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 import { conflictStash, draftResume } from "../legacy/recovery-bridge.ts";
 import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
@@ -408,7 +408,6 @@ function flagLinkOff(kind) {
   if (kind === "arrived") {
     forgetLinkKey(currentConn().serverUrl);
     showToast("This link has been turned off. Ask whoever sent it for a new one.", "warn", true);
-    updateSaveStatus();
     offerDraftAfterLinkOff();
     return;
   }
@@ -419,7 +418,6 @@ function flagLinkOff(kind) {
     ? "This link no longer works — ask whoever sent it for a new one. Your changes can't be saved to it any more."
     : "The owner turned off this link. Your changes can't be saved to it any more.",
   "warn", "Save a copy…", saveCopy, true);
-  updateSaveStatus();
   offerDraftAfterLinkOff();
 }
 
@@ -527,7 +525,7 @@ async function resumeServerDoc() {
       reason: "resumeServerDoc: reopened as the server has it, nothing to merge",
       writtenOut: true
     });
-    clearDirty();
+    confirmSavedNow();
     showToast("Signed back in — reopened " + (currentDocument().title || body.id), "ok");
     if (override) { try { override.onDone("server-resumed"); } catch (e) {} }
     return true;
@@ -922,7 +920,7 @@ export async function openServerDoc(id) {
   });
   if (typeof closeNewTabPage === "function") closeNewTabPage();
 
-  clearDirty();
+  confirmSavedNow();
   applyReviewMode();
   closeServerPicker();
   showToast("Opened " + (currentDocument().title || id) + " from the server — " + currentDocument().rows.length +
@@ -992,7 +990,7 @@ export async function publishToServer(opts) {
     return false;
   }
   if (outcome.forkedFrom) copyDocHistorySafe(outcome.forkedFrom, forkDocId);
-  if (saveChanges() === seqAtPublish) clearDirty();
+  if (saveChanges() === seqAtPublish) confirmSavedNow();
   else scheduleAutoSave();
   if (!opts.quiet) {
     showToast("Published to the server as “" + (currentDocument().title || body.id) + "” — collaborators can open it now", "ok");
@@ -1246,7 +1244,7 @@ async function writeToServer(job) {
         reportIfLandedHere(op, docId, body.rev);
       }
       if (!job.owns()) return true;
-      if (saveChanges() === seqAtSave) clearDirty();
+      if (saveChanges() === seqAtSave) confirmSavedNow();
       if (mergeResult) reportMerge(mergeResult, { alreadySaved: true, undo: "saved" });
       return true;
     } catch (err) {
@@ -1604,7 +1602,7 @@ async function sendReviewWrites() {
     if (reviewRefused["c:" + c.id]) refusedHere = true;
     (c.replies || []).forEach(function (r) { if (r && reviewRefused["r:" + c.id + ":" + r.id]) refusedHere = true; });
   });
-  if (!refusedHere) clearDirty();
+  if (!refusedHere) confirmSavedNow();
   return true;
 }
 

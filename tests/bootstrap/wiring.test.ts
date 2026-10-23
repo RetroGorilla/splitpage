@@ -172,7 +172,6 @@ function fakes(): Fakes {
         destination: () => NO_DOCUMENT,
         keyOf: () => ({ owner: null, name: "none" }),
         obsolete: () => {},
-        running: () => {},
         ownership,
         autosave: { enabledAtStart: () => false, due: () => {}, changed: () => {} }
       };
@@ -308,9 +307,9 @@ test("failed partial startup: a port that is present but lacks a function is nam
 test("failed partial startup: a save factory that returns malformed ports fails the saves step, names the port and installs no save owner", () => {
   const malformed: [string, (ports: LegacySavePorts) => unknown, string][] = [
     ["nothing", () => undefined, "the saves dependency returned no save ports"],
-    ...(["write", "destination", "keyOf", "obsolete", "running"] as const).map((port): [string, (ports: LegacySavePorts) => unknown, string] =>
+    ...(["write", "destination", "keyOf", "obsolete"] as const).map((port): [string, (ports: LegacySavePorts) => unknown, string] =>
       [port, (ports) => without(ports, port), "the saves dependency returned no " + port + " port"]),
-    ...(["write", "destination", "keyOf", "obsolete", "running"] as const).map((port): [string, (ports: LegacySavePorts) => unknown, string] =>
+    ...(["write", "destination", "keyOf", "obsolete"] as const).map((port): [string, (ports: LegacySavePorts) => unknown, string] =>
       [port + " not a function", (ports) => ({ ...ports, [port]: 7 }), "the saves dependency returned no " + port + " port"]),
     ["ownership not an object", (ports) => ({ ...ports, ownership: 7 }), "the saves dependency returned no ownership port"],
     ["ownership", (ports) => without(ports, "ownership"), "the saves dependency returned no ownership port"],
@@ -569,7 +568,6 @@ function heldSaves(name: string): HeldSaves {
     destination: () => { call("destination"); return NO_DOCUMENT; },
     keyOf: () => { call("keyOf"); return { owner: null, name: "none" }; },
     obsolete: () => { call("obsolete"); },
-    running: (on) => { call("running " + String(on)); },
     ownership: {
       capture: () => { call("capture"); return ownership.capture(); },
       stillOwns: (ctx) => { call("stillOwns"); return ownership.stillOwns(ctx); }

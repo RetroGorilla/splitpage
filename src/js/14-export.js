@@ -16,7 +16,6 @@ import {
   getEditorName,
   setBaseState
 } from "./03-sync.js";
-import { clearDirty, noteSaveStatus, setSaveButtons, updateSaveStatus } from "./12-dirty-toast.js";
 import {
   onServerDoc,
   saveToServer
@@ -31,7 +30,7 @@ import {
 import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./20d-formats.js";
 import { makeDesktopHandle } from "./20f-desktop.js";
 import { existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
-import { autoSavePolicy, requestSave, saveChanges, saveRunning, unsavedChanges } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, confirmSavedNow, requestSave, saveChanges, saveRunning, unsavedChanges } from "../legacy/save-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 import { conflictStash } from "../legacy/recovery-bridge.ts";
@@ -95,7 +94,7 @@ function confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, co
       : { diskBase: published });
   }
   adoptSavedCopyDocId(forkDocId, docIdAtSave, true);
-  if (!copyOfHosted && saveChanges() === seqAtSave) clearDirty();
+  if (!copyOfHosted && saveChanges() === seqAtSave) confirmSavedNow();
 }
 
 async function writeDoc(opts, job) {
@@ -105,14 +104,10 @@ async function writeDoc(opts, job) {
   if (!auto) resumeAutoSave();
 
   if (onServerDoc() && !saveAs) {
-    try {
-      var sentToServer = await saveToServer(job);
-      if (auto && sentToServer === false) {
-        haltAutoSave("Autosave is paused — the last save to the server did not go through. " +
-                     "Press Save to try again.");
-      }
-    } finally {
-      setSaveButtons();
+    var sentToServer = await saveToServer(job);
+    if (auto && sentToServer === false) {
+      haltAutoSave("Autosave is paused — the last save to the server did not go through. " +
+                   "Press Save to try again.");
     }
     return sentToServer === false ? FAILED : SAVED;
   }
@@ -199,7 +194,6 @@ async function writeDoc(opts, job) {
       } else adoptSavedCopyDocId(forkDocId, docIdAtSave, false);
       if (pickedFor && currentHome() === pickedFor) rememberLastFileHandle(handle);
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
-      else noteSaveStatus();
       warnImagesLeftOut(imagesLeftOut, handle.name);
       written = copyOfHosted ? COPIED : SAVED;
     } else {
@@ -224,7 +218,6 @@ async function writeDoc(opts, job) {
     }
   } finally {
     undoRetarget();
-    setSaveButtons();
   }
   return written;
 }
@@ -333,7 +326,6 @@ function autoSaveDue() {
 
 function autoSaveChanged(what) {
   if (what === "enabled") updateAutoSaveMenu();
-  updateSaveStatus();
 }
 
 export function flushAutoSave() {
@@ -401,10 +393,6 @@ export function obsoleteSaveText(title) {
   return "An earlier save of “" + (title || "Untitled Script") + "” finished after you reopened it. Your open copy is unchanged.";
 }
 
-function showSaveRunning() {
-  setSaveButtons();
-}
-
 function saveOwnership(ownership) {
   return {
     capture: ownership.capture,
@@ -423,7 +411,6 @@ export function legacySavePorts(ownership) {
     destination: function () { return currentHome(); },
     keyOf: destinationKeyOf,
     obsolete: reportObsoleteSave,
-    running: showSaveRunning,
     ownership: saveOwnership(ownership),
     autosave: {
       enabledAtStart: readAutoSavePref,

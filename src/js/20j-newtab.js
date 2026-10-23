@@ -7,7 +7,6 @@ import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { openGdocModal, openImportModal } from "./11-import.js";
-import { clearDirty, updateSaveStatus } from "./12-dirty-toast.js";
 import { arrivingOnLink } from "./13-hosted.js";
 import { openLocalFile, openProjectFile } from "./18-local-files.js";
 import { desktopAppUrl, desktopAppOffered } from "./20a-update.js";
@@ -19,6 +18,7 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { draftResume } from "../legacy/recovery-bridge.ts";
+import { confirmSavedNow } from "../legacy/save-bridge.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
 import { startupReady } from "../legacy/startup-bridge.ts";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
@@ -81,8 +81,7 @@ function adoptNewDocument(next, reason) {
   var leaves = currentHome().kind === "file" || currentHome().kind === "import";
   resetProductionPanelState();
   documentTransitions().startNew({ from: { document: next }, reason: reason, destination: leaves ? NO_DESTINATION : undefined });
-  clearDirty();
-  updateSaveStatus();
+  confirmSavedNow();
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   closeNewTabPage();
 }

@@ -3,8 +3,10 @@ import { documentLocation, serverStatus } from "../../legacy/location-bridge.ts"
 import { onPreferenceChange, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { onSaveChange } from "../../legacy/save-bridge.ts";
 import { identityChipListeners } from "../../js/03-sync.js";
+import { saveStatusListeners } from "../../js/12-dirty-toast.js";
 import { onPresenceRecolor } from "../../js/13a-presence.js";
 import { fileChipListeners, mirrorFileChipToWriter, updateFileChip } from "../../js/18-local-files.js";
+import { refreshOpenFileMenu } from "../../js/18b-file-menu.js";
 import { desktopDocumentListeners } from "../../js/20f-desktop.js";
 
 let stopChrome: (() => void) | null = null;
@@ -12,7 +14,7 @@ let stopChrome: (() => void) | null = null;
 export function mountDocumentChromeFeature(): void {
   stopDocumentChromeFeature();
   const stops: (() => void)[] = [];
-  for (const refresh of [updateFileChip, mirrorFileChipToWriter]) {
+  for (const refresh of [updateFileChip, mirrorFileChipToWriter, refreshOpenFileMenu]) {
     const chip = fileChipListeners(refresh);
     stops.push(
       onSessionChange(chip.session),
@@ -21,6 +23,14 @@ export function mountDocumentChromeFeature(): void {
       onSaveChange(chip.save)
     );
   }
+  const status = saveStatusListeners();
+  stops.push(
+    onSaveChange(status.save),
+    documentLocation().onChange(status.location),
+    serverStatus().onChange(status.status),
+    onPreferenceChange(status.preference)
+  );
+  status.paint();
   const identity = identityChipListeners();
   const desktop = desktopDocumentListeners();
   stops.push(
