@@ -13,7 +13,7 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { render } = await import("../js/05-render.js");
 const { updateTagBadges } = await import("../js/07-production-tags.js");
-const { productionEntries } = await import("../core/production/index.js");
+const { productionEntries } = await import("../core/production/index.ts");
 const { currentDocument } = await import("../legacy/session-bridge.ts");
 const { productionReaders } = await import("../legacy/document-ports.ts");
 const { cacheSeal } = await import("../legacy/cache-freeze.ts");

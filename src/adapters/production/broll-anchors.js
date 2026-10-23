@@ -3,7 +3,7 @@ import { escapeHtml } from "../../core/document/text-policy.ts";
 import { anchorBrollCell, brollAnchorTodo, planBrollAnchors } from "../../core/production/broll.ts";
 import { holdsMedia } from "../../core/production/tags.ts";
 import { toHtml } from "../../core/text/html.ts";
-import { brollAnchoringDeclined } from "../../application/broll-anchoring.js";
+import { brollAnchoringDeclined } from "../../application/broll-anchoring.ts";
 
 export function brollHtmlLines(body) {
   hoistNestedBrs(body);

@@ -8,7 +8,7 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { render } = await import("../js/05-render.js");
 const { applyTag, findOrAddPerson, openTagComposer, registerProductionTag } = await import("../js/07-production-tags.js");
-const { renameTag } = await import("../application/commands/production-actions.js");
+const { renameTag } = await import("../application/commands/production-actions.ts");
 const { runDocumentEdit, sessionStamps } = await import("../legacy/session-bridge.ts");
 const { retagRewrites } = await import("../legacy/tag-rewrites.ts");
 const { plainTagPhrase } = await import("../js/07b-plain-tags.js");

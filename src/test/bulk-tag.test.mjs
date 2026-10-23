@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { sanitizeHtml } from "../js/04-richtext.js";
 import { cellOf, projection } from "../js/04c-doc-model.js";
 import { bulkTagCell } from "../js/07-production-tags.js";
-import { bulkTagRows } from "../application/commands/bulk-tags.js";
+import { bulkTagRows } from "../application/commands/bulk-tags.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 loadTestDocument({ rows: [], productionTags: [] });

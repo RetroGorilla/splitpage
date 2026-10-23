@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { healTagRegistry, productionIndexStats, resetProductionIndexStats } from "../js/07-production-tags.js";
-import { productionEntries } from "../core/production/index.js";
+import { productionEntries } from "../core/production/index.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";

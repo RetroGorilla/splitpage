@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { healTagRegistry, productionIndexStats } from "../js/07-production-tags.js";
-import { currentProductionIndex, productionEntries } from "../core/production/index.js";
+import { currentProductionIndex, productionEntries } from "../core/production/index.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { deriveProductionIndex } from "../core/production/tags.ts";
