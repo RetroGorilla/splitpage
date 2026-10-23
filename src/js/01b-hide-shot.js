@@ -1,6 +1,5 @@
-import { S } from "./_state.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession } from "../legacy/session-bridge.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
@@ -69,13 +68,15 @@ export function clearShotHideGrace(rowId) {
 }
 
 export function revealRow(rowId) {
-  if (!hideShotOn() || !S.state) return;
-  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
-  if (idx === -1 || !isRowHiddenByShotToggle(S.state.rows[idx])) return;
+  var doc = currentDocument();
+  if (!hideShotOn() || !doc) return;
+  var idx = readSession(function (held) { return rowIndexOf(held, rowId); });
+  var rows = doc.rows;
+  if (idx === -1 || !isRowHiddenByShotToggle(rows[idx])) return;
   var start = idx, end = idx;
-  while (start > 0 && S.state.rows[start - 1].status === "shot") start--;
-  while (end < S.state.rows.length - 1 && S.state.rows[end + 1].status === "shot") end++;
-  for (var i = start; i <= end; i++) expandedShotRowIds[S.state.rows[i].id] = true;
+  while (start > 0 && rows[start - 1].status === "shot") start--;
+  while (end < rows.length - 1 && rows[end + 1].status === "shot") end++;
+  for (var i = start; i <= end; i++) expandedShotRowIds[rows[i].id] = true;
   announceHiding();
 }
 
