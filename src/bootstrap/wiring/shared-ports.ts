@@ -2,9 +2,10 @@ import type { ActionRegistry } from "../../application/actions.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { ScreenState } from "../../application/screen.ts";
-import type { ProductionIndexOwner } from "../../core/production/index.ts";
+import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import { appActions } from "../../legacy/app-actions.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
@@ -14,7 +15,7 @@ import { PREF_EVENT, preferences } from "../../legacy/preferences-bridge.ts";
 import { productionIndex } from "../../legacy/production-index-bridge.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
-import { currentDocument, onDocumentReplaced, onRefresh, onSessionChange, readSession } from "../../legacy/session-bridge.ts";
+import { currentDocument, editAllowed, onDocumentReplaced, onRefresh, onSessionChange, readSession, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../../legacy/session-bridge.ts";
 
 const actions: Pick<ActionRegistry, "invoke" | "view"> = {
   invoke: (id, source, input) => appActions.invoke(id, source, input),
@@ -51,6 +52,14 @@ const documentReader: DocumentReader = {
   onRefresh: onRefresh
 };
 
+const edits: DocumentEdits = {
+  run: runCommand,
+  edit: runDocumentEdit,
+  allowed: editAllowed,
+  stamps: sessionStamps,
+  text: sessionTextPorts
+};
+
 const review: ReviewFacts = { reviewing: reviewMode, refuseInReview: reviewBlocked };
 
 const text: TextServices<HTMLElement> = {
@@ -70,6 +79,7 @@ const shared = {
   changes,
   screen: (): ScreenState => screenNow(),
   document: documentReader,
+  edits,
   review,
   text,
   production
