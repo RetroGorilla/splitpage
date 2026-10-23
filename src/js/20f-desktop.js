@@ -71,6 +71,7 @@ export function makeDesktopHandle(entry) {
 }
 
 var awaitingHandedDocument = false;
+var lastDesktopDocumentState = "";
 
 export function handedDocumentSettled() {
   if (!awaitingHandedDocument) return;
@@ -78,12 +79,11 @@ export function handedDocumentSettled() {
   notifyDesktopDocumentState();
 }
 
-export function notifyDesktopDocumentState() {
-  if (!runningOnDesktop() || !currentDocument()) return;
-  if (awaitingHandedDocument) return;
+function desktopDocumentState() {
+  if (!runningOnDesktop() || !currentDocument() || awaitingHandedDocument) return null;
   var restoring = recoveryStarted() && draftResume().restorePending();
   var c = homeConn();
-  desktopPort().setDocumentState({
+  return {
     title: currentDocument().title || "Untitled Script",
     dirty: unsavedChanges() || restoring,
     pristine: (typeof isPristineSeedDocument === "function" && isPristineSeedDocument()) && !restoring,
@@ -93,7 +93,29 @@ export function notifyDesktopDocumentState() {
     serverUrl: c ? c.serverUrl : null,
     tunnel: c ? c.tunnel : null,
     role: c ? c.role : null
-  });
+  };
+}
+
+export function notifyDesktopDocumentState() {
+  var state = desktopDocumentState();
+  if (!state) return;
+  lastDesktopDocumentState = JSON.stringify(state);
+  desktopPort().setDocumentState(state);
+}
+
+export function desktopDocumentListeners() {
+  function changed() {
+    var state = desktopDocumentState();
+    if (state && JSON.stringify(state) !== lastDesktopDocumentState) notifyDesktopDocumentState();
+  }
+  return {
+    session: changed,
+    location: changed,
+    save: function (change) {
+      if (change === "change") notifyDesktopDocumentState();
+      else changed();
+    }
+  };
 }
 
 var menuCommandRunner = null;

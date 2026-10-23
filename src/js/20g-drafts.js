@@ -7,7 +7,6 @@ import {
   copyDocHistorySafe,
   syncDocIdentity
 } from "./02b-doc-id.js";
-import { updateIdentityChip } from "./03-sync.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
 import { onServerDoc } from "./13-hosted.js";
@@ -26,8 +25,7 @@ import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 import { applyStashedWork } from "./14-export.js";
 import {
   adoptProjectState,
-  parseProjectFileState,
-  updateFileChip
+  parseProjectFileState
 } from "./18-local-files.js";
 import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
 import { SCHEMA_VERSION } from "../core/document/fields.ts";
@@ -564,8 +562,6 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
     writtenOut: wasUntitled ? !!t.header.docIdWrittenOut : false
   });
   if (arrived.forkedFrom) copyDocHistorySafe(arrived.forkedFrom, arrived.document.docId);
-  updateIdentityChip();
-  updateFileChip();
   syncDocIdentity();
   markAbsorbedDirty("recovery");
   showToast(reasonText, "warn", true);
@@ -738,8 +734,6 @@ async function restoreFileDraft(t, mine, base, origin, ctx) {
 
   if (sameDocContent(base, disk)) {
     documentTransitions().restore({ from: { document: mine } });
-    updateIdentityChip();
-    updateFileChip();
     documentLocation().markWrittenOut(!!t.header.docIdWrittenOut);
     markAbsorbedDirty("recovery");
     showToast("Restored your unsaved changes to " + (currentDocument().title || file.name) +
@@ -777,8 +771,6 @@ function adoptUntitledDraft(t, mine, base) {
     detached: false,
     writtenOut: !!t.header.docIdWrittenOut
   });
-  updateIdentityChip();
-  updateFileChip();
   syncDocIdentity();
   markAbsorbedDirty("recovery");
   showToast("Restored your unsaved script" + (draftWhenText(t) ? " " + draftWhenText(t) : "") +
