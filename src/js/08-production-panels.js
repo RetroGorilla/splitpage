@@ -7,7 +7,8 @@ import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, groupTagsByCateg
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
-import { cssAttr, plainText, safeId } from "./04-richtext.js";
+import { plainText, safeId } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import { tagStatusLampHtml } from "./07-production-tags.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { personColor } from "./13a-presence.js";
