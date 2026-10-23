@@ -7,6 +7,13 @@ import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
 import { mountScriptZoomFeature, scriptZoomActions, stopScriptZoomFeature } from "../../src/bootstrap/wiring/script-zoom.ts";
 import { installAppActions } from "../../src/legacy/app-actions.ts";
 import { PREF_EVENT, preferences, startPreferences, viewFlags } from "../../src/legacy/preferences-bridge.ts";
+import type { SaveChange } from "../../src/application/save/save-state.ts";
+import { autoSavePolicy, haltAutoSave, noteSaveChange, saveDestinations, startSaves } from "../../src/legacy/save-bridge.ts";
+import type { LegacySavePorts } from "../../src/legacy/save-bridge.ts";
+import { cacheSeal } from "../../src/legacy/cache-freeze.ts";
+import { productionReaders } from "../../src/legacy/document-ports.ts";
+import { productionIndex, startProductionIndex } from "../../src/legacy/production-index-bridge.ts";
+import { migrateRows } from "../../src/js/02-state.js";
 
 test("shared ports follow their current owners, announce synchronously in subscription order and unsubscribe", () => {
   const shared = sharedPorts();
@@ -72,6 +79,81 @@ test("shared ports follow their current owners, announce synchronously in subscr
     stopActions();
     stopPreferences();
     localStorage.clear();
+  }
+});
+
+function savePorts(): LegacySavePorts {
+  return {
+    destination: () => "here",
+    keyOf: (identity) => ({ owner: identity, name: "" }),
+    obsolete: () => {},
+    ownership: { capture: () => ({ epoch: 1, docId: null, destination: "here", destinationGeneration: 0, generation: 0, connection: null, revision: null }), stillOwns: () => true },
+    autosave: { enabledAtStart: () => true, changed: () => {} }
+  };
+}
+
+test("the save state port follows the running save owner: unsaved, busy, its changes, an autosave now and resuming autosave", async () => {
+  const saves = sharedPorts().saves;
+  const timers = { start: () => null, stop: () => {} };
+  assert.equal(saves.unsaved(), false);
+  assert.equal(saves.busy(), false);
+  assert.throws(() => { saves.dueNow(); }, /The save coordinator is not started yet/);
+  assert.throws(() => { saves.resume(); }, /The save coordinator is not started yet/);
+  const heard: SaveChange[] = [];
+  const off = saves.onChange((change) => { heard.push(change); });
+  let stop = startSaves(savePorts(), timers);
+  try {
+    const written: string[] = [];
+    saveDestinations().register({ id: "probe", takes: () => true, autoSaveTarget: () => "file", write: async (job) => { written.push(job.request.kind); return { kind: "saved" }; } });
+    noteSaveChange();
+    assert.equal(saves.unsaved(), true);
+    assert.deepEqual(heard, ["change"]);
+    haltAutoSave("stopped for the test");
+    assert.equal(autoSavePolicy().halted(), "stopped for the test");
+    saves.resume();
+    assert.equal(autoSavePolicy().halted(), "");
+    saves.dueNow();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(written, ["autosave"]);
+    assert.equal(saves.busy(), false);
+    stop();
+    stop = startSaves(savePorts(), timers);
+    assert.equal(saves.unsaved(), false, "the port reads the save owner running now");
+    noteSaveChange();
+    assert.equal(saves.unsaved(), true);
+    off();
+    noteSaveChange();
+    assert.equal(heard.filter((change) => change === "change").length, 2);
+  } finally {
+    off();
+    stop();
+  }
+});
+
+test("the production index port forwards each call to the running production index and follows a restart", () => {
+  const production = sharedPorts().production;
+  assert.throws(() => production.entries(null), /The production index is not started yet/);
+  const doc = migrateRows({ schema: 2, title: "T", comments: [], rows: [{ id: "r1", audioText: 'Put the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="kettle" contenteditable="false">kettle</span> on.' }] });
+  let stop = startProductionIndex(productionReaders, cacheSeal);
+  try {
+    assert.deepEqual(production.entries(doc).map((e) => e.key), ["prop kettle"]);
+    assert.equal(production.current(doc), productionIndex().current(doc));
+    assert.equal(production.derived(), 1);
+    assert.equal(JSON.stringify(production.recordsPlan(doc, doc)), JSON.stringify(productionIndex().recordsPlan(doc, doc)));
+    production.resetDerived();
+    assert.equal(productionIndex().derived(), 0);
+    production.entries(doc);
+    assert.equal(production.derived(), 0, "an unchanged document is not derived again");
+    const first = productionIndex();
+    stop();
+    stop = startProductionIndex(productionReaders, cacheSeal);
+    assert.notEqual(productionIndex(), first);
+    production.entries(doc);
+    assert.equal(production.derived(), productionIndex().derived(), "the port reads the production index running now");
+    production.resetDerived();
+    assert.equal(productionIndex().derived(), 0);
+  } finally {
+    stop();
   }
 });
 
