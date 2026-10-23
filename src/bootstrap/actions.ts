@@ -5,11 +5,11 @@ import { mountShortcuts } from "../features/shortcuts/mount.ts";
 import { showRefusal } from "../js/12-dirty-toast.js";
 import { runMenuCommandsWith } from "../js/20f-desktop.js";
 import { editorOpenActions } from "../legacy/editor-open-actions.ts";
-import { registerFileActions } from "../legacy/file-actions.ts";
+import { fileActions } from "../legacy/file-actions.ts";
 import { helpMenuActions } from "../legacy/help-actions.ts";
 import { nativeMenuRunner } from "../legacy/native-menu.ts";
-import { registerShareActions } from "../legacy/share-actions.ts";
-import { hideShotActions, thisDocumentActions } from "../legacy/this-document-actions.ts";
+import { shareActions } from "../legacy/share-actions.ts";
+import { thisDocumentActions } from "../legacy/this-document-actions.ts";
 import { viewActions } from "../legacy/view-actions.ts";
 import { rowsActions } from "./wiring/editor.ts";
 import { rundownMinimizeActions, rundownSceneActions } from "./wiring/rundown.ts";
@@ -17,6 +17,8 @@ import { scriptZoomActions } from "./wiring/script-zoom.ts";
 import { helpActions } from "./wiring/help.ts";
 import { updateActions } from "./wiring/update.ts";
 import { galleryActions } from "./wiring/gallery.ts";
+import { fileMenuExportActions } from "./wiring/file-menu-export.ts";
+import { hideShotActions } from "./wiring/hide-shot.ts";
 
 let running: (() => void) | null = null;
 
@@ -29,7 +31,10 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
   const steps: readonly (() => () => void)[] = [
     () => registry.presentRefusals(presentRefusal),
     () => registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]),
-    () => registerFileActions(registry),
+    () => {
+      const menu = fileActions();
+      return registerAll(registry, [...menu.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...menu.slice(3)]);
+    },
     () => {
       const views = viewActions();
       return registerAll(registry, [...views.slice(0, 3), ...commentsPanelActions(), ...views.slice(3)]);
@@ -38,7 +43,10 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
       const menu = helpMenuActions();
       return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 5), ...updateActions(), ...commentsHelpActions(), ...menu.slice(5)]);
     },
-    () => registerShareActions(registry),
+    () => {
+      const share = shareActions();
+      return registerAll(registry, [...share.slice(0, 11), ...fileMenuExportActions().slice(1), ...share.slice(11)]);
+    },
     () => registerAll(registry, scriptZoomActions()),
     () => {
       const openers = editorOpenActions();

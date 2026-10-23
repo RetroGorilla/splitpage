@@ -1,7 +1,7 @@
 import { editableCellHtml } from "../features/common/editable-cell.js";
 import { formatDuration, pad2 } from "../core/production/timing.ts";
 import { totalSeconds } from "./01-scene-status.js";
-import { renderRowGroups } from "./01b-hide-shot.js";
+import { renderRowGroups } from "../legacy/hide-shot-bridge.ts";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { ensureTrailingCaretSpot, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";

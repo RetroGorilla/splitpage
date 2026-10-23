@@ -7,15 +7,19 @@ import { createActionRegistry, registerAll } from "../../src/application/actions
 import type { ActionRegistry, ActionSource } from "../../src/application/actions.ts";
 import { currentDocument } from "../../src/legacy/session-bridge.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
-import { registerFileActions } from "../../src/legacy/file-actions.ts";
-import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { fileActions } from "../../src/legacy/file-actions.ts";
+import { thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { hideShotActions } from "../../src/bootstrap/wiring/hide-shot.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { viewActions } from "../../src/legacy/view-actions.ts";
+import { fileMenuExportActions, mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../src/bootstrap/wiring/file-menu-export.ts";
+
 
 function loadingRegistry(): { registry: ActionRegistry; restore: () => void } {
   const registry = createActionRegistry();
   mountRundownFeature();
-  const disposers = [stopRundownFeature, registerFileActions(registry), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerAll(registry, [...viewActions().slice(0, 3), ...commentsPanelActions(), ...viewActions().slice(3)])];
+  mountFileMenuExportFeature();
+  const disposers = [stopRundownFeature, stopFileMenuExportFeature, registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerAll(registry, [...viewActions().slice(0, 3), ...commentsPanelActions(), ...viewActions().slice(3)])];
   const was: unknown = currentDocument();
   loadTestDocument(null);
   return {
