@@ -1,5 +1,5 @@
 import { formatDuration, pad2, totalSeconds } from "../core/production/timing.ts";
-import { renderRowGroups } from "./01b-hide-shot.js";
+import { renderRowGroups } from "../legacy/hide-shot-bridge.ts";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { ensureTrailingCaretSpot, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
