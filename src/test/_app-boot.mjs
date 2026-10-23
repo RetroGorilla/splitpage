@@ -113,7 +113,8 @@ export async function appWiringDeps() {
     destinations: () => [exporting.legacyFileDestination(), files.importSaveDestination(), hosted.serverSaveDestination()],
     transitions: { destination: sync.documentDestinationPort, identity: docId.documentIdentityPort, history: sync.documentHistoryPort },
     sources: () => [files.projectFileSource(), imports.importDocumentSource(), hosted.serverDocumentSource()],
-    recovery: () => Object.assign(drafts.draftRecoveryPorts(), { merge: sync.applyMerge }),
+    merge: sync.legacyMergePorts,
+    recovery: drafts.draftRecoveryPorts,
     projectFiles: formats.legacyProjectFileServices,
     keyTarget: window
   };
