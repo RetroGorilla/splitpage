@@ -1,7 +1,7 @@
 import { SEED_TEXT, bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 const { migrateRows } = await import("../js/02-state.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
@@ -20,9 +20,9 @@ after(closeApp);
 
 test("E4: boot recovery of unsaved work enters the session as a recovery with an epoch of its own, no generation and no undo entry", async () => {
   const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
-  assert.equal(S.state.rows[0].audioText, "Recovered from the last session.");
+  assert.equal(currentDocument().rows[0].audioText, "Recovered from the last session.");
   assert.deepEqual(heard, ["recovery:1:0"]);
-  assert.equal(session.read((doc) => doc), S.state);
+  assert.equal(session.read((doc) => doc), currentDocument());
   assert.equal(session.generation(), 0);
   flushEdits();
   assert.equal(undoSizes().undo, 0);

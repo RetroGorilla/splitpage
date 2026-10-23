@@ -1,12 +1,11 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { createHeldFetch, mockClock } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
 import { documentLocation } from "../legacy/location-bridge.ts";
-import { mergeBase } from "../legacy/session-bridge.ts";
+import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
@@ -115,14 +114,14 @@ test("a hosted save that lands after a same-id reopen is not adopted, and the ne
   const held = withServer(t, server);
   openHosted("srv-a", 1);
 
-  S.state.rows[0].audioText = "Typed before the save.";
+  currentDocument().rows[0].audioText = "Typed before the save.";
   noteSessionEdit();
   held.holdWhen((r) => r.method === "PUT");
   const saving = saveDoc({ auto: true });
   await held.gates.arrived("fetch");
 
   assert.equal(await hosted.openServerDoc("srv-a"), true, "the document was reopened");
-  assert.equal(textOf(S.state.rows[0]), "One.", "the reopened copy shows the server's revision 1");
+  assert.equal(textOf(currentDocument().rows[0]), "One.", "the reopened copy shows the server's revision 1");
   const warnedBefore = warnToasts().length;
 
   held.gates.releaseAll("fetch");
@@ -131,13 +130,13 @@ test("a hosted save that lands after a same-id reopen is not adopted, and the ne
   const late = {
     rev: homeModule.currentHome().rev,
     baseText: textOf(mergeBase().rows[0]),
-    shown: textOf(S.state.rows[0]),
+    shown: textOf(currentDocument().rows[0]),
     warned: warnToasts().slice(warnedBefore),
     halted: autoSavePolicy().halted()
   };
   assert.equal(server.docs.get("srv-a").rev, 2, "the late save reached the server");
 
-  S.state.rows[1].audioText = "Typed after the reopen.";
+  currentDocument().rows[1].audioText = "Typed after the reopen.";
   noteSessionEdit();
   await saveDoc();
   await settle();
@@ -162,7 +161,7 @@ test("a hosted save that lands after another server document was opened is not r
   const held = withServer(t, server);
   openHosted("srv-e", 1);
 
-  S.state.rows[0].audioText = "Typed in E.";
+  currentDocument().rows[0].audioText = "Typed in E.";
   noteSessionEdit();
   held.holdWhen((r) => r.method === "PUT");
   const saving = saveDoc();
@@ -188,10 +187,10 @@ test("a history restore made while a hosted save is in flight sticks, on screen 
   server.put("srv-r", script(), 1);
   const held = withServer(t, server);
   openHosted("srv-r", 1);
-  const ticket = pushSnapshot("The version to go back to", cloneState(S.state));
+  const ticket = pushSnapshot("The version to go back to", cloneState(currentDocument()));
   await ticket.done;
 
-  S.state.rows[0].audioText = "Typed then regretted.";
+  currentDocument().rows[0].audioText = "Typed then regretted.";
   noteSessionEdit();
   held.holdWhen((r) => r.method === "PUT");
   const saving = saveDoc({ auto: true });
@@ -200,7 +199,7 @@ test("a history restore made while a hosted save is in flight sticks, on screen 
   const button = document.createElement("button");
   button.setAttribute("data-id", ticket.id);
   assert.equal(await restoreSnapshotFromCard(button), "restored", "the earlier version was restored");
-  assert.equal(textOf(S.state.rows[0]), "One.", "the restored version is on screen");
+  assert.equal(textOf(currentDocument().rows[0]), "One.", "the restored version is on screen");
   const warnedBefore = warnToasts().length;
 
   held.gates.releaseAll("fetch");
@@ -211,7 +210,7 @@ test("a history restore made while a hosted save is in flight sticks, on screen 
   await saveDoc();
   await settle();
 
-  assert.equal(textOf(S.state.rows[0]), "One.", "the restored version is still on screen");
+  assert.equal(textOf(currentDocument().rows[0]), "One.", "the restored version is still on screen");
   assert.equal(textOf(server.docs.get("srv-r").state.rows[0]), "One.", "the server holds the restored version");
   assert.deepEqual(server.answered.map((a) => a.baseRev + ":" + a.status), ["1:200", "2:200"], "the save after the restore went on top of the late save");
   assert.equal(late.rev, 2, "the late save moved the revision of the place it was sent to");
@@ -226,7 +225,7 @@ test("a hosted save whose revision the reopen already fetched is not reported", 
   withServer(t, server);
   openHosted("srv-h", 1);
 
-  S.state.rows[0].audioText = "Saved before the reopen.";
+  currentDocument().rows[0].audioText = "Saved before the reopen.";
   noteSessionEdit();
   const releaseReply = server.holdPutReply();
   const saving = saveDoc({ auto: true });
@@ -234,7 +233,7 @@ test("a hosted save whose revision the reopen already fetched is not reported", 
   assert.equal(server.docs.get("srv-h").rev, 2, "the server accepted the save before replying");
 
   assert.equal(await hosted.openServerDoc("srv-h"), true, "the document was reopened");
-  assert.equal(textOf(S.state.rows[0]), "Saved before the reopen.", "the reopened copy already shows the saved text");
+  assert.equal(textOf(currentDocument().rows[0]), "Saved before the reopen.", "the reopened copy already shows the saved text");
   const warnedBefore = warnToasts().length;
 
   releaseReply();
@@ -253,7 +252,7 @@ test("a pull noticed while a hosted save waits for its reply does not run, and t
   withServer(t, server);
   openHosted("srv-b", 1);
 
-  S.state.rows[0].audioText = "Typed and saved.";
+  currentDocument().rows[0].audioText = "Typed and saved.";
   noteSessionEdit();
   const releaseReply = server.holdPutReply();
   const saving = saveToServer();
@@ -284,15 +283,15 @@ test("a pull whose connection changes before the answer arrives merges nothing; 
   changed.rows[0].audioText = "Saved by someone else.";
   server.put("srv-p", changed, 2);
 
-  const before = textOf(S.state.rows[0]);
+  const before = textOf(currentDocument().rows[0]);
   hosted.notePresenceRev({ docId: "srv-p", rev: 2 });
   hosted.setServerToken("another-token");
   await settle();
-  assert.equal(textOf(S.state.rows[0]), before, "nothing fetched under the old connection was merged into the document");
+  assert.equal(textOf(currentDocument().rows[0]), before, "nothing fetched under the old connection was merged into the document");
   assert.equal(homeModule.currentHome().rev, 1, "the tracked revision did not move");
   hosted.notePresenceRev({ docId: "srv-p", rev: 2 });
   await settle();
-  assert.equal(textOf(S.state.rows[0]), "Saved by someone else.", "a pull under the current connection merges");
+  assert.equal(textOf(currentDocument().rows[0]), "Saved by someone else.", "a pull under the current connection merges");
   assert.equal(homeModule.currentHome().rev, 2);
   hosted.clearServerToken();
   leave();
@@ -305,7 +304,7 @@ test("a plain hosted save adopts its revision and baseline and clears the unsave
   withServer(t, server);
   openHosted("srv-c", 1);
 
-  S.state.rows[0].audioText = "Saved plainly.";
+  currentDocument().rows[0].audioText = "Saved plainly.";
   noteSessionEdit();
   const warnedBefore = warnToasts().length;
   await saveDoc();
