@@ -24,7 +24,6 @@ import {
   slotOriginal,
   videoLinkKey
 } from "../../core/document/gallery.ts";
-import { unitSafePrefix } from "../../core/document/text-policy.ts";
 export {
   ANNOTATION_COLORS,
   addGalleryPicture,
@@ -61,13 +60,6 @@ export function pictureBytes(ref) {
 
 export function videoLinkText(l) {
   return l.href ? l.href : l.name + " (video file)";
-}
-
-export function videoLinkLabel(l) {
-  if (!l) return "";
-  if (!l.href) return l.name;
-  var s = String(l.href).replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "");
-  return s.length > 48 ? unitSafePrefix(s, 45) + "…" : s;
 }
 
 export function __init() {}
