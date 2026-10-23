@@ -55,7 +55,7 @@ function setup(t: TestContext) {
   realm.cancelAnimationFrame = (id: number) => { frames.delete(id); };
   realm.ResizeObserver = undefined;
   const context: Record<string, unknown> = { measureText: () => ({ width: 20 }) };
-  const ctx = new Proxy(context, { get: (target, key) => Reflect.get(target, key) ?? (() => {}) }) as unknown as CanvasRenderingContext2D;
+  const ctx = new Proxy(context, { get: (target, key): unknown => Reflect.get(target, key) ?? (() => {}) }) as unknown as CanvasRenderingContext2D;
   t.mock.method(element("annotate-frame"), "getBoundingClientRect", () => new win.DOMRect(0, 0, 100, 100));
   t.mock.method(win.HTMLCanvasElement.prototype, "getContext", () => ctx);
   t.mock.method(win.HTMLCanvasElement.prototype, "toBlob", (callback: BlobCallback) => {
