@@ -66,6 +66,8 @@ const changeListeners: Hearing[] = [];
 
 const refreshListeners: ((jobs: ReadonlySet<string>) => void)[] = [];
 
+const stampListeners: ((changes: ChangeSet) => void)[] = [];
+
 function hearing(entry: Hearing): SessionListener {
   return function (change) {
     if (entry.on) entry.listener(change);
@@ -114,6 +116,14 @@ export function onRefresh(listener: (jobs: ReadonlySet<string>) => void): () => 
   return function () {
     const at = refreshListeners.indexOf(listener);
     if (at !== -1) refreshListeners.splice(at, 1);
+  };
+}
+
+export function onStamped(listener: (changes: ChangeSet) => void): () => void {
+  stampListeners.push(listener);
+  return function () {
+    const at = stampListeners.indexOf(listener);
+    if (at !== -1) stampListeners.splice(at, 1);
   };
 }
 
@@ -246,7 +256,12 @@ export function runDocumentEdit(command: Command): boolean {
 }
 
 export function stampDocument(task: Stamp): CommandOutcome {
-  return session.stamp(task);
+  const outcome = session.stamp(task);
+  if (outcome.kind === "applied") {
+    const changes = outcome.changes;
+    stampListeners.slice().forEach(function (listener) { listener(changes); });
+  }
+  return outcome;
 }
 
 export function editAllowed(): boolean {

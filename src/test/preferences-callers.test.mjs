@@ -27,6 +27,7 @@ function finishFrames() {
 
 const stop = startPreferences({
   storage: () => localStorage,
+  watch: () => () => {},
   announce: (change) => document.dispatchEvent(new window.CustomEvent(PREF_EVENT, { detail: change }))
 });
 after(stop);
