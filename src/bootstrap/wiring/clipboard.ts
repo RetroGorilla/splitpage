@@ -1,4 +1,5 @@
 import { randomHexBytes, randomIds } from "../../adapters/identity/ids.ts";
+import { brollSeedOf, recordPastedBroll } from "../../application/production/broll-records.ts";
 import { __init as mountCellClipboard } from "../../features/clipboard/cell-clipboard.js";
 import type { CellClipboardPorts, CopyPasteMount, SceneClipPorts, SceneSelectPorts } from "../../features/clipboard/ports.ts";
 import { __init as mountSceneClip } from "../../features/clipboard/scene-clip.js";
@@ -10,7 +11,6 @@ import { migrateRows } from "../../js/02-state.js";
 import { stampRow } from "../../js/03-sync.js";
 import { closeRowMenus } from "../../features/rows/row-menu.js";
 import { collectTagsFromRows, scheduleProductionRefresh } from "../../js/07-production-tags.js";
-import { brollSeedOf, recordPastedBroll } from "../../js/08c-broll.js";
 import { onServerDoc } from "../../js/13-hosted.js";
 import { startNewScript } from "../../js/18b-file-menu.js";
 import { cellEditing, paintGuard, rowDrag } from "../../legacy/editor-bridge.ts";
@@ -40,7 +40,7 @@ export function mountCopyPasteFeature(): CopyPasteMount {
       selection: cellSelection,
       cells: { open: (cell) => cellEditing().open(cell), close: (cell, html, sel) => cellEditing().close(cell, html, sel) },
       paintGuard: { whileShown: (edit) => paintGuard().whileShown(edit) },
-      brollSeed: brollSeedOf
+      brollSeed: (row) => brollSeedOf(row, shared.text)
     };
     const clipPorts: SceneClipPorts = {
       document: shared.document,
@@ -49,7 +49,7 @@ export function mountCopyPasteFeature(): CopyPasteMount {
       text: shared.text,
       migrate: migrateRows,
       tagsInRows: collectTagsFromRows,
-      recordPastedBroll
+      recordPastedBroll: (doc, rowId, cell, ids) => { recordPastedBroll(doc, rowId, cell, ids, shared.text, randomIds); }
     };
     const selectPorts: SceneSelectPorts = {
       document: shared.document,

@@ -7,7 +7,12 @@ import { escapeHtml, migrateRows } from "../js/02-state.js";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { cellOf } from "../legacy/richtext.ts";
 import { normalizeCell } from "../core/text/runs.ts";
-import { BROLL_MARKER_RE, __init as brollInit, addBrollProp, brollInCell, brollPropKey, brollPropsInCell, brollShotsByProp, recordPastedBroll, renameBrollInScript } from "../js/08c-broll.js";
+import { BROLL_MARKER_RE, brollPropKey } from "../core/document/broll.ts";
+import { brollInCell, brollPropsInCell } from "../core/production/broll.ts";
+import { recordPastedBroll } from "../application/production/broll-records.ts";
+import { htmlToPlainText as brollPlainText } from "../legacy/plain-text.ts";
+import { addBrollProp, renameBrollInScript } from "../legacy/broll-bridge.ts";
+import { broll } from "./_broll-mounted.mjs";
 import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
@@ -26,7 +31,6 @@ import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 import { loadTestDocument } from "./_document.mjs";
 
-brollInit();
 
 function brollFieldLines(body) {
   hoistNestedBrs(body);
@@ -472,7 +476,7 @@ test("a pasted key's record is a new shot seeded from its scene; a moved one kee
     productionTags: []
   };
   loadTestDocument(doc);
-  recordPastedBroll(doc, "r0", cellOf(doc.rows[0].visualText), ["bsNew", "bsMoved", "bsLoose"]);
+  recordPastedBroll(doc, "r0", cellOf(doc.rows[0].visualText), ["bsNew", "bsMoved", "bsLoose"], { htmlToPlainText: brollPlainText, productionReaders: productionReaders }, randomIds);
   assert.deepEqual(currentDocument().brollShots.map((r) => r.id), ["bsMoved", "bsNew"]);
   assert.equal(currentDocument().brollShots[0], moved);
   assert.equal(moved.status, "shot");
@@ -515,7 +519,7 @@ function propsDoc() {
 }
 const shotsBy = () => {
   const out = {};
-  const by = brollShotsByProp();
+  const by = broll.brollShotsByProp();
   Object.keys(by).forEach((k) => { out[k] = by[k]; });
   return out;
 };
@@ -584,7 +588,7 @@ test("a pasted copy of a shot's line gets none of its hand-added props", () => {
   const s = propsDoc();
   addBrollProp("b1", "Kettle");
   s.rows[1].visualText = KEY("bsPasted") + " the " + tagSpan("prop", "Red mug", "red mug") + " on the sill";
-  recordPastedBroll(s, "r1", cellOf(s.rows[1].visualText), ["bsPasted"]);
+  recordPastedBroll(s, "r1", cellOf(s.rows[1].visualText), ["bsPasted"], { htmlToPlainText: brollPlainText, productionReaders: productionReaders }, randomIds);
   const rec = s.brollShots.find((r) => r.id === "bsPasted");
   assert.ok(rec);
   assert.deepEqual(rec.props, []);

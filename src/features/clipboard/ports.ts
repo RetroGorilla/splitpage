@@ -43,7 +43,7 @@ export interface SceneClipPorts {
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "fromHtml" | "inertBody">;
   readonly migrate: (doc: object) => ValidatedDocument;
   readonly tagsInRows: (rows: readonly unknown[]) => readonly SceneTag[];
-  readonly recordPastedBroll: (doc: object, rowId: string, cell: readonly Run[], ids: readonly string[]) => void;
+  readonly recordPastedBroll: (doc: ValidatedDocument, rowId: string, cell: readonly Run[], ids: readonly string[]) => void;
 }
 
 export interface SceneSelectPorts {
