@@ -10,6 +10,10 @@ import { PREF_EVENT, preferences, startPreferences, viewFlags } from "../../src/
 import type { SaveChange } from "../../src/application/save/save-state.ts";
 import { autoSavePolicy, haltAutoSave, noteSaveChange, saveDestinations, startSaves } from "../../src/legacy/save-bridge.ts";
 import type { LegacySavePorts } from "../../src/legacy/save-bridge.ts";
+import { cacheSeal } from "../../src/legacy/cache-freeze.ts";
+import { productionReaders } from "../../src/legacy/document-ports.ts";
+import { productionIndex, startProductionIndex } from "../../src/legacy/production-index-bridge.ts";
+import { migrateRows } from "../../src/js/02-state.js";
 
 test("shared ports follow their current owners, announce synchronously in subscription order and unsubscribe", () => {
   const shared = sharedPorts();
@@ -122,6 +126,33 @@ test("the save state port follows the running save owner: unsaved, busy, its cha
     assert.equal(heard.filter((change) => change === "change").length, 2);
   } finally {
     off();
+    stop();
+  }
+});
+
+test("the production index port forwards each call to the running production index and follows a restart", () => {
+  const production = sharedPorts().production;
+  assert.throws(() => production.entries(null), /The production index is not started yet/);
+  const doc = migrateRows({ schema: 2, title: "T", comments: [], rows: [{ id: "r1", audioText: 'Put the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="kettle" contenteditable="false">kettle</span> on.' }] });
+  let stop = startProductionIndex(productionReaders, cacheSeal);
+  try {
+    assert.deepEqual(production.entries(doc).map((e) => e.key), ["prop kettle"]);
+    assert.equal(production.current(doc), productionIndex().current(doc));
+    assert.equal(production.derived(), 1);
+    assert.equal(JSON.stringify(production.recordsPlan(doc, doc)), JSON.stringify(productionIndex().recordsPlan(doc, doc)));
+    production.resetDerived();
+    assert.equal(productionIndex().derived(), 0);
+    production.entries(doc);
+    assert.equal(production.derived(), 0, "an unchanged document is not derived again");
+    const first = productionIndex();
+    stop();
+    stop = startProductionIndex(productionReaders, cacheSeal);
+    assert.notEqual(productionIndex(), first);
+    production.entries(doc);
+    assert.equal(production.derived(), productionIndex().derived(), "the port reads the production index running now");
+    production.resetDerived();
+    assert.equal(productionIndex().derived(), 0);
+  } finally {
     stop();
   }
 });
