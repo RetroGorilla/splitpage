@@ -34,6 +34,7 @@ import * as panelWidths from "../../src/application/preferences/panel-widths.ts"
 import * as documentLocation from "../../src/application/location/document-location.ts";
 import * as serverStatus from "../../src/application/location/server-status.ts";
 import * as projectFileServices from "../../src/application/formats/project-file-services.ts";
+import * as documentMerge from "../../src/application/session/document-merge.ts";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -50,6 +51,7 @@ const OWNERS = [
   "src/application/editing/delete-confirm.ts",
   "src/application/editing/production-selection.ts",
   "src/application/session/merge-undo.ts",
+  "src/application/session/document-merge.ts",
   "src/application/preferences/preferences.ts",
   "src/application/preferences/view-flags.ts",
   "src/application/preferences/panel-widths.ts",
@@ -110,7 +112,7 @@ test("E12: importing the owners constructs nothing: each export is a constructor
     saveCoordinator: saveCoordinator, saveStatus: saveStatus, autoSave: autoSave, saveDestinations: saveDestinations, serverDestination: serverDestination, fileConflict: fileConflict,
     rowDrag: rowDrag, cellEditing: cellEditing, focusMemory: focusMemory, paintGuard: paintGuard, selection: selection, deleteConfirm: deleteConfirm, productionSelection: productionSelection, mergeUndo: mergeUndo,
     preferences: preferences, viewFlags: viewFlags, panelWidths: panelWidths,
-    documentLocation: documentLocation, serverStatus: serverStatus, projectFileServices: projectFileServices
+    documentLocation: documentLocation, serverStatus: serverStatus, projectFileServices: projectFileServices, documentMerge: documentMerge
   };
   for (const [module, exports] of Object.entries(loaded)) {
     for (const [name, value] of Object.entries(exports)) {

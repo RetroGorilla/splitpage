@@ -5,11 +5,10 @@ import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";
-import {
-  mergeStates,
-  stashLocalWork,
-  textMergeContext
-} from "../js/03-sync.js";
+import { textMergeContext } from "../js/03-sync.js";
+import { stashLocalWork } from "../legacy/recovery-bridge.ts";
+import { mergeStates } from "../legacy/merge-bridge.ts";
+import "./_merge-started.mjs";
 import { createMemoryBackend, dataUrlForSync, intern, internDataUrl, setBackend } from "../adapters/storage/02c-blobs.js";
 import { conflictStash, startRecovery } from "../legacy/recovery-bridge.ts";
 import { DRAFT_LIMITS } from "../adapters/storage/draft-store-idb.ts";
