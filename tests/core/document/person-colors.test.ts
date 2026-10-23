@@ -4,6 +4,7 @@ import {
   PERSON_COLORS,
   PERSON_MAP_MAX,
   PERSON_NAME_MAX,
+  colorsWithMine,
   lookupByName,
   mergePersonColors,
   normalizePersonColors,
@@ -83,4 +84,13 @@ test("a three-way merge takes their change where mine kept the base, and keeps e
   assert.deepEqual(mergePersonColors({ Sam: BLUE }, { Sam: BLUE }, { SAM: AMBER, Ada: VIOLET }), { Sam: AMBER, Ada: VIOLET });
   assert.equal(mergePersonColors(null, null, null), null);
   assert.equal(mergePersonColors({ Sam: "bad" }, [], "x"), null);
+});
+
+test("colorsWithMine records my colour under my name, replacing a differently cased entry, and says nothing when it is already there", () => {
+  const [blue, amber, violet] = PERSON_COLORS as readonly string[];
+  assert.equal(colorsWithMine({}, "", blue as string), null);
+  assert.equal(colorsWithMine({}, "Ann", ""), null);
+  assert.deepEqual(colorsWithMine(undefined, "Ann", blue as string), { Ann: blue });
+  assert.deepEqual(colorsWithMine({ ann: amber, Bo: violet }, "Ann", blue as string), { Bo: violet, Ann: blue });
+  assert.equal(colorsWithMine({ ANN: blue }, "Ann", blue as string), null);
 });
