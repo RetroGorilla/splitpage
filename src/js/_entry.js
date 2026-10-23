@@ -1,5 +1,4 @@
 import { __init as init_00_prelude } from "./00-prelude.js";
-import { __init as init_01_scene_status } from "./01-scene-status.js";
 import { __init as init_02_state } from "./02-state.js";
 import { __init as init_02b_doc_id } from "./02b-doc-id.js";
 import { __init as init_02c_blobs } from "../adapters/storage/02c-blobs.js";
@@ -50,7 +49,7 @@ import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountCopyPasteFeature, mountSettingsFeature, mountHideShotFeature, mountFileMenuExportFeature } from "../bootstrap/wiring.ts";
+import { wireApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountCopyPasteFeature, mountSettingsFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -76,7 +75,7 @@ try {
 }
 if (wiring) {
   init_00_prelude();
-  init_01_scene_status();
+  mountSceneStatusFeature();
   mountHideShotFeature();
   init_02_state();
   init_02b_doc_id();
