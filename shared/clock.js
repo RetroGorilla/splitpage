@@ -1,5 +1,13 @@
 "use strict";
 
+function formatTimestampAbsolute(iso, clockMode) {
+  try {
+    const d = new Date(iso === null ? 0 : iso === undefined ? NaN : iso);
+    if (isNaN(d.getTime())) return "";
+    return formatDateClock(d, { year: true }, clockMode);
+  } catch (e) { return ""; }
+}
+
 function clockCycle(mode) {
   if (mode === "12") return { hourCycle: "h12" };
   if (mode === "24") return { hourCycle: "h23" };
@@ -59,6 +67,7 @@ module.exports = {
   clockCycle,
   formatClock,
   formatDateClock,
+  formatTimestampAbsolute,
   savedStatusText,
   savedWhenText
 };

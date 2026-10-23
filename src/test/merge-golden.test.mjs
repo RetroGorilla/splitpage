@@ -7,7 +7,10 @@ import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
 import { mergeBrollShots, mergePeople, mergeProductionTags } from "../js/03-sync.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
-import { saveAuthorName } from "../js/10-comments.js";
+
+import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";
+import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+function saveAuthorName(name) { saveAuthorNameWith(commentPreferences(), name); }
 import {
   FIXED_ISO, assertGolden, freezeClockAndRandom, goldenNames, goldenText, jsonCopy, maskTokens, readGolden, updatingGoldens
 } from "./golden-helpers.mjs";

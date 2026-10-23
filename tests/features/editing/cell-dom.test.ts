@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { domKeys, domToPos, placeSelection, posToDom, readSelection } from "../../../src/features/editing/cell-dom.ts";
+import { domKeys, domToPos, placeSelection, posToDom, readSelection } from "../../../src/features/common/cell-dom.ts";
 import { jsdomWindow } from "./jsdom.mjs";
 
 const win: Window = jsdomWindow();
