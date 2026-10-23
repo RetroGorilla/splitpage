@@ -8,7 +8,7 @@ import { fileActions } from "../legacy/file-actions.ts";
 import { helpMenuActions } from "../legacy/help-actions.ts";
 import { nativeMenuRunner } from "../legacy/native-menu.ts";
 import { shareActions } from "../legacy/share-actions.ts";
-import { hideShotActions, thisDocumentActions } from "../legacy/this-document-actions.ts";
+import { thisDocumentActions } from "../legacy/this-document-actions.ts";
 import { registerViewActions } from "../legacy/view-actions.ts";
 import { rowsActions } from "./wiring/editor.ts";
 import { rundownMinimizeActions, rundownSceneActions } from "./wiring/rundown.ts";
@@ -17,6 +17,7 @@ import { helpActions } from "./wiring/help.ts";
 import { updateActions } from "./wiring/update.ts";
 import { galleryActions } from "./wiring/gallery.ts";
 import { fileMenuExportActions } from "./wiring/file-menu-export.ts";
+import { hideShotActions } from "./wiring/hide-shot.ts";
 
 let running: (() => void) | null = null;
 
