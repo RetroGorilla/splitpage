@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";
 import { withPageHead } from "../js/02b-doc-id.js";
 import { plainName, plainText, safeHref, safeId, safeImageSrc, sanitizeHtml } from "../js/04-richtext.js";
-import { directionShortcut, importDirections } from "../js/04c-doc-model.js";
+import { directionShortcut, importDirections } from "../core/text/directions.ts";
 import { normalizePersonColors } from "../core/document/person-colors.ts";
 import { normalizeSceneLength, normalizeTargetLength } from "../js/01-scene-status.js";
 import { migrateGallery, normalizeMarks, normalizePictureName, normalizeVideoLink, normalizeVideoLinks } from "../adapters/storage/02d-gallery.js";

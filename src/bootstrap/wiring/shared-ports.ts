@@ -2,7 +2,7 @@ import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
-import type { ExternalLinks } from "../../application/desktop-presence.ts";
+import type { ExternalLinks, LaunchFacts } from "../../application/desktop-presence.ts";
 import type { EditorSelectionPort } from "../../application/editing/selection.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { ExportRegistry } from "../../application/export/registry.ts";
@@ -206,6 +206,15 @@ const recents: RecentFiles = {
   routeOpen: (request) => desktopPort()?.routeOpen(request)
 };
 
+const launch: LaunchFacts = {
+  firstTabOfLaunch: () => desktopPort()?.firstTabOfLaunch,
+  hadPriorSession: () => desktopPort()?.hadPriorSession,
+  launchIntent: () => desktopPort()?.launchIntent,
+  hasDraftToRestore: () => desktopPort()?.hasDraftToRestore,
+  appVersion: () => desktopPort()?.appVersion,
+  sessionInfo: () => desktopPort()?.getSessionInfo()
+};
+
 const fileDelivery: FileDelivery = {
   deliver: (filename, data, options) => deliverFile(filename, data, options)
 };
@@ -238,6 +247,7 @@ const shared = {
   ownership,
   pictures,
   recents,
+  launch,
   fileDelivery,
   undo: undoControl,
   transitions

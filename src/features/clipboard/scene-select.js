@@ -1,32 +1,18 @@
-import { ensureBytes } from "../adapters/storage/02c-blobs.js";
-import { refsIn } from "../../shared/blob-policy.js";
-import { stampRow } from "./03-sync.js";
-import { cssAttr } from "../features/common/dom.ts";
-import { isScriptCell } from "../features/editing/cell-page.ts";
+import { refsIn } from "../../../shared/blob-policy.js";
+import { cssAttr } from "../common/dom.ts";
 import {
   SCENES_MIME, buildScenePayload, parseScenePayload, scenePaste, scenesOnClipboard, setLiveCut
-} from "./05g-scene-clip.js";
-import { closeRowMenus } from "./06-rows.js";
-import { scheduleProductionRefresh } from "./07-production-tags.js";
-import { breakUndoCoalescing, flushEdits, lastUndoEntry, undo } from "./12a-undo.js";
-import { onServerDoc } from "./13-hosted.js";
-import { autoSavePolicy } from "../legacy/save-bridge.ts";
-import { startNewScript } from "./18b-file-menu.js";
-import { randomHexBytes } from "../adapters/identity/ids.ts";
-import { addHeldCommentsCommand, pasteScenesCommand, removeScenesCommand } from "../application/commands/scenes.ts";
-import { cappedLongText } from "../core/document/text-policy.ts";
-import { REVIEW_ONLY, currentDocument, runCommand } from "../legacy/session-bridge.ts";
-import { VIEWING_ONLY } from "../application/collaboration/review.ts";
-import { cellEditing, rowDrag } from "../legacy/editor-bridge.ts";
-import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
-import { viewFlags } from "../legacy/preferences-bridge.ts";
-import { reviewMode } from "../legacy/location-bridge.ts";
+} from "./scene-clip.js";
+import { addHeldCommentsCommand, pasteScenesCommand, removeScenesCommand } from "../../application/commands/scenes.ts";
+import { cappedLongText } from "../../core/document/text-policy.ts";
+import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 
 var TOLERANCE = 4;
 var SCROLL_ZONE = 120;
 var SCROLL_MIN = 6;
 var SCROLL_MAX = 28;
 
+var ports = null;
 var track = null;
 var sel = null;
 var scroll = null;
@@ -36,13 +22,13 @@ var pendingCut = false;
 var clipWritten = null;
 
 export function hasSceneSelection() {
-  if (sel && sel.doc !== currentDocument()) clearSceneSelection();
+  if (sel && sel.doc !== ports.document.current()) clearSceneSelection();
   return !!sel;
 }
 
 export function selectedSceneIds() {
   if (!hasSceneSelection()) return [];
-  var rows = currentDocument().rows;
+  var rows = ports.document.current().rows;
   var a = -1, b = -1;
   rows.forEach(function (r, i) {
     if (r.id === sel.anchor) a = i;
@@ -59,7 +45,7 @@ export function selectedSceneIds() {
 }
 
 export function selectScenes(anchorId, focusId) {
-  sel = { anchor: anchorId, focus: focusId || anchorId, doc: currentDocument() };
+  sel = { anchor: anchorId, focus: focusId || anchorId, doc: ports.document.current() };
   paint();
 }
 
@@ -103,9 +89,9 @@ function rowIdAtY(y) {
 }
 
 function onRowsMouseDown(e) {
-  if (e.button !== 0 || rowDrag().dragging()) return;
+  if (e.button !== 0 || ports.rowDrag.dragging()) return;
   var cell = e.target.closest && e.target.closest(".cell-editable");
-  if (!cell || !isScriptCell(cell) || !cell.closest("#rows")) return;
+  if (!cell || !ports.scriptCell(cell) || !cell.closest("#rows")) return;
   track = { cell: cell, rowId: cell.getAttribute("data-id"), x: e.clientX, y: e.clientY, scene: false };
 }
 
@@ -126,12 +112,12 @@ function onMouseMove(e) {
 
 function startScenes() {
   track.scene = true;
-  sel = { anchor: track.rowId, focus: track.rowId, doc: currentDocument() };
+  sel = { anchor: track.rowId, focus: track.rowId, doc: ports.document.current() };
   document.body.classList.add("is-scene-selecting");
   var s = window.getSelection();
   if (s) s.removeAllRanges();
   if (document.activeElement === track.cell) track.cell.blur();
-  closeRowMenus();
+  ports.rows.closeMenus();
   paint();
 }
 
@@ -195,25 +181,25 @@ function prefetchPictures() {
   if (!ids.length) return;
   var want = Object.create(null);
   ids.forEach(function (id) { want[id] = true; });
-  var doc = currentDocument();
+  var doc = ports.document.current();
   var rows = doc.rows.filter(function (r) { return want[r.id]; });
   var comments = (doc.comments || []).filter(function (c) { return c && want[c.rowId]; });
   var shas = refsIn({ rows: rows, comments: comments });
-  if (shas.length) ensureBytes(shas);
+  if (shas.length) ports.pictures.ensureBytes(shas);
 }
 
 function count(n) { return n === 1 ? "1 scene" : n + " scenes"; }
 
 function refused(what) {
-  if (!reviewMode()) return false;
-  showToast("This is a review copy — scenes can be copied from it, not " + what + ".", "warn");
+  if (!ports.review.reviewing()) return false;
+  ports.notices.show("This is a review copy — scenes can be copied from it, not " + what + ".", "warn");
   return true;
 }
 
 function writeScenes(cd, cut) {
   var ids = selectedSceneIds();
-  var nonce = cut ? randomHexBytes(16) : null;
-  var out = buildScenePayload(currentDocument(), ids, { cut: nonce });
+  var nonce = cut ? ports.nonce() : null;
+  var out = buildScenePayload(ports.document.current(), ids, { cut: nonce });
   try { cd.setData(SCENES_MIME, out.json); } catch (e) { }
   cd.setData("text/html", out.html);
   cd.setData("text/plain", out.text);
@@ -235,7 +221,7 @@ function onCopyEvent(e) {
   pendingCut = false;
   e.preventDefault();
   e.stopImmediatePropagation();
-  var readOnly = reviewMode();
+  var readOnly = ports.review.reviewing();
   var w = writeScenes(e.clipboardData, cut && !readOnly);
   clipWritten = w;
   if (cut && !readOnly) {
@@ -249,11 +235,11 @@ function onCopyEvent(e) {
 
 function announceLeftOut(msg, leftOut, kind) {
   if (leftOut.length) {
-    showToast(msg + ". " + (leftOut.length === 1 ? "One picture" : leftOut.length + " pictures") +
+    ports.notices.show(msg + ". " + (leftOut.length === 1 ? "One picture" : leftOut.length + " pictures") +
       " didn't fit on the clipboard: " + (leftOut.length === 1 ? "it pastes" : "they paste") +
       " only where Splitpage already has " + (leftOut.length === 1 ? "it" : "them") + ".", "warn");
   } else {
-    showToast(msg + ".", kind || "ok");
+    ports.notices.show(msg + ".", kind || "ok");
   }
 }
 
@@ -268,10 +254,10 @@ function runClipboardCommand(cut) {
   pendingCut = false;
   if (ok && clipWritten) return;
   var ids = selectedSceneIds();
-  if (!ids.length || !navigator.clipboard) { showToast("Could not reach the clipboard.", "warn"); return; }
+  if (!ids.length || !navigator.clipboard) { ports.notices.show("Could not reach the clipboard.", "warn"); return; }
   if (cut && refused("cut")) cut = false;
-  var nonce = cut ? randomHexBytes(16) : null;
-  var out = buildScenePayload(currentDocument(), ids, { cut: nonce });
+  var nonce = cut ? ports.nonce() : null;
+  var out = buildScenePayload(ports.document.current(), ids, { cut: nonce });
   var write = typeof ClipboardItem === "function" && navigator.clipboard.write
     ? navigator.clipboard.write([new ClipboardItem({
         "text/html": new Blob([out.html], { type: "text/html" }),
@@ -281,11 +267,11 @@ function runClipboardCommand(cut) {
   write.then(function () {
     if (cut) afterCut({ ids: ids, nonce: nonce, out: out });
     else announceLeftOut(count(ids.length) + " copied", out.leftOut);
-  }, function () { showToast("Could not reach the clipboard.", "warn"); });
+  }, function () { ports.notices.show("Could not reach the clipboard.", "warn"); });
 }
 
 function afterCut(w) {
-  setLiveCut(w.nonce, currentDocument().docId);
+  setLiveCut(w.nonce, ports.document.current().docId);
   var entry = takeOut(w.ids);
   var msg = count(w.ids.length) + " cut — paste them with Ctrl+V";
   if (w.out.leftOut.length) announceLeftOut(msg, w.out.leftOut);
@@ -293,22 +279,22 @@ function afterCut(w) {
 }
 
 function runSceneCommand(command) {
-  var outcome = runCommand(command);
+  var outcome = ports.edits.run(command);
   if (outcome.kind === "failed") throw outcome.error;
-  if (outcome.kind === "rejected" && outcome.reason === REVIEW_ONLY) showToast(VIEWING_ONLY, "warn");
+  if (outcome.kind === "rejected" && outcome.reason === ports.reviewRefusal) ports.notices.show(VIEWING_ONLY, "warn");
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
 function takeOut(ids) {
-  breakUndoCoalescing();
-  var before = lastUndoEntry();
+  ports.undo.breakCoalescing();
+  var before = ports.undo.last();
   var done = runSceneCommand(removeScenesCommand(ids));
   sel = null;
   paint();
-  flushEdits();
-  breakUndoCoalescing();
-  if (done) scheduleProductionRefresh();
-  var entry = lastUndoEntry();
+  ports.undo.flush();
+  ports.undo.breakCoalescing();
+  if (done) ports.production.scheduleRefresh();
+  var entry = ports.undo.last();
   return entry === before ? null : entry;
 }
 
@@ -320,43 +306,43 @@ export function deleteSelectedScenes() {
 }
 
 function offerUndo(msg, entry) {
-  if (!entry) { showToast(msg + ".", "ok"); return; }
-  showActionToast(msg + ".", "ok", "Undo", function () {
-    if (lastUndoEntry() === entry) undo();
-    else showToast("Something else has changed since — Ctrl+Z undoes one step at a time.", "warn");
+  if (!entry) { ports.notices.show(msg + ".", "ok"); return; }
+  ports.notices.showAction(msg + ".", "ok", "Undo", function () {
+    if (ports.undo.last() === entry) ports.undo.undo();
+    else ports.notices.show("Something else has changed since — Ctrl+Z undoes one step at a time.", "warn");
   });
 }
 
 function pasteClip(clip, afterRowId, opts) {
   opts = opts || {};
-  breakUndoCoalescing();
-  var before = lastUndoEntry();
-  var hold = onServerDoc();
-  var paste = scenePaste(clip, { afterRowId: afterRowId, holdComments: hold, title: opts.title, stamp: stampRow });
+  ports.undo.breakCoalescing();
+  var before = ports.undo.last();
+  var hold = ports.onServer();
+  var paste = scenePaste(clip, { afterRowId: afterRowId, holdComments: hold, title: opts.title, stamp: ports.stampRow });
   if (!runSceneCommand(pasteScenesCommand(paste))) return null;
   var res = paste.result();
-  flushEdits();
+  ports.undo.flush();
   if (res.held.length) {
     runSceneCommand(addHeldCommentsCommand(res.held));
-    flushEdits();
+    ports.undo.flush();
   } else if (hold) {
-    autoSavePolicy().dueNow();
+    ports.saves.dueNow();
   }
-  breakUndoCoalescing();
-  scheduleProductionRefresh();
-  if (!viewFlags().writerOpen() && res.rowIds.length) {
+  ports.undo.breakCoalescing();
+  ports.production.scheduleRefresh();
+  if (!ports.writerOpen() && res.rowIds.length) {
     selectScenes(res.rowIds[0], res.rowIds[res.rowIds.length - 1]);
     var first = document.querySelector('#rows .row[data-id="' + cssAttr(res.rowIds[0]) + '"]');
     if (first) first.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }
-  var entry = lastUndoEntry();
+  var entry = ports.undo.last();
   var msg = opts.message || count(res.rowIds.length) + " pasted";
   offerUndo(msg, entry === before ? null : entry);
   var want = clip.refs.filter(function (sha) { return clip.carried.indexOf(sha) === -1; });
   if (want.length) {
-    ensureBytes(want).then(function (missing) {
+    ports.pictures.ensureBytes(want).then(function (missing) {
       if (!missing.length) return;
-      showToast((missing.length === 1 ? "A picture" : missing.length + " pictures") +
+      ports.notices.show((missing.length === 1 ? "A picture" : missing.length + " pictures") +
         " in the pasted scenes could not be found here — the scenes show where each one was.", "warn");
     });
   }
@@ -364,11 +350,11 @@ function pasteClip(clip, afterRowId, opts) {
 }
 
 export function pasteScenesAt(cd, cellEl) {
-  if (!cd || !currentDocument()) return false;
+  if (!cd || !ports.document.current()) return false;
   var clip = scenesOnClipboard(function (t) { return cd.getData(t); });
   if (!clip) return false;
   if (refused("pasted into")) return true;
-  cellEditing().sync(cellEl);
+  ports.cells.sync(cellEl);
   pasteClip(clip, cellEl.getAttribute("data-id"));
   return true;
 }
@@ -388,15 +374,15 @@ export function newScriptFromSelection() {
   var ids = selectedSceneIds();
   if (!ids.length) return;
   closeSceneMenu();
-  if (reviewMode()) {
-    showToast("This is a review copy — copy the scenes, then paste them into a new script.", "warn");
+  if (ports.review.reviewing()) {
+    ports.notices.show("This is a review copy — copy the scenes, then paste them into a new script.", "warn");
     return;
   }
-  var source = currentDocument();
+  var source = ports.document.current();
   var title = source.title || "Untitled Script";
   var clip = parseScenePayload(buildScenePayload(source, ids).json);
-  if (!clip || !startNewScript()) return;
-  var first = currentDocument().rows[0];
+  if (!clip || !ports.startNewScript()) return;
+  var first = ports.document.current().rows[0];
   pasteClip(clip, first ? first.id : null, {
     title: cappedLongText(title + " — " + count(ids.length), 300),
     message: "New script with " + count(ids.length) + " — the one before is in Version history"
@@ -461,7 +447,7 @@ export function openSceneMenu(x, y) {
   var ids = selectedSceneIds();
   if (!ids.length) return;
   var menu = ensureMenu();
-  var review = reviewMode();
+  var review = ports.review.reviewing();
   menu.setAttribute("aria-label", count(ids.length) + " selected");
   Array.prototype.forEach.call(menu.querySelectorAll("[data-scene-action]"), function (b) {
     var a = b.getAttribute("data-scene-action");
@@ -500,22 +486,33 @@ function onDocMouseDown(e) {
   if (sel) clearSceneSelection();
 }
 
-export function __init() {
-  document.addEventListener("mousedown", onDocMouseDown, true);
-  document.addEventListener("mousedown", onRowsMouseDown);
-  document.addEventListener("mousemove", onMouseMove);
-  document.addEventListener("mouseup", onMouseUp);
-  document.addEventListener("dragstart", onDragStart, true);
-  document.addEventListener("selectionchange", onSelectionChange);
-  document.addEventListener("beforecopy", onBeforeCopy, true);
-  document.addEventListener("beforecut", onBeforeCopy, true);
-  document.addEventListener("copy", onCopyEvent, true);
-  document.addEventListener("cut", onCopyEvent, true);
-  document.addEventListener("paste", onPasteEvent, true);
-  window.addEventListener("keydown", onKeyDown, true);
-  document.addEventListener("contextmenu", onContextMenu);
-  window.addEventListener("resize", closeSceneMenu);
-  window.addEventListener("scroll", closeSceneMenu, true);
+export function __init(given) {
+  ports = given;
+  track = null;
+  sel = null;
+  scroll = null;
+  pendingCut = false;
+  clipWritten = null;
+  var offs = [];
+  function listen(target, type, fn, opts) {
+    target.addEventListener(type, fn, opts);
+    offs.push(function () { target.removeEventListener(type, fn, opts); });
+  }
+  listen(document, "mousedown", onDocMouseDown, true);
+  listen(document, "mousedown", onRowsMouseDown);
+  listen(document, "mousemove", onMouseMove);
+  listen(document, "mouseup", onMouseUp);
+  listen(document, "dragstart", onDragStart, true);
+  listen(document, "selectionchange", onSelectionChange);
+  listen(document, "beforecopy", onBeforeCopy, true);
+  listen(document, "beforecut", onBeforeCopy, true);
+  listen(document, "copy", onCopyEvent, true);
+  listen(document, "cut", onCopyEvent, true);
+  listen(document, "paste", onPasteEvent, true);
+  listen(window, "keydown", onKeyDown, true);
+  listen(document, "contextmenu", onContextMenu);
+  listen(window, "resize", closeSceneMenu);
+  listen(window, "scroll", closeSceneMenu, true);
   window.__sceneSelectTest = {
     select: selectScenes,
     clear: clearSceneSelection,
@@ -523,4 +520,18 @@ export function __init() {
     openMenu: openSceneMenu,
     tracking: function () { return track ? { rowId: track.rowId, scene: track.scene } : null; }
   };
+  var disposed = false;
+  return { dispose: function () {
+    if (disposed) return;
+    disposed = true;
+    while (offs.length) offs.pop()();
+    stopScroll();
+    track = null;
+    sel = null;
+    document.body.classList.remove("has-scene-selection", "is-scene-selecting");
+    if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
+    if (menuEl && menuEl.parentNode) menuEl.parentNode.removeChild(menuEl);
+    styleEl = null;
+    menuEl = null;
+  } };
 }
