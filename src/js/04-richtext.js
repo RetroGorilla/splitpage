@@ -21,10 +21,6 @@ export function safeId(id, prefix) {
   return safeIdFrom(id, prefix, randomIds);
 }
 
-export function cssAttr(value) {
-  return String(value == null ? "" : value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-
 export function ensureTrailingCaretSpot(container) {
   var last = container && container.lastChild;
   if (last && last.nodeType === 1 && last.getAttribute && last.getAttribute("contenteditable") === "false") {

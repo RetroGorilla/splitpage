@@ -27,7 +27,8 @@ test("shared ports follow their current owners, announce synchronously in subscr
   document.addEventListener(PREF_EVENT, after);
   const first = createActionRegistry();
   let ran = 0;
-  first.register({ id: "probe", label: "First", group: "Test", run: () => { ran++; } });
+  const inputs: unknown[] = [];
+  first.register({ id: "probe", label: "First", group: "Test", run: (_source, input) => { ran++; inputs.push(input); } });
   let stopActions = installAppActions(first);
   let stopPreferences = start();
   try {
@@ -45,7 +46,9 @@ test("shared ports follow their current owners, announce synchronously in subscr
     assert.equal(notices.length, 2);
     assert.equal(shared.actions.view("probe")?.label, "First");
     assert.equal(shared.actions.invoke("probe", "button").kind, "ran");
-    assert.equal(ran, 1);
+    assert.equal(shared.actions.invoke("probe", "button", { at: 3 }).kind, "ran");
+    assert.deepEqual(inputs, [undefined, { at: 3 }]);
+    assert.equal(ran, 2);
     viewFlags().setWriterOpen(true);
     assert.equal(shared.screen().writer, true);
     stopActions();
@@ -57,7 +60,7 @@ test("shared ports follow their current owners, announce synchronously in subscr
     assert.equal(shared.screen().writer, false);
     assert.equal(shared.actions.view("probe")?.label, "Second");
     assert.equal(shared.actions.invoke("probe", "button").kind, "ran");
-    assert.equal(ran, 11);
+    assert.equal(ran, 12);
     preferences().clearScriptScale();
     assert.deepEqual(notices[2], { name: "scriptScale", value: null, elsewhere: false });
     off();

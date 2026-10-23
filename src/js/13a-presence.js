@@ -6,7 +6,7 @@ import {
   personKey,
   resolvePersonColor
 } from "../core/document/person-colors.ts";
-import { cssAttr } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import { getSavedAuthorName } from "./10-comments.js";
 import {
   apiUrl,
