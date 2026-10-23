@@ -51,6 +51,16 @@ export interface PreferenceChange {
   readonly value: string | null;
 }
 
+export interface PreferenceNotice {
+  readonly name: PreferenceName;
+  readonly value: string | null;
+  readonly elsewhere: boolean;
+}
+
+export interface PreferenceChanges {
+  readonly onChange: (listener: (change: PreferenceNotice) => void) => () => void;
+}
+
 export interface PreferencePorts {
   readonly storage: () => KeyValueStorage | null | undefined;
   readonly announce: (change: PreferenceChange) => void;

@@ -15,8 +15,8 @@ import {
   openPrompterInChromium
 } from "../js/20f-desktop.js";
 import { greyedOut, itemAvailability, shownWhen } from "./menu-items.ts";
-import { OPENS_A_DIALOG, availableUnless, firstRefusal } from "./screen.ts";
-import type { Blocker } from "./screen.ts";
+import { OPENS_A_DIALOG, availableUnless, firstRefusal } from "../application/screen.ts";
+import type { Blocker } from "../application/screen.ts";
 import { inDesktopApp, screenNow } from "./screen-state.ts";
 import { reviewMode } from "./location-bridge.ts";
 
