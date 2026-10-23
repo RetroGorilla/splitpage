@@ -7,6 +7,11 @@ export interface LaunchFacts {
   readonly sessionInfo: () => Promise<{ readonly hosting?: boolean; readonly [key: string]: unknown } | null> | undefined;
 }
 
+export interface ExternalLinks {
+  readonly available: () => boolean;
+  readonly open: (url: string) => void;
+}
+
 let present = false;
 
 export const runningOnDesktop = (): boolean => present;

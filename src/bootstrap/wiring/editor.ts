@@ -40,7 +40,7 @@ import { restoreMergeSnapshot } from "../../js/03-sync.js";
 import { installMergeBanner } from "../../legacy/merge-bridge.ts";
 import { ensureTrailingCaretSpot, safeId, sanitizeHtml, storedHtmlFromDom } from "../../js/04-richtext.js";
 import { cssAttr } from "../../features/common/dom.ts";
-import { announceGalleryEdit } from "../../js/05e-gallery-overlay.js";
+import { announceGalleryEdit } from "../../features/gallery/overlay.js";
 import {
   cancelLink,
   cancelVideo,

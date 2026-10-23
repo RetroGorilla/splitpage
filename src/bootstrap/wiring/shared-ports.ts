@@ -1,11 +1,12 @@
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
-import type { LaunchFacts } from "../../application/desktop-presence.ts";
 import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { ExternalLinks, LaunchFacts } from "../../application/desktop-presence.ts";
 import type { EditorSelectionPort } from "../../application/editing/selection.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { ExportRegistry } from "../../application/export/registry.ts";
+import type { FileDelivery } from "../../application/files/file-delivery.ts";
 import type { RecentFiles } from "../../application/files/recent-files.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
@@ -25,6 +26,7 @@ import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import { blobImgHtml, bytesForSync, dataUrlForSync, ensureBytes, intern, internDataUrl, isDurableSync, persist, queuePersist, recordFor, urlForSync } from "../../adapters/storage/02c-blobs.js";
 import { arrivingOnLink } from "../../js/13-hosted.js";
 import { appActions } from "../../legacy/app-actions.ts";
+import { deliverFile } from "../../legacy/file-delivery.ts";
 import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
@@ -178,6 +180,11 @@ const production: ProductionIndexOwner = {
   recordsPlan: (doc, viewed) => productionIndex().recordsPlan(doc, viewed)
 };
 
+const externalLinks: ExternalLinks = {
+  available: () => typeof desktopPort()?.openExternal === "function",
+  open: (url) => { desktopPort()?.openExternal?.(url); }
+};
+
 const selection: EditorSelectionPort = {
   dropLink: () => { editorSelection().dropLink(); }
 };
@@ -208,6 +215,10 @@ const launch: LaunchFacts = {
   sessionInfo: () => desktopPort()?.getSessionInfo()
 };
 
+const fileDelivery: FileDelivery = {
+  deliver: (filename, data, options) => deliverFile(filename, data, options)
+};
+
 const transitions: Transitions<DocumentDestination> = {
   open: (opening) => documentTransitions().open(opening),
   startNew: (arrival) => documentTransitions().startNew(arrival),
@@ -230,12 +241,14 @@ const shared = {
   text,
   saves,
   production,
+  externalLinks,
   selection,
   exports,
   ownership,
   pictures,
   recents,
   launch,
+  fileDelivery,
   undo: undoControl,
   transitions
 };
