@@ -6,6 +6,7 @@ import { formatTimecode, rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { revealRow } from "./01b-hide-shot.js";
 import { sidePanels } from "../legacy/panels-bridge.ts";
+import { viewFlags } from "../legacy/preferences-bridge.ts";
 import { plainText } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
 import { focusRowField } from "./06-rows.js";
@@ -1164,7 +1165,7 @@ export function mountBrollFeature() {
       closePanel: function () { sidePanels().close("broll-panel"); },
       openPanel: function () { appActions.invoke("panel-broll", "button"); },
       closePage: closeBrollPage,
-      pageOpen: brollPageOpen,
+      pageOpen: function () { return viewFlags().brollPageOpen(); },
       setPageGroup: function (value) {
         pageView.group = oneOf(PAGE_GROUPS, value, "location");
         saveView();
@@ -1185,6 +1186,7 @@ export function mountBrollFeature() {
         if (panel && document.getElementById("broll-panel") === panel) panel.hidden = true;
         if (page && brollPageEl() === page) {
           page.hidden = true;
+          viewFlags().setBrollPageOpen(false);
           document.body.classList.remove("broll-page-open");
         }
         sidePanels().sync();
@@ -1219,11 +1221,6 @@ function brollPageEl() {
   return document.getElementById("broll-page");
 }
 
-export function brollPageOpen() {
-  var page = brollPageEl();
-  return !!page && !page.hidden;
-}
-
 export function openBrollPage() {
   var page = brollPageEl();
   if (!page || !currentDocument()) return;
@@ -1234,6 +1231,7 @@ export function openBrollPage() {
   menuFor = null;
   sidePanels().closeAll();
   page.hidden = false;
+  viewFlags().setBrollPageOpen(true);
   document.body.classList.add("broll-page-open");
   renderBrollPage();
   var back = document.getElementById("broll-page-close");
@@ -1244,6 +1242,7 @@ export function closeBrollPage(andThen) {
   var page = brollPageEl();
   if (!page || page.hidden) return;
   page.hidden = true;
+  viewFlags().setBrollPageOpen(false);
   document.body.classList.remove("broll-page-open");
   if (pagePanelWasOpen) openBrollPanel();
   if (andThen) { andThen(); return; }
