@@ -8,7 +8,7 @@ comments.
 
 | Command | What it checks | Baseline |
 | --- | --- | --- |
-| `npm run check:deps` (`tools/dep-report.mjs`) | Layer rules, platform imports and globals, HTML parsed into cells outside the rich text adapter, unresolvable modules, computed dynamic loads, cycles through migrated folders, and the legacy debt: `S` importers, `S` writers and runtime cycle edges | `tools/dep-baseline.json` |
+| `npm run check:deps` (`tools/dep-report.mjs`) | Layer rules, platform imports and globals, HTML parsed into cells outside the rich text adapter, unresolvable modules, computed dynamic loads, cycles through migrated folders, the deleted `S` module, and the legacy debt: `S` importers, `S` writers and runtime cycle edges | `tools/dep-baseline.json` |
 | `npm run check:comments` (`tools/comment-gate.mjs`) | Comments in authored JS/TS, CSS, HTML, shell, PowerShell and batch files, and in YAML (workflow `run:` scripts included), Dockerfiles and JSON | `tools/comment-baseline.json` |
 
 Both fail on anything new and on anything the baseline lists that has gone.
@@ -194,6 +194,11 @@ is a runtime cycle or only closes through `import type`, and whether or not it
 passes through `src/js`. Such a cycle cannot be baselined.
 
 ## Legacy debt: `S` and runtime cycles
+
+`S` and `src/js/_state.js`, which defined it, are deleted (legacy reduction
+L3j). The `state-module` rule fails on `src/js/_state.js` itself and on any
+module, in any layer, tests and tools included, that imports it; its baseline
+is empty.
 
 Three rules turn the coupling the plan measures in section 4 into exact
 exception sets. Each entry is `{ rule, source, target }` like any other

@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
@@ -34,7 +34,7 @@ function load() {
   confirmSavedNow();
 }
 
-function shot() { return S.state.brollShots[0]; }
+function shot() { return currentDocument().brollShots[0]; }
 
 function typeInto(box, value) {
   box.value = value;
@@ -51,7 +51,7 @@ test("the model keeps a leading line break in a note, a reference and a tag's no
   load();
   assert.equal(shot().notes, LEAD);
   assert.equal(shot().audioRef, LEAD);
-  assert.equal(S.state.productionTags[0].notes, LEAD);
+  assert.equal(currentDocument().productionTags[0].notes, LEAD);
 });
 
 test("the b-roll panel's note and reference boxes show a leading line break", () => {
@@ -114,7 +114,7 @@ test("a tag's notes box shows a leading line break and keeps it on edit", () => 
     assert.equal(box.value, LEAD);
     box.focus();
     typeInto(box, box.value + " More.");
-    assert.equal(S.state.productionTags[0].notes, LEAD + " More.");
+    assert.equal(currentDocument().productionTags[0].notes, LEAD + " More.");
     assert.equal(registryKey("prop", "Kettle"), box.getAttribute("data-key"));
   } finally {
     leave(closeProduction);
