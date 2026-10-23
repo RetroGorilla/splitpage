@@ -5,6 +5,59 @@ import type { Blocker, ScreenState } from "../../src/application/screen.ts";
 import type { ReviewFacts } from "../../src/application/collaboration/review.ts";
 import type { DocumentView, SessionListener } from "../../src/application/session/document-session.ts";
 import type { DocumentReader } from "../../src/application/session/document-reader.ts";
+import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
+import type { ViewFlags } from "../../src/application/preferences/view-flags.ts";
+import type { SidePanels } from "../../src/application/side-panels.ts";
+
+export function fakeNotices() {
+  const shown: { message: string; kind: NoticeKind | undefined; label?: string; action?: () => void; sticky: boolean | undefined; notice: ReturnType<typeof notice> }[] = [];
+  function notice() {
+    let connected = true;
+    const clicks = new Set<() => void>();
+    return {
+      get isConnected() { return connected; },
+      dismiss: () => { connected = false; },
+      addEventListener: (_type: "click", listener: () => void) => { clicks.add(listener); },
+      removeEventListener: (_type: "click", listener: () => void) => { clicks.delete(listener); },
+      click: () => { for (const listener of [...clicks]) listener(); },
+      listenerCount: () => clicks.size
+    };
+  }
+  const notices: NoticePort = {
+    show: (message, kind, sticky) => {
+      const item = notice();
+      shown.push({ message, kind, sticky, notice: item });
+      return item;
+    },
+    showAction: (message, kind, label, action, sticky) => {
+      const item = notice();
+      shown.push({ message, kind, label, action, sticky, notice: item });
+      return item;
+    }
+  };
+  return { notices, shown };
+}
+
+export function fakeTourPreferences() {
+  let finished = 0;
+  const preferences: Pick<Preferences, "tourFinished"> = { tourFinished: () => { finished++; } };
+  return { preferences, finished: () => finished };
+}
+
+export function fakeTourFlags() {
+  let open = false;
+  const viewFlags: Pick<ViewFlags, "setTourOpen" | "tourOpen"> = {
+    setTourOpen: (value) => { open = value; },
+    tourOpen: () => open
+  };
+  return viewFlags;
+}
+
+export function fakeSidePanels() {
+  let closed = 0;
+  const sidePanels: Pick<SidePanels, "closeAll"> = { closeAll: () => { closed++; } };
+  return { sidePanels, closed: () => closed };
+}
 
 export function fakeScreen(initial: Partial<ScreenState> = {}) {
   const state: Record<Blocker, boolean> = {

@@ -1,4 +1,5 @@
 import type { ActionRegistry } from "../../application/actions.ts";
+import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { ExportRegistry } from "../../application/export/registry.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
@@ -12,6 +13,7 @@ import type { TextServices } from "../../application/text/services.ts";
 import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import { arrivingOnLink } from "../../js/13-hosted.js";
 import { appActions } from "../../legacy/app-actions.ts";
+import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
 import { exportFormats } from "../../legacy/export-formats.ts";
@@ -102,6 +104,12 @@ const text: TextServices<HTMLElement> = {
   cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal
 };
 
+const effects: EffectPorts<Element> = {
+  notices: { show: showToast, showAction: showActionToast },
+  menuItems: { setLabel: setMenuItemLabel, setReason: setMenuItemReason },
+  clipboard: { copyText: copyShareText }
+};
+
 const saves: SaveState = {
   unsaved: () => unsavedChanges(),
   busy: () => saveBusy(),
@@ -128,6 +136,7 @@ const exports: Pick<ExportRegistry, "card" | "cards" | "exporters" | "byAction" 
 };
 
 const shared = {
+  ...effects,
   actions,
   changes,
   screen: (): ScreenState => screenNow(),
