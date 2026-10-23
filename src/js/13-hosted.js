@@ -19,6 +19,8 @@ import {
 } from "../legacy/location-bridge.ts";
 import { SERVER_RESUME_KEY } from "../application/location/server-status.ts";
 import { shortHost } from "../adapters/transport/server-address.ts";
+import { cleanAuthorName } from "../core/document/people.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import {
   copyDocHistorySafe,
@@ -31,8 +33,7 @@ import {
   pushSnapshot,
   reportMerge,
   setBaseState,
-  stashLocalWork,
-  updateIdentityChip
+  stashLocalWork
 } from "./03-sync.js";
 import {
   ensureBytes,
@@ -50,8 +51,7 @@ import {
   captureReplyDrafts,
   formatTimestamp,
   getSavedAuthorName,
-  renderComments,
-  saveAuthorName
+  renderComments
 } from "./10-comments.js";
 import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
 import { maybeAskGuestName, updateCollaborateMenu } from "./13b-collaborate.js";
@@ -60,7 +60,7 @@ import { requestSave, saveBusy, saveChanges, unsavedChanges } from "../legacy/sa
 import { conflictStash, draftResume } from "../legacy/recovery-bridge.ts";
 import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
-import { deliverFile, updateFileChip } from "./18-local-files.js";
+import { deliverFile } from "./18-local-files.js";
 import {
   openPinDialog,
   openServersDialog,
@@ -403,7 +403,6 @@ function flagClientTooOld() {
     ? "This page is out of date for this server. Reload it to keep saving — your unsaved edits are kept and will be merged back in."
     : "This page is out of date for this server. Copy anything unsaved, then reload the page to keep saving.",
     "warn", true);
-  updateFileChip();
 }
 
 function flagLinkOff(kind) {
@@ -756,8 +755,7 @@ export async function finishServerDetect() {
     try { documentLocation().updateConnection({ role: role, scope: scope }); }
     catch (e2) { documentLocation().updateConnection({ role: role, scope: "" }); }
     if (serverIdentity && serverIdentity.name && !getSavedAuthorName()) {
-      saveAuthorName(serverIdentity.name);
-      updateIdentityChip();
+      preferences().setCommentAuthor(cleanAuthorName(serverIdentity.name));
     }
   } catch (e) {
     if (!stillOnServer(asking)) return;
