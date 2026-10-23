@@ -7,7 +7,7 @@ export function fileMenuExportActions(current: () => FileMenuExportControls | nu
     {
       id: "export",
       label: "Export…",
-      group: "File",
+      group: "Export",
       icon: "i-export",
       keys: ["mod+e"],
       words: "download save as format dialog",
