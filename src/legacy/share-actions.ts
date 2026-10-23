@@ -3,14 +3,13 @@ import { registerAll } from "../application/actions.ts";
 import { promptForTarget } from "../js/03-sync.js";
 import { openGdocModal, openImportModal } from "../js/11-import.js";
 import { openDriveModal, openServerPicker, publishToServer, serverOpenItemState, serverPublishItemState } from "../js/13-hosted.js";
-import { collaborateBlockedReason, openCollaborate } from "../js/13b-collaborate.js";
+import { collaborateBlockedReason, maybeAskGuestName, openCollaborate } from "../js/13b-collaborate.js";
 import { autoSavePolicy, savesStarted, toggleAutoSave } from "./save-bridge.ts";
 import { saveBackItemState, saveBackToFile } from "../js/18-local-files.js";
 import { pasteItemState, startNewScript } from "../js/18b-file-menu.js";
 import { exportAgain, exportAgainItemState } from "../js/18c-export-dialog.js";
+import { canOpenPrompterInBrowser, canOpenPrompterInChromium } from "../adapters/desktop/desktop-port.ts";
 import {
-  canOpenPrompterInBrowser,
-  canOpenPrompterInChromium,
   driveOpenShown,
   openPrompterInBrowser,
   openPrompterInChromium
@@ -95,6 +94,13 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       run: () => { openGdocModal(); }
     },
     {
+      id: "show-gdoc-import",
+      label: "Show the Google Docs import",
+      group: "File",
+      availability: () => ({ enabled: true, visible: false }),
+      run: () => { openGdocModal(); }
+    },
+    {
       id: "drive-open",
       label: "Import: Google Drive…",
       group: "File",
@@ -114,6 +120,13 @@ export function registerShareActions(registry: ActionRegistry): () => void {
         return loaded(why ? greyedOut(why, source) : { enabled: true }, OPENS_ONE);
       },
       run: () => openCollaborate()
+    },
+    {
+      id: "ask-guest-name",
+      label: "Ask a link guest for their name",
+      group: "Share",
+      availability: () => ({ enabled: true, visible: false }),
+      run: () => { maybeAskGuestName(); }
     },
     {
       id: "server-publish",
