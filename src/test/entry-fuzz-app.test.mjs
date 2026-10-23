@@ -14,7 +14,7 @@ await bootApp();
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { draftResume } = await import("../legacy/recovery-bridge.ts");
-const { applyMerge } = await import("../js/03-sync.js");
+const { applyMerge } = await import("../legacy/merge-bridge.ts");
 const { mergeUndo } = await import("../legacy/editor-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { finishServerDetect } = await import("../js/13-hosted.js");

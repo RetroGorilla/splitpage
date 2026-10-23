@@ -8,7 +8,8 @@ import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../js/02-state.js";
-import { mergeStates } from "../js/03-sync.js";
+import { mergeStates } from "../legacy/merge-bridge.ts";
+import "./_merge-started.mjs";
 import { sanitizeHtml } from "../js/04-richtext.js";
 import {
   breakLine, cellLength, cueShortcut, cuesInCell, deleteRange, editCues, flattenCues, fromHtml, importCues,

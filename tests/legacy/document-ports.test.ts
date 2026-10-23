@@ -8,13 +8,14 @@ import * as state from "../../src/js/02-state.js";
 import { loadInitialState, migrateDocument } from "../../src/js/02b-doc-id.js";
 import { dataUrlForSync, has, inlineStateImages, recordFor, setBackend } from "../../src/adapters/storage/02c-blobs.js";
 import { createHash } from "node:crypto";
-import { mergeStates } from "../../src/js/03-sync.js";
+import { mergeStates } from "../../src/legacy/merge-bridge.ts";
 import * as tags from "../../src/js/07-production-tags.js";
 import { seedCheckPasses } from "../../src/legacy/seed-check.ts";
 import { image } from "../../src/test/golden-helpers.mjs";
 import { checksumText } from "../../shared/text.js";
 import { documentLocation } from "../../src/legacy/location-bridge.ts";
 import "../../src/test/_location-started.mjs";
+import "../../src/test/_merge-started.mjs";
 
 type Put = { sha: string; interned: boolean };
 type Doc = Record<string, unknown>;
@@ -122,7 +123,8 @@ test("02-state, 02b and 03-sync migrate with 02-state's own table, so a field pu
     const d = migrateRows({ rows: [] });
     const mine = JSON.parse(JSON.stringify(d)) as Item;
     mine.probe = 9;
-    assert.equal(mergeStates(JSON.parse(JSON.stringify(d)), mine, JSON.parse(JSON.stringify(d))).merged.probe, 9);
+    const merged = Reflect.apply(mergeStates, undefined, [JSON.parse(JSON.stringify(d)), mine, JSON.parse(JSON.stringify(d))]) as { merged: Item };
+    assert.equal(merged.merged.probe, 9);
   } finally {
     STATE_FIELDS.pop();
   }
