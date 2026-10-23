@@ -12,7 +12,7 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { getEditorName } = await import("../js/03-sync.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { buildSplitpageFile } = await import("../js/20d-formats.js");
+const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { foldIntoEdit, undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 const { thumbnailsAfterPaste } = await import("../js/05v-video.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");

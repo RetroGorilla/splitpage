@@ -9,7 +9,7 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { buildSplitpageFile } = await import("../js/20d-formats.js");
+const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { SCENES_MIME, buildScenePayload } = await import("../js/05g-scene-clip.js");
 const { deleteSelectedScenes, newScriptFromSelection, pasteScenesAt } = await import("../js/05h-scene-select.js");
 const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
