@@ -34,7 +34,7 @@ import { REVIEW_ONLY, liveDocumentPort, liveSession, runCommand, sessionTextPort
 import { fromHtml } from "../../legacy/richtext.ts";
 import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 import { cycleRowStatus } from "../../js/01-scene-status.js";
-import { expandHiddenShotStrip } from "../../js/01b-hide-shot.js";
+import { expandHiddenShotStrip } from "./hide-shot.ts";
 import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
 import { restoreMergeSnapshot } from "../../js/03-sync.js";
 import { installMergeBanner } from "../../legacy/merge-bridge.ts";
