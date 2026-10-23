@@ -15,6 +15,7 @@ import type { Blocker, ScreenState } from "../../src/legacy/screen.ts";
 import { registerShareActions } from "../../src/legacy/share-actions.ts";
 import { registerThisDocumentActions } from "../../src/legacy/this-document-actions.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
+import { viewFlags } from "../../src/legacy/preferences-bridge.ts";
 
 const NOTHING: ScreenState = {
   loading: false, dialog: false, launcher: false, tour: false, prompter: false, writer: false, shotlist: false
@@ -99,11 +100,13 @@ test("on the shot-list page, what would open behind it is refused", () => {
   const { registry, restore } = loadedRegistry();
   try {
     document.body.innerHTML = '<div id="broll-page"></div>';
+    viewFlags().setBrollPageOpen(true);
     for (const id of [...PAGE_COMMANDS, "write", "present"]) assert.equal(refusal(registry, id), "Close the shot list first", id);
     for (const id of ["save", "save-as", "toggle-hide-shot"]) assert.equal(refusal(registry, id), null, id);
-    document.getElementById("broll-page")?.setAttribute("hidden", "");
+    viewFlags().setBrollPageOpen(false);
     for (const id of [...PAGE_COMMANDS, "write", "present"]) assert.equal(refusal(registry, id), null, id);
   } finally {
+    viewFlags().setBrollPageOpen(false);
     restore();
   }
 });
