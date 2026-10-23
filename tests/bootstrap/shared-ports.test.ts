@@ -1,7 +1,9 @@
 import "../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
 import { createActionRegistry, registerAll } from "../../src/application/actions.ts";
+import type { ExternalLinks } from "../../src/application/desktop-presence.ts";
 import { createExportRegistry } from "../../src/application/export/registry.ts";
 import type { ExportRegistry } from "../../src/application/export/registry.ts";
 import type { PreferenceNotice } from "../../src/application/preferences/preferences.ts";
@@ -19,6 +21,36 @@ import { installExportFormats } from "../../src/legacy/export-formats.ts";
 import { productionIndex, startProductionIndex } from "../../src/legacy/production-index-bridge.ts";
 import { liveDocumentPort } from "../../src/legacy/session-bridge.ts";
 import { migrateRows } from "../../src/js/02-state.js";
+
+test("external links check the current desktop capability and forward each address to the current bridge", () => {
+  const externalLinks: ExternalLinks = sharedPorts().externalLinks;
+  const opened: string[][] = [];
+  const url = "https://splitpage.test/releases?version=4.2#download";
+  try {
+    useDesktopForTest(null);
+    assert.equal(externalLinks.available(), false);
+    externalLinks.open(url);
+    useDesktopForTest({});
+    assert.equal(externalLinks.available(), false);
+    externalLinks.open(url);
+    assert.deepEqual(opened as unknown, []);
+    useDesktopForTest({ openExternal: (address) => { opened.push(["first", address]); } });
+    assert.equal(externalLinks.available(), true);
+    externalLinks.open(url);
+    useDesktopForTest({ openExternal: (address) => { opened.push(["second", address]); } });
+    assert.equal(externalLinks.available(), true);
+    externalLinks.open("mailto:hello@splitpage.test");
+    useDesktopForTest(null);
+    assert.equal(externalLinks.available(), false);
+    externalLinks.open(url);
+    assert.deepEqual(opened, [["first", url], ["second", "mailto:hello@splitpage.test"]]);
+    const error = new Error("the desktop could not open the address");
+    useDesktopForTest({ openExternal: () => { throw error; } });
+    assert.throws(() => externalLinks.open(url), error);
+  } finally {
+    restoreDesktop();
+  }
+});
 
 test("shared ports follow their current owners, announce synchronously in subscription order and unsubscribe", () => {
   const shared = sharedPorts();
