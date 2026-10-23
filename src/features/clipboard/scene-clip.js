@@ -8,6 +8,7 @@ import { syncCommentAnchors } from "../../core/text/anchors.ts";
 import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./cell-clipboard.js";
 import { SCHEMA_VERSION } from "../../core/document/fields.ts";
 import { cappedLongText } from "../../core/document/text-policy.ts";
+import { isBlankScene } from "../../application/commands/rows.ts";
 
 export var SCENES_MIME = "application/x-splitpage-scenes";
 export var SCENES_ATTR = "data-splitpage-scenes";
@@ -195,14 +196,6 @@ export function parseScenePayload(json) {
   };
 }
 
-export function isBlankScene(state, row) {
-  if (!row) return false;
-  if (plainOf(row.visualText).trim() || plainOf(row.audioText).trim()) return false;
-  if (row.imageRef || (row.moreImages && row.moreImages.length) || (row.imageLinks && row.imageLinks.length)) return false;
-  if (typeof row.lengthSeconds === "number") return false;
-  return !(state.comments || []).some(function (c) { return c && c.rowId === row.id; });
-}
-
 function mintFree(prefix, taken, mint) {
   var id, guard = 0;
   do { id = mint(prefix); } while (taken[id] && ++guard < 100);
@@ -232,7 +225,7 @@ export function scenePaste(clip, opts) {
       var row = doc.rows.filter(function (r) { return r.id === opts.afterRowId; })[0];
       var move = isMove(clip, doc);
       var rowMap = sceneRowIds(clip, doc, move, mint);
-      planned = { move: move, rowMap: rowMap, replaceRowId: row && isBlankScene(doc, row) ? row.id : null };
+      planned = { move: move, rowMap: rowMap, replaceRowId: row && isBlankScene(doc, row, ports.text) ? row.id : null };
       return {
         inserted: clip.rows.map(function (r) { return rowMap[r.id]; }),
         replaced: planned.replaceRowId,

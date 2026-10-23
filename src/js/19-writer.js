@@ -11,7 +11,7 @@ import {
   toggleCellDirection,
   toggleCellFormat
 } from "./05-render.js";
-import { splitRowFieldCore } from "./06-rows.js";
+import { splitRowFieldCore } from "../legacy/rows-bridge.ts";
 import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
 import { closeFindBar } from "./09-find-replace.js";
 import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "./12a-undo.js";
