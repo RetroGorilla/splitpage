@@ -20,8 +20,8 @@ import { startLocation } from "../legacy/location-bridge.ts";
 import { startPreferences } from "../legacy/preferences-bridge.ts";
 import { startRecovery } from "../legacy/recovery-bridge.ts";
 import type { LegacyRecoveryPorts } from "../legacy/recovery-bridge.ts";
-import { startSaves } from "../legacy/save-bridge.ts";
-import type { LegacyAutoSavePorts, LegacySavePorts } from "../legacy/save-bridge.ts";
+import { saveDestinations, startSaves } from "../legacy/save-bridge.ts";
+import type { LegacyAutoSavePorts, LegacySaveDestination, LegacySavePorts } from "../legacy/save-bridge.ts";
 import { liveDocumentPort, liveSession, startSessionBridge } from "../legacy/session-bridge.ts";
 import type { RecordsReconciler, SessionBridgePorts, SessionUndoPorts } from "../legacy/session-bridge.ts";
 import { captureOperation, startTransitions, stillOwns } from "../legacy/transition-bridge.ts";
@@ -44,6 +44,7 @@ export interface WiringDeps {
   readonly records: RecordsReconciler;
   readonly bulkTags: BulkTagPorts;
   readonly saves: (ownership: SaveOwnershipPort) => LegacySavePorts;
+  readonly destinations: () => readonly LegacySaveDestination[];
   readonly transitions: TransitionDeps;
   readonly recovery: () => LegacyRecoveryPorts;
   readonly keyTarget: EventTarget;
@@ -81,6 +82,7 @@ export const WIRING_STEPS = Object.freeze([
   "built-in exporters",
   "session",
   "saves",
+  "save destinations",
   "transitions",
   "recovery",
   "editor",
@@ -97,6 +99,7 @@ const REQUIRED: readonly (readonly [keyof WiringDeps, "function" | "object"])[] 
   ["refresh", "function"],
   ["records", "function"],
   ["saves", "function"],
+  ["destinations", "function"],
   ["transitions", "object"],
   ["recovery", "function"],
   ["keyTarget", "object"]
@@ -117,11 +120,11 @@ const TRANSITION_PORTS: { readonly [P in keyof TransitionDeps]: readonly (keyof 
   identity: ["mint", "writtenOut", "markWrittenOut"]
 };
 
-const SAVE_PORTS: readonly (keyof Omit<LegacySavePorts, "ownership" | "autosave">)[] = ["write", "destination", "keyOf", "obsolete"];
+const SAVE_PORTS: readonly (keyof Omit<LegacySavePorts, "ownership" | "autosave">)[] = ["destination", "keyOf", "obsolete"];
 
 const OWNERSHIP_PORTS: readonly (keyof SaveOwnershipPort)[] = ["capture", "stillOwns"];
 
-const AUTOSAVE_PORTS: readonly (keyof LegacyAutoSavePorts)[] = ["enabledAtStart", "due", "changed"];
+const AUTOSAVE_PORTS: readonly (keyof LegacyAutoSavePorts)[] = ["enabledAtStart", "changed"];
 
 const UNDO_PORTS: readonly (keyof SessionUndoPorts)[] = ["adapter", "route"];
 
@@ -158,6 +161,23 @@ function checkedActions(registry: ActionRegistry | null | undefined): ActionRegi
 function checkedExporters(drop: (() => void) | null | undefined): () => void {
   if (!present(drop, "function")) throw new WiringError("built-in exporters", "Wiring: the exporters dependency returned no function to remove them");
   return drop as () => void;
+}
+
+function checkedDestinations(list: readonly LegacySaveDestination[] | null | undefined): readonly LegacySaveDestination[] {
+  if (!Array.isArray(list)) throw new WiringError("save destinations", "Wiring: the destinations dependency returned no list of destinations");
+  return list as readonly LegacySaveDestination[];
+}
+
+function registerDestinations(list: readonly LegacySaveDestination[]): () => void {
+  const registry = saveDestinations();
+  const drops: (() => void)[] = [];
+  try {
+    for (const destination of list) drops.push(registry.register(destination));
+  } catch (error) {
+    drain(drops);
+    throw error;
+  }
+  return () => { drain(drops); };
 }
 
 function checkedRecovery(ports: LegacyRecoveryPorts | null | undefined): LegacyRecoveryPorts {
@@ -301,6 +321,7 @@ export function wireApp(deps: WiringDeps): Wiring {
     }
   }, (stop) => stop);
   build("saves", () => startSaves(checkedSaves(deps.saves({ capture: captureOperation, stillOwns: stillOwns })), deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
+  build("save destinations", () => registerDestinations(checkedDestinations(deps.destinations())), (drop) => drop);
   build("transitions", () => startTransitions({ ...deps.transitions, live: liveDocumentPort }), (stop) => stop);
   build("recovery", () => startRecovery(checkedRecovery(deps.recovery())), (stop) => stop);
   build("editor", () => startEditor(liveDocumentPort), (stop) => stop);

@@ -41,8 +41,7 @@ import {
 import { cleanAuthorName } from "../core/document/people.ts";
 import { showToast } from "./12-dirty-toast.js";
 import { personColor } from "./13a-presence.js";
-import { haltAutoSave } from "./14-export.js";
-import { autoSavePolicy, confirmBaseline, saveChanges } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, confirmBaseline, haltAutoSave, saveChanges } from "../legacy/save-bridge.ts";
 import { captureRestore, conflictStash, stillRestoring } from "../legacy/recovery-bridge.ts";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { driveFormatSize } from "../../shared/text.js";

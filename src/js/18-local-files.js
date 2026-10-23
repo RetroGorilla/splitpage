@@ -1,8 +1,7 @@
 import { docIdEmbeddedIn } from "../core/document/ids.ts";
-import { S } from "./_state.js";
 import { flushEdits } from "./12a-undo.js";
 import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
-import { noteAbsorbedDirty, noteReload } from "../legacy/session-bridge.ts";
+import { currentDocument, noteAbsorbedDirty, noteReload } from "../legacy/session-bridge.ts";
 import { documentTransitions } from "../legacy/transition-bridge.ts";
 import { autoSavePolicy, confirmSavedNow, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
 import { amendHome, currentHome, fileHome, importHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
@@ -30,7 +29,6 @@ import {
   blobSourceNow,
   onServerDoc
 } from "./13-hosted.js";
-import { warnImagesLeftOut } from "./14-export.js";
 import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
 import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
@@ -50,7 +48,7 @@ import { exportToggleOptions } from "../application/export/registry.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { exportFormats } from "../legacy/export-formats.ts";
-import { setMenuItemLabel, showToast } from "../legacy/effects-bridge.ts";
+import { setMenuItemLabel, showToast, warnImagesLeftOut } from "../legacy/effects-bridge.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { slugify } from "../../shared/text.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
@@ -147,7 +145,7 @@ export function exportFileName(kind, baseName, opts) {
 }
 
 export function exportBaseName() {
-  return importHome() ? importHome().name.replace(/\.[^.]+$/, "") : slugify(S.state.title);
+  return importHome() ? importHome().name.replace(/\.[^.]+$/, "") : slugify(currentDocument().title);
 }
 
 export function exportRequest(kind, opts) {
@@ -321,7 +319,7 @@ export async function openProjectFile(file, handle, opts) {
 export function adoptProjectState(newState, file, handle, kind, opts) {
   opts = opts || {};
   if (typeof closeNewTabPage === "function") closeNewTabPage();
-  if (!opts.skipSnapshot && S.state && S.state.rows.length) pushSnapshot("Before opening " + file.name);
+  if (!opts.skipSnapshot && currentDocument() && currentDocument().rows.length) pushSnapshot("Before opening " + file.name);
 
   resetProductionPanelState();
   documentTransitions().open({
@@ -333,10 +331,10 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
   });
 
   confirmSavedNow();
-  var commentNote = S.state.comments.length
-    ? ", " + S.state.comments.length + " comment" + (S.state.comments.length === 1 ? "" : "s") : "";
-  if (!opts.silent) showToast((opts.resumed ? "Resumed " : "Opened ") + (S.state.title || file.name) + " — " +
-    S.state.rows.length + " row" + (S.state.rows.length === 1 ? "" : "s") + commentNote, "ok");
+  var commentNote = currentDocument().comments.length
+    ? ", " + currentDocument().comments.length + " comment" + (currentDocument().comments.length === 1 ? "" : "s") : "";
+  if (!opts.silent) showToast((opts.resumed ? "Resumed " : "Opened ") + (currentDocument().title || file.name) + " — " +
+    currentDocument().rows.length + " row" + (currentDocument().rows.length === 1 ? "" : "s") + commentNote, "ok");
 
   if (handle) rememberLastFileHandle(handle);
   return true;
@@ -419,7 +417,7 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   if (!newRows || !newRows.length) { showToast("No scenes found in that file.", "warn"); return; }
 
-  if (!opts.reload && S.state.rows.length) pushSnapshot("Before opening " + file.name);
+  if (!opts.reload && currentDocument().rows.length) pushSnapshot("Before opening " + file.name);
 
   newRows.forEach(stampRow);
   var openedTitle = newTitle || file.name.replace(/\.[^.]+$/, "");
@@ -729,7 +727,7 @@ export function handleFileMenuAction(action, source) {
     appActions.invoke(action, source || "menu");
     return;
   }
-  if (!S.state) {
+  if (!currentDocument()) {
     showToast("Still loading…", "warn"); return;
   }
   if (exportFormats.isAction(action)) runExport(action);

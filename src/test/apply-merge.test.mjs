@@ -2,7 +2,6 @@ import "./_dom.mjs";
 import { bootApp, clearTimers, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { applyMerge, baseStateReason, mergeStates, setBaseState } from "../js/03-sync.js";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
@@ -47,7 +46,7 @@ let untouched = null;
 function reset() {
   clearTimers();
   loadTestDocument({ sentinel: "state" });
-  untouched = { held: S.state, json: JSON.stringify(S.state) };
+  untouched = { held: currentDocument(), json: JSON.stringify(currentDocument()) };
   holdMergeBase({ sentinel: "base" });
   mergeUndo().arm({ id: "s-earlier", docId: "d-earlier" });
 }
@@ -67,8 +66,8 @@ test("mergeOnly merges and hands the result back, touching nothing on screen", (
   });
   assert.deepEqual(unstamped(out.state), unstamped(direct));
   assert.equal(out.result.merged, out.state);
-  assert.equal(S.state, untouched.held);
-  assert.equal(JSON.stringify(S.state), untouched.json);
+  assert.equal(currentDocument(), untouched.held);
+  assert.equal(JSON.stringify(currentDocument()), untouched.json);
   assert.deepEqual(mergeBase(), { sentinel: "base" });
 });
 
@@ -118,10 +117,10 @@ test("a recovered stash where both sides added the same person: the merged scrip
 
   const out = applyMerge({ base: base, mine: mine, theirs: theirs, source: "stash", mergeOnly: true });
   loadTestDocument(out.state);
-  assert.deepEqual(S.state.people, [{ id: "pTheirs", name: "ada" }]);
-  assert.equal(personById(currentDocument(), S.state.productionTags.find((t) => t.name === "Lamp").owner).name, "ada");
-  assert.equal(personById(currentDocument(), S.state.brollShots[0].owner).name, "ada");
-  assert.deepEqual(migrateRows(cloneState(S.state)).brollShots[0].owner, "pTheirs", "and a reload keeps it");
+  assert.deepEqual(currentDocument().people, [{ id: "pTheirs", name: "ada" }]);
+  assert.equal(personById(currentDocument(), currentDocument().productionTags.find((t) => t.name === "Lamp").owner).name, "ada");
+  assert.equal(personById(currentDocument(), currentDocument().brollShots[0].owner).name, "ada");
+  assert.deepEqual(migrateRows(cloneState(currentDocument())).brollShots[0].owner, "pTheirs", "and a reload keeps it");
 });
 
 test("pictures merge by sha through applyMerge, and a stash's legacy inline one is the same picture (#82)", () => {
@@ -288,8 +287,8 @@ test("awaitUndoPoint adopts nothing until the undo point is written", async () =
     assert.equal(typeof p.then, "function", "a Promise, not the answer");
 
     await ticks(5);
-    assert.equal(S.state, untouched.held);
-  assert.equal(JSON.stringify(S.state), untouched.json);
+    assert.equal(currentDocument(), untouched.held);
+  assert.equal(JSON.stringify(currentDocument()), untouched.json);
     assert.deepEqual(mergeBase(), { sentinel: "base" });
     assert.deepEqual(mergeUndo().last(), { id: "s-earlier", docId: "d-earlier" });
     assert.equal(baseAsked, 0, "newBase is not even read yet");
@@ -300,8 +299,8 @@ test("awaitUndoPoint adopts nothing until the undo point is written", async () =
   }
   await p.then(null, () => {});
 
-  assert.equal(S.state.rows[0].audioText, "mine");
-  assert.equal(S.state.rows[1].audioText, "theirs");
+  assert.equal(currentDocument().rows[0].audioText, "mine");
+  assert.equal(currentDocument().rows[1].audioText, "theirs");
   assert.equal(mergeBase(), newBase, "the function's answer, as it is");
   assert.equal(baseAsked, 1);
   assert.equal(baseStateReason(), "merge: stash");
@@ -321,7 +320,7 @@ test("awaitUndoPoint answers a Promise even with no undo point to wait for", asy
   const p = applyMerge({ theirs: theirs, source: "stash", unchanged: true, awaitUndoPoint: true, report: false });
   assert.equal(typeof p.then, "function");
   await p.then(null, () => {});
-  assert.equal(S.state, theirs);
+  assert.equal(currentDocument(), theirs);
   assert.deepEqual(mergeBase(), { sentinel: "base" });
 });
 
