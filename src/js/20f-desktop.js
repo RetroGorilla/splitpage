@@ -16,58 +16,12 @@ import { openServersDialog } from "./20e-connect.js";
 import { flushDraftNow } from "./20g-drafts.js";
 import { draftResume, recoveryStarted } from "../legacy/recovery-bridge.ts";
 import { saveDoc, unsavedChanges } from "../legacy/save-bridge.ts";
-import { concatBytes, strBytes } from "../adapters/formats/bytes.ts";
+import { strBytes } from "../adapters/formats/bytes.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
-import { mimeForFilename } from "../../shared/file-names.js";
 import { startupReady } from "../legacy/startup-bridge.ts";
 import { desktopPort, restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
+import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
-
-export function makeDesktopHandle(entry) {
-  var id = entry.id;
-  var name = entry.name;
-  var handle = {
-    kind: "file",
-    name: name,
-    _desktopId: id,
-    getFile: function () {
-      return desktopPort().readFile(id).then(function (fresh) {
-        name = fresh.name || name;
-        handle.name = name;
-        var bytes = fresh.bytes instanceof Uint8Array ? fresh.bytes : new Uint8Array(fresh.bytes || []);
-        return new File([bytes], name, { lastModified: fresh.lastModified, type: mimeForFilename(name) });
-      });
-    },
-    createWritable: function () {
-      var chunks = [];
-      return Promise.resolve({
-        write: function (chunk) {
-          if (typeof chunk === "string") { chunks.push(strBytes(chunk)); return Promise.resolve(); }
-          if (chunk instanceof Blob) {
-            return chunk.arrayBuffer().then(function (buf) { chunks.push(new Uint8Array(buf)); });
-          }
-          if (chunk instanceof ArrayBuffer) { chunks.push(new Uint8Array(chunk)); return Promise.resolve(); }
-          if (ArrayBuffer.isView(chunk)) {
-            chunks.push(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
-            return Promise.resolve();
-          }
-          chunks.push(strBytes(String(chunk)));
-          return Promise.resolve();
-        },
-        close: function () {
-          return desktopPort().writeFile(id, concatBytes(chunks)).then(function (written) {
-            var stamp = written && written.lastModified;
-            return typeof stamp === "number" && isFinite(stamp) ? { lastModified: stamp } : undefined;
-          });
-        }
-      });
-    },
-    queryPermission: function () { return Promise.resolve("granted"); },
-    requestPermission: function () { return Promise.resolve("granted"); },
-    isSameEntry: function (other) { return !!other && other._desktopId === id; }
-  };
-  return handle;
-}
 
 var awaitingHandedDocument = false;
 var lastDesktopDocumentState = "";

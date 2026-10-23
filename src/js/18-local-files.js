@@ -3,7 +3,9 @@ import { flushEdits } from "./12a-undo.js";
 import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { currentDocument, noteAbsorbedDirty, noteReload } from "../legacy/session-bridge.ts";
 import { documentTransitions } from "../legacy/transition-bridge.ts";
-import { autoSavePolicy, confirmSavedNow, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, confirmSavedNow, fileConflicts, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
+import { deliverFile } from "../legacy/file-delivery.ts";
+import { checkFileConflict } from "../adapters/files/file-target.ts";
 import { amendHome, currentHome, fileHome, importHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import {
@@ -39,11 +41,8 @@ import {
   applyMarkdownProject,
   parseMarkdownProject
 } from "./20d-formats.js";
-import {
-  makeDesktopHandle
-} from "./20f-desktop.js";
+import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { closeNewTabPage } from "./20j-newtab.js";
-import { strBytes } from "../adapters/formats/bytes.ts";
 import { exportToggleOptions } from "../application/export/registry.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { appActions } from "../legacy/app-actions.ts";
@@ -52,7 +51,7 @@ import { setMenuItemLabel, showToast, warnImagesLeftOut } from "../legacy/effect
 import { cloneState } from "../core/document/clone.ts";
 import { slugify } from "../../shared/text.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
-import { fileKindFromName, mimeForFilename } from "../../shared/file-names.js";
+import { fileKindFromName } from "../../shared/file-names.js";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
 
@@ -494,73 +493,16 @@ export async function openLocalFile() {
   document.getElementById("open-file-input").click();
 }
 
-export async function deliverFile(filename, data, opts) {
-  opts = opts || {};
-  if (runningOnDesktop()) {
-    try {
-      var ext = (/\.([a-z0-9]+)$/i.exec(filename) || ["", ""])[1].toLowerCase();
-      var picked = await desktopPort().saveFileDialog({
-        suggestedName: filename,
-        filters: [{ name: ext ? ext.toUpperCase() + " file" : "File", extensions: ext ? [ext] : [] }]
-      });
-      if (!picked) return false;
-      var bytes;
-      if (data instanceof Blob) bytes = new Uint8Array(await data.arrayBuffer());
-      else if (data instanceof Uint8Array) bytes = data;
-      else if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
-      else if (ArrayBuffer.isView(data)) bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-      else bytes = strBytes(String(data));
-      await desktopPort().writeFile(picked.id, bytes);
-      showToast(opts.savedMsg || ("Saved " + filename), "ok");
-      return true;
-    } catch (err) {
-      showToast("Could not save the file. Please try again.", "error");
-      return false;
-    }
-  }
-  try {
-    var blob = data instanceof Blob ? data : new Blob([data], { type: mimeForFilename(filename) });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
-    showToast(opts.savedMsg || ("Saved " + filename), "ok");
-    return true;
-  } catch (err) {
-    showToast("Could not save the file. Please try again.", "error");
-    return false;
-  }
-}
-
-export async function checkFileConflict(handle, lastModified) {
-  if (!lastModified) return { ok: true };
-  var current;
-  try {
-    current = await handle.getFile();
-  } catch (e) {
-    return { ok: false, current: null };
-  }
-  if (current.lastModified && current.lastModified !== lastModified) {
-    return { ok: false, current: current };
-  }
-  return { ok: true };
-}
-
-export var fileConflictCtx = { kind: "import" };
 var fileConflictShowToken = 0;
 
-function fileConflictHome() {
-  return fileConflictCtx && fileConflictCtx.kind === "project" ? fileHome() : importHome();
+function fileConflictHome(conflict) {
+  return conflict.kind === "project" ? fileHome() : importHome();
 }
 
 var WRITTEN_BACK = Object.freeze({ kind: "saved" });
 var WRITEBACK_FAILED = Object.freeze({ kind: "failed" });
 var WRITEBACK_CANCELLED = Object.freeze({ kind: "cancelled" });
-var WRITEBACK_CONFLICTED = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
+var FILE_CHANGED = "The file changed on disk since it was opened";
 var NOTHING_IMPORTED = Object.freeze({ kind: "refused", reason: "The document has no imported file to write back to" });
 var IMPORT_REPLACED = Object.freeze({ kind: "refused", reason: "The imported file this write back was asked for is no longer open" });
 
@@ -594,8 +536,7 @@ export async function writeBackToFile(job) {
     if (job.request.kind !== "writebackForce") {
       var check = await checkFileConflict(imported.handle, imported.lastModified);
       if (!check.ok) {
-        showFileConflict(imported.name, check.current, { kind: "import" });
-        return WRITEBACK_CONFLICTED;
+        return { kind: "refused", reason: FILE_CHANGED, conflict: { fileName: imported.name, current: check.current, kind: "import" } };
       }
       if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
     }
@@ -621,8 +562,24 @@ export async function writeBackToFile(job) {
   return ok ? WRITTEN_BACK : WRITEBACK_FAILED;
 }
 
-export function showFileConflict(fileName, currentFile, ctx) {
-  fileConflictCtx = ctx || { kind: "import" };
+var IMPORT_KINDS = ["writeback", "writebackForce"];
+
+export function importSaveDestination() {
+  return {
+    id: "import",
+    takes: function (request) { return IMPORT_KINDS.indexOf(request.kind) !== -1; },
+    autoSaveTarget: function () { return null; },
+    write: writeBackToFile
+  };
+}
+
+export function showFileConflictView(conflict) {
+  if (!conflict) {
+    hideFileConflictView();
+    return;
+  }
+  var fileName = conflict.fileName;
+  var currentFile = conflict.current;
   if (!currentFile) {
     document.getElementById("file-conflict-detail").textContent =
       "Could not check whether " + fileName + " is still there — it may have been moved, " +
@@ -642,20 +599,20 @@ export function showFileConflict(fileName, currentFile, ctx) {
     if (token !== fileConflictShowToken) return;
     document.getElementById("file-conflict-modal").hidden = false;
   };
-  var probe = offerFileMerge(currentFile, fileConflictHome());
+  var probe = offerFileMerge(currentFile, fileConflictHome(conflict));
   var timer = setTimeout(show, 1500);
   probe.then(function () { clearTimeout(timer); show(); },
              function () { clearTimeout(timer); show(); });
 }
 
-export function closeFileConflict() {
+function hideFileConflictView() {
   fileConflictShowToken++;
   document.getElementById("file-conflict-modal").hidden = true;
   resetMergeOffer();
 }
 
 export async function reloadFileFromDisk() {
-  closeFileConflict();
+  fileConflicts().close();
   var imported = importHome();
   if (!imported || !imported.handle) return;
   try {
@@ -667,7 +624,7 @@ export async function reloadFileFromDisk() {
 }
 
 export async function reloadProjectFromDisk() {
-  closeFileConflict();
+  fileConflicts().close();
   var file = fileHome();
   if (!file || !file.handle) return;
   try {
