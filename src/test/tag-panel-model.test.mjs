@@ -7,7 +7,7 @@ import { S } from "../js/_state.js";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { cellOf, projection, tagNameOf, toHtml } from "../js/04c-doc-model.js";
 import { tagFieldOccurrences, tagOccurrences, tagsInField } from "../js/07-production-tags.js";
-import { removeTag, renameTag } from "../application/commands/production-actions.js";
+import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, readSession } from "../legacy/session-bridge.ts";
 import { retagRewrites, retagMentions } from "../legacy/tag-rewrites.ts";
 import { domProjection } from "../js/09-find-replace.js";

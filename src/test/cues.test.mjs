@@ -16,10 +16,10 @@ import {
   insertText, mergeCells, normalizeCell, spokenText, toDocxRuns, toHtml, toMarkdown, toPlainText, withoutCues
 } from "../js/04c-doc-model.js";
 import { __init as initTags, healTagRegistry, tagsInField } from "../js/07-production-tags.js";
-import { removeTag, renameTag } from "../application/commands/production-actions.js";
+import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, readSession } from "../legacy/session-bridge.ts";
 import { retagRewrites, retagMentions } from "../legacy/tag-rewrites.ts";
-import { productionEntries } from "../core/production/index.js";
+import { productionEntries } from "../core/production/index.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { zipRead } from "../adapters/formats/zip.ts";

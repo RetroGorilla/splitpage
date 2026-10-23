@@ -9,7 +9,7 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { inertBody } from "../legacy/richtext.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";
-import { newBrollRecord } from "../application/commands/production-actions.js";
+import { newBrollRecord } from "../application/commands/production-actions.ts";
 import { runDocumentEdit } from "../legacy/session-bridge.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { WHOLE_DOCUMENT } from "../application/session/change-set.ts";

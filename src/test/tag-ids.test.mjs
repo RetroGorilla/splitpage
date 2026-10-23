@@ -8,7 +8,7 @@ import { migrateRows } from "../js/02-state.js";
 import { mergeProductionTags, mergeStates } from "../js/03-sync.js";
 import { fromHtml, toHtml } from "../js/04c-doc-model.js";
 import { ensureTagIds, isTagId, registryEntryById } from "../js/07-production-tags.js";
-import { renameTag } from "../application/commands/production-actions.js";
+import { renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
 import { retagRewrites } from "../legacy/tag-rewrites.ts";
 import { loadTestDocument } from "./_document.mjs";

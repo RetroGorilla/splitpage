@@ -12,7 +12,7 @@ import { BROLL_MARKER_RE, __init as brollInit, addBrollProp, brollInCell, brollP
 import { anchorBrollInRows } from "../adapters/production/broll-anchors.js";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
-import { removeBrollProp, renameTag } from "../application/commands/production-actions.js";
+import { removeBrollProp, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
 import { retagRewrites } from "../legacy/tag-rewrites.ts";
 

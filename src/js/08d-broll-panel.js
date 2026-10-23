@@ -10,7 +10,7 @@ import { closeAllSidePanels } from "./03b-side-panels.js";
 import { cssAttr, plainText } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import { focusRowField } from "./06-rows.js";
-import { productionIndexFor } from "../core/production/index.js";
+import { productionIndexFor } from "../core/production/index.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";
 import {
   addBrollProp,
@@ -28,7 +28,7 @@ import { showToast } from "../legacy/effects-bridge.ts";
 import { mountBroll } from "../features/broll/mount.ts";
 import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
 import { deleteShotCommand, setShotsCommand } from "../application/commands/broll-records.ts";
-import { newBrollRecord, removeBrollProp } from "../application/commands/production-actions.js";
+import { newBrollRecord, removeBrollProp } from "../application/commands/production-actions.ts";
 import { brollRecord as shotIn, personById as personIn, personNamed } from "../core/production/records.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { currentDocument, readSession, runDocumentEdit } from "../legacy/session-bridge.ts";

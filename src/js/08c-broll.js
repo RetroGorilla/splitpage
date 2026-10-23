@@ -46,10 +46,10 @@ import { currentDocument, heldDocument, readSession, runCommand, runDocumentEdit
 import { addShotPropCommand } from "../application/commands/broll-records.ts";
 import { rewriteCellsCommand } from "../application/commands/document-edit.ts";
 import { addBrollRecord, brollRecord } from "../core/production/records.ts";
-import { tagRecordsPlan } from "../core/production/index.js";
+import { tagRecordsPlan } from "../core/production/index.ts";
 import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { anchorBrollInRows, brollHtmlLines, brollKeyHtml } from "../adapters/production/broll-anchors.js";
-import { declineBrollRows, resetBrollAnchoring } from "../application/broll-anchoring.js";
+import { declineBrollRows, resetBrollAnchoring } from "../application/broll-anchoring.ts";
 export {
   BROLL_MARKER_RE,
   BROLL_PROPS_MAX,

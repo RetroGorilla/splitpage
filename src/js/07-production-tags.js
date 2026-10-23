@@ -25,7 +25,7 @@ import {
 } from "../core/document/tags.ts";
 import { cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
 import { TAG_CATEGORIES, TAG_STATUSES, tagCategory, tagStatus } from "../core/production/looks.ts";
-import { productionIndexFor } from "../core/production/index.js";
+import { productionIndexFor } from "../core/production/index.ts";
 import {
   bulkTagCell as bulkTagCellWith,
   collectTagsFromRows as collectTagGroups,
@@ -42,7 +42,7 @@ import { cellOf } from "../legacy/richtext.ts";
 import { currentDocument, readSession, requestRefresh, runDocumentEdit, sessionStamps, stampDocument } from "../legacy/session-bridge.ts";
 import { changeSet } from "../application/session/change-set.ts";
 import { addPersonCommand, registerTagCommand, tagCellsCommand } from "../application/commands/production-records.ts";
-import { bindBulkTagRows } from "../application/commands/bulk-tags.js";
+import { bindBulkTagRows } from "../application/commands/bulk-tags.ts";
 import { personNamed, registryEntryById as registryEntryByIdIn } from "../core/production/records.ts";
 import { cellEditing, focusMemory } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";

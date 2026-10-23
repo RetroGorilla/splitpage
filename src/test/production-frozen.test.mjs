@@ -7,7 +7,7 @@ globalThis.location = new URL("https://splitpage.test/index.html?freeze-caches=1
 const { S } = await import("../js/_state.js");
 const { migrateRows } = await import("../js/02-state.js");
 const { healTagRegistry, productionIndexStats, resetProductionIndexStats } = await import("../js/07-production-tags.js");
-const { currentProductionIndex, productionEntries } = await import("../core/production/index.js");
+const { currentProductionIndex, productionEntries } = await import("../core/production/index.ts");
 const { currentDocument } = await import("../legacy/session-bridge.ts");
 const { mintTagId } = await import("../core/document/tags.ts");
 const { productionReaders } = await import("../legacy/document-ports.ts");
