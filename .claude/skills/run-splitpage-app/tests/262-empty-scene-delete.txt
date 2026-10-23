@@ -1,6 +1,6 @@
 # An empty scene is deleted by one click on its Delete (Adam, 2026-09-28);
 # anything else still arms first and deletes on the second click
-# (06-rows.js armDelete, "empty" as 05g-scene-clip.js isBlankScene says:
+# (06-rows.js armDelete, "empty" as features/clipboard/scene-clip.js isBlankScene says:
 # no words in either column, no pictures or videos, no set length, no
 # comments on it). Text typed but not yet synced counts as words. The
 # one-click delete is one undo step like any other.

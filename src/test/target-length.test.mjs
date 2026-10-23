@@ -19,7 +19,7 @@ import { TARGET_PRESETS, targetOverlayParts } from "../features/rundown/target.j
 import { __init as initTags } from "../js/07-production-tags.js";
 import { applyStepsLive, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";
-import { invertSteps } from "../js/04c-doc-model.js";
+import { invertSteps } from "../core/text/steps.ts";
 import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject } from "../adapters/formats/project-file.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
