@@ -1,3 +1,5 @@
+import type { UndoEntry, UndoState } from "../../application/editing/undo/history.ts";
+import type { Step } from "../../core/text/steps.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
@@ -10,7 +12,6 @@ import type { SaveOwnershipPort } from "../../application/save/coordinator.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { Slot, VideoLink } from "../../core/document/gallery.ts";
 import type { ImageRef } from "../../core/document/ports.ts";
-import type { ValidatedDocument } from "../../core/document/validated.ts";
 
 export interface GalleryPorts {
   readonly document: Pick<DocumentReader, "current" | "read">;
@@ -67,15 +68,8 @@ export interface GalleryOverlayMount {
   readonly dispose: () => void;
 }
 
-export interface UndoStepView {
-  readonly op: string;
-  readonly rowId?: string;
-  readonly key?: string;
-  readonly row?: { readonly id?: string } | null;
-}
-
 export interface UndoFold {
-  readonly fold: (entry: unknown, touches: (step: UndoStepView) => boolean, change: (doc: ValidatedDocument) => boolean) => boolean;
+  readonly fold: (entry: UndoEntry | null | undefined, touches: (step: Step) => boolean, change: (draft: UndoState) => boolean) => boolean;
 }
 
 export interface GalleryVideoPorts {

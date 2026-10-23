@@ -3,7 +3,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { DesktopVideoResult } from "../../../src/application/media/desktop-video.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
-import type { GalleryVideoPorts, UndoStepView } from "../../../src/features/gallery/ports.ts";
+import type { GalleryVideoPorts } from "../../../src/features/gallery/ports.ts";
+import type { Step } from "../../../src/core/text/steps.ts";
 import { __init as mountVideo } from "../../../src/features/gallery/video.js";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeOwnership, fakePictures } from "../fakes.ts";
@@ -15,7 +16,7 @@ function setup(opts: { allowed?: boolean; thumbnail?: (host: string, ref: string
   const pictures = fakePictures();
   const ownership = fakeOwnership();
   const asked: string[] = [];
-  const folds: { entry: unknown; touches: (step: UndoStepView) => boolean; changed: boolean }[] = [];
+  const folds: { entry: unknown; touches: (step: Step) => boolean; changed: boolean }[] = [];
   const ports: GalleryVideoPorts = {
     document: fakeDocument(doc).document,
     pictures: pictures.pictures,
@@ -70,7 +71,7 @@ test("gallery video: a pasted link's thumbnail folds into the paste's undo entry
   assert.equal(folds[0]?.changed, true);
   assert.equal(folds[0]?.touches({ op: "rowField", rowId: "r1", key: "imageLinks" }), true);
   assert.equal(folds[0]?.touches({ op: "rowField", rowId: "r1", key: "audioText" }), false);
-  assert.equal(folds[0]?.touches({ op: "deleteRow", row: { id: "r1" } }), true);
+  assert.equal(folds[0]?.touches({ op: "deleteRow", index: 0, row: { id: "r1" } }), true);
   assert.match(JSON.stringify(doc.rows[0]), /"sha256"/);
   owner.dispose();
 });
