@@ -1,7 +1,7 @@
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { rundownEdge } from "./05f-rundown.js";
 import { appActions } from "../legacy/app-actions.ts";
-import { presenceShown } from "./13a-presence.js";
+import { presence } from "../legacy/presence-bridge.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { pad2 } from "../core/production/timing.ts";
 
@@ -128,7 +128,7 @@ function placeRundownPresence() {
 export function paintRundownPresence(seen) {
   var layer = layerEl();
   if (!layer) return;
-  var people = presenceShown();
+  var people = presence().shown();
   var rows = currentDocument()?.rows ?? [];
   if (!people.length || !rows.length) {
     activity = idMap();
