@@ -1,7 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { createHeldFileHandle, mockClock } from "./_m4-matrix.mjs";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
@@ -58,21 +57,21 @@ async function open(doc = fixture()) {
 }
 
 const cellEl = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
-const tagKeys = () => S.state.productionTags.map((t) => t.cat + " " + t.name);
-const shotNames = () => S.state.brollShots.map((s) => s.id + " " + s.name);
+const tagKeys = () => currentDocument().productionTags.map((t) => t.cat + " " + t.name);
+const shotNames = () => currentDocument().brollShots.map((s) => s.id + " " + s.name);
 
 function lagging() {
-  S.state.rows[1].visualText = "B-roll: Hands";
-  S.state.rows[1].audioText = "Pour into the " + tag("prop", "mug") + ".";
-  S.state.brollShots = S.state.brollShots.map((s) => Object.assign({}, s, { name: "steam" }));
+  currentDocument().rows[1].visualText = "B-roll: Hands";
+  currentDocument().rows[1].audioText = "Pour into the " + tag("prop", "mug") + ".";
+  currentDocument().brollShots = currentDocument().brollShots.map((s) => Object.assign({}, s, { name: "steam" }));
 }
 
 function snapshot() {
-  return { doc: JSON.stringify(S.state), generation: liveSession().generation(), seq: saveChanges(), dirty: unsavedChanges() };
+  return { doc: JSON.stringify(currentDocument()), generation: liveSession().generation(), seq: saveChanges(), dirty: unsavedChanges() };
 }
 
 function assertUntouched(before, seen, where) {
-  assert.equal(JSON.stringify(S.state), before.doc, where + ": the document, its tag registry and its b-roll list are as they were");
+  assert.equal(JSON.stringify(currentDocument()), before.doc, where + ": the document, its tag registry and its b-roll list are as they were");
   assert.equal(liveSession().generation(), before.generation, where + ": generation");
   assert.equal(saveChanges(), before.seq, where + ": edit sequence");
   assert.equal(unsavedChanges(), before.dirty, where + ": unsaved state");
@@ -99,7 +98,7 @@ test("6.5: render, the idle refreshes, the panels, the badges and the export kit
       "b-roll panel": () => { openBrollPanel(); renderBroll(); sidePanels().close("broll-panel"); },
       "b-roll entries": () => brollEntries(),
       "production entries": () => productionIndex().entries(currentDocument()),
-      "export kit": () => buildSplitpageFile(exportDocumentOf(S.state))
+      "export kit": () => buildSplitpageFile(exportDocumentOf(currentDocument()))
     };
     for (const [where, read] of Object.entries(reads)) {
       read();
@@ -119,8 +118,8 @@ test("6.5: a save changes nothing in the held document; the file carries the ent
     const target = await open();
     noteSessionEdit();
     lagging();
-    const held = JSON.stringify(S.state.rows) + JSON.stringify(S.state.productionTags) + JSON.stringify(S.state.brollShots);
-    const entry = migrateRows(JSON.parse(JSON.stringify(S.state)));
+    const held = JSON.stringify(currentDocument().rows) + JSON.stringify(currentDocument().productionTags) + JSON.stringify(currentDocument().brollShots);
+    const entry = migrateRows(JSON.parse(JSON.stringify(currentDocument())));
     const gen = liveSession().generation();
     const seen = [];
     const stop = liveSession().subscribe((c) => seen.push(c.kind));
@@ -131,7 +130,7 @@ test("6.5: a save changes nothing in the held document; the file carries the ent
     }
     assert.deepEqual(seen, []);
     assert.equal(liveSession().generation(), gen);
-    assert.equal(JSON.stringify(S.state.rows) + JSON.stringify(S.state.productionTags) + JSON.stringify(S.state.brollShots), held);
+    assert.equal(JSON.stringify(currentDocument().rows) + JSON.stringify(currentDocument().productionTags) + JSON.stringify(currentDocument().brollShots), held);
     assert.equal(unsavedChanges(), false);
     const saved = parseSplitpageFile(await (await target.handle.getFile()).text());
     assert.deepEqual(saved.productionTags.map((x) => x.cat + " " + x.name), entry.productionTags.map((x) => x.cat + " " + x.name));
@@ -152,7 +151,7 @@ test("6.5: typing a tag registers it in the same transaction, and one undo takes
   assert.ok(tagKeys().includes("prop mug"));
   flushEdits();
   undo();
-  assert.equal(S.state.rows[1].audioText, "Pour.");
+  assert.equal(currentDocument().rows[1].audioText, "Pour.");
   assert.ok(!tagKeys().includes("prop mug"));
 });
 
@@ -181,9 +180,9 @@ test("6.5: a typed b-roll line in a scene that was already there is keyed when t
   }
   assert.deepEqual(seen, ["edit"]);
   assert.equal(liveSession().generation(), gen + 1);
-  const made = S.state.brollShots.find((s) => s.name === "Hands");
+  const made = currentDocument().brollShots.find((s) => s.name === "Hands");
   assert.ok(made, shotNames().join(", "));
-  assert.equal(S.state.rows[1].visualText, "Wide<br>" + key(made.id, "B-roll:") + " Hands");
+  assert.equal(currentDocument().rows[1].visualText, "Wide<br>" + key(made.id, "B-roll:") + " Hands");
   assert.equal(anchorBrollInLeftCell(cellEl("r2", "visualText")), 0, "leaving the cell again changes nothing");
 });
 
@@ -193,10 +192,10 @@ test("6.5: a document the current code wrote round-trips through entry with no r
   setCell("r2", "visualText", "Wide<br>B-roll: Hands");
   anchorBrollInLeftCell(cellEl("r2", "visualText"));
   setCell("r1", "visualText", key("bs_steam", "B-roll:") + " Steam rising");
-  const held = JSON.parse(JSON.stringify(S.state));
+  const held = JSON.parse(JSON.stringify(currentDocument()));
   assert.deepEqual(tagKeys(), ["prop kettle", "prop mug"]);
-  assert.equal(S.state.brollShots.length, 2);
-  const entered = migrateRows(parseSplitpageFile(buildSplitpageFile(exportDocumentOf(S.state))));
+  assert.equal(currentDocument().brollShots.length, 2);
+  const entered = migrateRows(parseSplitpageFile(buildSplitpageFile(exportDocumentOf(currentDocument()))));
   assert.deepEqual(entered.productionTags, held.productionTags);
   assert.deepEqual(entered.brollShots, held.brollShots);
   assert.deepEqual(entered.rows.map((r) => [r.visualText, r.audioText]), held.rows.map((r) => [r.visualText, r.audioText]));
@@ -212,9 +211,9 @@ test("6.5: a panel action on a tag the registry lacks registers it inside the ac
   assert.equal(liveSession().generation(), gen + 1, "the registration was noted as an edit");
   setTagNotes("prop mug", "");
   assert.equal(liveSession().generation(), gen + 1, "nothing new to note");
-  S.state.productionTags = S.state.productionTags.filter((x) => x.name !== "mug");
+  currentDocument().productionTags = currentDocument().productionTags.filter((x) => x.name !== "mug");
   setTagStatus("prop mug", "have");
-  assert.equal(S.state.productionTags.find((x) => x.name === "mug").status, "have");
+  assert.equal(currentDocument().productionTags.find((x) => x.name === "mug").status, "have");
   assert.equal(liveSession().generation(), gen + 2, "one edit for the registration and the status");
 });
 
@@ -224,13 +223,13 @@ test("6.5 follow-up: a cue rename seen by an edit that rolls back is seen again 
     schema: 5, title: "Cue retry", docId: "d" + "8".repeat(32),
     rows: [{ id: "r1", visualText: "Kitchen", audioText: cue("SFX: door slam"), status: "todo" }]
   }));
-  const sounds = () => S.state.productionTags.filter((t) => t.cat === "sound").map((t) => t.id + " " + t.name);
-  const kept = S.state.productionTags.find((t) => t.cat === "sound" && t.name === "door slam");
+  const sounds = () => currentDocument().productionTags.filter((t) => t.cat === "sound").map((t) => t.id + " " + t.name);
+  const kept = currentDocument().productionTags.find((t) => t.cat === "sound" && t.name === "door slam");
   assert.ok(kept, sounds().join(", "));
   assert.equal(setCell("r1", "visualText", "Kitchen, morning").kind, "applied");
 
-  const comments = S.state.comments;
-  S.state.comments = { slice() { throw new Error("anchors broke"); } };
+  const comments = currentDocument().comments;
+  currentDocument().comments = { slice() { throw new Error("anchors broke"); } };
   let failed;
   try {
     failed = runCommand({
@@ -242,10 +241,10 @@ test("6.5 follow-up: a cue rename seen by an edit that rolls back is seen again 
       })
     });
   } finally {
-    S.state.comments = comments;
+    currentDocument().comments = comments;
   }
   assert.equal(failed.kind, "failed");
-  assert.equal(S.state.rows[0].audioText, cue("SFX: door slam"), "the edit rolled back");
+  assert.equal(currentDocument().rows[0].audioText, cue("SFX: door slam"), "the edit rolled back");
   assert.deepEqual(sounds(), [kept.id + " door slam"], "the retitle rolled back with it");
 
   assert.equal(setCell("r1", "audioText", cue("SFX: door slams")).kind, "applied");

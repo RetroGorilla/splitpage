@@ -1,7 +1,7 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 const bridge = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
@@ -14,7 +14,7 @@ const unwired = unwiredSessionDeps();
 
 function script() {
   loadTestDocument(migrateRows({ title: "Unwired", rows: [{ id: "r1", visualText: "", audioText: "", status: "todo" }] }));
-  return S.state;
+  return currentDocument();
 }
 
 test("with nothing wired, loading the bridge alone provides no port: each one throws instead of running on a default", () => {
@@ -32,7 +32,7 @@ test("with nothing wired, a command that needs edit capability throws before it 
   const doc = script();
   const before = JSON.stringify(doc);
   assert.throws(() => bridge.runCommand(sceneStatusCommand("r1", bridge.sessionStamps)), /edit capability port was not provided/);
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.equal(bridge.liveSession().generation(), 0);
 });
 
@@ -43,7 +43,7 @@ test("with only the capability wired, a command fails on the missing attribution
   const outcome = bridge.runCommand(sceneLengthCommand("r1", 30, bridge.sessionStamps));
   assert.equal(outcome.kind, "failed");
   assert.match(outcome.error.message, /attribution port was not provided/);
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
 });
 
 test("with the attribution wired but no editor name, the command fails on its stamp and writes nothing", () => {
@@ -53,7 +53,7 @@ test("with the attribution wired but no editor name, the command fails on its st
   const outcome = bridge.runCommand(sceneLengthCommand("r1", 30, bridge.sessionStamps));
   assert.equal(outcome.kind, "failed");
   assert.match(outcome.error.message, /editor name port was not provided/);
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
 });
 
 test("with the effects missing, a legacy edit reports each missing effect and throws nothing", () => {

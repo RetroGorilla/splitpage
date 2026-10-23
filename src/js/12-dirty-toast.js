@@ -165,16 +165,15 @@ export function showRefusal(outcome) {
   showToast(/[.!?…]$/.test(text) ? text : text + ".", "warn");
 }
 
-if (typeof document !== "undefined" && document.addEventListener) {
-  document.addEventListener("undo-owner-cleared", function (e) {
-    var n = (e.detail && e.detail.count) || 0;
-    if (n) showToast("That person is no longer on the crew, so " + (n === 1 ? "1 item is" : n + " items are") + " now unassigned.", "warn");
-  });
-}
-
 export { showActionToast, showToast };
 
 export function __init() {
+  if (typeof document !== "undefined" && document.addEventListener) {
+    document.addEventListener("undo-owner-cleared", function (e) {
+      var n = (e.detail && e.detail.count) || 0;
+      if (n) showToast("That person is no longer on the crew, so " + (n === 1 ? "1 item is" : n + " items are") + " now unassigned.", "warn");
+    });
+  }
   window.__saveStatusTest = {
     refresh: updateSaveStatus
   };
