@@ -1,8 +1,10 @@
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { ScreenState } from "../../application/screen.ts";
+import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import { appActions } from "../../legacy/app-actions.ts";
 import { PREF_EVENT, preferences } from "../../legacy/preferences-bridge.ts";
+import { productionIndex } from "../../legacy/production-index-bridge.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
 
 const actions: Pick<ActionRegistry, "invoke" | "view"> = {
@@ -32,9 +34,18 @@ const changes: PreferenceChanges = {
   }
 };
 
+const production: ProductionIndexOwner = {
+  entries: (doc) => productionIndex().entries(doc),
+  current: (doc) => productionIndex().current(doc),
+  derived: () => productionIndex().derived(),
+  resetDerived: () => { productionIndex().resetDerived(); },
+  recordsPlan: (doc, viewed) => productionIndex().recordsPlan(doc, viewed)
+};
+
 const shared = {
   actions,
   changes,
+  production,
   screen: (): ScreenState => screenNow()
 };
 
