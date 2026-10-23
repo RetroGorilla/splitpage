@@ -220,7 +220,6 @@
     {"rule":"loop-import","source":"src/js/12-dirty-toast.js","target":"src/js/02b-doc-id.js#syncDocIdentity"},
     {"rule":"loop-import","source":"src/js/12-dirty-toast.js","target":"src/js/13-hosted.js#onServerDoc"},
     {"rule":"loop-import","source":"src/js/12-dirty-toast.js","target":"src/js/20g-drafts.js#noteDraftChange"},
-    {"rule":"loop-import","source":"src/js/12a-undo.js","target":"src/js/02-state.js#STATE_FIELDS"},
     {"rule":"loop-import","source":"src/js/13-hosted.js","target":"src/js/02-state.js#escapeHtml"},
     {"rule":"loop-import","source":"src/js/13-hosted.js","target":"src/js/02-state.js#migrateRows"},
     {"rule":"loop-import","source":"src/js/13-hosted.js","target":"src/js/02b-doc-id.js#copyDocHistorySafe"},
