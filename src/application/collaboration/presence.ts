@@ -10,12 +10,16 @@ export interface PresentPerson {
   readonly field?: string;
 }
 
-export interface ShownPerson {
+export interface PresencePerson {
   readonly id: string;
   readonly name: string;
   readonly color: string;
   readonly rowId: string;
   readonly field: string;
+}
+
+export interface PresenceView {
+  readonly shown: () => readonly PresencePerson[];
 }
 
 export interface PresencePorts {
@@ -24,9 +28,8 @@ export interface PresencePorts {
   readonly documentColors: () => unknown;
 }
 
-export interface Presence {
+export interface Presence extends PresenceView {
   readonly here: () => readonly PresentPerson[];
-  readonly shown: () => ShownPerson[];
   readonly nameOf: (person: PresentPerson | null | undefined) => string;
   readonly colorOf: (person: PresentPerson | null | undefined) => string;
   readonly personColor: (seed: unknown) => string;
@@ -93,7 +96,7 @@ export function createPresence(ports: PresencePorts): Presence {
 
   return Object.freeze({
     here: function (): readonly PresentPerson[] { return here; },
-    shown: function (): ShownPerson[] {
+    shown: function (): readonly PresencePerson[] {
       return here.slice(0, PRESENCE_MAX_SHOWN).map(function (person) {
         return {
           id: String((person && person.id) || seedOf(person)),
