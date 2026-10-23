@@ -3,7 +3,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { makeId, migrateRows } from "../js/02-state.js";
-import { __init as initBroll, anchorBrollInRows, brollEntries, derivedRecordsPlan, newBrollRecord } from "../js/08c-broll.js";
+import { __init as initBroll, brollEntries, derivedRecordsPlan } from "../js/08c-broll.js";
+import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
+import { cellOf } from "../legacy/richtext.ts";
+import { inertBody } from "../legacy/richtext.ts";
+import { sanitizeHtml } from "../legacy/richtext.ts";
+import { newBrollRecord } from "../application/commands/production-actions.ts";
+import { runDocumentEdit } from "../legacy/session-bridge.ts";
+import { randomIds } from "../adapters/identity/ids.ts";
 import { WHOLE_DOCUMENT } from "../application/session/change-set.ts";
 import { __init as initHistory } from "../js/03a-history-store.js";
 import { freezeClockAndRandom } from "./golden-helpers.mjs";
@@ -30,7 +38,7 @@ test("entry creates a record for each b-roll line, one draw per line in line ord
   load([row("r1", "Kettle on.", "B-roll: Steam<br>B-roll: Hands")]);
   assert.deepEqual(shots(), [["Steam", "bsf3o9g5mo5vwtxke"], ["Hands", "bszjm9vjpo5vwtxke"]]);
   assert.deepEqual(brollEntries().map((e) => e.id), ["bsf3o9g5mo5vwtxke", "bszjm9vjpo5vwtxke"]);
-  anchorBrollInRows(S.state);
+  anchorBrollInRows(S.state, undefined, { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml });
   assert.deepEqual(shots(), [["Steam", "bsf3o9g5mo5vwtxke"], ["Hands", "bszjm9vjpo5vwtxke"]]);
   assert.equal(S.state.rows[0].visualText,
     key("bsf3o9g5mo5vwtxke", "B-roll:") + " Steam<br>" + key("bszjm9vjpo5vwtxke", "B-roll:") + " Hands");
@@ -68,12 +76,12 @@ test("a read of lines typed after entry draws ids it does not keep and writes no
 test("newBrollRecord draws its own bs id whether or not the caller supplies one, so the capture and paste paths advance the sequence by one", () => {
   freezeClockAndRandom(SEED);
   load([row("r1", "Kettle on.", "")]);
-  const minted = newBrollRecord({});
+  const minted = newBrollRecord({}, { run: runDocumentEdit, ids: randomIds });
   assert.equal(minted.id, "bsf3o9g5mo5vwtxke");
   assert.equal(makeId("probe"), "probezjm9vjpo5vwtxke");
   freezeClockAndRandom(SEED);
   load([row("r1", "Kettle on.", "")]);
-  const supplied = newBrollRecord({ id: "bspasted01" });
+  const supplied = newBrollRecord({ id: "bspasted01" }, { run: runDocumentEdit, ids: randomIds });
   assert.equal(supplied.id, "bspasted01");
   assert.deepEqual(shots(), [["", "bspasted01"]]);
   assert.equal(makeId("probe"), "probezjm9vjpo5vwtxke");
