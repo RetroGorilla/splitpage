@@ -1,10 +1,12 @@
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
+import { deliverBytes } from "../../adapters/files/deliver.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { EditorSelectionPort } from "../../application/editing/selection.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { ExportRegistry } from "../../application/export/registry.ts";
+import type { FileDelivery } from "../../application/files/file-delivery.ts";
 import type { RecentFiles } from "../../application/files/recent-files.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
@@ -198,6 +200,15 @@ const recents: RecentFiles = {
   routeOpen: (request) => desktopPort()?.routeOpen(request)
 };
 
+const fileDelivery: FileDelivery = {
+  async deliver(filename, data, opts) {
+    const delivered = await deliverBytes(filename, data);
+    if (delivered === "saved") showToast((opts && opts.savedMsg) || ("Saved " + filename), "ok");
+    else if (delivered === "failed") showToast("Could not save the file. Please try again.", "error");
+    return delivered === "saved";
+  }
+};
+
 const transitions: Transitions<DocumentDestination> = {
   open: (opening) => documentTransitions().open(opening),
   startNew: (arrival) => documentTransitions().startNew(arrival),
@@ -225,6 +236,7 @@ const shared = {
   ownership,
   pictures,
   recents,
+  fileDelivery,
   undo: undoControl,
   transitions
 };
