@@ -1,9 +1,63 @@
 import type { ActionRegistry, ActionSource } from "../../src/application/actions.ts";
 import type { PreferenceChanges, PreferenceNotice, Preferences } from "../../src/application/preferences/preferences.ts";
+import type { SaveChange, SaveState } from "../../src/application/save/save-state.ts";
 import type { Blocker, ScreenState } from "../../src/application/screen.ts";
 import type { ReviewFacts } from "../../src/application/collaboration/review.ts";
 import type { DocumentView, SessionListener } from "../../src/application/session/document-session.ts";
 import type { DocumentReader } from "../../src/application/session/document-reader.ts";
+import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
+import type { ViewFlags } from "../../src/application/preferences/view-flags.ts";
+import type { SidePanels } from "../../src/application/side-panels.ts";
+
+export function fakeNotices() {
+  const shown: { message: string; kind: NoticeKind | undefined; label?: string; action?: () => void; sticky: boolean | undefined; notice: ReturnType<typeof notice> }[] = [];
+  function notice() {
+    let connected = true;
+    const clicks = new Set<() => void>();
+    return {
+      get isConnected() { return connected; },
+      dismiss: () => { connected = false; },
+      addEventListener: (_type: "click", listener: () => void) => { clicks.add(listener); },
+      removeEventListener: (_type: "click", listener: () => void) => { clicks.delete(listener); },
+      click: () => { for (const listener of [...clicks]) listener(); },
+      listenerCount: () => clicks.size
+    };
+  }
+  const notices: NoticePort = {
+    show: (message, kind, sticky) => {
+      const item = notice();
+      shown.push({ message, kind, sticky, notice: item });
+      return item;
+    },
+    showAction: (message, kind, label, action, sticky) => {
+      const item = notice();
+      shown.push({ message, kind, label, action, sticky, notice: item });
+      return item;
+    }
+  };
+  return { notices, shown };
+}
+
+export function fakeTourPreferences() {
+  let finished = 0;
+  const preferences: Pick<Preferences, "tourFinished"> = { tourFinished: () => { finished++; } };
+  return { preferences, finished: () => finished };
+}
+
+export function fakeTourFlags() {
+  let open = false;
+  const viewFlags: Pick<ViewFlags, "setTourOpen" | "tourOpen"> = {
+    setTourOpen: (value) => { open = value; },
+    tourOpen: () => open
+  };
+  return viewFlags;
+}
+
+export function fakeSidePanels() {
+  let closed = 0;
+  const sidePanels: Pick<SidePanels, "closeAll"> = { closeAll: () => { closed++; } };
+  return { sidePanels, closed: () => closed };
+}
 
 export function fakeScreen(initial: Partial<ScreenState> = {}) {
   const state: Record<Blocker, boolean> = {
@@ -119,5 +173,26 @@ export function fakeReview(initial = false) {
     review,
     setReviewing: (on: boolean): void => { reviewing = on; },
     refusals: (): number => refusals
+  };
+}
+
+export function fakeSaveState(initial: { unsaved?: boolean; busy?: boolean } = {}) {
+  const listeners = new Set<(change: SaveChange) => void>();
+  const asked: ("dueNow" | "resume")[] = [];
+  const state = { unsaved: !!initial.unsaved, busy: !!initial.busy };
+  const saves: SaveState = {
+    unsaved: () => state.unsaved,
+    busy: () => state.busy,
+    onChange: (listener) => {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+    dueNow: () => { asked.push("dueNow"); },
+    resume: () => { asked.push("resume"); }
+  };
+  return {
+    saves, state, asked,
+    listenerCount: (): number => listeners.size,
+    emit: (change: SaveChange): void => { for (const listener of [...listeners]) listener(change); }
   };
 }

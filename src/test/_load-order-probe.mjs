@@ -53,6 +53,7 @@ const exports = await import("../legacy/export-formats.ts");
 const exportServices = await import("../application/export/services.ts");
 const projectFileServices = await import("../application/formats/project-file-services.ts");
 const shotHiding = await import("../legacy/shot-hiding-bridge.ts");
+const presence = await import("../legacy/presence-bridge.ts");
 const owners = {
   session: session.sessionStarted(),
   saves: saves.savesStarted(),
@@ -68,7 +69,8 @@ const owners = {
   exports: started(() => exports.exportFormats.cards()),
   exportServices: exportServices.exportServicesStarted(),
   projectFileServices: projectFileServices.projectFileServicesStarted(),
-  shotHiding: shotHiding.shotHidingStarted()
+  shotHiding: shotHiding.shotHidingStarted(),
+  presence: presence.presenceStarted()
 };
 process.stdout.write(JSON.stringify({ target, calls, error, owners }) + "\n");
 process.exit(0);
