@@ -7,7 +7,7 @@ import {
 } from "./18b-file-menu.js";
 import { exportActionName, exportActionReason } from "./18c-export-dialog.js";
 import { runExportAction } from "./18-local-files.js";
-import { placeEditorSelection, rememberCellSelection } from "../features/editing/cell-selection.ts";
+import { placeEditorSelection, rememberCellSelection } from "../features/common/cell-selection.ts";
 import { editorSelection } from "../legacy/editor-bridge.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";

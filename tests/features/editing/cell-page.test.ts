@@ -7,7 +7,7 @@ Object.assign(globalThis, { window: win, document: win.document, NodeFilter: win
 const doc: Document = win.document;
 
 const { createCellPage, isDraftBox, isScriptCell } = await import("../../../src/features/editing/cell-page.ts");
-const { caretTextOffset, placeCaretAtTextOffset } = await import("../../../src/features/editing/caret.ts");
+const { caretTextOffset, placeCaretAtTextOffset } = await import("../../../src/features/common/caret.ts");
 
 function page() {
   doc.body.innerHTML =

@@ -7,6 +7,7 @@ import type { DocumentReader } from "../../src/application/session/document-read
 import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
 import type { ViewFlags } from "../../src/application/preferences/view-flags.ts";
 import type { SidePanels } from "../../src/application/side-panels.ts";
+import type { TextServices } from "../../src/application/text/services.ts";
 
 export function fakeNotices() {
   const shown: { message: string; kind: NoticeKind | undefined; label?: string; action?: () => void; sticky: boolean | undefined; notice: ReturnType<typeof notice> }[] = [];
@@ -56,6 +57,34 @@ export function fakeSidePanels() {
   let closed = 0;
   const sidePanels: Pick<SidePanels, "closeAll"> = { closeAll: () => { closed++; } };
   return { sidePanels, closed: () => closed };
+}
+
+export function fakeTextServices(document: Document) {
+  const calls: { method: string; html: unknown }[] = [];
+  const inertBody = (html: unknown): HTMLElement => {
+    const body = document.createElement("div");
+    body.innerHTML = String(html ?? "");
+    return body;
+  };
+  const text: Pick<TextServices<HTMLElement>, "fromHtml" | "inertBody" | "sanitizeHtml" | "storedHtmlFromDom"> = {
+    fromHtml: (html) => {
+      calls.push({ method: "fromHtml", html });
+      return [{ text: inertBody(html).textContent ?? "", marks: {} }];
+    },
+    inertBody: (html) => {
+      calls.push({ method: "inertBody", html });
+      return inertBody(html);
+    },
+    sanitizeHtml: (html) => {
+      calls.push({ method: "sanitizeHtml", html });
+      return String(html ?? "");
+    },
+    storedHtmlFromDom: (html) => {
+      calls.push({ method: "storedHtmlFromDom", html });
+      return html;
+    }
+  };
+  return { text, calls };
 }
 
 export function fakeScreen(initial: Partial<ScreenState> = {}) {
