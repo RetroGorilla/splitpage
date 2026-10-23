@@ -12,7 +12,7 @@ import "./_merge-started.mjs";
 import { createMemoryBackend, dataUrlForSync, intern, internDataUrl, setBackend } from "../adapters/storage/02c-blobs.js";
 import { conflictStash, startRecovery } from "../legacy/recovery-bridge.ts";
 import { DRAFT_LIMITS } from "../adapters/storage/draft-store-idb.ts";
-import { changedBetween } from "../js/12a-undo.js";
+import { changedBetween } from "../application/editing/undo/history.ts";
 import { personIdRemap } from "../core/merge/lists.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { loadTestDocument } from "./_document.mjs";

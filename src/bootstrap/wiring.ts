@@ -1,9 +1,9 @@
 import { wireProductionIndex } from "./wiring/production-index.ts";
 export { mountReadTimeFeature } from "./wiring/read-time.ts";
 export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
-export { mountRundownFeature, mountRundownPresenceFeature } from "./wiring/rundown.ts";
+export { mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature } from "./wiring/rundown.ts";
 export { mountHelpFeature } from "./wiring/help.ts";
-export { mountGalleryFeature } from "./wiring/gallery.ts";
+export { mountGalleryFeature, mountGalleryOverlayFeature } from "./wiring/gallery.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
 import { registerBuiltInExporters } from "./wiring/exporters.ts";
 import { wireProductionEditing } from "./wiring/production-editing.ts";
