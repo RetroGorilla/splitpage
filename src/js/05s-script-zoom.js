@@ -61,7 +61,10 @@ function step() {
 
 function storeScale() {
   storing = true;
-  try { preferences().setScriptScale(scale); }
+  try {
+    if (Math.abs(scale - 1) < 0.005) preferences().clearScriptScale();
+    else preferences().setScriptScale(scale);
+  }
   finally { storing = false; }
 }
 
