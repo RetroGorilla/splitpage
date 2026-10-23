@@ -28,4 +28,5 @@ test("bootstrap preserves the complete action registration order when export def
     stop();
     wired.dispose();
   }
+  assert.deepEqual(registry.list(), []);
 });

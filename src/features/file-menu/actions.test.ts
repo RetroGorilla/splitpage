@@ -23,7 +23,7 @@ test("export actions follow the mounted controls, keep their keys and close the 
     closeMenu: () => { calls.push("close"); }
   }));
   assert.deepEqual(registry.list().map((action) => ({ id: action.id, group: action.group })), [
-    { id: "export", group: "File" },
+    { id: "export", group: "Export" },
     { id: "export-again", group: "Export" }
   ]);
   assert.equal(registry.view("export")?.enabled, false);
