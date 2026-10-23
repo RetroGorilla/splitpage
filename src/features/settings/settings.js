@@ -1,3 +1,4 @@
+import { getSavedAuthorName } from "../../application/comment-author.js";
 import { SCRIPT_SCALE_MAX, SCRIPT_SCALE_MIN, WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../../application/preferences/preferences.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { cleanAuthorName } from "../../core/document/people.ts";
@@ -95,7 +96,7 @@ function bodyHtml() {
   var clock = ports.preferences.clock();
   var scale = ports.preferences.scriptScale();
   var wsize = currentWriterSize();
-  var name = ports.identity.name();
+  var name = getSavedAuthorName(ports.preferences);
   return section("Appearance",
       segHtml("theme", "Theme", [["system", "System"], ["light", "Light"], ["dark", "Dark"]], ports.preferences.theme()) +
       segHtml("clock", "Clock", [["system", "System"], ["12", "12-hour"], ["24", "24-hour"]], clock) +
@@ -271,7 +272,7 @@ function applyChange(target) {
   }
   if (id === "settings-name") {
     var v = cleanAuthorName(target.value);
-    if (!v || v === ports.identity.name()) { target.value = ports.identity.name(); return; }
+    if (!v || v === getSavedAuthorName(ports.preferences)) { target.value = getSavedAuthorName(ports.preferences); return; }
     ports.preferences.setCommentAuthor(v);
   }
   if (id === "settings-collab-server") {

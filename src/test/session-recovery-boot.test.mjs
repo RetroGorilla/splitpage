@@ -19,7 +19,7 @@ await bootApp(undefined, { beforeStart: () => session.subscribe((c) => heard.pus
 after(closeApp);
 
 test("E4: boot recovery of unsaved work enters the session as a recovery with an epoch of its own, no generation and no undo entry", async () => {
-  const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
+  const { flushEdits, undoSizes } = await import("../legacy/undo-bridge.ts");
   assert.equal(currentDocument().rows[0].audioText, "Recovered from the last session.");
   assert.deepEqual(heard, ["recovery:1:0"]);
   assert.equal(session.read((doc) => doc), currentDocument());

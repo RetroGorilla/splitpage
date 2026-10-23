@@ -1,3 +1,4 @@
+import { editableCellHtml } from "../features/common/editable-cell.js";
 import { formatDuration, pad2 } from "../core/production/timing.ts";
 import { totalSeconds } from "./01-scene-status.js";
 import { renderRowGroups } from "../legacy/hide-shot-bridge.ts";
@@ -7,13 +8,12 @@ import { ensureTrailingCaretSpot, sanitizeHtml, storedHtmlFromDom } from "./04-r
 import { cssAttr } from "../features/common/dom.ts";
 import {
   cellFormatState,
-  editableCellHtml,
   toggleCellDirection,
   toggleCellFormat
 } from "./05-render.js";
 import { splitRowFieldCore } from "./06-rows.js";
 import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
-import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "./12a-undo.js";
+import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "../legacy/undo-bridge.ts";
 import { bothScenesHaveVisual, joinScenesCommand } from "../application/commands/split-join.ts";
 import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../application/preferences/preferences.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
