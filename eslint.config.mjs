@@ -54,6 +54,14 @@ export default [
   },
 
   {
+    files: ["src/features/broll/records.js"],
+    languageOptions: {
+      sourceType: "module",
+      globals: globals.browser
+    }
+  },
+
+  {
     files: ["src/test/**/*.mjs"],
     languageOptions: {
       sourceType: "module",

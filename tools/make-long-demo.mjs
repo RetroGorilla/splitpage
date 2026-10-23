@@ -9,7 +9,7 @@ import { rowSeconds } from "../src/core/production/timing.ts";
 import { productionReaders } from "../src/legacy/document-ports.ts";
 import { migrateRows } from "../src/js/02-state.js";
 import { __init as initTags } from "../src/js/07-production-tags.js";
-import { brollEntries } from "../src/js/08c-broll.js";
+import { brollEntries } from "../src/bootstrap/wiring/broll.ts";
 
 initSceneStatus();
 initTags();

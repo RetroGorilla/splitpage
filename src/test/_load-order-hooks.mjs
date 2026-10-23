@@ -30,6 +30,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/read-time.ts": { functions: ["mountReadTimeFeature"] },
   "src/bootstrap/wiring/rundown.ts": { functions: ["mountRundownFeature", "mountRundownPresenceFeature"] },
   "src/bootstrap/wiring/help.ts": { functions: ["mountHelpFeature"] },
+  "src/bootstrap/wiring/broll.ts": { functions: ["mountBrollRecordsFeature"] },
   "src/bootstrap/wiring/gallery.ts": { functions: ["mountGalleryFeature"] },
   "src/application/export/services.ts": { functions: ["installExportServices"] },
   "src/bootstrap/wiring/exporters.ts": { functions: ["registerBuiltInExporters"] },

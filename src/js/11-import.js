@@ -3,7 +3,7 @@ import { MD_EXPORT_TAIL_RE, columnIndicesFromHeader, markdownExportScript, parse
 import { stampRow } from "./03-sync.js";
 import { sanitizeHtml } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
-import { declineBrollAnchoring } from "./08c-broll.js";
+import { declineBrollAnchoring } from "../bootstrap/wiring/broll.ts";
 import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf, inertBody } from "../legacy/richtext.ts";

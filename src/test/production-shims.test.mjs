@@ -16,7 +16,7 @@ import { randomIds } from "../adapters/identity/ids.ts";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { deriveProductionIndex } from "../core/production/tags.ts";
-import { __init as initBroll, brollEntries, updateBrollBadge } from "../js/08c-broll.js";
+import { mountBrollRecordsFeature as initBroll, brollEntries, updateBrollBadge } from "../bootstrap/wiring/broll.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { planBrollRecords } from "../core/production/broll.ts";
 import { seededHealRounds } from "./_heal-rounds.mjs";
