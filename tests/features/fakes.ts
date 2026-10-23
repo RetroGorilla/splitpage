@@ -4,6 +4,9 @@ import type { Blocker, ScreenState } from "../../src/application/screen.ts";
 import type { DocumentDestination } from "../../src/application/transitions/ports.ts";
 import type { Arrived, Incoming, Transitions } from "../../src/application/transitions/transitions.ts";
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
+import type { ReviewFacts } from "../../src/application/collaboration/review.ts";
+import type { DocumentView, SessionListener } from "../../src/application/session/document-session.ts";
+import type { DocumentReader } from "../../src/application/session/document-reader.ts";
 
 export function fakeScreen(initial: Partial<ScreenState> = {}) {
   const state: Record<Blocker, boolean> = {
@@ -92,4 +95,58 @@ export function fakeTransitions(arriving: (from: Incoming) => ValidatedDocument)
     copyId: () => "d" + "0".repeat(32)
   };
   return { transitions, calls };
+}
+
+function listenerSet<L>() {
+  const listeners = new Set<L>();
+  return {
+    listeners,
+    add: (listener: L): (() => void) => {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    }
+  };
+}
+
+export function fakeDocument(initial: DocumentView | null = null) {
+  let held = initial;
+  const changes = listenerSet<SessionListener>();
+  const replaced = listenerSet<() => void>();
+  const refreshes = listenerSet<(jobs: ReadonlySet<string>) => void>();
+  const document: DocumentReader = {
+    current: () => held,
+    read: (select) => select(held),
+    onChange: changes.add,
+    onReplaced: replaced.add,
+    onRefresh: refreshes.add
+  };
+  return {
+    document,
+    replace: (doc: DocumentView | null): void => {
+      held = doc;
+      for (const listener of [...replaced.listeners]) listener();
+    },
+    refresh: (jobs: readonly string[]): void => {
+      for (const listener of [...refreshes.listeners]) listener(new Set(jobs));
+    },
+    listenerCount: (): number => changes.listeners.size + replaced.listeners.size + refreshes.listeners.size
+  };
+}
+
+export function fakeReview(initial = false) {
+  let reviewing = initial;
+  let refusals = 0;
+  const review: ReviewFacts = {
+    reviewing: () => reviewing,
+    refuseInReview: () => {
+      if (!reviewing) return false;
+      refusals++;
+      return true;
+    }
+  };
+  return {
+    review,
+    setReviewing: (on: boolean): void => { reviewing = on; },
+    refusals: (): number => refusals
+  };
 }

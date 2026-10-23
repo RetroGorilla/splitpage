@@ -1,7 +1,7 @@
 import { ensureBytes } from "../adapters/storage/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import { stampRow } from "./03-sync.js";
-import { cssAttr } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import { isScriptCell } from "../features/editing/cell-page.ts";
 import {
   SCENES_MIME, buildScenePayload, parseScenePayload, scenePaste, scenesOnClipboard, setLiveCut
@@ -16,7 +16,7 @@ import { randomHexBytes } from "../adapters/identity/ids.ts";
 import { addHeldCommentsCommand, pasteScenesCommand, removeScenesCommand } from "../application/commands/scenes.ts";
 import { cappedLongText } from "../core/document/text-policy.ts";
 import { REVIEW_ONLY, currentDocument, runCommand } from "../legacy/session-bridge.ts";
-import { VIEWING_ONLY } from "../legacy/review-wording.ts";
+import { VIEWING_ONLY } from "../application/collaboration/review.ts";
 import { cellEditing, rowDrag } from "../legacy/editor-bridge.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
