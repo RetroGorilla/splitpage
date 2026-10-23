@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { STATE_FIELDS, migrateRows, missingStateFields } from "../js/02-state.js";
 import { cellOf } from "../legacy/richtext.ts";
 import { collectTagsFromRows } from "../js/07-production-tags.js";
-import { brollInCell } from "../js/08c-broll.js";
+import { brollInCell } from "../core/production/broll.ts";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
 import { STARTERS, starterById } from "../js/_starters.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";

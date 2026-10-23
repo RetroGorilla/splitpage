@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { __init as initBroll } from "../js/08c-broll.js";
+import "./_broll-mounted.mjs";
 import { __init as initBrollPanel } from "../js/08d-broll-panel.js";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import { PRINT_COLORS, exportDateText } from "../adapters/formats/export-kit.ts";
@@ -17,7 +17,6 @@ import { LONG_DEMO } from "../js/_starters.js";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
-initBroll();
 
 const PW = 612, M = 54;
 const copy = (o) => JSON.parse(JSON.stringify(o));
