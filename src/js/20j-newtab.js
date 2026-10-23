@@ -5,15 +5,14 @@ import { currentHome } from "../legacy/location-bridge.ts";
 import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
-import { updateIdentityChip } from "./03-sync.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { openGdocModal, openImportModal } from "./11-import.js";
 import { clearDirty, updateSaveStatus } from "./12-dirty-toast.js";
 import { arrivingOnLink } from "./13-hosted.js";
-import { openLocalFile, openProjectFile, updateFileChip } from "./18-local-files.js";
+import { openLocalFile, openProjectFile } from "./18-local-files.js";
 import { desktopAppUrl, desktopAppOffered } from "./20a-update.js";
 import { seedCheckPasses } from "../legacy/seed-check.ts";
-import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
+import { makeDesktopHandle } from "./20f-desktop.js";
 import { STARTERS, starterById } from "./_starters.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
@@ -83,11 +82,8 @@ function adoptNewDocument(next, reason) {
   resetProductionPanelState();
   documentTransitions().startNew({ from: { document: next }, reason: reason, destination: leaves ? NO_DESTINATION : undefined });
   clearDirty();
-  updateFileChip();
-  updateIdentityChip();
   updateSaveStatus();
   if (typeof syncDocIdentity === "function") syncDocIdentity();
-  if (runningOnDesktop() && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
   closeNewTabPage();
 }
 

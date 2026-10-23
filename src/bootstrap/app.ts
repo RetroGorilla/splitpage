@@ -62,6 +62,7 @@ import {
 import { mountOverlayFeature, stopOverlayFeature } from "./wiring/overlay.ts";
 import { openInitialDocument, startupPorts } from "./wiring/startup.ts";
 import { mountScreenFeature, stopScreenFeature } from "./wiring/screen.ts";
+import { mountDocumentChromeFeature, stopDocumentChromeFeature } from "./wiring/document-chrome.ts";
 
 let running: (() => void) | null = null;
 
@@ -102,6 +103,7 @@ export function startApp(wiring: Wiring): () => void {
     stops.push(startup.dispose);
     run([mountCellEditingFeature, stopCellEditingFeature]);
     run([mountScreenFeature, stopScreenFeature]);
+    run([mountDocumentChromeFeature, stopDocumentChromeFeature]);
     if (!appearance) run([mountAppearanceFeature, stopAppearance]);
     run(view("mountTopbar", mountTopbarFeature));
     run(view("mountCellReach", mountCellReachFeature));
