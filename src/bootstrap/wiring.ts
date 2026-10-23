@@ -7,8 +7,8 @@ export { mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature } 
 export { mountHelpFeature } from "./wiring/help.ts";
 export { mountFindFeature } from "./wiring/find.ts";
 export { mountSettingsFeature } from "./wiring/settings.ts";
-export { mountGalleryFeature, mountGalleryOverlayFeature } from "./wiring/gallery.ts";
 export { mountCopyPasteFeature } from "./wiring/clipboard.ts";
+export { mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature } from "./wiring/gallery.ts";
 export { mountSceneStatusFeature } from "./wiring/scene-status.ts";
 export { mountHideShotFeature } from "./wiring/hide-shot.ts";
 export { mountFileMenuExportFeature } from "./wiring/file-menu-export.ts";
