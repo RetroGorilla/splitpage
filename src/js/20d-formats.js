@@ -9,7 +9,8 @@ import {
   reassignDocId,
   standaloneHtmlFor
 } from "./02b-doc-id.js";
-import { setBaseState, stashLocalWork } from "./03-sync.js";
+import { setBaseState } from "./03-sync.js";
+import { stashLocalWork } from "../legacy/recovery-bridge.ts";
 import { tagFieldOccurrences } from "./07-production-tags.js";
 import { captureExportDocument, exportDocumentOf } from "./14b-export-kit.js";
 import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
