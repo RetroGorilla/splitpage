@@ -58,13 +58,14 @@ import { __init as init_20j_newtab } from "./20j-newtab.js";
 import { __init as init_20s_settings } from "./20s-settings.js";
 import { migrateRows } from "./02-state.js";
 import { documentIdentityPort } from "./02b-doc-id.js";
-import { documentDestinationPort, getEditorName, stampRow } from "./03-sync.js";
+import { applyMerge, documentDestinationPort, documentHistoryPort, getEditorName, stampRow } from "./03-sync.js";
 import { bulkTagCell, runIdleRefresh } from "./07-production-tags.js";
 import { derivedRecordsPlan } from "./08c-broll.js";
 import { legacySessionEffects } from "./12-dirty-toast.js";
 import { legacyFileDestination, legacySavePorts } from "./14-export.js";
-import { serverSaveDestination } from "./13-hosted.js";
-import { importSaveDestination } from "./18-local-files.js";
+import { importDocumentSource } from "./11-import.js";
+import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
+import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { wireApp } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
@@ -80,8 +81,9 @@ try {
     bulkTags: { cell: bulkTagCell, stamp: stampRow },
     saves: legacySavePorts,
     destinations: function () { return [legacyFileDestination(), importSaveDestination(), serverSaveDestination()]; },
-    transitions: { destination: documentDestinationPort, identity: documentIdentityPort },
-    recovery: draftRecoveryPorts,
+    transitions: { destination: documentDestinationPort, identity: documentIdentityPort, history: documentHistoryPort },
+    sources: function () { return [projectFileSource(), importDocumentSource(), serverDocumentSource()]; },
+    recovery: function () { return Object.assign(draftRecoveryPorts(), { merge: applyMerge }); },
     keyTarget: window
   });
 } catch (error) {
