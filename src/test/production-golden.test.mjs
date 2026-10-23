@@ -14,7 +14,12 @@ import { bulkTagRows } from "../application/commands/bulk-tags.ts";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
-import { BROLL_PROPS_MAX, BROLL_STATUSES, __init as initBroll, brollEntries, derivedRecordsPlan, brollInCell, brollPropKey, brollShotsByProp, brollStatus } from "../js/08c-broll.js";
+import { BROLL_PROPS_MAX, brollPropKey } from "../core/document/broll.ts";
+import { brollInCell } from "../core/production/broll.ts";
+import { BROLL_STATUSES, brollStatus } from "../features/broll/records.ts";
+import { derivedRecordsPlan } from "../bootstrap/wiring/broll.ts";
+import { brollEntries } from "../legacy/broll-bridge.ts";
+import { broll } from "./_broll-mounted.mjs";
 import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { __init as initHistory } from "../js/03a-history-store.js";
@@ -37,7 +42,6 @@ startSaves({
   ownership: { capture: () => { throw new Error("no save runs here"); }, stillOwns: () => false },
   autosave: { enabledAtStart: () => false, changed: () => {} }
 }, { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });
-initBroll();
 initHistory();
 
 const MINTED_SHOT = /\bbs[0-9a-z]{6,}\b/g;
@@ -106,7 +110,7 @@ function readAll() {
     entries: entriesView(productionIndex().entries(currentDocument())),
     byCategory: categoriesView(groupTagsByCategory(productionIndex().entries(currentDocument()))),
     brollRead: brollView(brollEntries()),
-    shotsByProp: jsonCopy(brollShotsByProp())
+    shotsByProp: jsonCopy(broll.brollShotsByProp())
   };
   out.readsWroteNothing = JSON.stringify(currentDocument()) === before;
   return out;

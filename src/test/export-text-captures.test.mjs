@@ -8,7 +8,7 @@ import { preferences } from "../legacy/preferences-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { blobStore, intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { __init as initBroll } from "../js/08c-broll.js";
+import "./_broll-mounted.mjs";
 import { exportAssetsNow } from "../adapters/formats/export-assets.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { htmlToPlainScript, toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
@@ -16,7 +16,6 @@ import { LONG_DEMO } from "../js/_starters.js";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
-initBroll();
 
 const jpegBytes = (w, h, salt) => new Uint8Array([0xFF, 0xD8, 0xFF, 0xC0, 0, 17, 8, h >> 8, h & 255, w >> 8, w & 255, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1, salt || 0, 0xFF, 0xD9]);
 const copy = (o) => JSON.parse(JSON.stringify(o));
