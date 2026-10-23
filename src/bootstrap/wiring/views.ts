@@ -78,7 +78,7 @@ import {
   openServerDoc,
   toggleDriveNewFolder
 } from "../../js/13-hosted.js";
-import { saveDoc } from "../../js/14-export.js";
+import { saveDoc } from "../../legacy/save-bridge.ts";
 import {
   buildFileData,
   closeFileConflict,

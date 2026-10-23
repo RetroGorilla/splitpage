@@ -19,9 +19,8 @@ const { openProductionPanel, closeProductionPanel, renderProduction, setTagNotes
 const { anchorBrollInLeftCell, brollEntries, runBrollRefresh, updateBrollBadge } = await import("../js/08c-broll.js");
 const { openBrollPanel, closeBrollPanel, renderBroll } = await import("../js/08d-broll-panel.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits, undo } = await import("../js/12a-undo.js");
-const { saveDoc, setAutoSaveEnabled } = await import("../js/14-export.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");

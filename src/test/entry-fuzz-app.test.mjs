@@ -6,7 +6,7 @@ import {
   TABLE_304, chance, judge, pick, rawObject, seeded, table304Document, text, upTo
 } from "../../tests/application/raw-inputs.ts";
 import { cloneState } from "../core/document/clone.ts";
-import { confirmSavedNow, unsavedChanges } from "../legacy/save-bridge.ts";
+import { confirmSavedNow, saveToServer, unsavedChanges } from "../legacy/save-bridge.ts";
 import { serverStatus } from "../legacy/location-bridge.ts";
 
 await bootApp();
@@ -17,7 +17,7 @@ const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { applyMerge } = await import("../js/03-sync.js");
 const { mergeUndo } = await import("../legacy/editor-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const { finishServerDetect, openServerDoc, saveToServer } = await import("../js/13-hosted.js");
+const { finishServerDetect, openServerDoc } = await import("../js/13-hosted.js");
 const { SERVER_RESUME_KEY } = await import("../application/location/server-status.ts");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
