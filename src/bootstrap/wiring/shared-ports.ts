@@ -1,6 +1,7 @@
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
+import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
@@ -9,7 +10,7 @@ import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
 import { reviewBlocked, reviewMode } from "../../legacy/location-bridge.ts";
 import { htmlToPlainText } from "../../legacy/plain-text.ts";
-import { PREF_EVENT, preferences } from "../../legacy/preferences-bridge.ts";
+import { PREF_EVENT, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
 import { currentDocument, onDocumentReplaced, onRefresh, onSessionChange, readSession } from "../../legacy/session-bridge.ts";
@@ -51,6 +52,11 @@ const documentReader: DocumentReader = {
 
 const review: ReviewFacts = { reviewing: reviewMode, refuseInReview: reviewBlocked };
 
+const flags: Pick<ViewFlags, "findOpen" | "setFindOpen"> = {
+  findOpen: () => viewFlags().findOpen(),
+  setFindOpen: (open) => viewFlags().setFindOpen(open)
+};
+
 const text: TextServices<HTMLElement> = {
   cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal
 };
@@ -61,6 +67,7 @@ const shared = {
   screen: (): ScreenState => screenNow(),
   document: documentReader,
   review,
+  flags,
   text
 };
 
