@@ -1,4 +1,5 @@
 import type { ActionRegistry } from "../../application/actions.ts";
+import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
@@ -8,6 +9,7 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { TextServices } from "../../application/text/services.ts";
 import { blobImgHtml, bytesForSync, dataUrlForSync, ensureBytes, intern, internDataUrl, isDurableSync, persist, queuePersist, recordFor, urlForSync } from "../../adapters/storage/02c-blobs.js";
 import { appActions } from "../../legacy/app-actions.ts";
+import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
 import { reviewBlocked, reviewMode } from "../../legacy/location-bridge.ts";
@@ -75,7 +77,14 @@ const pictures: PictureStore = {
   imgHtml: blobImgHtml
 };
 
+const effects: EffectPorts<Element> = {
+  notices: { show: showToast, showAction: showActionToast },
+  menuItems: { setLabel: setMenuItemLabel, setReason: setMenuItemReason },
+  clipboard: { copyText: copyShareText }
+};
+
 const shared = {
+  ...effects,
   actions,
   changes,
   screen: (): ScreenState => screenNow(),
