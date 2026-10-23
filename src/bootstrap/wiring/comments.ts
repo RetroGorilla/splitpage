@@ -22,7 +22,6 @@ import {
   captureReplyDrafts,
   captureCommentComposer,
   closeCommentComposer,
-  closeCommentsPanel,
   jumpToAnchor,
   limitAuthorNameField,
   postComment,
@@ -38,6 +37,7 @@ import {
   toggleResolve
 } from "../../js/10-comments.js";
 import { showToast } from "../../legacy/effects-bridge.ts";
+import { sidePanels } from "../../legacy/panels-bridge.ts";
 import {
   onRootClick,
   onRootFocusOut,
@@ -79,7 +79,7 @@ export function mountCommentsFeature(): ReturnType<typeof mountComments> {
       menu: toggleCommentMenu,
       jump: jumpToAnchor,
       openPanel: function () { runFromButton("panel-comments"); },
-      closePanel: closeCommentsPanel,
+      closePanel: () => { sidePanels().close("comments-panel"); },
       assigneeFilter: setCommentAssigneeFilter,
       assignee: setCommentAssignee,
       sortMode: function () { return commentSortMode(); },

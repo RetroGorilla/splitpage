@@ -2,7 +2,8 @@ import "../src/test/_dom.mjs";
 import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { S } from "../src/js/_state.js";
+import { currentDocument } from "../src/legacy/session-bridge.ts";
+import { loadTestDocument } from "../src/test/_document.mjs";
 import { __init as initSceneStatus } from "../src/js/01-scene-status.js";
 import { rowSeconds } from "../src/core/production/timing.ts";
 import { productionReaders } from "../src/legacy/document-ports.ts";
@@ -238,7 +239,7 @@ const comments = COMMENTS.map((c) => {
   };
 });
 
-S.state = migrateRows({
+loadTestDocument(migrateRows({
   schema: 2,
   title: TITLE,
   rows,
@@ -247,17 +248,17 @@ S.state = migrateRows({
   productionTags,
   brollShots: [],
   wordsPerMinute: 150
-});
+}));
 
 brollEntries(false);
-S.state.brollShots.forEach((r) => { if (shotBroll.includes(r.id)) r.status = "shot"; });
-const flagged = S.state.brollShots.find((r) => r.id === "bs_ld_02");
+currentDocument().brollShots.forEach((r) => { if (shotBroll.includes(r.id)) r.status = "shot"; });
+const flagged = currentDocument().brollShots.find((r) => r.id === "bs_ld_02");
 if (flagged) { flagged.reshoot = true; flagged.notes = "Soft focus — grab it again on the macro day."; }
 
-const total = S.state.rows.reduce((n, r) => n + rowSeconds(r, S.state, productionReaders), 0);
-S.state.targetSeconds = Math.floor(total / 60) * 60;
+const total = currentDocument().rows.reduce((n, r) => n + rowSeconds(r, currentDocument(), productionReaders), 0);
+currentDocument().targetSeconds = Math.floor(total / 60) * 60;
 
-const doc = migrateRows(JSON.parse(JSON.stringify(S.state)));
+const doc = migrateRows(JSON.parse(JSON.stringify(currentDocument())));
 delete doc.docId;
 
 writeFileSync(join(ROOT, "src", "starters", "long-demo.json"), JSON.stringify(doc, null, 2) + "\n");

@@ -2,6 +2,7 @@ import { pad2 } from "../core/production/timing.ts";
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import "./_export-services-started.mjs";
+import "./_project-file-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -14,13 +15,7 @@ import { breakdownRows } from "../js/08-production-panels.js";
 import { commentBodyText, commentEntries } from "../js/10-comments.js";
 import { mdSceneCellSource, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
 import { LONG_DEMO } from "../js/_starters.js";
-import {
-  applyMarkdownProject,
-  buildMarkdownProject,
-  buildSplitpageFile,
-  fileImagesMissing,
-  parseMarkdownProject
-} from "../js/20d-formats.js";
+import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, fileImagesMissing, parseMarkdownProject } from "../adapters/formats/project-file.ts";
 import { STORED } from "./_stored-cells.mjs";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";

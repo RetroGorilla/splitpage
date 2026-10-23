@@ -11,12 +11,12 @@ const { migrateRows } = await import("../js/02-state.js");
 const { listDocHistory } = await import("../js/03a-history-store.js");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits, redo, undo } = await import("../js/12a-undo.js");
-const { closeImportModal, handleImportFile, openImportModal } = await import("../js/11-import.js");
+const { closeImportModal, openImportModal } = await import("../js/11-import.js");
 const homeModule = await import("../legacy/location-bridge.ts");
-const { openProjectFile } = await import("../js/18-local-files.js");
-const { buildSplitpageFile } = await import("../js/20d-formats.js");
+const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 if (!window.Element.prototype.scrollIntoView) window.Element.prototype.scrollIntoView = function () {};
 
@@ -195,7 +195,7 @@ test("a decoded file waits in the modal without touching the document, then appe
   const before = observed();
   const rowsBefore = rowsJson();
   openImportModal();
-  await handleImportFile(new File(["Visual,Audio\nCrane,Up we go.\nDolly,In we come.\n"], "plan.csv"));
+  await openDocument({ kind: "import", file: new File(["Visual,Audio\nCrane,Up we go.\nDolly,In we come.\n"], "plan.csv") });
   assert.match(el("import-preview").textContent, /plan\.csv — this will create 2 rows/, "the preview names the file");
   assert.equal(rowsJson(), rowsBefore, "decoding left the document alone");
   assert.equal(unsavedChanges(), false, "and marked nothing unsaved");
@@ -245,9 +245,9 @@ test("a later file choice wins over an earlier one that finishes decoding after 
   useDocument(script());
   openImportModal();
   const slow = heldTextFile("slow.csv", "Visual,Audio\nSlow,Slow words.\n");
-  const decodingSlow = handleImportFile(slow.file);
+  const decodingSlow = openDocument({ kind: "import", file: slow.file });
   await slow.reached;
-  await handleImportFile(new File(["Visual,Audio\nQuick,Quick words.\n"], "quick.csv"));
+  await openDocument({ kind: "import", file: new File(["Visual,Audio\nQuick,Quick words.\n"], "quick.csv") });
   slow.release();
   await decodingSlow;
   assert.match(el("import-preview").textContent, /^quick\.csv/, "the modal offers the file chosen last");
@@ -260,10 +260,10 @@ test("a file decoded for a new-document import still fills it after the open doc
   useDocument(script());
   document.querySelector('[data-newtab-action="paste"]').click();
   const late = heldTextFile("late.csv", "Visual,Audio\nLate,Late words.\n");
-  const decoding = handleImportFile(late.file);
+  const decoding = openDocument({ kind: "import", file: late.file });
   await late.reached;
   const other = migrateRows({ schema: 5, title: "Other", docId: "d" + "3".repeat(32), rows: [{ id: "o1", visualText: "", audioText: "Other." }] });
-  await openProjectFile(new File([buildSplitpageFile(exportDocumentOf(other))], "other.splitpage"), null, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: new File([buildSplitpageFile(exportDocumentOf(other))], "other.splitpage"), handle: null, options: { skipSnapshot: true, silent: true } });
   late.release();
   await decoding;
   assert.match(el("import-preview").textContent, /^late\.csv/, "the new-document import belongs to no open document, so it keeps its file");

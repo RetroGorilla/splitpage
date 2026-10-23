@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createActionRegistry } from "../../src/application/actions.ts";
 import type { ActionRegistry, ActionSource } from "../../src/application/actions.ts";
-import { S } from "../../src/js/_state.js";
+import { currentDocument } from "../../src/legacy/session-bridge.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
 import { prompterIsOpen, setPrompterOpen } from "../../src/application/prompter-state.ts";
 import { registerFileActions } from "../../src/legacy/file-actions.ts";
@@ -60,7 +60,7 @@ function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
   const registry = createActionRegistry();
   const disposers = [registerFileActions(registry), registerThisDocumentActions(registry), registerViewActions(registry),
     registerShareActions(registry)];
-  const was = { state: S.state as unknown, prompterOpen: prompterIsOpen() };
+  const was = { state: currentDocument() as unknown, prompterOpen: prompterIsOpen() };
   loadTestDocument({ rows: [] });
   setPrompterOpen(false);
   return {

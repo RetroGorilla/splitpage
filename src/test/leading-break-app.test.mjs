@@ -1,15 +1,18 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { render } = await import("../js/05-render.js");
 const { registryKey } = await import("../core/document/tags.ts");
-const { openProductionPanel, closeProductionPanel } = await import("../js/08-production-panels.js");
-const { closeBrollPage, closeBrollPanel, openBrollPage, openBrollPanel } = await import("../js/08d-broll-panel.js");
+const { openProductionPanel } = await import("../js/08-production-panels.js");
+const { closeBrollPage, openBrollPage, openBrollPanel } = await import("../js/08d-broll-panel.js");
+const { sidePanels } = await import("../legacy/panels-bridge.ts");
+const closeBroll = () => { sidePanels().close("broll-panel"); };
+const closeProduction = () => { sidePanels().close("production-panel"); };
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
@@ -31,7 +34,7 @@ function load() {
   confirmSavedNow();
 }
 
-function shot() { return S.state.brollShots[0]; }
+function shot() { return currentDocument().brollShots[0]; }
 
 function typeInto(box, value) {
   box.value = value;
@@ -48,7 +51,7 @@ test("the model keeps a leading line break in a note, a reference and a tag's no
   load();
   assert.equal(shot().notes, LEAD);
   assert.equal(shot().audioRef, LEAD);
-  assert.equal(S.state.productionTags[0].notes, LEAD);
+  assert.equal(currentDocument().productionTags[0].notes, LEAD);
 });
 
 test("the b-roll panel's note and reference boxes show a leading line break", () => {
@@ -65,7 +68,7 @@ test("the b-roll panel's note and reference boxes show a leading line break", ()
     assert.equal(ref.value, LEAD);
     assert.equal(ref.defaultValue, LEAD);
   } finally {
-    leave(closeBrollPanel);
+    leave(closeBroll);
   }
 });
 
@@ -81,7 +84,7 @@ test("editing the b-roll panel's note after it shows a leading line break keeps 
     note.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
     assert.equal(shot().notes, LEAD + " More.");
   } finally {
-    leave(closeBrollPanel);
+    leave(closeBroll);
   }
 });
 
@@ -111,9 +114,9 @@ test("a tag's notes box shows a leading line break and keeps it on edit", () => 
     assert.equal(box.value, LEAD);
     box.focus();
     typeInto(box, box.value + " More.");
-    assert.equal(S.state.productionTags[0].notes, LEAD + " More.");
+    assert.equal(currentDocument().productionTags[0].notes, LEAD + " More.");
     assert.equal(registryKey("prop", "Kettle"), box.getAttribute("data-key"));
   } finally {
-    leave(closeProductionPanel);
+    leave(closeProduction);
   }
 });

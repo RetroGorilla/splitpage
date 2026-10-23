@@ -11,7 +11,7 @@ import {
   toggleResolveCommand,
   unwrapCommentAnchorCommand
 } from "../application/commands/comments.ts";
-import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
+import { captureOperation, keepSnapshot, stillOwns } from "../legacy/transition-bridge.ts";
 import { editorSelection } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
@@ -19,11 +19,7 @@ import { formatClock, formatDateClock } from "../../shared/clock.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { normalizeImageRef } from "../../shared/blob-policy.js";
-import {
-  openSidePanel,
-  pushSnapshot,
-  syncPanelClass
-} from "./03-sync.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { inertBody, plainText, safeId, sanitizeHtml } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
 import { editableCellHtml } from "./05-render.js";
@@ -216,7 +212,7 @@ export function resetCommentBindings() {
   expandedReplyIds = idMap();
   replyDrafts = idMap();
   document.getElementById("comment-modal").hidden = true;
-  closeCommentsPanel();
+  sidePanels().close("comments-panel");
   closeFieldPopovers(document.getElementById("comment-modal"));
   var body = document.getElementById("comment-body-editable");
   body.innerHTML = "";
@@ -587,13 +583,9 @@ function findCommentIndex(id) {
 
 export function openCommentsPanel() {
   if (!currentDocument()) return;
-  openSidePanel("comments-panel");
+  sidePanels().open("comments-panel");
   captureReplyDrafts();
   renderComments();
-}
-export function closeCommentsPanel() {
-  document.getElementById("comments-panel").hidden = true;
-  syncPanelClass();
 }
 
 export function toggleResolve(id) {
@@ -963,7 +955,7 @@ export function restoreConflictValue(commentId) {
   if (ci === -1) return;
   const c = doc.comments[ci];
   if (c.field === "title") {
-    pushSnapshot("Before using your version of the title");
+    keepSnapshot("Before using your version of the title");
     runDocumentEdit(restoreConflictCommand(commentId, { kind: "title", title: c.emptyValue ? "" : (c.titleValue || "") }, sessionStamps));
     showToast("Restored your version of the title", "ok");
     return;
@@ -971,7 +963,7 @@ export function restoreConflictValue(commentId) {
   var ri = readSession(function (doc) { return rowIndexOf(doc, c.rowId); });
   if (ri === -1) { showToast("That scene no longer exists.", "warn"); return; }
 
-  pushSnapshot("Before using your version of " + (c.conflictField || "a field"));
+  keepSnapshot("Before using your version of " + (c.conflictField || "a field"));
   var value = c.field === "visualImage"
     ? { kind: "image", imageRef: c.emptyValue ? null : (normalizeImageRef(c.imageValue) || null) }
     : { kind: "text", html: c.emptyValue ? "" : sanitizeHtml(c.body) };

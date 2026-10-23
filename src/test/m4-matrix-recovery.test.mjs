@@ -26,12 +26,11 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const { buildSplitpageFile } = await import("../js/20d-formats.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
+const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { startNewScript } = await import("../js/18b-file-menu.js");
 const { applyTakenDraft, armBrowserServerDraft, flushDraftNow, offerBrowserDraftAfterLinkOff } = await import("../js/20g-drafts.js");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
@@ -40,6 +39,7 @@ const { bytesForSync, createMemoryBackend, ensureBytes, has, internDataUrl, isDu
 const { addGalleryPicture } = await import("../core/document/gallery.ts");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
 
 const require = createRequire(import.meta.url);
 const { createDraftStore } = require("../../desktop/drafts.js");
@@ -394,8 +394,7 @@ rightToday("B8", "restoring a browser draft onto a server document, or an unsave
     const idb = browserStore();
     await idb.store.put(record("srv-r", mine, OTHER, { baseJson: JSON.stringify(base) }));
     useDocument(script("Before the server draft"));
-    const { openServerDoc } = await import("../js/13-hosted.js");
-    assert.equal(await openServerDoc("srv-r"), true);
+        assert.equal(await openDocument({ kind: "server", id: "srv-r" }), true);
     assert.equal(currentDocument().rows[0].audioText, "Unsaved in the browser.", "the draft was resumed");
     assert.equal(currentDocument().rows[1].audioText, "Changed on the server.");
     assert.equal(unsavedChanges(), true, "the resumed work is unsaved");
@@ -430,9 +429,8 @@ rightToday("B9", "a revoked link keeps the draft as an unsaved local copy and se
     doc.rows[0].audioText = "Kept for the user.";
     await idb.store.put(record("srv-gone", doc, OTHER));
     useDocument(script("Open elsewhere", { docId: idOf("6") }));
-    const { openServerDoc } = await import("../js/13-hosted.js");
-    window.__hostedTest.setSession({ docId: null });
-    assert.equal(await openServerDoc("srv-gone"), false);
+        window.__hostedTest.setSession({ docId: null });
+    assert.equal(await openDocument({ kind: "server", id: "srv-gone" }), false);
     await until(() => !drafts().restorePending(), "the restore settled");
     assert.equal(currentDocument().rows[0].audioText, "Kept for the user.", "the draft's work is open");
     assert.equal(unsavedChanges(), true, "as unsaved work");
@@ -646,11 +644,11 @@ rightToday("K2", "a desktop draft write that lands after the tab navigated is re
 
 async function snapshotRestore(setup) {
   const doc = script("History", { docId: idOf("b") });
-  await openProjectFile(splitpageFile(doc), null, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: splitpageFile(doc), handle: null, options: { skipSnapshot: true, silent: true } });
   confirmSavedNow();
   const point = cloneState(currentDocument());
   point.rows[0].audioText = "As it was.";
-  const ticket = pushSnapshot("A point to go back to", point);
+  const ticket = keepSnapshot("A point to go back to", point);
   await ticket.done;
   const button = document.createElement("button");
   button.setAttribute("data-id", ticket.id);
@@ -672,7 +670,7 @@ async function snapshotRestore(setup) {
 rightToday("H1", "a history restore that completes after a same-id reopen does not overwrite the reopened session", async () => {
   const outcome = await snapshotRestore(async (doc) => {
     const replaced = currentDocument();
-    await openProjectFile(splitpageFile(doc), null, { skipSnapshot: true, silent: true });
+    await openDocument({ kind: "file", file: splitpageFile(doc), handle: null, options: { skipSnapshot: true, silent: true } });
     confirmSavedNow();
     assert.notEqual(currentDocument(), replaced, "setup: the reopen put a new document in place");
     assert.equal(currentDocument().docId, replaced.docId, "setup: the reopened document has the same id");
@@ -687,7 +685,7 @@ rightToday("H1", "a history restore that completes after a same-id reopen does n
 rightToday("H1-switch", "a history restore that completes after another document was opened is refused and says so", async () => {
   const other = script("Another script", { docId: idOf("c") });
   const outcome = await snapshotRestore(async () => {
-    await openProjectFile(splitpageFile(other), null, { skipSnapshot: true, silent: true });
+    await openDocument({ kind: "file", file: splitpageFile(other), handle: null, options: { skipSnapshot: true, silent: true } });
     confirmSavedNow();
   });
   assert.equal(outcome, "changed");
@@ -696,9 +694,9 @@ rightToday("H1-switch", "a history restore that completes after another document
   assert.ok(toasts().some((x) => /A different document was opened while restoring, so nothing was restored/.test(x)), "the user is told nothing was restored");
 });
 
-rightToday("H2", "a snapshot holds the document as it was when pushSnapshot was called", async () => {
+rightToday("H2", "a snapshot holds the document as it was when keepSnapshot was called", async () => {
   useDocument(script("Before the snapshot", { docId: idOf("d") }));
-  const ticket = pushSnapshot("Before the edit");
+  const ticket = keepSnapshot("Before the edit");
   currentDocument().rows[0].audioText = "Typed after the snapshot call.";
   currentDocument().title = "Renamed after the snapshot call";
   noteSessionEdit();

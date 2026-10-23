@@ -10,16 +10,16 @@ import { hashText as historyHashText } from "../adapters/storage/03c-history-idb
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "../features/common/dom.ts";
 import { showToast } from "./12-dirty-toast.js";
-import { openServerDoc, pointTabAt } from "./13-hosted.js";
-import { openProjectFile } from "./18-local-files.js";
-import { openServersDialog } from "./20e-connect.js";
+import { pointTabAt } from "./13-hosted.js";
+import { openDocument } from "../legacy/transition-bridge.ts";
 import { flushDraftNow } from "./20g-drafts.js";
 import { draftResume, recoveryStarted } from "../legacy/recovery-bridge.ts";
 import { saveDoc, unsavedChanges } from "../legacy/save-bridge.ts";
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { startupReady } from "../legacy/startup-bridge.ts";
-import { desktopPort, restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
+import { appActions } from "../legacy/app-actions.ts";
+import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort, restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
 
@@ -87,14 +87,6 @@ function runDesktopMenuCommand(cmd) {
 }
 
 var prompterBrowserBusy = false;
-
-export function canOpenPrompterInBrowser() {
-  return !!(runningOnDesktop() && typeof desktopPort().openPrompterInBrowser === "function");
-}
-
-export function canOpenPrompterInChromium() {
-  return !!(runningOnDesktop() && typeof desktopPort().openPrompterInChromium === "function");
-}
 
 export function driveOpenShown() {
   return !runningOnDesktop() || typeof desktopPort().driveStatus === "function";
@@ -390,7 +382,7 @@ export function initDesktop() {
     function proceed() {
       var handle = makeDesktopHandle(entry);
       handle.getFile().then(function (file) {
-        return openProjectFile(file, handle);
+        return openDocument({ kind: "file", file: file, handle: handle });
       }).catch(function () {
         showToast("Could not open " + ((entry && entry.name) || "that file") + ".", "error");
       }).then(handedDocumentSettled);
@@ -431,7 +423,7 @@ export function initDesktop() {
   notifyDesktopDocumentState();
 
   desktopPort().getSessionInfo().then(function (info) {
-    if (info && info.hosting && typeof openServersDialog === "function") openServersDialog();
+    if (info && info.hosting) appActions.invoke("show-servers-dialog", "button");
   }).catch(function () {});
 }
 
@@ -461,8 +453,7 @@ function openPendingServerDocForTab(serverDocId) {
   }
   var retried = false;
   function openIt() {
-    if (typeof openServerDoc !== "function") { handedDocumentSettled(); return; }
-    Promise.resolve(openServerDoc(serverDocId)).then(function (ok) {
+    openDocument({ kind: "server", id: serverDocId }).then(function (ok) {
       if (ok === false && !retried && needsAuth()) { retried = true; afterDetect(); return; }
       handedDocumentSettled();
     }, handedDocumentSettled);

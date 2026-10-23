@@ -1,22 +1,17 @@
-import { docIdEmbeddedIn } from "../core/document/ids.ts";
 import { flushEdits } from "./12a-undo.js";
-import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
+import { sanitizeHtml } from "../legacy/richtext.ts";
 import { currentDocument, noteAbsorbedDirty, noteReload } from "../legacy/session-bridge.ts";
-import { documentTransitions } from "../legacy/transition-bridge.ts";
+import { documentTransitions, keepSnapshot } from "../legacy/transition-bridge.ts";
 import { autoSavePolicy, confirmSavedNow, fileConflicts, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
 import { deliverFile } from "../legacy/file-delivery.ts";
 import { checkFileConflict } from "../adapters/files/file-target.ts";
 import { amendHome, currentHome, fileHome, importHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import {
-  migrateDocument,
   standaloneHtmlFor,
   syncDocIdentity
 } from "./02b-doc-id.js";
-import {
-  pushSnapshot,
-  stampRow
-} from "./03-sync.js";
+import { stampRow } from "./03-sync.js";
 import { beginBusy, endBusy, withBusyBar } from "../features/notices/busy.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { brollPrintView } from "./08d-broll-panel.js";
@@ -35,22 +30,16 @@ import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
 import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
-import { toggleFileMenu } from "./18b-file-menu.js";
 import { isExportAction, rememberExport } from "./18c-export-dialog.js";
-import {
-  applyMarkdownProject,
-  parseMarkdownProject
-} from "./20d-formats.js";
+import { parseProjectFileState } from "../adapters/formats/project-file.ts";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
-import { closeNewTabPage } from "./20j-newtab.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { exportToggleOptions } from "../application/export/registry.ts";
-import { isDocumentObject } from "../core/migrate.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { exportFormats } from "../legacy/export-formats.ts";
 import { setMenuItemLabel, showToast, warnImagesLeftOut } from "../legacy/effects-bridge.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { slugify } from "../../shared/text.js";
-import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
@@ -180,127 +169,19 @@ export async function buildFileData(kind, baseName, opts) {
   return { data: made.data, filename: filename };
 }
 
-var RAW_TEXT_ELEMENTS = { script: 1, style: 1, textarea: 1, title: 1, xmp: 1, iframe: 1, noembed: 1, noframes: 1 };
-
-function tagAttributes(text, from) {
-  var attrs = {};
-  var i = from;
-  var n = text.length;
-  while (i < n) {
-    while (i < n && /[\t\n\f\r /]/.test(text[i])) i++;
-    if (i >= n) return null;
-    if (text[i] === ">") return { attrs: attrs, end: i + 1 };
-    var nameStart = i;
-    i++;
-    while (i < n && !/[\t\n\f\r />=]/.test(text[i])) i++;
-    var name = text.slice(nameStart, i).toLowerCase();
-    while (i < n && /[\t\n\f\r ]/.test(text[i])) i++;
-    var value = "";
-    if (text[i] === "=") {
-      i++;
-      while (i < n && /[\t\n\f\r ]/.test(text[i])) i++;
-      var quote = text[i];
-      if (quote === "\"" || quote === "'") {
-        var close = text.indexOf(quote, i + 1);
-        if (close === -1) return null;
-        value = text.slice(i + 1, close);
-        i = close + 1;
-      } else {
-        var valueStart = i;
-        while (i < n && !/[\t\n\f\r >]/.test(text[i])) i++;
-        value = text.slice(valueStart, i);
-      }
+export function projectFileSource() {
+  return {
+    id: "project-file",
+    takes: function (opening) { return opening.kind === "file"; },
+    open: function (opening) {
+      var parsed = opening.parsed;
+      if (parsed) return adoptProjectState(parsed.state, opening.file, opening.handle || null, parsed.kind, opening.options);
+      return openProjectFile(opening.file, opening.handle || null, opening.options);
     }
-    if (!Object.prototype.hasOwnProperty.call(attrs, name)) attrs[name] = value;
-  }
-  return null;
+  };
 }
 
-function stateDataScriptText(text) {
-  var opening = /<(!--|[a-zA-Z][^\t\n\f\r />]*)/g;
-  for (var m = opening.exec(text); m; m = opening.exec(text)) {
-    if (m[1] === "!--") {
-      var commentEnd = text.indexOf("-->", m.index + 4);
-      if (commentEnd === -1) return null;
-      opening.lastIndex = commentEnd + 3;
-      continue;
-    }
-    var tag = tagAttributes(text, m.index + m[0].length);
-    if (!tag) return null;
-    var name = m[1].toLowerCase();
-    opening.lastIndex = tag.end;
-    if (!RAW_TEXT_ELEMENTS[name]) continue;
-    var closing = new RegExp("</" + name + "[\\t\\n\\f\\r />]", "ig");
-    closing.lastIndex = tag.end;
-    var closed = closing.exec(text);
-    var contentEnd = closed ? closed.index : text.length;
-    if (name === "script" && tag.attrs.id === "state-data") return text.slice(tag.end, contentEnd);
-    if (!closed) return null;
-    opening.lastIndex = contentEnd;
-  }
-  return null;
-}
-
-function stateDataFromRawText(text) {
-  var data = stateDataScriptText(text);
-  if (data === null) return null;
-  try {
-    var parsed = JSON.parse(data.replace(/\r\n?/g, "\n"));
-    return isDocumentObject(parsed) ? parsed : null;
-  } catch (e) {
-    return null;
-  }
-}
-
-export async function parseProjectFileState(file, opts) {
-  var kind = fileKindFromName(file.name);
-  if (kind !== "splitpage" && kind !== "md" && kind !== "html") return null;
-
-  var text;
-  try {
-    text = await file.text();
-  } catch (e) {
-    return { error: "unreadable" };
-  }
-
-  if (kind === "splitpage") {
-    var native;
-    try {
-      native = parseSplitpageFile(text);
-    } catch (e) {
-      return { error: "not-splitpage" };
-    }
-    var nativeEmbedded = docIdEmbeddedIn(native);
-    return { state: migrateDocument(native, { kind: "file" }), kind: "splitpage", docIdEmbedded: nativeEmbedded };
-  }
-
-  if (kind === "html") {
-    var legacy = stateDataFromRawText(text);
-    if (!legacy) {
-      var dataEl = inertBody(text).ownerDocument.getElementById("state-data");
-      try {
-        legacy = JSON.parse(dataEl.textContent);
-      } catch (e) {
-        return { error: "not-splitpage" };
-      }
-    }
-    if (!isDocumentObject(legacy)) return { error: "not-splitpage" };
-    var legacyEmbedded = docIdEmbeddedIn(legacy);
-    return { state: migrateDocument(legacy, { kind: "file" }), kind: "html", docIdEmbedded: legacyEmbedded };
-  }
-
-  var project;
-  try {
-    project = parseMarkdownProject(text);
-  } catch (e) {
-    project = null;
-  }
-  if (!project) return null;
-  var reconciled = await applyMarkdownProject(project, opts);
-  return { state: reconciled, kind: "md", docIdEmbedded: !!project.docIdEmbedded };
-}
-
-export async function openProjectFile(file, handle, opts) {
+async function openProjectFile(file, handle, opts) {
   opts = opts || {};
   var parsed = await parseProjectFileState(file);
   if (!parsed) return loadFileIntoEditor(file, handle);
@@ -315,15 +196,15 @@ export async function openProjectFile(file, handle, opts) {
   return adoptProjectState(parsed.state, file, handle, parsed.kind, opts);
 }
 
-export function adoptProjectState(newState, file, handle, kind, opts) {
+function adoptProjectState(newState, file, handle, kind, opts) {
   opts = opts || {};
-  if (typeof closeNewTabPage === "function") closeNewTabPage();
-  if (!opts.skipSnapshot && currentDocument() && currentDocument().rows.length) pushSnapshot("Before opening " + file.name);
+  sidePanels().close("newtab-page");
 
   resetProductionPanelState();
   documentTransitions().open({
     from: { document: newState },
     reason: "adoptProjectState: the project file as it was just read",
+    keep: opts.skipSnapshot ? undefined : "Before opening " + file.name,
     destination: { kind: "file", fields: { handle: handle || null, format: kind, lastModified: file.lastModified || null,
                                            name: file.name, diskBase: cloneState(newState) } },
     writtenOut: true
@@ -416,7 +297,6 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   if (!newRows || !newRows.length) { showToast("No scenes found in that file.", "warn"); return; }
 
-  if (!opts.reload && currentDocument().rows.length) pushSnapshot("Before opening " + file.name);
 
   newRows.forEach(stampRow);
   var openedTitle = newTitle || file.name.replace(/\.[^.]+$/, "");
@@ -440,6 +320,7 @@ async function loadFileIntoEditor(file, handle, opts) {
     documentTransitions().open({
       from: { raw: { schema: SCHEMA_VERSION, title: openedTitle, rows: newRows } },
       reason: "loadFileIntoEditor: the imported document as it was just read",
+      keep: "Before opening " + file.name,
       destination: { kind: "import", fields: importFields },
       writtenOut: false
     });
@@ -448,7 +329,7 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   noteAbsorbedDirty(opts.reload ? "reload" : "adopt");
   amendHome(imported, { dirty: false });
-  if (typeof closeNewTabPage === "function") closeNewTabPage();
+  sidePanels().close("newtab-page");
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   showToast(opts.reload
     ? "Reloaded " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s")
@@ -616,7 +497,7 @@ export async function reloadFileFromDisk() {
   var imported = importHome();
   if (!imported || !imported.handle) return;
   try {
-    pushSnapshot("Before reloading " + imported.name + " from disk");
+    keepSnapshot("Before reloading " + imported.name + " from disk");
     await loadFileIntoEditor(await imported.handle.getFile(), imported.handle, { reload: true });
   } catch (e) {
     showToast("Could not re-read that file.", "error");
@@ -678,7 +559,7 @@ export function runExportAction(action) {
 
 export function handleFileMenuAction(action, source) {
   noteFileMenuChoice(action);
-  if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") toggleFileMenu(false);
+  if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") appActions.invoke("close-file-menu", "button");
   if (isExportAction(action)) rememberExport(action);
   if (appActions.has(action)) {
     appActions.invoke(action, source || "menu");
