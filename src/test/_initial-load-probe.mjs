@@ -1,5 +1,5 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { documentLocation } from "../legacy/location-bridge.ts";
 
 const pristine = process.argv[2] === "pristine";
@@ -18,8 +18,8 @@ const report = {
   pristine,
   error,
   seedCheck: window.__onboarding ? window.__onboarding.seedCheckPasses() : null,
-  title: S.state ? S.state.title : null,
-  docIdIsTheFiles: Boolean(S.state && S.state.docId === deriveDocId("splitpage-file", saved)),
+  title: currentDocument() ? currentDocument().title : null,
+  docIdIsTheFiles: Boolean(currentDocument() && currentDocument().docId === deriveDocId("splitpage-file", saved)),
   writtenOut: documentLocation().writtenOut()
 };
 closeApp();

@@ -9,7 +9,7 @@ import {
   ANNOTATION_COLORS, annotateGallerySlot, moveGallerySlot, normalizeMarks, removeGallerySlot, replaceGalleryPicture, rowSlots, slotOriginal
 } from "../adapters/storage/02d-gallery.js";
 import { mergeStates } from "../js/03-sync.js";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject } from "../js/20d-formats.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
@@ -147,7 +147,7 @@ test("a .splitpage file carries the originals inline and reads back the same ann
 
 test(".md: an untouched file keeps the annotation; another picture put in the cell by hand drops it", async () => {
   const s = doc([{ imageRef: F1, imageAnnotation: { imageRef: O1, marks: [PEN] } }]);
-  const was = S.state;
+  const was = currentDocument();
   loadTestDocument(s);
   try {
     const md = buildMarkdownProject(exportDocumentOf(s));

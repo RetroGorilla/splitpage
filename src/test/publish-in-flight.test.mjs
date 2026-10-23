@@ -6,14 +6,14 @@ import assert from "node:assert/strict";
 import { cloneState } from "../core/document/clone.ts";
 import { documentLocation, serverStatus } from "../legacy/location-bridge.ts";
 
-const { S } = await import("../js/_state.js");
 const homeMod = await import("../legacy/location-bridge.ts");
 const { setHome } = homeMod;
-const { publishToServer, publishAndCopyShareLink, saveToServer } = await import("../js/13-hosted.js");
+const { publishToServer, publishAndCopyShareLink, serverSaveDestination } = await import("../js/13-hosted.js");
 const { setBaseState } = await import("../js/03-sync.js");
-const { markDirty, clearDirty } = await import("../js/12-dirty-toast.js");
-const { setAutoSaveEnabled, legacySavePorts } = await import("../js/14-export.js");
-const { autoSavePolicy, noteSaveChange, startSaves, unsavedChanges } = await import("../legacy/save-bridge.ts");
+const { noteSessionEdit, currentDocument } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { legacyFileDestination, legacySavePorts } = await import("../js/14-export.js");
+const { autoSavePolicy, noteSaveChange, saveDestinations, saveToServer, setAutoSaveEnabled, startSaves, unsavedChanges } = await import("../legacy/save-bridge.ts");
 const { NO_DESTINATION, documentTransitions, startTransitions } = await import("../legacy/transition-bridge.ts");
 const { documentIdentityPort } = await import("../js/02b-doc-id.js");
 const { liveDocumentPort, mergeBase } = await import("../legacy/session-bridge.ts");
@@ -27,9 +27,11 @@ startTestSession(appSessionDeps());
 startTransitions({ live: liveDocumentPort, destination: documentDestinationPort, identity: documentIdentityPort });
 
 startSaves(legacySavePorts({
-  capture: () => Object.freeze({ epoch: 0, docId: S.state && S.state.docId, destination: homeMod.currentHome(), destinationGeneration: 0, generation: 0, connection: homeMod.currentConn(), revision: null }),
-  stillOwns: (ctx) => ctx.destination === homeMod.currentHome() && ctx.docId === (S.state && S.state.docId)
+  capture: () => Object.freeze({ epoch: 0, docId: currentDocument() && currentDocument().docId, destination: homeMod.currentHome(), destinationGeneration: 0, generation: 0, connection: homeMod.currentConn(), revision: null }),
+  stillOwns: (ctx) => ctx.destination === homeMod.currentHome() && ctx.docId === (currentDocument() && currentDocument().docId)
 }), { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });
+saveDestinations().register(legacyFileDestination());
+saveDestinations().register(serverSaveDestination());
 
 dom.window.document.body.innerHTML =
   '<div id="toast-host"></div>' +
@@ -78,8 +80,8 @@ function startOn(state, opts) {
   opts = opts || {};
   serverStatus().recordMode({ readOnly: false, available: true });
   documentTransitions().open({ from: { document: state }, reason: "test: the document as opened", destination: NO_DESTINATION, writtenOut: !!opts.written });
-  clearDirty();
-  if (opts.dirty) markDirty();
+  confirmSavedNow();
+  if (opts.dirty) noteSessionEdit();
   stubServer();
   stubTimers();
 }
@@ -91,7 +93,7 @@ test.after(() => {
   if (realNavigator) Object.defineProperty(globalThis, "navigator", realNavigator);
   setHome("none");
   loadTestDocument(null);
-  clearDirty();
+  confirmSavedNow();
 });
 
 test("control: an undisturbed publish adopts the server copy and is clean", async () => {
@@ -125,8 +127,8 @@ test("#247: a document opened during the upload keeps its own home, base, id and
   assert.equal(ok, false, "publishToServer says the copy was not adopted");
   assert.equal(homeMod.currentHome(), bHome, "B's home is still B's file");
   assert.equal(mergeBase(), bBase, "B's base is untouched");
-  assert.equal(S.state, b);
-  assert.equal(S.state.docId, DOC_IDS["doc-b"]);
+  assert.equal(currentDocument(), b);
+  assert.equal(currentDocument().docId, DOC_IDS["doc-b"]);
   assert.equal(unsavedChanges(), true, "B's unsaved work is still unsaved");
   assert.equal(documentLocation().writtenOut(), true);
   assert.equal(calls.filter((c) => c.method === "PUT").length, 0, "nothing was saved anywhere on B's behalf");
@@ -141,7 +143,7 @@ test("#247: a server document opened during the upload is not re-homed onto the 
   loadTestDocument(b);
   const bHome = setHome("server", { id: "server-b", rev: 7 });
   const bBase = setBaseState(cloneState(b), "test: B as the server sent it");
-  clearDirty();
+  confirmSavedNow();
 
   postGate();
   assert.equal(await p, false);
@@ -165,7 +167,7 @@ test("#247: the fork's new id is not put on the document that replaced this one"
 
   postGate();
   assert.equal(await p, false);
-  assert.equal(S.state.docId, DOC_IDS["doc-b"]);
+  assert.equal(currentDocument().docId, DOC_IDS["doc-b"]);
 });
 
 test("#247: a share link is not made for the document that replaced the one published", async () => {
@@ -182,7 +184,7 @@ test("#247: a share link is not made for the document that replaced the one publ
   loadTestDocument(b);
   setHome("server", { id: "server-b", rev: 3 });
   setBaseState(cloneState(b), "test: B as the server sent it");
-  clearDirty();
+  confirmSavedNow();
 
   postGate();
   assert.equal(await p, false);
@@ -194,8 +196,8 @@ test("#248: text typed during the upload stays dirty, and the next save carries 
   const p = publishToServer();
   await flush();
 
-  S.state.rows[0].audioText = "typed DURING upload";
-  markDirty();
+  currentDocument().rows[0].audioText = "typed DURING upload";
+  noteSessionEdit();
 
   timers.length = 0;
   postGate();

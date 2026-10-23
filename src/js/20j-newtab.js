@@ -1,24 +1,24 @@
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { formatDuration } from "../core/production/timing.ts";
 import { DEFAULT_WPM } from "../core/document/timing.ts";
-import { S } from "./_state.js";
 import { currentHome } from "../legacy/location-bridge.ts";
 import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { openGdocModal, openImportModal } from "./11-import.js";
-import { clearDirty, updateSaveStatus } from "./12-dirty-toast.js";
 import { arrivingOnLink } from "./13-hosted.js";
-import { openLocalFile, openProjectFile } from "./18-local-files.js";
+import { openLocalFile } from "./18-local-files.js";
 import { desktopAppUrl, desktopAppOffered } from "./20a-update.js";
 import { seedCheckPasses } from "../legacy/seed-check.ts";
-import { makeDesktopHandle } from "./20f-desktop.js";
+import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { STARTERS, starterById } from "./_starters.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
-import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
+import { NO_DESTINATION, documentTransitions, openDocument } from "../legacy/transition-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { draftResume } from "../legacy/recovery-bridge.ts";
+import { confirmSavedNow } from "../legacy/save-bridge.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
 import { startupReady } from "../legacy/startup-bridge.ts";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
@@ -81,14 +81,13 @@ function adoptNewDocument(next, reason) {
   var leaves = currentHome().kind === "file" || currentHome().kind === "import";
   resetProductionPanelState();
   documentTransitions().startNew({ from: { document: next }, reason: reason, destination: leaves ? NO_DESTINATION : undefined });
-  clearDirty();
-  updateSaveStatus();
+  confirmSavedNow();
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   closeNewTabPage();
 }
 
 function startNewDocument(makeState, reason) {
-  var ready = S.state ? null : startupReady();
+  var ready = currentDocument() ? null : startupReady();
   if (ready) {
     return ready.then(function () { return startNewDocument(makeState, reason); });
   }
@@ -141,7 +140,7 @@ function newTabOpenDropped(file) {
       file.name + " isn't one of them.", "warn");
     return Promise.resolve(false);
   }
-  return openProjectFile(file, null);
+  return openDocument({ kind: "file", file: file, handle: null });
 }
 
 function starterSceneSeconds(state) {
@@ -283,7 +282,7 @@ async function openRecent(fileId) {
     return;
   }
   var handle = makeDesktopHandle(entry);
-  await openProjectFile(await handle.getFile(), handle);
+  await openDocument({ kind: "file", file: await handle.getFile(), handle: handle });
 }
 
 async function forgetRecent(fileId) {

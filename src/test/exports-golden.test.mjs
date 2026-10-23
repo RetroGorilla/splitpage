@@ -18,7 +18,7 @@ const { STARTERS, LONG_DEMO } = await import("../js/_starters.js");
 const { migrateRows } = await import("../js/02-state.js");
 const { standaloneHtmlFor } = await import("../js/02b-doc-id.js");
 const { intern } = await import("../adapters/storage/02c-blobs.js");
-const { clearDirty } = await import("../js/12-dirty-toast.js");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { exportMetaLine, markdownExportImages, toMarkdownDoc, toMarkdownTableDoc } = await import("../adapters/formats/export-text.ts");
 const { captureExportDocument } = await import("../js/14b-export-kit.js");
@@ -94,7 +94,7 @@ const FIXTURES = [
 function useDocument(raw) {
   loadTestDocument(migrateRows(Object.assign({ docId: "d" + "5".repeat(32) }, jsonCopy(raw))));
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
 }
 
 const sha = (text) => createHash("sha256").update(text).digest("hex");

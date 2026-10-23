@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
@@ -13,15 +13,16 @@ const { liveSession, noteReload } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { adoptRestoredState } = await import("../js/02b-doc-id.js");
-const { applyMerge, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { applyMerge, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { scheduleIdleRefresh, productionIndexStats } = await import("../js/07-production-tags.js");
-const { markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { flushEdits, lastUndoEntry, undoSizes } = await import("../js/12a-undo.js");
-const { openProjectFile, reloadFileFromDisk } = await import("../js/18-local-files.js");
+const { reloadFileFromDisk } = await import("../js/18-local-files.js");
 const { startNewScript } = await import("../js/18b-file-menu.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -47,19 +48,19 @@ function script(title) {
   });
 }
 
-await openProjectFile(new File([buildSplitpageFile(exportDocumentOf(script("Bridge")))], "bridge.splitpage", { lastModified: 1 }), null, { skipSnapshot: true });
+await openDocument({ kind: "file", file: new File([buildSplitpageFile(exportDocumentOf(script("Bridge")))], "bridge.splitpage", { lastModified: 1 }), handle: null, options: { skipSnapshot: true } });
 
 test("the booted app's session holds the live document it adopted when the file opened", () => {
-  assert.equal(S.state.title, "Bridge");
-  assert.equal(held(), S.state);
+  assert.equal(currentDocument().title, "Bridge");
+  assert.equal(held(), currentDocument());
   assert.ok(session.epoch() >= 2, "the seed and then the file were each adopted");
 });
 
-test("markDirty is one session edit: one generation, one saveChanges(), dirty, and one undo entry once the edit is flushed", () => {
+test("noteSessionEdit is one session edit: one generation, one saveChanges(), dirty, and one undo entry once the edit is flushed", () => {
   const gen = session.generation(), seq = saveChanges(), entries = undoSizes().undo;
   listen();
-  S.state.rows[0].audioText = "One, edited.";
-  markDirty();
+  currentDocument().rows[0].audioText = "One, edited.";
+  noteSessionEdit();
   assert.equal(session.generation(), gen + 1);
   assert.equal(saveChanges(), seq + 1);
   assert.equal(unsavedChanges(), true);
@@ -74,15 +75,15 @@ test("opening another document, or restoring one with the same id, opens a new e
   listen();
   startNewScript();
   assert.equal(session.epoch(), epoch + 1, "a new script is adopted at the transition, with no flush or render first");
-  assert.equal(held(), S.state);
+  assert.equal(held(), currentDocument());
   assert.deepEqual(heard, [], "and its session is a new one: a subscription made for the old document hears nothing of it");
   listen();
-  const docId = S.state.docId;
-  adoptRestoredState(cloneState(S.state));
-  assert.equal(S.state.docId, docId, "the same document id");
+  const docId = currentDocument().docId;
+  adoptRestoredState(cloneState(currentDocument()));
+  assert.equal(currentDocument().docId, docId, "the same document id");
   flushEdits();
   assert.equal(session.epoch(), epoch + 2, "a new epoch all the same");
-  assert.equal(held(), S.state);
+  assert.equal(held(), currentDocument());
   assert.equal(session.generation(), gen);
   assert.equal(saveChanges(), seq);
   assert.equal(undoSizes().undo, 0);
@@ -99,7 +100,7 @@ test("a merge right after a document was swapped in, with no flush between, leav
   assert.deepEqual(heard, ["adopt", "server"], "the session adopts the swapped-in document as it is handed over, then the merge lands");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
-  assert.equal(held(), S.state);
+  assert.equal(held(), currentDocument());
   assert.equal(held().rows[1].audioText, "Theirs.");
   flushEdits();
   assert.equal(undoSizes().undo, 0);
@@ -108,21 +109,21 @@ test("a merge right after a document was swapped in, with no flush between, leav
 test("a server update over undo entries forgets the ones on a field their side changed and keeps the rest", () => {
   loadTestDocument(cloneState(script("Forget")));
   flushEdits();
-  S.state.rows[0].audioText = "Mine, one.";
-  markDirty();
+  currentDocument().rows[0].audioText = "Mine, one.";
+  noteSessionEdit();
   flushEdits();
-  S.state.rows[1].visualText = "Mine, close.";
-  markDirty();
+  currentDocument().rows[1].visualText = "Mine, close.";
+  noteSessionEdit();
   flushEdits();
   assert.equal(undoSizes().undo, 2);
   const epoch = session.epoch();
-  const theirs = cloneState(S.state);
+  const theirs = cloneState(currentDocument());
   theirs.rows[1].visualText = "Their close.";
   listen();
   applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false });
   assert.deepEqual(heard, ["server"]);
   assert.equal(session.epoch(), epoch);
-  assert.equal(held(), S.state);
+  assert.equal(held(), currentDocument());
   assert.equal(undoSizes().undo, 1);
   assert.deepEqual([lastUndoEntry().steps[0].rowId, lastUndoEntry().steps[0].key], ["r1", "audioText"]);
 });
@@ -147,14 +148,14 @@ test("a reported merge marks the document dirty and advances saveChanges() as be
 test("a reload in place is its own kind: same epoch, no generation, saveChanges() and dirty as before, no undo entry", async () => {
   let disk = new File(["Wide\tOne.\nClose\tTwo."], "reload.txt", { lastModified: 1 });
   const handle = { kind: "file", name: "reload.txt", getFile: async () => disk };
-  await openProjectFile(disk, handle, { skipSnapshot: true });
-  const doc = S.state;
+  await openDocument({ kind: "file", file: disk, handle: handle, options: { skipSnapshot: true } });
+  const doc = currentDocument();
   const epoch = session.epoch(), gen = session.generation(), seq = saveChanges();
   listen();
   disk = new File(["Wide\tOne, again.\nClose\tTwo."], "reload.txt", { lastModified: 2 });
   await reloadFileFromDisk();
-  assert.equal(S.state, doc, "reloaded in place");
-  assert.match(S.state.rows[0].audioText, /again/);
+  assert.equal(currentDocument(), doc, "reloaded in place");
+  assert.match(currentDocument().rows[0].audioText, /again/);
   assert.deepEqual(heard, ["reload"]);
   assert.equal(session.epoch(), epoch);
   assert.equal(session.generation(), gen);
@@ -169,9 +170,9 @@ test("a reload into a document swapped in with no flush lands in the document th
   const beforeText = JSON.stringify(before);
   listen();
   loadTestDocument(cloneState(script("Swapped")));
-  const doc = S.state;
+  const doc = currentDocument();
   const taken = noteReload({ title: "Reloaded", rows: [{ id: "r1", visualText: "Wide", audioText: "Reloaded." }] });
-  assert.equal(S.state, doc);
+  assert.equal(currentDocument(), doc);
   assert.equal(taken, doc);
   assert.equal(held(), doc);
   assert.equal(doc.title, "Reloaded");
@@ -187,19 +188,19 @@ test("E4: resumeServerDoc's merge is a recovery: a new epoch, the undo stack kep
   const base = script("Resume");
   loadTestDocument(cloneState(base));
   flushEdits();
-  S.state.rows[0].audioText = "Typed while reopening.";
-  markDirty();
+  currentDocument().rows[0].audioText = "Typed while reopening.";
+  noteSessionEdit();
   flushEdits();
   const theirs = cloneState(base);
   theirs.rows[1].audioText = "Server.";
   const epoch = session.epoch(), gen = session.generation(), seq = saveChanges();
   listen();
-  applyMerge({ base: base, mine: S.state, theirs: theirs, source: "server-resume", newBase: cloneState(theirs), noAutoSave: true });
+  applyMerge({ base: base, mine: currentDocument(), theirs: theirs, source: "server-resume", newBase: cloneState(theirs), noAutoSave: true });
   assert.deepEqual(heard, ["recovery"]);
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
   assert.equal(saveChanges(), seq + 1);
-  assert.equal(held(), S.state);
+  assert.equal(held(), currentDocument());
   flushEdits();
   assert.equal(undoSizes().undo, 1, "12a's stack is kept through the merge, as before");
 });
@@ -228,9 +229,9 @@ test("E4: a file draft restored onto a changed file is a recovery merge; an unti
     assert.deepEqual(heard, [], "the file opens at the transition, so a subscription made for the old document hears nothing of the merge");
     assert.equal(session.epoch(), epoch + 2, "the file opens an epoch at the transition and the recovery merge opens another");
     assert.equal(session.generation(), gen);
-    assert.equal(held(), S.state);
-    assert.equal(S.state.rows[0].audioText, "Unsaved here.");
-    assert.equal(S.state.rows[1].audioText, "Changed on disk.");
+    assert.equal(held(), currentDocument());
+    assert.equal(currentDocument().rows[0].audioText, "Unsaved here.");
+    assert.equal(currentDocument().rows[1].audioText, "Changed on disk.");
   } finally {
     restoreDesktop();
   }
@@ -242,40 +243,40 @@ test("E4: a file draft restored onto a changed file is a recovery merge; an unti
   assert.equal(session.generation(), gen);
   assert.equal(saveChanges(), seq + 1);
   assert.equal(unsavedChanges(), true);
-  assert.equal(held(), S.state);
+  assert.equal(held(), currentDocument());
 });
 
 test("importing a file is an adoption at the transition that marks the document dirty and advances saveChanges() as before, with no edit generation", async () => {
   const gen = session.generation(), epoch = session.epoch(), seq = saveChanges();
   listen();
-  await openProjectFile(new File(["Wide\tOne.\nClose\tTwo."], "import.txt", { lastModified: 1 }), null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: new File(["Wide\tOne.\nClose\tTwo."], "import.txt", { lastModified: 1 }), handle: null, options: { skipSnapshot: true } });
   assert.deepEqual(heard, [], "the import is a new session: a subscription made for the old document hears nothing of it");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
   assert.equal(saveChanges(), seq + 1);
   assert.equal(unsavedChanges(), true);
-  assert.equal(held(), S.state);
+  assert.equal(held(), currentDocument());
 });
 
 test("restoring a version from history is an adoption at the transition that marks the document dirty as before, with no edit generation", async () => {
   loadTestDocument(cloneState(script("History")));
   flushEdits();
-  const point = cloneState(S.state);
+  const point = cloneState(currentDocument());
   point.rows[0].audioText = "As it was.";
-  const ticket = pushSnapshot("A point to go back to", point);
+  const ticket = keepSnapshot("A point to go back to", point);
   await ticket.done;
   const button = document.createElement("button");
   button.setAttribute("data-id", ticket.id);
   const gen = session.generation(), epoch = session.epoch(), seq = saveChanges();
   listen();
   assert.equal(await restoreSnapshotFromCard(button), "restored");
-  assert.equal(S.state.rows[0].audioText, "As it was.");
+  assert.equal(currentDocument().rows[0].audioText, "As it was.");
   assert.deepEqual(heard, [], "the version is restored at the transition, a new session: a subscription made for the old document hears nothing of it");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
   assert.equal(saveChanges(), seq + 1);
   assert.equal(unsavedChanges(), true);
-  assert.equal(held(), S.state);
+  assert.equal(held(), currentDocument());
 });
 
 test("the idle refresh goes through the session's scheduler: requests in one window run the refresh once, 180 ms after the last", async (t) => {

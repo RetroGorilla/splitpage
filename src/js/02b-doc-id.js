@@ -1,4 +1,3 @@
-import { S } from "./_state.js";
 import { currentHome, documentLocation } from "../legacy/location-bridge.ts";
 import { mintDocId, randomHexBytes } from "../adapters/identity/ids.ts";
 import { documentIdStamp } from "../application/commands/save-stamps.ts";
@@ -53,8 +52,8 @@ export async function loadInitialState(pristine) {
 
 export function noteMergedDocId(prevId) {
   prevId = normalizeDocId(prevId);
-  if (!S.state || !prevId || prevId === S.state.docId) return;
-  copyDocHistorySafe(prevId, S.state.docId);
+  if (!currentDocument() || !prevId || prevId === currentDocument().docId) return;
+  copyDocHistorySafe(prevId, currentDocument().docId);
   syncDocIdentity();
 }
 
@@ -106,8 +105,8 @@ function docHomeKey() {
 }
 
 export function syncDocIdentity() {
-  if (!S.state) return;
-  var key = normalizeDocId(S.state.docId) + "|" + docHomeKey();
+  if (!currentDocument()) return;
+  var key = normalizeDocId(currentDocument().docId) + "|" + docHomeKey();
   if (key === lastIdentityKey) return;
   lastIdentityKey = key;
   identityAdoptedAt = Date.now();
@@ -121,7 +120,7 @@ export function reassignDocId(toId, opts) {
   opts = opts || {};
   toId = normalizeDocId(toId);
   var fromId = normalizeDocId(opts.fromId);
-  if (!toId || !fromId || toId === fromId || !S.state || S.state.docId !== fromId) return false;
+  if (!toId || !fromId || toId === fromId || !currentDocument() || currentDocument().docId !== fromId) return false;
   if (onServerDoc()) return false;
   stampDocument(documentIdStamp(fromId, toId));
   documentLocation().markWrittenOut(false);
@@ -157,12 +156,12 @@ export function initDocIdentityChannel(factory) {
 }
 
 function currentDocIdClaim(type) {
-  if (!S.state) return null;
-  var docId = normalizeDocId(S.state.docId);
+  if (!currentDocument()) return null;
+  var docId = normalizeDocId(currentDocument().docId);
   var home = docHomeKey();
   if (!docId || home.indexOf("file:") !== 0) return null;
   return { type: type, docId: docId, home: home, at: identityAdoptedAt, nonce: PAGE_NONCE,
-           title: cappedLongText(plainText(S.state.title || ""), 300) };
+           title: cappedLongText(plainText(currentDocument().title || ""), 300) };
 }
 
 function announceDocIdentity() {

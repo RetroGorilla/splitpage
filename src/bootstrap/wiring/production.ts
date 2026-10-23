@@ -55,7 +55,7 @@ import {
   stepFind,
   toggleBulkTag
 } from "../../js/09-find-replace.js";
-import { queueAutoSave } from "../../js/14-export.js";
+import { queueAutoSave } from "../../legacy/save-bridge.ts";
 import { exportAs, runExport } from "../../js/18-local-files.js";
 import { wireTagEntityContainer } from "../../js/20-teleprompter.js";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";

@@ -1,4 +1,3 @@
-import { S } from "./_state.js";
 import { ensureBytes } from "../adapters/storage/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import { stampRow } from "./03-sync.js";
@@ -11,12 +10,12 @@ import { closeRowMenus } from "./06-rows.js";
 import { scheduleProductionRefresh } from "./07-production-tags.js";
 import { breakUndoCoalescing, flushEdits, lastUndoEntry, undo } from "./12a-undo.js";
 import { onServerDoc } from "./13-hosted.js";
-import { queueAutoSave } from "./14-export.js";
+import { autoSavePolicy } from "../legacy/save-bridge.ts";
 import { startNewScript } from "./18b-file-menu.js";
 import { randomHexBytes } from "../adapters/identity/ids.ts";
 import { addHeldCommentsCommand, pasteScenesCommand, removeScenesCommand } from "../application/commands/scenes.ts";
 import { cappedLongText } from "../core/document/text-policy.ts";
-import { REVIEW_ONLY, runCommand } from "../legacy/session-bridge.ts";
+import { REVIEW_ONLY, currentDocument, runCommand } from "../legacy/session-bridge.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { cellEditing, rowDrag } from "../legacy/editor-bridge.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
@@ -37,13 +36,13 @@ var pendingCut = false;
 var clipWritten = null;
 
 export function hasSceneSelection() {
-  if (sel && sel.doc !== S.state) clearSceneSelection();
+  if (sel && sel.doc !== currentDocument()) clearSceneSelection();
   return !!sel;
 }
 
 export function selectedSceneIds() {
   if (!hasSceneSelection()) return [];
-  var rows = S.state.rows;
+  var rows = currentDocument().rows;
   var a = -1, b = -1;
   rows.forEach(function (r, i) {
     if (r.id === sel.anchor) a = i;
@@ -60,7 +59,7 @@ export function selectedSceneIds() {
 }
 
 export function selectScenes(anchorId, focusId) {
-  sel = { anchor: anchorId, focus: focusId || anchorId, doc: S.state };
+  sel = { anchor: anchorId, focus: focusId || anchorId, doc: currentDocument() };
   paint();
 }
 
@@ -127,7 +126,7 @@ function onMouseMove(e) {
 
 function startScenes() {
   track.scene = true;
-  sel = { anchor: track.rowId, focus: track.rowId, doc: S.state };
+  sel = { anchor: track.rowId, focus: track.rowId, doc: currentDocument() };
   document.body.classList.add("is-scene-selecting");
   var s = window.getSelection();
   if (s) s.removeAllRanges();
@@ -196,8 +195,9 @@ function prefetchPictures() {
   if (!ids.length) return;
   var want = Object.create(null);
   ids.forEach(function (id) { want[id] = true; });
-  var rows = S.state.rows.filter(function (r) { return want[r.id]; });
-  var comments = (S.state.comments || []).filter(function (c) { return c && want[c.rowId]; });
+  var doc = currentDocument();
+  var rows = doc.rows.filter(function (r) { return want[r.id]; });
+  var comments = (doc.comments || []).filter(function (c) { return c && want[c.rowId]; });
   var shas = refsIn({ rows: rows, comments: comments });
   if (shas.length) ensureBytes(shas);
 }
@@ -213,7 +213,7 @@ function refused(what) {
 function writeScenes(cd, cut) {
   var ids = selectedSceneIds();
   var nonce = cut ? randomHexBytes(16) : null;
-  var out = buildScenePayload(S.state, ids, { cut: nonce });
+  var out = buildScenePayload(currentDocument(), ids, { cut: nonce });
   try { cd.setData(SCENES_MIME, out.json); } catch (e) { }
   cd.setData("text/html", out.html);
   cd.setData("text/plain", out.text);
@@ -271,7 +271,7 @@ function runClipboardCommand(cut) {
   if (!ids.length || !navigator.clipboard) { showToast("Could not reach the clipboard.", "warn"); return; }
   if (cut && refused("cut")) cut = false;
   var nonce = cut ? randomHexBytes(16) : null;
-  var out = buildScenePayload(S.state, ids, { cut: nonce });
+  var out = buildScenePayload(currentDocument(), ids, { cut: nonce });
   var write = typeof ClipboardItem === "function" && navigator.clipboard.write
     ? navigator.clipboard.write([new ClipboardItem({
         "text/html": new Blob([out.html], { type: "text/html" }),
@@ -285,7 +285,7 @@ function runClipboardCommand(cut) {
 }
 
 function afterCut(w) {
-  setLiveCut(w.nonce, S.state.docId);
+  setLiveCut(w.nonce, currentDocument().docId);
   var entry = takeOut(w.ids);
   var msg = count(w.ids.length) + " cut — paste them with Ctrl+V";
   if (w.out.leftOut.length) announceLeftOut(msg, w.out.leftOut);
@@ -340,7 +340,7 @@ function pasteClip(clip, afterRowId, opts) {
     runSceneCommand(addHeldCommentsCommand(res.held));
     flushEdits();
   } else if (hold) {
-    queueAutoSave();
+    autoSavePolicy().dueNow();
   }
   breakUndoCoalescing();
   scheduleProductionRefresh();
@@ -364,7 +364,7 @@ function pasteClip(clip, afterRowId, opts) {
 }
 
 export function pasteScenesAt(cd, cellEl) {
-  if (!cd || !S.state) return false;
+  if (!cd || !currentDocument()) return false;
   var clip = scenesOnClipboard(function (t) { return cd.getData(t); });
   if (!clip) return false;
   if (refused("pasted into")) return true;
@@ -392,10 +392,11 @@ export function newScriptFromSelection() {
     showToast("This is a review copy — copy the scenes, then paste them into a new script.", "warn");
     return;
   }
-  var title = S.state.title || "Untitled Script";
-  var clip = parseScenePayload(buildScenePayload(S.state, ids).json);
+  var source = currentDocument();
+  var title = source.title || "Untitled Script";
+  var clip = parseScenePayload(buildScenePayload(source, ids).json);
   if (!clip || !startNewScript()) return;
-  var first = S.state.rows[0];
+  var first = currentDocument().rows[0];
   pasteClip(clip, first ? first.id : null, {
     title: cappedLongText(title + " — " + count(ids.length), 300),
     message: "New script with " + count(ids.length) + " — the one before is in Version history"
