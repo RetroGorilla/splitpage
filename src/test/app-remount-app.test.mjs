@@ -95,6 +95,7 @@ const CONDITIONAL = {
 
 const RESOURCE_ROWS = {
   appearance: ["window storage/B"],
+  preferenceWatch: ["document splitpage:pref/B", "window storage/B"],
   shortcuts: ["window keydown/B"],
   topbar: [
     "#btn-production pointerenter/B", "#btn-production focus/B", "#btn-production pointerleave/B",
@@ -106,7 +107,6 @@ const RESOURCE_ROWS = {
   ],
   cellReach: ["#rows mousedown/B"],
   phoneBar: ["#phone-bar click/B"],
-  panelListeners: ["document splitpage:pref/B"],
   S13: ["#production-list click/C", "#production-list contextmenu/B", "#production-list pointercancel/B", "#production-list pointerdown/B", "#production-list pointermove/B", "#production-list pointerup/B"],
   S26: ["#production-panel change/B", "#production-panel click/B", "#production-panel focusout/B", "#production-panel input/B", "#production-panel keydown/B"],
   S27: ["#gear-panel change/B", "#gear-panel click/B", "#gear-panel focusout/B", "#gear-panel input/B", "#gear-panel keydown/B"],
