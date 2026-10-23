@@ -30,12 +30,13 @@ import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
 import { cellEditing, focusMemory, installCellEditing, installPicturePicker, mergeUndo, paintGuard, rowDrag, undoGuard } from "../../legacy/editor-bridge.ts";
 import { REVIEW_ONLY, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "../../legacy/session-bridge.ts";
 import { fromHtml } from "../../legacy/richtext.ts";
-import { VIEWING_ONLY } from "../../legacy/review-wording.ts";
+import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 import { cycleRowStatus } from "../../js/01-scene-status.js";
 import { expandHiddenShotStrip, revealRow } from "../../js/01b-hide-shot.js";
 import { restoreMergeSnapshot } from "../../js/03-sync.js";
 import { installMergeBanner } from "../../legacy/merge-bridge.ts";
-import { cssAttr, ensureTrailingCaretSpot, safeId, sanitizeHtml, storedHtmlFromDom } from "../../js/04-richtext.js";
+import { ensureTrailingCaretSpot, safeId, sanitizeHtml, storedHtmlFromDom } from "../../js/04-richtext.js";
+import { cssAttr } from "../../features/common/dom.ts";
 import { announceGalleryEdit } from "../../js/05e-gallery-overlay.js";
 import {
   cancelLink,

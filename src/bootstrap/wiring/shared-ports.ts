@@ -1,14 +1,23 @@
 import type { ActionRegistry } from "../../application/actions.ts";
+import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
 import type { ScreenState } from "../../application/screen.ts";
+import type { DocumentReader } from "../../application/session/document-reader.ts";
+import type { TextServices } from "../../application/text/services.ts";
 import { appActions } from "../../legacy/app-actions.ts";
+import { cacheSeal } from "../../legacy/cache-freeze.ts";
+import { productionReaders } from "../../legacy/document-ports.ts";
+import { reviewBlocked, reviewMode } from "../../legacy/location-bridge.ts";
+import { htmlToPlainText } from "../../legacy/plain-text.ts";
 import { PREF_EVENT, preferences } from "../../legacy/preferences-bridge.ts";
 import { autoSavePolicy, onSaveChange, resumeAutoSave, saveBusy, unsavedChanges } from "../../legacy/save-bridge.ts";
+import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
+import { currentDocument, onDocumentReplaced, onRefresh, onSessionChange, readSession } from "../../legacy/session-bridge.ts";
 
 const actions: Pick<ActionRegistry, "invoke" | "view"> = {
-  invoke: (id, source) => appActions.invoke(id, source),
+  invoke: (id, source, input) => appActions.invoke(id, source, input),
   view: (id, source) => appActions.view(id, source)
 };
 
@@ -34,6 +43,20 @@ const changes: PreferenceChanges = {
   }
 };
 
+const documentReader: DocumentReader = {
+  current: currentDocument,
+  read: readSession,
+  onChange: onSessionChange,
+  onReplaced: onDocumentReplaced,
+  onRefresh: onRefresh
+};
+
+const review: ReviewFacts = { reviewing: reviewMode, refuseInReview: reviewBlocked };
+
+const text: TextServices<HTMLElement> = {
+  cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal
+};
+
 const saves: SaveState = {
   unsaved: () => unsavedChanges(),
   busy: () => saveBusy(),
@@ -45,8 +68,11 @@ const saves: SaveState = {
 const shared = {
   actions,
   changes,
-  saves,
-  screen: (): ScreenState => screenNow()
+  screen: (): ScreenState => screenNow(),
+  document: documentReader,
+  review,
+  text,
+  saves
 };
 
 export function sharedPorts(): typeof shared {

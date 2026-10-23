@@ -3,7 +3,7 @@ import type { Connection, DocumentLocation, Home, HomeFields } from "../applicat
 import { createServerStatus } from "../application/location/server-status.ts";
 import type { ServerStatus, ServerStatusPorts } from "../application/location/server-status.ts";
 import { showToast } from "./effects-bridge.ts";
-import { VIEWING_ONLY } from "./review-wording.ts";
+import { VIEWING_ONLY } from "../application/collaboration/review.ts";
 
 interface Started {
   readonly location: DocumentLocation;
