@@ -1,5 +1,6 @@
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { EditorSelectionPort } from "../../application/editing/selection.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
@@ -12,6 +13,7 @@ import { arrivingOnLink } from "../../js/13-hosted.js";
 import { appActions } from "../../legacy/app-actions.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
+import { editorSelection } from "../../legacy/editor-bridge.ts";
 import {
   currentConn, currentHome, documentLocation, fileHome, homeConn, importHome, reviewBlocked, reviewMode,
   serverHomeId, serverStatus, stillOnServer
@@ -110,6 +112,10 @@ const production: ProductionIndexOwner = {
   recordsPlan: (doc, viewed) => productionIndex().recordsPlan(doc, viewed)
 };
 
+const selection: EditorSelectionPort = {
+  dropLink: () => { editorSelection().dropLink(); }
+};
+
 const shared = {
   actions,
   changes,
@@ -120,7 +126,8 @@ const shared = {
   review,
   text,
   saves,
-  production
+  production,
+  selection
 };
 
 export function sharedPorts(): typeof shared {

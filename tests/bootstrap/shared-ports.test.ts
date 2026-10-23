@@ -12,7 +12,9 @@ import { autoSavePolicy, haltAutoSave, noteSaveChange, saveDestinations, startSa
 import type { LegacySavePorts } from "../../src/legacy/save-bridge.ts";
 import { cacheSeal } from "../../src/legacy/cache-freeze.ts";
 import { productionReaders } from "../../src/legacy/document-ports.ts";
+import { editorSelection, startEditor } from "../../src/legacy/editor-bridge.ts";
 import { productionIndex, startProductionIndex } from "../../src/legacy/production-index-bridge.ts";
+import { liveDocumentPort } from "../../src/legacy/session-bridge.ts";
 import { migrateRows } from "../../src/js/02-state.js";
 
 test("shared ports follow their current owners, announce synchronously in subscription order and unsubscribe", () => {
@@ -152,6 +154,34 @@ test("the production index port forwards each call to the running production ind
     assert.equal(production.derived(), productionIndex().derived(), "the port reads the production index running now");
     production.resetDerived();
     assert.equal(productionIndex().derived(), 0);
+  } finally {
+    stop();
+  }
+});
+
+test("the selection port drops the running editor's held link and follows a restart", () => {
+  const selection = sharedPorts().selection;
+  assert.throws(() => selection.dropLink(), /The editor's owners are not started yet/);
+  let stop = startEditor(liveDocumentPort);
+  try {
+    const range = document.createRange();
+    const cell = document.createElement("div");
+    const first = editorSelection();
+    first.holdLink(range, cell);
+    assert.deepEqual(first.heldLink(), { range, cell });
+    selection.dropLink();
+    assert.equal(first.heldLink(), null);
+    first.holdLink(range, cell);
+    stop();
+    assert.throws(() => selection.dropLink(), /The editor's owners are not started yet/);
+    stop = startEditor(liveDocumentPort);
+    const second = editorSelection();
+    assert.notEqual(second, first);
+    second.holdLink(range, cell);
+    assert.deepEqual(second.heldLink(), { range, cell });
+    selection.dropLink();
+    assert.equal(second.heldLink(), null);
+    assert.deepEqual(first.heldLink(), { range, cell }, "the port drops only the running editor's link");
   } finally {
     stop();
   }
