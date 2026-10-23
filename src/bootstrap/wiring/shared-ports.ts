@@ -1,5 +1,7 @@
+import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { ExternalLinks } from "../../application/desktop-presence.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
@@ -8,6 +10,7 @@ import type { DocumentEdits } from "../../application/session/document-edits.ts"
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { ProductionIndexOwner } from "../../core/production/index.ts";
+import type { UpdatePorts, UpdateStatus } from "../../features/update/ports.ts";
 import { arrivingOnLink } from "../../js/13-hosted.js";
 import { appActions } from "../../legacy/app-actions.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
@@ -110,6 +113,19 @@ const production: ProductionIndexOwner = {
   recordsPlan: (doc, viewed) => productionIndex().recordsPlan(doc, viewed)
 };
 
+const externalLinks: ExternalLinks = {
+  available: () => typeof desktopPort()?.openExternal === "function",
+  open: (url) => { desktopPort()?.openExternal?.(url); }
+};
+
+const updates: UpdatePorts["updates"] = {
+  status: () => (desktopPort()?.getUpdateStatus?.() ?? Promise.resolve(null)) as Promise<UpdateStatus | null>,
+  onStatus: (listener) => { desktopPort()?.onUpdateStatus?.(listener as (status: unknown) => void); },
+  stopStatus: () => { desktopPort()?.onUpdateStatus?.(null); },
+  download: () => desktopPort()?.downloadUpdate?.() ?? Promise.resolve(null),
+  install: () => desktopPort()?.installUpdate?.() ?? Promise.resolve(null)
+};
+
 const shared = {
   actions,
   changes,
@@ -120,7 +136,9 @@ const shared = {
   review,
   text,
   saves,
-  production
+  production,
+  externalLinks,
+  updates
 };
 
 export function sharedPorts(): typeof shared {
