@@ -446,6 +446,7 @@ export function syncPanelClass() {
 }
 
 var historyRenderToken = 0;
+var historyShownDocId = null;
 
 var HISTORY_SUBTITLES = {
   idb: "Snapshots of this document, kept in this browser before anything that could overwrite your work.",
@@ -647,6 +648,10 @@ export async function renderHistory() {
   }
   var token = ++historyRenderToken;
   var docId = normalizeDocId(S.state.docId);
+  if (historyShownDocId !== docId) {
+    historyShownDocId = docId;
+    listEl.innerHTML = "";
+  }
   var data;
   try {
     data = await listDocHistory(docId);
