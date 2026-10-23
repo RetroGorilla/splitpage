@@ -54,6 +54,15 @@ export default [
   },
 
   {
+    files: ["src/features/find/find.js", "src/features/common/find-dom.js"],
+    languageOptions: {
+      sourceType: "module",
+      globals: globals.browser
+    },
+    rules: { "no-control-regex": "off" }
+  },
+
+  {
     files: ["src/test/**/*.mjs"],
     languageOptions: {
       sourceType: "module",
@@ -125,7 +134,7 @@ export default [
   },
 
   {
-    files: ["src/core/text/runs.ts", "src/js/09-find-replace.js"],
+    files: ["src/core/text/runs.ts"],
     rules: { "no-control-regex": "off" }
   },
 
