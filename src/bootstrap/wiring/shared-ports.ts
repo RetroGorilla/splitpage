@@ -1,10 +1,12 @@
 import type { ActionRegistry } from "../../application/actions.ts";
+import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import { appActions } from "../../legacy/app-actions.ts";
+import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
 import { reviewBlocked, reviewMode } from "../../legacy/location-bridge.ts";
@@ -55,7 +57,14 @@ const text: TextServices<HTMLElement> = {
   cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal
 };
 
+const effects: EffectPorts<Element> = {
+  notices: { show: showToast, showAction: showActionToast },
+  menuItems: { setLabel: setMenuItemLabel, setReason: setMenuItemReason },
+  clipboard: { copyText: copyShareText }
+};
+
 const shared = {
+  ...effects,
   actions,
   changes,
   screen: (): ScreenState => screenNow(),
