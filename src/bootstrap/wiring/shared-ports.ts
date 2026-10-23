@@ -1,8 +1,11 @@
 import type { ActionRegistry } from "../../application/actions.ts";
+import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { EditorSelectionPort } from "../../application/editing/selection.ts";
+import type { ExportRegistry } from "../../application/export/registry.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
+import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
@@ -11,16 +14,18 @@ import type { TextServices } from "../../application/text/services.ts";
 import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import { arrivingOnLink } from "../../js/13-hosted.js";
 import { appActions } from "../../legacy/app-actions.ts";
+import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
 import { editorSelection } from "../../legacy/editor-bridge.ts";
+import { exportFormats } from "../../legacy/export-formats.ts";
 import {
   currentConn, currentHome, documentLocation, fileHome, homeConn, importHome, reviewBlocked, reviewMode,
   serverHomeId, serverStatus, stillOnServer
 } from "../../legacy/location-bridge.ts";
 import { htmlToPlainText } from "../../legacy/plain-text.ts";
-import { PREF_EVENT, preferences } from "../../legacy/preferences-bridge.ts";
-import { autoSavePolicy, onSaveChange, resumeAutoSave, saveBusy, unsavedChanges } from "../../legacy/save-bridge.ts";
+import { PREF_EVENT, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
+import { autoSavePolicy, onSaveChange, resumeAutoSave, saveBusy, setAutoSaveEnabled, unsavedChanges } from "../../legacy/save-bridge.ts";
 import { productionIndex } from "../../legacy/production-index-bridge.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
@@ -71,6 +76,11 @@ const edits: DocumentEdits = {
 
 const review: ReviewFacts = { reviewing: reviewMode, refuseInReview: reviewBlocked };
 
+const flags: Pick<ViewFlags, "findOpen" | "setFindOpen"> = {
+  findOpen: () => viewFlags().findOpen(),
+  setFindOpen: (open) => viewFlags().setFindOpen(open)
+};
+
 const place: DocumentPlace = {
   home: () => currentHome(),
   connection: () => currentConn(),
@@ -96,12 +106,19 @@ const text: TextServices<HTMLElement> = {
   cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal
 };
 
+const effects: EffectPorts<Element> = {
+  notices: { show: showToast, showAction: showActionToast },
+  menuItems: { setLabel: setMenuItemLabel, setReason: setMenuItemReason },
+  clipboard: { copyText: copyShareText }
+};
+
 const saves: SaveState = {
   unsaved: () => unsavedChanges(),
   busy: () => saveBusy(),
   onChange: (listener) => onSaveChange(listener),
   dueNow: () => { autoSavePolicy().dueNow(); },
-  resume: () => { resumeAutoSave(); }
+  resume: () => { resumeAutoSave(); },
+  setAutoSaveEnabled: (on) => { setAutoSaveEnabled(on); }
 };
 
 const production: ProductionIndexOwner = {
@@ -116,7 +133,17 @@ const selection: EditorSelectionPort = {
   dropLink: () => { editorSelection().dropLink(); }
 };
 
+const exports: Pick<ExportRegistry, "card" | "cards" | "exporters" | "byAction" | "isAction" | "onChange"> = {
+  card: (id) => exportFormats.card(id),
+  cards: () => exportFormats.cards(),
+  exporters: () => exportFormats.exporters(),
+  byAction: (action) => exportFormats.byAction(action),
+  isAction: (action) => exportFormats.isAction(action),
+  onChange: (listener) => exportFormats.onChange(listener)
+};
+
 const shared = {
+  ...effects,
   actions,
   changes,
   screen: (): ScreenState => screenNow(),
@@ -124,10 +151,12 @@ const shared = {
   edits,
   place,
   review,
+  flags,
   text,
   saves,
   production,
-  selection
+  selection,
+  exports
 };
 
 export function sharedPorts(): typeof shared {
