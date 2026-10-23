@@ -19,19 +19,20 @@ const { migrateRows } = await import("../js/02-state.js");
 const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { buildDocx } = await import("../adapters/formats/docx.ts");
-const { closeImportModal, handleImportFile, openImportModal } = await import("../js/11-import.js");
+const { closeImportModal, openImportModal } = await import("../js/11-import.js");
 const { zipRead } = await import("../adapters/formats/zip.ts");
 const { setBackend: setBlobBackend } = await import("../adapters/storage/02c-blobs.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, fileConflicts, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
-const { exportAs, openProjectFile, saveBackToFile } = await import("../js/18-local-files.js");
+const { exportAs, saveBackToFile } = await import("../js/18-local-files.js");
 const { finishServerDetect } = await import("../js/13-hosted.js");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { openPrompterInBrowser } = await import("../js/20f-desktop.js");
 const { makeDesktopHandle } = await import("../adapters/desktop/desktop-handle.ts");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -64,7 +65,7 @@ function useDocument(doc) {
 
 async function openFrom(target) {
   useDocument(script("Placeholder"));
-  await openProjectFile(await target.handle.getFile(), target.handle, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: await target.handle.getFile(), handle: target.handle, options: { skipSnapshot: true, silent: true } });
   assert.equal(homeModule.currentHome().kind, "file", "the document is open from the file");
   assert.equal(homeModule.currentHome().handle, target.handle, "and its home holds the file's handle");
 }
@@ -92,7 +93,7 @@ async function openFromDesktop(fake, doc) {
   await fake.writeFile(picked.id, new TextEncoder().encode(buildSplitpageFile(exportDocumentOf(doc))));
   const handle = makeDesktopHandle(picked);
   useDocument(script("Placeholder"));
-  await openProjectFile(await handle.getFile(), handle, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: await handle.getFile(), handle: handle, options: { skipSnapshot: true, silent: true } });
   assert.equal(homeModule.currentHome().kind, "file", "the document is open from the desktop file");
   return picked;
 }
@@ -150,7 +151,7 @@ rightToday("F1", "a file save that fails after its document was replaced leaves 
   target.holdOp("close");
   const saving = saveDoc();
   await target.arrivedAt("close");
-  await openProjectFile(splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), null, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), handle: null, options: { skipSnapshot: true, silent: true } });
   assert.equal(currentDocument().title, "Replacement", "the document was replaced");
   assert.equal(currentDocument().rev, 7, "the replacement opened with its own rev");
   const before = observed();
@@ -172,7 +173,7 @@ rightToday("F1-abort", "a Save As picker that is cancelled after its document wa
   picks.hold("picker");
   const saving = saveDoc({ saveAs: true });
   await picks.arrived("picker");
-  await openProjectFile(splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), null, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), handle: null, options: { skipSnapshot: true, silent: true } });
   assert.equal(currentDocument().title, "Replacement", "the document was replaced");
   assert.equal(currentDocument().rev, 7, "the replacement opened with its own rev");
   const before = observed();
@@ -188,7 +189,7 @@ rightToday("F1-dialog", "a desktop save dialog that is cancelled after its docum
   held.holdOp("saveFileDialog");
   const saving = saveDoc();
   await held.arrivedAt("saveFileDialog");
-  await openProjectFile(splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), null, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), handle: null, options: { skipSnapshot: true, silent: true } });
   assert.equal(currentDocument().title, "Replacement", "the document was replaced");
   assert.equal(currentDocument().rev, 7, "the replacement opened with its own rev");
   const before = observed();
@@ -205,7 +206,7 @@ rightToday("F1-done", "a file save that completes after its document was replace
   target.holdOp("close");
   const saving = saveDoc();
   await target.arrivedAt("close");
-  await openProjectFile(splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), null, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: splitpageFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage"), handle: null, options: { skipSnapshot: true, silent: true } });
   const before = observed();
   target.releaseOp("close");
   await saving;
@@ -221,7 +222,7 @@ rightToday("F2", "a file save that completes after a same-id reopen leaves the r
   target.holdOp("close");
   const saving = saveDoc();
   await target.arrivedAt("close");
-  await openProjectFile(await target.handle.getFile(), target.handle, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: await target.handle.getFile(), handle: target.handle, options: { skipSnapshot: true, silent: true } });
   assert.equal(currentDocument().docId, ID("3"), "the reopened document has the same id");
   assert.equal(currentDocument().rows[0].audioText, "One.", "and it was read before the write landed");
   edit("Typed after the reopen.");
@@ -412,7 +413,7 @@ rightToday("F5-replaced", "a save waiting behind a running save is dropped when 
   document.getElementById("save-error-retry").click();
   await turns(20);
   const other = heldFile(script("Replacement", { docId: ID("2"), rev: 7 }), "other.splitpage");
-  await openProjectFile(await other.handle.getFile(), other.handle, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: await other.handle.getFile(), handle: other.handle, options: { skipSnapshot: true, silent: true } });
   assert.equal(currentDocument().title, "Replacement", "setup: the document was replaced");
   const before = observed();
   await finishSaves(target);
@@ -516,7 +517,7 @@ function importDocument() {
 
 async function importFrom(target) {
   useDocument(script("Placeholder"));
-  await openProjectFile(await target.handle.getFile(), target.handle);
+  await openDocument({ kind: "file", file: await target.handle.getFile(), handle: target.handle });
   assert.equal(homeModule.currentHome().kind, "import", "the text file opened as an import");
   assert.equal(homeModule.currentHome().handle, target.handle, "with its handle");
   assert.equal(homeModule.currentHome().dirty, false, "and nothing unsaved");
@@ -615,7 +616,7 @@ rightToday("I4", "a file decoded for an import that was closed and opened again 
   useDocument(script("Importing"));
   const late = heldTextFile("late.csv", "Visual,Audio\nLate,Late words.\n");
   openImportModal();
-  const decoding = handleImportFile(late.file);
+  const decoding = openDocument({ kind: "import", file: late.file });
   await late.gates.arrived("text");
   closeImportModal();
   openImportModal();
@@ -632,9 +633,9 @@ rightToday("I5", "a file decoded for an import into a document that was replaced
   useDocument(script("Importing"));
   const late = heldTextFile("late.csv", "Visual,Audio\nLate,Late words.\n");
   openImportModal();
-  const decoding = handleImportFile(late.file);
+  const decoding = openDocument({ kind: "import", file: late.file });
   await late.gates.arrived("text");
-  await openProjectFile(splitpageFile(script("Replacement", { docId: ID("5") })), null, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: splitpageFile(script("Replacement", { docId: ID("5") })), handle: null, options: { skipSnapshot: true, silent: true } });
   assert.equal(currentDocument().docId, ID("5"), "setup: the other document is open");
   late.gates.release("text");
   await decoding;
@@ -646,7 +647,7 @@ rightToday("I6", "confirming an import after its document was replaced adds noth
   useDocument(script("Importing"));
   openImportModal();
   document.getElementById("import-textarea").value = "Meant for the first document.";
-  await openProjectFile(splitpageFile(script("Replacement", { docId: ID("6") })), null, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: splitpageFile(script("Replacement", { docId: ID("6") })), handle: null, options: { skipSnapshot: true, silent: true } });
   const replacement = currentDocument();
   const before = observed();
   const rows = JSON.stringify(replacement.rows);
@@ -688,7 +689,7 @@ test("an import writeback that lands after another file was imported leaves the 
   const saving = saveBackToFile();
   await gates.arrived("file.close");
   const other = createHeldFileHandle({ name: "other.txt", text: "Gamma line.\n\nDelta line.\n", lastModified: 2000 });
-  await openProjectFile(await other.handle.getFile(), other.handle);
+  await openDocument({ kind: "file", file: await other.handle.getFile(), handle: other.handle });
   const replaced = homeModule.currentHome();
   edit("Typed in the other file.");
   assert.equal(replaced.dirty, true);
@@ -709,7 +710,7 @@ test("a writeback queued behind another writes nothing once a different file was
   await gates.arrived("file.close");
   const second = saveBackToFile();
   const other = createHeldFileHandle({ name: "other.txt", text: "Gamma line.\n\nDelta line.\n", lastModified: 2000 });
-  await openProjectFile(await other.handle.getFile(), other.handle);
+  await openDocument({ kind: "file", file: await other.handle.getFile(), handle: other.handle });
   const replaced = homeModule.currentHome();
   edit("Typed in the other file.");
   gates.release("file.close");

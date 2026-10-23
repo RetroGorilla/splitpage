@@ -13,16 +13,13 @@ import { isDraftBox, isScriptCell } from "../features/editing/cell-page.ts";
 import { trackDocument } from "./12a-undo.js";
 import { rowMotionKey, withRowMotion } from "../features/rows/row-motion.js";
 import {
-  openTagComposer,
   productionIndexStats,
   resetProductionIndexStats,
   scheduleUntaggedScan,
   tagFieldOccurrences
 } from "./07-production-tags.js";
-import {
-  formatTimestamp,
-  openCommentComposer
-} from "./10-comments.js";
+import { formatTimestamp } from "./10-comments.js";
+import { appActions } from "../legacy/app-actions.ts";
 import { personColor } from "./13a-presence.js";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { makeId } from "../adapters/identity/ids.ts";
@@ -1133,7 +1130,7 @@ export function handleToolbarCmd(btn) {
     afterC.collapse(true);
     csel.addRange(afterC);
     cellEditing().sync(cellEl);
-    openCommentComposer({
+    appActions.invoke("comment-on-selection", "button", {
       id: cmtId,
       rowId: cellEl.getAttribute("data-id"),
       field: cellEl.getAttribute("data-field"),
@@ -1157,7 +1154,7 @@ export function handleToolbarCmd(btn) {
     var tagOccurrenceIndex = tagQuoted
       ? tagFieldOccurrences(beforeDiv.innerHTML, tagQuoted, "x", "x", true).hits
       : 0;
-    openTagComposer({
+    appActions.invoke("tag-selection", "button", {
       rowId: cellEl.getAttribute("data-id"),
       field: cellEl.getAttribute("data-field"),
       quotedText: tagQuoted,

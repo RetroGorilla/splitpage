@@ -13,15 +13,16 @@ const { liveSession, noteReload } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { adoptRestoredState } = await import("../js/02b-doc-id.js");
-const { applyMerge, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { applyMerge, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { scheduleIdleRefresh, productionIndexStats } = await import("../js/07-production-tags.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { flushEdits, lastUndoEntry, undoSizes } = await import("../js/12a-undo.js");
-const { openProjectFile, reloadFileFromDisk } = await import("../js/18-local-files.js");
+const { reloadFileFromDisk } = await import("../js/18-local-files.js");
 const { startNewScript } = await import("../js/18b-file-menu.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -47,7 +48,7 @@ function script(title) {
   });
 }
 
-await openProjectFile(new File([buildSplitpageFile(exportDocumentOf(script("Bridge")))], "bridge.splitpage", { lastModified: 1 }), null, { skipSnapshot: true });
+await openDocument({ kind: "file", file: new File([buildSplitpageFile(exportDocumentOf(script("Bridge")))], "bridge.splitpage", { lastModified: 1 }), handle: null, options: { skipSnapshot: true } });
 
 test("the booted app's session holds the live document it adopted when the file opened", () => {
   assert.equal(currentDocument().title, "Bridge");
@@ -147,7 +148,7 @@ test("a reported merge marks the document dirty and advances saveChanges() as be
 test("a reload in place is its own kind: same epoch, no generation, saveChanges() and dirty as before, no undo entry", async () => {
   let disk = new File(["Wide\tOne.\nClose\tTwo."], "reload.txt", { lastModified: 1 });
   const handle = { kind: "file", name: "reload.txt", getFile: async () => disk };
-  await openProjectFile(disk, handle, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: disk, handle: handle, options: { skipSnapshot: true } });
   const doc = currentDocument();
   const epoch = session.epoch(), gen = session.generation(), seq = saveChanges();
   listen();
@@ -248,7 +249,7 @@ test("E4: a file draft restored onto a changed file is a recovery merge; an unti
 test("importing a file is an adoption at the transition that marks the document dirty and advances saveChanges() as before, with no edit generation", async () => {
   const gen = session.generation(), epoch = session.epoch(), seq = saveChanges();
   listen();
-  await openProjectFile(new File(["Wide\tOne.\nClose\tTwo."], "import.txt", { lastModified: 1 }), null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: new File(["Wide\tOne.\nClose\tTwo."], "import.txt", { lastModified: 1 }), handle: null, options: { skipSnapshot: true } });
   assert.deepEqual(heard, [], "the import is a new session: a subscription made for the old document hears nothing of it");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
@@ -262,7 +263,7 @@ test("restoring a version from history is an adoption at the transition that mar
   flushEdits();
   const point = cloneState(currentDocument());
   point.rows[0].audioText = "As it was.";
-  const ticket = pushSnapshot("A point to go back to", point);
+  const ticket = keepSnapshot("A point to go back to", point);
   await ticket.done;
   const button = document.createElement("button");
   button.setAttribute("data-id", ticket.id);

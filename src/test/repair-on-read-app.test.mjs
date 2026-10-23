@@ -15,20 +15,21 @@ const { render } = await import("../js/05-render.js");
 const { updateTagBadges } = await import("../bootstrap/wiring/panels.ts");
 const { productionIndex } = await import("../legacy/production-index-bridge.ts");
 const { currentDocument } = await import("../legacy/session-bridge.ts");
-const { openProductionPanel, closeProductionPanel, renderProduction, setTagNotes, setTagStatus } = await import("../js/08-production-panels.js");
+const { openProductionPanel, renderProduction, setTagNotes, setTagStatus } = await import("../js/08-production-panels.js");
 const { anchorBrollInLeftCell, brollEntries, updateBrollBadge } = await import("../js/08c-broll.js");
-const { openBrollPanel, closeBrollPanel, renderBroll, runBrollRefresh } = await import("../js/08d-broll-panel.js");
+const { openBrollPanel, renderBroll, runBrollRefresh } = await import("../js/08d-broll-panel.js");
+const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits, undo } = await import("../js/12a-undo.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { cellRuns, cellTextCommand } = await import("../application/commands/cell-text.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
 const { scriptCellOf } = await import("../legacy/richtext.ts");
 const { liveSession, runCommand, sessionTextPorts } = await import("../legacy/session-bridge.ts");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -50,7 +51,7 @@ function fixture() {
 let opened = 0;
 async function open(doc = fixture()) {
   const handle = createHeldFileHandle({ name: "repair-" + (++opened) + ".splitpage", text: buildSplitpageFile(exportDocumentOf(doc)), lastModified: 1000 });
-  await openProjectFile(await handle.handle.getFile(), handle.handle, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: await handle.handle.getFile(), handle: handle.handle, options: { skipSnapshot: true, silent: true } });
   flushEdits();
   confirmSavedNow();
   return handle;
@@ -92,10 +93,10 @@ test("6.5: render, the idle refreshes, the panels, the badges and the export kit
     const reads = {
       render: () => render(),
       "tag badges": () => updateTagBadges(),
-      "production panel": () => { openProductionPanel(); renderProduction(); closeProductionPanel(); },
+      "production panel": () => { openProductionPanel(); renderProduction(); sidePanels().close("production-panel"); },
       "b-roll refresh": () => runBrollRefresh(),
       "b-roll badge": () => updateBrollBadge(),
-      "b-roll panel": () => { openBrollPanel(); renderBroll(); closeBrollPanel(); },
+      "b-roll panel": () => { openBrollPanel(); renderBroll(); sidePanels().close("broll-panel"); },
       "b-roll entries": () => brollEntries(),
       "production entries": () => productionIndex().entries(currentDocument()),
       "export kit": () => buildSplitpageFile(exportDocumentOf(S.state))

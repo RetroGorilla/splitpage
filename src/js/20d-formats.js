@@ -13,15 +13,15 @@ import {
 import { inlineStateImages, internDataUrl, missingInlineImages, queuePersist, rowImageDataUrl } from "../adapters/storage/02c-blobs.js";
 import { setBaseState, stashLocalWork } from "./03-sync.js";
 import { tagFieldOccurrences } from "./07-production-tags.js";
-import { handleImportFile, parseMarkdownTable } from "./11-import.js";
+import { parseMarkdownTable } from "./11-import.js";
 import { captureExportDocument, exportDocumentOf } from "./14b-export-kit.js";
 import { audioDirectionsHtml } from "../adapters/formats/docx.ts";
 import { mdSceneCellSource, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
-import { openProjectFile } from "./18-local-files.js";
 import { cappedLongText, plainText, safeImageSrc } from "../core/document/text-policy.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";
 import { autoSavePolicy, autoSaveTarget, flushAutoSave, saveDoc, toggleAutoSave } from "../legacy/save-bridge.ts";
 import { currentDocument, heldDocument } from "../legacy/session-bridge.ts";
+import { openDocument } from "../legacy/transition-bridge.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
@@ -235,8 +235,8 @@ export function __init() {
     reassignDocId: reassignDocId,
     docIdEvents: docIdEvents,
     initDocIdentityChannel: initDocIdentityChannel,
-    openFile: function (file, handle) { return openProjectFile(file, handle || null, { skipSnapshot: true }); },
-    importFile: function (file) { return handleImportFile(file); },
+    openFile: function (file, handle) { return openDocument({ kind: "file", file: file, handle: handle || null, options: { skipSnapshot: true } }); },
+    importFile: function (file) { return openDocument({ kind: "import", file: file }); },
     save: function (opts) { return saveDoc(opts || {}); },
     autosave: {
       timing: function () { return autoSavePolicy().timing; },

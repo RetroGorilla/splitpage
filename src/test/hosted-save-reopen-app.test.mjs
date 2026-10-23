@@ -15,8 +15,9 @@ const { confirmSavedNow, saveDoc, saveToServer } = await import("../legacy/save-
 const { flushEdits } = await import("../js/12a-undo.js");
 const hosted = await import("../js/13-hosted.js");
 const homeModule = await import("../legacy/location-bridge.ts");
-const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -120,7 +121,7 @@ test("a hosted save that lands after a same-id reopen is not adopted, and the ne
   const saving = saveDoc({ auto: true });
   await held.gates.arrived("fetch");
 
-  assert.equal(await hosted.openServerDoc("srv-a"), true, "the document was reopened");
+  assert.equal(await openDocument({ kind: "server", id: "srv-a" }), true, "the document was reopened");
   assert.equal(textOf(currentDocument().rows[0]), "One.", "the reopened copy shows the server's revision 1");
   const warnedBefore = warnToasts().length;
 
@@ -166,7 +167,7 @@ test("a hosted save that lands after another server document was opened is not r
   held.holdWhen((r) => r.method === "PUT");
   const saving = saveDoc();
   await held.gates.arrived("fetch");
-  assert.equal(await hosted.openServerDoc("srv-f"), true, "the other document opened");
+  assert.equal(await openDocument({ kind: "server", id: "srv-f" }), true, "the other document opened");
   const warnedBefore = warnToasts().length;
 
   held.gates.releaseAll("fetch");
@@ -187,7 +188,7 @@ test("a history restore made while a hosted save is in flight sticks, on screen 
   server.put("srv-r", script(), 1);
   const held = withServer(t, server);
   openHosted("srv-r", 1);
-  const ticket = pushSnapshot("The version to go back to", cloneState(currentDocument()));
+  const ticket = keepSnapshot("The version to go back to", cloneState(currentDocument()));
   await ticket.done;
 
   currentDocument().rows[0].audioText = "Typed then regretted.";
@@ -232,7 +233,7 @@ test("a hosted save whose revision the reopen already fetched is not reported", 
   for (let turn = 0; turn < 2000 && !server.answered.length; turn++) await new Promise((resolve) => setImmediate(resolve));
   assert.equal(server.docs.get("srv-h").rev, 2, "the server accepted the save before replying");
 
-  assert.equal(await hosted.openServerDoc("srv-h"), true, "the document was reopened");
+  assert.equal(await openDocument({ kind: "server", id: "srv-h" }), true, "the document was reopened");
   assert.equal(textOf(currentDocument().rows[0]), "Saved before the reopen.", "the reopened copy already shows the saved text");
   const warnedBefore = warnToasts().length;
 

@@ -24,6 +24,7 @@ const { sceneStatusCommand } = await import("../application/commands/scene-statu
 const hosted = await import("../js/13-hosted.js");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 const { setHome } = homeModule;
 
 after(closeApp);
@@ -218,7 +219,7 @@ rightToday("S1", "a hosted save whose document is switched for another acknowled
   holdFirst(held, "PUT", "api/docs/srv-a");
   const saving = saveDoc();
   await held.gates.arrived("fetch");
-  assert.equal(await hosted.openServerDoc("srv-b"), true, "the other document opened");
+  assert.equal(await openDocument({ kind: "server", id: "srv-b" }), true, "the other document opened");
   const before = summary();
   held.gates.releaseAll("fetch");
   await saving;
@@ -236,7 +237,7 @@ rightToday("S2", "a hosted save that completes after a same-id reopen does not m
   holdFirst(held, "PUT", "api/docs/srv-a");
   const saving = saveDoc();
   await held.gates.arrived("fetch");
-  assert.equal(await hosted.openServerDoc("srv-a"), true, "the document was reopened");
+  assert.equal(await openDocument({ kind: "server", id: "srv-a" }), true, "the document was reopened");
   const before = summary();
   held.gates.releaseAll("fetch");
   await saving;
@@ -364,7 +365,7 @@ rightToday("S6-switch", "a 409 that arrives after the document was switched merg
   holdFirst(held, "PUT", "api/docs/srv-a");
   const saving = saveDoc();
   await held.gates.arrived("fetch");
-  assert.equal(await hosted.openServerDoc("srv-b"), true);
+  assert.equal(await openDocument({ kind: "server", id: "srv-b" }), true);
   const before = summary();
   held.gates.releaseAll("fetch");
   await saving;
@@ -381,7 +382,7 @@ rightToday("S6-reopen", "a 409 that arrives after a same-id reopen merges nothin
   holdFirst(held, "PUT", "api/docs/srv-a");
   const saving = saveDoc();
   await held.gates.arrived("fetch");
-  assert.equal(await hosted.openServerDoc("srv-a"), true, "the document was reopened");
+  assert.equal(await openDocument({ kind: "server", id: "srv-a" }), true, "the document was reopened");
   const before = summary();
   held.gates.releaseAll("fetch");
   await saving;
