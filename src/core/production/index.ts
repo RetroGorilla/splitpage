@@ -87,9 +87,10 @@ export function createProductionIndex(readers: ProductionReaders, seal: Seal): P
 
   function productionIndex(doc: ValidatedDocument | null | undefined): HeldIndex | { core: null; entries: PresentedProductionEntry[] } {
     if (!doc) return { core: null, entries: [] };
-    const kept = prodIndex && prodIndex.state === doc ? refreshedProductionIndex(prodIndex.core, doc, readers) : null;
-    if (kept && kept === (prodIndex as HeldIndex).core) return prodIndex as HeldIndex;
-    if (kept) return holdIndex(kept, (prodIndex as HeldIndex).entries, (prodIndex as HeldIndex).state);
+    const held = prodIndex;
+    const kept = held && held.state === doc ? refreshedProductionIndex(held.core, doc, readers) : null;
+    if (held && kept && kept === held.core) return held;
+    if (held && kept) return holdIndex(kept, held.entries, held.state);
     prodIndexDerived++;
     const core = deriveProductionIndex(doc, readers);
     return holdIndex(core, core.entries.map(presentEntry), doc);
@@ -132,7 +133,8 @@ export function createProductionIndex(readers: ProductionReaders, seal: Seal): P
         apply: plan.count ? function (into: DocumentShape): number {
           plan.retitle.forEach(function (r) { (into.productionTags[r.at] as DocumentTag).name = r.name; });
           plan.register.forEach(function (t) { into.productionTags.push(t); });
-          adoptRegisteredIds(ix as HeldIndex, into);
+          if (!ix.core) throw new TypeError("The viewed document has no production index");
+          adoptRegisteredIds(ix, into);
           if (plan.retitle.length) prodIndex = null;
           return plan.count;
         } : null,
