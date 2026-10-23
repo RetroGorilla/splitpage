@@ -1,14 +1,19 @@
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import { arrivingOnLink } from "../../js/13-hosted.js";
 import { appActions } from "../../legacy/app-actions.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
-import { reviewBlocked, reviewMode } from "../../legacy/location-bridge.ts";
+import {
+  currentConn, currentHome, documentLocation, fileHome, homeConn, importHome, reviewBlocked, reviewMode,
+  serverHomeId, serverStatus, stillOnServer
+} from "../../legacy/location-bridge.ts";
 import { htmlToPlainText } from "../../legacy/plain-text.ts";
 import { PREF_EVENT, preferences } from "../../legacy/preferences-bridge.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
@@ -60,6 +65,27 @@ const edits: DocumentEdits = {
 
 const review: ReviewFacts = { reviewing: reviewMode, refuseInReview: reviewBlocked };
 
+const place: DocumentPlace = {
+  home: () => currentHome(),
+  connection: () => currentConn(),
+  fileHome: () => fileHome(),
+  importHome: () => importHome(),
+  homeConn: () => homeConn(),
+  serverHomeId: () => serverHomeId(),
+  serverHomeRev: () => documentLocation().serverHomeRev(),
+  serverOf: (connection) => documentLocation().serverOf(connection),
+  stillOnServer: (connection) => stillOnServer(connection),
+  writtenOut: () => documentLocation().writtenOut(),
+  onChange: (listener) => documentLocation().onChange(listener),
+  arrivingOnLink: () => arrivingOnLink(),
+  serverMode: () => serverStatus().mode(),
+  linkTurnedOff: () => serverStatus().linkTurnedOff(),
+  sessionExpired: () => serverStatus().sessionExpired(),
+  bookmarks: () => serverStatus().bookmarks(),
+  bookmarkById: (id) => serverStatus().bookmarkById(id),
+  onServerStatusChange: (listener) => serverStatus().onChange(listener)
+};
+
 const text: TextServices<HTMLElement> = {
   cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal
 };
@@ -70,6 +96,7 @@ const shared = {
   screen: (): ScreenState => screenNow(),
   document: documentReader,
   edits,
+  place,
   review,
   text
 };
