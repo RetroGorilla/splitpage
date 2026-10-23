@@ -1,6 +1,6 @@
 # Selecting whole scenes by dragging out of a text box, and copying,
-# cutting, deleting and pasting them (#204; src/js/05h-scene-select.js,
-# src/js/05g-scene-clip.js):
+# cutting, deleting and pasting them (#204; src/features/clipboard/scene-select.js,
+# src/features/clipboard/scene-clip.js):
 #
 #   * a drag that stays in its text box selects words, as ever; one that
 #     leaves the box (up or down) selects whole scenes — the text

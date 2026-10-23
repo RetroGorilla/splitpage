@@ -2,13 +2,13 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import {
-  addComment, applySteps, breakLine, cellLength, cellOf, tagNameOf, commentIds, commentRange, deleteRange, fromHtml, insertBrollKey,
-  insertText, invertSteps, joinCells, markThroughout, marksAt, mergeCells, namedTagId, normalizeCell, projection, removeComment,
-  replaceText, replaceWithBrollKey, replaceWithTag, retag, sameCell, setMark, sliceCell, splitCell, tagIds, toDocxRuns, toHtml,
-  toMarkdown, toggleMark, typingMarks,
-  toPlainText, touchedCells
-} from "../js/04c-doc-model.js";
+import { addComment, breakLine, commentRange, deleteRange, insertBrollKey, insertText, joinCells, markThroughout, marksAt, removeComment, replaceText, replaceWithBrollKey, replaceWithTag, retag, setMark, sliceCell, splitCell, toggleMark, typingMarks } from "../core/text/edits.ts";
+import { applySteps, invertSteps, touchedCells } from "../core/text/steps.ts";
+import { cellLength, tagNameOf, commentIds, namedTagId, normalizeCell, projection, sameCell, tagIds } from "../core/text/runs.ts";
+import { cellOf, fromHtml } from "../legacy/richtext.ts";
+import { mergeCells } from "../core/merge/cells.ts";
+import { toDocxRuns, toMarkdown, toPlainText } from "../core/text/projections.ts";
+import { toHtml } from "../core/text/html.ts";
 import { htmlToMarkdown, inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { htmlToRuns } from "../adapters/formats/html-runs.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
