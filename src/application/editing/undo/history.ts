@@ -137,7 +137,7 @@ export interface UndoHistory {
 
 type Owned = { id?: unknown; name?: unknown; owner?: unknown; [key: string]: unknown };
 
-const SKIP_DOC_KEYS = idMap<true>();
+const SKIP_DOC_KEYS: Record<string, true> = {};
 STATE_FIELDS.forEach(function (f) { if (!f.undo) SKIP_DOC_KEYS[f.key] = true; });
 const SKIP_ROW_KEYS: Readonly<Record<string, true>> = { id: true, updatedAt: true, updatedBy: true };
 const TEXT_KEYS: Readonly<Record<string, true>> = { visualText: true, audioText: true };
@@ -166,7 +166,7 @@ function canon(v: unknown): unknown {
 
 function sameDoc(a: unknown, b: unknown): boolean { return same(canon(a), canon(b)); }
 
-function idKey(id: unknown): string { return String(id); }
+function idKey(id: unknown): string { return id as string; }
 
 function rowsOf(doc: UndoDocument | null | undefined): StepRow[] {
   return (doc && doc.rows) || [];
@@ -177,7 +177,7 @@ function headAfter(entry: UndoEntry): unknown {
 }
 
 function docKeys(before: UndoDocument | null | undefined, after: UndoDocument | null | undefined): string[] {
-  const keys = idMap<true>();
+  const keys: Record<string, true> = {};
   STATE_FIELDS.forEach(function (f) { keys[f.key] = true; });
   Object.keys(before || {}).forEach(function (k) { keys[k] = true; });
   Object.keys(after || {}).forEach(function (k) { keys[k] = true; });
@@ -186,7 +186,7 @@ function docKeys(before: UndoDocument | null | undefined, after: UndoDocument | 
 
 function rowsEqualIgnoringStamps(a: StepRow | undefined, b: StepRow | undefined): boolean {
   if (!a || !b) return false;
-  const keys = idMap<true>();
+  const keys: Record<string, true> = {};
   Object.keys(a).forEach(function (k) { keys[k] = true; });
   Object.keys(b).forEach(function (k) { keys[k] = true; });
   return Object.keys(keys).every(function (k) {
@@ -230,7 +230,7 @@ export function diffStates(before: UndoDocument, after: UndoDocument, opts?: Dif
   }
   work.forEach(function (id) {
     const b = bById[idKey(id)] as StepRow, a = aById[idKey(id)] as StepRow;
-    const keys = idMap<true>();
+    const keys: Record<string, true> = {};
     Object.keys(b).forEach(function (k) { keys[k] = true; });
     Object.keys(a).forEach(function (k) { keys[k] = true; });
     Object.keys(keys).forEach(function (k) {
@@ -827,7 +827,7 @@ export function changedBetween(prev: UndoDocument | null | undefined, next: Undo
   n.forEach(function (r) {
     const o = pById[idKey(r.id)];
     if (!o) return;
-    const keys = idMap<true>();
+    const keys: Record<string, true> = {};
     Object.keys(o).forEach(function (k) { keys[k] = true; });
     Object.keys(r).forEach(function (k) { keys[k] = true; });
     Object.keys(keys).forEach(function (k) {
