@@ -3,11 +3,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { restoreDesktop, useDesktopForTest } from "../../../src/adapters/desktop/desktop-port.ts";
 import type { DesktopPort } from "../../../src/adapters/desktop/desktop-port.ts";
-import { sharedPorts } from "../../../src/bootstrap/wiring/shared-ports.ts";
+import { updates as updatesPort } from "../../../src/bootstrap/wiring/update.ts";
 import type { UpdatePorts, UpdateStatus } from "../../../src/features/update/ports.ts";
 
 test("update ports can be wired before mounting and delegate every call and listener cleanup to the current desktop", async () => {
-  const ports: UpdatePorts = { updates: sharedPorts().updates };
+  const ports: UpdatePorts = { updates: updatesPort };
   const { updates } = ports;
   const status = {
     version: "4.1.0",
