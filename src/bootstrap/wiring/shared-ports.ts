@@ -1,6 +1,7 @@
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { ExportRegistry } from "../../application/export/registry.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
@@ -18,13 +19,14 @@ import { appActions } from "../../legacy/app-actions.ts";
 import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
+import { exportFormats } from "../../legacy/export-formats.ts";
 import {
   currentConn, currentHome, documentLocation, fileHome, homeConn, importHome, reviewBlocked, reviewMode,
   serverHomeId, serverStatus, stillOnServer
 } from "../../legacy/location-bridge.ts";
 import { htmlToPlainText } from "../../legacy/plain-text.ts";
 import { PREF_EVENT, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
-import { autoSavePolicy, onSaveChange, resumeAutoSave, saveBusy, unsavedChanges } from "../../legacy/save-bridge.ts";
+import { autoSavePolicy, onSaveChange, resumeAutoSave, saveBusy, setAutoSaveEnabled, unsavedChanges } from "../../legacy/save-bridge.ts";
 import { productionIndex } from "../../legacy/production-index-bridge.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
@@ -133,7 +135,8 @@ const saves: SaveState = {
   busy: () => saveBusy(),
   onChange: (listener) => onSaveChange(listener),
   dueNow: () => { autoSavePolicy().dueNow(); },
-  resume: () => { resumeAutoSave(); }
+  resume: () => { resumeAutoSave(); },
+  setAutoSaveEnabled: (on) => { setAutoSaveEnabled(on); }
 };
 
 const production: ProductionIndexOwner = {
@@ -142,6 +145,15 @@ const production: ProductionIndexOwner = {
   derived: () => productionIndex().derived(),
   resetDerived: () => { productionIndex().resetDerived(); },
   recordsPlan: (doc, viewed) => productionIndex().recordsPlan(doc, viewed)
+};
+
+const exports: Pick<ExportRegistry, "card" | "cards" | "exporters" | "byAction" | "isAction" | "onChange"> = {
+  card: (id) => exportFormats.card(id),
+  cards: () => exportFormats.cards(),
+  exporters: () => exportFormats.exporters(),
+  byAction: (action) => exportFormats.byAction(action),
+  isAction: (action) => exportFormats.isAction(action),
+  onChange: (listener) => exportFormats.onChange(listener)
 };
 
 const shared = {
@@ -157,6 +169,7 @@ const shared = {
   text,
   saves,
   production,
+  exports,
   ownership,
   pictures
 };
