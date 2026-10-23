@@ -2,6 +2,7 @@ import type { ActionRegistry, ActionSource, Refusal } from "../application/actio
 import { mountShortcuts } from "../features/shortcuts/mount.ts";
 import { showRefusal } from "../js/12-dirty-toast.js";
 import { runMenuCommandsWith } from "../js/20f-desktop.js";
+import { registerEditorOpenActions } from "../legacy/editor-open-actions.ts";
 import { registerFileActions } from "../legacy/file-actions.ts";
 import { registerHelpActions } from "../legacy/help-actions.ts";
 import { nativeMenuRunner } from "../legacy/native-menu.ts";
@@ -26,6 +27,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => registerHelpActions(registry),
     () => registerShareActions(registry),
     () => registerZoomActions(registry),
+    () => registerEditorOpenActions(registry),
     () => runMenuCommandsWith(nativeMenuRunner(registry, presentRefusal)),
     () => mountShortcuts({ target: keyTarget, registry })
   ];
