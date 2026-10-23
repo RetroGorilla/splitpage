@@ -10,7 +10,8 @@ const { render } = await import("../js/05-render.js");
 const { applyTag, findOrAddPerson, openTagComposer, registerProductionTag, renameTag } = await import("../js/07-production-tags.js");
 const { plainTagPhrase } = await import("../js/07b-plain-tags.js");
 const { addBrollProp } = await import("../js/08c-broll.js");
-const { closeBrollPanel, openBrollPanel } = await import("../js/08d-broll-panel.js");
+const { openBrollPanel } = await import("../js/08d-broll-panel.js");
+const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { renderComments, setCommentAssignee } = await import("../js/10-comments.js");
 const NAME_KEY = "splitpage-comment-author";
 const { preferences } = await import("../legacy/preferences-bridge.ts");
@@ -99,7 +100,7 @@ for (const [what, c] of CASES) {
     document.getElementById("broll-add-input").value = c.typed(200);
     document.getElementById("broll-add-save").click();
     assert.ok(S.state.brollShots.some((b) => b.origin === "list" && b.name === c.kept(200)), JSON.stringify(S.state.brollShots.map((b) => b.name)));
-    closeBrollPanel();
+    sidePanels().close("broll-panel");
   });
 
   test("08d a shot's location: " + what + " (#344, #419)", () => {
@@ -111,7 +112,7 @@ for (const [what, c] of CASES) {
     box.value = c.typed(80);
     enter(box);
     assert.equal(shot("bs2").location, c.kept(80));
-    closeBrollPanel();
+    sidePanels().close("broll-panel");
   });
 
   test("08d the selected shots' location: " + what + " (#344, #419)", () => {
@@ -128,7 +129,7 @@ for (const [what, c] of CASES) {
     click('[data-action="broll-bulk-input-save"]');
     assert.equal(shot("bs2").location, c.kept(80));
     click('[data-action="broll-bulk-clear"]');
-    closeBrollPanel();
+    sidePanels().close("broll-panel");
   });
 
   test("08d renaming a script shot: " + what + " (#344, #419)", () => {
@@ -141,7 +142,7 @@ for (const [what, c] of CASES) {
     click('[data-action="broll-rename-save"][data-id="bs1"]');
     const text = new window.DOMParser().parseFromString(S.state.rows[0].visualText, "text/html").body.textContent;
     assert.equal(text, "B-roll: " + c.kept(200));
-    closeBrollPanel();
+    sidePanels().close("broll-panel");
   });
 
   test("10 setCommentAssignee: " + what + " (#344, #419)", () => {
@@ -426,7 +427,7 @@ test("a keyed B-roll line whose id has no stored shot keeps the shot its old cut
   assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs9", x(199) + GRIN, "two"]]);
   openBrollPanel();
   assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs9", x(199) + GRIN, "two"]]);
-  closeBrollPanel();
+  sidePanels().close("broll-panel");
 });
 
 test("a keyed B-roll line whose id is a stored shot still renames no other shot (#445)", () => {

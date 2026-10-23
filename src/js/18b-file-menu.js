@@ -13,7 +13,7 @@ import {
   canOpenPrompterInChromium,
   makeDesktopHandle
 } from "./20f-desktop.js";
-import { closeNewTabPage } from "./20j-newtab.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { LONG_DEMO } from "./_starters.js";
 import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
 import { setMenuItemLabel, setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
@@ -341,7 +341,7 @@ function replaceWithNewDocument(next, reason, keepLabel) {
   applyReviewMode();
   updateSaveStatus();
   if (typeof syncDocIdentity === "function") syncDocIdentity();
-  if (typeof closeNewTabPage === "function") closeNewTabPage();
+  sidePanels().close("newtab-page");
   return kept;
 }
 
