@@ -13,7 +13,7 @@ const { closeBrollPage, openBrollPage, openBrollPanel } = await import("../js/08
 const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const closeBroll = () => { sidePanels().close("broll-panel"); };
 const closeProduction = () => { sidePanels().close("production-panel"); };
-const { clearDirty } = await import("../js/12-dirty-toast.js");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
@@ -31,7 +31,7 @@ function load() {
     brollShots: [{ id: "bs1", name: "Harbour wide", origin: "list", notes: LEAD, audioRef: LEAD }]
   }));
   render();
-  clearDirty();
+  confirmSavedNow();
 }
 
 function shot() { return S.state.brollShots[0]; }

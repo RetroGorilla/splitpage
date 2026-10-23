@@ -1,6 +1,5 @@
 import { MD_IMAGE_PREFIX_RE } from "../adapters/formats/markdown-image.ts";
 import { deriveDocId, docIdEmbeddedIn } from "../core/document/ids.ts";
-import { S } from "./_state.js";
 import { amendHome, documentLocation, fileHome } from "../legacy/location-bridge.ts";
 import { legacyMdToHtml, makeId, migrateRows } from "./02-state.js";
 import {
@@ -14,21 +13,15 @@ import {
 import { inlineStateImages, internDataUrl, missingInlineImages, queuePersist, rowImageDataUrl } from "../adapters/storage/02c-blobs.js";
 import { setBaseState, stashLocalWork } from "./03-sync.js";
 import { tagFieldOccurrences } from "./07-production-tags.js";
-import { handleImportFile, parseMarkdownTable } from "./11-import.js";
+import { parseMarkdownTable } from "./11-import.js";
 import { captureExportDocument, exportDocumentOf } from "./14b-export-kit.js";
 import { audioDirectionsHtml } from "../adapters/formats/docx.ts";
-import {
-  autoSaveTarget,
-  flushAutoSave,
-  saveDoc,
-  toggleAutoSave
-} from "./14-export.js";
 import { mdSceneCellSource, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
-import { openProjectFile } from "./18-local-files.js";
 import { cappedLongText, plainText, safeImageSrc } from "../core/document/text-policy.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";
-import { autoSavePolicy } from "../legacy/save-bridge.ts";
-import { heldDocument } from "../legacy/session-bridge.ts";
+import { autoSavePolicy, autoSaveTarget, flushAutoSave, saveDoc, toggleAutoSave } from "../legacy/save-bridge.ts";
+import { currentDocument, heldDocument } from "../legacy/session-bridge.ts";
+import { openDocument } from "../legacy/transition-bridge.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
@@ -235,15 +228,15 @@ export function __init() {
     buildMarkdown: function (s) { return buildMarkdownProject(s ? exportDocumentOf(s) : captureExportDocument()); },
     parseMarkdown: parseMarkdownProject,
     buildStandaloneHtml: function () { return standaloneHtmlFor(captureExportDocument()); },
-    docId: function () { return S.state ? S.state.docId : null; },
+    docId: function () { return currentDocument() ? currentDocument().docId : null; },
     writtenOut: function () { return documentLocation().writtenOut(); },
     deriveDocId: deriveDocId,
     adoptRestoredState: adoptRestoredState,
     reassignDocId: reassignDocId,
     docIdEvents: docIdEvents,
     initDocIdentityChannel: initDocIdentityChannel,
-    openFile: function (file, handle) { return openProjectFile(file, handle || null, { skipSnapshot: true }); },
-    importFile: function (file) { return handleImportFile(file); },
+    openFile: function (file, handle) { return openDocument({ kind: "file", file: file, handle: handle || null, options: { skipSnapshot: true } }); },
+    importFile: function (file) { return openDocument({ kind: "import", file: file }); },
     save: function (opts) { return saveDoc(opts || {}); },
     autosave: {
       timing: function () { return autoSavePolicy().timing; },

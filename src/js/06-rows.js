@@ -1,4 +1,3 @@
-import { S } from "./_state.js";
 import { internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { safeHref, safeId, storedHtmlFromDom } from "./04-richtext.js";
@@ -11,7 +10,7 @@ import { placeCaretAtTextOffset } from "../features/editing/caret.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { addSceneCommand, deleteSceneCommand, swapScenesCommand } from "../application/commands/rows.ts";
 import { splitSceneCommand, textCut } from "../application/commands/split-join.ts";
-import { REVIEW_ONLY, onDocumentReplaced, readSession, runCommand, sessionStamps, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { REVIEW_ONLY, currentDocument, onDocumentReplaced, readSession, runCommand, sessionStamps, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { cellEditing, rowDrag } from "../legacy/editor-bridge.ts";
@@ -169,7 +168,7 @@ export function armDelete(btn, id) {
   var idx = readSession(function (doc) { return rowIndexOf(doc, id); });
   var rowEl = document.querySelector('#rows .row[data-id="' + safeId(id) + '"]');
   if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(function (cellEl) { cellEditing().sync(cellEl); });
-  if (idx !== -1 && isBlankScene(S.state, S.state.rows[idx])) {
+  if (idx !== -1 && isBlankScene(currentDocument(), currentDocument().rows[idx])) {
     deleteConfirmation().disarm("row");
     deleteRow(id);
     return;
@@ -388,7 +387,7 @@ export function openVideoFile(link) {
 export function openGalleryLink(rowId, slot, key) {
   var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
   if (idx === -1) return;
-  var s = rowSlots(S.state.rows[idx])[slot];
+  var s = rowSlots(currentDocument().rows[idx])[slot];
   var link = s && s.links.filter(function (l) { return videoLinkKey(l) === key; })[0];
   if (!link) return;
   if (link.href) {

@@ -11,6 +11,7 @@ export interface Arrival<D> {
   readonly from: Incoming;
   readonly reason: string;
   readonly destination?: D | undefined;
+  readonly keep?: string | undefined;
 }
 
 export interface Opening<D> extends Arrival<D> {
@@ -37,6 +38,7 @@ export interface Publication<D> {
 export interface Arrived {
   readonly document: ValidatedDocument;
   readonly forkedFrom: string | null;
+  readonly kept: boolean;
 }
 
 export type Published =
@@ -57,9 +59,16 @@ export function createTransitions<D>(ports: TransitionPorts<D>): Transitions<D> 
     return "document" in from ? from.document : ports.entry(from.raw);
   }
 
-  function arrive(doc: ValidatedDocument, forkedFrom: string | null): Arrived {
+  function keep(arrival: Arrival<D>): boolean {
+    if (arrival.keep === undefined) return false;
+    const live = ports.live.current();
+    if (!live || !live.rows.length) return false;
+    return !!ports.history.keep(arrival.keep);
+  }
+
+  function arrive(doc: ValidatedDocument, forkedFrom: string | null, kept: boolean): Arrived {
     ports.live.assign(doc);
-    return Object.freeze({ document: doc, forkedFrom: forkedFrom });
+    return Object.freeze({ document: doc, forkedFrom: forkedFrom, kept: kept });
   }
 
   function settle<T>(arrival: Arrival<D>, baseline: ValidatedDocument | null, writtenOut: boolean | undefined, arrived: T): T {
@@ -71,27 +80,30 @@ export function createTransitions<D>(ports: TransitionPorts<D>): Transitions<D> 
 
   function open(opening: Opening<D>): Arrived {
     const doc = enter(opening.from);
-    return settle(opening, doc, opening.writtenOut, arrive(doc, null));
+    const kept = keep(opening);
+    return settle(opening, doc, opening.writtenOut, arrive(doc, null, kept));
   }
 
   function startNew(arrival: Arrival<D>): Arrived {
     const doc = enter(arrival.from);
-    return settle(arrival, doc, false, arrive(doc, null));
+    const kept = keep(arrival);
+    return settle(arrival, doc, false, arrive(doc, null, kept));
   }
 
   function restore(restoration: Restoration): Arrived {
     const doc = enter(restoration.from);
     const live = ports.live.current();
     if (live) doc.docId = live.docId;
-    return arrive(doc, null);
+    return arrive(doc, null, false);
   }
 
   function recover(recovery: Recovery<D>): Arrived {
     const doc = enter(recovery.from);
+    const kept = keep(recovery);
     const forkedFrom = recovery.detached ? doc.docId : null;
     if (recovery.detached) doc.docId = ports.identity.mint();
     const writtenOut = recovery.detached ? false : recovery.writtenOut;
-    return settle(recovery, recovery.baseline, writtenOut, arrive(doc, forkedFrom));
+    return settle(recovery, recovery.baseline, writtenOut, arrive(doc, forkedFrom, kept));
   }
 
   function publish(ctx: OperationContext, publication: Publication<D>): Published {

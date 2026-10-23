@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
@@ -10,13 +10,13 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { render } = await import("../js/05-render.js");
 const { cellEditing, undoGuard } = await import("../legacy/editor-bridge.ts");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -48,14 +48,14 @@ let opened = 0;
 async function open(doc) {
   if (viewFlags().writerOpen()) writer.closeWriter();
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(doc || fixture())))], "text-" + (++opened) + ".splitpage", { lastModified: opened });
-  await openProjectFile(file, null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
-const row = (id) => S.state.rows.find((r) => r.id === id);
+const row = (id) => currentDocument().rows.find((r) => r.id === id);
 const cellOf = (id, field, root) => document.querySelector((root || "#rows") + ' .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
-const anchors = () => S.state.comments.map((c) => [c.id, c.rowId, c.field]);
+const anchors = () => currentDocument().comments.map((c) => [c.id, c.rowId, c.field]);
 
 function lastText(el) {
   const walker = document.createTreeWalker(el, 4);
@@ -367,9 +367,9 @@ test("a split (Alt+Enter) through a commented phrase: one entry, one dirty, one 
   selectText(el, 12, 12);
   const stamp = row("r2").updatedAt;
   const got = record(() => key(el, "Enter", { altKey: true }));
-  const created = S.state.rows[2].id;
+  const created = currentDocument().rows[2].id;
   assert.deepEqual(got, { seq: 1, render: 1, undo: 1, steps: ["rowField:r2.audioText", "insertRow:" + created] });
-  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", created, "r3", "r4"]);
+  assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", created, "r3", "r4"]);
   assert.equal(row("r2").audioText, "Alpha " + cmt("c1", "bravo "));
   assert.equal(row(created).audioText, cmt("c1", "charlie") + " delta");
   assert.equal(row(created).status, "todo");
@@ -386,12 +386,12 @@ test("a split before a commented phrase moves its comment to the new scene in th
   el.focus();
   selectText(el, 3, 3);
   const got = record(() => key(el, "Enter", { altKey: true }));
-  const created = S.state.rows[2].id;
+  const created = currentDocument().rows[2].id;
   assert.deepEqual(got, { seq: 1, render: 1, undo: 1, steps: ["rowField:r2.audioText", "insertRow:" + created, "docField:comments"] });
   assert.equal(row("r2").audioText, "Alp");
   assert.deepEqual(anchors(), [["c1", created, "audioText"], ["c2", "r4", "audioText"]]);
   assert.equal(undo().ok, true);
-  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r3", "r4"]);
+  assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3", "r4"]);
   assert.equal(row("r2").audioText, "Alpha " + cmt("c1", "bravo charlie") + " delta");
   assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
 });
@@ -404,7 +404,7 @@ test("a Writer join (Backspace at a scene's start): one entry; words glued with 
   selectText(p4, 0, 0);
   const got = record(() => key(p4, "Backspace"));
   assert.deepEqual(got, { seq: 1, render: 0, undo: 1, steps: ["deleteRow:r4", "rowField:r3.audioText", "rowField:r3.status", "docField:comments"] });
-  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r3"]);
+  assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3"]);
   assert.equal(row("r3").audioText, "Three. Four " + cmt("c2", "words") + ".");
   assert.equal(row("r3").status, "shot", "the joined scene takes the further status");
   assert.equal(row("r3").visualText, KEY("bsA") + " gulls");
@@ -412,7 +412,7 @@ test("a Writer join (Backspace at a scene's start): one entry; words glued with 
   assert.equal(document.activeElement, para("r3"));
   assert.equal(caretTextOffset(document.activeElement), "Three.".length, "the caret lands where the two met");
   assert.equal(undo().ok, true);
-  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r3", "r4"]);
+  assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3", "r4"]);
   assert.equal(row("r3").status, "todo");
   assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
   writer.closeWriter();
@@ -421,13 +421,13 @@ test("a Writer join (Backspace at a scene's start): one entry; words glued with 
 test("a Writer join of two scenes that both have a visual is refused with a toast and changes nothing", async () => {
   await open();
   writer.openWriter();
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   const p2 = para("r2");
   p2.focus();
   selectText(p2, 0, 0);
   const got = record(() => key(p2, "Backspace"));
   assert.deepEqual(got, { seq: 0, render: 0, undo: 0, steps: [] });
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.equal(toasts().at(-1), "Both scenes have a visual \u2014 join them in the split view, so you can pick which one to keep.");
   writer.closeWriter();
 });
@@ -439,7 +439,7 @@ test("a Writer split (Enter) before a commented word: one entry, and the comment
   p4.focus();
   selectText(p4, 2, 2);
   const got = record(() => key(p4, "Enter"));
-  const created = S.state.rows[4].id;
+  const created = currentDocument().rows[4].id;
   assert.deepEqual(got, { seq: 1, render: 0, undo: 1, steps: ["rowField:r4.audioText", "insertRow:" + created, "docField:comments"] });
   assert.equal(row("r4").audioText, "Fo");
   assert.equal(row(created).audioText, "ur " + cmt("c2", "words") + ".");
@@ -499,7 +499,7 @@ test("a copied b-roll key pasted onto an empty line gets a fresh id and a shot r
   assert.notEqual(id, "bsA");
   assert.match(id, /^bs[a-z0-9]+$/);
   assert.equal(row("r4").visualText, KEY(id) + " gulls");
-  assert.deepEqual(S.state.brollShots.map((s) => s.id), ["bsA", id]);
+  assert.deepEqual(currentDocument().brollShots.map((s) => s.id), ["bsA", id]);
   assert.equal(row("r3").visualText, KEY("bsA") + " gulls");
 });
 
@@ -515,7 +515,7 @@ test("a cut b-roll key pasted in the same tab keeps its id and makes no second r
   selectAll(to);
   clip("paste", to, store);
   assert.equal(row("r4").visualText, KEY("bsA") + " gulls");
-  assert.deepEqual(S.state.brollShots.map((s) => s.id), ["bsA"]);
+  assert.deepEqual(currentDocument().brollShots.map((s) => s.id), ["bsA"]);
 });
 test("a Writer join into a scene with no visual takes the later scene's visual and gallery slot, in one entry", async () => {
   const doc = fixture();
@@ -536,13 +536,13 @@ test("a Writer join into a scene with no visual takes the later scene's visual a
   assert.ok(got.steps.includes("deleteRow:r4"));
   assert.ok(got.steps.includes("rowField:r3b.visualText"));
   assert.ok(got.steps.includes("rowField:r3b.imageLinks"));
-  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r3", "r3b"]);
+  assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3", "r3b"]);
   assert.equal(row("r3b").visualText, "Drone over the bay");
   assert.equal(JSON.stringify(row("r3b").imageLinks), links);
   assert.equal(row("r3b").audioText, "Bridge. Four " + cmt("c2", "words") + ".");
   assert.equal(row("r3b").status, "shot");
   assert.equal(undo().ok, true);
-  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r3", "r3b", "r4"]);
+  assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3", "r3b", "r4"]);
   assert.equal(row("r3b").visualText, "");
   assert.ok(!row("r3b").imageLinks);
   assert.equal(JSON.stringify(row("r4").imageLinks), links);
@@ -557,13 +557,13 @@ test("a Writer join by Delete at a scene's end pulls the next scene up into it, 
   selectText(p3, "Three.".length, "Three.".length);
   const got = record(() => key(p3, "Delete"));
   assert.deepEqual(got, { seq: 1, render: 0, undo: 1, steps: ["deleteRow:r4", "rowField:r3.audioText", "rowField:r3.status", "docField:comments"] });
-  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r3"]);
+  assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3"]);
   assert.equal(row("r3").audioText, "Three. Four " + cmt("c2", "words") + ".");
   assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r3", "audioText"]]);
   assert.equal(document.activeElement, para("r3"));
   assert.equal(caretTextOffset(document.activeElement), "Three.".length);
   assert.equal(undo().ok, true);
-  assert.deepEqual(S.state.rows.map((r) => r.id), ["r1", "r2", "r3", "r4"]);
+  assert.deepEqual(currentDocument().rows.map((r) => r.id), ["r1", "r2", "r3", "r4"]);
   writer.closeWriter();
 });
 

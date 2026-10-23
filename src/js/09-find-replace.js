@@ -7,7 +7,7 @@ import { currentDocument, readSession, runDocumentEdit, sessionStamps } from "..
 import { rewriteCellsCommand, rewrittenCopies } from "../application/commands/document-edit.ts";
 import { tagCellsCommand } from "../application/commands/production-records.ts";
 import { cssAttr, inertBody, sanitizeHtml } from "./04-richtext.js";
-import { bulkTagRows } from "./07-production-tags.js";
+import { bulkTagRows } from "../application/commands/bulk-tags.ts";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { BROLL_MARKER_RE } from "../core/document/broll.ts";
 import { idMap } from "../core/document/id-map.ts";

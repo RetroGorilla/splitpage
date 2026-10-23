@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existingTarget, isAbort, pickTarget, writeToHandle } from "../../../src/adapters/files/file-target.ts";
+import { checkFileConflict, existingTarget, isAbort, pickTarget, writeToHandle } from "../../../src/adapters/files/file-target.ts";
 import type { FileHandle, FileWritable } from "../../../src/adapters/files/file-target.ts";
 
 interface Fake extends FileHandle {
@@ -96,4 +96,17 @@ test("only an AbortError counts as an abort", () => {
   assert.equal(isAbort(new Error("AbortError")), false);
   assert.equal(isAbort(null), false);
   assert.equal(isAbort("AbortError"), false);
+});
+
+test("the file-change check passes with no recorded time, passes when the file still has it, and names the newer file otherwise", async () => {
+  const same = fakeHandle("a.md", { stat: 42 });
+  assert.deepEqual(await checkFileConflict(same, null), { ok: true });
+  assert.deepEqual(same.log, [], "with no recorded time it reads nothing");
+  assert.deepEqual(await checkFileConflict(same, 42), { ok: true });
+  assert.deepEqual(await checkFileConflict(fakeHandle("a.md", { stat: 50 }), 42), { ok: false, current: { lastModified: 50 } });
+  assert.deepEqual(await checkFileConflict(fakeHandle("a.md", { stat: 0 }), 42), { ok: true }, "a file with no time of its own is not a change");
+});
+
+test("the file-change check reports a file it cannot read as changed, with nothing to compare", async () => {
+  assert.deepEqual(await checkFileConflict(fakeHandle("gone.md", { stat: new Error("not found") }), 42), { ok: false, current: null });
 });

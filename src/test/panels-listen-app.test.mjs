@@ -12,7 +12,16 @@ const { addCommentCommand, toggleResolveCommand } = await import("../application
 const { addSceneCommand } = await import("../application/commands/rows.ts");
 const { registerTagCommand } = await import("../application/commands/production-records.ts");
 const { wordsPerMinuteCommand } = await import("../application/commands/document-settings.ts");
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { preferences, viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { announceTagged } = await import("../js/07-production-tags.js");
+const { replaceWithTag } = await import("../core/text/edits.ts");
+const { namedTagId } = await import("../core/text/runs.ts");
+const { cellEditing } = await import("../legacy/editor-bridge.ts");
+const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
+const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
+const { targetLengthCommand } = await import("../application/commands/document-settings.ts");
+const { openProductionPanel } = await import("../js/08-production-panels.js");
+const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { mountPanelListenersFeature, stopPanelListenersFeature } = await import("../bootstrap/wiring/panels.ts");
 const writer = await import("../js/19-writer.js");
@@ -87,6 +96,50 @@ test("a reading-speed change that repaints the screen refreshes the length chips
   const before = el("length-status").textContent;
   runCommand(wordsPerMinuteCommand(60));
   assert.notEqual(el("length-status").textContent, before);
+});
+
+test("tagging text with an existing tag refreshes the open production panel with no direct call", () => {
+  open();
+  runCommand(registerTagCommand({ cat: "prop", name: "Lamp" }));
+  openProductionPanel();
+  const list = el("production-list");
+  assert.equal(list.innerHTML.includes("tag-orphan-badge"), true);
+  const cellEl = document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');
+  cellEditing().edit(cellEl, (cell) => {
+    const r = replaceWithTag(cell, 0, 3, "One", namedTagId("prop", "Lamp"));
+    return { cell: r.cell, sel: { from: r.end, to: r.end }, records: { tags: [{ cat: "prop", name: "Lamp" }] } };
+  });
+  flushEdits();
+  announceTagged();
+  const after = list.innerHTML;
+  sidePanels().close("production-panel");
+  assert.equal(after.includes("tag-orphan-badge"), false);
+});
+
+test("a clock preference change repaints the open comments list", () => {
+  open();
+  runCommand(addCommentCommand(comment("c4")));
+  const list = el("comments-list");
+  list.innerHTML = "stale";
+  preferences().setClock(preferences().clock() === "24" ? "12" : "24");
+  assert.notEqual(list.innerHTML, "stale");
+});
+
+test("status, scene length and target length changes update the length chips with no direct call", () => {
+  open();
+  const chip = () => el("length-status").textContent;
+  const seen = [chip()];
+  runCommand(sceneLengthCommand("r2", 600, sessionStamps));
+  seen.push(chip());
+  assert.notEqual(seen[1], seen[0]);
+  runCommand(targetLengthCommand(60));
+  seen.push(chip());
+  assert.notEqual(seen[2], seen[1]);
+  assert.equal(el("progress-chip").hidden, true);
+  runCommand(sceneStatusCommand("r1", sessionStamps));
+  runCommand(sceneStatusCommand("r1", sessionStamps));
+  assert.equal(el("progress-chip").hidden, false);
+  assert.equal(el("progress-text").textContent, "1/2 shot");
 });
 
 test("the panel listeners stop when the feature is stopped", () => {

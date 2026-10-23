@@ -1,20 +1,17 @@
-import { S } from "./_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { currentHome, reviewMode, serverStatus } from "../legacy/location-bridge.ts";
 import { savedStatusText, savedWhenText } from "../../shared/clock.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
-import { pushSnapshot } from "./03-sync.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
-import { clearDirty, updateSaveStatus } from "./12-dirty-toast.js";
-import { applyReviewMode, updateServerMenu } from "./13-hosted.js";
-import { openProjectFile } from "./18-local-files.js";
-import { makeDesktopHandle } from "./20f-desktop.js";
+import { applyReviewMode } from "./13-hosted.js";
 import { canOpenPrompterInBrowser, canOpenPrompterInChromium } from "../adapters/desktop/desktop-port.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
+import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { LONG_DEMO } from "./_starters.js";
-import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
+import { NO_DESTINATION, documentTransitions, keepSnapshot, openDocument } from "../legacy/transition-bridge.ts";
 import { setMenuItemLabel, setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
-import { saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { confirmSavedNow, saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
@@ -108,12 +105,12 @@ function savedWord(at) {
 }
 
 export function fileCardView() {
-  if (!S.state) return { name: "Loading…", bits: [] };
+  if (!currentDocument()) return { name: "Loading…", bits: [] };
   if (currentHome().kind === "server") {
     var srv = serverStatus().sessionExpired() ? { text: "Signed out — reload to sign in", unsaved: true }
       : serverStatus().linkTurnedOff() ? { text: "Link turned off — not saving", unsaved: true }
       : savedWord(null);
-    return { name: S.state.title || "Untitled Script", bits: [srv, { text: "On the server · v" + currentHome().rev }] };
+    return { name: currentDocument().title || "Untitled Script", bits: [srv, { text: "On the server · v" + currentHome().rev }] };
   }
   if (currentHome().kind === "file") {
     return {
@@ -160,7 +157,6 @@ export function refreshFileMenu() {
   if (presentChromium) presentChromium.hidden = !canOpenPrompterInChromium();
   var recent = el("menu-recent");
   if (recent) recent.hidden = !recentsSupported();
-  if (typeof updateServerMenu === "function") updateServerMenu();
 
   var paste = document.querySelector('#file-menu [data-file-action="paste"]');
   if (paste) {
@@ -177,6 +173,11 @@ export function refreshFileMenu() {
     var any = Array.prototype.some.call(g.querySelectorAll(":scope > .mi"), function (b) { return !b.hidden; });
     g.hidden = !any;
   });
+}
+
+export function refreshOpenFileMenu() {
+  var menu = el("file-menu");
+  if (menu && !menu.hidden) refreshFileMenu();
 }
 
 var extraRefreshers = [];
@@ -302,11 +303,11 @@ async function openRecentFile(fileId) {
     return;
   }
   var handle = makeDesktopHandle(entry);
-  await openProjectFile(await handle.getFile(), handle);
+  await openDocument({ kind: "file", file: await handle.getFile(), handle: handle });
 }
 
 export function startNewScript() {
-  if (!S.state) { showToast("Still loading…", "warn"); return false; }
+  if (!currentDocument()) { showToast("Still loading…", "warn"); return false; }
   var kept = replaceWithNewDocument(migrateRows({
     title: "Untitled Script",
     rows: [{ id: makeId("r"), visualText: "", imageRef: null, audioText: "" }],
@@ -319,7 +320,7 @@ export function startNewScript() {
 }
 
 export function openLongDemo() {
-  if (!S.state) { showToast("Still loading…", "warn"); return false; }
+  if (!currentDocument()) { showToast("Still loading…", "warn"); return false; }
   var kept = replaceWithNewDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))),
     "openLongDemo: a new copy of the long demo", "Before opening the long demo");
   showToast("The long demo — " + LONG_DEMO.state.rows.length + " scenes, not saved anywhere yet." +
@@ -330,13 +331,12 @@ export function openLongDemo() {
 function replaceWithNewDocument(next, reason, keepLabel) {
   var active = document.activeElement;
   if (active && active !== document.body && typeof active.blur === "function") active.blur();
-  var kept = S.state.rows.length ? pushSnapshot(keepLabel) : null;
-  if (kept) pushSnapshot(keepLabel, Object.assign({}, S.state, { docId: next.docId }));
+  var kept = currentDocument().rows.length ? keepSnapshot(keepLabel) : null;
+  if (kept) keepSnapshot(keepLabel, Object.assign({}, currentDocument(), { docId: next.docId }));
   resetProductionPanelState();
   documentTransitions().startNew({ from: { document: next }, reason: reason, destination: NO_DESTINATION });
-  clearDirty();
+  confirmSavedNow();
   applyReviewMode();
-  updateSaveStatus();
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   sidePanels().close("newtab-page");
   return kept;

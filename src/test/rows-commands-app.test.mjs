@@ -1,7 +1,6 @@
 import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
@@ -10,15 +9,15 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const { legacySessionEffects } = await import("../js/12-dirty-toast.js");
 const { addRow } = await import("../js/06-rows.js");
 const { cellEditing, rowDrag } = await import("../legacy/editor-bridge.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -51,12 +50,12 @@ let opened = 0;
 async function open() {
   if (viewFlags().writerOpen()) writer.closeWriter();
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "rows-" + (++opened) + ".splitpage", { lastModified: opened });
-  await openProjectFile(file, null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
-const ids = () => S.state.rows.map((r) => r.id);
+const ids = () => currentDocument().rows.map((r) => r.id);
 const rowEl = (id) => document.querySelector('#rows .row[data-id="' + id + '"]');
 const cellOf = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
 
@@ -111,11 +110,11 @@ test("rows: Insert below in the scene menu adds the scene through the session", 
   await open();
   const changes = await throughSession(() => click(rowEl("r2").querySelector('[data-action="insert-below"]')));
   assert.equal(changes.rowsInserted.length, 1);
-  const made = S.state.rows[2];
+  const made = currentDocument().rows[2];
   assert.equal(made.id, changes.rowsInserted[0]);
   assert.deepEqual(ids().filter((id) => id !== made.id), ["r1", "r2", "r3", "r4"]);
   assert.notEqual(made.updatedAt, OLD, "the new scene is stamped");
-  assert.ok(S.state.rows.filter((r) => r.id !== made.id).every((r) => r.updatedAt === OLD), "no other scene is stamped");
+  assert.ok(currentDocument().rows.filter((r) => r.id !== made.id).every((r) => r.updatedAt === OLD), "no other scene is stamped");
   assert.ok(rowEl(made.id), "the new scene is painted");
   await undoesInOneStep(["r1", "r2", "r3", "r4"]);
 });
@@ -145,7 +144,7 @@ test("rows: Move down in the scene menu reorders through the session and saves a
   assert.equal(changes.rowsMoved, true);
   assert.equal(changes.saveNow, true, "a reorder asks for an immediate save, as it always queued one");
   assert.deepEqual(ids(), ["r2", "r1", "r3", "r4"]);
-  assert.ok(S.state.rows.every((r) => r.updatedAt === OLD), "moving stamps no scene");
+  assert.ok(currentDocument().rows.every((r) => r.updatedAt === OLD), "moving stamps no scene");
   await undoesInOneStep(["r1", "r2", "r3", "r4"]);
 });
 
@@ -206,7 +205,7 @@ test("rows: deleting a scene with words arms first, then deletes through the ses
 
 test("rows: when the session refuses edits, a strip drop and an add leave the scenes untouched", async () => {
   await open();
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   const generation = liveSession().generation();
   effects.edit = () => ({ allowed: false, reason: "review" });
   try {
@@ -216,6 +215,6 @@ test("rows: when the session refuses edits, a strip drop and an add leave the sc
   } finally {
     effects.edit = appEffects.edit;
   }
-  assert.equal(JSON.stringify(S.state), before, "nothing was written around the session");
+  assert.equal(JSON.stringify(currentDocument()), before, "nothing was written around the session");
   assert.equal(liveSession().generation(), generation);
 });

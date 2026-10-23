@@ -8,7 +8,7 @@ import {
   normalizeLegacySnapshots
 } from "./03a-history-store.js";
 import { showToast } from "./12-dirty-toast.js";
-import { deliverFile } from "./18-local-files.js";
+import { deliverFile } from "../legacy/file-delivery.ts";
 import { applyWriterSize, readWriterSize } from "./19-writer.js";
 import { readEmbeddedVersion } from "./20a-update.js";
 import {

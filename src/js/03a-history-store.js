@@ -1,6 +1,5 @@
 import { sha256Bytes } from "../core/document/ids.ts";
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
-import { S } from "./_state.js";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { currentHome } from "../legacy/location-bridge.ts";
 import { dataUrlForSync, ensureBytes, inlineStateJson, intern, persist, recordFor } from "../adapters/storage/02c-blobs.js";
@@ -591,7 +590,7 @@ function historyStoreEntry(backend, entry) {
 export function captureSnapshot(label, src, opts) {
   opts = opts || {};
   if (!src || typeof src !== "object" || !Array.isArray(src.rows)) return null;
-  if (opts.allowSeedSkip && src === S.state && isPristineSeedDocument()) return null;
+  if (opts.allowSeedSkip && src === currentDocument() && isPristineSeedDocument()) return null;
   var docId = normalizeDocId(src.docId) || (src.docId = mintDocId());
   var stateJson;
   try {

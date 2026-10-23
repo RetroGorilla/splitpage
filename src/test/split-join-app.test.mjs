@@ -1,7 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
@@ -10,14 +9,14 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { openProductionPanel } = await import("../js/08-production-panels.js");
 const { openBrollPanel } = await import("../js/08d-broll-panel.js");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -50,15 +49,15 @@ async function open(doc) {
   if (viewFlags().writerOpen()) writer.closeWriter();
   window.__hostedTest.setSession({ role: "edit", docId: null });
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(doc || fixture())))], "split-" + (++opened) + ".splitpage", { lastModified: opened });
-  await openProjectFile(file, null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
 }
 
-const row = (id) => S.state.rows.find((r) => r.id === id);
-const ids = () => S.state.rows.map((r) => r.id);
+const row = (id) => currentDocument().rows.find((r) => r.id === id);
+const ids = () => currentDocument().rows.map((r) => r.id);
 const cellOf = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
 const para = (id) => document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]');
-const anchors = () => S.state.comments.map((c) => [c.id, c.rowId, c.field]);
+const anchors = () => currentDocument().comments.map((c) => [c.id, c.rowId, c.field]);
 const toasts = () => Array.from(document.querySelectorAll("#toast-host .toast")).map((t) => t.textContent);
 const settle = () => new Promise((r) => setImmediate(r));
 
@@ -165,7 +164,7 @@ test("a grid split (Alt+Enter) publishes one declared edit: one generation, one 
   selectText(el, 5, 5);
   const stamp = row("r1").updatedAt;
   const got = observe(() => key(el, "Enter", { altKey: true }));
-  const created = S.state.rows[1].id;
+  const created = currentDocument().rows[1].id;
   assert.deepEqual(got, { seq: 1, generation: 1, published: [DECLARED], refreshed: GRID_REFRESH, render: 1, undo: 1, steps: ["rowField:r1.audioText", "insertRow:" + created] });
   assert.equal(row("r1").audioText, "Hello");
   assert.equal(row(created).audioText, " there");
@@ -179,7 +178,7 @@ test("a split makes a todo scene after it with the cut-off half in the same fiel
   el.focus();
   selectText(el, 3, 3);
   key(el, "Enter", { altKey: true });
-  const made = S.state.rows[2];
+  const made = currentDocument().rows[2];
   assert.deepEqual(Object.keys(made), ["id", "visualText", "imageRef", "audioText", "status", "updatedAt", "updatedBy"]);
   assert.equal(made.visualText, "");
   assert.equal(made.imageRef, null);
@@ -197,7 +196,7 @@ test("a split in the visual field puts the second half in the new scene's visual
   el.focus();
   selectText(el, 2, 2);
   const got = observe(() => key(el, "Enter", { altKey: true }));
-  const created = S.state.rows[1].id;
+  const created = currentDocument().rows[1].id;
   assert.deepEqual(got.steps, ["rowField:r1.visualText", "insertRow:" + created]);
   assert.equal(row("r1").visualText, "Wi");
   assert.equal(row(created).visualText, "de");
@@ -213,14 +212,14 @@ test("a split at the very start leaves an empty first half; at the very end an e
   selectText(start, 0, 0);
   key(start, "Enter", { altKey: true });
   assert.equal(row("r1").audioText, "");
-  assert.equal(S.state.rows[1].audioText, "Hello there");
+  assert.equal(currentDocument().rows[1].audioText, "Hello there");
   await open();
   const end = cellOf("r1", "audioText");
   end.focus();
   selectText(end, 11, 11);
   key(end, "Enter", { altKey: true });
   assert.equal(row("r1").audioText, "Hello there");
-  assert.equal(S.state.rows[1].audioText, "");
+  assert.equal(currentDocument().rows[1].audioText, "");
 });
 
 test("a split with a selection deletes it first; a selection over a whole commented phrase leaves its comment where it was", async () => {
@@ -229,7 +228,7 @@ test("a split with a selection deletes it first; a selection over a whole commen
   el.focus();
   selectText(el, 6, 19);
   const got = observe(() => key(el, "Enter", { altKey: true }));
-  const created = S.state.rows[2].id;
+  const created = currentDocument().rows[2].id;
   assert.deepEqual(got, { seq: 1, generation: 1, published: [DECLARED], refreshed: GRID_REFRESH, render: 1, undo: 1, steps: ["rowField:r2.audioText", "insertRow:" + created] });
   assert.equal(row("r2").audioText, "Alpha ");
   assert.equal(row(created).audioText, " delta");
@@ -244,7 +243,7 @@ test("a split before a commented phrase moves its comment: one entry holding the
   el.focus();
   selectText(el, 6, 6);
   const got = observe(() => key(el, "Enter", { altKey: true }));
-  const created = S.state.rows[2].id;
+  const created = currentDocument().rows[2].id;
   assert.deepEqual(got.steps, ["rowField:r2.audioText", "insertRow:" + created, "docField:comments"]);
   assert.equal(got.undo, 1);
   assert.deepEqual(anchors(), [["c1", created, "audioText"], ["c2", "r4", "audioText"]]);
@@ -265,7 +264,7 @@ test("a comment anchored in the scene's other field stays with the split scene",
   el.focus();
   selectText(el, 3, 3);
   key(el, "Enter", { altKey: true });
-  assert.deepEqual(anchors(), [["c1", S.state.rows[2].id, "audioText"], ["c2", "r4", "audioText"], ["c3", "r2", "visualText"]]);
+  assert.deepEqual(anchors(), [["c1", currentDocument().rows[2].id, "audioText"], ["c2", "r4", "audioText"], ["c3", "r2", "visualText"]]);
 });
 
 test("a split of a cell holding a video card cuts the live DOM and stores both sanitised halves", async () => {
@@ -281,7 +280,7 @@ test("a split of a cell holding a video card cuts the live DOM and stores both s
   window.getSelection().removeAllRanges();
   window.getSelection().addRange(r);
   const got = observe(() => key(el, "Enter", { altKey: true }));
-  const created = S.state.rows[1].id;
+  const created = currentDocument().rows[1].id;
   assert.deepEqual(got, { seq: 1, generation: 1, published: [DECLARED], refreshed: GRID_REFRESH, render: 1, undo: 1, steps: ["rowField:r1.audioText", "insertRow:" + created] });
   assert.equal(row("r1").audioText, "Bef");
   assert.match(row(created).audioText, /^ore <a class="video-embed-card"[^>]*>.*<\/a> after$/);
@@ -300,7 +299,7 @@ test("a split of a visual cell holding a video card cuts the live DOM and stores
   window.getSelection().removeAllRanges();
   window.getSelection().addRange(r);
   const got = observe(() => key(el, "Enter", { altKey: true }));
-  const created = S.state.rows[1].id;
+  const created = currentDocument().rows[1].id;
   assert.deepEqual(got, { seq: 1, generation: 1, published: [DECLARED], refreshed: GRID_REFRESH, render: 1, undo: 1, steps: ["rowField:r1.visualText", "insertRow:" + created] });
   assert.equal(row("r1").visualText, "Bef");
   assert.match(row(created).visualText, /^ore <a class="video-embed-card"[^>]*>.*<\/a> after$/);
@@ -314,10 +313,10 @@ test("an Alt+Enter with no caret in the cell does nothing at all", async () => {
   const other = cellOf("r3", "audioText");
   other.focus();
   selectText(other, 1, 1);
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   const got = observe(() => key(el, "Enter", { altKey: true }));
   assert.deepEqual(got, { seq: 0, generation: 0, published: [], refreshed: [], render: 0, undo: 0, steps: [] });
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
 });
 
 test("typing and then splitting inside the 1,000 ms window are two entries; the split's undo leaves the typing", async () => {
@@ -349,7 +348,7 @@ test("a keystroke not yet stored is stored by the split and counts as its own ed
   assert.equal(got.generation, 2);
   assert.equal(got.undo, 2, "the split ends the typing group, so the stored keystroke is its own entry");
   assert.equal(row("r1").audioText, "Hel");
-  assert.equal(S.state.rows[1].audioText, "lo there?");
+  assert.equal(currentDocument().rows[1].audioText, "lo there?");
 });
 
 test("a Writer split is the same single edit with no grid render", async () => {
@@ -359,7 +358,7 @@ test("a Writer split is the same single edit with no grid render", async () => {
   p.focus();
   selectText(p, 5, 5);
   const got = observe(() => key(p, "Enter"));
-  const created = S.state.rows[1].id;
+  const created = currentDocument().rows[1].id;
   assert.deepEqual(got, { seq: 1, generation: 1, published: [DECLARED], refreshed: [], render: 0, undo: 1, steps: ["rowField:r1.audioText", "insertRow:" + created] });
   assert.equal(document.activeElement, para(created));
   writer.closeWriter();
@@ -416,7 +415,7 @@ test("a Writer split refreshes the production and b-roll panels with the scene n
     p.focus();
     selectText(p, 5, 5);
     key(p, "Enter");
-    assert.equal(S.state.rows.length, 3, panel.name);
+    assert.equal(currentDocument().rows.length, 3, panel.name);
     await waitRefresh();
     assert.deepEqual(panel.scenes(), panel.labels(3), panel.name);
     writer.closeWriter();
@@ -430,7 +429,7 @@ test("a Writer join refreshes the production and b-roll panels with the scene nu
     p.focus();
     selectText(p, 0, 0);
     key(p, "Backspace");
-    assert.equal(S.state.rows.length, 1, panel.name);
+    assert.equal(currentDocument().rows.length, 1, panel.name);
     await waitRefresh();
     assert.deepEqual(panel.scenes(), panel.labels(1), panel.name);
     writer.closeWriter();
@@ -587,13 +586,13 @@ test("two scenes with visuals are refused with the toast, whatever the visual is
     shape(doc);
     await open(doc);
     writer.openWriter();
-    const before = JSON.stringify(S.state);
+    const before = JSON.stringify(currentDocument());
     const p = para("j2");
     p.focus();
     selectText(p, 0, 0);
     const got = observe(() => key(p, "Backspace"));
     assert.deepEqual(got, { seq: 0, generation: 0, published: [], refreshed: [], render: 0, undo: 0, steps: [] }, name);
-    assert.equal(JSON.stringify(S.state), before, name);
+    assert.equal(JSON.stringify(currentDocument()), before, name);
     assert.equal(toasts().at(-1), "Both scenes have a visual — join them in the split view, so you can pick which one to keep.", name);
     writer.closeWriter();
   }
@@ -687,7 +686,7 @@ test("a Writer split stores text the cell holds but the model does not yet, as i
   assert.equal(got.generation, 2);
   assert.equal(got.undo, 2);
   assert.equal(row("r1").audioText, "Hel");
-  assert.equal(S.state.rows[1].audioText, "lo there?");
+  assert.equal(currentDocument().rows[1].audioText, "lo there?");
   writer.closeWriter();
 });
 
@@ -713,7 +712,7 @@ test("a join of a commented phrase cut in two by a split gives one anchor back, 
   p.focus();
   selectText(p, 9, 9);
   key(p, "Enter");
-  const created = S.state.rows[2].id;
+  const created = currentDocument().rows[2].id;
   assert.deepEqual(anchors(), [["c1", "r2", "audioText"], ["c2", "r4", "audioText"]]);
   const q = para(created);
   q.focus();
@@ -745,7 +744,7 @@ test("a grid split whose commit is followed by a throw still draws the new scene
   el.focus();
   selectText(el, 5, 5);
   const reported = withThrowingListener(() => key(el, "Enter", { altKey: true }));
-  const created = S.state.rows[1].id;
+  const created = currentDocument().rows[1].id;
   assert.deepEqual(reported, ["listener broke"]);
   assert.equal(row(created).audioText, " there");
   assert.ok(cellOf(created, "audioText"), "the new scene is on screen");
@@ -776,7 +775,7 @@ test("a Writer split is refused when the session turns review with the Writer op
   const got = observe(() => key(p, "Enter"));
   assert.equal(got.undo, 0);
   assert.equal(got.generation, 0);
-  assert.equal(S.state.rows.length, 4);
+  assert.equal(currentDocument().rows.length, 4);
   window.__hostedTest.setSession({ role: "edit", docId: null });
   writer.closeWriter();
 });
