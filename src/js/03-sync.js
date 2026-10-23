@@ -12,9 +12,8 @@ import { DEFAULT_WPM } from "../core/document/timing.ts";
 import { mergeStates as mergeStatesWith } from "../core/merge-states.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { textMergeContext as coreTextMergeContext } from "../core/merge/text-field.ts";
-import { SIDE_PANEL_IDS } from "../application/preferences/panel-widths.ts";
 import { withDocumentPorts } from "../legacy/document-ports.ts";
-import { panelWidths, preferences } from "../legacy/preferences-bridge.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 import { fromHtml } from "../legacy/richtext.ts";
 import {
   adoptRestoredState,
@@ -26,11 +25,7 @@ import {
   listDocHistory,
   protectHistorySnapshot
 } from "./03a-history-store.js";
-import {
-  applySidePanelWidth,
-  holdScriptPlace,
-  sidePanelOpening
-} from "./03b-side-panels.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { safeId } from "./04-richtext.js";
 import { targetSectionHtml, wireTargetSection } from "./05t-target.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
@@ -61,7 +56,7 @@ export function stampRow(row) {
   row.updatedBy = getEditorName();
 }
 
-export function pushSnapshot(label, snapshotState) {
+function pushSnapshot(label, snapshotState) {
   return captureSnapshot(label, snapshotState || currentDocument(), { allowSeedSkip: !snapshotState });
 }
 
@@ -104,7 +99,7 @@ async function restoreSnapshot(id, opts) {
     resetProductionPanelState();
     adoptRestoredState(parsed);
     noteAbsorbedDirty("recovery");
-    closeHistoryPanel();
+    sidePanels().close("history-panel");
     showToast(opts.restoredText || "Restored the version from " + formatTimestamp(snap.meta && snap.meta.at), "ok");
     if (!opts.local) autoSavePolicy().dueNow();
     return "restored";
@@ -399,50 +394,10 @@ function openClockPopover(focusOn) {
   });
 }
 
-export function openSidePanel(id) {
-  holdScriptPlace();
-  SIDE_PANEL_IDS.forEach(function (pid) {
-    if (pid !== id) {
-      var el = document.getElementById(pid);
-      if (el) el.hidden = true;
-    }
-  });
-  document.getElementById(id).hidden = false;
-  applySidePanelWidth(id, panelWidths().read(id));
-  syncPanelClass();
-}
-
 export function openHistoryPanel() {
-  openSidePanel("history-panel");
+  sidePanels().open("history-panel");
   renderHistory();
 }
-export function closeHistoryPanel() {
-  var p = document.getElementById("history-panel");
-  if (p) p.hidden = true;
-  syncPanelClass();
-}
-
-var PANEL_TOGGLES = [
-  ["production-panel", "btn-production"],
-  ["gear-panel", "btn-gear"],
-  ["broll-panel", "btn-broll"],
-  ["comments-panel", "btn-comments"]
-];
-
-export function syncPanelClass() {
-  var open = SIDE_PANEL_IDS.some(function (pid) {
-    var el = document.getElementById(pid);
-    return el && !el.hidden;
-  });
-  if (open !== document.body.classList.contains("panel-open")) sidePanelOpening(open);
-  document.body.classList.toggle("panel-open", open);
-  PANEL_TOGGLES.forEach(function (pair) {
-    var panel = document.getElementById(pair[0]);
-    var btn = document.getElementById(pair[1]);
-    if (btn) btn.setAttribute("aria-pressed", panel && !panel.hidden ? "true" : "false");
-  });
-}
-
 var historyRenderToken = 0;
 var historyShownDocId = null;
 
@@ -767,6 +722,10 @@ export function setBaseState(next, why) {
 export var documentDestinationPort = Object.freeze({
   set: function (destination) { setHome(destination.kind, destination.fields); },
   confirm: function (baseline, why) { setBaseState(baseline ? cloneState(baseline) : null, why); }
+});
+
+export var documentHistoryPort = Object.freeze({
+  keep: function (label, doc) { return pushSnapshot(label, doc); }
 });
 
 export function baseStateReason() {

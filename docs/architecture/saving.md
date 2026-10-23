@@ -54,6 +54,8 @@ Callers outside saving use it for work that waits: the pasted-picture and droppe
 | `publish(ctx, publication)` | If `stillOwns(ctx)`, sets the destination and baseline, changes the live id and marks it written out; the result says which id it replaced. Otherwise `{ kind: "obsolete" }` and nothing changes | Changes id and destination only |
 | `copyId()` | The id a copy should carry: the live id until it has been written out, then a fresh one | INV-36 |
 
+An arrival (`open`, `startNew`, `recover`) may carry `keep`, a label: the history snapshot taken before a replacement (L3h PR 3). If the live document has rows, the transition hands the label to the history port before the new document is assigned, and `Arrived.kept` says whether a snapshot was stored. `restore` never keeps one.
+
 The input is `{ document }` (already a `ValidatedDocument`) or `{ raw }` (migrated through the entry port, `migrateRows`). Every method that makes a document live does the same three things in order: assign it to `S.state`, adopt it in the session at once (`adoptReplacement` in the session bridge, which disposes the old session and starts one at the same epoch and generation), and then settle the destination. A transition returns `Arrived` (`document`, `forkedFrom`).
 
 The ports, all supplied by the legacy modules:
@@ -65,11 +67,26 @@ The ports, all supplied by the legacy modules:
 | `session` | `adoptReplacement` (`session-bridge.ts`) | Adopts a document in the session now |
 | `destination` | `documentDestinationPort` (`03-sync.js`) | `set` calls `setHome`; `confirm` calls `setBaseState` with a clone of the baseline |
 | `identity` | `documentIdentityPort` (`02b-doc-id.js`) | Mints ids and reads and writes `S.docIdWrittenOut` |
+| `history` | `documentHistoryPort` (`03-sync.js`) | `keep(label, doc?)` takes a history snapshot of `doc`, or of the live document when none is given |
 | `ownership` | The operation context | `stillOwns` |
 
 Destinations are `LegacyDestination` values (`kind` and `fields`), and `NO_DESTINATION` is `{ kind: "none" }`.
 
 When `adoptReplacement` has started the new session it calls the listeners registered with `onDocumentReplaced` (`session-bridge.ts`), and so does the undo adapter's adoption hook. A listener made with `liveSession().subscribe` would die with the session it was made on; `onDocumentReplaced` is the app-lifetime way to react to a replacement. Its one listener today is `releaseSessionVideoUrls` in `06-rows.js` (4.22, L1c), which revokes the cached object URLs of session videos and keeps the file and token grants.
+
+`keepSnapshot(label, doc?)` on the transition bridge takes the same snapshot outside a transition, for changes that are not replacements: taking your version of a title or field (`10-comments`), replacing rows on import (`11-import`), reloading an import from disk (`18-local-files`), resuming a server draft (`13-hosted`), and the two snapshots a new blank script or demo keeps, one under the old id and one under the new (`18b-file-menu`).
+
+### Document sources (L3h PR 3)
+
+A document source is `{ id, takes(opening), open(opening) }` (`src/application/transitions/sources.ts`). `createDocumentSources()` holds the registered ones and asks the newest first, like the save destinations. The transition bridge creates the registry when the transitions start, and `openDocument(opening)` opens through the source that takes the opening, answering what it answered (a promise), or `false` when none does. An opening is `{ kind, ...fields }`. The wiring's `document sources` step, right after `transitions`, registers the list the `sources` dependency returns and drops them at dispose; a duplicate id fails the step.
+
+| Source | Opening | Does |
+| --- | --- | --- |
+| `project-file` (`projectFileSource` in `18-local-files.js`) | `{ kind: "file", file, handle, options?, parsed? }` | Without `parsed`, reads the file (`openProjectFile`, which falls back to an import for other formats); with `parsed` (an answer of `parseProjectFileState`), adopts it as read (`adoptProjectState`) |
+| `server` (`serverDocumentSource` in `13-hosted.js`) | `{ kind: "server", id }` | `openServerDoc` |
+| `import` (`importDocumentSource` in `11-import.js`) | `{ kind: "import", file }` | `handleImportFile`: the import dialog's file |
+
+The source runs inside the `openDocument` call, so an opening that adopts at once (a `parsed` file) has replaced the document when the call returns, as before.
 
 ### Who calls them today
 
@@ -235,7 +252,7 @@ Restoring recovered work never saves it (INV-40, INV-41, INV-51), and a restore 
 - **The pristine check (#483, T3).** `neverWrittenOut(doc)` (`pristine.ts`) is true when there is no revision and the editor name is empty once trimmed. `loadInitialState` applies it to the raw state data and then to the migrated document, and the resume check in `openInitialDocument` (`src/bootstrap/startup/initial-document.ts`) applies it to the loaded document, so a whitespace-only name no longer makes the two disagree.
 - **Capture scheduling (B4b).** `capture-schedule.ts` owns the quiet timers (1.5 s idle, 5 s maximum, 15 s for large documents), the pending flag and the retry backoff (5 s doubling to 60 s). A refused write cancels the quiet timers a change armed while it was in flight, and a quiet timer never captures while a retry is armed. `20g-drafts.js` keeps the capture and the write and calls the schedule.
 - **Draft writer (4.17).** `draft-writer.ts` records the operation context and the key at capture time; a late write neither removes nor claims another document's key (B1), and a writer discards only the generation acknowledged to it (B7). The stores are adapters (`src/adapters/storage/`); takeover with and without Web Locks is as before (D12, B3).
-- **Left as is.** The server draft resume adopts through `resumeServerDoc` → `transitions.open`; its fallbacks to an unsaved copy wait on the server and the hosted code can change the destination before it answers, so an ownership check there would turn a revoked link (B9) into a lost copy. The merge branch of `restoreFileDraft` (`applyStashedWork`) awaits only its undo-point snapshot after the open and is not re-checked.
+- **Left as is.** The server draft resume adopts through `resumeServerDoc` → `transitions.open`; its fallbacks to an unsaved copy wait on the server and the hosted code can change the destination before it answers, so an ownership check there would turn a revoked link (B9) into a lost copy. The merge branch of `restoreFileDraft` (`applyStashedWork`, on the recovery bridge since L3h PR 3, built by `createStashedWork` in `src/application/recovery/stashed-work.ts` over the conflict stash and the merge port that `_entry.js` passes with the recovery ports) awaits only its undo-point snapshot after the open and is not re-checked.
 
 ## 8. Known gaps and exceptions
 
