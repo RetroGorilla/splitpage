@@ -2,7 +2,7 @@ import { formatDuration, pad2 } from "../core/production/timing.ts";
 import { totalSeconds } from "./01-scene-status.js";
 import { renderRowGroups } from "./01b-hide-shot.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { closeAllSidePanels } from "./03b-side-panels.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import {
   cssAttr,
   ensureTrailingCaretSpot,
@@ -268,7 +268,7 @@ export function openWriter(keepMark) {
   var el = document.getElementById("writer");
   writerUndoMark = keepMark == null ? undoMark() : keepMark;
   reopenOnRedo = null;
-  closeAllSidePanels();
+  sidePanels().closeAll();
   if (viewFlags().findOpen()) closeFindBar();
   document.getElementById("writer-title").value = currentDocument().title || "";
   applyWriterSize(readWriterSize(), false);

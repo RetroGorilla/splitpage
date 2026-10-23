@@ -65,7 +65,7 @@ import {
 } from "./20e-connect.js";
 import { joinServer } from "../adapters/transport/server-join.ts";
 import { setMenuItemReason } from "./18b-file-menu.js";
-import { closeNewTabPage } from "./20j-newtab.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { armBrowserServerDraft, offerBrowserDraftAfterLinkOff } from "./20g-drafts.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { idMap } from "../core/document/id-map.ts";
@@ -899,7 +899,7 @@ async function openServerDoc(id) {
     if (currentDocument() && currentDocument().rows.length) keepSnapshot("Before opening a script from the server");
     var resumed = await resumeServerDoc() === true;
     if (resumed) {
-      if (typeof closeNewTabPage === "function") closeNewTabPage();
+      sidePanels().close("newtab-page");
       closeServerPicker();
     }
     return resumed;
@@ -924,7 +924,7 @@ async function openServerDoc(id) {
     destination: { kind: "server", fields: { id: body.id, rev: body.rev || 0 } },
     writtenOut: true
   });
-  if (typeof closeNewTabPage === "function") closeNewTabPage();
+  sidePanels().close("newtab-page");
 
   confirmSavedNow();
   applyReviewMode();

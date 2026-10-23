@@ -67,7 +67,8 @@ test("every CSS variable has a CSS definition or a runtime assignment", () => {
     "src/features/title/topbar.ts",
     "src/features/notices/busy.js",
     "src/features/editing/cell-reach.js",
-    "src/features/notices/phone-bar.ts"
+    "src/features/notices/phone-bar.ts",
+    "src/features/panels/side-panels.ts"
   ]) addRuntimeDefinitions(new URL(file, repoUrl), definitions);
   for (const rule of rules) {
     for (const { property } of rule.declarations) if (property.startsWith("--")) definitions.add(property);

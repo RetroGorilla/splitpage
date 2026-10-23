@@ -1,6 +1,6 @@
 import { currentHome } from "../legacy/location-bridge.ts";
 import { loadLastFileHandle } from "./00-prelude.js";
-import { closeAllSidePanels } from "./03b-side-panels.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
 import { onFileMenuChoice } from "./18-local-files.js";
 import { deliverFile } from "../legacy/file-delivery.ts";
@@ -64,7 +64,7 @@ function renderOnboardStep() {
 export function openOnboarding() {
   var modal = onboardModal();
   if (!modal) return;
-  closeAllSidePanels();
+  sidePanels().closeAll();
   onboardReturnFocus = document.activeElement;
   resetOnboardUi();
   modal.hidden = false;

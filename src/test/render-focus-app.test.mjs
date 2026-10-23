@@ -16,7 +16,8 @@ const { paintGuard } = await import("../legacy/editor-bridge.ts");
 const whilePainting = (paint) => paintGuard().whilePainting(paint);
 const afterThisPaint = (work) => paintGuard().afterThisPaint(work);
 const { setHideShotScenes } = await import("../js/01b-hide-shot.js");
-const { runBrollRefresh, closeBrollPage, closeBrollPanel, openBrollPage, openBrollPanel } = await import("../js/08d-broll-panel.js");
+const { runBrollRefresh, closeBrollPage, openBrollPage, openBrollPanel } = await import("../js/08d-broll-panel.js");
+const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { liveSession } = await import("../legacy/session-bridge.ts");
@@ -369,7 +370,7 @@ function theirsFor(doc, key, value) {
 function leavePanel() {
   const active = document.activeElement;
   if (active && active !== document.body) active.blur();
-  closeBrollPanel();
+  sidePanels().close("broll-panel");
 }
 
 for (const f of PANEL_FIELDS) {
