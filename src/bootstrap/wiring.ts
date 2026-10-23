@@ -4,6 +4,7 @@ export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
 export { mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature } from "./wiring/rundown.ts";
 export { mountHelpFeature } from "./wiring/help.ts";
 export { derivedRecordsPlan, mountBrollFeature } from "./wiring/broll.ts";
+export { mountSettingsFeature } from "./wiring/settings.ts";
 export { mountGalleryFeature, mountGalleryOverlayFeature } from "./wiring/gallery.ts";
 export { mountCopyPasteFeature } from "./wiring/clipboard.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
