@@ -23,6 +23,13 @@ export function mountSettingsFeature(): SettingsMount {
       actions: shared.actions,
       notices: shared.notices,
       changes: shared.changes,
+      elsewhere: (listener) => {
+        const onStorage = (event: StorageEvent): void => {
+          if (event.key && event.key.indexOf("splitpage-") === 0) listener(preferences().nameOf(event.key));
+        };
+        window.addEventListener("storage", onStorage);
+        return () => { window.removeEventListener("storage", onStorage); };
+      },
       preferences: {
         announceTaggingHelp: () => preferences().announceTaggingHelp(),
         autosave: () => preferences().autosave(),
