@@ -5,7 +5,7 @@ import "./_project-file-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { STATE_FIELDS, migrateRows, missingStateFields } from "../js/02-state.js";
-import { cellOf } from "../js/04c-doc-model.js";
+import { cellOf } from "../legacy/richtext.ts";
 import { collectTagsFromRows } from "../js/07-production-tags.js";
 import { brollInCell } from "../js/08c-broll.js";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";

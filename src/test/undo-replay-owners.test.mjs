@@ -6,7 +6,7 @@ import { migrateRows } from "../js/02-state.js";
 import { flushEdits, noteEdit, redo, undo } from "../js/12a-undo.js";
 import { applyStepsLive, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";
-import { invertSteps } from "../js/04c-doc-model.js";
+import { invertSteps } from "../core/text/steps.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 const clone = (v) => JSON.parse(JSON.stringify(v));

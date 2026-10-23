@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
-import { cellOf, fromHtml } from "../js/04c-doc-model.js";
+import { cellOf, fromHtml } from "../legacy/richtext.ts";
 import { CONTRACT_HTML, mergeDecoderBreaks } from "../../tests/core/merge/decoder-contract.ts";
 
 function doc(audio) {
