@@ -184,7 +184,7 @@ Each is built in `sharedPorts()` from the owners and, until they retire, the bri
 | P12 Operation ownership | `SaveOwnershipPort` (`capture`, `stillOwns`), which exists in `application/save/coordinator.ts`: whether an async job still owns the document it started on | | transition bridge | 8 | gallery (`05e`) | Opus: async work against a replaced document |
 | P13 Picture store | `PictureStore`, new, `application/media/picture-store.ts`: intern, persist, read and render stored pictures | | `adapters/storage/02c-blobs.js`, `02d-gallery.js` | 16 | gallery (`05e`) | Opus: durable storage |
 | P14 Side panels | `SidePanels`, from L3f (`application/side-panels.ts`) | | panels bridge | 6 | help | done in L3f |
-| P15 Save status | `SaveStatus`, new, `application/save/`: `unsaved()`, `busy()`, `onChange(listener)`, `dueNow()` | read only, plus "autosave now" and "resume autosave" | save bridge | 16 | copy, paste and scene selection (`05h` asks for an autosave now) | Opus |
+| P15 Save status | `SaveState`, `application/save/save-state.ts` (named so because `SaveStatus` is the status line's view in `status.ts`): `unsaved()`, `busy()`, `onChange(listener)`, `dueNow()`, `resume()`; `sharedPorts().saves` | read only, plus "autosave now" and "resume autosave" | save bridge | 16 | its own PR; first used by copy, paste and scene selection (`05h` asks for an autosave now) | Opus |
 | P16 Document place | `DocumentPlace`, new, `application/location/`: where the document lives and the server's status, read only | | location bridge | 30 | its own PR at the start of Wave 3, since the first Wave 3 users (`13a`, `13b`, `20b`) are Codex | Opus |
 
 The pure page helpers move once, with their first user:
