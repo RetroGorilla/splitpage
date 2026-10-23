@@ -927,6 +927,8 @@ export function findViolations(modules) {
         add("missing-module", m.path, e.target, e.line, `${e.spec} does not resolve to a file`);
       }
     }
+    if (m.path === STATE_MODULE) add("state-module", m.path, STATE_MODULE, null, `${STATE_MODULE} is deleted: the document session holds the document`);
+    for (const e of m.edges) if (e.target === STATE_MODULE) add("state-module", m.path, STATE_MODULE, e.line, `imports ${STATE_MODULE}, which is deleted`);
     for (const u of m.unresolved) add("unresolved-dynamic", m.path, u.expression, u.line, `${u.kind} with a computed specifier`);
     if (platformGlobalsBanned(m.layer)) {
       for (const g of m.globals) add("platform-global", m.path, `global:${g.name}`, g.line, `${m.layer} may not use ${g.name}`);

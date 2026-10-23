@@ -646,6 +646,9 @@ eq("a module in an unknown src folder is production and its folder is reported",
 })).map((v) => `${v.rule} ${v.source} ${v.target}`), [
   "state-import src/entry.js global:S",
   "state-import src/util/helper.js global:S",
+  "state-module src/entry.js src/js/_state.js",
+  "state-module src/js/_state.js src/js/_state.js",
+  "state-module src/util/helper.js src/js/_state.js",
   "state-write src/entry.js global:S.dirty",
   "state-write src/util/helper.js global:S.state",
   "unknown-layer src/entry.js src/",
@@ -654,6 +657,21 @@ eq("a module in an unknown src folder is production and its folder is reported",
 eq("tests and tools are not production importers", stateFindings({
   "src/test/a.test.mjs": 'import { S } from "../js/_state.js";\nS.state = null;\n',
   "tools/demo.mjs": 'import { S } from "../src/js/_state.js";\nS.dirty = 1;\n'
+}), []);
+
+function stateModuleFindings(files) {
+  return findViolations(graph(files)).filter((v) => v.rule === "state-module").map((v) => `${v.source}:${v.line} ${v.target}`);
+}
+
+eq("the state module itself fails the state-module rule", stateModuleFindings(STATE_FILE), ["src/js/_state.js:null src/js/_state.js"]);
+eq("an import of the deleted state module fails in app code, tests and tools", stateModuleFindings({
+  "src/js/a.js": 'import { S } from "./_state.js";\nexport const r = S;\n',
+  "src/test/a.test.mjs": 'import "./_dom.mjs";\nconst { S } = await import("../js/_state.js");\nexport const r = S;\n',
+  "tools/demo.mjs": 'import { S } from "../src/js/_state.js";\nexport const r = S;\n'
+}), ["src/js/a.js:1 src/js/_state.js", "src/test/a.test.mjs:2 src/js/_state.js", "tools/demo.mjs:1 src/js/_state.js"]);
+eq("a module that does not import the state module passes the state-module rule", stateModuleFindings({
+  "src/js/a.js": 'import { currentDocument } from "../legacy/session-bridge.ts";\nexport const r = currentDocument;\n',
+  "src/legacy/session-bridge.ts": "export const currentDocument = () => null;\n"
 }), []);
 
 const MUTATORS = ["push", "pop", "splice", "shift", "unshift", "sort", "reverse", "fill", "copyWithin"];
@@ -1044,6 +1062,9 @@ try {
     "legacy-state-refs src/js/b.js global:S",
     "state-import src/js/a.js global:S",
     "state-import src/js/b.js global:S",
+    "state-module src/js/_state.js src/js/_state.js",
+    "state-module src/js/a.js src/js/_state.js",
+    "state-module src/js/b.js src/js/_state.js",
     "state-write src/js/b.js direct:S.state",
     "state-write src/js/b.js global:S.state"
   ]);
@@ -1058,8 +1079,8 @@ try {
     "src/js/c.js": 'import { S } from "./_state.js";\nexport const c = S.dirty;\n'
   });
   eq("a new S importer fails even when another importer goes in the same change", swap.code, 1);
-  eq("the new importer is named", lines(swap, "new state-"), ["new state-import: src/js/c.js:1 -> global:S"]);
-  eq("the removed importer is resolved", lines(swap, "resolved state-"), ["resolved state-import: src/js/a.js -> global:S"]);
+  eq("the new importer is named", lines(swap, "new state-"), ["new state-import: src/js/c.js:1 -> global:S", "new state-module: src/js/c.js:1 -> src/js/_state.js"]);
+  eq("the removed importer is resolved", lines(swap, "resolved state-"), ["resolved state-import: src/js/a.js -> global:S", "resolved state-module: src/js/a.js -> src/js/_state.js"]);
 
   const writer = attempt(repo, { "src/js/a.js": 'import { S } from "./_state.js";\nimport { b } from "./b.js";\nexport function a() { S.state = null; return b(); }\n' });
   eq("a new S.state writer fails", writer.code, 1);
@@ -1086,7 +1107,8 @@ try {
     "new layer: src/features/rows/view.ts:1 -> src/legacy/state.ts",
     "new legacy-state-refs: src/features/rows/view.ts -> global:S",
     "new state-import: src/features/rows/view.ts:1 -> global:S",
-    "new state-import: src/legacy/state.ts:1 -> global:S"
+    "new state-import: src/legacy/state.ts:1 -> global:S",
+    "new state-module: src/legacy/state.ts:1 -> src/js/_state.js"
   ]);
 
   const outside = attempt(repo, { "src/util/helper.js": 'import { S } from "../js/_state.js";\nS.state = null;\n' });
@@ -1094,6 +1116,7 @@ try {
   eq("its folder, import and write are all named", lines(outside, "new "), [
     "new legacy-state-refs: src/util/helper.js -> global:S",
     "new state-import: src/util/helper.js:1 -> global:S",
+    "new state-module: src/util/helper.js:1 -> src/js/_state.js",
     "new state-write: src/util/helper.js -> direct:S.state",
     "new state-write: src/util/helper.js:2 -> global:S.state",
     "new unknown-layer: src/util/helper.js -> src/util/"
@@ -1131,7 +1154,7 @@ try {
     "resolved state-write: src/js/b.js -> global:S.state"
   ]);
   eq("--prune accepts it", cli(repo, "--prune").code, 0);
-  eq("the pruned baseline keeps the importers and reference counts", JSON.parse(readFileSync(join(repo, "tools/dep-baseline.json"), "utf8")).exceptions.map((e) => `${e.rule} ${e.source}`), ["legacy-state-refs src/js/a.js", "legacy-state-refs src/js/b.js", "state-import src/js/a.js", "state-import src/js/b.js"]);
+  eq("the pruned baseline keeps the importers and reference counts", JSON.parse(readFileSync(join(repo, "tools/dep-baseline.json"), "utf8")).exceptions.map((e) => `${e.rule} ${e.source}`), ["legacy-state-refs src/js/a.js", "legacy-state-refs src/js/b.js", "state-import src/js/a.js", "state-import src/js/b.js", "state-module src/js/_state.js", "state-module src/js/a.js", "state-module src/js/b.js"]);
   eq("and the check passes", cli(repo).code, 0);
 
   const r = spawnSync(process.execPath, [join(TOOLS, "dep-report.mjs"), "--bogus"], { encoding: "utf8" });
@@ -1144,7 +1167,7 @@ try {
   writeFiles(accepting, { "src/js/a.js": LEGACY["src/js/a.js"] + 'import "./f.js";\n' });
   const moved = cli(accepting);
   eq("moving a helper between two cycle members fails the check", moved.code, 1);
-  check("the summary counts the baseline and the new entries separately", moved.out.includes("9 exceptions in the baseline, 1 new, 0 resolved"), moved.out);
+  check("the summary counts the baseline and the new entries separately", moved.out.includes("12 exceptions in the baseline, 1 new, 0 resolved"), moved.out);
   eq("--accept without a reason exits 2", cli(accepting, "--accept").code, 2);
   eq("--accept with a blank reason exits 2", cli(accepting, "--accept", "  ").code, 2);
   eq("and leaves the baseline alone", readFileSync(baselineFile, "utf8"), initial);
@@ -1155,7 +1178,7 @@ try {
   eq("exactly the new entry is added, with the reason", afterAccept.filter((e) => e.reason), [
     { rule: "cycle-edge", source: "src/js/a.js", target: "src/js/f.js", reason: "helper moved from b.js to f.js; a.js now calls it directly" }
   ]);
-  eq("the other entries are unchanged", afterAccept.filter((e) => !e.reason).length, 9);
+  eq("the other entries are unchanged", afterAccept.filter((e) => !e.reason).length, 12);
   eq("the check passes after --accept", cli(accepting).code, 0);
 
   writeFiles(accepting, { "src/js/b.js": 'import { S } from "./_state.js";\nimport { f } from "./f.js";\nexport function b() { S.dirty = true; return f(); }\n' });
