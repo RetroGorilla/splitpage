@@ -23,7 +23,7 @@ test("before the preferences are started, every accessor throws instead of runni
 test("started once with fresh owners; a second start throws until the first is stopped, and a restart forgets the old flags", () => {
   const storage = memory();
   const heard = [];
-  const stop = bridge.startPreferences({ storage: () => storage, announce: (change) => heard.push(change), watch: () => () => {} });
+  const stop = bridge.startPreferences({ storage: () => storage, announce: (change) => heard.push(change) });
   let flags;
   try {
     assert.equal(bridge.preferencesStarted(), true);
@@ -39,7 +39,7 @@ test("started once with fresh owners; a second start throws until the first is s
   }
   assert.equal(bridge.preferencesStarted(), false);
   assert.throws(() => bridge.viewFlags(), /not started yet/);
-  const again = bridge.startPreferences({ storage: () => storage, announce: () => {}, watch: () => () => {} });
+  const again = bridge.startPreferences({ storage: () => storage, announce: () => {} });
   try {
     assert.notEqual(bridge.viewFlags(), flags);
     assert.equal(bridge.viewFlags().writerOpen(), false);
@@ -52,7 +52,7 @@ test("started once with fresh owners; a second start throws until the first is s
 test("hide-shot starts from the stored preference when the preferences start", () => {
   const storage = memory();
   storage.items.set("splitpage-hide-shot", "1");
-  const stop = bridge.startPreferences({ storage: () => storage, announce: () => {}, watch: () => () => {} });
+  const stop = bridge.startPreferences({ storage: () => storage, announce: () => {} });
   try {
     assert.equal(bridge.viewFlags().hideShot(), true);
   } finally {
@@ -61,7 +61,7 @@ test("hide-shot starts from the stored preference when the preferences start", (
 });
 
 test("an old stop run after a newer start leaves the newer owners in place", () => {
-  const ports = { storage: () => memory(), announce: () => {}, watch: () => () => {} };
+  const ports = { storage: () => memory(), announce: () => {} };
   const first = bridge.startPreferences(ports);
   first();
   const second = bridge.startPreferences(ports);
@@ -73,28 +73,23 @@ test("an old stop run after a newer start leaves the newer owners in place", () 
   }
 });
 
-test("a change made outside the owner reaches the change listeners once; the owner's own echo and a stopped watch do not", () => {
+test("a change heard from outside the owner reaches the change listeners; the owner's own echo and a stopped owner do not", () => {
   const storage = memory();
-  let heardOutside = null;
-  let unwatched = 0;
-  const ports = {
-    storage: () => storage,
-    announce: (change) => { heardOutside(change); },
-    watch: (heard) => { heardOutside = heard; return () => { unwatched++; heardOutside = () => {}; }; }
-  };
   const changes = [];
   const unlisten = bridge.onPreferenceChange((change) => { changes.push(change); });
-  const stop = bridge.startPreferences(ports);
+  const stop = bridge.startPreferences({
+    storage: () => storage,
+    announce: (change) => { bridge.notePreferenceChange(change); }
+  });
   try {
     bridge.preferences().setClock("24");
     assert.deepEqual(changes, [{ key: "splitpage-clock", value: "24" }], "the owner's write is heard once, not again through its echo");
-    storage.setItem("splitpage-clock", "12");
-    heardOutside({ key: "splitpage-clock", value: "12" });
+    bridge.notePreferenceChange({ key: "splitpage-clock", value: "12" });
     assert.deepEqual(changes.slice(1), [{ key: "splitpage-clock", value: "12" }]);
   } finally {
     stop();
-    unlisten();
   }
-  stop();
-  assert.equal(unwatched, 1, "stopping the preferences stops the watch once");
+  bridge.notePreferenceChange({ key: "splitpage-clock", value: "24" });
+  unlisten();
+  assert.equal(changes.length, 2);
 });

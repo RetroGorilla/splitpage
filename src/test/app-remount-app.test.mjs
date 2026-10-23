@@ -95,6 +95,7 @@ const CONDITIONAL = {
 
 const RESOURCE_ROWS = {
   appearance: ["window storage/B"],
+  preferenceWatch: ["document splitpage:pref/B", "window storage/B"],
   shortcuts: ["window keydown/B"],
   topbar: [
     "#btn-production pointerenter/B", "#btn-production focus/B", "#btn-production pointerleave/B",
