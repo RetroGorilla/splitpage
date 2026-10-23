@@ -3,10 +3,8 @@ import { currentHome, reviewMode, serverStatus } from "../legacy/location-bridge
 import { savedStatusText, savedWhenText } from "../../shared/clock.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
-import { pushSnapshot } from "./03-sync.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { applyReviewMode } from "./13-hosted.js";
-import { openProjectFile } from "./18-local-files.js";
 import {
   canOpenPrompterInBrowser,
   canOpenPrompterInChromium
@@ -14,7 +12,7 @@ import {
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { LONG_DEMO } from "./_starters.js";
-import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
+import { NO_DESTINATION, documentTransitions, keepSnapshot, openDocument } from "../legacy/transition-bridge.ts";
 import { setMenuItemLabel, setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
 import { confirmSavedNow, saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
@@ -308,7 +306,7 @@ async function openRecentFile(fileId) {
     return;
   }
   var handle = makeDesktopHandle(entry);
-  await openProjectFile(await handle.getFile(), handle);
+  await openDocument({ kind: "file", file: await handle.getFile(), handle: handle });
 }
 
 export function startNewScript() {
@@ -336,8 +334,8 @@ export function openLongDemo() {
 function replaceWithNewDocument(next, reason, keepLabel) {
   var active = document.activeElement;
   if (active && active !== document.body && typeof active.blur === "function") active.blur();
-  var kept = currentDocument().rows.length ? pushSnapshot(keepLabel) : null;
-  if (kept) pushSnapshot(keepLabel, Object.assign({}, currentDocument(), { docId: next.docId }));
+  var kept = currentDocument().rows.length ? keepSnapshot(keepLabel) : null;
+  if (kept) keepSnapshot(keepLabel, Object.assign({}, currentDocument(), { docId: next.docId }));
   resetProductionPanelState();
   documentTransitions().startNew({ from: { document: next }, reason: reason, destination: NO_DESTINATION });
   confirmSavedNow();

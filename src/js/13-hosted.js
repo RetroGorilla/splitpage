@@ -29,7 +29,6 @@ import {
   applyMerge,
   getEditorName,
   mergeStates,
-  pushSnapshot,
   reportMerge,
   setBaseState,
   stashLocalWork
@@ -57,7 +56,7 @@ import { maybeAskGuestName } from "./13b-collaborate.js";
 import { confirmSavedNow, haltAutoSave, requestSave, resumeAutoSave, saveBusy, saveChanges, saveDoc, scheduleAutoSave, unsavedChanges } from "../legacy/save-bridge.ts";
 import { createServerDestination } from "../application/save/server-destination.ts";
 import { conflictStash, draftResume } from "../legacy/recovery-bridge.ts";
-import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
+import { captureOperation, documentTransitions, keepSnapshot, stillOwns } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
 import { deliverFile } from "../legacy/file-delivery.ts";
 import {
@@ -887,9 +886,17 @@ function renderServerPicker() {
   }).join("");
 }
 
-export async function openServerDoc(id) {
+export function serverDocumentSource() {
+  return {
+    id: "server",
+    takes: function (opening) { return opening.kind === "server"; },
+    open: function (opening) { return openServerDoc(opening.id); }
+  };
+}
+
+async function openServerDoc(id) {
   if (!runningOnDesktop() && !draftResume().serverResume() && await armBrowserServerDraft(id)) {
-    if (currentDocument() && currentDocument().rows.length) pushSnapshot("Before opening a script from the server");
+    if (currentDocument() && currentDocument().rows.length) keepSnapshot("Before opening a script from the server");
     var resumed = await resumeServerDoc() === true;
     if (resumed) {
       sidePanels().close("newtab-page");
@@ -909,12 +916,11 @@ export async function openServerDoc(id) {
   if (!body || !isDocumentObject(body.state)) { showToast("That document is empty.", "warn"); return false; }
   forgetRemoteMisses();
 
-  if (currentDocument() && currentDocument().rows.length) pushSnapshot("Before opening " + (body.state.title || id));
-
   resetProductionPanelState();
   documentTransitions().open({
     from: { document: migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null }) },
     reason: "openServerDoc: the document as the server sent it",
+    keep: "Before opening " + (body.state.title || id),
     destination: { kind: "server", fields: { id: body.id, rev: body.rev || 0 } },
     writtenOut: true
   });
