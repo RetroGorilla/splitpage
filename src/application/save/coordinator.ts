@@ -60,7 +60,10 @@ export interface Confirmed<B> {
   readonly baseline: B | null;
 }
 
+export type SaveStatusChange = "change" | "clean" | "running";
+
 export interface SaveCoordinator<R, B> {
+  readonly onChange: (listener: (change: SaveStatusChange) => void) => () => void;
   readonly request: (request: R) => Promise<SaveOutcome>;
   readonly running: () => boolean;
   readonly waiting: () => number;
@@ -106,12 +109,17 @@ function ofWriter(result: WriterResult | null | undefined): WriterResult {
 }
 
 export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): SaveCoordinator<R, B> {
+  const listeners = new Set<(change: SaveStatusChange) => void>();
   const queues: Queue<R>[] = [];
   const held = new Map<unknown, Map<string, Held<B>>>();
   let changes = 0;
   let cleanAt = 0;
   let activeCount = 0;
   let stopped = false;
+
+  function announce(change: SaveStatusChange): void {
+    if (!stopped) Array.from(listeners).forEach(function (listener) { listener(change); });
+  }
 
   function keyNow(): DestinationKey {
     return ports.destination.keyOf(ports.destination.current());
@@ -153,7 +161,10 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
     const was = activeCount > 0;
     activeCount += delta;
     const now = activeCount > 0;
-    if (was !== now) ports.report.running(now);
+    if (was !== now) {
+      ports.report.running(now);
+      announce("running");
+    }
   }
 
   function acknowledge(key: DestinationKey, generation: number): void {
@@ -257,6 +268,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
   function stop(): void {
     if (stopped) return;
     stopped = true;
+    listeners.clear();
     for (const queue of queues.splice(0)) {
       for (const entry of queue.entries.splice(0)) entry.settle({ kind: "cancelled" });
     }
@@ -265,6 +277,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
   function confirmClean(): void {
     acknowledge(keyNow(), changes);
     cleanAt = changes;
+    announce("clean");
   }
 
   function confirmBaseline(baseline: B | null): B | null {
@@ -282,6 +295,10 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
   }
 
   return Object.freeze({
+    onChange: function (listener: (change: SaveStatusChange) => void) {
+      listeners.add(listener);
+      return function () { listeners.delete(listener); };
+    },
     request: request,
     running: function () { return activeCount > 0; },
     waiting: function () {
@@ -289,6 +306,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
     },
     noteChange: function () {
       changes += 1;
+      announce("change");
       return changes;
     },
     changes: function () { return changes; },

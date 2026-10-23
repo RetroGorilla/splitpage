@@ -8,8 +8,7 @@ import {
   collabServerView,
   normalizeCollabServer,
   readCollabServer,
-  signOutCollab,
-  updateCollaborateMenu
+  signOutCollab
 } from "./13b-collaborate.js";
 import { setAutoSaveEnabled } from "./14-export.js";
 import { applyWriterSize, readWriterSize } from "./19-writer.js";
@@ -379,7 +378,6 @@ function onPrefChanged(key) {
     updateSaveStatus();
     if (S.state) renderComments();
   }
-  if (name === "collabServer") updateCollaborateMenu();
   if (settingsOpen()) renderSettings(key);
 }
 
