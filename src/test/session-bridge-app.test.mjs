@@ -15,7 +15,7 @@ const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { adoptRestoredState } = await import("../js/02b-doc-id.js");
 const { applyMerge, pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { scheduleIdleRefresh, productionIndexStats } = await import("../js/07-production-tags.js");
-const { markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { flushEdits, lastUndoEntry, undoSizes } = await import("../js/12a-undo.js");
 const { openProjectFile, reloadFileFromDisk } = await import("../js/18-local-files.js");
 const { startNewScript } = await import("../js/18b-file-menu.js");
@@ -55,11 +55,11 @@ test("the booted app's session holds the live document it adopted when the file 
   assert.ok(session.epoch() >= 2, "the seed and then the file were each adopted");
 });
 
-test("markDirty is one session edit: one generation, one saveChanges(), dirty, and one undo entry once the edit is flushed", () => {
+test("noteSessionEdit is one session edit: one generation, one saveChanges(), dirty, and one undo entry once the edit is flushed", () => {
   const gen = session.generation(), seq = saveChanges(), entries = undoSizes().undo;
   listen();
   S.state.rows[0].audioText = "One, edited.";
-  markDirty();
+  noteSessionEdit();
   assert.equal(session.generation(), gen + 1);
   assert.equal(saveChanges(), seq + 1);
   assert.equal(unsavedChanges(), true);
@@ -109,10 +109,10 @@ test("a server update over undo entries forgets the ones on a field their side c
   loadTestDocument(cloneState(script("Forget")));
   flushEdits();
   S.state.rows[0].audioText = "Mine, one.";
-  markDirty();
+  noteSessionEdit();
   flushEdits();
   S.state.rows[1].visualText = "Mine, close.";
-  markDirty();
+  noteSessionEdit();
   flushEdits();
   assert.equal(undoSizes().undo, 2);
   const epoch = session.epoch();
@@ -188,7 +188,7 @@ test("E4: resumeServerDoc's merge is a recovery: a new epoch, the undo stack kep
   loadTestDocument(cloneState(base));
   flushEdits();
   S.state.rows[0].audioText = "Typed while reopening.";
-  markDirty();
+  noteSessionEdit();
   flushEdits();
   const theirs = cloneState(base);
   theirs.rows[1].audioText = "Server.";

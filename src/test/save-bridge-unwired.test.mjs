@@ -10,7 +10,6 @@ function ports(log) {
     destination: () => "here",
     keyOf: (identity) => ({ owner: identity, name: "" }),
     obsolete: () => log.push("obsolete"),
-    running: (running) => log.push("running:" + running),
     ownership: { capture: () => Object.freeze({ destination: "here" }), stillOwns: () => true },
     autosave: { enabledAtStart: () => true, due: () => log.push("autosave due"), changed: (what) => log.push("autosave " + what) }
   };
@@ -40,12 +39,14 @@ test("before the save coordinator is started, every accessor throws instead of r
 test("started once, with the ports it is handed; a second start throws until the first is stopped", async () => {
   const log = [];
   const stop = bridge.startSaves(ports(log), timers(log));
+  const unhear = bridge.onSaveChange((change) => { if (change === "running") log.push("running:" + bridge.saveBusy()); });
   try {
     assert.throws(() => bridge.startSaves(ports([]), timers([])), /already started/);
     const outcome = await bridge.requestSave({ kind: "auto" });
     assert.deepEqual(outcome, { kind: "saved", acknowledged: true });
     assert.deepEqual(log, ["running:true", "write:auto", "running:false"]);
   } finally {
+    unhear();
     stop();
   }
   assert.equal(bridge.savesStarted(), false);
@@ -91,4 +92,24 @@ test("the legacy join rule: plain saves fold, a manual save absorbs an automatic
   assert.equal(j("save", "server"), "save");
   assert.equal(j("saveAs", "save"), null);
   assert.equal(j("save", "force"), null);
+});
+
+test("confirming a save drops autosave's timers and halt before the coordinator announces it clean", () => {
+  const log = [];
+  const stop = bridge.startSaves(ports(log), timers(log));
+  const unhear = bridge.onSaveChange((change) => {
+    log.push("announced " + change + " halted=" + JSON.stringify(bridge.autoSavePolicy().halted()) + " pending=" + bridge.autoSavePolicy().pending());
+  });
+  try {
+    bridge.noteSaveChange();
+    bridge.autoSavePolicy().schedule("file");
+    bridge.autoSavePolicy().halt("Paused");
+    log.length = 0;
+    bridge.confirmSavedNow();
+    assert.deepEqual(log, ["autosave halt", 'announced halt halted="" pending=false', 'announced clean halted="" pending=false']);
+    assert.equal(bridge.unsavedChanges(), false);
+  } finally {
+    unhear();
+    stop();
+  }
 });

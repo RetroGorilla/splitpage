@@ -11,7 +11,8 @@ const homeMod = await import("../legacy/location-bridge.ts");
 const { setHome } = homeMod;
 const { publishToServer, publishAndCopyShareLink, saveToServer } = await import("../js/13-hosted.js");
 const { setBaseState } = await import("../js/03-sync.js");
-const { markDirty, clearDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { setAutoSaveEnabled, legacySavePorts } = await import("../js/14-export.js");
 const { autoSavePolicy, noteSaveChange, startSaves, unsavedChanges } = await import("../legacy/save-bridge.ts");
 const { NO_DESTINATION, documentTransitions, startTransitions } = await import("../legacy/transition-bridge.ts");
@@ -78,8 +79,8 @@ function startOn(state, opts) {
   opts = opts || {};
   serverStatus().recordMode({ readOnly: false, available: true });
   documentTransitions().open({ from: { document: state }, reason: "test: the document as opened", destination: NO_DESTINATION, writtenOut: !!opts.written });
-  clearDirty();
-  if (opts.dirty) markDirty();
+  confirmSavedNow();
+  if (opts.dirty) noteSessionEdit();
   stubServer();
   stubTimers();
 }
@@ -91,7 +92,7 @@ test.after(() => {
   if (realNavigator) Object.defineProperty(globalThis, "navigator", realNavigator);
   setHome("none");
   loadTestDocument(null);
-  clearDirty();
+  confirmSavedNow();
 });
 
 test("control: an undisturbed publish adopts the server copy and is clean", async () => {
@@ -141,7 +142,7 @@ test("#247: a server document opened during the upload is not re-homed onto the 
   loadTestDocument(b);
   const bHome = setHome("server", { id: "server-b", rev: 7 });
   const bBase = setBaseState(cloneState(b), "test: B as the server sent it");
-  clearDirty();
+  confirmSavedNow();
 
   postGate();
   assert.equal(await p, false);
@@ -182,7 +183,7 @@ test("#247: a share link is not made for the document that replaced the one publ
   loadTestDocument(b);
   setHome("server", { id: "server-b", rev: 3 });
   setBaseState(cloneState(b), "test: B as the server sent it");
-  clearDirty();
+  confirmSavedNow();
 
   postGate();
   assert.equal(await p, false);
@@ -195,7 +196,7 @@ test("#248: text typed during the upload stays dirty, and the next save carries 
   await flush();
 
   S.state.rows[0].audioText = "typed DURING upload";
-  markDirty();
+  noteSessionEdit();
 
   timers.length = 0;
   postGate();

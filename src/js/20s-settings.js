@@ -2,7 +2,6 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 import { setHideShotScenes } from "./01b-hide-shot.js";
 import { personSwatchesHtml, renderHistory, setMyColor } from "./03-sync.js";
 import { getSavedAuthorName, renderComments } from "./10-comments.js";
-import { updateSaveStatus } from "./12-dirty-toast.js";
 import {
   DEFAULT_COLLAB_SERVER,
   collabServerView,
@@ -375,7 +374,6 @@ function onPrefChanged(key) {
   if (name === "theme") applyTheme(window, preferences().theme());
   if (name === "tagIcons") applyTagIcons(window, preferences().tagIcons());
   if (name === "clock") {
-    updateSaveStatus();
     if (currentDocument()) renderComments();
     var hist = document.getElementById("history-panel");
     if (hist && !hist.hidden) renderHistory();
@@ -395,7 +393,6 @@ export function __init() {
   window.__settingsTest = {
     open: openSettings,
     close: closeSettings,
-    isOpen: settingsOpen,
-    refreshSaveStatus: updateSaveStatus
+    isOpen: settingsOpen
   };
 }

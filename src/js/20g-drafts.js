@@ -8,7 +8,7 @@ import {
   syncDocIdentity
 } from "./02b-doc-id.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
-import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
+import { showToast } from "./12-dirty-toast.js";
 import { onServerDoc } from "./13-hosted.js";
 import { DRAFT_LIMITS, browserDraftKey, draftBaseOf } from "../adapters/storage/draft-store-idb.ts";
 import {
@@ -33,7 +33,7 @@ import { createCaptureSchedule } from "../application/recovery/capture-schedule.
 import { cloneState } from "../core/document/clone.ts";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
-import { currentDocument, mergeBase } from "../legacy/session-bridge.ts";
+import { currentDocument, mergeBase, noteAbsorbedDirty } from "../legacy/session-bridge.ts";
 
 var draftOnDisk;
 
@@ -563,7 +563,7 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
   });
   if (arrived.forkedFrom) copyDocHistorySafe(arrived.forkedFrom, arrived.document.docId);
   syncDocIdentity();
-  markAbsorbedDirty("recovery");
+  noteAbsorbedDirty("recovery");
   showToast(reasonText, "warn", true);
   return true;
 }
@@ -735,7 +735,7 @@ async function restoreFileDraft(t, mine, base, origin, ctx) {
   if (sameDocContent(base, disk)) {
     documentTransitions().restore({ from: { document: mine } });
     documentLocation().markWrittenOut(!!t.header.docIdWrittenOut);
-    markAbsorbedDirty("recovery");
+    noteAbsorbedDirty("recovery");
     showToast("Restored your unsaved changes to " + (currentDocument().title || file.name) +
       (draftWhenText(t) ? " " + draftWhenText(t) : ""), "ok", true);
     return "applied";
@@ -772,7 +772,7 @@ function adoptUntitledDraft(t, mine, base) {
     writtenOut: !!t.header.docIdWrittenOut
   });
   syncDocIdentity();
-  markAbsorbedDirty("recovery");
+  noteAbsorbedDirty("recovery");
   showToast("Restored your unsaved script" + (draftWhenText(t) ? " " + draftWhenText(t) : "") +
     " — it has never been saved, so save it somewhere.", "warn", true);
   return "applied";

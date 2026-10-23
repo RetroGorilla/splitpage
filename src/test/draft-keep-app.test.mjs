@@ -9,7 +9,8 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { markDirty, clearDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { flushDraftNow } = await import("../js/20g-drafts.js");
@@ -44,7 +45,7 @@ async function withDesktop(fn) {
 async function openCleanFile(id, title) {
   const name = id + ".splitpage";
   await openProjectFile(new File([buildSplitpageFile(exportDocumentOf(script(title)))], name, { lastModified: 1 }), desktopHandle(id, name), { skipSnapshot: true, silent: true });
-  clearDirty();
+  confirmSavedNow();
   await flushDraftNow();
   calls.length = 0;
 }
@@ -98,10 +99,10 @@ test("a keep flush of a dirty file tab writes the draft once, as a plain flush w
   await withDesktop(async () => {
     await openCleanFile("fdirty", "Dirty");
     S.state.rows[0].audioText = "Typed and not saved.";
-    markDirty();
+    noteSessionEdit();
     await flushDraftNow({ keep: true });
     assert.equal(writes().length, 1, JSON.stringify(calls.map((c) => c.op)));
     assert.equal(JSON.parse(writes()[0].payload.stateJson).rows[0].audioText, "Typed and not saved.");
-    clearDirty();
+    confirmSavedNow();
   });
 });
