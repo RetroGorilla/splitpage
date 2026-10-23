@@ -17,6 +17,7 @@ import type { SaveState } from "../../application/save/save-state.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
+import type { StartupSignal } from "../../application/startup-signal.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { DocumentDestination } from "../../application/transitions/ports.ts";
 import type { Transitions } from "../../application/transitions/transitions.ts";
@@ -43,6 +44,7 @@ import { productionIndex } from "../../legacy/production-index-bridge.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
 import { currentDocument, editAllowed, onDocumentReplaced, onRefresh, onSessionChange, readSession, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../../legacy/session-bridge.ts";
+import { startupReady } from "../../legacy/startup-bridge.ts";
 import { captureOperation, documentTransitions, stillOwns } from "../../legacy/transition-bridge.ts";
 
 const actions: Pick<ActionRegistry, "invoke" | "view"> = {
@@ -228,6 +230,10 @@ const transitions: Transitions<DocumentDestination> = {
   copyId: () => documentTransitions().copyId()
 };
 
+const startup: StartupSignal = {
+  ready: () => startupReady()
+};
+
 const shared = {
   ...effects,
   actions,
@@ -250,7 +256,8 @@ const shared = {
   launch,
   fileDelivery,
   undo: undoControl,
-  transitions
+  transitions,
+  startup
 };
 
 export function sharedPorts(): typeof shared {
