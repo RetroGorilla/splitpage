@@ -1,9 +1,8 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
-import { S } from "./_state.js";
 import { reviewMode, setHome } from "../legacy/location-bridge.ts";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, isDurableSync } from "../adapters/storage/02c-blobs.js";
-import { heldDocument, holdMergeBase, mergeBase, noteMerged, noteRecovery, noteServerUpdate, runDocumentEdit } from "../legacy/session-bridge.ts";
+import { currentDocument, heldDocument, holdMergeBase, mergeBase, noteMerged, noteRecovery, noteServerUpdate, runDocumentEdit } from "../legacy/session-bridge.ts";
 import { wordsPerMinuteCommand } from "../application/commands/document-settings.ts";
 import { applyIncomingMerge } from "../application/session/apply-merge.ts";
 import { mergeIncoming } from "../application/session/merge-incoming.ts";
@@ -64,7 +63,7 @@ export function stampRow(row) {
 }
 
 export function pushSnapshot(label, snapshotState) {
-  return captureSnapshot(label, snapshotState || S.state, { allowSeedSkip: !snapshotState });
+  return captureSnapshot(label, snapshotState || currentDocument(), { allowSeedSkip: !snapshotState });
 }
 
 var restoreInFlight = false;
@@ -73,11 +72,11 @@ var RESTORE_BACKUP_ATTEMPTS = 3;
 async function restoreSnapshot(id, opts) {
   opts = opts || {};
   if (restoreInFlight) return "busy";
-  if (!S.state) return "missing";
+  if (!currentDocument()) return "missing";
   restoreInFlight = true;
-  var docIdAtStart = S.state.docId;
+  var docIdAtStart = currentDocument().docId;
   var ctx = captureRestore();
-  var moved = function () { return !S.state || !stillRestoring(ctx); };
+  var moved = function () { return !currentDocument() || !stillRestoring(ctx); };
   var releaseHold = function () {};
   try {
     releaseHold = protectHistorySnapshot({ docId: opts.older ? null : docIdAtStart, older: !!opts.older, id: id });
@@ -91,14 +90,14 @@ async function restoreSnapshot(id, opts) {
 
     var stored = false;
     for (var attempt = 0; attempt < RESTORE_BACKUP_ATTEMPTS; attempt++) {
-      var stateAtCapture = S.state;
+      var stateAtCapture = currentDocument();
       var seqAtCapture = saveChanges();
-      var ticket = captureSnapshot("Before restoring an earlier version", S.state, { allowSeedSkip: false });
+      var ticket = captureSnapshot("Before restoring an earlier version", currentDocument(), { allowSeedSkip: false });
       if (!ticket) { stored = false; break; }
       var result = await ticket.done;
       if (moved()) return "changed";
       stored = !!(result && result.stored);
-      if (S.state === stateAtCapture && saveChanges() === seqAtCapture) break;
+      if (currentDocument() === stateAtCapture && saveChanges() === seqAtCapture) break;
       stored = false;
     }
     if (!stored && !opts.force) return "no-backup";
@@ -211,9 +210,9 @@ function stashBlobsFor(docs) {
 }
 
 export function stashLocalWork() {
-  if (!S.state) return false;
-  var payload = { at: nowIso(), by: getEditorName(), base: mergeBase(), mine: S.state };
-  var blobs = stashBlobsFor([S.state, mergeBase()]);
+  if (!currentDocument()) return false;
+  var payload = { at: nowIso(), by: getEditorName(), base: mergeBase(), mine: currentDocument() };
+  var blobs = stashBlobsFor([currentDocument(), mergeBase()]);
   if (blobs) payload.blobs = blobs;
   return conflictStash().save(payload);
 }
@@ -374,7 +373,7 @@ export function promptForTarget() {
 }
 
 function openClockPopover(focusOn) {
-  if (!S.state) return;
+  if (!currentDocument()) return;
   var viewing = reviewMode();
   var off = viewing ? " disabled" : "";
   var host = lengthHost();
@@ -382,7 +381,7 @@ function openClockPopover(focusOn) {
     '<label class="anchor-popover-label" for="wpm-input">Reading speed</label>' +
     '<div class="anchor-popover-row">' +
       '<input type="number" id="wpm-input" min="60" max="400" step="5" value="' +
-        escapeHtml(String(S.state.wordsPerMinute || DEFAULT_WPM)) + '" aria-label="Words per minute"' + off + '>' +
+        escapeHtml(String(currentDocument().wordsPerMinute || DEFAULT_WPM)) + '" aria-label="Words per minute"' + off + '>' +
       '<span class="anchor-popover-unit">words a minute</span>' +
       '<button type="button" id="wpm-save" class="btn-outline"' + off + '>Set</button>' +
     '</div>' +
@@ -645,13 +644,13 @@ function historyUsageHtml(backend, usage) {
 export async function renderHistory() {
   var listEl = document.getElementById("history-list");
   var panel = document.getElementById("history-panel");
-  if (!listEl || !panel || panel.hidden || !S.state) return;
+  if (!listEl || !panel || panel.hidden || !currentDocument()) return;
   if (!historyToggleBound) {
     historyToggleBound = true;
     listEl.addEventListener("toggle", onHistoryRowToggle, true);
   }
   var token = ++historyRenderToken;
-  var docId = normalizeDocId(S.state.docId);
+  var docId = normalizeDocId(currentDocument().docId);
   if (historyShownDocId !== docId) {
     historyShownDocId = docId;
     listEl.innerHTML = "";
@@ -664,8 +663,8 @@ export async function renderHistory() {
     return;
   }
   if (token !== historyRenderToken) return;
-  if (!S.state || panel.hidden) return;
-  if (normalizeDocId(S.state.docId) !== docId) {
+  if (!currentDocument() || panel.hidden) return;
+  if (normalizeDocId(currentDocument().docId) !== docId) {
     return renderHistory();
   }
   data = data || {};

@@ -1,15 +1,17 @@
-import { MD_IMAGE_PREFIX_RE } from "../adapters/formats/markdown-image.ts";
-import { internDataUrl, queuePersist } from "../adapters/storage/02c-blobs.js";
+import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
 import { pushSnapshot, stampRow } from "./03-sync.js";
-import { cssAttr, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
-import { anchorBrollInRows, declineBrollAnchoring } from "./08c-broll.js";
+import { cssAttr, sanitizeHtml } from "./04-richtext.js";
+import { declineBrollAnchoring } from "./08c-broll.js";
+import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
+import { cellOf, inertBody } from "../legacy/richtext.ts";
+import { randomIds } from "../adapters/identity/ids.ts";
 import { markDirty } from "./12-dirty-toast.js";
-import { audioDirectionsHtml, docxToRows } from "../adapters/formats/docx.ts";
+import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
 import { importModeTouched, resetImportMode } from "../application/import-mode.ts";
 import { importRowsCommand } from "../application/commands/import-rows.ts";
-import { makeId } from "../adapters/identity/ids.ts";
-import { escapeHtml, legacyMdToHtml, truncateForPreview } from "../core/document/text-policy.ts";
+import { escapeHtml, truncateForPreview } from "../core/document/text-policy.ts";
 import { REVIEW_ONLY, editAllowed, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
@@ -257,35 +259,14 @@ export function parseImportRows(text, mode) {
   return splitImportText(text, mode).map(function (c) { return { visualText: "", audioText: c }; });
 }
 
-export function normalizeImportedRows(rows) {
-  function importedImageRef(dataUrl) {
-    var rec = dataUrl ? internDataUrl(dataUrl) : null;
-    if (rec) queuePersist([rec.sha256]);
-    return rec;
-  }
-  return rows.map(function (r) {
-    var visual = String(r.visualText || "");
-    var image = null;
-    var m = MD_IMAGE_PREFIX_RE.exec(visual);
-    if (m) {
-      image = safeImageSrc(m[1]);
-      if (image) visual = visual.slice(m[0].length);
-    }
-    return {
-      id: makeId(),
-      visualText: sanitizeHtml(legacyMdToHtml(visual)),
-      imageRef: importedImageRef(image),
-      audioText: audioDirectionsHtml(sanitizeHtml(legacyMdToHtml(r.audioText || "")))
-    };
-  });
-}
+const brollAnchorPorts = { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml };
 
 var IMPORT_SCANS = [
   {
     id: "broll",
     label: "Look for B-roll lines and track them",
     hint: "A line starting “B-roll:” becomes a shot on the b-roll list, and keeps its status when the line is reworded.",
-    apply: function (rows, doc) { return anchorBrollInRows(doc, rows); },
+    apply: function (rows, doc) { return anchorBrollInRows(doc, rows, brollAnchorPorts); },
     decline: function (rows) { declineBrollAnchoring(rows); },
     found: function (n) {
       return n + " B-roll line" + (n === 1 ? "" : "s") + " found and tracked.";
@@ -464,7 +445,7 @@ export async function handleImportFile(file) {
         rows = parsed.rows;
         if ((!rows || !rows.length) && parsed.looseText) {
           rows = normalizeImportedRows(parseImportRows(parsed.looseText,
-            detectTwoColumnFormat(parsed.looseText) ? "twocolumn" : "paragraph"));
+            detectTwoColumnFormat(parsed.looseText) ? "twocolumn" : "paragraph"), sanitizeHtml);
         }
       }
     } catch (err) {
@@ -511,7 +492,7 @@ export function confirmImport() {
       showToast("Paste or choose some text first.", "warn");
       return;
     }
-    newRows = normalizeImportedRows(rows);
+    newRows = normalizeImportedRows(rows, sanitizeHtml);
   }
   var scan = chosenImportScan();
   if (importIntoNewDocument) {
