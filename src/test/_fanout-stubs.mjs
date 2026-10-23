@@ -2,7 +2,7 @@ import { viewFlags } from "../legacy/preferences-bridge.ts";
 import { currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import { productionReaders as documentReaders } from "../legacy/document-ports.ts";
 import { hasSetLength as coreHasSetLength } from "../core/document/timing.ts";
-import { noteEdit } from "../js/12a-undo.js";
+import { noteEdit } from "../legacy/undo-bridge.ts";
 import { startTestSession } from "./_session.mjs";
 
 export function wireSession(effects) {

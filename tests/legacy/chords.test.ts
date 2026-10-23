@@ -1,3 +1,4 @@
+import { commentsPanelActions, commentsHelpActions } from "../../src/bootstrap/wiring/comments.ts";
 import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
 import { test } from "node:test";
@@ -13,7 +14,7 @@ import { shareActions } from "../../src/legacy/share-actions.ts";
 import { thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
 import { hideShotActions } from "../../src/bootstrap/wiring/hide-shot.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
-import { registerViewActions } from "../../src/legacy/view-actions.ts";
+import { viewActions } from "../../src/legacy/view-actions.ts";
 import { scriptZoomActions } from "../../src/bootstrap/wiring/script-zoom.ts";
 import { findActions, mountFindFeature, stopFindFeature } from "../../src/bootstrap/wiring/find.ts";
 import { fileMenuExportActions, mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../src/bootstrap/wiring/file-menu-export.ts";
@@ -35,8 +36,8 @@ function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   mountFindFeature();
   const menu = helpMenuActions();
   const disposers = [stopRundownFeature, stopFileMenuExportFeature, stopFindFeature,
-    registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerViewActions(registry),
-    registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 5), ...updateActions(), ...menu.slice(5)]), registerAll(registry, [...shareActions().slice(0, 11), ...fileMenuExportActions().slice(1), ...shareActions().slice(11)]), registerAll(registry, scriptZoomActions()), stopHelpFeature
+    registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...viewActions().slice(0, 3), ...commentsPanelActions(), ...viewActions().slice(3)]),
+    registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 5), ...updateActions(), ...commentsHelpActions(), ...menu.slice(5)]), registerAll(registry, [...shareActions().slice(0, 11), ...fileMenuExportActions().slice(1), ...shareActions().slice(11)]), registerAll(registry, scriptZoomActions()), stopHelpFeature
   ];
   return { registry, dispose: () => {
     try {
