@@ -217,10 +217,14 @@ export function fakeReview(initial = false) {
 export function fakeEdits(answer: CommandOutcome = { kind: "noop" }) {
   const ran: Command[] = [];
   let outcome = answer;
-  const edits: Pick<DocumentEdits, "run" | "stamps"> = {
+  const edits: Pick<DocumentEdits, "run" | "edit" | "stamps"> = {
     run: (command) => {
       ran.push(command);
       return outcome;
+    },
+    edit: (command) => {
+      ran.push(command);
+      return outcome.kind === "applied" || outcome.kind === "committed";
     },
     stamps: { clock: { nowIso: () => "2026-01-01T00:00:00.000Z" }, editor: { name: () => "Tester" } }
   };
