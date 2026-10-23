@@ -1,8 +1,7 @@
 import { docIdEmbeddedIn } from "../core/document/ids.ts";
-import { S } from "./_state.js";
 import { flushEdits } from "./12a-undo.js";
 import { inertBody } from "../legacy/richtext.ts";
-import { noteReload } from "../legacy/session-bridge.ts";
+import { currentDocument, noteReload } from "../legacy/session-bridge.ts";
 import { documentTransitions } from "../legacy/transition-bridge.ts";
 import { autoSavePolicy, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
 import { amendHome, currentHome, fileHome, importHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
@@ -150,7 +149,7 @@ export function exportFileName(kind, baseName, opts) {
 }
 
 export function exportBaseName() {
-  return importHome() ? importHome().name.replace(/\.[^.]+$/, "") : slugify(S.state.title);
+  return importHome() ? importHome().name.replace(/\.[^.]+$/, "") : slugify(currentDocument().title);
 }
 
 export function exportRequest(kind, opts) {
@@ -324,7 +323,7 @@ export async function openProjectFile(file, handle, opts) {
 export function adoptProjectState(newState, file, handle, kind, opts) {
   opts = opts || {};
   if (typeof closeNewTabPage === "function") closeNewTabPage();
-  if (!opts.skipSnapshot && S.state && S.state.rows.length) pushSnapshot("Before opening " + file.name);
+  if (!opts.skipSnapshot && currentDocument() && currentDocument().rows.length) pushSnapshot("Before opening " + file.name);
 
   resetProductionPanelState();
   documentTransitions().open({
@@ -336,10 +335,10 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
   });
 
   clearDirty();
-  var commentNote = S.state.comments.length
-    ? ", " + S.state.comments.length + " comment" + (S.state.comments.length === 1 ? "" : "s") : "";
-  if (!opts.silent) showToast((opts.resumed ? "Resumed " : "Opened ") + (S.state.title || file.name) + " — " +
-    S.state.rows.length + " row" + (S.state.rows.length === 1 ? "" : "s") + commentNote, "ok");
+  var commentNote = currentDocument().comments.length
+    ? ", " + currentDocument().comments.length + " comment" + (currentDocument().comments.length === 1 ? "" : "s") : "";
+  if (!opts.silent) showToast((opts.resumed ? "Resumed " : "Opened ") + (currentDocument().title || file.name) + " — " +
+    currentDocument().rows.length + " row" + (currentDocument().rows.length === 1 ? "" : "s") + commentNote, "ok");
 
   if (handle) rememberLastFileHandle(handle);
   return true;
@@ -422,7 +421,7 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   if (!newRows || !newRows.length) { showToast("No scenes found in that file.", "warn"); return; }
 
-  if (!opts.reload && S.state.rows.length) pushSnapshot("Before opening " + file.name);
+  if (!opts.reload && currentDocument().rows.length) pushSnapshot("Before opening " + file.name);
 
   newRows.forEach(stampRow);
   var openedTitle = newTitle || file.name.replace(/\.[^.]+$/, "");
@@ -732,7 +731,7 @@ export function handleFileMenuAction(action, source) {
     appActions.invoke(action, source || "menu");
     return;
   }
-  if (!S.state) {
+  if (!currentDocument()) {
     showToast("Still loading…", "warn"); return;
   }
   if (exportFormats.isAction(action)) runExport(action);

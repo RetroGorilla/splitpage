@@ -1,6 +1,6 @@
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { formatDuration } from "../core/production/timing.ts";
 import { DEFAULT_WPM } from "../core/document/timing.ts";
-import { S } from "./_state.js";
 import { currentHome } from "../legacy/location-bridge.ts";
 import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
@@ -88,7 +88,7 @@ function adoptNewDocument(next, reason) {
 }
 
 function startNewDocument(makeState, reason) {
-  var ready = S.state ? null : startupReady();
+  var ready = currentDocument() ? null : startupReady();
   if (ready) {
     return ready.then(function () { return startNewDocument(makeState, reason); });
   }
