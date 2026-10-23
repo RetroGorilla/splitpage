@@ -1,5 +1,7 @@
 import { wireProductionIndex } from "../bootstrap/wiring/production-index.ts";
 import { migrateRows } from "../js/02-state.js";
+import { stampRow } from "../js/03-sync.js";
+import { bulkTagCell } from "../js/07-production-tags.js";
 import { sessionStarted, startSessionBridge } from "../legacy/session-bridge.ts";
 import { legacySessionPorts } from "../bootstrap/wiring.ts";
 import { startPageEffects } from "../bootstrap/effects.ts";
@@ -8,7 +10,7 @@ import { effectsStarted } from "../legacy/effects-bridge.ts";
 export function startTestSession(deps) {
   if (sessionStarted()) throw new Error("startTestSession: a session is already started, so the dependencies passed would be ignored");
   if (!effectsStarted()) startPageEffects(window);
-  const stopIndex = wireProductionIndex();
+  const stopIndex = wireProductionIndex({ cell: bulkTagCell, stamp: stampRow });
   try {
     const stopSession = startSessionBridge(legacySessionPorts(Object.assign({ entry: migrateRows }, deps)));
     return () => {
