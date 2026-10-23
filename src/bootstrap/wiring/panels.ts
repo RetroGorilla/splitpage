@@ -8,7 +8,7 @@ import { onPlainTagged } from "../../js/07b-plain-tags.js";
 import { onPainted } from "../../js/05-render.js";
 import { refreshGalleryOverlay } from "../../js/05e-gallery-overlay.js";
 import { renderRundown, setRundownExtraSeconds } from "../../features/rundown/rundown.js";
-import { paintRundownPresence } from "../../js/05p-rundown-presence.js";
+import { paintRundownPresence } from "../../features/rundown/presence.js";
 import { paintTargetOverlay } from "../../js/05t-target.js";
 import { refreshAnnotator } from "../../js/05w-annotate.js";
 import { productionPanelsOpen, renderProduction, updateGearCount, updateProductionCount } from "../../js/08-production-panels.js";
