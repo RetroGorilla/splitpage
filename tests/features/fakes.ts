@@ -78,11 +78,11 @@ export function fakeScreen(initial: Partial<ScreenState> = {}) {
 }
 
 export function fakeActions(registry?: ActionRegistry) {
-  const calls: { id: string; source: ActionSource }[] = [];
+  const calls: { id: string; source: ActionSource; input?: unknown }[] = [];
   const actions: Pick<ActionRegistry, "invoke" | "view"> = {
-    invoke: (id, source) => {
-      calls.push({ id, source });
-      return registry ? registry.invoke(id, source) : { kind: "ran", id };
+    invoke: (id, source, input) => {
+      calls.push(input === undefined ? { id, source } : { id, source, input });
+      return registry ? registry.invoke(id, source, input) : { kind: "ran", id };
     },
     view: (id, source) => registry?.view(id, source)
   };
@@ -217,10 +217,14 @@ export function fakeReview(initial = false) {
 export function fakeEdits(answer: CommandOutcome = { kind: "noop" }) {
   const ran: Command[] = [];
   let outcome = answer;
-  const edits: Pick<DocumentEdits, "run" | "stamps"> = {
+  const edits: Pick<DocumentEdits, "run" | "edit" | "stamps"> = {
     run: (command) => {
       ran.push(command);
       return outcome;
+    },
+    edit: (command) => {
+      ran.push(command);
+      return outcome.kind === "applied" || outcome.kind === "committed";
     },
     stamps: { clock: { nowIso: () => "2026-01-01T00:00:00.000Z" }, editor: { name: () => "Tester" } }
   };

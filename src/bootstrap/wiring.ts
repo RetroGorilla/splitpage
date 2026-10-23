@@ -1,7 +1,7 @@
 import { wireProductionIndex } from "./wiring/production-index.ts";
 export { mountReadTimeFeature } from "./wiring/read-time.ts";
 export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
-export { mountRundownFeature } from "./wiring/rundown.ts";
+export { mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature } from "./wiring/rundown.ts";
 export { mountHelpFeature } from "./wiring/help.ts";
 export { mountFindFeature } from "./wiring/find.ts";
 export { mountGalleryFeature } from "./wiring/gallery.ts";
