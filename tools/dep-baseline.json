@@ -52,7 +52,6 @@
     {"rule":"legacy-file","source":"src/js/05e-gallery-overlay.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/05g-scene-clip.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/05h-scene-select.js","target":"src/js"},
-    {"rule":"legacy-file","source":"src/js/05p-rundown-presence.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/05t-target.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/05v-video.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/06-rows.js","target":"src/js"},

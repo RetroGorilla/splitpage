@@ -1,4 +1,5 @@
 import type { ActionRegistry } from "../../application/actions.ts";
+import type { PresenceView } from "../../application/collaboration/presence.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
 import type { RowDrag } from "../../application/editing/row-drag.ts";
@@ -15,4 +16,10 @@ export interface RundownPorts {
   readonly actions: Pick<ActionRegistry, "invoke">;
   readonly minimized: Pick<Preferences, "rundownMin" | "setRundownMin">;
   readonly changes: PreferenceChanges;
+}
+
+export interface RundownPresencePorts {
+  readonly document: Pick<DocumentReader, "current">;
+  readonly presence: PresenceView;
+  readonly actions: Pick<ActionRegistry, "invoke">;
 }
