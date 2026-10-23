@@ -1,6 +1,7 @@
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { EditorSelectionPort } from "../../application/editing/selection.ts";
 import type { ExportRegistry } from "../../application/export/registry.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
@@ -19,6 +20,7 @@ import { appActions } from "../../legacy/app-actions.ts";
 import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
+import { editorSelection } from "../../legacy/editor-bridge.ts";
 import { exportFormats } from "../../legacy/export-formats.ts";
 import {
   currentConn, currentHome, documentLocation, fileHome, homeConn, importHome, reviewBlocked, reviewMode,
@@ -147,6 +149,10 @@ const production: ProductionIndexOwner = {
   recordsPlan: (doc, viewed) => productionIndex().recordsPlan(doc, viewed)
 };
 
+const selection: EditorSelectionPort = {
+  dropLink: () => { editorSelection().dropLink(); }
+};
+
 const exports: Pick<ExportRegistry, "card" | "cards" | "exporters" | "byAction" | "isAction" | "onChange"> = {
   card: (id) => exportFormats.card(id),
   cards: () => exportFormats.cards(),
@@ -169,6 +175,7 @@ const shared = {
   text,
   saves,
   production,
+  selection,
   exports,
   ownership,
   pictures
