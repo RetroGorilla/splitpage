@@ -3,7 +3,7 @@ import { runningOnDesktop } from "../../application/desktop-presence.ts";
 import { __init as mountSettings } from "../../features/settings/settings.js";
 import type { SettingsMount, SettingsPorts } from "../../features/settings/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { setHideShotScenes } from "../../js/01b-hide-shot.js";
+import { setHideShotScenes } from "../../legacy/hide-shot-bridge.ts";
 import { personSwatchesHtml } from "../../js/03-sync.js";
 import { getSavedAuthorName } from "../../application/comment-author.js";
 import { DEFAULT_COLLAB_SERVER, collabServerView, normalizeCollabServer, readCollabServer, signOutCollab } from "../../js/13b-collaborate.js";

@@ -1,6 +1,5 @@
 import { __init as init_00_prelude } from "./00-prelude.js";
 import { __init as init_01_scene_status } from "./01-scene-status.js";
-import { __init as init_01b_hide_shot } from "./01b-hide-shot.js";
 import { __init as init_02_state } from "./02-state.js";
 import { __init as init_02b_doc_id } from "./02b-doc-id.js";
 import { __init as init_02c_blobs } from "../adapters/storage/02c-blobs.js";
@@ -30,7 +29,6 @@ import { __init as init_14b_export_kit } from "./14b-export-kit.js";
 import { __init as init_18_local_files } from "./18-local-files.js";
 import { __init as init_18a_local_merge } from "./18a-local-merge.js";
 import { __init as init_18b_file_menu } from "./18b-file-menu.js";
-import { __init as init_18c_export_dialog } from "./18c-export-dialog.js";
 import { __init as init_18d_command_menu } from "./18d-command-menu.js";
 import { __init as init_19_writer } from "./19-writer.js";
 import { __init as init_20_teleprompter } from "./20-teleprompter.js";
@@ -54,7 +52,7 @@ import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountCopyPasteFeature, mountSettingsFeature } from "../bootstrap/wiring.ts";
+import { wireApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountCopyPasteFeature, mountSettingsFeature, mountHideShotFeature, mountFileMenuExportFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -81,7 +79,7 @@ try {
 if (wiring) {
   init_00_prelude();
   init_01_scene_status();
-  init_01b_hide_shot();
+  mountHideShotFeature();
   init_02_state();
   init_02b_doc_id();
   init_02c_blobs();
@@ -120,7 +118,7 @@ if (wiring) {
   init_18_local_files();
   init_18a_local_merge();
   init_18b_file_menu();
-  init_18c_export_dialog();
+  mountFileMenuExportFeature();
   init_18d_command_menu();
   init_19_writer();
   init_20_teleprompter();
