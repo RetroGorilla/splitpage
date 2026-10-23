@@ -256,7 +256,7 @@ A **move** is a group of numbered files that become one feature folder (or one o
 | 2 | Gallery | `05e`, `05w`, `05v` | 1,672 | 11 | 0 | 6 | `features/gallery` | Opus (`05w` alone is Codex, after `05e`); `05e` lands P12 and P13 |
 | 2 | Copy, paste and scene selection | `05c`, `05g`, `05h`, and `04c` deleted | 1,380 | 15 | 1 | 8 | `features/clipboard` | Opus; `05h` lands P15 |
 | 2 | B-roll records | `08c` | 282 | 5 | 7 | 6 | `features/broll`; the records reconciler to `application/production` | Opus; lands P21 |
-| 2 | Rows, without the render | `06`, `01`, `01b` | 687 | 6 | 14 | 8 | `features/rows` | `01b`'s shot-hiding state goes to an owner in its own PR first; then `06` Opus, `01` and `01b` Codex |
+| 2 | Rows, without the render | `06`, `01`, `01b` | 687 | 6 | 14 | 8 | `features/rows` | `01b`'s shot-hiding state is in the shot-hiding owner (`application/shot-hiding.ts`); `06` Opus, `01` and `01b` Codex |
 | 3 | Document place port (P16) | none | | | | | `application/location/` | Opus, its own PR before the moves below that read where the document lives |
 | 3 | The render | `05-render` | 1,286 | 20 | 7 | 8 | `features/rows` | Opus, perf-ab; after L3g |
 | 3 | Tags | `07`, `07b`, `08` | 2,029 | 11 | 19 | 10 | `features/tags` | `07` and `07b` Opus (perf-ab), `08` Codex |
@@ -298,7 +298,7 @@ Why this order:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `00-prelude` | 61 | | 0 | 0 | 6 | `bootstrap/startup`, `adapters/files`, identity owner | 4 | Opus | Close (unload warning), stored file handles, desktop attach |
 | `01-scene-status` | 114 | | 4 | 2 | 1 | `features/rows` | 2 | Codex | Runs one command through P9; tells the rundown its extra seconds through a callback |
-| `01b-hide-shot` | 125 | | 3 | 0 | 10 | `features/rows` | 2 | Codex | Its expanded strips and grace timers move to a shot-hiding owner in `src/application/` in their own PR first (Rule 5). 9 numbered importers; `revealRow` is already the `reveal-row` action by then |
+| `01b-hide-shot` | 125 | | 3 | 0 | 10 | `features/rows` | 2 | Codex | Its expanded strips and grace timers are in the shot-hiding owner (`application/shot-hiding.ts`, through `legacy/shot-hiding-bridge.ts`), which 7 former importers now call directly. 3 numbered importers left (`05-render`, `19-writer`, `20s-settings`) plus `legacy/this-document-actions.ts`; `revealRow` is already the `reveal-row` action by then |
 | `02-state` | 48 | | 1 | 1 | 13 | deleted: importers use `src/core/`, P7 and the document entry | 4 | Opus | `migrateRows` is the document entry |
 | `02b-doc-id` | 234 | yes | 6 | 3 | 10 | `application/` identity owner, adapters | 4 | Opus | State ingress |
 | `03-sync` | 781 | yes | 9 | 9 | 17 | `application/session` merge, `features/merge`, `features/history` | 4 | Opus | Merge |
