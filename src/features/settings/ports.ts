@@ -24,7 +24,7 @@ export interface SettingsPorts {
     "theme" | "setTheme" | "clock" | "setClock" | "scriptScale" | "setScriptScale" |
     "rundownMin" | "setRundownMin" | "tagIcons" | "setTagIcons" | "hideShot" |
     "autosave" | "videoThumbs" | "setVideoThumbs" | "defaultWpm" | "setDefaultWpm" |
-    "prompterFlag" | "setMyColor" | "setCommentAuthor" | "setCollabServer" |
+    "prompterFlag" | "setMyColor" | "commentAuthor" | "setCommentAuthor" | "setCollabServer" |
     "announceTaggingHelp" | "resetTour" | "resetDesktopNotice">;
   readonly editor: {
     readonly writerSize: () => number | null;
