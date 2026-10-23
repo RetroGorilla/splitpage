@@ -3,10 +3,9 @@ import { authorityOf, isOwner } from "../application/collaboration/authority.ts"
 import { runIsStale } from "../application/collaboration/workflow.ts";
 import { currentConn, currentHome, documentLocation, reviewMode, serverHomeId, serverStatus } from "../legacy/location-bridge.ts";
 import { normalizeServerUrl } from "../../shared/server-links.js";
-import { personSwatchesHtml, setMyColor, updateIdentityChip } from "./03-sync.js";
+import { personSwatchesHtml, setMyColor } from "./03-sync.js";
 import { getSavedAuthorName } from "./10-comments.js";
 import { apiFetch, applyHealth, applyReviewMode, clearServerToken, finishServerDetect, isLinkGuest, onServerDoc, pointTabAt, publishToServer, rememberTokenForServer, rememberedTokenForServer, serverDocShareUrl, setServerToken, shareAccessNote } from "./13-hosted.js";
-import { updateFileChip } from "./18-local-files.js";
 import { openSettings } from "./20s-settings.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
@@ -337,7 +336,6 @@ async function publishStep(c) {
     go(c, "error");
     return;
   }
-  updateFileChip();
   loadLinks(c);
 }
 
@@ -845,7 +843,6 @@ function saveGuestName() {
   var v = input ? cleanAuthorName(input.value) : "";
   if (!v) { if (input) input.focus(); return; }
   preferences().setCommentAuthor(v);
-  updateIdentityChip();
   closeGuestName();
   showToast("Hi " + v + " — that's how the others will see you.", "ok");
 }

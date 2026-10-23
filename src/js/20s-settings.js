@@ -1,6 +1,6 @@
 import { S } from "./_state.js";
 import { setHideShotScenes } from "./01b-hide-shot.js";
-import { personSwatchesHtml, renderHistory, setMyColor, updateIdentityChip } from "./03-sync.js";
+import { personSwatchesHtml, renderHistory, setMyColor } from "./03-sync.js";
 import { getSavedAuthorName, renderComments } from "./10-comments.js";
 import { updateSaveStatus } from "./12-dirty-toast.js";
 import {
@@ -285,7 +285,6 @@ function applyChange(target) {
     var v = cleanAuthorName(target.value);
     if (!v || v === getSavedAuthorName()) { target.value = getSavedAuthorName(); return; }
     preferences().setCommentAuthor(v);
-    updateIdentityChip();
   }
   if (id === "settings-collab-server") {
     var raw = (target.value || "").trim();
@@ -381,7 +380,6 @@ function onPrefChanged(key) {
     var hist = document.getElementById("history-panel");
     if (hist && !hist.hidden) renderHistory();
   }
-  if (name === "commentAuthor" || name === "personColor") updateIdentityChip();
   if (settingsOpen()) renderSettings(key);
 }
 

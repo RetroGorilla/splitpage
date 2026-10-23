@@ -11,8 +11,6 @@ import {
   resumeAutoSave,
   scheduleAutoSave
 } from "./14-export.js";
-import { updateFileChip } from "./18-local-files.js";
-import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { noteDraftChange } from "./20g-drafts.js";
 import { noteAbsorbedDirty, noteSessionEdit } from "../legacy/session-bridge.ts";
 import { autoSavePolicy, confirmSavedNow, noteSaveChange, saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
@@ -20,7 +18,6 @@ import { saveButtonView, saveStatus } from "../application/save/status.ts";
 import { changeSet } from "../application/session/change-set.ts";
 import { authorityOf, editCapability } from "../application/collaboration/authority.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 
 var MY_COLOR = changeSet({ docFields: ["personColors"] });
@@ -51,8 +48,7 @@ export function legacySessionEffects() {
     save: function (change) {
       if (!saveBusy()) setSaveButtons();
       if (change.kind !== "recovery") scheduleAutoSave();
-      if (currentHome().kind === "import") { amendHome(currentHome(), { dirty: true }); updateFileChip(); }
-      else if (onServerDoc()) { updateFileChip(); }
+      if (currentHome().kind === "import") amendHome(currentHome(), { dirty: true });
       if (change.changes.saveNow) queueAutoSave();
     },
     edit: function () {
@@ -71,7 +67,6 @@ export function setSaveButtons() {
     btn.classList.toggle("is-dirty", view.dirty);
   });
   if (typeof syncDocIdentity === "function") syncDocIdentity();
-  if (runningOnDesktop() && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
   if (typeof noteDraftChange === "function") noteDraftChange();
   updateSaveStatus();
 }
