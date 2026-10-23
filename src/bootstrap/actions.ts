@@ -17,6 +17,7 @@ import { scriptZoomActions } from "./wiring/script-zoom.ts";
 import { helpActions } from "./wiring/help.ts";
 import { updateActions } from "./wiring/update.ts";
 import { galleryActions } from "./wiring/gallery.ts";
+import { findActions } from "./wiring/find.ts";
 import { fileMenuExportActions } from "./wiring/file-menu-export.ts";
 import { hideShotActions } from "./wiring/hide-shot.ts";
 
@@ -30,7 +31,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
   if (running) throw new Error("the actions are already started; stop them first");
   const steps: readonly (() => () => void)[] = [
     () => registry.presentRefusals(presentRefusal),
-    () => registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]),
+    () => registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]),
     () => {
       const menu = fileActions();
       return registerAll(registry, [...menu.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...menu.slice(3)]);
