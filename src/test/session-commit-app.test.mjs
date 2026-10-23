@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 await bootApp();
@@ -51,7 +51,7 @@ function fresh() {
   render();
   flushEdits();
   confirmSavedNow();
-  return S.state;
+  return currentDocument();
 }
 
 function colorOf(doc) {
@@ -90,7 +90,7 @@ test("a command by a named editor writes the colour inside its transaction and p
   const doc = fresh();
   assert.equal(colorOf(doc), undefined);
   const changes = published(() => cycleRowStatus("r1"));
-  assert.equal(colorOf(S.state), COLOR);
+  assert.equal(colorOf(currentDocument()), COLOR);
   assert.equal(changes.length, 1);
   assert.ok(changes[0].changes.docFields.includes("personColors"), "the published change set names personColors");
   assert.deepEqual(changes[0].changes.cells.map((c) => c.field), ["status", "updatedAt", "updatedBy"]);
@@ -103,14 +103,14 @@ test("the colour is no undo step: the first edit's entry holds only the edit, an
   const entry = lastUndoEntry();
   assert.deepEqual(entry.steps.map((s) => s.key), ["status"]);
   const states = [];
-  const off = liveSession().subscribe(() => { states.push({ status: S.state.rows[0].status, color: colorOf(S.state) }); });
+  const off = liveSession().subscribe(() => { states.push({ status: currentDocument().rows[0].status, color: colorOf(currentDocument()) }); });
   try {
     undo();
   } finally {
     off();
   }
   assert.deepEqual(states, [{ status: "todo", color: COLOR }]);
-  assert.equal(colorOf(S.state), COLOR);
+  assert.equal(colorOf(currentDocument()), COLOR);
   assert.deepEqual(undoSizes(), { undo: 0, redo: 1 });
 });
 
@@ -126,16 +126,16 @@ test("without a saved name or colour a command writes and declares no colour", (
   unnamed();
   fresh();
   const changes = published(() => cycleRowStatus("r1"));
-  assert.equal(S.state.personColors && Object.keys(S.state.personColors).length ? "has" : "none", "none");
+  assert.equal(currentDocument().personColors && Object.keys(currentDocument().personColors).length ? "has" : "none", "none");
   assert.deepEqual(changes[0].changes.docFields, []);
 });
 
 test("a legacy edit records the colour as it marks the document unsaved, and its undo entry holds only the edit", () => {
   named();
   fresh();
-  S.state.title = "Renamed by hand";
+  currentDocument().title = "Renamed by hand";
   noteSessionEdit();
-  assert.equal(colorOf(S.state), COLOR);
+  assert.equal(colorOf(currentDocument()), COLOR);
   assert.equal(unsavedChanges(), true);
   assert.deepEqual(lastUndoEntry().steps.map((s) => s.key), ["title"]);
 });
@@ -144,7 +144,7 @@ test("an absorbed change that marks the document unsaved records the colour as b
   named();
   fresh();
   noteAbsorbedDirty("server");
-  assert.equal(colorOf(S.state), COLOR);
+  assert.equal(colorOf(currentDocument()), COLOR);
   assert.equal(unsavedChanges(), true);
 });
 
@@ -154,7 +154,7 @@ test("the dirty effect itself writes no document content, for a named editor too
   const before = JSON.stringify(doc);
   liveSession().settle("server");
   liveSession().noteEdit();
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.equal(unsavedChanges(), true);
 });
 
@@ -170,7 +170,7 @@ test("a status click whose listener throws after the commit repaints the scene, 
   } finally {
     off();
   }
-  assert.equal(S.state.rows[1].status, "ready");
+  assert.equal(currentDocument().rows[1].status, "ready");
   assert.equal(unsavedChanges(), true);
   assert.equal(saveChanges(), seq + 1);
   assert.deepEqual(reported.map((e) => e.message), ["listener broke"]);
@@ -195,7 +195,7 @@ test("a scene length whose effect throws after the commit still closes as applie
     globalThis.setTimeout = start;
   }
   assert.equal(result, true);
-  assert.equal(S.state.rows[0].lengthSeconds, 45);
+  assert.equal(currentDocument().rows[0].lengthSeconds, 45);
   assert.equal(unsavedChanges(), true);
   assert.deepEqual(reported.map((e) => e.message), ["effect broke"]);
 });
@@ -205,10 +205,10 @@ test("in review mode neither a legacy edit nor an absorbed change records the co
   fresh();
   window.__hostedTest.setSession({ role: "review", docId: "d" + "8".repeat(32) });
   try {
-    S.state.personColors = {};
+    currentDocument().personColors = {};
     noteSessionEdit();
     noteAbsorbedDirty("server");
-    assert.deepEqual(S.state.personColors, {});
+    assert.deepEqual(currentDocument().personColors, {});
   } finally {
     window.__hostedTest.setSession({ role: "edit", docId: null });
     unnamed();

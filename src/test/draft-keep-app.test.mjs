@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 
@@ -98,7 +98,7 @@ test("a keep flush of a clean script with no file writes nothing (#258)", async 
 test("a keep flush of a dirty file tab writes the draft once, as a plain flush would (#258)", async () => {
   await withDesktop(async () => {
     await openCleanFile("fdirty", "Dirty");
-    S.state.rows[0].audioText = "Typed and not saved.";
+    currentDocument().rows[0].audioText = "Typed and not saved.";
     noteSessionEdit();
     await flushDraftNow({ keep: true });
     assert.equal(writes().length, 1, JSON.stringify(calls.map((c) => c.op)));
