@@ -394,10 +394,10 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `13b-collaborate.js` | features/file-menu | `app-actions`, `location-bridge`, `preferences-bridge` |
 | `14-export.js` | adapters/files (save writer) | `location-bridge`, `preferences-bridge`, `recovery-bridge`, `save-bridge` |
 | `14b-export-kit.js` | adapters/formats | `preferences-bridge`, `session-bridge` (the capture binding; decodes through the export services port) |
-| `15-docx.js` | adapters/formats | none (decodes through the export services port) |
-| `16-csv.js` | adapters/formats | none (decodes through the export services port) |
-| `16b-xlsx.js` | adapters/formats | none |
-| `17-pdf.js` | adapters/formats | none |
+| `docx.ts` | adapters/formats | none (decodes through the export services port) |
+| `csv.ts` | adapters/formats | none (decodes through the export services port) |
+| `xlsx.ts` | adapters/formats | none |
+| `pdf.ts` | adapters/formats | none |
 | `18-local-files.js` | adapters/files | `app-actions`, `export-formats`, `location-bridge`, `production-editing-bridge`, `richtext`, `save-bridge`, `session-bridge`, `transition-bridge` |
 | `18a-local-merge.js` | features/merge | `location-bridge`, `plain-text` |
 | `18b-file-menu.js` | features/file-menu | `location-bridge`, `preferences-bridge`, `production-editing-bridge`, `save-bridge`, `transition-bridge` |
