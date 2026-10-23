@@ -1,4 +1,3 @@
-import { S } from "./_state.js";
 import {
   annotateGallerySlot,
   moveGallerySlot,
@@ -9,7 +8,7 @@ import {
   videoLinkLabel
 } from "../adapters/storage/02d-gallery.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession } from "../legacy/session-bridge.ts";
 import { cssAttr } from "./04-richtext.js";
 import {
   galleryBadgeHtml,
@@ -39,7 +38,7 @@ function modal() { return document.getElementById("gallery-modal"); }
 
 function rowOf(rowId) {
   var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
-  return idx === -1 ? null : { row: S.state.rows[idx], index: idx };
+  return idx === -1 ? null : { row: currentDocument().rows[idx], index: idx };
 }
 
 function shownSlots(slots) {
