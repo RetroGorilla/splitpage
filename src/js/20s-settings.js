@@ -1,7 +1,6 @@
-import { currentDocument } from "../legacy/session-bridge.ts";
 import { setHideShotScenes } from "./01b-hide-shot.js";
-import { personSwatchesHtml, renderHistory, setMyColor } from "./03-sync.js";
-import { getSavedAuthorName, renderComments } from "./10-comments.js";
+import { personSwatchesHtml } from "./03-sync.js";
+import { getSavedAuthorName } from "./10-comments.js";
 import {
   DEFAULT_COLLAB_SERVER,
   collabServerView,
@@ -259,7 +258,7 @@ function applyChange(target) {
   var id = target.id, name = target.name;
   if (name === "settings-theme") { preferences().setTheme(target.value); return; }
   if (name === "settings-clock") { preferences().setClock(target.value); return; }
-  if (name === "settings-person-color") { setMyColor(target.value); return; }
+  if (name === "settings-person-color") { preferences().setMyColor(target.value); return; }
   if (id === "settings-rundown-min") { preferences().setRundownMin(target.checked); return; }
   if (id === "settings-tag-icons") { preferences().setTagIcons(target.checked); return; }
   if (id === "settings-video-thumbs") { preferences().setVideoThumbs(target.checked); return; }
@@ -373,11 +372,6 @@ function onPrefChanged(key) {
   var name = preferences().nameOf(key);
   if (name === "theme") applyTheme(window, preferences().theme());
   if (name === "tagIcons") applyTagIcons(window, preferences().tagIcons());
-  if (name === "clock") {
-    if (currentDocument()) renderComments();
-    var hist = document.getElementById("history-panel");
-    if (hist && !hist.hidden) renderHistory();
-  }
   if (settingsOpen()) renderSettings(key);
 }
 
