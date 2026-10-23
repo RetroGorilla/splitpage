@@ -1,4 +1,5 @@
 import { createViewLifetime } from "../common/view-lifetime.ts";
+import { listenIdentity } from "./identity.ts";
 
 export interface IdentityPorts {
   readonly promptForName: () => void;
@@ -10,6 +11,7 @@ export function mountIdentity(mount: { window: Window; ports: IdentityPorts }): 
   const life = createViewLifetime(window);
   const element = (id: string): HTMLInputElement => document.getElementById(id) as HTMLInputElement;
   life.listen(element("identity-chip"), "click", ports.promptForName);
+  life.release(listenIdentity());
   return { dispose: life.dispose };
 }
 

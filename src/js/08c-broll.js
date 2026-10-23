@@ -13,7 +13,6 @@ import {
   scheduleIdleRefresh,
   tagRecordsPlan
 } from "./07-production-tags.js";
-import { renderBrollViews } from "./08d-broll-panel.js";
 import { makeId, randomIds } from "../adapters/identity/ids.ts";
 import {
   BROLL_CLOSERS,
@@ -416,11 +415,6 @@ export function updateBrollBadge() {
 
 export function scheduleBrollRefresh() {
   scheduleIdleRefresh("broll");
-}
-
-export function runBrollRefresh() {
-  updateBrollBadge();
-  renderBrollViews();
 }
 
 export function __init() {
