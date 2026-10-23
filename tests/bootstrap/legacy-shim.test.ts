@@ -17,7 +17,7 @@ const FROZEN_SHIM_IMPORTS: readonly string[] = [
   "./05-render.js",
   "./05v-video.js",
   "./06-rows.js", "./07-production-tags.js", "./07b-plain-tags.js", "./08-production-panels.js", "./08c-broll.js", "./08d-broll-panel.js",
-  "./09-find-replace.js", "./11-import.js", "./12-dirty-toast.js", "./12a-undo.js", "./13-hosted.js",
+  "./09-find-replace.js", "./11-import.js", "./12-dirty-toast.js", "./13-hosted.js",
   "./13a-presence.js", "./13b-collaborate.js", "./14-export.js", "./14b-export-kit.js", "./18-local-files.js", "./18a-local-merge.js", "./18b-file-menu.js",
   "./18d-command-menu.js", "./19-writer.js", "./20-teleprompter.js", "./20a-update.js", "./20b-onboarding.js",
   "./20d-formats.js", "./20e-connect.js", "./20f-desktop.js", "./20g-drafts.js", "./20h-appdata.js",
@@ -36,10 +36,10 @@ function importsOf(path: string): readonly Import[] {
   return analysis.imports;
 }
 
-test("the frozen shim import set has the 41 started modules and the two bootstrap modules", () => {
+test("the frozen shim import set has the 40 started modules and the two bootstrap modules", () => {
   assert.equal(new Set(FROZEN_SHIM_IMPORTS).size, FROZEN_SHIM_IMPORTS.length);
-  assert.equal(FROZEN_SHIM_IMPORTS.length, 43);
-  assert.equal(FROZEN_SHIM_IMPORTS.filter((s) => /^\.\/\d/.test(s)).length, 39);
+  assert.equal(FROZEN_SHIM_IMPORTS.length, 42);
+  assert.equal(FROZEN_SHIM_IMPORTS.filter((s) => /^\.\/\d/.test(s)).length, 38);
   assert.ok(!FROZEN_SHIM_IMPORTS.includes("./14e-export-formats.js"));
 });
 
@@ -77,7 +77,7 @@ interface LoadReport {
   readonly owners: Readonly<Record<string, boolean | string>>;
 }
 
-const NOTHING_STARTED = { session: false, saves: false, recovery: false, merge: false, editor: false, productionEditing: false, preferences: false, location: false, effects: false, transitions: false, actions: false, exports: false, exportServices: false, projectFileServices: false, shotHiding: false, presence: false };
+const NOTHING_STARTED = { session: false, saves: false, recovery: false, merge: false, editor: false, productionEditing: false, preferences: false, location: false, effects: false, transitions: false, actions: false, exports: false, exportServices: false, projectFileServices: false, shotHiding: false, presence: false, undo: false };
 const CONFIGURES = /^(?:start|install|register|provide|configure|route|watch|hand|use|on)[A-Z]/;
 const run = promisify(execFile);
 
@@ -131,11 +131,11 @@ test("the load-order check catches a module that configures a bridge while it lo
 });
 
 test("no numbered module configures a bridge or starts an owner while it loads: each is imported alone, with fresh module state", { timeout: 600_000 }, async () => {
-  assert.equal(NUMBERED.length, 39, "every remaining numbered module");
+  assert.equal(NUMBERED.length, 38, "every remaining numbered module");
   const targets = [...NUMBERED, "src/adapters/formats/export-projections.ts", "src/adapters/formats/export-kit.ts", "src/adapters/formats/export-assets.ts", "src/adapters/formats/export-text.ts", "src/adapters/formats/csv.ts", "src/adapters/formats/xlsx.ts", "src/adapters/formats/docx.ts", "src/adapters/formats/pdf.ts", "src/features/rows/row-motion.js", "src/features/title/topbar.ts", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/script-zoom/script-zoom.js", "src/features/notices/phone-bar.ts", "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts", "src/bootstrap/wiring/exporters.ts", "src/bootstrap/wiring/script-zoom.ts", "src/application/screen.ts", "src/features/script-zoom/actions.ts", "src/bootstrap/wiring/shared-ports.ts", "src/features/help/help.js", "src/features/help/actions.ts", "src/bootstrap/wiring/help.ts",
     "src/features/settings/settings.js", "src/features/settings/actions.ts", "src/bootstrap/wiring/settings.ts",
     "src/features/gallery/annotate.js", "src/features/gallery/overlay.js", "src/features/gallery/actions.ts", "src/bootstrap/wiring/gallery.ts", "src/features/common/gallery.ts",
-    "src/features/rundown/rundown.js", "src/features/rundown/actions.ts", "src/features/rows/actions.ts", "src/bootstrap/wiring/rundown.ts", "src/features/rows/read-time.js", "src/bootstrap/wiring/read-time.ts", "src/features/rundown/presence.js", "src/features/rundown/target.js", "src/features/update/ports.ts", "src/features/update/actions.ts",
+    "src/features/rundown/rundown.js", "src/features/rundown/actions.ts", "src/features/rows/actions.ts", "src/bootstrap/wiring/rundown.ts", "src/features/rows/read-time.js", "src/bootstrap/wiring/read-time.ts", "src/features/rundown/presence.js", "src/legacy/undo-bridge.ts", "src/features/rundown/target.js", "src/features/update/ports.ts", "src/features/update/actions.ts",
     "src/features/clipboard/cell-clipboard.js", "src/features/clipboard/scene-clip.js", "src/features/clipboard/scene-select.js", "src/bootstrap/wiring/clipboard.ts", "src/bootstrap/wiring/hide-shot.ts", "src/features/editing/draft-edit.js", "src/bootstrap/wiring/draft-edit.ts",
     "src/features/file-menu/export-dialog.js", "src/features/file-menu/actions.ts", "src/features/file-menu/ports.ts", "src/bootstrap/wiring/file-menu-export.ts", "src/bootstrap/wiring/file-menu-export-controls.ts",
     "src/features/comments/comments.js", "src/features/comments/actions.ts", "src/features/common/comment-time.js", "src/features/common/comment-anchors.js", "src/features/common/editable-cell.js", "src/application/comment-author.js"];

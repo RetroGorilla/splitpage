@@ -16,7 +16,7 @@ const { cellFromClipboard } = await import("../features/clipboard/cell-clipboard
 const { fromHtml } = await import("../legacy/richtext.ts");
 const { toHtml } = await import("../core/text/html.ts");
 const { projection, commentIds } = await import("../core/text/runs.ts");
-const { undo, redo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
+const { undo, redo, undoSizes, flushEdits } = await import("../legacy/undo-bridge.ts");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);

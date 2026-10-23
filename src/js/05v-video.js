@@ -1,7 +1,7 @@
 import { intern, persist } from "../adapters/storage/02c-blobs.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { currentDocument, readSession } from "../legacy/session-bridge.ts";
-import { foldIntoEdit } from "./12a-undo.js";
+import { foldIntoEdit } from "../legacy/undo-bridge.ts";
 import { fetchVideoThumbnail, parseVideoLink, playerUrl, videoRef } from "../../shared/video-embed.js";
 import { normalizeVideoLink, setVideoThumbnail, videoLinkKey } from "../core/document/gallery.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
