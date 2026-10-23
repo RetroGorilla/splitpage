@@ -13,12 +13,11 @@ import {
 import { createMemoryBackend, dataUrlForSync, intern, internDataUrl, setBackend } from "../adapters/storage/02c-blobs.js";
 import { conflictStash, startRecovery } from "../legacy/recovery-bridge.ts";
 import { DRAFT_LIMITS } from "../adapters/storage/draft-store-idb.ts";
-import { S } from "../js/_state.js";
 import { changedBetween } from "../js/12a-undo.js";
 import { personIdRemap } from "../core/merge/lists.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { loadTestDocument } from "./_document.mjs";
-import { holdMergeBase, mergeBase } from "../legacy/session-bridge.ts";
+import { holdMergeBase, mergeBase, currentDocument } from "../legacy/session-bridge.ts";
 
 startRecovery({
   indexedDB: null, limits: DRAFT_LIMITS, now: () => Date.now(), writerId: "w-merge-states", desktop: () => null,
@@ -653,7 +652,7 @@ test("a stash carries the pictures the store does not hold, and they come back",
 test("stashLocalWork writes refs, plus the bytes of every picture not durably stored", () => {
   setBackend(createMemoryBackend());
   const b = pic(60, 10), c = pic(61, 10);
-  const was = { state: S.state, base: mergeBase() };
+  const was = { state: currentDocument(), base: mergeBase() };
   loadTestDocument(imgDoc(b));
   holdMergeBase(imgDoc(c));
   try {

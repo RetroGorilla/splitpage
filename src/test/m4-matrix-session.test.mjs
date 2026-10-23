@@ -26,7 +26,7 @@ let unfollow = null;
 
 function noteHeld() {
   for (const events of tracing) {
-    events.push({ field: "state", value: currentDocument() === null ? null : "object", epoch: probe.epoch(), sessionHolds: probe.held() === S.state });
+    events.push({ field: "state", value: currentDocument() === null ? null : "object", epoch: probe.epoch(), sessionHolds: probe.held() === currentDocument() });
   }
 }
 
@@ -57,10 +57,8 @@ const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { adoptRestoredState, migrateDocument, standaloneHtmlFor } = await import("../js/02b-doc-id.js");
 const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const exportModule = await import("../js/14-export.js");
-const { saveDoc, setAutoSaveEnabled } = exportModule;
 const { exportMetaLine, toMarkdownDoc } = await import("../adapters/formats/export-text.ts");
 const { captureExportDocument, exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { exportFacts } = await import("../adapters/formats/export-kit.ts");
@@ -132,7 +130,7 @@ function useDocument(doc) {
 }
 
 function mutateLive() {
-  const s = S.state;
+  const s = currentDocument();
   s.title = "A different title";
   s.wordsPerMinute = 90;
   s.targetSeconds = 61;
@@ -202,7 +200,7 @@ function namedEditor() {
 function committedPrecondition() {
   namedEditor();
   useDocument(demo());
-  const row = S.state.rows[0];
+  const row = currentDocument().rows[0];
   return { row: row, before: row.status };
 }
 
@@ -236,13 +234,13 @@ function assertReportedAfterCommit(inject, message) {
 
 rightToday("E1", "a command's effect pass writes no document content that its change set does not declare", () => {
   const { row } = committedPrecondition();
-  const before = JSON.parse(JSON.stringify(S.state));
+  const before = JSON.parse(JSON.stringify(currentDocument()));
   const outcome = runCommand(sceneStatusCommand(row.id, sessionStamps));
   assert.equal(outcome.kind, "applied", "the command applied");
-  const undeclared = undeclaredChanges(before, JSON.parse(JSON.stringify(S.state)), outcome.changes);
+  const undeclared = undeclaredChanges(before, JSON.parse(JSON.stringify(currentDocument())), outcome.changes);
   assert.deepEqual(undeclared, [], "undeclared document changes after the effect pass: " + JSON.stringify(undeclared));
   assert.equal(before.personColors && before.personColors["Sam Ortega"], undefined, "the document had no colour for the editor");
-  assert.equal(S.state.personColors["Sam Ortega"], PERSON_COLORS[0], "the editor's colour was written");
+  assert.equal(currentDocument().personColors["Sam Ortega"], PERSON_COLORS[0], "the editor's colour was written");
   assert.ok(outcome.changes.docFields.includes("personColors"), "the change set declares the colour");
 });
 
@@ -288,7 +286,7 @@ rightToday("T2a-tab", "a new tab's blank document opens its epoch at the transit
     document.querySelector('#newtab-page [data-newtab-action="new"]').click();
     for (let turn = 0; turn < 50 && session.epoch() === epoch; turn++) await new Promise((resolve) => setImmediate(resolve));
   });
-  assert.equal(S.state.title, "Untitled Script");
+  assert.equal(currentDocument().title, "Untitled Script");
   assertAdoptedAtOnce(events, epoch);
 });
 
@@ -340,8 +338,8 @@ rightToday("T2c-resume", "a resumed server draft opens its epoch at the transiti
   try {
     const epoch = session.epoch();
     const events = await traced(async () => { assert.equal(await openServerDoc("server-r"), true); });
-    assert.equal(S.state.rows[0].audioText, "Unsaved in the browser.", "the draft was resumed");
-    assert.equal(S.state.rows[1].audioText, "Changed on the server.");
+    assert.equal(currentDocument().rows[0].audioText, "Unsaved in the browser.", "the draft was resumed");
+    assert.equal(currentDocument().rows[1].audioText, "Changed on the server.");
     assertAdoptedAtOnce(events, epoch);
   } finally {
     serverStatus().recordMode({ available: available });
@@ -379,16 +377,16 @@ rightToday("T2c-resume-switch", "a late server resume leaves a document opened d
     const file = splitpageFile(replacement, "opened-during-resume.splitpage");
     const target = createHeldFileHandle({ name: file.name });
     await openProjectFile(file, target.handle, { skipSnapshot: true, silent: true });
-    assert.equal(S.state.title, replacement.title, "setup: the replacement document opened while the resume fetch was held");
+    assert.equal(currentDocument().title, replacement.title, "setup: the replacement document opened while the resume fetch was held");
     assert.equal(homeModule.currentConn(), connection, "setup: opening the file kept the same connection");
-    const opened = JSON.stringify(S.state);
+    const opened = JSON.stringify(currentDocument());
     const baseline = JSON.stringify(mergeBase());
     const destination = homeModule.currentHome();
     const epoch = session.epoch();
     held.gates.release("fetch");
     await resuming;
-    assert.equal(S.state.title, replacement.title, "late server resume must leave the newly opened document in place");
-    assert.equal(JSON.stringify(S.state), opened, "the opened document's contents and identity are unchanged");
+    assert.equal(currentDocument().title, replacement.title, "late server resume must leave the newly opened document in place");
+    assert.equal(JSON.stringify(currentDocument()), opened, "the opened document's contents and identity are unchanged");
     assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
     assert.equal(JSON.stringify(mergeBase()), baseline, "the opened document's baseline is unchanged");
     assert.equal(unsavedChanges(), false, "the opened document stays clean");
@@ -419,9 +417,9 @@ rightToday("T2c-reopen", "a server document reopened after a sign-in opens its e
     const epoch = session.epoch();
     const events = await traced(async () => {
       await finishServerDetect();
-      for (let turn = 0; turn < 200 && S.state.title !== "Reopened from the server"; turn++) await new Promise((resolve) => setImmediate(resolve));
+      for (let turn = 0; turn < 200 && currentDocument().title !== "Reopened from the server"; turn++) await new Promise((resolve) => setImmediate(resolve));
     });
-    assert.equal(S.state.title, "Reopened from the server", "the document was reopened");
+    assert.equal(currentDocument().title, "Reopened from the server", "the document was reopened");
     assertAdoptedAtOnce(events, epoch);
   } finally {
     uninstall();
@@ -454,17 +452,17 @@ rightToday("T2c-reopen-switch", "a late sign-in resume leaves a document opened 
     const file = splitpageFile(replacement, "opened-during-sign-in.splitpage");
     const target = createHeldFileHandle({ name: file.name });
     await openProjectFile(file, target.handle, { skipSnapshot: true, silent: true });
-    assert.equal(S.state.title, replacement.title, "setup: the replacement document opened while the resume fetch was held");
+    assert.equal(currentDocument().title, replacement.title, "setup: the replacement document opened while the resume fetch was held");
     assert.equal(homeModule.currentConn(), connection, "setup: opening the file kept the same connection");
-    const opened = JSON.stringify(S.state);
+    const opened = JSON.stringify(currentDocument());
     const baseline = JSON.stringify(mergeBase());
     const destination = homeModule.currentHome();
     const epoch = session.epoch();
     held.gates.release("fetch");
     await detecting;
     for (let turn = 0; turn < 50; turn++) await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(S.state.title, replacement.title, "late sign-in resume must leave the newly opened document in place");
-    assert.equal(JSON.stringify(S.state), opened, "the opened document's contents and identity are unchanged");
+    assert.equal(currentDocument().title, replacement.title, "late sign-in resume must leave the newly opened document in place");
+    assert.equal(JSON.stringify(currentDocument()), opened, "the opened document's contents and identity are unchanged");
     assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
     assert.equal(JSON.stringify(mergeBase()), baseline, "the opened document's baseline is unchanged");
     assert.equal(unsavedChanges(), false, "the opened document stays clean");
@@ -508,16 +506,16 @@ rightToday("T2c-reopen-stale", "a sign-in resume dropped for a newly opened docu
     held.gates.release("fetch");
     await detecting;
     for (let turn = 0; turn < 50; turn++) await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(S.state.title, replacement.title, "setup: the first resume was dropped for the newly opened document");
+    assert.equal(currentDocument().title, replacement.title, "setup: the first resume was dropped for the newly opened document");
     assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending, "setup: the dropped resume kept its key");
-    const opened = JSON.stringify(S.state);
+    const opened = JSON.stringify(currentDocument());
     const baseline = JSON.stringify(mergeBase());
     const destination = homeModule.currentHome();
     const epoch = session.epoch();
     await finishServerDetect();
     for (let turn = 0; turn < 50; turn++) await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(S.state.title, replacement.title, "a later sign-in must not resume the server document over the opened one");
-    assert.equal(JSON.stringify(S.state), opened, "the opened document's contents and identity are unchanged");
+    assert.equal(currentDocument().title, replacement.title, "a later sign-in must not resume the server document over the opened one");
+    assert.equal(JSON.stringify(currentDocument()), opened, "the opened document's contents and identity are unchanged");
     assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
     assert.equal(JSON.stringify(mergeBase()), baseline, "the opened document's baseline is unchanged");
     assert.equal(unsavedChanges(), false, "the opened document stays clean");
@@ -548,7 +546,7 @@ rightToday("T2d", "a restored draft opens its epoch at the transition, not at th
 
 rightToday("T2e", "a restored history version opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("History"));
-  const point = cloneState(S.state);
+  const point = cloneState(currentDocument());
   point.rows[0].audioText = "As it was.";
   const ticket = pushSnapshot("A point to go back to", point);
   await ticket.done;
@@ -579,10 +577,10 @@ rightToday("T1", "Save As, publish and detached recovery fork the id; open, rest
     delete window.showSaveFilePicker;
     setHome("none");
   }
-  assert.notEqual(S.state.docId, idOf("1"), "Save As gave the copy a new id");
-  assert.match(S.state.docId, /^d[0-9a-f]{32}$/);
+  assert.notEqual(currentDocument().docId, idOf("1"), "Save As gave the copy a new id");
+  assert.match(currentDocument().docId, /^d[0-9a-f]{32}$/);
   assert.equal(target.commits.length, 1, "the copy was written once");
-  assert.ok(target.text().includes(S.state.docId) && !target.text().includes(idOf("1")), "the file carries the new id, not the old one");
+  assert.ok(target.text().includes(currentDocument().docId) && !target.text().includes(idOf("1")), "the file carries the new id, not the old one");
 
   useDocument(script("Fork by publish", { docId: idOf("2") }));
   documentLocation().markWrittenOut(true);
@@ -595,27 +593,27 @@ rightToday("T1", "Save As, publish and detached recovery fork the id; open, rest
     uninstall();
     setHome("none");
   }
-  assert.notEqual(S.state.docId, idOf("2"), "publishing gave the copy a new id");
-  assert.equal(held.matching("POST", "api/docs")[0].body.state.docId, S.state.docId, "the server was sent the new id");
+  assert.notEqual(currentDocument().docId, idOf("2"), "publishing gave the copy a new id");
+  assert.equal(held.matching("POST", "api/docs")[0].body.state.docId, currentDocument().docId, "the server was sent the new id");
 
   useDocument(script("Detached", { docId: idOf("3") }));
   const draft = script("Recovered", { docId: idOf("4") });
   await applyTakenDraft({ header: { origin: { kind: "file", fileName: "gone.splitpage" } }, stateJson: JSON.stringify(draft) });
-  assert.equal(S.state.title, "Recovered");
-  assert.notEqual(S.state.docId, idOf("4"), "a detached recovery got a new id");
+  assert.equal(currentDocument().title, "Recovered");
+  assert.notEqual(currentDocument().docId, idOf("4"), "a detached recovery got a new id");
 
   useDocument(script("Before open"));
   const opened = script("Opened", { docId: idOf("5") });
   await openProjectFile(splitpageFile(opened), null, { skipSnapshot: true, silent: true });
-  assert.equal(S.state.docId, idOf("5"), "open keeps the file's id");
+  assert.equal(currentDocument().docId, idOf("5"), "open keeps the file's id");
   const epoch = session.epoch();
   await openProjectFile(splitpageFile(opened), null, { skipSnapshot: true, silent: true });
-  assert.equal(S.state.docId, idOf("5"), "a same-id reopen keeps the id");
+  assert.equal(currentDocument().docId, idOf("5"), "a same-id reopen keeps the id");
   assert.ok(session.epoch() > epoch, "and is a new epoch all the same");
 
   adoptRestoredState(script("Restored", { docId: idOf("6") }));
-  assert.equal(S.state.docId, idOf("5"), "restore keeps the open document's id");
-  assert.equal(S.state.title, "Restored");
+  assert.equal(currentDocument().docId, idOf("5"), "restore keeps the open document's id");
+  assert.equal(currentDocument().title, "Restored");
 });
 
 const HTML_HEAD = '<!doctype html><html><head><meta charset="utf-8"><title>t</title></head><body>';
@@ -679,7 +677,7 @@ rightToday("T5", "restoring a draft onto an unchanged file schedules no save and
   useDocument(script("Before restore"));
   await withRestoredFileDraft("unchanged", async (restored) => {
     assert.equal(restored.outcome, "applied");
-    assert.equal(S.state.rows[0].audioText, "Unsaved here.", "the restored text is on screen");
+    assert.equal(currentDocument().rows[0].audioText, "Unsaved here.", "the restored text is on screen");
     const fileBefore = await restored.onDisk();
     const baselineBefore = JSON.stringify(mergeBase());
     assert.equal(mergeBase().rows[0].audioText, restored.disk.rows[0].audioText, "the baseline is the file's own content");
@@ -699,8 +697,8 @@ rightToday("T5-merge", "restoring a draft onto a changed file merges, halts auto
   useDocument(script("Before merge restore"));
   await withRestoredFileDraft("changed", async (restored) => {
     assert.equal(restored.outcome, "merged");
-    assert.equal(S.state.rows[0].audioText, "Unsaved here.");
-    assert.equal(S.state.rows[1].audioText, "Changed on disk.");
+    assert.equal(currentDocument().rows[0].audioText, "Unsaved here.");
+    assert.equal(currentDocument().rows[1].audioText, "Changed on disk.");
     const fileBefore = await restored.onDisk();
     const baselineBefore = JSON.stringify(mergeBase());
     await settleSaves(clock);
@@ -721,7 +719,7 @@ rightToday("T6", "with autosave off, nothing is scheduled after a restore or an 
     await withRestoredFileDraft("unchanged", async (restored) => {
       assert.equal(restored.outcome, "applied");
       const fileBefore = await restored.onDisk();
-      S.state.rows[1].audioText = "Typed after the restore.";
+      currentDocument().rows[1].audioText = "Typed after the restore.";
       noteSessionEdit();
       await settleSaves(clock);
       assert.equal(await restored.onDisk(), fileBefore, "the file holds what it held: no automatic write with autosave off");
@@ -741,7 +739,7 @@ rightToday("L1a", "a refresh the old document asked for does not run once the do
   clock.tick(5000);
   requestRefresh("m4-old-document");
   startNewScript();
-  assert.equal(S.state.title, "Untitled Script", "the replacement happened");
+  assert.equal(currentDocument().title, "Untitled Script", "the replacement happened");
   jobs.length = 0;
   clock.tick(5000);
   assert.equal(jobs.includes("m4-old-document"), false, "the old document's refresh did not run after the replacement: " + jobs.join(","));
@@ -759,7 +757,7 @@ rightToday("L1b", "an autosave or draft the old document armed writes nothing fo
     await openProjectFile(await handle.getFile(), handle, { skipSnapshot: true, silent: true });
     held.calls.length = 0;
     const fileBefore = new TextDecoder().decode((await fake.readFile(picked.id)).bytes);
-    S.state.rows[0].audioText = "Typed in the old document.";
+    currentDocument().rows[0].audioText = "Typed in the old document.";
     noteSessionEdit();
     assert.ok(autoSavePolicy().pending(), "an autosave is armed for the old document");
     startNewScript();
@@ -767,7 +765,7 @@ rightToday("L1b", "an autosave or draft the old document armed writes nothing fo
     assert.equal(new TextDecoder().decode((await fake.readFile(picked.id)).bytes), fileBefore, "the old document's file holds what it held after the replacement");
     const drafted = held.calls.filter((c) => c.op === "writeDraft").map((c) => c.args[0].stateJson);
     assert.equal(drafted.filter((json) => json.includes("Typed in the old document.")).length, 0, "no draft of the old document's text was written for the replacement");
-    assert.equal(S.state.title, "Untitled Script");
+    assert.equal(currentDocument().title, "Untitled Script");
   } finally {
     restore();
   }
@@ -777,14 +775,14 @@ rightToday("L1d", "no subscription made for the old document survives its replac
   useDocument(script("Subscribed"));
   const heardOld = [];
   liveSession().subscribe((change) => heardOld.push(change.kind));
-  S.state.rows[0].audioText = "Typed in the old document.";
+  currentDocument().rows[0].audioText = "Typed in the old document.";
   noteSessionEdit();
   assert.deepEqual(heardOld, ["edit"], "setup: the subscription hears the document it was made for");
   startNewScript();
-  assert.equal(S.state.title, "Untitled Script", "the replacement happened");
+  assert.equal(currentDocument().title, "Untitled Script", "the replacement happened");
   const heardNew = [];
   liveSession().subscribe((change) => heardNew.push(change.kind));
-  S.state.rows[0].audioText = "Typed in the replacement.";
+  currentDocument().rows[0].audioText = "Typed in the replacement.";
   noteSessionEdit();
   assert.deepEqual(heardOld, ["edit"], "the old document's subscription heard nothing after the replacement");
   assert.deepEqual(heardNew, ["edit"], "a subscription made for the replacement hears it");
@@ -807,7 +805,7 @@ rightToday("L1c", "an object URL made for the old document's session video is re
     grantVideoFile(new File(["12345"], "clip.mp4"), link);
     assert.ok(sessionVideoUrl(link), "the video has an object URL while its document is open");
     startNewScript();
-    assert.equal(S.state.title, "Untitled Script", "the replacement happened");
+    assert.equal(currentDocument().title, "Untitled Script", "the replacement happened");
     assert.ok(hasSessionVideo(link), "the file grant survives the switch");
     assert.deepEqual(created.filter((url) => !revoked.includes(url)), [], "every object URL made for the old document is revoked");
   } finally {

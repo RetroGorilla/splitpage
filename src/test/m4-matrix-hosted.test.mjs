@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import blobPolicy from "../../shared/blob-policy.js";
 import { createHeldFetch, createHeldFileHandle, mockClock, rightToday } from "./_m4-matrix.mjs";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
@@ -15,9 +15,8 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow, saveDoc } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const { saveDoc } = await import("../js/14-export.js");
 const { intern } = await import("../adapters/storage/02c-blobs.js");
 const { startNewScript } = await import("../js/18b-file-menu.js");
 const { closeCollaborate, collaborateBlockedReason, openCollaborate } = await import("../js/13b-collaborate.js");
@@ -189,7 +188,7 @@ function startUnpublished(doc) {
 }
 
 function editRow(index, text) {
-  S.state.rows[index].audioText = text;
+  currentDocument().rows[index].audioText = text;
   noteSessionEdit();
 }
 
@@ -198,7 +197,7 @@ function summary() {
     homeId: homeModule.currentHome().id,
     rev: homeModule.currentHome().rev,
     dirty: unsavedChanges(),
-    texts: S.state.rows.map((r) => r.audioText),
+    texts: currentDocument().rows.map((r) => r.audioText),
     baseTexts: mergeBase() ? mergeBase().rows.map((r) => r.audioText) : null
   };
 }
@@ -224,7 +223,7 @@ rightToday("S1", "a hosted save whose document is switched for another acknowled
   held.gates.releaseAll("fetch");
   await saving;
   await settle();
-  assert.equal(S.state.title, "B", "the other document is still open");
+  assert.equal(currentDocument().title, "B", "the other document is still open");
   assert.deepEqual(summary(), before, "the save of A changed nothing in B");
   assert.equal(homeModule.currentHome().rev, 4, "B keeps its own revision");
   assert.equal(puts(held, "srv-b").length, 0, "nothing was sent for B");
@@ -468,7 +467,7 @@ rightToday("P2", "a publish that completes after another document was opened lea
   const publishing = hosted.publishToServer();
   await held.gates.arrived("fetch");
   startNewScript();
-  assert.equal(S.state.title, "Untitled Script");
+  assert.equal(currentDocument().title, "Untitled Script");
   const other = { dirty: unsavedChanges(), homeKind: homeModule.currentHome().kind, base: JSON.stringify(mergeBase()) };
   held.gates.releaseAll("fetch");
   assert.equal(await publishing, false, "the publish reports that it did not adopt the copy");
@@ -521,7 +520,7 @@ rightToday("P1-token", "a publish that lands after a token change on the same se
   const toasts = newToasts(before);
   assert.ok(toasts.some((text) => text.includes("sign-in changed") && text.includes("To publish")), "the toast names the script and says the sign-in changed: " + toasts.join(" | "));
   assert.equal(toasts.some((text) => text.includes("opened another script")), false, "it does not claim another script was opened");
-  assert.equal(S.state.title, "To publish", "the open document is untouched");
+  assert.equal(currentDocument().title, "To publish", "the open document is untouched");
 }));
 
 rightToday("C1", "hosted Save As acknowledges no server edit and keeps the merge ancestor", hostedCase(async ({ server, held }) => {
@@ -743,11 +742,11 @@ async function capabilityRecord(role, scope) {
   await scenario(async ({ server, held }) => {
     server.put("srv-a", script("A", idOf("a")), 1);
     openHosted(script("A", idOf("a")), "srv-a", 1, { role: role, scope: scope });
-    const outcome = runCommand(sceneStatusCommand(S.state.rows[0].id, sessionStamps));
+    const outcome = runCommand(sceneStatusCommand(currentDocument().rows[0].id, sessionStamps));
     const edit = outcome.kind;
     await settle();
     const started = held.requests.length;
-    if (S.state.rows[1].audioText === "Two.") editRow(1, "Typed by " + role);
+    if (currentDocument().rows[1].audioText === "Two.") editRow(1, "Typed by " + role);
     await saveDoc();
     await settle();
     const save = held.requests.slice(started).filter((r) => r.method === "PUT" && r.url.endsWith("api/docs/srv-a")).length;

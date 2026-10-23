@@ -1,18 +1,17 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { createHeldFileHandle, mockClock } from "./_m4-matrix.mjs";
-import { mergeBase } from "../legacy/session-bridge.ts";
+import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const { obsoleteSaveText, saveDoc, setAutoSaveEnabled } = await import("../js/14-export.js");
+const { obsoleteSaveText } = await import("../js/14-export.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const homeModule = await import("../legacy/location-bridge.ts");
@@ -42,7 +41,7 @@ async function openFrom(target) {
 }
 
 function edit(text) {
-  S.state.rows[0].audioText = text;
+  currentDocument().rows[0].audioText = text;
   noteSessionEdit();
 }
 
