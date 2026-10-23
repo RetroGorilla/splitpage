@@ -7,6 +7,7 @@ test("the find bar and the writer start closed, and hide-shot starts from the st
   const off = createViewFlags({ hideShot: () => false });
   assert.equal(off.findOpen(), false);
   assert.equal(off.writerOpen(), false);
+  assert.equal(off.tourOpen(), false);
   assert.equal(off.brollPageOpen(), false);
   assert.equal(off.hideShot(), false);
   assert.equal(createViewFlags({ hideShot: () => true }).hideShot(), true);
@@ -27,6 +28,28 @@ test("each setter changes only its own flag and announces the change", () => {
     { flag: "writerOpen", value: true },
     { flag: "hideShot", value: true },
     { flag: "writerOpen", value: false }
+  ]);
+});
+
+test("the tour setter changes only its own flag and announces only changes", () => {
+  const flags = createViewFlags({ hideShot: () => false });
+  const seen: ViewFlagChange[] = [];
+  flags.onChange((change) => seen.push(change));
+  flags.setTourOpen(false);
+  assert.deepEqual(seen, []);
+  flags.setTourOpen(true);
+  assert.deepEqual([flags.findOpen(), flags.writerOpen(), flags.tourOpen(), flags.hideShot()], [false, false, true, false]);
+  assert.deepEqual(seen, [{ flag: "tourOpen", value: true }]);
+  flags.setTourOpen(true);
+  assert.deepEqual(seen, [{ flag: "tourOpen", value: true }]);
+  flags.setWriterOpen(true);
+  assert.equal(flags.tourOpen(), true);
+  flags.setTourOpen(false);
+  assert.deepEqual([flags.findOpen(), flags.writerOpen(), flags.tourOpen(), flags.hideShot()], [false, true, false, false]);
+  assert.deepEqual(seen, [
+    { flag: "tourOpen", value: true },
+    { flag: "writerOpen", value: true },
+    { flag: "tourOpen", value: false }
   ]);
 });
 

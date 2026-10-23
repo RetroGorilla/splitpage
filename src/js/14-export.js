@@ -15,7 +15,7 @@ import {
   setBaseState
 } from "./03-sync.js";
 import { captureExportDocument } from "./14b-export-kit.js";
-import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./20d-formats.js";
+import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "../adapters/formats/project-file.ts";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { checkFileConflict, existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
 import { deliverFile } from "../legacy/file-delivery.ts";
