@@ -7,7 +7,6 @@ import {
   safeId,
   sanitizeHtml
 } from "./04-richtext.js";
-import { render } from "./05-render.js";
 import { plainTagOpen } from "./07b-plain-tags.js";
 import { renderProduction, updateGearCount } from "./08-production-panels.js";
 import { runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
@@ -739,7 +738,6 @@ export function applyTag() {
       return allOccurrencesTagged(doc, phrase, cat, name).rewrites;
     }, { cat: cat, name: name }, sessionStamps, true));
     breakUndoCoalescing();
-    render();
     showToast("Labelled " + n + " mention" + (n === 1 ? "" : "s") + " of " + name, "ok");
     return;
   }
@@ -760,7 +758,6 @@ export function applyTag() {
   if (!readSession(tagged).length) { showToast("Could not find that text any more.", "warn"); return; }
   runDocumentEdit(tagCellsCommand("tag-occurrence", tagged, { cat: cat, name: name }, sessionStamps, true));
   breakUndoCoalescing();
-  render();
   showToast("Labelled as " + name, "ok");
 }
 

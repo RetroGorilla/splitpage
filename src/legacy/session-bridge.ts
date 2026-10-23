@@ -57,11 +57,34 @@ export const sessionTextPorts: CellTextPorts = Object.freeze({
   cells: function (html: string) { return scriptCellOf(html); }
 });
 
+interface Hearing {
+  readonly listener: SessionListener;
+  on: boolean;
+}
+
+const changeListeners: Hearing[] = [];
+
+const refreshListeners: ((jobs: ReadonlySet<string>) => void)[] = [];
+
+function hearing(entry: Hearing): SessionListener {
+  return function (change) {
+    if (entry.on) entry.listener(change);
+  };
+}
+
 function createSession(ports: SessionBridgePorts, after: SessionCounters): DocumentSession {
-  return createDocumentSession({
+  const made = createDocumentSession({
     entry: ports.entry,
     undo: ports.undo.adapter,
-    effects: ports.effects,
+    effects: {
+      dirty: function (change) { ports.effects.dirty(change); },
+      draft: function (change) { ports.effects.draft(change); },
+      save: function (change) { ports.effects.save(change); },
+      refresh: function (jobs) {
+        ports.effects.refresh(jobs);
+        refreshListeners.slice().forEach(function (listener) { listener(jobs); });
+      }
+    },
     capability: ports.capability,
     reconcile: {
       anchors: function (doc) { return syncCommentAnchors(doc, cellOf); },
@@ -72,6 +95,8 @@ function createSession(ports: SessionBridgePorts, after: SessionCounters): Docum
     timers: ports.timers,
     after: after
   });
+  changeListeners.forEach(function (entry) { made.subscribe(hearing(entry)); });
+  return made;
 }
 
 const replacedListeners: Array<() => void> = [];
@@ -82,6 +107,25 @@ function announceReplaced(): void {
 
 export function onDocumentReplaced(listener: () => void): void {
   replacedListeners.push(listener);
+}
+
+export function onRefresh(listener: (jobs: ReadonlySet<string>) => void): () => void {
+  refreshListeners.push(listener);
+  return function () {
+    const at = refreshListeners.indexOf(listener);
+    if (at !== -1) refreshListeners.splice(at, 1);
+  };
+}
+
+export function onSessionChange(listener: SessionListener): () => void {
+  const entry: Hearing = { listener: listener, on: true };
+  changeListeners.push(entry);
+  if (started) started.current.subscribe(hearing(entry));
+  return function () {
+    entry.on = false;
+    const at = changeListeners.indexOf(entry);
+    if (at !== -1) changeListeners.splice(at, 1);
+  };
 }
 
 function swept<T>(outcome: T): T {

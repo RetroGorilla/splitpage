@@ -21,6 +21,16 @@ interface Started {
 
 let started: Started | null = null;
 
+const changeListeners: ((change: PreferenceChange) => void)[] = [];
+
+export function onPreferenceChange(listener: (change: PreferenceChange) => void): () => void {
+  changeListeners.push(listener);
+  return function () {
+    const at = changeListeners.indexOf(listener);
+    if (at !== -1) changeListeners.splice(at, 1);
+  };
+}
+
 function running(): Started {
   if (!started) throw new Error("The preferences are not started yet");
   return started;
@@ -39,7 +49,16 @@ export function browserPreferencePorts(): LegacyPreferencePorts {
 
 export function startPreferences(ports: LegacyPreferencePorts = browserPreferencePorts()): () => void {
   if (started) throw new Error("The preferences are already started; stop them first");
-  const preferences = createPreferences(ports);
+  const preferences = createPreferences({
+    storage: ports.storage,
+    announce: function (change) {
+      try {
+        ports.announce(change);
+      } finally {
+        changeListeners.slice().forEach(function (listener) { listener(change); });
+      }
+    }
+  });
   const mine: Started = {
     preferences: preferences,
     flags: createViewFlags({ hideShot: preferences.hideShot }),

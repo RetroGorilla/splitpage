@@ -7,7 +7,6 @@ import {
   resolvePersonColor
 } from "../core/document/person-colors.ts";
 import { cssAttr } from "./04-richtext.js";
-import { render } from "./05-render.js";
 import { paintRundownPresence } from "./05p-rundown-presence.js";
 import { getSavedAuthorName } from "./10-comments.js";
 import {
@@ -60,6 +59,16 @@ function presenceColor(p) {
 }
 
 var presenceLiveColors = {};
+
+var recolorListeners = [];
+
+export function onPresenceRecolor(listener) {
+  recolorListeners.push(listener);
+  return function () {
+    var at = recolorListeners.indexOf(listener);
+    if (at !== -1) recolorListeners.splice(at, 1);
+  };
+}
 
 function noteLiveColors(list) {
   var next = {};
@@ -150,7 +159,7 @@ function setPresenceHere(list) {
   presenceHere = list || [];
   var recolored = noteLiveColors(presenceHere);
   paintPresence();
-  if (recolored && S.state) render();
+  if (recolored) recolorListeners.slice().forEach(function (listener) { listener(); });
 }
 
 async function presenceTick() {

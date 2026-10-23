@@ -1,6 +1,5 @@
 import { productionReaders } from "../legacy/document-ports.ts";
 import { armShotHideGrace, clearShotHideGrace } from "./01b-hide-shot.js";
-import { paintRowTimes, render, renderRow } from "./05-render.js";
 import { renderRundown, setRundownExtraSeconds } from "./05f-rundown.js";
 import { paintTargetOverlay } from "./05t-target.js";
 import { sceneStatus, sceneStatusCommand, shotGrace } from "../application/commands/scene-status.ts";
@@ -69,7 +68,6 @@ export function updateScriptStats() {
   }
   paintLength(document.getElementById("runtime-chip"), totalHtml, slotHtml, title);
   paintLength(document.getElementById("length-status"), totalHtml, slotHtml, title);
-  paintRowTimes();
   setRundownExtraSeconds(target || 0);
   renderRundown();
   paintTargetOverlay();
@@ -97,7 +95,6 @@ export function cycleRowStatus(rowId) {
     if (grace === "arm") armShotHideGrace(rowId);
     else if (grace === "clear") clearShotHideGrace(rowId);
   }
-  if (!renderRow(rowId)) render();
   updateScriptStats();
 }
 

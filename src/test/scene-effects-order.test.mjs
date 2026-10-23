@@ -14,7 +14,7 @@ const bridge = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { loadTestDocument } = await import("./_document.mjs");
 
-const STATS = ["paintRowTimes", "setRundownExtraSeconds", "renderRundown", "paintTargetOverlay"];
+const STATS = ["setRundownExtraSeconds", "renderRundown", "paintTargetOverlay"];
 
 const reviewing = { on: false };
 const published = [];
@@ -45,11 +45,11 @@ test("the stubs stand in for every module the two commands reach", () => {
   assert.deepEqual(stubs.calls, STATS, "01's own updateScriptStats runs and paints through the stubs");
 });
 
-test("a status click: the command sets and stamps the row, one effect pass with an immediate save, then the view repaints one row and the stats", () => {
+test("a status click: the command sets and stamps the row, one effect pass with an immediate save, then the stats; the script screen repaints the row itself by hearing the change", () => {
   stubs.resetFanout();
   lengthDoc([{ id: "r1", status: "todo" }, { id: "r2", status: "todo" }]);
   cycleRowStatus("r2");
-  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "renderRow:r2", ...STATS]);
+  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", ...STATS]);
   assert.equal(S.state.rows[1].status, "ready");
   assert.equal(stubs.dirtied[0][1].status, "ready", "the status is set before the effects run");
   assert.notEqual(stubs.dirtied[0][1].updatedAt, "", "and the row is already stamped");
@@ -59,20 +59,13 @@ test("a status click: the command sets and stamps the row, one effect pass with 
   assert.deepEqual(published[0].changes.derive, ["production"], "production refreshes through the scheduler, b-roll does not");
 });
 
-test("a status click whose row does not paint renders the whole script instead", () => {
-  stubs.resetFanout({ renderRow: false });
-  lengthDoc([{ id: "r1", status: "ready" }]);
-  cycleRowStatus("r1");
-  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "renderRow:r1", "render", ...STATS]);
-});
-
 test("with shot scenes hidden, reaching shot arms the grace after the effects and before the repaint", () => {
   stubs.resetFanout({ hideShot: true });
   lengthDoc([{ id: "r1", status: "ready" }, { id: "r2", status: "ready" }]);
   cycleRowStatus("r2");
   assert.equal(S.state.rows[1].status, "shot");
   assert.equal(S.state.rows[0].status, "ready");
-  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "armShotHideGrace:r2", "renderRow:r2", ...STATS]);
+  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "armShotHideGrace:r2", ...STATS]);
 });
 
 test("with shot scenes hidden, leaving shot clears the grace in the same place", () => {
@@ -81,14 +74,14 @@ test("with shot scenes hidden, leaving shot clears the grace in the same place",
   cycleRowStatus("r2");
   assert.equal(S.state.rows[1].status, "todo");
   assert.equal(S.state.rows[0].status, "shot");
-  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "clearShotHideGrace:r2", "renderRow:r2", ...STATS]);
+  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "clearShotHideGrace:r2", ...STATS]);
 });
 
 test("with shot scenes hidden, todo to ready touches no grace", () => {
   stubs.resetFanout({ hideShot: true });
   lengthDoc([{ id: "r1", status: "todo" }, { id: "r2", status: "todo" }]);
   cycleRowStatus("r2");
-  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "renderRow:r2", ...STATS]);
+  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", ...STATS]);
 });
 
 test("with shot scenes shown, reaching shot arms no grace", () => {
@@ -156,44 +149,36 @@ function withThrowingListener(run) {
   return reported;
 }
 
-test("a status click whose commit is followed by a throw still arms the grace and repaints, and throws nothing", () => {
+test("a status click whose commit is followed by a throw still arms the grace and the stats, and throws nothing", () => {
   stubs.resetFanout({ hideShot: true });
   lengthDoc([{ id: "r1", status: "ready" }]);
   const reported = withThrowingListener(() => cycleRowStatus("r1"));
   assert.deepEqual(reported, ["listener broke"]);
   assert.equal(S.state.rows[0].status, "shot");
-  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "armShotHideGrace:r1", "renderRow:r1", ...STATS]);
+  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "armShotHideGrace:r1", ...STATS]);
 });
 
-test("a scene length whose commit is followed by a throw still repaints and answers true, and throws nothing", () => {
+test("a scene length whose commit is followed by a throw still runs the stats and answers true, and throws nothing", () => {
   stubs.resetFanout();
   lengthDoc([{ id: "r1", status: "todo" }]);
   let answer = null;
   const reported = withThrowingListener(() => { answer = setSceneLength("r1", 45); });
   assert.deepEqual(reported, ["listener broke"]);
   assert.equal(answer, true);
-  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "renderRow:r1", "updateScriptStats"]);
+  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "updateScriptStats"]);
 });
 
-test("a scene length: the command sets and stamps the row, one effect pass with an immediate save, then the view repaints one row and the stats", () => {
+test("a scene length: the command sets and stamps the row, one effect pass with an immediate save, then the stats; the script screen repaints the row itself by hearing the change", () => {
   stubs.resetFanout();
   lengthDoc([{ id: "r1", status: "todo" }, { id: "r2", status: "todo" }]);
   assert.equal(setSceneLength("r2", 90), true);
-  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "renderRow:r2", "updateScriptStats"]);
+  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "updateScriptStats"]);
   assert.equal(stubs.dirtied[0][1].lengthSeconds, 90, "the length is set before the effects run");
   assert.notEqual(stubs.dirtied[0][1].updatedAt, "", "and the row is already stamped");
   assert.equal(S.state.rows[0].updatedAt, "", "no other row is stamped");
   assert.equal(published.length, 1);
   assert.equal(published[0].kind, "edit");
   assert.deepEqual(published[0].changes.derive, ["production", "broll"], "production and b-roll refresh through the scheduler");
-});
-
-test("a scene length whose row does not paint renders the whole script instead", () => {
-  stubs.resetFanout({ renderRow: false });
-  lengthDoc([{ id: "r1", status: "todo", lengthSeconds: 90 }]);
-  assert.equal(setSceneLength("r1", null), true);
-  assert.ok(!("lengthSeconds" in S.state.rows[0]), "clearing deletes the key");
-  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "renderRow:r1", "render", "updateScriptStats"]);
 });
 
 test("a scene length that changes nothing or a missing scene has no effect; review mode only warns; no document does nothing", () => {

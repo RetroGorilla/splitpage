@@ -7,7 +7,7 @@ import {
   inertBody,
   sanitizeHtml
 } from "./04-richtext.js";
-import { cellEditing } from "../legacy/editor-bridge.ts";
+import { cellEditing, paintGuard } from "../legacy/editor-bridge.ts";
 import {
   isInsideTagOrLink,
   scheduleIdleRefresh,
@@ -358,11 +358,15 @@ export function anchorBrollInLeftCell(cellEl) {
   var copy = { id: row.id, visualText: row.visualText };
   var n = readSession(function (doc) { return anchorBrollInRows(doc, [copy]); });
   if (!n) return 0;
-  var outcome = runCommand(cellTextCommand(row.id, "visualText", cellRuns(scriptCellOf(copy.visualText)), sessionTextPorts));
-  if (outcome.kind === "failed") throw outcome.error;
-  if (outcome.kind !== "applied" && outcome.kind !== "committed") return 0;
-  cellEl.innerHTML = row.visualText;
-  ensureTrailingCaretSpot(cellEl);
+  var took = paintGuard().whileShown(function () {
+    var outcome = runCommand(cellTextCommand(row.id, "visualText", cellRuns(scriptCellOf(copy.visualText)), sessionTextPorts));
+    if (outcome.kind === "failed") throw outcome.error;
+    if (outcome.kind !== "applied" && outcome.kind !== "committed") return false;
+    cellEl.innerHTML = row.visualText;
+    ensureTrailingCaretSpot(cellEl);
+    return true;
+  });
+  if (!took) return 0;
   scheduleBrollRefresh();
   return n;
 }

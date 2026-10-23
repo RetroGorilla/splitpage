@@ -48,7 +48,6 @@ export interface MergeOutcome {
 }
 
 export interface MergeView {
-  readonly redraw: () => void;
   readonly chips: () => void;
   readonly report: (result: MergedStates, opts: { readonly noAutoSave: boolean; readonly kind: MergeKind }) => void;
   readonly absorbedDirty: (kind: MergeKind) => void;
@@ -114,7 +113,6 @@ export function applyIncomingMerge<Ctx>(opts: ApplyMergeOptions, ports: ApplyMer
       const base = typeof opts.newBase === "function" ? (opts.newBase as () => unknown)() : opts.newBase;
       ports.setBase(base, "merge: " + (opts.source || ""));
     }
-    ports.view.redraw();
     if (opts.chips) ports.view.chips();
     if (opts.report !== false) {
       if (result) ports.view.report(result, { noAutoSave: !!opts.noAutoSave, kind: kind });

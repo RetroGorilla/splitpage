@@ -45,7 +45,6 @@ import {
 } from "../adapters/storage/02c-blobs.js";
 import { cssAttr, inertBody } from "./04-richtext.js";
 import { withBusyBar } from "../features/notices/busy.js";
-import { render, renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import {
   captureReplyDrafts,
@@ -537,7 +536,6 @@ async function resumeServerDoc() {
       writtenOut: true
     });
     clearDirty();
-    renderAbsorbed();
     updateIdentityChip();
     updateFileChip();
     showToast("Signed back in — reopened " + (S.state.title || body.id), "ok");
@@ -932,6 +930,7 @@ export async function openServerDoc(id) {
 
   if (S.state && S.state.rows.length) pushSnapshot("Before opening " + (body.state.title || id));
 
+  resetProductionPanelState();
   documentTransitions().open({
     from: { document: migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null }) },
     reason: "openServerDoc: the document as the server sent it",
@@ -939,11 +938,9 @@ export async function openServerDoc(id) {
     writtenOut: true
   });
   if (typeof closeNewTabPage === "function") closeNewTabPage();
-  resetProductionPanelState();
 
   clearDirty();
   applyReviewMode();
-  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   closeServerPicker();
@@ -1623,8 +1620,7 @@ async function sendReviewWrites() {
   } finally {
     reviewWriting = false;
   }
-  if (redraw) render();
-  else if (sentAny) { captureReplyDrafts(); renderComments(); }
+  if (!redraw && sentAny) { captureReplyDrafts(); renderComments(); }
   var refusedHere = false;
   (S.state.comments || []).forEach(function (c) {
     if (!c) return;
@@ -2507,7 +2503,6 @@ export function __init() {
       if (opts.blobs !== undefined) noteCaps(currentConn(), { blobs: opts.blobs ? 1 : 0 }, false);
       applyReviewMode();
       updateServerMenu();
-      render();
     },
     role: function () { return currentConn().role; },
     conn: function () {

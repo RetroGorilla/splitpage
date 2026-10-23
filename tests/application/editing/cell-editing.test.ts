@@ -25,6 +25,7 @@ interface Rig {
   painted: { cell: Cell; field: string; row: ShownRow }[];
   announced: { message: string; before: unknown }[];
   refused: string[];
+  shownRuns: string[];
   set: (flags: { stale?: boolean; applying?: boolean }) => void;
 }
 
@@ -62,6 +63,8 @@ function rig(opts: { failing?: boolean } = {}): Rig {
   const painted: Rig["painted"] = [];
   const announced: Rig["announced"] = [];
   const refused: string[] = [];
+  const shownRuns: string[] = [];
+  let showing = 0;
   const flags = { stale: false, applying: false };
   let entries = 0;
   const editing = createCellEditing<Cell>({
@@ -76,6 +79,7 @@ function rig(opts: { failing?: boolean } = {}): Rig {
     document: function () { return h.session.read(function (doc) { return doc; }); },
     run: function (command) {
       calls.push("run:" + command.name);
+      if (showing) shownRuns.push(command.name);
       const outcome = h.session.run(command);
       if (outcome.kind === "applied" || outcome.kind === "committed") entries++;
       return outcome;
@@ -90,7 +94,14 @@ function rig(opts: { failing?: boolean } = {}): Rig {
     },
     stale: function () { return flags.stale; },
     painted: function (cell, field, row) { calls.push("painted"); painted.push({ cell: cell, field: field, row: row }); },
-    redraw: function () { calls.push("redraw"); },
+    shown: function <T>(edit: () => T): T {
+      showing++;
+      try {
+        return edit();
+      } finally {
+        showing--;
+      }
+    },
     announce: function (message, before) { announced.push({ message: message, before: before }); },
     refused: function (reason) { refused.push(reason); }
   });
@@ -101,6 +112,7 @@ function rig(opts: { failing?: boolean } = {}): Rig {
     painted: painted,
     announced: announced,
     refused: refused,
+    shownRuns: shownRuns,
     set: function (next) { Object.assign(flags, next); }
   };
 }
@@ -122,6 +134,7 @@ test("a sync stores what the cell shows and tells the screen the row it now hold
   r.editing.sync(c);
   assert.equal(fieldOf(r, "r1", "audioText"), "Every evening.");
   assert.deepEqual(r.calls, ["page.html", "run:set-cell-text", "painted"]);
+  assert.deepEqual(r.shownRuns, ["set-cell-text"], "the page already shows a synced cell, so the command runs as shown");
   assert.equal(r.painted.length, 1);
   assert.equal(r.painted[0]?.field, "audioText");
   assert.equal(r.painted[0]?.row.id, "r1");
@@ -191,6 +204,7 @@ test("an edit runs one cell-text command, then writes the cell, syncs it, puts t
     "run:set-cell-text",
     "page.write", "page.html", "run:set-cell-text", "painted", "page.focus", "undo.flush", "undo.break"
   ]);
+  assert.deepEqual(r.shownRuns, ["set-cell-text", "set-cell-text", "set-cell-text"], "the edit writes the cell itself, so every command in it runs as shown");
   assert.equal(r.h.session.generation(), 1, "the edit is one generation; the syncs around it change nothing");
 });
 
@@ -230,19 +244,20 @@ test("an edit whose command fails throws the failure", () => {
   assert.equal(c.shown, "Every morning.");
 });
 
-test("a gallery edit runs one command, redraws, and announces with the undo entry from before it", () => {
+test("a gallery edit runs one command the page does not show yet, and announces with the undo entry from before it", () => {
   const r = rig();
   const done = r.editing.editGallery("r2", "Video link removed", function (row) {
     row.imageLinks = [];
     return true;
   });
   assert.equal(done, true);
-  assert.deepEqual(r.calls, ["undo.break", "run:gallery-edit", "redraw"]);
+  assert.deepEqual(r.calls, ["undo.break", "run:gallery-edit"]);
+  assert.deepEqual(r.shownRuns, [], "the screen paints a gallery edit from the session change");
   assert.deepEqual(r.announced, [{ message: "Video link removed", before: "entry0" }]);
   assert.equal(r.h.session.generation(), 1);
 });
 
-test("a gallery edit for a missing scene, or one that changes nothing, does not redraw or announce", () => {
+test("a gallery edit for a missing scene, or one that changes nothing, does not announce", () => {
   const r = rig();
   assert.equal(r.editing.editGallery("r9", "Gone", function () { return true; }), false);
   assert.deepEqual(r.calls, []);
@@ -251,11 +266,12 @@ test("a gallery edit for a missing scene, or one that changes nothing, does not 
   assert.deepEqual(r.announced, []);
 });
 
-test("moving a row runs the move and redraws; a review refusal is reported and nothing redraws", () => {
+test("moving a row runs the move the page does not show yet; a review refusal is reported", () => {
   const r = rig();
   r.editing.moveRow("r1", "r3", true);
   assert.deepEqual(r.h.session.read(function (doc) { return doc ? doc.rows.map(function (x) { return x.id; }) : []; }), ["r2", "r3", "r1"]);
-  assert.deepEqual(r.calls, ["run:move-scene", "redraw"]);
+  assert.deepEqual(r.calls, ["run:move-scene"]);
+  assert.deepEqual(r.shownRuns, []);
   r.calls.length = 0;
   r.h.deny("review");
   r.editing.moveRow("r1", "r2", false);

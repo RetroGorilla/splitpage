@@ -2,7 +2,6 @@ import { S } from "./_state.js";
 import { intern, persist } from "../adapters/storage/02c-blobs.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { readSession } from "../legacy/session-bridge.ts";
-import { render, renderRow } from "./05-render.js";
 import { foldIntoEdit } from "./12a-undo.js";
 import { fetchVideoThumbnail, parseVideoLink, playerUrl, videoRef } from "../../shared/video-embed.js";
 import { normalizeVideoLink, setVideoThumbnail, videoLinkKey } from "../core/document/gallery.ts";
@@ -117,11 +116,10 @@ export function thumbnailsAfterPaste(rowId, hrefs, entry) {
     var key = videoLinkKey(link);
     fetchThumbnailRecord(link.href).then(function (rec) {
       if (!rec || !stillOwns(ctx) || readSession(function (doc) { return rowIndexOf(doc, rowId); }) === -1) return;
-      var done = foldIntoEdit(entry, touchesGallery(rowId), function (state) {
+      foldIntoEdit(entry, touchesGallery(rowId), function (state) {
         var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
         return idx !== -1 && setVideoThumbnail(state.rows[idx], key, rec);
       });
-      if (done && !renderRow(rowId)) render();
     });
   });
 }

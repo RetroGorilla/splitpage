@@ -7,7 +7,6 @@ import { currentDocument, readSession, runDocumentEdit, sessionStamps } from "..
 import { rewriteCellsCommand, rewrittenCopies } from "../application/commands/document-edit.ts";
 import { tagCellsCommand } from "../application/commands/production-records.ts";
 import { cssAttr, inertBody, sanitizeHtml } from "./04-richtext.js";
-import { render } from "./05-render.js";
 import { bulkTagRows } from "./07-production-tags.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { BROLL_MARKER_RE } from "../core/document/broll.ts";
@@ -284,7 +283,6 @@ export function replaceCurrent() {
     return res.changed ? [{ rowId: m.rowId, field: m.field, html: res.html }] : [];
   }
   if (!runDocumentEdit(rewriteCellsCommand("replace-match", replaced, sessionStamps, { needs: "edit", stamped: true }))) return;
-  render();
   refreshFindMatches(true);
   revealFindMatch();
 }
@@ -322,7 +320,6 @@ export function replaceAll() {
       : "Nothing to replace.", "warn");
     return;
   }
-  render();
   refreshFindMatches(false);
   revealFindMatch();
   showToast("Replaced " + total + " match" + (total === 1 ? "" : "es") + tagNote, "ok");
@@ -441,7 +438,6 @@ export function runBulkTag() {
     return;
   }
   breakUndoCoalescing();
-  render();
   closeBulkTag();
   refreshFindMatches(false);
   revealFindMatch();

@@ -3,20 +3,16 @@ import { ensureBytes } from "../adapters/storage/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import { stampRow } from "./03-sync.js";
 import { cssAttr } from "./04-richtext.js";
-import { render } from "./05-render.js";
 import { isScriptCell } from "../features/editing/cell-page.ts";
 import {
   SCENES_MIME, buildScenePayload, parseScenePayload, scenePaste, scenesOnClipboard, setLiveCut
 } from "./05g-scene-clip.js";
 import { closeRowMenus } from "./06-rows.js";
 import { scheduleProductionRefresh } from "./07-production-tags.js";
-import { renderProduction } from "./08-production-panels.js";
-import { renderComments } from "./10-comments.js";
 import { breakUndoCoalescing, flushEdits, lastUndoEntry, undo } from "./12a-undo.js";
 import { onServerDoc } from "./13-hosted.js";
 import { queueAutoSave } from "./14-export.js";
 import { startNewScript } from "./18b-file-menu.js";
-import { renderWriter } from "./19-writer.js";
 import { randomHexBytes } from "../adapters/identity/ids.ts";
 import { addHeldCommentsCommand, pasteScenesCommand, removeScenesCommand } from "../application/commands/scenes.ts";
 import { cappedLongText } from "../core/document/text-policy.ts";
@@ -311,7 +307,7 @@ function takeOut(ids) {
   paint();
   flushEdits();
   breakUndoCoalescing();
-  if (done) repaint();
+  if (done) scheduleProductionRefresh();
   var entry = lastUndoEntry();
   return entry === before ? null : entry;
 }
@@ -331,17 +327,6 @@ function offerUndo(msg, entry) {
   });
 }
 
-function repaint() {
-  if (viewFlags().writerOpen()) {
-    renderWriter();
-    renderProduction();
-    renderComments();
-  } else {
-    render();
-  }
-  scheduleProductionRefresh();
-}
-
 function pasteClip(clip, afterRowId, opts) {
   opts = opts || {};
   breakUndoCoalescing();
@@ -358,7 +343,7 @@ function pasteClip(clip, afterRowId, opts) {
     queueAutoSave();
   }
   breakUndoCoalescing();
-  repaint();
+  scheduleProductionRefresh();
   if (!viewFlags().writerOpen() && res.rowIds.length) {
     selectScenes(res.rowIds[0], res.rowIds[res.rowIds.length - 1]);
     var first = document.querySelector('#rows .row[data-id="' + cssAttr(res.rowIds[0]) + '"]');
