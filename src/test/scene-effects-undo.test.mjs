@@ -11,7 +11,8 @@ register("./_fanout-hooks.mjs", import.meta.url);
 
 const stubs = await import("./_fanout-stubs.mjs");
 const { cycleRowStatus } = await import("../js/01-scene-status.js");
-const { setSceneLength } = await import("../js/05r-read-time.js");
+const { __init: mountReadTime, setSceneLength } = await import("../features/rows/read-time.js");
+mountReadTime(stubs.readTimePorts());
 const { loadTestDocument } = await import("./_document.mjs");
 
 stubs.wireSession();
