@@ -126,7 +126,7 @@ export function fakeReview(initial = false) {
 export function fakeSaveState(initial: { unsaved?: boolean; busy?: boolean } = {}) {
   const listeners = new Set<(change: SaveChange) => void>();
   const asked: ("dueNow" | "resume")[] = [];
-  const state = { unsaved: !!initial.unsaved, busy: !!initial.busy };
+  const state = { unsaved: !!initial.unsaved, busy: !!initial.busy, autoSaveEnabled: true };
   const saves: SaveState = {
     unsaved: () => state.unsaved,
     busy: () => state.busy,
@@ -135,7 +135,8 @@ export function fakeSaveState(initial: { unsaved?: boolean; busy?: boolean } = {
       return () => { listeners.delete(listener); };
     },
     dueNow: () => { asked.push("dueNow"); },
-    resume: () => { asked.push("resume"); }
+    resume: () => { asked.push("resume"); },
+    setAutoSaveEnabled: (on) => { state.autoSaveEnabled = on; }
   };
   return {
     saves, state, asked,
