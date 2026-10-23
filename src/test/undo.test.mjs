@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { caretAfterStep } from "../js/12a-undo.js";
 import { applyStepsLive, changedBetween, createUndoHistory, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";
-import { invertSteps } from "../js/04c-doc-model.js";
+import { invertSteps } from "../core/text/steps.ts";
 import { PROTOTYPE_IDS } from "../core/document/id-map.ts";
 
 const row = (id, audio, extra) => Object.assign({ id, status: "todo", visualText: "", audioText: audio || "" }, extra);
