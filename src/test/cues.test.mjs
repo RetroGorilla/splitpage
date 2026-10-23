@@ -4,7 +4,6 @@ import "./_preferences-started.mjs";
 import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
@@ -34,7 +33,7 @@ const C = (text, marks) => ({ text, marks: Object.assign({ cue: true }, marks ||
 const CUE = (inner) => `<span class="audio-cue">${inner}</span>`;
 
 function withState(s, fn) {
-  const was = S.state;
+  const was = currentDocument();
   loadTestDocument(s);
   try { return fn(s); } finally { loadTestDocument(was); }
 }

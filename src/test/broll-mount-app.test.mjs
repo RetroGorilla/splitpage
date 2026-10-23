@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
@@ -49,24 +49,24 @@ for (const scenario of ["dispose and reopen", "same-ID document replacement", "s
     try {
       if (scenario !== "normal callback") owner.dispose();
       if (scenario === "dispose and reopen" || scenario === "same-ID document replacement") {
-        const before = S.state;
+        const before = currentDocument();
         open();
-        assert.notEqual(S.state, before);
-        assert.equal(S.state.docId, before.docId);
+        assert.notEqual(currentDocument(), before);
+        assert.equal(currentDocument().docId, before.docId);
       }
       if (scenario === "stale callback after remount" || scenario === "dispose and reopen") {
         replacement = mountBrollFeature();
         openBrollPanel();
       }
       document.getElementById("broll-add-input").value = "Held shot";
-      const before = JSON.stringify(S.state);
+      const before = JSON.stringify(currentDocument());
       const panel = document.getElementById("broll-panel");
       const html = panel.innerHTML;
       held(new window.Event("click"));
       await Promise.resolve();
-      if (scenario === "normal callback") assert.equal(S.state.brollShots.filter((shot) => shot.name === "Held shot").length, 1);
+      if (scenario === "normal callback") assert.equal(currentDocument().brollShots.filter((shot) => shot.name === "Held shot").length, 1);
       else {
-        assert.equal(JSON.stringify(S.state), before);
+        assert.equal(JSON.stringify(currentDocument()), before);
         assert.equal(panel.innerHTML, html);
         assert.equal(document.getElementById("broll-add-input").value, "Held shot");
       }
@@ -97,15 +97,15 @@ test("b-roll app: remount adds once, preserves review refusal, and disposal clea
     openBrollPanel();
     assert.equal(document.querySelector(".broll-group-menu"), null);
     assert.equal(document.querySelector(".broll-card"), null);
-    window.__hostedTest.setSession({ role: "review", docId: S.state.docId });
-    const before = JSON.stringify(S.state.brollShots);
+    window.__hostedTest.setSession({ role: "review", docId: currentDocument().docId });
+    const before = JSON.stringify(currentDocument().brollShots);
     document.getElementById("broll-add-input").value = "Review refused";
     fire(document.getElementById("broll-add-save"), "click");
-    assert.equal(JSON.stringify(S.state.brollShots), before);
+    assert.equal(JSON.stringify(currentDocument().brollShots), before);
     window.__hostedTest.setSession({ role: "edit", docId: null });
     document.getElementById("broll-add-input").value = "Once after remount";
     fire(document.getElementById("broll-add-save"), "click");
-    assert.equal(S.state.brollShots.filter((shot) => shot.name === "Once after remount").length, 1);
+    assert.equal(currentDocument().brollShots.filter((shot) => shot.name === "Once after remount").length, 1);
   } finally {
     window.__hostedTest.setSession({ role: "edit", docId: null });
     replacement.dispose();
