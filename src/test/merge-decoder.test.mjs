@@ -2,7 +2,8 @@ import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mergeStates } from "../js/03-sync.js";
+import { mergeStates } from "../legacy/merge-bridge.ts";
+import "./_merge-started.mjs";
 import { cellOf, fromHtml } from "../js/04c-doc-model.js";
 import { CONTRACT_HTML, mergeDecoderBreaks } from "../../tests/core/merge/decoder-contract.ts";
 
