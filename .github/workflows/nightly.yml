@@ -1,0 +1,70 @@
+name: Nightly browser suites
+
+on:
+  schedule:
+    - cron: '0 10 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-browser-suites
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PLAYWRIGHT_VERSION: '1.63.0'
+
+jobs:
+  suites:
+    runs-on: ${{ vars.CI_RUNNER }}
+    timeout-minutes: 180
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.pw-browsers
+      SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: 4.1-development
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install tooling
+        run: npm ci
+
+      - name: Build index.html and stamp sw.js
+        run: node build.mjs
+
+      - name: Install Chromium
+        run: |
+          npx --yes playwright@${PLAYWRIGHT_VERSION} install chromium
+          exe=$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -type f -path '*/chromium-*/*' -name chrome -print -quit)
+          if [ -z "$exe" ]; then
+            echo "::error::no Chromium under $PLAYWRIGHT_BROWSERS_PATH"
+            exit 1
+          fi
+          echo "SPLITPAGE_CHROME=$exe" >> "$GITHUB_ENV"
+
+      - name: Pick this runner's port block
+        run: |
+          n=${RUNNER_NAME##*-}
+          case "$n" in ''|*[!0-9]*|?????*) n=1 ;; esac
+          echo "PORT_BASE=$(( (10#$n + 9) % 10 * 100 ))" >> "$GITHUB_ENV"
+
+      - name: All browser suites
+        run: node tools/run-suites.mjs "$RUNNER_TEMP/suites" --lanes 4 --port-base "$PORT_BASE"
+
+      - name: Keep the failure summary
+        if: failure()
+        run: grep -v '^PASS' "$RUNNER_TEMP/suites/summary.txt" > "$RUNNER_TEMP/failures.txt" || true
+
+      - name: Upload the failure summary
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-failures
+          path: ${{ runner.temp }}/failures.txt
+          if-no-files-found: ignore
+          retention-days: 3
