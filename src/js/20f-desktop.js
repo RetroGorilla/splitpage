@@ -1,6 +1,6 @@
 import { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE, historyUtf8Length, sanitizeHistoryMeta } from "../../shared/history-policy.js";
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
-import { S } from "./_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { checkServer, currentConn, currentHome, fileHome, homeConn, serverHomeId, serverStatus, setHome } from "../legacy/location-bridge.ts";
 import { normalizeServerUrl } from "../../shared/server-links.js";
 import { reassignDocId } from "./02b-doc-id.js";
@@ -80,14 +80,14 @@ export function handedDocumentSettled() {
 }
 
 function desktopDocumentState() {
-  if (!runningOnDesktop() || !S.state || awaitingHandedDocument) return null;
+  if (!runningOnDesktop() || !currentDocument() || awaitingHandedDocument) return null;
   var restoring = recoveryStarted() && draftResume().restorePending();
   var c = homeConn();
   return {
-    title: S.state.title || "Untitled Script",
+    title: currentDocument().title || "Untitled Script",
     dirty: unsavedChanges() || restoring,
     pristine: (typeof isPristineSeedDocument === "function" && isPristineSeedDocument()) && !restoring,
-    docId: S.state.docId || null,
+    docId: currentDocument().docId || null,
     fileId: (currentHome().kind === "file" && currentHome().handle && currentHome().handle._desktopId) || null,
     serverKey: serverHomeId(),
     serverUrl: c ? c.serverUrl : null,
@@ -205,7 +205,7 @@ async function openPrompterElsewhere(chromium) {
   if (prompterBrowserBusy) return { ok: false, message: "" };
   prompterBrowserBusy = true;
   try {
-    if (!S.state) return prompterBrowserResult(false, "Still loading…");
+    if (!currentDocument()) return prompterBrowserResult(false, "Still loading…");
     var serverId = serverHomeId();
     var hc = homeConn();
     if (serverId && hc && hc.serverUrl) return await copyPrompterLinkForRemoteServer(serverId);
@@ -442,7 +442,7 @@ export function initDesktop() {
         showToast("Could not open " + ((entry && entry.name) || "that file") + ".", "error");
       }).then(handedDocumentSettled);
     }
-    var ready = S.state ? null : startupReady();
+    var ready = currentDocument() ? null : startupReady();
     if (ready) ready.then(proceed);
     else proceed();
   });
@@ -454,7 +454,7 @@ export function initDesktop() {
       adoptPayloadServer(payload);
       openPendingServerDocForTab(serverDocId);
     }
-    var ready = S.state ? null : startupReady();
+    var ready = currentDocument() ? null : startupReady();
     if (ready) ready.then(proceed);
     else proceed();
   });
