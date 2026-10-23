@@ -30,7 +30,7 @@ export const appActions: ActionRegistry = {
   shortcuts: () => registry().shortcuts(),
   view: (id, source) => registry().view(id, source),
   list: (source) => registry().list(source),
-  invoke: (id, source) => registry().invoke(id, source),
+  invoke: (id, source, input) => registry().invoke(id, source, input),
   presentRefusals: (presenter) => registry().presentRefusals(presenter)
 };
 
