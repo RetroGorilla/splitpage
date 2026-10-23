@@ -18,7 +18,6 @@ import { __init as init_05f_rundown } from "./05f-rundown.js";
 import { __init as init_05g_scene_clip } from "./05g-scene-clip.js";
 import { __init as init_05h_scene_select } from "./05h-scene-select.js";
 import { __init as init_05p_rundown_presence } from "./05p-rundown-presence.js";
-import { __init as init_05r_read_time } from "./05r-read-time.js";
 import { __init as init_05t_target } from "./05t-target.js";
 import { __init as init_05v_video } from "./05v-video.js";
 import { __init as init_05w_annotate } from "./05w-annotate.js";
@@ -67,7 +66,7 @@ import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireApp, mountScriptZoomFeature } from "../bootstrap/wiring.ts";
+import { wireApp, mountReadTimeFeature, mountScriptZoomFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -112,7 +111,7 @@ if (wiring) {
   init_05g_scene_clip();
   init_05h_scene_select();
   init_05p_rundown_presence();
-  init_05r_read_time();
+  mountReadTimeFeature();
   mountScriptZoomFeature();
   init_05t_target();
   init_05v_video();

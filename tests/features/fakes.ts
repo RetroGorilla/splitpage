@@ -2,8 +2,11 @@ import type { ActionRegistry, ActionSource } from "../../src/application/actions
 import type { PreferenceChanges, PreferenceNotice, Preferences } from "../../src/application/preferences/preferences.ts";
 import type { Blocker, ScreenState } from "../../src/application/screen.ts";
 import type { ReviewFacts } from "../../src/application/collaboration/review.ts";
-import type { DocumentView, SessionListener } from "../../src/application/session/document-session.ts";
+import type { Command, CommandOutcome, DocumentView, SessionListener } from "../../src/application/session/document-session.ts";
 import type { DocumentReader } from "../../src/application/session/document-reader.ts";
+import type { UndoControl } from "../../src/application/editing/undo-control.ts";
+import type { Notice, NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
+import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
 
 export function fakeScreen(initial: Partial<ScreenState> = {}) {
   const state: Record<Blocker, boolean> = {
@@ -120,4 +123,38 @@ export function fakeReview(initial = false) {
     setReviewing: (on: boolean): void => { reviewing = on; },
     refusals: (): number => refusals
   };
+}
+
+export function fakeEdits(answer: CommandOutcome = { kind: "noop" }) {
+  const ran: Command[] = [];
+  let outcome = answer;
+  const edits: Pick<DocumentEdits, "run" | "stamps"> = {
+    run: (command) => {
+      ran.push(command);
+      return outcome;
+    },
+    stamps: { clock: { nowIso: () => "2026-01-01T00:00:00.000Z" }, editor: { name: () => "Tester" } }
+  };
+  return { edits, ran, answer: (next: CommandOutcome): void => { outcome = next; } };
+}
+
+export function fakeUndo() {
+  const calls: string[] = [];
+  const undo: Pick<UndoControl, "undo" | "redo"> = {
+    undo: () => { calls.push("undo"); },
+    redo: () => { calls.push("redo"); }
+  };
+  return { undo, calls };
+}
+
+export function fakeNotices() {
+  const shown: { message: string; kind: NoticeKind | undefined }[] = [];
+  const notice: Notice = { isConnected: true, dismiss: () => {}, removeEventListener: () => {} };
+  const notices: Pick<NoticePort, "show"> = {
+    show: (message, kind) => {
+      shown.push({ message, kind });
+      return notice;
+    }
+  };
+  return { notices, shown };
 }
