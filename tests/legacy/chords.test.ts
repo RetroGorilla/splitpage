@@ -10,7 +10,7 @@ import { registerHelpActions } from "../../src/legacy/help-actions.ts";
 import { registerShareActions } from "../../src/legacy/share-actions.ts";
 import { registerThisDocumentActions } from "../../src/legacy/this-document-actions.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
-import { registerZoomActions } from "../../src/legacy/zoom-actions.ts";
+import { registerZoomActions } from "../../src/bootstrap/wiring/script-zoom.ts";
 
 function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   const registry = createActionRegistry();
