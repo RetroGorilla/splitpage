@@ -2,7 +2,7 @@ import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
 import { revealRow } from "./01b-hide-shot.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { currentDocument, readSession } from "../legacy/session-bridge.ts";
-import { cssAttr } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import { clearDropMarkers } from "./06-rows.js";
 import { contentMemo } from "../core/document/memo.ts";
 import { escapeHtml, unitSafePrefix } from "../core/document/text-policy.ts";
