@@ -1,4 +1,4 @@
-import { S } from "./_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { setHideShotScenes } from "./01b-hide-shot.js";
 import { personSwatchesHtml, renderHistory, setMyColor } from "./03-sync.js";
 import { getSavedAuthorName, renderComments } from "./10-comments.js";
@@ -374,7 +374,7 @@ function onPrefChanged(key) {
   if (name === "theme") applyTheme(window, preferences().theme());
   if (name === "tagIcons") applyTagIcons(window, preferences().tagIcons());
   if (name === "clock") {
-    if (S.state) renderComments();
+    if (currentDocument()) renderComments();
     var hist = document.getElementById("history-panel");
     if (hist && !hist.hidden) renderHistory();
   }
