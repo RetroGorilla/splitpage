@@ -1,21 +1,13 @@
-import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
-import { revealRow } from "./01b-hide-shot.js";
-import { rowIndexOf } from "../core/document/rows.ts";
-import { currentDocument, readSession } from "../legacy/session-bridge.ts";
-import { cssAttr } from "../features/common/dom.ts";
-import { clearDropMarkers } from "./06-rows.js";
-import { contentMemo } from "../core/document/memo.ts";
-import { escapeHtml, unitSafePrefix } from "../core/document/text-policy.ts";
-import { pad2, formatDuration, rowSeconds } from "../core/production/timing.ts";
-import { toPlainText } from "../core/text/projections.ts";
-import { appActions } from "../legacy/app-actions.ts";
-import { cacheSeal } from "../legacy/cache-freeze.ts";
-import { cellOf } from "../legacy/richtext.ts";
-import { cellEditing, rowDrag } from "../legacy/editor-bridge.ts";
-import { brollCountIn } from "../core/production/broll.ts";
-import { PREF_EVENT, preferences } from "../legacy/preferences-bridge.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
-import { reviewMode } from "../legacy/location-bridge.ts";
+import { ROW_STATUSES, rowStatus } from "../../core/production/looks.ts";
+import { rowIndexOf } from "../../core/document/rows.ts";
+import { contentMemo } from "../../core/document/memo.ts";
+import { escapeHtml, unitSafePrefix } from "../../core/document/text-policy.ts";
+import { pad2, formatDuration, rowSeconds } from "../../core/production/timing.ts";
+import { toPlainText } from "../../core/text/projections.ts";
+import { brollCountIn } from "../../core/production/broll.ts";
+import { cssAttr } from "../common/dom.ts";
+
+var ports = null;
 
 export var RUNDOWN_TAIL_SECONDS = 10;
 var BLOCK_GAP_PX = 2;
@@ -353,15 +345,15 @@ var snippetOf = null;
 function sceneSnippet(row) {
   if (!snippetOf) {
     snippetOf = contentMemo(function (html) {
-      var text = toPlainText(cellOf(html)).replace(/\s+/g, " ").trim();
+      var text = toPlainText(ports.text.cellOf(html)).replace(/\s+/g, " ").trim();
       return unitSafePrefix(text, 90);
-    }, cacheSeal);
+    }, ports.text.cacheSeal);
   }
   return snippetOf(row.audioText || "") || snippetOf(row.visualText || "");
 }
 
 function brollTicksHtml(row) {
-  var n = brollCountIn(row, productionReaders);
+  var n = brollCountIn(row, ports.text.productionReaders);
   var out = "";
   for (var i = 0; i < n; i++) {
     out += '<span class="rd-broll" style="left:calc(' + tenth((i + 1) / (n + 1) * 100) + '% - 1px)"></span>';
@@ -432,8 +424,8 @@ function segmentHtml(row, b, isCurrent) {
 
 export function renderRundown() {
   var strip = document.getElementById("rundown");
-  if (!strip) return;
-  var rows = currentDocument()?.rows ?? [];
+  if (!strip || !ports) return;
+  var rows = ports.document.current()?.rows ?? [];
   strip.hidden = !rows.length;
   if (!rows.length) { lensReset(); return; }
   var track = strip.querySelector(".rundown-track");
@@ -444,8 +436,8 @@ export function renderRundown() {
   var trackWidth = track.clientWidth;
   if (!trackWidth) return;
 
-  var doc = currentDocument();
-  var scenes = rows.map(function (r) { return { seconds: rowSeconds(r, doc, productionReaders), status: r.status }; });
+  var doc = ports.document.current();
+  var scenes = rows.map(function (r) { return { seconds: rowSeconds(r, doc, ports.text.productionReaders), status: r.status }; });
   var total = scenes.reduce(function (n, sc) { return n + sc.seconds; }, 0);
   var width = placeLength(strip, total, trackWidth);
   var lay = rundownRestLayout(scenes, total, extraSeconds, width, REST_MIN_PX);
@@ -796,7 +788,7 @@ function updateRundownMinControls() {
 
 function setRundownMinimized(on, persist) {
   on = !!on;
-  if (persist !== false) preferences().setRundownMin(on);
+  if (persist !== false) ports.minimized.setRundownMin(on);
   if (on === minimized) { updateRundownMinControls(); return; }
   minimized = on;
   lensReset();
@@ -812,12 +804,12 @@ export function toggleRundownMinimized() {
 }
 
 function dragIndex() {
-  var id = rowDrag().dragging();
-  return id ? readSession(function (doc) { return rowIndexOf(doc, id); }) : -1;
+  var id = ports.rowDrag.dragging();
+  return id ? ports.document.read(function (doc) { return rowIndexOf(doc, id); }) : -1;
 }
 
 function dropAllowed() {
-  return !!rowDrag().dragging() && !minimized && !reviewMode() && base.n > 0 && !!base.X && !!currentDocument();
+  return !!ports.rowDrag.dragging() && !minimized && !ports.review.reviewing() && base.n > 0 && !!base.X && !!ports.document.current();
 }
 
 function ensureDropEls(track) {
@@ -882,7 +874,7 @@ function endDragOver() {
 }
 
 function followMovedScene(rowId) {
-  revealRow(rowId);
+  ports.actions.invoke("reveal-row", "button", rowId);
   var rowEl = document.querySelector('#rows .row[data-id="' + cssAttr(rowId) + '"]');
   if (!rowEl) return;
   var rect = rowEl.getBoundingClientRect();
@@ -921,26 +913,25 @@ function onStripDragOver(e) {
 }
 
 function onStripDrop(e) {
-  var id = rowDrag().dragging();
+  var id = ports.rowDrag.dragging();
   if (!id) return;
   e.preventDefault();
   var allowed = dropAllowed();
   if (allowed) showDrop(trackX(e));
   var g = allowed ? drop.gap : -1;
-  rowDrag().end();
-  clearDropMarkers();
+  ports.rowDrag.end();
   hideDrop();
   lensOff();
-  var doc = currentDocument();
+  var doc = ports.document.current();
   if (g < 0 || !doc) return;
   var rows = doc.rows;
-  if (g === 0) cellEditing().moveRow(id, rows[0].id, false);
-  else cellEditing().moveRow(id, rows[g - 1].id, true);
+  if (g === 0) ports.cells.moveRow(id, rows[0].id, false);
+  else ports.cells.moveRow(id, rows[g - 1].id, true);
   followMovedScene(id);
 }
 
 export function goToScene(rowId) {
-  revealRow(rowId);
+  ports.actions.invoke("reveal-row", "button", rowId);
   var rowEl = document.querySelector('#rows .row[data-id="' + cssAttr(rowId) + '"]');
   if (!rowEl) return;
   rowEl.scrollIntoView({ block: "center" });
@@ -978,30 +969,44 @@ function lensDebug() {
   };
 }
 
-export function __init() {
+export function __init(given) {
   var strip = document.getElementById("rundown");
   var rowsEl = document.getElementById("rows");
-  if (!strip) return;
+  ports = given;
+  var offs = [];
+  var disposed = false;
+  var owner = { mounted: function () { return !disposed; }, minimized: isRundownMinimized, toggleMinimized: toggleRundownMinimized, goToScene: goToScene, dispose: function () {
+    if (disposed) return;
+    disposed = true;
+    while (offs.length) offs.pop()();
+    holdClear();
+    if (lens.raf) { cancelAnimationFrame(lens.raf); lens.raf = 0; }
+    ports = null;
+  } };
+  if (!strip) return owner;
+  function listen(target, type, fn) {
+    target.addEventListener(type, fn);
+    offs.push(function () { target.removeEventListener(type, fn); });
+  }
   try { noHover = !!(window.matchMedia && window.matchMedia("(hover: none)").matches); } catch (e) {}
-  minimized = preferences().rundownMin();
+  minimized = ports.minimized.rundownMin();
   var toggle = ensureToggle(strip);
   updateRundownMinControls();
-  toggle.addEventListener("click", function () { appActions.invoke("toggle-rundown-min", "button"); });
-  document.addEventListener(PREF_EVENT, function (e) {
-    var d = e && e.detail;
-    if (!d || preferences().nameOf(d.key) !== "rundownMin") return;
-    var v = d.value;
-    var on = v === true || v === "1" || v === 1 ? true : v === false || v === "0" || v === 0 ? false : preferences().rundownMin();
+  listen(toggle, "click", function () { ports.actions.invoke("toggle-rundown-min", "button"); });
+  offs.push(ports.changes.onChange(function (change) {
+    if (change.name !== "rundownMin") return;
+    var v = change.value;
+    var on = v === true || v === "1" || v === 1 ? true : v === false || v === "0" || v === 0 ? false : ports.minimized.rundownMin();
     setRundownMinimized(on, false);
-  });
+  }, { elsewhere: false }));
 
-  if (rowsEl) rowsEl.addEventListener("focusin", function (e) { noteCurrentRow(e.target); });
-  document.addEventListener("selectionchange", function () { noteCurrentRow(document.activeElement); });
-  strip.addEventListener("click", function (e) {
+  if (rowsEl) listen(rowsEl, "focusin", function (e) { noteCurrentRow(e.target); });
+  listen(document, "selectionchange", function () { noteCurrentRow(document.activeElement); });
+  listen(strip, "click", function (e) {
     var b = e.target.closest ? e.target.closest(".rd-block") : null;
     if (b) goToScene(b.getAttribute("data-row"));
   });
-  strip.addEventListener("keydown", function (e) {
+  listen(strip, "keydown", function (e) {
     var b = e.target.closest ? e.target.closest(".rd-block") : null;
     if (!b) return;
     var next;
@@ -1020,41 +1025,44 @@ export function __init() {
 
   var track = strip.querySelector(".rundown-track");
   if (track) {
-    track.addEventListener("pointermove", function (e) {
-      if (e.pointerType === "touch" || rowDrag().dragging()) return;
+    listen(track, "pointermove", function (e) {
+      if (e.pointerType === "touch" || ports.rowDrag.dragging()) return;
       var x = trackX(e);
       if (overLength(x)) { lensOff("pointer"); return; }
       lensAt(x, "pointer", e.timeStamp);
     });
-    track.addEventListener("pointerleave", function () { lensOff("pointer"); });
+    listen(track, "pointerleave", function () { lensOff("pointer"); });
   }
-  strip.addEventListener("focusin", function (e) {
+  listen(strip, "focusin", function (e) {
     var b = e.target.closest ? e.target.closest(".rd-block") : null;
     if (!b) return;
     var visible = false;
     try { visible = b.matches(":focus-visible"); } catch (err) {}
     if (visible) lensFocus(Number(b.getAttribute("data-i")));
   });
-  strip.addEventListener("focusout", function (e) {
+  listen(strip, "focusout", function (e) {
     if (e.relatedTarget && strip.contains(e.relatedTarget)) return;
     lensOff("focus");
   });
 
-  strip.addEventListener("dragover", onStripDragOver);
-  strip.addEventListener("drop", onStripDrop);
-  document.addEventListener("dragover", function (e) {
+  listen(strip, "dragover", onStripDragOver);
+  listen(strip, "drop", onStripDrop);
+  listen(document, "dragover", function (e) {
     if (drop.x === null && lens.src !== "drag") return;
     if (e.target && e.target.closest && e.target.closest("#rundown")) return;
     endDragOver();
   });
-  document.addEventListener("dragend", endDragOver);
-  document.addEventListener("drop", function (e) {
+  listen(document, "dragend", endDragOver);
+  listen(document, "drop", function (e) {
     if (e.target && e.target.closest && e.target.closest("#rundown")) return;
     endDragOver();
   });
 
   if (typeof ResizeObserver === "function") {
-    new ResizeObserver(function () { renderRundown(); }).observe(strip);
+    var resized = new ResizeObserver(function () { renderRundown(); });
+    resized.observe(strip);
+    offs.push(function () { resized.disconnect(); });
   }
   window.__rundownTest = { lens: lensDebug, setMinimized: setRundownMinimized, x: rundownX };
+  return owner;
 }

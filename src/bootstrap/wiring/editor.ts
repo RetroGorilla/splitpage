@@ -1,3 +1,5 @@
+import type { ActionDefinition } from "../../application/actions.ts";
+import { rowActions } from "../../features/rows/actions.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { ROOT_CLICK_ORDER, ROOT_MOUSEDOWN_ORDER, createRootRouter } from "../../features/routing/root-router.ts";
 import type { RootClickSlot, RootMouseDownSlot, RootRoute } from "../../features/routing/root-router.ts";
@@ -32,7 +34,8 @@ import { REVIEW_ONLY, liveDocumentPort, liveSession, runCommand, sessionTextPort
 import { fromHtml } from "../../legacy/richtext.ts";
 import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 import { cycleRowStatus } from "../../js/01-scene-status.js";
-import { expandHiddenShotStrip, revealRow } from "../../js/01b-hide-shot.js";
+import { expandHiddenShotStrip } from "../../js/01b-hide-shot.js";
+import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
 import { restoreMergeSnapshot } from "../../js/03-sync.js";
 import { installMergeBanner } from "../../legacy/merge-bridge.ts";
 import { ensureTrailingCaretSpot, safeId, sanitizeHtml, storedHtmlFromDom } from "../../js/04-richtext.js";
@@ -420,7 +423,7 @@ const rowRoutePorts: RowRoutePorts = {
   armDelete: armDelete,
   cycleStatus: cycleRowStatus,
   expandHidden: expandHiddenShotStrip,
-  reveal: revealRow,
+  reveal: function (rowId) { shotHiding().reveal(rowId); },
   gone: function () { showToast("That scene is no longer here.", "warn"); }
 };
 
@@ -431,12 +434,17 @@ export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
     return [
       function () { return routeRootClick("rows-add", function (e) { return owner.addClick(e); }); },
       function () { return routeRootClick("rows-scene", function (e) { return owner.sceneClick(e); }); },
-      function () { return routeRootClick("rows-menu", function (e) { return owner.menuClick(e); }); }
+      function () { return routeRootClick("rows-menu", function (e) { return owner.menuClick(e); }); },
+      function () { return rowDrag().onEnd(clearDropMarkers); }
     ];
   });
 }
 
 export const stopRowsFeature = rowRoutes.stop;
+
+export function rowsActions(): ActionDefinition[] {
+  return rowActions({ reveal: (rowId) => { shotHiding().reveal(rowId); } });
+}
 
 const rowsEditor = owned<ReturnType<typeof mountRowsEditor>>();
 

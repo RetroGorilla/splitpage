@@ -29,7 +29,7 @@ const wired = stubs.wireSession({
   edit: function () { return reviewing.on ? { allowed: false, reason: bridge.REVIEW_ONLY } : { allowed: true }; }
 });
 bridge.liveSession().subscribe(function (change) { published.push(change); });
-onScriptStats(function () { stubs.renderRundown(); stubs.paintTargetOverlay(); });
+onScriptStats(function (targetSeconds) { stubs.setRundownExtraSeconds(targetSeconds); stubs.renderRundown(); stubs.paintTargetOverlay(); });
 bridge.liveSession().subscribe(statsFollowChange);
 
 function lengthDoc(rows) {

@@ -1,15 +1,13 @@
-import type { ActionRegistry } from "../application/actions.ts";
-import { registerAll } from "../application/actions.ts";
+import type { ActionDefinition } from "../application/actions.ts";
 import { toggleHideShotScenes } from "../js/01b-hide-shot.js";
 import { openHistoryPanel } from "../js/03-sync.js";
-import { isRundownMinimized, toggleRundownMinimized } from "../js/05f-rundown.js";
 import { openFindBar } from "../js/09-find-replace.js";
 import { viewFlags } from "./preferences-bridge.ts";
 import { EVERY_OVERLAY, availableUnless, everyOverlayBut } from "../application/screen.ts";
 import { screenNow } from "./screen-state.ts";
 
-export function registerThisDocumentActions(registry: ActionRegistry): () => void {
-  return registerAll(registry, [
+export function hideShotActions(): ActionDefinition[] {
+  return [
     {
       id: "toggle-hide-shot",
       label: "Hide shot scenes",
@@ -19,16 +17,12 @@ export function registerThisDocumentActions(registry: ActionRegistry): () => voi
       words: "collapse done finished filter shot scenes",
       availability: () => availableUnless(["loading", "dialog"], screenNow(), viewFlags().hideShot()),
       run: () => { toggleHideShotScenes(); }
-    },
-    {
-      id: "toggle-rundown-min",
-      label: "Minimise the rundown",
-      group: "This document",
-      icon: "i-rundown-min",
-      words: "rundown strip timeline minimize collapse thin bar more room",
-      availability: (source) => availableUnless(source === "button" ? [] : ["loading"], screenNow(), isRundownMinimized()),
-      run: () => { toggleRundownMinimized(); }
-    },
+    }
+  ];
+}
+
+export function thisDocumentActions(): ActionDefinition[] {
+  return [
     {
       id: "history",
       label: "Version history…",
@@ -52,5 +46,5 @@ export function registerThisDocumentActions(registry: ActionRegistry): () => voi
         else openFindBar();
       }
     }
-  ]);
+  ];
 }

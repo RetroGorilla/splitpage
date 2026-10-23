@@ -50,8 +50,12 @@ export function markDirty() {
   if (answers.noteEdit) noteEdit();
 }
 
-export function armShotHideGrace(id) { calls.push("armShotHideGrace:" + id); }
-export function clearShotHideGrace(id) { calls.push("clearShotHideGrace:" + id); }
+export function shotHiding() {
+  return {
+    armGrace: function (id) { calls.push("armShotHideGrace:" + id); },
+    clearGrace: function (id) { calls.push("clearShotHideGrace:" + id); }
+  };
+}
 
 export function renderRow(id) {
   calls.push("renderRow:" + id);

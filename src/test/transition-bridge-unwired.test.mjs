@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import "./_location-started.mjs";
 
 const bridge = await import("../legacy/transition-bridge.ts");
+const { NO_DESTINATION } = await import("../application/transitions/ports.ts");
 const { currentDocument, liveDocumentPort, liveSession, requestRefresh } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");
@@ -35,7 +36,7 @@ test("started once, with the ports it is handed; a second start throws until the
   try {
     assert.throws(() => startWith([]), /already started/);
     const next = script("New");
-    const arrived = bridge.documentTransitions().startNew({ from: { document: next }, reason: "a new script", destination: bridge.NO_DESTINATION });
+    const arrived = bridge.documentTransitions().startNew({ from: { document: next }, reason: "a new script", destination: NO_DESTINATION });
     assert.equal(arrived.document, next);
     assert.deepEqual(log, ["assign", "destination:none", "baseline:a new script", "writtenOut:false"]);
     assert.equal(liveSession().read((doc) => doc), next, "the session holds the new document as the transition returns");

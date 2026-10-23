@@ -1,9 +1,11 @@
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
+import "./_shot-hiding-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { rowGroupItems, setHideShotScenes } from "../js/01b-hide-shot.js";
+import { setHideShotScenes } from "../js/01b-hide-shot.js";
+import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { paintRowTimes } from "../js/05-render.js";
 import { syncAnchorResolvedClasses } from "../js/10-comments.js";
 import { PROTOTYPE_IDS } from "../core/document/id-map.ts";
@@ -17,7 +19,7 @@ test("hide shot scenes: a shot scene with an Object.prototype id is hidden like 
   setHideShotScenes(true);
   try {
     const rows = [row("r1")].concat(PROTOTYPE_IDS.map((id) => row(id, "shot")), [row("r9")]);
-    const items = rowGroupItems(rows);
+    const items = shotHiding().groups(rows);
     assert.deepEqual(items.map((it) => it.strip || it.row.id), ["r1", PROTOTYPE_IDS, "r9"]);
   } finally {
     setHideShotScenes(false);

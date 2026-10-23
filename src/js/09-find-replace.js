@@ -1,7 +1,7 @@
 import { normalizeTagName, registryTagHooks } from "../core/document/tags.ts";
 import { isBlankTagName } from "../core/production/tags.ts";
 import { TAG_CATEGORIES, tagCategory } from "../core/production/looks.ts";
-import { revealRow } from "./01b-hide-shot.js";
+import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { currentDocument, readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
 import { rewriteCellsCommand, rewrittenCopies } from "../application/commands/document-edit.ts";
@@ -245,7 +245,7 @@ function highlightsSupported() {
 
 function revealFindMatch() {
   var m = findMatches[findIndex];
-  if (m) revealRow(m.rowId);
+  if (m) shotHiding().reveal(m.rowId);
   var hit = currentMatchRange();
   if (highlightsSupported()) {
     if (hit) CSS.highlights.set(FIND_HL, new Highlight(hit.range));

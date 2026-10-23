@@ -58,10 +58,10 @@ test("read time: while reviewing a click only warns, and a refused length warns 
   review.setReviewing(true);
   button.click();
   assert.equal(readTimeEditing(), null);
-  assert.deepEqual(notices.shown, [{ message: REVIEW_REFUSAL, kind: "warn" }]);
+  assert.deepEqual(notices.shown.map(({ message, kind }) => ({ message, kind })), [{ message: REVIEW_REFUSAL, kind: "warn" }]);
   edits.answer({ kind: "rejected", reason: REVIEW_REFUSAL_REASON });
   assert.equal(setSceneLength("r1", 30), false);
-  assert.deepEqual(notices.shown, [{ message: REVIEW_REFUSAL, kind: "warn" }, { message: REVIEW_REFUSAL, kind: "warn" }]);
+  assert.deepEqual(notices.shown.map(({ message, kind }) => ({ message, kind })), [{ message: REVIEW_REFUSAL, kind: "warn" }, { message: REVIEW_REFUSAL, kind: "warn" }]);
   owner.dispose();
 });
 
