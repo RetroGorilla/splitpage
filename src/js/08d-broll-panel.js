@@ -7,7 +7,8 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
-import { cssAttr, plainText } from "./04-richtext.js";
+import { plainText } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import { focusRowField } from "./06-rows.js";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import {

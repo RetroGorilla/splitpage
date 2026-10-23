@@ -16,7 +16,7 @@ import {
   startLocation,
   stillOnServer
 } from "../../src/legacy/location-bridge.ts";
-import { VIEWING_ONLY } from "../../src/legacy/review-wording.ts";
+import { VIEWING_ONLY } from "../../src/application/collaboration/review.ts";
 
 function noticeRecorder(): { shown: unknown[][]; ports: EffectPorts<Element> } {
   const shown: unknown[][] = [];
