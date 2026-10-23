@@ -2,6 +2,9 @@ import type { ActionRegistry, ActionSource } from "../../src/application/actions
 import type { PreferenceChanges, PreferenceNotice, Preferences } from "../../src/application/preferences/preferences.ts";
 import type { SaveChange, SaveState } from "../../src/application/save/save-state.ts";
 import type { Blocker, ScreenState } from "../../src/application/screen.ts";
+import type { DocumentDestination } from "../../src/application/transitions/ports.ts";
+import type { Arrived, Incoming, Transitions } from "../../src/application/transitions/transitions.ts";
+import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import type { ReviewFacts } from "../../src/application/collaboration/review.ts";
 import type { PictureStore } from "../../src/application/media/picture-store.ts";
 import type { SaveOwnershipPort } from "../../src/application/save/coordinator.ts";
@@ -127,6 +130,32 @@ export function fakePreferences(initialScale = 1) {
       notices.emit({ name: "scriptScale", value: announced, elsewhere: true });
     }
   };
+}
+
+export function fakeTransitions(arriving: (from: Incoming) => ValidatedDocument) {
+  const calls: { kind: "open" | "startNew" | "restore" | "recover"; reason: string | null; destination: DocumentDestination | undefined }[] = [];
+  const arrive = (from: Incoming): Arrived => ({ document: arriving(from), forkedFrom: null, kept: false });
+  const transitions: Transitions<DocumentDestination> = {
+    open: (opening) => {
+      calls.push({ kind: "open", reason: opening.reason, destination: opening.destination });
+      return arrive(opening.from);
+    },
+    startNew: (arrival) => {
+      calls.push({ kind: "startNew", reason: arrival.reason, destination: arrival.destination });
+      return arrive(arrival.from);
+    },
+    restore: (restoration) => {
+      calls.push({ kind: "restore", reason: null, destination: undefined });
+      return arrive(restoration.from);
+    },
+    recover: (recovery) => {
+      calls.push({ kind: "recover", reason: recovery.reason, destination: recovery.destination });
+      return arrive(recovery.from);
+    },
+    publish: () => ({ kind: "obsolete" }),
+    copyId: () => "d" + "0".repeat(32)
+  };
+  return { transitions, calls };
 }
 
 function listenerSet<L>() {
