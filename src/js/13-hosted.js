@@ -59,7 +59,7 @@ import { createServerDestination } from "../application/save/server-destination.
 import { conflictStash, draftResume } from "../legacy/recovery-bridge.ts";
 import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
-import { deliverFile } from "./18-local-files.js";
+import { deliverFile } from "../legacy/file-delivery.ts";
 import {
   openPinDialog,
   openServersDialog

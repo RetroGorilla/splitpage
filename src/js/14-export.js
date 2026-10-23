@@ -17,15 +17,10 @@ import {
   setBaseState
 } from "./03-sync.js";
 import { captureExportDocument } from "./14b-export-kit.js";
-import {
-  checkFileConflict,
-  deliverFile,
-  showFileConflict,
-  writeBackToFile
-} from "./18-local-files.js";
 import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./20d-formats.js";
-import { makeDesktopHandle } from "./20f-desktop.js";
-import { existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
+import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
+import { checkFileConflict, existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
+import { deliverFile } from "../legacy/file-delivery.ts";
 import { autoSavePolicy, confirmSavedNow, flushAutoSave, haltAutoSave, resumeAutoSave, saveChanges } from "../legacy/save-bridge.ts";
 import { showToast, warnImagesLeftOut } from "../legacy/effects-bridge.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
@@ -42,7 +37,8 @@ var SAVED = Object.freeze({ kind: "saved" });
 var COPIED = Object.freeze({ kind: "copied" });
 var CANCELLED = Object.freeze({ kind: "cancelled" });
 var FAILED = Object.freeze({ kind: "failed" });
-var CONFLICTED = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
+var FILE_CHANGED = "The file changed on disk since it was opened";
+var CONFLICTED = Object.freeze({ kind: "refused", reason: FILE_CHANGED });
 
 function saveDialogs(slug) {
   return {
@@ -137,9 +133,9 @@ async function writeDoc(opts, job) {
     if (reusing && !opts.force) {
       var check = await checkFileConflict(reusing.handle, homeAtSave.lastModified);
       if (!check.ok) {
-        if (auto) haltAutoSave("Autosave is paused — " + reusing.handle.name +
-                               " changed on disk since it was opened. Press Save to sort it out.");
-        else showFileConflict(reusing.handle.name, check.current, { kind: "project" });
+        if (!auto) return { kind: "refused", reason: FILE_CHANGED, conflict: { fileName: reusing.handle.name, current: check.current, kind: "project" } };
+        haltAutoSave("Autosave is paused — " + reusing.handle.name +
+                     " changed on disk since it was opened. Press Save to sort it out.");
         return CONFLICTED;
       }
     }
@@ -265,17 +261,15 @@ function autoSaveChanged(what) {
   if (what === "enabled") updateAutoSaveMenu();
 }
 
-var TAKEN_ANYWHERE = ["saveAs", "writeback", "writebackForce"];
 var TAKEN_OFF_THE_SERVER = ["save", "auto", "autosave", "force"];
 
 function fileTakes(request, place) {
-  if (TAKEN_ANYWHERE.indexOf(request.kind) !== -1) return true;
+  if (request.kind === "saveAs") return true;
   return TAKEN_OFF_THE_SERVER.indexOf(request.kind) !== -1 && !(place && place.kind === "server");
 }
 
 function writeToFile(job) {
   var kind = job.request.kind;
-  if (kind === "writeback" || kind === "writebackForce") return writeBackToFile(job);
   return writeDoc({ auto: kind === "auto" || kind === "autosave", force: kind === "force", saveAs: kind === "saveAs" }, job);
 }
 

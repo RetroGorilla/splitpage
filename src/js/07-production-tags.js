@@ -1,5 +1,4 @@
 import { domToPos } from "../features/editing/cell-dom.ts";
-import { updateScriptStats } from "./01-scene-status.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import {
   inertBody,
@@ -7,11 +6,8 @@ import {
   sanitizeHtml
 } from "./04-richtext.js";
 import { plainTagOpen } from "./07b-plain-tags.js";
-import { renderProduction, updateGearCount } from "./08-production-panels.js";
-import { runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
 import { domRangeFor } from "./09-find-replace.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
-import { updateWriterStats } from "./19-writer.js";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { contentMemo } from "../core/document/memo.ts";
@@ -170,39 +166,25 @@ export function scheduleIdleRefresh(job) {
 export function runIdleRefresh(jobs) {
   if (!currentDocument()) return;
   idleFlushes++;
-  if (jobs.has("production")) refreshProductionNow();
-  if (jobs.has("writerStats")) updateWriterStats();
   if (jobs.has("untagged")) scanUntaggedMentions();
-  if (jobs.has("broll")) runBrollRefresh();
 }
 
-function refreshProductionNow() {
-  var panel = document.getElementById("production-panel");
-  var gearPanel = document.getElementById("gear-panel");
-  if ((panel && !panel.hidden) || (gearPanel && !gearPanel.hidden)) renderProduction();
-  else updateTagBadges();
-  updateScriptStats();
+var taggedListeners = [];
+
+export function onTagged(listener) {
+  taggedListeners.push(listener);
+  return function () {
+    var at = taggedListeners.indexOf(listener);
+    if (at !== -1) taggedListeners.splice(at, 1);
+  };
+}
+
+export function announceTagged() {
+  taggedListeners.slice().forEach(function (listener) { listener(); });
 }
 
 export function scheduleProductionRefresh() {
   scheduleIdleRefresh("production");
-}
-
-export function updateProductionBadge(n) {
-  var badge = document.getElementById("production-badge");
-  if (!badge) return;
-  if (n > 0) { badge.hidden = false; badge.textContent = n > 99 ? "99+" : String(n); }
-  else badge.hidden = true;
-}
-
-function updateProductionCount() {
-  updateProductionBadge(currentDocument() ? productionEntries().length : 0);
-}
-
-export function updateTagBadges() {
-  updateProductionCount();
-  updateGearCount();
-  updateBrollBadge();
 }
 
 var AUTO_TAG_MAX_LEN = 60;
@@ -231,8 +213,7 @@ export function maybeAutoTagShortcut(e, cellEl) {
   if (isBlankTagName(trimmed) || phrase.length > AUTO_TAG_MAX_LEN || hasShortcutChar(phrase)) return;
 
   tagTextRange(cellEl, node, openAt, offset, trimmed, rule.cat, trimmed);
-  updateTagBadges();
-  renderProduction();
+  announceTagged();
 }
 
 function tagTextRange(cellEl, node, a, b, text, cat, name) {
@@ -323,8 +304,7 @@ export function acceptTagGhost() {
 
   hideTagGhost();
   tagTextRange(g.cellEl, g.node, g.openAt, g.offset, g.entry.name, g.entry.cat.id, g.entry.name);
-  updateTagBadges();
-  renderProduction();
+  announceTagged();
   return true;
 }
 
@@ -485,8 +465,7 @@ export function acceptUntaggedMention() {
 
   hideUntaggedPrompt();
   tagTextRange(s.cellEl, node, s.range.startOffset, s.range.endOffset, s.text, s.entry.cat.id, s.entry.name);
-  updateTagBadges();
-  renderProduction();
+  announceTagged();
   scanUntaggedMentions();
   return true;
 }

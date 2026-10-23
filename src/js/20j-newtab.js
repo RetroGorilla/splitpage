@@ -11,7 +11,7 @@ import { arrivingOnLink } from "./13-hosted.js";
 import { openLocalFile, openProjectFile } from "./18-local-files.js";
 import { desktopAppUrl, desktopAppOffered } from "./20a-update.js";
 import { seedCheckPasses } from "../legacy/seed-check.ts";
-import { makeDesktopHandle } from "./20f-desktop.js";
+import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { STARTERS, starterById } from "./_starters.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { productionReaders } from "../legacy/document-ports.ts";

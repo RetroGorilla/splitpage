@@ -1,7 +1,6 @@
 import { productionReaders } from "../legacy/document-ports.ts";
 import { armShotHideGrace, clearShotHideGrace } from "./01b-hide-shot.js";
-import { renderRundown, setRundownExtraSeconds } from "./05f-rundown.js";
-import { paintTargetOverlay } from "./05t-target.js";
+import { setRundownExtraSeconds } from "./05f-rundown.js";
 import { sceneStatus, sceneStatusCommand, shotGrace } from "../application/commands/scene-status.ts";
 import { REVIEW_ONLY, currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
@@ -40,6 +39,21 @@ function paintLength(el, totalHtml, slotHtml, title) {
   if (el.title !== title) el.title = title;
 }
 
+var statsListeners = [];
+
+export function onScriptStats(listener) {
+  statsListeners.push(listener);
+  return function () {
+    var at = statsListeners.indexOf(listener);
+    if (at !== -1) statsListeners.splice(at, 1);
+  };
+}
+
+export function statsFollowChange(change) {
+  var changes = change.changes;
+  if (changes.docFields.indexOf("targetSeconds") !== -1 || changes.cells.some(function (cell) { return cell.field === "status" || cell.field === "lengthSeconds"; })) updateScriptStats();
+}
+
 export function updateScriptStats() {
   var doc = currentDocument();
   if (!doc) return;
@@ -69,8 +83,7 @@ export function updateScriptStats() {
   paintLength(document.getElementById("runtime-chip"), totalHtml, slotHtml, title);
   paintLength(document.getElementById("length-status"), totalHtml, slotHtml, title);
   setRundownExtraSeconds(target || 0);
-  renderRundown();
-  paintTargetOverlay();
+  statsListeners.slice().forEach(function (listener) { listener(); });
 
   var chip = document.getElementById("progress-chip");
   var text = document.getElementById("progress-text");
@@ -95,7 +108,6 @@ export function cycleRowStatus(rowId) {
     if (grace === "arm") armShotHideGrace(rowId);
     else if (grace === "clear") clearShotHideGrace(rowId);
   }
-  updateScriptStats();
 }
 
 export function __init() {}

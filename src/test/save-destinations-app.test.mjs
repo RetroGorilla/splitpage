@@ -78,10 +78,10 @@ test("a destination registered in a test takes Save As, then Save and autosave t
   }
 });
 
-test("the built-in destinations are the file and the server, and a dropped test destination leaves only them", () => {
-  assert.deepEqual(saves.saveDestinations().ids(), ["server", "file"]);
+test("the built-in destinations are the file, the import and the server, and a dropped test destination leaves only them", () => {
+  assert.deepEqual(saves.saveDestinations().ids(), ["server", "import", "file"]);
   const drop = saves.saveDestinations().register(throwawayDestination().destination);
-  assert.deepEqual(saves.saveDestinations().ids(), ["throwaway", "server", "file"]);
+  assert.deepEqual(saves.saveDestinations().ids(), ["throwaway", "server", "import", "file"]);
   drop();
-  assert.deepEqual(saves.saveDestinations().ids(), ["server", "file"]);
+  assert.deepEqual(saves.saveDestinations().ids(), ["server", "import", "file"]);
 });
