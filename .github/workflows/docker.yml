@@ -56,7 +56,7 @@ permissions:
 
 jobs:
   image:
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -175,7 +175,7 @@ jobs:
         run: docker logs --tail 80 splitpage-ci 2>&1 || true
 
   prebuilt:
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
