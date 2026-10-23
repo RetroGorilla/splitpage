@@ -9,4 +9,5 @@ export interface SaveState {
   readonly onChange: (listener: (change: SaveChange) => void) => () => void;
   readonly dueNow: () => void;
   readonly resume: () => void;
+  readonly setAutoSaveEnabled: (on: boolean) => void;
 }
