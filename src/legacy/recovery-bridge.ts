@@ -8,10 +8,11 @@ import { createDraftResume } from "../application/recovery/draft-resume.ts";
 import type { DraftResume } from "../application/recovery/draft-resume.ts";
 import { createLegacySnapshots } from "../application/recovery/legacy-snapshots.ts";
 import type { LegacySnapshots } from "../application/recovery/legacy-snapshots.ts";
-import { createStashedWork } from "../application/recovery/stashed-work.ts";
+import { createLocalWorkStash, createStashedWork } from "../application/recovery/stashed-work.ts";
 import type { ApplyStashedWork, StashMerge } from "../application/recovery/stashed-work.ts";
 import { cloneState } from "../core/document/clone.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
+import type { MergedStates } from "../core/merge-states.ts";
 import { migrateRows } from "../js/02-state.js";
 import { documentLocation } from "./location-bridge.ts";
 import { createDesktopDraftStore } from "../adapters/storage/draft-store-desktop.ts";
@@ -19,6 +20,9 @@ import type { DesktopDraftBridge } from "../adapters/storage/draft-store-desktop
 import { createIdbDraftStore } from "../adapters/storage/draft-store-idb.ts";
 import type { OperationContext } from "../application/session/operation.ts";
 import { captureOperation, stillOwns } from "./transition-bridge.ts";
+import { currentDocument, mergeBase, sessionStamps } from "./session-bridge.ts";
+import { nowIso } from "../adapters/identity/ids.ts";
+import { dataUrlForSync, isDurableSync } from "../adapters/storage/02c-blobs.js";
 
 export interface LegacyRecoveryPorts {
   readonly indexedDB: IDBFactory | null;
@@ -29,7 +33,19 @@ export interface LegacyRecoveryPorts {
   readonly sessionStorage: () => KeyValueStorage | null | undefined;
   readonly localStorage: () => KeyValueStorage | null | undefined;
   readonly internImage: (dataUrl: string) => void;
-  readonly merge: StashMerge<ValidatedDocument, unknown>;
+  readonly merge: StashMerge<ValidatedDocument, MergedStates>;
+  readonly drafts: LegacyDraftPorts;
+}
+
+export interface DraftFlush {
+  readonly ok: boolean;
+  readonly code?: string;
+}
+
+export interface LegacyDraftPorts {
+  readonly flush: (opts?: { readonly keep?: boolean } | null) => Promise<DraftFlush>;
+  readonly armServer: (docId: string) => Promise<boolean>;
+  readonly offerAfterLinkOff: (docId: string) => Promise<boolean>;
 }
 
 export interface BrowserDrafts {
@@ -43,7 +59,8 @@ interface Started {
   readonly resume: DraftResume;
   readonly stash: ConflictStash;
   readonly snapshots: LegacySnapshots;
-  readonly stashedWork: ApplyStashedWork<ValidatedDocument, unknown>;
+  readonly stashedWork: ApplyStashedWork<ValidatedDocument, MergedStates>;
+  readonly stashLocal: () => boolean;
   browser: BrowserDrafts;
 }
 
@@ -72,12 +89,21 @@ export function startRecovery(ports: LegacyRecoveryPorts): () => void {
     desktop: createDesktopDraftStore({ bridge: ports.desktop }),
     resume: createDraftResume(),
     stash: stash,
-    stashedWork: createStashedWork<ValidatedDocument, unknown>({
+    stashedWork: createStashedWork<ValidatedDocument, MergedStates>({
       stash: stash,
       sessionStorage: ports.sessionStorage,
       markWrittenOut: function () { documentLocation().markWrittenOut(true); },
       copy: function (doc) { return migrateRows(cloneState(doc)); },
       merge: ports.merge
+    }),
+    stashLocal: createLocalWorkStash<ValidatedDocument>({
+      stash: stash,
+      current: currentDocument,
+      base: mergeBase,
+      now: nowIso,
+      editor: function () { return sessionStamps.editor.name(); },
+      durable: isDurableSync,
+      dataUrl: dataUrlForSync
     }),
     snapshots: createLegacySnapshots({ storage: ports.localStorage }),
     browser: browserDraftsFor(ports, ports.indexedDB)
@@ -108,8 +134,24 @@ export function conflictStash(): ConflictStash {
   return running().stash;
 }
 
-export function applyStashedWork(...args: Parameters<ApplyStashedWork<ValidatedDocument, unknown>>): ReturnType<ApplyStashedWork<ValidatedDocument, unknown>> {
+export function applyStashedWork(...args: Parameters<ApplyStashedWork<ValidatedDocument, MergedStates>>): ReturnType<ApplyStashedWork<ValidatedDocument, MergedStates>> {
   return running().stashedWork(...args);
+}
+
+export function stashLocalWork(): boolean {
+  return running().stashLocal();
+}
+
+export function flushDraftNow(opts?: { readonly keep?: boolean } | null): Promise<DraftFlush> {
+  return running().ports.drafts.flush(opts);
+}
+
+export function armBrowserServerDraft(docId: string): Promise<boolean> {
+  return running().ports.drafts.armServer(docId);
+}
+
+export function offerBrowserDraftAfterLinkOff(docId: string): Promise<boolean> {
+  return running().ports.drafts.offerAfterLinkOff(docId);
 }
 
 export function legacySnapshots(): LegacySnapshots {

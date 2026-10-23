@@ -1,6 +1,7 @@
 import type { Startup, StartupPorts } from "../startup.ts";
 import type { StashResult } from "../startup/initial-document.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
+import type { MergedStates } from "../../core/merge-states.ts";
 import { connectStartup } from "../../legacy/startup-bridge.ts";
 import { documentTransitions } from "../../legacy/transition-bridge.ts";
 import { suppressUnloadWarning } from "../../js/00-prelude.js";
@@ -9,10 +10,8 @@ import { initDocIdentityChannel, loadInitialState, syncDocIdentity } from "../..
 import { heldDocument } from "../../legacy/session-bridge.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
-import {
-  reportMerge,
-  toastLastEditor
-} from "../../js/03-sync.js";
+import { toastLastEditor } from "../../js/03-sync.js";
+import { reportMerge } from "../../legacy/merge-bridge.ts";
 import { startHistoryMigration } from "../../js/03a-history-store.js";
 import { renderFirstDraw } from "../../js/05-render.js";
 import { hasUnsavedChanges, updateSaveStatus } from "../../js/12-dirty-toast.js";
@@ -24,7 +23,7 @@ import { desktopBridge, initDesktop, notifyDesktopDocumentState } from "../../js
 import { applyTakenDraft, armServerDraftResume, desktopDraftTaker } from "../../js/20g-drafts.js";
 import { checkServer } from "../../legacy/location-bridge.ts";
 
-export function startupPorts(): StartupPorts<unknown, ValidatedDocument, ValidatedDocument, unknown> {
+export function startupPorts(): StartupPorts<unknown, ValidatedDocument, ValidatedDocument, MergedStates> {
   return {
     desktop: !!desktopBridge(),
     draft: {
@@ -40,7 +39,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
       applyStash: function (loaded, options) {
         const applied = applyStashedWork(loaded, null, { ...options });
         if (applied instanceof Promise) throw new Error("The stashed work opened at startup must merge without waiting for an undo point");
-        const result: StashResult<ValidatedDocument, unknown> = applied;
+        const result: StashResult<ValidatedDocument, MergedStates> = applied;
         return result;
       },
       liveDocument: function () { return heldDocument(); },
