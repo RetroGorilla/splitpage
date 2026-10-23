@@ -1,5 +1,5 @@
 # Taking a scene out re-points the comments whose words are still in the
-# script (05g-scene-clip.js removeScenes, 06-rows.js deleteRow). Alt+Enter
+# script (features/clipboard/scene-clip.js removeScenes, 06-rows.js deleteRow). Alt+Enter
 # through a commented phrase leaves it marked in both halves, its card on
 # the first; deleting (or cutting) that first scene used to leave the
 # comment pointing at the deleted scene ("Deleted scene · Audio") although

@@ -3,7 +3,9 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readBuiltCss } from "../../tools/css-colours.mjs";
-import { fromHtml, namedTagId, projection, toHtml } from "../js/04c-doc-model.js";
+import { fromHtml } from "../legacy/richtext.ts";
+import { namedTagId, projection } from "../core/text/runs.ts";
+import { toHtml } from "../core/text/html.ts";
 import {
   PLAIN_TAG_KEYWORDS,
   applyPlainTag,

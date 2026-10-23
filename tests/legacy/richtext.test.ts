@@ -5,7 +5,6 @@ import { storedImageMarkup } from "../../src/core/document/text-policy.ts";
 import * as legacy from "../../src/legacy/richtext.ts";
 import { has, intern, recordFor, setBackend } from "../../src/adapters/storage/02c-blobs.js";
 import * as richtext from "../../src/js/04-richtext.js";
-import * as docModel from "../../src/js/04c-doc-model.js";
 import { image } from "../../src/test/golden-helpers.mjs";
 
 type Put = { sha: string; interned: boolean; bytes: number };
@@ -25,15 +24,13 @@ function recordingBackend(puts: Put[]) {
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-test("04-richtext.js and 04c-doc-model.js hand out the legacy composition's functions", () => {
+test("04-richtext.js hands out the legacy composition's functions", () => {
   assert.equal(richtext.inertBody, legacy.inertBody);
   assert.equal(richtext.sanitizeHtml, legacy.sanitizeHtml);
   assert.equal(richtext.imageRefOf, legacy.imageRefOf);
   assert.equal(richtext.storedHtmlFromDom, legacy.storedHtmlFromDom);
   assert.equal(richtext.htmlToMarkdown, legacy.htmlToMarkdown);
   assert.equal(richtext.buildVideoCardEl, legacy.buildVideoCardEl);
-  assert.equal(docModel.fromHtml, legacy.fromHtml);
-  assert.equal(docModel.cellOf, legacy.cellOf);
 });
 
 test("it parses with the page's DOMParser, into a document of its own", () => {
