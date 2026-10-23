@@ -2,6 +2,7 @@ import { wireProductionIndex } from "./wiring/production-index.ts";
 export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
 export { mountRundownFeature } from "./wiring/rundown.ts";
 export { mountHelpFeature } from "./wiring/help.ts";
+export { mountSettingsFeature } from "./wiring/settings.ts";
 export { mountGalleryFeature } from "./wiring/gallery.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
 import { registerBuiltInExporters } from "./wiring/exporters.ts";

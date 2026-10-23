@@ -51,7 +51,6 @@ import { __init as init_20f_desktop } from "./20f-desktop.js";
 import { __init as init_20g_drafts } from "./20g-drafts.js";
 import { __init as init_20h_appdata } from "./20h-appdata.js";
 import { __init as init_20j_newtab } from "./20j-newtab.js";
-import { __init as init_20s_settings } from "./20s-settings.js";
 import { migrateRows } from "./02-state.js";
 import { documentIdentityPort } from "./02b-doc-id.js";
 import { documentDestinationPort, documentHistoryPort, getEditorName, legacyMergePorts, stampRow } from "./03-sync.js";
@@ -64,7 +63,7 @@ import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireApp, mountRundownFeature, mountScriptZoomFeature, mountHelpFeature, mountGalleryFeature } from "../bootstrap/wiring.ts";
+import { wireApp, mountRundownFeature, mountScriptZoomFeature, mountHelpFeature, mountGalleryFeature, mountSettingsFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -146,6 +145,6 @@ if (wiring) {
   init_20g_drafts();
   init_20h_appdata();
   init_20j_newtab();
-  init_20s_settings();
+  mountSettingsFeature();
   startAppWhenReady(document, wiring);
 }
