@@ -2,7 +2,6 @@ import "./_dom.mjs";
 import { bootApp, clearTimers, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { applyMerge, baseStateReason, reportMerge, setBaseState } from "../js/03-sync.js";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
@@ -10,7 +9,7 @@ import { listDocHistory } from "../js/03a-history-store.js";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, confirmSavedNow, resumeAutoSave, unsavedChanges } from "../legacy/save-bridge.ts";
 import { loadTestDocument } from "./_document.mjs";
-import { mergeBase } from "../legacy/session-bridge.ts";
+import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 await window.__historyTest.forceBackend("memory");
@@ -73,9 +72,9 @@ test("characterization: an adopted merge redraws, shows the banner, marks the do
   const baseBefore = mergeBase();
 
   const out = applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "server-conflict" });
-  assert.equal(out.state, S.state);
-  assert.equal(S.state.rows[0].audioText, "mine");
-  assert.equal(S.state.rows[1].audioText, "theirs");
+  assert.equal(out.state, currentDocument());
+  assert.equal(currentDocument().rows[0].audioText, "mine");
+  assert.equal(currentDocument().rows[1].audioText, "theirs");
   assert.equal(out.snapshot, null, "no undoPoint asked for");
   assert.equal(window.__renderTest.counts().render, 1, "one redraw");
   assert.equal(banner().hidden, false);
@@ -94,7 +93,7 @@ test("characterization: `report: false` merges silently: no banner, no unsaved m
 
   const out = applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "server-conflict", report: false, noAutoSave: true });
   assert.ok(out.result);
-  assert.equal(S.state.rows[1].audioText, "theirs");
+  assert.equal(currentDocument().rows[1].audioText, "theirs");
   assert.equal(window.__renderTest.counts().render, 1);
   assert.equal(banner().hidden, true);
   assert.ok(!unsavedChanges(), "report: false leaves the unsaved mark to the caller");
@@ -110,7 +109,7 @@ test("characterization: `report: false` with nothing merged adopts theirs withou
   const out = applyMerge({ theirs: theirs, unchanged: true, source: "stash", recovery: true, report: false });
   assert.equal(out.result, null);
   assert.equal(out.snapshot, null);
-  assert.equal(S.state.title, "As the server has it");
+  assert.equal(currentDocument().title, "As the server has it");
   assert.equal(window.__renderTest.counts().render, 1, "adopting theirs redraws");
   assert.equal(banner().hidden, true);
   assert.ok(!unsavedChanges());
@@ -153,7 +152,7 @@ test("characterization: a merge where nothing differs row by row still marks uns
 
   const out = applyMerge({ base: mk(id), mine: mine, theirs: theirs, source: "stash", noAutoSave: true });
   assert.ok(out.result);
-  assert.equal(S.state.title, "Mine");
+  assert.equal(currentDocument().title, "Mine");
   assert.equal(banner().hidden, true);
   assert.ok(unsavedChanges());
   assert.ok(autoSavePolicy().halted(), "the no-autosave rule applies here too");
@@ -209,7 +208,7 @@ test("characterization: `toast` speaks after adoption, a function seeing the ado
 
   applyMerge({
     base: s.base, mine: s.mine, theirs: s.theirs, source: "server-resume", report: false,
-    toast: { text: function () { return "Now " + S.state.title; }, tone: "warn", sticky: true }
+    toast: { text: function () { return "Now " + currentDocument().title; }, tone: "warn", sticky: true }
   });
   assert.deepEqual(toasts(), [{ text: "Now Their title", warn: true, ok: false, sticky: true }]);
 
@@ -280,8 +279,8 @@ test("characterization: the banner's ×, Review conflicts and Undo merge", async
   undoBtn().click();
   assert.equal(undoBtn().textContent, "Undo merge");
   assert.ok(!undoBtn().classList.contains("armed"));
-  for (let i = 0; i < 50 && S.state.rows[0].audioText !== "mine said this"; i++) await new Promise((r) => setTimeout(r, 10));
-  assert.equal(S.state.rows[0].audioText, "mine said this", "the second restores the undo point");
+  for (let i = 0; i < 50 && currentDocument().rows[0].audioText !== "mine said this"; i++) await new Promise((r) => setTimeout(r, 10));
+  assert.equal(currentDocument().rows[0].audioText, "mine said this", "the second restores the undo point");
   assert.ok(unsavedChanges(), "locally, unsaved");
 });
 

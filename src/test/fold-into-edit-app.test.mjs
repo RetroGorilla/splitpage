@@ -1,7 +1,7 @@
 import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { createHeldFetch, createHeldImageDecode } from "./_m4-matrix.mjs";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
 
@@ -66,13 +66,13 @@ async function open() {
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
-const row = (id) => S.state.rows.find((r) => r.id === id);
-const docText = () => JSON.stringify(S.state);
+const row = (id) => currentDocument().rows.find((r) => r.id === id);
+const docText = () => JSON.stringify(currentDocument());
 
 function edit(fn) {
   clock += 5_000;
   const before = lastUndoEntry();
-  fn(S.state);
+  fn(currentDocument());
   liveSession().noteEdit();
   flushEdits();
   const entry = lastUndoEntry();

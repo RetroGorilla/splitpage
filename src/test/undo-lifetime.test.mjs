@@ -1,7 +1,7 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import {
   absorbRemoteChange, flushEdits, lastUndoEntry, noteEdit, noteRemoteChange, redo, resetUndo, trackDocument,
@@ -22,7 +22,7 @@ function open(state) {
 }
 
 function edit(fn) {
-  fn(S.state);
+  fn(currentDocument());
   noteEdit();
   flushEdits();
 }
@@ -42,8 +42,8 @@ test("the history's lifetime moves on with every reset: a new document, the same
 
   edit((s) => { s.rows[0].audioText = "Alpha edited"; });
   assert.equal(undoSizes().undo, 1);
-  const again = JSON.parse(JSON.stringify(S.state));
-  assert.equal(again.docId, S.state.docId);
+  const again = JSON.parse(JSON.stringify(currentDocument()));
+  assert.equal(again.docId, currentDocument().docId);
   open(again);
   life = moved(life, "the same document id opened again");
   assert.deepEqual(undoSizes(), { undo: 0, redo: 0 });
@@ -58,7 +58,7 @@ test("the history's lifetime moves on with every reset: a new document, the same
 
   loadTestDocument(null);
   flushEdits();
-  life = moved(life, "no document: the !S.state clear in flushEdits");
+  life = moved(life, "no document: the !live clear in flushEdits");
   open(doc("Fourth"));
   life = moved(life, "a document after none");
 
@@ -84,11 +84,11 @@ test("the history's lifetime holds through ordinary edits, undo, redo, a mark, a
   assert.equal(undoLifetime(), life, "undoMark and trackDocument on the same document");
 
   assert.equal(undo().ok, true);
-  assert.equal(S.state.rows[1].status, "todo");
+  assert.equal(currentDocument().rows[1].status, "todo");
   assert.equal(undoLifetime(), life, "undo");
 
   assert.equal(redo().ok, true);
-  assert.equal(S.state.rows[1].status, "shot");
+  assert.equal(currentDocument().rows[1].status, "shot");
   assert.equal(undoLifetime(), life, "redo");
 
   assert.equal(undo().ok, true);
@@ -97,7 +97,7 @@ test("the history's lifetime holds through ordinary edits, undo, redo, a mark, a
   assert.equal(redo().ok, true);
   assert.equal(undoLifetime(), life, "undo to the bottom and back");
 
-  const merged = JSON.parse(JSON.stringify(S.state));
+  const merged = JSON.parse(JSON.stringify(currentDocument()));
   merged.rows[1].audioText = "Bravo from elsewhere";
   noteRemoteChange(merged);
   loadTestDocument(merged);
@@ -112,7 +112,7 @@ test("a reload of the open file in place starts a new lifetime, while the histor
   edit((s) => { s.rows[1].status = "shot"; });
   const life = undoLifetime();
 
-  S.state.rows[0].visualText = "one reloaded";
+  currentDocument().rows[0].visualText = "one reloaded";
   absorbRemoteChange();
   assert.notEqual(undoLifetime(), life, "absorbRemoteChange over the tracked document");
   assert.equal(undoSizes().undo, 1, "the edit to another field survives the reload");

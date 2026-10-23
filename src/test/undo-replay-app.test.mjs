@@ -1,7 +1,7 @@
 import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
@@ -53,9 +53,9 @@ async function open() {
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
-const row = (id) => S.state.rows.find((r) => r.id === id);
+const row = (id) => currentDocument().rows.find((r) => r.id === id);
 const cellOf = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
-const docText = () => JSON.stringify(S.state);
+const docText = () => JSON.stringify(currentDocument());
 
 function lastText(el) {
   const walker = document.createTreeWalker(el, 4);
@@ -206,7 +206,7 @@ test("6.2: an empty replay changes nothing observable", async () => {
 test("6.2: a refused replay changes nothing in the document, keeps the refusal's history behaviour and warns", async () => {
   await open();
   edit("r1", "Hello again");
-  const next = JSON.parse(JSON.stringify(S.state));
+  const next = JSON.parse(JSON.stringify(currentDocument()));
   next.rows = next.rows.filter((r) => r.id !== "r1");
   loadTestDocument(liveSession().absorbServer(next));
   const text = docText();
@@ -277,12 +277,12 @@ test("6.2: owner cleanup by a replay is in its change set, including lists the e
   clock += 5_000;
   flushEdits();
   const entry = lastUndoEntry();
-  S.state.people = S.state.people.concat([{ id: "pC", name: "Cy" }]);
+  currentDocument().people = currentDocument().people.concat([{ id: "pC", name: "Cy" }]);
   liveSession().noteEdit();
   flushEdits();
   assert.notEqual(lastUndoEntry(), entry, "adding the person made an undo entry");
   assert.deepEqual(lastUndoEntry().steps.map((s) => s.key), ["people"], "the entry carries the crew only");
-  const next = JSON.parse(JSON.stringify(S.state));
+  const next = JSON.parse(JSON.stringify(currentDocument()));
   next.brollShots.find((b) => b.id === "bs_pier").owner = "pC";
   loadTestDocument(liveSession().absorbServer(next));
   const w = watch();
@@ -294,7 +294,7 @@ test("6.2: owner cleanup by a replay is in its change set, including lists the e
   }
   assert.equal(r.ok, true);
   assert.equal(r.cleared, 1);
-  assert.equal(S.state.brollShots.find((b) => b.id === "bs_pier").owner, "", "the collaborator's assignment to the removed person is cleared");
+  assert.equal(currentDocument().brollShots.find((b) => b.id === "bs_pier").owner, "", "the collaborator's assignment to the removed person is cleared");
   assert.deepEqual(w.seen.map((c) => c.kind), ["replay"]);
   assert.deepEqual(w.seen[0].changes.docFields.slice().sort(), ["brollShots", "people"]);
 });

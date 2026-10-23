@@ -1,9 +1,8 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { createHeldFileHandle, mockClock } from "./_m4-matrix.mjs";
-import { mergeBase } from "../legacy/session-bridge.ts";
+import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
@@ -42,7 +41,7 @@ async function openFrom(target) {
 }
 
 function edit(text) {
-  S.state.rows[0].audioText = text;
+  currentDocument().rows[0].audioText = text;
   noteSessionEdit();
 }
 

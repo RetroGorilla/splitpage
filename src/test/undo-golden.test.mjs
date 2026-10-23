@@ -1,7 +1,6 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
 import { changedBetween, flushEdits, lastUndoEntry, noteEdit, undo, undoSizes } from "../js/12a-undo.js";
 import { assertGolden, goldenNames, jsonCopy } from "./golden-helpers.mjs";
@@ -61,9 +60,9 @@ function unstamped(key, value) {
 test("undo golden: state-fields", () => {
   const out = EDITS.map(([key, label, edit]) => {
     loadTestDocument(fresh());
-    const before = jsonCopy(S.state);
-    edit(S.state);
-    const touched = changedBetween(before, S.state);
+    const before = jsonCopy(currentDocument());
+    edit(currentDocument());
+    const touched = changedBetween(before, currentDocument());
     noteEdit();
     flushEdits();
     const entry = lastUndoEntry();
