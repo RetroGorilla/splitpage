@@ -1,6 +1,5 @@
 import { currentDocument } from "./session-bridge.ts";
 import { prompterIsOpen } from "../application/prompter-state.ts";
-import { brollPageOpen } from "../js/08d-broll-panel.js";
 import { viewFlags } from "./preferences-bridge.ts";
 import { tourShowing } from "../js/20c-help.js";
 import { dialogOpen, launcherOpen } from "./screen.ts";
@@ -16,7 +15,7 @@ export function screenNow(): ScreenState {
     tour: tourShowing(),
     prompter: prompterIsOpen(),
     writer: viewFlags().writerOpen(),
-    shotlist: brollPageOpen()
+    shotlist: viewFlags().brollPageOpen()
   };
 }
 

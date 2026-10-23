@@ -7,6 +7,7 @@ test("the find bar and the writer start closed, and hide-shot starts from the st
   const off = createViewFlags({ hideShot: () => false });
   assert.equal(off.findOpen(), false);
   assert.equal(off.writerOpen(), false);
+  assert.equal(off.brollPageOpen(), false);
   assert.equal(off.hideShot(), false);
   assert.equal(createViewFlags({ hideShot: () => true }).hideShot(), true);
 });
@@ -34,8 +35,26 @@ test("setting a flag to the value it already has announces nothing", () => {
   const seen: ViewFlagChange[] = [];
   flags.onChange((change) => seen.push(change));
   flags.setFindOpen(false);
+  flags.setBrollPageOpen(false);
   flags.setHideShot(false);
   assert.deepEqual(seen, []);
+});
+
+test("the B-roll page setter changes only its own flag and announces only changes", () => {
+  const flags = createViewFlags({ hideShot: () => true });
+  const seen: ViewFlagChange[] = [];
+  flags.onChange((change) => seen.push(change));
+  flags.setBrollPageOpen(true);
+  assert.deepEqual([flags.findOpen(), flags.writerOpen(), flags.brollPageOpen(), flags.hideShot()], [false, false, true, true]);
+  flags.setBrollPageOpen(true);
+  assert.deepEqual(seen, [{ flag: "brollPageOpen", value: true }]);
+  flags.setBrollPageOpen(false);
+  assert.deepEqual([flags.findOpen(), flags.writerOpen(), flags.brollPageOpen(), flags.hideShot()], [false, false, false, true]);
+  flags.setBrollPageOpen(false);
+  assert.deepEqual(seen, [
+    { flag: "brollPageOpen", value: true },
+    { flag: "brollPageOpen", value: false }
+  ]);
 });
 
 test("a listener that is removed hears no more, and removing it during an announcement does not skip the others", () => {
