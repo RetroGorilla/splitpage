@@ -32,7 +32,7 @@ import {
   stopWriterFeature
 } from "./wiring/editor.ts";
 import { mountFindFeature, mountTagsFeature, stopFindFeature, stopTagsFeature } from "./wiring/production.ts";
-import { mountCommentsFeature, stopCommentsFeature } from "./wiring/comments.ts";
+import { mountCommentsFeature, stopCommentsFeature } from "./wiring/comments-controls.ts";
 import {
   mountAppearanceFeature,
   mountConflictsFeature,

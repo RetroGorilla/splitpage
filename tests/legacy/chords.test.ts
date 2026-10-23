@@ -1,3 +1,4 @@
+import { registerCommentsAction } from "../../src/bootstrap/wiring/comments.ts";
 import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
 import { test } from "node:test";
@@ -18,8 +19,8 @@ function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   mountHelpFeature();
   const menu = helpMenuActions();
   const disposers = [
-    registerThisDocumentActions(registry), registerFileActions(registry), registerViewActions(registry),
-    registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]), registerShareActions(registry), registerAll(registry, scriptZoomActions()), stopHelpFeature
+    registerThisDocumentActions(registry), registerFileActions(registry), registerViewActions(registry), registerCommentsAction(registry, "panel"),
+    registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]), registerCommentsAction(registry, "tagging-help"), registerShareActions(registry), registerAll(registry, scriptZoomActions()), stopHelpFeature
   ];
   return { registry, dispose: () => { for (const d of disposers) d(); } };
 }

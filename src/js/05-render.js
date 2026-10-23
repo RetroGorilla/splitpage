@@ -20,7 +20,7 @@ import {
   scheduleUntaggedScan,
   tagFieldOccurrences
 } from "./07-production-tags.js";
-import { formatTimestamp } from "./10-comments.js";
+import { formatTimestamp } from "../bootstrap/wiring/comments.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { presence } from "../legacy/presence-bridge.ts";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";

@@ -1,3 +1,4 @@
+import { registerCommentsAction } from "../../src/bootstrap/wiring/comments.ts";
 import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
 import "../../src/test/_location-started.mjs";
@@ -61,7 +62,7 @@ test("each blocker refuses with its own reason", () => {
 function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
   mountHelpFeature();
   const registry = createActionRegistry();
-  const disposers = [registerFileActions(registry), registerThisDocumentActions(registry), registerViewActions(registry),
+  const disposers = [registerFileActions(registry), registerThisDocumentActions(registry), registerViewActions(registry), registerCommentsAction(registry, "panel"),
     registerShareActions(registry), stopHelpFeature];
   const was = { state: currentDocument() as unknown, prompterOpen: prompterIsOpen() };
   loadTestDocument({ rows: [] });
@@ -133,7 +134,9 @@ const DIALOG_OPENERS = ["about", "settings", "servers", "setup", "tagging-help",
 test("a command that opens a dialog, Help among them, is refused over a dialog but opens over Present", () => {
   const { registry, restore } = loadedRegistry();
   const menu = helpMenuActions();
-  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]);
+  const unregister = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]);
+  const tagging = registerCommentsAction(registry, "tagging-help");
+  const help = () => { tagging(); unregister(); };
   try {
     for (const id of [...DIALOG_OPENERS, "help"]) assert.equal(refusal(registry, id, "menu"), null, id);
     document.body.innerHTML = '<div class="modal-backdrop"></div>';
@@ -150,7 +153,9 @@ test("a command that opens a dialog, Help among them, is refused over a dialog b
 test("the tour is refused over a dialog and starts over Present and the shot list", () => {
   const { registry, restore } = loadedRegistry();
   const menu = helpMenuActions();
-  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]);
+  const unregister = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]);
+  const tagging = registerCommentsAction(registry, "tagging-help");
+  const help = () => { tagging(); unregister(); };
   try {
     assert.equal(refusal(registry, "tour", "menu"), null);
     document.body.innerHTML = '<div class="modal-backdrop"></div>';

@@ -4,7 +4,6 @@ import { goToScene } from "../js/05f-rundown.js";
 import { openAnnotator } from "../js/05w-annotate.js";
 import { openGalleryLink } from "../js/06-rows.js";
 import { openTagComposer } from "../js/07-production-tags.js";
-import { openCommentComposer } from "../js/10-comments.js";
 
 const OPENED_FROM_ITS_VIEW: Availability = { enabled: true, visible: false };
 
@@ -32,8 +31,8 @@ function opener(id: string, label: string, run: (input: unknown) => void): Actio
   };
 }
 
-export function registerEditorOpenActions(registry: ActionRegistry): () => void {
-  return registerAll(registry, [
+export function registerEditorOpenActions(registry: ActionRegistry, section: "before-comment" | "after-comment" | "all" = "all"): () => void {
+  const definitions = [
     opener("go-to-scene", "Go to scene", (input) => {
       if (input !== null && typeof input !== "string") throw new TypeError("go-to-scene needs a scene id");
       goToScene(input);
@@ -46,11 +45,9 @@ export function registerEditorOpenActions(registry: ActionRegistry): () => void 
       const at = fields("open-picture-link", input, ["rowId"], ["slot"]);
       openGalleryLink(at["rowId"], at["slot"], at["key"]);
     }),
-    opener("comment-on-selection", "Comment on selection", (input) => {
-      openCommentComposer(fields("comment-on-selection", input, ["id", "rowId", "field", "quotedText"]));
-    }),
     opener("tag-selection", "Tag selection", (input) => {
       openTagComposer(fields("tag-selection", input, ["rowId", "field", "quotedText"], ["occurrenceIndex"]));
     })
-  ]);
+  ];
+  return registerAll(registry, section === "before-comment" ? definitions.slice(0, 3) : section === "after-comment" ? definitions.slice(3) : definitions);
 }

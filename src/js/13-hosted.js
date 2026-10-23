@@ -48,7 +48,7 @@ import {
   formatTimestamp,
   getSavedAuthorName,
   renderComments
-} from "./10-comments.js";
+} from "../bootstrap/wiring/comments.ts";
 import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { confirmSavedNow, haltAutoSave, requestSave, resumeAutoSave, saveBusy, saveChanges, saveDoc, scheduleAutoSave, unsavedChanges } from "../legacy/save-bridge.ts";
 import { createServerDestination } from "../application/save/server-destination.ts";

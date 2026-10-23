@@ -29,7 +29,6 @@ import { __init as init_08_production_panels } from "./08-production-panels.js";
 import { __init as init_08c_broll } from "./08c-broll.js";
 import { __init as init_08d_broll_panel } from "./08d-broll-panel.js";
 import { __init as init_09_find_replace } from "./09-find-replace.js";
-import { __init as init_10_comments } from "./10-comments.js";
 import { __init as init_11_import } from "./11-import.js";
 import { __init as init_12_dirty_toast } from "./12-dirty-toast.js";
 import { __init as init_12a_undo } from "./12a-undo.js";
@@ -66,7 +65,7 @@ import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireApp, mountScriptZoomFeature, mountHelpFeature } from "../bootstrap/wiring.ts";
+import { wireApp, mountScriptZoomFeature, mountHelpFeature, mountCommentsState } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -123,7 +122,7 @@ if (wiring) {
   init_08c_broll();
   init_08d_broll_panel();
   init_09_find_replace();
-  init_10_comments();
+  mountCommentsState();
   init_11_import();
   init_12_dirty_toast();
   init_12a_undo();

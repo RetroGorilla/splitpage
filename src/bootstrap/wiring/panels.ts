@@ -14,7 +14,7 @@ import { refreshAnnotator } from "../../js/05w-annotate.js";
 import { productionPanelsOpen, renderProduction, updateGearCount, updateProductionCount } from "../../js/08-production-panels.js";
 import { runBrollRefresh } from "../../js/08d-broll-panel.js";
 import { scheduleBrollRefresh, updateBrollBadge } from "../../js/08c-broll.js";
-import { captureReplyDrafts, commentsChanged, renderComments, syncAnchorResolvedClasses } from "../../js/10-comments.js";
+import { captureReplyDrafts, commentsChanged, renderComments, syncAnchorResolvedClasses } from "./comments.ts";
 import { onPresencePaint, paintPresence } from "../../js/13a-presence.js";
 import { presence } from "../../legacy/presence-bridge.ts";
 import { drawWriter, paintWriterDraw, updateWriterStats } from "../../js/19-writer.js";

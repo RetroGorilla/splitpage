@@ -122,7 +122,7 @@ import {
   openCommentsPanel,
   renderComments,
   syncAnchorResolvedClasses
-} from "../../js/10-comments.js";
+} from "./comments.ts";
 import { showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
 import {
