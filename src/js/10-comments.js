@@ -16,7 +16,7 @@ import { editorSelection } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 import { formatClock, formatDateClock } from "../../shared/clock.js";
-import { revealRow } from "./01b-hide-shot.js";
+import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { normalizeImageRef } from "../../shared/blob-policy.js";
 import { sidePanels } from "../legacy/panels-bridge.ts";
@@ -658,7 +658,7 @@ export function jumpToAnchor(cmtId) {
   const doc = currentDocument();
   if (!doc) return;
   var cIdx = findCommentIndex(cmtId);
-  if (cIdx !== -1) revealRow(doc.comments[cIdx].rowId);
+  if (cIdx !== -1) shotHiding().reveal(doc.comments[cIdx].rowId);
   var el = document.querySelector('#rows .cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
   if (!el) {
     showToast("That text is no longer in the script.", "warn");

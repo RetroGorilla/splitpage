@@ -5,7 +5,7 @@ import { nextTagStatus, normalizeTagName } from "../core/document/tags.ts";
 import { formatDuration, pad2, rowSeconds } from "../core/production/timing.ts";
 import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, groupTagsByCategory, tagStatus } from "../core/production/looks.ts";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
-import { revealRow } from "./01b-hide-shot.js";
+import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { plainText, safeId } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
@@ -678,7 +678,7 @@ function findTagByKey(key) {
 }
 
 export function jumpToTag(rowId, key) {
-  revealRow(rowId);
+  shotHiding().reveal(rowId);
   var row = document.querySelector('#rows .row[data-id="' + safeId(rowId, "r") + '"]');
   if (!row) { showToast("That scene is no longer here.", "warn"); return; }
   row.scrollIntoView({ behavior: "smooth", block: "center" });
