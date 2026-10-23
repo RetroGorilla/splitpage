@@ -1,5 +1,6 @@
 import { viewFlags } from "../legacy/preferences-bridge.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
+import { productionReaders as documentReaders } from "../legacy/document-ports.ts";
 import { hasSetLength as coreHasSetLength } from "../core/document/timing.ts";
 import { noteEdit } from "../js/12a-undo.js";
 import { startTestSession } from "./_session.mjs";
@@ -81,3 +82,15 @@ export const productionReaders = { wordCount: () => 0 };
 export function hasSetLength(row) { return coreHasSetLength(row); }
 export function formatDuration(s) { return String(s); }
 export function parseSceneLength() { return null; }
+
+export function readTimePorts() {
+  return {
+    document: { current: currentDocument, read: readSession },
+    text: { productionReaders: documentReaders },
+    edits: { run: runCommand, stamps: sessionStamps },
+    undo: { undo, redo },
+    paint: { afterThisPaint },
+    review: { reviewing: reviewMode },
+    notices: { show: showToast }
+  };
+}

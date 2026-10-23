@@ -1,4 +1,4 @@
-const STUBBED_PARENTS = /\/src\/js\/(?:01-scene-status|05r-read-time)\.js$/;
+const STUBBED_PARENTS = /\/src\/js\/01-scene-status\.js$/;
 const BRIDGE = "../legacy/effects-bridge.ts";
 const STUBS = new URL("./_fanout-stubs.mjs", import.meta.url).href;
 
