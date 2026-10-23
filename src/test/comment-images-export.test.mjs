@@ -4,11 +4,10 @@ import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { commentBodyText, commentEntries } from "../js/10-comments.js";
+import { commentBodyText, commentEntries } from "../adapters/formats/export-projections.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
 import { buildDocx } from "../adapters/formats/docx.ts";
@@ -17,7 +16,6 @@ import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
-initStatus();
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
 const R = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";

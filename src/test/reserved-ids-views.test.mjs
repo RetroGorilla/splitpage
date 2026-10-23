@@ -8,7 +8,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 import { setHideShotScenes } from "../legacy/hide-shot-bridge.ts";
 import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { paintRowTimes } from "../js/05-render.js";
-import { syncAnchorResolvedClasses } from "../js/10-comments.js";
+import { syncAnchorResolvedClasses } from "../features/common/comment-anchors.js";
 import { PROTOTYPE_IDS } from "../core/document/id-map.ts";
 import { loadTestDocument } from "./_document.mjs";
 
@@ -48,7 +48,7 @@ test("comment anchors: only a resolved comment's anchor is drawn resolved, whate
     ids.map((id) => '<span class="cmt-anchor" data-cmt="' + id + '">x</span>').join("") + "</div>";
   loadTestDocument({ rows: [], comments: [{ id: "c1", resolved: true }, { id: "toString", resolved: false }] });
   try {
-    syncAnchorResolvedClasses();
+    syncAnchorResolvedClasses(currentDocument(), document);
     const resolved = Array.from(document.querySelectorAll(".cmt-anchor.resolved"), (el) => el.getAttribute("data-cmt"));
     assert.deepEqual(resolved, ["c1"]);
   } finally {

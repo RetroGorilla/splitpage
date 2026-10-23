@@ -46,11 +46,20 @@ export default [
   },
 
   {
-    files: ["src/js/**/*.js", "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js", "src/features/rows/row-motion.js", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/adapters/desktop/voice-relay.js", "src/features/script-zoom/script-zoom.js", "src/features/rows/read-time.js", "src/features/rows/scenes.js", "src/features/rows/scene-media.js", "src/features/rows/row-menu.js", "src/features/settings/settings.js", "src/features/help/help.js", "src/features/file-menu/export-dialog.js", "src/features/gallery/annotate.js", "src/features/gallery/overlay.js", "src/features/clipboard/cell-clipboard.js", "src/features/clipboard/scene-clip.js", "src/features/clipboard/scene-select.js", "src/features/rundown/rundown.js", "src/features/rundown/presence.js", "src/features/rundown/target.js", "src/features/editing/draft-edit.js"],
+    files: ["src/js/**/*.js", "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js", "src/features/rows/row-motion.js", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/adapters/desktop/voice-relay.js", "src/features/script-zoom/script-zoom.js", "src/features/rows/read-time.js", "src/features/rows/scenes.js", "src/features/rows/scene-media.js", "src/features/rows/row-menu.js", "src/features/settings/settings.js", "src/features/help/help.js", "src/features/comments/comments.js", "src/features/file-menu/export-dialog.js", "src/features/gallery/annotate.js", "src/features/gallery/overlay.js", "src/features/clipboard/cell-clipboard.js", "src/features/clipboard/scene-clip.js", "src/features/clipboard/scene-select.js", "src/features/rundown/rundown.js", "src/features/rundown/presence.js", "src/features/rundown/target.js", "src/features/editing/draft-edit.js"],
     languageOptions: {
       sourceType: "module",
       globals: globals.browser
     }
+  },
+
+  {
+    files: ["src/features/find/find.js", "src/features/common/find-dom.js"],
+    languageOptions: {
+      sourceType: "module",
+      globals: globals.browser
+    },
+    rules: { "no-control-regex": "off" }
   },
 
   {
@@ -125,7 +134,7 @@ export default [
   },
 
   {
-    files: ["src/core/text/runs.ts", "src/js/09-find-replace.js"],
+    files: ["src/core/text/runs.ts"],
     rules: { "no-control-regex": "off" }
   },
 
