@@ -3,11 +3,7 @@ import { isBlankTagName } from "../core/production/tags.ts";
 import { domToPos } from "../features/editing/cell-dom.ts";
 import { cellEditing } from "../legacy/editor-bridge.ts";
 import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
-import {
-  isInsideTagOrLink,
-  updateTagBadges
-} from "./07-production-tags.js";
-import { renderProduction } from "./08-production-panels.js";
+import { isInsideTagOrLink } from "./07-production-tags.js";
 import { cappedName, escapeHtml } from "../core/document/text-policy.ts";
 import { replaceText, replaceWithTag } from "../core/text/edits.ts";
 import { namedTagId, projection } from "../core/text/runs.ts";
@@ -225,6 +221,16 @@ function charBeforeNode(cellEl, node) {
   return projection(fromHtml(html)).charAt(pos - 1);
 }
 
+var plainTaggedListeners = [];
+
+export function onPlainTagged(listener) {
+  plainTaggedListeners.push(listener);
+  return function () {
+    var at = plainTaggedListeners.indexOf(listener);
+    if (at !== -1) plainTaggedListeners.splice(at, 1);
+  };
+}
+
 export function closePlainTag() {
   var o = open;
   if (!o || !stillThere(o)) { open = null; clearPaint(); return false; }
@@ -245,8 +251,7 @@ export function closePlainTag() {
     return { cell: res.cell, sel: { from: res.caret, to: res.caret }, records: { tags: [{ cat: o.cat, name: res.name }] } };
   });
   if (!done) { unwrap(o); return true; }
-  updateTagBadges();
-  renderProduction();
+  plainTaggedListeners.slice().forEach(function (listener) { listener(); });
   return true;
 }
 

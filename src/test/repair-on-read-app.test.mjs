@@ -12,12 +12,12 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { render } = await import("../js/05-render.js");
-const { updateTagBadges } = await import("../js/07-production-tags.js");
+const { updateTagBadges } = await import("../bootstrap/wiring/panels.ts");
 const { productionIndex } = await import("../legacy/production-index-bridge.ts");
 const { currentDocument } = await import("../legacy/session-bridge.ts");
 const { openProductionPanel, closeProductionPanel, renderProduction, setTagNotes, setTagStatus } = await import("../js/08-production-panels.js");
-const { anchorBrollInLeftCell, brollEntries, runBrollRefresh, updateBrollBadge } = await import("../js/08c-broll.js");
-const { openBrollPanel, closeBrollPanel, renderBroll } = await import("../js/08d-broll-panel.js");
+const { anchorBrollInLeftCell, brollEntries, updateBrollBadge } = await import("../js/08c-broll.js");
+const { openBrollPanel, closeBrollPanel, renderBroll, runBrollRefresh } = await import("../js/08d-broll-panel.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits, undo } = await import("../js/12a-undo.js");

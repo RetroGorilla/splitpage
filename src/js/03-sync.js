@@ -325,10 +325,6 @@ export function personSwatchesHtml(name, radioName, legendClass) {
     '</div></fieldset>';
 }
 
-export function setMyColor(color) {
-  preferences().setMyColor(color);
-}
-
 export function promptForName() {
   var current = getSavedAuthorName();
   var host = document.getElementById("identity-chip");
@@ -353,7 +349,7 @@ export function promptForName() {
     if (e.key === "Enter") { e.preventDefault(); commit(); }
   });
   wrap.addEventListener("change", function (e) {
-    if (e.target && e.target.name === "person-color") setMyColor(e.target.value);
+    if (e.target && e.target.name === "person-color") preferences().setMyColor(e.target.value);
   });
 }
 

@@ -1,7 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { confirmSavedNow, unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
@@ -12,7 +11,7 @@ const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, undoSizes, flushEdits, breakUndoCoalescing } = await import("../js/12a-undo.js");
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { focusMemory } = await import("../legacy/editor-bridge.ts");
@@ -56,7 +55,7 @@ async function openInWriter() {
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
-const ids = () => S.state.rows.map((r) => r.id);
+const ids = () => currentDocument().rows.map((r) => r.id);
 const para = (id) => document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]');
 const writerTitle = () => document.getElementById("writer-title");
 const docTitle = () => document.getElementById("doc-title");
@@ -136,7 +135,7 @@ async function throughSession(gesture) {
 
 function untouched(gesture) {
   flushEdits();
-  const model = JSON.stringify(S.state), generation = liveSession().generation(), sizes = undoSizes();
+  const model = JSON.stringify(currentDocument()), generation = liveSession().generation(), sizes = undoSizes();
   const seen = [];
   const stop = liveSession().subscribe((c) => seen.push(c));
   try {
@@ -145,7 +144,7 @@ function untouched(gesture) {
     stop();
   }
   flushEdits();
-  assert.equal(JSON.stringify(S.state), model, "the document is unchanged");
+  assert.equal(JSON.stringify(currentDocument()), model, "the document is unchanged");
   assert.equal(liveSession().generation(), generation, "the session did not change");
   assert.deepEqual(undoSizes(), sizes, "the undo stack is unchanged");
   assert.deepEqual(seen, [], "nothing was published");
@@ -158,12 +157,12 @@ test("writer: typing in a paragraph is one set-cell-text edit naming the paragra
   const changes = await throughSession(() => typeChar(para("r2"), "!"));
   assert.deepEqual(changes.cells.map((c) => c.rowId + ":" + c.field).filter((c) => c.endsWith("audioText")), ["r2:audioText"]);
   assert.deepEqual(changes.docFields, []);
-  assert.equal(S.state.rows[1].audioText, "Second line!");
-  assert.notEqual(S.state.rows[1].updatedAt, OLD, "the paragraph's scene is stamped");
-  assert.equal(S.state.rows[0].updatedAt, OLD, "no other scene is stamped");
+  assert.equal(currentDocument().rows[1].audioText, "Second line!");
+  assert.notEqual(currentDocument().rows[1].updatedAt, OLD, "the paragraph's scene is stamped");
+  assert.equal(currentDocument().rows[0].updatedAt, OLD, "no other scene is stamped");
   undo();
   await settle();
-  assert.equal(S.state.rows[1].audioText, "Second line");
+  assert.equal(currentDocument().rows[1].audioText, "Second line");
   writer.closeWriter();
 });
 
@@ -173,12 +172,12 @@ test("writer: Enter splits the scene through the session in one undo step", asyn
   selectText(p, 5, 5);
   const changes = await throughSession(() => key(p, "Enter"));
   assert.equal(changes.rowsInserted.length, 1);
-  assert.equal(S.state.rows.length, 4);
-  assert.equal(S.state.rows[1].id, changes.rowsInserted[0]);
+  assert.equal(currentDocument().rows.length, 4);
+  assert.equal(currentDocument().rows[1].id, changes.rowsInserted[0]);
   undo();
   await settle();
   assert.deepEqual(ids(), ["r1", "r2", "r3"], "one Ctrl+Z puts the scenes back");
-  assert.equal(S.state.rows[0].audioText, "First line");
+  assert.equal(currentDocument().rows[0].audioText, "First line");
   writer.closeWriter();
 });
 
@@ -213,10 +212,10 @@ test("writer: the bar's Bold button formats the selection as one edit", async ()
   focusMemory().focusedParagraph(p);
   const changes = await throughSession(() => click(document.querySelector('.writer-bar .wr-fmt[data-cmd="bold"]')));
   assert.ok(changes.cells.some((c) => c.rowId === "r1" && c.field === "audioText"));
-  assert.match(S.state.rows[0].audioText, /<(b|strong)>First<\/(b|strong)>/);
+  assert.match(currentDocument().rows[0].audioText, /<(b|strong)>First<\/(b|strong)>/);
   undo();
   await settle();
-  assert.equal(S.state.rows[0].audioText, "First line");
+  assert.equal(currentDocument().rows[0].audioText, "First line");
   writer.closeWriter();
 });
 
@@ -225,12 +224,12 @@ test("writer: typing the Writer's title is one set-title edit, mirrored to the m
   const changes = await throughSession(() => typeTitle(writerTitle(), "Writer commands!"));
   assert.deepEqual(changes.docFields, ["title"]);
   assert.deepEqual(changes.cells, []);
-  assert.equal(S.state.title, "Writer commands!");
+  assert.equal(currentDocument().title, "Writer commands!");
   assert.equal(docTitle().value, "Writer commands!", "the main title shows the same words");
-  assert.ok(S.state.rows.every((r) => r.updatedAt === OLD), "a title stamps no scene");
+  assert.ok(currentDocument().rows.every((r) => r.updatedAt === OLD), "a title stamps no scene");
   undo();
   await settle();
-  assert.equal(S.state.title, "Writer commands", "one Ctrl+Z puts the title back");
+  assert.equal(currentDocument().title, "Writer commands", "one Ctrl+Z puts the title back");
   writer.closeWriter();
 });
 
@@ -239,11 +238,11 @@ test("writer: typing the main title is one set-title edit and updates the page t
   breakUndoCoalescing();
   const changes = await throughSession(() => typeTitle(docTitle(), "Main title"));
   assert.deepEqual(changes.docFields, ["title"]);
-  assert.equal(S.state.title, "Main title");
+  assert.equal(currentDocument().title, "Main title");
   assert.match(document.title, /Main title/);
   undo();
   await settle();
-  assert.equal(S.state.title, "Writer commands");
+  assert.equal(currentDocument().title, "Writer commands");
 });
 
 test("writer: an input that leaves the title as it was makes no edit", async () => {

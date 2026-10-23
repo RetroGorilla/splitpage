@@ -231,6 +231,8 @@ PR 4 is done: opening, editing, syncing and closing a script cell, a gallery edi
 
 Exit: the `state-write` count is 0 outside the session; `stateAssigners` is 0; the full browser run passes with `SPLITPAGE_DOCUMENT_GUARD=1`; each new command has undo, redo and refused-edit tests; no numbered file imports the PR's names from another numbered file.
 
+The three names `05-render` still hands on at the end of this step are deferred: `updateCommentsCount` and `syncAnchorResolvedClasses` go to L3e PR 4, and `openTagComposer` goes to L3g.
+
 **L3e. Displays and recorders listen for changes** (5 PRs; after L3b, L3c and L3d).
 
 38 functions are called after a change to refresh something that depends on it. The session announces every document change (change sets, listeners and refresh jobs since milestone 3), and the L3b and L3c owners announce theirs. Each display subscribes to what it shows, in its own area, and the calls go. Each PR lists every source its displays listen to:
@@ -248,6 +250,8 @@ Exit: the `state-write` count is 0 outside the session; `stateAssigners` is 0; t
 **Long term:** a new display subscribes from its own area and no editing code changes. Today a new display means finding every place that edits and adding a call there, and a missed call shows up as a stale panel.
 
 Exit per PR: no numbered file imports the PR's names from another numbered file; each display has a test that a change made through the session or its owner refreshes it with no direct call; each keeps its timing (synchronous or scheduled, as today) and its number of renders per keystroke, checked by a counted test on the typing path.
+
+PR 4 as built: `05-render` announces what it has painted (rows, screen, one row, production tags) and the panels subscribe from `src/bootstrap/wiring/panels.ts`, so the render no longer names any panel. The comments count listens to session changes touching `comments`. The history panel listens to the history store and the clock preference, b-roll, writer stats and the production panels listen to refresh jobs, the annotator listens to the session, and the rundown and its presence marks listen to the stats and presence announcements. The script stats listen to status, scene-length and target-length changes. Left as direct calls because a gesture, not a change, causes them: `renderComments` after posting review replies (`13-hosted`), and the production render handed to the prompter as a port. `syncPanelClass` is L3f and `openTagComposer` is L3g.
 
 **L3f. Panels coordinate through the panels feature** (1 PR; cloud, Sonnet; after L3e). `src/features/panels` provides "open panel X" and "close the side panels" through a port, and each panel registers with it. Panels stop closing each other by name (`closeAllSidePanels`, `openSidePanel`, the five `close…Panel` functions, `closeNewTabPage`), and `applySidePanelWidth` moves into the feature.
 

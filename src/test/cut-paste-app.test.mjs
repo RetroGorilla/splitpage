@@ -1,7 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
@@ -11,7 +10,7 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { copyFromCell, pasteIntoCell } = await import("../js/05c-clipboard.js");
 const { render } = await import("../js/05-render.js");
@@ -67,9 +66,9 @@ function holdMedia() {
 }
 
 const session = liveSession();
-const row = (id) => S.state.rows.find((r) => r.id === id);
+const row = (id) => currentDocument().rows.find((r) => r.id === id);
 const cellOf = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
-const anchors = () => S.state.comments.map((c) => [c.id, c.rowId, c.field]);
+const anchors = () => currentDocument().comments.map((c) => [c.id, c.rowId, c.field]);
 const toasts = () => Array.from(document.querySelectorAll("#toast-host .toast:not(.is-leaving)")).map((t) => t.textContent);
 
 function clip(type, el, data) {
@@ -128,13 +127,13 @@ test("a copy writes the words and their formatting, prevents the default and cha
   const el = cellOf("r2", "audioText");
   el.focus();
   selectText(el, 6, 19);
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   const got = record(() => clip("copy", el));
   assert.equal(got.out.prevented, true);
   assert.equal(got.out.store["text/plain"], "bravo charlie");
   assert.equal(got.out.store["text/html"], "bravo charlie", "a copy carries no comment mark and no cut marker");
   assert.deepEqual({ seq: got.seq, generation: got.generation, heard: got.heard, undo: got.undo }, { seq: 0, generation: 0, heard: [], undo: 0 });
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
 });
 
 test("a cut dirties once, stamps only the cut scene, and records one entry for the one cell", async () => {
@@ -213,13 +212,13 @@ test("a paste into a cell that holds a picture or video card is refused: nothing
   to.focus();
   selectText(to, 0, 0);
   assert.match(row("r5").visualText, /video-embed-card/);
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   const got = record(() => clip("paste", to, { "text/plain": "more", "text/html": "more" }));
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.deepEqual({ seq: got.seq, generation: got.generation, undo: got.undo }, { seq: 0, generation: 0, undo: 0 });
   const res = pasteIntoCell(to, "more", "more", null);
   assert.equal(res.done, false);
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
 });
 
 test("a video link pasted on its own attaches to the scene's gallery, leaves the words, and dirties once", async () => {
@@ -349,7 +348,7 @@ test("a cut b-roll key pasted back in the same tab: one entry, no second shot re
   const got = record(() => clip("paste", to, cut.store));
   assert.deepEqual({ seq: got.seq, generation: got.generation, undo: got.undo, steps: got.steps },
     { seq: 1, generation: 1, undo: 1, steps: ["rowField:r4.visualText"] });
-  assert.deepEqual(S.state.brollShots.map((s) => s.id), ["bsA"]);
+  assert.deepEqual(currentDocument().brollShots.map((s) => s.id), ["bsA"]);
   assert.equal(row("r4").visualText, KEY("bsA") + " gulls");
   assert.equal(undo().ok, true);
   assert.equal(row("r4").visualText, "");
@@ -370,15 +369,15 @@ test("a copied b-roll key gets a fresh id and a shot record seeded from the scen
   assert.deepEqual({ seq: got.seq, generation: got.generation, undo: got.undo, steps: got.steps },
     { seq: 1, generation: 1, undo: 1, steps: ["rowField:r4.visualText", "docField:brollShots"] });
   const id = /data-broll-id="([^"]+)"/.exec(row("r4").visualText)[1];
-  const shot = S.state.brollShots.find((s) => s.id === id);
+  const shot = currentDocument().brollShots.find((s) => s.id === id);
   assert.ok(shot);
   assert.equal(shot.name, "gulls");
   assert.equal(shot.audioRef, "Four words.");
   assert.equal(shot.origin, "script");
   assert.equal(undo().ok, true);
-  assert.deepEqual(S.state.brollShots.map((s) => s.id), ["bsA"]);
+  assert.deepEqual(currentDocument().brollShots.map((s) => s.id), ["bsA"]);
   assert.equal(redo().ok, true);
-  assert.deepEqual(S.state.brollShots.map((s) => s.id), ["bsA", id]);
+  assert.deepEqual(currentDocument().brollShots.map((s) => s.id), ["bsA", id]);
 });
 
 test("a cut's comment follows its words into the next paste, which is one dirty for the cell and the move", async () => {
@@ -602,7 +601,7 @@ test("a cut of one of two cells holding a comment pastes its words plain and the
   clip("paste", to, cut.store);
   assert.equal(row("r1").audioText, "Hello therebravo");
   assert.equal(row("r3").audioText, cmt("c1", "charlie") + " delta");
-  assert.equal(S.state.comments.filter((c) => c.id === "c1").length, 1);
+  assert.equal(currentDocument().comments.filter((c) => c.id === "c1").length, 1);
 });
 
 test("a paste of another tab's cut, or of a cut whose comment no longer exists, brings the words and no comment", async () => {
@@ -636,14 +635,14 @@ test("a scene that has left the document: a paste into its stale cell is refused
   await open();
   const stale = cellOf("r1", "audioText").cloneNode(true);
   stale.setAttribute("data-id", "gone");
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   const text = pasteIntoCell(stale, "", "x", null);
   assert.equal(text.done, false);
   assert.equal(text.rowIndex, -1);
   const files = pasteIntoCell(stale, "", "", { attach: [{ kind: "video", href: "https://vimeo.com/1" }] });
   assert.equal(files.done, true);
   assert.equal(files.attached, null);
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
 });
 
 test("in review mode a cut only copies and a paste is ignored: the words stay, no marker is written, nothing is dirtied", async () => {
@@ -653,12 +652,12 @@ test("in review mode a cut only copies and a paste is ignored: the words stay, n
     const el = cellOf("r1", "audioText");
     el.focus();
     selectText(el, 0, 6);
-    const before = JSON.stringify(S.state);
+    const before = JSON.stringify(currentDocument());
     const got = record(() => clip("cut", el));
     assert.equal(got.out.prevented, true);
     assert.equal(got.out.store["text/plain"], "Hello ");
     assert.equal(got.out.store["text/html"], "Hello ", "a copy, with no cut marker");
-    assert.equal(JSON.stringify(S.state), before);
+    assert.equal(JSON.stringify(currentDocument()), before);
     assert.deepEqual({ seq: got.seq, generation: got.generation, undo: got.undo }, { seq: 0, generation: 0, undo: 0 });
     const to = cellOf("r3", "audioText");
     to.focus();
@@ -750,7 +749,7 @@ test("a stamp that throws fails a paste or a cut whole: the call throws and the 
   el.focus();
   selectText(el, 0, 6);
   flushEdits();
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   const seq = saveChanges(), generation = session.generation(), entries = undoSizes().undo;
   const real = Date.prototype.toISOString;
   Date.prototype.toISOString = function () { throw new Error("no clock"); };
@@ -767,7 +766,7 @@ test("a stamp that throws fails a paste or a cut whole: the call throws and the 
     Date.prototype.toISOString = real;
   }
   flushEdits();
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.equal(saveChanges(), seq);
   assert.equal(session.generation(), generation);
   assert.equal(undoSizes().undo, entries);
