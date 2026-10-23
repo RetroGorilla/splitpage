@@ -8,6 +8,7 @@ import { actionForKey } from "../../src/application/shortcuts.ts";
 import { registerFileActions } from "../../src/legacy/file-actions.ts";
 import { helpMenuActions } from "../../src/legacy/help-actions.ts";
 import { helpActions, mountHelpFeature, stopHelpFeature } from "../../src/bootstrap/wiring/help.ts";
+import { updateActions } from "../../src/bootstrap/wiring/update.ts";
 import { registerShareActions } from "../../src/legacy/share-actions.ts";
 import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
@@ -21,7 +22,7 @@ function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   const menu = helpMenuActions();
   const disposers = [stopRundownFeature,
     registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerFileActions(registry), registerViewActions(registry),
-    registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]), registerShareActions(registry), registerAll(registry, scriptZoomActions()), stopHelpFeature
+    registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 5), ...updateActions(), ...menu.slice(5)]), registerShareActions(registry), registerAll(registry, scriptZoomActions()), stopHelpFeature
   ];
   return { registry, dispose: () => { for (const d of disposers) d(); } };
 }
