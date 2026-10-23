@@ -11,7 +11,7 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { applyMerge } = await import("../legacy/merge-bridge.ts");
 const { render, renderAbsorbed, screenIsStale } = await import("../js/05-render.js");
-const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
+const { flushEdits, undoSizes } = await import("../legacy/undo-bridge.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");

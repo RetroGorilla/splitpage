@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
-import { flushEdits, noteEdit, redo, undo } from "../js/12a-undo.js";
+import { flushEdits, noteEdit, redo, undo } from "../legacy/undo-bridge.ts";
 import { applyStepsLive, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";
 import { invertSteps } from "../js/04c-doc-model.js";

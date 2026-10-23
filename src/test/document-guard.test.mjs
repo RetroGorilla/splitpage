@@ -9,7 +9,7 @@ const { DocumentWriteError, documentGuardAsked, documentGuardOn, isDocumentView,
 const { currentDocument, heldDocument, liveDocumentPort, liveSession, runDocumentEdit, sessionStamps } = await import("../legacy/session-bridge.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
-const { flushEdits, undo, undoSizes } = await import("../js/12a-undo.js");
+const { flushEdits, undo, undoSizes } = await import("../legacy/undo-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 function shown() {

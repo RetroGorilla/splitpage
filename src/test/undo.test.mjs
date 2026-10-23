@@ -1,9 +1,12 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { caretAfterStep } from "../js/12a-undo.js";
+import { caretAfterStep as caretAfter } from "../features/undo/caret.ts";
+import { fromHtml } from "../legacy/richtext.ts";
 import { applyStepsLive, changedBetween, createUndoHistory, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";
+
+const caretAfterStep = (step) => caretAfter((h) => fromHtml(h), step);
 import { invertSteps } from "../js/04c-doc-model.js";
 import { PROTOTYPE_IDS } from "../core/document/id-map.ts";
 

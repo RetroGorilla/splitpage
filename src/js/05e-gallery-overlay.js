@@ -18,7 +18,7 @@ import {
 import { embedRefusal, fetchThumbnailRecord, playerSrc, thumbnailsAllowed } from "./05v-video.js";
 import { hasSessionVideo, sessionVideoUrl } from "./06-rows.js";
 import { appActions } from "../legacy/app-actions.ts";
-import { breakUndoCoalescing, lastUndoEntry, undo } from "./12a-undo.js";
+import { breakUndoCoalescing, lastUndoEntry, undo } from "../legacy/undo-bridge.ts";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";

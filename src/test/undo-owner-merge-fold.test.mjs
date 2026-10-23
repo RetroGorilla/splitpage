@@ -7,7 +7,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
-import { flushEdits, noteEdit, redo, undo } from "../js/12a-undo.js";
+import { flushEdits, noteEdit, redo, undo } from "../legacy/undo-bridge.ts";
 import { startTestSession } from "./_session.mjs";
 import { appSessionDeps } from "./_app-session.mjs";
 import { loadTestDocument } from "./_document.mjs";

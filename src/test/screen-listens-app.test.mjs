@@ -19,7 +19,7 @@ const { cellEditing, paintGuard } = await import("../legacy/editor-bridge.ts");
 const { preferences, viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { documentLocation } = await import("../legacy/location-bridge.ts");
 const { expandHiddenShotStrip, setHideShotScenes } = await import("../js/01b-hide-shot.js");
-const { flushEdits, redo, undo } = await import("../js/12a-undo.js");
+const { flushEdits, redo, undo } = await import("../legacy/undo-bridge.ts");
 const writer = await import("../js/19-writer.js");
 
 after(closeApp);

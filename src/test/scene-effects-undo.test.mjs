@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
-import { lastUndoEntry, redo, resetUndo, undo, undoSizes } from "../js/12a-undo.js";
+import { lastUndoEntry, redo, resetUndo, undo, undoSizes } from "../legacy/undo-bridge.ts";
 
 register("./_fanout-hooks.mjs", import.meta.url);
 

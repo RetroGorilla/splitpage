@@ -1,4 +1,4 @@
-import { flushEdits } from "./12a-undo.js";
+import { flushEdits } from "../legacy/undo-bridge.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";
 import { currentDocument, noteAbsorbedDirty, noteReload } from "../legacy/session-bridge.ts";
 import { documentTransitions, keepSnapshot } from "../legacy/transition-bridge.ts";
