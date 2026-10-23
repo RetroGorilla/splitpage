@@ -1,5 +1,5 @@
 import { isInsideTagOrLink } from "../features/common/dom.ts";
-import { domToPos } from "../features/editing/cell-dom.ts";
+import { domToPos } from "../features/common/cell-dom.ts";
 import { rowIndexOf } from "../core/document/rows.ts";
 import {
   inertBody,

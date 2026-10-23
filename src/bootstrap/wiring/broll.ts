@@ -4,7 +4,7 @@ import { randomIds } from "../../adapters/identity/ids.ts";
 import { anchorBrollInRows, brollHtmlLines, brollKeyHtml } from "../../adapters/production/broll-anchors.ts";
 import type { BrollRecordsMount } from "../../features/broll/ports.ts";
 import { createBrollRecords } from "../../features/broll/records.ts";
-import { domToPos } from "../../features/editing/cell-dom.ts";
+import { domToPos } from "../../features/common/cell-dom.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { ensureTrailingCaretSpot } from "../../js/04-richtext.js";
 import { handBrollPanelTo } from "../../legacy/broll-bridge.ts";
