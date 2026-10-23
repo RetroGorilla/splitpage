@@ -9,7 +9,7 @@ import { onPainted } from "../../js/05-render.js";
 import { refreshGalleryOverlay } from "../../js/05e-gallery-overlay.js";
 import { renderRundown, setRundownExtraSeconds } from "../../features/rundown/rundown.js";
 import { paintRundownPresence } from "../../features/rundown/presence.js";
-import { paintTargetOverlay } from "../../js/05t-target.js";
+import { paintTargetOverlay } from "../../features/rundown/target.js";
 import { refreshAnnotator } from "../../features/gallery/annotate.js";
 import { productionPanelsOpen, renderProduction, updateGearCount, updateProductionCount } from "../../js/08-production-panels.js";
 import { runBrollRefresh } from "../../js/08d-broll-panel.js";

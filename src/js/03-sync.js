@@ -23,7 +23,7 @@ import {
 } from "./03a-history-store.js";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { safeId } from "./04-richtext.js";
-import { targetSectionHtml, wireTargetSection } from "./05t-target.js";
+import { targetSectionHtml, wireTargetSection } from "../legacy/target-section.ts";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import {
   formatTimestamp,
