@@ -296,3 +296,30 @@ test("wired zoom actions follow remounts and refuse both a disposed owner and a 
     stopPreferences();
   }
 });
+
+test("a preference subscriber that does not hear other windows adds no storage listener and still hears this window", () => {
+  const stopPreferences = startPreferences({
+    storage: () => localStorage,
+    announce: (change) => document.dispatchEvent(new window.CustomEvent(PREF_EVENT, { detail: change }))
+  });
+  const added: string[] = [];
+  const add = window.addEventListener.bind(window);
+  window.addEventListener = ((type: string, ...rest: [EventListenerOrEventListenerObject, (boolean | AddEventListenerOptions)?]) => {
+    added.push(type);
+    add(type, ...rest);
+  }) as typeof window.addEventListener;
+  const notices: PreferenceNotice[] = [];
+  let off = (): void => {};
+  try {
+    off = sharedPorts().changes.onChange((change) => { notices.push(change); }, { elsewhere: false });
+    assert.deepEqual(added, []);
+    preferences().setRundownMin(true);
+    window.dispatchEvent(new window.StorageEvent("storage", { key: "splitpage-rundown-min", newValue: "0" }));
+    assert.deepEqual(notices, [{ name: "rundownMin", value: "1", elsewhere: false }]);
+  } finally {
+    off();
+    window.addEventListener = add;
+    stopPreferences();
+    localStorage.clear();
+  }
+});

@@ -1,6 +1,5 @@
 import { productionReaders } from "../legacy/document-ports.ts";
 import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
-import { setRundownExtraSeconds } from "./05f-rundown.js";
 import { sceneStatus, sceneStatusCommand, shotGrace } from "../application/commands/scene-status.ts";
 import { REVIEW_ONLY, currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
@@ -82,8 +81,7 @@ export function updateScriptStats() {
   }
   paintLength(document.getElementById("runtime-chip"), totalHtml, slotHtml, title);
   paintLength(document.getElementById("length-status"), totalHtml, slotHtml, title);
-  setRundownExtraSeconds(target || 0);
-  statsListeners.slice().forEach(function (listener) { listener(); });
+  statsListeners.slice().forEach(function (listener) { listener(target || 0); });
 
   var chip = document.getElementById("progress-chip");
   var text = document.getElementById("progress-text");

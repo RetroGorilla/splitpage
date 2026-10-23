@@ -1,5 +1,4 @@
 import type { ActionDefinition, Availability } from "../application/actions.ts";
-import { goToScene } from "../js/05f-rundown.js";
 import { openGalleryLink } from "../js/06-rows.js";
 import { openTagComposer } from "../js/07-production-tags.js";
 import { openCommentComposer } from "../js/10-comments.js";
@@ -32,10 +31,6 @@ function opener(id: string, label: string, run: (input: unknown) => void): Actio
 
 export function editorOpenActions(): ActionDefinition[] {
   return [
-    opener("go-to-scene", "Go to scene", (input) => {
-      if (input !== null && typeof input !== "string") throw new TypeError("go-to-scene needs a scene id");
-      goToScene(input);
-    }),
     opener("open-picture-link", "Open picture link", (input) => {
       const at = fields("open-picture-link", input, ["rowId"], ["slot"]);
       openGalleryLink(at["rowId"], at["slot"], at["key"]);

@@ -2,17 +2,19 @@ import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createActionRegistry } from "../../src/application/actions.ts";
+import { createActionRegistry, registerAll } from "../../src/application/actions.ts";
 import type { ActionRegistry, ActionSource } from "../../src/application/actions.ts";
 import { currentDocument } from "../../src/legacy/session-bridge.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
 import { registerFileActions } from "../../src/legacy/file-actions.ts";
-import { registerThisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
 
 function loadingRegistry(): { registry: ActionRegistry; restore: () => void } {
   const registry = createActionRegistry();
-  const disposers = [registerFileActions(registry), registerThisDocumentActions(registry), registerViewActions(registry)];
+  mountRundownFeature();
+  const disposers = [stopRundownFeature, registerFileActions(registry), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerViewActions(registry)];
   const was: unknown = currentDocument();
   loadTestDocument(null);
   return {
