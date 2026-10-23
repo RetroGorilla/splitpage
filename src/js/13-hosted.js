@@ -2443,6 +2443,15 @@ export function driveSignOut() {
   renderDriveList();
 }
 
+var serverModeView = new Proxy({}, {
+  get: function (_, key) { return serverStatus().mode()[key]; },
+  set: function (_, key, value) { serverStatus().recordMode({ [key]: value }); return true; },
+  ownKeys: function () { return Reflect.ownKeys(serverStatus().mode()); },
+  getOwnPropertyDescriptor: function (_, key) {
+    return Object.getOwnPropertyDescriptor(serverStatus().mode(), key) && { value: serverStatus().mode()[key], writable: true, enumerable: true, configurable: true };
+  }
+});
+
 export function __init() {
   documentLocation().onChange(function (change) {
     if (change === "connection") updateServerMenu();
@@ -2466,7 +2475,7 @@ export function __init() {
     url: serverDocShareUrl,
     note: shareAccessNote,
     publishAndCopy: publishAndCopyShareLink,
-    mode: function () { return serverStatus().mode(); },
+    mode: function () { return serverModeView; },
     updateMenu: updateServerMenu,
     sharedDocId: function () { return sharedDocId; },
     setIdentity: function (who) { serverIdentity = who; }
