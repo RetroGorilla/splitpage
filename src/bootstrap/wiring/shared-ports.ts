@@ -2,6 +2,7 @@ import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { ExternalLinks } from "../../application/desktop-presence.ts";
 import type { EditorSelectionPort } from "../../application/editing/selection.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { ExportRegistry } from "../../application/export/registry.ts";
@@ -177,6 +178,11 @@ const production: ProductionIndexOwner = {
   recordsPlan: (doc, viewed) => productionIndex().recordsPlan(doc, viewed)
 };
 
+const externalLinks: ExternalLinks = {
+  available: () => typeof desktopPort()?.openExternal === "function",
+  open: (url) => { desktopPort()?.openExternal?.(url); }
+};
+
 const selection: EditorSelectionPort = {
   dropLink: () => { editorSelection().dropLink(); }
 };
@@ -220,6 +226,7 @@ const shared = {
   text,
   saves,
   production,
+  externalLinks,
   selection,
   exports,
   ownership,
