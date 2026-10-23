@@ -6,7 +6,9 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { adoptReplacement, liveSession, onSessionChange, runCommand, sessionStamps } = await import("../legacy/session-bridge.ts");
+const { adoptReplacement, liveSession, onSessionChange, runCommand, sessionStamps, stampDocument } = await import("../legacy/session-bridge.ts");
+const { changeSet } = await import("../application/session/change-set.ts");
+const { editStamp } = await import("../application/commands/save-stamps.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
@@ -205,6 +207,33 @@ test("the clock and the author name repaint the screen through the preferences",
   preferences().setDefaultWpm(170);
   assert.equal(counts().render, 2, "a preference the screen does not show paints nothing");
   preferences().setClock(clock);
+});
+
+test("a clock changed in another tab repaints the screen through the preferences", () => {
+  open();
+  const clock = preferences().clock();
+  const other = clock === "24" ? "12" : "24";
+  localStorage.setItem("splitpage-clock", other);
+  window.dispatchEvent(new window.StorageEvent("storage", { key: "splitpage-clock", newValue: other }));
+  assert.equal(counts().render, 1);
+  localStorage.setItem("splitpage-clock", clock);
+  window.dispatchEvent(new window.StorageEvent("storage", { key: "splitpage-clock", newValue: clock }));
+  assert.equal(counts().render, 2);
+});
+
+test("a stamp that rewrites a scene's text repaints the screen once; a save stamp paints nothing", () => {
+  open();
+  stampDocument({
+    name: "rewrite",
+    plan: () => ({
+      changes: changeSet({ cells: [{ rowId: "r3", field: "audioText" }] }),
+      apply: (live) => { live.rows[2].audioText = "Stamped."; }
+    })
+  });
+  assert.equal(counts().render, 1);
+  assert.equal(cellOf("r3", "audioText").textContent, "Stamped.");
+  stampDocument(editStamp({ lastEditedBy: "Ann", lastEditedAt: new Date().toISOString() }));
+  assert.equal(counts().render, 1);
 });
 
 test("a location change repaints only when review or edit permission changes", () => {

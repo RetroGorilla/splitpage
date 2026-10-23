@@ -5,8 +5,7 @@ import { normalizeTagName } from "../core/document/tags.ts";
 import { formatTimecode, rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { revealRow } from "./01b-hide-shot.js";
-import { openSidePanel, syncPanelClass } from "./03-sync.js";
-import { closeAllSidePanels } from "./03b-side-panels.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { plainText } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
 import { focusRowField } from "./06-rows.js";
@@ -1136,22 +1135,21 @@ function onBrollInput(e) {
 
 export function openBrollPanel() {
   if (!currentDocument()) return;
-  openSidePanel("broll-panel");
+  sidePanels().open("broll-panel");
   renderBroll();
 }
 
-export function closeBrollPanel() {
-  var p = document.getElementById("broll-panel");
-  if (p) p.hidden = true;
+function brollPanelClosed() {
   groupMenuOpen = false;
   menuFor = null;
-  syncPanelClass();
 }
 
 var brollMount = null;
+var brollPanelRegistration = null;
 
 export function mountBrollFeature() {
-  if (brollMount) brollMount.dispose();
+  stopBrollFeature();
+  brollPanelRegistration = sidePanels().registerPanel("broll-panel", brollPanelClosed);
   var panel = document.getElementById("broll-panel");
   var page = brollPageEl();
   brollMount = mountBroll({
@@ -1163,7 +1161,7 @@ export function mountBrollFeature() {
       keydown: onBrollKeydown,
       input: onBrollInput,
       add: addBrollFromPanel,
-      closePanel: closeBrollPanel,
+      closePanel: function () { sidePanels().close("broll-panel"); },
       openPanel: function () { appActions.invoke("panel-broll", "button"); },
       closePage: closeBrollPage,
       pageOpen: brollPageOpen,
@@ -1189,7 +1187,7 @@ export function mountBrollFeature() {
           page.hidden = true;
           document.body.classList.remove("broll-page-open");
         }
-        syncPanelClass();
+        sidePanels().sync();
       }
     }
   });
@@ -1198,7 +1196,10 @@ export function mountBrollFeature() {
 
 export function stopBrollFeature() {
   var owner = brollMount;
+  var registration = brollPanelRegistration;
   brollMount = null;
+  brollPanelRegistration = null;
+  if (registration) registration();
   if (owner) owner.dispose();
 }
 
@@ -1231,7 +1232,7 @@ export function openBrollPage() {
   pagePanelWasOpen = !!panel && !panel.hidden;
   groupMenuOpen = false;
   menuFor = null;
-  closeAllSidePanels();
+  sidePanels().closeAll();
   page.hidden = false;
   document.body.classList.add("broll-page-open");
   renderBrollPage();

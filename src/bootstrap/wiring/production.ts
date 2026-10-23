@@ -3,6 +3,7 @@ import type { FindPorts } from "../../features/find/mount.ts";
 import type { TagsPorts } from "../../features/tags/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runFromButton } from "../../legacy/app-actions.ts";
+import { sidePanels } from "../../legacy/panels-bridge.ts";
 import { mountFind } from "../../features/find/mount.ts";
 import { mountTags } from "../../features/tags/mount.ts";
 import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
@@ -29,8 +30,6 @@ import {
   bulkDeleteSelected,
   bulkSetOwner,
   bulkSetStatus,
-  closeGearPanel,
-  closeProductionPanel,
   handleSelectionClick,
   jumpToTag,
   openProductionPanel,
@@ -106,8 +105,8 @@ export function mountTagsFeature(): ReturnType<typeof mountTags> {
       renderProduction: renderProduction,
       bulkDeleteSelected: bulkDeleteSelected,
       bulkAddPerson: bulkAddPerson,
-      closeGearPanel: closeGearPanel,
-      closeProductionPanel: closeProductionPanel,
+      closeGearPanel: () => { sidePanels().close("gear-panel"); },
+      closeProductionPanel: () => { sidePanels().close("production-panel"); },
       openProductionPanel: openProductionPanel,
       renderGearList: renderGearList,
       applyGearQuickAdd: applyGearQuickAdd,

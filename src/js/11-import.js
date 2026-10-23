@@ -1,5 +1,5 @@
 import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
-import { pushSnapshot, stampRow } from "./03-sync.js";
+import { stampRow } from "./03-sync.js";
 import { sanitizeHtml } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
 import { declineBrollAnchoring } from "./08c-broll.js";
@@ -13,7 +13,7 @@ import { importModeTouched, resetImportMode } from "../application/import-mode.t
 import { importRowsCommand } from "../application/commands/import-rows.ts";
 import { escapeHtml, truncateForPreview } from "../core/document/text-policy.ts";
 import { REVIEW_ONLY, editAllowed, noteSessionEdit, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
-import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
+import { captureOperation, keepSnapshot, stillOwns } from "../legacy/transition-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
@@ -427,7 +427,15 @@ function stillAsked(asked) {
     (!asked.operation || stillOwns(asked.operation));
 }
 
-export async function handleImportFile(file) {
+export function importDocumentSource() {
+  return {
+    id: "import",
+    takes: function (opening) { return opening.kind === "import"; },
+    open: function (opening) { return handleImportFile(opening.file); }
+  };
+}
+
+async function handleImportFile(file) {
   if (!file) return;
   var asked = importAsked();
   var kind = fileKindFromName(file.name);
@@ -509,7 +517,7 @@ export function confirmImport() {
     return;
   }
   var replace = document.getElementById("import-replace").checked;
-  if (replace && editAllowed() && readSession(hasRows)) pushSnapshot("Before replacing rows on import");
+  if (replace && editAllowed() && readSession(hasRows)) keepSnapshot("Before replacing rows on import");
   var imported = importRowsCommand({ rows: newRows, replace: replace, scan: scan }, sessionStamps);
   var outcome = runCommand(imported.command);
   if (outcome.kind === "failed") throw outcome.error;
