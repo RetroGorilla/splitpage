@@ -1,9 +1,12 @@
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
+import type { SaveOwnershipPort } from "../../application/save/coordinator.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import { blobImgHtml, bytesForSync, dataUrlForSync, ensureBytes, intern, internDataUrl, isDurableSync, persist, queuePersist, recordFor, urlForSync } from "../../adapters/storage/02c-blobs.js";
 import { appActions } from "../../legacy/app-actions.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
@@ -13,6 +16,7 @@ import { PREF_EVENT, preferences } from "../../legacy/preferences-bridge.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
 import { currentDocument, onDocumentReplaced, onRefresh, onSessionChange, readSession } from "../../legacy/session-bridge.ts";
+import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
 
 const actions: Pick<ActionRegistry, "invoke" | "view"> = {
   invoke: (id, source, input) => appActions.invoke(id, source, input),
@@ -55,13 +59,31 @@ const text: TextServices<HTMLElement> = {
   cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal
 };
 
+const ownership: SaveOwnershipPort = { capture: captureOperation, stillOwns };
+
+const pictures: PictureStore = {
+  intern,
+  internDataUrl,
+  recordFor,
+  bytesFor: bytesForSync,
+  urlFor: urlForSync,
+  dataUrlFor: dataUrlForSync,
+  isDurable: isDurableSync,
+  queuePersist,
+  persist,
+  ensureBytes: (shas) => ensureBytes(shas),
+  imgHtml: blobImgHtml
+};
+
 const shared = {
   actions,
   changes,
   screen: (): ScreenState => screenNow(),
   document: documentReader,
   review,
-  text
+  text,
+  ownership,
+  pictures
 };
 
 export function sharedPorts(): typeof shared {
