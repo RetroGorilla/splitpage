@@ -1,3 +1,5 @@
+import { inFront } from "../../application/screen.ts";
+
 var ports = null;
 
 export var SCRIPT_SCALE_MIN = 0.7;
@@ -9,6 +11,7 @@ var target = 1;
 var frame = 0;
 var anchor = null;
 var readoutTimer = 0;
+var settleFrames = new Set();
 let storing = false;
 
 export function clampScriptScale(v) {
@@ -59,16 +62,24 @@ function step() {
 function storeScale() {
   storing = true;
   try {
-    if (Math.abs(scale - 1) < 0.005) ports.clearScriptScale();
-    else ports.setScriptScale(scale);
+    if (Math.abs(scale - 1) < 0.005) ports.scale.clearScriptScale();
+    else ports.scale.setScriptScale(scale);
   }
   finally { storing = false; }
 }
 
 function settleAnchor() {
-  requestAnimationFrame(function () {
-    requestAnimationFrame(function () { if (!frame) holdAnchor(); });
+  afterFrame(function () {
+    afterFrame(function () { if (!frame) holdAnchor(); });
   });
+}
+
+function afterFrame(run) {
+  var id = requestAnimationFrame(function () {
+    settleFrames.delete(id);
+    run();
+  });
+  settleFrames.add(id);
 }
 
 function scheduleStep() {
@@ -137,11 +148,15 @@ function readoutEl() {
   el.hidden = true;
   el.title = "Script size — click to go back to 100 %";
   el.setAttribute("aria-live", "polite");
-  el.addEventListener("click", function () { resetScriptScale(); });
-  el.addEventListener("mouseenter", function () { clearTimeout(readoutTimer); });
-  el.addEventListener("mouseleave", function () { hideReadoutSoon(); });
+  el.addEventListener("click", resetScriptScale);
+  el.addEventListener("mouseenter", pauseReadout);
+  el.addEventListener("mouseleave", hideReadoutSoon);
   document.body.appendChild(el);
   return el;
+}
+
+function pauseReadout() {
+  clearTimeout(readoutTimer);
 }
 
 function showReadout(v) {
@@ -161,7 +176,7 @@ function hideReadoutSoon() {
 }
 
 export function scriptViewActive() {
-  return ports.hasDocument() && !ports.prompterIsOpen() && !ports.writerOpen() &&
+  return !inFront(["loading", "prompter", "writer"], ports.screen()) &&
     !document.documentElement.classList.contains("is-newtab-open");
 }
 
@@ -189,37 +204,42 @@ function onKeydown(e) {
   var z = zoomKey(e);
   if (!z) return;
   var id = z === 2 ? "script-zoom-reset" : z > 0 ? "script-zoom-in" : "script-zoom-out";
-  if (ports.runAction(id, "shortcut").kind === "ran") e.preventDefault();
+  if (ports.actions.invoke(id, "shortcut").kind === "ran") e.preventDefault();
 }
 
 export function __init(given) {
   ports = given;
-  scale = target = ports.scriptScale();
+  scale = target = ports.scale.scriptScale();
   paintScale(scale);
   var rowsEl = document.getElementById("rows");
   if (rowsEl) rowsEl.addEventListener("wheel", onWheel, { passive: false });
   document.addEventListener("keydown", onKeydown, true);
-  function onPreference(e) {
-    if (storing) return;
-    var d = e && e.detail;
-    if (!d || !ports.isScriptScaleKey(d.key)) return;
-    var v = d.value == null ? ports.scriptScale() : clampScriptScale(parseFloat(d.value));
+  var stopChanges = ports.changes.onChange(function (change) {
+    if (change.name !== "scriptScale" || (!change.elsewhere && storing)) return;
+    var v = change.elsewhere || change.value == null ? ports.scale.scriptScale() : clampScriptScale(parseFloat(change.value));
     anchorAtCaretOrMiddle();
     setScriptScale(v, { now: true, quiet: true, noStore: true });
-  }
-  function onStorage(e) {
-    if (!ports.isScriptScaleKey(e.key)) return;
-    anchorAtCaretOrMiddle();
-    setScriptScale(ports.scriptScale(), { now: true, quiet: true, noStore: true });
-  }
-  document.addEventListener(ports.preferenceEvent, onPreference);
-  window.addEventListener("storage", onStorage);
-  return { dispose: function () {
+  });
+  var disposed = false;
+  return { mounted: function () { return !disposed; }, scriptViewActive, stepScriptScale, resetScriptScale, dispose: function () {
+    if (disposed) return;
+    disposed = true;
     if (rowsEl) rowsEl.removeEventListener("wheel", onWheel);
     document.removeEventListener("keydown", onKeydown, true);
-    document.removeEventListener(given.preferenceEvent, onPreference);
-    window.removeEventListener("storage", onStorage);
+    stopChanges();
     if (frame) { cancelAnimationFrame(frame); frame = 0; }
+    settleFrames.forEach(function (id) { cancelAnimationFrame(id); });
+    settleFrames.clear();
     clearTimeout(readoutTimer);
+    readoutTimer = 0;
+    var readout = document.getElementById("script-zoom-readout");
+    if (readout) {
+      readout.removeEventListener("click", resetScriptScale);
+      readout.removeEventListener("mouseenter", pauseReadout);
+      readout.removeEventListener("mouseleave", hideReadoutSoon);
+      readout.remove();
+    }
+    anchor = null;
+    ports = null;
   } };
 }

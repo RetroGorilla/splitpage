@@ -4,7 +4,7 @@ import { brollPageOpen } from "../js/08d-broll-panel.js";
 import { viewFlags } from "./preferences-bridge.ts";
 import { tourShowing } from "../js/20c-help.js";
 import { dialogOpen, launcherOpen } from "./screen.ts";
-import type { ScreenState } from "./screen.ts";
+import type { ScreenState } from "../application/screen.ts";
 import { saveBusy } from "./save-bridge.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
 

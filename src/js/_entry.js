@@ -65,7 +65,7 @@ import { legacyFileDestination, legacySavePorts } from "./14-export.js";
 import { serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
-import { wireApp, initScriptZoom as init_script_zoom } from "../bootstrap/wiring.ts";
+import { wireApp, mountScriptZoomFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -108,7 +108,7 @@ if (wiring) {
   init_05h_scene_select();
   init_05p_rundown_presence();
   init_05r_read_time();
-  init_script_zoom();
+  mountScriptZoomFeature();
   init_05t_target();
   init_05v_video();
   init_05w_annotate();

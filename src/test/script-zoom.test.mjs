@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { PREF_EVENT, preferences, startPreferences } from "../legacy/preferences-bridge.ts";
-import { __init } from "../bootstrap/wiring/script-zoom.ts";
+import { mountScriptZoomFeature as __init } from "../bootstrap/wiring/script-zoom.ts";
 import { scriptScale, setScriptScale } from "../features/script-zoom/script-zoom.js";
 
 const frames = new Map();

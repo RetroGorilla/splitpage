@@ -6,7 +6,7 @@ import { closeCommentsPanel, openCommentsPanel } from "../js/10-comments.js";
 import { VIEWING_ONLY } from "../js/13-hosted.js";
 import { openWriter } from "../js/19-writer.js";
 import { openPrompter } from "../js/20-teleprompter.js";
-import { EVERY_OVERLAY, availableUnless, everyOverlayBut, firstRefusal } from "./screen.ts";
+import { EVERY_OVERLAY, availableUnless, everyOverlayBut, firstRefusal } from "../application/screen.ts";
 import { screenNow } from "./screen-state.ts";
 import { reviewMode } from "./location-bridge.ts";
 

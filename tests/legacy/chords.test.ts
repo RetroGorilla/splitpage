@@ -2,7 +2,7 @@ import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createActionRegistry } from "../../src/application/actions.ts";
+import { createActionRegistry, registerAll } from "../../src/application/actions.ts";
 import type { ActionRegistry } from "../../src/application/actions.ts";
 import { actionForKey } from "../../src/application/shortcuts.ts";
 import { registerFileActions } from "../../src/legacy/file-actions.ts";
@@ -10,13 +10,13 @@ import { registerHelpActions } from "../../src/legacy/help-actions.ts";
 import { registerShareActions } from "../../src/legacy/share-actions.ts";
 import { registerThisDocumentActions } from "../../src/legacy/this-document-actions.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
-import { registerZoomActions } from "../../src/bootstrap/wiring/script-zoom.ts";
+import { scriptZoomActions } from "../../src/bootstrap/wiring/script-zoom.ts";
 
 function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   const registry = createActionRegistry();
   const disposers = [
     registerThisDocumentActions(registry), registerFileActions(registry), registerViewActions(registry),
-    registerHelpActions(registry), registerShareActions(registry), registerZoomActions(registry)
+    registerHelpActions(registry), registerShareActions(registry), registerAll(registry, scriptZoomActions())
   ];
   return { registry, dispose: () => { for (const d of disposers) d(); } };
 }
