@@ -14,6 +14,7 @@ import { rowsActions } from "./wiring/editor.ts";
 import { rundownMinimizeActions, rundownSceneActions } from "./wiring/rundown.ts";
 import { scriptZoomActions } from "./wiring/script-zoom.ts";
 import { helpActions } from "./wiring/help.ts";
+import { updateActions } from "./wiring/update.ts";
 import { galleryActions } from "./wiring/gallery.ts";
 
 let running: (() => void) | null = null;
@@ -31,7 +32,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => registerViewActions(registry),
     () => {
       const menu = helpMenuActions();
-      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]);
+      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 5), ...updateActions(), ...menu.slice(5)]);
     },
     () => registerShareActions(registry),
     () => registerAll(registry, scriptZoomActions()),

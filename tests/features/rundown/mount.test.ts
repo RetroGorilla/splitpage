@@ -65,7 +65,7 @@ test("rundown: going to a scene reveals it through the reveal-row action and foc
   if (row) row.scrollIntoView = (options?: boolean | ScrollIntoViewOptions) => { scrolled.push(options); };
   owner.goToScene("r1");
   assert.deepEqual(scrolled, [{ block: "center" }]);
-  assert.deepEqual(actions.calls, [{ id: "reveal-row", source: "button" }]);
+  assert.deepEqual(actions.calls, [{ id: "reveal-row", source: "button", input: "r1" }]);
   assert.equal(document.activeElement, cell);
   owner.dispose();
 });
