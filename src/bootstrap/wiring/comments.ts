@@ -6,7 +6,7 @@ import { keepSnapshot } from "../../legacy/transition-bridge.ts";
 import { presence } from "../../legacy/presence-bridge.ts";
 import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
 import { onCommentsSent } from "../../js/13-hosted.js";
-import { resetDraftHistory } from "../../js/05d-draft-edit.js";
+import { resetDraftHistory } from "../../features/editing/draft-edit.js";
 import type { CommentsPorts } from "../../features/comments/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runFromButton } from "../../legacy/app-actions.ts";
@@ -22,7 +22,7 @@ import {
   noteDraftComposition,
   noteDraftFocus,
   pasteIntoDraft
-} from "../../js/05d-draft-edit.js";
+} from "../../features/editing/draft-edit.js";
 import { isDraftBox } from "../../features/editing/cell-page.ts";
 import { compressImageFile } from "../../js/06-rows.js";
 import {
