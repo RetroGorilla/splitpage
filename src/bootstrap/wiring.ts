@@ -3,6 +3,7 @@ export { mountReadTimeFeature } from "./wiring/read-time.ts";
 export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
 export { mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature } from "./wiring/rundown.ts";
 export { mountHelpFeature } from "./wiring/help.ts";
+export { mountSettingsFeature } from "./wiring/settings.ts";
 export { mountCopyPasteFeature } from "./wiring/clipboard.ts";
 export { mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature } from "./wiring/gallery.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
