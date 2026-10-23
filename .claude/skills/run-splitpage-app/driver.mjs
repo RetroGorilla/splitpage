@@ -5,6 +5,7 @@ import path from "node:path";
 import os from "node:os";
 import { fileURLToPath } from "node:url";
 import { spawn, execFileSync } from "node:child_process";
+import { createInterface } from "node:readline";
 import { freezeAsked, frozenWrites, withFreezeFlag } from "./freeze-flag.mjs";
 import { guardAsked, guardedWrites, withGuardFlag } from "./guard-flag.mjs";
 
@@ -14,7 +15,7 @@ function parseArgs(argv) {
   const out = {
     port: 8791, cdpPort: 9333, root: path.resolve(HERE, "..", "..", ".."),
     shotDir: path.join(os.tmpdir(), "splitpage-shots"),
-    headed: false, script: null, runId: null, chrome: null, bind: "127.0.0.1",
+    headed: false, script: null, runId: null, chrome: null, bind: "127.0.0.1", cdpProxy: false,
     freezeCaches: freezeAsked(process.env),
     documentGuard: guardAsked(process.env),
   };
@@ -25,6 +26,7 @@ function parseArgs(argv) {
     switch (flag) {
       case "port": out.port = parseInt(argv[++i], 10); break;
       case "cdpport": case "cdp-port": out.cdpPort = parseInt(argv[++i], 10); break;
+      case "cdp-proxy": out.cdpProxy = true; break;
       case "root": out.root = path.resolve(argv[++i]); break;
       case "shotdir": case "shot-dir": out.shotDir = path.resolve(argv[++i]); break;
       case "script": out.script = argv[++i]; break;
@@ -35,7 +37,7 @@ function parseArgs(argv) {
       case "freezecaches": case "freeze-caches": out.freezeCaches = true; break;
       case "documentguard": case "document-guard": out.documentGuard = true; break;
       case "h": case "help":
-        console.log("usage: node driver.mjs --script <file> [--port N] [--cdp-port N] [--root DIR] [--shot-dir DIR] [--chrome PATH] [--bind ADDRESS] [--headed] [--freeze-caches] [--document-guard]");
+        console.log("usage: node driver.mjs --script <file> [--port N] [--cdp-port N] [--cdp-proxy (runner IPC)] [--root DIR] [--shot-dir DIR] [--chrome PATH] [--bind ADDRESS] [--headed] [--freeze-caches] [--document-guard]");
         process.exit(0);
         break;
       default: throw new Error(`unknown option: ${a}`);
@@ -166,7 +168,7 @@ let browserProc = null;
 let userDataDir = null;
 async function startBrowser() {
   if (browserProc) return;
-  if (await portInUse(opts.cdpPort)) {
+  if (!opts.cdpProxy && await portInUse(opts.cdpPort)) {
     const e = new Error(
       `CDP port ${opts.cdpPort} is already in use, probably by a browser left over from an earlier run. ` +
       `Pass a different --cdp-port, or close whatever holds it` +
@@ -177,7 +179,7 @@ async function startBrowser() {
   const exe = findBrowser();
   userDataDir = path.join(os.tmpdir(), `splitpage-edge-${opts.runId}-${Math.random().toString(16).slice(2, 10)}`);
   const args = [
-    `--remote-debugging-port=${opts.cdpPort}`,
+    `--remote-debugging-port=${opts.cdpProxy ? 0 : opts.cdpPort}`,
     `--user-data-dir=${userDataDir}`,
     "--no-first-run", "--no-default-browser-check", "--disable-gpu",
     "--disable-features=Translate,msEdgeSplitScreen,msImplicitSignin",
@@ -194,8 +196,23 @@ async function startBrowser() {
   }
   if (!opts.headed) args.unshift("--headless=new");
   args.push("about:blank");
-  browserProc = spawn(exe, args, { stdio: ["ignore", "ignore", "ignore"], detached: false });
+  browserProc = spawn(exe, args, { stdio: ["ignore", "ignore", opts.cdpProxy ? "pipe" : "ignore"], detached: false });
   browserProc.on("error", (e) => { throw new Error(`failed to launch ${exe}: ${e.message}`); });
+  if (opts.cdpProxy) {
+    const lines = createInterface({ input: browserProc.stderr });
+    let port = null;
+    for await (const line of lines) {
+      const endpoint = /^DevTools listening on ws:\/\/127\.0\.0\.1:(\d+)\//.exec(line);
+      if (endpoint) { port = Number(endpoint[1]); break; }
+    }
+    lines.close();
+    browserProc.stderr.resume();
+    if (!port) throw new Error("browser exited without binding its CDP port");
+    await new Promise((resolve) => {
+      process.once("message", resolve);
+      process.send({ cdpPort: port });
+    });
+  }
   log(`browser pid=${browserProc.pid} exe=${exe} cdp=${opts.cdpPort} headless=${!opts.headed}`);
 }
 
