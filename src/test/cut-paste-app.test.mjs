@@ -16,7 +16,7 @@ const { copyFromCell, pasteIntoCell } = await import("../features/clipboard/cell
 const { render } = await import("../js/05-render.js");
 const { cellEditing } = await import("../legacy/editor-bridge.ts");
 const { cellSelection } = await import("../features/common/cell-selection.ts");
-const { armDeleteComment } = await import("../js/10-comments.js");
+const { armDeleteComment } = await import("../features/comments/comments.js");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../legacy/undo-bridge.ts");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 

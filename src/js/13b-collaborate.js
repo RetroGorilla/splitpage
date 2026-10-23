@@ -4,7 +4,7 @@ import { runIsStale } from "../application/collaboration/workflow.ts";
 import { currentConn, currentHome, documentLocation, reviewMode, serverHomeId, serverStatus } from "../legacy/location-bridge.ts";
 import { normalizeServerUrl } from "../../shared/server-links.js";
 import { personSwatchesHtml } from "./03-sync.js";
-import { getSavedAuthorName } from "./10-comments.js";
+import { getSavedAuthorName } from "../application/comment-author.js";
 import { apiFetch, applyHealth, applyReviewMode, clearServerToken, finishServerDetect, isLinkGuest, onServerDoc, pointTabAt, publishToServer, rememberTokenForServer, rememberedTokenForServer, serverDocShareUrl, setServerToken, shareAccessNote } from "./13-hosted.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
@@ -788,7 +788,7 @@ var GUEST_ID = "guest-modal";
 var GUEST_ASKED_KEY = "splitpage-guest-asked";
 
 export function maybeAskGuestName() {
-  if (getSavedAuthorName()) return false;
+  if (getSavedAuthorName(preferences())) return false;
   try { if (sessionStorage.getItem(GUEST_ASKED_KEY)) return false; } catch (e) {}
   try { sessionStorage.setItem(GUEST_ASKED_KEY, "1"); } catch (e) {}
   openGuestName();

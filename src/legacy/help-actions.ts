@@ -1,6 +1,5 @@
 import type { ActionDefinition, Availability } from "../application/actions.ts";
 import { openSettings, settingsAction } from "../application/settings-actions.ts";
-import { showTaggingHelp } from "../js/10-comments.js";
 import { openLongDemo } from "../js/18b-file-menu.js";
 import { openOnboarding } from "../js/20b-onboarding.js";
 import { openServersDialog, serversMenuLabel } from "../js/20e-connect.js";
@@ -53,15 +52,6 @@ export function helpMenuActions(): ActionDefinition[] {
       words: "setup settings wizard install",
       availability: overDialogs,
       run: () => { openOnboarding(); }
-    },
-    {
-      id: "tagging-help",
-      label: "Tagging reference",
-      group: "Tags",
-      icon: "i-tag",
-      words: "tags tagging reference shortcuts brackets help",
-      availability: overDialogs,
-      run: () => { showTaggingHelp(); }
     },
     {
       id: "export-app-data",
