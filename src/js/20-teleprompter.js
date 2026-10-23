@@ -20,8 +20,8 @@ import {
 import { autoSavePolicy } from "../legacy/save-bridge.ts";
 import { parseProjectFileState } from "../adapters/formats/project-file.ts";
 import { openDocument } from "../legacy/transition-bridge.ts";
+import { canOpenPrompterInBrowser } from "../adapters/desktop/desktop-port.ts";
 import {
-  canOpenPrompterInBrowser,
   createDesktopRecognition,
   desktopVoiceAvailable,
   desktopVoiceKnown,

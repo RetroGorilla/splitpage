@@ -6,7 +6,7 @@ import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
-import { openGdocModal, openImportModal } from "./11-import.js";
+import { openImportModal } from "./11-import.js";
 import { arrivingOnLink } from "./13-hosted.js";
 import { openLocalFile } from "./18-local-files.js";
 import { desktopAppUrl, desktopAppOffered } from "./20a-update.js";
@@ -339,7 +339,7 @@ export function __init() {
       else if (action === "open") newTabOpenFile();
       else if (action === "join") appActions.invoke("servers", "button");
       else if (action === "paste") openPasteAsNewDocument();
-      else if (action === "gdoc") openGdocModal();
+      else if (action === "gdoc") appActions.invoke("show-gdoc-import", "button");
       else if (action === "dismiss") closeNewTabPage();
       else if (action === "tour") { closeNewTabPage(); appActions.invoke("tour", "button"); }
       else if (action === "open-recent") openRecent(target.getAttribute("data-file-id"));

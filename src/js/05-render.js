@@ -798,6 +798,8 @@ var ONE_ROW = { status: true, lengthSeconds: true, updatedAt: true, updatedBy: t
 
 var SHOWN_DOC_FIELDS = { title: true, wordsPerMinute: true, comments: true };
 
+var TEXT_FIELDS = { visualText: true, audioText: true };
+
 var SHOWN_PREFERENCES = { clock: true, commentAuthor: true, personColor: true };
 
 function rowsTouched(cells, skip) {
@@ -847,6 +849,10 @@ export function screenListeners() {
   screen.drawn = false;
   return {
     session: paintSessionChange,
+    stamped: function (changes) {
+      if (!screen.drawn || screenStale || paintBroke) return;
+      if (changes.docFields.indexOf("comments") !== -1 || changes.cells.some(function (cell) { return TEXT_FIELDS[cell.field]; })) render();
+    },
     refresh: function (jobs) {
       if (screen.drawn && jobs.has("production")) paintRowTimes();
     },
