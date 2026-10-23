@@ -5,6 +5,7 @@ import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { EditorSelectionPort } from "../../application/editing/selection.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { ExportRegistry } from "../../application/export/registry.ts";
+import type { LastFile } from "../../application/files/last-file.ts";
 import type { RecentFiles } from "../../application/files/recent-files.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
@@ -19,6 +20,7 @@ import type { TextServices } from "../../application/text/services.ts";
 import type { DocumentDestination } from "../../application/transitions/ports.ts";
 import type { Transitions } from "../../application/transitions/transitions.ts";
 import { normalizeTagName } from "../../core/document/tags.ts";
+import { loadLastFileHandle } from "../../js/00-prelude.js";
 import { breakUndoCoalescing, flushEdits, lastUndoEntry, redo, undo } from "../../js/12a-undo.js";
 import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import { blobImgHtml, bytesForSync, dataUrlForSync, ensureBytes, intern, internDataUrl, isDurableSync, persist, queuePersist, recordFor, urlForSync } from "../../adapters/storage/02c-blobs.js";
@@ -190,6 +192,8 @@ const exports: Pick<ExportRegistry, "card" | "cards" | "exporters" | "byAction" 
   onChange: (listener) => exportFormats.onChange(listener)
 };
 
+const lastFile: LastFile = { load: loadLastFileHandle };
+
 const recents: RecentFiles = {
   list: () => desktopPort()?.listRecents(),
   remove: (fileId) => desktopPort()?.removeRecent(fileId),
@@ -224,6 +228,7 @@ const shared = {
   exports,
   ownership,
   pictures,
+  lastFile,
   recents,
   undo: undoControl,
   transitions
