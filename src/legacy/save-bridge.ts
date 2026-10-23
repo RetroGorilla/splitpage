@@ -60,7 +60,13 @@ export function onSaveChange(listener: (change: SaveChange) => void): () => void
 }
 
 function announce(change: SaveChange): void {
-  changeListeners.slice().forEach(function (listener) { listener(change); });
+  changeListeners.slice().forEach(function (listener) {
+    try {
+      listener(change);
+    } catch (error) {
+      queueMicrotask(() => { throw error; });
+    }
+  });
 }
 
 function live(): Started {
