@@ -6,7 +6,7 @@ const REPO = fileURLToPath(new URL("../../", import.meta.url));
 export const CONFIGURATION = Object.freeze({
   "src/legacy/session-bridge.ts": { functions: ["startSessionBridge", "onDocumentReplaced", "onSessionChange", "onRefresh", "onStamped"] },
   "src/legacy/undo-adapter.ts": { functions: ["routeReplays"] },
-  "src/js/12a-undo.js": { functions: ["configureUndo", "routeUndoReplays"] },
+  "src/legacy/undo-bridge.ts": { functions: ["startUndo", "configureUndo", "routeUndoReplays"] },
   "src/legacy/app-actions.ts": { functions: ["installAppActions"], facade: { name: "appActions", methods: ["register", "presentRefusals"] } },
   "src/legacy/export-formats.ts": { functions: ["installExportFormats"], facade: { name: "exportFormats", methods: ["defineCard", "register", "onChange"] } },
   "src/legacy/save-bridge.ts": { functions: ["startSaves", "onSaveChange"] },

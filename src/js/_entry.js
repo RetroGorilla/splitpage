@@ -19,7 +19,6 @@ import { __init as init_08d_broll_panel } from "./08d-broll-panel.js";
 import { __init as init_09_find_replace } from "./09-find-replace.js";
 import { __init as init_11_import } from "./11-import.js";
 import { __init as init_12_dirty_toast } from "./12-dirty-toast.js";
-import { __init as init_12a_undo } from "./12a-undo.js";
 import { __init as init_13_hosted } from "./13-hosted.js";
 import { __init as init_13a_presence } from "./13a-presence.js";
 import { __init as init_13b_collaborate } from "./13b-collaborate.js";
@@ -108,7 +107,6 @@ if (wiring) {
   mountCommentsLogicFeature();
   init_11_import();
   init_12_dirty_toast();
-  init_12a_undo();
   init_13_hosted();
   init_13a_presence();
   init_13b_collaborate();
