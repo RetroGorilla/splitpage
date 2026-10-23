@@ -3,7 +3,7 @@ import { sidePanels } from "../legacy/panels-bridge.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { handTourPauseTo } from "../legacy/tour-pause.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
-import { preferences } from "../legacy/preferences-bridge.ts";
+import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
 
 function scrollHelpTo(id) {
   var body = document.getElementById("help-body");
@@ -53,6 +53,7 @@ function suspendTourForHelp() {
   if (!overlay) return;
   tourSuspendedAt = tourStepIndex;
   tourStepIndex = -1;
+  viewFlags().setTourOpen(false);
   overlay.hidden = true;
 }
 
@@ -63,6 +64,7 @@ function resumeTourAfterHelp() {
   var overlay = document.getElementById("tour-overlay");
   if (!overlay) return;
   tourStepIndex = at;
+  viewFlags().setTourOpen(true);
   overlay.hidden = false;
   renderTourStep();
 }
@@ -224,6 +226,7 @@ function interruptTour() {
   tourInterruptedAt = at;
   tourSuspendedAt = -1;
   tourStepIndex = -1;
+  viewFlags().setTourOpen(false);
   var overlay = document.getElementById("tour-overlay");
   if (overlay) overlay.hidden = true;
   var taggingHelp = document.getElementById("tagging-help");
@@ -268,6 +271,7 @@ export function startTour() {
   tourTaggingHelpWasHidden = taggingHelp ? taggingHelp.hidden : true;
 
   tourStepIndex = from >= 0 ? from : 0;
+  viewFlags().setTourOpen(true);
   overlay.hidden = false;
   renderTourStep();
 
@@ -285,16 +289,17 @@ function endTour() {
   var taggingHelp = document.getElementById("tagging-help");
   if (taggingHelp) taggingHelp.hidden = tourTaggingHelpWasHidden;
   tourStepIndex = -1;
+  viewFlags().setTourOpen(false);
   markTourDone();
 }
 
 function tourNext() {
-  if (tourStepIndex < TOUR_STEPS.length - 1) { tourStepIndex++; renderTourStep(); }
+  if (tourStepIndex < TOUR_STEPS.length - 1) { tourStepIndex++; viewFlags().setTourOpen(true); renderTourStep(); }
   else endTour();
 }
 
 function tourBack() {
-  if (tourStepIndex > 0) { tourStepIndex--; renderTourStep(); }
+  if (tourStepIndex > 0) { tourStepIndex--; viewFlags().setTourOpen(true); renderTourStep(); }
 }
 
 export function __init() {
