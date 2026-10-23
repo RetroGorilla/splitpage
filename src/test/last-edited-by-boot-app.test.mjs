@@ -20,7 +20,7 @@ import { getSavedAuthorName as getSavedAuthorNameWith } from "../application/com
 import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
 function getSavedAuthorName() { return getSavedAuthorNameWith(commentPreferences()); }
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
-const { openSettings } = await import("../js/20s-settings.js");
+const { openSettings } = await import("../features/settings/settings.js");
 const { render } = await import("../js/05-render.js");
 const { toastLastEditor } = await import("../js/03-sync.js");
 const { loadTestDocument } = await import("./_document.mjs");

@@ -1,5 +1,5 @@
 # Copy, cut, paste and drop in a script cell through the document model
-# (#85, design §5, D6, D7; src/js/05c-clipboard.js).
+# (#85, design §5, D6, D7; src/features/clipboard/cell-clipboard.js).
 #
 #   * a paste of rich HTML lands formatted, sanitised, with the caret after
 #     it, as ONE undo entry;
