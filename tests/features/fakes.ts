@@ -10,11 +10,13 @@ import type { PictureStore } from "../../src/application/media/picture-store.ts"
 import type { SaveOwnershipPort } from "../../src/application/save/coordinator.ts";
 import type { OperationContext } from "../../src/application/session/operation.ts";
 import type { ImageRef } from "../../src/core/document/ports.ts";
-import type { DocumentView, SessionListener } from "../../src/application/session/document-session.ts";
 import type { DocumentReader } from "../../src/application/session/document-reader.ts";
-import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
 import type { ViewFlags } from "../../src/application/preferences/view-flags.ts";
 import type { SidePanels } from "../../src/application/side-panels.ts";
+import type { Command, CommandOutcome, DocumentView, SessionListener } from "../../src/application/session/document-session.ts";
+import type { UndoControl } from "../../src/application/editing/undo-control.ts";
+import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
+import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
 
 export function fakeNotices() {
   const shown: { message: string; kind: NoticeKind | undefined; label?: string; action?: () => void; sticky: boolean | undefined; notice: ReturnType<typeof notice> }[] = [];
@@ -76,11 +78,11 @@ export function fakeScreen(initial: Partial<ScreenState> = {}) {
 }
 
 export function fakeActions(registry?: ActionRegistry) {
-  const calls: { id: string; source: ActionSource }[] = [];
+  const calls: { id: string; source: ActionSource; input?: unknown }[] = [];
   const actions: Pick<ActionRegistry, "invoke" | "view"> = {
-    invoke: (id, source) => {
-      calls.push({ id, source });
-      return registry ? registry.invoke(id, source) : { kind: "ran", id };
+    invoke: (id, source, input) => {
+      calls.push(input === undefined ? { id, source } : { id, source, input });
+      return registry ? registry.invoke(id, source, input) : { kind: "ran", id };
     },
     view: (id, source) => registry?.view(id, source)
   };
@@ -210,6 +212,32 @@ export function fakeReview(initial = false) {
     setReviewing: (on: boolean): void => { reviewing = on; },
     refusals: (): number => refusals
   };
+}
+
+export function fakeEdits(answer: CommandOutcome = { kind: "noop" }) {
+  const ran: Command[] = [];
+  let outcome = answer;
+  const edits: Pick<DocumentEdits, "run" | "edit" | "stamps"> = {
+    run: (command) => {
+      ran.push(command);
+      return outcome;
+    },
+    edit: (command) => {
+      ran.push(command);
+      return outcome.kind === "applied" || outcome.kind === "committed";
+    },
+    stamps: { clock: { nowIso: () => "2026-01-01T00:00:00.000Z" }, editor: { name: () => "Tester" } }
+  };
+  return { edits, ran, answer: (next: CommandOutcome): void => { outcome = next; } };
+}
+
+export function fakeUndo() {
+  const calls: string[] = [];
+  const undo: Pick<UndoControl, "undo" | "redo"> = {
+    undo: () => { calls.push("undo"); },
+    redo: () => { calls.push("redo"); }
+  };
+  return { undo, calls };
 }
 
 export function fakeSaveState(initial: { unsaved?: boolean; busy?: boolean } = {}) {
