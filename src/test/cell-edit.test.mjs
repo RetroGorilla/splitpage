@@ -1,4 +1,4 @@
-import { domToPos, posToDom } from "../features/editing/cell-dom.ts";
+import { domToPos, posToDom } from "../features/common/cell-dom.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
