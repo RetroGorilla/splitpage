@@ -3,7 +3,7 @@ import "./_preferences-started.mjs";
 import { register } from "node:module";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { lastUndoEntry, redo, resetUndo, undo, undoSizes } from "../js/12a-undo.js";
 
@@ -26,11 +26,11 @@ function fresh() {
     ]
   }));
   resetUndo();
-  return S.state;
+  return currentDocument();
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
-const row = (id) => S.state.rows.find((r) => r.id === id);
+const row = (id) => currentDocument().rows.find((r) => r.id === id);
 
 test("one status click is one undo entry holding only the status", async () => {
   fresh();

@@ -1,11 +1,10 @@
 import "./_dom.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { flushEdits, lastUndoEntry, nextRedoEntry, noteEdit, noteRemoteChange, redo, resetUndo, undo, undoSizes } from "../js/12a-undo.js";
 import { cellEdit, changeSet } from "../application/session/change-set.ts";
-import { liveSession } from "../legacy/session-bridge.ts";
+import { liveSession, currentDocument } from "../legacy/session-bridge.ts";
 import { createUndoAdapter } from "../legacy/undo-adapter.ts";
 import { loadTestDocument } from "./_document.mjs";
 import { startTestSession } from "./_session.mjs";
@@ -86,7 +85,7 @@ function snapshot(label) {
     sizes: undoSizes(),
     top: top ? JSON.stringify(top.steps) : null,
     next: next ? JSON.stringify(next.steps) : null,
-    state: JSON.stringify(S.state)
+    state: JSON.stringify(currentDocument())
   };
 }
 
@@ -97,12 +96,12 @@ async function drive(seed, perform) {
   loadTestDocument(script(seed));
   const out = [];
   for (let n = 0; n < OPS; n++) {
-    const p = plan(r, S.state);
+    const p = plan(r, currentDocument());
     clock += Math.floor(r() * 300);
     if (p.name === "wait") clock += p.ms;
     else if (p.name === "undo") undo();
     else if (p.name === "redo") redo();
-    else if (p.name === "remote") perform.remote(p.theirs(S.state));
+    else if (p.name === "remote") perform.remote(p.theirs(currentDocument()));
     else perform.edit(p);
     await Promise.resolve();
     flushEdits();
@@ -112,7 +111,7 @@ async function drive(seed, perform) {
 }
 
 const legacy = {
-  edit: (p) => { p.apply(S.state); noteEdit(); },
+  edit: (p) => { p.apply(currentDocument()); noteEdit(); },
   remote: (next) => { noteRemoteChange(next); loadTestDocument(next); }
 };
 

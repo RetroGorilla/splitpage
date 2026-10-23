@@ -3,7 +3,7 @@ import "./_preferences-started.mjs";
 import "./_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
 import { flushEdits, noteEdit, noteRemoteChange, redo, undo } from "../js/12a-undo.js";
@@ -35,44 +35,44 @@ function commit() {
 }
 
 function removePerson(id) {
-  S.state.people = S.state.people.filter((p) => p.id !== id);
-  [].concat(S.state.productionTags, S.state.brollShots).forEach((e) => { if (e.owner === id) e.owner = ""; });
+  currentDocument().people = currentDocument().people.filter((p) => p.id !== id);
+  [].concat(currentDocument().productionTags, currentDocument().brollShots).forEach((e) => { if (e.owner === id) e.owner = ""; });
   commit();
 }
 
 function remoteCrew(mutate) {
-  const next = clone(S.state);
+  const next = clone(currentDocument());
   mutate(next);
   noteRemoteChange(next);
   loadTestDocument(next);
 }
 
 function dangling() {
-  const ids = new Set(S.state.people.map((p) => p.id));
-  return [].concat(S.state.productionTags, S.state.brollShots)
+  const ids = new Set(currentDocument().people.map((p) => p.id));
+  return [].concat(currentDocument().productionTags, currentDocument().brollShots)
     .filter((e) => e.owner && !ids.has(e.owner)).map((e) => e.name + ":" + e.owner);
 }
 
 test("redo of an older assignment after a crew-changing merge forgot the removal does not re-assign the removed person (#476)", () => {
   boot(["Ada", "Cy"]);
-  const dock = S.state.brollShots.find((e) => e.name === "Dock");
+  const dock = currentDocument().brollShots.find((e) => e.name === "Dock");
   dock.owner = "p_Ada";
   commit();
   removePerson("p_Ada");
-  assert.equal(ownerOf(S.state.brollShots, "Dock"), "");
+  assert.equal(ownerOf(currentDocument().brollShots, "Dock"), "");
   remoteCrew((st) => st.people.push(person("p_Di", "Di")));
   assert.equal(undo().ok, true);
   const res = redo();
   assert.equal(res.ok, true);
   assert.equal(res.cleared, 1);
   assert.deepEqual(dangling(), []);
-  assert.equal(ownerOf(S.state.brollShots, "Dock"), "");
-  assert.equal(ownerOf(migrateRows(clone(S.state)).brollShots, "Dock"), "");
+  assert.equal(ownerOf(currentDocument().brollShots, "Dock"), "");
+  assert.equal(ownerOf(migrateRows(clone(currentDocument())).brollShots, "Dock"), "");
 });
 
 test("the same holds for a production tag (#476)", () => {
   boot(["Ada", "Cy"]);
-  S.state.productionTags.find((e) => e.name === "Kettle").owner = "p_Ada";
+  currentDocument().productionTags.find((e) => e.name === "Kettle").owner = "p_Ada";
   commit();
   removePerson("p_Ada");
   remoteCrew((st) => st.people.push(person("p_Di", "Di")));
@@ -83,22 +83,22 @@ test("the same holds for a production tag (#476)", () => {
 
 test("redo still assigns a person who is in the crew (#476)", () => {
   boot(["Ada", "Cy"]);
-  S.state.brollShots.find((e) => e.name === "Dock").owner = "p_Cy";
+  currentDocument().brollShots.find((e) => e.name === "Dock").owner = "p_Cy";
   commit();
   assert.equal(undo().ok, true);
   remoteCrew((st) => st.people.push(person("p_Di", "Di")));
   const res = redo();
   assert.equal(res.ok, true);
   assert.equal(res.cleared, undefined);
-  assert.equal(ownerOf(S.state.brollShots, "Dock"), "p_Cy");
+  assert.equal(ownerOf(currentDocument().brollShots, "Dock"), "p_Cy");
 });
 
 test("undo of an entry that removed a person after a same-named fold leaves no dangling owner (#476)", () => {
   boot(["Ada"]);
-  S.state.brollShots.find((e) => e.name === "Dock").owner = "p_Ada";
+  currentDocument().brollShots.find((e) => e.name === "Dock").owner = "p_Ada";
   commit();
   removePerson("p_Ada");
-  S.state.people = [person("pT", "ada")];
+  currentDocument().people = [person("pT", "ada")];
   assert.equal(undo().ok, true);
   assert.deepEqual(dangling(), []);
   assert.equal(redo().ok, true);
@@ -107,24 +107,24 @@ test("undo of an entry that removed a person after a same-named fold leaves no d
 
 test("undo of an entry that only added a person clears the item a collaborator gave that person (#476)", () => {
   boot(["Cy"]);
-  S.state.people.push(person("p_Ada", "Ada"));
+  currentDocument().people.push(person("p_Ada", "Ada"));
   commit();
   remoteCrew((st) => { st.brollShots.find((e) => e.name === "Dock").owner = "p_Ada"; });
   const res = undo();
   assert.equal(res.ok, true);
   assert.equal(res.cleared, 1);
-  assert.deepEqual(S.state.people.map((p) => p.name), ["Cy"]);
+  assert.deepEqual(currentDocument().people.map((p) => p.name), ["Cy"]);
   assert.deepEqual(dangling(), []);
-  assert.equal(ownerOf(S.state.brollShots, "Dock"), "");
+  assert.equal(ownerOf(currentDocument().brollShots, "Dock"), "");
   const again = redo();
   assert.equal(again.ok, true);
   assert.equal(again.cleared, undefined);
-  assert.deepEqual(S.state.people.map((p) => p.name), ["Cy", "Ada"]);
-  assert.equal(ownerOf(S.state.brollShots, "Dock"), "p_Ada", "redo gives back what the undo cleared");
+  assert.deepEqual(currentDocument().people.map((p) => p.name), ["Cy", "Ada"]);
+  assert.equal(ownerOf(currentDocument().brollShots, "Dock"), "p_Ada", "redo gives back what the undo cleared");
   const twice = undo();
   assert.equal(twice.ok, true);
   assert.equal(twice.cleared, 1, "the second undo clears it again and says so");
-  assert.equal(ownerOf(S.state.brollShots, "Dock"), "");
+  assert.equal(ownerOf(currentDocument().brollShots, "Dock"), "");
 });
 
 for (const list of ["brollShots", "productionTags"]) {
@@ -136,29 +136,29 @@ for (const list of ["brollShots", "productionTags"]) {
     const item = list === "brollShots" ? shot : (id, name, owner) => tag(id, name, owner);
     opening[list].push(item("i_dock", "Dock", ""), item("i_pier", "Pier", "p_Cy"));
     loadTestDocument(opening);
-    S.state.people.push(person("p_Ada", "Ada"));
+    currentDocument().people.push(person("p_Ada", "Ada"));
     commit();
     remoteCrew((st) => { st[list].find((e) => e.name === "Dock").owner = "p_Ada"; });
-    S.state[list].find((e) => e.name === "Pier").owner = "";
+    currentDocument()[list].find((e) => e.name === "Pier").owner = "";
     commit();
     assert.equal(undo().ok, true);
-    assert.equal(ownerOf(S.state[list], "Pier"), "p_Cy");
+    assert.equal(ownerOf(currentDocument()[list], "Pier"), "p_Cy");
     assert.equal(undo().cleared, 1);
-    assert.equal(ownerOf(S.state[list], "Dock"), "");
+    assert.equal(ownerOf(currentDocument()[list], "Dock"), "");
     assert.equal(redo().ok, true);
-    assert.equal(ownerOf(S.state[list], "Dock"), "p_Ada");
+    assert.equal(ownerOf(currentDocument()[list], "Dock"), "p_Ada");
     const res = redo();
     assert.equal(res.ok, true);
     assert.equal(res.cleared, undefined);
-    assert.equal(ownerOf(S.state[list], "Pier"), "", "my unassignment is applied");
-    assert.equal(ownerOf(S.state[list], "Dock"), "p_Ada");
+    assert.equal(ownerOf(currentDocument()[list], "Pier"), "", "my unassignment is applied");
+    assert.equal(ownerOf(currentDocument()[list], "Dock"), "p_Ada");
     assert.deepEqual(dangling(), []);
   });
 }
 
 test("redo of an entry that only removed a person clears the tag a collaborator gave that person meanwhile (#476)", () => {
   boot(["Ada", "Cy"]);
-  S.state.people = S.state.people.filter((p) => p.id !== "p_Ada");
+  currentDocument().people = currentDocument().people.filter((p) => p.id !== "p_Ada");
   commit();
   assert.equal(undo().ok, true);
   remoteCrew((st) => {
@@ -169,46 +169,46 @@ test("redo of an entry that only removed a person clears the tag a collaborator 
   assert.equal(res.ok, true);
   assert.equal(res.cleared, 1);
   assert.deepEqual(dangling(), []);
-  assert.equal(ownerOf(S.state.productionTags, "Kettle"), "");
-  assert.equal(ownerOf(S.state.brollShots, "Dock"), "p_Cy", "an owner still in the crew is kept");
+  assert.equal(ownerOf(currentDocument().productionTags, "Kettle"), "");
+  assert.equal(ownerOf(currentDocument().brollShots, "Dock"), "p_Cy", "an owner still in the crew is kept");
 });
 
 test("a redo that only changes the crew keeps an owner the same-name remap points at a crew member (#476)", () => {
   boot(["Cy"]);
-  S.state.people.push(person("p_Ada", "Ada"));
+  currentDocument().people.push(person("p_Ada", "Ada"));
   commit();
   assert.equal(undo().ok, true);
-  S.state.people.push(person("pT_ada", "ADA"));
-  S.state.brollShots.find((e) => e.name === "Dock").owner = "pT_ada";
+  currentDocument().people.push(person("pT_ada", "ADA"));
+  currentDocument().brollShots.find((e) => e.name === "Dock").owner = "pT_ada";
   const res = redo();
   assert.equal(res.ok, true);
   assert.equal(res.cleared, undefined);
   assert.deepEqual(dangling(), []);
-  assert.deepEqual(S.state.people.map((p) => p.id), ["p_Cy", "p_Ada"]);
-  assert.equal(ownerOf(S.state.brollShots, "Dock"), "p_Ada");
+  assert.deepEqual(currentDocument().people.map((p) => p.id), ["p_Cy", "p_Ada"]);
+  assert.equal(ownerOf(currentDocument().brollShots, "Dock"), "p_Ada");
 });
 
 test("a crew-only redo that clears one owner and re-points another records both, so its undo goes back exactly (#476 review)", () => {
   boot(["Cy"]);
-  S.state.people.push(person("p_Ada", "Ada"));
+  currentDocument().people.push(person("p_Ada", "Ada"));
   commit();
   assert.equal(undo().ok, true);
-  S.state.people.push(person("pT_ada", "ADA"));
-  S.state.brollShots.find((e) => e.name === "Dock").owner = "pT_ada";
-  S.state.brollShots.push(shot("bs_pier", "Pier", "p_Gone"));
+  currentDocument().people.push(person("pT_ada", "ADA"));
+  currentDocument().brollShots.find((e) => e.name === "Dock").owner = "pT_ada";
+  currentDocument().brollShots.push(shot("bs_pier", "Pier", "p_Gone"));
   const res = redo();
   assert.equal(res.ok, true);
   assert.equal(res.cleared, 1);
-  assert.equal(ownerOf(S.state.brollShots, "Dock"), "p_Ada");
-  assert.equal(ownerOf(S.state.brollShots, "Pier"), "");
+  assert.equal(ownerOf(currentDocument().brollShots, "Dock"), "p_Ada");
+  assert.equal(ownerOf(currentDocument().brollShots, "Pier"), "");
   assert.deepEqual(dangling(), []);
   const back = undo();
   assert.equal(back.ok, true);
-  assert.deepEqual(S.state.people.map((p) => p.id), ["p_Cy"]);
-  assert.deepEqual(S.state.brollShots.map((b) => b.owner), ["", ""]);
+  assert.deepEqual(currentDocument().people.map((p) => p.id), ["p_Cy"]);
+  assert.deepEqual(currentDocument().brollShots.map((b) => b.owner), ["", ""]);
   assert.deepEqual(dangling(), []);
   assert.equal(redo().ok, true);
-  assert.equal(ownerOf(S.state.brollShots, "Dock"), "p_Ada");
+  assert.equal(ownerOf(currentDocument().brollShots, "Dock"), "p_Ada");
   assert.deepEqual(dangling(), []);
 });
 
@@ -218,7 +218,7 @@ test("an undo that only changes the crew announces the items it unassigned (#476
   document.addEventListener("undo-owner-cleared", listener);
   try {
     boot(["Cy"]);
-    S.state.people.push(person("p_Ada", "Ada"));
+    currentDocument().people.push(person("p_Ada", "Ada"));
     commit();
     remoteCrew((st) => {
       st.brollShots.find((e) => e.name === "Dock").owner = "p_Ada";
@@ -237,7 +237,7 @@ test("an undo that only changes the crew announces its cleared items without a j
   window.addEventListener("error", onError);
   try {
     boot(["Cy"]);
-    S.state.people.push(person("p_Ada", "Ada"));
+    currentDocument().people.push(person("p_Ada", "Ada"));
     commit();
     remoteCrew((st) => {
       st.brollShots.find((e) => e.name === "Dock").owner = "p_Ada";
@@ -265,22 +265,22 @@ const NAMES = ["Ada", "Bo", "Cy"];
 const ITEMS = [["productionTags", "Kettle"], ["productionTags", "Lamp"], ["brollShots", "Pier"], ["brollShots", "Dock"]];
 
 function ownerNameOf(list, name) {
-  const owner = ownerOf(S.state[list], name);
+  const owner = ownerOf(currentDocument()[list], name);
   if (!owner) return "";
-  const p = S.state.people.find((x) => x.id === owner);
+  const p = currentDocument().people.find((x) => x.id === owner);
   return p ? p.name.toLowerCase() : "?dangling:" + owner;
 }
 
 function mergeFold(name, mixedCase) {
-  const mine = S.state.people.find((p) => p.name === name);
+  const mine = currentDocument().people.find((p) => p.name === name);
   if (!mine) return false;
-  const base = clone(S.state);
+  const base = clone(currentDocument());
   base.people = base.people.filter((p) => p.id !== mine.id);
   [].concat(base.productionTags, base.brollShots).forEach((e) => { if (e.owner === mine.id) e.owner = ""; });
   const theirs = clone(base);
   theirs.people.push(person("pT_" + name, mixedCase ? name.toUpperCase() : name));
-  const merged = mergeStates(clone(base), clone(S.state), theirs).merged;
-  const next = clone(S.state);
+  const merged = mergeStates(clone(base), clone(currentDocument()), theirs).merged;
+  const next = clone(currentDocument());
   next.people = merged.people;
   next.productionTags = merged.productionTags;
   next.brollShots = merged.brollShots;
@@ -297,7 +297,7 @@ function nameOfOwner(st, list, name) {
 }
 
 function remoteItems(synced, mutate) {
-  const mine = clone(S.state);
+  const mine = clone(currentDocument());
   const theirs = clone(synced);
   mutate(theirs);
   const merged = mergeStates(clone(synced), clone(mine), clone(theirs)).merged;
@@ -312,7 +312,7 @@ function remoteItems(synced, mutate) {
     const was = ownerOf(synced[l], n);
     return was && !mineIds.has(was) && ownerOf(mine[l], n);
   }).length;
-  const next = clone(S.state);
+  const next = clone(currentDocument());
   next.people = merged.people;
   next.productionTags = merged.productionTags;
   next.brollShots = merged.brollShots;
@@ -334,11 +334,11 @@ function ownStepsLanded(steps, pre) {
       if (!before.has(e.id) || before.get(e.id) === want) return;
       const was = pre[s.key].find((x) => x.id === e.id);
       if (!was || (was.owner || "") !== before.get(e.id) && nameIn(pre, s, was.owner || "") !== nameIn(pre, s, before.get(e.id))) return;
-      const live = S.state[s.key].find((x) => x.id === e.id);
+      const live = currentDocument()[s.key].find((x) => x.id === e.id);
       if (!live) return;
       ownItems++;
-      const name = nameIn(S.state, s, want);
-      const to = name ? S.state.people.find((p) => p.name.trim().toLowerCase() === name) : null;
+      const name = nameIn(currentDocument(), s, want);
+      const to = name ? currentDocument().people.find((p) => p.name.trim().toLowerCase() === name) : null;
       const expect = to ? to.id : "";
       if ((live.owner || "") !== expect) missed.push(e.name + ": " + (live.owner || "") + " not " + expect);
     });
@@ -358,7 +358,7 @@ test("seeded: through noteRemoteChange, with crew-changing, item-assigning and m
     opening.productionTags.push(tag("t_kettle", "Kettle", ""), tag("t_lamp", "Lamp", ""));
     opening.brollShots.push(shot("bs_pier", "Pier", ""), shot("bs_dock", "Dock", ""));
     loadTestDocument(opening);
-    let synced = clone(S.state);
+    let synced = clone(currentDocument());
     const seen = {};
     ITEMS.forEach(([, n]) => { seen[n] = new Set([""]); });
     const note = () => ITEMS.forEach(([l, n]) => seen[n].add(ownerNameOf(l, n)));
@@ -367,30 +367,30 @@ test("seeded: through noteRemoteChange, with crew-changing, item-assigning and m
       const op = r();
       if (op < 0.2) {
         const [list, name] = pick(ITEMS);
-        const owner = pick(["", ...S.state.people.map((p) => p.id)]);
-        const item = S.state[list].find((e) => e.name === name);
+        const owner = pick(["", ...currentDocument().people.map((p) => p.id)]);
+        const item = currentDocument()[list].find((e) => e.name === name);
         if (item.owner === owner) continue;
         item.owner = owner;
         commit();
         note();
       } else if (op < 0.32) {
         const n = pick(NAMES);
-        if (S.state.people.some((p) => p.name.toLowerCase() === n.toLowerCase())) continue;
-        S.state.people.push(person("pM_" + n + "_" + step, n));
+        if (currentDocument().people.some((p) => p.name.toLowerCase() === n.toLowerCase())) continue;
+        currentDocument().people.push(person("pM_" + n + "_" + step, n));
         commit();
       } else if (op < 0.4) {
-        if (!S.state.people.length) continue;
-        const gone = pick(S.state.people).id;
-        const owned = ITEMS.filter(([l, n]) => ownerOf(S.state[l], n) === gone);
+        if (!currentDocument().people.length) continue;
+        const gone = pick(currentDocument().people).id;
+        const owned = ITEMS.filter(([l, n]) => ownerOf(currentDocument()[l], n) === gone);
         removePerson(gone);
-        if (owned.length && S.state.people.length && r() < 0.7) {
-          const heir = pick(S.state.people).id;
-          owned.forEach(([l, n]) => { S.state[l].find((e) => e.name === n).owner = heir; });
+        if (owned.length && currentDocument().people.length && r() < 0.7) {
+          const heir = pick(currentDocument().people).id;
+          owned.forEach(([l, n]) => { currentDocument()[l].find((e) => e.name === n).owner = heir; });
           commit();
         }
         note();
       } else if (op < 0.47) {
-        if (mergeFold(pick(NAMES), r() < 0.5)) { folds++; synced = clone(S.state); note(); }
+        if (mergeFold(pick(NAMES), r() < 0.5)) { folds++; synced = clone(currentDocument()); note(); }
       } else if (op < 0.6) {
         const [list, name] = pick(ITEMS);
         let res;
@@ -410,7 +410,7 @@ test("seeded: through noteRemoteChange, with crew-changing, item-assigning and m
         assert.deepEqual(res.lost, [], label + " merge kept my assignments");
         ownerDeleted += res.ownerDeleted;
         reassigned += res.reassigned;
-        synced = clone(S.state);
+        synced = clone(currentDocument());
         note();
       } else if (op < 0.68) {
         crewMerges++;
@@ -424,10 +424,10 @@ test("seeded: through noteRemoteChange, with crew-changing, item-assigning and m
             st.people.push(person("pT_" + n + "_" + step, n));
           }
         });
-        synced = clone(S.state);
+        synced = clone(currentDocument());
         note();
       } else if (op < 0.85) {
-        const pre = clone(S.state);
+        const pre = clone(currentDocument());
         const res = undo();
         if (res.empty) continue;
         if (!res.ok) { refused++; continue; }
@@ -438,7 +438,7 @@ test("seeded: through noteRemoteChange, with crew-changing, item-assigning and m
         assert.deepEqual(ownStepsLanded(res.steps, pre), [], label + " undo applied its own owner changes");
         ITEMS.forEach(([l, n]) => assert.ok(seen[n].has(ownerNameOf(l, n)), label + " undo " + n + "=" + ownerNameOf(l, n)));
       } else {
-        const pre = clone(S.state);
+        const pre = clone(currentDocument());
         const res = redo();
         if (res.empty) continue;
         if (!res.ok) { refused++; continue; }
@@ -463,7 +463,7 @@ test("an undo or redo that clears an owner announces it, one that does not stays
   document.addEventListener("undo-owner-cleared", listener);
   try {
     boot(["Ada", "Cy"]);
-    S.state.brollShots.find((e) => e.name === "Dock").owner = "p_Ada";
+    currentDocument().brollShots.find((e) => e.name === "Dock").owner = "p_Ada";
     commit();
     removePerson("p_Ada");
     remoteCrew((st) => st.people.push(person("p_Di", "Di")));

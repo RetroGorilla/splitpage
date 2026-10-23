@@ -1,7 +1,6 @@
 import { bootApp, clearTimers, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
-import { S } from "../js/_state.js";
 import { mockClock } from "./_m4-matrix.mjs";
 
 const live = [];
@@ -223,10 +222,10 @@ test("E9: a replaced document leaves no listener, observer, timer, refresh or ob
     grantVideoFile(new File(["12345"], "clip.mp4"), link);
     assert.ok(sessionVideoUrl(link), "the session video has an object URL while its document is open");
     requestRefresh("m4-lifecycle-" + round);
-    S.state.rows[0].audioText = "Typed in round " + round + ".";
+    currentDocument().rows[0].audioText = "Typed in round " + round + ".";
     noteSessionEdit();
     startNewScript();
-    assert.equal(S.state.title, "Untitled Script", "the replacement happened");
+    assert.equal(currentDocument().title, "Untitled Script", "the replacement happened");
     assert.ok(hasSessionVideo(link), "the file grant survives the replacement");
   }
   jobs.length = 0;
@@ -258,7 +257,7 @@ test("E9: the session's own dispose stops its timers and drops its listeners", a
   refreshed.into = jobs;
   t.after(() => { refreshed.into = null; });
   session.subscribe((change) => heard.push(change.kind));
-  S.state.rows[0].audioText = "Before dispose.";
+  currentDocument().rows[0].audioText = "Before dispose.";
   noteSessionEdit();
   assert.deepEqual(heard, ["edit"], "setup: the subscription hears an edit");
   requestRefresh("m4-lifecycle-disposed");
