@@ -124,6 +124,19 @@ A quick test: if feature B is about to call `a.something()`, then A does somethi
 
 **Numbered importers during the move.** When a file moves, the numbered files that imported it switch, in the same PR, to the action, owner, callback or common helper above. The one exception is a numbered file that moves into the same feature folder next, such as `05p-rundown-presence` and `05t-target` after the rundown. The PR lists those. The rule enforces itself in the end: when that importer moves, the layer rule fails until the crossing is designed.
 
+**Bridges that import the moved file.** A bridge may not import a feature (`layerAllows` lets `src/legacy/` import numbered files but not `src/features/`), so the move PR also settles every bridge import of the file, listed under "Imported by bridges" in the [inventory](feature-ports-inventory.md):
+
+- An action definition that calls the file moves into the feature's `actions.ts` ([Rule 6](#rule-6-features-own-their-action-definitions-bootstrap-owns-their-order)). The legacy actions file keeps its other definitions until their files move.
+- State that a bridge reads, such as `tourShowing()` for `legacy/screen-state.ts`, moves to an owner in its own PR first (Rule 8, step 1).
+- Anything else goes through a hand-off, below.
+
+**Hand-off bridges.** A few bridges wrap no owner. One numbered file hands its functions in, and other files call them:
+
+- `legacy/tour-pause.ts`: `20c-help` hands in the tour's interrupt and resume, and `20e-connect` calls them around its dialog.
+- `handServerCheckTo` in the location bridge: `13-hosted` hands in its server check, and `20e-connect` and `20f-desktop` call it through `checkServer()`.
+
+These are connections between two areas, not shared ports. When the file that hands its functions in moves, its mount returns them as a small control object, typed in its own `ports.ts`, and its wiring hands that object to the bridge. The numbered callers keep working unchanged. When the last caller moves, its call becomes one of the four ways above, usually an output callback the wiring connects, and the hand-off goes (for `tour-pause.ts`, the whole file). Its entries in `src/test/_load-order-hooks.mjs` and `tests/bootstrap/legacy-shim.test.ts` go with it.
+
 ### Rule 6. Features own their action definitions; bootstrap owns their order
 
 - A feature's action definitions (id, label, icon, words, keys, availability, run) live in `src/features/<name>/actions.ts`, as a function that takes what the actions control and returns `ActionDefinition[]`. For the rundown that is `rundownActions(rundown: { minimized(): boolean; toggle(): void })`, with the `RundownMinimizer` interface moving from `legacy/this-document-actions.ts` into the feature. Availability uses the screen port ([P6](#the-shared-ports)) and the pure rules from `application/screen.ts`.
@@ -191,7 +204,7 @@ A **move** is a group of numbered files that become one feature folder (or one o
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 0 | Script zoom (#730) | `05s` | 218 | 0 | 3 | 3 | `features/script-zoom` | Codex; lands P3, P4, P6, `sharedPorts()`, the fakes and the action-order test |
 | 0 | Rundown (`h2ggei`) | `05f`, `05p`, `05t` | 1,385 | 4 | 5 | 9 | `features/rundown` | Opus; lands P1, P5, P8, P10 and `reveal-row` |
-| 1 | Help and tour | `20c` | 351 | 1 | 3 | 5 | `features/help` | Codex, after L3f; lands P2 |
+| 1 | Help and tour | `20c` | 351 | 1 | 3 | 5 | `features/help` | Codex, after L3f and the Opus PR that lands P1; a `tourOpen` view flag PR first; lands P2 |
 | 1 | Draft boxes | `05d` | 317 | 0 | 4 | 1 | `features/editing` | Codex |
 | 1 | Read time | `05r` | 155 | 3 | 0 | 5 | `features/rows` | Opus; lands P9 and P11 |
 | 1 | Find and replace | `09` | 518 | 5 | 3 | 5 | `features/find` | Codex |
@@ -267,7 +280,7 @@ Why this order:
 | `07b-plain-tags` | 259 | yes | 3 | 1 | 1 | `features/tags` | 3 | Opus | Typing path |
 | `08-production-panels` | 1,106 | yes | 7 | 6 | 3 | `features/tags` | 3 | Codex | Panel; commands only |
 | `08c-broll` | 282 | | 6 | 2 | 4 | `features/broll`, reconciler to `application/production` | 2 | Opus | The session's records reconciler; captures b-roll while typing |
-| `08d-broll-panel` | 1,360 | yes | 6 | 9 | 4 | `features/broll` | 3 | Codex | Panel; commands only |
+| `08d-broll-panel` | 1,360 | yes | 6 | 9 | 4 | `features/broll` | 3 | Codex | Panel; commands only. `brollPageOpen()`, which `screen-state` reads, goes to `ViewFlags` first, as the tour's flag does |
 | `09-find-replace` | 518 | | 5 | 3 | 3 | `features/find` | 1 | Codex | Replace runs through P9 and P11, unchanged |
 | `10-comments` | 1,036 | yes | 8 | 6 | 10 | `features/comments` | 3 | Codex | Resumes autosave in review mode and asks for an autosave now, through P15 |
 | `11-import` | 574 | yes | 5 | 3 | 4 | `features/imports`, `adapters/formats` | 4 | Opus | State ingress |
@@ -287,7 +300,7 @@ Why this order:
 | `20-teleprompter` | 1,061 | yes | 9 | 6 | 2 | `features/prompter` | 3 | Opus | Opens a project in the prompter window |
 | `20a-update` | 384 | yes | 1 | 1 | 4 | `features/update` | 3 | Codex | Calls the desktop port; desktop smoke |
 | `20b-onboarding` | 337 | | 7 | 5 | 1 | `features/onboarding` | 3 | Codex | |
-| `20c-help` | 351 | | 5 | 1 | 2 | `features/help` | 1 | Codex | After L3f |
+| `20c-help` | 351 | | 5 | 1 | 2 | `features/help` | 1 | Codex | After L3f and P1. First, in its own Codex PR, the tour's showing state goes to `ViewFlags` as `tourOpen`/`setTourOpen` (beside `writerOpen`), so `screen-state` reads the owner instead of `tourShowing()`. In the move: the `help` and `tour` definitions leave `legacy/help-actions.ts` for `features/help/actions.ts`. The tour pause is a hand-off: the mount returns `tour: { interrupt, offerResume }`, the help wiring hands it to `handTourPauseTo`, and `20e` keeps calling the bridge. When `20e` moves (Wave 3), connect gets an output callback for its dialog opening and closing, the wiring connects it to the tour, and `tour-pause.ts` goes |
 | `20d-formats` | 263 | yes | 4 | 7 | 2 | `adapters/formats`, `application/save` | 4 | Opus | L3h PR 4 moves its codecs |
 | `20e-connect` | 511 | yes | 5 | 2 | 5 | `features/collaboration` | 3 | Opus | Sets where the document lives |
 | `20f-desktop` | 1,009 | yes | 5 | 8 | 6 | `adapters/desktop`, a desktop feature | 4 | Opus | Preload bridge; desktop smoke |
