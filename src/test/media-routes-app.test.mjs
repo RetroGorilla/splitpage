@@ -16,7 +16,7 @@ const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts
 const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { rowSlots } = await import("../core/document/gallery.ts");
-const { openGalleryOverlay, closeGalleryOverlay } = await import("../js/05e-gallery-overlay.js");
+const { openGalleryOverlay, closeGalleryOverlay } = await import("../features/gallery/overlay.js");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
