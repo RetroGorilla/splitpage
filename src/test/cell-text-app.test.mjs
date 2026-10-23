@@ -19,7 +19,7 @@ const { fromHtml, sanitizeHtml, storedHtmlFromDom } = await import("../legacy/ri
 const { toHtml } = await import("../core/text/html.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
-const { applyMerge } = await import("../js/03-sync.js");
+const { applyMerge } = await import("../legacy/merge-bridge.ts");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
