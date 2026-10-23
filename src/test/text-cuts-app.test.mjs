@@ -17,7 +17,8 @@ const { buildScenePayload, parseScenePayload } = await import("../js/05g-scene-c
 const { newScriptFromSelection, selectScenes } = await import("../js/05h-scene-select.js");
 const { registryKey } = await import("../core/document/tags.ts");
 const { setTagNotes } = await import("../js/08-production-panels.js");
-const { closeBrollPanel, openBrollPanel } = await import("../js/08d-broll-panel.js");
+const { openBrollPanel } = await import("../js/08d-broll-panel.js");
+const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { closeExportDialog, openExportDialog } = await import("../js/18c-export-dialog.js");
 const { presenceInitials } = await import("../js/13a-presence.js");
 const { buildMarkdownProject, parseMarkdownProject, applyMarkdownProject } = await import("../adapters/formats/project-file.ts");
@@ -129,7 +130,7 @@ test("08d a shot's note and its reference are cut at 2000 by code point (#434)",
   ref.value = x(1999) + GRIN + "y";
   ref.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
   assert.equal(shot("bs2").audioRef, x(1999) + GRIN);
-  closeBrollPanel();
+  sidePanels().close("broll-panel");
 });
 
 test("20h imported server names, hosts and onboarding values are cut by code point (#434)", async () => {
