@@ -12,7 +12,7 @@ import { currentDocument, editAllowed, readSession } from "../legacy/session-bri
 import { buildVideoCardEl, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
 import { slotPoster } from "../features/common/gallery.ts";
-import { appendDraftMedia, draftModel, editDraft } from "./05d-draft-edit.js";
+import { appendDraftMedia, draftModel, editDraft } from "../features/editing/draft-edit.js";
 import { isDraftBox, isScriptCell } from "../features/editing/cell-page.ts";
 import { trackDocument } from "./12a-undo.js";
 import { rowMotionKey, withRowMotion } from "../features/rows/row-motion.js";
@@ -48,7 +48,7 @@ import { fromHtml } from "../legacy/richtext.ts";
 import { cellEditing, editorSelection, paintGuard, undoGuard } from "../legacy/editor-bridge.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
-import { cellSelection, placeEditorSelection, rememberCellSelection } from "../features/editing/cell-selection.ts";
+import { cellSelection, placeEditorSelection, rememberCellSelection } from "../features/common/cell-selection.ts";
 import { setTagAddingPerson } from "../application/tag-panel-state.ts";
 import { formatVideoLength } from "../../shared/text.js";
 import { reviewMode } from "../legacy/location-bridge.ts";

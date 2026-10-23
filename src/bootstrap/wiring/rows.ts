@@ -1,6 +1,6 @@
 import { owned } from "../../features/routing/owned.ts";
-import { placeCaretAtTextOffset } from "../../features/editing/caret.ts";
-import { cellSelection, setCellSelection } from "../../features/editing/cell-selection.ts";
+import { placeCaretAtTextOffset } from "../../features/common/caret.ts";
+import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
 import type { PastePlace, SceneMedia, SceneMediaPorts, ScenePorts, Scenes } from "../../features/rows/ports.ts";
 import { __init as mountSceneMedia } from "../../features/rows/scene-media.js";
 import { __init as mountScenes } from "../../features/rows/scenes.js";
