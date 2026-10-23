@@ -3,7 +3,6 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
 import { readBuiltCss } from "../../tools/css-colours.mjs";
-import { S } from "../js/_state.js";
 import { table304Document } from "../../tests/application/raw-inputs.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
@@ -13,7 +12,7 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { liveSession, mergeBase } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession, mergeBase } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { applyMerge, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { renderAbsorbed } = await import("../js/05-render.js");
@@ -123,7 +122,7 @@ function fresh(title) {
   for (const id of ["merge-banner", "merge-undo", "merge-review"]) document.getElementById(id).hidden = true;
   document.querySelectorAll("#rows .just-merged").forEach((el) => el.classList.remove("just-merged"));
   quiet();
-  return S.state;
+  return currentDocument();
 }
 
 function chipText(chipId, partIds) {
@@ -143,13 +142,13 @@ function bookkeeping() {
     undoButton: !document.getElementById("merge-undo").hidden,
     undoPoint: !!mergeUndo().last(),
     highlighted: Array.from(document.querySelectorAll("#rows .row.just-merged")).map((el) => el.getAttribute("data-id")),
-    sessionHoldsIt: held() === S.state,
+    sessionHoldsIt: held() === currentDocument(),
     fileChip: chipText("file-chip", ["file-chip-name", "file-chip-state"]),
     identityChip: chipText("identity-chip", ["identity-name"]),
     heard: heard.slice(),
     server: asked.filter((a) => /^(GET|PUT) api\/docs\//.test(a)),
-    title: S.state.title,
-    rows: S.state.rows.map((r) => r.audioText),
+    title: currentDocument().title,
+    rows: currentDocument().rows.map((r) => r.audioText),
     toasts: announced.map(toastText).filter((t) => t !== REDRAW).map((t) => t.replace(/\d+/g, "#"))
   };
 }
@@ -281,7 +280,7 @@ test("a draft of an imported file whose render throws still opens as an unsaved 
 });
 
 test("a new blank script whose render throws still replaces the document, as a clean one does (#418)", async () => {
-  const seen = await bothWays("new blank script", () => { fresh("Before the blank"); return { observe: () => mergeBase() && mergeBase().docId === S.state.docId }; }, async () => {
+  const seen = await bothWays("new blank script", () => { fresh("Before the blank"); return { observe: () => mergeBase() && mergeBase().docId === currentDocument().docId }; }, async () => {
     document.querySelector('#newtab-page [data-newtab-action="new"]').click();
     await idle();
   });
@@ -371,8 +370,8 @@ test("the redraw toast is a sticky error with a Redraw button: Redraw while rend
     const first = await logging(() => applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false }));
     assert.equal(first.threw, null);
     assert.deepEqual(first.logged, [BROKE]);
-    assert.equal(held(), S.state);
-    assert.equal(S.state.title, "Redrawn");
+    assert.equal(held(), currentDocument());
+    assert.equal(currentDocument().title, "Redrawn");
     assert.notEqual(document.getElementById("doc-title").value, "Redrawn", "nothing was drawn");
     const toasts = redrawToasts();
     assert.equal(toasts.length, 1);
@@ -513,7 +512,7 @@ function findAndReplace(needle, replacement) {
 
 function editState() {
   return {
-    doc: JSON.stringify(S.state),
+    doc: JSON.stringify(currentDocument()),
     undo: undoSizes(),
     top: JSON.stringify(lastUndoEntry() || null),
     redo: JSON.stringify(nextRedoEntry() || null),
@@ -533,7 +532,7 @@ function sameEdits(now, before, label) {
 async function staleScreen(setup, change) {
   fresh("Stale screen");
   if (setup) await setup();
-  const theirs = cloneState(S.state);
+  const theirs = cloneState(currentDocument());
   theirs.title = "Theirs";
   if (change) change(theirs);
   else theirs.rows[1].audioText = THEIRS;
@@ -546,7 +545,7 @@ async function staleScreen(setup, change) {
   }
   await idle();
   assert.deepEqual(out.logged, [BROKE]);
-  if (!change) assert.equal(S.state.rows[1].audioText, THEIRS);
+  if (!change) assert.equal(currentDocument().rows[1].audioText, THEIRS);
   assert.notEqual(cellOf("r2", "audioText").textContent.indexOf("Mara mends nets."), -1, "r2 still shows the old text");
   assert.equal(redrawToasts().length, 1);
 }
@@ -816,7 +815,7 @@ test("on a stale screen a paste that reaches the stale cell late changes nothing
   const out = await logging(async () => { res = pasteIntoCell(cell, "", "XYZ", {}); await idle(); });
   assert.equal(out.threw, null, out.threw && out.threw.stack);
   sameEdits(editState(), before, "a late paste on the stale screen");
-  assert.equal(S.state.rows[1].audioText, THEIRS);
+  assert.equal(currentDocument().rows[1].audioText, THEIRS);
   assert.equal(res.done, false);
   let called = false;
   assert.equal(cellEditing().edit(cell, () => { called = true; return null; }), null);
@@ -836,7 +835,7 @@ test("a paste with a file that is still being read when the screen goes stale ch
   const file = new window.File(["not really a video"], "clip.mp4", { type: "video/mp4" });
   Object.defineProperty(ev, "clipboardData", { value: { getData: (t) => store[t] || "", files: [file], types: ["text/plain", "Files"] } });
   cell.dispatchEvent(ev);
-  const theirs = cloneState(S.state);
+  const theirs = cloneState(currentDocument());
   theirs.rows[1].audioText = THEIRS;
   const unbreak = breakRender("early");
   let merged;
@@ -851,7 +850,7 @@ test("a paste with a file that is still being read when the screen goes stale ch
   for (let i = 0; i < 100 && !pasteRefusals().length; i++) await new Promise((r) => setTimeout(r, 50));
   await idle();
   sameEdits(editState(), before, "the late paste");
-  assert.equal(S.state.rows[1].audioText, THEIRS);
+  assert.equal(currentDocument().rows[1].audioText, THEIRS);
   assert.equal(pasteRefusals().length, 1, "the refused paste says why: " + JSON.stringify(shown().map(toastText)));
   assert.equal(pasteRefusals()[0].classList.contains("error"), true);
   await pressRedraw();
@@ -971,7 +970,7 @@ test("a later update that draws cleanly lifts the block without Redraw, and neit
   await staleScreen(() => cellOf("r1", "audioText").focus());
   const save = document.getElementById("btn-save");
   save.focus();
-  const theirs = cloneState(S.state);
+  const theirs = cloneState(currentDocument());
   theirs.title = "Drawn by the next update";
   const unbreak = breakRender("early");
   try {
@@ -989,7 +988,7 @@ test("a later update that draws cleanly lifts the block without Redraw, and neit
   assert.equal(document.activeElement, document.getElementById("btn-save"));
   typeChar(cellOf("r2", "audioText"), "x");
   await idle();
-  assert.equal(S.state.rows[1].audioText, THEIRS + "x");
+  assert.equal(currentDocument().rows[1].audioText, THEIRS + "x");
 });
 
 test("on a stale screen nothing copies a cell's stale text into the script, even a sync no refused event led to (#443)", async () => {
@@ -1000,7 +999,7 @@ test("on a stale screen nothing copies a cell's stale text into the script, even
   cellEditing().sync(cell);
   await idle();
   sameEdits(editState(), before, "syncing the stale cell");
-  assert.equal(S.state.rows[1].audioText, THEIRS);
+  assert.equal(currentDocument().rows[1].audioText, THEIRS);
   await pressRedraw();
   assert.equal(cellOf("r2", "audioText").textContent, THEIRS);
 });
@@ -1012,7 +1011,7 @@ test("a failed render marks the page as a stale screen, and Redraw or a later cl
   assert.equal(document.body.classList.contains("is-stale-screen"), false, "Redraw takes the mark off");
   await staleScreen();
   assert.equal(document.body.classList.contains("is-stale-screen"), true, "marked again by the next failed render");
-  const theirs = cloneState(S.state);
+  const theirs = cloneState(currentDocument());
   theirs.title = "Cleared by a clean update";
   const clean = await logging(() => applyMerge({ theirs: cloneState(theirs), source: "server-conflict", unchanged: true, report: false }));
   await idle();

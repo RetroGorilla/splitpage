@@ -1,7 +1,6 @@
 import { hasSetLength, parseSceneLength } from "../core/document/timing.ts";
 import { estimatedSeconds, formatDuration, rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
-import { updateScriptStats } from "./01-scene-status.js";
 import { cssAttr } from "./04-richtext.js";
 import { paintGuard } from "../legacy/editor-bridge.ts";
 import { redo, undo } from "./12a-undo.js";
@@ -24,9 +23,7 @@ function applySceneLength(rowId, seconds) {
 }
 
 export function setSceneLength(rowId, seconds) {
-  if (!applySceneLength(rowId, seconds)) return false;
-  updateScriptStats();
-  return true;
+  return applySceneLength(rowId, seconds);
 }
 
 export function openReadTimeEditor(btn) {

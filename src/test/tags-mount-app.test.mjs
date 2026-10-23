@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -71,10 +71,10 @@ for (const work of ["card", "touch"]) {
           open();
           replacement = mountTagsFeature();
         } else if (scenario === "same-ID replacement") {
-          const before = S.state;
+          const before = currentDocument();
           open();
-          assert.notEqual(S.state, before);
-          assert.equal(S.state.docId, before.docId);
+          assert.notEqual(currentDocument(), before);
+          assert.equal(currentDocument().docId, before.docId);
         }
         let scrolled = 0;
         const card = document.querySelector("#production-list .tag-entity");

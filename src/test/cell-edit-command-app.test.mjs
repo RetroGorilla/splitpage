@@ -1,7 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { saveChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
@@ -14,7 +13,7 @@ const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { cellEditing } = await import("../legacy/editor-bridge.ts");
 const { toggleCellFormat, maybeCueShortcut } = await import("../js/05-render.js");
 const { undo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const { setMark } = await import("../js/04c-doc-model.js");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
@@ -47,7 +46,7 @@ async function open() {
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
-const row = (id) => S.state.rows.find((r) => r.id === id);
+const row = (id) => currentDocument().rows.find((r) => r.id === id);
 const cellOf = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
 
 function lastText(el) {
@@ -166,7 +165,7 @@ test("in review mode the session refuses a formatting edit: the document, the ce
   try {
     const el = cellOf("r1", "audioText");
     select(el, 6, 11);
-    const before = JSON.stringify(S.state);
+    const before = JSON.stringify(currentDocument());
     const shown = el.innerHTML;
     const generation = liveSession().generation();
     const seq = saveChanges();
@@ -178,7 +177,7 @@ test("in review mode the session refuses a formatting edit: the document, the ce
       w.stop();
     }
     assert.equal(out, null);
-    assert.equal(JSON.stringify(S.state), before);
+    assert.equal(JSON.stringify(currentDocument()), before);
     assert.equal(el.innerHTML, shown);
     assert.equal(liveSession().generation(), generation);
     assert.equal(saveChanges(), seq);
@@ -193,7 +192,7 @@ test("a command that fails is thrown, and leaves the document, the cell on scree
   const el = cellOf("r1", "audioText");
   select(el, 6, 11);
   await settle();
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   const shown = el.innerHTML;
   const seq = saveChanges(), generation = liveSession().generation(), sizes = undoSizes();
   const real = Date.prototype.toISOString;
@@ -204,7 +203,7 @@ test("a command that fails is thrown, and leaves the document, the cell on scree
     Date.prototype.toISOString = real;
   }
   await settle();
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.equal(el.innerHTML, shown);
   assert.equal(saveChanges(), seq);
   assert.equal(liveSession().generation(), generation);

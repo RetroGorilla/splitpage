@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { saveChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
@@ -58,10 +58,10 @@ async function open(make = fixture) {
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
-const row = (id) => S.state.rows.find((r) => r.id === id);
+const row = (id) => currentDocument().rows.find((r) => r.id === id);
 const cellOf = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
-const tagNames = () => S.state.productionTags.map((t) => t.cat + ":" + t.name);
-const shotIds = () => S.state.brollShots.map((s) => s.id);
+const tagNames = () => currentDocument().productionTags.map((t) => t.cat + ":" + t.name);
+const shotIds = () => currentDocument().brollShots.map((s) => s.id);
 
 function lastText(el) {
   const walker = document.createTreeWalker(el, 4);
@@ -88,11 +88,11 @@ function watch() {
 }
 
 function snapshot() {
-  return { doc: JSON.stringify(S.state), generation: liveSession().generation(), seq: saveChanges() };
+  return { doc: JSON.stringify(currentDocument()), generation: liveSession().generation(), seq: saveChanges() };
 }
 
 function assertUntouched(before, seen) {
-  assert.equal(JSON.stringify(S.state), before.doc, "the document, its tag registry and its b-roll list are as they were");
+  assert.equal(JSON.stringify(currentDocument()), before.doc, "the document, its tag registry and its b-roll list are as they were");
   assert.equal(liveSession().generation(), before.generation);
   assert.equal(saveChanges(), before.seq);
   assert.deepEqual(seen, []);
@@ -275,7 +275,7 @@ test("typing B-roll: writes the shot record in the same command as its key", asy
   const key = /data-broll-id="([^"]+)"/.exec(row("r3").visualText);
   assert.ok(key, "the marker became a b-roll key");
   assert.deepEqual(added, [key[1]]);
-  assert.equal(S.state.brollShots.find((s) => s.id === key[1]).audioRef, "Steam");
+  assert.equal(currentDocument().brollShots.find((s) => s.id === key[1]).audioRef, "Steam");
   assert.equal(liveSession().generation(), generation + 1);
   assert.equal(w.seen.length, 1);
   assert.deepEqual(w.seen[0].changes.docFields, ["brollShots"]);

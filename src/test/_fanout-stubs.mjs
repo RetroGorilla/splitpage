@@ -1,5 +1,5 @@
 import { viewFlags } from "../legacy/preferences-bridge.ts";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { hasSetLength as coreHasSetLength } from "../core/document/timing.ts";
 import { noteEdit } from "../js/12a-undo.js";
 import { startTestSession } from "./_session.mjs";
@@ -45,7 +45,7 @@ export function stampRow(row) {
 
 export function markDirty() {
   calls.push("markDirty");
-  dirtied.push(rowCopy(S.state.rows));
+  dirtied.push(rowCopy(currentDocument().rows));
   if (answers.noteEdit) noteEdit();
 }
 

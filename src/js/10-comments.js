@@ -487,7 +487,13 @@ export function syncAnchorResolvedClasses() {
   });
 }
 
-export function updateCommentsCount() {
+var COUNTED_KINDS = { adopt: true, server: true, recovery: true, reload: true };
+
+export function commentsChanged(change) {
+  if (COUNTED_KINDS[change.kind] || change.changes.whole || change.changes.docFields.indexOf("comments") !== -1) updateCommentsCount();
+}
+
+function updateCommentsCount() {
   const doc = currentDocument();
   if (!doc) return;
   const open = doc.comments.filter(function (c) { return !c.resolved; }).length;

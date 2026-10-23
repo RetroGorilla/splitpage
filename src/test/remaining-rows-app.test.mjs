@@ -1,7 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 
 window.Element.prototype.scrollBy = function () {};
 const scrolled = [];
@@ -12,7 +11,7 @@ const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const { editorSelection } = await import("../legacy/editor-bridge.ts");
 const { setHideShotScenes } = await import("../js/01b-hide-shot.js");
 const writer = await import("../js/19-writer.js");
@@ -49,7 +48,7 @@ async function open() {
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
-const row = (id) => S.state.rows.find((r) => r.id === id);
+const row = (id) => currentDocument().rows.find((r) => r.id === id);
 const rowEl = (id) => document.querySelector('#rows .row[data-id="' + id + '"]');
 const cellOf = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
 const wrapOf = (cell) => cell.closest(".field-wrap");
@@ -115,7 +114,7 @@ async function throughSession(gesture) {
 }
 
 async function nothingWritten(gesture) {
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   const sizes = undoSizes();
   const generation = liveSession().generation();
   const seen = [];
@@ -129,7 +128,7 @@ async function nothingWritten(gesture) {
   assert.deepEqual(seen, [], "nothing published");
   assert.equal(liveSession().generation(), generation);
   assert.deepEqual(undoSizes(), sizes, "no undo entry");
-  assert.equal(JSON.stringify(S.state), before, "the document is unchanged");
+  assert.equal(JSON.stringify(currentDocument()), before, "the document is unchanged");
 }
 
 async function inReview(body) {
@@ -301,5 +300,5 @@ test("the add-scene bar adds a scene through the session", async () => {
   await open();
   const changes = await throughSession(() => click(document.querySelector('.add-row-bar [data-action="add-row"]')));
   assert.equal(changes.rowsInserted.length, 1);
-  assert.equal(S.state.rows.length, 4);
+  assert.equal(currentDocument().rows.length, 4);
 });
