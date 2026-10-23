@@ -1,17 +1,15 @@
-import type { ActionDefinition, ActionRegistry, Availability } from "../application/actions.ts";
-import { registerAll } from "../application/actions.ts";
+import type { ActionDefinition, Availability } from "../application/actions.ts";
 import { showTaggingHelp } from "../js/10-comments.js";
 import { openLongDemo } from "../js/18b-file-menu.js";
 import { showAbout } from "../js/20a-update.js";
 import { openOnboarding } from "../js/20b-onboarding.js";
-import { openHelp, startTour } from "../js/20c-help.js";
 import { openServersDialog, serversMenuLabel } from "../js/20e-connect.js";
 import { appDataImportShown } from "../js/20f-desktop.js";
 import { exportAppData, openImportAppData } from "../js/20h-appdata.js";
 import { openSettings } from "../js/20s-settings.js";
 import { OPENS_A_DIALOG, availableUnless } from "../application/screen.ts";
 import { onlyDialogOpen } from "./screen.ts";
-import { inDesktopApp, screenNow } from "./screen-state.ts";
+import { screenNow } from "./screen-state.ts";
 
 function overDialogs(): Availability {
   return availableUnless(OPENS_A_DIALOG, screenNow());
@@ -21,7 +19,7 @@ function overDialogsButThePinPrompt(): Availability {
   return onlyDialogOpen("pin-modal") ? availableUnless(["tour"], screenNow()) : overDialogs();
 }
 
-export function registerHelpActions(registry: ActionRegistry): () => void {
+export function helpMenuActions(): ActionDefinition[] {
   const definitions: ActionDefinition[] = [
     {
       id: "servers",
@@ -47,26 +45,6 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       words: "settings preferences options theme dark light mode clock 12 24 hour colour color name zoom",
       availability: overDialogs,
       run: (_source, input) => { openSettings(input); }
-    },
-    {
-      id: "help",
-      label: "Help",
-      group: "Help",
-      icon: "i-help",
-      keys: () => (inDesktopApp() ? ["F1"] : []),
-      bindKeys: () => false,
-      words: "guide manual docs user guide how",
-      availability: () => availableUnless(["dialog"], screenNow()),
-      run: () => { openHelp(); }
-    },
-    {
-      id: "tour",
-      label: "Take the tour",
-      group: "Help",
-      icon: "i-compass",
-      words: "tutorial walkthrough introduction",
-      availability: () => availableUnless(["dialog"], screenNow()),
-      run: () => { startTour(); }
     },
     {
       id: "long-demo",
@@ -125,5 +103,5 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       run: () => { openImportAppData(); }
     }
   ];
-  return registerAll(registry, definitions);
+  return definitions;
 }

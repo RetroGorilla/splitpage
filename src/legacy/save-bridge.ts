@@ -8,13 +8,13 @@ import type {
   SaveJob,
   SaveOutcome,
   SaveOwnershipPort,
-  SaveStatusChange,
   WriterResult
 } from "../application/save/coordinator.ts";
 import { createSaveDestinations } from "../application/save/destinations.ts";
 import { createFileConflicts } from "../application/save/file-conflict.ts";
 import type { FileConflicts } from "../application/save/file-conflict.ts";
 import type { SaveDestination, SaveDestinations } from "../application/save/destinations.ts";
+import type { SaveChange } from "../application/save/save-state.ts";
 import type { AutoSaveTarget } from "../application/save/status.ts";
 import type { TimerPort } from "../application/session/ports.ts";
 import { showToast } from "./effects-bridge.ts";
@@ -57,8 +57,6 @@ interface Started {
 }
 
 let started: Started | null = null;
-
-export type SaveChange = SaveStatusChange | AutoSaveChange;
 
 const changeListeners: ((change: SaveChange) => void)[] = [];
 
