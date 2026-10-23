@@ -16,8 +16,7 @@ import {
   removeTag,
   renameTag,
   tagStatusLampHtml,
-  tagsByCategory,
-  updateProductionBadge
+  tagsByCategory
 } from "./07-production-tags.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { personColor } from "./13a-presence.js";
@@ -75,6 +74,23 @@ function updateGearBadge(n) {
 
 export function updateGearCount() {
   updateGearBadge(currentDocument() ? gearEntries().length : 0);
+}
+
+function updateProductionBadge(n) {
+  var badge = document.getElementById("production-badge");
+  if (!badge) return;
+  if (n > 0) { badge.hidden = false; badge.textContent = n > 99 ? "99+" : String(n); }
+  else badge.hidden = true;
+}
+
+export function updateProductionCount() {
+  updateProductionBadge(currentDocument() ? productionEntries().length : 0);
+}
+
+export function productionPanelsOpen() {
+  var panel = document.getElementById("production-panel");
+  var gearPanel = document.getElementById("gear-panel");
+  return !!((panel && !panel.hidden) || (gearPanel && !gearPanel.hidden));
 }
 
 function updateGearHeadCount(n) {

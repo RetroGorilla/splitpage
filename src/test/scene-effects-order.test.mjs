@@ -8,7 +8,7 @@ import { S } from "../js/_state.js";
 register("./_fanout-hooks.mjs", import.meta.url);
 
 const stubs = await import("./_fanout-stubs.mjs");
-const { cycleRowStatus, updateScriptStats } = await import("../js/01-scene-status.js");
+const { cycleRowStatus, onScriptStats, updateScriptStats } = await import("../js/01-scene-status.js");
 const { setSceneLength } = await import("../js/05r-read-time.js");
 const bridge = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
@@ -28,6 +28,7 @@ const wired = stubs.wireSession({
   edit: function () { return reviewing.on ? { allowed: false, reason: bridge.REVIEW_ONLY } : { allowed: true }; }
 });
 bridge.liveSession().subscribe(function (change) { published.push(change); });
+onScriptStats(function () { stubs.renderRundown(); stubs.paintTargetOverlay(); });
 
 function lengthDoc(rows) {
   const opening = migrateRows({ title: "Order", rows: rows.map((r) => Object.assign({ visualText: "", audioText: "", updatedAt: "" }, r)) });

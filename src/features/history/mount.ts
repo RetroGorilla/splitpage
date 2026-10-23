@@ -1,5 +1,4 @@
 import { createViewLifetime } from "../common/view-lifetime.ts";
-import { listenHistory } from "./display.ts";
 
 export interface HistoryPorts {
   readonly promptForWpm: () => void;
@@ -18,6 +17,5 @@ export function mountHistory(mount: { window: Window; ports: HistoryPorts }): { 
 
   life.listen(element("history-close"), "click", ports.closeHistoryPanel);
   life.listen(element("history-panel"), "click", ports.onRootClick);
-  life.release(listenHistory());
   return { dispose: life.dispose };
 }

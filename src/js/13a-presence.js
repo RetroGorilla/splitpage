@@ -7,7 +7,6 @@ import {
   resolvePersonColor
 } from "../core/document/person-colors.ts";
 import { cssAttr } from "./04-richtext.js";
-import { paintRundownPresence } from "./05p-rundown-presence.js";
 import { getSavedAuthorName } from "./10-comments.js";
 import {
   apiUrl,
@@ -194,12 +193,22 @@ function presenceBeatSoon() {
   schedulePresence(PRESENCE_SOON_MS);
 }
 
+var paintListeners = [];
+
+export function onPresencePaint(listener) {
+  paintListeners.push(listener);
+  return function () {
+    var at = paintListeners.indexOf(listener);
+    if (at !== -1) paintListeners.splice(at, 1);
+  };
+}
+
 export function paintPresence() {
   var bar = document.getElementById("presence-bar");
   var list = presenceHere.slice(0, PRESENCE_MAX_SHOWN);
   var mine = presenceLocation();
   if (bar) fitPresenceBar(bar);
-  paintRundownPresence();
+  paintListeners.slice().forEach(function (listener) { listener(); });
   document.querySelectorAll(".presence-mark").forEach(function (el) { el.remove(); });
   if (!list.length) return;
   list.forEach(function (p) {

@@ -3,12 +3,7 @@ import { isBlankTagName } from "../core/production/tags.ts";
 import { domToPos } from "../features/editing/cell-dom.ts";
 import { cellEditing } from "../legacy/editor-bridge.ts";
 import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
-import {
-  isInsideTagOrLink,
-  registryEntry,
-  updateTagBadges
-} from "./07-production-tags.js";
-import { renderProduction } from "./08-production-panels.js";
+import { isInsideTagOrLink, registryEntry } from "./07-production-tags.js";
 import { cappedName, escapeHtml } from "../core/document/text-policy.ts";
 import { replaceText, replaceWithTag } from "../core/text/edits.ts";
 import { namedTagId, projection } from "../core/text/runs.ts";
@@ -244,8 +239,6 @@ export function closePlainTag() {
     return { cell: res.cell, sel: { from: res.caret, to: res.caret }, records: { tags: [{ cat: o.cat, name: res.name }] } };
   });
   if (!done) { unwrap(o); return true; }
-  updateTagBadges();
-  renderProduction();
   return true;
 }
 

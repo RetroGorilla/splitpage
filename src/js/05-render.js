@@ -3,14 +3,12 @@ import { disarmDeleteButton } from "../features/rows/delete-button.ts";
 import { hasSetLength } from "../core/document/timing.ts";
 import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
 import { S } from "./_state.js";
-import { updateScriptStats } from "./01-scene-status.js";
 import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "../adapters/storage/02d-gallery.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { currentDocument, editAllowed, readSession } from "../legacy/session-bridge.ts";
 import { buildVideoCardEl, cssAttr, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
-import { refreshGalleryOverlay } from "./05e-gallery-overlay.js";
 import { appendDraftMedia, draftModel, editDraft } from "./05d-draft-edit.js";
 import { isDraftBox, isScriptCell } from "../features/editing/cell-page.ts";
 import { trackDocument } from "./12a-undo.js";
@@ -20,21 +18,13 @@ import {
   productionIndexStats,
   resetProductionIndexStats,
   scheduleUntaggedScan,
-  tagFieldOccurrences,
-  updateTagBadges
+  tagFieldOccurrences
 } from "./07-production-tags.js";
-import { renderProduction } from "./08-production-panels.js";
-import { scheduleBrollRefresh } from "./08c-broll.js";
 import {
-  captureReplyDrafts,
   formatTimestamp,
-  openCommentComposer,
-  renderComments,
-  syncAnchorResolvedClasses,
-  updateCommentsCount
+  openCommentComposer
 } from "./10-comments.js";
-import { paintPresence, personColor } from "./13a-presence.js";
-import { drawWriter, paintWriterDraw } from "./19-writer.js";
+import { personColor } from "./13a-presence.js";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
@@ -471,9 +461,10 @@ function paintOneRow(rowId) {
     cellsPainted += 2;
   }
   if (heldCell && !heldCell.isConnected) placeEditorSelection(editorSelection(), rowsEl);
-  if (touched) paintPresence();
-  if (touched) paintRowTimes();
-  if (touched) refreshGalleryOverlay();
+  if (touched) {
+    paintRowTimes();
+    announcePainted("row");
+  }
   return true;
 }
 
@@ -651,6 +642,20 @@ export function render() {
   }
 }
 
+var paintedListeners = [];
+
+export function onPainted(listener) {
+  paintedListeners.push(listener);
+  return function () {
+    var at = paintedListeners.indexOf(listener);
+    if (at !== -1) paintedListeners.splice(at, 1);
+  };
+}
+
+function announcePainted(kind) {
+  paintedListeners.slice().forEach(function (listener) { listener(kind); });
+}
+
 export function paintingScreen() {
   return paintGuard().painting();
 }
@@ -662,33 +667,23 @@ function paintAll() {
   var rowsEl = document.getElementById("rows");
   var plan = planRows(rowsEl);
   var title = S.state.title || "";
-  var writerDraw = viewFlags().writerOpen() ? drawWriter() : null;
 
   resetTransientUiState();
   var focus = captureRenderFocus(rowsEl);
   if (focus && focus.cell) rememberCellSelection(editorSelection(), focus.cell);
   withRowMotion(rowsEl, function () {
     commitRows(rowsEl, plan, focus && focus.rowEl);
+    announcePainted("rows");
   });
   editorSelection().notePainted(rowsEl);
   if (!viewFlags().writerOpen()) restoreRenderFocus(rowsEl, focus);
 
   var titleInput = document.getElementById("doc-title");
   if (document.activeElement !== titleInput) titleInput.value = title;
-  if (writerDraw) paintWriterDraw(writerDraw);
   syncPageTitle();
-  syncAnchorResolvedClasses();
   paintRowTimes();
-  updateScriptStats();
-  updateCommentsCount();
-  updateTagBadges();
-  scheduleBrollRefresh();
-  renderProduction();
-  captureReplyDrafts();
-  renderComments();
+  announcePainted("screen");
   scheduleUntaggedScan();
-  paintPresence();
-  refreshGalleryOverlay();
   var link = editorSelection().heldLink();
   if (link && !link.cell.isConnected) editorSelection().dropLink();
   screen.drawn = true;
@@ -848,8 +843,7 @@ function paintSessionChange(change) {
 }
 
 function paintProductionViews() {
-  updateTagBadges();
-  renderProduction();
+  announcePainted("tags");
 }
 
 export function screenListeners() {
