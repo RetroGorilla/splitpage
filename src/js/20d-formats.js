@@ -1,6 +1,5 @@
 import { MD_IMAGE_PREFIX_RE } from "../adapters/formats/markdown-image.ts";
 import { deriveDocId, docIdEmbeddedIn } from "../core/document/ids.ts";
-import { S } from "./_state.js";
 import { amendHome, documentLocation, fileHome } from "../legacy/location-bridge.ts";
 import { legacyMdToHtml, makeId, migrateRows } from "./02-state.js";
 import {
@@ -22,7 +21,7 @@ import { openProjectFile } from "./18-local-files.js";
 import { cappedLongText, plainText, safeImageSrc } from "../core/document/text-policy.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";
 import { autoSavePolicy, autoSaveTarget, flushAutoSave, saveDoc, toggleAutoSave } from "../legacy/save-bridge.ts";
-import { heldDocument } from "../legacy/session-bridge.ts";
+import { currentDocument, heldDocument } from "../legacy/session-bridge.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
@@ -229,7 +228,7 @@ export function __init() {
     buildMarkdown: function (s) { return buildMarkdownProject(s ? exportDocumentOf(s) : captureExportDocument()); },
     parseMarkdown: parseMarkdownProject,
     buildStandaloneHtml: function () { return standaloneHtmlFor(captureExportDocument()); },
-    docId: function () { return S.state ? S.state.docId : null; },
+    docId: function () { return currentDocument() ? currentDocument().docId : null; },
     writtenOut: function () { return documentLocation().writtenOut(); },
     deriveDocId: deriveDocId,
     adoptRestoredState: adoptRestoredState,

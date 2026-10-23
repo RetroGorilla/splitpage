@@ -1,4 +1,4 @@
-import { S } from "./_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { closeAllSidePanels } from "./03b-side-panels.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { handTourPauseTo } from "../legacy/tour-pause.ts";
@@ -253,7 +253,7 @@ function offerTourResume() {
 export function startTour() {
   var from = tourResumeFrom;
   tourResumeFrom = -1;
-  if (!S.state) {
+  if (!currentDocument()) {
     if (typeof showToast === "function") showToast("Still loading…", "warn");
     return;
   }
