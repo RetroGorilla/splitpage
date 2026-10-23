@@ -28,9 +28,8 @@ const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const exportModule = await import("../js/14-export.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { startNewScript } = await import("../js/18b-file-menu.js");
@@ -124,7 +123,7 @@ async function endCase() {
   draftResume().dropServerResume();
   window.__hostedTest.setSession({ docId: null });
   drafts().browser.useIndexedDB(new IDBFactory());
-  exportModule.setAutoSaveEnabled(true);
+  setAutoSaveEnabled(true);
 }
 
 async function cleanly(run) {
@@ -238,7 +237,7 @@ async function advance(clock, ms) {
 }
 
 async function quotaSetup(clock, faults) {
-  exportModule.setAutoSaveEnabled(false);
+  setAutoSaveEnabled(false);
   let faulty = null;
   const idb = browserStore((factory) => {
     faulty = createFaultyIdbFactory(factory);
@@ -298,7 +297,7 @@ rightToday("B4b", "a change noted while a retry is in flight does not bring the 
 
 rightToday("B5", "unavailable storage turns browser drafts off quietly, with no retry and no notice", (t) => cleanly(async () => {
   const clock = mockClock(t);
-  exportModule.setAutoSaveEnabled(false);
+  setAutoSaveEnabled(false);
   let opens = 0;
   browserStore(() => ({ open() { opens++; throw new Error("SecurityError"); } }));
   serverDocument("srv-u", "Unavailable", "f");
@@ -356,7 +355,7 @@ rightToday("B6", "a corrupt draft record reads as none: nothing is resumed, offe
 
 rightToday("B7", "a writer discards only the draft it wrote: a newer generation from another tab survives", (t) => cleanly(async () => {
   const clock = mockClock(t);
-  exportModule.setAutoSaveEnabled(false);
+  setAutoSaveEnabled(false);
   const idb = browserStore();
   serverDocument("srv-g", "Generations", "2");
   typeInto("Mine, generation one.");
@@ -378,7 +377,7 @@ rightToday("B7", "a writer discards only the draft it wrote: a newer generation 
 
 rightToday("B8", "restoring a browser draft onto a server document, or an unsaved script, writes neither the server nor a file", (t) => cleanly(async () => {
   const clock = mockClock(t);
-  exportModule.setAutoSaveEnabled(true);
+  setAutoSaveEnabled(true);
   const base = script("Restored", { docId: idOf("3") });
   const mine = cloneState(base);
   mine.rows[0].audioText = "Unsaved in the browser.";

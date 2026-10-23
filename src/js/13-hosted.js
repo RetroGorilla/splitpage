@@ -54,8 +54,8 @@ import {
 } from "./10-comments.js";
 import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { maybeAskGuestName } from "./13b-collaborate.js";
-import { saveDoc, scheduleAutoSave } from "./14-export.js";
-import { confirmSavedNow, requestSave, saveBusy, saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
+import { confirmSavedNow, haltAutoSave, requestSave, resumeAutoSave, saveBusy, saveChanges, saveDoc, scheduleAutoSave, unsavedChanges } from "../legacy/save-bridge.ts";
+import { createServerDestination } from "../application/save/server-destination.ts";
 import { conflictStash, draftResume } from "../legacy/recovery-bridge.ts";
 import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
@@ -1203,12 +1203,13 @@ function reportIfLandedHere(op, docId, rev) {
   if (currentHome().rev < rev) reportLateServerSave();
 }
 
-var SENT_OUTCOMES = ["saved", "obsolete"];
-
-export function saveToServer(job) {
-  if (job) return writeToServer(job);
-  return requestSave({ kind: "server" }).then(function (outcome) {
-    return SENT_OUTCOMES.indexOf(outcome.kind) !== -1;
+export function serverSaveDestination() {
+  return createServerDestination({
+    send: writeToServer,
+    signedOut: function () { return !!serverStatus().sessionExpired(); },
+    linkOff: function () { return !!serverStatus().linkTurnedOff(); },
+    resumeAutoSave: resumeAutoSave,
+    haltAutoSave: haltAutoSave
   });
 }
 

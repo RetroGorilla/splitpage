@@ -9,7 +9,7 @@ import {
   readCollabServer,
   signOutCollab
 } from "./13b-collaborate.js";
-import { setAutoSaveEnabled } from "./14-export.js";
+import { setAutoSaveEnabled } from "../legacy/save-bridge.ts";
 import { applyWriterSize, readWriterSize } from "./19-writer.js";
 import { setPrompterFlip, setPrompterMirror, setPrompterSceneMode } from "./20-teleprompter.js";
 import { renderDesktopAppNotice } from "./20a-update.js";

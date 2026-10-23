@@ -74,12 +74,11 @@ test("captureOperation and stillOwns follow the live session, document, destinat
   const loc = await import("../legacy/location-bridge.ts");
   const saves = await import("../legacy/save-bridge.ts");
   const stopSaves = saves.startSaves({
-    write: async () => ({ kind: "saved" }),
-    destination: () => loc.currentHome(),
+      destination: () => loc.currentHome(),
     keyOf: (h) => ({ owner: h, name: "" }),
     obsolete: () => {},
     ownership: { capture: bridge.captureOperation, stillOwns: bridge.stillOwns },
-    autosave: { enabledAtStart: () => false, due: () => {}, changed: () => {} }
+    autosave: { enabledAtStart: () => false, changed: () => {} }
   }, { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });
   try {
     bridge.documentTransitions().open({ from: { document: script("Owned") }, reason: "opened" });
