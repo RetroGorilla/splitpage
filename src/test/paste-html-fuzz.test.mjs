@@ -12,8 +12,10 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { cellFromClipboard } = await import("../js/05c-clipboard.js");
-const { fromHtml, toHtml, projection, commentIds } = await import("../js/04c-doc-model.js");
+const { cellFromClipboard } = await import("../features/clipboard/cell-clipboard.js");
+const { fromHtml } = await import("../legacy/richtext.ts");
+const { toHtml } = await import("../core/text/html.ts");
+const { projection, commentIds } = await import("../core/text/runs.ts");
 const { undo, redo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 

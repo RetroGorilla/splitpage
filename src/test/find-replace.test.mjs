@@ -1,7 +1,8 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cellOf, projection } from "../js/04c-doc-model.js";
+import { cellOf } from "../legacy/richtext.ts";
+import { projection } from "../core/text/runs.ts";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { countInTags, domProjection, domRangeFor, findInCell, findInRows, noMatchLabel, replaceInHtml } from "../js/09-find-replace.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
