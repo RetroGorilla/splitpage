@@ -3,6 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { REVIEW_REFUSAL_REASON } from "../../../src/application/collaboration/authority.ts";
 import { VIEWING_ONLY } from "../../../src/application/collaboration/review.ts";
+import { changeSet } from "../../../src/application/session/change-set.ts";
 import type { DeleteArea } from "../../../src/application/editing/delete-confirm.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { deepFreeze } from "../../../src/core/document/freeze.ts";
@@ -30,7 +31,7 @@ function setup() {
     { id: "r1", visualText: "Picture", audioText: "Words", status: "todo" },
     { id: "r2", visualText: "", audioText: "", status: "todo" }
   ] }, fakeMigration().ports);
-  const edits = fakeEdits({ kind: "applied" });
+  const edits = fakeEdits({ kind: "applied", generation: 1, changes: changeSet({}) });
   const notices = fakeNotices();
   const calls: string[] = [];
   const armed = new Map<DeleteArea, string>();
