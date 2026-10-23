@@ -9,7 +9,7 @@ await bootApp();
 const { adoptReplacement, noteServerUpdate, runCommand } = await import("../legacy/session-bridge.ts");
 const { documentLocation, setHome, amendHome, currentHome, serverStatus } = await import("../legacy/location-bridge.ts");
 const { preferences, viewFlags } = await import("../legacy/preferences-bridge.ts");
-const { autoSavePolicy, confirmSavedNow, noteSaveChange } = await import("../legacy/save-bridge.ts");
+const { autoSavePolicy, confirmSavedNow, noteSaveChange, onSaveChange } = await import("../legacy/save-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { titleCommand } = await import("../application/commands/title.ts");
@@ -40,7 +40,7 @@ function open(kind = "import") {
   if (viewFlags().writerOpen()) writer.closeWriter();
   flushEdits();
   setHome("none");
-  documentLocation().setConnection({ serverUrl: "http://localhost:7777", token: "token", role: "edit" });
+  documentLocation().setConnection({ serverUrl: "http://localhost:7777/", token: "token", role: "edit" });
   preferences().setCommentAuthor("Rae");
   preferences().setMyColor(null);
   autoSavePolicy().setEnabled(false);
@@ -189,6 +189,27 @@ test("stopping and remounting the listeners releases subscriptions and registers
   assert.equal(el("file-chip-name").textContent, "while-stopped.txt");
   preferences().setCommentAuthor("Back");
   assert.equal(el("identity-name").textContent, "Back");
+});
+
+test("a failing save-status listener is reported later and does not stop the save or the chrome", (t) => {
+  open("server");
+  stopDocumentChromeFeature();
+  const failure = new Error("listener failed");
+  t.after(onSaveChange(() => { throw failure; }));
+  mountDocumentChromeFeature();
+  const queued = [];
+  t.mock.method(globalThis, "queueMicrotask", (job) => { queued.push(job); });
+  noteSaveChange();
+  assert.match(stateText(), /saving/);
+  confirmSavedNow();
+  assert.match(stateText(), /v3/);
+  assert.equal(desktop._lastDocState.dirty, false);
+  t.mock.restoreAll();
+  const reported = [];
+  for (const job of queued) {
+    try { job(); } catch (error) { reported.push(error); }
+  }
+  assert.deepEqual(reported, [failure, failure]);
 });
 
 test("server status announcements refresh the readonly banner, link status and expired-session status", () => {
