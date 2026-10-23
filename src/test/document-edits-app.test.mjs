@@ -9,7 +9,6 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, redo, undoSizes, flushEdits, breakUndoCoalescing } = await import("../js/12a-undo.js");
 const { liveSession, runDocumentEdit, stampDocument } = await import("../legacy/session-bridge.ts");
@@ -24,6 +23,7 @@ const { setCommentAssignee, toggleResolve } = await import("../js/10-comments.js
 const { wordsPerMinuteCommand } = await import("../application/commands/document-settings.ts");
 const { deletePersonCommand } = await import("../application/commands/production-records.ts");
 const { editStamp, documentIdStamp } = await import("../application/commands/save-stamps.ts");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -52,7 +52,7 @@ let opened = 0;
 async function open() {
   window.__hostedTest.setSession({ role: "edit", docId: null });
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "document-edits-" + (++opened) + ".splitpage", { lastModified: opened });
-  await openProjectFile(file, null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
   breakUndoCoalescing();
 }

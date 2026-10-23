@@ -29,7 +29,6 @@ import {
   applyMerge,
   getEditorName,
   mergeStates,
-  pushSnapshot,
   reportMerge,
   setBaseState,
   stashLocalWork
@@ -54,20 +53,17 @@ import {
   renderComments
 } from "./10-comments.js";
 import { showActionToast, showToast } from "./12-dirty-toast.js";
-import { maybeAskGuestName } from "./13b-collaborate.js";
 import { confirmSavedNow, haltAutoSave, requestSave, resumeAutoSave, saveBusy, saveChanges, saveDoc, scheduleAutoSave, unsavedChanges } from "../legacy/save-bridge.ts";
 import { createServerDestination } from "../application/save/server-destination.ts";
 import { conflictStash, draftResume } from "../legacy/recovery-bridge.ts";
-import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
+import { captureOperation, documentTransitions, keepSnapshot, stillOwns } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
 import { deliverFile } from "../legacy/file-delivery.ts";
-import {
-  openPinDialog,
-  openServersDialog
-} from "./20e-connect.js";
+import { openPinDialog } from "./20e-connect.js";
+import { appActions } from "../legacy/app-actions.ts";
 import { joinServer } from "../adapters/transport/server-join.ts";
 import { setMenuItemReason } from "./18b-file-menu.js";
-import { closeNewTabPage } from "./20j-newtab.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { armBrowserServerDraft, offerBrowserDraftAfterLinkOff } from "./20g-drafts.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { idMap } from "../core/document/id-map.ts";
@@ -888,12 +884,20 @@ function renderServerPicker() {
   }).join("");
 }
 
-export async function openServerDoc(id) {
+export function serverDocumentSource() {
+  return {
+    id: "server",
+    takes: function (opening) { return opening.kind === "server"; },
+    open: function (opening) { return openServerDoc(opening.id); }
+  };
+}
+
+async function openServerDoc(id) {
   if (!runningOnDesktop() && !draftResume().serverResume() && await armBrowserServerDraft(id)) {
-    if (currentDocument() && currentDocument().rows.length) pushSnapshot("Before opening a script from the server");
+    if (currentDocument() && currentDocument().rows.length) keepSnapshot("Before opening a script from the server");
     var resumed = await resumeServerDoc() === true;
     if (resumed) {
-      if (typeof closeNewTabPage === "function") closeNewTabPage();
+      sidePanels().close("newtab-page");
       closeServerPicker();
     }
     return resumed;
@@ -910,16 +914,15 @@ export async function openServerDoc(id) {
   if (!body || !isDocumentObject(body.state)) { showToast("That document is empty.", "warn"); return false; }
   forgetRemoteMisses();
 
-  if (currentDocument() && currentDocument().rows.length) pushSnapshot("Before opening " + (body.state.title || id));
-
   resetProductionPanelState();
   documentTransitions().open({
     from: { document: migrateDocument(body.state, { kind: "server", serverId: body.id, fallbackId: null }) },
     reason: "openServerDoc: the document as the server sent it",
+    keep: "Before opening " + (body.state.title || id),
     destination: { kind: "server", fields: { id: body.id, rev: body.rev || 0 } },
     writtenOut: true
   });
-  if (typeof closeNewTabPage === "function") closeNewTabPage();
+  sidePanels().close("newtab-page");
 
   confirmSavedNow();
   applyReviewMode();
@@ -1039,7 +1042,7 @@ export async function publishAndCopyShareLink() {
   if (!serverStatus().mode().available) {
     showToast("A share link needs a Splitpage server to publish to. " +
       "Pick or add one under Servers…, then try again.", "warn");
-    if (typeof openServersDialog === "function") openServersDialog();
+    appActions.invoke("show-servers-dialog", "button");
     return false;
   }
   if (serverStatus().mode().readOnly) {
@@ -1081,7 +1084,7 @@ async function openSharedDocFromLink(refusedId) {
   if (!id || id === refusedId) return false;
   if (onServerDoc()) return false;
   var opened = await openServerDoc(id);
-  if (opened && (isLinkGuest() || linkKey)) maybeAskGuestName();
+  if (opened && (isLinkGuest() || linkKey)) appActions.invoke("ask-guest-name", "button");
   return true;
 }
 

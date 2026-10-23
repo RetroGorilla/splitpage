@@ -20,6 +20,10 @@ export interface IdentityPort {
   readonly markWrittenOut: (writtenOut: boolean) => void;
 }
 
+export interface HistoryPort {
+  readonly keep: (label: string, doc?: ValidatedDocument | null) => unknown;
+}
+
 export interface OwnershipPort {
   readonly stillOwns: (ctx: OperationContext) => boolean;
 }
@@ -29,5 +33,6 @@ export interface TransitionPorts<D> {
   readonly live: LiveDocumentPort;
   readonly destination: DestinationPort<D>;
   readonly identity: IdentityPort;
+  readonly history: HistoryPort;
   readonly ownership: OwnershipPort;
 }

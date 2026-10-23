@@ -22,7 +22,7 @@ export interface ActionDefinition {
   readonly claimKeys?: boolean;
   readonly words?: string;
   readonly availability?: (source: ActionSource) => Availability;
-  readonly run: (source: ActionSource) => void | Promise<void>;
+  readonly run: (source: ActionSource, input?: unknown) => void | Promise<void>;
 }
 
 export interface ActionView {
@@ -58,7 +58,7 @@ export interface ActionRegistry {
   shortcuts: () => readonly KeyedAction[];
   view: (id: string, source?: ActionSource) => ActionView | undefined;
   list: (source?: ActionSource) => readonly ActionView[];
-  invoke: (id: string, source: ActionSource) => InvokeOutcome;
+  invoke: (id: string, source: ActionSource, input?: unknown) => InvokeOutcome;
   presentRefusals: (presenter: RefusalPresenter) => () => void;
 }
 
@@ -158,7 +158,7 @@ export function createActionRegistry(options: RegistryOptions = {}): ActionRegis
     list(source = LISTING) {
       return [...definitions.values()].map((d) => toView(d, source));
     },
-    invoke(id, source) {
+    invoke(id, source, input) {
       const definition = definitions.get(id);
       if (!definition) return { kind: "unknown", id };
       const a = availabilityOf(definition, source);
@@ -168,7 +168,7 @@ export function createActionRegistry(options: RegistryOptions = {}): ActionRegis
         return refusal;
       }
       try {
-        const pending: unknown = definition.run(source);
+        const pending: unknown = definition.run(source, input);
         if (isThenable(pending)) pending.then(undefined, (error: unknown) => { report(error, id); });
         return { kind: "ran", id };
       } catch (error) {

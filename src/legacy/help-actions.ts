@@ -33,13 +33,20 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       run: () => { openServersDialog(); }
     },
     {
+      id: "show-servers-dialog",
+      label: "Show the servers dialog",
+      group: "Share",
+      availability: () => ({ enabled: true, visible: false }),
+      run: () => { openServersDialog(); }
+    },
+    {
       id: "settings",
       label: "Settings",
       group: "Help",
       icon: "i-settings",
       words: "settings preferences options theme dark light mode clock 12 24 hour colour color name zoom",
       availability: overDialogs,
-      run: () => { openSettings(); }
+      run: (_source, input) => { openSettings(input); }
     },
     {
       id: "help",

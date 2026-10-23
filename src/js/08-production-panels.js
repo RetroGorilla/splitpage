@@ -6,7 +6,7 @@ import { formatDuration, pad2, rowSeconds } from "../core/production/timing.ts";
 import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, groupTagsByCategory, tagStatus } from "../core/production/looks.ts";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { revealRow } from "./01b-hide-shot.js";
-import { openSidePanel, syncPanelClass } from "./03-sync.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { plainText, safeId } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
 import { tagStatusLampHtml } from "./07-production-tags.js";
@@ -55,13 +55,8 @@ function personById(id) {
 
 export function openProductionPanel() {
   if (!currentDocument()) return;
-  openSidePanel("production-panel");
+  sidePanels().open("production-panel");
   renderProduction();
-}
-
-export function closeProductionPanel() {
-  document.getElementById("production-panel").hidden = true;
-  syncPanelClass();
 }
 
 
@@ -71,14 +66,9 @@ function gearEntries() {
 
 export function openGearPanel() {
   if (!currentDocument()) return;
-  openSidePanel("gear-panel");
+  sidePanels().open("gear-panel");
   fillGearQuickAdd();
   renderProduction();
-}
-
-export function closeGearPanel() {
-  document.getElementById("gear-panel").hidden = true;
-  syncPanelClass();
 }
 
 function updateGearBadge(n) {

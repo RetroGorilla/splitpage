@@ -2,7 +2,7 @@ import { docIdEmbeddedIn } from "../core/document/ids.ts";
 import { flushEdits } from "./12a-undo.js";
 import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { currentDocument, noteAbsorbedDirty, noteReload } from "../legacy/session-bridge.ts";
-import { documentTransitions } from "../legacy/transition-bridge.ts";
+import { documentTransitions, keepSnapshot } from "../legacy/transition-bridge.ts";
 import { autoSavePolicy, confirmSavedNow, fileConflicts, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
 import { deliverFile } from "../legacy/file-delivery.ts";
 import { checkFileConflict } from "../adapters/files/file-target.ts";
@@ -13,10 +13,7 @@ import {
   standaloneHtmlFor,
   syncDocIdentity
 } from "./02b-doc-id.js";
-import {
-  pushSnapshot,
-  stampRow
-} from "./03-sync.js";
+import { stampRow } from "./03-sync.js";
 import { beginBusy, endBusy, withBusyBar } from "../features/notices/busy.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { brollPrintView } from "./08d-broll-panel.js";
@@ -35,14 +32,13 @@ import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
 import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
-import { toggleFileMenu } from "./18b-file-menu.js";
 import { isExportAction, rememberExport } from "./18c-export-dialog.js";
 import {
   applyMarkdownProject,
   parseMarkdownProject
 } from "./20d-formats.js";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
-import { closeNewTabPage } from "./20j-newtab.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { exportToggleOptions } from "../application/export/registry.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { appActions } from "../legacy/app-actions.ts";
@@ -300,7 +296,19 @@ export async function parseProjectFileState(file, opts) {
   return { state: reconciled, kind: "md", docIdEmbedded: !!project.docIdEmbedded };
 }
 
-export async function openProjectFile(file, handle, opts) {
+export function projectFileSource() {
+  return {
+    id: "project-file",
+    takes: function (opening) { return opening.kind === "file"; },
+    open: function (opening) {
+      var parsed = opening.parsed;
+      if (parsed) return adoptProjectState(parsed.state, opening.file, opening.handle || null, parsed.kind, opening.options);
+      return openProjectFile(opening.file, opening.handle || null, opening.options);
+    }
+  };
+}
+
+async function openProjectFile(file, handle, opts) {
   opts = opts || {};
   var parsed = await parseProjectFileState(file);
   if (!parsed) return loadFileIntoEditor(file, handle);
@@ -315,15 +323,15 @@ export async function openProjectFile(file, handle, opts) {
   return adoptProjectState(parsed.state, file, handle, parsed.kind, opts);
 }
 
-export function adoptProjectState(newState, file, handle, kind, opts) {
+function adoptProjectState(newState, file, handle, kind, opts) {
   opts = opts || {};
-  if (typeof closeNewTabPage === "function") closeNewTabPage();
-  if (!opts.skipSnapshot && currentDocument() && currentDocument().rows.length) pushSnapshot("Before opening " + file.name);
+  sidePanels().close("newtab-page");
 
   resetProductionPanelState();
   documentTransitions().open({
     from: { document: newState },
     reason: "adoptProjectState: the project file as it was just read",
+    keep: opts.skipSnapshot ? undefined : "Before opening " + file.name,
     destination: { kind: "file", fields: { handle: handle || null, format: kind, lastModified: file.lastModified || null,
                                            name: file.name, diskBase: cloneState(newState) } },
     writtenOut: true
@@ -416,7 +424,6 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   if (!newRows || !newRows.length) { showToast("No scenes found in that file.", "warn"); return; }
 
-  if (!opts.reload && currentDocument().rows.length) pushSnapshot("Before opening " + file.name);
 
   newRows.forEach(stampRow);
   var openedTitle = newTitle || file.name.replace(/\.[^.]+$/, "");
@@ -440,6 +447,7 @@ async function loadFileIntoEditor(file, handle, opts) {
     documentTransitions().open({
       from: { raw: { schema: SCHEMA_VERSION, title: openedTitle, rows: newRows } },
       reason: "loadFileIntoEditor: the imported document as it was just read",
+      keep: "Before opening " + file.name,
       destination: { kind: "import", fields: importFields },
       writtenOut: false
     });
@@ -448,7 +456,7 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   noteAbsorbedDirty(opts.reload ? "reload" : "adopt");
   amendHome(imported, { dirty: false });
-  if (typeof closeNewTabPage === "function") closeNewTabPage();
+  sidePanels().close("newtab-page");
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   showToast(opts.reload
     ? "Reloaded " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s")
@@ -616,7 +624,7 @@ export async function reloadFileFromDisk() {
   var imported = importHome();
   if (!imported || !imported.handle) return;
   try {
-    pushSnapshot("Before reloading " + imported.name + " from disk");
+    keepSnapshot("Before reloading " + imported.name + " from disk");
     await loadFileIntoEditor(await imported.handle.getFile(), imported.handle, { reload: true });
   } catch (e) {
     showToast("Could not re-read that file.", "error");
@@ -678,7 +686,7 @@ export function runExportAction(action) {
 
 export function handleFileMenuAction(action, source) {
   noteFileMenuChoice(action);
-  if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") toggleFileMenu(false);
+  if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") appActions.invoke("close-file-menu", "button");
   if (isExportAction(action)) rememberExport(action);
   if (appActions.has(action)) {
     appActions.invoke(action, source || "menu");

@@ -72,3 +72,24 @@ test("an old stop run after a newer start leaves the newer owners in place", () 
     second();
   }
 });
+
+test("a change heard from outside the owner reaches the change listeners; the owner's own echo and a stopped owner do not", () => {
+  const storage = memory();
+  const changes = [];
+  const unlisten = bridge.onPreferenceChange((change) => { changes.push(change); });
+  const stop = bridge.startPreferences({
+    storage: () => storage,
+    announce: (change) => { bridge.notePreferenceChange(change); }
+  });
+  try {
+    bridge.preferences().setClock("24");
+    assert.deepEqual(changes, [{ key: "splitpage-clock", value: "24" }], "the owner's write is heard once, not again through its echo");
+    bridge.notePreferenceChange({ key: "splitpage-clock", value: "12" });
+    assert.deepEqual(changes.slice(1), [{ key: "splitpage-clock", value: "12" }]);
+  } finally {
+    stop();
+  }
+  bridge.notePreferenceChange({ key: "splitpage-clock", value: "24" });
+  unlisten();
+  assert.equal(changes.length, 2);
+});

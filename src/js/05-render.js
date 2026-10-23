@@ -14,16 +14,13 @@ import { isDraftBox, isScriptCell } from "../features/editing/cell-page.ts";
 import { trackDocument } from "./12a-undo.js";
 import { rowMotionKey, withRowMotion } from "../features/rows/row-motion.js";
 import {
-  openTagComposer,
   productionIndexStats,
   resetProductionIndexStats,
   scheduleUntaggedScan,
   tagFieldOccurrences
 } from "./07-production-tags.js";
-import {
-  formatTimestamp,
-  openCommentComposer
-} from "./10-comments.js";
+import { formatTimestamp } from "./10-comments.js";
+import { appActions } from "../legacy/app-actions.ts";
 import { personColor } from "./13a-presence.js";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { makeId } from "../adapters/identity/ids.ts";
@@ -802,6 +799,8 @@ var ONE_ROW = { status: true, lengthSeconds: true, updatedAt: true, updatedBy: t
 
 var SHOWN_DOC_FIELDS = { title: true, wordsPerMinute: true, comments: true };
 
+var TEXT_FIELDS = { visualText: true, audioText: true };
+
 var SHOWN_PREFERENCES = { clock: true, commentAuthor: true, personColor: true };
 
 function rowsTouched(cells, skip) {
@@ -851,6 +850,10 @@ export function screenListeners() {
   screen.drawn = false;
   return {
     session: paintSessionChange,
+    stamped: function (changes) {
+      if (!screen.drawn || screenStale || paintBroke) return;
+      if (changes.docFields.indexOf("comments") !== -1 || changes.cells.some(function (cell) { return TEXT_FIELDS[cell.field]; })) render();
+    },
     refresh: function (jobs) {
       if (screen.drawn && jobs.has("production")) paintRowTimes();
     },
@@ -1134,7 +1137,7 @@ export function handleToolbarCmd(btn) {
     afterC.collapse(true);
     csel.addRange(afterC);
     cellEditing().sync(cellEl);
-    openCommentComposer({
+    appActions.invoke("comment-on-selection", "button", {
       id: cmtId,
       rowId: cellEl.getAttribute("data-id"),
       field: cellEl.getAttribute("data-field"),
@@ -1158,7 +1161,7 @@ export function handleToolbarCmd(btn) {
     var tagOccurrenceIndex = tagQuoted
       ? tagFieldOccurrences(beforeDiv.innerHTML, tagQuoted, "x", "x", true).hits
       : 0;
-    openTagComposer({
+    appActions.invoke("tag-selection", "button", {
       rowId: cellEl.getAttribute("data-id"),
       field: cellEl.getAttribute("data-field"),
       quotedText: tagQuoted,
