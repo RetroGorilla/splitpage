@@ -4,7 +4,7 @@ import { tagCategory, tagStatus } from "../core/production/looks.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
 import { formatTimecode, rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
-import { revealRow } from "./01b-hide-shot.js";
+import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { cssAttr, plainText } from "./04-richtext.js";
 import { focusRowField } from "./06-rows.js";
@@ -861,7 +861,7 @@ function addBrollFromPanel() {
 export function jumpToBrollShot(id) {
   var e = entryById(id);
   if (!e || !e.rowId) return false;
-  revealRow(e.rowId);
+  shotHiding().reveal(e.rowId);
   focusRowField(e.rowId, "visualText");
   return true;
 }

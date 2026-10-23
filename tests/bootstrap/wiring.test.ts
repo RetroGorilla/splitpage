@@ -20,6 +20,7 @@ import { exportFormats, installExportFormats } from "../../src/legacy/export-for
 import { editorStarted, startEditor } from "../../src/legacy/editor-bridge.ts";
 import { locationStarted, startLocation } from "../../src/legacy/location-bridge.ts";
 import { preferencesStarted, startPreferences } from "../../src/legacy/preferences-bridge.ts";
+import { legacyShotHidingPorts, shotHidingStarted, startShotHiding } from "../../src/legacy/shot-hiding-bridge.ts";
 import { effectsStarted, startEffects } from "../../src/legacy/effects-bridge.ts";
 import type { EffectPorts } from "../../src/application/effects/ports.ts";
 import { recoveryStarted } from "../../src/legacy/recovery-bridge.ts";
@@ -47,7 +48,7 @@ import type { ProjectFileServices } from "../../src/application/formats/project-
 
 after(closeApp);
 
-const OWNERS = ["location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions", "recovery", "editor", "productionEditing", "preferences"] as const;
+const OWNERS = ["location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions", "recovery", "editor", "productionEditing", "preferences", "shotHiding"] as const;
 
 type Owner = (typeof OWNERS)[number];
 type Started = Record<Owner, boolean>;
@@ -76,7 +77,8 @@ function started(): Started {
     recovery: recoveryStarted(),
     editor: editorStarted(),
     productionEditing: productionEditingStarted(),
-    preferences: preferencesStarted()
+    preferences: preferencesStarted(),
+    shotHiding: shotHidingStarted()
   };
 }
 
@@ -531,9 +533,10 @@ test("failed partial startup: a step that throws undoes every step before it, in
     recovery: (f) => ({ deps: { ...f.deps, recovery: () => { throw boom; } } }),
     editor: (f) => ({ deps: f.deps, cleanup: startEditor(liveDocumentPort), cause: false }),
     "production editing": (f) => ({ deps: f.deps, cleanup: startProductionEditing(must(f.deps.timers)), cause: false }),
-    preferences: (f) => ({ deps: f.deps, cleanup: startPreferences(), cause: false })
+    preferences: (f) => ({ deps: f.deps, cleanup: startPreferences(), cause: false }),
+    "shot hiding": (f) => ({ deps: f.deps, cleanup: startShotHiding(legacyShotHidingPorts(must(f.deps.timers))), cause: false })
   };
-  const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { location: "location", "page effects": "effects", "export services": "exportServices", "export registry": "exports", transitions: "transitions", editor: "editor", "production editing": "productionEditing", preferences: "preferences" };
+  const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { location: "location", "page effects": "effects", "export services": "exportServices", "export registry": "exports", transitions: "transitions", editor: "editor", "production editing": "productionEditing", preferences: "preferences", "shot hiding": "shotHiding" };
   assert.deepEqual(Object.keys(breakers), [...WIRING_STEPS], "every step is broken once");
   for (const step of WIRING_STEPS) {
     const f = fakes();
