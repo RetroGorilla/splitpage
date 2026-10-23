@@ -1,7 +1,9 @@
+import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { ExportRegistry } from "../../application/export/registry.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
+import type { DesktopVideo } from "../../application/media/desktop-video.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
 import type { ScreenState } from "../../application/screen.ts";
@@ -121,6 +123,12 @@ const exports: Pick<ExportRegistry, "card" | "cards" | "exporters" | "byAction" 
   onChange: (listener) => exportFormats.onChange(listener)
 };
 
+const desktopVideo: DesktopVideo = {
+  grant: (file) => desktopPort()?.grantVideoFile(file) ?? Promise.resolve(null),
+  open: (token) => desktopPort()?.openVideoFile(token) ?? Promise.resolve(null),
+  thumbnail: (host, ref) => desktopPort()?.videoThumbnail(host, ref) ?? Promise.resolve(null)
+};
+
 const shared = {
   actions,
   changes,
@@ -132,7 +140,8 @@ const shared = {
   text,
   saves,
   production,
-  exports
+  exports,
+  desktopVideo
 };
 
 export function sharedPorts(): typeof shared {

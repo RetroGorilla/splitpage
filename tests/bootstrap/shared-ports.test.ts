@@ -1,9 +1,11 @@
 import "../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
+import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
 import { createActionRegistry, registerAll } from "../../src/application/actions.ts";
 import { createExportRegistry } from "../../src/application/export/registry.ts";
 import type { ExportRegistry } from "../../src/application/export/registry.ts";
+import type { DesktopVideo } from "../../src/application/media/desktop-video.ts";
 import type { PreferenceNotice } from "../../src/application/preferences/preferences.ts";
 import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
 import { mountScriptZoomFeature, scriptZoomActions, stopScriptZoomFeature } from "../../src/bootstrap/wiring/script-zoom.ts";
@@ -211,6 +213,63 @@ test("the export formats port delegates to the current registry and follows a re
   } finally {
     off();
     stop();
+  }
+});
+
+test("the desktop video port delegates each call to the current desktop port", async () => {
+  const video: DesktopVideo = sharedPorts().desktopVideo;
+  const file = { name: "clip.mp4", size: 12 };
+  const calls: unknown[][] = [];
+  try {
+    useDesktopForTest(null);
+    assert.equal(await video.grant(file), null);
+    assert.equal(await video.open("missing"), null);
+    assert.equal(await video.thumbnail("youtube", "missing"), null);
+    for (const name of ["first", "second"]) {
+      const token = name + "-token";
+      const opened = { ok: true, code: name };
+      const thumbnail = { ok: true, bytes: new Uint8Array([1, 2]), mime: "image/jpeg" };
+      const grantAnswer = Promise.resolve(token);
+      const openAnswer = Promise.resolve(opened);
+      const thumbnailAnswer = Promise.resolve(thumbnail);
+      useDesktopForTest({
+        grantVideoFile: (input) => { calls.push([name, "grantVideoFile", input]); return grantAnswer; },
+        openVideoFile: (input) => { calls.push([name, "openVideoFile", input]); return openAnswer; },
+        videoThumbnail: (host, ref) => { calls.push([name, "videoThumbnail", host, ref]); return thumbnailAnswer; }
+      });
+      const granted = video.grant(file);
+      const open = video.open(token);
+      const thumb = video.thumbnail("youtube", name + "-ref");
+      assert.equal(granted, grantAnswer);
+      assert.equal(open, openAnswer);
+      assert.equal(thumb, thumbnailAnswer);
+      assert.equal(await granted, token);
+      assert.equal(await open, opened);
+      assert.equal(await thumb, thumbnail);
+    }
+    assert.deepEqual(calls, [
+      ["first", "grantVideoFile", file],
+      ["first", "openVideoFile", "first-token"],
+      ["first", "videoThumbnail", "youtube", "first-ref"],
+      ["second", "grantVideoFile", file],
+      ["second", "openVideoFile", "second-token"],
+      ["second", "videoThumbnail", "youtube", "second-ref"]
+    ]);
+    const failure = new Error("video unavailable");
+    useDesktopForTest({
+      grantVideoFile: () => Promise.reject(failure),
+      openVideoFile: () => Promise.reject(failure),
+      videoThumbnail: () => Promise.reject(failure)
+    });
+    await assert.rejects(video.grant(file), failure);
+    await assert.rejects(video.open("token"), failure);
+    await assert.rejects(video.thumbnail("youtube", "ref"), failure);
+    useDesktopForTest(null);
+    assert.equal(await video.grant(file), null);
+    assert.equal(await video.open("token"), null);
+    assert.equal(await video.thumbnail("youtube", "ref"), null);
+  } finally {
+    restoreDesktop();
   }
 });
 
