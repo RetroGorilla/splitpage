@@ -19,14 +19,14 @@ interface ImportedRow {
 
 export function normalizeImportedRows(rows: readonly ImportRow[], sanitizeHtml: (html: string) => string): ImportedRow[] {
   function importedImageRef(dataUrl: string | null): ImageRef | null {
-    var rec = dataUrl ? internDataUrl(dataUrl) : null;
+    const rec = dataUrl ? internDataUrl(dataUrl) : null;
     if (rec) queuePersist([rec.sha256]);
     return rec;
   }
   return rows.map(function (r) {
-    var visual = String(r.visualText || "");
-    var image: string | null = null;
-    var m = MD_IMAGE_PREFIX_RE.exec(visual);
+    let visual = String(r.visualText || "");
+    let image: string | null = null;
+    const m = MD_IMAGE_PREFIX_RE.exec(visual);
     if (m) {
       image = safeImageSrc(m[1]);
       if (image) visual = visual.slice(m[0].length);

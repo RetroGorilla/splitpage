@@ -25,8 +25,9 @@ interface BrollAnchorPorts {
 }
 export function brollHtmlLines(body: HTMLElement): HtmlLine[] {
   hoistNestedBrs(body);
-  var kids: Node[] = Array.from(body.childNodes);
-  var lines: HtmlLine[] = [], start = 0;
+  const kids: Node[] = Array.from(body.childNodes);
+  const lines: HtmlLine[] = [];
+  let start = 0;
   kids.forEach(function (n, i) {
     if (n.nodeType === 1 && (n as Element).tagName === "BR") {
       lines.push({ nodes: kids.slice(start, i), br: n });
@@ -38,22 +39,22 @@ export function brollHtmlLines(body: HTMLElement): HtmlLine[] {
 }
 
 function hoistNestedBrs(body: HTMLElement): void {
-  var guard = 0;
+  let guard = 0;
   while (guard++ < 1000) {
-    var brs = body.getElementsByTagName("br");
-    var br: HTMLBRElement | null = null;
-    for (var i = 0; i < brs.length; i++) {
+    const brs = body.getElementsByTagName("br");
+    let br: HTMLBRElement | null = null;
+    for (let i = 0; i < brs.length; i++) {
       const candidate = brs[i];
       if (candidate && candidate.parentNode !== body) { br = candidate; break; }
     }
     if (!br) return;
-    var parent = br.parentNode as Node;
-    var grand = parent.parentNode;
+    const parent = br.parentNode as Node;
+    const grand = parent.parentNode;
     if (!grand) return;
-    var tail = parent.cloneNode(false);
+    const tail = parent.cloneNode(false);
     while (br.nextSibling) tail.appendChild(br.nextSibling);
     parent.removeChild(br);
-    var ref = parent.nextSibling;
+    const ref = parent.nextSibling;
     grand.insertBefore(br, ref);
     if (tail.childNodes.length) grand.insertBefore(tail, ref);
   }
@@ -69,10 +70,10 @@ export function brollKeyHtml(id: string, text: string): string {
 }
 
 function brollLineTextNodes(nodes: readonly Node[]): Text[] {
-  var out: Text[] = [];
+  const out: Text[] = [];
   (function walk(list: ArrayLike<Node>): void {
-    for (var i = 0; i < list.length; i++) {
-      var n = list[i] as Node;
+    for (let i = 0; i < list.length; i++) {
+      const n = list[i] as Node;
       if (n.nodeType === 3) out.push(n as Text);
       else if (n.nodeType === 1) walk(n.childNodes);
     }
@@ -82,34 +83,34 @@ function brollLineTextNodes(nodes: readonly Node[]): Text[] {
 
 function brollPruneEmpty(el: Node | null, body: HTMLElement): void {
   while (el && el !== body && el.parentNode && !el.childNodes.length) {
-    var parent: ParentNode = el.parentNode;
+    const parent: ParentNode = el.parentNode;
     parent.removeChild(el);
     el = parent;
   }
 }
 
 function brollWrapHtmlLine(body: HTMLElement, line: HtmlLine, id: string): boolean {
-  var m = BROLL_MARKER_RE.exec(brollHtmlLineText(line.nodes));
+  const m = BROLL_MARKER_RE.exec(brollHtmlLineText(line.nodes));
   if (!m) return false;
-  var left = m[0].length;
+  let left = m[0].length;
   brollLineTextNodes(line.nodes).forEach(function (t) {
     if (left <= 0) return;
-    var val = t.nodeValue || "";
+    const val = t.nodeValue || "";
     if (val.length > left) { t.nodeValue = val.slice(left); left = 0; return; }
     left -= val.length;
-    var parent = t.parentNode;
+    const parent = t.parentNode;
     if (!parent) return;
     parent.removeChild(t);
     brollPruneEmpty(parent, body);
   });
 
-  var ref: Node | null = null;
-  for (var i = 0; i < line.nodes.length && !ref; i++) {
+  let ref: Node | null = null;
+  for (let i = 0; i < line.nodes.length && !ref; i++) {
     const node = line.nodes[i];
     if (node && node.parentNode === body) ref = node;
   }
   if (!ref) ref = line.br;
-  var holder = body.ownerDocument.createElement("div");
+  const holder = body.ownerDocument.createElement("div");
   holder.innerHTML = brollKeyHtml(id, (m[1] as string) + (m[2] as string)) + " ";
   Array.from(holder.childNodes).forEach(function (n) {
     body.insertBefore(n, ref);
@@ -118,39 +119,39 @@ function brollWrapHtmlLine(body: HTMLElement, line: HtmlLine, id: string): boole
 }
 
 function brollRekeyHtmlLine(line: HtmlLine, id: string): boolean {
-  for (var i = 0; i < line.nodes.length; i++) {
-    var n = line.nodes[i] as Node;
+  for (let i = 0; i < line.nodes.length; i++) {
+    const n = line.nodes[i] as Node;
     if (n.nodeType !== 1) continue;
-    var element = n as Element;
-    var key = element.classList.contains("broll-key") ? element : element.querySelector(".broll-key");
+    const element = n as Element;
+    const key = element.classList.contains("broll-key") ? element : element.querySelector(".broll-key");
     if (key) { key.setAttribute("data-broll-id", id); return true; }
   }
   return false;
 }
 
 export function anchorBrollInRows(doc: ValidatedDocument | null | undefined, only: readonly DocumentRow[] | null | undefined, ports: BrollAnchorPorts): number {
-  var rows = only || (doc && doc.rows);
+  const rows = only || (doc && doc.rows);
   if (!doc || !rows || !rows.length) return 0;
-  var plan = planBrollAnchors(doc, ports.readers, ports.ids);
-  var total = 0;
+  const plan = planBrollAnchors(doc, ports.readers, ports.ids);
+  let total = 0;
   rows.forEach(function (row) {
     if (brollAnchoringDeclined(row.id)) return;
-    var html = row.visualText;
-    var cell = ports.cellOf(html);
-    var todo = brollAnchorTodo(cell, row.id, plan);
+    const html = row.visualText;
+    const cell = ports.cellOf(html);
+    const todo = brollAnchorTodo(cell, row.id, plan);
     if (!todo.length) return;
-    var n = 0;
+    let n = 0;
     if (holdsMedia(html)) {
-      var body = ports.inertBody(html);
-      var htmlLines = brollHtmlLines(body);
+      const body = ports.inertBody(html);
+      const htmlLines = brollHtmlLines(body);
       todo.forEach(function (t) {
-        var line = htmlLines[t.found.index];
+        const line = htmlLines[t.found.index];
         if (!line) return;
         if (t.found.marker.key ? brollRekeyHtmlLine(line, t.id) : brollWrapHtmlLine(body, line, t.id)) n++;
       });
       if (n) row.visualText = ports.sanitize(body.innerHTML);
     } else {
-      var anchored = anchorBrollCell(cell, todo);
+      const anchored = anchorBrollCell(cell, todo);
       n = anchored.anchored;
       if (n) row.visualText = toHtml(anchored.cell);
     }
