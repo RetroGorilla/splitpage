@@ -192,11 +192,14 @@ Each is built in `sharedPorts()` from the owners and, until they retire, the bri
 | P18 Draft resume | `DraftResume`, which exists in `application/recovery/draft-resume.ts`, narrowed. Onboarding and new tab need only `restorePending()` | | recovery bridge (`draftResume()`), forwarded at call time | 5 | onboarding (`20b`) | Codex for the read-only `restorePending()`. The Opus moves of `13`, `20f` and `20g` widen the `Pick` |
 | P19 Seed check | `SeedCheck`, new, beside `seedCheckMatches` in `application/preferences/seed-check.ts`: `passes()`, true while the page still holds its untouched starting document | | seed-check bridge | 3 | onboarding (`20b`) | Codex |
 | P20 Document transitions | `Transitions` (`application/transitions/transitions.ts`), narrowed. The destination type and `NO_DESTINATION` move from `legacy/transition-bridge.ts` to `application/transitions/ports.ts` | | transition bridge (`documentTransitions`) | 6 | the first of `18b` and `20j` (Wave 3) | Opus: bringing a document in |
-| P21 Production index | `ProductionIndexOwner` (`core/production/index.ts`), narrowed | | production-index bridge | 4 | b-roll records (`08c`) | Opus: the tag ghost reads it on every keystroke |
+| P21 Production index | `ProductionIndexOwner` (`core/production/index.ts`), narrowed | | production-index bridge, as `sharedPorts().production`, which forwards each call at call time | 4 | its own PR; first used by b-roll records (`08c`) | Opus: the tag ghost reads it on every keystroke |
 | P22 Export formats | `ExportRegistry` (`application/export/registry.ts`), narrowed | | export-formats bridge | 3 | the first of `18c` and `18d` | Codex |
 | P23 Startup signal | `StartupSignal` moves from `legacy/startup-bridge.ts` to `application/startup-signal.ts`: `ready()` | | startup bridge (`startupReady`) | 3 | the first of `20` and `20j` | Opus, with that move |
-| P24 Launch facts | `LaunchFacts`, new, beside `runningOnDesktop` in `application/desktop-presence.ts`: `firstTabOfLaunch()`, `hadPriorSession()`, `launchIntent()`, `hasDraftToRestore()`, read only | | `desktopPort()` (`adapters/desktop/desktop-port.ts`), read at call time | 4 (`20b`, `20f`, `20g`, `20j`) | onboarding (`20b`) | Codex, with the desktop smoke |
+| P24 Launch facts | `LaunchFacts`, new, beside `runningOnDesktop` in `application/desktop-presence.ts`: `firstTabOfLaunch()`, `hadPriorSession()`, `launchIntent()`, `hasDraftToRestore()`, `appVersion()` (`20h`), and `sessionInfo()` (`getSessionInfo`, `13b` and `20f`), read only | | `desktopPort()` (`adapters/desktop/desktop-port.ts`), read at call time | 6 (`13b`, `20b`, `20f`, `20g`, `20h`, `20j`) | onboarding (`20b`) | Codex, with the desktop smoke |
 | P25 Last file | `LastFile`, new, `application/files/last-file.ts`: `load()`, the file handle stored from the last session. The Opus moves of `14` and `18` add `remember(handle)` | | `loadLastFileHandle` in `00-prelude` until it moves (Wave 4) | 3 (`18`, `20b`, `20j`) | onboarding (`20b`) | Codex for the read-only `load()` |
+| P26 External links | `ExternalLinks`, new, beside `runningOnDesktop` in `application/desktop-presence.ts`: `available()` (the desktop offers `openExternal`) and `open(url)`, which opens the address in the system browser. Callers keep their own `runningOnDesktop()` checks and browser fallbacks | | `desktopPort().openExternal`, read at call time | 4 (`06`, `11`, `13`, `20a`) | the first of `06` and `20a` | Codex, with the desktop smoke |
+| P27 Recent files | `RecentFiles`, new, `application/files/recent-files.ts`: `list()`, `remove(fileId)`, `clear()`, `read(id)` and `routeOpen(request)` | | `desktopPort()`: `listRecents`, `removeRecent`, `clearRecents`, `readFile`, `routeOpen` | 4 (`18`, `18b`, `20f`, `20j`) | the first of `18b` and `20j` | Opus: opening files brings a document in |
+| P28 Desktop video | `DesktopVideo`, new, beside P13 in `application/media/`: `grant(file)`, `open(token)`, `thumbnail(host, ref)` | | `desktopPort()`: `grantVideoFile`, `openVideoFile`, `videoThumbnail` | 2 (`05v`, `06`) | gallery (`05v`) | Opus, with the gallery |
 
 Two existing ports grow:
 
@@ -230,6 +233,17 @@ Two existing ports grow:
 | `document-guard` | goes with `02b` (Wave 4, Opus). P1 keeps the guard's read-only view |
 | `tag-rewrites` (`retagMentions`, `retagRewrites`, used by `08`) | The retag planners move to `application/commands/`, taking P8 as an argument instead of importing the richtext bridge. That happens in their own Codex PR, before `08` moves, and `08` then runs them through P9 |
 | the action files (`*-actions.ts`, `native-menu`) | [Rule 6](#rule-6-features-own-their-action-definitions-bootstrap-owns-their-order) |
+
+**Every desktop port member numbered files use**, and where each goes. A feature may not import `adapters/desktop/desktop-port.ts`, even for types:
+
+| Members | Used by | Goes to |
+| --- | --- | --- |
+| `getUpdateStatus`, `onUpdateStatus`, `downloadUpdate`, `installUpdate` | `20a` | Update's own port (see `20a` below) |
+| `openExternal` | `06`, `11`, `13`, `20a` | P26 |
+| `firstTabOfLaunch`, `hadPriorSession`, `launchIntent`, `hasDraftToRestore`, `appVersion`, `getSessionInfo` | `13b`, `20b`, `20f`, `20g`, `20h`, `20j` | P24 |
+| `listRecents`, `removeRecent`, `clearRecents`, `readFile`, `routeOpen` | `18`, `18b`, `20f`, `20j` | P27 |
+| `grantVideoFile`, `openVideoFile`, `videoThumbnail` | `05v`, `06` | P28 |
+| `history*` (`03a`), `connection` and `driveStatus` (`13`, `20f`), `saveFileDialog` (`14`), `openFileDialog` (`18`), the `on…` events, `setDocumentState`, `openPrompterIn…`, `voice…`, `tabId`, `blob…` and `drive…` (`20f`), `writeDraft`, `takeDraft` and `draftRestoreDone` (`20g`) | Wave 4 files | the Wave 4 adapter and owner moves into `adapters/desktop` and `application/`, on Opus |
 
 The pure page helpers move once, with their first user:
 
@@ -267,7 +281,7 @@ A **move** is a group of numbered files that become one feature folder (or one o
 | 3 | File menu and export dialog | `18b`, `18c` | 1,080 | 15 | 17 | 9 | `features/file-menu` | `18b` Opus, `18c` Codex |
 | 3 | Command menu | `18d` | 337 | 9 | 3 | 4 | `features/command-menu` | Codex |
 | 3 | Collaboration | `13a`, `13b`, `20e` | 1,760 | 23 | 19 | 8 | `features/collaboration` | `13a`'s presence state goes to an owner in its own PR first; then `13a` and `13b` Codex, `20e` Opus |
-| 3 | Update notices | `20a` | 384 | 1 | 5 | 1 | `features/update` | Codex, desktop smoke |
+| 3 | Update notices | `20a` | 384 | 1 | 5 | 1 | `features/update` | Codex, desktop smoke; after P16; lands P26 if `06` hasn't |
 | 3 | Onboarding | `20b` | 337 | 6 | 1 | 7 | `features/onboarding` | Codex, after P16; lands P17, P18, P19, P24 and P25 |
 | 3 | New tab | `20j` | 379 | 13 | 1 | 12 | `features/newtab` | Opus |
 | 3 | Settings and app data | `20s`, `20h` | 838 | 23 | 3 | 6 | `features/settings` | `20s` Codex, `20h` Opus |
@@ -342,7 +356,7 @@ Why this order:
 | `18d-command-menu` | 337 | | 4 | 3 | 1 | `features/command-menu` | 3 | Codex | |
 | `19-writer` | 383 | yes | 7 | 9 | 3 | `features/writer` | 3 | Opus | Writer typing; perf-ab |
 | `20-teleprompter` | 1,061 | yes | 9 | 6 | 2 | `features/prompter` | 3 | Opus | Opens a project in the prompter window |
-| `20a-update` | 384 | yes | 1 | 1 | 4 | `features/update` | 3 | Codex | Calls the desktop port; desktop smoke |
+| `20a-update` | 384 | yes | 1 | 1 | 4 | `features/update` | 3 | Codex | Desktop smoke. Update's own port, typed in `features/update/ports.ts` because only update uses it: `updates: { status(), onStatus(listener), stopStatus(), download(), install() }`, with an `UpdateStatus` type listing the fields the notices read (`version`, `latest`, `updateAvailable`, `canInstall`, `checking`, `error`, `download`, `releaseUrl`, `desktopAppUrl`, `desktop`). The update wiring forwards each call to `desktopPort()` at call time. Off the desktop, the calls resolve `null` and do nothing, as the old guards did. `stopStatus()` is today's `onUpdateStatus(null)`, and `dispose` calls it. Installing quits the app, but the quit happens in the desktop process, and update only calls it, unchanged, so the move stays Codex. `openExternal` is P26, and `arrivingOnLink` is P16 |
 | `20b-onboarding` | 337 | | 7 | 5 | 1 | `features/onboarding` | 3 | Codex | After P16 (its own Opus PR), which also gives `arrivingOnLink()`. Lands P17 (`deliverFile`, with the desktop smoke), P18 (`restorePending()` only), P19 (`seedCheckPasses`), P24 (the desktop port's launch and session facts, with the desktop smoke) and P25 (`loadLastFileHandle`). Uses P14 for `sidePanels().closeAll()`. Three feature-local fields, filled by the wiring from files that move later (Rule 5): `launcherInfo()` from `13-hosted`'s `launcherFetch("api/launcher/info")`, `addServerBookmark(name, url, options)` from `20e-connect`, and `onFileMenuChoice(listener)` from `18-local-files`. `18` has no way to remove a listener, so the wiring registers once and passes each choice to the mounted onboarding, and `dispose` stops it |
 | `20c-help` | 351 | | 5 | 1 | 2 | `features/help` | 1 | Codex | After L3f and P1. First, in its own Codex PR, the tour's showing state goes to `ViewFlags` as `tourOpen`/`setTourOpen` (beside `writerOpen`), so `screen-state` reads the owner instead of `tourShowing()`. In the move: the `help` and `tour` definitions leave `legacy/help-actions.ts` for `features/help/actions.ts`. The tour pause is a hand-off: the mount returns `tour: { interrupt, offerResume }`, the help wiring hands it to `handTourPauseTo`, and `20e` keeps calling the bridge. When `20e` moves (Wave 3), connect gets an output callback for its dialog opening and closing, the wiring connects it to the tour, and `tour-pause.ts` goes |
 | `20d-formats` | 263 | yes | 4 | 7 | 2 | `adapters/formats`, `application/save` | 4 | Opus | L3h PR 4 moves its codecs |

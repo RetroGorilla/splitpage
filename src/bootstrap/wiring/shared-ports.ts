@@ -6,6 +6,7 @@ import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import { arrivingOnLink } from "../../js/13-hosted.js";
 import { appActions } from "../../legacy/app-actions.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
@@ -16,6 +17,7 @@ import {
 } from "../../legacy/location-bridge.ts";
 import { htmlToPlainText } from "../../legacy/plain-text.ts";
 import { PREF_EVENT, preferences } from "../../legacy/preferences-bridge.ts";
+import { productionIndex } from "../../legacy/production-index-bridge.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
 import { currentDocument, editAllowed, onDocumentReplaced, onRefresh, onSessionChange, readSession, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../../legacy/session-bridge.ts";
@@ -90,6 +92,14 @@ const text: TextServices<HTMLElement> = {
   cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal
 };
 
+const production: ProductionIndexOwner = {
+  entries: (doc) => productionIndex().entries(doc),
+  current: (doc) => productionIndex().current(doc),
+  derived: () => productionIndex().derived(),
+  resetDerived: () => { productionIndex().resetDerived(); },
+  recordsPlan: (doc, viewed) => productionIndex().recordsPlan(doc, viewed)
+};
+
 const shared = {
   actions,
   changes,
@@ -98,7 +108,8 @@ const shared = {
   edits,
   place,
   review,
-  text
+  text,
+  production
 };
 
 export function sharedPorts(): typeof shared {
