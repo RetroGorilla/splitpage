@@ -1,5 +1,6 @@
 import type { ActionRegistry, ActionSource } from "../../src/application/actions.ts";
 import type { PreferenceChanges, PreferenceNotice, Preferences } from "../../src/application/preferences/preferences.ts";
+import type { SaveChange, SaveState } from "../../src/application/save/save-state.ts";
 import type { Blocker, ScreenState } from "../../src/application/screen.ts";
 import type { ReviewFacts } from "../../src/application/collaboration/review.ts";
 import type { DocumentView, SessionListener } from "../../src/application/session/document-session.ts";
@@ -172,5 +173,26 @@ export function fakeReview(initial = false) {
     review,
     setReviewing: (on: boolean): void => { reviewing = on; },
     refusals: (): number => refusals
+  };
+}
+
+export function fakeSaveState(initial: { unsaved?: boolean; busy?: boolean } = {}) {
+  const listeners = new Set<(change: SaveChange) => void>();
+  const asked: ("dueNow" | "resume")[] = [];
+  const state = { unsaved: !!initial.unsaved, busy: !!initial.busy };
+  const saves: SaveState = {
+    unsaved: () => state.unsaved,
+    busy: () => state.busy,
+    onChange: (listener) => {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
+    dueNow: () => { asked.push("dueNow"); },
+    resume: () => { asked.push("resume"); }
+  };
+  return {
+    saves, state, asked,
+    listenerCount: (): number => listeners.size,
+    emit: (change: SaveChange): void => { for (const listener of [...listeners]) listener(change); }
   };
 }

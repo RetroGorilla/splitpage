@@ -2,7 +2,8 @@ import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
 import { disarmDeleteButton } from "../features/rows/delete-button.ts";
 import { hasSetLength } from "../core/document/timing.ts";
 import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
-import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
+import { hiddenShotStripHtml } from "./01b-hide-shot.js";
+import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "../adapters/storage/02d-gallery.js";
 import { rowIndexOf } from "../core/document/rows.ts";
@@ -21,7 +22,7 @@ import {
 } from "./07-production-tags.js";
 import { formatTimestamp } from "./10-comments.js";
 import { appActions } from "../legacy/app-actions.ts";
-import { personColor } from "./13a-presence.js";
+import { presence } from "../legacy/presence-bridge.ts";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
@@ -174,7 +175,7 @@ function rowGutterHtml(row, index, review) {
       '<div class="row-controls">' + controls + '</div>' +
       (row.updatedBy
         ? '<div class="row-meta" title="Last edited by ' + escapeHtml(row.updatedBy) + '">' +
-            '<span class="row-meta-who"><span class="person-dot" style="--person:' + personColor(row.updatedBy) +
+            '<span class="row-meta-who"><span class="person-dot" style="--person:' + presence().personColor(row.updatedBy) +
               '" aria-hidden="true"></span>' + escapeHtml(String(row.updatedBy).split(/\s+/)[0]) + '</span><br>' +
             formatTimestamp(row.updatedAt) + '</div>'
         : '') +
@@ -508,7 +509,7 @@ function planRows(rowsEl) {
     else drop.push(el);
   });
 
-  var steps = rowGroupItems(currentDocument().rows).map(function (item) {
+  var steps = shotHiding().groups(currentDocument().rows).map(function (item) {
     var key = item.strip ? "strip:" + item.strip.join(",") : "row:" + item.row.id;
     var el = existing.get(key);
     if (el) {
