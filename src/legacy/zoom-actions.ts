@@ -1,6 +1,6 @@
 import type { ActionDefinition, ActionRegistry, ActionSource, Availability } from "../application/actions.ts";
 import { registerAll } from "../application/actions.ts";
-import { resetScriptScale, scriptViewActive, stepScriptScale } from "../js/05s-script-zoom.js";
+import { resetScriptScale, scriptViewActive, stepScriptScale } from "../features/script-zoom/script-zoom.js";
 
 function zoomAvailability(source: ActionSource): Availability {
   return source !== "shortcut" || scriptViewActive() ? { enabled: true, visible: false } : { enabled: false, visible: false };
