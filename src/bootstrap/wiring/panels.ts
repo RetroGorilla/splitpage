@@ -6,7 +6,7 @@ import { renderHistory } from "../../js/03-sync.js";
 import { onTagged } from "../../js/07-production-tags.js";
 import { onPlainTagged } from "../../js/07b-plain-tags.js";
 import { onPainted } from "../../js/05-render.js";
-import { refreshGalleryOverlay } from "../../js/05e-gallery-overlay.js";
+import { refreshGalleryOverlay } from "../../features/gallery/overlay.js";
 import { renderRundown, setRundownExtraSeconds } from "../../features/rundown/rundown.js";
 import { paintRundownPresence } from "../../features/rundown/presence.js";
 import { paintTargetOverlay } from "../../features/rundown/target.js";
