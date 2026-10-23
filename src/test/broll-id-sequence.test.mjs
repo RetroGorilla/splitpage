@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { S } from "../js/_state.js";
 import { makeId, migrateRows } from "../js/02-state.js";
 import { __init as initBroll, brollEntries, derivedRecordsPlan } from "../js/08c-broll.js";
-import { anchorBrollInRows } from "../adapters/production/broll-anchors.js";
+import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { inertBody } from "../legacy/richtext.ts";

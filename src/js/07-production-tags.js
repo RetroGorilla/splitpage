@@ -1,7 +1,6 @@
 import { domToPos } from "../features/editing/cell-dom.ts";
 import { updateScriptStats } from "./01-scene-status.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { stampRow } from "./03-sync.js";
 import {
   inertBody,
   safeId,
@@ -25,7 +24,7 @@ import {
 } from "../core/document/tags.ts";
 import { cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
 import { TAG_CATEGORIES, TAG_STATUSES, tagCategory, tagStatus } from "../core/production/looks.ts";
-import { productionIndexFor } from "../core/production/index.ts";
+import { productionIndex } from "../legacy/production-index-bridge.ts";
 import {
   bulkTagCell as bulkTagCellWith,
   collectTagsFromRows as collectTagGroups,
@@ -36,13 +35,11 @@ import {
 } from "../core/production/tags.ts";
 import { replaceWithTag } from "../core/text/edits.ts";
 import { namedTagId, projection } from "../core/text/runs.ts";
-import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { currentDocument, readSession, requestRefresh, runDocumentEdit, sessionStamps, stampDocument } from "../legacy/session-bridge.ts";
 import { changeSet } from "../application/session/change-set.ts";
 import { addPersonCommand, registerTagCommand, tagCellsCommand } from "../application/commands/production-records.ts";
-import { bindBulkTagRows } from "../application/commands/bulk-tags.ts";
 import { personNamed, registryEntryById as registryEntryByIdIn } from "../core/production/records.ts";
 import { cellEditing, focusMemory } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
@@ -58,7 +55,6 @@ export {
 
 var TAG_SHORTCUT_CHARS;
 
-bindBulkTagRows({ cell: bulkTagCell, stamp: stampRow });
 
 export function tagIconSvg(cat) {
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2" ' +
@@ -120,18 +116,17 @@ export function findOrAddPerson(name) {
   return person ? person.id : "";
 }
 
-const productionIndex = productionIndexFor(productionReaders, cacheSeal);
 
 function productionEntries() {
-  return productionIndex.entries(currentDocument());
+  return productionIndex().entries(currentDocument());
 }
 
 function currentProductionIndex() {
-  return productionIndex.current(currentDocument());
+  return productionIndex().current(currentDocument());
 }
 
 function tagRecordsPlan(doc) {
-  return productionIndex.recordsPlan(doc, currentDocument());
+  return productionIndex().recordsPlan(doc, currentDocument());
 }
 
 const REGISTRY_CHANGE = changeSet({ docFields: ["productionTags"] });
@@ -159,11 +154,11 @@ export function missingRegistryTags(rows, registry) {
 }
 
 export function productionIndexStats() {
-  return { derived: productionIndex.derived(), flushes: idleFlushes };
+  return { derived: productionIndex().derived(), flushes: idleFlushes };
 }
 
 export function resetProductionIndexStats() {
-  productionIndex.resetDerived();
+  productionIndex().resetDerived();
   idleFlushes = 0;
 }
 

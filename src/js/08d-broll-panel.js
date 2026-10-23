@@ -10,8 +10,7 @@ import { closeAllSidePanels } from "./03b-side-panels.js";
 import { cssAttr, plainText } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import { focusRowField } from "./06-rows.js";
-import { productionIndexFor } from "../core/production/index.ts";
-import { cacheSeal } from "../legacy/cache-freeze.ts";
+import { productionIndex } from "../legacy/production-index-bridge.ts";
 import {
   addBrollProp,
   brollEntries,
@@ -33,11 +32,10 @@ import { brollRecord as shotIn, personById as personIn, personNamed } from "../c
 import { randomIds } from "../adapters/identity/ids.ts";
 import { currentDocument, readSession, runDocumentEdit } from "../legacy/session-bridge.ts";
 
-const productionIndex = productionIndexFor(productionReaders, cacheSeal);
 const shotEditPorts = { run: runDocumentEdit, ids: randomIds };
 
 function productionEntries() {
-  return productionIndex.entries(currentDocument());
+  return productionIndex().entries(currentDocument());
 }
 
 var VIEW_KEY = "splitpage-broll-view";

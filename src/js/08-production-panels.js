@@ -4,8 +4,7 @@ import { showToast } from "../legacy/effects-bridge.ts";
 import { nextTagStatus, normalizeTagName } from "../core/document/tags.ts";
 import { formatDuration, pad2, rowSeconds } from "../core/production/timing.ts";
 import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, groupTagsByCategory, tagStatus } from "../core/production/looks.ts";
-import { productionIndexFor } from "../core/production/index.ts";
-import { cacheSeal } from "../legacy/cache-freeze.ts";
+import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { cssAttr, plainText, safeId } from "./04-richtext.js";
@@ -35,15 +34,14 @@ export { breakdownRows, breakdownTable };
 
 export var IS_TOUCH;
 
-const productionIndex = productionIndexFor(productionReaders, cacheSeal);
 const tagEditPorts = { run: runDocumentEdit, read: readSession, stamps: sessionStamps, rewrites: retagRewrites, mentions: retagMentions };
 
 function productionEntries() {
-  return productionIndex.entries(currentDocument());
+  return productionIndex().entries(currentDocument());
 }
 
 function currentProductionIndex() {
-  return productionIndex.current(currentDocument());
+  return productionIndex().current(currentDocument());
 }
 
 function tagsByCategory(all) {
