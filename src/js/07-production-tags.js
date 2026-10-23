@@ -7,7 +7,7 @@ import {
 } from "./04-richtext.js";
 import { plainTagOpen } from "./07b-plain-tags.js";
 import { domRangeFor } from "./09-find-replace.js";
-import { breakUndoCoalescing } from "./12a-undo.js";
+import { breakUndoCoalescing } from "../legacy/undo-bridge.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { contentMemo } from "../core/document/memo.ts";

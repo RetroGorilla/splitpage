@@ -10,7 +10,7 @@ import { sidePanels } from "../legacy/panels-bridge.ts";
 import { plainText, safeId } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
 import { tagStatusLampHtml } from "./07-production-tags.js";
-import { breakUndoCoalescing } from "./12a-undo.js";
+import { breakUndoCoalescing } from "../legacy/undo-bridge.ts";
 import { presence } from "../legacy/presence-bridge.ts";
 import { breakdownRows, breakdownTable } from "../adapters/formats/export-projections.ts";
 import { idMap } from "../core/document/id-map.ts";

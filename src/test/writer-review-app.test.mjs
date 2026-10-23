@@ -11,7 +11,7 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
+const { flushEdits, undoSizes } = await import("../legacy/undo-bridge.ts");
 const { currentDocument, liveSession, runCommand, sessionTextPorts, REVIEW_ONLY } = await import("../legacy/session-bridge.ts");
 const { joinScenesCommand, splitSceneCommand, textCut } = await import("../application/commands/split-join.ts");
 const { htmlToPlainText } = await import("../legacy/plain-text.ts");

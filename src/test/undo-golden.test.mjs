@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
-import { flushEdits, lastUndoEntry, noteEdit, undo, undoSizes } from "../js/12a-undo.js";
+import { flushEdits, lastUndoEntry, noteEdit, undo, undoSizes } from "../legacy/undo-bridge.ts";
 import { changedBetween } from "../application/editing/undo/history.ts";
 import { assertGolden, goldenNames, jsonCopy } from "./golden-helpers.mjs";
 import { loadTestDocument } from "./_document.mjs";

@@ -5,7 +5,7 @@ import { armDeleteButton, disarmDeleteButton } from "../features/rows/delete-but
 import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
 import { isBlankScene } from "./05g-scene-clip.js";
 import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
-import { breakUndoCoalescing } from "./12a-undo.js";
+import { breakUndoCoalescing } from "../legacy/undo-bridge.ts";
 import { placeCaretAtTextOffset } from "../features/editing/caret.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { addSceneCommand, deleteSceneCommand, swapScenesCommand } from "../application/commands/rows.ts";

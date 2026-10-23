@@ -10,16 +10,19 @@ import {
   flushEdits,
   lastUndoEntry,
   noteEdit,
+  legacyUndoPorts,
   redo,
+  startUndo,
   undo,
   undoSizes
-} from "../../../src/js/12a-undo.js";
+} from "../../../src/legacy/undo-bridge.ts";
 import { heldDocument, liveSession, startSessionBridge } from "../../../src/legacy/session-bridge.ts";
 import { createUndoAdapter, routeReplays } from "../../../src/legacy/undo-adapter.ts";
 
 const control: UndoControl = sharedPorts().undo;
 
 function open(t: TestContext) {
+  t.after(startUndo(legacyUndoPorts()));
   const stop = startSessionBridge({
     entry: (raw) => migrateRows(raw),
     undo: { adapter: createUndoAdapter(), route: routeReplays },

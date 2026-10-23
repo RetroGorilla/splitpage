@@ -23,6 +23,8 @@ import type { RowsEditorPorts } from "../../features/rows/editor.ts";
 import { mountRowRoutes } from "../../features/rows/routes.ts";
 import type { RowRoutePorts } from "../../features/rows/routes.ts";
 import { mountTitleRoutes } from "../../features/title/routes.ts";
+import type { Run } from "../../core/text/runs.ts";
+import { caretAfterStep } from "../../features/undo/caret.ts";
 import { mountUndoRoutes, undoGesture } from "../../features/undo/routes.ts";
 import { mountVideoPopover } from "../../features/video/popover.ts";
 import { mountWriterRoutes } from "../../features/writer/routes.ts";
@@ -129,7 +131,6 @@ import { showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
 import {
   breakUndoCoalescing,
-  caretAfterStep,
   compositionUndoMark,
   configureUndo,
   dropEmptyStepsSince,
@@ -138,7 +139,7 @@ import {
   redo,
   settleAfterApply,
   undo
-} from "../../js/12a-undo.js";
+} from "../../legacy/undo-bridge.ts";
 import { onServerDoc } from "../../js/13-hosted.js";
 import { runExport } from "../../js/18-local-files.js";
 import {
@@ -157,6 +158,12 @@ interface UndoCellStep {
   readonly op: string;
   readonly rowId: string;
   readonly key: string;
+  readonly before?: unknown;
+  readonly after?: unknown;
+}
+
+function decodeCell(html: unknown): Run[] {
+  return fromHtml(html);
 }
 
 interface PasteAttached {
@@ -487,7 +494,7 @@ function afterUndoApplied(steps: readonly unknown[]): void {
     const cell = document.querySelector<HTMLElement>((viewFlags().writerOpen() ? "#writer-doc " : "#rows ") + sel) || document.querySelector<HTMLElement>(sel);
     if (cell) {
       cell.focus();
-      placeCaretAtTextOffset(cell, caretAfterStep(cellStep));
+      placeCaretAtTextOffset(cell, caretAfterStep(decodeCell, cellStep));
     }
   }
 }
@@ -532,7 +539,7 @@ export function mountCompositionFeature(): ReturnType<typeof mountComposition> {
       ports: {
         cellOf: scriptCellOf,
         epoch: function () { return liveSession().epoch(); },
-        mark: function (cell): unknown { return compositionUndoMark(cell.rowId, cell.field); },
+        mark: function (cell) { return compositionUndoMark(cell.rowId, cell.field); },
         dropEmptySince: dropEmptyStepsSince
       }
     });

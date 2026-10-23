@@ -8,7 +8,7 @@ await bootApp();
 
 const { appActions } = await import("../legacy/app-actions.ts");
 const { migrateRows } = await import("../js/02-state.js");
-const { flushEdits } = await import("../js/12a-undo.js");
+const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const { closeGdocModal } = await import("../js/11-import.js");
 const { preferences } = await import("../legacy/preferences-bridge.ts");
 const { closeSettings, settingsOpen } = await import("../js/20s-settings.js");

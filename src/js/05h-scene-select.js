@@ -8,7 +8,7 @@ import {
 } from "./05g-scene-clip.js";
 import { closeRowMenus } from "./06-rows.js";
 import { scheduleProductionRefresh } from "./07-production-tags.js";
-import { breakUndoCoalescing, flushEdits, lastUndoEntry, undo } from "./12a-undo.js";
+import { breakUndoCoalescing, flushEdits, lastUndoEntry, undo } from "../legacy/undo-bridge.ts";
 import { onServerDoc } from "./13-hosted.js";
 import { autoSavePolicy } from "../legacy/save-bridge.ts";
 import { startNewScript } from "./18b-file-menu.js";

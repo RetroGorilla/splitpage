@@ -17,7 +17,7 @@ const { render } = await import("../js/05-render.js");
 const { cellEditing } = await import("../legacy/editor-bridge.ts");
 const { cellSelection } = await import("../features/editing/cell-selection.ts");
 const { armDeleteComment } = await import("../js/10-comments.js");
-const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
+const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../legacy/undo-bridge.ts");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);

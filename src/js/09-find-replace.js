@@ -9,7 +9,7 @@ import { tagCellsCommand } from "../application/commands/production-records.ts";
 import { inertBody, sanitizeHtml } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
 import { bulkTagRows } from "../application/commands/bulk-tags.ts";
-import { breakUndoCoalescing } from "./12a-undo.js";
+import { breakUndoCoalescing } from "../legacy/undo-bridge.ts";
 import { BROLL_MARKER_RE } from "../core/document/broll.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml, withoutLoneSurrogates } from "../core/document/text-policy.ts";

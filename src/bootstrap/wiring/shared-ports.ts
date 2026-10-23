@@ -19,7 +19,7 @@ import type { TextServices } from "../../application/text/services.ts";
 import type { DocumentDestination } from "../../application/transitions/ports.ts";
 import type { Transitions } from "../../application/transitions/transitions.ts";
 import { normalizeTagName } from "../../core/document/tags.ts";
-import { breakUndoCoalescing, flushEdits, lastUndoEntry, redo, undo } from "../../js/12a-undo.js";
+import { breakUndoCoalescing, flushEdits, lastUndoEntry, redo, undo } from "../../legacy/undo-bridge.ts";
 import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import { blobImgHtml, bytesForSync, dataUrlForSync, ensureBytes, intern, internDataUrl, isDurableSync, persist, queuePersist, recordFor, urlForSync } from "../../adapters/storage/02c-blobs.js";
 import { arrivingOnLink } from "../../js/13-hosted.js";

@@ -10,7 +10,7 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
+const { undo, undoSizes, flushEdits } = await import("../legacy/undo-bridge.ts");
 const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const { legacySessionEffects } = await import("../js/12-dirty-toast.js");
 const { addRow } = await import("../js/06-rows.js");

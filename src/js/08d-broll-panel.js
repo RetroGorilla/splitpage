@@ -17,7 +17,7 @@ import {
   renameBrollInScript,
   updateBrollBadge
 } from "./08c-broll.js";
-import { breakUndoCoalescing } from "./12a-undo.js";
+import { breakUndoCoalescing } from "../legacy/undo-bridge.ts";
 import { presence } from "../legacy/presence-bridge.ts";
 import { brollGroups as brollGroupsFrom, brollShotListForPrint, brollTable, filterCounts, FILTERS, matchesFilter, oneOf, PAGE_GROUPS, pageSummaryText, sceneLabel, shotRecordForFile, startOf } from "../adapters/formats/export-projections.ts";
 import { exportAs } from "./18-local-files.js";

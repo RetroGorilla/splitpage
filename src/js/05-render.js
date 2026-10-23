@@ -13,7 +13,7 @@ import { cssAttr } from "../features/common/dom.ts";
 import { slotPoster } from "../features/common/gallery.ts";
 import { appendDraftMedia, draftModel, editDraft } from "./05d-draft-edit.js";
 import { isDraftBox, isScriptCell } from "../features/editing/cell-page.ts";
-import { trackDocument } from "./12a-undo.js";
+import { trackDocument } from "../legacy/undo-bridge.ts";
 import { rowMotionKey, withRowMotion } from "../features/rows/row-motion.js";
 import {
   productionIndexStats,

@@ -9,7 +9,7 @@ import { preferences } from "../legacy/preferences-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { intern } from "../adapters/storage/02c-blobs.js";
 import { addGalleryPicture, addGalleryVideo, setVideoThumbnail, videoLinkKey } from "../adapters/storage/02d-gallery.js";
-import { flushEdits, foldIntoEdit, lastUndoEntry, noteEdit, redo, resetUndo, undo, undoSizes } from "../js/12a-undo.js";
+import { flushEdits, foldIntoEdit, lastUndoEntry, noteEdit, redo, resetUndo, undo, undoSizes } from "../legacy/undo-bridge.ts";
 import videoEmbed from "../../shared/video-embed.js";
 import { loadTestDocument } from "./_document.mjs";
 

@@ -14,7 +14,7 @@ import {
 import { cellSelection } from "../features/editing/cell-selection.ts";
 import { cellEditing, paintGuard } from "../legacy/editor-bridge.ts";
 import { brollSeedOf } from "./08c-broll.js";
-import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
+import { breakUndoCoalescing, flushEdits } from "../legacy/undo-bridge.ts";
 import { makeId, randomHexBytes, randomIds } from "../adapters/identity/ids.ts";
 import {
   attachToGallery,

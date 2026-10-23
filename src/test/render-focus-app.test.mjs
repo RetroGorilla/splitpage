@@ -18,7 +18,7 @@ const afterThisPaint = (work) => paintGuard().afterThisPaint(work);
 const { setHideShotScenes } = await import("../js/01b-hide-shot.js");
 const { runBrollRefresh, closeBrollPage, openBrollPage, openBrollPanel } = await import("../js/08d-broll-panel.js");
 const { sidePanels } = await import("../legacy/panels-bridge.ts");
-const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
+const { flushEdits, undoSizes } = await import("../legacy/undo-bridge.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
