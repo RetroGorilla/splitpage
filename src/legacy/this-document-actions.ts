@@ -5,7 +5,7 @@ import { openHistoryPanel } from "../js/03-sync.js";
 import { isRundownMinimized, toggleRundownMinimized } from "../js/05f-rundown.js";
 import { openFindBar } from "../js/09-find-replace.js";
 import { viewFlags } from "./preferences-bridge.ts";
-import { EVERY_OVERLAY, availableUnless, everyOverlayBut } from "./screen.ts";
+import { EVERY_OVERLAY, availableUnless, everyOverlayBut } from "../application/screen.ts";
 import { screenNow } from "./screen-state.ts";
 
 export function registerThisDocumentActions(registry: ActionRegistry): () => void {

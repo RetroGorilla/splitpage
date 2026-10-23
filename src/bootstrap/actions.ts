@@ -1,4 +1,5 @@
 import type { ActionRegistry, ActionSource, Refusal } from "../application/actions.ts";
+import { registerAll } from "../application/actions.ts";
 import { mountShortcuts } from "../features/shortcuts/mount.ts";
 import { showRefusal } from "../js/12-dirty-toast.js";
 import { runMenuCommandsWith } from "../js/20f-desktop.js";
@@ -9,7 +10,7 @@ import { nativeMenuRunner } from "../legacy/native-menu.ts";
 import { registerShareActions } from "../legacy/share-actions.ts";
 import { registerThisDocumentActions } from "../legacy/this-document-actions.ts";
 import { registerViewActions } from "../legacy/view-actions.ts";
-import { registerZoomActions } from "../legacy/zoom-actions.ts";
+import { scriptZoomActions } from "./wiring/script-zoom.ts";
 
 let running: (() => void) | null = null;
 
@@ -26,7 +27,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => registerViewActions(registry),
     () => registerHelpActions(registry),
     () => registerShareActions(registry),
-    () => registerZoomActions(registry),
+    () => registerAll(registry, scriptZoomActions()),
     () => registerEditorOpenActions(registry),
     () => runMenuCommandsWith(nativeMenuRunner(registry, presentRefusal)),
     () => mountShortcuts({ target: keyTarget, registry })
