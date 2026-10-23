@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
@@ -54,7 +54,7 @@ test("bulk tag: a needle that is only a lone half asks the same as an empty Find
 
 test("bulk tag: Go with a lone half tags nothing and registers nothing, like an empty box", () => {
   load("a " + emoji + " b");
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   typeIntoFind("");
   const seenBefore = toasts().length;
   runBulkTag();
@@ -64,8 +64,8 @@ test("bulk tag: Go with a lone half tags nothing and registers nothing, like an 
   const mark = toasts().length;
   runBulkTag();
   assert.deepEqual(toasts().slice(mark), emptyToast);
-  assert.equal(JSON.stringify(S.state), before);
-  assert.deepEqual(S.state.productionTags, []);
+  assert.equal(JSON.stringify(currentDocument()), before);
+  assert.deepEqual(currentDocument().productionTags, []);
 });
 
 test("bulk tag: a lone half beside real words is dropped, so the words are tagged under their own name", () => {
@@ -76,9 +76,9 @@ test("bulk tag: a lone half beside real words is dropped, so the words are tagge
   assert.equal(document.getElementById("find-tag-ask").querySelector("em").textContent, "drone");
   closeBulkTag();
   runBulkTag();
-  assert.deepEqual(S.state.productionTags.map((t) => t.name), ["drone"]);
-  assert.match(S.state.rows[0].visualText, /data-tag-name="drone"/);
-  assert.doesNotMatch(S.state.rows[0].visualText, /[\ud800-\udfff]/);
+  assert.deepEqual(currentDocument().productionTags.map((t) => t.name), ["drone"]);
+  assert.match(currentDocument().rows[0].visualText, /data-tag-name="drone"/);
+  assert.doesNotMatch(currentDocument().rows[0].visualText, /[\ud800-\udfff]/);
 });
 
 test("bulk tag: a lone half before a word is dropped, and the word is tagged under its own name", () => {
@@ -88,8 +88,8 @@ test("bulk tag: a lone half before a word is dropped, and the word is tagged und
   assert.match(document.getElementById("find-tag-ask").textContent, /^Tag 1 mention of drone as /);
   closeBulkTag();
   runBulkTag();
-  assert.deepEqual(S.state.productionTags.map((t) => t.name), ["drone"]);
-  assert.match(S.state.rows[0].visualText, /data-tag-name="drone"/);
+  assert.deepEqual(currentDocument().productionTags.map((t) => t.name), ["drone"]);
+  assert.match(currentDocument().rows[0].visualText, /data-tag-name="drone"/);
 });
 
 test("bulk tag: a trailing space in the Find box is trimmed, so the tag is registered as the word", () => {
@@ -99,8 +99,8 @@ test("bulk tag: a trailing space in the Find box is trimmed, so the tag is regis
   assert.match(document.getElementById("find-tag-ask").textContent, /^Tag 1 mention of drone as /);
   closeBulkTag();
   runBulkTag();
-  assert.deepEqual(S.state.productionTags.map((t) => t.name), ["drone"]);
-  assert.match(S.state.rows[0].visualText, /data-tag-name="drone"/);
+  assert.deepEqual(currentDocument().productionTags.map((t) => t.name), ["drone"]);
+  assert.match(currentDocument().rows[0].visualText, /data-tag-name="drone"/);
 });
 
 test("bulk tag: a whole emoji in the Find box is a needle, alone or after words", () => {
@@ -111,15 +111,15 @@ test("bulk tag: a whole emoji in the Find box is a needle, alone or after words"
   assert.equal(document.getElementById("find-tag-go").disabled, false);
   closeBulkTag();
   runBulkTag();
-  assert.deepEqual(S.state.productionTags.map((t) => t.name), [emoji]);
+  assert.deepEqual(currentDocument().productionTags.map((t) => t.name), [emoji]);
   load("see the drone" + emoji + " now");
   typeIntoFind("drone" + emoji);
   openBulkTag();
   assert.ok(document.getElementById("find-tag-ask").textContent.startsWith("Tag 1 mention of drone" + emoji + " as "));
   closeBulkTag();
   runBulkTag();
-  assert.deepEqual(S.state.productionTags.map((t) => t.name), ["drone" + emoji]);
-  assert.ok(S.state.rows[0].visualText.includes('data-tag-name="drone' + emoji + '"'));
+  assert.deepEqual(currentDocument().productionTags.map((t) => t.name), ["drone" + emoji]);
+  assert.ok(currentDocument().rows[0].visualText.includes('data-tag-name="drone' + emoji + '"'));
 });
 
 test("bulk tag: the category picked for a name already registered ignores a lone half in the needle", () => {

@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 const { setPrompterOpen } = await import("../application/prompter-state.ts");
@@ -36,10 +36,10 @@ for (const scenario of ["dispose and reopen", "same-ID replacement", "stale comp
         open();
         replacement = mountPrompterVisibilityFeature();
       } else if (scenario === "same-ID replacement") {
-        const held = S.state;
+        const held = currentDocument();
         open();
-        assert.notEqual(S.state, held);
-        assert.equal(S.state.docId, held.docId);
+        assert.notEqual(currentDocument(), held);
+        assert.equal(currentDocument().docId, held.docId);
       }
       finish({ release: async () => { released++; } });
       await pending;

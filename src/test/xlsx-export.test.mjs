@@ -3,7 +3,7 @@ import "./_export-services-started.mjs";
 import { liveDoc } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
@@ -21,7 +21,7 @@ import { loadTestDocument } from "./_document.mjs";
 initTags();
 initStatus();
 
-const demo = () => { loadTestDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)))); return S.state; };
+const demo = () => { loadTestDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)))); return currentDocument(); };
 const MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 
 async function open(bytes) {
@@ -85,7 +85,7 @@ test("the script's workbook: a sheet per part, each cell the .csv's", async () =
   for (const part of ["[Content_Types].xml", "_rels/.rels", "docProps/core.xml", "docProps/app.xml", "xl/workbook.xml",
     "xl/_rels/workbook.xml.rels", "xl/styles.xml", "xl/sharedStrings.xml"]) assert.ok(book.names.includes(part), part);
   assert.ok(book.text("[Content_Types].xml").includes("spreadsheetml.sheet.main+xml"));
-  assert.ok(book.text("docProps/core.xml").includes("<dc:title>" + S.state.title + "</dc:title>"));
+  assert.ok(book.text("docProps/core.xml").includes("<dc:title>" + currentDocument().title + "</dc:title>"));
   assert.ok(/T00:00:00Z/.test(book.text("docProps/core.xml")), "stamped with the day only");
 
   const t = scriptTable(liveDoc());
@@ -102,7 +102,7 @@ test("the script's workbook: a sheet per part, each cell the .csv's", async () =
   assert.deepEqual(comments.rows[0], t.commentHead);
   assert.deepEqual(asText(comments.rows.slice(1)), asText(t.comments.map((c) => c.cells)));
 
-  const bd = breakdownTable(exportDocumentOf(S.state));
+  const bd = breakdownTable(exportDocumentOf(currentDocument()));
   assert.deepEqual(asText(book.sheets[2].rows.slice(1)), asText(bd.rows.map((r) => r.cells)));
   assert.equal(typeof book.sheets[2].rows[1][4], "number");
   const br = brollTable(liveDoc());
@@ -164,7 +164,7 @@ test("the breakdown's and the shot list's own workbooks, and empty ones", async 
   demo();
   const bd = await open(buildBreakdownXlsx(liveDoc()));
   assert.deepEqual(bd.sheets.map((s) => s.name), ["Breakdown"]);
-  assert.deepEqual(bd.sheets[0].rows[0], breakdownTable(exportDocumentOf(S.state)).head);
+  assert.deepEqual(bd.sheets[0].rows[0], breakdownTable(exportDocumentOf(currentDocument())).head);
   const br = await open(buildBrollXlsx(liveDoc()));
   assert.deepEqual(br.sheets.map((s) => s.name), ["B-roll"]);
   assert.equal(br.sheets[0].rows.length, brollTable(liveDoc()).rows.length + 1);
@@ -197,8 +197,8 @@ test("awkward text survives: markup characters, line breaks, spaces at the ends,
   const row = book.sheets[0].rows[1];
   assert.equal(row[5], "A <b> & C\nsecond line");
   assert.equal(row[2], "Ready");
-  assert.ok(S.state.title.indexOf("Tom & Jerry's") === 0);
-  assert.equal(book.xml("docProps/core.xml").getElementsByTagName("dc:title")[0].textContent, S.state.title);
+  assert.ok(currentDocument().title.indexOf("Tom & Jerry's") === 0);
+  assert.equal(book.xml("docProps/core.xml").getElementsByTagName("dc:title")[0].textContent, currentDocument().title);
 });
 
 function withClock(next, run) {

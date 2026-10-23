@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { rowGroupItems, setHideShotScenes } from "../js/01b-hide-shot.js";
 import { paintRowTimes } from "../js/05-render.js";
 import { syncAnchorResolvedClasses } from "../js/10-comments.js";
@@ -12,7 +12,7 @@ import { loadTestDocument } from "./_document.mjs";
 const row = (id, status) => ({ id: id, status: status || "todo", visualText: "", audioText: "one two three" });
 
 test("hide shot scenes: a shot scene with an Object.prototype id is hidden like any other (#311)", () => {
-  const saved = S.state;
+  const saved = currentDocument();
   loadTestDocument(null);
   setHideShotScenes(true);
   try {
@@ -26,7 +26,7 @@ test("hide shot scenes: a shot scene with an Object.prototype id is hidden like 
 });
 
 test("scene times: a scene with an Object.prototype id that is not on screen is skipped (#311)", () => {
-  const saved = S.state;
+  const saved = currentDocument();
   document.body.innerHTML = '<div id="rows"><div class="row" data-id="r1"><span class="row-start"></span><span class="row-read"></span></div></div>';
   loadTestDocument({ rows: [row("r1")].concat(PROTOTYPE_IDS.map((id) => row(id, "shot"))), comments: [] });
   try {
@@ -39,7 +39,7 @@ test("scene times: a scene with an Object.prototype id that is not on screen is 
 });
 
 test("comment anchors: only a resolved comment's anchor is drawn resolved, whatever its id (#311)", () => {
-  const saved = S.state;
+  const saved = currentDocument();
   const ids = PROTOTYPE_IDS.concat(["c1"]);
   document.body.innerHTML = '<div id="rows">' +
     ids.map((id) => '<span class="cmt-anchor" data-cmt="' + id + '">x</span>').join("") + "</div>";

@@ -1,7 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { confirmSavedNow, saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 
@@ -14,7 +13,7 @@ const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
-const { liveSession, runCommand, sessionTextPorts, REVIEW_ONLY } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession, runCommand, sessionTextPorts, REVIEW_ONLY } = await import("../legacy/session-bridge.ts");
 const { joinScenesCommand, splitSceneCommand, textCut } = await import("../application/commands/split-join.ts");
 const { htmlToPlainText } = await import("../legacy/plain-text.ts");
 const writer = await import("../js/19-writer.js");
@@ -133,10 +132,10 @@ async function writerInReview() {
 function untouched(run) {
   flushEdits();
   host().textContent = "";
-  const model = JSON.stringify(S.state), seq = saveChanges(), generation = liveSession().generation(), sizes = undoSizes();
+  const model = JSON.stringify(currentDocument()), seq = saveChanges(), generation = liveSession().generation(), sizes = undoSizes();
   const out = run();
   flushEdits();
-  assert.equal(JSON.stringify(S.state), model, "the document is unchanged");
+  assert.equal(JSON.stringify(currentDocument()), model, "the document is unchanged");
   assert.equal(saveChanges(), seq, "saveChanges() is unchanged");
   assert.equal(unsavedChanges(), false, "the script is not marked dirty");
   assert.equal(liveSession().generation(), generation, "the session did not change");
@@ -168,7 +167,7 @@ test("typing in the Writer in review mode is refused with one toast and changes 
   await writerInReview();
   untouched(() => typeChar(para("r1"), "!"));
   oneRefusal();
-  assert.equal(S.state.rows[0].audioText, "Hello there");
+  assert.equal(currentDocument().rows[0].audioText, "Hello there");
   toEdit();
   writer.closeWriter();
 });
@@ -204,7 +203,7 @@ test("cutting in the Writer in review mode is refused with one toast and keeps t
   const store = untouched(() => clip("cut", p));
   oneRefusal();
   assert.equal(store["text/plain"], undefined);
-  assert.equal(S.state.rows[1].audioText, "Alpha bravo");
+  assert.equal(currentDocument().rows[1].audioText, "Alpha bravo");
   toEdit();
   writer.closeWriter();
 });
@@ -229,7 +228,7 @@ test("Enter in the Writer in review mode does not split: one toast, no new scene
   const ev = untouched(() => key(p, "Enter"));
   assert.equal(ev.defaultPrevented, true);
   oneRefusal();
-  assert.equal(S.state.rows.length, 4);
+  assert.equal(currentDocument().rows.length, 4);
   assert.equal(document.querySelectorAll("#writer-doc .wr-para").length, 4);
   toEdit();
   writer.closeWriter();
@@ -262,7 +261,7 @@ test("Backspace at the start and Delete at the end do not join scenes in review 
   const del = untouched(() => key(first, "Delete"));
   assert.equal(del.defaultPrevented, true);
   oneRefusal();
-  assert.equal(S.state.rows.length, 4);
+  assert.equal(currentDocument().rows.length, 4);
   toEdit();
   writer.closeWriter();
 });
@@ -279,7 +278,7 @@ test("Ctrl+B and the Bold button in the Writer in review mode do not format", as
   selectText(p, 0, 5);
   untouched(() => document.querySelector('.writer-bar .wr-fmt[data-cmd="bold"]').click());
   oneRefusal();
-  assert.equal(S.state.rows[1].audioText, "Alpha bravo");
+  assert.equal(currentDocument().rows[1].audioText, "Alpha bravo");
   toEdit();
   writer.closeWriter();
 });
@@ -290,7 +289,7 @@ test("Ctrl+Z and Ctrl+Y in the Writer in review mode refuse and leave the undo s
   clock += 10_000;
   typeChar(para("r1"), "!");
   flushEdits();
-  assert.equal(S.state.rows[0].audioText, "Hello there!");
+  assert.equal(currentDocument().rows[0].audioText, "Hello there!");
   toReview();
   flushEdits();
   confirmSavedNow();
@@ -303,7 +302,7 @@ test("Ctrl+Z and Ctrl+Y in the Writer in review mode refuse and leave the undo s
   const redone =untouched(() => key(p, "y", { ctrlKey: true }));
   assert.equal(redone.defaultPrevented, true);
   oneRefusal();
-  assert.equal(S.state.rows[0].audioText, "Hello there!");
+  assert.equal(currentDocument().rows[0].audioText, "Hello there!");
   assert.equal(viewFlags().writerOpen(), true);
   toEdit();
   writer.closeWriter();
@@ -317,7 +316,7 @@ test("the Writer title in review mode cannot be edited", async () => {
     title.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
   oneRefusal();
-  assert.equal(S.state.title, "Writer in review");
+  assert.equal(currentDocument().title, "Writer in review");
   assert.equal(document.getElementById("doc-title").value, "Writer in review");
   toEdit();
   writer.closeWriter();
@@ -415,19 +414,19 @@ test("a Writer split in review mode with the Writer open is refused: one toast, 
   selectText(p, 5, 5);
   untouched(() => key(p, "Enter"));
   oneRefusal();
-  assert.equal(S.state.rows.length, 4);
+  assert.equal(currentDocument().rows.length, 4);
   toEdit();
   writer.closeWriter();
 });
 
 test("the split and join commands themselves are rejected by the session in review mode", async () => {
   await writerInReview();
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   const split = runCommand(splitSceneCommand("r1", "audioText", textCut(5, 5), "new-row", sessionTextPorts));
   assert.deepEqual(split, { kind: "rejected", reason: REVIEW_ONLY });
   const join = runCommand(joinScenesCommand("r3", Object.assign({}, sessionTextPorts, { plainText: htmlToPlainText })));
   assert.deepEqual(join, { kind: "rejected", reason: REVIEW_ONLY });
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.equal(unsavedChanges(), false);
   toEdit();
   writer.closeWriter();
@@ -441,10 +440,10 @@ test("back in edit mode the Writer types, splits and formats again", async () =>
   host().textContent = "";
   typeChar(p, "!");
   flushEdits();
-  assert.equal(S.state.rows[0].audioText, "Hello there!");
+  assert.equal(currentDocument().rows[0].audioText, "Hello there!");
   selectText(para("r1"), 5, 5);
   key(para("r1"), "Enter");
-  assert.equal(S.state.rows.length, 5);
+  assert.equal(currentDocument().rows.length, 5);
   assert.equal(toasts().length, 0);
   await settle();
   writer.closeWriter();
@@ -503,7 +502,7 @@ test("composition text that lands in a Writer paragraph not yet redrawn read-onl
     composeInto(para("r1"), COMPOSED);
     para("r1").dispatchEvent(new window.FocusEvent("focusout", { bubbles: true }));
   });
-  assert.equal(S.state.rows[0].audioText, "Hello there");
+  assert.equal(currentDocument().rows[0].audioText, "Hello there");
   assert.equal(para("r1").textContent, "Hello there");
   assert.equal(para("r1").getAttribute("contenteditable"), "false");
   toEdit();
@@ -517,7 +516,7 @@ test("composition text that lands in a Writer paragraph not yet redrawn read-onl
     writer.closeWriter();
   });
   assert.equal(viewFlags().writerOpen(), false);
-  assert.equal(S.state.rows[1].audioText, "Alpha bravo");
+  assert.equal(currentDocument().rows[1].audioText, "Alpha bravo");
   toEdit();
 });
 
@@ -526,7 +525,7 @@ test("a refused composition whose redraw fires focusout on the removed paragraph
   untouched(() => composeInto(para("r1"), COMPOSED, { end: false }));
   assert.deepEqual(removedWhileFocused, [{ connected: true, text: "Hello there" + COMPOSED }], "the old paragraph got a focusout while connected, holding the composed text");
   oneRefusal();
-  assert.equal(S.state.rows[0].audioText, "Hello there");
+  assert.equal(currentDocument().rows[0].audioText, "Hello there");
   assert.equal(para("r1").textContent, "Hello there");
   assert.equal(para("r1").getAttribute("contenteditable"), "false");
   toEdit();
@@ -543,7 +542,7 @@ test("in review mode, a Writer paragraph whose text differs from the model is no
   p.focus();
   untouched(() => writer.closeWriter());
   assert.equal(viewFlags().writerOpen(), false);
-  assert.equal(S.state.rows[1].audioText, "Alpha bravo");
+  assert.equal(currentDocument().rows[1].audioText, "Alpha bravo");
   toEdit();
 });
 
@@ -557,7 +556,7 @@ test("in review mode, a grid cell whose text or formatting differs from the mode
   untouched(() => cell.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true })));
   cell.innerHTML = "Hello <strong>there</strong>";
   untouched(() => cellEditing().sync(cell));
-  assert.equal(S.state.rows[0].audioText, "Hello there");
+  assert.equal(currentDocument().rows[0].audioText, "Hello there");
   toEdit();
 });
 
@@ -569,7 +568,7 @@ test("in review mode, a comment anchor reaching the grid through the same sync i
   const generation = liveSession().generation();
   cell.innerHTML = 'Hello <span class="cmt-anchor" data-cmt="c-review">there</span>';
   cellEditing().sync(cell);
-  assert.equal(S.state.rows[0].audioText, 'Hello <span class="cmt-anchor" data-cmt="c-review">there</span>');
+  assert.equal(currentDocument().rows[0].audioText, 'Hello <span class="cmt-anchor" data-cmt="c-review">there</span>');
   assert.equal(liveSession().generation(), generation + 1);
   toEdit();
 });
@@ -585,7 +584,7 @@ test("in review mode, an input on the grid's title does not rename the script an
     title.dispatchEvent(new window.Event("input", { bubbles: true }));
   });
   assert.equal(title.value, "Writer in review");
-  assert.equal(S.state.title, "Writer in review");
+  assert.equal(currentDocument().title, "Writer in review");
   toEdit();
 });
 
@@ -602,7 +601,7 @@ test("a refused composition in the Writer title not yet redrawn read-only gives 
   oneRefusal();
   assert.equal(title.value, "Writer in review");
   assert.equal(title.readOnly, true);
-  assert.equal(S.state.title, "Writer in review");
+  assert.equal(currentDocument().title, "Writer in review");
   assert.equal(document.getElementById("doc-title").value, "Writer in review");
   toEdit();
   writer.closeWriter();
@@ -622,7 +621,7 @@ test("cutting and pasting with the selection inside bold text in the Writer in r
   selectText(p, 7, 10);
   untouched(() => clip("paste", bold, { "text/plain": "PASTED", "text/html": "<i>PASTED</i>" }));
   oneRefusal();
-  assert.equal(S.state.rows[1].audioText, "Alpha bravo");
+  assert.equal(currentDocument().rows[1].audioText, "Alpha bravo");
   toEdit();
   writer.closeWriter();
 });

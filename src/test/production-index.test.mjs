@@ -2,7 +2,6 @@ import { mintTagId } from "../core/document/tags.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { healTagRegistry, productionIndexStats, resetProductionIndexStats } from "../js/07-production-tags.js";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
@@ -19,13 +18,13 @@ function load(over) {
 
 test("reading the breakdown never writes the registry; healTagRegistry does, without changing what it reads", () => {
   load({ rows: [{ id: "r1", audioText: "Put the " + tag("prop", "kettle") + " on." }] });
-  S.state.productionTags = [];
+  currentDocument().productionTags = [];
   const before = productionIndex().entries(currentDocument());
   assert.deepEqual(before.map((e) => [e.key, e.orphaned, e.status]), [["prop kettle", false, "needed"]]);
-  assert.deepEqual(S.state.productionTags, [], "a read wrote the registry");
+  assert.deepEqual(currentDocument().productionTags, [], "a read wrote the registry");
 
   assert.equal(healTagRegistry(), 1);
-  assert.deepEqual(S.state.productionTags, [{ id: mintTagId("prop", "kettle"), cat: "prop", name: "kettle", owner: "", notes: "", status: "needed" }]);
+  assert.deepEqual(currentDocument().productionTags, [{ id: mintTagId("prop", "kettle"), cat: "prop", name: "kettle", owner: "", notes: "", status: "needed" }]);
   assert.deepEqual(productionIndex().entries(currentDocument()).map((e) => Object.assign({}, e, { id: null })), before);
   assert.equal(productionIndex().entries(currentDocument())[0].id, mintTagId("prop", "kettle"));
   assert.equal(before[0].id, null, "the entry handed out before the heal keeps the id it was handed out with");
@@ -43,26 +42,26 @@ test("the index is kept through prose edits and re-derived by any change to what
   productionIndex().entries(currentDocument());
   assert.equal(productionIndexStats().derived, 1);
 
-  S.state.rows[0].audioText = "Now put the " + tag("prop", "kettle") + " on, slowly.";
-  S.state.rows[1].visualText = "Close on the " + tag("location", "kitchen");
+  currentDocument().rows[0].audioText = "Now put the " + tag("prop", "kettle") + " on, slowly.";
+  currentDocument().rows[1].visualText = "Close on the " + tag("location", "kitchen");
   productionIndex().entries(currentDocument());
   productionIndex().entries(currentDocument());
   assert.equal(productionIndexStats().derived, 1);
 
-  S.state.rows[0].audioText += " " + tag("prop", "mug");
+  currentDocument().rows[0].audioText += " " + tag("prop", "mug");
   assert.ok(productionIndex().entries(currentDocument()).some((e) => e.name === "mug"));
   assert.equal(productionIndexStats().derived, 2);
 
-  S.state.productionTags[0].status = "have";
+  currentDocument().productionTags[0].status = "have";
   assert.equal(productionIndex().entries(currentDocument()).find((e) => e.name === "kettle").status, "have");
   assert.equal(productionIndexStats().derived, 3);
 
-  S.state.rows.reverse();
+  currentDocument().rows.reverse();
   assert.equal(productionIndex().entries(currentDocument()).find((e) => e.name === "kettle").mentions[0].rowIndex, 1);
   assert.equal(productionIndexStats().derived, 4);
 
   const entries = productionIndex().entries(currentDocument());
-  loadTestDocument(JSON.parse(JSON.stringify(S.state)));
+  loadTestDocument(JSON.parse(JSON.stringify(currentDocument())));
   assert.deepEqual(productionIndex().entries(currentDocument()).map((e) => e.key), entries.map((e) => e.key));
   assert.equal(productionIndexStats().derived, 5);
 });

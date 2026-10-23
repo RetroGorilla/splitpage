@@ -1,7 +1,7 @@
 import { SEED_TEXT, bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { table304Document } from "../../tests/application/raw-inputs.ts";
 
 const REDRAW = "Could not draw the script. Nothing was lost — press Redraw before you start editing.";
@@ -59,7 +59,7 @@ test("a boot render that throws still finishes start-up: the document is loaded,
   assert.equal(armed, false, "the boot render ran");
   assert.equal(bootError, null, "start-up did not fail: " + (bootError && bootError.stack));
   assert.deepEqual(logged, [BROKE]);
-  assert.equal(S.state.title, seedTitle);
+  assert.equal(currentDocument().title, seedTitle);
   assert.equal(redrawToasts().length, 1, "Redraw is offered with the start-up text");
   assert.equal(Array.from(document.querySelectorAll("#toast-host .toast.error:not(.is-leaving)")).length, 1, "and with no other error toast");
   assert.equal(document.getElementById("rows").hasAttribute("inert"), true);
@@ -74,7 +74,7 @@ test("a boot render that throws still finishes start-up: the document is loaded,
   await idle();
   assert.equal(bootError, null);
   assert.deepEqual(events.filter((e) => e.indexOf("restore-done:") === 0), ["restore-done:applied"]);
-  assert.equal(S.state.title, "Taken draft");
+  assert.equal(currentDocument().title, "Taken draft");
   assert.equal(document.getElementById("doc-title").value, "Taken draft", "the draft was drawn");
   assert.equal(redrawToasts().length, 0, "the clean draw took Redraw away");
   assert.equal(document.getElementById("rows").hasAttribute("inert"), false);
