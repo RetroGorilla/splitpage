@@ -27,7 +27,6 @@ import {
   checkFileConflict,
   deliverFile,
   showFileConflict,
-  updateFileChip,
   writeBackToFile
 } from "./18-local-files.js";
 import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./20d-formats.js";
@@ -150,12 +149,10 @@ async function writeDoc(opts, job) {
     retarget = setHome("file", { handle: handle, format: k, name: handle.name });
     pickedFor = retarget;
     job.moved();
-    if (prevHome.kind === "import") updateFileChip();
   }
   function undoRetarget() {
     if (retarget && !wrote && currentHome() === retarget) {
       documentLocation().restoreHome(prevHome);
-      if (prevHome.kind === "import") updateFileChip();
     }
     retarget = null;
   }
@@ -338,7 +335,6 @@ function autoSaveDue() {
 function autoSaveChanged(what) {
   if (what === "enabled") updateAutoSaveMenu();
   updateSaveStatus();
-  if (what === "halt") updateFileChip();
 }
 
 export function flushAutoSave() {

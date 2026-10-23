@@ -9,7 +9,7 @@ export const CONFIGURATION = Object.freeze({
   "src/js/12a-undo.js": { functions: ["configureUndo", "routeUndoReplays"] },
   "src/legacy/app-actions.ts": { functions: ["installAppActions"], facade: { name: "appActions", methods: ["register", "presentRefusals"] } },
   "src/legacy/export-formats.ts": { functions: ["installExportFormats"], facade: { name: "exportFormats", methods: ["defineCard", "register", "onChange"] } },
-  "src/legacy/save-bridge.ts": { functions: ["startSaves"] },
+  "src/legacy/save-bridge.ts": { functions: ["startSaves", "onSaveChange"] },
   "src/legacy/transition-bridge.ts": { functions: ["startTransitions"] },
   "src/legacy/recovery-bridge.ts": { functions: ["startRecovery", "useBrowserDraftFactory"] },
   "src/legacy/production-editing-bridge.ts": { functions: ["startProductionEditing"] },
