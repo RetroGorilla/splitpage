@@ -10,6 +10,7 @@ import { rowIndexOf } from "../core/document/rows.ts";
 import { currentDocument, editAllowed, readSession } from "../legacy/session-bridge.ts";
 import { buildVideoCardEl, ensureTrailingCaretSpot, safeHref, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
+import { slotPoster } from "../features/common/gallery.ts";
 import { appendDraftMedia, draftModel, editDraft } from "./05d-draft-edit.js";
 import { isDraftBox, isScriptCell } from "../features/editing/cell-page.ts";
 import { trackDocument } from "./12a-undo.js";
@@ -228,10 +229,6 @@ function setTextIfChanged(el, text) {
 
 var GALLERY_CELL_MAX = 4;
 var GALLERY_CAPTION_MAX = 3;
-
-export function slotPoster(slot) {
-  return slot.links.filter(function (l) { return l.poster; })[0] || null;
-}
 
 export function gallerySlotPictureHtml(slot) {
   if (slot.ref) return blobImgHtml(slot.ref);

@@ -21,7 +21,6 @@ import { __init as init_05p_rundown_presence } from "./05p-rundown-presence.js";
 import { __init as init_05r_read_time } from "./05r-read-time.js";
 import { __init as init_05t_target } from "./05t-target.js";
 import { __init as init_05v_video } from "./05v-video.js";
-import { __init as init_05w_annotate } from "./05w-annotate.js";
 import { __init as init_06_rows } from "./06-rows.js";
 import { __init as init_07_production_tags } from "./07-production-tags.js";
 import { __init as init_07b_plain_tags } from "./07b-plain-tags.js";
@@ -66,7 +65,7 @@ import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireApp, mountScriptZoomFeature, mountHelpFeature } from "../bootstrap/wiring.ts";
+import { wireApp, mountScriptZoomFeature, mountHelpFeature, mountGalleryFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -115,7 +114,7 @@ if (wiring) {
   mountScriptZoomFeature();
   init_05t_target();
   init_05v_video();
-  init_05w_annotate();
+  mountGalleryFeature();
   init_06_rows();
   init_07_production_tags();
   init_07b_plain_tags();
