@@ -6,16 +6,16 @@ import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
-import { openGdocModal, openImportModal } from "./11-import.js";
+import { openImportModal } from "./11-import.js";
 import { arrivingOnLink } from "./13-hosted.js";
-import { openLocalFile, openProjectFile } from "./18-local-files.js";
+import { openLocalFile } from "./18-local-files.js";
 import { desktopAppUrl, desktopAppOffered } from "./20a-update.js";
 import { seedCheckPasses } from "../legacy/seed-check.ts";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { STARTERS, starterById } from "./_starters.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
-import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
+import { NO_DESTINATION, documentTransitions, openDocument } from "../legacy/transition-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { draftResume } from "../legacy/recovery-bridge.ts";
 import { confirmSavedNow } from "../legacy/save-bridge.ts";
@@ -140,7 +140,7 @@ function newTabOpenDropped(file) {
       file.name + " isn't one of them.", "warn");
     return Promise.resolve(false);
   }
-  return openProjectFile(file, null);
+  return openDocument({ kind: "file", file: file, handle: null });
 }
 
 function starterSceneSeconds(state) {
@@ -282,7 +282,7 @@ async function openRecent(fileId) {
     return;
   }
   var handle = makeDesktopHandle(entry);
-  await openProjectFile(await handle.getFile(), handle);
+  await openDocument({ kind: "file", file: await handle.getFile(), handle: handle });
 }
 
 async function forgetRecent(fileId) {
@@ -339,7 +339,7 @@ export function __init() {
       else if (action === "open") newTabOpenFile();
       else if (action === "join") appActions.invoke("servers", "button");
       else if (action === "paste") openPasteAsNewDocument();
-      else if (action === "gdoc") openGdocModal();
+      else if (action === "gdoc") appActions.invoke("show-gdoc-import", "button");
       else if (action === "dismiss") closeNewTabPage();
       else if (action === "tour") { closeNewTabPage(); appActions.invoke("tour", "button"); }
       else if (action === "open-recent") openRecent(target.getAttribute("data-file-id"));

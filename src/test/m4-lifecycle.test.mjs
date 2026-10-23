@@ -62,14 +62,14 @@ const { migrateRows } = await import("../js/02-state.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const { buildSplitpageFile } = await import("../js/20d-formats.js");
+const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { startNewScript } = await import("../js/18b-file-menu.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { grantVideoFile, hasSessionVideo, sessionVideoUrl } = await import("../js/06-rows.js");
 const { normalizeVideoLink } = await import("../core/document/gallery.ts");
 const { requestRefresh } = await import("../legacy/session-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 function script(title) {
   return migrateRows({
@@ -229,8 +229,8 @@ test("E9: a replaced document leaves no listener, observer, timer, refresh or ob
     assert.ok(hasSessionVideo(link), "the file grant survives the replacement");
   }
   jobs.length = 0;
-  await openProjectFile(new File([buildSplitpageFile(exportDocumentOf(script("Opened")))], "a.splitpage", { lastModified: 1 }), null, { skipSnapshot: true, silent: true });
-  await openProjectFile(new File([buildSplitpageFile(exportDocumentOf(script("Opened again")))], "b.splitpage", { lastModified: 1 }), null, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: new File([buildSplitpageFile(exportDocumentOf(script("Opened")))], "a.splitpage", { lastModified: 1 }), handle: null, options: { skipSnapshot: true, silent: true } });
+  await openDocument({ kind: "file", file: new File([buildSplitpageFile(exportDocumentOf(script("Opened again")))], "b.splitpage", { lastModified: 1 }), handle: null, options: { skipSnapshot: true, silent: true } });
   clock.tick(60 * 60 * 1000);
   await settle(clock);
 

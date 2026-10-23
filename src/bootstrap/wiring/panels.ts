@@ -1,5 +1,5 @@
 import { currentDocument, onRefresh, onSessionChange } from "../../legacy/session-bridge.ts";
-import { PREF_EVENT, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
+import { onPreferenceChange, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { onScriptStats, statsFollowChange, updateScriptStats } from "../../js/01-scene-status.js";
 import { onHistoryChange } from "../../js/03a-history-store.js";
 import { renderHistory } from "../../js/03-sync.js";
@@ -31,15 +31,10 @@ function refreshTagViews(): void {
   renderProduction();
 }
 
-function listenForClock(): () => void {
-  const heard = (event: Event): void => {
-    const detail = (event as CustomEvent<{ key?: string }>).detail;
-    if (!detail || preferences().nameOf(detail.key as string) !== "clock") return;
-    renderHistoryPanel();
-    if (currentDocument()) renderComments();
-  };
-  document.addEventListener(PREF_EVENT, heard);
-  return () => { document.removeEventListener(PREF_EVENT, heard); };
+function clockChanged(change: { key: string }): void {
+  if (preferences().nameOf(change.key) !== "clock") return;
+  renderHistoryPanel();
+  if (currentDocument()) renderComments();
 }
 
 function renderHistoryPanel(): void {
@@ -94,7 +89,7 @@ export function mountPanelListenersFeature(): void {
       if (jobs.has("broll")) runBrollRefresh();
     }),
     onHistoryChange(renderHistoryPanel),
-    listenForClock()
+    onPreferenceChange(clockChanged)
   ];
   stopPanels = () => {
     while (stops.length) stops.pop()?.();

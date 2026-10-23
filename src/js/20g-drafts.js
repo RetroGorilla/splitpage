@@ -12,6 +12,7 @@ import { showToast } from "./12-dirty-toast.js";
 import { onServerDoc } from "./13-hosted.js";
 import { DRAFT_LIMITS, browserDraftKey, draftBaseOf } from "../adapters/storage/draft-store-idb.ts";
 import {
+  applyStashedWork,
   browserDrafts,
   captureRestore,
   desktopDrafts,
@@ -20,13 +21,9 @@ import {
   stillRestoring,
   useBrowserDraftFactory
 } from "../legacy/recovery-bridge.ts";
-import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
+import { NO_DESTINATION, documentTransitions, openDocument } from "../legacy/transition-bridge.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
-import { applyStashedWork } from "./14-export.js";
-import {
-  adoptProjectState,
-  parseProjectFileState
-} from "./18-local-files.js";
+import { parseProjectFileState } from "../adapters/formats/project-file.ts";
 import { notifyDesktopDocumentState } from "./20f-desktop.js";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { SCHEMA_VERSION } from "../core/document/fields.ts";
@@ -724,7 +721,7 @@ async function restoreFileDraft(t, mine, base, origin, ctx) {
   }
   if (refId) disk.docId = refId;
 
-  adoptProjectState(disk, file, handle, parsed.kind, { skipSnapshot: true, silent: true });
+  openDocument({ kind: "file", file: file, handle: handle, parsed: { state: disk, kind: parsed.kind }, options: { skipSnapshot: true, silent: true } });
   var diskCopy = cloneState(disk);
 
   if (sameDocContent(mine, disk)) {

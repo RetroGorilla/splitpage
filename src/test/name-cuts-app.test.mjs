@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
@@ -13,7 +13,8 @@ const { runDocumentEdit, sessionStamps } = await import("../legacy/session-bridg
 const { retagRewrites } = await import("../legacy/tag-rewrites.ts");
 const { plainTagPhrase } = await import("../js/07b-plain-tags.js");
 const { addBrollProp } = await import("../js/08c-broll.js");
-const { closeBrollPanel, openBrollPanel } = await import("../js/08d-broll-panel.js");
+const { openBrollPanel } = await import("../js/08d-broll-panel.js");
+const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { renderComments, setCommentAssignee } = await import("../js/10-comments.js");
 const NAME_KEY = "splitpage-comment-author";
 const { preferences } = await import("../legacy/preferences-bridge.ts");
@@ -60,19 +61,19 @@ function expand(id) {
   assert.ok(panel().querySelector('.broll-card[data-id="' + id + '"]'), id + " is open");
 }
 function enter(el) { el.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true })); }
-function shot(id) { return S.state.brollShots.filter((b) => b.id === id)[0]; }
+function shot(id) { return currentDocument().brollShots.filter((b) => b.id === id)[0]; }
 
 for (const [what, c] of CASES) {
   test("07 findOrAddPerson: " + what + " (#344, #419)", () => {
     load();
     const id = findOrAddPerson(c.typed(60));
-    assert.equal(S.state.people.filter((p) => p.id === id)[0].name, c.kept(60));
+    assert.equal(currentDocument().people.filter((p) => p.id === id)[0].name, c.kept(60));
   });
 
   test("07 renameTag: " + what + " (#344, #419)", () => {
     load();
     assert.ok(renameTag("prop", "Kettle", c.typed(80), { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }));
-    assert.deepEqual(S.state.productionTags.map((t) => t.name), [c.kept(80)]);
+    assert.deepEqual(currentDocument().productionTags.map((t) => t.name), [c.kept(80)]);
   });
 
   test("07 applyTag, the tag composer's name: " + what + " (#344, #419)", () => {
@@ -81,8 +82,8 @@ for (const [what, c] of CASES) {
     document.getElementById("tag-name").value = c.typed(80);
     document.getElementById("tag-all").checked = true;
     applyTag();
-    assert.ok(S.state.productionTags.some((t) => t.name === c.kept(80)), JSON.stringify(S.state.productionTags.map((t) => t.name)));
-    assert.equal(S.state.rows[0].audioText.split('data-tag-name="' + c.kept(80) + '"').length, 3);
+    assert.ok(currentDocument().productionTags.some((t) => t.name === c.kept(80)), JSON.stringify(currentDocument().productionTags.map((t) => t.name)));
+    assert.equal(currentDocument().rows[0].audioText.split('data-tag-name="' + c.kept(80) + '"').length, 3);
   });
 
   test("07b plainTagPhrase: " + what + " (#344, #419)", () => {
@@ -93,7 +94,7 @@ for (const [what, c] of CASES) {
     load();
     assert.ok(addBrollProp("bs2", c.typed(80)));
     assert.deepEqual(shot("bs2").props.map((p) => p.name), [c.kept(80)]);
-    assert.ok(S.state.productionTags.some((t) => t.cat === "prop" && t.name === c.kept(80)));
+    assert.ok(currentDocument().productionTags.some((t) => t.cat === "prop" && t.name === c.kept(80)));
   });
 
   test("08d the b-roll panel's new shot: " + what + " (#344, #419)", () => {
@@ -101,8 +102,8 @@ for (const [what, c] of CASES) {
     openBrollPanel();
     document.getElementById("broll-add-input").value = c.typed(200);
     document.getElementById("broll-add-save").click();
-    assert.ok(S.state.brollShots.some((b) => b.origin === "list" && b.name === c.kept(200)), JSON.stringify(S.state.brollShots.map((b) => b.name)));
-    closeBrollPanel();
+    assert.ok(currentDocument().brollShots.some((b) => b.origin === "list" && b.name === c.kept(200)), JSON.stringify(currentDocument().brollShots.map((b) => b.name)));
+    sidePanels().close("broll-panel");
   });
 
   test("08d a shot's location: " + what + " (#344, #419)", () => {
@@ -114,7 +115,7 @@ for (const [what, c] of CASES) {
     box.value = c.typed(80);
     enter(box);
     assert.equal(shot("bs2").location, c.kept(80));
-    closeBrollPanel();
+    sidePanels().close("broll-panel");
   });
 
   test("08d the selected shots' location: " + what + " (#344, #419)", () => {
@@ -131,7 +132,7 @@ for (const [what, c] of CASES) {
     click('[data-action="broll-bulk-input-save"]');
     assert.equal(shot("bs2").location, c.kept(80));
     click('[data-action="broll-bulk-clear"]');
-    closeBrollPanel();
+    sidePanels().close("broll-panel");
   });
 
   test("08d renaming a script shot: " + what + " (#344, #419)", () => {
@@ -142,15 +143,15 @@ for (const [what, c] of CASES) {
     click('[data-action="broll-rename"][data-id="bs1"]');
     panel().querySelector('.broll-rename-input[data-id="bs1"]').value = c.typed(200);
     click('[data-action="broll-rename-save"][data-id="bs1"]');
-    const text = new window.DOMParser().parseFromString(S.state.rows[0].visualText, "text/html").body.textContent;
+    const text = new window.DOMParser().parseFromString(currentDocument().rows[0].visualText, "text/html").body.textContent;
     assert.equal(text, "B-roll: " + c.kept(200));
-    closeBrollPanel();
+    sidePanels().close("broll-panel");
   });
 
   test("10 setCommentAssignee: " + what + " (#344, #419)", () => {
     load();
     setCommentAssignee("c1", c.typed(80));
-    assert.equal(S.state.comments[0].assignee, c.kept(80));
+    assert.equal(currentDocument().comments[0].assignee, c.kept(80));
   });
 
   test("13b the guest's name: " + what + " (#344, #419)", () => {
@@ -189,7 +190,7 @@ for (const [what, stored, line, whole] of OLD_CUTS) {
       rows: [{ id: "r1", status: "todo", audioText: '<span class="audio-cue">SFX: ' + line(80) + "</span>", visualText: "" }],
       productionTags: [{ id: "t_old1", cat: "sound", name: stored(80), status: "have", owner: "p1", notes: "keep me" }]
     });
-    const sound = S.state.productionTags.filter((t) => t.cat === "sound");
+    const sound = currentDocument().productionTags.filter((t) => t.cat === "sound");
     assert.deepEqual(sound.map((t) => [t.id, t.name, t.status, t.owner, t.notes]), [["t_old1", whole(80), "have", "p1", "keep me"]]);
   });
 
@@ -198,7 +199,7 @@ for (const [what, stored, line, whole] of OLD_CUTS) {
       rows: [{ id: "r1", status: "todo", audioText: "", visualText: "B-roll: " + line(200) }],
       brollShots: [{ id: "bs1", name: stored(200), notes: "keep me", status: "shot", origin: "script" }]
     });
-    assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes, b.status]), [["bs1", whole(200), "keep me", "shot"]]);
+    assert.deepEqual(currentDocument().brollShots.map((b) => [b.id, b.name, b.notes, b.status]), [["bs1", whole(200), "keep me", "shot"]]);
   });
 }
 
@@ -207,7 +208,7 @@ test("a sound cue whose text differs from its tag only in case leaves the tag's 
     rows: [{ id: "r1", status: "todo", audioText: '<span class="audio-cue">SFX: door slam ' + x(70) + "</span>", visualText: "" }],
     productionTags: [{ id: "t_old1", cat: "sound", name: "DOOR SLAM " + x(70), status: "have", owner: "p1", notes: "keep me" }]
   });
-  const sound = S.state.productionTags.filter((t) => t.cat === "sound");
+  const sound = currentDocument().productionTags.filter((t) => t.cat === "sound");
   assert.deepEqual(sound.map((t) => [t.id, t.name, t.status, t.owner, t.notes]), [["t_old1", "DOOR SLAM " + x(70), "have", "p1", "keep me"]]);
 });
 
@@ -222,7 +223,7 @@ for (const [what, line, stored, now] of HALF_INSIDE) {
       rows: [{ id: "r1", status: "todo", audioText: '<span class="audio-cue">SFX: ' + line(80) + "</span>", visualText: "" }],
       productionTags: [{ id: "t_old1", cat: "sound", name: stored(80), status: "have", owner: "p1", notes: "keep me" }]
     });
-    const sound = S.state.productionTags.filter((t) => t.cat === "sound");
+    const sound = currentDocument().productionTags.filter((t) => t.cat === "sound");
     assert.deepEqual(sound.map((t) => [t.id, t.name, t.owner, t.notes]), [["t_old1", now(80), "p1", "keep me"]]);
   });
 
@@ -231,7 +232,7 @@ for (const [what, line, stored, now] of HALF_INSIDE) {
       rows: [{ id: "r1", status: "todo", audioText: "", visualText: "B-roll: " + line(200) }],
       brollShots: [{ id: "bs1", name: stored(200), notes: "keep me", status: "shot", origin: "script" }]
     });
-    assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", now(200), "keep me"]]);
+    assert.deepEqual(currentDocument().brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", now(200), "keep me"]]);
   });
 }
 
@@ -243,7 +244,7 @@ test("a cue that its own tag's heal already matches renames no other broken tag 
       { id: "t_old2", cat: "sound", name: x(78) + "g\uD83D", notes: "two" }
     ]
   });
-  assert.deepEqual(S.state.productionTags.map((t) => [t.id, t.name, t.notes]), [["t_old1", x(78), "one"], ["t_old2", x(78) + "g", "two"]]);
+  assert.deepEqual(currentDocument().productionTags.map((t) => [t.id, t.name, t.notes]), [["t_old1", x(78), "one"], ["t_old2", x(78) + "g", "two"]]);
 });
 
 test("a B-roll line that a shot's heal already matches renames no other broken shot (#344)", () => {
@@ -254,7 +255,7 @@ test("a B-roll line that a shot's heal already matches renames no other broken s
       { id: "bs2", name: x(198) + "g\uD83D", notes: "two", status: "shot", origin: "script" }
     ]
   });
-  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(198), "one"], ["bs2", x(198) + "g", "two"]]);
+  assert.deepEqual(currentDocument().brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(198), "one"], ["bs2", x(198) + "g", "two"]]);
 });
 
 test("an unkeyed B-roll line renames the free shot with its old cut, not one a keyed line holds (#344)", () => {
@@ -266,7 +267,7 @@ test("an unkeyed B-roll line renames the free shot with its old cut, not one a k
       { id: "bs2", name: x(199) + "\uD83D", notes: "free", status: "shot", origin: "script" }
     ]
   });
-  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, "held"], ["bs2", x(199) + GRIN, "free"]]);
+  assert.deepEqual(currentDocument().brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, "held"], ["bs2", x(199) + GRIN, "free"]]);
 });
 
 test("two unkeyed B-roll lines with the same old cut rename two shots, one each (#344)", () => {
@@ -277,7 +278,7 @@ test("two unkeyed B-roll lines with the same old cut rename two shots, one each 
       { id: "bs2", name: x(199) + "\uD83D", notes: "two", status: "shot", origin: "script" }
     ]
   });
-  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, "one"], ["bs2", x(199) + GRIN, "two"]]);
+  assert.deepEqual(currentDocument().brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, "one"], ["bs2", x(199) + GRIN, "two"]]);
 });
 
 test("a keyed B-roll line renames no other shot that shares its old cut (#344)", () => {
@@ -289,7 +290,7 @@ test("a keyed B-roll line renames no other shot that shares its old cut (#344)",
       { id: "bs2", name: x(199) + "\uD83D", notes: "listed", status: "shot", origin: "list" }
     ]
   });
-  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, ""], ["bs2", x(199), "listed"]]);
+  assert.deepEqual(currentDocument().brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, ""], ["bs2", x(199), "listed"]]);
 });
 
 test("a comment over text that held a lone half is not marked Changed once the half is gone (#344)", () => {
@@ -300,7 +301,7 @@ test("a comment over text that held a lone half is not marked Changed once the h
   renderComments();
   assert.ok(document.querySelector('.comment-card[data-id="c1"]'), "the card is drawn");
   assert.equal(document.querySelector('.comment-card[data-id="c1"] .comment-quote.changed'), null);
-  assert.equal(S.state.comments[0].quotedText, "hi there");
+  assert.equal(currentDocument().comments[0].quotedText, "hi there");
 });
 
 test("07 registerProductionTag cuts by code point and refuses a name that cleans to nothing (#344, #437)", () => {
@@ -308,7 +309,7 @@ test("07 registerProductionTag cuts by code point and refuses a name that cleans
   registerProductionTag("prop", "\uD83D");
   registerProductionTag("prop", " " + x(79) + GRIN + " tail");
   registerProductionTag("prop", "kettle\uD83D");
-  assert.deepEqual(S.state.productionTags.map((t) => t.name), ["Kettle", x(79) + GRIN]);
+  assert.deepEqual(currentDocument().productionTags.map((t) => t.name), ["Kettle", x(79) + GRIN]);
 });
 
 test("07 the tag composer offers the selected words cut by code point (#344)", () => {
@@ -337,12 +338,12 @@ for (const [what, stored, line, words, whole] of CUE_AND_WORDS) {
       ],
       productionTags: [{ id: "t_old1", cat: "sound", name: stored, status: "have", owner: "p1", notes: "keep me" }]
     });
-    const sound = S.state.productionTags.filter((t) => t.cat === "sound");
+    const sound = currentDocument().productionTags.filter((t) => t.cat === "sound");
     assert.deepEqual(sound.map((t) => [t.id, t.name, t.status, t.owner, t.notes]), [["t_old1", whole, "have", "p1", "keep me"]]);
-    assert.deepEqual(tagNamesIn(S.state.rows[1].audioText).concat(tagNamesIn(S.state.rows[1].visualText)), [whole, whole]);
-    assert.equal(new window.DOMParser().parseFromString(S.state.rows[1].audioText, "text/html").body.textContent, "a door b");
-    assert.equal(S.state.rows[0].audioText, cue(line));
-    const once = JSON.stringify(S.state);
+    assert.deepEqual(tagNamesIn(currentDocument().rows[1].audioText).concat(tagNamesIn(currentDocument().rows[1].visualText)), [whole, whole]);
+    assert.equal(new window.DOMParser().parseFromString(currentDocument().rows[1].audioText, "text/html").body.textContent, "a door b");
+    assert.equal(currentDocument().rows[0].audioText, cue(line));
+    const once = JSON.stringify(currentDocument());
     assert.equal(JSON.stringify(migrateRows(JSON.parse(once))), once, "a second load changes nothing");
   });
 }
@@ -358,8 +359,8 @@ test("words tagged with a renamed sound tag's old name stay on another sound tag
       { id: "t_old2", cat: "sound", name: x(79), notes: "words" }
     ]
   });
-  assert.deepEqual(S.state.productionTags.map((t) => [t.id, t.name, t.notes]), [["t_old1", x(79) + GRIN, "cue"], ["t_old2", x(79), "words"]]);
-  assert.deepEqual(tagNamesIn(S.state.rows[1].audioText), [x(79)]);
+  assert.deepEqual(currentDocument().productionTags.map((t) => [t.id, t.name, t.notes]), [["t_old1", x(79) + GRIN, "cue"], ["t_old2", x(79), "words"]]);
+  assert.deepEqual(tagNamesIn(currentDocument().rows[1].audioText), [x(79)]);
 });
 
 test("tagged words follow their renamed sound tag whatever their case, as they matched it before (#445)", () => {
@@ -370,8 +371,8 @@ test("tagged words follow their renamed sound tag whatever their case, as they m
     ],
     productionTags: [{ id: "t_old1", cat: "sound", name: "Door " + GRIN.repeat(37) + "\uD83D", owner: "p1", notes: "keep me" }]
   });
-  assert.deepEqual(S.state.productionTags.map((t) => [t.id, t.name, t.notes]), [["t_old1", "Door " + GRIN.repeat(45), "keep me"]]);
-  assert.deepEqual(tagNamesIn(S.state.rows[1].audioText), ["Door " + GRIN.repeat(45)]);
+  assert.deepEqual(currentDocument().productionTags.map((t) => [t.id, t.name, t.notes]), [["t_old1", "Door " + GRIN.repeat(45), "keep me"]]);
+  assert.deepEqual(tagNamesIn(currentDocument().rows[1].audioText), ["Door " + GRIN.repeat(45)]);
 });
 
 test("words of a sound tag whose cue rename was refused never join the tag that refused it (#445)", () => {
@@ -385,8 +386,8 @@ test("words of a sound tag whose cue rename was refused never join the tag that 
       { id: "t_old2", cat: "sound", name: x(79) + GRIN, notes: "cue" }
     ]
   });
-  assert.deepEqual(S.state.productionTags.slice(0, 2).map((t) => [t.id, t.name, t.notes]), [["t_old1", x(79) + "\uD83D", "words"], ["t_old2", x(79) + GRIN, "cue"]]);
-  assert.deepEqual(tagNamesIn(S.state.rows[1].audioText), [x(79)]);
+  assert.deepEqual(currentDocument().productionTags.slice(0, 2).map((t) => [t.id, t.name, t.notes]), [["t_old1", x(79) + "\uD83D", "words"], ["t_old2", x(79) + GRIN, "cue"]]);
+  assert.deepEqual(tagNamesIn(currentDocument().rows[1].audioText), [x(79)]);
 });
 
 test("a sound tag whose cue has its own tag keeps its tagged words (#445)", () => {
@@ -400,8 +401,8 @@ test("a sound tag whose cue has its own tag keeps its tagged words (#445)", () =
       { id: "t_old2", cat: "sound", name: GRIN.repeat(50), notes: "cue" }
     ]
   });
-  assert.deepEqual(S.state.productionTags.map((t) => [t.id, t.name, t.notes]), [["t_old1", GRIN.repeat(40), "words"], ["t_old2", GRIN.repeat(50), "cue"]]);
-  assert.deepEqual(tagNamesIn(S.state.rows[1].audioText), [GRIN.repeat(40)]);
+  assert.deepEqual(currentDocument().productionTags.map((t) => [t.id, t.name, t.notes]), [["t_old1", GRIN.repeat(40), "words"], ["t_old2", GRIN.repeat(50), "cue"]]);
+  assert.deepEqual(tagNamesIn(currentDocument().rows[1].audioText), [GRIN.repeat(40)]);
 });
 
 test("a prop tag with a sound tag's old name keeps its tagged words, and the sound words still follow (#445)", () => {
@@ -415,8 +416,8 @@ test("a prop tag with a sound tag's old name keeps its tagged words, and the sou
       { id: "t_old2", cat: "prop", name: GRIN.repeat(40), notes: "prop" }
     ]
   });
-  assert.deepEqual(S.state.productionTags.map((t) => [t.id, t.cat, t.name]), [["t_old1", "sound", GRIN.repeat(50)], ["t_old2", "prop", GRIN.repeat(40)]]);
-  assert.deepEqual([...S.state.rows[1].audioText.matchAll(/data-tag-cat="(\w+)" data-tag-name="([^"]*)"/g)].map((m) => [m[1], m[2]]),
+  assert.deepEqual(currentDocument().productionTags.map((t) => [t.id, t.cat, t.name]), [["t_old1", "sound", GRIN.repeat(50)], ["t_old2", "prop", GRIN.repeat(40)]]);
+  assert.deepEqual([...currentDocument().rows[1].audioText.matchAll(/data-tag-cat="(\w+)" data-tag-name="([^"]*)"/g)].map((m) => [m[1], m[2]]),
     [["prop", GRIN.repeat(40)], ["sound", GRIN.repeat(50)]]);
 });
 
@@ -426,10 +427,10 @@ test("a keyed B-roll line whose id has no stored shot keeps the shot its old cut
     rows: [{ id: "r1", status: "todo", audioText: "", visualText: key + x(199) + GRIN + " a" }],
     brollShots: [{ id: "bs9", name: x(199) + "\uD83D", notes: "two", status: "shot", origin: "script" }]
   });
-  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs9", x(199) + GRIN, "two"]]);
+  assert.deepEqual(currentDocument().brollShots.map((b) => [b.id, b.name, b.notes]), [["bs9", x(199) + GRIN, "two"]]);
   openBrollPanel();
-  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs9", x(199) + GRIN, "two"]]);
-  closeBrollPanel();
+  assert.deepEqual(currentDocument().brollShots.map((b) => [b.id, b.name, b.notes]), [["bs9", x(199) + GRIN, "two"]]);
+  sidePanels().close("broll-panel");
 });
 
 test("a keyed B-roll line whose id is a stored shot still renames no other shot (#445)", () => {
@@ -441,5 +442,5 @@ test("a keyed B-roll line whose id is a stored shot still renames no other shot 
       { id: "bs9", name: x(199) + "\uD83D", notes: "two", status: "shot", origin: "list" }
     ]
   });
-  assert.deepEqual(S.state.brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, ""], ["bs9", x(199), "two"]]);
+  assert.deepEqual(currentDocument().brollShots.map((b) => [b.id, b.name, b.notes]), [["bs1", x(199) + GRIN, ""], ["bs9", x(199), "two"]]);
 });

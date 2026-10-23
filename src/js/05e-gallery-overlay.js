@@ -16,8 +16,8 @@ import {
   slotPoster
 } from "./05-render.js";
 import { embedRefusal, fetchThumbnailRecord, playerSrc, thumbnailsAllowed } from "./05v-video.js";
-import { openAnnotator } from "./05w-annotate.js";
-import { hasSessionVideo, openGalleryLink, sessionVideoUrl } from "./06-rows.js";
+import { hasSessionVideo, sessionVideoUrl } from "./06-rows.js";
+import { appActions } from "../legacy/app-actions.ts";
 import { breakUndoCoalescing, lastUndoEntry, undo } from "./12a-undo.js";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
@@ -413,13 +413,13 @@ function onClick(e) {
   else if (act === "pick") pick(Number(el.getAttribute("data-slot")));
   else if (act === "cover") makeCover();
   else if (act === "remove") removeSelected();
-  else if (act === "annotate") openAnnotator(view.rowId, view.sel);
+  else if (act === "annotate") appActions.invoke("annotate-picture", "button", { rowId: view.rowId, slot: view.sel });
   else if (act === "unannotate") removeAnnotations();
   else if (act === "all") { view.videos = false; paint(); }
   else if (act === "play") startPlaying();
   else if (act === "zoom") openZoom();
   else if (act === "retry-thumb") retryThumbnail();
-  else if (act === "open" || act === "link") openGalleryLink(view.rowId, view.sel, el.getAttribute("data-key"));
+  else if (act === "open" || act === "link") appActions.invoke("open-picture-link", "button", { rowId: view.rowId, slot: view.sel, key: el.getAttribute("data-key") });
   else if (act === "add") pickPictureFor(view.rowId);
 }
 

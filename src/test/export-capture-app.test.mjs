@@ -15,7 +15,7 @@ const { flushEdits } = await import("../js/12a-undo.js");
 const { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } = await import("../adapters/formats/export-text.ts");
 const { captureExportDocument } = await import("../js/14b-export-kit.js");
 const { exportFacts } = await import("../adapters/formats/export-kit.ts");
-const { buildMarkdownProject, buildSplitpageFile } = await import("../js/20d-formats.js");
+const { buildMarkdownProject, buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 const TOKEN = "tok-e15-0123456789abcdef";

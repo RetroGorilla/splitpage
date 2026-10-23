@@ -10,8 +10,7 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
-const { buildSplitpageFile } = await import("../js/20d-formats.js");
+const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
 const { currentDocument, liveSession, runCommand, sessionTextPorts, REVIEW_ONLY } = await import("../legacy/session-bridge.ts");
 const { joinScenesCommand, splitSceneCommand, textCut } = await import("../application/commands/split-join.ts");
@@ -19,6 +18,7 @@ const { htmlToPlainText } = await import("../legacy/plain-text.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { cellEditing } = await import("../legacy/editor-bridge.ts");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -47,7 +47,7 @@ async function open() {
   if (viewFlags().writerOpen()) writer.closeWriter();
   window.__hostedTest.setSession({ role: "edit", docId: null });
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "writer-review-" + (++opened) + ".splitpage", { lastModified: opened });
-  await openProjectFile(file, null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
 }
 

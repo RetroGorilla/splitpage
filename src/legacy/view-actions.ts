@@ -1,14 +1,15 @@
 import type { ActionRegistry, ActionDefinition, Availability } from "../application/actions.ts";
 import { registerAll } from "../application/actions.ts";
-import { closeProductionPanel, closeGearPanel, openGearPanel, openProductionPanel } from "../js/08-production-panels.js";
-import { closeBrollPanel, openBrollPanel } from "../js/08d-broll-panel.js";
-import { closeCommentsPanel, openCommentsPanel } from "../js/10-comments.js";
+import { openGearPanel, openProductionPanel } from "../js/08-production-panels.js";
+import { openBrollPanel } from "../js/08d-broll-panel.js";
+import { openCommentsPanel } from "../js/10-comments.js";
 import { VIEWING_ONLY } from "../js/13-hosted.js";
 import { openWriter } from "../js/19-writer.js";
 import { openPrompter } from "../js/20-teleprompter.js";
 import { EVERY_OVERLAY, availableUnless, everyOverlayBut, firstRefusal } from "../application/screen.ts";
 import { screenNow } from "./screen-state.ts";
 import { reviewMode } from "./location-bridge.ts";
+import { sidePanels } from "./panels-bridge.ts";
 
 const VIEWING_ONLY_LISTED = "Viewing only — the writer changes the script";
 
@@ -31,7 +32,7 @@ function loadingRefusal(waits: boolean): Availability {
 }
 
 function panel(id: string, label: string, buttonId: string, panelId: string, words: string, waitsForLoad: boolean,
-  open: () => void, close: () => void): ActionDefinition {
+  open: () => void): ActionDefinition {
   return {
     id,
     label,
@@ -40,7 +41,7 @@ function panel(id: string, label: string, buttonId: string, panelId: string, wor
     words,
     availability: () => withButton(buttonId, firstRefusal(loadingRefusal(waitsForLoad), availableUnless(EVERY_OVERLAY, screenNow()))),
     run: () => {
-      if (panelOpen(panelId)) close();
+      if (panelOpen(panelId)) sidePanels().close(panelId);
       else open();
     }
   };
@@ -49,13 +50,13 @@ function panel(id: string, label: string, buttonId: string, panelId: string, wor
 export function registerViewActions(registry: ActionRegistry): () => void {
   const definitions: ActionDefinition[] = [
     panel("panel-production", "Production panel", "btn-production", "production-panel",
-      "breakdown tags props locations cast show hide toggle", true, openProductionPanel, closeProductionPanel),
+      "breakdown tags props locations cast show hide toggle", true, openProductionPanel),
     panel("panel-gear", "Gear panel", "btn-gear", "gear-panel",
-      "gear equipment kit camera show hide toggle", true, openGearPanel, closeGearPanel),
+      "gear equipment kit camera show hide toggle", true, openGearPanel),
     panel("panel-broll", "B-roll panel", "btn-broll", "broll-panel",
-      "broll b roll shots cutaways show hide toggle", false, openBrollPanel, closeBrollPanel),
+      "broll b roll shots cutaways show hide toggle", false, openBrollPanel),
     panel("panel-comments", "Comments panel", "btn-comments", "comments-panel",
-      "comments notes review feedback show hide toggle", true, openCommentsPanel, closeCommentsPanel),
+      "comments notes review feedback show hide toggle", true, openCommentsPanel),
     {
       id: "write",
       label: "Write",

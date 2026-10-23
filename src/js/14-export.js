@@ -4,7 +4,6 @@ import { documentIdStamp, editStamp } from "../application/commands/save-stamps.
 import { currentDocument, stampDocument } from "../legacy/session-bridge.ts";
 import { amendHome, currentHome, documentLocation, fileHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
 import { rememberLastFileHandle } from "./00-prelude.js";
-import { migrateRows } from "./02-state.js";
 import {
   copyDocHistorySafe,
   syncDocIdentity
@@ -12,26 +11,23 @@ import {
 import { ensureBytes } from "../adapters/storage/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import {
-  applyMerge,
   getEditorName,
   setBaseState
 } from "./03-sync.js";
 import { captureExportDocument } from "./14b-export-kit.js";
-import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./20d-formats.js";
+import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "../adapters/formats/project-file.ts";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { checkFileConflict, existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
 import { deliverFile } from "../legacy/file-delivery.ts";
 import { autoSavePolicy, confirmSavedNow, flushAutoSave, haltAutoSave, resumeAutoSave, saveChanges } from "../legacy/save-bridge.ts";
 import { showToast, warnImagesLeftOut } from "../legacy/effects-bridge.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
-import { conflictStash } from "../legacy/recovery-bridge.ts";
 import { autoSaveWhere } from "../application/save/autosave.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
 import { slugify } from "../../shared/text.js";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
-import { SERVER_RESUME_KEY } from "../application/location/server-status.ts";
 
 var SAVED = Object.freeze({ kind: "saved" });
 var COPIED = Object.freeze({ kind: "copied" });
@@ -200,40 +196,6 @@ function adoptSavedCopyDocId(forkDocId, docIdAtSave, owned) {
   documentLocation().markWrittenOut(true);
   syncDocIdentity();
 }
-
-export function applyStashedWork(loaded, override, apply) {
-  var stashes = conflictStash();
-  var stash = override || stashes.read();
-  if (!override) stashes.dropReloadGuard();
-  if (!stash || !stash.mine || !Array.isArray(stash.mine.rows)) return { state: loaded, report: null, snapshot: null };
-  stashes.accept(stash, loaded);
-  if (!override) {
-    try {
-      if (sessionStorage.getItem(SERVER_RESUME_KEY)) return { state: loaded, report: null, snapshot: null };
-    } catch (e) {}
-
-    var stashId = normalizeDocId(stash.mine.docId);
-    if (stashId) { loaded.docId = stashId; documentLocation().markWrittenOut(true); }
-
-    stashes.clear();
-  }
-  function through(extra) {
-    var out = applyMerge(Object.assign(
-      { theirs: loaded, source: "stash", mergeOnly: !apply }, extra, apply || {}
-    ));
-    function answer(o) { return { state: o.state, report: o.result, snapshot: o.snapshot, replaced: !!o.replaced }; }
-    return out && typeof out.then === "function" ? out.then(answer) : answer(out);
-  }
-
-  if (JSON.stringify(stash.mine) === JSON.stringify(loaded)) return through({ unchanged: true });
-
-  return through({
-    base: stash.base || null,
-    mine: stash.mine,
-    undoPoint: migrateRows(cloneState(loaded))
-  });
-}
-
 
 function readAutoSavePref() {
   return preferences().autosave();

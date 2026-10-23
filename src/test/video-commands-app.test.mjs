@@ -10,8 +10,7 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
-const { buildSplitpageFile } = await import("../js/20d-formats.js");
+const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { undoSizes, flushEdits } = await import("../js/12a-undo.js");
 const { openGalleryOverlay, closeGalleryOverlay } = await import("../js/05e-gallery-overlay.js");
 const { openCommentComposer, closeCommentComposer } = await import("../js/10-comments.js");
@@ -19,6 +18,7 @@ const { liveSession } = await import("../legacy/session-bridge.ts");
 const { addGalleryVideo } = await import("../core/document/gallery.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const decode = createHeldImageDecode({ dataUrl: PNG, encodedDataUrl: PNG });
@@ -51,7 +51,7 @@ async function open() {
   if (viewFlags().writerOpen()) writer.closeWriter();
   closeGalleryOverlay();
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "video-" + (++opened) + ".splitpage", { lastModified: opened });
-  await openProjectFile(file, null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
   document.getElementById("toast-host").textContent = "";
 }

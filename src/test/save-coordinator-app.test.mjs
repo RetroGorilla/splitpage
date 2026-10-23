@@ -12,11 +12,11 @@ const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { obsoleteSaveText } = await import("../js/14-export.js");
-const { buildSplitpageFile } = await import("../js/20d-formats.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
+const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const homeModule = await import("../legacy/location-bridge.ts");
 const saves = await import("../legacy/save-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -37,7 +37,7 @@ async function openFrom(target) {
   loadTestDocument(script("Placeholder", ID("0")));
   flushEdits();
   confirmSavedNow();
-  await openProjectFile(await target.handle.getFile(), target.handle, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: await target.handle.getFile(), handle: target.handle, options: { skipSnapshot: true, silent: true } });
 }
 
 function edit(text) {
@@ -76,7 +76,7 @@ test("D10: a file save that lands after the same file was reopened is reported o
   target.holdOp("close");
   const saving = saveDoc();
   await target.arrivedAt("close");
-  await openProjectFile(await target.handle.getFile(), target.handle, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: await target.handle.getFile(), handle: target.handle, options: { skipSnapshot: true, silent: true } });
   const before = warnings().length;
   target.releaseOp("close");
   await saving;
@@ -91,7 +91,7 @@ test("D10: a file save that lands after another file's document was opened says 
   const saving = saveDoc();
   await target.arrivedAt("close");
   const other = heldFile(script("Other", ID("c")), "other.splitpage");
-  await openProjectFile(await other.handle.getFile(), other.handle, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: await other.handle.getFile(), handle: other.handle, options: { skipSnapshot: true, silent: true } });
   const before = warnings().length;
   target.releaseOp("close");
   await saving;
