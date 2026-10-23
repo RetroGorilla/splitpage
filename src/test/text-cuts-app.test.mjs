@@ -21,7 +21,7 @@ const { openBrollPanel } = await import("../js/08d-broll-panel.js");
 const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { closeExportDialog, openExportDialog } = await import("../js/18c-export-dialog.js");
 const { presenceInitials } = await import("../js/13a-presence.js");
-const { buildMarkdownProject, parseMarkdownProject, applyMarkdownProject } = await import("../js/20d-formats.js");
+const { buildMarkdownProject, parseMarkdownProject, applyMarkdownProject } = await import("../adapters/formats/project-file.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);

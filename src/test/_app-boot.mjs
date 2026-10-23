@@ -88,7 +88,7 @@ export function closeApp() {
 }
 
 export async function appWiringDeps() {
-  const [{ migrateRows }, docId, sync, production, broll, dirty, exporting, drafts, hosted, files, imports] = await Promise.all([
+  const [{ migrateRows }, docId, sync, production, broll, dirty, exporting, drafts, hosted, files, imports, formats] = await Promise.all([
     import("../js/02-state.js"),
     import("../js/02b-doc-id.js"),
     import("../js/03-sync.js"),
@@ -99,7 +99,8 @@ export async function appWiringDeps() {
     import("../js/20g-drafts.js"),
     import("../js/13-hosted.js"),
     import("../js/18-local-files.js"),
-    import("../js/11-import.js")
+    import("../js/11-import.js"),
+    import("../js/20d-formats.js")
   ]);
   return {
     entry: migrateRows,
@@ -113,6 +114,7 @@ export async function appWiringDeps() {
     transitions: { destination: sync.documentDestinationPort, identity: docId.documentIdentityPort, history: sync.documentHistoryPort },
     sources: () => [files.projectFileSource(), imports.importDocumentSource(), hosted.serverDocumentSource()],
     recovery: () => Object.assign(drafts.draftRecoveryPorts(), { merge: sync.applyMerge }),
+    projectFiles: formats.legacyProjectFileServices,
     keyTarget: window
   };
 }

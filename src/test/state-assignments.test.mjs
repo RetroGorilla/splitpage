@@ -18,7 +18,7 @@ const { adoptRestoredState } = await import("../js/02b-doc-id.js");
 const { applyMerge } = await import("../js/03-sync.js");
 const { openLongDemo, startNewScript } = await import("../js/18b-file-menu.js");
 const { seedCheckPasses } = await import("../legacy/seed-check.ts");
-const { buildSplitpageFile } = await import("../js/20d-formats.js");
+const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 
