@@ -8,14 +8,16 @@ import { registerFileActions } from "../legacy/file-actions.ts";
 import { helpMenuActions } from "../legacy/help-actions.ts";
 import { nativeMenuRunner } from "../legacy/native-menu.ts";
 import { registerShareActions } from "../legacy/share-actions.ts";
-import { hideShotActions, thisDocumentActions } from "../legacy/this-document-actions.ts";
+import { thisDocumentActions } from "../legacy/this-document-actions.ts";
 import { registerViewActions } from "../legacy/view-actions.ts";
 import { rowsActions } from "./wiring/editor.ts";
 import { rundownMinimizeActions, rundownSceneActions } from "./wiring/rundown.ts";
 import { scriptZoomActions } from "./wiring/script-zoom.ts";
 import { helpActions } from "./wiring/help.ts";
+import { updateActions } from "./wiring/update.ts";
 import { galleryActions } from "./wiring/gallery.ts";
 import { findActions } from "./wiring/find.ts";
+import { hideShotActions } from "./wiring/hide-shot.ts";
 
 let running: (() => void) | null = null;
 
@@ -32,7 +34,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => registerViewActions(registry),
     () => {
       const menu = helpMenuActions();
-      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]);
+      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 5), ...updateActions(), ...menu.slice(5)]);
     },
     () => registerShareActions(registry),
     () => registerAll(registry, scriptZoomActions()),

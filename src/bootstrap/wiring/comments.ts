@@ -13,7 +13,7 @@ import {
   noteDraftComposition,
   noteDraftFocus,
   pasteIntoDraft
-} from "../../js/05d-draft-edit.js";
+} from "../../features/editing/draft-edit.js";
 import { isDraftBox } from "../../features/editing/cell-page.ts";
 import { compressImageFile } from "../../js/06-rows.js";
 import {

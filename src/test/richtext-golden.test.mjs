@@ -2,7 +2,8 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { buildVideoCardEl, htmlToMarkdown, sanitizeHtml, storedHtmlFromDom } from "../js/04-richtext.js";
-import { fromHtml, toHtml } from "../js/04c-doc-model.js";
+import { fromHtml } from "../legacy/richtext.ts";
+import { toHtml } from "../core/text/html.ts";
 import { intern } from "../adapters/storage/02c-blobs.js";
 import { createIdMasker, goldenText, idsInHtml, image, mintedId, settleGolden } from "./golden-helpers.mjs";
 

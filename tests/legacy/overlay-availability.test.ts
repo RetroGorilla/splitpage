@@ -11,10 +11,12 @@ import { prompterIsOpen, setPrompterOpen } from "../../src/application/prompter-
 import { registerFileActions } from "../../src/legacy/file-actions.ts";
 import { helpMenuActions } from "../../src/legacy/help-actions.ts";
 import { helpActions, mountHelpFeature, stopHelpFeature } from "../../src/bootstrap/wiring/help.ts";
+import { updateActions } from "../../src/bootstrap/wiring/update.ts";
 import { availableUnless, EVERY_OVERLAY, everyOverlayBut, inFront, OPENS_A_DIALOG } from "../../src/application/screen.ts";
 import type { Blocker, ScreenState } from "../../src/application/screen.ts";
 import { registerShareActions } from "../../src/legacy/share-actions.ts";
-import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { hideShotActions } from "../../src/bootstrap/wiring/hide-shot.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
 import { viewFlags } from "../../src/legacy/preferences-bridge.ts";
@@ -152,7 +154,7 @@ const DIALOG_OPENERS = ["about", "settings", "servers", "setup", "tagging-help",
 test("a command that opens a dialog, Help among them, is refused over a dialog but opens over Present", () => {
   const { registry, restore } = loadedRegistry();
   const menu = helpMenuActions();
-  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]);
+  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 5), ...updateActions(), ...menu.slice(5)]);
   try {
     for (const id of [...DIALOG_OPENERS, "help"]) assert.equal(refusal(registry, id, "menu"), null, id);
     document.body.innerHTML = '<div class="modal-backdrop"></div>';
@@ -169,7 +171,7 @@ test("a command that opens a dialog, Help among them, is refused over a dialog b
 test("the tour is refused over a dialog and starts over Present and the shot list", () => {
   const { registry, restore } = loadedRegistry();
   const menu = helpMenuActions();
-  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]);
+  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 5), ...updateActions(), ...menu.slice(5)]);
   try {
     assert.equal(refusal(registry, "tour", "menu"), null);
     document.body.innerHTML = '<div class="modal-backdrop"></div>';

@@ -7,7 +7,8 @@ import type { ActionRegistry, ActionSource } from "../../src/application/actions
 import { currentDocument } from "../../src/legacy/session-bridge.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
 import { registerFileActions } from "../../src/legacy/file-actions.ts";
-import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { hideShotActions } from "../../src/bootstrap/wiring/hide-shot.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
 
