@@ -1,3 +1,4 @@
+import { commentsPanelActions, commentsHelpActions } from "../../src/bootstrap/wiring/comments.ts";
 import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
 import { test } from "node:test";
@@ -5,26 +6,49 @@ import assert from "node:assert/strict";
 import { createActionRegistry, registerAll } from "../../src/application/actions.ts";
 import type { ActionRegistry } from "../../src/application/actions.ts";
 import { actionForKey } from "../../src/application/shortcuts.ts";
-import { registerFileActions } from "../../src/legacy/file-actions.ts";
+import { fileActions } from "../../src/legacy/file-actions.ts";
 import { helpMenuActions } from "../../src/legacy/help-actions.ts";
 import { helpActions, mountHelpFeature, stopHelpFeature } from "../../src/bootstrap/wiring/help.ts";
 import { updateActions } from "../../src/bootstrap/wiring/update.ts";
-import { registerShareActions } from "../../src/legacy/share-actions.ts";
-import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { shareActions } from "../../src/legacy/share-actions.ts";
+import { thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { hideShotActions } from "../../src/bootstrap/wiring/hide-shot.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
-import { registerViewActions } from "../../src/legacy/view-actions.ts";
+import { viewActions } from "../../src/legacy/view-actions.ts";
 import { scriptZoomActions } from "../../src/bootstrap/wiring/script-zoom.ts";
+import { findActions, mountFindFeature, stopFindFeature } from "../../src/bootstrap/wiring/find.ts";
+import { fileMenuExportActions, mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../src/bootstrap/wiring/file-menu-export.ts";
+
 
 function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
+  const globals = [window, globalThis].flatMap((target) =>
+    ["CSS", "Highlight"].map((name) => ({ target, name, descriptor: Object.getOwnPropertyDescriptor(target, name) })));
+  const css = { highlights: new Map() };
+  class Highlight extends Set {}
+  for (const target of [window, globalThis]) {
+    Object.defineProperty(target, "CSS", { configurable: true, writable: true, value: css });
+    Object.defineProperty(target, "Highlight", { configurable: true, writable: true, value: Highlight });
+  }
   const registry = createActionRegistry();
   mountRundownFeature();
+  mountFileMenuExportFeature();
   mountHelpFeature();
+  mountFindFeature();
   const menu = helpMenuActions();
-  const disposers = [stopRundownFeature,
-    registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerFileActions(registry), registerViewActions(registry),
-    registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 5), ...updateActions(), ...menu.slice(5)]), registerShareActions(registry), registerAll(registry, scriptZoomActions()), stopHelpFeature
+  const disposers = [stopRundownFeature, stopFileMenuExportFeature, stopFindFeature,
+    registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...viewActions().slice(0, 3), ...commentsPanelActions(), ...viewActions().slice(3)]),
+    registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 5), ...updateActions(), ...commentsHelpActions(), ...menu.slice(5)]), registerAll(registry, [...shareActions().slice(0, 11), ...fileMenuExportActions().slice(1), ...shareActions().slice(11)]), registerAll(registry, scriptZoomActions()), stopHelpFeature
   ];
-  return { registry, dispose: () => { for (const d of disposers) d(); } };
+  return { registry, dispose: () => {
+    try {
+      for (const d of disposers) d();
+    } finally {
+      for (const { target, name, descriptor } of globals) {
+        if (descriptor) Object.defineProperty(target, name, descriptor);
+        else Reflect.deleteProperty(target, name);
+      }
+    }
+  } };
 }
 
 function pressed(registry: ActionRegistry, key: string, mods: { shift?: boolean; alt?: boolean; meta?: boolean } = {}): string | null {

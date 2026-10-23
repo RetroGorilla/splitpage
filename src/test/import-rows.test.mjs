@@ -10,7 +10,7 @@ after(closeApp);
 const { migrateRows } = await import("../js/02-state.js");
 const { listDocHistory } = await import("../js/03a-history-store.js");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
-const { flushEdits, redo, undo } = await import("../js/12a-undo.js");
+const { flushEdits, redo, undo } = await import("../legacy/undo-bridge.ts");
 const { closeImportModal, openImportModal } = await import("../js/11-import.js");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");

@@ -1,9 +1,9 @@
-import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
-import { isDraftBox } from "../features/editing/cell-page.ts";
-import { clamp, clampRange, deleteRange, insertCell, insertText, markThroughout, setMark } from "../core/text/edits.ts";
-import { toHtml } from "../core/text/html.ts";
-import { cellLength, normalizeCell, projection } from "../core/text/runs.ts";
-import { fromHtml, inertBody, sanitizeHtml, storedHtmlFromDom } from "../legacy/richtext.ts";
+import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
+import { isDraftBox } from "./cell-page.ts";
+import { clamp, clampRange, deleteRange, insertCell, insertText, markThroughout, setMark } from "../../core/text/edits.ts";
+import { toHtml } from "../../core/text/html.ts";
+import { cellLength, normalizeCell, projection } from "../../core/text/runs.ts";
+var ports = null;
 
 var PUA_FIRST = 0xE000;
 var PUA_LAST = 0xF8FF;
@@ -34,7 +34,7 @@ export function mediaTable(texts) {
       return ch;
     },
     isMedia: function (ch) { return Object.prototype.hasOwnProperty.call(table.media, ch); },
-    cell: function (html) { return fromHtml(liftMedia(html, table)); },
+    cell: function (html) { return ports.text.fromHtml(liftMedia(html, table)); },
     html: function (cell) { return dropMedia(toHtml(stripMediaMarks(cell, table.isMedia)), table); },
     markThroughout: function (cell, from, to, name) { return markThroughoutText(cell, from, to, name, table.isMedia); },
     toggleMark: function (cell, from, to, name) {
@@ -45,7 +45,7 @@ export function mediaTable(texts) {
 }
 
 export function liftMedia(html, table) {
-  var body = inertBody(sanitizeHtml(html == null ? "" : String(html)));
+  var body = ports.text.inertBody(ports.text.sanitizeHtml(html == null ? "" : String(html)));
   var found = [];
   (function walk(node) {
     for (var c = node.firstChild; c; c = c.nextSibling) {
@@ -144,13 +144,13 @@ export function historyRedo(h, now) {
 }
 
 var histories = new WeakMap();
-var timers = new WeakMap();
+var timers = new Map();
 var composing = new WeakSet();
 
 function boxHtml(box) {
   var html = box.innerHTML;
   if (html.indexOf("\u200B") !== -1) html = html.replace(/\u200B/g, "");
-  return storedHtmlFromDom(html);
+  return ports.text.storedHtmlFromDom(html);
 }
 
 function snapshot(box) {
@@ -292,7 +292,7 @@ export function noteDraftFocus(box) {
 }
 
 export function pasteIntoDraft(box, html, text) {
-  var clean = html ? sanitizeHtml(html) : "";
+  var clean = html ? ports.text.sanitizeHtml(html) : "";
   if (!clean && !text) return null;
   return editDraft(box, function (cell, sel, media) {
     var r = sel ? clampRange(cell, sel.from, sel.to) : { from: cellLength(cell), to: cellLength(cell) };
@@ -313,4 +313,18 @@ export function appendDraftMedia(box, mediaHtml) {
   }, [mediaHtml]);
 }
 
-export function __init() {}
+export function __init(given) {
+  ports = given;
+  histories = new WeakMap();
+  composing = new WeakSet();
+  var disposed = false;
+  return { dispose: function () {
+    if (disposed) return;
+    disposed = true;
+    timers.forEach(function (timer) { clearTimeout(timer); });
+    timers.clear();
+    histories = new WeakMap();
+    composing = new WeakSet();
+    ports = null;
+  } };
+}
