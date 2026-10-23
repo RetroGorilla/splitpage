@@ -155,6 +155,7 @@ function fakes(): Fakes {
     editorName: () => "Ann",
     refresh: (jobs) => { refreshed.push(...jobs); },
     records: () => null,
+    bulkTags: { cell: (html) => ({ hits: 0, inTags: 0, skipped: 0, html: html }), stamp: () => {} },
     exporters: (registry: ExportRegistry) => {
       note("exporters");
       counts.exporters++;
