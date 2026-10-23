@@ -117,7 +117,7 @@ eval (function(){ B.forgetMemory(); __srv.calls = []; return !B.has(__img.R.sha)
 expect (async function(){ var m = await B.ensureBytes([__img.R.sha, __img.P.sha]); return JSON.stringify(m) === JSON.stringify([__img.P.sha]) && B.has(__img.R.sha); })()
 expect __srv.calls.filter(function(c){ return c.m === 'GET' && c.path.indexOf('api/blobs/') === 0; }).length === 2
 # no blob routes, no blob fetch
-eval (function(){ H.setSession({ docId: 'doc-b', rev: H.home().rev, blobs: false }); B.forgetMemory(); __srv.calls = []; return H.caps().blobs; })()
+eval (function(){ H.setSession({ docId: 'doc-b', rev: H.home().rev, blobs: false }); B.forgetMemory(); window.__presenceTest.goIdle(); __srv.calls = []; return H.caps().blobs; })()
 expect (async function(){ return (await H.fetchBlob(__img.R.sha)) === null && __srv.calls.length === 0; })()
 # put every image back for what follows
 eval (function(){ Object.keys(__img).forEach(function(k){ B.internDataUrl(__img[k].url); }); H.setSession({ docId: 'doc-b', rev: H.home().rev, blobs: true }); return H.caps().blobs; })()
