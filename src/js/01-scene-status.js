@@ -49,6 +49,11 @@ export function onScriptStats(listener) {
   };
 }
 
+export function statsFollowChange(change) {
+  var changes = change.changes;
+  if (changes.docFields.indexOf("targetSeconds") !== -1 || changes.cells.some(function (cell) { return cell.field === "status" || cell.field === "lengthSeconds"; })) updateScriptStats();
+}
+
 export function updateScriptStats() {
   var doc = currentDocument();
   if (!doc) return;
@@ -103,7 +108,6 @@ export function cycleRowStatus(rowId) {
     if (grace === "arm") armShotHideGrace(rowId);
     else if (grace === "clear") clearShotHideGrace(rowId);
   }
-  updateScriptStats();
 }
 
 export function __init() {}

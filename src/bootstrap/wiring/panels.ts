@@ -1,8 +1,10 @@
 import { currentDocument, onRefresh, onSessionChange } from "../../legacy/session-bridge.ts";
 import { onPreferenceChange, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
-import { onScriptStats, updateScriptStats } from "../../js/01-scene-status.js";
+import { onScriptStats, statsFollowChange, updateScriptStats } from "../../js/01-scene-status.js";
 import { onHistoryChange } from "../../js/03a-history-store.js";
 import { renderHistory } from "../../js/03-sync.js";
+import { onTagged } from "../../js/07-production-tags.js";
+import { onPlainTagged } from "../../js/07b-plain-tags.js";
 import { onPainted } from "../../js/05-render.js";
 import { refreshGalleryOverlay } from "../../js/05e-gallery-overlay.js";
 import { renderRundown } from "../../js/05f-rundown.js";
@@ -22,6 +24,11 @@ export function updateTagBadges(): void {
   updateProductionCount();
   updateGearCount();
   updateBrollBadge();
+}
+
+function refreshTagViews(): void {
+  updateTagBadges();
+  renderProduction();
 }
 
 function renderHistoryPanel(): void {
@@ -55,12 +62,15 @@ export function mountPanelListenersFeature(): void {
         refreshGalleryOverlay();
       }
     }),
+    onTagged(refreshTagViews),
+    onPlainTagged(refreshTagViews),
     onScriptStats(() => {
       renderRundown();
       paintTargetOverlay();
     }),
     onPresencePaint(() => { paintRundownPresence(); }),
     onSessionChange(commentsChanged),
+    onSessionChange(statsFollowChange),
     onSessionChange(refreshAnnotator),
     onRefresh((jobs) => {
       if (!currentDocument()) return;
@@ -74,7 +84,9 @@ export function mountPanelListenersFeature(): void {
     }),
     onHistoryChange(renderHistoryPanel),
     onPreferenceChange((change) => {
-      if (preferences().nameOf(change.key) === "clock") renderHistoryPanel();
+      if (preferences().nameOf(change.key) !== "clock") return;
+      renderHistoryPanel();
+      if (currentDocument()) renderComments();
     })
   ];
   stopPanels = () => {

@@ -257,6 +257,20 @@ export function runIdleRefresh(jobs) {
   if (jobs.has("untagged")) scanUntaggedMentions();
 }
 
+var taggedListeners = [];
+
+export function onTagged(listener) {
+  taggedListeners.push(listener);
+  return function () {
+    var at = taggedListeners.indexOf(listener);
+    if (at !== -1) taggedListeners.splice(at, 1);
+  };
+}
+
+export function announceTagged() {
+  taggedListeners.slice().forEach(function (listener) { listener(); });
+}
+
 export function scheduleProductionRefresh() {
   scheduleIdleRefresh("production");
 }
@@ -287,6 +301,7 @@ export function maybeAutoTagShortcut(e, cellEl) {
   if (isBlankTagName(trimmed) || phrase.length > AUTO_TAG_MAX_LEN || hasShortcutChar(phrase)) return;
 
   tagTextRange(cellEl, node, openAt, offset, trimmed, rule.cat, trimmed);
+  announceTagged();
 }
 
 function tagTextRange(cellEl, node, a, b, text, cat, name) {
@@ -377,6 +392,7 @@ export function acceptTagGhost() {
 
   hideTagGhost();
   tagTextRange(g.cellEl, g.node, g.openAt, g.offset, g.entry.name, g.entry.cat.id, g.entry.name);
+  announceTagged();
   return true;
 }
 
@@ -537,6 +553,7 @@ export function acceptUntaggedMention() {
 
   hideUntaggedPrompt();
   tagTextRange(s.cellEl, node, s.range.startOffset, s.range.endOffset, s.text, s.entry.cat.id, s.entry.name);
+  announceTagged();
   scanUntaggedMentions();
   return true;
 }

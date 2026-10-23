@@ -219,6 +219,16 @@ function charBeforeNode(cellEl, node) {
   return projection(fromHtml(html)).charAt(pos - 1);
 }
 
+var plainTaggedListeners = [];
+
+export function onPlainTagged(listener) {
+  plainTaggedListeners.push(listener);
+  return function () {
+    var at = plainTaggedListeners.indexOf(listener);
+    if (at !== -1) plainTaggedListeners.splice(at, 1);
+  };
+}
+
 export function closePlainTag() {
   var o = open;
   if (!o || !stillThere(o)) { open = null; clearPaint(); return false; }
@@ -239,6 +249,7 @@ export function closePlainTag() {
     return { cell: res.cell, sel: { from: res.caret, to: res.caret }, records: { tags: [{ cat: o.cat, name: res.name }] } };
   });
   if (!done) { unwrap(o); return true; }
+  plainTaggedListeners.slice().forEach(function (listener) { listener(); });
   return true;
 }
 
