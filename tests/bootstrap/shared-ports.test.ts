@@ -133,6 +133,33 @@ test("the save state port follows the running save owner: unsaved, busy, its cha
   }
 });
 
+test("the save state setter forwards to the running save owner and preferences after a restart", () => {
+  const saves = sharedPorts().saves;
+  const timers = { start: () => null, stop: () => {} };
+  const stopPreferences = startPreferences();
+  let stop = startSaves(savePorts(), timers);
+  try {
+    saves.setAutoSaveEnabled(false);
+    assert.equal(preferences().autosave(), false);
+    assert.equal(autoSavePolicy().enabled(), false);
+    saves.setAutoSaveEnabled(true);
+    assert.equal(preferences().autosave(), true);
+    assert.equal(autoSavePolicy().enabled(), true);
+    const first = autoSavePolicy();
+    stop();
+    stop = startSaves(savePorts(), timers);
+    assert.notEqual(autoSavePolicy(), first);
+    saves.setAutoSaveEnabled(false);
+    assert.equal(preferences().autosave(), false);
+    assert.equal(autoSavePolicy().enabled(), false);
+    assert.equal(first.enabled(), true);
+  } finally {
+    stop();
+    stopPreferences();
+    localStorage.clear();
+  }
+});
+
 test("the production index port forwards each call to the running production index and follows a restart", () => {
   const production = sharedPorts().production;
   assert.throws(() => production.entries(null), /The production index is not started yet/);
