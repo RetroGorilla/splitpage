@@ -9,7 +9,7 @@ await bootApp();
 const { cycleRowStatus } = await import("../js/01-scene-status.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { migrateRows } = await import("../js/02-state.js");
-const { setSceneLength } = await import("../js/05r-read-time.js");
+const { setSceneLength } = await import("../features/rows/read-time.js");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 
