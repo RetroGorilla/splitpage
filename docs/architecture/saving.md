@@ -25,7 +25,7 @@ Each start function returns a stop function that clears the bridge's state; test
 | Field | Meaning | Source in the app |
 | --- | --- | --- |
 | `epoch` | The session's epoch: a new one opens when a document is adopted or recovered, even with the same document id | `liveSession().epoch()` |
-| `docId` | The live document's id, or `null` | `S.state.docId` |
+| `docId` | The live document's id, or `null` | `currentDocument().docId` |
 | `destination` | The destination's identity | The current `home` record (`_home.js`) |
 | `destinationGeneration` | The generation the current destination has confirmed | `confirmedGeneration()` in the save bridge |
 | `generation` | The session's count of accepted edits | `liveSession().generation()` |
@@ -56,17 +56,17 @@ Callers outside saving use it for work that waits: the pasted-picture and droppe
 
 An arrival (`open`, `startNew`, `recover`) may carry `keep`, a label: the history snapshot taken before a replacement (L3h PR 3). If the live document has rows, the transition hands the label to the history port before the new document is assigned, and `Arrived.kept` says whether a snapshot was stored. `restore` never keeps one.
 
-The input is `{ document }` (already a `ValidatedDocument`) or `{ raw }` (migrated through the entry port, `migrateRows`). Every method that makes a document live does the same three things in order: assign it to `S.state`, adopt it in the session at once (`adoptReplacement` in the session bridge, which disposes the old session and starts one at the same epoch and generation), and then settle the destination. A transition returns `Arrived` (`document`, `forkedFrom`).
+The input is `{ document }` (already a `ValidatedDocument`) or `{ raw }` (migrated through the entry port, `migrateRows`). Every method that makes a document live does the same three things in order: hand it to `liveDocumentPort.assign`, which is `adoptReplacement` in the session bridge (it disposes the old session and starts one at the same epoch and generation), and then settle the destination. A transition returns `Arrived` (`document`, `forkedFrom`).
 
 The ports, all supplied by the legacy modules:
 
 | Port | In the app | Does |
 | --- | --- | --- |
 | `entry` | `migrateRows` (`02-state.js`) | Brands raw input as a `ValidatedDocument` |
-| `live` | `liveDocumentPort` (`02b-doc-id.js`) | Reads and assigns `S.state` |
+| `live` | `liveDocumentPort` (`src/legacy/session-bridge.ts`) | Reads the session's document and replaces it |
 | `session` | `adoptReplacement` (`session-bridge.ts`) | Adopts a document in the session now |
 | `destination` | `documentDestinationPort` (`03-sync.js`) | `set` calls `setHome`; `confirm` calls `setBaseState` with a clone of the baseline |
-| `identity` | `documentIdentityPort` (`02b-doc-id.js`) | Mints ids and reads and writes `S.docIdWrittenOut` |
+| `identity` | `documentIdentityPort` (`02b-doc-id.js`) | Mints ids and reads and writes whether the id was written out, through the document location owner (`documentLocation()`) |
 | `history` | `documentHistoryPort` (`03-sync.js`) | `keep(label, doc?)` takes a history snapshot of `doc`, or of the live document when none is given |
 | `ownership` | The operation context | `stillOwns` |
 
@@ -82,7 +82,7 @@ A document source is `{ id, takes(opening), open(opening) }` (`src/application/t
 
 | Source | Opening | Does |
 | --- | --- | --- |
-| `project-file` (`projectFileSource` in `18-local-files.js`) | `{ kind: "file", file, handle, options?, parsed? }` | Without `parsed`, reads the file (`openProjectFile`, which falls back to an import for other formats); with `parsed` (an answer of `parseProjectFileState`), adopts it as read (`adoptProjectState`) |
+| `project-file` (`projectFileSource` in `18-local-files.js`) | `{ kind: "file", file, handle, options?, parsed? }` | Without `parsed`, reads the file (`openProjectFile`, which falls back to an import for other formats); with `parsed` (an answer of `parseProjectFileState` in `src/adapters/formats/project-file.ts`), adopts it as read (`adoptProjectState`) |
 | `server` (`serverDocumentSource` in `13-hosted.js`) | `{ kind: "server", id }` | `openServerDoc` |
 | `import` (`importDocumentSource` in `11-import.js`) | `{ kind: "import", file }` | `handleImportFile`: the import dialog's file |
 
@@ -232,7 +232,7 @@ The autosave entry points are in the save bridge: `autoSaveTarget()` asks the de
 
 `captureExportDocument(opts)` (`14b-export-kit.js`, over `application/save/capture.ts`) reads the session once, synchronously, and returns a frozen `ExportDocument`: the document, the capture time, and core's production index, comment numbers and b-roll entries. It carries no connection, token, link key, handle or path, and no picture bytes: pictures are content hashes. `opts.docId` stamps a different id on the capture, which is how Save As writes a forked id without changing the live document yet. It throws when there is no document.
 
-The exporters take it: `buildSplitpageFile`, `buildMarkdownProject`, `standaloneHtmlFor`, the CSV, DOCX, PDF and XLSX builders and the export dialog, and `exportFacts`. `exportDocumentOf(state)` builds the same shape from a given state; only the formats test hooks in `20d-formats.js` use it.
+The exporters take it: `buildSplitpageFile` and `buildMarkdownProject` (`src/adapters/formats/project-file.ts`, over the project file services the wiring installs; L3h PR 4), `standaloneHtmlFor`, the CSV, DOCX, PDF and XLSX builders and the export dialog, and `exportFacts`. `exportDocumentOf(state)` builds the same shape from a given state; only the formats test hooks in `20d-formats.js` use it.
 
 `writeDoc` captures before its first `await`, so the file's bytes are the document as it stood when the save started. `opts.stamp` (4.11) lays the next `rev` and the last-edited stamps on the capture, like `opts.docId`, so the bytes carry them while the live document keeps its own until `confirmWrite`. `buildFileData` (used by import writeback and the export dialog) builds one export request before its first `await` (5.1, `exportRequest` in `18-local-files.js`): the capture, the resolved options (stage directions, the b-roll view, the image-bundle choice) and the asset request; the capture itself carries the clock setting (`clockMode`). Providers come from the format registry (registered by `src/bootstrap/wiring/exporters.ts`, milestone-5.md step 4) and are called with the document, the options, the held assets and the ports they need. The writers decode cells through the export services (`src/application/export/services.ts`): the cached cell reader, the inert-body parser, the decoder, the Markdown and plain-text projections, the production readers and the cache seal, which the wiring's `export services` step builds from the legacy rich-text objects and starts before the registry. The writers read nothing else: no stored preference, panel state or live row.
 

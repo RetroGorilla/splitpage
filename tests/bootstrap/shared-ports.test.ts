@@ -24,7 +24,8 @@ test("shared ports follow their current owners, announce synchronously in subscr
   document.addEventListener(PREF_EVENT, after);
   const first = createActionRegistry();
   let ran = 0;
-  first.register({ id: "probe", label: "First", group: "Test", run: () => { ran++; } });
+  const inputs: unknown[] = [];
+  first.register({ id: "probe", label: "First", group: "Test", run: (_source, input) => { ran++; inputs.push(input); } });
   let stopActions = installAppActions(first);
   let stopPreferences = start();
   try {
@@ -42,7 +43,9 @@ test("shared ports follow their current owners, announce synchronously in subscr
     assert.equal(notices.length, 2);
     assert.equal(shared.actions.view("probe")?.label, "First");
     assert.equal(shared.actions.invoke("probe", "button").kind, "ran");
-    assert.equal(ran, 1);
+    assert.equal(shared.actions.invoke("probe", "button", { at: 3 }).kind, "ran");
+    assert.deepEqual(inputs, [undefined, { at: 3 }]);
+    assert.equal(ran, 2);
     viewFlags().setWriterOpen(true);
     assert.equal(shared.screen().writer, true);
     stopActions();
@@ -54,7 +57,7 @@ test("shared ports follow their current owners, announce synchronously in subscr
     assert.equal(shared.screen().writer, false);
     assert.equal(shared.actions.view("probe")?.label, "Second");
     assert.equal(shared.actions.invoke("probe", "button").kind, "ran");
-    assert.equal(ran, 11);
+    assert.equal(ran, 12);
     preferences().clearScriptScale();
     assert.deepEqual(notices[2], { name: "scriptScale", value: null, elsewhere: false });
     off();
@@ -95,5 +98,32 @@ test("wired zoom actions follow remounts and refuse both a disposed owner and a 
     stopScriptZoomFeature();
     off();
     stopPreferences();
+  }
+});
+
+test("a preference subscriber that does not hear other windows adds no storage listener and still hears this window", () => {
+  const stopPreferences = startPreferences({
+    storage: () => localStorage,
+    announce: (change) => document.dispatchEvent(new window.CustomEvent(PREF_EVENT, { detail: change }))
+  });
+  const added: string[] = [];
+  const add = window.addEventListener.bind(window);
+  window.addEventListener = ((type: string, ...rest: [EventListenerOrEventListenerObject, (boolean | AddEventListenerOptions)?]) => {
+    added.push(type);
+    add(type, ...rest);
+  }) as typeof window.addEventListener;
+  const notices: PreferenceNotice[] = [];
+  let off = (): void => {};
+  try {
+    off = sharedPorts().changes.onChange((change) => { notices.push(change); }, { elsewhere: false });
+    assert.deepEqual(added, []);
+    preferences().setRundownMin(true);
+    window.dispatchEvent(new window.StorageEvent("storage", { key: "splitpage-rundown-min", newValue: "0" }));
+    assert.deepEqual(notices, [{ name: "rundownMin", value: "1", elsewhere: false }]);
+  } finally {
+    off();
+    window.addEventListener = add;
+    stopPreferences();
+    localStorage.clear();
   }
 });

@@ -3,7 +3,7 @@ import "./_preferences-started.mjs";
 import { register } from "node:module";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 register("./_fanout-hooks.mjs", import.meta.url);
 
@@ -21,7 +21,7 @@ const published = [];
 const wired = stubs.wireSession({
   dirty: function () {
     stubs.calls.push("dirty");
-    stubs.dirtied.push(JSON.parse(JSON.stringify(S.state.rows)));
+    stubs.dirtied.push(JSON.parse(JSON.stringify(currentDocument().rows)));
   },
   draft: function () { stubs.calls.push("draft"); },
   save: function (change) { stubs.calls.push(change.changes.saveNow ? "save now" : "save"); },
@@ -35,7 +35,7 @@ function lengthDoc(rows) {
   const opening = migrateRows({ title: "Order", rows: rows.map((r) => Object.assign({ visualText: "", audioText: "", updatedAt: "" }, r)) });
   loadTestDocument(opening);
   published.length = 0;
-  return S.state;
+  return currentDocument();
 }
 
 const STATUS_REFUSAL = "This is a review copy — comment on a scene instead of changing its status.";
@@ -52,10 +52,10 @@ test("a status click: the command sets and stamps the row, one effect pass with 
   lengthDoc([{ id: "r1", status: "todo" }, { id: "r2", status: "todo" }]);
   cycleRowStatus("r2");
   assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", ...STATS]);
-  assert.equal(S.state.rows[1].status, "ready");
+  assert.equal(currentDocument().rows[1].status, "ready");
   assert.equal(stubs.dirtied[0][1].status, "ready", "the status is set before the effects run");
   assert.notEqual(stubs.dirtied[0][1].updatedAt, "", "and the row is already stamped");
-  assert.equal(S.state.rows[0].updatedAt, "", "no other row is stamped");
+  assert.equal(currentDocument().rows[0].updatedAt, "", "no other row is stamped");
   assert.equal(published.length, 1);
   assert.equal(published[0].kind, "edit");
   assert.deepEqual(published[0].changes.derive, ["production"], "production refreshes through the scheduler, b-roll does not");
@@ -65,8 +65,8 @@ test("with shot scenes hidden, reaching shot arms the grace after the effects an
   stubs.resetFanout({ hideShot: true });
   lengthDoc([{ id: "r1", status: "ready" }, { id: "r2", status: "ready" }]);
   cycleRowStatus("r2");
-  assert.equal(S.state.rows[1].status, "shot");
-  assert.equal(S.state.rows[0].status, "ready");
+  assert.equal(currentDocument().rows[1].status, "shot");
+  assert.equal(currentDocument().rows[0].status, "ready");
   assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", ...STATS, "armShotHideGrace:r2"]);
 });
 
@@ -74,8 +74,8 @@ test("with shot scenes hidden, leaving shot clears the grace in the same place",
   stubs.resetFanout({ hideShot: true });
   lengthDoc([{ id: "r1", status: "shot" }, { id: "r2", status: "shot" }]);
   cycleRowStatus("r2");
-  assert.equal(S.state.rows[1].status, "todo");
-  assert.equal(S.state.rows[0].status, "shot");
+  assert.equal(currentDocument().rows[1].status, "todo");
+  assert.equal(currentDocument().rows[0].status, "shot");
   assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", ...STATS, "clearShotHideGrace:r2"]);
 });
 
@@ -90,7 +90,7 @@ test("with shot scenes shown, reaching shot arms no grace", () => {
   stubs.resetFanout();
   lengthDoc([{ id: "r1", status: "ready" }]);
   cycleRowStatus("r1");
-  assert.equal(S.state.rows[0].status, "shot");
+  assert.equal(currentDocument().rows[0].status, "shot");
   assert.ok(!stubs.calls.some((c) => c.indexOf("Grace") !== -1), stubs.calls.join(","));
 });
 
@@ -99,7 +99,7 @@ test("a status click on a scene that is gone does nothing", () => {
   const before = JSON.stringify(lengthDoc([{ id: "r1", status: "todo" }]));
   cycleRowStatus("gone");
   assert.deepEqual(stubs.calls, []);
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.deepEqual(published, []);
 });
 
@@ -114,7 +114,7 @@ test("in review mode a status click only warns, with hidden shot scenes too; no 
     reviewing.on = false;
   }
   assert.deepEqual(stubs.calls, ["showToast:" + STATUS_REFUSAL, "showToast:" + STATUS_REFUSAL]);
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.deepEqual(published, []);
 
   stubs.resetFanout();
@@ -133,7 +133,7 @@ test("a status click whose command fails throws to the caller, leaves the row as
     wired.editorName = function () { return "Anonymous"; };
   }
   assert.deepEqual(stubs.calls, []);
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.deepEqual(published, []);
 });
 
@@ -156,7 +156,7 @@ test("a status click whose commit is followed by a throw still arms the grace an
   lengthDoc([{ id: "r1", status: "ready" }]);
   const reported = withThrowingListener(() => cycleRowStatus("r1"));
   assert.deepEqual(reported, ["listener broke"]);
-  assert.equal(S.state.rows[0].status, "shot");
+  assert.equal(currentDocument().rows[0].status, "shot");
   assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", ...STATS, "armShotHideGrace:r1"]);
 });
 
@@ -177,7 +177,7 @@ test("a scene length: the command sets and stamps the row, one effect pass with 
   assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", ...STATS]);
   assert.equal(stubs.dirtied[0][1].lengthSeconds, 90, "the length is set before the effects run");
   assert.notEqual(stubs.dirtied[0][1].updatedAt, "", "and the row is already stamped");
-  assert.equal(S.state.rows[0].updatedAt, "", "no other row is stamped");
+  assert.equal(currentDocument().rows[0].updatedAt, "", "no other row is stamped");
   assert.equal(published.length, 1);
   assert.equal(published[0].kind, "edit");
   assert.deepEqual(published[0].changes.derive, ["production", "broll"], "production and b-roll refresh through the scheduler");
@@ -197,7 +197,7 @@ test("a scene length that changes nothing or a missing scene has no effect; revi
     reviewing.on = false;
   }
   assert.deepEqual(stubs.calls, ["showToast:This is a review copy — comment on a scene instead of changing its length."]);
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.deepEqual(published, []);
 
   stubs.resetFanout();

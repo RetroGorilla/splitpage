@@ -29,9 +29,12 @@ export function fakeActions(registry?: ActionRegistry) {
 export function fakePreferenceChanges() {
   const listeners = new Set<(change: PreferenceNotice) => void>();
   const changes: PreferenceChanges = {
-    onChange: (listener) => {
-      listeners.add(listener);
-      return () => { listeners.delete(listener); };
+    onChange: (listener, hearing) => {
+      const heard = hearing?.elsewhere === false
+        ? (change: PreferenceNotice): void => { if (!change.elsewhere) listener(change); }
+        : listener;
+      listeners.add(heard);
+      return () => { listeners.delete(heard); };
     }
   };
   return {

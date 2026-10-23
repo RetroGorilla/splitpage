@@ -29,4 +29,4 @@ The feature mount tests use shared fakes and jsdom without starting the app. Exi
 
 The JavaScript move and its ESLint browser-globals entry were already present. The dependency baseline already contains no script-zoom `legacy-file`, `loop-import` or `cycle-edge` entries, so there is nothing to prune and no exception is added.
 
-The numbered-file count stays at 55. Before and after `--legacy-metrics` reports, lint, types, dependency and comment gates, and test execution are deferred to the wrapper under the task's prohibition on running git, npm, node or test commands. No typing-path or desktop-port call is introduced by this rework.
+The numbered-file count stays at 55. No typing-path or desktop-port call is introduced by this rework.
