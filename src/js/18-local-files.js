@@ -545,6 +545,10 @@ var fileMenuChoiceListeners = [];
 
 export function onFileMenuChoice(listener) {
   fileMenuChoiceListeners.push(listener);
+  return function () {
+    var index = fileMenuChoiceListeners.indexOf(listener);
+    if (index !== -1) fileMenuChoiceListeners.splice(index, 1);
+  };
 }
 
 export function noteFileMenuChoice(action) {

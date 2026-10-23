@@ -3,7 +3,7 @@ import { ROOT_CLICK_ORDER, ROOT_MOUSEDOWN_ORDER, createRootRouter } from "../../
 import type { RootClickSlot, RootMouseDownSlot, RootRoute } from "../../features/routing/root-router.ts";
 import { createReviewClickGate } from "../../features/review/click-gate.ts";
 import { createCellEditing } from "../../application/editing/cell-editing.ts";
-import { caretTextOffset, placeCaretAtTextOffset } from "../../features/editing/caret.ts";
+import { caretTextOffset, placeCaretAtTextOffset } from "../../features/common/caret.ts";
 import { createCellPage, isDraftBox, isScriptCell } from "../../features/editing/cell-page.ts";
 import { mountComposition } from "../../features/editing/composition.ts";
 import type { CompositionCell } from "../../features/editing/composition.ts";
@@ -65,7 +65,7 @@ import {
   draftUndo,
   noteDraftInput,
   pasteIntoDraft
-} from "../../js/05d-draft-edit.js";
+} from "../../features/editing/draft-edit.js";
 import {
   addRow,
   addRowAndFocus,

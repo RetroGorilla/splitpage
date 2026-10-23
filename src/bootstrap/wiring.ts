@@ -1,5 +1,8 @@
 import { wireProductionIndex } from "./wiring/production-index.ts";
 export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
+export { mountHelpFeature } from "./wiring/help.ts";
+export { mountOnboardingFeature } from "./wiring/onboarding.ts";
+export { mountDraftEditFeature } from "./wiring/draft-edit.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
 import { registerBuiltInExporters } from "./wiring/exporters.ts";
 import { wireProductionEditing } from "./wiring/production-editing.ts";

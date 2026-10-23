@@ -1,3 +1,10 @@
+export interface LaunchFacts {
+  readonly firstTabOfLaunch: () => boolean;
+  readonly hadPriorSession: () => boolean;
+  readonly launchIntent: () => { readonly type: string } | null;
+  readonly hasDraftToRestore: () => boolean;
+}
+
 let present = false;
 
 export const runningOnDesktop = (): boolean => present;
