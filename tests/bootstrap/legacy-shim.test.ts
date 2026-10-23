@@ -78,7 +78,7 @@ interface LoadReport {
   readonly owners: Readonly<Record<string, boolean | string>>;
 }
 
-const NOTHING_STARTED = { session: false, saves: false, recovery: false, editor: false, productionEditing: false, preferences: false, location: false, effects: false, transitions: false, actions: false, exports: false, exportServices: false, projectFileServices: false, shotHiding: false };
+const NOTHING_STARTED = { session: false, saves: false, recovery: false, merge: false, editor: false, productionEditing: false, preferences: false, location: false, effects: false, transitions: false, actions: false, exports: false, exportServices: false, projectFileServices: false, shotHiding: false };
 const CONFIGURES = /^(?:start|install|register|provide|configure|route|watch|hand|use|on)[A-Z]/;
 const run = promisify(execFile);
 

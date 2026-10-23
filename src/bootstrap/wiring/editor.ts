@@ -15,6 +15,7 @@ import { mountClipboardRoutes } from "../../features/clipboard/routes.ts";
 import { mountMediaRoutes } from "../../features/media/routes.ts";
 import type { MediaRoutePorts } from "../../features/media/routes.ts";
 import { mountMergeBanner } from "../../features/merge/banner.ts";
+import type { MergeReport } from "../../features/merge/banner.ts";
 import { mountRowsEditor } from "../../features/rows/editor.ts";
 import type { RowsEditorPorts } from "../../features/rows/editor.ts";
 import { mountRowRoutes } from "../../features/rows/routes.ts";
@@ -33,7 +34,8 @@ import { VIEWING_ONLY } from "../../legacy/review-wording.ts";
 import { cycleRowStatus } from "../../js/01-scene-status.js";
 import { expandHiddenShotStrip } from "../../js/01b-hide-shot.js";
 import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
-import { installMergeBanner, restoreMergeSnapshot } from "../../js/03-sync.js";
+import { restoreMergeSnapshot } from "../../js/03-sync.js";
+import { installMergeBanner } from "../../legacy/merge-bridge.ts";
 import { cssAttr, ensureTrailingCaretSpot, safeId, sanitizeHtml, storedHtmlFromDom } from "../../js/04-richtext.js";
 import { announceGalleryEdit } from "../../js/05e-gallery-overlay.js";
 import {
@@ -368,7 +370,9 @@ export function mountMergeBannerFeature(): ReturnType<typeof mountMergeBanner> {
         openComments: openCommentsPanel,
         rowElement: function (rowId) { return document.querySelector('#rows .row[data-id="' + safeId(rowId, "r") + '"]'); },
         logError: function (e) { if (window.console) console.error(e); },
-        install: installMergeBanner
+        install: function (banner) {
+          return installMergeBanner({ show: function (result, opts) { return banner.show(result as MergeReport, opts); } });
+        }
       }
     });
   });

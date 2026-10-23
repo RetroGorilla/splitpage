@@ -41,6 +41,7 @@ function started(read) {
 const session = await import("../legacy/session-bridge.ts");
 const saves = await import("../legacy/save-bridge.ts");
 const recovery = await import("../legacy/recovery-bridge.ts");
+const merge = await import("../legacy/merge-bridge.ts");
 const transitions = await import("../legacy/transition-bridge.ts");
 const editor = await import("../legacy/editor-bridge.ts");
 const productionEditing = await import("../legacy/production-editing-bridge.ts");
@@ -56,6 +57,7 @@ const owners = {
   session: session.sessionStarted(),
   saves: saves.savesStarted(),
   recovery: recovery.recoveryStarted(),
+  merge: merge.mergeStarted(),
   editor: editor.editorStarted(),
   productionEditing: productionEditing.productionEditingStarted(),
   preferences: preferences.preferencesStarted(),
