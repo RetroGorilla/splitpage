@@ -94,6 +94,13 @@ export function registerFileActions(registry: ActionRegistry): () => void {
         if (!commandMenuOpen()) openCommandMenu();
         else if (source === "shortcut") closeCommandMenu();
       }
+    },
+    {
+      id: "close-file-menu",
+      label: "Close the file menu",
+      group: "File",
+      availability: () => ({ enabled: true, visible: false }),
+      run: () => { toggleFileMenu(false); }
     }
   ]);
 }

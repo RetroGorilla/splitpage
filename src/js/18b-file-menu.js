@@ -5,10 +5,7 @@ import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { applyReviewMode } from "./13-hosted.js";
-import {
-  canOpenPrompterInBrowser,
-  canOpenPrompterInChromium
-} from "./20f-desktop.js";
+import { canOpenPrompterInBrowser, canOpenPrompterInChromium } from "../adapters/desktop/desktop-port.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { LONG_DEMO } from "./_starters.js";
