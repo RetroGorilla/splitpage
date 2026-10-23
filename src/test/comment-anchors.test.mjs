@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 import { commentRange, fromHtml, joinCells, splitCell, syncCommentAnchors, toHtml } from "../js/04c-doc-model.js";
 import { sanitizeHtml } from "../js/04-richtext.js";
 import { migrateRows } from "../js/02-state.js";
-import { mergeStates } from "../js/03-sync.js";
+import { mergeStates } from "../legacy/merge-bridge.ts";
+import "./_merge-started.mjs";
 
 const T = (text, marks) => ({ text, marks: marks || {} });
 const cmt = (id, inner) => `<span class="cmt-anchor" data-cmt="${id}">${inner}</span>`;

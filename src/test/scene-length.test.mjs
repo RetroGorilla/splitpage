@@ -15,7 +15,8 @@ import {
 import { estimatedSeconds, rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../js/02-state.js";
-import { mergeStates } from "../js/03-sync.js";
+import { mergeStates } from "../legacy/merge-bridge.ts";
+import "./_merge-started.mjs";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { applyStepsLive, diffStates } from "../js/12a-undo.js";
 import { invertSteps } from "../js/04c-doc-model.js";

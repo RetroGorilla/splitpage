@@ -4,7 +4,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { SCHEMA_VERSION } from "../js/00-prelude.js";
 import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
-import { mergeBrollShots, mergePeople, mergeProductionTags, mergeStates } from "../js/03-sync.js";
+import { mergeBrollShots, mergePeople, mergeProductionTags } from "../js/03-sync.js";
+import { mergeStates } from "../legacy/merge-bridge.ts";
+import "./_merge-started.mjs";
 import { saveAuthorName } from "../js/10-comments.js";
 import {
   FIXED_ISO, assertGolden, freezeClockAndRandom, goldenNames, goldenText, jsonCopy, maskTokens, readGolden, updatingGoldens
