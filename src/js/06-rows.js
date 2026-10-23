@@ -3,7 +3,7 @@ import { rowIndexOf } from "../core/document/rows.ts";
 import { safeHref, safeId, storedHtmlFromDom } from "./04-richtext.js";
 import { armDeleteButton, disarmDeleteButton } from "../features/rows/delete-button.ts";
 import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
-import { isBlankScene } from "./05g-scene-clip.js";
+import { isBlankScene } from "../features/clipboard/scene-clip.js";
 import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { placeCaretAtTextOffset } from "../features/editing/caret.ts";
