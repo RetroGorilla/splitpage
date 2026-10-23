@@ -8,7 +8,6 @@ import { __init as init_03a_history_store } from "./03a-history-store.js";
 import { __init as init_03b_side_panels } from "./03b-side-panels.js";
 import { __init as init_04_richtext } from "./04-richtext.js";
 import { __init as init_05_render } from "./05-render.js";
-import { __init as init_05v_video } from "./05v-video.js";
 import { __init as init_06_rows } from "./06-rows.js";
 import { __init as init_07_production_tags } from "./07-production-tags.js";
 import { __init as init_07b_plain_tags } from "./07b-plain-tags.js";
@@ -49,7 +48,7 @@ import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountCopyPasteFeature, mountSettingsFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature, mountScenesFeature, mountSceneMediaFeature } from "../bootstrap/wiring.ts";
+import { wireApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature, mountCopyPasteFeature, mountSettingsFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature, mountScenesFeature, mountSceneMediaFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -94,7 +93,7 @@ if (wiring) {
   mountReadTimeFeature();
   mountScriptZoomFeature();
   mountTargetFeature();
-  init_05v_video();
+  mountGalleryVideoFeature();
   mountGalleryFeature();
   init_06_rows();
   mountScenesFeature();

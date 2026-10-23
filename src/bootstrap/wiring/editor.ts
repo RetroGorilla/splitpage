@@ -65,7 +65,7 @@ import {
 } from "../../js/05-render.js";
 import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../features/clipboard/cell-clipboard.js";
 import { pasteScenesAt } from "../../features/clipboard/scene-select.js";
-import { thumbnailsAfterPaste } from "../../js/05v-video.js";
+import { thumbnailsAfterPaste } from "./gallery.ts";
 import {
   draftRedo,
   draftUndo,
