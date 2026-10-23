@@ -6,7 +6,7 @@ import {
   pointTabAt,
   setServerToken
 } from "./13-hosted.js";
-import { deliverFile } from "./18-local-files.js";
+import { deliverFile } from "../legacy/file-delivery.ts";
 import { renderDesktopShareInfo } from "./20f-desktop.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { joinServer } from "../adapters/transport/server-join.ts";
