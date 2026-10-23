@@ -14,8 +14,12 @@ const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, redo, undoSizes, flushEdits, breakUndoCoalescing } = await import("../js/12a-undo.js");
 const { liveSession, runDocumentEdit, stampDocument } = await import("../legacy/session-bridge.ts");
 const { setTargetLength } = await import("../js/05t-target.js");
-const { registerProductionTag, findOrAddPerson, renameTag, removeTag } = await import("../js/07-production-tags.js");
-const { newBrollRecord, addBrollProp, removeBrollProp } = await import("../js/08c-broll.js");
+const { registerProductionTag, findOrAddPerson } = await import("../js/07-production-tags.js");
+const { renameTag, removeTag, newBrollRecord, removeBrollProp } = await import("../application/commands/production-actions.ts");
+const { retagRewrites, retagMentions } = await import("../legacy/tag-rewrites.ts");
+const { sessionStamps, readSession } = await import("../legacy/session-bridge.ts");
+const { randomIds } = await import("../adapters/identity/ids.ts");
+const { addBrollProp } = await import("../js/08c-broll.js");
 const { setCommentAssignee, toggleResolve } = await import("../js/10-comments.js");
 const { wordsPerMinuteCommand } = await import("../application/commands/document-settings.ts");
 const { deletePersonCommand } = await import("../application/commands/production-records.ts");
@@ -128,19 +132,19 @@ test("document edits: registering a tag and adding a person undo and redo in one
 test("document edits: renaming and removing a tag rewrite its mentions and undo in one step", async () => {
   await open();
   const look = () => ({ text: held().rows[0].audioText, tags: held().productionTags });
-  await roundTrip(() => renameTag("prop", "Net", "Trawl"), look);
+  await roundTrip(() => renameTag("prop", "Net", "Trawl", { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }), look);
   assert.match(held().rows[0].audioText, /data-tag-name="Trawl"/);
-  await roundTrip(() => removeTag("prop", "Trawl") > 0, look);
+  await roundTrip(() => removeTag("prop", "Trawl", { run: runDocumentEdit, read: readSession, mentions: retagMentions, rewrites: retagRewrites, stamps: sessionStamps }) > 0, look);
   assert.doesNotMatch(held().rows[0].audioText, /tag-anchor/);
-  refused(() => renameTag("prop", "Net", "Rope"), look);
+  refused(() => renameTag("prop", "Net", "Rope", { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }), look);
 });
 
 test("document edits: b-roll shots and their props undo and redo in one step", async () => {
   await open();
-  await roundTrip(() => !!newBrollRecord({ name: "Gulls" }), () => held().brollShots);
+  await roundTrip(() => !!newBrollRecord({ name: "Gulls" }, { run: runDocumentEdit, ids: randomIds }), () => held().brollShots);
   await roundTrip(() => addBrollProp("b1", "Rope"), () => ({ shots: held().brollShots, tags: held().productionTags }));
   const prop = held().brollShots.find((b) => b.id === "b1").props[0];
-  await roundTrip(() => removeBrollProp("b1", prop.id), () => held().brollShots);
+  await roundTrip(() => removeBrollProp("b1", prop.id, { run: runDocumentEdit }), () => held().brollShots);
   refused(() => addBrollProp("b1", "Rope"), () => held().brollShots);
 });
 

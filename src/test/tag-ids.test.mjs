@@ -7,12 +7,10 @@ import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { mergeProductionTags, mergeStates } from "../js/03-sync.js";
 import { fromHtml, toHtml } from "../js/04c-doc-model.js";
-import {
-  ensureTagIds,
-  isTagId,
-  registryEntryById,
-  renameTag
-} from "../js/07-production-tags.js";
+import { ensureTagIds, isTagId, registryEntryById } from "../js/07-production-tags.js";
+import { renameTag } from "../application/commands/production-actions.ts";
+import { runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
+import { retagRewrites } from "../legacy/tag-rewrites.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 const span = (cat, name, text) =>
@@ -57,9 +55,9 @@ test("a rename keeps the id, and a rename onto an existing name folds into that 
   }));
   const mugId = S.state.productionTags.find((t) => t.name === "Mug").id;
   const cupId = S.state.productionTags.find((t) => t.name === "Cup").id;
-  assert.ok(renameTag("prop", "Mug", "Big mug"));
+  assert.ok(renameTag("prop", "Mug", "Big mug", { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }));
   assert.equal(registryEntryById(mugId).name, "Big mug");
-  assert.ok(renameTag("prop", "Big mug", "cup"));
+  assert.ok(renameTag("prop", "Big mug", "cup", { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }));
   assert.equal(registryEntryById(mugId), null);
   assert.equal(registryEntryById(cupId).name, "Cup");
   assert.equal(S.state.productionTags.length, 1);
