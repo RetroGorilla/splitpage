@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { STATE_FIELDS, migrateRows, missingStateFields } from "../js/02-state.js";
-import { changedBetween } from "../js/12a-undo.js";
+import { changedBetween } from "../application/editing/undo/history.ts";
 import { STATE_FIELDS as CORE_FIELDS } from "../core/document/fields.ts";
 import * as sync from "../js/03-sync.js";
 import { LIST_MERGERS } from "../core/merge/lists.ts";
@@ -53,7 +53,7 @@ test("03-sync no longer re-exports core's ROW_FIELDS and GALLERY_FIELDS", () => 
   assert.equal("GALLERY_FIELDS" in sync, false);
 });
 
-test("12a-undo skips exactly the fields core marks undo: false", () => {
+test("the undo history skips exactly the fields core marks undo: false", () => {
   const every = Object.fromEntries(CORE_FIELDS.map((f) => [f.key, []]));
   const touched = changedBetween({}, every);
   assert.deepEqual(Object.keys(touched.doc), CORE_FIELDS.filter((f) => f.undo).map((f) => f.key));
