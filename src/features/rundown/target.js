@@ -1,10 +1,9 @@
-import { parseSceneLength, targetLengthOf } from "../core/document/timing.ts";
-import { formatDuration } from "../core/production/timing.ts";
-import { onRundownPaint, rundownLayout } from "../features/rundown/rundown.js";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { targetLengthCommand } from "../application/commands/document-settings.ts";
-import { currentDocument, runDocumentEdit } from "../legacy/session-bridge.ts";
-import { reviewMode } from "../legacy/location-bridge.ts";
+import { parseSceneLength, targetLengthOf } from "../../core/document/timing.ts";
+import { formatDuration } from "../../core/production/timing.ts";
+import { onRundownPaint, rundownLayout } from "./rundown.js";
+import { targetLengthCommand } from "../../application/commands/document-settings.ts";
+
+var ports = null;
 
 export var TARGET_PRESETS = [30, 60, 120, 180, 300, 600];
 
@@ -48,8 +47,8 @@ var LABEL_GAP_PX = 4;
 
 export function paintTargetOverlay() {
   var layer = document.getElementById("rundown-overlay");
-  if (!layer) return;
-  var target = targetLengthOf(currentDocument());
+  if (!layer || !ports) return;
+  var target = targetLengthOf(ports.document.current());
   var L = rundownLayout();
   var parts = target && L.pxPerSecond > 0 ? targetOverlayParts(L.totalSeconds, target, L.x) : null;
   var html = parts ? overlayHtml(parts) : "";
@@ -62,13 +61,13 @@ export function paintTargetOverlay() {
 }
 
 export function setTargetLength(seconds) {
-  if (!currentDocument() || reviewMode()) return false;
-  return !!runDocumentEdit(targetLengthCommand(seconds));
+  if (!ports.document.current() || ports.review.reviewing()) return false;
+  return !!ports.edits.edit(targetLengthCommand(seconds));
 }
 
 export function targetSectionHtml() {
-  var current = targetLengthOf(currentDocument());
-  var viewing = reviewMode();
+  var current = targetLengthOf(ports.document.current());
+  var viewing = ports.review.reviewing();
   var off = viewing ? " disabled" : "";
   return '<div class="target-section" role="group" aria-labelledby="target-heading">' +
     '<label class="anchor-popover-label" id="target-heading" for="target-input">Target length</label>' +
@@ -91,13 +90,13 @@ export function targetSectionHtml() {
 
 export function wireTargetSection(wrap, close) {
   var input = wrap.querySelector("#target-input");
-  if (!input || reviewMode()) return;
+  if (!input || ports.review.reviewing()) return;
   function commit() {
     var text = input.value.trim();
     var secs = parseSceneLength(text);
     if (typeof secs === "number" && isNaN(secs)) {
       input.setAttribute("aria-invalid", "true");
-      showToast("That isn’t a length — try 2:00, 90 or 1m30s. Leave it empty for no target.", "error");
+      ports.notices.show("That isn’t a length — try 2:00, 90 or 1m30s. Leave it empty for no target.", "error");
       input.select();
       return;
     }
@@ -121,7 +120,22 @@ export function wireTargetSection(wrap, close) {
   });
 }
 
-export function __init() {
-  onRundownPaint(function () { paintTargetOverlay(); });
+export function __init(given) {
+  ports = given;
+  lastOverlayHtml = "";
+  var disposed = false;
+  var off = onRundownPaint(function () { paintTargetOverlay(); });
   window.__targetTest = { parts: targetOverlayParts, set: setTargetLength, layout: rundownLayout };
+  return {
+    section: {
+      html: function () { return disposed ? "" : targetSectionHtml(); },
+      wire: function (wrap, close) { if (!disposed) wireTargetSection(wrap, close); }
+    },
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      off();
+      ports = null;
+    }
+  };
 }

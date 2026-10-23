@@ -6,7 +6,7 @@ import {
   rundownDotXs,
   rundownPresenceActivity,
   rundownPresenceGroups
-} from "../js/05p-rundown-presence.js";
+} from "../features/rundown/presence.js";
 import { PROTOTYPE_IDS } from "../core/document/id-map.ts";
 
 var rows = {
