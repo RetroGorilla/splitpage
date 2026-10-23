@@ -10,7 +10,7 @@ const { render } = await import("../js/05-render.js");
 const { registryKey } = await import("../core/document/tags.ts");
 const { openProductionPanel, closeProductionPanel } = await import("../js/08-production-panels.js");
 const { closeBrollPage, closeBrollPanel, openBrollPage, openBrollPanel } = await import("../js/08d-broll-panel.js");
-const { clearDirty } = await import("../js/12-dirty-toast.js");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
@@ -28,7 +28,7 @@ function load() {
     brollShots: [{ id: "bs1", name: "Harbour wide", origin: "list", notes: LEAD, audioRef: LEAD }]
   }));
   render();
-  clearDirty();
+  confirmSavedNow();
 }
 
 function shot() { return S.state.brollShots[0]; }

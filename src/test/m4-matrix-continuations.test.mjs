@@ -14,7 +14,7 @@ const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { renderAbsorbed } = await import("../js/05-render.js");
-const { clearDirty } = await import("../js/12-dirty-toast.js");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits, lastUndoEntry, undoSizes } = await import("../js/12a-undo.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
@@ -80,7 +80,7 @@ function showDocument(doc) {
   loadTestDocument(doc);
   flushEdits();
   renderAbsorbed();
-  clearDirty();
+  confirmSavedNow();
   document.getElementById("toast-host").textContent = "";
   return doc;
 }
@@ -92,7 +92,7 @@ function splitpageFile(doc) {
 async function reopen(doc) {
   const epoch = session.epoch();
   await openProjectFile(splitpageFile(doc), null, { skipSnapshot: true, silent: true });
-  clearDirty();
+  confirmSavedNow();
   document.getElementById("toast-host").textContent = "";
   assert.ok(session.epoch() > epoch, "setup: the document was replaced and has a new epoch");
 }

@@ -51,7 +51,6 @@ startSaves({
   destination: () => null,
   keyOf: () => ({ owner: null, name: "none" }),
   obsolete: () => {},
-  running: () => {},
   ownership: { capture: () => { throw new Error("no save runs here"); }, stillOwns: () => false },
   autosave: { enabledAtStart: () => false, due: () => {}, changed: () => {} }
 }, { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });

@@ -27,7 +27,8 @@ const { migrateRows } = await import("../js/02-state.js");
 const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
-const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const exportModule = await import("../js/14-export.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
@@ -82,7 +83,7 @@ function splitpageFile(doc, name) {
 function useDocument(doc) {
   loadTestDocument(doc);
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   return doc;
 }
 
@@ -93,7 +94,7 @@ function serverDocument(serverId, title, docLetter) {
 
 function typeInto(text) {
   S.state.rows[0].audioText = text;
-  markDirty();
+  noteSessionEdit();
 }
 
 function draftKey(serverId) {
@@ -118,7 +119,7 @@ function browserStore(wrap) {
 }
 
 async function endCase() {
-  clearDirty();
+  confirmSavedNow();
   await flushDraftNow();
   draftResume().dropServerResume();
   window.__hostedTest.setSession({ docId: null });
@@ -366,7 +367,7 @@ rightToday("B7", "a writer discards only the draft it wrote: a newer generation 
   theirs.rows[0].audioText = "Theirs, generation two.";
   await idb.store.put(record("srv-g", theirs, OTHER, { editSeq: 99 }));
   const discardsBefore = drafts().status().discards;
-  clearDirty();
+  confirmSavedNow();
   await flushDraftNow();
   assert.equal(drafts().status().discards, discardsBefore + 1, "setup: this tab tried to discard its draft");
   const kept = await idb.store.get(key);
@@ -638,7 +639,7 @@ rightToday("K2", "a desktop draft write that lands after the tab navigated is re
     assert.equal(store.hasDraft(TAB), true);
   } finally {
     window.__desktopTest.restoreBackend();
-    clearDirty();
+    confirmSavedNow();
     await flushDraftNow();
     rmSync(dir, { recursive: true, force: true });
   }
@@ -647,7 +648,7 @@ rightToday("K2", "a desktop draft write that lands after the tab navigated is re
 async function snapshotRestore(setup) {
   const doc = script("History", { docId: idOf("b") });
   await openProjectFile(splitpageFile(doc), null, { skipSnapshot: true, silent: true });
-  clearDirty();
+  confirmSavedNow();
   const point = cloneState(S.state);
   point.rows[0].audioText = "As it was.";
   const ticket = pushSnapshot("A point to go back to", point);
@@ -673,11 +674,11 @@ rightToday("H1", "a history restore that completes after a same-id reopen does n
   const outcome = await snapshotRestore(async (doc) => {
     const replaced = S.state;
     await openProjectFile(splitpageFile(doc), null, { skipSnapshot: true, silent: true });
-    clearDirty();
+    confirmSavedNow();
     assert.notEqual(S.state, replaced, "setup: the reopen put a new document in place");
     assert.equal(S.state.docId, replaced.docId, "setup: the reopened document has the same id");
     S.state.rows[1].audioText = "Typed in the reopened session.";
-    markDirty();
+    noteSessionEdit();
   });
   assert.equal(S.state.rows[0].audioText, "One.", "the reopened session's first scene is untouched");
   assert.equal(S.state.rows[1].audioText, "Typed in the reopened session.", "its own typing is still there");
@@ -688,7 +689,7 @@ rightToday("H1-switch", "a history restore that completes after another document
   const other = script("Another script", { docId: idOf("c") });
   const outcome = await snapshotRestore(async () => {
     await openProjectFile(splitpageFile(other), null, { skipSnapshot: true, silent: true });
-    clearDirty();
+    confirmSavedNow();
   });
   assert.equal(outcome, "changed");
   assert.equal(S.state.title, "Another script", "the other document is untouched");
@@ -701,7 +702,7 @@ rightToday("H2", "a snapshot holds the document as it was when pushSnapshot was 
   const ticket = pushSnapshot("Before the edit");
   S.state.rows[0].audioText = "Typed after the snapshot call.";
   S.state.title = "Renamed after the snapshot call";
-  markDirty();
+  noteSessionEdit();
   const stored = await ticket.done;
   assert.equal(stored.stored, true);
   const got = await window.__historyTest.read({ docId: idOf("d"), id: ticket.id });

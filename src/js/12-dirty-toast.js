@@ -1,19 +1,11 @@
-import { S } from "./_state.js";
 import { amendHome, currentHome, homeConn, reviewMode, serverStatus } from "../legacy/location-bridge.ts";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "../../shared/clock.js";
 import { onServerDoc } from "./13-hosted.js";
 import { personColorsWithMine } from "./13a-presence.js";
-import {
-  autoSaveTarget,
-  clearAutoSaveTimers,
-  queueAutoSave,
-  resumeAutoSave,
-  scheduleAutoSave
-} from "./14-export.js";
+import { autoSaveTarget, scheduleAutoSave } from "./14-export.js";
 import { noteDraftChange } from "./20g-drafts.js";
-import { noteAbsorbedDirty, noteSessionEdit } from "../legacy/session-bridge.ts";
-import { autoSavePolicy, confirmSavedNow, noteSaveChange, saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, noteSaveChange, saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
 import { saveButtonView, saveStatus } from "../application/save/status.ts";
 import { changeSet } from "../application/session/change-set.ts";
 import { authorityOf, editCapability } from "../application/collaboration/authority.ts";
@@ -29,11 +21,6 @@ function myColorPlan(doc) {
   return { changes: MY_COLOR, apply: function (live) { live.personColors = next; } };
 }
 
-function signLegacyEdit() {
-  var plan = myColorPlan(S.state);
-  if (plan) plan.apply(S.state);
-}
-
 export function hasUnsavedChanges() { return unsavedChanges(); }
 
 export function legacySessionEffects() {
@@ -46,10 +33,9 @@ export function legacySessionEffects() {
       if (typeof noteDraftChange === "function") noteDraftChange();
     },
     save: function (change) {
-      if (!saveBusy()) setSaveButtons();
       if (change.kind !== "recovery") scheduleAutoSave();
       if (currentHome().kind === "import") amendHome(currentHome(), { dirty: true });
-      if (change.changes.saveNow) queueAutoSave();
+      if (change.changes.saveNow) autoSavePolicy().dueNow();
     },
     edit: function () {
       return editCapability(authorityOf(homeConn()));
@@ -57,7 +43,7 @@ export function legacySessionEffects() {
   };
 }
 
-export function setSaveButtons() {
+function paintSaveButtons() {
   var view = saveButtonView({ busy: saveBusy(), dirty: hasUnsavedChanges() });
   ["btn-save", "wr-save"].forEach(function (id) {
     var btn = document.getElementById(id);
@@ -66,31 +52,43 @@ export function setSaveButtons() {
     btn.disabled = view.disabled;
     btn.classList.toggle("is-dirty", view.dirty);
   });
+}
+
+function setSaveButtons() {
+  paintSaveButtons();
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   if (typeof noteDraftChange === "function") noteDraftChange();
   updateSaveStatus();
 }
 
-export function markDirty() {
-  signLegacyEdit();
-  noteSessionEdit();
-}
-
-export function markAbsorbedDirty(kind) {
-  signLegacyEdit();
-  noteAbsorbedDirty(kind);
-}
-
-export function clearDirty() {
-  confirmSavedNow();
-  clearAutoSaveTimers();
-  resumeAutoSave();
-  savedAt = 0;
-  setSaveButtons("Save");
-}
-
-export function noteSaveStatus() {
-  updateSaveStatus();
+export function saveStatusListeners() {
+  return {
+    paint: function () {
+      paintSaveButtons();
+      updateSaveStatus();
+    },
+    save: function (change) {
+      if (change === "change") {
+        if (!saveBusy()) setSaveButtons();
+      } else if (change === "clean") {
+        savedAt = 0;
+        setSaveButtons();
+      } else if (change === "running") {
+        setSaveButtons();
+      } else {
+        updateSaveStatus();
+      }
+    },
+    location: function (change) {
+      if (change !== "writtenOut") updateSaveStatus();
+    },
+    status: function (change) {
+      if (change === "link" || change === "session") updateSaveStatus();
+    },
+    preference: function (change) {
+      if (preferences().nameOf(change.key) === "clock") updateSaveStatus();
+    }
+  };
 }
 
 function savedTitle(where) {
