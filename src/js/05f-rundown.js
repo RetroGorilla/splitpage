@@ -1,5 +1,5 @@
 import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
-import { revealRow } from "./01b-hide-shot.js";
+import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { currentDocument, readSession } from "../legacy/session-bridge.ts";
 import { cssAttr } from "./04-richtext.js";
@@ -882,7 +882,7 @@ function endDragOver() {
 }
 
 function followMovedScene(rowId) {
-  revealRow(rowId);
+  shotHiding().reveal(rowId);
   var rowEl = document.querySelector('#rows .row[data-id="' + cssAttr(rowId) + '"]');
   if (!rowEl) return;
   var rect = rowEl.getBoundingClientRect();
@@ -940,7 +940,7 @@ function onStripDrop(e) {
 }
 
 export function goToScene(rowId) {
-  revealRow(rowId);
+  shotHiding().reveal(rowId);
   var rowEl = document.querySelector('#rows .row[data-id="' + cssAttr(rowId) + '"]');
   if (!rowEl) return;
   rowEl.scrollIntoView({ block: "center" });
