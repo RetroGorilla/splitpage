@@ -12,7 +12,6 @@ import { __init as init_04c_doc_model } from "./04c-doc-model.js";
 import { __init as init_05_render } from "./05-render.js";
 import { __init as init_05c_clipboard } from "./05c-clipboard.js";
 import { __init as init_05d_draft_edit } from "./05d-draft-edit.js";
-import { __init as init_05e_gallery_overlay } from "./05e-gallery-overlay.js";
 import { __init as init_05g_scene_clip } from "./05g-scene-clip.js";
 import { __init as init_05h_scene_select } from "./05h-scene-select.js";
 import { __init as init_05v_video } from "./05v-video.js";
@@ -60,7 +59,7 @@ import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireApp, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountHelpFeature, mountGalleryFeature, mountHideShotFeature } from "../bootstrap/wiring.ts";
+import { wireApp, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountHideShotFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -100,7 +99,7 @@ if (wiring) {
   init_05_render();
   init_05c_clipboard();
   init_05d_draft_edit();
-  init_05e_gallery_overlay();
+  mountGalleryOverlayFeature();
   mountRundownFeature();
   init_05g_scene_clip();
   init_05h_scene_select();
