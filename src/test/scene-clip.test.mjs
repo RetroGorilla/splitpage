@@ -8,7 +8,8 @@ import { dataUrlForSync, intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { commentIds } from "../core/text/runs.ts";
 import { fromHtml } from "../legacy/richtext.ts";
-import { createUndoHistory, diffStates } from "../js/12a-undo.js";
+import { createUndoHistory, diffStates } from "../application/editing/undo/history.ts";
+import { cellRuns } from "./_cell-runs.mjs";
 import { detectTwoColumnFormat, parseImportRows } from "../js/11-import.js";
 import {
   SCENES_ATTR, SCENES_MIME, buildScenePayload, insertScenes, isBlankScene, isMove, parseScenePayload,
@@ -301,7 +302,7 @@ const markedIn = (state) => {
 
 test("the live cut follows undo: the move's paste undone, the next paste is the move again", () => {
   loadTestDocument(source());
-  const history = createUndoHistory();
+  const history = createUndoHistory(cellRuns);
   const built = buildScenePayload(currentDocument(), ["r2", "r3"], { cut: "ef56" });
   setLiveCut("ef56", currentDocument().docId);
   let base = JSON.parse(JSON.stringify(currentDocument()));
@@ -329,7 +330,7 @@ test("the live cut follows undo: the move's paste undone, the next paste is the 
 
 test("the cut undone, its paste is a copy: comments and b-roll records of its own, never the originals' marks", () => {
   loadTestDocument(source());
-  const history = createUndoHistory();
+  const history = createUndoHistory(cellRuns);
   const built = buildScenePayload(currentDocument(), ["r2", "r3"], { cut: "ab78" });
   setLiveCut("ab78", currentDocument().docId);
   const base = JSON.parse(JSON.stringify(currentDocument()));
@@ -387,7 +388,7 @@ test("a paste onto a blank scene takes its place; comments can be held back for 
 
 test("a paste, a cut and a delete are each one undo entry that puts the document back", () => {
   loadTestDocument(target());
-  const history = createUndoHistory();
+  const history = createUndoHistory(cellRuns);
   let base = JSON.parse(JSON.stringify(currentDocument()));
   const c = clip(buildScenePayload(source(), ["r2", "r3"]));
   insertScenes(c, { afterRowId: "t1" });
@@ -401,7 +402,7 @@ test("a paste, a cut and a delete are each one undo entry that puts the document
   assert.equal(history.redo(currentDocument()).ok, true);
   assert.equal(currentDocument().rows.length, 4);
 
-  const h2 = createUndoHistory();
+  const h2 = createUndoHistory(cellRuns);
   base = JSON.parse(JSON.stringify(currentDocument()));
   removeScenes([currentDocument().rows[1].id, currentDocument().rows[2].id]);
   h2.record(diffStates(base, currentDocument()), Date.now());
