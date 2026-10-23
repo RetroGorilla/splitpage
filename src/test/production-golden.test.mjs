@@ -15,7 +15,7 @@ import { bulkTagRows } from "../application/commands/bulk-tags.ts";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
-import { BROLL_PROPS_MAX, BROLL_STATUSES, __init as initBroll, brollEntries, derivedRecordsPlan, brollInCell, brollPropKey, brollShotsByProp, brollStatus } from "../js/08c-broll.js";
+import { BROLL_PROPS_MAX, BROLL_STATUSES, mountBrollRecordsFeature as initBroll, brollEntries, derivedRecordsPlan, brollInCell, brollPropKey, brollShotsByProp, brollStatus } from "../bootstrap/wiring/broll.ts";
 import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { inertBody } from "../legacy/richtext.ts";

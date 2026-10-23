@@ -7,7 +7,7 @@ import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { cellOf, commentIds, fromHtml, normalizeCell, syncCommentAnchors, toHtml, toPlainText } from "./04c-doc-model.js";
 import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./05c-clipboard.js";
 import { collectTagsFromRows } from "./07-production-tags.js";
-import { recordPastedBroll } from "./08c-broll.js";
+import { recordPastedBroll } from "../bootstrap/wiring/broll.ts";
 import { SCHEMA_VERSION } from "../core/document/fields.ts";
 import { cappedLongText } from "../core/document/text-policy.ts";
 import { inertBody } from "../legacy/richtext.ts";

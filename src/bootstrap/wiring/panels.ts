@@ -13,7 +13,7 @@ import { paintTargetOverlay } from "../../js/05t-target.js";
 import { refreshAnnotator } from "../../features/gallery/annotate.js";
 import { productionPanelsOpen, renderProduction, updateGearCount, updateProductionCount } from "../../js/08-production-panels.js";
 import { runBrollRefresh } from "../../js/08d-broll-panel.js";
-import { scheduleBrollRefresh, updateBrollBadge } from "../../js/08c-broll.js";
+import { scheduleBrollRefresh, updateBrollBadge } from "./broll.ts";
 import { captureReplyDrafts, commentsChanged, renderComments, syncAnchorResolvedClasses } from "../../js/10-comments.js";
 import { onPresencePaint, paintPresence } from "../../js/13a-presence.js";
 import { presence } from "../../legacy/presence-bridge.ts";

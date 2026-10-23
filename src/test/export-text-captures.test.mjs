@@ -9,7 +9,7 @@ import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { blobStore, intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { __init as initBroll } from "../js/08c-broll.js";
+import { mountBrollRecordsFeature as initBroll } from "../bootstrap/wiring/broll.ts";
 import { exportAssetsNow } from "../adapters/formats/export-assets.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { htmlToPlainScript, toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";

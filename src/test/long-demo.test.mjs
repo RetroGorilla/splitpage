@@ -12,7 +12,7 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { STATE_FIELDS, migrateRows, missingStateFields } from "../js/02-state.js";
 import { cellOf } from "../js/04c-doc-model.js";
 import { collectTagsFromRows, __init as initTags } from "../js/07-production-tags.js";
-import { brollInCell } from "../js/08c-broll.js";
+import { brollInCell } from "../bootstrap/wiring/broll.ts";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
 import { LONG_DEMO, STARTERS, starterById } from "../js/_starters.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";

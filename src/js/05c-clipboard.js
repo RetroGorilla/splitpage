@@ -13,7 +13,7 @@ import {
 } from "./04c-doc-model.js";
 import { cellSelection } from "../features/editing/cell-selection.ts";
 import { cellEditing, paintGuard } from "../legacy/editor-bridge.ts";
-import { brollSeedOf } from "./08c-broll.js";
+import { brollSeedOf } from "../bootstrap/wiring/broll.ts";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
 import { makeId, randomHexBytes, randomIds } from "../adapters/identity/ids.ts";
 import {
