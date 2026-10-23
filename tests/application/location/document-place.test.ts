@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { DocumentPlace } from "../../../src/application/location/document-place.ts";
 import { sharedPorts } from "../../../src/bootstrap/wiring/shared-ports.ts";
+import { arrivingOnLink } from "../../../src/js/13-hosted.js";
 import {
   currentConn, currentHome, documentLocation, locationStarted, serverStatus, setHome, startLocation
 } from "../../../src/legacy/location-bridge.ts";
@@ -12,7 +13,7 @@ test("document place is built without starting owners and exposes only reads and
   assert.equal(sharedPorts().place, place);
   assert.equal(locationStarted(), false);
   assert.deepEqual(Object.keys(place).sort(), [
-    "bookmarkById", "bookmarks", "connection", "fileHome", "home", "homeConn", "importHome",
+    "arrivingOnLink", "bookmarkById", "bookmarks", "connection", "fileHome", "home", "homeConn", "importHome",
     "linkTurnedOff", "onChange", "onServerStatusChange", "serverHomeId", "serverHomeRev", "serverMode",
     "serverOf", "sessionExpired", "stillOnServer", "writtenOut"
   ]);
@@ -39,6 +40,11 @@ test("document place is built without starting owners and exposes only reads and
   }
   assert.equal(place.stillOnServer({}), false);
   assert.equal(locationStarted(), false);
+});
+
+test("document place delegates arrivingOnLink to the existing hosted function", () => {
+  const place: DocumentPlace = sharedPorts().place;
+  assert.equal(place.arrivingOnLink(), arrivingOnLink());
 });
 
 test("document place returns the bridge's live location records and follows a stop and restart", () => {

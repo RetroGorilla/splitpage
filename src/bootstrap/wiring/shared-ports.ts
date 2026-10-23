@@ -6,6 +6,7 @@ import type { PreferenceChange, PreferenceChanges } from "../../application/pref
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import { arrivingOnLink } from "../../js/13-hosted.js";
 import { appActions } from "../../legacy/app-actions.ts";
 import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
@@ -69,6 +70,7 @@ const place: DocumentPlace = {
   stillOnServer: (connection) => stillOnServer(connection),
   writtenOut: () => documentLocation().writtenOut(),
   onChange: (listener) => documentLocation().onChange(listener),
+  arrivingOnLink: () => arrivingOnLink(),
   serverMode: () => serverStatus().mode(),
   linkTurnedOff: () => serverStatus().linkTurnedOff(),
   sessionExpired: () => serverStatus().sessionExpired(),
