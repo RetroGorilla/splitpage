@@ -231,6 +231,8 @@ PR 4 is done: opening, editing, syncing and closing a script cell, a gallery edi
 
 Exit: the `state-write` count is 0 outside the session; `stateAssigners` is 0; the full browser run passes with `SPLITPAGE_DOCUMENT_GUARD=1`; each new command has undo, redo and refused-edit tests; no numbered file imports the PR's names from another numbered file.
 
+The three names `05-render` still hands on at the end of this step are deferred: `updateCommentsCount` and `syncAnchorResolvedClasses` go to L3e PR 4, and `openTagComposer` goes to L3g.
+
 **L3e. Displays and recorders listen for changes** (5 PRs; after L3b, L3c and L3d).
 
 38 functions are called after a change to refresh something that depends on it. The session announces every document change (change sets, listeners and refresh jobs since milestone 3), and the L3b and L3c owners announce theirs. Each display subscribes to what it shows, in its own area, and the calls go. Each PR lists every source its displays listen to:
