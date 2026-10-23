@@ -10,7 +10,8 @@ import { blobImgHtml, rowImage, rowImageKey } from "../adapters/storage/02c-blob
 import { videoLinkLabel } from "../adapters/storage/02d-gallery.js";
 import { textMergeContext } from "./03-sync.js";
 import { applyStashedWork } from "./14-export.js";
-import { closeFileConflict, parseProjectFileState } from "./18-local-files.js";
+import { parseProjectFileState } from "./18-local-files.js";
+import { fileConflicts } from "../legacy/save-bridge.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { safeImageSrc } from "../core/document/text-policy.ts";
 import { pad2 } from "../core/production/timing.ts";
@@ -355,7 +356,7 @@ export function confirmFileMerge() {
   if (!cand || !currentDocument()) { cancelMergeReview(); return; }
   document.getElementById("merge-review-modal").hidden = true;
   document.getElementById("merge-review-list").innerHTML = "";
-  closeFileConflict();
+  fileConflicts().close();
 
   var diskCopy = cloneState(cand.theirs);
   var prevDocId = currentDocument().docId;
