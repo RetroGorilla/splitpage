@@ -34,7 +34,8 @@ import { REVIEW_ONLY, liveDocumentPort, liveSession, runCommand, sessionTextPort
 import { fromHtml } from "../../legacy/richtext.ts";
 import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 import { cycleRowStatus } from "../../js/01-scene-status.js";
-import { expandHiddenShotStrip, revealRow } from "../../js/01b-hide-shot.js";
+import { expandHiddenShotStrip } from "../../js/01b-hide-shot.js";
+import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
 import { restoreMergeSnapshot } from "../../js/03-sync.js";
 import { installMergeBanner } from "../../legacy/merge-bridge.ts";
 import { ensureTrailingCaretSpot, safeId, sanitizeHtml, storedHtmlFromDom } from "../../js/04-richtext.js";
@@ -422,7 +423,7 @@ const rowRoutePorts: RowRoutePorts = {
   armDelete: armDelete,
   cycleStatus: cycleRowStatus,
   expandHidden: expandHiddenShotStrip,
-  reveal: revealRow,
+  reveal: function (rowId) { shotHiding().reveal(rowId); },
   gone: function () { showToast("That scene is no longer here.", "warn"); }
 };
 
@@ -442,7 +443,7 @@ export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
 export const stopRowsFeature = rowRoutes.stop;
 
 export function rowsActions(): ActionDefinition[] {
-  return rowActions({ reveal: revealRow });
+  return rowActions({ reveal: (rowId) => { shotHiding().reveal(rowId); } });
 }
 
 const rowsEditor = owned<ReturnType<typeof mountRowsEditor>>();
