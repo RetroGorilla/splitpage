@@ -4,6 +4,35 @@ import type { Blocker, ScreenState } from "../../src/application/screen.ts";
 import type { ReviewFacts } from "../../src/application/collaboration/review.ts";
 import type { DocumentView, SessionListener } from "../../src/application/session/document-session.ts";
 import type { DocumentReader } from "../../src/application/session/document-reader.ts";
+import type { TextServices } from "../../src/application/text/services.ts";
+
+export function fakeTextServices(document: Document) {
+  const calls: { method: string; html: unknown }[] = [];
+  const inertBody = (html: unknown): HTMLElement => {
+    const body = document.createElement("div");
+    body.innerHTML = String(html ?? "");
+    return body;
+  };
+  const text: Pick<TextServices<HTMLElement>, "fromHtml" | "inertBody" | "sanitizeHtml" | "storedHtmlFromDom"> = {
+    fromHtml: (html) => {
+      calls.push({ method: "fromHtml", html });
+      return [{ text: inertBody(html).textContent ?? "", marks: {} }];
+    },
+    inertBody: (html) => {
+      calls.push({ method: "inertBody", html });
+      return inertBody(html);
+    },
+    sanitizeHtml: (html) => {
+      calls.push({ method: "sanitizeHtml", html });
+      return String(html ?? "");
+    },
+    storedHtmlFromDom: (html) => {
+      calls.push({ method: "storedHtmlFromDom", html });
+      return html;
+    }
+  };
+  return { text, calls };
+}
 
 export function fakeScreen(initial: Partial<ScreenState> = {}) {
   const state: Record<Blocker, boolean> = {
