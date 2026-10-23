@@ -1,7 +1,7 @@
 import { onRefresh, onSessionChange, onStamped } from "../../legacy/session-bridge.ts";
 import { documentLocation } from "../../legacy/location-bridge.ts";
 import { onPreferenceChange, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
-import { onShotHiding } from "../../js/01b-hide-shot.js";
+import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
 import { onPresenceRecolor } from "../../js/13a-presence.js";
 import { screenListeners } from "../../js/05-render.js";
 
@@ -18,7 +18,7 @@ export function mountScreenFeature(): void {
     onSessionChange(screen.session),
     onRefresh(screen.refresh),
     onStamped(screen.stamped),
-    onShotHiding(screen.hiding),
+    shotHiding().onHiding(screen.hiding),
     onPresenceRecolor(screen.colours),
     documentLocation().onChange(screen.location),
     viewFlags().onChange(screen.flag)
