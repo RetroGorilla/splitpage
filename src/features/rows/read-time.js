@@ -1,44 +1,41 @@
-import { hasSetLength, parseSceneLength } from "../core/document/timing.ts";
-import { estimatedSeconds, formatDuration, rowSeconds } from "../core/production/timing.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
-import { cssAttr } from "../features/common/dom.ts";
-import { paintGuard } from "../legacy/editor-bridge.ts";
-import { redo, undo } from "./12a-undo.js";
-import { sceneAt, sceneLengthCommand } from "../application/commands/scene-length.ts";
-import { REVIEW_ONLY, currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { reviewMode } from "../legacy/location-bridge.ts";
+import { hasSetLength, parseSceneLength } from "../../core/document/timing.ts";
+import { estimatedSeconds, formatDuration, rowSeconds } from "../../core/production/timing.ts";
+import { cssAttr } from "../common/dom.ts";
+import { sceneAt, sceneLengthCommand } from "../../application/commands/scene-length.ts";
+import { REVIEW_REFUSAL_REASON } from "../../application/collaboration/authority.ts";
 
 var REVIEW_REFUSAL = "This is a review copy — comment on a scene instead of changing its length.";
 
+var ports = null;
 var editing = null;
 
 export function readTimeEditing() { return editing ? editing.rowId : null; }
 
 function applySceneLength(rowId, seconds) {
-  var outcome = runCommand(sceneLengthCommand(rowId, seconds, sessionStamps));
+  var outcome = ports.edits.run(sceneLengthCommand(rowId, seconds, ports.edits.stamps));
   if (outcome.kind === "failed") throw outcome.error;
-  if (outcome.kind === "rejected" && outcome.reason === REVIEW_ONLY) showToast(REVIEW_REFUSAL, "warn");
+  if (outcome.kind === "rejected" && outcome.reason === REVIEW_REFUSAL_REASON) ports.notices.show(REVIEW_REFUSAL, "warn");
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
 export function setSceneLength(rowId, seconds) {
+  if (!ports) return false;
   return applySceneLength(rowId, seconds);
 }
 
 export function openReadTimeEditor(btn) {
-  if (!btn) return;
-  if (reviewMode()) { showToast(REVIEW_REFUSAL, "warn"); return; }
+  if (!btn || !ports) return;
+  if (ports.review.reviewing()) { ports.notices.show(REVIEW_REFUSAL, "warn"); return; }
   var rowId = btn.getAttribute("data-id");
-  var scene = readSession(sceneAt(rowId));
+  var scene = ports.document.read(sceneAt(rowId));
   if (!scene) return;
   closeReadTimeEditor(false);
   var row = scene.row;
   var idx = scene.index;
   var wasSet = hasSetLength(row);
-  var doc = currentDocument();
-  var secs = rowSeconds(row, doc, productionReaders);
-  var estimate = formatDuration(estimatedSeconds(row, doc, productionReaders));
+  var doc = ports.document.current();
+  var secs = rowSeconds(row, doc, ports.text.productionReaders);
+  var estimate = formatDuration(estimatedSeconds(row, doc, ports.text.productionReaders));
   var prefill = wasSet || secs >= 0.5 ? formatDuration(secs) : "";
   var input = document.createElement("input");
   input.type = "text";
@@ -72,15 +69,15 @@ export function closeReadTimeEditor(commit, fromBlur) {
       if (typeof secs === "number" && isNaN(secs)) {
         if (!fromBlur) {
           ed.input.setAttribute("aria-invalid", "true");
-          showToast("That isn’t a length — try 1:30, 90 or 1m30s. Leave it empty to use the estimate.", "error");
+          ports.notices.show("That isn’t a length — try 1:30, 90 or 1m30s. Leave it empty to use the estimate.", "error");
           ed.input.select();
           return false;
         }
-        showToast("Scene length unchanged — “" + text + "” isn’t a length.", "error");
+        ports.notices.show("Scene length unchanged — “" + text + "” isn’t a length.", "error");
       } else {
         editing = null;
         teardown(ed);
-        paintGuard().afterThisPaint(
+        ports.paint.afterThisPaint(
           function () { setSceneLength(ed.rowId, secs); },
           function () { applySceneLength(ed.rowId, secs); }
         );
@@ -130,25 +127,40 @@ function onEditorBlur() {
   closeReadTimeEditor(true, true);
 }
 
-export function __init() {
+export function __init(given) {
+  ports = given;
+  var offs = [];
+  var disposed = false;
+  var owner = { dispose: function () {
+    if (disposed) return;
+    disposed = true;
+    closeReadTimeEditor(false, true);
+    while (offs.length) offs.pop()();
+    ports = null;
+  } };
   var rowsEl = document.getElementById("rows");
-  if (!rowsEl) return;
-  rowsEl.addEventListener("mousedown", function (e) {
+  if (!rowsEl) return owner;
+  function listen(type, fn) {
+    rowsEl.addEventListener(type, fn);
+    offs.push(function () { rowsEl.removeEventListener(type, fn); });
+  }
+  listen("mousedown", function (e) {
     var btn = e.target.closest && e.target.closest(".row-read");
     if (btn && btn.getAttribute("aria-disabled") !== "true") e.preventDefault();
   });
-  rowsEl.addEventListener("click", function (e) {
+  listen("click", function (e) {
     var btn = e.target.closest && e.target.closest(".row-read");
     if (!btn) return;
     e.preventDefault();
     openReadTimeEditor(btn);
   });
-  rowsEl.addEventListener("keydown", function (e) {
+  listen("keydown", function (e) {
     if (!(e.target.classList && e.target.classList.contains("row-read"))) return;
-    if (!(e.ctrlKey || e.metaKey) || e.altKey || reviewMode()) return;
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || ports.review.reviewing()) return;
     var k = String(e.key).toLowerCase();
     if (k !== "z" && k !== "y") return;
     e.preventDefault();
-    if (k === "y" || e.shiftKey) redo(); else undo();
+    if (k === "y" || e.shiftKey) ports.undo.redo(); else ports.undo.undo();
   });
+  return owner;
 }
