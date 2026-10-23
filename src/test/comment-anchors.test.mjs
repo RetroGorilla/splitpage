@@ -2,7 +2,10 @@ import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { commentRange, fromHtml, joinCells, splitCell, syncCommentAnchors, toHtml } from "../js/04c-doc-model.js";
+import { commentRange, joinCells, splitCell } from "../core/text/edits.ts";
+import { fromHtml, cellOf } from "../legacy/richtext.ts";
+import { toHtml } from "../core/text/html.ts";
+import { syncCommentAnchors } from "../core/text/anchors.ts";
 import { sanitizeHtml } from "../js/04-richtext.js";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
@@ -22,10 +25,10 @@ test("a comment points at the first cell holding its mark, in document order", (
     ],
     comments: [comment("c1", "r1", "audioText"), comment("c2", "r1", "audioText")]
   };
-  assert.equal(syncCommentAnchors(state), 2);
+  assert.equal(syncCommentAnchors(state, cellOf), 2);
   assert.deepEqual([state.comments[0].rowId, state.comments[0].field], ["r2", "visualText"]);
   assert.deepEqual([state.comments[1].rowId, state.comments[1].field], ["r3", "audioText"]);
-  assert.equal(syncCommentAnchors(state), 0);
+  assert.equal(syncCommentAnchors(state, cellOf), 0);
 });
 
 test("a comment whose mark is nowhere keeps what it had; cards and title comments are never moved", () => {
@@ -37,17 +40,17 @@ test("a comment whose mark is nowhere keeps what it had; cards and title comment
       comment("c8", null, "title", { anchorId: null })
     ]
   };
-  assert.equal(syncCommentAnchors(state), 0);
+  assert.equal(syncCommentAnchors(state, cellOf), 0);
   assert.deepEqual(state.comments.map((c) => [c.rowId, c.field]), [["gone", "audioText"], ["r0", "visualText"], [null, "title"]]);
 });
 
 test("the anchor id falls back to the comment's own id; no comments, no rows, no work", () => {
   const state = { rows: [{ id: "r2", audioText: cmt("c3", "x") }], comments: [{ id: "c3", rowId: "r1", field: "audioText" }] };
-  assert.equal(syncCommentAnchors(state), 1);
+  assert.equal(syncCommentAnchors(state, cellOf), 1);
   assert.equal(state.comments[0].rowId, "r2");
-  assert.equal(syncCommentAnchors({ rows: [] }), 0);
-  assert.equal(syncCommentAnchors({ rows: [{ id: "r1", audioText: cmt("c1", "x") }], comments: [] }), 0);
-  assert.equal(syncCommentAnchors(null), 0);
+  assert.equal(syncCommentAnchors({ rows: [] }, cellOf), 0);
+  assert.equal(syncCommentAnchors({ rows: [{ id: "r1", audioText: cmt("c1", "x") }], comments: [] }, cellOf), 0);
+  assert.equal(syncCommentAnchors(null, cellOf), 0);
 });
 
 test("a split through a commented phrase marks both halves; the comment points at the first", () => {
@@ -59,11 +62,11 @@ test("a split through a commented phrase marks both halves; the comment points a
   };
   assert.equal(state.rows[0].audioText, "Alpha " + cmt("c1", "bravo"));
   assert.equal(state.rows[1].audioText, cmt("c1", " charlie") + " delta");
-  assert.equal(syncCommentAnchors(state), 0);
+  assert.equal(syncCommentAnchors(state, cellOf), 0);
   const [, tail] = splitCell(cell, 6);
   state.rows[0].audioText = "Alpha ";
   state.rows[1].audioText = toHtml(tail);
-  assert.equal(syncCommentAnchors(state), 1);
+  assert.equal(syncCommentAnchors(state, cellOf), 1);
   assert.equal(state.comments[0].rowId, "r2");
 });
 
@@ -101,7 +104,7 @@ test("a span that is both a comment anchor and a tag keeps both marks (#280)", (
     rows: [{ id: "r2", visualText: "", audioText: `<span class="cmt-anchor tag-anchor" data-cmt="c1" data-tag-cat="prop" data-tag-name="Lamp">lamp</span>` }],
     comments: [comment("c1", "r1", "audioText")]
   };
-  assert.equal(syncCommentAnchors(state), 1);
+  assert.equal(syncCommentAnchors(state, cellOf), 1);
   assert.equal(state.comments[0].rowId, "r2");
 });
 
