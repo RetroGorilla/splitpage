@@ -22,6 +22,7 @@ import { startEditor } from "../legacy/editor-bridge.ts";
 import { startLocation } from "../legacy/location-bridge.ts";
 import { startPreferences } from "../legacy/preferences-bridge.ts";
 import { legacyShotHidingPorts, startShotHiding } from "../legacy/shot-hiding-bridge.ts";
+import { legacyPresencePorts, startPresence } from "../legacy/presence-bridge.ts";
 import { startRecovery } from "../legacy/recovery-bridge.ts";
 import type { LegacyRecoveryPorts } from "../legacy/recovery-bridge.ts";
 import { saveDestinations, startSaves } from "../legacy/save-bridge.ts";
@@ -96,7 +97,8 @@ export const WIRING_STEPS = Object.freeze([
   "editor",
   "production editing",
   "preferences",
-  "shot hiding"
+  "shot hiding",
+  "presence"
 ] as const);
 
 export type WiringStep = (typeof WIRING_STEPS)[number];
@@ -359,6 +361,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("production editing", () => wireProductionEditing(deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
   build("preferences", () => startPreferences(), (stop) => stop);
   build("shot hiding", () => startShotHiding(legacyShotHidingPorts(deps.timers ?? SYSTEM_TIMERS)), (stop) => stop);
+  build("presence", () => startPresence(legacyPresencePorts()), (stop) => stop);
   let disposed = false;
   const dispose = (): void => {
     if (disposed) return;

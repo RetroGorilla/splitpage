@@ -10,7 +10,7 @@ import { sidePanels } from "../legacy/panels-bridge.ts";
 import { cssAttr, plainText, safeId } from "./04-richtext.js";
 import { tagStatusLampHtml } from "./07-production-tags.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
-import { personColor } from "./13a-presence.js";
+import { presence } from "../legacy/presence-bridge.ts";
 import { breakdownRows, breakdownTable } from "../adapters/formats/export-projections.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
@@ -215,7 +215,7 @@ function mentionLinksHtml(item) {
 
 function personAvatarHtml(name) {
   var initial = Array.from(String(name || "").trim())[0] || "?";
-  return '<span class="person-avatar" style="--presence:' + personColor(name) + '" aria-hidden="true">' +
+  return '<span class="person-avatar" style="--presence:' + presence().personColor(name) + '" aria-hidden="true">' +
     escapeHtml(initial.toUpperCase()) + '</span>';
 }
 

@@ -35,6 +35,7 @@ import * as documentLocation from "../../src/application/location/document-locat
 import * as serverStatus from "../../src/application/location/server-status.ts";
 import * as projectFileServices from "../../src/application/formats/project-file-services.ts";
 import * as shotHiding from "../../src/application/shot-hiding.ts";
+import * as presence from "../../src/application/collaboration/presence.ts";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -56,7 +57,8 @@ const OWNERS = [
   "src/application/preferences/panel-widths.ts",
   "src/application/location",
   "src/application/formats",
-  "src/application/shot-hiding.ts"
+  "src/application/shot-hiding.ts",
+  "src/application/collaboration/presence.ts"
 ];
 
 function sourcesOf(path: string): string[] {
@@ -113,7 +115,8 @@ test("E12: importing the owners constructs nothing: each export is a constructor
     rowDrag: rowDrag, cellEditing: cellEditing, focusMemory: focusMemory, paintGuard: paintGuard, selection: selection, deleteConfirm: deleteConfirm, productionSelection: productionSelection, mergeUndo: mergeUndo,
     preferences: preferences, viewFlags: viewFlags, panelWidths: panelWidths,
     documentLocation: documentLocation, serverStatus: serverStatus, projectFileServices: projectFileServices,
-    shotHiding: shotHiding
+    shotHiding: shotHiding,
+    presence: presence
   };
   for (const [module, exports] of Object.entries(loaded)) {
     for (const [name, value] of Object.entries(exports)) {
@@ -134,4 +137,5 @@ test("E12: importing the owners constructs nothing: each export is a constructor
   assert.equal(typeof stashedWork.createStashedWork, "function");
   assert.equal(typeof cellEditing.createCellEditing, "function");
   assert.equal(typeof shotHiding.createShotHiding, "function");
+  assert.equal(typeof presence.createPresence, "function");
 });
