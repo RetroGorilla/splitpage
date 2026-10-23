@@ -1,8 +1,11 @@
 import { createOperations } from "../application/session/operation.ts";
 import type { OperationContext, Operations } from "../application/session/operation.ts";
+import { createDocumentSources } from "../application/transitions/sources.ts";
+import type { DocumentSource, DocumentSources } from "../application/transitions/sources.ts";
 import { createTransitions } from "../application/transitions/transitions.ts";
 import type { Transitions } from "../application/transitions/transitions.ts";
-import type { DestinationPort, IdentityPort, LiveDocumentPort } from "../application/transitions/ports.ts";
+import type { DestinationPort, HistoryPort, IdentityPort, LiveDocumentPort } from "../application/transitions/ports.ts";
+import type { ValidatedDocument } from "../core/document/validated.ts";
 import { migrateRows } from "../js/02-state.js";
 import { currentConn, currentHome, documentLocation } from "./location-bridge.ts";
 import { confirmedGeneration } from "./save-bridge.ts";
@@ -17,13 +20,24 @@ export interface LegacyTransitionPorts {
   readonly live: LiveDocumentPort;
   readonly destination: DestinationPort<LegacyDestination>;
   readonly identity: IdentityPort;
+  readonly history: HistoryPort;
 }
+
+export interface LegacyOpening {
+  readonly kind: string;
+  readonly [field: string]: unknown;
+}
+
+export type LegacyDocumentSource = DocumentSource<LegacyOpening>;
+export type LegacyDocumentSources = DocumentSources<LegacyOpening>;
 
 export const NO_DESTINATION: LegacyDestination = Object.freeze({ kind: "none" });
 
 interface Started {
   readonly transitions: Transitions<LegacyDestination>;
   readonly operations: Operations;
+  readonly sources: LegacyDocumentSources;
+  readonly history: HistoryPort;
 }
 
 let started: Started | null = null;
@@ -66,9 +80,15 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
     live: ports.live,
     destination: ports.destination,
     identity: ports.identity,
+    history: ports.history,
     ownership: operations
   });
-  const mine: Started = Object.freeze({ transitions: transitions, operations: operations });
+  const mine: Started = Object.freeze({
+    transitions: transitions,
+    operations: operations,
+    sources: createDocumentSources<LegacyOpening>(),
+    history: ports.history
+  });
   started = mine;
   return function () {
     if (started === mine) started = null;
@@ -85,4 +105,18 @@ export function captureOperation(): OperationContext {
 
 export function stillOwns(ctx: OperationContext): boolean {
   return running().operations.stillOwns(ctx);
+}
+
+export function documentSources(): LegacyDocumentSources {
+  return running().sources;
+}
+
+export function openDocument(opening: LegacyOpening): Promise<unknown> {
+  const source = running().sources.taking(opening);
+  if (!source) return Promise.resolve(false);
+  return Promise.resolve(source.open(opening));
+}
+
+export function keepSnapshot(label: string, doc?: ValidatedDocument | null): unknown {
+  return running().history.keep(label, doc);
 }

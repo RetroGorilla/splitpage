@@ -3,7 +3,7 @@ import "./_export-services-started.mjs";
 import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { intern } from "../adapters/storage/02c-blobs.js";
@@ -383,17 +383,17 @@ test("a comment near the bottom of a page carries on at the top of the next, nev
   assert.ok(carried > 10 && within > 5, "only " + carried + " variants reached a second page, " + within + " mid-paragraph");
 });
 
-test("commentEntries(exportDocumentOf(S.state)) keeps its plain-text shape; pieces only when asked", () => {
+test("commentEntries(exportDocumentOf(currentDocument())) keeps its plain-text shape; pieces only when asked", () => {
   const pic = cimg(120, 90);
   loadTestDocument(migrateRows({
     schema: 2, title: "t", rows: [{ id: "r0", visualText: "v", audioText: "a", status: "todo" }],
     comments: [{ id: "c0", rowId: "r0", field: "audioText", author: "Ann", body: "One&nbsp;" + pic.html + "<br>two <b>three</b>",
       replies: [{ id: "rp0", author: "Bob", body: "plain <i>reply</i>" }] }]
   }));
-  const [plain] = commentEntries(exportDocumentOf(S.state));
+  const [plain] = commentEntries(exportDocumentOf(currentDocument()));
   assert.equal(plain.body, "One \ntwo three");
   assert.ok(!("pieces" in plain) && !("pieces" in plain.replies[0]));
-  const [withPieces] = commentEntries(exportDocumentOf(S.state), { pieces: true });
+  const [withPieces] = commentEntries(exportDocumentOf(currentDocument()), { pieces: true });
   assert.equal(withPieces.body, plain.body);
   assert.deepEqual(withPieces.pieces, [{ text: "One" }, { image: pic.rec.sha256 }, { text: "two three" }]);
   assert.deepEqual(withPieces.replies[0].pieces, [{ text: "plain reply" }]);

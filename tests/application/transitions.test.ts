@@ -78,6 +78,12 @@ function world(opened?: { doc: ValidatedDocument; writtenOut: boolean; destinati
       writtenOut: function () { return writtenOut; },
       markWrittenOut: function (out) { log.push("writtenOut:" + String(out)); writtenOut = out; }
     },
+    history: {
+      keep: function (label, doc) {
+        log.push("keep:" + label + ":" + (doc ? doc.title : (live ? live.title : "none")));
+        return label === "not stored" ? null : { label: label };
+      }
+    },
     ownership: operations
   });
   return {
@@ -228,4 +234,43 @@ test("#247: a publish that lands after the document was replaced, reopened, move
     assert.deepEqual({ doc: JSON.stringify(w.live()), destination: w.destination(), baseline: w.baseline(), writtenOut: w.writtenOut() }, before, name);
     assert.deepEqual(w.log, [], name);
   }
+});
+
+test("a transition with keep snapshots the live document through the history port before it is replaced, and says so", () => {
+  const w = opened(true);
+  const arrived = w.transitions.open({ from: { document: scriptWith("From disk", idOf("2")) }, reason: "opened", keep: "Before opening From disk", destination: FILE, writtenOut: true });
+  assert.equal(arrived.kept, true);
+  assert.deepEqual(w.log, ["keep:Before opening From disk:Open", "assign:From disk", "destination:file", "baseline:From disk:opened", "writtenOut:true"]);
+});
+
+test("startNew and recover take the same snapshot before the document is replaced", () => {
+  const fresh = opened(true);
+  assert.equal(fresh.transitions.startNew({ from: { document: scriptWith("New", idOf("2")) }, reason: "new", keep: "Before starting a new script" }).kept, true);
+  assert.deepEqual(fresh.log.slice(0, 2), ["keep:Before starting a new script:Open", "assign:New"]);
+  const recovered = opened(true);
+  const arrived = recovered.transitions.recover({ from: { document: scriptWith("Recovered", idOf("3")) }, reason: "recovered", keep: "Before recovering", detached: true, baseline: null });
+  assert.equal(arrived.kept, true);
+  assert.deepEqual(recovered.log.slice(0, 2), ["keep:Before recovering:Open", "assign:Recovered"]);
+});
+
+test("no snapshot is taken without keep, with no live document, or with a live document that has no rows; restore never takes one", () => {
+  const plain = opened(true);
+  assert.equal(plain.transitions.open({ from: { document: scriptWith("Plain", idOf("2")) }, reason: "plain" }).kept, false);
+  assert.ok(!plain.log.some((line) => line.startsWith("keep:")), "no keep, no snapshot");
+  const empty = world();
+  assert.equal(empty.transitions.open({ from: { document: scriptWith("First", idOf("2")) }, reason: "first", keep: "Before opening First" }).kept, false);
+  assert.ok(!empty.log.some((line) => line.startsWith("keep:")), "nothing live, nothing to keep");
+  const rowless = world({ doc: migrateRows({ ...rawScript("Rowless"), rows: [] }, fakeMigration().ports), writtenOut: true, destination: FILE });
+  assert.equal(rowless.live()?.rows.length, 0);
+  assert.equal(rowless.transitions.open({ from: { document: scriptWith("Next", idOf("2")) }, reason: "next", keep: "Before opening Next" }).kept, false);
+  assert.ok(!rowless.log.some((line) => line.startsWith("keep:")), "a document with no rows is not kept");
+  const restored = opened(true);
+  assert.equal(restored.transitions.restore({ from: { document: scriptWith("Older", idOf("2")) } }).kept, false);
+});
+
+test("a snapshot the history port does not store reports kept false, and the transition still runs", () => {
+  const w = opened(true);
+  const arrived = w.transitions.open({ from: { document: scriptWith("From disk", idOf("2")) }, reason: "opened", keep: "not stored" });
+  assert.equal(arrived.kept, false);
+  assert.equal(w.live()?.title, "From disk");
 });

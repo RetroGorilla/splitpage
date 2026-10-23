@@ -1,3 +1,5 @@
+import { wireProductionIndex } from "./wiring/production-index.ts";
+import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
 import { registerBuiltInExporters } from "./wiring/exporters.ts";
 import { wireProductionEditing } from "./wiring/production-editing.ts";
 import type { ActionRegistry } from "../application/actions.ts";
@@ -18,12 +20,12 @@ import { startLocation } from "../legacy/location-bridge.ts";
 import { startPreferences } from "../legacy/preferences-bridge.ts";
 import { startRecovery } from "../legacy/recovery-bridge.ts";
 import type { LegacyRecoveryPorts } from "../legacy/recovery-bridge.ts";
-import { startSaves } from "../legacy/save-bridge.ts";
-import type { LegacyAutoSavePorts, LegacySavePorts } from "../legacy/save-bridge.ts";
+import { saveDestinations, startSaves } from "../legacy/save-bridge.ts";
+import type { LegacyAutoSavePorts, LegacySaveDestination, LegacySavePorts } from "../legacy/save-bridge.ts";
 import { liveDocumentPort, liveSession, startSessionBridge } from "../legacy/session-bridge.ts";
 import type { RecordsReconciler, SessionBridgePorts, SessionUndoPorts } from "../legacy/session-bridge.ts";
-import { captureOperation, startTransitions, stillOwns } from "../legacy/transition-bridge.ts";
-import type { LegacyTransitionPorts } from "../legacy/transition-bridge.ts";
+import { captureOperation, documentSources, startTransitions, stillOwns } from "../legacy/transition-bridge.ts";
+import type { LegacyDocumentSource, LegacyTransitionPorts } from "../legacy/transition-bridge.ts";
 import { createUndoAdapter, routeReplays } from "../legacy/undo-adapter.ts";
 
 export interface SessionEffects {
@@ -40,8 +42,11 @@ export interface WiringDeps {
   readonly editorName: () => string;
   readonly refresh: (jobs: ReadonlySet<string>) => void;
   readonly records: RecordsReconciler;
+  readonly bulkTags: BulkTagPorts;
   readonly saves: (ownership: SaveOwnershipPort) => LegacySavePorts;
+  readonly destinations: () => readonly LegacySaveDestination[];
   readonly transitions: TransitionDeps;
+  readonly sources: () => readonly LegacyDocumentSource[];
   readonly recovery: () => LegacyRecoveryPorts;
   readonly keyTarget: EventTarget;
   readonly actions?: (() => ActionRegistry) | undefined;
@@ -78,7 +83,9 @@ export const WIRING_STEPS = Object.freeze([
   "built-in exporters",
   "session",
   "saves",
+  "save destinations",
   "transitions",
+  "document sources",
   "recovery",
   "editor",
   "production editing",
@@ -94,7 +101,9 @@ const REQUIRED: readonly (readonly [keyof WiringDeps, "function" | "object"])[] 
   ["refresh", "function"],
   ["records", "function"],
   ["saves", "function"],
+  ["destinations", "function"],
   ["transitions", "object"],
+  ["sources", "function"],
   ["recovery", "function"],
   ["keyTarget", "object"]
 ];
@@ -111,14 +120,15 @@ export type TransitionDeps = Omit<LegacyTransitionPorts, "live">;
 
 const TRANSITION_PORTS: { readonly [P in keyof TransitionDeps]: readonly (keyof TransitionDeps[P])[] } = {
   destination: ["set", "confirm"],
-  identity: ["mint", "writtenOut", "markWrittenOut"]
+  identity: ["mint", "writtenOut", "markWrittenOut"],
+  history: ["keep"]
 };
 
-const SAVE_PORTS: readonly (keyof Omit<LegacySavePorts, "ownership" | "autosave">)[] = ["write", "destination", "keyOf", "obsolete", "running"];
+const SAVE_PORTS: readonly (keyof Omit<LegacySavePorts, "ownership" | "autosave">)[] = ["destination", "keyOf", "obsolete"];
 
 const OWNERSHIP_PORTS: readonly (keyof SaveOwnershipPort)[] = ["capture", "stillOwns"];
 
-const AUTOSAVE_PORTS: readonly (keyof LegacyAutoSavePorts)[] = ["enabledAtStart", "due", "changed"];
+const AUTOSAVE_PORTS: readonly (keyof LegacyAutoSavePorts)[] = ["enabledAtStart", "changed"];
 
 const UNDO_PORTS: readonly (keyof SessionUndoPorts)[] = ["adapter", "route"];
 
@@ -132,7 +142,7 @@ const KEY_TARGET_METHODS: readonly (keyof EventTarget)[] = ["addEventListener", 
 
 const ACTION_REGISTRY_METHODS: readonly (keyof ActionRegistry)[] = ["register", "has", "shortcuts", "view", "list", "invoke", "presentRefusals"];
 
-const RECOVERY_METHODS: readonly (keyof LegacyRecoveryPorts)[] = ["now", "desktop", "sessionStorage", "localStorage", "internImage"];
+const RECOVERY_METHODS: readonly (keyof LegacyRecoveryPorts)[] = ["now", "desktop", "sessionStorage", "localStorage", "internImage", "merge"];
 
 function present(value: unknown, kind: "function" | "object"): boolean {
   return value !== null && typeof value === kind;
@@ -157,11 +167,45 @@ function checkedExporters(drop: (() => void) | null | undefined): () => void {
   return drop as () => void;
 }
 
+function checkedDestinations(list: readonly LegacySaveDestination[] | null | undefined): readonly LegacySaveDestination[] {
+  if (!Array.isArray(list)) throw new WiringError("save destinations", "Wiring: the destinations dependency returned no list of destinations");
+  return list as readonly LegacySaveDestination[];
+}
+
+function checkedSources(list: readonly LegacyDocumentSource[] | null | undefined): readonly LegacyDocumentSource[] {
+  if (!Array.isArray(list)) throw new WiringError("document sources", "Wiring: the sources dependency returned no list of sources");
+  return list as readonly LegacyDocumentSource[];
+}
+
+function registerSources(list: readonly LegacyDocumentSource[]): () => void {
+  const registry = documentSources();
+  const drops: (() => void)[] = [];
+  try {
+    for (const source of list) drops.push(registry.register(source));
+  } catch (error) {
+    drain(drops);
+    throw error;
+  }
+  return () => { drain(drops); };
+}
+
+function registerDestinations(list: readonly LegacySaveDestination[]): () => void {
+  const registry = saveDestinations();
+  const drops: (() => void)[] = [];
+  try {
+    for (const destination of list) drops.push(registry.register(destination));
+  } catch (error) {
+    drain(drops);
+    throw error;
+  }
+  return () => { drain(drops); };
+}
+
 function checkedRecovery(ports: LegacyRecoveryPorts | null | undefined): LegacyRecoveryPorts {
-  if (!present(ports, "object")) throw new WiringError("recovery", "Wiring: the recovery dependency returned no recovery ports");
+  if (!ports || !present(ports, "object")) throw new WiringError("recovery", "Wiring: the recovery dependency returned no recovery ports");
   const missing = lacking(ports, RECOVERY_METHODS);
   if (missing) throw new WiringError("recovery", "Wiring: the recovery dependency returned no " + missing + " function");
-  return ports as LegacyRecoveryPorts;
+  return ports;
 }
 
 function checkedSaves(ports: LegacySavePorts | null | undefined): LegacySavePorts {
@@ -285,9 +329,22 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("export services", () => legacyExportServices(), installExportServices);
   const exports = build("export registry", () => createExportRegistry(), installExportFormats);
   build("built-in exporters", () => checkedExporters((deps.exporters ?? registerBuiltInExporters)(exports)), (drop) => drop);
-  build("session", () => startSessionBridge(legacySessionPorts(deps)), (stop) => stop);
+  build("session", () => {
+    const stopIndex = wireProductionIndex(deps.bulkTags);
+    try {
+      const stopSession = startSessionBridge(legacySessionPorts(deps));
+      return () => {
+        try { stopSession(); } finally { stopIndex(); }
+      };
+    } catch (error) {
+      stopIndex();
+      throw error;
+    }
+  }, (stop) => stop);
   build("saves", () => startSaves(checkedSaves(deps.saves({ capture: captureOperation, stillOwns: stillOwns })), deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
+  build("save destinations", () => registerDestinations(checkedDestinations(deps.destinations())), (drop) => drop);
   build("transitions", () => startTransitions({ ...deps.transitions, live: liveDocumentPort }), (stop) => stop);
+  build("document sources", () => registerSources(checkedSources(deps.sources())), (drop) => drop);
   build("recovery", () => startRecovery(checkedRecovery(deps.recovery())), (stop) => stop);
   build("editor", () => startEditor(liveDocumentPort), (stop) => stop);
   build("production editing", () => wireProductionEditing(deps.timers ?? SYSTEM_TIMERS), (stop) => stop);

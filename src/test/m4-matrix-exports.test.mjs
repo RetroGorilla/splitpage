@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { createGates, createHeldFetch, mockClock, rightToday } from "./_m4-matrix.mjs";
 
 await bootApp();
@@ -11,7 +11,7 @@ const { LONG_DEMO } = await import("../js/_starters.js");
 const { migrateRows } = await import("../js/02-state.js");
 const { blobStore, createMemoryBackend, intern, setBackend } = await import("../adapters/storage/02c-blobs.js");
 const { brollShotListForPrint } = await import("../js/08d-broll-panel.js");
-const { clearDirty } = await import("../js/12-dirty-toast.js");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { captureExportDocument } = await import("../js/14b-export-kit.js");
 const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts");
@@ -39,12 +39,12 @@ function demo() {
 function useDocument(doc) {
   loadTestDocument(doc);
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   return doc;
 }
 
 function mutateLive() {
-  const s = S.state;
+  const s = currentDocument();
   s.title = "A different title";
   s.wordsPerMinute = 90;
   s.targetSeconds = 61;
@@ -70,7 +70,7 @@ function sameBytes(a, b, message) {
 }
 
 function liveJson() {
-  return JSON.stringify(S.state);
+  return JSON.stringify(currentDocument());
 }
 
 const BROLL_VIEW = { filter: "all", group: "scene" };
@@ -191,9 +191,9 @@ async function withHeldStore(run) {
 }
 
 function swapPictures(replacement) {
-  S.state.rows[0].imageRef = replacement.ref;
-  S.state.rows[0].moreImages = [];
-  S.state.comments[0].body = "No picture now";
+  currentDocument().rows[0].imageRef = replacement.ref;
+  currentDocument().rows[0].moreImages = [];
+  currentDocument().comments[0].body = "No picture now";
 }
 
 rightToday("X19", "an export whose local picture reads are held keeps the captured pictures and their places when the document, connection and pictures change", async (t) => {
@@ -225,7 +225,7 @@ rightToday("X19", "an export whose local picture reads are held keeps the captur
       assert.deepEqual(held.reads.slice().sort(), [row.ref.sha256, more.ref.sha256, comment.ref.sha256].sort(), kind + ": the held reads were for the captured pictures");
       sameBytes(built.data, reference.data, kind + ": the export holds the captured pictures where they were");
       assert.equal(liveJson(), replaced, kind + ": the replacement document is as it was left");
-      assert.equal(S.state.rows[0].imageRef.sha256, replacement.ref.sha256, kind + ": the live row keeps its new picture");
+      assert.equal(currentDocument().rows[0].imageRef.sha256, replacement.ref.sha256, kind + ": the live row keeps its new picture");
     });
   }
 });
@@ -352,7 +352,7 @@ rightToday("X21", "an export of a server document fetches its missing pictures f
     hosted.pointTabAt("");
     homeModule.documentLocation().updateConnection({ token: "", role: "", scope: "" });
     setBackend(createMemoryBackend());
-    clearDirty();
+    confirmSavedNow();
   }
 });
 

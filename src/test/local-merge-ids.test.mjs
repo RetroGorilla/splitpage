@@ -1,7 +1,7 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { offerFileMerge, openMergeReview, resetMergeOffer } from "../js/18a-local-merge.js";
@@ -36,7 +36,7 @@ async function review(mine, theirs) {
 }
 
 test("merge review: a scene only I hold named constructor is listed, and a scene __proto__ gets its number (#278)", async () => {
-  const saved = S.state;
+  const saved = currentDocument();
   try {
     const r = await review(
       doc([row("r1", "one"), row("__proto__", "two, mine"), row("constructor", "MINE ONLY")]),
@@ -51,7 +51,7 @@ test("merge review: a scene only I hold named constructor is listed, and a scene
 });
 
 test("merge review: a crew member named constructor that only one side holds is listed under that name (#278)", async () => {
-  const saved = S.state;
+  const saved = currentDocument();
   try {
     const r = await review(
       doc([row("r1", "one")], [{ id: "p1", name: "Sam" }]),

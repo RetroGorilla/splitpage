@@ -1,6 +1,6 @@
 import { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE, historyUtf8Length, sanitizeHistoryMeta } from "../../shared/history-policy.js";
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument, noteSessionEdit } from "../legacy/session-bridge.ts";
 import { checkServer, currentConn, currentHome, fileHome, homeConn, serverHomeId, serverStatus, setHome } from "../legacy/location-bridge.ts";
 import { normalizeServerUrl } from "../../shared/server-links.js";
 import { reassignDocId } from "./02b-doc-id.js";
@@ -9,66 +9,19 @@ import { isPristineSeedDocument } from "./03a-history-store.js";
 import { hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "./04-richtext.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
-import { openServerDoc, pointTabAt } from "./13-hosted.js";
-import { saveDoc } from "./14-export.js";
-import { openProjectFile } from "./18-local-files.js";
+import { showToast } from "./12-dirty-toast.js";
+import { pointTabAt } from "./13-hosted.js";
+import { openDocument } from "../legacy/transition-bridge.ts";
 import { flushDraftNow } from "./20g-drafts.js";
 import { draftResume, recoveryStarted } from "../legacy/recovery-bridge.ts";
-import { unsavedChanges } from "../legacy/save-bridge.ts";
-import { concatBytes, strBytes } from "../adapters/formats/bytes.ts";
+import { saveDoc, unsavedChanges } from "../legacy/save-bridge.ts";
+import { strBytes } from "../adapters/formats/bytes.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
-import { mimeForFilename } from "../../shared/file-names.js";
 import { startupReady } from "../legacy/startup-bridge.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort, restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
+import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
-
-export function makeDesktopHandle(entry) {
-  var id = entry.id;
-  var name = entry.name;
-  var handle = {
-    kind: "file",
-    name: name,
-    _desktopId: id,
-    getFile: function () {
-      return desktopPort().readFile(id).then(function (fresh) {
-        name = fresh.name || name;
-        handle.name = name;
-        var bytes = fresh.bytes instanceof Uint8Array ? fresh.bytes : new Uint8Array(fresh.bytes || []);
-        return new File([bytes], name, { lastModified: fresh.lastModified, type: mimeForFilename(name) });
-      });
-    },
-    createWritable: function () {
-      var chunks = [];
-      return Promise.resolve({
-        write: function (chunk) {
-          if (typeof chunk === "string") { chunks.push(strBytes(chunk)); return Promise.resolve(); }
-          if (chunk instanceof Blob) {
-            return chunk.arrayBuffer().then(function (buf) { chunks.push(new Uint8Array(buf)); });
-          }
-          if (chunk instanceof ArrayBuffer) { chunks.push(new Uint8Array(chunk)); return Promise.resolve(); }
-          if (ArrayBuffer.isView(chunk)) {
-            chunks.push(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
-            return Promise.resolve();
-          }
-          chunks.push(strBytes(String(chunk)));
-          return Promise.resolve();
-        },
-        close: function () {
-          return desktopPort().writeFile(id, concatBytes(chunks)).then(function (written) {
-            var stamp = written && written.lastModified;
-            return typeof stamp === "number" && isFinite(stamp) ? { lastModified: stamp } : undefined;
-          });
-        }
-      });
-    },
-    queryPermission: function () { return Promise.resolve("granted"); },
-    requestPermission: function () { return Promise.resolve("granted"); },
-    isSameEntry: function (other) { return !!other && other._desktopId === id; }
-  };
-  return handle;
-}
 
 var awaitingHandedDocument = false;
 var lastDesktopDocumentState = "";
@@ -429,7 +382,7 @@ export function initDesktop() {
     function proceed() {
       var handle = makeDesktopHandle(entry);
       handle.getFile().then(function (file) {
-        return openProjectFile(file, handle);
+        return openDocument({ kind: "file", file: file, handle: handle });
       }).catch(function () {
         showToast("Could not open " + ((entry && entry.name) || "that file") + ".", "error");
       }).then(handedDocumentSettled);
@@ -500,8 +453,7 @@ function openPendingServerDocForTab(serverDocId) {
   }
   var retried = false;
   function openIt() {
-    if (typeof openServerDoc !== "function") { handedDocumentSettled(); return; }
-    Promise.resolve(openServerDoc(serverDocId)).then(function (ok) {
+    openDocument({ kind: "server", id: serverDocId }).then(function (ok) {
       if (ok === false && !retried && needsAuth()) { retried = true; afterDetect(); return; }
       handedDocumentSettled();
     }, handedDocumentSettled);
@@ -1042,6 +994,6 @@ export function __init() {
       wireDesktopBlobs(desktopPort());
     },
     get tabId() { var port = desktopPort(); return port && port.tabId; },
-    markDirtyForTest: function () { markDirty(); }
+    markDirtyForTest: function () { noteSessionEdit(); }
   };
 }

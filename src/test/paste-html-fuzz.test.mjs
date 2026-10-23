@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { prng, genPaste } from "./_paste-gen.mjs";
 
 window.Element.prototype.scrollBy = function () {};
@@ -11,11 +11,11 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { cellFromClipboard } = await import("../js/05c-clipboard.js");
 const { fromHtml, toHtml, projection, commentIds } = await import("../js/04c-doc-model.js");
 const { undo, redo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -112,7 +112,7 @@ function fixture() {
 let opened = 0;
 async function open() {
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "fuzz-" + (++opened) + ".splitpage", { lastModified: opened });
-  await openProjectFile(file, null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
 }
 
@@ -160,17 +160,17 @@ function textLength(el) {
 
 function state() {
   return JSON.stringify({
-    rows: S.state.rows.map((r) => {
+    rows: currentDocument().rows.map((r) => {
       const copy = JSON.parse(JSON.stringify(r));
       delete copy.updatedAt;
       delete copy.updatedBy;
       return copy;
     }),
-    comments: S.state.comments.map((c) => [c.id, c.rowId, c.field])
+    comments: currentDocument().comments.map((c) => [c.id, c.rowId, c.field])
   });
 }
 
-const shots = () => S.state.brollShots.map((s) => s.id);
+const shots = () => currentDocument().brollShots.map((s) => s.id);
 
 test("seeded: pasting into the booted app keeps every cell clean and canonical, keeps broll ids unique, and is one undo step that undoes and redoes exactly", async () => {
   const realNow = Date.now;
@@ -205,16 +205,16 @@ test("seeded: pasting into the booted app keeps every cell clean and canonical, 
         const shotsAfter = shots();
         const grew = undoSizes().undo - entries;
         if (errors.length) failures.push(label + " error " + errors[0]);
-        S.state.rows.forEach((r) => {
+        currentDocument().rows.forEach((r) => {
           ["visualText", "audioText"].forEach((f) => {
             if (typeof r[f] === "string" && violation(r[f].replace(/<a class="video-embed-card"[^>]*>.*?<\/a>/g, ""))) failures.push(label + " " + r.id + "." + f + " not clean");
           });
         });
-        const keys = S.state.rows.flatMap((r) => Array.from(String(r.visualText + r.audioText).matchAll(/data-broll-id="([^"]*)"/g), (m) => m[1]));
+        const keys = currentDocument().rows.flatMap((r) => Array.from(String(r.visualText + r.audioText).matchAll(/data-broll-id="([^"]*)"/g), (m) => m[1]));
         if (keys.some((k) => !k) || new Set(keys).size !== keys.length) failures.push(label + " keys " + keys.join());
-        const migrated = migrateRows(JSON.parse(JSON.stringify(S.state)));
+        const migrated = migrateRows(JSON.parse(JSON.stringify(currentDocument())));
         migrated.rows.forEach((r, i) => {
-          if (r.visualText !== S.state.rows[i].visualText || r.audioText !== S.state.rows[i].audioText) failures.push(label + " not a migrate fixed point " + r.id);
+          if (r.visualText !== currentDocument().rows[i].visualText || r.audioText !== currentDocument().rows[i].audioText) failures.push(label + " not a migrate fixed point " + r.id);
         });
         if (grew > 1) failures.push(label + " entries " + grew);
         else if (grew === 1) {

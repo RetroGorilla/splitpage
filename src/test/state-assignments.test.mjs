@@ -16,12 +16,11 @@ const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { adoptRestoredState } = await import("../js/02b-doc-id.js");
 const { applyMerge } = await import("../js/03-sync.js");
-const { openServerDoc } = await import("../js/13-hosted.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { openLongDemo, startNewScript } = await import("../js/18b-file-menu.js");
 const { seedCheckPasses } = await import("../legacy/seed-check.ts");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -170,7 +169,7 @@ test("13-hosted openServerDoc: migrateDocument's answer through the live-documen
     { status: 200, headers: { "content-type": "application/json" } });
   useDesktopForTest({});
   try {
-    const got = await drive(() => openServerDoc("doc1"));
+    const got = await drive(() => openDocument({ kind: "server", id: "doc1" }));
     assert.equal(fixedPoint(only(got, "replaced")), true);
   } finally {
     globalThis.fetch = realFetch;
@@ -180,13 +179,13 @@ test("13-hosted openServerDoc: migrateDocument's answer through the live-documen
 
 test("18-local-files adoptProjectState, from a .splitpage file, through the live-document port: a migrateRows fixed point", async () => {
   const file = new File([buildSplitpageFile(exportDocumentOf(migrated("On disk")))], "disk.splitpage", { lastModified: 1 });
-  const got = await drive(() => openProjectFile(file, null, { skipSnapshot: true }));
+  const got = await drive(() => openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } }));
   assert.equal(fixedPoint(only(got, "replaced")), true);
 });
 
 test("18-local-files loadFileIntoEditor, from a .txt import, through the live-document port: a migrateRows fixed point", async () => {
   const file = new File(["Wide on the harbour\tEvery morning.\nClose\tMara mends nets."], "import.txt", { lastModified: 1 });
-  const got = await drive(() => openProjectFile(file, null, { skipSnapshot: true }));
+  const got = await drive(() => openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } }));
   assert.equal(fixedPoint(only(got, "replaced")), true);
 });
 

@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
 await bootApp();
@@ -10,8 +10,8 @@ const { cycleRowStatus } = await import("../js/01-scene-status.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { migrateRows } = await import("../js/02-state.js");
 const { setSceneLength } = await import("../js/05r-read-time.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -23,10 +23,10 @@ const doc = migrateRows({
     { id: "r2", visualText: "Close", audioText: "Two.", status: "todo" }
   ]
 });
-await openProjectFile(new File([buildSplitpageFile(exportDocumentOf(doc))], "counts.splitpage", { lastModified: 1 }), null, { skipSnapshot: true });
+await openDocument({ kind: "file", file: new File([buildSplitpageFile(exportDocumentOf(doc))], "counts.splitpage", { lastModified: 1 }), handle: null, options: { skipSnapshot: true } });
 
 test("the booted app holds the opened script, saved", () => {
-  assert.equal(S.state.title, "Edit counts");
+  assert.equal(currentDocument().title, "Edit counts");
   assert.equal(unsavedChanges(), false);
 });
 
@@ -64,7 +64,7 @@ test("in review mode a scene length is refused with a warning toast and has no o
   const host = document.getElementById("toast-host");
   host.textContent = "";
   const seq = saveChanges(), dirty = unsavedChanges(), generation = liveSession().generation(), sizes = undoSizes();
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   assert.equal(setSceneLength("r1", 30), false);
   const toasts = host.querySelectorAll(".toast");
   assert.equal(toasts.length, 1);
@@ -72,7 +72,7 @@ test("in review mode a scene length is refused with a warning toast and has no o
   assert.ok(toasts[0].classList.contains("warn"));
   await Promise.resolve();
   flushEdits();
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.equal(saveChanges(), seq);
   assert.equal(unsavedChanges(), dirty);
   assert.equal(liveSession().generation(), generation);
@@ -87,7 +87,7 @@ test("in review mode a status click is refused with a warning toast and has no o
   const host = document.getElementById("toast-host");
   host.textContent = "";
   const seq = saveChanges(), dirty = unsavedChanges(), generation = liveSession().generation(), sizes = undoSizes();
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   cycleRowStatus("r1");
   const toasts = host.querySelectorAll(".toast");
   assert.equal(toasts.length, 1);
@@ -95,7 +95,7 @@ test("in review mode a status click is refused with a warning toast and has no o
   assert.ok(toasts[0].classList.contains("warn"));
   await Promise.resolve();
   flushEdits();
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.equal(saveChanges(), seq);
   assert.equal(unsavedChanges(), dirty);
   assert.equal(liveSession().generation(), generation);
@@ -112,7 +112,7 @@ async function reviewClick(selector, wording) {
   const host = document.getElementById("toast-host");
   host.textContent = "";
   const seq = saveChanges(), dirty = unsavedChanges(), generation = liveSession().generation(), sizes = undoSizes();
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   target.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
   const toasts = host.querySelectorAll(".toast");
   assert.equal(toasts.length, 1);
@@ -120,7 +120,7 @@ async function reviewClick(selector, wording) {
   assert.ok(toasts[0].classList.contains("warn"));
   await Promise.resolve();
   flushEdits();
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.equal(saveChanges(), seq);
   assert.equal(unsavedChanges(), dirty);
   assert.equal(liveSession().generation(), generation);
@@ -166,7 +166,7 @@ test("in edit mode a click on the status button cycles the status and shows no t
   flushEdits();
   const target = document.querySelector('#rows .row[data-id="r1"] [data-action="cycle-status"]');
   assert.ok(target, "the status button is on the page");
-  const statusOf = () => S.state.rows.find(r => r.id === "r1").status;
+  const statusOf = () => currentDocument().rows.find(r => r.id === "r1").status;
   const before = statusOf(), seq = saveChanges();
   target.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
   assert.notEqual(statusOf(), before);

@@ -3,18 +3,16 @@ import { mintTagId } from "../core/document/tags.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
-import {
-  currentProductionIndex,
-  healTagRegistry,
-  productionEntries,
-  productionIndexStats,
-  registerProductionTag,
-  renameTag
-} from "../js/07-production-tags.js";
+import { healTagRegistry, productionIndexStats, registerProductionTag } from "../js/07-production-tags.js";
+import { renameTag, newBrollRecord } from "../application/commands/production-actions.ts";
+import { retagRewrites } from "../legacy/tag-rewrites.ts";
+import { sessionStamps } from "../legacy/session-bridge.ts";
+import { randomIds } from "../adapters/identity/ids.ts";
+import { productionIndex } from "../legacy/production-index-bridge.ts";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { deriveProductionIndex } from "../core/production/tags.ts";
-import { __init as initBroll, brollEntries, newBrollRecord, updateBrollBadge } from "../js/08c-broll.js";
+import { __init as initBroll, brollEntries, updateBrollBadge } from "../js/08c-broll.js";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { planBrollRecords } from "../core/production/broll.ts";
 import { seededHealRounds } from "./_heal-rounds.mjs";
@@ -33,7 +31,7 @@ const shot = (id, name, extra) => Object.assign({
 
 function load(over) {
   loadTestDocument(migrateRows(Object.assign({ schema: 2, title: "Shims", docId: "d" + "6".repeat(32), rows: [], comments: [] }, over)));
-  return S.state;
+  return currentDocument();
 }
 
 const countingIds = () => {
@@ -93,7 +91,7 @@ test("renaming a prop renames it on every shot that needs it, not only the first
       shot("b4", "cup", { props: [{ id: "t_kettle", name: "Kettle" }] })
     ]
   });
-  assert.ok(renameTag("prop", "Kettle", "Copper kettle"));
+  assert.ok(renameTag("prop", "Kettle", "Copper kettle", { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }));
   assert.deepEqual(s.brollShots.map((r) => r.props), [
     [{ id: "t_kettle", name: "Copper kettle" }],
     [],
@@ -144,21 +142,21 @@ test("a shot the core plan creates and one newBrollRecord stores serialise alike
   assert.equal(plan.create.length, 1);
   const planned = plan.create[0];
   const { id, name, desc, audioRef, location } = planned;
-  const stored = newBrollRecord({ id, name, desc, audioRef, location });
+  const stored = newBrollRecord({ id, name, desc, audioRef, location }, { run: runDocumentEdit, ids: randomIds });
   assert.equal(JSON.stringify(planned), JSON.stringify(stored));
-  assert.deepEqual(Object.keys(planned), Object.keys(newBrollRecord({})));
+  assert.deepEqual(Object.keys(planned), Object.keys(newBrollRecord({}, { run: runDocumentEdit, ids: randomIds })));
   assert.deepEqual(Object.keys(planned),
     ["id", "name", "desc", "status", "reshoot", "notes", "owner", "audioRef", "location", "props", "origin"]);
 });
 
 test("after a heal the cached core index carries the new ids, as the entries shown do (#326)", () => {
   load({ rows: [row("r1", "Put the " + tag("prop", "kettle") + " on.", "")], productionTags: [] });
-  S.state.productionTags = [];
-  assert.deepEqual(productionEntries().map((e) => e.id), [null]);
+  currentDocument().productionTags = [];
+  assert.deepEqual(productionIndex().entries(currentDocument()).map((e) => e.id), [null]);
   assert.equal(healTagRegistry(), 1);
-  assert.deepEqual(productionEntries().map((e) => e.id), [mintTagId("prop", "kettle")]);
-  assert.deepEqual(currentProductionIndex().entries.map((e) => e.id), [mintTagId("prop", "kettle")]);
-  assert.deepEqual(currentProductionIndex().unregistered, []);
+  assert.deepEqual(productionIndex().entries(currentDocument()).map((e) => e.id), [mintTagId("prop", "kettle")]);
+  assert.deepEqual(productionIndex().current(currentDocument()).entries.map((e) => e.id), [mintTagId("prop", "kettle")]);
+  assert.deepEqual(productionIndex().current(currentDocument()).unregistered, []);
 });
 
 test("after a heal the cached index is what a fresh derivation of the healed document gives, without re-deriving (#326)", () => {
@@ -168,18 +166,18 @@ test("after a heal the cached index is what a fresh derivation of the healed doc
       row("r2", tag("cast", "Ada") + " pours. " + tag("prop", "Mug"), tag("prop", "kettle") + " " + tag("vfx", "steam"))
     ]
   });
-  S.state.productionTags = [
+  currentDocument().productionTags = [
     { id: "t_kitchen", cat: "location", name: "Kitchen", owner: "", notes: "", status: "have" },
     { id: "t_ladder", cat: "prop", name: "Ladder", owner: "", notes: "n", status: "needed" }
   ];
-  const shown = productionEntries();
+  const shown = productionIndex().entries(currentDocument());
   const shownIds = shown.map((e) => e.id);
   const derivedBefore = productionIndexStats().derived;
   assert.equal(healTagRegistry(), 5);
   assert.equal(productionIndexStats().derived, derivedBefore, "the heal re-derived the index");
-  const fresh = deriveProductionIndex(S.state, productionReaders);
-  assert.deepEqual(currentProductionIndex(), fresh);
-  assert.deepEqual(productionEntries().map((e) => [e.key, e.id]), fresh.entries.map((e) => [e.key, e.id]));
+  const fresh = deriveProductionIndex(currentDocument(), productionReaders);
+  assert.deepEqual(productionIndex().current(currentDocument()), fresh);
+  assert.deepEqual(productionIndex().entries(currentDocument()).map((e) => [e.key, e.id]), fresh.entries.map((e) => [e.key, e.id]));
   assert.notDeepEqual(shownIds, fresh.entries.map((e) => e.id));
   assert.deepEqual(shown.map((e) => e.id), shownIds, "an entry already handed out keeps its old id: the heal writes into no entry it handed out");
   assert.equal(healTagRegistry(), 0);
@@ -189,33 +187,33 @@ test("after a heal the cached index is what a fresh derivation of the healed doc
 test("a name the registry refuses stays unregistered after a heal, after the names it took in, as a fresh derivation lists it (#377)", () => {
   const refused = String.fromCharCode(0x2060);
   load({ rows: [row("r1", tag("prop", "kettle") + " " + tag("prop", refused) + " " + tag("prop", "mug"), "")] });
-  S.state.productionTags = [];
-  const shown = productionEntries();
+  currentDocument().productionTags = [];
+  const shown = productionIndex().entries(currentDocument());
   assert.deepEqual(shown.map((e) => e.name), ["kettle", refused, "mug"]);
   const derivedBefore = productionIndexStats().derived;
   assert.equal(healTagRegistry(), 2, "the heal counts the names it took in, not the one the registry refused");
   assert.equal(productionIndexStats().derived, derivedBefore, "the heal re-derived the index");
-  assert.deepEqual(S.state.productionTags.map((t) => t.name), ["kettle", "mug"]);
+  assert.deepEqual(currentDocument().productionTags.map((t) => t.name), ["kettle", "mug"]);
   const want = [["kettle", mintTagId("prop", "kettle")], ["mug", mintTagId("prop", "mug")], [refused, null]];
-  assert.deepEqual(currentProductionIndex().entries.map((e) => [e.name, e.id]), want);
-  assert.deepEqual(productionEntries().map((e) => [e.name, e.id]), want);
-  assert.deepEqual(currentProductionIndex().unregistered.map((t) => t.name), [refused]);
-  assert.deepEqual(currentProductionIndex(), deriveProductionIndex(S.state, productionReaders));
+  assert.deepEqual(productionIndex().current(currentDocument()).entries.map((e) => [e.name, e.id]), want);
+  assert.deepEqual(productionIndex().entries(currentDocument()).map((e) => [e.name, e.id]), want);
+  assert.deepEqual(productionIndex().current(currentDocument()).unregistered.map((t) => t.name), [refused]);
+  assert.deepEqual(productionIndex().current(currentDocument()), deriveProductionIndex(currentDocument(), productionReaders));
   assert.deepEqual(shown.map((e) => [e.name, e.id]), [["kettle", null], [refused, null], ["mug", null]], "the entries handed out before the heal keep the ids they were handed out with");
   assert.equal(healTagRegistry(), 0);
   assert.equal(productionIndexStats().derived, derivedBefore, "a heal with nothing to take in re-derived the index");
-  assert.deepEqual(currentProductionIndex().entries.map((e) => [e.name, e.id]), want);
-  assert.deepEqual(currentProductionIndex(), deriveProductionIndex(S.state, productionReaders));
+  assert.deepEqual(productionIndex().current(currentDocument()).entries.map((e) => [e.name, e.id]), want);
+  assert.deepEqual(productionIndex().current(currentDocument()), deriveProductionIndex(currentDocument(), productionReaders));
 });
 
 test("a heal that only meets names the registry refuses counts nothing and keeps the index (#377)", () => {
   load({ rows: [row("r1", tag("prop", String.fromCharCode(0xad)) + " " + tag("cast", String.fromCharCode(0x200d)), tag("prop", "kettle"))] });
-  S.state.productionTags = [{ id: "t_kettle", cat: "prop", name: "kettle", owner: "", notes: "", status: "have" }];
-  const index = currentProductionIndex();
+  currentDocument().productionTags = [{ id: "t_kettle", cat: "prop", name: "kettle", owner: "", notes: "", status: "have" }];
+  const index = productionIndex().current(currentDocument());
   assert.equal(index.unregistered.length, 2);
   assert.equal(healTagRegistry(), 0);
-  assert.equal(currentProductionIndex(), index, "a heal that took nothing in replaced the index");
-  assert.deepEqual(S.state.productionTags.map((t) => t.id), ["t_kettle"]);
+  assert.equal(productionIndex().current(currentDocument()), index, "a heal that took nothing in replaced the index");
+  assert.deepEqual(currentDocument().productionTags.map((t) => t.id), ["t_kettle"]);
 });
 
 test("seeded documents: after a heal, and after an edit and a second heal, both index views agree with a fresh derivation, entries handed out before keep their ids, and a heal right after counts nothing (#326, #377)", () => {
