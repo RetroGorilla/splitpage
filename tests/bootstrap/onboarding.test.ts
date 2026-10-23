@@ -12,8 +12,8 @@ test("wired onboarding replaces its mount, closes on file choices and disables s
   document.body.innerHTML = '<div id="onboarding-modal" hidden><button data-onboard-action="skip"></button></div>';
   const modal = document.getElementById("onboarding-modal");
   assert.ok(modal);
-  loadTestDocument({ rows: [] });
   const stopPreferences = startPreferences();
+  loadTestDocument({ rows: [] });
   let closed = 0;
   const stopPanels = startSidePanels({
     registerPanel: () => () => {}, registerPage: () => () => {}, open: () => {}, close: () => {},
