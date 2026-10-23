@@ -4,7 +4,6 @@ import "./_preferences-started.mjs";
 import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../js/02-state.js";
@@ -32,7 +31,6 @@ import { prompterSceneHtml, trimPrompterCell } from "../js/20-teleprompter.js";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
-initSceneStatus();
 
 const T = (text, marks) => ({ text, marks: marks || {} });
 const C = (text, marks) => ({ text, marks: Object.assign({ cue: true }, marks || {}) });

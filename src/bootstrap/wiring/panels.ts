@@ -1,6 +1,6 @@
 import { currentDocument, onRefresh, onSessionChange } from "../../legacy/session-bridge.ts";
 import { onPreferenceChange, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
-import { onScriptStats, statsFollowChange, updateScriptStats } from "../../js/01-scene-status.js";
+import { onScriptStats, statsFollowChange, updateScriptStats } from "./scene-status.ts";
 import { onHistoryChange } from "../../js/03a-history-store.js";
 import { renderHistory } from "../../js/03-sync.js";
 import { onTagged } from "../../js/07-production-tags.js";

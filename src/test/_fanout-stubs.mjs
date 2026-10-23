@@ -1,5 +1,5 @@
 import { viewFlags } from "../legacy/preferences-bridge.ts";
-import { currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
+import { REVIEW_ONLY, currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import { productionReaders as documentReaders } from "../legacy/document-ports.ts";
 import { hasSetLength as coreHasSetLength } from "../core/document/timing.ts";
 import { noteEdit } from "../js/12a-undo.js";
@@ -96,5 +96,18 @@ export function readTimePorts() {
     paint: { afterThisPaint },
     review: { reviewing: reviewMode },
     notices: { show: showToast }
+  };
+}
+
+export function sceneStatusPorts() {
+  return {
+    document: { current: currentDocument, read: readSession },
+    edits: { run: runCommand, stamps: sessionStamps },
+    reviewRefusal: REVIEW_ONLY,
+    text: { productionReaders: documentReaders },
+    notices: { show: showToast },
+    hideShot: () => viewFlags().hideShot(),
+    shots: shotHiding(),
+    element: (id) => document.getElementById(id)
   };
 }

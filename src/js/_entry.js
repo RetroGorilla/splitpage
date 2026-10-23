@@ -1,5 +1,4 @@
 import { __init as init_00_prelude } from "./00-prelude.js";
-import { __init as init_01_scene_status } from "./01-scene-status.js";
 import { __init as init_01b_hide_shot } from "./01b-hide-shot.js";
 import { __init as init_02_state } from "./02-state.js";
 import { __init as init_02b_doc_id } from "./02b-doc-id.js";
@@ -61,7 +60,7 @@ import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireApp, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountHelpFeature, mountGalleryFeature } from "../bootstrap/wiring.ts";
+import { wireApp, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountHelpFeature, mountGalleryFeature, mountSceneStatusFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -87,7 +86,7 @@ try {
 }
 if (wiring) {
   init_00_prelude();
-  init_01_scene_status();
+  mountSceneStatusFeature();
   init_01b_hide_shot();
   init_02_state();
   init_02b_doc_id();

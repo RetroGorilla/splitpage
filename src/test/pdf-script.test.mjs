@@ -4,7 +4,6 @@ import { liveDoc } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
@@ -21,7 +20,6 @@ import { buildPdf, pdfTextWidth } from "../adapters/formats/pdf.ts";
 import { LONG_DEMO } from "../js/_starters.js";
 import { loadTestDocument } from "./_document.mjs";
 
-initStatus();
 initTags();
 
 const M = 54, PW = 612;

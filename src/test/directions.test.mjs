@@ -6,7 +6,6 @@ import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../js/02-state.js";
@@ -35,7 +34,6 @@ import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
-initSceneStatus();
 
 const T = (text, marks) => ({ text, marks: marks || {} });
 const D = (text, marks) => ({ text, marks: Object.assign({ dir: true }, marks || {}) });

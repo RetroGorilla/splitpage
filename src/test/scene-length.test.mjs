@@ -1,5 +1,5 @@
 import { rowContentEqual } from "../core/merge/rows.ts";
-import { hasSetLength, parseSceneLength } from "../core/document/timing.ts";
+import { hasSetLength, normalizeSceneLength, parseSceneLength } from "../core/document/timing.ts";
 import "./_dom.mjs";
 import "./_export-services-started.mjs";
 import "./_project-file-services-started.mjs";
@@ -7,12 +7,7 @@ import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import {
-  __init as initSceneStatus,
-  normalizeSceneLength,
-  totalSeconds
-} from "../js/01-scene-status.js";
-import { estimatedSeconds, rowSeconds } from "../core/production/timing.ts";
+import { estimatedSeconds, rowSeconds, totalSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
@@ -26,7 +21,6 @@ import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
-initSceneStatus();
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
@@ -97,7 +91,7 @@ test("a set length replaces the estimate outright, shorter or longer", () => {
   withState(s, () => {
     assert.deepEqual(s.rows.map((row) => rowSeconds(row, s, productionReaders)), [2, 30, 12, 4]);
     assert.equal(estimatedSeconds(s.rows[0], s, productionReaders), 4, "the estimate is still there to compare with");
-    assert.equal(totalSeconds(), 48);
+    assert.equal(totalSeconds(currentDocument(), productionReaders), 48);
   });
 });
 

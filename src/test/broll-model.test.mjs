@@ -3,7 +3,6 @@ import "./_export-services-started.mjs";
 import { liveDoc, printData } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { __init as initStatus } from "../js/01-scene-status.js";
 import { escapeHtml, migrateRows } from "../js/02-state.js";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { cellOf, normalizeCell } from "../js/04c-doc-model.js";
@@ -27,7 +26,6 @@ import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 import { loadTestDocument } from "./_document.mjs";
 
 brollInit();
-initStatus();
 
 function brollFieldLines(body) {
   hoistNestedBrs(body);

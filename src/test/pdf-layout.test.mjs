@@ -4,7 +4,6 @@ import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
@@ -13,7 +12,6 @@ import { buildPdf, pdfCommentImagesFor } from "../adapters/formats/pdf.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { loadTestDocument } from "./_document.mjs";
 
-initStatus();
 initTags();
 
 const PH = 792, M = 54;

@@ -7,7 +7,7 @@ import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 await bootApp();
 
 const { liveSession } = await import("../legacy/session-bridge.ts");
-const { cycleRowStatus } = await import("../js/01-scene-status.js");
+const { cycleRowStatus } = await import("../bootstrap/wiring/scene-status.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { render } = await import("../js/05-render.js");
 const { setSceneLength } = await import("../features/rows/read-time.js");

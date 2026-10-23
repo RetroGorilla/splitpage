@@ -6,7 +6,6 @@ import "./_export-services-started.mjs";
 import "./_project-file-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { STATE_FIELDS, migrateRows, missingStateFields } from "../js/02-state.js";
@@ -19,7 +18,6 @@ import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
 
-initSceneStatus();
 initTags();
 
 const copy = (o) => JSON.parse(JSON.stringify(o));

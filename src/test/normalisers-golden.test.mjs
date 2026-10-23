@@ -7,7 +7,7 @@ import { withPageHead } from "../js/02b-doc-id.js";
 import { plainName, plainText, safeHref, safeId, safeImageSrc, sanitizeHtml } from "../js/04-richtext.js";
 import { directionShortcut, importDirections } from "../js/04c-doc-model.js";
 import { normalizePersonColors } from "../core/document/person-colors.ts";
-import { normalizeSceneLength, normalizeTargetLength } from "../js/01-scene-status.js";
+import { normalizeSceneLength, normalizeTargetLength } from "../core/document/timing.ts";
 import { migrateGallery, normalizeMarks, normalizePictureName, normalizeVideoLink, normalizeVideoLinks } from "../adapters/storage/02d-gallery.js";
 import { assertGolden, goldenNames, mintedId, updatingGoldens } from "./golden-helpers.mjs";
 
