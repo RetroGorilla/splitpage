@@ -3,8 +3,7 @@ import {
   fileMenuOpen,
   keyChipWords,
   keyChipsHtml,
-  refreshFileMenu,
-  toggleFileMenu
+  refreshFileMenu
 } from "./18b-file-menu.js";
 import { exportActionName, exportActionReason } from "./18c-export-dialog.js";
 import { runExportAction } from "./18-local-files.js";
@@ -233,7 +232,7 @@ export function commandMenuOpen() {
 
 export function openCommandMenu() {
   if (commandMenuOpen()) return false;
-  if (fileMenuOpen()) toggleFileMenu(false);
+  if (fileMenuOpen()) appActions.invoke("close-file-menu", "button");
   var ae = document.activeElement;
   var range = null;
   var sel = window.getSelection && window.getSelection();

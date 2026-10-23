@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 const bridge = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
+const { changeSet } = await import("../application/session/change-set.ts");
 const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");
 
 const unwired = unwiredSessionDeps();
@@ -82,4 +83,20 @@ test("a listener stopped and registered again on the same session hears each cha
   bridge.runCommand(sceneLengthCommand("r1", 55, bridge.sessionStamps));
   stop();
   assert.deepEqual(heard.filter((h) => h[0] === "again"), [["again", "edit"]]);
+});
+
+test("a stamp listener hears each applied stamp's change set, and not a stamp that changed nothing or a stopped listener", () => {
+  heard.length = 0;
+  const stamped = [];
+  const stop = bridge.onStamped((changes) => { stamped.push(changes.docFields.slice()); });
+  const retitle = (title) => ({
+    name: "retitle",
+    plan: (doc) => doc.title === title ? null : { changes: changeSet({ docFields: ["title"] }), apply: (live) => { live.title = title; } }
+  });
+  assert.equal(bridge.stampDocument(retitle("Stamped")).kind, "applied");
+  assert.equal(bridge.stampDocument(retitle("Stamped")).kind, "noop");
+  stop();
+  bridge.stampDocument(retitle("Unheard"));
+  assert.deepEqual(stamped, [["title"]]);
+  assert.deepEqual(heard, [], "a stamp is not a session change");
 });
