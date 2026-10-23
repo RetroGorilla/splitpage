@@ -10,11 +10,13 @@ import type { PictureStore } from "../../src/application/media/picture-store.ts"
 import type { SaveOwnershipPort } from "../../src/application/save/coordinator.ts";
 import type { OperationContext } from "../../src/application/session/operation.ts";
 import type { ImageRef } from "../../src/core/document/ports.ts";
-import type { DocumentView, SessionListener } from "../../src/application/session/document-session.ts";
 import type { DocumentReader } from "../../src/application/session/document-reader.ts";
-import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
 import type { ViewFlags } from "../../src/application/preferences/view-flags.ts";
 import type { SidePanels } from "../../src/application/side-panels.ts";
+import type { Command, CommandOutcome, DocumentView, SessionListener } from "../../src/application/session/document-session.ts";
+import type { UndoControl } from "../../src/application/editing/undo-control.ts";
+import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
+import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
 import type { TextServices } from "../../src/application/text/services.ts";
 
 export function fakeTextServices(document: Document) {
@@ -239,6 +241,28 @@ export function fakeReview(initial = false) {
     setReviewing: (on: boolean): void => { reviewing = on; },
     refusals: (): number => refusals
   };
+}
+
+export function fakeEdits(answer: CommandOutcome = { kind: "noop" }) {
+  const ran: Command[] = [];
+  let outcome = answer;
+  const edits: Pick<DocumentEdits, "run" | "stamps"> = {
+    run: (command) => {
+      ran.push(command);
+      return outcome;
+    },
+    stamps: { clock: { nowIso: () => "2026-01-01T00:00:00.000Z" }, editor: { name: () => "Tester" } }
+  };
+  return { edits, ran, answer: (next: CommandOutcome): void => { outcome = next; } };
+}
+
+export function fakeUndo() {
+  const calls: string[] = [];
+  const undo: Pick<UndoControl, "undo" | "redo"> = {
+    undo: () => { calls.push("undo"); },
+    redo: () => { calls.push("redo"); }
+  };
+  return { undo, calls };
 }
 
 export function fakeSaveState(initial: { unsaved?: boolean; busy?: boolean } = {}) {
