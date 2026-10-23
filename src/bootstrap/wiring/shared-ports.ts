@@ -6,6 +6,7 @@ import type { ExternalLinks } from "../../application/desktop-presence.ts";
 import type { EditorSelectionPort } from "../../application/editing/selection.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { ExportRegistry } from "../../application/export/registry.ts";
+import type { FileDelivery } from "../../application/files/file-delivery.ts";
 import type { RecentFiles } from "../../application/files/recent-files.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
@@ -25,6 +26,7 @@ import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import { blobImgHtml, bytesForSync, dataUrlForSync, ensureBytes, intern, internDataUrl, isDurableSync, persist, queuePersist, recordFor, urlForSync } from "../../adapters/storage/02c-blobs.js";
 import { arrivingOnLink } from "../../js/13-hosted.js";
 import { appActions } from "../../legacy/app-actions.ts";
+import { deliverFile } from "../../legacy/file-delivery.ts";
 import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
@@ -204,6 +206,10 @@ const recents: RecentFiles = {
   routeOpen: (request) => desktopPort()?.routeOpen(request)
 };
 
+const fileDelivery: FileDelivery = {
+  deliver: (filename, data, options) => deliverFile(filename, data, options)
+};
+
 const transitions: Transitions<DocumentDestination> = {
   open: (opening) => documentTransitions().open(opening),
   startNew: (arrival) => documentTransitions().startNew(arrival),
@@ -232,6 +238,7 @@ const shared = {
   ownership,
   pictures,
   recents,
+  fileDelivery,
   undo: undoControl,
   transitions
 };
