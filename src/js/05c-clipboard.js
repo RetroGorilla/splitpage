@@ -11,7 +11,7 @@ import {
   sliceCell,
   toHtml
 } from "./04c-doc-model.js";
-import { cellSelection } from "../features/editing/cell-selection.ts";
+import { cellSelection } from "../features/common/cell-selection.ts";
 import { cellEditing, paintGuard } from "../legacy/editor-bridge.ts";
 import { brollSeedOf } from "./08c-broll.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";

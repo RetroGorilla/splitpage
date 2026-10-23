@@ -1,5 +1,5 @@
 import type { CellPage } from "../../application/editing/cell-editing.ts";
-import { cellSelection, setCellSelection } from "./cell-selection.ts";
+import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
 
 export interface CellPagePorts {
   readonly storedHtml: (html: string) => string;
