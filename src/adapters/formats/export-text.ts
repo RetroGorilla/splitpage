@@ -9,7 +9,8 @@ import type { SceneFacts, ShotRecord } from "./export-projections.ts";
 import { capturedPicture, capturedRowPicture, exportAssetsNow } from "./export-assets.ts";
 import { rowImageDataUrl } from "../storage/02c-blobs.js";
 import { rowImage, rowImageKey } from "../../core/document/media.ts";
-import { morePictureRefs, rowVideoLinks, videoLinkLabel, videoLinkText } from "../storage/02d-gallery.js";
+import { morePictureRefs, rowVideoLinks, videoLinkText } from "../storage/02d-gallery.js";
+import { videoLinkLabel } from "../../core/document/gallery.ts";
 import {
   breakdownGroups,
   brollSummaryText,

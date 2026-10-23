@@ -1,35 +1,13 @@
-import {
-  annotateGallerySlot,
-  moveGallerySlot,
-  removeGallerySlot,
-  rowSlots,
-  setVideoThumbnail,
-  videoLinkKey,
-  videoLinkLabel
-} from "../adapters/storage/02d-gallery.js";
-import { rowIndexOf } from "../core/document/rows.ts";
-import { currentDocument, readSession } from "../legacy/session-bridge.ts";
-import { cssAttr } from "../features/common/dom.ts";
-import { slotPoster } from "../features/common/gallery.ts";
-import {
-  galleryBadgeHtml,
-  gallerySlotPictureHtml
-} from "./05-render.js";
-import { embedRefusal, fetchThumbnailRecord, playerSrc, thumbnailsAllowed } from "./05v-video.js";
-import { hasSessionVideo, sessionVideoUrl } from "./06-rows.js";
-import { appActions } from "../legacy/app-actions.ts";
-import { breakUndoCoalescing, lastUndoEntry, undo } from "../legacy/undo-bridge.ts";
-import { videoHostLabel } from "../adapters/formats/video-host.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
-import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
-import { cellEditing, pickPictureFor } from "../legacy/editor-bridge.ts";
-import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
-import { formatVideoLength } from "../../shared/text.js";
-import { embeddableVideo } from "../../shared/video-embed.js";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
-import { PREF_EVENT, preferences } from "../legacy/preferences-bridge.ts";
-import { reviewMode } from "../legacy/location-bridge.ts";
+import { annotateGallerySlot, moveGallerySlot, removeGallerySlot, rowSlots, setVideoThumbnail, videoLinkKey, videoLinkLabel } from "../../core/document/gallery.ts";
+import { rowIndexOf } from "../../core/document/rows.ts";
+import { escapeHtml } from "../../core/document/text-policy.ts";
+import { cssAttr } from "../common/dom.ts";
+import { slotPoster } from "../common/gallery.ts";
+import { formatVideoLength } from "../../../shared/text.js";
+import { embeddableVideo } from "../../../shared/video-embed.js";
+import { runningOnDesktop } from "../../application/desktop-presence.ts";
 
+var ports = null;
 var view = null;
 var returnFocus = null;
 var dragFrom = -1;
@@ -37,8 +15,8 @@ var dragFrom = -1;
 function modal() { return document.getElementById("gallery-modal"); }
 
 function rowOf(rowId) {
-  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
-  return idx === -1 ? null : { row: currentDocument().rows[idx], index: idx };
+  var idx = ports.document.read(function (doc) { return rowIndexOf(doc, rowId); });
+  return idx === -1 ? null : { row: ports.document.current().rows[idx], index: idx };
 }
 
 function shownSlots(slots) {
@@ -103,7 +81,7 @@ function paint() {
   if (!shown.length) { view.videos = false; shown = shownSlots(slots); }
   if (shown.indexOf(view.sel) === -1) view.sel = shown[Math.min(shown.length - 1, Math.max(0, view.sel))] || 0;
   if (view.sel >= slots.length) view.sel = slots.length - 1;
-  var review = reviewMode();
+  var review = ports.review.reviewing();
   var n = slots.length;
   var pictures = slots.filter(function (s) { return (s.ref || s.dataUrl) && !slotPoster(s); }).length;
   var videos = 0;
@@ -138,7 +116,7 @@ function paint() {
   if (playing) {
     inner = playerHtml(poster, play);
   } else {
-    inner = gallerySlotPictureHtml(slot) +
+    inner = ports.render.slotPictureHtml(slot) +
       (poster && !still && !(play && (play.note || play.can)) ? '<svg class="scene-gallery-preview-none" aria-hidden="true"><use href="#i-camera"/></svg>' : '') +
       '<span class="scene-gallery-position">' + (pos + 1) + ' / ' + shown.length + '</span>' +
       (poster ? '<span class="scene-gallery-kind"><svg aria-hidden="true"><use href="#i-play"/></svg>' +
@@ -170,12 +148,12 @@ function paint() {
 
   var caption = slot.links.length
     ? slot.links.map(function (l) {
-        return '<div class="scene-gallery-line"><span class="scene-gallery-host">' + escapeHtml(videoHostLabel(l)) + '</span>' +
+        return '<div class="scene-gallery-line"><span class="scene-gallery-host">' + escapeHtml(ports.video.hostLabel(l)) + '</span>' +
           '<button type="button" class="scene-gallery-link' + (l.href ? '' : ' is-file') + '" data-gact="link" data-key="' +
           escapeHtml(videoLinkKey(l)) + '" title="' + escapeHtml(l.href || l.name) + '">' + escapeHtml(videoLinkLabel(l)) + '</button></div>';
       }).join("")
     : '<div class="scene-gallery-line is-name">' + escapeHtml(slot.name || (poster ? "" : "Picture " + (sel + 1))) + '</div>';
-  var retry = !review && poster && !still && embeddableVideo(poster) && thumbnailsAllowed()
+  var retry = !review && poster && !still && embeddableVideo(poster) && ports.video.thumbnailsAllowed()
     ? '<button type="button" class="btn-outline" data-gact="retry-thumb" data-key="' + escapeHtml(videoLinkKey(poster)) + '"' +
       (view.fetching === videoLinkKey(poster) ? ' disabled aria-busy="true"' : '') + '>Retry thumbnail</button>'
     : '';
@@ -202,7 +180,7 @@ function paint() {
       '" data-gact="pick" data-slot="' + i + '"' + (review ? '' : ' draggable="true"') +
       ' aria-label="' + escapeHtml((p ? "Video " : "Picture ") + (i + 1) + (p ? ": " + videoLinkLabel(p) : s.name ? ": " + s.name : "")) + '"' +
       (i === sel ? ' aria-current="true"' : '') + '>' +
-      gallerySlotPictureHtml(s) + (p ? galleryBadgeHtml(false) : '') + '<span class="scene-gallery-num">' + (i + 1) + '</span></button></li>';
+      ports.render.slotPictureHtml(s) + (p ? ports.render.badgeHtml(false) : '') + '<span class="scene-gallery-num">' + (i + 1) + '</span></button></li>';
     if (!view.videos && n > 4 && k === 2) {
       grid += '<li class="scene-gallery-divider" aria-hidden="true"><span>behind</span> ' +
         '<span class="scene-gallery-divider-count">+' + (n - 3) + '</span></li>';
@@ -252,10 +230,10 @@ function playState(poster) {
   if (poster.href) {
     var v = embeddableVideo(poster);
     if (!v) return null;
-    var why = view.refused === key ? "The player couldn’t load here." : embedRefusal(v);
+    var why = view.refused === key ? "The player couldn’t load here." : ports.video.embedRefusal(v);
     return why ? { note: why } : { can: true, embed: v };
   }
-  if (hasSessionVideo(poster)) return { can: true, file: true };
+  if (ports.sessionVideos.has(poster)) return { can: true, file: true };
   return { note: "Only this video’s name is kept, so it can’t play here. Drop the file on this scene again to play it." };
 }
 
@@ -273,11 +251,11 @@ function playButtonHtml(poster, play) {
 
 function playerHtml(poster, play) {
   if (play.file) {
-    var url = sessionVideoUrl(poster);
+    var url = ports.sessionVideos.url(poster);
     return url ? '<video class="scene-gallery-player" src="' + escapeHtml(url) + '" controls autoplay playsinline></video>'
       : noteHtml(poster, "This video couldn’t be read here.");
   }
-  var p = playerSrc(play.embed);
+  var p = ports.video.playerSrc(play.embed);
   if (!p) return noteHtml(poster, "The player couldn’t load here.");
   return '<iframe class="scene-gallery-player" src="' + escapeHtml(p.src) + '" data-src="' + escapeHtml(p.real) + '"' +
     ' title="' + escapeHtml(hostName(play) + " player: " + videoLinkLabel(poster)) + '"' +
@@ -306,19 +284,19 @@ function retryThumbnail() {
   var rowId = view.rowId;
   var slot = rowSlots(rowOf(rowId).row)[view.sel];
   var poster = slot && slotPoster(slot);
-  if (!poster || !poster.href || reviewMode()) return;
+  if (!poster || !poster.href || ports.review.reviewing()) return;
   var key = videoLinkKey(poster);
-  var ctx = captureOperation();
+  var ctx = ports.ownership.capture();
   view.fetching = key;
   paint();
-  fetchThumbnailRecord(poster.href).then(function (rec) {
+  ports.video.fetchThumbnail(poster.href).then(function (rec) {
     if (view && view.fetching === key) view.fetching = null;
-    if (!stillOwns(ctx)) {
+    if (!ports.ownership.stillOwns(ctx)) {
       if (view) refreshGalleryOverlay();
       return;
     }
-    var done = rec && rowOf(rowId) && cellEditing().editGallery(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); });
-    if (!done) showToast("Could not get this video’s thumbnail — you may be offline, or the video is private or gone.", "warn");
+    var done = rec && rowOf(rowId) && ports.cells.editGallery(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); });
+    if (!done) ports.notices.show("Could not get this video’s thumbnail — you may be offline, or the video is private or gone.", "warn");
     if (view && view.rowId === rowId) refreshGalleryOverlay();
   });
 }
@@ -334,12 +312,12 @@ function revealPicked(grid) {
 }
 
 export function announceGalleryEdit(msg, before) {
-  var entry = lastUndoEntry();
-  breakUndoCoalescing();
-  if (!entry || entry === before) { showToast(msg, "ok"); return; }
-  showActionToast(msg, "ok", "Undo", function () {
-    if (lastUndoEntry() === entry) undo();
-    else showToast("Something else has changed since — Ctrl+Z undoes one step at a time.", "warn");
+  var entry = ports.undo.last();
+  ports.undo.breakCoalescing();
+  if (!entry || entry === before) { ports.notices.show(msg, "ok"); return; }
+  ports.notices.showAction(msg, "ok", "Undo", function () {
+    if (ports.undo.last() === entry) ports.undo.undo();
+    else ports.notices.show("Something else has changed since — Ctrl+Z undoes one step at a time.", "warn");
   });
 }
 
@@ -358,31 +336,31 @@ function step(by) {
 }
 
 function moveTo(from, to) {
-  if (reviewMode() || from === to) return;
+  if (ports.review.reviewing() || from === to) return;
   var rowId = view.rowId;
-  if (cellEditing().editGallery(rowId, "Moved to " + (to + 1), function (row) { return moveGallerySlot(row, from, to); })) {
+  if (ports.cells.editGallery(rowId, "Moved to " + (to + 1), function (row) { return moveGallerySlot(row, from, to); })) {
     view.sel = to;
     refreshGalleryOverlay();
   }
 }
 
 function makeCover() {
-  if (reviewMode() || !view.sel) return;
+  if (ports.review.reviewing() || !view.sel) return;
   var from = view.sel;
   var rowId = view.rowId;
-  if (cellEditing().editGallery(rowId, "Made the cover", function (row) { return moveGallerySlot(row, from, 0); })) {
+  if (ports.cells.editGallery(rowId, "Made the cover", function (row) { return moveGallerySlot(row, from, 0); })) {
     view.sel = 0;
     refreshGalleryOverlay();
   }
 }
 
 function removeSelected() {
-  if (reviewMode()) return;
+  if (ports.review.reviewing()) return;
   var at = view.sel;
   var rowId = view.rowId;
   var slot = rowSlots(rowOf(rowId).row)[at];
   var what = slotPoster(slot) ? "Video" : "Picture";
-  cellEditing().editGallery(rowId, what + " removed", function (row) { return removeGallerySlot(row, at); });
+  ports.cells.editGallery(rowId, what + " removed", function (row) { return removeGallerySlot(row, at); });
   if (view) {
     view.sel = Math.max(0, at - 1);
     refreshGalleryOverlay();
@@ -390,13 +368,13 @@ function removeSelected() {
 }
 
 function removeAnnotations() {
-  if (reviewMode()) return;
+  if (ports.review.reviewing()) return;
   var at = view.sel;
   var slot = rowSlots(rowOf(view.rowId).row)[at];
   if (!slot || !slot.annotation) return;
   var original = slot.annotation.imageRef;
-  if (!cellEditing().editGallery(view.rowId, "Annotations removed", function (row) { return annotateGallerySlot(row, at, null, original, []); })) {
-    showToast("Could not go back to the original — the gallery already shows that picture.", "warn");
+  if (!ports.cells.editGallery(view.rowId, "Annotations removed", function (row) { return annotateGallerySlot(row, at, null, original, []); })) {
+    ports.notices.show("Could not go back to the original — the gallery already shows that picture.", "warn");
     return;
   }
   var btn = modal().querySelector('[data-gact="annotate"]');
@@ -413,14 +391,14 @@ function onClick(e) {
   else if (act === "pick") pick(Number(el.getAttribute("data-slot")));
   else if (act === "cover") makeCover();
   else if (act === "remove") removeSelected();
-  else if (act === "annotate") appActions.invoke("annotate-picture", "button", { rowId: view.rowId, slot: view.sel });
+  else if (act === "annotate") ports.actions.invoke("annotate-picture", "button", { rowId: view.rowId, slot: view.sel });
   else if (act === "unannotate") removeAnnotations();
   else if (act === "all") { view.videos = false; paint(); }
   else if (act === "play") startPlaying();
   else if (act === "zoom") openZoom();
   else if (act === "retry-thumb") retryThumbnail();
-  else if (act === "open" || act === "link") appActions.invoke("open-picture-link", "button", { rowId: view.rowId, slot: view.sel, key: el.getAttribute("data-key") });
-  else if (act === "add") pickPictureFor(view.rowId);
+  else if (act === "open" || act === "link") ports.actions.invoke("open-picture-link", "button", { rowId: view.rowId, slot: view.sel, key: el.getAttribute("data-key") });
+  else if (act === "add") ports.pickPicture(view.rowId);
 }
 
 function onKeydown(e) {
@@ -447,7 +425,7 @@ function onKeydown(e) {
     }
     return;
   }
-  if ((e.key === "Delete" || e.key === "Backspace") && !reviewMode()) {
+  if ((e.key === "Delete" || e.key === "Backspace") && !ports.review.reviewing()) {
     e.preventDefault();
     removeSelected();
   }
@@ -455,7 +433,7 @@ function onKeydown(e) {
 
 function onDragStart(e) {
   var tile = e.target.closest && e.target.closest('.scene-gallery-grid-tile[data-gact="pick"]');
-  if (!tile || !view || reviewMode()) return;
+  if (!tile || !view || ports.review.reviewing()) return;
   dragFrom = Number(tile.getAttribute("data-slot"));
   try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", ""); } catch (err) {}
 }
@@ -518,7 +496,7 @@ function paintZoom() {
   var slots = rowSlots(rowOf(view.rowId).row);
   var slot = slots[view.sel];
   var stage = zoomStage();
-  stage.innerHTML = gallerySlotPictureHtml(slot);
+  stage.innerHTML = ports.render.slotPictureHtml(slot);
   var img = stage.querySelector("img");
   img.className = "scene-gallery-zoom-img";
   img.draggable = false;
@@ -667,34 +645,52 @@ function onZoomPointerUp(e) {
   zoomStage().classList.remove("is-dragging");
 }
 
-export function __init() {
+export function __init(given) {
+  ports = given;
+  view = null;
+  returnFocus = null;
+  dragFrom = -1;
+  zoom = null;
+  var offs = [];
+  var disposed = false;
+  var owner = { dispose: function () {
+    if (disposed) return;
+    disposed = true;
+    while (offs.length) offs.pop()();
+    ports = null;
+  } };
+  function listen(target, type, fn, opts) {
+    target.addEventListener(type, fn, opts);
+    offs.push(function () { target.removeEventListener(type, fn, opts); });
+  }
   var m = modal();
-  if (!m) return;
-  m.addEventListener("click", onClick);
-  m.addEventListener("keydown", onKeydown);
-  m.addEventListener("dragstart", onDragStart);
-  m.addEventListener("dragover", onDragOver);
-  m.addEventListener("drop", onDrop);
-  m.addEventListener("dragend", function () { dragFrom = -1; });
-  document.getElementById("gallery-close").addEventListener("click", closeGalleryOverlay);
+  if (!m) return owner;
+  listen(m, "click", onClick);
+  listen(m, "keydown", onKeydown);
+  listen(m, "dragstart", onDragStart);
+  listen(m, "dragover", onDragOver);
+  listen(m, "drop", onDrop);
+  listen(m, "dragend", function () { dragFrom = -1; });
+  listen(document.getElementById("gallery-close"), "click", closeGalleryOverlay);
   var z = zoomEl();
   if (z) {
-    z.addEventListener("click", onZoomClick);
-    z.addEventListener("wheel", onZoomWheel, { passive: false });
-    z.addEventListener("pointerdown", onZoomPointerDown);
-    z.addEventListener("pointermove", onZoomPointerMove);
-    z.addEventListener("pointerup", onZoomPointerUp);
-    z.addEventListener("pointercancel", onZoomPointerUp);
-    window.addEventListener("resize", function () { if (zoom) layoutZoom(true); });
+    listen(z, "click", onZoomClick);
+    listen(z, "wheel", onZoomWheel, { passive: false });
+    listen(z, "pointerdown", onZoomPointerDown);
+    listen(z, "pointermove", onZoomPointerMove);
+    listen(z, "pointerup", onZoomPointerUp);
+    listen(z, "pointercancel", onZoomPointerUp);
+    listen(window, "resize", function () { if (zoom) layoutZoom(true); });
   }
-  document.addEventListener("securitypolicyviolation", function (e) {
+  listen(document, "securitypolicyviolation", function (e) {
     if (!view || !view.playing) return;
     if (!/^(frame-src|child-src|default-src)/.test(e.effectiveDirective || e.violatedDirective || "")) return;
     view.refused = view.playing;
     view.playing = null;
     paint();
   });
-  document.addEventListener(PREF_EVENT, function (e) {
-    if (e.detail && preferences().nameOf(e.detail.key) === "videoThumbs") refreshGalleryOverlay();
-  });
+  offs.push(ports.changes.onChange(function (change) {
+    if (change.name === "videoThumbs") refreshGalleryOverlay();
+  }, { elsewhere: false }));
+  return owner;
 }
