@@ -17,6 +17,8 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/production-index-bridge.ts": { functions: ["startProductionIndex"] },
   "src/legacy/editor-bridge.ts": { functions: ["startEditor", "installPicturePicker", "installCellEditing"] },
   "src/legacy/preferences-bridge.ts": { functions: ["startPreferences", "onPreferenceChange"] },
+  "src/legacy/shot-hiding-bridge.ts": { functions: ["startShotHiding"] },
+  "src/legacy/presence-bridge.ts": { functions: ["startPresence"] },
   "src/legacy/location-bridge.ts": { functions: ["startLocation", "handServerCheckTo"] },
   "src/legacy/effects-bridge.ts": { functions: ["startEffects"] },
   "src/legacy/panels-bridge.ts": { functions: ["startSidePanels"] },
