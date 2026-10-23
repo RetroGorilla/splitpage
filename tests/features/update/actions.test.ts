@@ -1,8 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createActionRegistry, registerAll } from "../../application/actions.ts";
-import type { Blocker, ScreenState } from "../../application/screen.ts";
-import { updateActions } from "./actions.ts";
+import { createActionRegistry, registerAll } from "../../../src/application/actions.ts";
+import type { Blocker, ScreenState } from "../../../src/application/screen.ts";
+import { updateActions } from "../../../src/features/update/actions.ts";
 
 const NOTHING: ScreenState = {
   loading: false, dialog: false, launcher: false, tour: false, prompter: false, writer: false, shotlist: false
