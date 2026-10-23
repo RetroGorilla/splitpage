@@ -38,7 +38,7 @@ import {
   promptForWpm,
   restoreSnapshotFromCard
 } from "../../js/03-sync.js";
-import { openGalleryOverlay } from "../../js/05e-gallery-overlay.js";
+import { openGalleryOverlay } from "../../features/gallery/overlay.js";
 import {
   clearPendingFileRows,
   captureImportPreview,

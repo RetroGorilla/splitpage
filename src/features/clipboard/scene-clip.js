@@ -1,16 +1,13 @@
-import { normalizeBrollProps } from "../core/document/broll.ts";
-import { mintTagId, normalizeTagName, registryKey } from "../core/document/tags.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
-import { makeId, migrateRows } from "./02-state.js";
-import { dataUrlForSync, internDataUrl, queuePersist } from "../adapters/storage/02c-blobs.js";
-import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
-import { cellOf, commentIds, fromHtml, normalizeCell, syncCommentAnchors, toHtml, toPlainText } from "./04c-doc-model.js";
-import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./05c-clipboard.js";
-import { collectTagsFromRows } from "./07-production-tags.js";
-import { recordPastedBroll } from "./08c-broll.js";
-import { SCHEMA_VERSION } from "../core/document/fields.ts";
-import { cappedLongText } from "../core/document/text-policy.ts";
-import { inertBody } from "../legacy/richtext.ts";
+import { normalizeBrollProps } from "../../core/document/broll.ts";
+import { mintTagId, normalizeTagName, registryKey } from "../../core/document/tags.ts";
+import { isSha256Hex, refsIn } from "../../../shared/blob-policy.js";
+import { commentIds, normalizeCell } from "../../core/text/runs.ts";
+import { toHtml } from "../../core/text/html.ts";
+import { toPlainText } from "../../core/text/projections.ts";
+import { syncCommentAnchors } from "../../core/text/anchors.ts";
+import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./cell-clipboard.js";
+import { SCHEMA_VERSION } from "../../core/document/fields.ts";
+import { cappedLongText } from "../../core/document/text-policy.ts";
 
 export var SCENES_MIME = "application/x-splitpage-scenes";
 export var SCENES_ATTR = "data-splitpage-scenes";
@@ -19,6 +16,7 @@ var VERSION = 1;
 
 export var SCENE_BLOB_CAP = 16 * 1024 * 1024;
 
+var ports = null;
 var liveCut = null;
 
 export function setLiveCut(nonce, docId) { liveCut = nonce ? { nonce: String(nonce), docId: docId || null } : null; }
@@ -40,7 +38,7 @@ function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringi
 function cellIdsOf(rows, pick) {
   var out = Object.create(null);
   rows.forEach(function (row) {
-    ["visualText", "audioText"].forEach(function (f) { pick(cellOf(row[f] || ""), out); });
+    ["visualText", "audioText"].forEach(function (f) { pick(ports.text.cellOf(row[f] || ""), out); });
   });
   return out;
 }
@@ -62,7 +60,7 @@ export function buildScenePayload(state, rowIds, opts) {
   }).map(clone);
 
   var tagKeys = Object.create(null);
-  collectTagsFromRows(rows).forEach(function (t) { tagKeys[registryKey(t.cat.id, t.name)] = true; });
+  ports.tagsInRows(rows).forEach(function (t) { tagKeys[registryKey(t.cat.id, t.name)] = true; });
   var keyIds = cellIdsOf(rows, function (cell, out) {
     cell.forEach(function (r) { if (r.atom && r.id) out[r.id] = true; });
   });
@@ -77,7 +75,7 @@ export function buildScenePayload(state, rowIds, opts) {
   productionTags.concat(brollShots).forEach(function (x) { if (x.owner) owners[x.owner] = true; });
   var people = (state.people || []).filter(function (p) { return p && owners[p.id]; }).map(clone);
 
-  var dataUrl = opts.dataUrl || dataUrlForSync;
+  var dataUrl = opts.dataUrl || ports.pictures.dataUrlFor;
   var cap = typeof opts.cap === "number" ? opts.cap : SCENE_BLOB_CAP;
   var blobs = {}, leftOut = [], used = 0;
   refsIn({ rows: rows, comments: comments }).forEach(function (sha) {
@@ -109,7 +107,7 @@ export function buildScenePayload(state, rowIds, opts) {
 var NBSP_RE = new RegExp(String.fromCharCode(160), "g");
 
 function plainOf(html) {
-  return toPlainText(cellOf(html || "")).replace(NBSP_RE, " ");
+  return toPlainText(ports.text.cellOf(html || "")).replace(NBSP_RE, " ");
 }
 
 export function scenesPlainText(rows) {
@@ -131,7 +129,7 @@ export function scenesTableHtml(rows, payload) {
     });
     marker = " " + SCENES_ATTR + '="' + escAttr(JSON.stringify(lean)) + '"';
   }
-  var cell = function (html) { return clipboardOfCell(cellOf(html || "")).html; };
+  var cell = function (html) { return clipboardOfCell(ports.text.cellOf(html || "")).html; };
   return '<table border="1" cellpadding="6" style="border-collapse:collapse"' + marker + ">" +
     "<thead><tr><th>Visual</th><th>Audio</th></tr></thead><tbody>" +
     rows.map(function (r) {
@@ -152,7 +150,7 @@ export function scenesOnClipboard(getData) {
   }
   var html = readType(getData, "text/html");
   if (html.indexOf(SCENES_ATTR) === -1) return null;
-  var el = inertBody(html).querySelector("[" + SCENES_ATTR + "]");
+  var el = ports.text.inertBody(html).querySelector("[" + SCENES_ATTR + "]");
   return el ? parseScenePayload(el.getAttribute(SCENES_ATTR)) : null;
 }
 
@@ -165,12 +163,12 @@ export function parseScenePayload(json) {
   var blobs = p.blobs && typeof p.blobs === "object" ? p.blobs : {};
   Object.keys(blobs).forEach(function (sha) {
     if (!isSha256Hex(sha) || typeof blobs[sha] !== "string") return;
-    var rec = internDataUrl(blobs[sha]);
+    var rec = ports.pictures.internDataUrl(blobs[sha]);
     if (rec && rec.sha256 === sha) carried.push(sha);
   });
-  if (carried.length) queuePersist(carried);
+  if (carried.length) ports.pictures.queuePersist(carried);
   var list = function (v) { return Array.isArray(v) ? clone(v) : []; };
-  var doc = migrateRows({
+  var doc = ports.migrate({
     schema: SCHEMA_VERSION,
     title: "",
     rows: list(p.rows),
@@ -225,7 +223,7 @@ function sceneRowIds(clip, state, move, mint) {
 
 export function scenePaste(clip, opts) {
   opts = opts || {};
-  var mint = opts.mint || makeId;
+  var mint = opts.mint || ports.ids.id;
   var planned = null;
   var result = null;
   return {
@@ -261,8 +259,8 @@ export function scenePaste(clip, opts) {
 
 export function insertScenes(clip, opts) {
   opts = opts || {};
-  var state = opts.state || currentDocument();
-  var mint = opts.mint || makeId;
+  var state = opts.state || ports.document.current();
+  var mint = opts.mint || ports.ids.id;
   var move = !!opts.move && scenesAway(clip, state);
   var list = function (k) { if (!Array.isArray(state[k])) state[k] = []; return state[k]; };
 
@@ -312,7 +310,7 @@ export function insertScenes(clip, opts) {
     var row = clone(r);
     row.id = rowMap[r.id];
     ["visualText", "audioText"].forEach(function (f) {
-      var cell = fromHtml(row[f] || "").map(function (run) {
+      var cell = ports.text.fromHtml(row[f] || "").map(function (run) {
         if (!run.marks || !run.marks.cmt) return run;
         var marks = Object.assign({}, run.marks);
         marks.cmt = marks.cmt.map(function (id) { return anchorMap[id]; }).filter(Boolean);
@@ -387,11 +385,11 @@ export function insertScenes(clip, opts) {
     shots.push(rec);
   });
   Object.keys(mintedByRow).forEach(function (rowId) {
-    recordPastedBroll(state, rowId, mintedByRow[rowId].cell, mintedByRow[rowId].ids);
+    ports.recordPastedBroll(state, rowId, mintedByRow[rowId].cell, mintedByRow[rowId].ids);
   });
 
   if (!opts.holdComments) added.forEach(function (c) { comments.push(c); });
-  syncCommentAnchors(state);
+  syncCommentAnchors(state, ports.text.cellOf);
 
   return {
     rowIds: rows.map(function (r) { return r.id; }),
@@ -401,4 +399,8 @@ export function insertScenes(clip, opts) {
   };
 }
 
-export function __init() {}
+export function __init(given) {
+  ports = given;
+  liveCut = null;
+  return { dispose: function () { liveCut = null; } };
+}

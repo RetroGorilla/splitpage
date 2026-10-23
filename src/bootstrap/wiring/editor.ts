@@ -40,7 +40,7 @@ import { restoreMergeSnapshot } from "../../js/03-sync.js";
 import { installMergeBanner } from "../../legacy/merge-bridge.ts";
 import { ensureTrailingCaretSpot, safeId, sanitizeHtml, storedHtmlFromDom } from "../../js/04-richtext.js";
 import { cssAttr } from "../../features/common/dom.ts";
-import { announceGalleryEdit } from "../../js/05e-gallery-overlay.js";
+import { announceGalleryEdit } from "../../features/gallery/overlay.js";
 import {
   cancelLink,
   cancelVideo,
@@ -60,8 +60,8 @@ import {
   typePendingMarks,
   updateToolbarState
 } from "../../js/05-render.js";
-import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../js/05c-clipboard.js";
-import { pasteScenesAt } from "../../js/05h-scene-select.js";
+import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../features/clipboard/cell-clipboard.js";
+import { pasteScenesAt } from "../../features/clipboard/scene-select.js";
 import { thumbnailsAfterPaste } from "../../js/05v-video.js";
 import {
   draftRedo,
