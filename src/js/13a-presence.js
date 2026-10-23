@@ -2,7 +2,7 @@ import { homeConn, serverHomeId, serverStatus } from "../legacy/location-bridge.
 import { cssAttr } from "../features/common/dom.ts";
 import { PRESENCE_MAX_SHOWN } from "../application/collaboration/presence.ts";
 import { presence, presenceStarted } from "../legacy/presence-bridge.ts";
-import { getSavedAuthorName } from "./10-comments.js";
+import { getSavedAuthorName } from "../application/comment-author.js";
 import {
   apiUrl,
   notePresenceRev,
@@ -72,7 +72,7 @@ function presencePayload(gone) {
   return {
     docId: serverHomeId(),
     id: presenceSelfId(),
-    name: getSavedAuthorName() || "",
+    name: getSavedAuthorName(preferences()) || "",
     color: preferences().myColor(),
     rowId: presenceWhere.rowId || "",
     field: presenceWhere.field || "",

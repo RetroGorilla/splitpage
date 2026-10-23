@@ -1,6 +1,6 @@
 import { setHideShotScenes } from "./01b-hide-shot.js";
 import { personSwatchesHtml } from "./03-sync.js";
-import { getSavedAuthorName } from "./10-comments.js";
+import { getSavedAuthorName } from "../application/comment-author.js";
 import {
   DEFAULT_COLLAB_SERVER,
   collabServerView,
@@ -105,7 +105,7 @@ function bodyHtml() {
   var clock = preferences().clock();
   var scale = preferences().scriptScale();
   var wsize = currentWriterSize();
-  var name = getSavedAuthorName();
+  var name = getSavedAuthorName(preferences());
   return section("Appearance",
       segHtml("theme", "Theme", [["system", "System"], ["light", "Light"], ["dark", "Dark"]], preferences().theme()) +
       segHtml("clock", "Clock", [["system", "System"], ["12", "12-hour"], ["24", "24-hour"]], clock) +
@@ -281,7 +281,7 @@ function applyChange(target) {
   }
   if (id === "settings-name") {
     var v = cleanAuthorName(target.value);
-    if (!v || v === getSavedAuthorName()) { target.value = getSavedAuthorName(); return; }
+    if (!v || v === getSavedAuthorName(preferences())) { target.value = getSavedAuthorName(preferences()); return; }
     preferences().setCommentAuthor(v);
   }
   if (id === "settings-collab-server") {

@@ -1,7 +1,6 @@
 import type { ActionDefinition, Availability } from "../application/actions.ts";
 import { openGalleryLink } from "../js/06-rows.js";
 import { openTagComposer } from "../js/07-production-tags.js";
-import { openCommentComposer } from "../js/10-comments.js";
 
 const OPENED_FROM_ITS_VIEW: Availability = { enabled: true, visible: false };
 
@@ -34,9 +33,6 @@ export function editorOpenActions(): ActionDefinition[] {
     opener("open-picture-link", "Open picture link", (input) => {
       const at = fields("open-picture-link", input, ["rowId"], ["slot"]);
       openGalleryLink(at["rowId"], at["slot"], at["key"]);
-    }),
-    opener("comment-on-selection", "Comment on selection", (input) => {
-      openCommentComposer(fields("comment-on-selection", input, ["id", "rowId", "field", "quotedText"]));
     }),
     opener("tag-selection", "Tag selection", (input) => {
       openTagComposer(fields("tag-selection", input, ["rowId", "field", "quotedText"], ["occurrenceIndex"]));

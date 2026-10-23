@@ -1,3 +1,4 @@
+import { commentsPanelActions, commentsHelpActions, commentsOpenActions } from "./wiring/comments.ts";
 import type { ActionRegistry, ActionSource, Refusal } from "../application/actions.ts";
 import { registerAll } from "../application/actions.ts";
 import { mountShortcuts } from "../features/shortcuts/mount.ts";
@@ -9,7 +10,7 @@ import { helpMenuActions } from "../legacy/help-actions.ts";
 import { nativeMenuRunner } from "../legacy/native-menu.ts";
 import { registerShareActions } from "../legacy/share-actions.ts";
 import { hideShotActions, thisDocumentActions } from "../legacy/this-document-actions.ts";
-import { registerViewActions } from "../legacy/view-actions.ts";
+import { viewActions } from "../legacy/view-actions.ts";
 import { rowsActions } from "./wiring/editor.ts";
 import { rundownMinimizeActions, rundownSceneActions } from "./wiring/rundown.ts";
 import { scriptZoomActions } from "./wiring/script-zoom.ts";
@@ -28,14 +29,20 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => registry.presentRefusals(presentRefusal),
     () => registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]),
     () => registerFileActions(registry),
-    () => registerViewActions(registry),
+    () => {
+      const views = viewActions();
+      return registerAll(registry, [...views.slice(0, 3), ...commentsPanelActions(), ...views.slice(3)]);
+    },
     () => {
       const menu = helpMenuActions();
-      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]);
+      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 6), ...commentsHelpActions(), ...menu.slice(6)]);
     },
     () => registerShareActions(registry),
     () => registerAll(registry, scriptZoomActions()),
-    () => registerAll(registry, [...rundownSceneActions(), ...galleryActions(), ...editorOpenActions()]),
+    () => {
+      const openers = editorOpenActions();
+      return registerAll(registry, [...rundownSceneActions(), ...galleryActions(), ...openers.slice(0, 1), ...commentsOpenActions(), ...openers.slice(1)]);
+    },
     () => registerAll(registry, rowsActions()),
     () => runMenuCommandsWith(nativeMenuRunner(registry, presentRefusal)),
     () => mountShortcuts({ target: keyTarget, registry })
