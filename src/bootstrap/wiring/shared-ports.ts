@@ -1,8 +1,10 @@
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
+import type { SaveState } from "../../application/save/save-state.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import { appActions } from "../../legacy/app-actions.ts";
 import { PREF_EVENT, preferences } from "../../legacy/preferences-bridge.ts";
+import { autoSavePolicy, onSaveChange, resumeAutoSave, saveBusy, unsavedChanges } from "../../legacy/save-bridge.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
 
 const actions: Pick<ActionRegistry, "invoke" | "view"> = {
@@ -32,9 +34,18 @@ const changes: PreferenceChanges = {
   }
 };
 
+const saves: SaveState = {
+  unsaved: () => unsavedChanges(),
+  busy: () => saveBusy(),
+  onChange: (listener) => onSaveChange(listener),
+  dueNow: () => { autoSavePolicy().dueNow(); },
+  resume: () => { resumeAutoSave(); }
+};
+
 const shared = {
   actions,
   changes,
+  saves,
   screen: (): ScreenState => screenNow()
 };
 
