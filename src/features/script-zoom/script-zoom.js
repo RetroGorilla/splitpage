@@ -1,7 +1,7 @@
-import { currentDocument } from "../legacy/session-bridge.ts";
-import { prompterIsOpen } from "../application/prompter-state.ts";
-import { appActions } from "../legacy/app-actions.ts";
-import { PREF_EVENT, preferences, viewFlags } from "../legacy/preferences-bridge.ts";
+import { currentDocument } from "../../legacy/session-bridge.ts";
+import { prompterIsOpen } from "../../application/prompter-state.ts";
+import { appActions } from "../../legacy/app-actions.ts";
+import { PREF_EVENT, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
 
 export var SCRIPT_SCALE_MIN = 0.7;
 export var SCRIPT_SCALE_MAX = 2;

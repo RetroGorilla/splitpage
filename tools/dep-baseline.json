@@ -175,7 +175,6 @@
     {"rule":"legacy-file","source":"src/js/05h-scene-select.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/05p-rundown-presence.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/05r-read-time.js","target":"src/js"},
-    {"rule":"legacy-file","source":"src/js/05s-script-zoom.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/05t-target.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/05v-video.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/05w-annotate.js","target":"src/js"},
