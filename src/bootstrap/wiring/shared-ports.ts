@@ -4,6 +4,7 @@ import type { PreferenceChange, PreferenceChanges } from "../../application/pref
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import { normalizeTagName } from "../../core/document/tags.ts";
 import { appActions } from "../../legacy/app-actions.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
@@ -52,7 +53,19 @@ const documentReader: DocumentReader = {
 const review: ReviewFacts = { reviewing: reviewMode, refuseInReview: reviewBlocked };
 
 const text: TextServices<HTMLElement> = {
-  cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal
+  cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal,
+  retagBody(body, cat, target, toName) {
+    body.querySelectorAll(".tag-anchor").forEach(function (el) {
+      if (el.getAttribute("data-tag-cat") !== cat) return;
+      if (normalizeTagName(el.getAttribute("data-tag-name")) !== target) return;
+      if (toName !== null) { el.setAttribute("data-tag-name", toName); return; }
+      const parent = el.parentNode;
+      if (!parent) return;
+      while (el.firstChild) parent.insertBefore(el.firstChild, el);
+      parent.removeChild(el);
+    });
+    return body.innerHTML;
+  }
 };
 
 const shared = {

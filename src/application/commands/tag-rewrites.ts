@@ -5,7 +5,7 @@ import { normalizeTagName } from "../../core/document/tags.ts";
 import { holdsMedia, retagCell } from "../../core/production/tags.ts";
 import { namedTagId } from "../../core/text/runs.ts";
 
-type RetagText = Pick<TextServices<HTMLElement>, "cellOf" | "productionReaders" | "inertBody" | "sanitizeHtml">;
+type RetagText<Body> = Pick<TextServices<Body>, "cellOf" | "productionReaders" | "inertBody" | "retagBody" | "sanitizeHtml">;
 
 export interface TagName {
   readonly cat: string;
@@ -25,25 +25,16 @@ function htmlOf(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
-function retagInHtml(text: RetagText, html: string, cat: string, target: string, toName: string | null): string {
+function retagInHtml<Body>(text: RetagText<Body>, html: string, cat: string, target: string, toName: string | null): string {
   const body = text.inertBody(html);
-  Array.prototype.forEach.call(body.querySelectorAll(".tag-anchor"), function (el: Element) {
-    if (el.getAttribute("data-tag-cat") !== cat) return;
-    if (normalizeTagName(el.getAttribute("data-tag-name")) !== target) return;
-    if (toName !== null) { el.setAttribute("data-tag-name", toName); return; }
-    const parent = el.parentNode;
-    if (!parent) return;
-    while (el.firstChild) parent.insertBefore(el.firstChild, el);
-    parent.removeChild(el);
-  });
-  return text.sanitizeHtml(body.innerHTML);
+  return text.sanitizeHtml(text.retagBody(body, cat, target, toName));
 }
 
 function copies(doc: DocumentView): CellCopy[] {
   return doc.rows.map(function (row) { return { id: row.id, visualText: row.visualText, audioText: row.audioText }; });
 }
 
-function retagOne(text: RetagText, rows: CellCopy[], tag: TagName, toName: string | null): { mentions: number; rewrites: CellRewrite[] } {
+function retagOne<Body>(text: RetagText<Body>, rows: CellCopy[], tag: TagName, toName: string | null): { mentions: number; rewrites: CellRewrite[] } {
   const target = normalizeTagName(tag.name);
   const toId = toName === null ? null : namedTagId(tag.cat, toName);
   const out = { mentions: 0, rewrites: [] as CellRewrite[] };
@@ -63,7 +54,7 @@ function retagOne(text: RetagText, rows: CellCopy[], tag: TagName, toName: strin
   return out;
 }
 
-function retagAll(text: RetagText, doc: DocumentView, tags: readonly TagName[], toName: string | null): { mentions: number; rewrites: CellRewrite[] } {
+function retagAll<Body>(text: RetagText<Body>, doc: DocumentView, tags: readonly TagName[], toName: string | null): { mentions: number; rewrites: CellRewrite[] } {
   const rows = copies(doc);
   const latest = new Map<string, CellRewrite>();
   let mentions = 0;
@@ -75,10 +66,10 @@ function retagAll(text: RetagText, doc: DocumentView, tags: readonly TagName[], 
   return { mentions: mentions, rewrites: Array.from(latest.values()) };
 }
 
-export function retagRewrites(text: RetagText, tags: readonly TagName[], toName: string | null): RewritePlanner {
+export function retagRewrites<Body>(text: RetagText<Body>, tags: readonly TagName[], toName: string | null): RewritePlanner {
   return function (doc) { return retagAll(text, doc, tags, toName).rewrites; };
 }
 
-export function retagMentions(text: RetagText, doc: DocumentView | null, tags: readonly TagName[]): number {
+export function retagMentions<Body>(text: RetagText<Body>, doc: DocumentView | null, tags: readonly TagName[]): number {
   return doc ? retagAll(text, doc, tags, null).mentions : 0;
 }
