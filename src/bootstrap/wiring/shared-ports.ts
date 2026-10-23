@@ -3,6 +3,7 @@ import type { ActionRegistry } from "../../application/actions.ts";
 import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { EditorSelectionPort } from "../../application/editing/selection.ts";
+import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { ExportRegistry } from "../../application/export/registry.ts";
 import type { RecentFiles } from "../../application/files/recent-files.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
@@ -15,6 +16,7 @@ import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import { breakUndoCoalescing, flushEdits, lastUndoEntry, redo, undo } from "../../js/12a-undo.js";
 import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import { blobImgHtml, bytesForSync, dataUrlForSync, ensureBytes, intern, internDataUrl, isDurableSync, persist, queuePersist, recordFor, urlForSync } from "../../adapters/storage/02c-blobs.js";
 import { arrivingOnLink } from "../../js/13-hosted.js";
@@ -112,6 +114,14 @@ const text: TextServices<HTMLElement> = {
   cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal
 };
 
+const undoControl: UndoControl = {
+  breakCoalescing: breakUndoCoalescing,
+  flush: flushEdits,
+  undo,
+  redo,
+  last: lastUndoEntry
+};
+
 const effects: EffectPorts<Element> = {
   notices: { show: showToast, showAction: showActionToast },
   menuItems: { setLabel: setMenuItemLabel, setReason: setMenuItemReason },
@@ -189,7 +199,8 @@ const shared = {
   exports,
   ownership,
   pictures,
-  recents
+  recents,
+  undo: undoControl
 };
 
 export function sharedPorts(): typeof shared {
