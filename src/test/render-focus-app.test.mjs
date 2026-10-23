@@ -11,7 +11,10 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { applyMerge } = await import("../js/03-sync.js");
-const { afterThisPaint, paintingScreen, renderAbsorbed, renderRow, whilePainting } = await import("../js/05-render.js");
+const { paintingScreen, renderAbsorbed, renderRow } = await import("../js/05-render.js");
+const { paintGuard } = await import("../legacy/editor-bridge.ts");
+const whilePainting = (paint) => paintGuard().whilePainting(paint);
+const afterThisPaint = (work) => paintGuard().afterThisPaint(work);
 const { setHideShotScenes } = await import("../js/01b-hide-shot.js");
 const { runBrollRefresh } = await import("../js/08c-broll.js");
 const { closeBrollPage, closeBrollPanel, openBrollPage, openBrollPanel } = await import("../js/08d-broll-panel.js");
@@ -252,7 +255,7 @@ test("a render that throws between the grid and the Writer makes no edit, and ty
   const consoles = [...new Set([window.console, globalThis.console])];
   const was = consoles.map((c) => c.error);
   const logged = [];
-  consoles.forEach((c) => { c.error = (e) => { logged.push((e && e.message) || String(e)); }; });
+  consoles.forEach((c) => { c.error = (e) => { logged.push((e && e.message) || String(e)); process.stderr.write("STACK " + (e && e.stack) + "\n"); }; });
   let got;
   try {
     got = observe(() => merge(theirs));

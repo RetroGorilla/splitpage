@@ -18,7 +18,6 @@ import {
   updateIdentityChip
 } from "./03-sync.js";
 import { beginBusy, endBusy, withBusyBar } from "../features/notices/busy.js";
-import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { brollPrintView } from "./08d-broll-panel.js";
 import { formatTimestamp } from "./10-comments.js";
@@ -312,6 +311,7 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
   if (typeof closeNewTabPage === "function") closeNewTabPage();
   if (!opts.skipSnapshot && S.state && S.state.rows.length) pushSnapshot("Before opening " + file.name);
 
+  resetProductionPanelState();
   documentTransitions().open({
     from: { document: newState },
     reason: "adoptProjectState: the project file as it was just read",
@@ -319,10 +319,8 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
                                            name: file.name, diskBase: cloneState(newState) } },
     writtenOut: true
   });
-  resetProductionPanelState();
 
   clearDirty();
-  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   var commentNote = S.state.comments.length
@@ -431,20 +429,19 @@ async function loadFileIntoEditor(file, handle, opts) {
   if (opts.reload) {
     setHome("import", importFields);
   } else {
+    resetProductionPanelState();
     documentTransitions().open({
       from: { raw: { schema: SCHEMA_VERSION, title: openedTitle, rows: newRows } },
       reason: "loadFileIntoEditor: the imported document as it was just read",
       destination: { kind: "import", fields: importFields },
       writtenOut: false
     });
-    resetProductionPanelState();
   }
   var imported = importHome();
 
   markAbsorbedDirty(opts.reload ? "reload" : "adopt");
   amendHome(imported, { dirty: false });
   if (typeof closeNewTabPage === "function") closeNewTabPage();
-  renderAbsorbed();
   updateIdentityChip();
   updateFileChip();
   if (typeof syncDocIdentity === "function") syncDocIdentity();

@@ -2,7 +2,6 @@ import { MD_IMAGE_PREFIX_RE } from "../adapters/formats/markdown-image.ts";
 import { internDataUrl, queuePersist } from "../adapters/storage/02c-blobs.js";
 import { pushSnapshot, stampRow } from "./03-sync.js";
 import { cssAttr, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
-import { render } from "./05-render.js";
 import { anchorBrollInRows, declineBrollAnchoring } from "./08c-broll.js";
 import { markDirty } from "./12-dirty-toast.js";
 import { audioDirectionsHtml, docxToRows } from "../adapters/formats/docx.ts";
@@ -550,7 +549,6 @@ function hasRows(doc) {
 }
 
 function finishImport(count, found) {
-  render();
   closeImportModal();
   showToast("Imported " + count + " row" + (count === 1 ? "" : "s") + "." +
     (found ? " " + found : ""), "ok");

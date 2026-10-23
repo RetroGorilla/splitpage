@@ -1,7 +1,6 @@
 import { S } from "./_state.js";
 import { setHideShotScenes } from "./01b-hide-shot.js";
 import { personSwatchesHtml, renderHistory, setMyColor, updateIdentityChip } from "./03-sync.js";
-import { render } from "./05-render.js";
 import { getSavedAuthorName, renderComments } from "./10-comments.js";
 import { updateSaveStatus } from "./12-dirty-toast.js";
 import {
@@ -288,7 +287,6 @@ function applyChange(target) {
     if (!v || v === getSavedAuthorName()) { target.value = getSavedAuthorName(); return; }
     preferences().setCommentAuthor(v);
     updateIdentityChip();
-    if (S.state) render();
   }
   if (id === "settings-collab-server") {
     var raw = (target.value || "").trim();
@@ -380,7 +378,7 @@ function onPrefChanged(key) {
   if (name === "tagIcons") applyTagIcons(window, preferences().tagIcons());
   if (name === "clock") {
     updateSaveStatus();
-    if (S.state) { render(); renderComments(); }
+    if (S.state) renderComments();
     var hist = document.getElementById("history-panel");
     if (hist && !hist.hidden) renderHistory();
   }

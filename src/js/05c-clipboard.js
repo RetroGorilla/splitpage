@@ -12,7 +12,7 @@ import {
   toHtml
 } from "./04c-doc-model.js";
 import { cellSelection } from "../features/editing/cell-selection.ts";
-import { cellEditing } from "../legacy/editor-bridge.ts";
+import { cellEditing, paintGuard } from "../legacy/editor-bridge.ts";
 import { brollSeedOf } from "./08c-broll.js";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
 import { makeId, randomHexBytes, randomIds } from "../adapters/identity/ids.ts";
@@ -262,6 +262,10 @@ function caretOf(caret) {
 }
 
 function cutSelection(cellEl) {
+  paintGuard().whileShown(function () { cutShown(cellEl); });
+}
+
+function cutShown(cellEl) {
   var open = cellEditing().open(cellEl);
   if (!open || !open.sel || open.sel.from === open.sel.to) return;
   var cut = cutCommand(open.rowId, open.field, open.sel, clipboardPorts());
@@ -276,6 +280,10 @@ function pasteRequest(rowId, field, range, pasted, got, attach) {
 }
 
 export function pasteIntoCell(cellEl, html, text, extra) {
+  return paintGuard().whileShown(function () { return pasteShown(cellEl, html, text, extra); });
+}
+
+function pasteShown(cellEl, html, text, extra) {
   extra = extra || {};
   var target = null;
   var hasComment = function (id) {

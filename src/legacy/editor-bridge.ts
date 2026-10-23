@@ -1,8 +1,8 @@
 import type { CellEditing } from "../application/editing/cell-editing.ts";
 import { createFocusMemory } from "../application/editing/focus-memory.ts";
 import type { FocusMemory } from "../application/editing/focus-memory.ts";
-import { createUndoGuard } from "../application/editing/paint-guard.ts";
-import type { UndoGuard } from "../application/editing/paint-guard.ts";
+import { createPaintGuard, createUndoGuard } from "../application/editing/paint-guard.ts";
+import type { PaintGuard, UndoGuard } from "../application/editing/paint-guard.ts";
 import { createRowDrag } from "../application/editing/row-drag.ts";
 import type { RowDrag } from "../application/editing/row-drag.ts";
 import { createEditorSelection } from "../application/editing/selection.ts";
@@ -21,6 +21,7 @@ export type CellSelection = EditorSelection<Element, Range, Element>;
 interface Started {
   readonly drag: RowDrag;
   readonly undo: UndoGuard;
+  readonly paint: PaintGuard;
   readonly focus: FocusMemory<Element>;
   readonly merge: MergeUndo;
   readonly selection: CellSelection;
@@ -55,6 +56,7 @@ export function startEditor(live: LiveDocumentPort): () => void {
   const mine: Started = {
     drag: createRowDrag(),
     undo: createUndoGuard(),
+    paint: createPaintGuard(),
     focus: createFocusMemory<Element>(),
     merge: createMergeUndo(),
     selection: createEditorSelection<Element, Range, Element>(selectionPorts(live)),
@@ -77,6 +79,10 @@ export function rowDrag(): RowDrag {
 
 export function undoGuard(): UndoGuard {
   return running().undo;
+}
+
+export function paintGuard(): PaintGuard {
+  return running().paint;
 }
 
 export function focusMemory(): FocusMemory<Element> {
