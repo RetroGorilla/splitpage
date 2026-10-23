@@ -30,7 +30,7 @@ import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
 import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
-import { isExportAction, rememberExport } from "./18c-export-dialog.js";
+import { isExportAction, rememberExport } from "../bootstrap/wiring/file-menu-export-controls.ts";
 import { parseProjectFileState } from "../adapters/formats/project-file.ts";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
