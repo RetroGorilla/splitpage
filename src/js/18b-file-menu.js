@@ -9,9 +9,9 @@ import { applyReviewMode } from "./13-hosted.js";
 import { openProjectFile } from "./18-local-files.js";
 import {
   canOpenPrompterInBrowser,
-  canOpenPrompterInChromium,
-  makeDesktopHandle
+  canOpenPrompterInChromium
 } from "./20f-desktop.js";
+import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { LONG_DEMO } from "./_starters.js";
 import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";

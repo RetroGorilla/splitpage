@@ -207,3 +207,24 @@ test("saveDoc resumes a halted autosave unless it is automatic, and saveToServer
     stop();
   }
 });
+
+test("a refusal that carries a file conflict becomes the open conflict; one without leaves it closed", async () => {
+  const log = [];
+  const stop = bridge.startSaves(ports(log), timers(log));
+  try {
+    const conflict = { fileName: "a.md", current: null, kind: "import" };
+    bridge.saveDestinations().register({
+      id: "changed",
+      takes: () => true,
+      autoSaveTarget: () => null,
+      write: async (job) => job.request.kind === "save" ? { kind: "refused", reason: "changed", conflict } : { kind: "refused", reason: "plain" }
+    });
+    assert.deepEqual(await bridge.requestSave({ kind: "force" }), { kind: "refused", reason: "plain" });
+    assert.equal(bridge.fileConflicts().current(), null);
+    assert.deepEqual(await bridge.requestSave({ kind: "save" }), { kind: "refused", reason: "changed", conflict });
+    assert.deepEqual(bridge.fileConflicts().current(), conflict);
+  } finally {
+    stop();
+  }
+  assert.throws(() => bridge.fileConflicts(), /not started yet/);
+});

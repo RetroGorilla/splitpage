@@ -1,6 +1,5 @@
 import { parseSceneLength, targetLengthOf } from "../core/document/timing.ts";
 import { formatDuration } from "../core/production/timing.ts";
-import { updateScriptStats } from "./01-scene-status.js";
 import { onRundownPaint, rundownLayout } from "./05f-rundown.js";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { targetLengthCommand } from "../application/commands/document-settings.ts";
@@ -64,9 +63,7 @@ export function paintTargetOverlay() {
 
 export function setTargetLength(seconds) {
   if (!currentDocument() || reviewMode()) return false;
-  if (!runDocumentEdit(targetLengthCommand(seconds))) return false;
-  updateScriptStats();
-  return true;
+  return !!runDocumentEdit(targetLengthCommand(seconds));
 }
 
 export function targetSectionHtml() {

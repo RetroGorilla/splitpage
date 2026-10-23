@@ -4,7 +4,7 @@ import "./_preferences-started.mjs";
 import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
@@ -49,7 +49,7 @@ const cmt = (id, inner) => `<span class="cmt-anchor" data-cmt="${id}">${inner}</
 const BROLL = '<span class="broll-key" data-broll-id="bs_1" contenteditable="false">B-roll:</span>';
 
 function withState(s, fn) {
-  const was = S.state;
+  const was = currentDocument();
   loadTestDocument(s);
   try { return fn(s); } finally { loadTestDocument(was); }
 }
@@ -324,7 +324,7 @@ test("a Splitpage .docx reopens with its directions as directions; ((…)) in a 
 
 test("the other exports print it as (beat)", () => {
   withState(directionDoc(), () => {
-    assert.ok(toMarkdownDoc(exportDocumentOf(S.state)).includes("Welcome back. *(beat)* Today, the kettle."));
+    assert.ok(toMarkdownDoc(exportDocumentOf(currentDocument())).includes("Welcome back. *(beat)* Today, the kettle."));
     assert.ok(buildCsv(liveDoc()).includes("Welcome back. (beat) Today, the kettle."));
   });
 });
