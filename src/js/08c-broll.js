@@ -46,9 +46,8 @@ import { currentDocument, heldDocument, readSession, runCommand, runDocumentEdit
 import { addShotPropCommand } from "../application/commands/broll-records.ts";
 import { rewriteCellsCommand } from "../application/commands/document-edit.ts";
 import { addBrollRecord, brollRecord } from "../core/production/records.ts";
-import { tagRecordsPlan } from "../core/production/index.ts";
-import { cacheSeal } from "../legacy/cache-freeze.ts";
-import { anchorBrollInRows, brollHtmlLines, brollKeyHtml } from "../adapters/production/broll-anchors.js";
+import { productionIndex } from "../legacy/production-index-bridge.ts";
+import { anchorBrollInRows, brollHtmlLines, brollKeyHtml } from "../adapters/production/broll-anchors.ts";
 import { declineBrollRows, resetBrollAnchoring } from "../application/broll-anchoring.ts";
 export {
   BROLL_MARKER_RE,
@@ -122,7 +121,7 @@ function unkeyedScope(changes) {
 
 export function derivedRecordsPlan(doc, changes) {
   if (!doc || doc !== heldDocument()) return null;
-  var tags = tagRecordsPlan(doc, currentDocument(), productionReaders, cacheSeal);
+  var tags = productionIndex().recordsPlan(doc, currentDocument());
   var shots = planBrollRecords(doc, productionReaders, randomIds, htmlToPlainText, unkeyedScope(changes));
   var fields = [];
   if (tags && tags.apply) fields.push("productionTags");

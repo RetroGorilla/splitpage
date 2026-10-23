@@ -1,3 +1,4 @@
+import { groupTagsByCategory } from "../core/production/looks.ts";
 import { BROLL_NAME_MAX, BROLL_TEXT_MAX, normalizeBrollProps } from "../core/document/broll.ts";
 import { nextTagStatus, normalizeTagName, registryKey } from "../core/document/tags.ts";
 import { TAG_CATEGORIES, TAG_STATUSES, tagCategory, tagStatus } from "../core/production/looks.ts";
@@ -12,12 +13,11 @@ import { migrateRows } from "../js/02-state.js";
 import { cellOf } from "../js/04c-doc-model.js";
 import { bulkTagCell, healTagRegistry, tagKey, tagOccurrences, tagStatusRank, tagsInField } from "../js/07-production-tags.js";
 import { bulkTagRows } from "../application/commands/bulk-tags.ts";
-import { productionEntries, tagsByCategory } from "../core/production/index.ts";
+import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
-import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { BROLL_PROPS_MAX, BROLL_STATUSES, __init as initBroll, brollEntries, derivedRecordsPlan, brollInCell, brollPropKey, brollShotsByProp, brollStatus } from "../js/08c-broll.js";
-import { anchorBrollInRows } from "../adapters/production/broll-anchors.js";
+import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { inertBody } from "../legacy/richtext.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";
@@ -109,8 +109,8 @@ function occurrencesOf(names) {
 function readAll() {
   const before = JSON.stringify(S.state);
   const out = {
-    entries: entriesView(productionEntries(currentDocument(), productionReaders, cacheSeal)),
-    byCategory: categoriesView(tagsByCategory(currentDocument(), productionReaders, cacheSeal)),
+    entries: entriesView(productionIndex().entries(currentDocument())),
+    byCategory: categoriesView(groupTagsByCategory(productionIndex().entries(currentDocument()))),
     brollRead: brollView(brollEntries()),
     shotsByProp: jsonCopy(brollShotsByProp())
   };
@@ -122,7 +122,7 @@ function repairAll(out) {
   const registryBefore = jsonCopy(S.state.productionTags);
   out.healed = healTagRegistry();
   out.registryAfterHeal = unchangedOr(registryBefore, S.state.productionTags);
-  out.entriesAfterHeal = sameAsOr("entries", out.entries, entriesView(productionEntries(currentDocument(), productionReaders, cacheSeal)));
+  out.entriesAfterHeal = sameAsOr("entries", out.entries, entriesView(productionIndex().entries(currentDocument())));
   out.healedAgain = healTagRegistry();
   const shotsBefore = jsonCopy(S.state.brollShots);
   const records = derivedRecordsPlan(S.state, WHOLE_DOCUMENT);
@@ -270,7 +270,7 @@ function steps(list) {
     const healed = fn();
     return {
       step: label, healed: healed === undefined ? null : healed, sound: soundRegistry(),
-      orphaned: productionEntries(currentDocument(), productionReaders, cacheSeal).filter((e) => e.orphaned).map((e) => e.key)
+      orphaned: productionIndex().entries(currentDocument()).filter((e) => e.orphaned).map((e) => e.key)
     };
   });
 }

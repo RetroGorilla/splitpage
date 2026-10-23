@@ -1,3 +1,4 @@
+import { wireProductionIndex } from "./wiring/production-index.ts";
 import { registerBuiltInExporters } from "./wiring/exporters.ts";
 import { wireProductionEditing } from "./wiring/production-editing.ts";
 import type { ActionRegistry } from "../application/actions.ts";
@@ -285,7 +286,18 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("export services", () => legacyExportServices(), installExportServices);
   const exports = build("export registry", () => createExportRegistry(), installExportFormats);
   build("built-in exporters", () => checkedExporters((deps.exporters ?? registerBuiltInExporters)(exports)), (drop) => drop);
-  build("session", () => startSessionBridge(legacySessionPorts(deps)), (stop) => stop);
+  build("session", () => {
+    const stopIndex = wireProductionIndex();
+    try {
+      const stopSession = startSessionBridge(legacySessionPorts(deps));
+      return () => {
+        try { stopSession(); } finally { stopIndex(); }
+      };
+    } catch (error) {
+      stopIndex();
+      throw error;
+    }
+  }, (stop) => stop);
   build("saves", () => startSaves(checkedSaves(deps.saves({ capture: captureOperation, stillOwns: stillOwns })), deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
   build("transitions", () => startTransitions({ ...deps.transitions, live: liveDocumentPort }), (stop) => stop);
   build("recovery", () => startRecovery(checkedRecovery(deps.recovery())), (stop) => stop);

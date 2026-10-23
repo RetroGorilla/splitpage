@@ -5,12 +5,30 @@ import { holdsMedia } from "../../core/production/tags.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { brollAnchoringDeclined } from "../../application/broll-anchoring.ts";
 
-export function brollHtmlLines(body) {
+import type { IdSource } from "../../core/document/ports.ts";
+import type { DocumentRow, ValidatedDocument } from "../../core/document/validated.ts";
+import type { FieldHtml, ProductionReaders } from "../../core/production/ports.ts";
+import type { Frozen } from "../../core/document/freeze.ts";
+import type { Run } from "../../core/text/runs.ts";
+
+interface HtmlLine {
+  nodes: Node[];
+  br: Node | null;
+}
+
+interface BrollAnchorPorts {
+  readers: ProductionReaders;
+  ids: IdSource;
+  cellOf: (html: FieldHtml) => Frozen<Run[]>;
+  inertBody: (html: FieldHtml) => HTMLElement;
+  sanitize: (html: string) => string;
+}
+export function brollHtmlLines(body: HTMLElement): HtmlLine[] {
   hoistNestedBrs(body);
-  var kids = Array.prototype.slice.call(body.childNodes);
-  var lines = [], start = 0;
+  var kids: Node[] = Array.from(body.childNodes);
+  var lines: HtmlLine[] = [], start = 0;
   kids.forEach(function (n, i) {
-    if (n.nodeType === 1 && n.tagName === "BR") {
+    if (n.nodeType === 1 && (n as Element).tagName === "BR") {
       lines.push({ nodes: kids.slice(start, i), br: n });
       start = i + 1;
     }
@@ -19,16 +37,17 @@ export function brollHtmlLines(body) {
   return lines;
 }
 
-function hoistNestedBrs(body) {
+function hoistNestedBrs(body: HTMLElement): void {
   var guard = 0;
   while (guard++ < 1000) {
     var brs = body.getElementsByTagName("br");
-    var br = null;
+    var br: HTMLBRElement | null = null;
     for (var i = 0; i < brs.length; i++) {
-      if (brs[i].parentNode !== body) { br = brs[i]; break; }
+      const candidate = brs[i];
+      if (candidate && candidate.parentNode !== body) { br = candidate; break; }
     }
     if (!br) return;
-    var parent = br.parentNode;
+    var parent = br.parentNode as Node;
     var grand = parent.parentNode;
     if (!grand) return;
     var tail = parent.cloneNode(false);
@@ -40,36 +59,36 @@ function hoistNestedBrs(body) {
   }
 }
 
-function brollHtmlLineText(nodes) {
+function brollHtmlLineText(nodes: readonly Node[]): string {
   return nodes.map(function (n) { return n.textContent || ""; }).join("");
 }
 
-export function brollKeyHtml(id, text) {
+export function brollKeyHtml(id: string, text: string): string {
   return '<span class="broll-key" data-broll-id="' + escapeHtml(id) +
     '" contenteditable="false">' + escapeHtml(text) + '</span>';
 }
 
-function brollLineTextNodes(nodes) {
-  var out = [];
-  (function walk(list) {
+function brollLineTextNodes(nodes: readonly Node[]): Text[] {
+  var out: Text[] = [];
+  (function walk(list: ArrayLike<Node>): void {
     for (var i = 0; i < list.length; i++) {
-      var n = list[i];
-      if (n.nodeType === 3) out.push(n);
+      var n = list[i] as Node;
+      if (n.nodeType === 3) out.push(n as Text);
       else if (n.nodeType === 1) walk(n.childNodes);
     }
   })(nodes);
   return out;
 }
 
-function brollPruneEmpty(el, body) {
+function brollPruneEmpty(el: Node | null, body: HTMLElement): void {
   while (el && el !== body && el.parentNode && !el.childNodes.length) {
-    var parent = el.parentNode;
+    var parent: ParentNode = el.parentNode;
     parent.removeChild(el);
     el = parent;
   }
 }
 
-function brollWrapHtmlLine(body, line, id) {
+function brollWrapHtmlLine(body: HTMLElement, line: HtmlLine, id: string): boolean {
   var m = BROLL_MARKER_RE.exec(brollHtmlLineText(line.nodes));
   if (!m) return false;
   var left = m[0].length;
@@ -84,30 +103,32 @@ function brollWrapHtmlLine(body, line, id) {
     brollPruneEmpty(parent, body);
   });
 
-  var ref = null;
+  var ref: Node | null = null;
   for (var i = 0; i < line.nodes.length && !ref; i++) {
-    if (line.nodes[i].parentNode === body) ref = line.nodes[i];
+    const node = line.nodes[i];
+    if (node && node.parentNode === body) ref = node;
   }
   if (!ref) ref = line.br;
   var holder = body.ownerDocument.createElement("div");
-  holder.innerHTML = brollKeyHtml(id, m[1] + m[2]) + " ";
-  Array.prototype.slice.call(holder.childNodes).forEach(function (n) {
+  holder.innerHTML = brollKeyHtml(id, (m[1] as string) + (m[2] as string)) + " ";
+  Array.from(holder.childNodes).forEach(function (n) {
     body.insertBefore(n, ref);
   });
   return true;
 }
 
-function brollRekeyHtmlLine(line, id) {
+function brollRekeyHtmlLine(line: HtmlLine, id: string): boolean {
   for (var i = 0; i < line.nodes.length; i++) {
-    var n = line.nodes[i];
+    var n = line.nodes[i] as Node;
     if (n.nodeType !== 1) continue;
-    var key = n.classList.contains("broll-key") ? n : n.querySelector(".broll-key");
+    var element = n as Element;
+    var key = element.classList.contains("broll-key") ? element : element.querySelector(".broll-key");
     if (key) { key.setAttribute("data-broll-id", id); return true; }
   }
   return false;
 }
 
-export function anchorBrollInRows(doc, only, ports) {
+export function anchorBrollInRows(doc: ValidatedDocument | null | undefined, only: readonly DocumentRow[] | null | undefined, ports: BrollAnchorPorts): number {
   var rows = only || (doc && doc.rows);
   if (!doc || !rows || !rows.length) return 0;
   var plan = planBrollAnchors(doc, ports.readers, ports.ids);

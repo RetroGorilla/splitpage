@@ -19,9 +19,8 @@ import { __init as initTags, healTagRegistry, tagsInField } from "../js/07-produ
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, readSession } from "../legacy/session-bridge.ts";
 import { retagRewrites, retagMentions } from "../legacy/tag-rewrites.ts";
-import { productionEntries } from "../core/production/index.ts";
+import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { audioDirectionsHtml, buildDocx, buildNarrationText } from "../adapters/formats/docx.ts";
 import { prompterSceneHtml, trimPrompterCell } from "../js/20-teleprompter.js";
@@ -161,7 +160,7 @@ test("the Production panel lists it under Music/SFX, with the tags of the same n
   s.rows[0].visualText = 'Kitchen <span class="tag-anchor" data-tag-cat="sound" data-tag-name="door slam" contenteditable="false">door slam</span>';
   withState(s, () => {
     healTagRegistry();
-    const sound = productionEntries(currentDocument(), productionReaders, cacheSeal).filter((e) => e.cat.id === "sound");
+    const sound = productionIndex().entries(currentDocument()).filter((e) => e.cat.id === "sound");
     assert.deepEqual(sound.map((e) => [e.name, e.mentions.length]).sort(), [["door slam", 2], ["upbeat intro", 1]]);
     assert.ok(s.productionTags.some((t) => t.cat === "sound" && t.name === "upbeat intro" && t.status === "needed"));
     assert.deepEqual(tagsInField(CUE("SFX:")), []);
@@ -190,7 +189,7 @@ test("an edited cue keeps its item: renamed in place with its status, no entry l
     const e = s.productionTags.find((t) => t.name === "slow piano intros");
     assert.equal(e.id, id, "the same entry");
     assert.equal(e.notes, "the Rhodes take");
-    assert.deepEqual(productionEntries(currentDocument(), productionReaders, cacheSeal).filter((x) => x.cat.id === "sound").map((x) => [x.name, x.orphaned]).sort(),
+    assert.deepEqual(productionIndex().entries(currentDocument()).filter((x) => x.cat.id === "sound").map((x) => [x.name, x.orphaned]).sort(),
       [["door slam", false], ["slow piano intros", false], ["upbeat intro", false]]);
   });
 });
@@ -252,7 +251,7 @@ test("one cue deleted and another edited in the same cell: the edited one keeps 
       const e = s.productionTags.find((t) => t.name === newName);
       assert.equal(e.id, kept.id, label + ": the same entry");
       assert.equal(e.notes, "the good take", label);
-      assert.deepEqual(productionEntries(currentDocument(), productionReaders, cacheSeal).filter((x) => x.orphaned).map((x) => x.name), [gone], label);
+      assert.deepEqual(productionIndex().entries(currentDocument()).filter((x) => x.orphaned).map((x) => x.name), [gone], label);
     });
   }
 });

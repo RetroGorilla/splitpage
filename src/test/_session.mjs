@@ -1,3 +1,4 @@
+import { wireProductionIndex } from "../bootstrap/wiring/production-index.ts";
 import { migrateRows } from "../js/02-state.js";
 import { sessionStarted, startSessionBridge } from "../legacy/session-bridge.ts";
 import { legacySessionPorts } from "../bootstrap/wiring.ts";
@@ -7,7 +8,16 @@ import { effectsStarted } from "../legacy/effects-bridge.ts";
 export function startTestSession(deps) {
   if (sessionStarted()) throw new Error("startTestSession: a session is already started, so the dependencies passed would be ignored");
   if (!effectsStarted()) startPageEffects(window);
-  return startSessionBridge(legacySessionPorts(Object.assign({ entry: migrateRows }, deps)));
+  const stopIndex = wireProductionIndex();
+  try {
+    const stopSession = startSessionBridge(legacySessionPorts(Object.assign({ entry: migrateRows }, deps)));
+    return () => {
+      try { stopSession(); } finally { stopIndex(); }
+    };
+  } catch (error) {
+    stopIndex();
+    throw error;
+  }
 }
 
 function missing(port) {

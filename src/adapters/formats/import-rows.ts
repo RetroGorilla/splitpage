@@ -1,18 +1,31 @@
+import type { ImageRef } from "../../core/document/ports.ts";
 import { MD_IMAGE_PREFIX_RE } from "./markdown-image.ts";
 import { audioDirectionsHtml } from "./docx.ts";
 import { internDataUrl, queuePersist } from "../storage/02c-blobs.js";
 import { makeId } from "../identity/ids.ts";
 import { legacyMdToHtml, safeImageSrc } from "../../core/document/text-policy.ts";
 
-export function normalizeImportedRows(rows, sanitizeHtml) {
-  function importedImageRef(dataUrl) {
+interface ImportRow {
+  visualText?: unknown;
+  audioText?: unknown;
+}
+
+interface ImportedRow {
+  id: string;
+  visualText: string;
+  imageRef: ImageRef | null;
+  audioText: string;
+}
+
+export function normalizeImportedRows(rows: readonly ImportRow[], sanitizeHtml: (html: string) => string): ImportedRow[] {
+  function importedImageRef(dataUrl: string | null): ImageRef | null {
     var rec = dataUrl ? internDataUrl(dataUrl) : null;
     if (rec) queuePersist([rec.sha256]);
     return rec;
   }
   return rows.map(function (r) {
     var visual = String(r.visualText || "");
-    var image = null;
+    var image: string | null = null;
     var m = MD_IMAGE_PREFIX_RE.exec(visual);
     if (m) {
       image = safeImageSrc(m[1]);

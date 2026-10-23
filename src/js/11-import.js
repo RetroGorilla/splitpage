@@ -1,9 +1,9 @@
-import { normalizeImportedRows } from "../adapters/formats/import-rows.js";
+import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
 import { pushSnapshot, stampRow } from "./03-sync.js";
 import { cssAttr, sanitizeHtml } from "./04-richtext.js";
 import { render } from "./05-render.js";
 import { declineBrollAnchoring } from "./08c-broll.js";
-import { anchorBrollInRows } from "../adapters/production/broll-anchors.js";
+import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf, inertBody } from "../legacy/richtext.ts";
 import { randomIds } from "../adapters/identity/ids.ts";

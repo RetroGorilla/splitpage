@@ -9,7 +9,7 @@ import { escapeHtml, migrateRows } from "../js/02-state.js";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { cellOf, normalizeCell } from "../js/04c-doc-model.js";
 import { BROLL_MARKER_RE, __init as brollInit, addBrollProp, brollInCell, brollPropKey, brollPropsInCell, brollShotsByProp, recordPastedBroll, renameBrollInScript } from "../js/08c-broll.js";
-import { anchorBrollInRows } from "../adapters/production/broll-anchors.js";
+import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { removeBrollProp, renameTag } from "../application/commands/production-actions.ts";
