@@ -1,15 +1,13 @@
 import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import {
   createHeldDesktop,
   createHeldFetch,
   createHeldFileHandle,
   firstWriteBeforeAdoption,
   mockClock,
-  rightToday,
-  traceFields
+  rightToday
 } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
@@ -19,7 +17,6 @@ const { currentDocument, liveSession, mergeBase, onDocumentReplaced, requestRefr
 
 const session = liveSession();
 const probe = { epoch: () => (sessionStarted() ? session.epoch() : null), held: () => (sessionStarted() ? session.read((doc) => doc) : null) };
-const TRACED = ["docIdWrittenOut"];
 const tracing = new Set();
 
 let unfollow = null;
@@ -41,10 +38,10 @@ onDocumentReplaced(function () {
 });
 
 function traceDocument() {
-  const trace = traceFields(S, TRACED, probe);
+  const events = [];
   followAbsorbs();
-  tracing.add(trace.events);
-  return { events: trace.events, stop: () => { tracing.delete(trace.events); trace.stop(); } };
+  tracing.add(events);
+  return { events, stop: () => { tracing.delete(events); } };
 }
 
 const bootTrace = traceDocument();

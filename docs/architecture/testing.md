@@ -177,7 +177,7 @@ under the test-only freeze flag (milestone 3, decisions D2 and D3).
     whose rejection the app handles: the drivers see only uncaught
     exceptions. The unit tests above cover the index and the readers
     directly.
-  - A write into a value no cache handed out: the document, `S`, a copy a
+  - A write into a value no cache handed out: the document, a copy a
     caller made. Freezing guards only what the caches listed above store.
   - A write into an object that is not an array or a plain object.
   - Pages that run without the flag, so nothing is locked on them: a `goto`
@@ -196,19 +196,18 @@ under the test-only freeze flag (milestone 3, decisions D2 and D3).
 
 The document session (`src/application/session/document-session.ts`) is the
 document's only holder (legacy reduction L3d PR 3). The session bridge hands
-it out through `currentDocument()` and `liveDocumentPort`, and `S.state` is a
-getter onto it with a setter that throws, so a legacy file can still read the
-document through `S.state` but can no longer replace it. A write into the
-document must be a session command (`runDocumentEdit`, `stampDocument`, an
-undo replay), so that undo, dirty, drafts, saves and displays see it. The
-appendix grep of [legacy-reduction.md](legacy-reduction.md) finds direct
-writes through `S.state`; a write through an alias (`var list =
-S.state.comments; list.push(...)`) needs the guard.
+it out through `currentDocument()` and `liveDocumentPort`; the old `S` handle
+on it is deleted (L3j), and `check:deps` fails on `src/js/_state.js` or any
+import of it. A write into the document must be a session command
+(`runDocumentEdit`, `stampDocument`, an undo replay), so that undo, dirty,
+drafts, saves and displays see it. A write through a read
+(`currentDocument().comments.push(...)`) needs the guard.
 
 - **The switch.** `src/legacy/document-guard.ts` reads the page's query once,
-  when the bundle starts: `document-guard=1`, and nothing else, makes the
-  `S.state` getter hand out a read-only view of the session's document;
-  otherwise it hands out the document itself and nothing else runs.
+  when the bundle starts: `document-guard=1`, and nothing else, makes
+  `currentDocument()` and `liveDocumentPort.current()` hand out a read-only
+  view of the session's document; otherwise they hand out the document itself
+  and nothing else runs.
 - **The view.** A `Proxy` whose `set`, `deleteProperty`, `defineProperty`,
   `setPrototypeOf` and `preventExtensions` traps throw a
   `DocumentWriteError` (a `TypeError`) in any mode, after writing it to the
@@ -220,8 +219,9 @@ S.state.comments; list.push(...)`) needs the guard.
   (a replacement through `liveDocumentPort`, a server, recovery, merged or
   reloaded document, a merge base) and, after each command, stamp, replay or
   noted edit, replaces any view left in the document with its raw object.
-  Commands change the session's own object. `currentDocument()` and
-  `liveDocumentPort.current()` always give the raw document.
+  Commands change the session's own object. `heldDocument()` gives the raw
+  document, for undo, the records reconciler's identity check, the startup
+  identity check, the merge port and the suites' fixture hook.
   `src/test/document-guard.test.mjs` covers the switch, the view, every kind
   of write and the unwrapping.
 - **The runs.** `SPLITPAGE_DOCUMENT_GUARD=1` makes `run-tests.ps1`,
@@ -234,14 +234,13 @@ S.state.comments; list.push(...)`) needs the guard.
   page exactly in a guard run and that writes through the view are refused
   exactly then. The full browser run passes with the guard on; it can run
   together with `SPLITPAGE_FREEZE_CACHES=1`.
-- **What it does not cover.** A write through `currentDocument()` or
-  `liveDocumentPort.current()`, which hand out the raw document for the
-  session's own ports; the suites' `__splitpageFormats.state()` hook, which
+- **What it does not cover.** A write through `heldDocument()`, which hands
+  out the raw document for the session's own ports; the suites' `__splitpageFormats.state()` hook, which
   hands scripts the raw document so they can seed fixtures; pages opened
   without the flag, as for frozen caches.
 - **Identity.** A raw document and its view are different objects, so code
-  that compares a document handed in by the session with `S.state` must
-  compare it with `currentDocument()` (B-roll and tag records,
+  that compares a document handed in by the session with the live one must
+  compare it with `heldDocument()` (B-roll and tag records,
   `derivedRecordsPlan`).
 
 ## Golden fixtures

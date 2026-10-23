@@ -1,11 +1,7 @@
 import { bootApp, closeApp, seen } from "./_app-boot.mjs";
-import { readFileSync, readdirSync } from "node:fs";
-import { join, relative } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import ts from "typescript";
-import { S } from "../js/_state.js";
 import { cloneState } from "../core/document/clone.ts";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
@@ -23,60 +19,6 @@ const { applyTakenDraft } = await import("../js/20g-drafts.js");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
-
-const SRC = fileURLToPath(new URL("..", import.meta.url));
-
-function sourceFiles(dir) {
-  const out = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      if (path !== join(SRC, "test")) out.push(...sourceFiles(path));
-    } else if (/\.(?:js|mjs|ts)$/.test(entry.name) && !/\.test\./.test(entry.name)) {
-      out.push(path);
-    }
-  }
-  return out;
-}
-
-function enclosingFunction(node) {
-  for (let n = node.parent; n; n = n.parent) {
-    if (ts.isFunctionDeclaration(n) || ts.isFunctionExpression(n) || ts.isArrowFunction(n)) return n;
-  }
-  return null;
-}
-
-function nameOf(fn) {
-  if (fn && (ts.isFunctionDeclaration(fn) || ts.isFunctionExpression(fn)) && fn.name) return fn.name.text;
-  if (fn && fn.parent && ts.isPropertyAssignment(fn.parent) && ts.isIdentifier(fn.parent.name)) return fn.parent.name.text;
-  return "(anonymous)";
-}
-
-function isStateAssignment(node) {
-  return ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-    ts.isPropertyAccessExpression(node.left) && node.left.name.text === "state" &&
-    ts.isIdentifier(node.left.expression) && node.left.expression.text === "S";
-}
-
-function walk(node, visit) {
-  visit(node);
-  ts.forEachChild(node, (child) => walk(child, visit));
-}
-
-function assignments() {
-  const found = [];
-  for (const file of sourceFiles(SRC)) {
-    const text = readFileSync(file, "utf8");
-    if (text.indexOf("S.state") === -1) continue;
-    const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true);
-    walk(source, (node) => {
-      if (!isStateAssignment(node)) return;
-      const fn = enclosingFunction(node);
-      found.push({ site: relative(join(SRC, "js"), file).replace(/\\/g, "/") + "#" + nameOf(fn), node, fn });
-    });
-  }
-  return found;
-}
 
 function fixedPoint(value) {
   if (value === null || value === undefined) return value;
@@ -113,14 +55,6 @@ function migrated(title) {
   return migrateRows(rawDoc(title));
 }
 
-test("there is no S.state assignment left in src, and assigning it throws: the session is the document's only holder", () => {
-  assert.deepEqual(assignments().map((a) => a.site), []);
-  const held = currentDocument();
-  assert.ok(held, "the session holds the boot document");
-  assert.throws(() => Reflect.set(S, "state", migrated("Assigned")), /The document is read-only here: the document session holds it/, "an assignment throws, in sloppy code too");
-  assert.equal(currentDocument(), held);
-});
-
 test("boot from the seed: the transition API's live-document port replaces the session's document once, with the seed script, a migrateRows fixed point", () => {
   assert.equal(seedCheckPasses(), true, "the page's seed check matches its state-data, as a fresh build's does");
   assert.deepEqual(atBoot.map((r) => r.site), ["replaced"]);
@@ -131,11 +65,11 @@ test("boot from the seed: the transition API's live-document port replaces the s
 });
 
 test("02b adoptRestoredState, through the live-document port: a migrateRows fixed point, its docId kept", async () => {
-  const before = S.state.docId;
+  const before = currentDocument().docId;
   const value = only(await drive(() => adoptRestoredState(rawDoc("Restored"))), "replaced");
   assert.equal(fixedPoint(value), true);
   assert.equal(currentDocument().docId, before, "the docId is put back before the replacement");
-  assert.equal(fixedPoint(S.state), true);
+  assert.equal(fixedPoint(currentDocument()), true);
 });
 
 test("03-sync applyMerge's adopt, after a merge: the session absorbs the merged document, a migrateRows fixed point, with no replacement", async () => {

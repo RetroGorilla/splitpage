@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { setHome } from "../legacy/location-bridge.ts";
 import { truncateForPreview } from "../core/document/text-policy.ts";
 
@@ -51,7 +51,7 @@ function toasts() {
 }
 
 function panel() { return document.getElementById("broll-panel"); }
-function shot(id) { return S.state.brollShots.filter((b) => b.id === id)[0]; }
+function shot(id) { return currentDocument().brollShots.filter((b) => b.id === id)[0]; }
 
 test("02b the identity claim and the copy toast cut the title by code point (#434)", () => {
   load();
@@ -59,7 +59,7 @@ test("02b the identity claim and the copy toast cut the title by code point (#43
   let channel = null;
   setHome("file", { format: "html", name: "cuts.html" });
   try {
-    S.state.title = x(299) + GRIN + "y";
+    currentDocument().title = x(299) + GRIN + "y";
     syncDocIdentity();
     initDocIdentityChannel(function () {
       channel = { postMessage: (m) => posted.push(m), close() {} };
@@ -67,12 +67,12 @@ test("02b the identity claim and the copy toast cut the title by code point (#43
     });
     assert.equal(posted[0] && posted[0].title, x(299) + GRIN);
     document.querySelectorAll("#toast-host .toast").forEach((t) => t.remove());
-    channel.onmessage({ data: { type: "claim", docId: S.state.docId, home: "file:other.html", at: 0, nonce: "other", title: x(299) + GRIN + "z" } });
+    channel.onmessage({ data: { type: "claim", docId: currentDocument().docId, home: "file:other.html", at: 0, nonce: "other", title: x(299) + GRIN + "z" } });
     const said = toasts().filter((t) => t.indexOf("is a copy of") !== -1);
     assert.equal(said.length, 1, JSON.stringify(toasts()));
     assert.ok(said[0].indexOf('"' + x(299) + GRIN + '"') !== -1, said[0]);
     document.querySelectorAll("#toast-host .toast").forEach((t) => t.remove());
-    assert.ok(reassignDocId("d" + "7".repeat(32), { fromId: S.state.docId, otherTitle: " " + x(299) + "\uD83D" + "ab" }));
+    assert.ok(reassignDocId("d" + "7".repeat(32), { fromId: currentDocument().docId, otherTitle: " " + x(299) + "\uD83D" + "ab" }));
     const again = toasts().filter((t) => t.indexOf("is a copy of") !== -1);
     assert.ok(again[0].indexOf('"' + x(299) + "a" + '"') !== -1, again[0]);
   } finally {
@@ -83,7 +83,7 @@ test("02b the identity claim and the copy toast cut the title by code point (#43
 
 test("05g a pasted scene's source title is cut by code point (#434)", () => {
   load();
-  const payload = JSON.parse(buildScenePayload(S.state, ["r2"]).json);
+  const payload = JSON.parse(buildScenePayload(currentDocument(), ["r2"]).json);
   payload.source = { docId: null, title: x(299) + GRIN + "y" };
   assert.equal(parseScenePayload(JSON.stringify(payload)).source.title, x(299) + GRIN);
   payload.source = { docId: null, title: "a\uD83D b" };
@@ -92,16 +92,16 @@ test("05g a pasted scene's source title is cut by code point (#434)", () => {
 
 test("05h a new script from selected scenes cuts its title by code point (#434)", () => {
   load();
-  S.state.title = x(299) + GRIN;
+  currentDocument().title = x(299) + GRIN;
   selectScenes("r2", "r2");
   newScriptFromSelection();
-  assert.equal(S.state.title, x(299) + GRIN);
-  assert.equal(S.state.rows.length, 1);
+  assert.equal(currentDocument().title, x(299) + GRIN);
+  assert.equal(currentDocument().rows.length, 1);
 });
 
 test("20d a Markdown project's title is cut by code point (#434)", async () => {
   load();
-  const proj = parseMarkdownProject(buildMarkdownProject(exportDocumentOf(S.state)));
+  const proj = parseMarkdownProject(buildMarkdownProject(exportDocumentOf(currentDocument())));
   proj.title = x(299) + GRIN + "y";
   const back = await applyMarkdownProject(proj, { noAsk: true });
   assert.equal(back.title, x(299) + GRIN);
@@ -110,9 +110,9 @@ test("20d a Markdown project's title is cut by code point (#434)", async () => {
 test("08 a tag's notes are cut at 2000 by code point, with no lone half (#434)", () => {
   load();
   setTagNotes(registryKey("prop", "Kettle"), x(1999) + GRIN + "y");
-  assert.equal(S.state.productionTags[0].notes, x(1999) + GRIN);
+  assert.equal(currentDocument().productionTags[0].notes, x(1999) + GRIN);
   setTagNotes(registryKey("prop", "Kettle"), " a\uD83D\n b ");
-  assert.equal(S.state.productionTags[0].notes, " a\n b ");
+  assert.equal(currentDocument().productionTags[0].notes, " a\n b ");
 });
 
 test("08d a shot's note and its reference are cut at 2000 by code point (#434)", () => {
@@ -176,8 +176,8 @@ test("13a presence initials take whole characters (#434)", () => {
 
 test("18c the export preview never cuts a name or a scene in half an emoji (#434)", () => {
   load();
-  S.state.brollShots[1].name = x(32) + GRIN + "abc";
-  S.state.rows[1].audioText = x(149) + GRIN + "y";
+  currentDocument().brollShots[1].name = x(32) + GRIN + "abc";
+  currentDocument().rows[1].audioText = x(149) + GRIN + "y";
   const seen = {};
   for (const action of ["export-broll-pdf", "export-pdf"]) {
     assert.ok(openExportDialog({ action }), action);
@@ -191,7 +191,7 @@ test("18c the export preview never cuts a name or a scene in half an emoji (#434
 
 test("05f a scene's rundown snippet never ends in half an emoji (#434)", () => {
   load();
-  S.state.rows[1].audioText = x(89) + GRIN + "y";
+  currentDocument().rows[1].audioText = x(89) + GRIN + "y";
   const track = document.querySelector("#rundown .rundown-track");
   Object.defineProperty(track, "clientWidth", { value: 1200, configurable: true });
   try {
