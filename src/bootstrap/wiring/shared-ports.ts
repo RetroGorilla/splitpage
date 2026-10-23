@@ -1,9 +1,11 @@
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import { breakUndoCoalescing, flushEdits, lastUndoEntry, redo, undo } from "../../js/12a-undo.js";
 import { appActions } from "../../legacy/app-actions.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
@@ -55,13 +57,22 @@ const text: TextServices<HTMLElement> = {
   cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal
 };
 
+const undoControl: UndoControl = {
+  breakCoalescing: breakUndoCoalescing,
+  flush: flushEdits,
+  undo,
+  redo,
+  last: lastUndoEntry
+};
+
 const shared = {
   actions,
   changes,
   screen: (): ScreenState => screenNow(),
   document: documentReader,
   review,
-  text
+  text,
+  undo: undoControl
 };
 
 export function sharedPorts(): typeof shared {
