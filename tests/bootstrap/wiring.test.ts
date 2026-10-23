@@ -42,10 +42,12 @@ import { documentSources, documentTransitions, openDocument, startTransitions } 
 import { createUndoAdapter, routeReplays } from "../../src/legacy/undo-adapter.ts";
 import { sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
 import { migrateRows } from "../../src/js/02-state.js";
+import { projectFileServices, projectFileServicesStarted } from "../../src/application/formats/project-file-services.ts";
+import type { ProjectFileServices } from "../../src/application/formats/project-file-services.ts";
 
 after(closeApp);
 
-const OWNERS = ["location", "effects", "actions", "exportServices", "exports", "session", "saves", "transitions", "recovery", "editor", "productionEditing", "preferences"] as const;
+const OWNERS = ["location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions", "recovery", "editor", "productionEditing", "preferences"] as const;
 
 type Owner = (typeof OWNERS)[number];
 type Started = Record<Owner, boolean>;
@@ -66,6 +68,7 @@ function started(): Started {
     effects: effectsStarted(),
     actions: live(() => appActions.list()),
     exportServices: exportServicesStarted(),
+    projectFiles: projectFileServicesStarted(),
     exports: live(() => exportFormats.cards()),
     session: sessionStarted() && live(() => liveSession().epoch()),
     saves: savesStarted(),
@@ -118,6 +121,17 @@ function transitionPorts(): TransitionDeps {
     destination: { set: () => {}, confirm: () => {} },
     identity: { mint: () => "d" + "0".repeat(32), writtenOut: () => false, markWrittenOut: () => {} },
     history: { keep: () => null }
+  };
+}
+
+function projectFilePorts(): ProjectFileServices {
+  return {
+    migrateRows: (raw) => migrateRows(raw),
+    migrateDocument: (raw) => migrateRows(raw),
+    sanitizeHtml: (html) => html,
+    tagFieldOccurrences: (html) => ({ hits: 0, html: html }),
+    inertBody: () => ({ ownerDocument: { getElementById: () => null } }),
+    askMarkdownRows: () => Promise.resolve("keep")
   };
 }
 
@@ -192,6 +206,10 @@ function fakes(): Fakes {
         sessionStorage: () => null, localStorage: () => null, internImage: () => {}, merge: (request) => ({ state: migrateRows(request["theirs"]) })
       };
     },
+    projectFiles: () => {
+      note("projectFiles");
+      return projectFilePorts();
+    },
     keyTarget: new EventTarget(),
     undo,
     timers,
@@ -232,12 +250,13 @@ test("startup: wireApp builds every owner in order, each step sees only the owne
   const wiring = wireApp(f.deps);
   assert.deepEqual(f.log, [
     ["actions", only("location", "effects")],
-    ["exporters", only("location", "effects", "actions", "exportServices", "exports")],
-    ["undo route", only("location", "effects", "actions", "exportServices", "exports", "session")],
-    ["saves", only("location", "effects", "actions", "exportServices", "exports", "session")],
-    ["destinations", only("location", "effects", "actions", "exportServices", "exports", "session", "saves")],
-    ["sources", only("location", "effects", "actions", "exportServices", "exports", "session", "saves", "transitions")],
-    ["recovery", only("location", "effects", "actions", "exportServices", "exports", "session", "saves", "transitions")]
+    ["projectFiles", only("location", "effects", "actions", "exportServices")],
+    ["exporters", only("location", "effects", "actions", "exportServices", "projectFiles", "exports")],
+    ["undo route", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session")],
+    ["saves", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session")],
+    ["destinations", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves")],
+    ["sources", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions")],
+    ["recovery", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions")]
   ]);
   assert.deepEqual(started(), EVERYTHING);
   assert.equal(wiring.session, liveSession());
@@ -253,7 +272,7 @@ test("startup: wireApp builds every owner in order, each step sees only the owne
 });
 
 test("failed partial startup: each missing dependency is named and nothing is built", () => {
-  const required: (keyof WiringDeps)[] = ["entry", "effects", "editorName", "refresh", "records", "saves", "destinations", "transitions", "sources", "recovery", "keyTarget"];
+  const required: (keyof WiringDeps)[] = ["entry", "effects", "editorName", "refresh", "records", "saves", "destinations", "transitions", "sources", "recovery", "projectFiles", "keyTarget"];
   for (const name of required) {
     const f = fakes();
     const error = refused(() => wireLoose(without(f.deps, name)));
@@ -475,6 +494,25 @@ test("failed partial startup: an actions, exporters or recovery factory that ret
   }
 });
 
+test("failed partial startup: project file services missing a function fail their step, name the function and leave no owner", () => {
+  for (const name of ["migrateRows", "migrateDocument", "sanitizeHtml", "tagFieldOccurrences", "inertBody", "askMarkdownRows"] as const) {
+    const f = fakes();
+    const error = refused(() => wireLoose({ ...f.deps, projectFiles: () => without(projectFilePorts(), name) }));
+    assert.equal(error.step, "project file services", name);
+    assert.equal(String((error.cause as Error).message), "The project file services have no " + name + " function", name);
+    assert.deepEqual(started(), NOTHING, name + ": every owner built before it is released");
+  }
+});
+
+test("startup: the wired project file services are the ones the dependency returned, until dispose", () => {
+  const f = fakes();
+  const ports = projectFilePorts();
+  const wiring = wireApp({ ...f.deps, projectFiles: () => ports });
+  assert.equal(projectFileServices().askMarkdownRows, ports.askMarkdownRows);
+  wiring.dispose();
+  assert.throws(() => projectFileServices(), /The project file services are not started yet/);
+});
+
 test("failed partial startup: a step that throws undoes every step before it, in reverse, and names itself with the cause", () => {
   const boom = new Error("boom");
   const breakers: Record<(typeof WIRING_STEPS)[number], (f: Fakes) => { deps: WiringDeps; cleanup?: () => void; cause?: boolean }> = {
@@ -482,6 +520,7 @@ test("failed partial startup: a step that throws undoes every step before it, in
     "page effects": (f) => ({ deps: f.deps, cleanup: startEffects({} as EffectPorts<Element>), cause: false }),
     "action registry": (f) => ({ deps: { ...f.deps, actions: () => { throw boom; } } }),
     "export services": (f) => ({ deps: f.deps, cleanup: installExportServices(legacyExportServices()), cause: false }),
+    "project file services": (f) => ({ deps: { ...f.deps, projectFiles: () => { throw boom; } } }),
     "export registry": (f) => ({ deps: f.deps, cleanup: installExportFormats(createExportRegistry()), cause: false }),
     "built-in exporters": (f) => ({ deps: { ...f.deps, exporters: () => { throw boom; } } }),
     session: (f) => ({ deps: { ...f.deps, undo: { ...must(f.deps.undo), route: () => { throw boom; } } } }),

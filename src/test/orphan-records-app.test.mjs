@@ -10,7 +10,7 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { buildSplitpageFile } = await import("../js/20d-formats.js");
+const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { maybeAutoTagShortcut } = await import("../js/07-production-tags.js");
 const { maybeOpenPlainTag, closePlainTag, cancelPlainTag } = await import("../js/07b-plain-tags.js");
 const { maybeCaptureBroll } = await import("../js/08c-broll.js");

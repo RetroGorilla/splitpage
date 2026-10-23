@@ -1,4 +1,4 @@
-export type ViewFlagName = "findOpen" | "hideShot" | "writerOpen" | "brollPageOpen";
+export type ViewFlagName = "findOpen" | "hideShot" | "writerOpen" | "tourOpen" | "brollPageOpen";
 
 export interface ViewFlagChange {
   readonly flag: ViewFlagName;
@@ -14,6 +14,8 @@ export interface ViewFlags {
   readonly setFindOpen: (open: boolean) => void;
   readonly writerOpen: () => boolean;
   readonly setWriterOpen: (open: boolean) => void;
+  readonly tourOpen: () => boolean;
+  readonly setTourOpen: (open: boolean) => void;
   readonly brollPageOpen: () => boolean;
   readonly setBrollPageOpen: (open: boolean) => void;
   readonly hideShot: () => boolean;
@@ -22,7 +24,7 @@ export interface ViewFlags {
 }
 
 export function createViewFlags(ports: ViewFlagsPorts): ViewFlags {
-  const state: Record<ViewFlagName, boolean> = { findOpen: false, hideShot: !!ports.hideShot(), writerOpen: false, brollPageOpen: false };
+  const state: Record<ViewFlagName, boolean> = { findOpen: false, hideShot: !!ports.hideShot(), writerOpen: false, tourOpen: false, brollPageOpen: false };
   const listeners = new Set<(change: ViewFlagChange) => void>();
 
   function set(flag: ViewFlagName, value: boolean): void {
@@ -37,6 +39,8 @@ export function createViewFlags(ports: ViewFlagsPorts): ViewFlags {
     setFindOpen: function (open: boolean): void { set("findOpen", open); },
     writerOpen: function (): boolean { return state.writerOpen; },
     setWriterOpen: function (open: boolean): void { set("writerOpen", open); },
+    tourOpen: function (): boolean { return state.tourOpen; },
+    setTourOpen: function (open: boolean): void { set("tourOpen", open); },
     brollPageOpen: function (): boolean { return state.brollPageOpen; },
     setBrollPageOpen: function (open: boolean): void { set("brollPageOpen", open); },
     hideShot: function (): boolean { return state.hideShot; },

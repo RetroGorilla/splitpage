@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import "./_project-file-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";

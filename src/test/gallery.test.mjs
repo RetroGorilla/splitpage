@@ -1,6 +1,7 @@
 import { rowContentEqual } from "../core/merge/rows.ts";
 import "./_dom.mjs";
 import "./_export-services-started.mjs";
+import "./_project-file-services-started.mjs";
 import "./_preferences-started.mjs";
 import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
@@ -17,7 +18,7 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import { toMarkdownDoc } from "../adapters/formats/export-text.ts";
 import { buildDocx, docxToRows } from "../adapters/formats/docx.ts";
 import { buildPdf } from "../adapters/formats/pdf.ts";
-import { buildSplitpageFile } from "../js/20d-formats.js";
+import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
 import { refsIn } from "../../shared/blob-policy.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";

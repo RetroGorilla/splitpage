@@ -1,12 +1,13 @@
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import "./_export-services-started.mjs";
+import "./_project-file-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { STATE_FIELDS, migrateRows, missingStateFields } from "../js/02-state.js";
 import { mergeStates } from "../js/03-sync.js";
-import { buildSplitpageFile } from "../js/20d-formats.js";
+import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 

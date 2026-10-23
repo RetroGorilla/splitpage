@@ -9,7 +9,7 @@ import { escapeHtml, migrateRows } from "./02-state.js";
 import { blobImgHtml, rowImage, rowImageKey } from "../adapters/storage/02c-blobs.js";
 import { videoLinkLabel } from "../adapters/storage/02d-gallery.js";
 import { textMergeContext } from "./03-sync.js";
-import { parseProjectFileState } from "./18-local-files.js";
+import { parseProjectFileState } from "../adapters/formats/project-file.ts";
 import { fileConflicts } from "../legacy/save-bridge.ts";
 import { applyStashedWork } from "../legacy/recovery-bridge.ts";
 import { idMap } from "../core/document/id-map.ts";
