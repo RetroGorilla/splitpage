@@ -46,7 +46,7 @@ const actions: Pick<ActionRegistry, "invoke" | "view"> = {
 };
 
 const changes: PreferenceChanges = {
-  onChange(listener) {
+  onChange(listener, hearing) {
     const onPreference = (event: Event): void => {
       const change = (event as CustomEvent<PreferenceChange | undefined>).detail;
       if (!change) return;
@@ -58,11 +58,12 @@ const changes: PreferenceChanges = {
       const name = preferences().nameOf(event.key);
       if (name) listener({ name, value: event.newValue, elsewhere: true });
     };
+    const elsewhere = hearing?.elsewhere !== false;
     document.addEventListener(PREF_EVENT, onPreference);
-    window.addEventListener("storage", onStorage);
+    if (elsewhere) window.addEventListener("storage", onStorage);
     return () => {
       document.removeEventListener(PREF_EVENT, onPreference);
-      window.removeEventListener("storage", onStorage);
+      if (elsewhere) window.removeEventListener("storage", onStorage);
     };
   }
 };
