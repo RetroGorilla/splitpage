@@ -15,7 +15,7 @@ await bootApp(JSON.stringify({ schema: 2, title: "Mine", rows: [], rev: 5, lastE
 
 const { migrateRows } = await import("../js/02-state.js");
 const { getEditorName, promptForName } = await import("../js/03-sync.js");
-const { getSavedAuthorName, openCommentComposer, postComment, postReply, toggleReplyComposer } = await import("../js/10-comments.js");
+const { getSavedAuthorName, openCommentComposer, postComment, postReply, toggleReplyComposer } = await import("../bootstrap/wiring/comments.ts");
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { openSettings } = await import("../js/20s-settings.js");
 const { render } = await import("../js/05-render.js");

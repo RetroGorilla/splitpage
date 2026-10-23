@@ -1,3 +1,4 @@
+import { registerCommentsAction } from "../../src/bootstrap/wiring/comments.ts";
 import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
 import { test } from "node:test";
@@ -12,7 +13,7 @@ import { registerViewActions } from "../../src/legacy/view-actions.ts";
 
 function loadingRegistry(): { registry: ActionRegistry; restore: () => void } {
   const registry = createActionRegistry();
-  const disposers = [registerFileActions(registry), registerThisDocumentActions(registry), registerViewActions(registry)];
+  const disposers = [registerFileActions(registry), registerThisDocumentActions(registry), registerViewActions(registry), registerCommentsAction(registry, "panel")];
   const was: unknown = currentDocument();
   loadTestDocument(null);
   return {

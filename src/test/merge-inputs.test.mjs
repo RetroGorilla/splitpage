@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
-import { saveAuthorName } from "../js/10-comments.js";
+import { saveAuthorName } from "../bootstrap/wiring/comments.ts";
 import { deepFreeze } from "../core/document/freeze.ts";
 import { freezeClockAndRandom, jsonCopy } from "./golden-helpers.mjs";
 import { mergeCorpus, mergeGoldenInputs } from "./_merge-corpus.mjs";

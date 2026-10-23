@@ -7,7 +7,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 import { setHideShotScenes } from "../js/01b-hide-shot.js";
 import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { paintRowTimes } from "../js/05-render.js";
-import { syncAnchorResolvedClasses } from "../js/10-comments.js";
+import { syncAnchorResolvedClasses } from "../bootstrap/wiring/comments.ts";
 import { PROTOTYPE_IDS } from "../core/document/id-map.ts";
 import { loadTestDocument } from "./_document.mjs";
 

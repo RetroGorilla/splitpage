@@ -1,5 +1,4 @@
 import type { ActionDefinition, Availability } from "../application/actions.ts";
-import { showTaggingHelp } from "../js/10-comments.js";
 import { openLongDemo } from "../js/18b-file-menu.js";
 import { showAbout } from "../js/20a-update.js";
 import { openOnboarding } from "../js/20b-onboarding.js";
@@ -71,15 +70,6 @@ export function helpMenuActions(): ActionDefinition[] {
       words: "version about",
       availability: overDialogs,
       run: () => { showAbout(); }
-    },
-    {
-      id: "tagging-help",
-      label: "Tagging reference",
-      group: "Tags",
-      icon: "i-tag",
-      words: "tags tagging reference shortcuts brackets help",
-      availability: overDialogs,
-      run: () => { showTaggingHelp(); }
     },
     {
       id: "export-app-data",

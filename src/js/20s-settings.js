@@ -1,6 +1,6 @@
 import { setHideShotScenes } from "./01b-hide-shot.js";
 import { personSwatchesHtml } from "./03-sync.js";
-import { getSavedAuthorName } from "./10-comments.js";
+import { getSavedAuthorName } from "../bootstrap/wiring/comments.ts";
 import {
   DEFAULT_COLLAB_SERVER,
   collabServerView,

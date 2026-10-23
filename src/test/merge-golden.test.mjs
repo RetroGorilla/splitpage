@@ -7,7 +7,7 @@ import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
 import { mergeBrollShots, mergePeople, mergeProductionTags } from "../js/03-sync.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
-import { saveAuthorName } from "../js/10-comments.js";
+import { saveAuthorName } from "../bootstrap/wiring/comments.ts";
 import {
   FIXED_ISO, assertGolden, freezeClockAndRandom, goldenNames, goldenText, jsonCopy, maskTokens, readGolden, updatingGoldens
 } from "./golden-helpers.mjs";

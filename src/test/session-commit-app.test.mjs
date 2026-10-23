@@ -16,7 +16,7 @@ const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits, lastUndoEntry, undo, undoSizes } = await import("../js/12a-undo.js");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
 const { preferences } = await import("../legacy/preferences-bridge.ts");
-const { saveAuthorName } = await import("../js/10-comments.js");
+const { saveAuthorName } = await import("../bootstrap/wiring/comments.ts");
 const NAME_KEY = "splitpage-comment-author";
 const { loadTestDocument } = await import("./_document.mjs");
 

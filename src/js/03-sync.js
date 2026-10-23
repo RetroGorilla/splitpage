@@ -28,7 +28,7 @@ import { resetProductionPanelState } from "../legacy/production-editing-bridge.t
 import {
   formatTimestamp,
   getSavedAuthorName
-} from "./10-comments.js";
+} from "../bootstrap/wiring/comments.ts";
 import { cleanAuthorName } from "../core/document/people.ts";
 import { showToast } from "./12-dirty-toast.js";
 import { presence } from "../legacy/presence-bridge.ts";

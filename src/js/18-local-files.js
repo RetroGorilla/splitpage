@@ -15,7 +15,7 @@ import { stampRow } from "./03-sync.js";
 import { beginBusy, endBusy, withBusyBar } from "../features/notices/busy.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { brollPrintView } from "./08d-broll-panel.js";
-import { formatTimestamp } from "./10-comments.js";
+import { formatTimestamp } from "../bootstrap/wiring/comments.ts";
 import { captureExportDocument, loadExportAssets } from "./14b-export-kit.js";
 import { exportAssetsRequest } from "../adapters/formats/export-assets.ts";
 import {

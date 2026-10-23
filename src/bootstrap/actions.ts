@@ -1,3 +1,4 @@
+import { registerCommentsAction } from "./wiring/comments.ts";
 import type { ActionRegistry, ActionSource, Refusal } from "../application/actions.ts";
 import { registerAll } from "../application/actions.ts";
 import { mountShortcuts } from "../features/shortcuts/mount.ts";
@@ -25,14 +26,20 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => registry.presentRefusals(presentRefusal),
     () => registerThisDocumentActions(registry),
     () => registerFileActions(registry),
-    () => registerViewActions(registry),
+    () => registerViewActions(registry, "panels"),
+    () => registerCommentsAction(registry, "panel"),
+    () => registerViewActions(registry, "views"),
     () => {
       const menu = helpMenuActions();
-      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]);
+      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 6)]);
     },
+    () => registerCommentsAction(registry, "tagging-help"),
+    () => registerAll(registry, helpMenuActions().slice(6)),
     () => registerShareActions(registry),
     () => registerAll(registry, scriptZoomActions()),
-    () => registerEditorOpenActions(registry),
+    () => registerEditorOpenActions(registry, "before-comment"),
+    () => registerCommentsAction(registry, "selection"),
+    () => registerEditorOpenActions(registry, "after-comment"),
     () => runMenuCommandsWith(nativeMenuRunner(registry, presentRefusal)),
     () => mountShortcuts({ target: keyTarget, registry })
   ];

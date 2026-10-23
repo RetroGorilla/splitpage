@@ -9,11 +9,11 @@ window.Element.prototype.scrollIntoView = function () {};
 window.Element.prototype.scrollBy = function () {};
 await bootApp();
 const { commentSortMode } = await import("../application/comment-sort.ts");
-const { mountCommentsFeature } = await import("../bootstrap/wiring/comments.ts");
+const { mountCommentsFeature } = await import("../bootstrap/wiring/comments-controls.ts");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../js/05-render.js");
 const { documentLocation } = await import("../legacy/location-bridge.ts");
-const { openCommentComposer, openCommentsPanel, closeCommentComposer } = await import("../js/10-comments.js");
+const { openCommentComposer, openCommentsPanel, closeCommentComposer } = await import("../bootstrap/wiring/comments.ts");
 after(closeApp);
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
