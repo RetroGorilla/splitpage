@@ -45,7 +45,7 @@ import {
 import {
   makeDesktopHandle
 } from "./20f-desktop.js";
-import { closeNewTabPage } from "./20j-newtab.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { exportToggleOptions } from "../application/export/registry.ts";
 import { isDocumentObject } from "../core/migrate.ts";
@@ -323,7 +323,7 @@ export async function openProjectFile(file, handle, opts) {
 
 export function adoptProjectState(newState, file, handle, kind, opts) {
   opts = opts || {};
-  if (typeof closeNewTabPage === "function") closeNewTabPage();
+  sidePanels().close("newtab-page");
   if (!opts.skipSnapshot && S.state && S.state.rows.length) pushSnapshot("Before opening " + file.name);
 
   resetProductionPanelState();
@@ -454,7 +454,7 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   markAbsorbedDirty(opts.reload ? "reload" : "adopt");
   amendHome(imported, { dirty: false });
-  if (typeof closeNewTabPage === "function") closeNewTabPage();
+  sidePanels().close("newtab-page");
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   showToast(opts.reload
     ? "Reloaded " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s")

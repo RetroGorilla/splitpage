@@ -1,42 +1,3 @@
-import { SIDE_PANEL_IDS } from "../application/preferences/panel-widths.ts";
-import { mountPanels } from "../features/panels/mount.ts";
-import { panelWidths } from "../legacy/preferences-bridge.ts";
-import { closeHistoryPanel, syncPanelClass } from "./03-sync.js";
-import { closeGearPanel, closeProductionPanel } from "./08-production-panels.js";
-import { closeBrollPanel } from "./08d-broll-panel.js";
-import { closeCommentsPanel } from "./10-comments.js";
-
-function readSidePanelWidth(id) {
-  return panelWidths().read(id);
-}
-function saveSidePanelWidth(id, w) {
-  panelWidths().save(id, w);
-}
-function sidePanelWidthDefault(id) {
-  return panelWidths().defaultWidth(id);
-}
-function clampSidePanelWidth(w, id) {
-  return panelWidths().clamp(w, id);
-}
-
-export function applySidePanelWidth(id, w) {
-  var panel = document.getElementById(id);
-  if (!panel) return;
-  panel.style.setProperty("--panel-width", w + "px");
-  document.body.style.setProperty("--open-panel-width", w + "px");
-}
-
-export function initSidePanelResizeHandles() {
-  return mountPanels({ window: window, ports: {
-    ids: SIDE_PANEL_IDS,
-    readWidth: readSidePanelWidth,
-    defaultWidth: sidePanelWidthDefault,
-    clampWidth: clampSidePanelWidth,
-    applyWidth: applySidePanelWidth,
-    saveWidth: saveSidePanelWidth
-  } }).dispose;
-}
-
 var placeHold = null;
 var placeFrame = 0;
 
@@ -93,25 +54,6 @@ export function sidePanelOpening(open) {
   var html = document.documentElement;
   if (open) html.style.setProperty("--page-gutter", Math.max(0, window.innerWidth - html.clientWidth) + "px");
   holdScriptPlace();
-}
-
-var SIDE_PANEL_CLOSERS = {
-  "comments-panel": closeCommentsPanel,
-  "production-panel": closeProductionPanel,
-  "gear-panel": closeGearPanel,
-  "broll-panel": closeBrollPanel,
-  "history-panel": closeHistoryPanel
-};
-
-export function closeAllSidePanels() {
-  SIDE_PANEL_IDS.forEach(function (id) {
-    var el = document.getElementById(id);
-    if (!el || el.hidden) return;
-    var close = SIDE_PANEL_CLOSERS[id];
-    if (typeof close === "function") close();
-    el.hidden = true;
-  });
-  syncPanelClass();
 }
 
 export function __init() {

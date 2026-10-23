@@ -9,7 +9,7 @@ import {
 } from "../application/prompter-state.ts";
 import { reviewBlocked, reviewMode, serverHomeId } from "../legacy/location-bridge.ts";
 import { SpeechRecognitionCtor } from "./00-prelude.js";
-import { closeAllSidePanels } from "./03b-side-panels.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import {
   addPersonForTag,
   renderProduction,
@@ -27,7 +27,6 @@ import {
   loadDesktopVoice,
   openPrompterInBrowser
 } from "./20f-desktop.js";
-import { closeNewTabPage } from "./20j-newtab.js";
 import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "./_voice-relay.js";
 import { pad2, formatTimecode, rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
@@ -432,7 +431,7 @@ function lockPageScrollWhenArrived(el) {
 }
 
 export function openPrompter() {
-  closeAllSidePanels();
+  sidePanels().closeAll();
   buildPrompterContent();
   var el = document.getElementById("prompter");
   prompterLeaveSeq++;
@@ -964,7 +963,7 @@ function whenInitialStateReady() {
 }
 
 function showPrompterForLaunch() {
-  closeNewTabPage();
+  sidePanels().close("newtab-page");
   if (!prompterIsOpen()) openPrompter();
 }
 

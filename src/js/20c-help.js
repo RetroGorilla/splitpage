@@ -1,5 +1,5 @@
 import { S } from "./_state.js";
-import { closeAllSidePanels } from "./03b-side-panels.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { handTourPauseTo } from "../legacy/tour-pause.ts";
 import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
@@ -20,7 +20,7 @@ export function openHelp(anchor) {
   var modal = document.getElementById("help-modal");
   if (!modal) return;
   suspendTourForHelp();
-  closeAllSidePanels();
+  sidePanels().closeAll();
   helpReturnFocus = document.activeElement;
   modal.hidden = false;
   if (anchor) scrollHelpTo(anchor);
@@ -259,7 +259,7 @@ export function startTour() {
   }
   var overlay = document.getElementById("tour-overlay");
   if (!overlay) return;
-  closeAllSidePanels();
+  sidePanels().closeAll();
   tourSuspendedAt = -1;
   tourInterruptedAt = -1;
   dismissPausedToast();

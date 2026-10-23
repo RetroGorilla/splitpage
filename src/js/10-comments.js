@@ -19,11 +19,8 @@ import { formatClock, formatDateClock } from "../../shared/clock.js";
 import { revealRow } from "./01b-hide-shot.js";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { normalizeImageRef } from "../../shared/blob-policy.js";
-import {
-  openSidePanel,
-  pushSnapshot,
-  syncPanelClass
-} from "./03-sync.js";
+import { pushSnapshot } from "./03-sync.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import {
   cssAttr,
   inertBody,
@@ -221,7 +218,7 @@ export function resetCommentBindings() {
   expandedReplyIds = idMap();
   replyDrafts = idMap();
   document.getElementById("comment-modal").hidden = true;
-  closeCommentsPanel();
+  sidePanels().close("comments-panel");
   closeFieldPopovers(document.getElementById("comment-modal"));
   var body = document.getElementById("comment-body-editable");
   body.innerHTML = "";
@@ -592,13 +589,9 @@ function findCommentIndex(id) {
 
 export function openCommentsPanel() {
   if (!currentDocument()) return;
-  openSidePanel("comments-panel");
+  sidePanels().open("comments-panel");
   captureReplyDrafts();
   renderComments();
-}
-export function closeCommentsPanel() {
-  document.getElementById("comments-panel").hidden = true;
-  syncPanelClass();
 }
 
 export function toggleResolve(id) {
