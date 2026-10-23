@@ -337,14 +337,6 @@ function wrapComment(text, indent, width) {
   return lines.map((l, i) => indent + (i === 0 ? "/* " : "   ") + l).join("\n") + " */";
 }
 
-const stateDoc = stateNames.map((n) => {
-  const b = bindings.get(n);
-  const shortFrag = (f) => f.replace(/\.js$/, "");
-  const doc = shortFrag(b.declFrag) + " declares it; " +
-    [...b.writeFrags].sort().map(shortFrag).join(", ") + " assign it.";
-  return wrapComment(doc, "  ", 78) + "\n  " + n + ": undefined";
-}).join(",\n\n");
-
 const entryImports = names.map((n) => {
   const alias = "init_" + n.replace(/\.js$/, "").replace(/[^A-Za-z0-9]/g, "_");
   return { n, alias };
