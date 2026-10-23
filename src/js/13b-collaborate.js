@@ -1,4 +1,4 @@
-import { S } from "./_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { authorityOf, isOwner } from "../application/collaboration/authority.ts";
 import { runIsStale } from "../application/collaboration/workflow.ts";
 import { currentConn, currentHome, documentLocation, reviewMode, serverHomeId, serverStatus } from "../legacy/location-bridge.ts";
@@ -160,7 +160,7 @@ function ensureModal() {
 }
 
 export async function openCollaborate() {
-  if (!S.state) { showToast("Still loading…", "warn"); return; }
+  if (!currentDocument()) { showToast("Still loading…", "warn"); return; }
   var why = collaborateBlockedReason();
   if (why) { showToast(why + ".", "warn"); return; }
   var m = ensureModal();
@@ -333,7 +333,7 @@ async function publishStep(c) {
   var failure = null;
   var ok = await publishToServer({ quiet: true, onError: function (e) { failure = e; } });
   if (stale(c)) {
-    if (ok) showToast("“" + (S.state.title || "Untitled script") + "” is on " + serverLabel(currentConn().serverUrl) +
+    if (ok) showToast("“" + (currentDocument().title || "Untitled script") + "” is on " + serverLabel(currentConn().serverUrl) +
       " — File ▸ Collaborate… has its links.", "ok");
     return;
   }
@@ -545,7 +545,7 @@ function paint() {
   if (!c || !m) return;
   var t = c.target;
   var host = serverLabel(t.url);
-  document.getElementById("collab-doc-title").textContent = (S.state && S.state.title) || "Untitled script";
+  document.getElementById("collab-doc-title").textContent = (currentDocument() && currentDocument().title) || "Untitled script";
   document.getElementById("collab-doc-where").textContent =
     onServerDoc() ? "On " + host : "On this device";
   var body = document.getElementById("collab-body");
@@ -587,7 +587,7 @@ function statusHtml(text) {
 
 function bodyHtml(c, host) {
   var hostHtml = "<strong>" + escapeHtml(host) + "</strong>";
-  var title = (S.state && S.state.title) || "Untitled script";
+  var title = (currentDocument() && currentDocument().title) || "Untitled script";
   switch (c.step) {
     case "checking":
       return statusHtml("Checking " + host + "…");
@@ -815,7 +815,7 @@ function openGuestName() {
     document.body.appendChild(m);
     wireGuest(m);
   }
-  var title = (S.state && S.state.title) || "this script";
+  var title = (currentDocument() && currentDocument().title) || "this script";
   var can = reviewMode() ? "you can read it, present it and leave comments."
     : "you can edit it and leave comments.";
   m.innerHTML =
