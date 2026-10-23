@@ -1,3 +1,5 @@
+import type { ActionDefinition } from "../../application/actions.ts";
+import { rowActions } from "../../features/rows/actions.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { ROOT_CLICK_ORDER, ROOT_MOUSEDOWN_ORDER, createRootRouter } from "../../features/routing/root-router.ts";
 import type { RootClickSlot, RootMouseDownSlot, RootRoute } from "../../features/routing/root-router.ts";
@@ -427,12 +429,17 @@ export function mountRowsFeature(): ReturnType<typeof mountRowRoutes> {
     return [
       function () { return routeRootClick("rows-add", function (e) { return owner.addClick(e); }); },
       function () { return routeRootClick("rows-scene", function (e) { return owner.sceneClick(e); }); },
-      function () { return routeRootClick("rows-menu", function (e) { return owner.menuClick(e); }); }
+      function () { return routeRootClick("rows-menu", function (e) { return owner.menuClick(e); }); },
+      function () { return rowDrag().onEnd(clearDropMarkers); }
     ];
   });
 }
 
 export const stopRowsFeature = rowRoutes.stop;
+
+export function rowsActions(): ActionDefinition[] {
+  return rowActions({ reveal: revealRow });
+}
 
 const rowsEditor = owned<ReturnType<typeof mountRowsEditor>>();
 

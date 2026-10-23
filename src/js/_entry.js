@@ -14,7 +14,6 @@ import { __init as init_05_render } from "./05-render.js";
 import { __init as init_05c_clipboard } from "./05c-clipboard.js";
 import { __init as init_05d_draft_edit } from "./05d-draft-edit.js";
 import { __init as init_05e_gallery_overlay } from "./05e-gallery-overlay.js";
-import { __init as init_05f_rundown } from "./05f-rundown.js";
 import { __init as init_05g_scene_clip } from "./05g-scene-clip.js";
 import { __init as init_05h_scene_select } from "./05h-scene-select.js";
 import { __init as init_05p_rundown_presence } from "./05p-rundown-presence.js";
@@ -66,7 +65,7 @@ import { importDocumentSource } from "./11-import.js";
 import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
-import { wireApp, mountScriptZoomFeature } from "../bootstrap/wiring.ts";
+import { wireApp, mountRundownFeature, mountScriptZoomFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -105,7 +104,7 @@ if (wiring) {
   init_05c_clipboard();
   init_05d_draft_edit();
   init_05e_gallery_overlay();
-  init_05f_rundown();
+  mountRundownFeature();
   init_05g_scene_clip();
   init_05h_scene_select();
   init_05p_rundown_presence();

@@ -8,8 +8,10 @@ import { registerFileActions } from "../legacy/file-actions.ts";
 import { registerHelpActions } from "../legacy/help-actions.ts";
 import { nativeMenuRunner } from "../legacy/native-menu.ts";
 import { registerShareActions } from "../legacy/share-actions.ts";
-import { registerThisDocumentActions } from "../legacy/this-document-actions.ts";
+import { hideShotActions, thisDocumentActions } from "../legacy/this-document-actions.ts";
 import { registerViewActions } from "../legacy/view-actions.ts";
+import { rowsActions } from "./wiring/editor.ts";
+import { rundownMinimizeActions, rundownSceneActions } from "./wiring/rundown.ts";
 import { scriptZoomActions } from "./wiring/script-zoom.ts";
 
 let running: (() => void) | null = null;
@@ -22,13 +24,15 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
   if (running) throw new Error("the actions are already started; stop them first");
   const steps: readonly (() => () => void)[] = [
     () => registry.presentRefusals(presentRefusal),
-    () => registerThisDocumentActions(registry),
+    () => registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]),
     () => registerFileActions(registry),
     () => registerViewActions(registry),
     () => registerHelpActions(registry),
     () => registerShareActions(registry),
     () => registerAll(registry, scriptZoomActions()),
+    () => registerAll(registry, rundownSceneActions()),
     () => registerEditorOpenActions(registry),
+    () => registerAll(registry, rowsActions()),
     () => runMenuCommandsWith(nativeMenuRunner(registry, presentRefusal)),
     () => mountShortcuts({ target: keyTarget, registry })
   ];

@@ -3,7 +3,7 @@ import "../../src/test/_preferences-started.mjs";
 import "../../src/test/_location-started.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createActionRegistry } from "../../src/application/actions.ts";
+import { createActionRegistry, registerAll } from "../../src/application/actions.ts";
 import type { ActionRegistry, ActionSource } from "../../src/application/actions.ts";
 import { S } from "../../src/js/_state.js";
 import { loadTestDocument } from "../../src/test/_document.mjs";
@@ -13,7 +13,8 @@ import { registerHelpActions } from "../../src/legacy/help-actions.ts";
 import { availableUnless, EVERY_OVERLAY, everyOverlayBut, inFront, OPENS_A_DIALOG } from "../../src/application/screen.ts";
 import type { Blocker, ScreenState } from "../../src/application/screen.ts";
 import { registerShareActions } from "../../src/legacy/share-actions.ts";
-import { registerThisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
 
 const NOTHING: ScreenState = {
@@ -58,7 +59,8 @@ test("each blocker refuses with its own reason", () => {
 
 function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
   const registry = createActionRegistry();
-  const disposers = [registerFileActions(registry), registerThisDocumentActions(registry), registerViewActions(registry),
+  mountRundownFeature();
+  const disposers = [stopRundownFeature, registerFileActions(registry), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerViewActions(registry),
     registerShareActions(registry)];
   const was = { state: S.state as unknown, prompterOpen: prompterIsOpen() };
   loadTestDocument({ rows: [] });
