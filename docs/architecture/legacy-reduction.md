@@ -352,6 +352,8 @@ Exit: the 6 files are gone (−4,165 numbered lines). With L4b, L4 removes 16 fi
 
 After L3, the remaining numbered files are in no loop and use no `S`, so each is feature code in the wrong folder. Each moves into `src/features/` when a 4.1 feature next changes it, with L0's ratchets keeping the counts falling, and its bridges retire as it does. Scheduling them as their own work instead is Adam's call.
 
+[feature-ports.md](feature-ports.md) sets how a moved file connects to the rest of the app (ports, wiring, actions and tests), proposes an order for the moves in five waves (0 to 4), and marks which need Opus. It also finds that 16 of the files are wholly or partly owners or adapters, not feature code, and those parts go to `src/application/` or `src/adapters/` instead.
+
 ## Order and parallelism
 
 ```

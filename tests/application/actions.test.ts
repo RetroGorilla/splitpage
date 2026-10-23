@@ -218,3 +218,12 @@ test("a group of actions registers whole or not at all", () => {
   off();
   assert.deepEqual(registry.list().map((v) => v.id), ["taken"]);
 });
+
+test("an action receives what to open from the code that runs it, and a menu passes nothing", () => {
+  const registry = createActionRegistry();
+  const inputs: unknown[] = [];
+  registry.register({ id: "a", label: "A", group: "G", run: (_s, input) => { inputs.push(input); } });
+  assert.equal(registry.invoke("a", "button", { rowId: "r1" }).kind, "ran");
+  assert.equal(registry.invoke("a", "menu").kind, "ran");
+  assert.deepEqual(inputs, [{ rowId: "r1" }, undefined]);
+});
