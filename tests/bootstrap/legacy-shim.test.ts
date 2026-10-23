@@ -137,8 +137,8 @@ test("no numbered module configures a bridge or starts an owner while it loads: 
     "src/features/settings/settings.js", "src/features/settings/actions.ts", "src/bootstrap/wiring/settings.ts",
     "src/features/gallery/annotate.js", "src/features/gallery/overlay.js", "src/features/gallery/actions.ts", "src/bootstrap/wiring/gallery.ts", "src/features/common/gallery.ts",
     "src/features/rundown/rundown.js", "src/features/rundown/actions.ts", "src/features/rows/actions.ts", "src/bootstrap/wiring/rundown.ts", "src/features/rows/read-time.js", "src/bootstrap/wiring/read-time.ts", "src/features/rundown/presence.js", "src/features/rundown/target.js", "src/features/update/ports.ts", "src/features/update/actions.ts",
-    "src/features/clipboard/cell-clipboard.js", "src/features/clipboard/scene-clip.js", "src/features/clipboard/scene-select.js", "src/bootstrap/wiring/clipboard.ts", "src/bootstrap/wiring/hide-shot.ts"];
-  assert.equal(targets.length, 97);
+    "src/features/clipboard/cell-clipboard.js", "src/features/clipboard/scene-clip.js", "src/features/clipboard/scene-select.js", "src/bootstrap/wiring/clipboard.ts", "src/bootstrap/wiring/hide-shot.ts", "src/features/rows/hide-shot.ts", "src/legacy/hide-shot-bridge.ts"];
+  assert.equal(targets.length, 99);
   for (const loadOnly of ["src/features/rows/row-motion.js", "src/features/title/topbar.ts", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/notices/phone-bar.ts", "src/adapters/storage/03c-history-idb.js", "src/adapters/formats/export-projections.ts", "src/adapters/formats/export-kit.ts", "src/adapters/formats/export-assets.ts", "src/adapters/formats/export-text.ts", "src/adapters/formats/csv.ts", "src/adapters/formats/xlsx.ts", "src/adapters/formats/docx.ts", "src/adapters/formats/pdf.ts", "src/bootstrap/wiring/exporters.ts", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts"]) {
     assert.ok(targets.includes(loadOnly), loadOnly);
   }
