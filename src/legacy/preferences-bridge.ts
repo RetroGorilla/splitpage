@@ -31,6 +31,16 @@ export function onPreferenceChange(listener: (change: PreferenceChange) => void)
   };
 }
 
+let announcing = false;
+
+function tellListeners(change: PreferenceChange): void {
+  changeListeners.slice().forEach(function (listener) { listener(change); });
+}
+
+export function notePreferenceChange(change: PreferenceChange): void {
+  if (started && !announcing) tellListeners(change);
+}
+
 function running(): Started {
   if (!started) throw new Error("The preferences are not started yet");
   return started;
@@ -52,10 +62,12 @@ export function startPreferences(ports: LegacyPreferencePorts = browserPreferenc
   const preferences = createPreferences({
     storage: ports.storage,
     announce: function (change) {
+      announcing = true;
       try {
         ports.announce(change);
       } finally {
-        changeListeners.slice().forEach(function (listener) { listener(change); });
+        announcing = false;
+        tellListeners(change);
       }
     }
   });

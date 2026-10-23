@@ -7,6 +7,8 @@ import type { ActionRegistry } from "../application/actions.ts";
 import { createExportRegistry } from "../application/export/registry.ts";
 import type { ExportRegistry } from "../application/export/registry.ts";
 import { installExportServices } from "../application/export/services.ts";
+import { installProjectFileServices } from "../application/formats/project-file-services.ts";
+import type { ProjectFileServices } from "../application/formats/project-file-services.ts";
 import type { DocumentSession, DocumentView, Plan } from "../application/session/document-session.ts";
 import type { ChangeSet, SessionChange } from "../application/session/change-set.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
@@ -49,6 +51,7 @@ export interface WiringDeps {
   readonly transitions: TransitionDeps;
   readonly sources: () => readonly LegacyDocumentSource[];
   readonly recovery: () => LegacyRecoveryPorts;
+  readonly projectFiles: () => ProjectFileServices;
   readonly keyTarget: EventTarget;
   readonly actions?: (() => ActionRegistry) | undefined;
   readonly exporters?: ((registry: ExportRegistry) => () => void) | undefined;
@@ -80,6 +83,7 @@ export const WIRING_STEPS = Object.freeze([
   "page effects",
   "action registry",
   "export services",
+  "project file services",
   "export registry",
   "built-in exporters",
   "session",
@@ -106,6 +110,7 @@ const REQUIRED: readonly (readonly [keyof WiringDeps, "function" | "object"])[] 
   ["transitions", "object"],
   ["sources", "function"],
   ["recovery", "function"],
+  ["projectFiles", "function"],
   ["keyTarget", "object"]
 ];
 
@@ -328,6 +333,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("page effects", () => startPageEffects(window), (stop) => stop);
   const actions = build("action registry", () => checkedActions((deps.actions ?? createAppActions)()), installAppActions);
   build("export services", () => legacyExportServices(), installExportServices);
+  build("project file services", () => deps.projectFiles(), installProjectFileServices);
   const exports = build("export registry", () => createExportRegistry(), installExportFormats);
   build("built-in exporters", () => checkedExporters((deps.exporters ?? registerBuiltInExporters)(exports)), (drop) => drop);
   build("session", () => {

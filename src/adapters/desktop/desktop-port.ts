@@ -184,6 +184,14 @@ export function desktopPort(): DesktopPort | null {
   return current;
 }
 
+export function canOpenPrompterInBrowser(): boolean {
+  return current !== null && typeof current.openPrompterInBrowser === "function";
+}
+
+export function canOpenPrompterInChromium(): boolean {
+  return current !== null && typeof current.openPrompterInChromium === "function";
+}
+
 export function useDesktopForTest(fake: Partial<DesktopPort> | null | undefined): void {
   use(fake as DesktopPort | null | undefined);
 }
