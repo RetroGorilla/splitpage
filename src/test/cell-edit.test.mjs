@@ -1,9 +1,10 @@
-import { domToPos } from "../features/editing/cell-dom.ts";
+import { domToPos, posToDom } from "../features/editing/cell-dom.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { posToDom } from "../features/editing/cell-dom.ts";
-import { cellLength, fromHtml, toHtml } from "../js/04c-doc-model.js";
+import { cellLength } from "../core/text/runs.ts";
+import { fromHtml } from "../legacy/richtext.ts";
+import { toHtml } from "../core/text/html.ts";
 
 const tag = (name, inner) => `<span class="tag-anchor" data-tag-cat="prop" data-tag-name="${name}" contenteditable="false">${inner || name}</span>`;
 const broll = '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span>';
