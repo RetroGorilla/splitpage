@@ -29,6 +29,7 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/view-actions.ts": { functions: ["registerViewActions"] },
   "src/bootstrap/wiring/script-zoom.ts": { functions: ["mountScriptZoomFeature"] },
   "src/bootstrap/wiring/read-time.ts": { functions: ["mountReadTimeFeature"] },
+  "src/bootstrap/wiring/scene-status.ts": { functions: ["mountSceneStatusFeature", "onScriptStats"] },
   "src/bootstrap/wiring/rundown.ts": { functions: ["mountRundownFeature", "mountRundownPresenceFeature", "mountTargetFeature"] },
   "src/bootstrap/wiring/help.ts": { functions: ["mountHelpFeature"] },
   "src/bootstrap/wiring/gallery.ts": { functions: ["mountGalleryFeature"] },

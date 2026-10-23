@@ -4,7 +4,6 @@ import "./_export-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { detectTwoColumnFormat, parseImportRows } from "../js/11-import.js";
@@ -17,7 +16,6 @@ import { exportFacts } from "../adapters/formats/export-kit.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
-initStatus();
 
 const cells = (rows) => rows.map((r) => [r.visualText, r.audioText]);
 

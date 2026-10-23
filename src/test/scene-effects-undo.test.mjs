@@ -1,16 +1,14 @@
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
-import { register } from "node:module";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { lastUndoEntry, redo, resetUndo, undo, undoSizes } from "../js/12a-undo.js";
 
-register("./_fanout-hooks.mjs", import.meta.url);
-
 const stubs = await import("./_fanout-stubs.mjs");
-const { cycleRowStatus } = await import("../js/01-scene-status.js");
+const { createSceneStatus } = await import("../features/rows/scene-status.ts");
+const { cycleRowStatus } = createSceneStatus(stubs.sceneStatusPorts());
 const { __init: mountReadTime, setSceneLength } = await import("../features/rows/read-time.js");
 mountReadTime(stubs.readTimePorts());
 const { loadTestDocument } = await import("./_document.mjs");

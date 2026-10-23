@@ -4,14 +4,12 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { currentDocument } from "../src/legacy/session-bridge.ts";
 import { loadTestDocument } from "../src/test/_document.mjs";
-import { __init as initSceneStatus } from "../src/js/01-scene-status.js";
 import { rowSeconds } from "../src/core/production/timing.ts";
 import { productionReaders } from "../src/legacy/document-ports.ts";
 import { migrateRows } from "../src/js/02-state.js";
 import { __init as initTags } from "../src/js/07-production-tags.js";
 import { brollEntries } from "../src/js/08c-broll.js";
 
-initSceneStatus();
 initTags();
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));

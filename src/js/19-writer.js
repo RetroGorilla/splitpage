@@ -1,5 +1,4 @@
-import { formatDuration, pad2 } from "../core/production/timing.ts";
-import { totalSeconds } from "./01-scene-status.js";
+import { formatDuration, pad2, totalSeconds } from "../core/production/timing.ts";
 import { renderRowGroups } from "./01b-hide-shot.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
@@ -105,7 +104,7 @@ export function updateWriterStats() {
   doc.rows.forEach(function (row) { words += productionReaders.wordCount(row.audioText); });
   document.getElementById("wr-scenes").textContent = String(doc.rows.length);
   document.getElementById("wr-words").textContent = words.toLocaleString();
-  document.getElementById("wr-runtime").textContent = formatDuration(totalSeconds());
+  document.getElementById("wr-runtime").textContent = formatDuration(totalSeconds(currentDocument(), productionReaders));
 }
 
 export function scheduleWriterStats() {

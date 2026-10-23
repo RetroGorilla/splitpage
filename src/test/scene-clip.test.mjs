@@ -1,7 +1,6 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { dataUrlForSync, intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
@@ -17,7 +16,6 @@ import { removeScenesCommand } from "../application/commands/scenes.ts";
 import { currentDocument, runCommand } from "../legacy/session-bridge.ts";
 
 initTags();
-initStatus();
 
 function removeScenes(rowIds) {
   const outcome = runCommand(removeScenesCommand(rowIds));

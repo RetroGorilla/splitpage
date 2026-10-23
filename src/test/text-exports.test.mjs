@@ -4,7 +4,6 @@ import { liveDoc } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { __init as initStatus } from "../js/01-scene-status.js";
 import { escapeHtml, migrateRows } from "../js/02-state.js";
 import { withPageHead } from "../js/02b-doc-id.js";
 import { cellOf, toPlainText } from "../js/04c-doc-model.js";
@@ -17,7 +16,6 @@ import { exportFacts } from "../adapters/formats/export-kit.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
-initStatus();
 
 const demo = () => { loadTestDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)))); return currentDocument(); };
 

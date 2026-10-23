@@ -4,7 +4,6 @@ import { liveDoc } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { breakdownTable } from "../js/08-production-panels.js";
@@ -19,7 +18,6 @@ import { LONG_DEMO } from "../js/_starters.js";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
-initStatus();
 
 const demo = () => { loadTestDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state)))); return currentDocument(); };
 const MAIN = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";

@@ -1,4 +1,4 @@
-import { targetLengthOf } from "../core/document/timing.ts";
+import { normalizeTargetLength, targetLengthOf } from "../core/document/timing.ts";
 import "./_dom.mjs";
 import "./_export-services-started.mjs";
 import "./_project-file-services-started.mjs";
@@ -6,11 +6,7 @@ import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import {
-  __init as initSceneStatus,
-  normalizeTargetLength,
-  targetClock
-} from "../js/01-scene-status.js";
+import { targetClock } from "../core/production/timing.ts";
 import { migrateRows } from "../js/02-state.js";
 import { mergeTargetLength } from "../js/03-sync.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
@@ -25,7 +21,6 @@ import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
-initSceneStatus();
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 

@@ -33,7 +33,7 @@ import { cellEditing, focusMemory, installCellEditing, installPicturePicker, mer
 import { REVIEW_ONLY, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "../../legacy/session-bridge.ts";
 import { fromHtml } from "../../legacy/richtext.ts";
 import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
-import { cycleRowStatus } from "../../js/01-scene-status.js";
+import { cycleRowStatus } from "./scene-status.ts";
 import { expandHiddenShotStrip } from "../../js/01b-hide-shot.js";
 import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
 import { restoreMergeSnapshot } from "../../js/03-sync.js";

@@ -5,7 +5,6 @@ import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import "./_preferences-started.mjs";
 import { preferences } from "../legacy/preferences-bridge.ts";
-import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { __init as initBroll } from "../js/08c-broll.js";
@@ -24,7 +23,6 @@ import {
 import { LONG_DEMO } from "../js/_starters.js";
 import { loadTestDocument } from "./_document.mjs";
 
-initSceneStatus();
 initTags();
 initBroll();
 
