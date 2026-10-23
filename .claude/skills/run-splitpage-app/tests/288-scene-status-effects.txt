@@ -84,7 +84,7 @@ expect R.counts().rowsPainted === 0
 expect R.counts().cellsPainted === 0
 expect __meta('r2') === window.__meta0
 expect document.querySelector('#rows .row[data-id="r2"]') === window.__rowEl
-expect document.querySelector('#rows .row[data-id="r2"] .row-read').textContent.indexOf('1:30') !== -1
+wait document.querySelector('#rows .row[data-id="r2"] .row-read').textContent.indexOf('1:30') !== -1
 sleep 150
 expect __saving()
 sleep 550
