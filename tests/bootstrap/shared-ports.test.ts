@@ -7,6 +7,9 @@ import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
 import { mountScriptZoomFeature, scriptZoomActions, stopScriptZoomFeature } from "../../src/bootstrap/wiring/script-zoom.ts";
 import { installAppActions } from "../../src/legacy/app-actions.ts";
 import { PREF_EVENT, preferences, startPreferences, viewFlags } from "../../src/legacy/preferences-bridge.ts";
+import type { SaveChange } from "../../src/application/save/save-state.ts";
+import { autoSavePolicy, haltAutoSave, noteSaveChange, saveDestinations, startSaves } from "../../src/legacy/save-bridge.ts";
+import type { LegacySavePorts } from "../../src/legacy/save-bridge.ts";
 import { cacheSeal } from "../../src/legacy/cache-freeze.ts";
 import { productionReaders } from "../../src/legacy/document-ports.ts";
 import { productionIndex, startProductionIndex } from "../../src/legacy/production-index-bridge.ts";
@@ -76,6 +79,54 @@ test("shared ports follow their current owners, announce synchronously in subscr
     stopActions();
     stopPreferences();
     localStorage.clear();
+  }
+});
+
+function savePorts(): LegacySavePorts {
+  return {
+    destination: () => "here",
+    keyOf: (identity) => ({ owner: identity, name: "" }),
+    obsolete: () => {},
+    ownership: { capture: () => ({ epoch: 1, docId: null, destination: "here", destinationGeneration: 0, generation: 0, connection: null, revision: null }), stillOwns: () => true },
+    autosave: { enabledAtStart: () => true, changed: () => {} }
+  };
+}
+
+test("the save state port follows the running save owner: unsaved, busy, its changes, an autosave now and resuming autosave", async () => {
+  const saves = sharedPorts().saves;
+  const timers = { start: () => null, stop: () => {} };
+  assert.equal(saves.unsaved(), false);
+  assert.equal(saves.busy(), false);
+  assert.throws(() => { saves.dueNow(); }, /The save coordinator is not started yet/);
+  assert.throws(() => { saves.resume(); }, /The save coordinator is not started yet/);
+  const heard: SaveChange[] = [];
+  const off = saves.onChange((change) => { heard.push(change); });
+  let stop = startSaves(savePorts(), timers);
+  try {
+    const written: string[] = [];
+    saveDestinations().register({ id: "probe", takes: () => true, autoSaveTarget: () => "file", write: async (job) => { written.push(job.request.kind); return { kind: "saved" }; } });
+    noteSaveChange();
+    assert.equal(saves.unsaved(), true);
+    assert.deepEqual(heard, ["change"]);
+    haltAutoSave("stopped for the test");
+    assert.equal(autoSavePolicy().halted(), "stopped for the test");
+    saves.resume();
+    assert.equal(autoSavePolicy().halted(), "");
+    saves.dueNow();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.deepEqual(written, ["autosave"]);
+    assert.equal(saves.busy(), false);
+    stop();
+    stop = startSaves(savePorts(), timers);
+    assert.equal(saves.unsaved(), false, "the port reads the save owner running now");
+    noteSaveChange();
+    assert.equal(saves.unsaved(), true);
+    off();
+    noteSaveChange();
+    assert.equal(heard.filter((change) => change === "change").length, 2);
+  } finally {
+    off();
+    stop();
   }
 });
 
