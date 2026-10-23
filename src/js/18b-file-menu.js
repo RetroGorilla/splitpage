@@ -3,16 +3,15 @@ import { currentHome, reviewMode, serverStatus } from "../legacy/location-bridge
 import { savedStatusText, savedWhenText } from "../../shared/clock.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
-import { pushSnapshot, updateIdentityChip } from "./03-sync.js";
+import { pushSnapshot } from "./03-sync.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { clearDirty, updateSaveStatus } from "./12-dirty-toast.js";
 import { applyReviewMode, updateServerMenu } from "./13-hosted.js";
-import { openProjectFile, updateFileChip } from "./18-local-files.js";
+import { openProjectFile } from "./18-local-files.js";
 import {
   canOpenPrompterInBrowser,
   canOpenPrompterInChromium,
-  makeDesktopHandle,
-  notifyDesktopDocumentState
+  makeDesktopHandle
 } from "./20f-desktop.js";
 import { closeNewTabPage } from "./20j-newtab.js";
 import { LONG_DEMO } from "./_starters.js";
@@ -340,11 +339,8 @@ function replaceWithNewDocument(next, reason, keepLabel) {
   documentTransitions().startNew({ from: { document: next }, reason: reason, destination: NO_DESTINATION });
   clearDirty();
   applyReviewMode();
-  updateIdentityChip();
-  updateFileChip();
   updateSaveStatus();
   if (typeof syncDocIdentity === "function") syncDocIdentity();
-  if (runningOnDesktop() && typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
   if (typeof closeNewTabPage === "function") closeNewTabPage();
   return kept;
 }
