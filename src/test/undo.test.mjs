@@ -7,7 +7,7 @@ import { applyStepsLive, changedBetween, createUndoHistory, diffStates } from ".
 import { cellRuns } from "./_cell-runs.mjs";
 
 const caretAfterStep = (step) => caretAfter((h) => fromHtml(h), step);
-import { invertSteps } from "../js/04c-doc-model.js";
+import { invertSteps } from "../core/text/steps.ts";
 import { PROTOTYPE_IDS } from "../core/document/id-map.ts";
 
 const row = (id, audio, extra) => Object.assign({ id, status: "todo", visualText: "", audioText: audio || "" }, extra);
