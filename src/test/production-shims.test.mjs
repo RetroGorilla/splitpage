@@ -6,7 +6,11 @@ import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";
 import { healTagRegistry, productionIndexStats, registerProductionTag } from "../js/07-production-tags.js";
 import { renameTag, newBrollRecord } from "../application/commands/production-actions.ts";
-import { retagRewrites } from "../legacy/tag-rewrites.ts";
+import { retagRewrites as planRetagRewrites } from "../application/commands/tag-rewrites.ts";
+import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
+
+const retagText = sharedPorts().text;
+const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 import { sessionStamps } from "../legacy/session-bridge.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { productionIndex } from "../legacy/production-index-bridge.ts";

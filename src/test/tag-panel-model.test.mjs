@@ -8,7 +8,12 @@ import { cellOf, projection, tagNameOf, toHtml } from "../js/04c-doc-model.js";
 import { tagFieldOccurrences, tagOccurrences, tagsInField } from "../js/07-production-tags.js";
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../legacy/session-bridge.ts";
-import { retagRewrites, retagMentions } from "../legacy/tag-rewrites.ts";
+import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions } from "../application/commands/tag-rewrites.ts";
+import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
+
+const retagText = sharedPorts().text;
+const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
+const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
 import { domProjection } from "../js/09-find-replace.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 import { loadTestDocument } from "./_document.mjs";
