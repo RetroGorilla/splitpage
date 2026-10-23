@@ -175,4 +175,8 @@ if (typeof document !== "undefined" && document.addEventListener) {
 
 export { showActionToast, showToast };
 
-export function __init() {}
+export function __init() {
+  window.__saveStatusTest = {
+    refresh: updateSaveStatus
+  };
+}
