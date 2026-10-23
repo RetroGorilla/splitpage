@@ -56,7 +56,7 @@ export function stampRow(row) {
   row.updatedBy = getEditorName();
 }
 
-export function pushSnapshot(label, snapshotState) {
+function pushSnapshot(label, snapshotState) {
   return captureSnapshot(label, snapshotState || currentDocument(), { allowSeedSkip: !snapshotState });
 }
 
@@ -722,6 +722,10 @@ export function setBaseState(next, why) {
 export var documentDestinationPort = Object.freeze({
   set: function (destination) { setHome(destination.kind, destination.fields); },
   confirm: function (baseline, why) { setBaseState(baseline ? cloneState(baseline) : null, why); }
+});
+
+export var documentHistoryPort = Object.freeze({
+  keep: function (label, doc) { return pushSnapshot(label, doc); }
 });
 
 export function baseStateReason() {

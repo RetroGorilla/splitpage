@@ -23,13 +23,13 @@ const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits, undo } = await import("../js/12a-undo.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { cellRuns, cellTextCommand } = await import("../application/commands/cell-text.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
 const { scriptCellOf } = await import("../legacy/richtext.ts");
 const { liveSession, runCommand, sessionTextPorts } = await import("../legacy/session-bridge.ts");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -51,7 +51,7 @@ function fixture() {
 let opened = 0;
 async function open(doc = fixture()) {
   const handle = createHeldFileHandle({ name: "repair-" + (++opened) + ".splitpage", text: buildSplitpageFile(exportDocumentOf(doc)), lastModified: 1000 });
-  await openProjectFile(await handle.handle.getFile(), handle.handle, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: await handle.handle.getFile(), handle: handle.handle, options: { skipSnapshot: true, silent: true } });
   flushEdits();
   confirmSavedNow();
   return handle;

@@ -18,7 +18,8 @@ import {
   setTagOwner
 } from "./08-production-panels.js";
 import { autoSavePolicy } from "../legacy/save-bridge.ts";
-import { adoptProjectState, parseProjectFileState } from "./18-local-files.js";
+import { parseProjectFileState } from "./18-local-files.js";
+import { openDocument } from "../legacy/transition-bridge.ts";
 import {
   canOpenPrompterInBrowser,
   createDesktopRecognition,
@@ -985,7 +986,7 @@ async function launchPrompterFromScript(token) {
     showToast("Could not read the script the desktop app sent.", "error", true);
     return false;
   }
-  adoptProjectState(parsed.state, file, null, parsed.kind, { skipSnapshot: true, silent: true });
+  openDocument({ kind: "file", file: file, handle: null, parsed: parsed, options: { skipSnapshot: true, silent: true } });
   showPrompterForLaunch();
   showToast("A copy from the desktop app, for reading — edit the script there; changes made here are not saved back.", "ok");
   return true;

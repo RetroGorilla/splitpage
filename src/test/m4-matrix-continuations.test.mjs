@@ -17,13 +17,13 @@ const { renderAbsorbed } = await import("../js/05-render.js");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits, lastUndoEntry, undoSizes } = await import("../js/12a-undo.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { handleImageFile } = await import("../js/06-rows.js");
 const { openGalleryOverlay } = await import("../js/05e-gallery-overlay.js");
 const { thumbnailsAfterPaste } = await import("../js/05v-video.js");
 const annotate = await import("../js/05w-annotate.js");
 const { addGalleryVideo, rowSlots } = await import("../core/document/gallery.ts");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 function pngDataUrl(red, green, blue) {
@@ -91,7 +91,7 @@ function splitpageFile(doc) {
 
 async function reopen(doc) {
   const epoch = session.epoch();
-  await openProjectFile(splitpageFile(doc), null, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: splitpageFile(doc), handle: null, options: { skipSnapshot: true, silent: true } });
   confirmSavedNow();
   document.getElementById("toast-host").textContent = "";
   assert.ok(session.epoch() > epoch, "setup: the document was replaced and has a new epoch");

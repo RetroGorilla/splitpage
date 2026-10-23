@@ -8,6 +8,12 @@ import { createDraftResume } from "../application/recovery/draft-resume.ts";
 import type { DraftResume } from "../application/recovery/draft-resume.ts";
 import { createLegacySnapshots } from "../application/recovery/legacy-snapshots.ts";
 import type { LegacySnapshots } from "../application/recovery/legacy-snapshots.ts";
+import { createStashedWork } from "../application/recovery/stashed-work.ts";
+import type { ApplyStashedWork, StashMerge } from "../application/recovery/stashed-work.ts";
+import { cloneState } from "../core/document/clone.ts";
+import type { ValidatedDocument } from "../core/document/validated.ts";
+import { migrateRows } from "../js/02-state.js";
+import { documentLocation } from "./location-bridge.ts";
 import { createDesktopDraftStore } from "../adapters/storage/draft-store-desktop.ts";
 import type { DesktopDraftBridge } from "../adapters/storage/draft-store-desktop.ts";
 import { createIdbDraftStore } from "../adapters/storage/draft-store-idb.ts";
@@ -23,6 +29,7 @@ export interface LegacyRecoveryPorts {
   readonly sessionStorage: () => KeyValueStorage | null | undefined;
   readonly localStorage: () => KeyValueStorage | null | undefined;
   readonly internImage: (dataUrl: string) => void;
+  readonly merge: StashMerge<ValidatedDocument, unknown>;
 }
 
 export interface BrowserDrafts {
@@ -36,6 +43,7 @@ interface Started {
   readonly resume: DraftResume;
   readonly stash: ConflictStash;
   readonly snapshots: LegacySnapshots;
+  readonly stashedWork: ApplyStashedWork<ValidatedDocument, unknown>;
   browser: BrowserDrafts;
 }
 
@@ -58,11 +66,19 @@ function browserDraftsFor(ports: LegacyRecoveryPorts, factory: IDBFactory | null
 
 export function startRecovery(ports: LegacyRecoveryPorts): () => void {
   if (started) throw new Error("The draft recovery is already started; stop it first");
+  const stash = createConflictStash({ storage: ports.sessionStorage, internImage: ports.internImage });
   const mine: Started = {
     ports: ports,
     desktop: createDesktopDraftStore({ bridge: ports.desktop }),
     resume: createDraftResume(),
-    stash: createConflictStash({ storage: ports.sessionStorage, internImage: ports.internImage }),
+    stash: stash,
+    stashedWork: createStashedWork<ValidatedDocument, unknown>({
+      stash: stash,
+      sessionStorage: ports.sessionStorage,
+      markWrittenOut: function () { documentLocation().markWrittenOut(true); },
+      copy: function (doc) { return migrateRows(cloneState(doc)); },
+      merge: ports.merge
+    }),
     snapshots: createLegacySnapshots({ storage: ports.localStorage }),
     browser: browserDraftsFor(ports, ports.indexedDB)
   };
@@ -90,6 +106,10 @@ export function draftResume(): DraftResume {
 
 export function conflictStash(): ConflictStash {
   return running().stash;
+}
+
+export function applyStashedWork(...args: Parameters<ApplyStashedWork<ValidatedDocument, unknown>>): ReturnType<ApplyStashedWork<ValidatedDocument, unknown>> {
+  return running().stashedWork(...args);
 }
 
 export function legacySnapshots(): LegacySnapshots {

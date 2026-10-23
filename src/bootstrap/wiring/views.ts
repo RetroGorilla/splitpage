@@ -30,7 +30,7 @@ import {
   setPrompterSkipShot,
   voiceIsFollowing
 } from "../../application/prompter-state.ts";
-import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
+import { captureOperation, openDocument, stillOwns } from "../../legacy/transition-bridge.ts";
 import { importHome } from "../../legacy/location-bridge.ts";
 import { expandHiddenShotStrip } from "../../js/01b-hide-shot.js";
 import {
@@ -46,7 +46,6 @@ import {
   closeImportModal,
   confirmGdocImport,
   confirmImport,
-  handleImportFile,
   maybeAutoDetectTwoColumn,
   updateImportPreview
 } from "../../js/11-import.js";
@@ -76,7 +75,6 @@ import {
   driveSignOut,
   driveStartRename,
   driveUploadFiles,
-  openServerDoc,
   toggleDriveNewFolder
 } from "../../js/13-hosted.js";
 import { fileConflicts, saveDoc } from "../../legacy/save-bridge.ts";
@@ -86,7 +84,6 @@ import {
   exportAs,
   handleFileMenuAction,
   hideResumeBanner,
-  openProjectFile,
   pendingResumeHandle,
   reloadFileFromDisk,
   reloadProjectFromDisk,
@@ -231,7 +228,7 @@ export function mountServerFeature(): ReturnType<typeof mountServer> {
   return replaceViewMount("mountServer", function () {
     const ports: ServerPorts = {
       closeServerPicker: closeServerPicker,
-      openServerDoc: openServerDoc,
+      openServerDoc: function (id) { void openDocument({ kind: "server", id: id }); },
       armServerDelete: armServerDelete,
       routeOpen: routeServerOpen,
       capture: function () {
@@ -348,7 +345,7 @@ export function mountFileMenuFeature(): ReturnType<typeof mountFileMenu> {
       toggleFileMenu: toggleFileMenu,
       toggleSubmenu: toggleSubmenu,
       handleFileMenuAction: handleFileMenuAction,
-      openProjectFile: openProjectFile
+      openProjectFile: function (file, handle) { void openDocument({ kind: "file", file: file, handle: handle }); }
     };
     return mountFileMenu({ window: window, ports: ports });
   });
@@ -363,7 +360,7 @@ export function mountImportsFeature(): ReturnType<typeof mountImports> {
       clearPendingFileRows: clearPendingFileRows,
       maybeAutoDetectTwoColumn: maybeAutoDetectTwoColumn,
       updateImportPreview: updateImportPreview,
-      handleImportFile: handleImportFile,
+      handleImportFile: function (file) { void openDocument({ kind: "import", file: file }); },
       touchMode: touchImportMode,
       capture: function () {
         const ownsDocument = captureViewDocument();
