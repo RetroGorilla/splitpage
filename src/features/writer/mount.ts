@@ -1,5 +1,4 @@
 import { createViewLifetime } from "../common/view-lifetime.ts";
-import { listenWriterStats } from "./display.ts";
 
 export interface WriterOpenPorts {
   readonly runFromButton: (id: string) => void;
@@ -11,7 +10,6 @@ export function mountWriterOpen(mount: { window: Window; ports: WriterOpenPorts 
   const life = createViewLifetime(window);
   const element = (id: string): HTMLInputElement => document.getElementById(id) as HTMLInputElement;
   life.listen(element("btn-write"), "click", function () { ports.runFromButton("write"); });
-  life.release(listenWriterStats());
   return { dispose: life.dispose };
 }
 

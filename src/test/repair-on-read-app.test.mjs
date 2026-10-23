@@ -12,7 +12,8 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { render } = await import("../js/05-render.js");
-const { productionEntries, updateTagBadges } = await import("../js/07-production-tags.js");
+const { productionEntries } = await import("../js/07-production-tags.js");
+const { updateTagBadges } = await import("../bootstrap/wiring/panels.ts");
 const { openProductionPanel, closeProductionPanel, renderProduction, setTagNotes, setTagStatus } = await import("../js/08-production-panels.js");
 const { anchorBrollInLeftCell, brollEntries, updateBrollBadge } = await import("../js/08c-broll.js");
 const { openBrollPanel, closeBrollPanel, renderBroll, runBrollRefresh } = await import("../js/08d-broll-panel.js");

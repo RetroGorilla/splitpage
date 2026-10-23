@@ -1,5 +1,4 @@
 import { domToPos } from "../features/editing/cell-dom.ts";
-import { updateScriptStats } from "./01-scene-status.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { stampRow } from "./03-sync.js";
 import {
@@ -8,8 +7,6 @@ import {
   sanitizeHtml
 } from "./04-richtext.js";
 import { plainTagOpen } from "./07b-plain-tags.js";
-import { renderProduction, updateGearCount } from "./08-production-panels.js";
-import { updateBrollBadge } from "./08c-broll.js";
 import { domRangeFor } from "./09-find-replace.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { randomIds } from "../adapters/identity/ids.ts";
@@ -257,37 +254,11 @@ export function scheduleIdleRefresh(job) {
 export function runIdleRefresh(jobs) {
   if (!currentDocument()) return;
   idleFlushes++;
-  if (jobs.has("production")) refreshProductionNow();
   if (jobs.has("untagged")) scanUntaggedMentions();
-}
-
-function refreshProductionNow() {
-  var panel = document.getElementById("production-panel");
-  var gearPanel = document.getElementById("gear-panel");
-  if ((panel && !panel.hidden) || (gearPanel && !gearPanel.hidden)) renderProduction();
-  else updateTagBadges();
-  updateScriptStats();
 }
 
 export function scheduleProductionRefresh() {
   scheduleIdleRefresh("production");
-}
-
-export function updateProductionBadge(n) {
-  var badge = document.getElementById("production-badge");
-  if (!badge) return;
-  if (n > 0) { badge.hidden = false; badge.textContent = n > 99 ? "99+" : String(n); }
-  else badge.hidden = true;
-}
-
-function updateProductionCount() {
-  updateProductionBadge(currentDocument() ? productionEntries().length : 0);
-}
-
-export function updateTagBadges() {
-  updateProductionCount();
-  updateGearCount();
-  updateBrollBadge();
 }
 
 var AUTO_TAG_MAX_LEN = 60;
@@ -316,8 +287,6 @@ export function maybeAutoTagShortcut(e, cellEl) {
   if (isBlankTagName(trimmed) || phrase.length > AUTO_TAG_MAX_LEN || hasShortcutChar(phrase)) return;
 
   tagTextRange(cellEl, node, openAt, offset, trimmed, rule.cat, trimmed);
-  updateTagBadges();
-  renderProduction();
 }
 
 function tagTextRange(cellEl, node, a, b, text, cat, name) {
@@ -408,8 +377,6 @@ export function acceptTagGhost() {
 
   hideTagGhost();
   tagTextRange(g.cellEl, g.node, g.openAt, g.offset, g.entry.name, g.entry.cat.id, g.entry.name);
-  updateTagBadges();
-  renderProduction();
   return true;
 }
 
@@ -570,8 +537,6 @@ export function acceptUntaggedMention() {
 
   hideUntaggedPrompt();
   tagTextRange(s.cellEl, node, s.range.startOffset, s.range.endOffset, s.text, s.entry.cat.id, s.entry.name);
-  updateTagBadges();
-  renderProduction();
   scanUntaggedMentions();
   return true;
 }

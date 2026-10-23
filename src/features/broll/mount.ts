@@ -1,5 +1,4 @@
 import { createViewLifetime } from "../common/view-lifetime.ts";
-import { currentDocument, onRefresh } from "../../legacy/session-bridge.ts";
 
 type BrollEvent = Event & { readonly target: HTMLElement & { value: string }; readonly key: string };
 
@@ -20,7 +19,6 @@ export interface BrollPorts {
   readonly hasSelection: () => boolean;
   readonly clearSelection: () => void;
   readonly render: () => void;
-  readonly refresh: () => void;
   readonly reset: () => void;
 }
 
@@ -36,9 +34,6 @@ export function mountBroll(mount: { window: Window; ports: BrollPorts }): { disp
   const life = createViewLifetime(win, (target) =>
     !!panel && current(panel) && (target === win || target === doc || current(target as HTMLElement)));
   const { listen } = life;
-  life.release(onRefresh((jobs) => {
-    if (currentDocument() && jobs.has("broll")) ports.refresh();
-  }));
   function rootListeners(root: HTMLElement): void {
     listen(root, "click", (event) => ports.click(event, root));
     listen(root, "change", ports.change);
