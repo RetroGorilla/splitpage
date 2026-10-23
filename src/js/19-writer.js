@@ -24,8 +24,8 @@ import { currentDocument, editAllowed, readSession, runCommand, sessionTextPorts
 import { cellEditing, editorSelection, focusMemory, paintGuard } from "../legacy/editor-bridge.ts";
 import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
-import { placeEditorSelection, rememberCellSelection } from "../features/editing/cell-selection.ts";
-import { placeCaretAtTextOffset } from "../features/editing/caret.ts";
+import { placeEditorSelection, rememberCellSelection } from "../features/common/cell-selection.ts";
+import { placeCaretAtTextOffset } from "../features/common/caret.ts";
 import { gallerySize } from "../core/document/gallery.ts";
 import { escapeHtml, truncateForPreview } from "../core/document/text-policy.ts";
 
