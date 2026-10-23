@@ -27,6 +27,7 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/view-actions.ts": { functions: ["registerViewActions"] },
   "src/bootstrap/wiring/script-zoom.ts": { functions: ["mountScriptZoomFeature"] },
   "src/bootstrap/wiring/help.ts": { functions: ["mountHelpFeature"] },
+  "src/bootstrap/wiring/onboarding.ts": { functions: ["mountOnboardingFeature"] },
   "src/application/export/services.ts": { functions: ["installExportServices"] },
   "src/bootstrap/wiring/exporters.ts": { functions: ["registerBuiltInExporters"] },
   "src/bootstrap/wiring.ts": { functions: ["wireApp"] },

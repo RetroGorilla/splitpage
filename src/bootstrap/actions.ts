@@ -12,6 +12,7 @@ import { registerThisDocumentActions } from "../legacy/this-document-actions.ts"
 import { registerViewActions } from "../legacy/view-actions.ts";
 import { scriptZoomActions } from "./wiring/script-zoom.ts";
 import { helpActions } from "./wiring/help.ts";
+import { onboardingActions } from "./wiring/onboarding.ts";
 
 let running: (() => void) | null = null;
 
@@ -28,7 +29,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => registerViewActions(registry),
     () => {
       const menu = helpMenuActions();
-      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]);
+      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 4), ...onboardingActions(), ...menu.slice(4)]);
     },
     () => registerShareActions(registry),
     () => registerAll(registry, scriptZoomActions()),
