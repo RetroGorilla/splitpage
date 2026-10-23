@@ -15,6 +15,7 @@ import { rundownMinimizeActions, rundownSceneActions } from "./wiring/rundown.ts
 import { scriptZoomActions } from "./wiring/script-zoom.ts";
 import { helpActions } from "./wiring/help.ts";
 import { galleryActions } from "./wiring/gallery.ts";
+import { findActions } from "./wiring/find.ts";
 
 let running: (() => void) | null = null;
 
@@ -26,7 +27,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
   if (running) throw new Error("the actions are already started; stop them first");
   const steps: readonly (() => () => void)[] = [
     () => registry.presentRefusals(presentRefusal),
-    () => registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]),
+    () => registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]),
     () => registerFileActions(registry),
     () => registerViewActions(registry),
     () => {

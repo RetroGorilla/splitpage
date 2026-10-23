@@ -13,17 +13,36 @@ import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-docu
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
 import { scriptZoomActions } from "../../src/bootstrap/wiring/script-zoom.ts";
+import { findActions, mountFindFeature, stopFindFeature } from "../../src/bootstrap/wiring/find.ts";
 
 function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
+  const globals = [window, globalThis].flatMap((target) =>
+    ["CSS", "Highlight"].map((name) => ({ target, name, descriptor: Object.getOwnPropertyDescriptor(target, name) })));
+  const css = { highlights: new Map() };
+  class Highlight extends Set {}
+  for (const target of [window, globalThis]) {
+    Object.defineProperty(target, "CSS", { configurable: true, writable: true, value: css });
+    Object.defineProperty(target, "Highlight", { configurable: true, writable: true, value: Highlight });
+  }
   const registry = createActionRegistry();
   mountRundownFeature();
   mountHelpFeature();
+  mountFindFeature();
   const menu = helpMenuActions();
-  const disposers = [stopRundownFeature,
-    registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerFileActions(registry), registerViewActions(registry),
+  const disposers = [stopRundownFeature, stopFindFeature,
+    registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerFileActions(registry), registerViewActions(registry),
     registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]), registerShareActions(registry), registerAll(registry, scriptZoomActions()), stopHelpFeature
   ];
-  return { registry, dispose: () => { for (const d of disposers) d(); } };
+  return { registry, dispose: () => {
+    try {
+      for (const d of disposers) d();
+    } finally {
+      for (const { target, name, descriptor } of globals) {
+        if (descriptor) Object.defineProperty(target, name, descriptor);
+        else Reflect.deleteProperty(target, name);
+      }
+    }
+  } };
 }
 
 function pressed(registry: ActionRegistry, key: string, mods: { shift?: boolean; alt?: boolean; meta?: boolean } = {}): string | null {

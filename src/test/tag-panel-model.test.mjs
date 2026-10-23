@@ -14,7 +14,7 @@ import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
 const retagText = sharedPorts().text;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
-import { domProjection } from "../js/09-find-replace.js";
+import { domProjection } from "../features/common/find-dom.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 import { loadTestDocument } from "./_document.mjs";
 
