@@ -4,6 +4,8 @@ import assert from "node:assert/strict";
 import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
 import { createActionRegistry, registerAll } from "../../src/application/actions.ts";
 import type { ExternalLinks } from "../../src/application/desktop-presence.ts";
+import { createExportRegistry } from "../../src/application/export/registry.ts";
+import type { ExportRegistry } from "../../src/application/export/registry.ts";
 import type { PreferenceNotice } from "../../src/application/preferences/preferences.ts";
 import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
 import { mountScriptZoomFeature, scriptZoomActions, stopScriptZoomFeature } from "../../src/bootstrap/wiring/script-zoom.ts";
@@ -14,6 +16,7 @@ import { autoSavePolicy, haltAutoSave, noteSaveChange, saveDestinations, startSa
 import type { LegacySavePorts } from "../../src/legacy/save-bridge.ts";
 import { cacheSeal } from "../../src/legacy/cache-freeze.ts";
 import { productionReaders } from "../../src/legacy/document-ports.ts";
+import { installExportFormats } from "../../src/legacy/export-formats.ts";
 import { productionIndex, startProductionIndex } from "../../src/legacy/production-index-bridge.ts";
 import { migrateRows } from "../../src/js/02-state.js";
 
@@ -185,6 +188,60 @@ test("the production index port forwards each call to the running production ind
     production.resetDerived();
     assert.equal(productionIndex().derived(), 0);
   } finally {
+    stop();
+  }
+});
+
+test("the export formats port delegates to the current registry and follows a restart", () => {
+  const formats = sharedPorts().exports;
+  assert.throws(() => formats.cards(), /The export registry is not started yet/);
+  const registry = (name: string): ExportRegistry => {
+    const owner = createExportRegistry();
+    owner.defineCard({ id: "demo", group: "part", name, ext: ".demo", icon: "i-file", purpose: name });
+    owner.register({
+      id: "demo", action: "export-demo", card: "demo", name, menuLabel: name,
+      fileName: (base) => base + ".demo", build: () => ({ data: name })
+    });
+    return owner;
+  };
+  const check = (owner: ExportRegistry): void => {
+    assert.deepEqual(formats.card("demo"), owner.card("demo"));
+    assert.deepEqual(formats.cards(), owner.cards());
+    assert.deepEqual(formats.exporters(), owner.exporters());
+    assert.equal(formats.byAction("export-demo"), owner.byAction("export-demo"));
+    assert.equal(formats.card("missing"), undefined);
+    assert.equal(formats.byAction("missing"), undefined);
+    assert.equal(formats.isAction("export-demo"), true);
+    assert.equal(formats.isAction("missing"), false);
+    assert.equal(formats.isAction(null), false);
+  };
+  const first = registry("First");
+  let stop = installExportFormats(first);
+  let off = (): void => {};
+  let changes = 0;
+  try {
+    check(first);
+    off = formats.onChange(() => { changes++; });
+    const remove = first.register({ id: "provider", fileName: (base) => base, build: () => ({ data: "" }) });
+    assert.equal(changes, 1);
+    off();
+    remove();
+    assert.equal(changes, 1);
+    stop();
+    assert.throws(() => formats.cards(), /The export registry is not started yet/);
+    const second = registry("Second");
+    stop = installExportFormats(second);
+    check(second);
+    off = formats.onChange(() => { changes++; });
+    const removeSecond = second.register({ id: "provider", fileName: (base) => base, build: () => ({ data: "" }) });
+    assert.equal(changes, 2);
+    first.register({ id: "provider", fileName: (base) => base, build: () => ({ data: "" }) });
+    assert.equal(changes, 2);
+    off();
+    removeSecond();
+    assert.equal(changes, 2);
+  } finally {
+    off();
     stop();
   }
 });
