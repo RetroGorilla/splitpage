@@ -15,7 +15,7 @@ import { migrateRows } from "../js/02-state.js";
 import { mergeTargetLength } from "../js/03-sync.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
-import { TARGET_PRESETS, targetOverlayParts } from "../js/05t-target.js";
+import { TARGET_PRESETS, targetOverlayParts } from "../features/rundown/target.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { applyStepsLive, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";
