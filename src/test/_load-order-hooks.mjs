@@ -24,7 +24,7 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/share-actions.ts": { functions: ["registerShareActions"] },
   "src/legacy/this-document-actions.ts": { functions: ["registerThisDocumentActions"] },
   "src/legacy/view-actions.ts": { functions: ["registerViewActions"] },
-  "src/bootstrap/wiring/script-zoom.ts": { functions: ["registerZoomActions", "mountScriptZoomFeature"] },
+  "src/bootstrap/wiring/script-zoom.ts": { functions: ["mountScriptZoomFeature"] },
   "src/application/export/services.ts": { functions: ["installExportServices"] },
   "src/bootstrap/wiring/exporters.ts": { functions: ["registerBuiltInExporters"] },
   "src/bootstrap/wiring.ts": { functions: ["wireApp"] },

@@ -1,5 +1,5 @@
 import { wireProductionIndex } from "./wiring/production-index.ts";
-export { __init as initScriptZoom } from "./wiring/script-zoom.ts";
+export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
 import { registerBuiltInExporters } from "./wiring/exporters.ts";
 import { wireProductionEditing } from "./wiring/production-editing.ts";

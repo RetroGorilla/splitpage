@@ -9,7 +9,8 @@ import { openServersDialog, serversMenuLabel } from "../js/20e-connect.js";
 import { appDataImportShown } from "../js/20f-desktop.js";
 import { exportAppData, openImportAppData } from "../js/20h-appdata.js";
 import { openSettings } from "../js/20s-settings.js";
-import { OPENS_A_DIALOG, availableUnless, onlyDialogOpen } from "./screen.ts";
+import { OPENS_A_DIALOG, availableUnless } from "../application/screen.ts";
+import { onlyDialogOpen } from "./screen.ts";
 import { inDesktopApp, screenNow } from "./screen-state.ts";
 
 function overDialogs(): Availability {

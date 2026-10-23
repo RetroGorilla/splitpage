@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { availableUnless } from "../../src/legacy/screen.ts";
+import { availableUnless } from "../../src/application/screen.ts";
 
 const SRC = fileURLToPath(new URL("../../src/", import.meta.url));
 const SOURCE = /\.(?:js|mjs|ts)$/;

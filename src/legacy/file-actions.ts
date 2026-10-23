@@ -5,7 +5,7 @@ import { openLocalFile } from "../js/18-local-files.js";
 import { fileMenuOpen, toggleFileMenu } from "../js/18b-file-menu.js";
 import { openExportDialog } from "../js/18c-export-dialog.js";
 import { closeCommandMenu, commandMenuOpen, openCommandMenu } from "../js/18d-command-menu.js";
-import { EVERY_OVERLAY, availableUnless, everyOverlayBut, firstRefusal } from "./screen.ts";
+import { EVERY_OVERLAY, availableUnless, everyOverlayBut, firstRefusal } from "../application/screen.ts";
 import { inDesktopApp, saveInProgress, screenNow } from "./screen-state.ts";
 
 function pageOwnsKeys(): boolean {

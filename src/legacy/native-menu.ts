@@ -2,7 +2,7 @@ import type { ActionRegistry, RefusalPresenter } from "../application/actions.ts
 import { handleFileMenuAction, noteFileMenuChoice } from "../js/18-local-files.js";
 import { toggleFileMenu } from "../js/18b-file-menu.js";
 import { exportFormats } from "./export-formats.ts";
-import { availableUnless } from "./screen.ts";
+import { availableUnless } from "../application/screen.ts";
 import { screenNow } from "./screen-state.ts";
 
 const HEADER_ACTIONS: Readonly<Record<string, string>> = {
