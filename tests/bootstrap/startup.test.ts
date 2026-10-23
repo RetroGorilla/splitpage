@@ -227,14 +227,14 @@ test("a document written out before, or the desktop, does not resume the last pr
   }
 });
 
-test("a stash that leaves the live document in place opens nothing and draws nothing", async () => {
+test("a stash that leaves the live document in place opens nothing and still draws the first time", async () => {
   const r = rig({ keepLive: true });
   r.live = { copyOf: "already live" };
   const startup = beginStartup(r.ports);
   try {
     await startup.openDocument();
     assert.ok(!r.log.some((s) => s.startsWith("open:")));
-    assert.ok(!r.log.includes("first-draw"));
+    assert.ok(r.log.includes("first-draw"));
     assert.ok(r.log.includes("identity-chip"));
   } finally {
     startup.dispose();

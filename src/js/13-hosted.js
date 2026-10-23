@@ -18,6 +18,8 @@ import {
 } from "../legacy/location-bridge.ts";
 import { SERVER_RESUME_KEY } from "../application/location/server-status.ts";
 import { shortHost } from "../adapters/transport/server-address.ts";
+import { cleanAuthorName } from "../core/document/people.ts";
+import { preferences } from "../legacy/preferences-bridge.ts";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import {
   copyDocHistorySafe,
@@ -30,8 +32,7 @@ import {
   pushSnapshot,
   reportMerge,
   setBaseState,
-  stashLocalWork,
-  updateIdentityChip
+  stashLocalWork
 } from "./03-sync.js";
 import {
   ensureBytes,
@@ -49,21 +50,19 @@ import {
   captureReplyDrafts,
   formatTimestamp,
   getSavedAuthorName,
-  renderComments,
-  saveAuthorName
+  renderComments
 } from "./10-comments.js";
 import { clearDirty, showActionToast, showToast, updateSaveStatus } from "./12-dirty-toast.js";
-import { maybeAskGuestName, updateCollaborateMenu } from "./13b-collaborate.js";
+import { maybeAskGuestName } from "./13b-collaborate.js";
 import { saveDoc, scheduleAutoSave } from "./14-export.js";
 import { requestSave, saveBusy, saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 import { conflictStash, draftResume } from "../legacy/recovery-bridge.ts";
 import { captureOperation, documentTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
-import { deliverFile, updateFileChip } from "./18-local-files.js";
+import { deliverFile } from "./18-local-files.js";
 import {
   openPinDialog,
-  openServersDialog,
-  updateConnectMenu
+  openServersDialog
 } from "./20e-connect.js";
 import { joinServer } from "../adapters/transport/server-join.ts";
 import { setMenuItemReason } from "./18b-file-menu.js";
@@ -390,7 +389,6 @@ function flagServerSessionExpired() {
     ? "Your sign-in expired. Reload the page to sign in again — your unsaved edits are kept and will be merged back in."
     : "Your sign-in expired. Copy anything unsaved, then reload the page to sign in again.",
     "warn", true);
-  updateFileChip();
 }
 
 var clientTooOld = false;
@@ -403,7 +401,6 @@ function flagClientTooOld() {
     ? "This page is out of date for this server. Reload it to keep saving — your unsaved edits are kept and will be merged back in."
     : "This page is out of date for this server. Copy anything unsaved, then reload the page to keep saving.",
     "warn", true);
-  updateFileChip();
 }
 
 function flagLinkOff(kind) {
@@ -411,9 +408,7 @@ function flagLinkOff(kind) {
   if (kind === "arrived") {
     forgetLinkKey(currentConn().serverUrl);
     showToast("This link has been turned off. Ask whoever sent it for a new one.", "warn", true);
-    updateFileChip();
     updateSaveStatus();
-    updateServerMenu();
     offerDraftAfterLinkOff();
     return;
   }
@@ -424,9 +419,7 @@ function flagLinkOff(kind) {
     ? "This link no longer works — ask whoever sent it for a new one. Your changes can't be saved to it any more."
     : "The owner turned off this link. Your changes can't be saved to it any more.",
   "warn", "Save a copy…", saveCopy, true);
-  updateFileChip();
   updateSaveStatus();
-  updateServerMenu();
   offerDraftAfterLinkOff();
 }
 
@@ -535,8 +528,6 @@ async function resumeServerDoc() {
       writtenOut: true
     });
     clearDirty();
-    updateIdentityChip();
-    updateFileChip();
     showToast("Signed back in — reopened " + (currentDocument().title || body.id), "ok");
     if (override) { try { override.onDone("server-resumed"); } catch (e) {} }
     return true;
@@ -663,8 +654,6 @@ export async function detectServer() {
   }
   if (!stillOnServer(probing)) return;
   serverStatus().recordMode({ checked: true });
-  updateConnectMenu();
-  updateServerMenu();
   if (!serverStatus().mode().available) {
     if (currentConn().serverUrl) {
       showToast("Could not reach " + currentConn().serverUrl +
@@ -687,12 +676,11 @@ export async function detectServer() {
       var r = await joinWithLinkKey();
       if (!stillOnServer(probing)) return;
       if (r === "ok") { finishServerDetect(); return; }
-      if (r === "off") { updateServerMenu(); return; }
+      if (r === "off") return;
       if (r === "gone") reason = "This link no longer works — ask whoever sent it for a new one. " +
         "If you have this server's join PIN or key, enter it here.";
       if (currentConn().token) { finishServerDetect(); return; }
     }
-    updateServerMenu();
     openPinDialog({ reason: reason || ((currentConn().serverUrl ? shortHost(currentConn().serverUrl) : "This server") +
       " asks for a join PIN or key before it will show you anything.") });
     return;
@@ -760,12 +748,11 @@ export async function finishServerDetect() {
     try { documentLocation().updateConnection({ role: role, scope: scope }); }
     catch (e2) { documentLocation().updateConnection({ role: role, scope: "" }); }
     if (serverIdentity && serverIdentity.name && !getSavedAuthorName()) {
-      saveAuthorName(serverIdentity.name);
-      updateIdentityChip();
+      preferences().setCommentAuthor(cleanAuthorName(serverIdentity.name));
     }
   } catch (e) {
     if (!stillOnServer(asking)) return;
-    if (e && e.code === "link-off") { flagLinkOff("off"); updateServerMenu(); return; }
+    if (e && e.code === "link-off") { flagLinkOff("off"); return; }
     if (e && e.code === "pin" && linkKey && !serverStatus().linkTurnedOff()) {
       documentLocation().updateConnection({ token: "", role: "", scope: "" });
       saveTabServer();
@@ -773,12 +760,10 @@ export async function finishServerDetect() {
       if (!stillOnServer(asking)) return;
       if (again === "ok") { finishServerDetect(); return; }
       if (again === "gone" || again === "none") flagLinkOff("gone");
-      updateServerMenu();
       return;
     }
   }
 
-  updateServerMenu();
   applyReviewMode();
   var draftFor = runningOnDesktop() ? "" : (currentConn().scope || sharedDocId || linkDocId || "");
   (draftFor ? armBrowserServerDraft(draftFor) : Promise.resolve(false)).then(function () {
@@ -819,7 +804,6 @@ function paintServerItem(id, state) {
 export function updateServerMenu() {
   paintServerItem("menu-server-open", serverOpenItemState());
   paintServerItem("menu-server-new", serverPublishItemState());
-  updateCollaborateMenu();
 }
 
 export function applyReviewMode() {
@@ -940,8 +924,6 @@ export async function openServerDoc(id) {
 
   clearDirty();
   applyReviewMode();
-  updateIdentityChip();
-  updateFileChip();
   closeServerPicker();
   showToast("Opened " + (currentDocument().title || id) + " from the server — " + currentDocument().rows.length +
     " scene" + (currentDocument().rows.length === 1 ? "" : "s"), "ok");
@@ -1012,7 +994,6 @@ export async function publishToServer(opts) {
   if (outcome.forkedFrom) copyDocHistorySafe(outcome.forkedFrom, forkDocId);
   if (saveChanges() === seqAtPublish) clearDirty();
   else scheduleAutoSave();
-  updateFileChip();
   if (!opts.quiet) {
     showToast("Published to the server as “" + (currentDocument().title || body.id) + "” — collaborators can open it now", "ok");
   }
@@ -1113,7 +1094,6 @@ export async function armServerDelete(btn, id) {
     if (serverHomeId() === id) setHome("none");
     serverDocs = serverDocs.filter(function (d) { return d.id !== id; });
     renderServerPicker();
-    updateFileChip();
     showToast("Deleted from the server", "ok");
     return;
   }
@@ -1267,7 +1247,6 @@ async function writeToServer(job) {
       }
       if (!job.owns()) return true;
       if (saveChanges() === seqAtSave) clearDirty();
-      updateFileChip();
       if (mergeResult) reportMerge(mergeResult, { alreadySaved: true, undo: "saved" });
       return true;
     } catch (err) {
@@ -1299,7 +1278,6 @@ async function writeToServer(job) {
       if (err && err.code === "not-found") {
         showToast("That document is no longer on the server. Use “Put this script on the server” to publish it again.", "warn");
         setHome("none");
-        updateFileChip();
         return false;
       }
       handleApiError(err, "Could not save to the server");
@@ -1627,7 +1605,6 @@ async function sendReviewWrites() {
     (c.replies || []).forEach(function (r) { if (r && reviewRefused["r:" + c.id + ":" + r.id]) refusedHere = true; });
   });
   if (!refusedHere) clearDirty();
-  updateFileChip();
   return true;
 }
 
@@ -1690,7 +1667,6 @@ async function pullServerDoc(docId) {
   amendHome(currentHome(), { rev: rev });
   if (sameDocumentContent(theirs, mergeBase())) {
     setBaseState(cloneState(theirs), "pullServerDoc: their save says what ours already said");
-    updateFileChip();
     return;
   }
 
@@ -2467,6 +2443,12 @@ export function driveSignOut() {
 }
 
 export function __init() {
+  documentLocation().onChange(function (change) {
+    if (change === "connection") updateServerMenu();
+  });
+  serverStatus().onChange(function (change) {
+    if (change === "mode") updateServerMenu();
+  });
   handServerCheckTo(detectServer);
   loadTabConnection();
 
@@ -2501,7 +2483,6 @@ export function __init() {
       if (onServerDoc() && opts.base !== false) setBaseState(cloneState(currentDocument()), "__hostedTest.setSession: as openServerDoc would");
       if (opts.blobs !== undefined) noteCaps(currentConn(), { blobs: opts.blobs ? 1 : 0 }, false);
       applyReviewMode();
-      updateServerMenu();
     },
     role: function () { return currentConn().role; },
     conn: function () {
