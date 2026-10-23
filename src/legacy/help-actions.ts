@@ -32,6 +32,13 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       run: () => { openServersDialog(); }
     },
     {
+      id: "show-servers-dialog",
+      label: "Show the servers dialog",
+      group: "Share",
+      availability: () => ({ enabled: true, visible: false }),
+      run: () => { openServersDialog(); }
+    },
+    {
       id: "settings",
       label: "Settings",
       group: "Help",

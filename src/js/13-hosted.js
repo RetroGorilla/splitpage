@@ -1038,7 +1038,7 @@ export async function publishAndCopyShareLink() {
   if (!serverStatus().mode().available) {
     showToast("A share link needs a Splitpage server to publish to. " +
       "Pick or add one under Servers…, then try again.", "warn");
-    appActions.invoke("servers", "button");
+    appActions.invoke("show-servers-dialog", "button");
     return false;
   }
   if (serverStatus().mode().readOnly) {
