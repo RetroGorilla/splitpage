@@ -76,17 +76,6 @@ test("presence: shown lists at most eight people with their id, name, colour and
   assert.equal(w.presence.nameOf(undefined), "Guest");
 });
 
-test("presence: colorsWithMine records my colour under my name, replacing a differently cased entry, and says nothing when it is already there", () => {
-  const w = world();
-  assert.equal(w.presence.colorsWithMine({ personColors: {} }), null, "no name or colour");
-  w.name = "  Ann ";
-  w.color = BLUE;
-  assert.equal(w.presence.colorsWithMine(null), null);
-  assert.deepEqual(w.presence.colorsWithMine({}), { Ann: BLUE });
-  assert.deepEqual(w.presence.colorsWithMine({ personColors: { ann: AMBER, Bo: VIOLET } }), { Bo: VIOLET, Ann: BLUE });
-  assert.equal(w.presence.colorsWithMine({ personColors: { ANN: BLUE } }), null);
-});
-
 test("presence: a listener can unsubscribe, and dispose forgets who is here, the live colours and every listener", () => {
   const w = world();
   const extra: string[] = [];

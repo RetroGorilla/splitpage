@@ -1,6 +1,4 @@
-import { normalizePersonColors, paletteColor, personKey, resolvePersonColor } from "../../core/document/person-colors.ts";
-import type { PersonColors } from "../../core/document/person-colors.ts";
-import { cappedName } from "../../core/document/text-policy.ts";
+import { paletteColor, personKey, resolvePersonColor } from "../../core/document/person-colors.ts";
 
 export const PRESENCE_MAX_SHOWN = 8;
 
@@ -32,7 +30,6 @@ export interface Presence {
   readonly nameOf: (person: PresentPerson | null | undefined) => string;
   readonly colorOf: (person: PresentPerson | null | undefined) => string;
   readonly personColor: (seed: unknown) => string;
-  readonly colorsWithMine: (state: { readonly personColors?: unknown } | null | undefined) => PersonColors | null;
   readonly apply: (list: readonly PresentPerson[] | null | undefined) => void;
   readonly onChange: (listener: () => void) => () => void;
   readonly onRecolor: (listener: () => void) => () => void;
@@ -110,23 +107,6 @@ export function createPresence(ports: PresencePorts): Presence {
     nameOf: nameOf,
     colorOf: colorOf,
     personColor: personColor,
-    colorsWithMine: function (state: { readonly personColors?: unknown } | null | undefined): PersonColors | null {
-      if (!state) return null;
-      const name = ports.selfName().trim();
-      const color = ports.selfColor();
-      if (!name || !color) return null;
-      const given = state.personColors;
-      const map = given && typeof given === "object" ? given as Readonly<Record<string, string>> : null;
-      let have = "";
-      if (map) {
-        Object.keys(map).forEach(function (k) { if (personKey(k) === personKey(name)) have = k; });
-        if (have && map[have] === color) return null;
-      }
-      const next: Record<string, string> = {};
-      if (map) Object.keys(map).forEach(function (k) { if (k !== have) next[k] = map[k] as string; });
-      next[cappedName(name, 80)] = color;
-      return normalizePersonColors(next);
-    },
     apply: function (list: readonly PresentPerson[] | null | undefined): void {
       here = list || [];
       const recolored = noteLiveColors(here);
