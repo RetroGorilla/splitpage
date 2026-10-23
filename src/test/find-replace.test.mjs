@@ -3,7 +3,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { cellOf, projection } from "../js/04c-doc-model.js";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
-import { countInTags, domProjection, domRangeFor, findInCell, findInRows, noMatchLabel, replaceInHtml } from "../js/09-find-replace.js";
+import { countInTags, findInCell, findInRows, noMatchLabel, replaceInHtml } from "../features/find/find.js";
+import { domProjection, domRangeFor } from "../features/common/find-dom.js";
+import { __init } from "../features/find/find.js";
+__init({ text: { cellOf, inertBody, sanitizeHtml } });
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 
 const find = (html, needle, matchCase) => findInCell(cellOf(html), needle, !!matchCase);

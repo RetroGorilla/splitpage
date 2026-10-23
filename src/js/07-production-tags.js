@@ -6,7 +6,7 @@ import {
   sanitizeHtml
 } from "./04-richtext.js";
 import { plainTagOpen } from "./07b-plain-tags.js";
-import { domRangeFor } from "./09-find-replace.js";
+import { domRangeFor } from "../features/common/find-dom.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";

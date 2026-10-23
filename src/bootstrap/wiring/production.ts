@@ -1,10 +1,8 @@
 import { bulkDeleteArmed, clearProductionSelection, disarmBulkDelete, productionSelection, selectedKeys } from "../../legacy/production-editing-bridge.ts";
-import type { FindPorts } from "../../features/find/mount.ts";
 import type { TagsPorts } from "../../features/tags/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runFromButton } from "../../legacy/app-actions.ts";
 import { sidePanels } from "../../legacy/panels-bridge.ts";
-import { mountFind } from "../../features/find/mount.ts";
 import { mountTags } from "../../features/tags/mount.ts";
 import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
 import { cssAttr } from "../../features/common/dom.ts";
@@ -42,51 +40,12 @@ import {
   setTagOwner,
   setTagNotes
 } from "../../js/08-production-panels.js";
-import {
-  bulkTagOpen,
-  closeBulkTag,
-  closeFindBar,
-  findQueryChanged,
-  leaveFindAtMatch,
-  pickBulkTagCat,
-  replaceAll,
-  replaceCurrent,
-  runBulkTag,
-  stepFind,
-  toggleBulkTag
-} from "../../js/09-find-replace.js";
 import { queueAutoSave } from "../../legacy/save-bridge.ts";
 import { exportAs, runExport } from "../../js/18-local-files.js";
 import { wireTagEntityContainer } from "../../js/20-teleprompter.js";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";
 import { productionGroupBy, setGearGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey } from "../../application/tag-panel-state.ts";
-import { findMatchesCase, setFindMatchCase } from "../../application/find-options.ts";
 import { reviewBlocked, reviewMode } from "../../legacy/location-bridge.ts";
-
-const find = owned<ReturnType<typeof mountFind>>();
-
-export function mountFindFeature(): ReturnType<typeof mountFind> {
-  return find.replace(function () {
-    const ports: FindPorts = {
-      closeFindBar: closeFindBar,
-      stepFind: stepFind,
-      replaceCurrent: replaceCurrent,
-      replaceAll: replaceAll,
-      toggleBulkTag: toggleBulkTag,
-      runBulkTag: runBulkTag,
-      closeBulkTag: closeBulkTag,
-      pickBulkTagCat: pickBulkTagCat,
-      findQueryChanged: findQueryChanged,
-      leaveFindAtMatch: leaveFindAtMatch,
-      bulkTagOpen: bulkTagOpen,
-      getFindMatchCase: function () { return findMatchesCase(); },
-      setFindMatchCase: function (value) { setFindMatchCase(value); }
-    };
-    return mountFind({ window: window, ports: ports });
-  });
-}
-
-export const stopFindFeature = find.stop;
 
 const tags = owned<ReturnType<typeof mountTags>>();
 

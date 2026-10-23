@@ -26,7 +26,7 @@ import { __init as init_07b_plain_tags } from "./07b-plain-tags.js";
 import { __init as init_08_production_panels } from "./08-production-panels.js";
 import { __init as init_08c_broll } from "./08c-broll.js";
 import { __init as init_08d_broll_panel } from "./08d-broll-panel.js";
-import { __init as init_09_find_replace } from "./09-find-replace.js";
+import { mountFindFeature } from "../bootstrap/wiring.ts";
 import { __init as init_10_comments } from "./10-comments.js";
 import { __init as init_11_import } from "./11-import.js";
 import { __init as init_12_dirty_toast } from "./12-dirty-toast.js";
@@ -120,7 +120,7 @@ if (wiring) {
   init_08_production_panels();
   init_08c_broll();
   init_08d_broll_panel();
-  init_09_find_replace();
+  mountFindFeature();
   init_10_comments();
   init_11_import();
   init_12_dirty_toast();

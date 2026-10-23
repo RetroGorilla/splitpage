@@ -31,7 +31,8 @@ import {
   stopVideoFeature,
   stopWriterFeature
 } from "./wiring/editor.ts";
-import { mountFindFeature, mountTagsFeature, stopFindFeature, stopTagsFeature } from "./wiring/production.ts";
+import { mountTagsFeature, stopTagsFeature } from "./wiring/production.ts";
+import { mountFindEventsFeature, stopFindEventsFeature } from "./wiring/find.ts";
 import { mountCommentsFeature, stopCommentsFeature } from "./wiring/comments.ts";
 import {
   mountAppearanceFeature,
@@ -127,7 +128,7 @@ export function startApp(wiring: Wiring): () => void {
     run([mountRowsFeature, stopRowsFeature]);
     run([mountRowsEditingFeature, stopRowsEditingFeature]);
     run(view("mountIdentity", mountIdentityFeature));
-    run([mountFindFeature, stopFindFeature]);
+    run([mountFindEventsFeature, stopFindEventsFeature]);
     run(view("mountHistoryGallery", mountHistoryGalleryFeature));
     run(view("mountHistory", mountHistoryFeature));
     overlay.mountToolbar();

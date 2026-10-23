@@ -18,6 +18,7 @@ import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-docu
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
 import { viewFlags } from "../../src/legacy/preferences-bridge.ts";
+import { findActions, mountFindFeature, stopFindFeature } from "../../src/bootstrap/wiring/find.ts";
 
 const NOTHING: ScreenState = {
   loading: false, dialog: false, launcher: false, tour: false, prompter: false, writer: false, shotlist: false
@@ -60,10 +61,19 @@ test("each blocker refuses with its own reason", () => {
 });
 
 function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
+  const globals = [window, globalThis].flatMap((target) =>
+    ["CSS", "Highlight"].map((name) => ({ target, name, descriptor: Object.getOwnPropertyDescriptor(target, name) })));
+  const css = { highlights: new Map() };
+  class Highlight extends Set {}
+  for (const target of [window, globalThis]) {
+    Object.defineProperty(target, "CSS", { configurable: true, writable: true, value: css });
+    Object.defineProperty(target, "Highlight", { configurable: true, writable: true, value: Highlight });
+  }
   mountHelpFeature();
   const registry = createActionRegistry();
   mountRundownFeature();
-  const disposers = [stopRundownFeature, registerFileActions(registry), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerViewActions(registry),
+  mountFindFeature();
+  const disposers = [stopRundownFeature, stopFindFeature, registerFileActions(registry), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerViewActions(registry),
     registerShareActions(registry), stopHelpFeature];
   const was = { state: currentDocument() as unknown, prompterOpen: prompterIsOpen() };
   loadTestDocument({ rows: [] });
@@ -74,7 +84,14 @@ function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
       loadTestDocument(was.state);
       setPrompterOpen(was.prompterOpen);
       document.body.innerHTML = "";
-      for (const dispose of disposers) dispose();
+      try {
+        for (const dispose of disposers) dispose();
+      } finally {
+        for (const { target, name, descriptor } of globals) {
+          if (descriptor) Object.defineProperty(target, name, descriptor);
+          else Reflect.deleteProperty(target, name);
+        }
+      }
     }
   };
 }
