@@ -10,10 +10,10 @@ import {
 import { rowIndexOf } from "../core/document/rows.ts";
 import { currentDocument, readSession } from "../legacy/session-bridge.ts";
 import { cssAttr } from "../features/common/dom.ts";
+import { slotPoster } from "../features/common/gallery.ts";
 import {
   galleryBadgeHtml,
-  gallerySlotPictureHtml,
-  slotPoster
+  gallerySlotPictureHtml
 } from "./05-render.js";
 import { embedRefusal, fetchThumbnailRecord, playerSrc, thumbnailsAllowed } from "./05v-video.js";
 import { hasSessionVideo, sessionVideoUrl } from "./06-rows.js";

@@ -14,7 +14,8 @@ import { helpActions, mountHelpFeature, stopHelpFeature } from "../../src/bootst
 import { availableUnless, EVERY_OVERLAY, everyOverlayBut, inFront, OPENS_A_DIALOG } from "../../src/application/screen.ts";
 import type { Blocker, ScreenState } from "../../src/application/screen.ts";
 import { registerShareActions } from "../../src/legacy/share-actions.ts";
-import { registerThisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
 import { viewFlags } from "../../src/legacy/preferences-bridge.ts";
 
@@ -61,7 +62,8 @@ test("each blocker refuses with its own reason", () => {
 function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
   mountHelpFeature();
   const registry = createActionRegistry();
-  const disposers = [registerFileActions(registry), registerThisDocumentActions(registry), registerViewActions(registry),
+  mountRundownFeature();
+  const disposers = [stopRundownFeature, registerFileActions(registry), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerViewActions(registry),
     registerShareActions(registry), stopHelpFeature];
   const was = { state: currentDocument() as unknown, prompterOpen: prompterIsOpen() };
   loadTestDocument({ rows: [] });

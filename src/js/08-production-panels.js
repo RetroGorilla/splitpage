@@ -20,7 +20,8 @@ import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddC
 import { PERSON_NAME_MAX, personById as personIn, personNamed, registryEntryOf } from "../core/production/records.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { currentDocument, readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
-import { retagMentions, retagRewrites } from "../legacy/tag-rewrites.ts";
+import { retagMentions, retagRewrites } from "../application/commands/tag-rewrites.ts";
+import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { bulkTagRows } from "../application/commands/bulk-tags.ts";
 import { rewrittenCopies } from "../application/commands/document-edit.ts";
@@ -31,7 +32,11 @@ export { breakdownRows, breakdownTable };
 
 export var IS_TOUCH;
 
-const tagEditPorts = { run: runDocumentEdit, read: readSession, stamps: sessionStamps, rewrites: retagRewrites, mentions: retagMentions };
+const tagEditPorts = {
+  run: runDocumentEdit, read: readSession, stamps: sessionStamps,
+  rewrites: (tags, toName) => retagRewrites(sharedPorts().text, tags, toName),
+  mentions: (doc, tags) => retagMentions(sharedPorts().text, doc, tags)
+};
 
 function productionEntries() {
   return productionIndex().entries(currentDocument());
@@ -820,11 +825,11 @@ export function bulkDeleteSelected() {
   if (!items.length) return;
   breakUndoCoalescing();
   var labelled = items.filter(function (item) { return !item.orphaned; }).map(tagRef);
-  var unlabelled = readSession(function (doc) { return retagMentions(doc, labelled); });
+  var unlabelled = readSession(function (doc) { return retagMentions(sharedPorts().text, doc, labelled); });
   clearProductionSelection();
   runDocumentEdit(deleteTagsCommand(items.map(function (item) {
     return { cat: item.cat.id, name: item.name, unlabel: !item.orphaned };
-  }), retagRewrites(labelled, null), sessionStamps));
+  }), retagRewrites(sharedPorts().text, labelled, null), sessionStamps));
   var n = items.length;
   breakUndoCoalescing();
   showToast("Deleted " + n + " item" + (n === 1 ? "" : "s") +
