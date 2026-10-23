@@ -1,7 +1,6 @@
 import { setHideShotScenes } from "./01b-hide-shot.js";
 import { personSwatchesHtml } from "./03-sync.js";
 import { getSavedAuthorName } from "./10-comments.js";
-import { updateSaveStatus } from "./12-dirty-toast.js";
 import {
   DEFAULT_COLLAB_SERVER,
   collabServerView,
@@ -373,9 +372,6 @@ function onPrefChanged(key) {
   var name = preferences().nameOf(key);
   if (name === "theme") applyTheme(window, preferences().theme());
   if (name === "tagIcons") applyTagIcons(window, preferences().tagIcons());
-  if (name === "clock") {
-    updateSaveStatus();
-  }
   if (settingsOpen()) renderSettings(key);
 }
 
@@ -391,7 +387,6 @@ export function __init() {
   window.__settingsTest = {
     open: openSettings,
     close: closeSettings,
-    isOpen: settingsOpen,
-    refreshSaveStatus: updateSaveStatus
+    isOpen: settingsOpen
   };
 }

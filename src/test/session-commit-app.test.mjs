@@ -11,7 +11,8 @@ const { cycleRowStatus } = await import("../js/01-scene-status.js");
 const { migrateRows } = await import("../js/02-state.js");
 const { render } = await import("../js/05-render.js");
 const { setSceneLength } = await import("../js/05r-read-time.js");
-const { clearDirty, markAbsorbedDirty, markDirty } = await import("../js/12-dirty-toast.js");
+const { noteAbsorbedDirty, noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits, lastUndoEntry, undo, undoSizes } = await import("../js/12a-undo.js");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
 const { preferences } = await import("../legacy/preferences-bridge.ts");
@@ -49,7 +50,7 @@ function fresh() {
   }));
   render();
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   return S.state;
 }
 
@@ -133,7 +134,7 @@ test("a legacy edit records the colour as it marks the document unsaved, and its
   named();
   fresh();
   S.state.title = "Renamed by hand";
-  markDirty();
+  noteSessionEdit();
   assert.equal(colorOf(S.state), COLOR);
   assert.equal(unsavedChanges(), true);
   assert.deepEqual(lastUndoEntry().steps.map((s) => s.key), ["title"]);
@@ -142,7 +143,7 @@ test("a legacy edit records the colour as it marks the document unsaved, and its
 test("an absorbed change that marks the document unsaved records the colour as before", () => {
   named();
   fresh();
-  markAbsorbedDirty("server");
+  noteAbsorbedDirty("server");
   assert.equal(colorOf(S.state), COLOR);
   assert.equal(unsavedChanges(), true);
 });
@@ -181,14 +182,17 @@ test("a status click whose listener throws after the commit repaints the scene, 
 test("a scene length whose effect throws after the commit still closes as applied and reports once", () => {
   unnamed();
   fresh();
-  const button = document.getElementById("btn-save");
-  Object.defineProperty(button, "textContent", { configurable: true, get() { return ""; }, set() { throw new Error("effect broke"); } });
+  const start = globalThis.setTimeout;
+  globalThis.setTimeout = function () {
+    globalThis.setTimeout = start;
+    throw new Error("effect broke");
+  };
   let result;
   let reported;
   try {
     reported = reportedDuring(() => { result = setSceneLength("r1", 45); });
   } finally {
-    delete button.textContent;
+    globalThis.setTimeout = start;
   }
   assert.equal(result, true);
   assert.equal(S.state.rows[0].lengthSeconds, 45);
@@ -202,8 +206,8 @@ test("in review mode neither a legacy edit nor an absorbed change records the co
   window.__hostedTest.setSession({ role: "review", docId: "d" + "8".repeat(32) });
   try {
     S.state.personColors = {};
-    markDirty();
-    markAbsorbedDirty("server");
+    noteSessionEdit();
+    noteAbsorbedDirty("server");
     assert.deepEqual(S.state.personColors, {});
   } finally {
     window.__hostedTest.setSession({ role: "edit", docId: null });

@@ -10,7 +10,7 @@ import { closeRowMenus } from "./06-rows.js";
 import { scheduleProductionRefresh } from "./07-production-tags.js";
 import { breakUndoCoalescing, flushEdits, lastUndoEntry, undo } from "./12a-undo.js";
 import { onServerDoc } from "./13-hosted.js";
-import { queueAutoSave } from "./14-export.js";
+import { autoSavePolicy } from "../legacy/save-bridge.ts";
 import { startNewScript } from "./18b-file-menu.js";
 import { randomHexBytes } from "../adapters/identity/ids.ts";
 import { addHeldCommentsCommand, pasteScenesCommand, removeScenesCommand } from "../application/commands/scenes.ts";
@@ -340,7 +340,7 @@ function pasteClip(clip, afterRowId, opts) {
     runSceneCommand(addHeldCommentsCommand(res.held));
     flushEdits();
   } else if (hold) {
-    queueAutoSave();
+    autoSavePolicy().dueNow();
   }
   breakUndoCoalescing();
   scheduleProductionRefresh();

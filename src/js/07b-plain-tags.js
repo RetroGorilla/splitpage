@@ -3,11 +3,13 @@ import { isBlankTagName } from "../core/production/tags.ts";
 import { domToPos } from "../features/editing/cell-dom.ts";
 import { cellEditing } from "../legacy/editor-bridge.ts";
 import { cellSelection, setCellSelection } from "../features/editing/cell-selection.ts";
-import { isInsideTagOrLink, registryEntry } from "./07-production-tags.js";
+import { isInsideTagOrLink } from "./07-production-tags.js";
 import { cappedName, escapeHtml } from "../core/document/text-policy.ts";
 import { replaceText, replaceWithTag } from "../core/text/edits.ts";
 import { namedTagId, projection } from "../core/text/runs.ts";
 import { fromHtml, storedHtmlFromDom } from "../legacy/richtext.ts";
+import { registryEntryOf } from "../core/production/records.ts";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 export var PLAIN_TAG_KEYWORDS = {
   prop: "prop",
@@ -238,7 +240,7 @@ export function closePlainTag() {
   if (!phrase) { cancelPlainTag(); return true; }
   open = null;
   clearPaint();
-  var entry = registryEntry(o.cat, phrase.name);
+  var entry = registryEntryOf(currentDocument(), o.cat, phrase.name);
   var name = entry ? entry.name : phrase.name;
   var done = cellEditing().edit(o.cellEl, function (cell) {
     var from = domToPos(o.cellEl, o.span.firstChild, 0), to = domToPos(o.cellEl, o.tail, at);

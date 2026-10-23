@@ -3,21 +3,12 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { nextTagStatus, normalizeTagName } from "../core/document/tags.ts";
 import { formatDuration, pad2, rowSeconds } from "../core/production/timing.ts";
-import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, tagStatus } from "../core/production/looks.ts";
+import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, groupTagsByCategory, tagStatus } from "../core/production/looks.ts";
+import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { cssAttr, plainText, safeId } from "./04-richtext.js";
-import {
-  bulkTagRows,
-  currentProductionIndex,
-  personById,
-  productionEntries,
-  registryEntry,
-  removeTag,
-  renameTag,
-  tagStatusLampHtml,
-  tagsByCategory
-} from "./07-production-tags.js";
+import { tagStatusLampHtml } from "./07-production-tags.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
 import { personColor } from "./13a-presence.js";
 import { breakdownRows, breakdownTable } from "../adapters/formats/export-projections.ts";
@@ -25,10 +16,12 @@ import { idMap } from "../core/document/id-map.ts";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
 import { planQuickAdd } from "../core/production/tags.ts";
 import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddCommand, tagCellsCommand, updateTagsCommand } from "../application/commands/production-records.ts";
-import { PERSON_NAME_MAX, personNamed } from "../core/production/records.ts";
+import { PERSON_NAME_MAX, personById as personIn, personNamed, registryEntryOf } from "../core/production/records.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { currentDocument, readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
 import { retagMentions, retagRewrites } from "../legacy/tag-rewrites.ts";
+import { removeTag, renameTag } from "../application/commands/production-actions.ts";
+import { bulkTagRows } from "../application/commands/bulk-tags.ts";
 import { rewrittenCopies } from "../application/commands/document-edit.ts";
 import { gearGroupBy, productionGroupBy, setTagAddingPerson, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../application/tag-panel-state.ts";
 import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
@@ -36,6 +29,28 @@ import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
 export { breakdownRows, breakdownTable };
 
 export var IS_TOUCH;
+
+const tagEditPorts = { run: runDocumentEdit, read: readSession, stamps: sessionStamps, rewrites: retagRewrites, mentions: retagMentions };
+
+function productionEntries() {
+  return productionIndex().entries(currentDocument());
+}
+
+function currentProductionIndex() {
+  return productionIndex().current(currentDocument());
+}
+
+function tagsByCategory(all) {
+  return groupTagsByCategory(all || productionEntries());
+}
+
+function registryEntry(cat, name) {
+  return registryEntryOf(currentDocument(), cat, name);
+}
+
+function personById(id) {
+  return personIn(currentDocument(), id);
+}
 
 export function openProductionPanel() {
   if (!currentDocument()) return;
@@ -701,7 +716,7 @@ export function armRemoveTag(btn, key) {
     var item = findTagByKey(key);
     if (!item) return;
     breakUndoCoalescing();
-    var n = removeTag(item.cat.id, item.name);
+    var n = removeTag(item.cat.id, item.name, tagEditPorts);
     breakUndoCoalescing();
     showToast("Removed " + item.name + " from " + n + " mention" + (n === 1 ? "" : "s"), "ok");
     return;
@@ -946,7 +961,7 @@ export function saveTagRename(key) {
   var renamed = input.value;
   setTagRenaming(null);
   breakUndoCoalescing();
-  var changed = renameTag(item.cat.id, item.name, renamed);
+  var changed = renameTag(item.cat.id, item.name, renamed, tagEditPorts);
   if (changed) {
     breakUndoCoalescing();
     showToast("Renamed to " + plainText(renamed).trim(), "ok");

@@ -78,7 +78,6 @@ test("captureOperation and stillOwns follow the live session, document, destinat
     destination: () => loc.currentHome(),
     keyOf: (h) => ({ owner: h, name: "" }),
     obsolete: () => {},
-    running: () => {},
     ownership: { capture: bridge.captureOperation, stillOwns: bridge.stillOwns },
     autosave: { enabledAtStart: () => false, due: () => {}, changed: () => {} }
   }, { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });
