@@ -4,7 +4,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";
 import { loadInitialState, migrateDocument } from "../js/02b-doc-id.js";
-import { mergeStates } from "../js/03-sync.js";
+import { mergeStates } from "../legacy/merge-bridge.ts";
+import "./_merge-started.mjs";
 
 const GRIN = String.fromCodePoint(0x1F600);
 const LONE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
