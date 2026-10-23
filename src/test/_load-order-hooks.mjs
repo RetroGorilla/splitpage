@@ -20,6 +20,7 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/effects-bridge.ts": { functions: ["startEffects"] },
   "src/legacy/panels-bridge.ts": { functions: ["startSidePanels"] },
   "src/legacy/tour-pause.ts": { functions: ["handTourPauseTo"] },
+  "src/legacy/editor-open-actions.ts": { functions: ["registerEditorOpenActions"] },
   "src/legacy/file-actions.ts": { functions: ["registerFileActions"] },
   "src/legacy/help-actions.ts": { functions: ["registerHelpActions"] },
   "src/legacy/share-actions.ts": { functions: ["registerShareActions"] },

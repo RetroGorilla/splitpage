@@ -1,5 +1,6 @@
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { goToScene, rundownEdge } from "./05f-rundown.js";
+import { rundownEdge } from "./05f-rundown.js";
+import { appActions } from "../legacy/app-actions.ts";
 import { presenceShown } from "./13a-presence.js";
 import { idMap } from "../core/document/id-map.ts";
 import { pad2 } from "../core/production/timing.ts";
@@ -173,7 +174,7 @@ export function __init() {
     var dot = e.target.closest ? e.target.closest(".rd-who") : null;
     if (!dot) return;
     e.preventDefault();
-    goToScene(dot.getAttribute("data-row"));
+    appActions.invoke("go-to-scene", "button", dot.getAttribute("data-row"));
   });
   if (typeof MutationObserver === "function") {
     new MutationObserver(function (list) {
