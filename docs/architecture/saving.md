@@ -54,6 +54,8 @@ Callers outside saving use it for work that waits: the pasted-picture and droppe
 | `publish(ctx, publication)` | If `stillOwns(ctx)`, sets the destination and baseline, changes the live id and marks it written out; the result says which id it replaced. Otherwise `{ kind: "obsolete" }` and nothing changes | Changes id and destination only |
 | `copyId()` | The id a copy should carry: the live id until it has been written out, then a fresh one | INV-36 |
 
+An arrival (`open`, `startNew`, `recover`) may carry `keep`, a label: the history snapshot taken before a replacement (L3h PR 3). If the live document has rows, the transition hands the label to the history port before the new document is assigned, and `Arrived.kept` says whether a snapshot was stored. `restore` never keeps one.
+
 The input is `{ document }` (already a `ValidatedDocument`) or `{ raw }` (migrated through the entry port, `migrateRows`). Every method that makes a document live does the same three things in order: assign it to `S.state`, adopt it in the session at once (`adoptReplacement` in the session bridge, which disposes the old session and starts one at the same epoch and generation), and then settle the destination. A transition returns `Arrived` (`document`, `forkedFrom`).
 
 The ports, all supplied by the legacy modules:
@@ -65,11 +67,26 @@ The ports, all supplied by the legacy modules:
 | `session` | `adoptReplacement` (`session-bridge.ts`) | Adopts a document in the session now |
 | `destination` | `documentDestinationPort` (`03-sync.js`) | `set` calls `setHome`; `confirm` calls `setBaseState` with a clone of the baseline |
 | `identity` | `documentIdentityPort` (`02b-doc-id.js`) | Mints ids and reads and writes `S.docIdWrittenOut` |
+| `history` | `documentHistoryPort` (`03-sync.js`) | `keep(label, doc?)` takes a history snapshot of `doc`, or of the live document when none is given |
 | `ownership` | The operation context | `stillOwns` |
 
 Destinations are `LegacyDestination` values (`kind` and `fields`), and `NO_DESTINATION` is `{ kind: "none" }`.
 
 When `adoptReplacement` has started the new session it calls the listeners registered with `onDocumentReplaced` (`session-bridge.ts`), and so does the undo adapter's adoption hook. A listener made with `liveSession().subscribe` would die with the session it was made on; `onDocumentReplaced` is the app-lifetime way to react to a replacement. Its one listener today is `releaseSessionVideoUrls` in `06-rows.js` (4.22, L1c), which revokes the cached object URLs of session videos and keeps the file and token grants.
+
+`keepSnapshot(label, doc?)` on the transition bridge takes the same snapshot outside a transition, for changes that are not replacements: taking your version of a title or field (`10-comments`), replacing rows on import (`11-import`), reloading an import from disk (`18-local-files`), resuming a server draft (`13-hosted`), and the two snapshots a new blank script or demo keeps, one under the old id and one under the new (`18b-file-menu`).
+
+### Document sources (L3h PR 3)
+
+A document source is `{ id, takes(opening), open(opening) }` (`src/application/transitions/sources.ts`). `createDocumentSources()` holds the registered ones and asks the newest first, like the save destinations. The transition bridge creates the registry when the transitions start, and `openDocument(opening)` opens through the source that takes the opening, answering what it answered (a promise), or `false` when none does. An opening is `{ kind, ...fields }`. The wiring's `document sources` step, right after `transitions`, registers the list the `sources` dependency returns and drops them at dispose; a duplicate id fails the step.
+
+| Source | Opening | Does |
+| --- | --- | --- |
+| `project-file` (`projectFileSource` in `18-local-files.js`) | `{ kind: "file", file, handle, options?, parsed? }` | Without `parsed`, reads the file (`openProjectFile`, which falls back to an import for other formats); with `parsed` (an answer of `parseProjectFileState`), adopts it as read (`adoptProjectState`) |
+| `server` (`serverDocumentSource` in `13-hosted.js`) | `{ kind: "server", id }` | `openServerDoc` |
+| `import` (`importDocumentSource` in `11-import.js`) | `{ kind: "import", file }` | `handleImportFile`: the import dialog's file |
+
+The source runs inside the `openDocument` call, so an opening that adopts at once (a `parsed` file) has replaced the document when the call returns, as before.
 
 ### Who calls them today
 
@@ -140,7 +157,7 @@ An `obsolete` outcome calls the report port's `obsolete(request, here)`. A run t
 
 | Port | In the app |
 | --- | --- |
-| `writer.write` | `writeQueued`: kind `autosave` goes to `writeAutoSave`, kind `server` to `saveToServer`, kinds `writeback` and `writebackForce` to `writeBackToFile` (4.12), every other kind to `writeDoc` |
+| `writer.write` | Not a legacy port since L3h PR 1: the save bridge builds it from the destination registry (section 5, "Destinations") |
 | `destination.current` | `home` |
 | `destination.keyOf` | `destinationKeyOf`: no destination is one shared key; a server document is keyed by the server and `doc:<id>`; a desktop file by its desktop id; a browser file by its handle object |
 | `report.obsolete` | `reportObsoleteSave`: a toast, only when `here` is true, the destination is not a server and a document is open: "An earlier save of “{title}” finished after you reopened it. Your open copy is unchanged." (D10) |
@@ -152,34 +169,53 @@ An `obsolete` outcome calls the report port's `obsolete(request, here)`. A run t
 
 ## 5. The front door and the writers
 
-`saveDoc(opts)` in `14-export.js` is the entry for the Save action, the desktop menu's Save, Save As, force overwrite and every direct caller. It resumes autosave (unless the call is automatic) and returns `requestSave({ kind })`, with the kind from `saveKind(opts)`: `saveAs`, `force`, `auto` or `save`. `queueAutoSave` requests `autosave`, or puts the autosave back on its timer when another save is already running. `publishAndCopyShareLink` requests `server`. The save-error retry, the conflict overwrite and copy, `flagLinkOff`'s copy and `openPrompterElsewhere`'s save reach the same queue through `saveDoc`. Import writeback (`saveBackToFile`) requests `writeback`, or `writebackForce` from the conflict overwrite (4.12).
+`saveDoc(opts)` in `src/legacy/save-bridge.ts` is the entry for the Save action, the desktop menu's Save, Save As, force overwrite and every direct caller. It resumes autosave (unless the call is automatic) and returns `requestSave({ kind })`, with the kind from `saveKind(opts)`: `saveAs`, `force`, `auto` or `save`. `queueAutoSave` requests `autosave`, or puts the autosave back on its timer when another save is already running. `publishAndCopyShareLink` requests `server`. The save-error retry, the conflict overwrite and copy, `flagLinkOff`'s copy and `openPrompterElsewhere`'s save reach the same queue through `saveDoc`. Import writeback (`saveBackToFile`) requests `writeback`, or `writebackForce` from the conflict overwrite (4.12).
 
 The coordinator orders the writers and judges their results; each writer decides what it writes.
+
+### Destinations (L3h PR 1 and 2)
+
+A destination is `{ id, takes(request, place), autoSaveTarget(place), write(job) }` (`src/application/save/destinations.ts`). `createSaveDestinations()` holds the registered ones; `taking(request, place)` asks the newest first and answers the first that takes the request at the document's current place (`home`), or null. The save bridge creates the registry with the coordinator, and its writer port sends each job to the destination that takes it, at the place the document has when the job starts. A request no destination takes is refused ("No save destination takes this save") without a write. The wiring's `save destinations` step, right after `saves`, registers the list the `destinations` dependency returns (from `_entry.js`: `legacyFileDestination()` from `14-export`, `importSaveDestination()` from `18-local-files` and `serverSaveDestination()` from `13-hosted`) and drops them at dispose; a duplicate id fails the step and releases what was built.
+
+| Destination | Takes | Autosave target |
+| --- | --- | --- |
+| `file` (`legacyFileDestination` in `14-export.js`) | `saveAs` anywhere; `save`, `auto`, `autosave` and `force` when the document is not on a server | `autoSaveWhere` with the file home and the server status |
+| `import` (`importSaveDestination` in `18-local-files.js`) | `writeback` and `writebackForce` anywhere | none: an import never autosaves |
+| `server` (`createServerDestination` in `src/application/save/server-destination.ts`, built by `serverSaveDestination()` in `13-hosted.js`) | `server` anywhere; `save`, `auto`, `autosave` and `force` when the document is on a server | `server`, or none while signed out or after the link was turned off |
+
+The built-ins never take the same request, so their order does not matter. A destination registered later (in a test, or a future cloud drive) is asked before them. `src/test/save-destinations-app.test.mjs` registers a throwaway destination in the booted app and saves through Save As, then Save and autosave to the place it chose, with no other change.
+
+### File conflicts (L3h PR 2)
+
+A writer that finds its file changed on disk does not open a dialog. It answers `{ kind: "refused", reason, conflict }`, where `conflict` is a `FileConflict` (`src/application/save/file-conflict.ts`): `{ fileName, current, kind }`, `kind` being `project` (the file writer) or `import` (import writeback), and `current` the file's state now. The coordinator passes the conflict through to the outcome. The save bridge's `requestSave` hands it to `fileConflicts()`, the conflict owner it creates at start, only if the save bridge it started on is still the running one. The owner holds the one conflict being shown: `show`, `close` (which always announces, so a stale view closes), `current` and `onChange`. The conflicts view in `src/bootstrap/wiring/views.ts` follows `onChange` and draws `showFileConflictView` (`18-local-files.js`); its buttons and the reloads in `18-local-files` and `18a-local-merge` close it through `fileConflicts().close()`. An automatic save that finds a conflict still halts autosave and opens no dialog.
+
+The file check is `checkFileConflict(handle, lastModified)` in `src/adapters/files/file-target.ts`. Delivering bytes outside a save (exports, downloads, an import writeback's fallback) is `deliverBytes` in `src/adapters/files/deliver.ts` (desktop dialog, else a browser download), wrapped by `deliverFile` in `src/legacy/file-delivery.ts`, which shows the saved or failed toast and answers whether the bytes went out.
 
 ### The file writer (4.11, 4.13)
 
 `writeDoc` (`14-export.js`) writes files, Save As, downloads and a hosted Save As, over `src/adapters/files/file-target.ts`.
 
 - **The port.** A `FileHandle` is `{ name, createWritable() → { write, close }, getFile() → { lastModified } }`. `pickTarget(dialogs)` asks the desktop dialog, else the browser picker, else answers a download; an abort or an empty dialog is `cancelled`. `existingTarget(handle)` is Save's own file. `writeToHandle(handle, body)` writes, closes and returns the file's `lastModified`. If `close()` resolves `{ lastModified }` the writer uses that and does not call `getFile()`; otherwise it reads `getFile()` once.
-- **The desktop shim.** `makeDesktopHandle` (`20f-desktop.js`) resolves `close()` with the `lastModified` that `splitpage:write-file` answered (main stats the file right after `atomicWrite`), so on the desktop the baseline timestamp is the write's own and the second read is gone (F8). A missing or non-finite stamp falls back to `getFile()`. Main still has a short window between the atomic write and its stat.
+- **The desktop shim.** `makeDesktopHandle` (`src/adapters/desktop/desktop-handle.ts`, through the desktop port) resolves `close()` with the `lastModified` that `splitpage:write-file` answered (main stats the file right after `atomicWrite`), so on the desktop the baseline timestamp is the write's own and the second read is gone (F8). A missing or non-finite stamp falls back to `getFile()`. Main still has a short window between the atomic write and its stat.
 - **Stamps on the capture.** `writeDoc` sets the Save controls busy (since 6.5 it repairs no records first; save preparation is read-only), and captures with `captureExportDocument({ docId: fork, stamp: { rev + 1, lastEditedBy, lastEditedAt } })`. The new `rev` and the last-edited stamps go on the captured copy, so the bytes carry them without any change to the live document. Then it picks or reuses a target, checks the file's conflict marker against the home captured at the start (unless forced), builds the bytes, and writes.
 - **Confirming.** `confirmWrite` runs only if the write landed and `job.owns()` still holds. It gives the live document its `rev` and stamps, sets the baseline, the home's `diskBase` and `lastModified`, the forked id and `docIdWrittenOut`, and clears the dirty flag. No failure, cancel, conflict or build-error path writes to the live document, so a save whose document was replaced mid-write changes nothing in the replacement (F1, F1-abort, F1-dialog, F2). Save As retargets the document only while the job owns it, followed by `job.moved()`; one `finally` undoes a retarget and clears the busy state.
 - **A write that landed but is no longer owned.** The bytes are on disk, so the toast "Saved to …" still shows, the coordinator reports the save obsolete, and only the history copy runs: a forked copy's history is copied after any landed write (suite 22 pins this); the id change and `docIdWrittenOut` happen only when owned.
-- **Results.** `SAVED`, `COPIED`, `CANCELLED`, `FAILED`, `CONFLICTED` (a refusal) or a `failed` result with the error. A non-Save-As call for a server document delegates to `saveToServer(job)`.
+- **Results.** `SAVED`, `COPIED`, `CANCELLED`, `FAILED`, `CONFLICTED` (a refusal) or a `failed` result with the error. A save of a server document other than Save As never reaches it: the server destination takes it.
+- **Pictures left out.** When some pictures were not available, the writer shows `warnImagesLeftOut` through the notices port (`src/legacy/effects-bridge.ts`, wording in `src/application/export/diagnostics.ts`); exports show the same notice from their diagnostics.
 
 ### Import writeback (4.12)
 
 An imported file (`.md`, `.txt` and the like) saves back to its source through the coordinator, on the import destination's own queue.
 
 - `saveBackToFile(opts)` requests `writeback` (or `writebackForce`). The request carries the import home it was made for (`target`, an optional field of `LegacySaveRequest`). The kinds never join.
-- `writeBackToFile(job)` is the writer: it builds the bytes with `buildFileData` (captured at its start), checks the conflict marker, writes in place or falls back to a download through `deliverFile`, and answers saved, failed, cancelled or refused. It refuses (`IMPORT_REPLACED`) unless the import named by `target` is still the open one and `job.owns()` still holds, checked before the build, after it and after the conflict check. Without that, a writeback queued behind another would write the new document into a different file once another import had replaced the first while it waited.
+- `writeBackToFile(job)` is the writer: it builds the bytes with `buildFileData` (captured at its start), checks the conflict marker, writes in place or falls back to a download through `deliverFile`, and answers saved, failed, cancelled or refused; a file changed on disk is a refusal carrying an `import` conflict ("File conflicts" above). It refuses (`IMPORT_REPLACED`) unless the import named by `target` is still the open one and `job.owns()` still holds, checked before the build, after it and after the conflict check. Without that, a writeback queued behind another would write the new document into a different file once another import had replaced the first while it waited.
 - After an acknowledged outcome the import home reads saved from `unsavedFor(imported)`, not from a blanket clear. The download fallback still counts as the import's save. The Save button shows its busy state while a writeback runs, because the coordinator reports it running.
 - The bytes are the document as it stood when the writeback began, for every import format, including while the pictures are being loaded (5.1's capture; I3, M5 5.3, reads the stored `.txt`, `.md`, `.csv` and `.docx`).
 - It still reads the file a second time after writing (`close()` then `getFile()`); on the desktop the shim now answers the stamp from `close()`, so using it here is a one-line change left for later (4.13's note).
 
 ### The hosted writer and the transport (4.14, 4.15)
 
-- **`saveToServer(job)`** (`13-hosted.js`) is the server destination's writer, used for kind `server` and inside `writeDoc`. It builds one transport from `job.operation().connection` and uses it for the missing-blobs check, the blob uploads, the document `PUT` with the base revision and the missing-blobs retry. In review mode it sends the review writes instead of a full `PUT`. On a 409 it merges and retries up to three times, but only while `job.owns()`; after its own merge it calls `job.moved()` so the retry is the same operation (S6, S6-reopen). A call with no job (tests, a direct caller) goes through `requestSave({ kind: "server" })`.
+- **`writeToServer(job)`** (`13-hosted.js`, private) is what the server destination sends with. The destination resumes autosave first for a manual or forced save, answers `saved` when the send went through and `failed` when it did not, and on a failed automatic save pauses autosave ("Autosave is paused — the last save to the server did not go through. Press Save to try again."). `writeToServer` builds one transport from `job.operation().connection` and uses it for the missing-blobs check, the blob uploads, the document `PUT` with the base revision and the missing-blobs retry. In review mode it sends the review writes instead of a full `PUT`. On a 409 it merges and retries up to three times, but only while `job.owns()`; after its own merge it calls `job.moved()` so the retry is the same operation (S6, S6-reopen). `saveToServer()` in the save bridge requests `server` and answers whether the save was sent (saved or obsolete).
 - **The transport** (`server-transport.ts`) holds a frozen copy of the server and token. `request` keeps `apiFetch`'s error mapping unchanged; `get` is the blob GET; `takesBlobs` reads the server's capabilities. `apiFetch`, `apiUrl` and `fetchBlob` are thin wrappers for callers that want the live connection. A tab pointed at another server, or a token changed, mid-save changes nothing about where the rest of the save goes (S3, S4-token).
 - **Completion follows the destination record for facts about the place, and the operation for facts about the session.** On a late success the revision and baseline move when the same destination record is still open (`home === op.destination`) and the job is still alive (`job.alive()`): a save whose wiring was disposed while it was in flight leaves the revision and baseline to the replacement, even when the replacement kept the same home record, and is reported as a late save like one that landed after a reopen. Dirty, the merge report and the 409 retry need `job.owns()`. A history restore during an in-flight server save opens a new epoch but leaves the destination record as it was, so that save still updates the tracked server revision and baseline; the next save then sends the restore with the new base revision and does not merge the regretted text back (4.14's choice, kept by 4.18). A same-id reopen makes a new home record, so neither applies (S2). A token change mid-save keeps the home record, so the revision lands; the coordinator judges the save obsolete and `reportObsoleteSave` shows nothing for a server destination, so the document stays dirty and the next save just re-sends.
 - **Lifecycle.** The presence poll captures the operation and sends through that connection's transport. A reply that arrives after the document changed hands is dropped and the next beat comes soon (it is the one self-rearming timer the app keeps for the whole session; see `m4-lifecycle.test.mjs`).
@@ -190,7 +226,7 @@ An imported file (`.md`, `.txt` and the like) saves back to its source through t
 
 ### Autosave
 
-`writeAutoSave` refuses unless `autoSaveAllowed()` and the document is dirty, else runs `writeDoc({ auto: true })`.
+The autosave entry points are in the save bridge: `autoSaveTarget()` asks the destination that would take an `autosave` request at the current place, `scheduleAutoSave`, `queueAutoSave`, `flushAutoSave`, `haltAutoSave`, `resumeAutoSave`, `setAutoSaveEnabled` and `toggleAutoSave` work the policy with that target. An `autosave` request is refused unless the policy allows that destination's target and there are unsaved changes; otherwise the destination writes it as an automatic save.
 
 ## 6. Capture (4.6)
 
@@ -216,7 +252,7 @@ Restoring recovered work never saves it (INV-40, INV-41, INV-51), and a restore 
 - **The pristine check (#483, T3).** `neverWrittenOut(doc)` (`pristine.ts`) is true when there is no revision and the editor name is empty once trimmed. `loadInitialState` applies it to the raw state data and then to the migrated document, and the resume check in `openInitialDocument` (`src/bootstrap/startup/initial-document.ts`) applies it to the loaded document, so a whitespace-only name no longer makes the two disagree.
 - **Capture scheduling (B4b).** `capture-schedule.ts` owns the quiet timers (1.5 s idle, 5 s maximum, 15 s for large documents), the pending flag and the retry backoff (5 s doubling to 60 s). A refused write cancels the quiet timers a change armed while it was in flight, and a quiet timer never captures while a retry is armed. `20g-drafts.js` keeps the capture and the write and calls the schedule.
 - **Draft writer (4.17).** `draft-writer.ts` records the operation context and the key at capture time; a late write neither removes nor claims another document's key (B1), and a writer discards only the generation acknowledged to it (B7). The stores are adapters (`src/adapters/storage/`); takeover with and without Web Locks is as before (D12, B3).
-- **Left as is.** The server draft resume adopts through `resumeServerDoc` → `transitions.open`; its fallbacks to an unsaved copy wait on the server and the hosted code can change the destination before it answers, so an ownership check there would turn a revoked link (B9) into a lost copy. The merge branch of `restoreFileDraft` (`applyStashedWork`) awaits only its undo-point snapshot after the open and is not re-checked.
+- **Left as is.** The server draft resume adopts through `resumeServerDoc` → `transitions.open`; its fallbacks to an unsaved copy wait on the server and the hosted code can change the destination before it answers, so an ownership check there would turn a revoked link (B9) into a lost copy. The merge branch of `restoreFileDraft` (`applyStashedWork`, on the recovery bridge since L3h PR 3, built by `createStashedWork` in `src/application/recovery/stashed-work.ts` over the conflict stash and the merge port that `_entry.js` passes with the recovery ports) awaits only its undo-point snapshot after the open and is not re-checked.
 
 ## 8. Known gaps and exceptions
 

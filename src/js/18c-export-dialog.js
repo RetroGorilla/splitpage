@@ -1,4 +1,4 @@
-import { S } from "./_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import {
   brollSummaryText,
   exportBrollScenes,
@@ -71,7 +71,7 @@ function exportOptionsFor(action) {
 }
 
 export function exportActionReason(action) {
-  if (!S.state) return "Still loading…";
+  if (!currentDocument()) return "Still loading…";
   var exporter = exportFormats.byAction(action);
   return exporter && exporter.reason ? exporter.reason(captureExportDocument()) : "";
 }
@@ -174,7 +174,7 @@ function pvRuns(html, n, nums) {
 
 function pvTitleBlock(title, doc) {
   return '<div class="pv-title">' + title + '</div>' +
-    (S.state.rows.length ? '<div class="pv-meta">' + escapeHtml(exportMetaLine(exportFacts(doc))) + '</div>' : '');
+    (currentDocument().rows.length ? '<div class="pv-meta">' + escapeHtml(exportMetaLine(exportFacts(doc))) + '</div>' : '');
 }
 
 function pvLamp(id) { return '<i class="pv-lamp pv-lamp-' + escapeHtml(id) + '" aria-hidden="true"></i>'; }
@@ -204,11 +204,11 @@ function pvScript(title, opts, doc) {
   var scenes = sceneFacts(doc);
   var nums = doc.commentNumbers;
   var html = (opts.app ? "" : pvTitleBlock(title, doc)) + (opts.rundown ? pvRundown(scenes, !opts.app, doc) : "");
-  if (!S.state.rows.length) return html + '<p class="pv-para pv-faint">(no scenes yet)</p>';
+  if (!currentDocument().rows.length) return html + '<p class="pv-para pv-faint">(no scenes yet)</p>';
   html += '<div class="pv-script' + (opts.word ? ' pv-script-word' : '') + '">' +
     '<div class="pv-sh"><span>Scene</span><span><i class="pv-dot pv-dot-v"></i>Visual</span>' +
     '<span><i class="pv-dot pv-dot-a"></i>Audio</span><span class="pv-read">Read</span></div>' +
-    S.state.rows.slice(0, 6).map(function (r, i) {
+    currentDocument().rows.slice(0, 6).map(function (r, i) {
       var f = scenes[i];
       return '<div class="pv-sc">' +
         '<div class="pv-gut"><b>' + f.number + '</b> <span class="pv-tc">' + f.start + '</span>' +
@@ -280,8 +280,8 @@ function pvWorkbook(grid, sheets) {
 }
 
 function previewHtml(action) {
-  var title = escapeHtml(S.state.title || "Untitled Script");
-  var rows = S.state.rows.slice(0, 7);
+  var title = escapeHtml(currentDocument().title || "Untitled Script");
+  var rows = currentDocument().rows.slice(0, 7);
   var doc = captureExportDocument();
   if (action === "export-broll-pdf") return pvShotList(title, doc);
   if (action === "export-broll-csv" || action === "export-broll-xlsx") {
@@ -308,7 +308,7 @@ function previewHtml(action) {
                        cellText(r.visualText, 34), cellText(r.audioText, 44)] };
     }).concat(rows.length ? [
       { cls: "pv-gap", cells: ["…", "", "", "", "", ""] },
-      { cls: "pv-total", cells: ["Total", "", escapeHtml(exportFacts(doc).status.shot + " of " + S.state.rows.length + " shot"),
+      { cls: "pv-total", cells: ["Total", "", escapeHtml(exportFacts(doc).status.shot + " of " + currentDocument().rows.length + " shot"),
                                  escapeHtml(exportFacts(doc).runtime), "", ""] }
     ] : []);
     if (action === "export-csv") return pvGrid(sheetHead, sheetRows, [12, 12, 14, 10, 25, 27]);
@@ -403,22 +403,22 @@ function tailSummary(doc) {
   var parts = [];
   if (breakdownRows(doc).length) parts.push("breakdown");
   if (exportBrollScenes(doc).length) parts.push("b-roll shot list");
-  var comments = S.state.comments || [];
+  var comments = currentDocument().comments || [];
   if (comments.length) parts.push(comments.some(function (c) { return !c.resolved; }) ? "numbered comments" : "comments");
   return parts.length ? listed(parts) + " at the end" : "";
 }
 
 export function exportSummary(action) {
   var f = formatForAction(action);
-  if (!f || !S.state) return "";
-  var rows = S.state.rows;
+  if (!f || !currentDocument()) return "";
+  var rows = currentDocument().rows;
   var doc = captureExportDocument();
   var bits = [];
   if (f.format.group === "whole") {
     var pics = rows.filter(function (r) { return !!rowImage(r); }).length;
     if (action === "export-csv") {
       bits.push(plural(rows.length, "scene") + (rows.length ? ", with start and read times, tags and b-roll" : ""));
-      if ((S.state.comments || []).length) bits.push("comments below");
+      if ((currentDocument().comments || []).length) bits.push("comments below");
     } else if (action === "export-xlsx") {
       bits.push(plural(rows.length, "scene") + (rows.length ? ", with start and read times, tags and b-roll" : ""));
       var more = xlsxSheetNames(doc).slice(1).map(function (s) { return s.toLowerCase(); });
@@ -466,8 +466,8 @@ export function exportSummary(action) {
 
 export function exportFileNameFor(action) {
   var exporter = exportFormats.byAction(action);
-  if (!exporter || !S.state) return "";
-  var bundle = !!exporter.bundlesPictures && S.state.rows.some(function (r) { return !!rowImage(r); });
+  if (!exporter || !currentDocument()) return "";
+  var bundle = !!exporter.bundlesPictures && currentDocument().rows.some(function (r) { return !!rowImage(r); });
   return exportFileName(exporter.id, exportBaseName(), { imageBundle: bundle });
 }
 
@@ -518,7 +518,7 @@ export function exportDialogOpen() {
 
 export function openExportDialog(opts) {
   opts = opts || {};
-  if (!S.state) { showToast("Still loading…", "warn"); return false; }
+  if (!currentDocument()) { showToast("Still loading…", "warn"); return false; }
   var modal = el("export-modal");
   if (!modal || !modal.hidden) return false;
   buildCards();

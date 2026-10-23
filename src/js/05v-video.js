@@ -1,7 +1,6 @@
-import { S } from "./_state.js";
 import { intern, persist } from "../adapters/storage/02c-blobs.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession } from "../legacy/session-bridge.ts";
 import { foldIntoEdit } from "./12a-undo.js";
 import { fetchVideoThumbnail, parseVideoLink, playerUrl, videoRef } from "../../shared/video-embed.js";
 import { normalizeVideoLink, setVideoThumbnail, videoLinkKey } from "../core/document/gallery.ts";
@@ -108,7 +107,7 @@ function touchesGallery(rowId) {
 }
 
 export function thumbnailsAfterPaste(rowId, hrefs, entry) {
-  if (!S.state || !hrefs || !hrefs.length || !thumbnailsAllowed()) return;
+  if (!currentDocument() || !hrefs || !hrefs.length || !thumbnailsAllowed()) return;
   var ctx = captureOperation();
   hrefs.forEach(function (href) {
     var link = normalizeVideoLink({ href: href });

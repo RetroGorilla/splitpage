@@ -2,9 +2,8 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { S } from "../js/_state.js";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
-import { mergeBase } from "../legacy/session-bridge.ts";
+import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 after(closeApp);
@@ -64,11 +63,11 @@ function exportItems(query) {
 
 test("one provider and one registration put a new exporter in the menu, the palette, the dialog and Export Again", async () => {
   const demo = demoExporter();
-  const docBefore = JSON.stringify(S.state);
+  const docBefore = JSON.stringify(currentDocument());
   const dirtyBefore = unsavedChanges();
   const baseBefore = JSON.stringify(mergeBase());
   const seqBefore = saveChanges();
-  const idBefore = S.state.docId;
+  const idBefore = currentDocument().docId;
   const files = delivered();
   const dropCard = exportFormats.defineCard(CARD);
   const drop = exportFormats.register(demo.decl);
@@ -94,7 +93,7 @@ test("one provider and one registration put a new exporter in the menu, the pale
     document.getElementById("export-go").click();
     await new Promise((resolve) => setTimeout(resolve, 50));
     assert.deepEqual(files.files.map((f) => f.name), [exportBaseName() + " - demo.demo"], "the dialog ran the provider");
-    assert.equal(await files.files[0].blob.text(), "demo of " + S.state.title);
+    assert.equal(await files.files[0].blob.text(), "demo of " + currentDocument().title);
     assert.deepEqual(demo.built.map((b) => [b.frozen, b.allowImageBundle]), [[true, true]], "the provider got the captured, frozen document");
     assert.equal(lastExportAction(), "export-demo-sheet", "the choice is remembered by its action id");
     assert.ok(document.getElementById("export-modal").hidden);
@@ -113,11 +112,11 @@ test("one provider and one registration put a new exporter in the menu, the pale
     await new Promise((resolve) => setTimeout(resolve, 50));
     assert.equal(files.files.length, 4, "the menu entry ran it");
 
-    assert.equal(JSON.stringify(S.state), docBefore, "exporting left the document as it was");
+    assert.equal(JSON.stringify(currentDocument()), docBefore, "exporting left the document as it was");
     assert.equal(unsavedChanges(), dirtyBefore);
     assert.equal(JSON.stringify(mergeBase()), baseBefore, "no baseline was confirmed");
     assert.equal(saveChanges(), seqBefore);
-    assert.equal(S.state.docId, idBefore);
+    assert.equal(currentDocument().docId, idBefore);
   } finally {
     closeExportDialog();
     files.restore();

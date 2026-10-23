@@ -64,14 +64,18 @@ function world(): World {
       }
     },
     report: {
-      obsolete: function (request, here) { w.calls++; w.obsolete.push({ request: request, here: here }); },
-      running: function (running) { w.calls++; w.running.push(running); }
+      obsolete: function (request, here) { w.calls++; w.obsolete.push({ request: request, here: here }); }
     },
     join: function (pending, next) {
       if (pending.kind === "saveAs" || next.kind === "saveAs") return null;
       if (pending.kind === "auto" && next.kind === "auto") return pending;
       return { kind: "save" };
     }
+  });
+  coordinator.onChange(function (change) {
+    if (change !== "running") return;
+    w.calls++;
+    w.running.push(coordinator.running());
   });
   (w as { coordinator: SaveCoordinator<Request, string> }).coordinator = coordinator;
   return w;
@@ -201,6 +205,16 @@ test("cancelled and failed: neither acknowledges; a cancellation is its own outc
   assert.deepEqual(await refused, { kind: "refused", reason: "changed on disk" });
   assert.equal(w.coordinator.dirty(), true);
   assert.deepEqual(w.obsolete, []);
+});
+
+test("a refusal keeps the file conflict its writer named, so a view can show it", async () => {
+  const w = world();
+  w.coordinator.noteChange();
+  const conflict = { fileName: "a.md", current: { lastModified: 9 }, kind: "import" as const };
+  const refused = w.coordinator.request({ kind: "save" });
+  nth(w, 0).answer({ kind: "refused", reason: "changed on disk", conflict });
+  assert.deepEqual(await refused, { kind: "refused", reason: "changed on disk", conflict });
+  assert.equal(w.coordinator.dirty(), true);
 });
 
 test("C1: a copy that lands is saved but acknowledges nothing for the destination", async () => {

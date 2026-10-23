@@ -4,7 +4,6 @@ import "./_preferences-started.mjs";
 import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
@@ -15,9 +14,12 @@ import {
   breakLine, cellLength, cueShortcut, cuesInCell, deleteRange, editCues, flattenCues, fromHtml, importCues,
   insertText, mergeCells, normalizeCell, spokenText, toDocxRuns, toHtml, toMarkdown, toPlainText, withoutCues
 } from "../js/04c-doc-model.js";
-import {
-  __init as initTags, healTagRegistry, productionEntries, removeTag, renameTag, tagsInField
-} from "../js/07-production-tags.js";
+import { __init as initTags, healTagRegistry, tagsInField } from "../js/07-production-tags.js";
+import { removeTag, renameTag } from "../application/commands/production-actions.ts";
+import { runDocumentEdit, sessionStamps, readSession } from "../legacy/session-bridge.ts";
+import { retagRewrites, retagMentions } from "../legacy/tag-rewrites.ts";
+import { productionIndex } from "../legacy/production-index-bridge.ts";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { audioDirectionsHtml, buildDocx, buildNarrationText } from "../adapters/formats/docx.ts";
 import { prompterSceneHtml, trimPrompterCell } from "../js/20-teleprompter.js";
@@ -31,7 +33,7 @@ const C = (text, marks) => ({ text, marks: Object.assign({ cue: true }, marks ||
 const CUE = (inner) => `<span class="audio-cue">${inner}</span>`;
 
 function withState(s, fn) {
-  const was = S.state;
+  const was = currentDocument();
   loadTestDocument(s);
   try { return fn(s); } finally { loadTestDocument(was); }
 }
@@ -157,7 +159,7 @@ test("the Production panel lists it under Music/SFX, with the tags of the same n
   s.rows[0].visualText = 'Kitchen <span class="tag-anchor" data-tag-cat="sound" data-tag-name="door slam" contenteditable="false">door slam</span>';
   withState(s, () => {
     healTagRegistry();
-    const sound = productionEntries().filter((e) => e.cat.id === "sound");
+    const sound = productionIndex().entries(currentDocument()).filter((e) => e.cat.id === "sound");
     assert.deepEqual(sound.map((e) => [e.name, e.mentions.length]).sort(), [["door slam", 2], ["upbeat intro", 1]]);
     assert.ok(s.productionTags.some((t) => t.cat === "sound" && t.name === "upbeat intro" && t.status === "needed"));
     assert.deepEqual(tagsInField(CUE("SFX:")), []);
@@ -186,7 +188,7 @@ test("an edited cue keeps its item: renamed in place with its status, no entry l
     const e = s.productionTags.find((t) => t.name === "slow piano intros");
     assert.equal(e.id, id, "the same entry");
     assert.equal(e.notes, "the Rhodes take");
-    assert.deepEqual(productionEntries().filter((x) => x.cat.id === "sound").map((x) => [x.name, x.orphaned]).sort(),
+    assert.deepEqual(productionIndex().entries(currentDocument()).filter((x) => x.cat.id === "sound").map((x) => [x.name, x.orphaned]).sort(),
       [["door slam", false], ["slow piano intros", false], ["upbeat intro", false]]);
   });
 });
@@ -248,7 +250,7 @@ test("one cue deleted and another edited in the same cell: the edited one keeps 
       const e = s.productionTags.find((t) => t.name === newName);
       assert.equal(e.id, kept.id, label + ": the same entry");
       assert.equal(e.notes, "the good take", label);
-      assert.deepEqual(productionEntries().filter((x) => x.orphaned).map((x) => x.name), [gone], label);
+      assert.deepEqual(productionIndex().entries(currentDocument()).filter((x) => x.orphaned).map((x) => x.name), [gone], label);
     });
   }
 });
@@ -268,9 +270,9 @@ test("renaming the item rewrites the cue's words; removing it makes the line pla
   const s = cueDoc();
   withState(s, () => {
     healTagRegistry();
-    renameTag("sound", "upbeat intro", "Main theme");
+    renameTag("sound", "upbeat intro", "Main theme", { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps });
     assert.equal(s.rows[1].audioText, CUE("Music: Main theme"));
-    assert.equal(removeTag("sound", "door slam"), 1);
+    assert.equal(removeTag("sound", "door slam", { run: runDocumentEdit, read: readSession, mentions: retagMentions, rewrites: retagRewrites, stamps: sessionStamps }), 1);
     assert.equal(s.rows[0].audioText, "Welcome back.<br>SFX: door slam<br>Today, the kettle.");
   });
   assert.equal(toHtml(editCues(fromHtml(CUE("Music:theme")), () => true, "Big theme")), CUE("Music: Big theme"));

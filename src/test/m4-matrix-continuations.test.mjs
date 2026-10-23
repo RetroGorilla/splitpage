@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import { after } from "node:test";
 import assert from "node:assert/strict";
 import zlib from "node:zlib";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { createHeldFetch, createHeldImageDecode, rightToday } from "./_m4-matrix.mjs";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
 
@@ -14,16 +14,16 @@ const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { renderAbsorbed } = await import("../js/05-render.js");
-const { clearDirty } = await import("../js/12-dirty-toast.js");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits, lastUndoEntry, undoSizes } = await import("../js/12a-undo.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { handleImageFile } = await import("../js/06-rows.js");
 const { openGalleryOverlay } = await import("../js/05e-gallery-overlay.js");
 const { thumbnailsAfterPaste } = await import("../js/05v-video.js");
 const annotate = await import("../js/05w-annotate.js");
 const { addGalleryVideo, rowSlots } = await import("../core/document/gallery.ts");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 function pngDataUrl(red, green, blue) {
@@ -80,7 +80,7 @@ function showDocument(doc) {
   loadTestDocument(doc);
   flushEdits();
   renderAbsorbed();
-  clearDirty();
+  confirmSavedNow();
   document.getElementById("toast-host").textContent = "";
   return doc;
 }
@@ -91,8 +91,8 @@ function splitpageFile(doc) {
 
 async function reopen(doc) {
   const epoch = session.epoch();
-  await openProjectFile(splitpageFile(doc), null, { skipSnapshot: true, silent: true });
-  clearDirty();
+  await openDocument({ kind: "file", file: splitpageFile(doc), handle: null, options: { skipSnapshot: true, silent: true } });
+  confirmSavedNow();
   document.getElementById("toast-host").textContent = "";
   assert.ok(session.epoch() > epoch, "setup: the document was replaced and has a new epoch");
 }
@@ -126,7 +126,7 @@ function toasts() {
 }
 
 function edits() {
-  return { doc: JSON.stringify(S.state), dirty: unsavedChanges(), undo: undoSizes(), top: JSON.stringify(lastUndoEntry() || null) };
+  return { doc: JSON.stringify(currentDocument()), dirty: unsavedChanges(), undo: undoSizes(), top: JSON.stringify(lastUndoEntry() || null) };
 }
 
 async function latePaste(replace) {
@@ -157,9 +157,9 @@ const afterCaret = (at, text) => AUDIO.slice(0, at) + text + AUDIO.slice(at);
 
 rightToday("M0", "a delayed paste into an untouched document lands at the caret it started at, with its picture on the scene", async () => {
   await latePaste(async () => {});
-  assert.equal(S.state.rows[0].audioText, afterCaret(5, "Pasted "), "the text went in at the caret");
+  assert.equal(currentDocument().rows[0].audioText, afterCaret(5, "Pasted "), "the text went in at the caret");
   assert.equal(unsavedChanges(), true);
-  assert.ok(S.state.rows[0].imageRef || S.state.rows[0].moreImages, "the picture is on the scene: " + JSON.stringify(Object.keys(S.state.rows[0])));
+  assert.ok(currentDocument().rows[0].imageRef || currentDocument().rows[0].moreImages, "the picture is on the scene: " + JSON.stringify(Object.keys(currentDocument().rows[0])));
 });
 
 rightToday("M1", "a delayed paste that completes after another document was opened changes nothing and tells the user", async () => {
@@ -179,7 +179,7 @@ rightToday("M2", "a delayed paste that completes after the same document was reo
 
 rightToday("M3a", "a delayed paste puts its text at the place captured when it began if the cell is unchanged, however the caret moved (D11)", async () => {
   await latePaste(async () => { select(cellOf("r1", "audioText"), 0); });
-  assert.equal(S.state.rows[0].audioText, afterCaret(5, "Pasted "), "the text went in at the captured place");
+  assert.equal(currentDocument().rows[0].audioText, afterCaret(5, "Pasted "), "the text went in at the captured place");
 });
 
 rightToday("M3b", "a delayed paste puts its text at the end of the cell if the cell was edited while the picture loaded (D11)", async () => {
@@ -189,10 +189,10 @@ rightToday("M3b", "a delayed paste puts its text at the end of the cell if the c
     node.data += "!";
     cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "!" }));
     flushEdits();
-    assert.equal(S.state.rows[0].audioText, AUDIO + "!", "setup: the edit made while the picture loaded reached the document");
+    assert.equal(currentDocument().rows[0].audioText, AUDIO + "!", "setup: the edit made while the picture loaded reached the document");
     select(cell, 0);
   });
-  assert.equal(S.state.rows[0].audioText, AUDIO + "!Pasted ", "the text went in at the end of the edited cell");
+  assert.equal(currentDocument().rows[0].audioText, AUDIO + "!Pasted ", "the text went in at the end of the edited cell");
 });
 
 rightToday("M3c", "a delayed paste puts its text in the cell it began in when the caret moved to another cell (D11)", async () => {
@@ -201,8 +201,8 @@ rightToday("M3c", "a delayed paste puts its text in the cell it began in when th
     other.focus();
     select(other, 0);
   });
-  assert.equal(S.state.rows[0].audioText, afterCaret(5, "Pasted "), "the text went in at the captured place");
-  assert.equal(S.state.rows[1].audioText, "Hello world 1.", "the other cell is untouched");
+  assert.equal(currentDocument().rows[0].audioText, afterCaret(5, "Pasted "), "the text went in at the captured place");
+  assert.equal(currentDocument().rows[1].audioText, "Hello world 1.", "the other cell is untouched");
 });
 
 function dropPicture(target) {
@@ -320,16 +320,16 @@ rightToday("M6-switch", "a thumbnail fetched for a paste that arrives after a co
 
 rightToday("M0b", "in an untouched document the late gallery picture, retried thumbnail, pasted link's thumbnail and annotation each land on their scene", withObjectUrls(async () => {
   await lateGalleryPicture(async () => {});
-  assert.ok(S.state.rows[0].imageRef, "the gallery picture is on the scene");
+  assert.ok(currentDocument().rows[0].imageRef, "the gallery picture is on the scene");
 
   await lateRetry(async () => {});
-  assert.ok(thumbnailOf(S.state), "the retried thumbnail is on the video");
+  assert.ok(thumbnailOf(currentDocument()), "the retried thumbnail is on the video");
 
   await lateThumbnailAfterPaste(async () => {});
-  assert.ok(thumbnailOf(S.state), "the pasted link's thumbnail is on the video");
+  assert.ok(thumbnailOf(currentDocument()), "the pasted link's thumbnail is on the video");
 
   await lateAnnotation(async () => {});
-  assert.ok(rowSlots(S.state.rows[0])[0].annotation, "the annotation is on the picture");
+  assert.ok(rowSlots(currentDocument().rows[0])[0].annotation, "the annotation is on the picture");
 }));
 
 function pointer(el, type) {

@@ -1,10 +1,11 @@
 import { docIdEmbeddedIn } from "../core/document/ids.ts";
-import { S } from "./_state.js";
 import { flushEdits } from "./12a-undo.js";
-import { inertBody } from "../legacy/richtext.ts";
-import { noteReload } from "../legacy/session-bridge.ts";
-import { documentTransitions } from "../legacy/transition-bridge.ts";
-import { autoSavePolicy, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
+import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
+import { currentDocument, noteAbsorbedDirty, noteReload } from "../legacy/session-bridge.ts";
+import { documentTransitions, keepSnapshot } from "../legacy/transition-bridge.ts";
+import { autoSavePolicy, confirmSavedNow, fileConflicts, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
+import { deliverFile } from "../legacy/file-delivery.ts";
+import { checkFileConflict } from "../adapters/files/file-target.ts";
 import { amendHome, currentHome, fileHome, importHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import {
@@ -12,10 +13,7 @@ import {
   standaloneHtmlFor,
   syncDocIdentity
 } from "./02b-doc-id.js";
-import {
-  pushSnapshot,
-  stampRow
-} from "./03-sync.js";
+import { stampRow } from "./03-sync.js";
 import { beginBusy, endBusy, withBusyBar } from "../features/notices/busy.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { brollPrintView } from "./08d-broll-panel.js";
@@ -24,46 +22,39 @@ import { captureExportDocument, loadExportAssets } from "./14b-export-kit.js";
 import { exportAssetsRequest } from "../adapters/formats/export-assets.ts";
 import {
   detectTwoColumnFormat,
-  normalizeImportedRows,
   parseImportRows
 } from "./11-import.js";
-import { clearDirty, markAbsorbedDirty } from "./12-dirty-toast.js";
 import {
   blobSourceNow,
   onServerDoc
 } from "./13-hosted.js";
-import { warnImagesLeftOut } from "./14-export.js";
 import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
+import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
-import { refreshFileMenu, toggleFileMenu } from "./18b-file-menu.js";
+import { toggleFileMenu } from "./18b-file-menu.js";
 import { isExportAction, rememberExport } from "./18c-export-dialog.js";
 import {
   applyMarkdownProject,
   parseMarkdownProject
 } from "./20d-formats.js";
-import {
-  makeDesktopHandle
-} from "./20f-desktop.js";
+import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
-import { strBytes } from "../adapters/formats/bytes.ts";
 import { exportToggleOptions } from "../application/export/registry.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { exportFormats } from "../legacy/export-formats.ts";
-import { setMenuItemLabel, showToast } from "../legacy/effects-bridge.ts";
+import { setMenuItemLabel, showToast, warnImagesLeftOut } from "../legacy/effects-bridge.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { slugify } from "../../shared/text.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
-import { fileKindFromName, mimeForFilename } from "../../shared/file-names.js";
+import { fileKindFromName } from "../../shared/file-names.js";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 export function updateFileChip() {
   updateHeaderFileChip();
   updateReadonlyBanner();
-  var menu = document.getElementById("file-menu");
-  if (menu && !menu.hidden) refreshFileMenu();
 }
 
 export function fileChipListeners(refresh) {
@@ -150,7 +141,7 @@ export function exportFileName(kind, baseName, opts) {
 }
 
 export function exportBaseName() {
-  return importHome() ? importHome().name.replace(/\.[^.]+$/, "") : slugify(S.state.title);
+  return importHome() ? importHome().name.replace(/\.[^.]+$/, "") : slugify(currentDocument().title);
 }
 
 export function exportRequest(kind, opts) {
@@ -306,7 +297,19 @@ export async function parseProjectFileState(file, opts) {
   return { state: reconciled, kind: "md", docIdEmbedded: !!project.docIdEmbedded };
 }
 
-export async function openProjectFile(file, handle, opts) {
+export function projectFileSource() {
+  return {
+    id: "project-file",
+    takes: function (opening) { return opening.kind === "file"; },
+    open: function (opening) {
+      var parsed = opening.parsed;
+      if (parsed) return adoptProjectState(parsed.state, opening.file, opening.handle || null, parsed.kind, opening.options);
+      return openProjectFile(opening.file, opening.handle || null, opening.options);
+    }
+  };
+}
+
+async function openProjectFile(file, handle, opts) {
   opts = opts || {};
   var parsed = await parseProjectFileState(file);
   if (!parsed) return loadFileIntoEditor(file, handle);
@@ -321,25 +324,25 @@ export async function openProjectFile(file, handle, opts) {
   return adoptProjectState(parsed.state, file, handle, parsed.kind, opts);
 }
 
-export function adoptProjectState(newState, file, handle, kind, opts) {
+function adoptProjectState(newState, file, handle, kind, opts) {
   opts = opts || {};
   sidePanels().close("newtab-page");
-  if (!opts.skipSnapshot && S.state && S.state.rows.length) pushSnapshot("Before opening " + file.name);
 
   resetProductionPanelState();
   documentTransitions().open({
     from: { document: newState },
     reason: "adoptProjectState: the project file as it was just read",
+    keep: opts.skipSnapshot ? undefined : "Before opening " + file.name,
     destination: { kind: "file", fields: { handle: handle || null, format: kind, lastModified: file.lastModified || null,
                                            name: file.name, diskBase: cloneState(newState) } },
     writtenOut: true
   });
 
-  clearDirty();
-  var commentNote = S.state.comments.length
-    ? ", " + S.state.comments.length + " comment" + (S.state.comments.length === 1 ? "" : "s") : "";
-  if (!opts.silent) showToast((opts.resumed ? "Resumed " : "Opened ") + (S.state.title || file.name) + " — " +
-    S.state.rows.length + " row" + (S.state.rows.length === 1 ? "" : "s") + commentNote, "ok");
+  confirmSavedNow();
+  var commentNote = currentDocument().comments.length
+    ? ", " + currentDocument().comments.length + " comment" + (currentDocument().comments.length === 1 ? "" : "s") : "";
+  if (!opts.silent) showToast((opts.resumed ? "Resumed " : "Opened ") + (currentDocument().title || file.name) + " — " +
+    currentDocument().rows.length + " row" + (currentDocument().rows.length === 1 ? "" : "s") + commentNote, "ok");
 
   if (handle) rememberLastFileHandle(handle);
   return true;
@@ -399,14 +402,14 @@ async function loadFileIntoEditor(file, handle, opts) {
       newRows = parsed.rows;
       if (!newRows.length && parsed.looseText) {
         var looseMode = detectTwoColumnFormat(parsed.looseText) ? "twocolumn" : "paragraph";
-        newRows = normalizeImportedRows(parseImportRows(parsed.looseText, looseMode));
+        newRows = normalizeImportedRows(parseImportRows(parsed.looseText, looseMode), sanitizeHtml);
       }
     } else if (kind === "csv") {
       newRows = csvToRows(await file.text());
     } else {
       var text = await file.text();
       var mode = detectTwoColumnFormat(text) ? "twocolumn" : "paragraph";
-      newRows = normalizeImportedRows(parseImportRows(text, mode));
+      newRows = normalizeImportedRows(parseImportRows(text, mode), sanitizeHtml);
       var firstHeading = /^#\s+(.+)$/m.exec(text);
       if (firstHeading) newTitle = firstHeading[1].trim();
     }
@@ -422,7 +425,6 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   if (!newRows || !newRows.length) { showToast("No scenes found in that file.", "warn"); return; }
 
-  if (!opts.reload && S.state.rows.length) pushSnapshot("Before opening " + file.name);
 
   newRows.forEach(stampRow);
   var openedTitle = newTitle || file.name.replace(/\.[^.]+$/, "");
@@ -446,13 +448,14 @@ async function loadFileIntoEditor(file, handle, opts) {
     documentTransitions().open({
       from: { raw: { schema: SCHEMA_VERSION, title: openedTitle, rows: newRows } },
       reason: "loadFileIntoEditor: the imported document as it was just read",
+      keep: "Before opening " + file.name,
       destination: { kind: "import", fields: importFields },
       writtenOut: false
     });
   }
   var imported = importHome();
 
-  markAbsorbedDirty(opts.reload ? "reload" : "adopt");
+  noteAbsorbedDirty(opts.reload ? "reload" : "adopt");
   amendHome(imported, { dirty: false });
   sidePanels().close("newtab-page");
   if (typeof syncDocIdentity === "function") syncDocIdentity();
@@ -499,73 +502,16 @@ export async function openLocalFile() {
   document.getElementById("open-file-input").click();
 }
 
-export async function deliverFile(filename, data, opts) {
-  opts = opts || {};
-  if (runningOnDesktop()) {
-    try {
-      var ext = (/\.([a-z0-9]+)$/i.exec(filename) || ["", ""])[1].toLowerCase();
-      var picked = await desktopPort().saveFileDialog({
-        suggestedName: filename,
-        filters: [{ name: ext ? ext.toUpperCase() + " file" : "File", extensions: ext ? [ext] : [] }]
-      });
-      if (!picked) return false;
-      var bytes;
-      if (data instanceof Blob) bytes = new Uint8Array(await data.arrayBuffer());
-      else if (data instanceof Uint8Array) bytes = data;
-      else if (data instanceof ArrayBuffer) bytes = new Uint8Array(data);
-      else if (ArrayBuffer.isView(data)) bytes = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
-      else bytes = strBytes(String(data));
-      await desktopPort().writeFile(picked.id, bytes);
-      showToast(opts.savedMsg || ("Saved " + filename), "ok");
-      return true;
-    } catch (err) {
-      showToast("Could not save the file. Please try again.", "error");
-      return false;
-    }
-  }
-  try {
-    var blob = data instanceof Blob ? data : new Blob([data], { type: mimeForFilename(filename) });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
-    showToast(opts.savedMsg || ("Saved " + filename), "ok");
-    return true;
-  } catch (err) {
-    showToast("Could not save the file. Please try again.", "error");
-    return false;
-  }
-}
-
-export async function checkFileConflict(handle, lastModified) {
-  if (!lastModified) return { ok: true };
-  var current;
-  try {
-    current = await handle.getFile();
-  } catch (e) {
-    return { ok: false, current: null };
-  }
-  if (current.lastModified && current.lastModified !== lastModified) {
-    return { ok: false, current: current };
-  }
-  return { ok: true };
-}
-
-export var fileConflictCtx = { kind: "import" };
 var fileConflictShowToken = 0;
 
-function fileConflictHome() {
-  return fileConflictCtx && fileConflictCtx.kind === "project" ? fileHome() : importHome();
+function fileConflictHome(conflict) {
+  return conflict.kind === "project" ? fileHome() : importHome();
 }
 
 var WRITTEN_BACK = Object.freeze({ kind: "saved" });
 var WRITEBACK_FAILED = Object.freeze({ kind: "failed" });
 var WRITEBACK_CANCELLED = Object.freeze({ kind: "cancelled" });
-var WRITEBACK_CONFLICTED = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
+var FILE_CHANGED = "The file changed on disk since it was opened";
 var NOTHING_IMPORTED = Object.freeze({ kind: "refused", reason: "The document has no imported file to write back to" });
 var IMPORT_REPLACED = Object.freeze({ kind: "refused", reason: "The imported file this write back was asked for is no longer open" });
 
@@ -599,8 +545,7 @@ export async function writeBackToFile(job) {
     if (job.request.kind !== "writebackForce") {
       var check = await checkFileConflict(imported.handle, imported.lastModified);
       if (!check.ok) {
-        showFileConflict(imported.name, check.current, { kind: "import" });
-        return WRITEBACK_CONFLICTED;
+        return { kind: "refused", reason: FILE_CHANGED, conflict: { fileName: imported.name, current: check.current, kind: "import" } };
       }
       if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
     }
@@ -626,8 +571,24 @@ export async function writeBackToFile(job) {
   return ok ? WRITTEN_BACK : WRITEBACK_FAILED;
 }
 
-export function showFileConflict(fileName, currentFile, ctx) {
-  fileConflictCtx = ctx || { kind: "import" };
+var IMPORT_KINDS = ["writeback", "writebackForce"];
+
+export function importSaveDestination() {
+  return {
+    id: "import",
+    takes: function (request) { return IMPORT_KINDS.indexOf(request.kind) !== -1; },
+    autoSaveTarget: function () { return null; },
+    write: writeBackToFile
+  };
+}
+
+export function showFileConflictView(conflict) {
+  if (!conflict) {
+    hideFileConflictView();
+    return;
+  }
+  var fileName = conflict.fileName;
+  var currentFile = conflict.current;
   if (!currentFile) {
     document.getElementById("file-conflict-detail").textContent =
       "Could not check whether " + fileName + " is still there — it may have been moved, " +
@@ -647,24 +608,24 @@ export function showFileConflict(fileName, currentFile, ctx) {
     if (token !== fileConflictShowToken) return;
     document.getElementById("file-conflict-modal").hidden = false;
   };
-  var probe = offerFileMerge(currentFile, fileConflictHome());
+  var probe = offerFileMerge(currentFile, fileConflictHome(conflict));
   var timer = setTimeout(show, 1500);
   probe.then(function () { clearTimeout(timer); show(); },
              function () { clearTimeout(timer); show(); });
 }
 
-export function closeFileConflict() {
+function hideFileConflictView() {
   fileConflictShowToken++;
   document.getElementById("file-conflict-modal").hidden = true;
   resetMergeOffer();
 }
 
 export async function reloadFileFromDisk() {
-  closeFileConflict();
+  fileConflicts().close();
   var imported = importHome();
   if (!imported || !imported.handle) return;
   try {
-    pushSnapshot("Before reloading " + imported.name + " from disk");
+    keepSnapshot("Before reloading " + imported.name + " from disk");
     await loadFileIntoEditor(await imported.handle.getFile(), imported.handle, { reload: true });
   } catch (e) {
     showToast("Could not re-read that file.", "error");
@@ -672,7 +633,7 @@ export async function reloadFileFromDisk() {
 }
 
 export async function reloadProjectFromDisk() {
-  closeFileConflict();
+  fileConflicts().close();
   var file = fileHome();
   if (!file || !file.handle) return;
   try {
@@ -732,7 +693,7 @@ export function handleFileMenuAction(action, source) {
     appActions.invoke(action, source || "menu");
     return;
   }
-  if (!S.state) {
+  if (!currentDocument()) {
     showToast("Still loading…", "warn"); return;
   }
   if (exportFormats.isAction(action)) runExport(action);

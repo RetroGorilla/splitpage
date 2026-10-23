@@ -1,4 +1,5 @@
 import type { OperationContext } from "../session/operation.ts";
+import type { FileConflict } from "./file-conflict.ts";
 
 export interface DestinationKey {
   readonly owner: unknown;
@@ -10,14 +11,14 @@ export type SaveOutcome =
   | { readonly kind: "failed"; readonly error?: unknown }
   | { readonly kind: "cancelled" }
   | { readonly kind: "obsolete"; readonly here: boolean }
-  | { readonly kind: "refused"; readonly reason: string };
+  | { readonly kind: "refused"; readonly reason: string; readonly conflict?: FileConflict };
 
 export type WriterResult =
   | { readonly kind: "saved" }
   | { readonly kind: "copied" }
   | { readonly kind: "failed"; readonly error?: unknown }
   | { readonly kind: "cancelled" }
-  | { readonly kind: "refused"; readonly reason: string };
+  | { readonly kind: "refused"; readonly reason: string; readonly conflict?: FileConflict };
 
 export interface SaveJob<R> {
   readonly request: R;
@@ -44,7 +45,6 @@ export interface SaveWriterPort<R> {
 
 export interface SaveReportPort<R> {
   readonly obsolete: (request: R, here: boolean) => void;
-  readonly running: (running: boolean) => void;
 }
 
 export interface SaveCoordinatorPorts<R> {
@@ -161,10 +161,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
     const was = activeCount > 0;
     activeCount += delta;
     const now = activeCount > 0;
-    if (was !== now) {
-      ports.report.running(now);
-      announce("running");
-    }
+    if (was !== now) announce("running");
   }
 
   function acknowledge(key: DestinationKey, generation: number): void {
@@ -175,7 +172,9 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
   function judge(entry: Entry<R>, result: WriterResult, operation: OperationContext, generation: number): SaveOutcome {
     if (result.kind === "failed") return "error" in result ? { kind: "failed", error: result.error } : { kind: "failed" };
     if (result.kind === "cancelled") return { kind: "cancelled" };
-    if (result.kind === "refused") return { kind: "refused", reason: result.reason };
+    if (result.kind === "refused") {
+      return result.conflict ? { kind: "refused", reason: result.reason, conflict: result.conflict } : { kind: "refused", reason: result.reason };
+    }
     if (stopped) return { kind: "obsolete", here: false };
     const landed = ports.destination.keyOf(operation.destination);
     if (!ports.ownership.stillOwns(operation)) {

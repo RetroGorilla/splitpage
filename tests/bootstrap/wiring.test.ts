@@ -38,7 +38,7 @@ import {
   startSessionBridge
 } from "../../src/legacy/session-bridge.ts";
 import type { ReplayRunner, SessionUndoPorts } from "../../src/legacy/session-bridge.ts";
-import { documentTransitions, startTransitions } from "../../src/legacy/transition-bridge.ts";
+import { documentSources, documentTransitions, openDocument, startTransitions } from "../../src/legacy/transition-bridge.ts";
 import { createUndoAdapter, routeReplays } from "../../src/legacy/undo-adapter.ts";
 import { sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
 import { migrateRows } from "../../src/js/02-state.js";
@@ -116,7 +116,8 @@ const NO_DOCUMENT = { kind: "none" };
 function transitionPorts(): TransitionDeps {
   return {
     destination: { set: () => {}, confirm: () => {} },
-    identity: { mint: () => "d" + "0".repeat(32), writtenOut: () => false, markWrittenOut: () => {} }
+    identity: { mint: () => "d" + "0".repeat(32), writtenOut: () => false, markWrittenOut: () => {} },
+    history: { keep: () => null }
   };
 }
 
@@ -155,6 +156,7 @@ function fakes(): Fakes {
     editorName: () => "Ann",
     refresh: (jobs) => { refreshed.push(...jobs); },
     records: () => null,
+    bulkTags: { cell: (html) => ({ hits: 0, inTags: 0, skipped: 0, html: html }), stamp: () => {} },
     exporters: (registry: ExportRegistry) => {
       note("exporters");
       counts.exporters++;
@@ -167,19 +169,28 @@ function fakes(): Fakes {
     saves: (ownership) => {
       note("saves");
       return {
-        write: () => Promise.resolve({ kind: "saved" as const }),
         destination: () => NO_DOCUMENT,
         keyOf: () => ({ owner: null, name: "none" }),
         obsolete: () => {},
-        running: () => {},
         ownership,
-        autosave: { enabledAtStart: () => false, due: () => {}, changed: () => {} }
+        autosave: { enabledAtStart: () => false, changed: () => {} }
       };
     },
+    destinations: () => {
+      note("destinations");
+      return [{ id: "probe", takes: () => true, autoSaveTarget: () => null, write: () => Promise.resolve({ kind: "saved" as const }) }];
+    },
     transitions: transitionPorts(),
+    sources: () => {
+      note("sources");
+      return [{ id: "probe", takes: () => true, open: () => true }];
+    },
     recovery: () => {
       note("recovery");
-      return { indexedDB: null, limits: { maxAgeMs: 1, maxCount: 1, maxBytes: 1 }, now: () => 0, writerId: "w", desktop: () => null, sessionStorage: () => null, localStorage: () => null, internImage: () => {} };
+      return {
+        indexedDB: null, limits: { maxAgeMs: 1, maxCount: 1, maxBytes: 1 }, now: () => 0, writerId: "w", desktop: () => null,
+        sessionStorage: () => null, localStorage: () => null, internImage: () => {}, merge: (request) => ({ state: migrateRows(request["theirs"]) })
+      };
     },
     keyTarget: new EventTarget(),
     undo,
@@ -224,6 +235,8 @@ test("startup: wireApp builds every owner in order, each step sees only the owne
     ["exporters", only("location", "effects", "actions", "exportServices", "exports")],
     ["undo route", only("location", "effects", "actions", "exportServices", "exports", "session")],
     ["saves", only("location", "effects", "actions", "exportServices", "exports", "session")],
+    ["destinations", only("location", "effects", "actions", "exportServices", "exports", "session", "saves")],
+    ["sources", only("location", "effects", "actions", "exportServices", "exports", "session", "saves", "transitions")],
     ["recovery", only("location", "effects", "actions", "exportServices", "exports", "session", "saves", "transitions")]
   ]);
   assert.deepEqual(started(), EVERYTHING);
@@ -240,7 +253,7 @@ test("startup: wireApp builds every owner in order, each step sees only the owne
 });
 
 test("failed partial startup: each missing dependency is named and nothing is built", () => {
-  const required: (keyof WiringDeps)[] = ["entry", "effects", "editorName", "refresh", "records", "saves", "transitions", "recovery", "keyTarget"];
+  const required: (keyof WiringDeps)[] = ["entry", "effects", "editorName", "refresh", "records", "saves", "destinations", "transitions", "sources", "recovery", "keyTarget"];
   for (const name of required) {
     const f = fakes();
     const error = refused(() => wireLoose(without(f.deps, name)));
@@ -257,7 +270,7 @@ test("failed partial startup: each missing dependency is named and nothing is bu
     assert.deepEqual(f.log, [], effect + ": nothing is built");
     assert.deepEqual(started(), NOTHING, effect + ": no facade is started");
   }
-  for (const port of ["destination", "identity"] as const) {
+  for (const port of ["destination", "identity", "history"] as const) {
     const f = fakes();
     const error = refused(() => wireLoose({ ...f.deps, transitions: without(f.deps.transitions, port) }));
     assert.equal(error.step, "transitions");
@@ -282,7 +295,8 @@ test("failed partial startup: each missing dependency is named and nothing is bu
 test("failed partial startup: a port that is present but lacks a function is named and nothing is built", () => {
   const methods: Record<keyof TransitionDeps, readonly string[]> = {
     destination: ["set", "confirm"],
-    identity: ["mint", "writtenOut", "markWrittenOut"]
+    identity: ["mint", "writtenOut", "markWrittenOut"],
+    history: ["keep"]
   };
   for (const [port, names] of Object.entries(methods) as [keyof TransitionDeps, readonly string[]][]) {
     for (const method of names) {
@@ -307,9 +321,9 @@ test("failed partial startup: a port that is present but lacks a function is nam
 test("failed partial startup: a save factory that returns malformed ports fails the saves step, names the port and installs no save owner", () => {
   const malformed: [string, (ports: LegacySavePorts) => unknown, string][] = [
     ["nothing", () => undefined, "the saves dependency returned no save ports"],
-    ...(["write", "destination", "keyOf", "obsolete", "running"] as const).map((port): [string, (ports: LegacySavePorts) => unknown, string] =>
+    ...(["destination", "keyOf", "obsolete"] as const).map((port): [string, (ports: LegacySavePorts) => unknown, string] =>
       [port, (ports) => without(ports, port), "the saves dependency returned no " + port + " port"]),
-    ...(["write", "destination", "keyOf", "obsolete", "running"] as const).map((port): [string, (ports: LegacySavePorts) => unknown, string] =>
+    ...(["destination", "keyOf", "obsolete"] as const).map((port): [string, (ports: LegacySavePorts) => unknown, string] =>
       [port + " not a function", (ports) => ({ ...ports, [port]: 7 }), "the saves dependency returned no " + port + " port"]),
     ["ownership not an object", (ports) => ({ ...ports, ownership: 7 }), "the saves dependency returned no ownership port"],
     ["ownership", (ports) => without(ports, "ownership"), "the saves dependency returned no ownership port"],
@@ -319,9 +333,9 @@ test("failed partial startup: a save factory that returns malformed ports fails 
       [method + " not a function", (ports) => ({ ...ports, ownership: { ...ports.ownership, [method]: "x" } }), "the saves dependency's ownership port has no " + method + " function"]),
     ["autosave not an object", (ports) => ({ ...ports, autosave: 7 }), "the saves dependency returned no autosave port"],
     ["autosave", (ports) => without(ports, "autosave"), "the saves dependency returned no autosave port"],
-    ...(["enabledAtStart", "due", "changed"] as const).map((method): [string, (ports: LegacySavePorts) => unknown, string] =>
+    ...(["enabledAtStart", "changed"] as const).map((method): [string, (ports: LegacySavePorts) => unknown, string] =>
       [method, (ports) => ({ ...ports, autosave: without(ports.autosave, method) }), "the saves dependency's autosave port has no " + method + " function"]),
-    ...(["enabledAtStart", "due", "changed"] as const).map((method): [string, (ports: LegacySavePorts) => unknown, string] =>
+    ...(["enabledAtStart", "changed"] as const).map((method): [string, (ports: LegacySavePorts) => unknown, string] =>
       [method + " not a function", (ports) => ({ ...ports, autosave: { ...ports.autosave, [method]: "x" } }), "the saves dependency's autosave port has no " + method + " function"])
   ];
   for (const [what, spoil, message] of malformed) {
@@ -337,6 +351,65 @@ test("failed partial startup: a save factory that returns malformed ports fails 
     assert.deepEqual(started(), NOTHING, what + ": every owner built before it is released");
     assert.deepEqual(f.live, { exporters: 0, undo: 0 }, what);
   }
+});
+
+test("failed partial startup: a destinations dependency that returns no list fails the save destinations step and installs no save owner", () => {
+  for (const given of [undefined, null, 7, {}]) {
+    const f = fakes();
+    const error = refused(() => wireLoose({ ...f.deps, destinations: () => given }));
+    assert.equal(error.step, "save destinations", String(given));
+    assert.ok(error.cause instanceof WiringError, String(given) + ": the cause is a WiringError");
+    assert.equal(error.cause.message, "Wiring: the destinations dependency returned no list of destinations", String(given));
+    assert.equal(savesStarted(), false, String(given) + ": no save coordinator is installed");
+    assert.deepEqual(started(), NOTHING, String(given) + ": every owner built before it is released");
+  }
+  const f = fakes();
+  const probe = { id: "probe", takes: () => true, autoSaveTarget: () => null, write: () => Promise.resolve({ kind: "saved" as const }) };
+  const twice = refused(() => wireLoose({ ...f.deps, destinations: () => [probe, probe] }));
+  assert.equal(twice.step, "save destinations", "a second destination with the same id");
+  assert.match(String((twice.cause as Error).message), /a destination called probe is already registered/);
+  assert.equal(savesStarted(), false, "the first destination and the coordinator are released");
+  assert.deepEqual(started(), NOTHING);
+});
+
+test("failed partial startup: a sources dependency that returns no list fails the document sources step and releases the transitions", () => {
+  for (const given of [undefined, null, 7, {}]) {
+    const f = fakes();
+    const error = refused(() => wireLoose({ ...f.deps, sources: () => given }));
+    assert.equal(error.step, "document sources", String(given));
+    assert.ok(error.cause instanceof WiringError, String(given) + ": the cause is a WiringError");
+    assert.equal(error.cause.message, "Wiring: the sources dependency returned no list of sources", String(given));
+    assert.deepEqual(started(), NOTHING, String(given) + ": every owner built before it is released");
+  }
+  const f = fakes();
+  const probe = { id: "probe", takes: () => true, open: () => true };
+  const twice = refused(() => wireLoose({ ...f.deps, sources: () => [probe, probe] }));
+  assert.equal(twice.step, "document sources", "a second source with the same id");
+  assert.match(String((twice.cause as Error).message), /a source called probe is already registered/);
+  assert.deepEqual(started(), NOTHING);
+});
+
+test("document sources: the wiring registers the sources it is given, opens through the newest that takes the opening, and drops them at dispose", async () => {
+  const f = fakes();
+  const opened: string[] = [];
+  const wiring = wireApp({
+    ...f.deps,
+    sources: () => [
+      { id: "files", takes: (o) => o.kind === "file", open: (o) => { opened.push("files:" + String(o["name"])); return true; } },
+      { id: "any", takes: () => true, open: () => { opened.push("any"); return "any"; } }
+    ]
+  });
+  try {
+    assert.deepEqual(documentSources().ids(), ["any", "files"]);
+    assert.equal(await openDocument({ kind: "file", name: "a" }), "any", "the source registered last is asked first");
+    const drop = documentSources().register({ id: "late", takes: (o) => o.kind === "file", open: (o) => { opened.push("late:" + String(o["name"])); return true; } });
+    assert.equal(await openDocument({ kind: "file", name: "b" }), true);
+    drop();
+    assert.deepEqual(opened, ["any", "late:b"]);
+  } finally {
+    wiring.dispose();
+  }
+  assert.throws(() => documentSources(), /The document transitions are not started yet/);
 });
 
 test("failed partial startup: a timers port, undo adapter or key target that lacks a method is named and nothing is built", () => {
@@ -413,7 +486,9 @@ test("failed partial startup: a step that throws undoes every step before it, in
     "built-in exporters": (f) => ({ deps: { ...f.deps, exporters: () => { throw boom; } } }),
     session: (f) => ({ deps: { ...f.deps, undo: { ...must(f.deps.undo), route: () => { throw boom; } } } }),
     saves: (f) => ({ deps: { ...f.deps, saves: () => { throw boom; } } }),
+    "save destinations": (f) => ({ deps: { ...f.deps, destinations: () => { throw boom; } } }),
     transitions: (f) => ({ deps: f.deps, cleanup: startTransitions({ ...transitionPorts(), live: liveDocumentPort }), cause: false }),
+    "document sources": (f) => ({ deps: { ...f.deps, sources: () => { throw boom; } } }),
     recovery: (f) => ({ deps: { ...f.deps, recovery: () => { throw boom; } } }),
     editor: (f) => ({ deps: f.deps, cleanup: startEditor(liveDocumentPort), cause: false }),
     "production editing": (f) => ({ deps: f.deps, cleanup: startProductionEditing(must(f.deps.timers)), cause: false }),
@@ -552,6 +627,7 @@ interface HeldSaves {
   readonly jobs: LegacySaveJob[];
   readonly finish: ((result: WriterResult) => void)[];
   readonly saves: WiringDeps["saves"];
+  readonly destinations: WiringDeps["destinations"];
 }
 
 function heldSaves(name: string): HeldSaves {
@@ -560,22 +636,26 @@ function heldSaves(name: string): HeldSaves {
   const finish: ((result: WriterResult) => void)[] = [];
   const call = (what: string): void => { calls.push(name + " " + what); };
   const saves: WiringDeps["saves"] = (ownership) => ({
-    write: (job) => {
-      call("write");
-      jobs.push(job);
-      return new Promise<WriterResult>((resolve) => { finish.push(resolve); });
-    },
     destination: () => { call("destination"); return NO_DOCUMENT; },
     keyOf: () => { call("keyOf"); return { owner: null, name: "none" }; },
     obsolete: () => { call("obsolete"); },
-    running: (on) => { call("running " + String(on)); },
     ownership: {
       capture: () => { call("capture"); return ownership.capture(); },
       stillOwns: (ctx) => { call("stillOwns"); return ownership.stillOwns(ctx); }
     },
-    autosave: { enabledAtStart: () => false, due: () => { call("autosave due"); }, changed: () => {} }
+    autosave: { enabledAtStart: () => false, changed: () => {} }
   });
-  return { calls, jobs, finish, saves };
+  const destinations: WiringDeps["destinations"] = () => [{
+    id: name,
+    takes: () => true,
+    autoSaveTarget: () => null,
+    write: (job) => {
+      call("write");
+      jobs.push(job);
+      return new Promise<WriterResult>((resolve) => { finish.push(resolve); });
+    }
+  }];
+  return { calls, jobs, finish, saves, destinations };
 }
 
 function settled(promise: Promise<SaveOutcome>): Promise<SaveOutcome | "still pending"> {
@@ -586,7 +666,7 @@ for (const rewire of [false, true]) {
   test("save teardown" + (rewire ? ", then a rewire" : "") + ": dispose settles the queued save, and the held write that finishes afterwards settles without calling any old or replacement owner", async () => {
     const f = fakes();
     const old = heldSaves("old");
-    const wiring = wireApp({ ...f.deps, saves: old.saves });
+    const wiring = wireApp({ ...f.deps, saves: old.saves, destinations: old.destinations });
     const active = requestSave({ kind: "save" });
     const queued = requestSave({ kind: "saveAs" });
     assert.equal(old.jobs.length, 1, "the first save is writing");
@@ -597,7 +677,7 @@ for (const rewire of [false, true]) {
     old.calls.length = 0;
     assert.deepEqual(await settled(queued), { kind: "cancelled" }, "the queued save settles at dispose and never writes");
     const fresh = heldSaves("new");
-    const replacement = rewire ? wireApp({ ...fakes().deps, saves: fresh.saves }) : null;
+    const replacement = rewire ? wireApp({ ...fakes().deps, saves: fresh.saves, destinations: fresh.destinations }) : null;
     try {
       assert.equal(job.owns(), false, "the held job no longer owns anything");
       job.moved();
@@ -624,7 +704,7 @@ test("save teardown: a held write that fails or is cancelled after dispose settl
   for (const result of [{ kind: "failed", error: new Error("disk") }, { kind: "cancelled" }, { kind: "refused", reason: "read-only" }] as const) {
     const f = fakes();
     const held = heldSaves("held");
-    const wiring = wireApp({ ...f.deps, saves: held.saves });
+    const wiring = wireApp({ ...f.deps, saves: held.saves, destinations: held.destinations });
     const active = requestSave({ kind: "save" });
     wiring.dispose();
     held.calls.length = 0;

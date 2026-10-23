@@ -4,28 +4,28 @@ import { byId, rowContentEqual, rowFieldKey } from "../core/merge/rows.ts";
 import { GALLERY_FIELDS, ROW_FIELDS } from "../core/document/fields.ts";
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { rowStatus, tagCategory, tagStatus } from "../core/production/looks.ts";
-import { S } from "./_state.js";
 import { amendHome, fileHome } from "../legacy/location-bridge.ts";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import { blobImgHtml, rowImage, rowImageKey } from "../adapters/storage/02c-blobs.js";
 import { videoLinkLabel } from "../adapters/storage/02d-gallery.js";
 import { textMergeContext } from "./03-sync.js";
-import { applyStashedWork } from "./14-export.js";
-import { closeFileConflict, parseProjectFileState } from "./18-local-files.js";
+import { parseProjectFileState } from "./18-local-files.js";
+import { fileConflicts } from "../legacy/save-bridge.ts";
+import { applyStashedWork } from "../legacy/recovery-bridge.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { safeImageSrc } from "../core/document/text-policy.ts";
 import { pad2 } from "../core/production/timing.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { cloneState } from "../core/document/clone.ts";
-import { mergeBase } from "../legacy/session-bridge.ts";
+import { currentDocument, mergeBase } from "../legacy/session-bridge.ts";
 
 var mergeCandidate = null;
 var mergeProbeToken = 0;
 
 function fileMergeBase(home) {
   if (home && home.diskBase) return home.diskBase;
-  if (home && home === fileHome() && mergeBase() && S.state &&
-      normalizeDocId(mergeBase().docId) === normalizeDocId(S.state.docId)) return mergeBase();
+  if (home && home === fileHome() && mergeBase() && currentDocument() &&
+      normalizeDocId(mergeBase().docId) === normalizeDocId(currentDocument().docId)) return mergeBase();
   return null;
 }
 
@@ -39,7 +39,7 @@ export function resetMergeOffer() {
 export async function offerFileMerge(currentFile, home) {
   resetMergeOffer();
   var token = mergeProbeToken;
-  if (!currentFile || !S.state) return;
+  if (!currentFile || !currentDocument()) return;
   var parsed;
   try {
     parsed = await parseProjectFileState(currentFile, { noAsk: true });
@@ -51,7 +51,7 @@ export async function offerFileMerge(currentFile, home) {
 
   var theirs = parsed.state;
   var base = fileMergeBase(home);
-  var refId = normalizeDocId((base && base.docId) || S.state.docId);
+  var refId = normalizeDocId((base && base.docId) || currentDocument().docId);
   if (parsed.docIdEmbedded && refId && normalizeDocId(theirs.docId) !== refId) return;
   if (refId) theirs.docId = refId;
 
@@ -326,8 +326,8 @@ function mergeGroupHtml(g) {
 }
 
 export function openMergeReview() {
-  if (!mergeCandidate || !S.state) return;
-  var groups = mergeDiffModel(mergeCandidate.base, S.state, mergeCandidate.theirs);
+  if (!mergeCandidate || !currentDocument()) return;
+  var groups = mergeDiffModel(mergeCandidate.base, currentDocument(), mergeCandidate.theirs);
   var count = groups.reduce(function (n, g) { return n + g.entries.length; }, 0);
   document.getElementById("merge-review-detail").textContent = count
     ? (count === 1 ? "One field differs" : count + " fields differ") +
@@ -353,20 +353,20 @@ export function cancelMergeReview() {
 
 export function confirmFileMerge() {
   var cand = mergeCandidate;
-  if (!cand || !S.state) { cancelMergeReview(); return; }
+  if (!cand || !currentDocument()) { cancelMergeReview(); return; }
   document.getElementById("merge-review-modal").hidden = true;
   document.getElementById("merge-review-list").innerHTML = "";
-  closeFileConflict();
+  fileConflicts().close();
 
   var diskCopy = cloneState(cand.theirs);
-  var prevDocId = S.state.docId;
+  var prevDocId = currentDocument().docId;
   if (cand.home) {
     amendHome(cand.home, cand.lastModified
       ? { diskBase: diskCopy, lastModified: cand.lastModified }
       : { diskBase: diskCopy });
   }
   applyStashedWork(migrateRows(cloneState(cand.theirs)), {
-    base: cand.base, mine: cloneState(S.state)
+    base: cand.base, mine: cloneState(currentDocument())
   }, {
     newBase: cloneState(diskCopy),
     historyFrom: prevDocId,

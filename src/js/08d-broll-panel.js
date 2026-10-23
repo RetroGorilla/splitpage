@@ -8,12 +8,10 @@ import { revealRow } from "./01b-hide-shot.js";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { cssAttr, plainText } from "./04-richtext.js";
 import { focusRowField } from "./06-rows.js";
-import { productionEntries } from "./07-production-tags.js";
+import { productionIndex } from "../legacy/production-index-bridge.ts";
 import {
   addBrollProp,
   brollEntries,
-  newBrollRecord,
-  removeBrollProp,
   renameBrollInScript,
   updateBrollBadge
 } from "./08c-broll.js";
@@ -27,9 +25,16 @@ import { showToast } from "../legacy/effects-bridge.ts";
 import { mountBroll } from "../features/broll/mount.ts";
 import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
 import { deleteShotCommand, setShotsCommand } from "../application/commands/broll-records.ts";
+import { newBrollRecord, removeBrollProp } from "../application/commands/production-actions.ts";
 import { brollRecord as shotIn, personById as personIn, personNamed } from "../core/production/records.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { currentDocument, readSession, runDocumentEdit } from "../legacy/session-bridge.ts";
+
+const shotEditPorts = { run: runDocumentEdit, ids: randomIds };
+
+function productionEntries() {
+  return productionIndex().entries(currentDocument());
+}
 
 var VIEW_KEY = "splitpage-broll-view";
 
@@ -846,7 +851,7 @@ function addBrollFromPanel() {
   if (!input) return;
   var name = cappedText(input.value, BROLL_NAME_MAX);
   if (!name) return;
-  var rec = newBrollRecord({ name: name, origin: "list" });
+  var rec = newBrollRecord({ name: name, origin: "list" }, shotEditPorts);
   input.value = "";
   openId = rec.id;
   renderBrollViews();
@@ -987,7 +992,7 @@ function onBrollClick(e, root) {
     var ref = root.querySelector('.broll-ref-input[data-id="' + cssAttr(id) + '"]');
     if (ref) ref.focus();
   } else if (action === "broll-prop-remove") {
-    removeBrollProp(id, btn.getAttribute("data-ref"));
+    removeBrollProp(id, btn.getAttribute("data-ref"), shotEditPorts);
     renderBrollViews();
   } else if (action === "broll-person-new") {
     addingPersonFor = id;

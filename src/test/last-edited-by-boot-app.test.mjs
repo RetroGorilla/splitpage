@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 const GRIN = String.fromCodePoint(0x1F600);
 const NAME_33 = "Maria ".repeat(5) + "Lee";
@@ -43,7 +43,7 @@ function typeInto(input, value) {
 }
 
 test("a name over 30 characters: booting on the user's own saved file shows no toast", () => {
-  assert.equal(S.state.lastEditedBy, NAME_33.slice(0, 30).trimEnd());
+  assert.equal(currentDocument().lastEditedBy, NAME_33.slice(0, 30).trimEnd());
   assert.deepEqual(openedToasts(), []);
 });
 
@@ -112,7 +112,7 @@ test("a reply posted with a longer name than the field allows is stored under 30
   field.value = NAME_33;
   document.querySelector(".reply-composer .cell-editable").innerHTML = "hello";
   postReply("c1");
-  assert.equal(S.state.comments[0].replies[0].author, NAME_33.slice(0, 30).trimEnd());
+  assert.equal(currentDocument().comments[0].replies[0].author, NAME_33.slice(0, 30).trimEnd());
   assert.equal(localStorage.getItem(NAME_KEY), NAME_33.slice(0, 30).trimEnd());
 });
 
@@ -121,7 +121,7 @@ test("a comment posted with a longer name than the field allows is stored under 
   document.getElementById("comment-name").value = NAME_33;
   document.getElementById("comment-body-editable").innerHTML = "hello";
   postComment();
-  const posted = S.state.comments.find((c) => c.id === "c9");
+  const posted = currentDocument().comments.find((c) => c.id === "c9");
   assert.equal(posted.author, NAME_33.slice(0, 30).trimEnd());
   assert.equal(localStorage.getItem(NAME_KEY), NAME_33.slice(0, 30).trimEnd());
 });

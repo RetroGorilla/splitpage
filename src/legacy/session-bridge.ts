@@ -253,7 +253,13 @@ export function editAllowed(): boolean {
   return running().ports.capability.edit().allowed;
 }
 
+function attribute(): void {
+  const outcome = session.stamp({ name: "attribute", plan: function (doc) { return running().ports.attribution.attribute(doc); } });
+  if (outcome.kind === "failed") throw outcome.error;
+}
+
 export function noteSessionEdit(): void {
+  attribute();
   session.noteEdit();
 }
 
@@ -274,6 +280,7 @@ export function noteReload(content: ReloadedContent): ValidatedDocument | null {
 }
 
 export function noteAbsorbedDirty(kind: AbsorbedKind): void {
+  attribute();
   session.settle(kind);
 }
 

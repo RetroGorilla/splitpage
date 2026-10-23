@@ -1,7 +1,7 @@
 import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { createHeldFetch, createHeldImageDecode } from "./_m4-matrix.mjs";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
 
@@ -12,7 +12,6 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { getEditorName } = await import("../js/03-sync.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { foldIntoEdit, undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
 const { thumbnailsAfterPaste } = await import("../js/05v-video.js");
@@ -20,6 +19,7 @@ const { liveSession } = await import("../legacy/session-bridge.ts");
 const { addGalleryVideo, setVideoThumbnail, videoLinkKey } = await import("../core/document/gallery.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 const naming = { name: getEditorName };
 await rewireRunningApp({ editorName: () => naming.name() });
@@ -61,18 +61,18 @@ let opened = 0;
 async function open() {
   if (viewFlags().writerOpen()) writer.closeWriter();
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "fold-" + (++opened) + ".splitpage", { lastModified: opened });
-  await openProjectFile(file, null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
-const row = (id) => S.state.rows.find((r) => r.id === id);
-const docText = () => JSON.stringify(S.state);
+const row = (id) => currentDocument().rows.find((r) => r.id === id);
+const docText = () => JSON.stringify(currentDocument());
 
 function edit(fn) {
   clock += 5_000;
   const before = lastUndoEntry();
-  fn(S.state);
+  fn(currentDocument());
   liveSession().noteEdit();
   flushEdits();
   const entry = lastUndoEntry();

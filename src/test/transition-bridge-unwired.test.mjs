@@ -1,11 +1,10 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import "./_location-started.mjs";
 
 const bridge = await import("../legacy/transition-bridge.ts");
-const { liveDocumentPort, liveSession, requestRefresh } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveDocumentPort, liveSession, requestRefresh } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");
 
@@ -74,20 +73,18 @@ test("captureOperation and stillOwns follow the live session, document, destinat
   const loc = await import("../legacy/location-bridge.ts");
   const saves = await import("../legacy/save-bridge.ts");
   const stopSaves = saves.startSaves({
-    write: async () => ({ kind: "saved" }),
-    destination: () => loc.currentHome(),
+      destination: () => loc.currentHome(),
     keyOf: (h) => ({ owner: h, name: "" }),
     obsolete: () => {},
-    running: () => {},
     ownership: { capture: bridge.captureOperation, stillOwns: bridge.stillOwns },
-    autosave: { enabledAtStart: () => false, due: () => {}, changed: () => {} }
+    autosave: { enabledAtStart: () => false, changed: () => {} }
   }, { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });
   try {
     bridge.documentTransitions().open({ from: { document: script("Owned") }, reason: "opened" });
     saves.noteSaveChange();
     saves.confirmSavedNow();
     const ctx = bridge.captureOperation();
-    assert.equal(ctx.docId, S.state.docId);
+    assert.equal(ctx.docId, currentDocument().docId);
     assert.equal(ctx.destination, loc.currentHome());
     assert.equal(ctx.destinationGeneration, saves.confirmedGeneration(), "the destination's confirmed generation is captured");
     assert.equal(ctx.connection, loc.currentConn());

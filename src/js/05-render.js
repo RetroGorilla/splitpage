@@ -2,7 +2,6 @@ import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
 import { disarmDeleteButton } from "../features/rows/delete-button.ts";
 import { hasSetLength } from "../core/document/timing.ts";
 import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
-import { S } from "./_state.js";
 import { hiddenShotStripHtml, rowGroupItems } from "./01b-hide-shot.js";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "../adapters/storage/02d-gallery.js";
@@ -439,14 +438,15 @@ export function renderRow(rowId) {
 }
 
 function paintOneRow(rowId) {
-  if (!S.state) return false;
-  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
+  var doc = currentDocument();
+  if (!doc) return false;
+  var idx = readSession(function (held) { return rowIndexOf(held, rowId); });
   var rowsEl = document.getElementById("rows");
   if (idx === -1 || !rowsEl) return false;
   var rowEl = rowsEl.querySelector(':scope > .row[data-id="' + cssAttr(rowId) + '"]');
   if (!rowEl) return false;
-  var patch = planRowPatch(rowEl, S.state.rows[idx], idx);
-  var whole = patch ? null : newRowEl(S.state.rows[idx], idx);
+  var patch = planRowPatch(rowEl, doc.rows[idx], idx);
+  var whole = patch ? null : newRowEl(doc.rows[idx], idx);
   var active = document.activeElement;
   var heldCell = active && active.classList && active.classList.contains("cell-editable") && rowEl.contains(active) &&
     rememberCellSelection(editorSelection(), active) ? active : null;
@@ -497,7 +497,7 @@ var EMPTY_ROWS_HTML =
   '</div>';
 
 function planRows(rowsEl) {
-  if (!S.state.rows.length) return { empty: true };
+  if (!currentDocument().rows.length) return { empty: true };
   var existing = new Map();
   var drop = [];
   Array.prototype.slice.call(rowsEl.children).forEach(function (el) {
@@ -507,7 +507,7 @@ function planRows(rowsEl) {
     else drop.push(el);
   });
 
-  var steps = rowGroupItems(S.state.rows).map(function (item) {
+  var steps = rowGroupItems(currentDocument().rows).map(function (item) {
     var key = item.strip ? "strip:" + item.strip.join(",") : "row:" + item.row.id;
     var el = existing.get(key);
     if (el) {
@@ -618,7 +618,7 @@ var rowsPainted = 0;
 var cellsPainted = 0;
 
 export function syncPageTitle() {
-  var name = ((S.state && S.state.title) || "").trim();
+  var name = (currentDocument()?.title || "").trim();
   document.title = !name || name === "Untitled Script" ? "Splitpage" : name + " — Splitpage";
 }
 
@@ -659,11 +659,11 @@ export function paintingScreen() {
 
 function paintAll() {
   trackDocument();
-  if (!S.state) return;
+  if (!currentDocument()) return;
   renderCalls++;
   var rowsEl = document.getElementById("rows");
   var plan = planRows(rowsEl);
-  var title = S.state.title || "";
+  var title = currentDocument().title || "";
 
   resetTransientUiState();
   var focus = captureRenderFocus(rowsEl);
