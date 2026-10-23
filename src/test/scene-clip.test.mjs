@@ -1,17 +1,19 @@
 import "./_dom.mjs";
+import "./_copy-paste-mounted.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { dataUrlForSync, intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { commentIds, fromHtml } from "../js/04c-doc-model.js";
+import { commentIds } from "../core/text/runs.ts";
+import { fromHtml } from "../legacy/richtext.ts";
 import { createUndoHistory, diffStates } from "../js/12a-undo.js";
 import { detectTwoColumnFormat, parseImportRows } from "../js/11-import.js";
 import {
   SCENES_ATTR, SCENES_MIME, buildScenePayload, insertScenes, isBlankScene, isMove, parseScenePayload,
   scenesOnClipboard, setLiveCut
-} from "../js/05g-scene-clip.js";
+} from "../features/clipboard/scene-clip.js";
 import { loadTestDocument } from "./_document.mjs";
 import { removeScenesCommand } from "../application/commands/scenes.ts";
 import { currentDocument, runCommand } from "../legacy/session-bridge.ts";

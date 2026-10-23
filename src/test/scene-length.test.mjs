@@ -19,7 +19,7 @@ import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { applyStepsLive, diffStates } from "../js/12a-undo.js";
-import { invertSteps } from "../js/04c-doc-model.js";
+import { invertSteps } from "../core/text/steps.ts";
 import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject } from "../adapters/formats/project-file.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";

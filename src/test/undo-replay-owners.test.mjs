@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { applyStepsLive, diffStates, flushEdits, noteEdit, redo, undo } from "../js/12a-undo.js";
-import { invertSteps } from "../js/04c-doc-model.js";
+import { invertSteps } from "../core/text/steps.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 const clone = (v) => JSON.parse(JSON.stringify(v));

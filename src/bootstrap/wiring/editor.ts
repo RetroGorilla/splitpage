@@ -60,8 +60,8 @@ import {
   typePendingMarks,
   updateToolbarState
 } from "../../js/05-render.js";
-import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../js/05c-clipboard.js";
-import { pasteScenesAt } from "../../js/05h-scene-select.js";
+import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../features/clipboard/cell-clipboard.js";
+import { pasteScenesAt } from "../../features/clipboard/scene-select.js";
 import { thumbnailsAfterPaste } from "../../js/05v-video.js";
 import {
   draftRedo,
