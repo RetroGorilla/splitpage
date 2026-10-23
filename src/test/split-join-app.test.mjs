@@ -10,7 +10,7 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
+const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../legacy/undo-bridge.ts");
 const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");

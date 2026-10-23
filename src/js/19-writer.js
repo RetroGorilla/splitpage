@@ -1,5 +1,5 @@
-import { formatDuration, pad2 } from "../core/production/timing.ts";
-import { totalSeconds } from "./01-scene-status.js";
+import { editableCellHtml } from "../features/common/editable-cell.js";
+import { formatDuration, pad2, totalSeconds } from "../core/production/timing.ts";
 import { renderRowGroups } from "../legacy/hide-shot-bridge.ts";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
@@ -7,20 +7,19 @@ import { ensureTrailingCaretSpot, sanitizeHtml, storedHtmlFromDom } from "./04-r
 import { cssAttr } from "../features/common/dom.ts";
 import {
   cellFormatState,
-  editableCellHtml,
   toggleCellDirection,
   toggleCellFormat
 } from "./05-render.js";
 import { splitRowFieldCore } from "./06-rows.js";
 import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
-import { closeFindBar } from "./09-find-replace.js";
-import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "./12a-undo.js";
+import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "../legacy/undo-bridge.ts";
 import { bothScenesHaveVisual, joinScenesCommand } from "../application/commands/split-join.ts";
 import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../application/preferences/preferences.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { VIEWING_ONLY } from "../application/collaboration/review.ts";
 import { currentDocument, editAllowed, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { appActions } from "../legacy/app-actions.ts";
 import { cellEditing, editorSelection, focusMemory, paintGuard } from "../legacy/editor-bridge.ts";
 import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
@@ -105,7 +104,7 @@ export function updateWriterStats() {
   doc.rows.forEach(function (row) { words += productionReaders.wordCount(row.audioText); });
   document.getElementById("wr-scenes").textContent = String(doc.rows.length);
   document.getElementById("wr-words").textContent = words.toLocaleString();
-  document.getElementById("wr-runtime").textContent = formatDuration(totalSeconds());
+  document.getElementById("wr-runtime").textContent = formatDuration(totalSeconds(currentDocument(), productionReaders));
 }
 
 export function scheduleWriterStats() {
@@ -265,7 +264,7 @@ export function openWriter(keepMark) {
   writerUndoMark = keepMark == null ? undoMark() : keepMark;
   reopenOnRedo = null;
   sidePanels().closeAll();
-  if (viewFlags().findOpen()) closeFindBar();
+  if (viewFlags().findOpen()) appActions.invoke("find", "button", "close");
   document.getElementById("writer-title").value = currentDocument().title || "";
   applyWriterSize(readWriterSize(), false);
   setWriterGutter(writerGutterMode);
