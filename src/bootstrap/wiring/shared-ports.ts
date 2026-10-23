@@ -15,7 +15,7 @@ import { screenNow } from "../../legacy/screen-state.ts";
 import { currentDocument, onDocumentReplaced, onRefresh, onSessionChange, readSession } from "../../legacy/session-bridge.ts";
 
 const actions: Pick<ActionRegistry, "invoke" | "view"> = {
-  invoke: (id, source) => appActions.invoke(id, source),
+  invoke: (id, source, input) => appActions.invoke(id, source, input),
   view: (id, source) => appActions.view(id, source)
 };
 
