@@ -27,7 +27,8 @@ import {
   adoptProjectState,
   parseProjectFileState
 } from "./18-local-files.js";
-import { makeDesktopHandle, notifyDesktopDocumentState } from "./20f-desktop.js";
+import { notifyDesktopDocumentState } from "./20f-desktop.js";
+import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { SCHEMA_VERSION } from "../core/document/fields.ts";
 import { createCaptureSchedule } from "../application/recovery/capture-schedule.ts";
 import { cloneState } from "../core/document/clone.ts";

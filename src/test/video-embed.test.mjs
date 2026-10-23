@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import "./_preferences-started.mjs";
 import { settingsAppData } from "../application/preferences/preferences.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
@@ -264,7 +264,7 @@ function freshDoc() {
 }
 
 function edit(fn) {
-  fn(S.state);
+  fn(currentDocument());
   noteEdit();
   flushEdits();
   return lastUndoEntry();
@@ -283,16 +283,16 @@ test("the thumbnail lands in the paste's own entry: one undo takes both back, on
   noteEdit();
   flushEdits();
   assert.deepEqual(undoSizes(), sizes, "no entry of its own");
-  assert.equal(S.state.rows[0].imageRef.sha256, T1.sha256);
+  assert.equal(currentDocument().rows[0].imageRef.sha256, T1.sha256);
   undo();
-  assert.equal(S.state.rows[1].audioText, "Bravo");
+  assert.equal(currentDocument().rows[1].audioText, "Bravo");
   undo();
-  assert.equal(S.state.rows[0].imageRef, null);
-  assert.equal(S.state.rows[0].imageLinks, undefined);
-  assert.equal(S.state.rows[0].audioText, "Alpha");
+  assert.equal(currentDocument().rows[0].imageRef, null);
+  assert.equal(currentDocument().rows[0].imageLinks, undefined);
+  assert.equal(currentDocument().rows[0].audioText, "Alpha");
   redo();
-  assert.equal(S.state.rows[0].imageRef.sha256, T1.sha256);
-  assert.equal(S.state.rows[0].imageLinks[0].href, "https://youtu.be/dQw4w9WgXcQ");
+  assert.equal(currentDocument().rows[0].imageRef.sha256, T1.sha256);
+  assert.equal(currentDocument().rows[0].imageLinks[0].href, "https://youtu.be/dQw4w9WgXcQ");
 });
 
 test("nothing lands when something since is about the gallery, or the paste was undone", () => {
@@ -300,13 +300,13 @@ test("nothing lands when something since is about the gallery, or the paste was 
   let entry = edit((s) => { addGalleryVideo(s.rows[0], { href: "https://youtu.be/dQw4w9WgXcQ" }); });
   edit((s) => { addGalleryPicture(s.rows[0], P1); });
   assert.equal(foldIntoEdit(entry, touchesR1, giveThumb(T1)), false);
-  assert.equal(S.state.rows[0].imageRef, null);
+  assert.equal(currentDocument().rows[0].imageRef, null);
 
   freshDoc();
   entry = edit((s) => { addGalleryVideo(s.rows[0], { href: "https://youtu.be/dQw4w9WgXcQ" }); });
   undo();
   assert.equal(foldIntoEdit(entry, touchesR1, giveThumb(T1)), false);
-  assert.equal(S.state.rows[0].imageLinks, undefined);
+  assert.equal(currentDocument().rows[0].imageLinks, undefined);
 });
 
 test("with no entry about it at all (the stack was cleared), it is taken in without one", () => {
@@ -317,5 +317,5 @@ test("with no entry about it at all (the stack was cleared), it is taken in with
   noteEdit();
   flushEdits();
   assert.deepEqual(undoSizes(), { undo: 0, redo: 0 });
-  assert.equal(S.state.rows[0].imageRef.sha256, T1.sha256);
+  assert.equal(currentDocument().rows[0].imageRef.sha256, T1.sha256);
 });

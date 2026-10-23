@@ -3,7 +3,7 @@ import { authorityOf, isOwner } from "../application/collaboration/authority.ts"
 import { runIsStale } from "../application/collaboration/workflow.ts";
 import { currentConn, currentHome, documentLocation, reviewMode, serverHomeId, serverStatus } from "../legacy/location-bridge.ts";
 import { normalizeServerUrl } from "../../shared/server-links.js";
-import { personSwatchesHtml, setMyColor } from "./03-sync.js";
+import { personSwatchesHtml } from "./03-sync.js";
 import { getSavedAuthorName } from "./10-comments.js";
 import { apiFetch, applyHealth, applyReviewMode, clearServerToken, finishServerDetect, isLinkGuest, onServerDoc, pointTabAt, publishToServer, rememberTokenForServer, rememberedTokenForServer, serverDocShareUrl, setServerToken, shareAccessNote } from "./13-hosted.js";
 import { openSettings } from "./20s-settings.js";
@@ -856,7 +856,7 @@ function wireGuest(m) {
     else closeGuestName();
   });
   m.addEventListener("change", function (e) {
-    if (e.target && e.target.name === "guest-person-color") setMyColor(e.target.value);
+    if (e.target && e.target.name === "guest-person-color") preferences().setMyColor(e.target.value);
   });
   m.addEventListener("keydown", function (e) {
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeGuestName(); return; }

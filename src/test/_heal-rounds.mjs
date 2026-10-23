@@ -1,6 +1,5 @@
 import { productionReaders } from "../legacy/document-ports.ts";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { healTagRegistry, productionIndexStats } from "../js/07-production-tags.js";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
@@ -27,7 +26,7 @@ export function seededHealRounds(seed, rounds) {
     return html;
   };
   const check = (handed, handedIds, label) => {
-    const fresh = deriveProductionIndex(S.state, productionReaders);
+    const fresh = deriveProductionIndex(currentDocument(), productionReaders);
     assert.deepEqual(productionIndex().current(currentDocument()), fresh, label);
     assert.deepEqual(productionIndex().entries(currentDocument()).map((e) => [e.key, e.id, e.name, e.orphaned]),
       fresh.entries.map((e) => [e.key, e.id, e.name, e.orphaned]), label);
@@ -54,7 +53,7 @@ export function seededHealRounds(seed, rounds) {
       productionTags.push({ id: "t_" + round + "_" + t, cat, name, owner: "", notes: "", status: "needed" });
     }
     loadTestDocument(migrateRows({ schema: 2, title: "Shims", docId: "d" + "6".repeat(32), rows, comments: [] }));
-    S.state.productionTags = productionTags;
+    currentDocument().productionTags = productionTags;
     const label = "round " + round;
     const first = productionIndex().entries(currentDocument());
     const firstIds = first.map((e) => e.id);
@@ -62,15 +61,15 @@ export function seededHealRounds(seed, rounds) {
     check(first, firstIds, label + " first heal");
     if (productionIndex().current(currentDocument()).unregistered.length) refusedRounds++;
 
-    const target = S.state.rows[rand(rows.length)];
+    const target = currentDocument().rows[rand(rows.length)];
     const newCue = cues[rand(cues.length)] + [" piano", "s", " storm"][rand(3)];
     target.audioText = target.audioText.replace(/<br><span class="audio-cue">.*<\/span>$/, "") + "<br>" + cue(newCue);
     if (rand(2)) target.visualText += tag(cats[rand(cats.length)], names[rand(names.length)]);
     const handed = productionIndex().entries(currentDocument());
     const handedIds = handed.map((e) => e.id);
-    const namesBefore = new Map(S.state.productionTags.map((t) => [t.id, t.name]));
+    const namesBefore = new Map(currentDocument().productionTags.map((t) => [t.id, t.name]));
     healTagRegistry();
-    if (S.state.productionTags.some((t) => namesBefore.has(t.id) && namesBefore.get(t.id) !== t.name)) retitledRounds++;
+    if (currentDocument().productionTags.some((t) => namesBefore.has(t.id) && namesBefore.get(t.id) !== t.name)) retitledRounds++;
     if (productionIndex().entries(currentDocument()).some((e, i) => handed[i] && handed[i].key === e.key && handed[i].id !== e.id)) idsMoved++;
     check(handed, handedIds, label + " second heal");
   }

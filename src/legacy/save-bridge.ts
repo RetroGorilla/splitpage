@@ -12,6 +12,8 @@ import type {
   WriterResult
 } from "../application/save/coordinator.ts";
 import { createSaveDestinations } from "../application/save/destinations.ts";
+import { createFileConflicts } from "../application/save/file-conflict.ts";
+import type { FileConflicts } from "../application/save/file-conflict.ts";
 import type { SaveDestination, SaveDestinations } from "../application/save/destinations.ts";
 import type { AutoSaveTarget } from "../application/save/status.ts";
 import type { TimerPort } from "../application/session/ports.ts";
@@ -50,6 +52,7 @@ interface Started {
   readonly coordinator: Coordinator;
   readonly autosave: AutoSavePolicy;
   readonly destinations: LegacySaveDestinations;
+  readonly conflicts: FileConflicts;
   readonly place: () => unknown;
 }
 
@@ -143,6 +146,7 @@ export function startSaves(ports: LegacySavePorts, timers: Pick<TimerPort, "star
       }
     }),
     destinations: destinations,
+    conflicts: createFileConflicts(),
     place: ports.destination
   });
   started = mine;
@@ -152,6 +156,7 @@ export function startSaves(ports: LegacySavePorts, timers: Pick<TimerPort, "star
     if (started === mine) started = null;
     mine.autosave.stop();
     mine.coordinator.stop();
+    mine.conflicts.stop();
   };
 }
 
@@ -160,7 +165,12 @@ export function savesStarted(): boolean {
 }
 
 export function requestSave(request: LegacySaveRequest): Promise<SaveOutcome> {
-  return running().request(Object.freeze(request.target === undefined ? { kind: request.kind } : { kind: request.kind, target: request.target }));
+  const now = live();
+  return now.coordinator.request(Object.freeze(request.target === undefined ? { kind: request.kind } : { kind: request.kind, target: request.target }))
+    .then(function (outcome) {
+      if (outcome.kind === "refused" && outcome.conflict && started === now) now.conflicts.show(outcome.conflict);
+      return outcome;
+    });
 }
 
 export function saveRunning(): boolean {
@@ -296,4 +306,8 @@ export function saveToServer(): Promise<boolean> {
   return requestSave({ kind: "server" }).then(function (outcome) {
     return SENT_OUTCOMES.indexOf(outcome.kind) !== -1;
   });
+}
+
+export function fileConflicts(): FileConflicts {
+  return live().conflicts;
 }

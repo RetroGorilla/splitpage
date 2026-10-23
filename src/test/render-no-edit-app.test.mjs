@@ -1,7 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { cloneState } from "../core/document/clone.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 
@@ -14,7 +13,7 @@ const { applyMerge } = await import("../js/03-sync.js");
 const { render, renderAbsorbed, screenIsStale } = await import("../js/05-render.js");
 const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
@@ -52,14 +51,14 @@ function fresh(title) {
   renderAbsorbed();
   confirmSavedNow();
   document.getElementById("toast-host").textContent = "";
-  return S.state;
+  return currentDocument();
 }
 
 const para = (id) => document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]');
 const gridCell = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + (field || "audioText") + '"]');
-const row = (id) => S.state.rows.find((r) => r.id === id);
+const row = (id) => currentDocument().rows.find((r) => r.id === id);
 
-const modelTexts = () => S.state.rows.map((r) => [r.id, r.visualText, r.audioText]);
+const modelTexts = () => currentDocument().rows.map((r) => [r.id, r.visualText, r.audioText]);
 const gridTexts = () => Array.from(document.querySelectorAll("#rows > .row")).map((el) => {
   const id = el.getAttribute("data-id");
   return [id, gridCell(id, "visualText").textContent, gridCell(id, "audioText").textContent];
@@ -197,7 +196,7 @@ test("R1a: a render with a grid cell focused that the update leaves alone keeps 
   row("r1").audioText = "Theirs one.";
   row("r2").visualText = "Theirs close.";
   row("r3").audioText = "Theirs three.";
-  S.state.title = "Theirs title";
+  currentDocument().title = "Theirs title";
   const got = observe(() => render());
   holds(got, [["r1", "Wide", "Theirs one."], ["r2", "Theirs close.", "Mine two."], ["r3", "Detail", "Theirs three."]], "R1a");
   assert.equal(document.getElementById("doc-title").value, "Theirs title");
@@ -221,7 +220,7 @@ test("R1c: a render that reorders the scenes around the focused one never takes 
   fresh("R1c");
   const cell = gridCell("r1", "audioText");
   caretAt(cell, 2);
-  S.state.rows = [row("r2"), row("r3"), row("r1")];
+  currentDocument().rows = [row("r2"), row("r3"), row("r1")];
   const got = observe(() => render());
   holds(got, [["r2", "Close", "Mine two."], ["r3", "Detail", "Mine three."], ["r1", "Wide", "Mine one."]], "R1c");
   assert.deepEqual(removals, [], "the focused cell was never moved or removed");
@@ -253,7 +252,7 @@ test("R2b: a render with a Writer paragraph focused after scenes were added befo
   writer.openWriter();
   caretAt(para("r2"), 2);
   const extra = migrateRows({ schema: 2, title: "x", rows: [{ id: "r9", visualText: "New", audioText: "Theirs new.", status: "todo" }] }).rows[0];
-  S.state.rows = [extra, row("r1"), row("r2")];
+  currentDocument().rows = [extra, row("r1"), row("r2")];
   const calls = focusCalls(() => {
     const got = observe(() => render());
     holds(got, [["r9", "New", "Theirs new."], ["r1", "Wide", "Mine one."], ["r2", "Close", "Mine two."]], "R2b", { writer: true });
@@ -266,7 +265,7 @@ test("R2b: a render with a Writer paragraph focused after scenes were added befo
 
 test("R3a: an incoming merge while a grid cell holds focus after accepted typing keeps that typing and the focus, applies the incoming change beside it, and the render adds no edit", () => {
   fresh("R3a");
-  const base = cloneState(S.state);
+  const base = cloneState(currentDocument());
   const cell = gridCell("r1", "audioText");
   typeAtEnd(cell, "!");
   assert.equal(row("r1").audioText, "Mine one.!");
@@ -275,24 +274,24 @@ test("R3a: an incoming merge while a grid cell holds focus after accepted typing
   theirs.rows[0].visualText = "Theirs wide.";
   theirs.rows[2].audioText = "Theirs three.";
   theirs.title = "Theirs title";
-  const got = observe(() => merged(theirs, cloneState(S.state), base));
+  const got = observe(() => merged(theirs, cloneState(currentDocument()), base));
   holds(got, [["r1", "Theirs wide.", "Mine one.!"], ["r2", "Close", "Mine two."], ["r3", "Detail", "Theirs three."]], "R3a", { dirty: true });
-  assert.equal(S.state.title, "Theirs title");
+  assert.equal(currentDocument().title, "Theirs title");
   assert.equal(document.activeElement, gridCell("r1", "audioText"));
   assert.equal(caretOffset(document.activeElement), "Mine one.!".length);
 });
 
 function conflictRun(label, focused) {
   fresh(label);
-  const base = cloneState(S.state);
+  const base = cloneState(currentDocument());
   typeAtEnd(gridCell("r1", "audioText"), "!");
   if (!focused) document.activeElement.blur();
   const theirs = cloneState(base);
   theirs.rows[0].audioText = "Theirs one.";
   theirs.rows[1].audioText = "Theirs two.";
-  const decided = applyMerge({ base: cloneState(base), mine: cloneState(S.state), theirs: cloneState(theirs), source: "server-conflict", mergeOnly: true })
+  const decided = applyMerge({ base: cloneState(base), mine: cloneState(currentDocument()), theirs: cloneState(theirs), source: "server-conflict", mergeOnly: true })
     .state.rows.map((r) => [r.id, r.visualText, r.audioText]);
-  const got = observe(() => merged(theirs, cloneState(S.state), base));
+  const got = observe(() => merged(theirs, cloneState(currentDocument()), base));
   return { decided: decided, got: got, texts: modelTexts(), grid: gridTexts() };
 }
 
@@ -312,12 +311,12 @@ test("R3b: an incoming merge while a grid cell holds focus, whose text both side
 
 test("R3c: an incoming merge that removes the focused cell's scene, after accepted typing there and elsewhere, keeps the typing elsewhere and makes no edit", () => {
   fresh("R3c");
-  const base = cloneState(S.state);
+  const base = cloneState(currentDocument());
   typeAtEnd(gridCell("r3", "audioText"), "?");
   caretAt(gridCell("r1", "audioText"), 2);
   const theirs = cloneState(base);
   theirs.rows.splice(0, 1);
-  const got = observe(() => merged(theirs, cloneState(S.state), base));
+  const got = observe(() => merged(theirs, cloneState(currentDocument()), base));
   assert.deepEqual(noEdit(got), NO_EDIT);
   assert.deepEqual(modelTexts(), [["r2", "Close", "Mine two."], ["r3", "Detail", "Mine three.?"]]);
   assert.deepEqual(gridTexts(), modelTexts());
@@ -373,7 +372,7 @@ const THROWS = [
   {
     name: "when the title is read, after the scenes and before the Writer",
     arm: () => {
-      const doc = S.state;
+      const doc = currentDocument();
       const value = doc.title;
       let armed = true;
       Object.defineProperty(doc, "title", {
@@ -405,7 +404,7 @@ function logging(run) {
 function incomingForThrow() {
   row("r1").audioText = "Theirs one.";
   row("r3").audioText = "Theirs three.";
-  S.state.title = "Theirs title";
+  currentDocument().title = "Theirs title";
 }
 
 function failingRender(place, how) {
@@ -548,7 +547,7 @@ for (const place of PLACES) {
       try {
         const before = screenMarkup();
         incomingForThrow();
-        S.state.rows.push(migrateRows({ schema: 2, title: "x", rows: [{ id: "r9", visualText: "New", audioText: "Theirs new.", status: "todo" }] }).rows[0]);
+        currentDocument().rows.push(migrateRows({ schema: 2, title: "x", rows: [{ id: "r9", visualText: "New", audioText: "Theirs new.", status: "todo" }] }).rows[0]);
         const out = logging(() => {
           const disarm = throwAtRow(id);
           try {
@@ -583,7 +582,7 @@ test("R5a: with the Writer open and a Writer paragraph focused, restoring the re
   fresh("R5a");
   writer.openWriter();
   caretAt(para("r3"), 5);
-  S.state.rows.forEach((r) => { r.audioText = "Theirs " + r.id + "."; r.visualText = "Seen " + r.id; });
+  currentDocument().rows.forEach((r) => { r.audioText = "Theirs " + r.id + "."; r.visualText = "Seen " + r.id; });
   const expected = [["r1", "Seen r1", "Theirs r1."], ["r2", "Seen r2", "Theirs r2."], ["r3", "Seen r3", "Theirs r3."]];
   const calls = focusCalls(() => {
     holds(observe(() => render()), expected, "R5a", { writer: true });
