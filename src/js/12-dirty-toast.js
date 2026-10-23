@@ -1,4 +1,3 @@
-import { S } from "./_state.js";
 import { amendHome, currentHome, homeConn, reviewMode, serverStatus } from "../legacy/location-bridge.ts";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "../../shared/clock.js";
@@ -12,7 +11,7 @@ import {
   scheduleAutoSave
 } from "./14-export.js";
 import { noteDraftChange } from "./20g-drafts.js";
-import { noteAbsorbedDirty, noteSessionEdit } from "../legacy/session-bridge.ts";
+import { heldDocument, noteAbsorbedDirty, noteSessionEdit } from "../legacy/session-bridge.ts";
 import { autoSavePolicy, confirmSavedNow, noteSaveChange, saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
 import { saveButtonView, saveStatus } from "../application/save/status.ts";
 import { changeSet } from "../application/session/change-set.ts";
@@ -30,8 +29,8 @@ function myColorPlan(doc) {
 }
 
 function signLegacyEdit() {
-  var plan = myColorPlan(S.state);
-  if (plan) plan.apply(S.state);
+  var plan = myColorPlan(heldDocument());
+  if (plan) plan.apply(heldDocument());
 }
 
 export function hasUnsavedChanges() { return unsavedChanges(); }
