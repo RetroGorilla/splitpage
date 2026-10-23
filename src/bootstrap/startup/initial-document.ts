@@ -10,7 +10,7 @@ export interface StashOptions<Doc> {
 
 export interface StashResult<Doc, Report> {
   readonly state: Doc;
-  readonly report?: Report | null;
+  readonly report?: Report | null | undefined;
 }
 
 export interface InitialDocumentPorts<Loaded extends WrittenMarks, Doc, Report> {
