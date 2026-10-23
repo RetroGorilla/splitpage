@@ -11,11 +11,10 @@ after(closeApp);
 const { noteAbsorbedDirty, noteSessionEdit, runCommand } = await import("../legacy/session-bridge.ts");
 const { amendHome, currentHome, documentLocation, serverStatus, setHome } = await import("../legacy/location-bridge.ts");
 const { preferences } = await import("../legacy/preferences-bridge.ts");
-const { autoSavePolicy, confirmSavedNow, unsavedChanges } = await import("../legacy/save-bridge.ts");
+const { autoSavePolicy, confirmSavedNow, saveDoc, unsavedChanges } = await import("../legacy/save-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { titleCommand } = await import("../application/commands/title.ts");
-const { saveDoc } = await import("../js/14-export.js");
 const { toggleFileMenu } = await import("../js/18b-file-menu.js");
 const { loadTestDocument } = await import("./_document.mjs");
 

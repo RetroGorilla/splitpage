@@ -15,9 +15,8 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow, saveDoc } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const { saveDoc } = await import("../js/14-export.js");
 const { intern } = await import("../adapters/storage/02c-blobs.js");
 const { startNewScript } = await import("../js/18b-file-menu.js");
 const { closeCollaborate, collaborateBlockedReason, openCollaborate } = await import("../js/13b-collaborate.js");

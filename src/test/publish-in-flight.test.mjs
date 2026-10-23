@@ -9,12 +9,12 @@ import { documentLocation, serverStatus } from "../legacy/location-bridge.ts";
 const { S } = await import("../js/_state.js");
 const homeMod = await import("../legacy/location-bridge.ts");
 const { setHome } = homeMod;
-const { publishToServer, publishAndCopyShareLink, saveToServer } = await import("../js/13-hosted.js");
+const { publishToServer, publishAndCopyShareLink, serverSaveDestination } = await import("../js/13-hosted.js");
 const { setBaseState } = await import("../js/03-sync.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
-const { setAutoSaveEnabled, legacySavePorts } = await import("../js/14-export.js");
-const { autoSavePolicy, noteSaveChange, startSaves, unsavedChanges } = await import("../legacy/save-bridge.ts");
+const { legacyFileDestination, legacySavePorts } = await import("../js/14-export.js");
+const { autoSavePolicy, noteSaveChange, saveDestinations, saveToServer, setAutoSaveEnabled, startSaves, unsavedChanges } = await import("../legacy/save-bridge.ts");
 const { NO_DESTINATION, documentTransitions, startTransitions } = await import("../legacy/transition-bridge.ts");
 const { documentIdentityPort } = await import("../js/02b-doc-id.js");
 const { liveDocumentPort, mergeBase } = await import("../legacy/session-bridge.ts");
@@ -31,6 +31,8 @@ startSaves(legacySavePorts({
   capture: () => Object.freeze({ epoch: 0, docId: S.state && S.state.docId, destination: homeMod.currentHome(), destinationGeneration: 0, generation: 0, connection: homeMod.currentConn(), revision: null }),
   stillOwns: (ctx) => ctx.destination === homeMod.currentHome() && ctx.docId === (S.state && S.state.docId)
 }), { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });
+saveDestinations().register(legacyFileDestination());
+saveDestinations().register(serverSaveDestination());
 
 dom.window.document.body.innerHTML =
   '<div id="toast-host"></div>' +

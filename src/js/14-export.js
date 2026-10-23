@@ -17,10 +17,6 @@ import {
   getEditorName,
   setBaseState
 } from "./03-sync.js";
-import {
-  onServerDoc,
-  saveToServer
-} from "./13-hosted.js";
 import { captureExportDocument } from "./14b-export-kit.js";
 import {
   checkFileConflict,
@@ -31,8 +27,8 @@ import {
 import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "./20d-formats.js";
 import { makeDesktopHandle } from "./20f-desktop.js";
 import { existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
-import { autoSavePolicy, confirmSavedNow, requestSave, saveChanges, saveRunning, unsavedChanges } from "../legacy/save-bridge.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
+import { autoSavePolicy, confirmSavedNow, flushAutoSave, haltAutoSave, resumeAutoSave, saveChanges } from "../legacy/save-bridge.ts";
+import { showToast, warnImagesLeftOut } from "../legacy/effects-bridge.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 import { conflictStash } from "../legacy/recovery-bridge.ts";
 import { autoSaveWhere } from "../application/save/autosave.ts";
@@ -43,24 +39,11 @@ import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
 import { SERVER_RESUME_KEY } from "../application/location/server-status.ts";
 
-function saveKind(opts) {
-  if (opts.saveAs) return "saveAs";
-  if (opts.force) return "force";
-  return opts.auto ? "auto" : "save";
-}
-
-export function saveDoc(opts) {
-  opts = opts || {};
-  if (!opts.auto) resumeAutoSave();
-  return requestSave({ kind: saveKind(opts) }).then(function () {});
-}
-
 var SAVED = Object.freeze({ kind: "saved" });
 var COPIED = Object.freeze({ kind: "copied" });
 var CANCELLED = Object.freeze({ kind: "cancelled" });
 var FAILED = Object.freeze({ kind: "failed" });
 var CONFLICTED = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
-var NOT_AUTOSAVING = Object.freeze({ kind: "refused", reason: "Autosave is off, paused, has nowhere to write or nothing to write" });
 
 function saveDialogs(slug) {
   return {
@@ -103,15 +86,6 @@ async function writeDoc(opts, job) {
   var saveAs = !!opts.saveAs;
   var auto = !!opts.auto;
   if (!auto) resumeAutoSave();
-
-  if (onServerDoc() && !saveAs) {
-    var sentToServer = await saveToServer(job);
-    if (auto && sentToServer === false) {
-      haltAutoSave("Autosave is paused — the last save to the server did not go through. " +
-                   "Press Save to try again.");
-    }
-    return sentToServer === false ? FAILED : SAVED;
-  }
 
   var converting = !saveAs && currentHome().kind === "file" && currentHome().format === "html";
   if (converting) {
@@ -223,17 +197,11 @@ async function writeDoc(opts, job) {
   return written;
 }
 
-export function warnImagesLeftOut(n, name) {
-  if (!n) return;
-  showToast(n + (n === 1 ? " image" : " images") + " could not be included in " + name +
-    " — the picture" + (n === 1 ? " was" : "s were") + " not available on this computer.", "warn");
-}
-
 function adoptSavedCopyDocId(forkDocId, docIdAtSave, owned) {
   forkDocId = normalizeDocId(forkDocId);
   if (forkDocId) copyDocHistorySafe(docIdAtSave, forkDocId);
   if (!owned) return;
-  if (forkDocId && !onServerDoc()) stampDocument(documentIdStamp(null, forkDocId));
+  if (forkDocId && currentHome().kind !== "server") stampDocument(documentIdStamp(null, forkDocId));
   documentLocation().markWrittenOut(true);
   syncDocIdentity();
 }
@@ -276,32 +244,14 @@ function readAutoSavePref() {
   return preferences().autosave();
 }
 
-export function autoSaveTarget() {
+function fileAutoSaveTarget() {
   var file = fileHome();
   return autoSaveWhere({
-    onServer: onServerDoc(),
+    onServer: false,
     signedOut: !!serverStatus().sessionExpired(),
     linkOff: !!serverStatus().linkTurnedOff(),
     file: file ? { handle: file.handle, format: file.format || null } : null
   });
-}
-
-function autoSaveAllowed() {
-  return autoSavePolicy().may(autoSaveTarget());
-}
-
-export function setAutoSaveEnabled(on) {
-  preferences().setAutosave(!!on);
-  autoSavePolicy().setEnabled(on);
-  if (on && unsavedChanges()) scheduleAutoSave();
-}
-
-export function toggleAutoSave() {
-  var on = !autoSavePolicy().enabled();
-  setAutoSaveEnabled(on);
-  showToast(on
-    ? "Autosave is on — edits go to the file you saved to, a moment after you stop typing."
-    : "Autosave is off — your changes are only written when you press Save.", "ok");
 }
 
 export function updateAutoSaveMenu() {
@@ -312,66 +262,26 @@ export function updateAutoSaveMenu() {
   item.classList.toggle("is-on", on);
 }
 
-export function scheduleAutoSave() {
-  autoSavePolicy().schedule(autoSaveTarget());
-}
-
-export function clearAutoSaveTimers() {
-  autoSavePolicy().clear();
-}
-
-function autoSaveDue() {
-  if (!unsavedChanges()) return;
-  queueAutoSave();
-}
-
 function autoSaveChanged(what) {
   if (what === "enabled") updateAutoSaveMenu();
 }
 
-export function flushAutoSave() {
-  var policy = autoSavePolicy();
-  if (!policy.pending()) return;
-  policy.clear();
-  if (unsavedChanges()) queueAutoSave();
+var TAKEN_ANYWHERE = ["saveAs", "writeback", "writebackForce"];
+var TAKEN_OFF_THE_SERVER = ["save", "auto", "autosave", "force"];
+
+function fileTakes(request, place) {
+  if (TAKEN_ANYWHERE.indexOf(request.kind) !== -1) return true;
+  return TAKEN_OFF_THE_SERVER.indexOf(request.kind) !== -1 && !(place && place.kind === "server");
 }
 
-export function haltAutoSave(reason) {
-  autoSavePolicy().halt(reason);
-}
-
-export function resumeAutoSave() {
-  autoSavePolicy().resume();
-}
-
-var autoSaveWriting = false;
-export function queueAutoSave() {
-  if (!autoSaveAllowed()) return;
-  clearAutoSaveTimers();
-  if (saveRunning() && !autoSaveWriting) { scheduleAutoSave(); return; }
-  Promise.resolve().then(function () { return requestSave({ kind: "autosave" }); }).catch(function () {});
-}
-
-function writeAutoSave(job) {
-  if (!autoSaveAllowed() || !unsavedChanges()) return Promise.resolve(NOT_AUTOSAVING);
-  autoSaveWriting = true;
-  return writeDoc({ auto: true }, job).then(function (result) {
-    autoSaveWriting = false;
-    return result;
-  }, function (error) {
-    autoSaveWriting = false;
-    throw error;
-  });
-}
-
-function writeQueued(job) {
+function writeToFile(job) {
   var kind = job.request.kind;
-  if (kind === "autosave") return writeAutoSave(job);
   if (kind === "writeback" || kind === "writebackForce") return writeBackToFile(job);
-  if (kind === "server") {
-    return saveToServer(job).then(function (sent) { return sent === false ? FAILED : SAVED; });
-  }
-  return writeDoc({ auto: kind === "auto", force: kind === "force", saveAs: kind === "saveAs" }, job);
+  return writeDoc({ auto: kind === "auto" || kind === "autosave", force: kind === "force", saveAs: kind === "saveAs" }, job);
+}
+
+export function legacyFileDestination() {
+  return { id: "file", takes: fileTakes, autoSaveTarget: fileAutoSaveTarget, write: writeToFile };
 }
 
 var NO_DESTINATION_KEY = Object.freeze({});
@@ -408,14 +318,12 @@ function saveOwnership(ownership) {
 
 export function legacySavePorts(ownership) {
   return {
-    write: writeQueued,
     destination: function () { return currentHome(); },
     keyOf: destinationKeyOf,
     obsolete: reportObsoleteSave,
     ownership: saveOwnership(ownership),
     autosave: {
       enabledAtStart: readAutoSavePref,
-      due: autoSaveDue,
       changed: autoSaveChanged
     }
   };
