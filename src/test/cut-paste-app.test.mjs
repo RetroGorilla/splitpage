@@ -11,7 +11,7 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
-const { buildSplitpageFile } = await import("../js/20d-formats.js");
+const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { copyFromCell, pasteIntoCell } = await import("../js/05c-clipboard.js");
 const { render } = await import("../js/05-render.js");
 const { cellEditing } = await import("../legacy/editor-bridge.ts");

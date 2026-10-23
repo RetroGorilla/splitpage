@@ -18,7 +18,7 @@ import {
   setTagOwner
 } from "./08-production-panels.js";
 import { autoSavePolicy } from "../legacy/save-bridge.ts";
-import { parseProjectFileState } from "./18-local-files.js";
+import { parseProjectFileState } from "../adapters/formats/project-file.ts";
 import { openDocument } from "../legacy/transition-bridge.ts";
 import {
   canOpenPrompterInBrowser,
