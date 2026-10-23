@@ -1,4 +1,5 @@
 import { wireProductionIndex } from "./wiring/production-index.ts";
+export { mountReadTimeFeature } from "./wiring/read-time.ts";
 export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
 export { mountRundownFeature, mountRundownPresenceFeature } from "./wiring/rundown.ts";
 export { mountHelpFeature } from "./wiring/help.ts";
