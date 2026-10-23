@@ -9,16 +9,7 @@ on:
       - deploy.sh
       - .env.example
       - server/**
-      - build.mjs
-      - package.json
-      - package-lock.json
-      - .nvmrc
       - .github/workflows/docker.yml
-      - .github/workflows/ci.yml
-      - tools/artifact-files.mjs
-      - tools/main-module.mjs
-      - tools/css-inputs.mjs
-      - css-inputs.json
   push:
     branches: [main]
     paths:
@@ -28,24 +19,7 @@ on:
       - deploy.sh
       - .env.example
       - server/**
-      - build.mjs
-      - VERSION
-      - sw.js
-      - src/**
-      - shared/**
-      - docs/help.md
-      - manifest.webmanifest
-      - icon.svg
-      - icon-maskable.svg
-      - package.json
-      - package-lock.json
-      - .nvmrc
       - .github/workflows/docker.yml
-      - .github/workflows/ci.yml
-      - tools/artifact-files.mjs
-      - tools/main-module.mjs
-      - tools/css-inputs.mjs
-      - css-inputs.json
 
 concurrency:
   group: docker-${{ github.ref }}
