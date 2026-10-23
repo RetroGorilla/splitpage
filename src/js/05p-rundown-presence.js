@@ -1,4 +1,4 @@
-import { S } from "./_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { goToScene, rundownEdge } from "./05f-rundown.js";
 import { presenceShown } from "./13a-presence.js";
 import { idMap } from "../core/document/id-map.ts";
@@ -128,7 +128,7 @@ export function paintRundownPresence(seen) {
   var layer = layerEl();
   if (!layer) return;
   var people = presenceShown();
-  var rows = S.state && S.state.rows ? S.state.rows : [];
+  var rows = currentDocument()?.rows ?? [];
   if (!people.length || !rows.length) {
     activity = idMap();
     groups = [];
