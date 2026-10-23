@@ -1,11 +1,10 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import "./_location-started.mjs";
 
 const bridge = await import("../legacy/transition-bridge.ts");
-const { liveDocumentPort, liveSession, requestRefresh } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveDocumentPort, liveSession, requestRefresh } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");
 
@@ -85,7 +84,7 @@ test("captureOperation and stillOwns follow the live session, document, destinat
     saves.noteSaveChange();
     saves.confirmSavedNow();
     const ctx = bridge.captureOperation();
-    assert.equal(ctx.docId, S.state.docId);
+    assert.equal(ctx.docId, currentDocument().docId);
     assert.equal(ctx.destination, loc.currentHome());
     assert.equal(ctx.destinationGeneration, saves.confirmedGeneration(), "the destination's confirmed generation is captured");
     assert.equal(ctx.connection, loc.currentConn());
