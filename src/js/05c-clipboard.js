@@ -13,7 +13,9 @@ import {
 } from "./04c-doc-model.js";
 import { cellSelection } from "../features/editing/cell-selection.ts";
 import { cellEditing, paintGuard } from "../legacy/editor-bridge.ts";
-import { brollSeedOf } from "./08c-broll.js";
+import { brollSeedOf } from "../application/production/broll-records.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
+import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { breakUndoCoalescing, flushEdits } from "./12a-undo.js";
 import { makeId, randomHexBytes, randomIds } from "../adapters/identity/ids.ts";
 import {
@@ -183,7 +185,7 @@ function clipboardPorts() {
     editor: sessionTextPorts.editor,
     cells: sessionTextPorts.cells,
     ids: randomIds,
-    brollSeed: brollSeedOf
+    brollSeed: function (row) { return brollSeedOf(row, { htmlToPlainText: htmlToPlainText, productionReaders: productionReaders }); }
   };
 }
 

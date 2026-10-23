@@ -7,7 +7,10 @@ import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { cellOf, commentIds, fromHtml, normalizeCell, syncCommentAnchors, toHtml, toPlainText } from "./04c-doc-model.js";
 import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./05c-clipboard.js";
 import { collectTagsFromRows } from "./07-production-tags.js";
-import { recordPastedBroll } from "./08c-broll.js";
+import { recordPastedBroll } from "../application/production/broll-records.ts";
+import { randomIds } from "../adapters/identity/ids.ts";
+import { productionReaders } from "../legacy/document-ports.ts";
+import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { SCHEMA_VERSION } from "../core/document/fields.ts";
 import { cappedLongText } from "../core/document/text-policy.ts";
 import { inertBody } from "../legacy/richtext.ts";
@@ -387,7 +390,7 @@ export function insertScenes(clip, opts) {
     shots.push(rec);
   });
   Object.keys(mintedByRow).forEach(function (rowId) {
-    recordPastedBroll(state, rowId, mintedByRow[rowId].cell, mintedByRow[rowId].ids);
+    recordPastedBroll(state, rowId, mintedByRow[rowId].cell, mintedByRow[rowId].ids, { htmlToPlainText: htmlToPlainText, productionReaders: productionReaders }, randomIds);
   });
 
   if (!opts.holdComments) added.forEach(function (c) { comments.push(c); });
