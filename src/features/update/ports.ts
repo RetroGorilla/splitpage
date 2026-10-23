@@ -1,3 +1,10 @@
+import type { ScreenState } from "../../application/screen.ts";
+
+export interface UpdateActionPorts {
+  readonly screen: () => ScreenState;
+  readonly showAbout: () => void;
+}
+
 export interface UpdateStatus {
   readonly version?: string | null;
   readonly latest?: string | null;
