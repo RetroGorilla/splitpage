@@ -5,7 +5,7 @@ import type { CellClipboardPorts, CopyPasteMount, SceneClipPorts, SceneSelectPor
 import { __init as mountSceneClip } from "../../features/clipboard/scene-clip.js";
 import { __init as mountSceneSelect } from "../../features/clipboard/scene-select.js";
 import { isScriptCell } from "../../features/editing/cell-page.ts";
-import { cellSelection } from "../../features/editing/cell-selection.ts";
+import { cellSelection } from "../../features/common/cell-selection.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { migrateRows } from "../../js/02-state.js";
 import { stampRow } from "../../js/03-sync.js";
