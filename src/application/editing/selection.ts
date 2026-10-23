@@ -67,6 +67,8 @@ export interface EditorSelection<Root extends object, Range, Cell> extends Selec
   readonly dropLink: () => void;
 }
 
+export type EditorSelectionPort = Pick<EditorSelection<object, unknown, unknown>, "dropLink">;
+
 export function createEditorSelection<Root extends object, Range, Cell>(ports: SelectionPorts): EditorSelection<Root, Range, Cell> {
   const model = createSelectionModel(ports);
   const painted = new WeakMap<Root, number>();
