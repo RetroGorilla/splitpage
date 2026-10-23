@@ -30,7 +30,6 @@ import {
   blobSourceNow,
   onServerDoc
 } from "./13-hosted.js";
-import { warnImagesLeftOut } from "./14-export.js";
 import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
 import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
@@ -50,7 +49,7 @@ import { exportToggleOptions } from "../application/export/registry.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { exportFormats } from "../legacy/export-formats.ts";
-import { setMenuItemLabel, showToast } from "../legacy/effects-bridge.ts";
+import { setMenuItemLabel, showToast, warnImagesLeftOut } from "../legacy/effects-bridge.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { slugify } from "../../shared/text.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";

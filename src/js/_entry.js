@@ -62,7 +62,8 @@ import { documentDestinationPort, getEditorName, stampRow } from "./03-sync.js";
 import { bulkTagCell, runIdleRefresh } from "./07-production-tags.js";
 import { derivedRecordsPlan } from "./08c-broll.js";
 import { legacySessionEffects } from "./12-dirty-toast.js";
-import { legacySavePorts } from "./14-export.js";
+import { legacyFileDestination, legacySavePorts } from "./14-export.js";
+import { serverSaveDestination } from "./13-hosted.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { wireApp } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
@@ -77,6 +78,7 @@ try {
     records: derivedRecordsPlan,
     bulkTags: { cell: bulkTagCell, stamp: stampRow },
     saves: legacySavePorts,
+    destinations: function () { return [legacyFileDestination(), serverSaveDestination()]; },
     transitions: { destination: documentDestinationPort, identity: documentIdentityPort },
     recovery: draftRecoveryPorts,
     keyTarget: window

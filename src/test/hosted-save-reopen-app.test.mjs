@@ -12,10 +12,8 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow, saveDoc, saveToServer } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const exportModule = await import("../js/14-export.js");
-const { saveDoc } = exportModule;
 const hosted = await import("../js/13-hosted.js");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
@@ -258,7 +256,7 @@ test("a pull noticed while a hosted save waits for its reply does not run, and t
   S.state.rows[0].audioText = "Typed and saved.";
   noteSessionEdit();
   const releaseReply = server.holdPutReply();
-  const saving = hosted.saveToServer();
+  const saving = saveToServer();
   for (let turn = 0; turn < 2000 && !server.answered.length; turn++) await new Promise((resolve) => setImmediate(resolve));
   assert.equal(server.docs.get("srv-b").rev, 2, "the server accepted the save before replying");
 

@@ -35,12 +35,11 @@ startTestSession(appSessionDeps());
 
 freezeClockAndRandom(0x70726f64);
 startSaves({
-  write: async () => ({ kind: "saved" }),
   destination: () => null,
   keyOf: () => ({ owner: null, name: "none" }),
   obsolete: () => {},
   ownership: { capture: () => { throw new Error("no save runs here"); }, stillOwns: () => false },
-  autosave: { enabledAtStart: () => false, due: () => {}, changed: () => {} }
+  autosave: { enabledAtStart: () => false, changed: () => {} }
 }, { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });
 initBroll();
 initHistory();

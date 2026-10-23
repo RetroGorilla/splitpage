@@ -7,10 +7,8 @@ import { migrateRows } from "../js/02-state.js";
 import { applyMerge, baseStateReason, reportMerge, setBaseState } from "../js/03-sync.js";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { listDocHistory } from "../js/03a-history-store.js";
-import { confirmSavedNow } from "../legacy/save-bridge.ts";
-import * as exporting from "../js/14-export.js";
 import { cloneState } from "../core/document/clone.ts";
-import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, confirmSavedNow, resumeAutoSave, unsavedChanges } from "../legacy/save-bridge.ts";
 import { loadTestDocument } from "./_document.mjs";
 import { mergeBase } from "../legacy/session-bridge.ts";
 
@@ -51,7 +49,7 @@ function start(id) {
   setBaseState(cloneState(doc), "a test: the document as opened");
   mergeUndo().arm(null);
   confirmSavedNow();
-  exporting.resumeAutoSave();
+  resumeAutoSave();
   banner().hidden = true;
   undoBtn().hidden = true;
   reviewBtn().hidden = true;
