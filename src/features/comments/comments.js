@@ -26,6 +26,7 @@ import { normalizeTagName } from "../../core/document/tags.ts";
 import { EDITOR_NAME_MAX } from "../../core/document/fields.ts";
 import { codePointPrefix, escapeHtml } from "../../core/document/text-policy.ts";
 import { cleanAuthorName } from "../../core/document/people.ts";
+import { getSavedAuthorName, saveAuthorName } from "../../application/comment-author.js";
 
 var ports = null;
 var commentDisposers = [];
@@ -243,13 +244,6 @@ export function limitAuthorNameField(field) {
   field.value = value.slice(0, cut) + value.slice(caret);
   field.setSelectionRange(cut, cut);
 }
-export function getSavedAuthorName() {
-  return cleanAuthorName(ports.preferences.commentAuthor());
-}
-export function saveAuthorName(name) {
-  ports.preferences.rememberCommentAuthor(cleanAuthorName(name));
-}
-
 export function setCommentSortMode(mode) {
   const chosen = ports.sort.choose(mode);
   ports.preferences.setCommentsSort(chosen);
@@ -272,7 +266,7 @@ export function setCommentAssigneeFilter(value) {
   renderComments();
 }
 function commentMatchesAssigneeFilter(c, assignee) {
-  return matchesAssignee(c, assignee, getSavedAuthorName);
+  return matchesAssignee(c, assignee, function () { return getSavedAuthorName(ports.preferences); });
 }
 
 function commentAssigneeCandidates() {
@@ -347,7 +341,7 @@ function renderCommentFilterBar() {
     doc.comments.forEach(function (c) { if (commentMatchesFilterMode(c, mode) && matcher(c)) n++; });
     return n;
   }
-  var meNorm = normalizeTagName(getSavedAuthorName());
+  var meNorm = normalizeTagName(getSavedAuthorName(ports.preferences));
   var candidates = commentAssigneeCandidates();
   var current = commentFilter.assignee;
   var currentIsSpecial = current === "" || current === "me" || current === "__unassigned__";
@@ -489,7 +483,7 @@ export function openCommentComposer(ctx) {
   document.getElementById("comment-modal-quote").innerHTML =
     '“<span class="comment-quote-words">' + escapeHtml(ctx.quotedText) + '</span>”';
   var nameInput = document.getElementById("comment-name");
-  nameInput.value = getSavedAuthorName();
+  nameInput.value = getSavedAuthorName(ports.preferences);
   var bodyEl = document.getElementById("comment-body-editable");
   bodyEl.innerHTML = "";
   ports.clearDraftUndo(bodyEl);
@@ -515,7 +509,7 @@ export function postComment() {
   if (!pendingComment) return;
   var nameInput = document.getElementById("comment-name");
   var author = cleanAuthorName(nameInput.value) || "Anonymous";
-  saveAuthorName(author);
+  saveAuthorName(ports.preferences, author);
   var bodyEl = document.getElementById("comment-body-editable");
   var bodyHtml = ports.text.sanitizeHtml(bodyEl.innerHTML);
   var hasMedia = /<img|video-embed-card/.test(bodyHtml);
@@ -616,7 +610,7 @@ export function postReply(id) {
   var nameInput = card.querySelector(".reply-name-input");
   var bodyEl = card.querySelector(".cell-editable");
   var author = cleanAuthorName(nameInput.value) || "Anonymous";
-  saveAuthorName(author);
+  saveAuthorName(ports.preferences, author);
   var bodyHtml = ports.text.sanitizeHtml(bodyEl.innerHTML);
   if (!bodyEl.textContent.trim()) {
     ports.notices.show("Write a reply before posting.", "warn");
@@ -687,7 +681,7 @@ function replyComposerHtml(commentId) {
       '<div class="reply-composer-foot">' +
         '<label class="reply-name">Your name' +
           '<input type="text" class="reply-name-input ev-field" placeholder="Your name" value="' +
-            escapeHtml(draft.name !== undefined ? draft.name : getSavedAuthorName()) + '" autocomplete="off">' +
+            escapeHtml(draft.name !== undefined ? draft.name : getSavedAuthorName(ports.preferences)) + '" autocomplete="off">' +
         '</label>' +
         '<span class="reply-composer-actions">' +
           '<button type="button" class="reply-cancel" data-action="reply-cancel" data-id="' + commentId + '">Cancel</button>' +

@@ -1,4 +1,4 @@
-# A scene cut and Ctrl+Z (src/js/05g-scene-clip.js isMove, 05h-scene-select.js
+# A scene cut and Ctrl+Z (src/features/clipboard/scene-clip.js isMove, features/clipboard/scene-select.js
 # pasteClip). Whether a paste of cut scenes is the MOVE (the same rows, their
 # comments following their words, the b-roll keys finding their records) or a
 # COPY (everything its own) must follow the undo stack:

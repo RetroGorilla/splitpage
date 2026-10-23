@@ -31,7 +31,7 @@ import type { WriterRoutePorts } from "../../features/writer/routes.ts";
 import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
 import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
 import { cellEditing, focusMemory, installCellEditing, installPicturePicker, mergeUndo, paintGuard, rowDrag, undoGuard } from "../../legacy/editor-bridge.ts";
-import { REVIEW_ONLY, currentDocument, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from"../../legacy/session-bridge.ts";
+import { REVIEW_ONLY, currentDocument, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "../../legacy/session-bridge.ts";
 import { fromHtml } from "../../legacy/richtext.ts";
 import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 import { cycleRowStatus } from "../../js/01-scene-status.js";
@@ -61,8 +61,8 @@ import {
   typePendingMarks,
   updateToolbarState
 } from "../../js/05-render.js";
-import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../js/05c-clipboard.js";
-import { pasteScenesAt } from "../../js/05h-scene-select.js";
+import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../features/clipboard/cell-clipboard.js";
+import { pasteScenesAt } from "../../features/clipboard/scene-select.js";
 import { thumbnailsAfterPaste } from "../../js/05v-video.js";
 import {
   draftRedo,
