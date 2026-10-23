@@ -1,4 +1,4 @@
-import { setHideShotScenes } from "./01b-hide-shot.js";
+import { setHideShotScenes } from "../legacy/hide-shot-bridge.ts";
 import { personSwatchesHtml } from "./03-sync.js";
 import { getSavedAuthorName } from "./10-comments.js";
 import {

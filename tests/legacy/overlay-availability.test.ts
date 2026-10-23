@@ -14,7 +14,8 @@ import { helpActions, mountHelpFeature, stopHelpFeature } from "../../src/bootst
 import { availableUnless, EVERY_OVERLAY, everyOverlayBut, inFront, OPENS_A_DIALOG } from "../../src/application/screen.ts";
 import type { Blocker, ScreenState } from "../../src/application/screen.ts";
 import { registerShareActions } from "../../src/legacy/share-actions.ts";
-import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { hideShotActions } from "../../src/bootstrap/wiring/hide-shot.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
 import { viewFlags } from "../../src/legacy/preferences-bridge.ts";

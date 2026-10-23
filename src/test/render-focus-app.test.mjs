@@ -15,7 +15,7 @@ const { paintingScreen, renderAbsorbed, renderRow } = await import("../js/05-ren
 const { paintGuard } = await import("../legacy/editor-bridge.ts");
 const whilePainting = (paint) => paintGuard().whilePainting(paint);
 const afterThisPaint = (work) => paintGuard().afterThisPaint(work);
-const { setHideShotScenes } = await import("../js/01b-hide-shot.js");
+const { setHideShotScenes } = await import("../legacy/hide-shot-bridge.ts");
 const { runBrollRefresh, closeBrollPage, openBrollPage, openBrollPanel } = await import("../js/08d-broll-panel.js");
 const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { flushEdits, undoSizes } = await import("../js/12a-undo.js");

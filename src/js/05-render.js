@@ -2,7 +2,7 @@ import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
 import { disarmDeleteButton } from "../features/rows/delete-button.ts";
 import { hasSetLength } from "../core/document/timing.ts";
 import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
-import { hiddenShotStripHtml } from "./01b-hide-shot.js";
+import { hiddenShotStripHtml } from "../features/rows/hide-shot.ts";
 import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { rowSlots, videoLinkKey, videoLinkLabel } from "../adapters/storage/02d-gallery.js";
