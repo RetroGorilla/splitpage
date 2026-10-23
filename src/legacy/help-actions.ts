@@ -38,7 +38,7 @@ export function registerHelpActions(registry: ActionRegistry): () => void {
       icon: "i-settings",
       words: "settings preferences options theme dark light mode clock 12 24 hour colour color name zoom",
       availability: overDialogs,
-      run: () => { openSettings(); }
+      run: (_source, input) => { openSettings(input); }
     },
     {
       id: "help",

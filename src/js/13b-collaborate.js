@@ -6,7 +6,6 @@ import { normalizeServerUrl } from "../../shared/server-links.js";
 import { personSwatchesHtml } from "./03-sync.js";
 import { getSavedAuthorName } from "./10-comments.js";
 import { apiFetch, applyHealth, applyReviewMode, clearServerToken, finishServerDetect, isLinkGuest, onServerDoc, pointTabAt, publishToServer, rememberTokenForServer, rememberedTokenForServer, serverDocShareUrl, setServerToken, shareAccessNote } from "./13-hosted.js";
-import { openSettings } from "./20s-settings.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { onPreferenceChange, preferences, preferencesStarted } from "../legacy/preferences-bridge.ts";
@@ -750,7 +749,7 @@ function wireModal(m) {
       connectStep(c);
     } else if (action === "settings") {
       closeCollaborate();
-      openSettings({ focus: "settings-collab-server" });
+      appActions.invoke("settings", "button", { focus: "settings-collab-server" });
     } else if (action === "sign-in") signInStep(c);
     else if (action === "publish") publishStep(c);
     else if (action === "copy") {
