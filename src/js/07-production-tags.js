@@ -1,3 +1,4 @@
+import { isInsideTagOrLink } from "../features/common/dom.ts";
 import { domToPos } from "../features/common/cell-dom.ts";
 import { rowIndexOf } from "../core/document/rows.ts";
 import {
@@ -82,10 +83,6 @@ function hasShortcutChar(s) {
     if (TAG_SHORTCUT_CHARS.indexOf(s.charAt(i)) !== -1) return true;
   }
   return false;
-}
-
-export function isInsideTagOrLink(el) {
-  return !!(el && el.closest && el.closest(".tag-anchor, a"));
 }
 
 

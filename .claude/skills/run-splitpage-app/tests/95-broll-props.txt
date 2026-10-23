@@ -1,4 +1,4 @@
-# The props each b-roll shot needs (#149, 08c-broll.js / 08d-broll-panel.js):
+# The props each b-roll shot needs (#149, features/broll/records.ts / 08d-broll-panel.js):
 #
 #   * a prop tagged on a shot's own lines shows on its line in the panel,
 #     including one tagged a moment ago while typing;
