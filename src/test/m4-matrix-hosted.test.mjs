@@ -14,7 +14,8 @@ const { mergeBase, runCommand, sessionStamps } = await import("../legacy/session
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
-const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { saveDoc } = await import("../js/14-export.js");
 const { intern } = await import("../adapters/storage/02c-blobs.js");
@@ -139,7 +140,7 @@ function resetTab() {
   if (homeModule.currentConn().serverUrl) hosted.pointTabAt("");
   documentLocation().updateConnection({ token: "", role: "", scope: "" });
   serverStatus().recordMode({ readOnly: false });
-  clearDirty();
+  confirmSavedNow();
 }
 
 async function scenario(run) {
@@ -167,29 +168,29 @@ function openHosted(doc, id, rev, options) {
   const o = options || {};
   loadTestDocument(doc);
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   serverStatus().recordMode({ available: true, readOnly: false });
   setHome("none");
   window.__hostedTest.setSession({ docId: id, rev: rev === undefined ? 1 : rev, role: o.role, scope: o.scope, blobs: o.blobs });
   documentLocation().markWrittenOut(true);
-  clearDirty();
+  confirmSavedNow();
   return doc;
 }
 
 function startUnpublished(doc) {
   loadTestDocument(doc);
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   serverStatus().recordMode({ available: true, readOnly: false });
   documentLocation().markWrittenOut(false);
   setHome("none");
   documentLocation().updateConnection({ token: "", role: "edit", scope: "" });
-  markDirty();
+  noteSessionEdit();
 }
 
 function editRow(index, text) {
   S.state.rows[index].audioText = text;
-  markDirty();
+  noteSessionEdit();
 }
 
 function summary() {
@@ -555,7 +556,7 @@ function collabScenario(answerFor, setup) {
     server.override = answerFor;
     loadTestDocument(script("Collab", idOf("a")));
     flushEdits();
-    clearDirty();
+    confirmSavedNow();
     serverStatus().recordMode({ available: true, readOnly: false, checked: true });
     setHome("none");
     const run = await setup({ server, held });

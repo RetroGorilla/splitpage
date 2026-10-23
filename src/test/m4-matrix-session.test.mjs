@@ -56,7 +56,8 @@ const { migrateRows } = await import("../js/02-state.js");
 const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { adoptRestoredState, migrateDocument, standaloneHtmlFor } = await import("../js/02b-doc-id.js");
 const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
-const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const exportModule = await import("../js/14-export.js");
 const { saveDoc, setAutoSaveEnabled } = exportModule;
@@ -126,7 +127,7 @@ function demo() {
 function useDocument(doc) {
   loadTestDocument(doc);
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   return doc;
 }
 
@@ -252,9 +253,9 @@ rightToday("E2a", "a throw in undo recording after a commit gives a distinct rep
 }, "undo recording failed"));
 
 rightToday("E2b", "a throw in an effect after a commit gives a distinct reported outcome and keeps the document", assertReportedAfterCommit(() => {
-  const button = document.getElementById("btn-save");
-  Object.defineProperty(button, "textContent", { configurable: true, get() { return ""; }, set() { throw new Error("effect failed"); } });
-  return () => { delete button.textContent; };
+  const start = globalThis.setTimeout;
+  globalThis.setTimeout = function () { throw new Error("effect failed"); };
+  return () => { globalThis.setTimeout = start; };
 }, "effect failed"));
 
 rightToday("E2c", "a throw in a session listener after a commit gives a distinct reported outcome and keeps the document", assertReportedAfterCommit(() => {
@@ -721,7 +722,7 @@ rightToday("T6", "with autosave off, nothing is scheduled after a restore or an 
       assert.equal(restored.outcome, "applied");
       const fileBefore = await restored.onDisk();
       S.state.rows[1].audioText = "Typed after the restore.";
-      markDirty();
+      noteSessionEdit();
       await settleSaves(clock);
       assert.equal(await restored.onDisk(), fileBefore, "the file holds what it held: no automatic write with autosave off");
       assert.equal(unsavedChanges(), true, "the work is still unsaved");
@@ -759,7 +760,7 @@ rightToday("L1b", "an autosave or draft the old document armed writes nothing fo
     held.calls.length = 0;
     const fileBefore = new TextDecoder().decode((await fake.readFile(picked.id)).bytes);
     S.state.rows[0].audioText = "Typed in the old document.";
-    markDirty();
+    noteSessionEdit();
     assert.ok(autoSavePolicy().pending(), "an autosave is armed for the old document");
     startNewScript();
     await settleSaves(clock);
@@ -777,14 +778,14 @@ rightToday("L1d", "no subscription made for the old document survives its replac
   const heardOld = [];
   liveSession().subscribe((change) => heardOld.push(change.kind));
   S.state.rows[0].audioText = "Typed in the old document.";
-  markDirty();
+  noteSessionEdit();
   assert.deepEqual(heardOld, ["edit"], "setup: the subscription hears the document it was made for");
   startNewScript();
   assert.equal(S.state.title, "Untitled Script", "the replacement happened");
   const heardNew = [];
   liveSession().subscribe((change) => heardNew.push(change.kind));
   S.state.rows[0].audioText = "Typed in the replacement.";
-  markDirty();
+  noteSessionEdit();
   assert.deepEqual(heardOld, ["edit"], "the old document's subscription heard nothing after the replacement");
   assert.deepEqual(heardNew, ["edit"], "a subscription made for the replacement hears it");
 });

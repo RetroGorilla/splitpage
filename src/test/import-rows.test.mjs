@@ -10,7 +10,7 @@ after(closeApp);
 
 const { migrateRows } = await import("../js/02-state.js");
 const { listDocHistory } = await import("../js/03a-history-store.js");
-const { clearDirty } = await import("../js/12-dirty-toast.js");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits, redo, undo } = await import("../js/12a-undo.js");
 const { closeImportModal, handleImportFile, openImportModal } = await import("../js/11-import.js");
 const homeModule = await import("../legacy/location-bridge.ts");
@@ -37,7 +37,7 @@ function script(extra) {
 function useDocument(doc) {
   loadTestDocument(doc);
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   return doc;
 }
 

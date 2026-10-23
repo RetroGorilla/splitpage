@@ -178,3 +178,16 @@ test("stop clears the timers and no schedule after it arms one", () => {
   assert.equal(b.timers.length, 2);
   assert.equal(b.policy.pending(), false);
 });
+
+test("dueNow drops the armed timers and runs the due port at once, and does nothing once the policy is stopped", () => {
+  const b = bench();
+  b.policy.schedule("file");
+  assert.deepEqual(live(b), [2000, 15000]);
+  b.policy.dueNow();
+  assert.equal(b.due, 1);
+  assert.deepEqual(live(b), []);
+  assert.equal(b.policy.pending(), false);
+  b.policy.stop();
+  b.policy.dueNow();
+  assert.equal(b.due, 1);
+});

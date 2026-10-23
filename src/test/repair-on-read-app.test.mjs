@@ -18,7 +18,8 @@ const { currentDocument } = await import("../legacy/session-bridge.ts");
 const { openProductionPanel, closeProductionPanel, renderProduction, setTagNotes, setTagStatus } = await import("../js/08-production-panels.js");
 const { anchorBrollInLeftCell, brollEntries, runBrollRefresh, updateBrollBadge } = await import("../js/08c-broll.js");
 const { openBrollPanel, closeBrollPanel, renderBroll } = await import("../js/08d-broll-panel.js");
-const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits, undo } = await import("../js/12a-undo.js");
 const { saveDoc, setAutoSaveEnabled } = await import("../js/14-export.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
@@ -52,7 +53,7 @@ async function open(doc = fixture()) {
   const handle = createHeldFileHandle({ name: "repair-" + (++opened) + ".splitpage", text: buildSplitpageFile(exportDocumentOf(doc)), lastModified: 1000 });
   await openProjectFile(await handle.handle.getFile(), handle.handle, { skipSnapshot: true, silent: true });
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   return handle;
 }
 
@@ -116,7 +117,7 @@ test("6.5: a save changes nothing in the held document; the file carries the ent
   setAutoSaveEnabled(false);
   try {
     const target = await open();
-    markDirty();
+    noteSessionEdit();
     lagging();
     const held = JSON.stringify(S.state.rows) + JSON.stringify(S.state.productionTags) + JSON.stringify(S.state.brollShots);
     const entry = migrateRows(JSON.parse(JSON.stringify(S.state)));
@@ -137,7 +138,7 @@ test("6.5: a save changes nothing in the held document; the file carries the ent
     assert.deepEqual(saved.brollShots.map((x) => x.name), entry.brollShots.map((x) => x.name));
   } finally {
     homeModule.setHome("none");
-    clearDirty();
+    confirmSavedNow();
   }
 });
 
