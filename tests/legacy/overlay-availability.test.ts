@@ -8,19 +8,21 @@ import type { ActionRegistry, ActionSource } from "../../src/application/actions
 import { currentDocument } from "../../src/legacy/session-bridge.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
 import { prompterIsOpen, setPrompterOpen } from "../../src/application/prompter-state.ts";
-import { registerFileActions } from "../../src/legacy/file-actions.ts";
+import { fileActions } from "../../src/legacy/file-actions.ts";
 import { helpMenuActions } from "../../src/legacy/help-actions.ts";
 import { helpActions, mountHelpFeature, stopHelpFeature } from "../../src/bootstrap/wiring/help.ts";
 import { updateActions } from "../../src/bootstrap/wiring/update.ts";
 import { availableUnless, EVERY_OVERLAY, everyOverlayBut, inFront, OPENS_A_DIALOG } from "../../src/application/screen.ts";
 import type { Blocker, ScreenState } from "../../src/application/screen.ts";
-import { registerShareActions } from "../../src/legacy/share-actions.ts";
+import { shareActions } from "../../src/legacy/share-actions.ts";
 import { thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
 import { hideShotActions } from "../../src/bootstrap/wiring/hide-shot.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
 import { viewFlags } from "../../src/legacy/preferences-bridge.ts";
 import { findActions, mountFindFeature, stopFindFeature } from "../../src/bootstrap/wiring/find.ts";
+import { fileMenuExportActions, mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../src/bootstrap/wiring/file-menu-export.ts";
+
 
 const NOTHING: ScreenState = {
   loading: false, dialog: false, launcher: false, tour: false, prompter: false, writer: false, shotlist: false
@@ -74,9 +76,10 @@ function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
   mountHelpFeature();
   const registry = createActionRegistry();
   mountRundownFeature();
+  mountFileMenuExportFeature();
   mountFindFeature();
-  const disposers = [stopRundownFeature, stopFindFeature, registerFileActions(registry), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerViewActions(registry),
-    registerShareActions(registry), stopHelpFeature];
+  const disposers = [stopRundownFeature, stopFileMenuExportFeature, stopFindFeature, registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerViewActions(registry),
+    registerAll(registry, [...shareActions().slice(0, 11), ...fileMenuExportActions().slice(1), ...shareActions().slice(11)]), stopHelpFeature];
   const was = { state: currentDocument() as unknown, prompterOpen: prompterIsOpen() };
   loadTestDocument({ rows: [] });
   setPrompterOpen(false);
