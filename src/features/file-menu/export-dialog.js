@@ -1,26 +1,30 @@
-import { currentDocument } from "../legacy/session-bridge.ts";
-import {
-  brollSummaryText,
-  exportBrollScenes,
-  exportComments,
-  exportFacts
-} from "../adapters/formats/export-kit.ts";
-import { captureExportDocument } from "./14b-export-kit.js";
-import { exportRuns } from "../adapters/formats/export-kit.ts";
-import { breakdownRows, sceneFacts } from "../adapters/formats/export-projections.ts";
-import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
-import { narrationRows } from "../adapters/formats/docx.ts";
-import { exportBaseName, exportFileName, handleFileMenuAction, runExportAction } from "./18-local-files.js";
-import { onFileMenuRefresh } from "./18b-file-menu.js";
-import { tagPrintColor } from "../adapters/formats/print-colors.ts";
-import { exportToggleOptions } from "../application/export/registry.ts";
-import { rowImage } from "../core/document/media.ts";
-import { tagCategory } from "../core/production/looks.ts";
-import { escapeHtml, unitSafePrefix } from "../core/document/text-policy.ts";
-import { toPlainText } from "../core/text/projections.ts";
-import { exportFormats } from "../legacy/export-formats.ts";
-import { cellOf } from "../legacy/richtext.ts";
-import { setMenuItemLabel, setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
+import { exportToggleOptions } from "../../application/export/registry.ts";
+import { rowImage } from "../../core/document/media.ts";
+import { tagCategory } from "../../core/production/looks.ts";
+import { escapeHtml, unitSafePrefix } from "../../core/document/text-policy.ts";
+import { toPlainText } from "../../core/text/projections.ts";
+import { createViewLifetime } from "../common/view-lifetime.ts";
+
+var ports = null;
+
+function currentDocument() { return ports.document.current(); }
+function captureExportDocument(options) { return ports.capture(options); }
+function showToast(message, kind) { return ports.notices.show(message, kind); }
+function cellOf(html) { return ports.text.cellOf(html); }
+function exportFacts(doc) { return ports.preview.facts(doc); }
+function exportBrollScenes(doc) { return ports.preview.shots(doc); }
+function breakdownRows(doc) { return ports.preview.breakdown(doc); }
+function sceneFacts(doc) { return ports.preview.scenes(doc); }
+function narrationRows(doc, opts) { return ports.preview.narration(doc, opts); }
+function runExportAction(action) { return ports.exportAction(action); }
+
+var exportFormats = {
+  cards: function () { return ports.exports.cards(); },
+  card: function (id) { return ports.exports.card(id); },
+  byAction: function (action) { return ports.exports.byAction(action); },
+  isAction: function (action) { return ports.exports.isAction(action); },
+  exporters: function () { return ports.exports.exporters(); }
+};
 
 var LAST_EXPORT_KEY = "splitpage-last-export";
 
@@ -154,7 +158,7 @@ function cellText(html, n, opts) { return escapeHtml(trunc(toPlainText(cellOf(ht
 
 function pvRuns(html, n, nums) {
   var out = "", left = n;
-  var runs = exportRuns(html, nums);
+  var runs = ports.preview.runs(html, nums);
   for (var i = 0; i < runs.length && left > 0; i++) {
     var r = runs[i];
     if (r.broll) { out += '<span class="pv-broll">B-roll</span>'; continue; }
@@ -174,7 +178,7 @@ function pvRuns(html, n, nums) {
 
 function pvTitleBlock(title, doc) {
   return '<div class="pv-title">' + title + '</div>' +
-    (currentDocument().rows.length ? '<div class="pv-meta">' + escapeHtml(exportMetaLine(exportFacts(doc))) + '</div>' : '');
+    (currentDocument().rows.length ? '<div class="pv-meta">' + escapeHtml(ports.preview.meta(doc)) + '</div>' : '');
 }
 
 function pvLamp(id) { return '<i class="pv-lamp pv-lamp-' + escapeHtml(id) + '" aria-hidden="true"></i>'; }
@@ -259,14 +263,14 @@ function pvShotList(title, doc) {
     });
   });
   return '<div class="pv-eyebrow">B-roll shot list</div><div class="pv-title">' + title + '</div>' +
-    '<div class="pv-meta">' + escapeHtml(brollSummaryText(groups)) + ' · by scene · ' + escapeHtml(exportFacts(doc).date) + '</div>' +
+    '<div class="pv-meta">' + escapeHtml(ports.preview.shotSummary(doc)) + ' · by scene · ' + escapeHtml(exportFacts(doc).date) + '</div>' +
     pvGrid(["Done", "Scene", "B-roll shot", "Location", "Props", "Flagged", "Notes"], rows.slice(0, 12), [6, 7, 30, 13, 16, 10, 18]) +
     pvFooter(title, "B-roll shot list");
 }
 
 function xlsxSheetNames(doc) {
   var names = ["Script"];
-  if (exportComments(doc).length) names.push("Comments");
+  if (ports.preview.commentCount(doc)) names.push("Comments");
   if (breakdownRows(doc).length) names.push("Breakdown");
   if (exportBrollScenes(doc).length) names.push("B-roll");
   return names;
@@ -297,8 +301,8 @@ function previewHtml(action) {
   }
   if (action === "export-pdf") return pvScript(title, { rundown: true }, doc) + pvFooter(title);
   if (action === "export-docx") return pvScript(title, { word: true }, doc) + pvFooter(title);
-  if (action === "export-md") return pvTextLines(toMarkdownDoc(doc, { scenes: 3 }), 40);
-  if (action === "export-md-table") return pvTextLines(toMarkdownTableDoc(doc, { export: true, scenes: 7 }), 20);
+  if (action === "export-md") return pvTextLines(ports.preview.markdown(doc), 40);
+  if (action === "export-md-table") return pvTextLines(ports.preview.markdownTable(doc), 20);
   if (action === "export-csv" || action === "export-xlsx") {
     var scenes = sceneFacts(doc);
     var sheetHead = ["Scene", "Start", "Status", "Read", "Visual", "Audio"];
@@ -350,7 +354,7 @@ function previewHtml(action) {
   if (action === "export-packing-gear" || action === "export-packing-prop") {
     var catId = action === "export-packing-gear" ? "gear" : "prop";
     var cat = tagCategory(catId);
-    var color = tagPrintColor(catId);
+    var color = ports.preview.tagColor(catId);
     var heading = cat ? cat.plural : catId;
     var all = breakdownRows(doc).filter(function (b) { return b.catId === catId; })
       .sort(function (a, b) { return a.name.localeCompare(b.name); });
@@ -456,7 +460,7 @@ export function exportSummary(action) {
     var shotGroups = exportBrollScenes(doc);
     var shotCount = shotGroups.reduce(function (n, g) { return n + g.items.length; }, 0);
     bits.push(plural(shotCount, "shot") + ", by scene");
-    if (shotCount) bits.push(brollSummaryText(shotGroups));
+    if (shotCount) bits.push(ports.preview.shotSummary(doc));
     bits.push(action === "export-broll-pdf" ? "props, flags and their reasons, and room for notes"
       : "a row a shot: status, flag, location, props, who, notes");
     if (action === "export-broll-xlsx") bits.push("columns sized, header frozen, filters on");
@@ -468,7 +472,7 @@ export function exportFileNameFor(action) {
   var exporter = exportFormats.byAction(action);
   if (!exporter || !currentDocument()) return "";
   var bundle = !!exporter.bundlesPictures && currentDocument().rows.some(function (r) { return !!rowImage(r); });
-  return exportFileName(exporter.id, exportBaseName(), { imageBundle: bundle });
+  return ports.fileName(exporter.id, { imageBundle: bundle });
 }
 
 function renderSide() {
@@ -567,9 +571,9 @@ function refreshExportAgainItem() {
   var state = exportAgainItemState();
   item.hidden = state.hidden;
   if (state.hidden) return;
-  setMenuItemLabel(item, state.label);
+  ports.menuItems.setLabel(item, state.label);
   item.disabled = state.disabled;
-  setMenuItemReason(item, state.reason);
+  ports.menuItems.setReason(item, state.reason);
 }
 
 function trapTab(e) {
@@ -601,10 +605,33 @@ function refreshExportDialog() {
   choose(keep, false);
 }
 
-export function __init() {
+export function __init(given) {
+  ports = given;
+  chosenFormat = null;
+  chosenChoice = {};
+  returnFocusTo = null;
+  var life = createViewLifetime(window);
+  var controls = {
+    captureExportDocument, exportFormatList, exportActionName, isExportAction, lastExportAction, rememberExport,
+    exportActionReason, exportSummary, exportFileNameFor, exportDialogOpen, openExportDialog,
+    closeExportDialog, exportAgain, exportAgainItemState,
+    dispose: function () {
+      if (!life.active()) return;
+      life.dispose();
+      closeExportDialog();
+      var host = el("export-formats");
+      if (host) host.removeAttribute("data-built");
+      if (window.__exportTest === testApi) delete window.__exportTest;
+      chosenFormat = null;
+      chosenChoice = {};
+      returnFocusTo = null;
+      ports = null;
+    }
+  };
+  var testApi;
   var modal = el("export-modal");
-  if (!modal) return;
-  modal.addEventListener("change", function (e) {
+  if (!modal) return controls;
+  life.listen(modal, "change", function (e) {
     var t = e.target;
     if (t.name === "export-format") choose(t.value, false);
     else if (t.name === "export-choice" && chosenFormat) {
@@ -615,7 +642,7 @@ export function __init() {
       renderSide();
     }
   });
-  modal.addEventListener("keydown", function (e) {
+  life.listen(modal, "keydown", function (e) {
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeExportDialog(); }
     else if (e.key === "Tab") trapTab(e);
     else if (e.key === "Enter" && e.target.matches && e.target.matches('input[type="radio"]')) {
@@ -623,22 +650,22 @@ export function __init() {
       exportChosen();
     }
   });
-  modal.addEventListener("click", function (e) { if (e.target === modal) closeExportDialog(); });
-  el("export-close").addEventListener("click", closeExportDialog);
-  el("export-cancel").addEventListener("click", closeExportDialog);
-  el("export-go").addEventListener("click", exportChosen);
-  el("export-share-link").addEventListener("click", function () {
+  life.listen(modal, "click", function (e) { if (e.target === modal) closeExportDialog(); });
+  life.listen(el("export-close"), "click", closeExportDialog);
+  life.listen(el("export-cancel"), "click", closeExportDialog);
+  life.listen(el("export-go"), "click", exportChosen);
+  life.listen(el("export-share-link"), "click", function () {
     closeExportDialog();
-    handleFileMenuAction("collaborate");
+    ports.share();
   });
-  onFileMenuRefresh(refreshExportAgainItem);
+  life.release(ports.onMenuRefresh(refreshExportAgainItem));
   syncExportMenu();
-  exportFormats.onChange(function () {
+  life.release(ports.exports.onChange(function () {
     syncExportMenu();
     refreshExportDialog();
-  });
+  }));
 
-  window.__exportTest = {
+  testApi = window.__exportTest = {
     formats: exportFormatList,
     name: exportActionName,
     last: lastExportAction,
@@ -646,4 +673,5 @@ export function __init() {
     fileName: exportFileNameFor,
     chosen: chosenAction
   };
+  return controls;
 }
