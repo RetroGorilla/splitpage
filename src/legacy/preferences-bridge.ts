@@ -11,7 +11,6 @@ export const PREF_EVENT = "splitpage:pref";
 export interface LegacyPreferencePorts {
   readonly storage: () => KeyValueStorage | null | undefined;
   readonly announce: (change: PreferenceChange) => void;
-  readonly watch: (heard: (change: PreferenceChange) => void) => () => void;
 }
 
 interface Started {
@@ -32,8 +31,14 @@ export function onPreferenceChange(listener: (change: PreferenceChange) => void)
   };
 }
 
+let announcing = false;
+
 function tellListeners(change: PreferenceChange): void {
   changeListeners.slice().forEach(function (listener) { listener(change); });
+}
+
+export function notePreferenceChange(change: PreferenceChange): void {
+  if (started && !announcing) tellListeners(change);
 }
 
 function running(): Started {
@@ -48,28 +53,12 @@ export function browserPreferencePorts(): LegacyPreferencePorts {
     },
     announce: function (change) {
       document.dispatchEvent(new CustomEvent(PREF_EVENT, { detail: { key: change.key, value: change.value } }));
-    },
-    watch: function (heard) {
-      function announced(e: Event): void {
-        const detail = (e as CustomEvent<Partial<PreferenceChange> | null>).detail;
-        if (detail && typeof detail.key === "string") heard({ key: detail.key, value: detail.value ?? null });
-      }
-      function stored(e: StorageEvent): void {
-        if (e.key !== null) heard({ key: e.key, value: e.newValue });
-      }
-      document.addEventListener(PREF_EVENT, announced);
-      window.addEventListener("storage", stored);
-      return function () {
-        document.removeEventListener(PREF_EVENT, announced);
-        window.removeEventListener("storage", stored);
-      };
     }
   };
 }
 
 export function startPreferences(ports: LegacyPreferencePorts = browserPreferencePorts()): () => void {
   if (started) throw new Error("The preferences are already started; stop them first");
-  let announcing = false;
   const preferences = createPreferences({
     storage: ports.storage,
     announce: function (change) {
@@ -88,12 +77,7 @@ export function startPreferences(ports: LegacyPreferencePorts = browserPreferenc
     panels: createPanelWidths({ storage: ports.storage })
   };
   started = mine;
-  let unwatch = ports.watch(function (change) {
-    if (!announcing && started === mine) tellListeners(change);
-  });
   return function () {
-    unwatch();
-    unwatch = function () {};
     if (started === mine) started = null;
   };
 }

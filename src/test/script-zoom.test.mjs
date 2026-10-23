@@ -30,7 +30,6 @@ function finishFrames() {
 const heard = [];
 const stop = startPreferences({
   storage: () => localStorage,
-  watch: () => () => {},
   announce: (change) => {
     heard.push(change);
     document.dispatchEvent(new window.CustomEvent(PREF_EVENT, { detail: change }));
