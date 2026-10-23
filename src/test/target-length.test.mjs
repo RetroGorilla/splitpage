@@ -4,7 +4,7 @@ import "./_export-services-started.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import {
   __init as initSceneStatus,
   normalizeTargetLength,
@@ -32,7 +32,7 @@ initSceneStatus();
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
 function withState(s, fn) {
-  const was = S.state;
+  const was = currentDocument();
   loadTestDocument(s);
   try { return fn(s); } finally { loadTestDocument(was); }
 }
