@@ -1,3 +1,4 @@
+import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.js";
 import { currentDocument, onRefresh, onSessionChange } from "../../legacy/session-bridge.ts";
 import { onPreferenceChange, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { onScriptStats, statsFollowChange, updateScriptStats } from "../../js/01-scene-status.js";
@@ -14,7 +15,7 @@ import { refreshAnnotator } from "../../features/gallery/annotate.js";
 import { productionPanelsOpen, renderProduction, updateGearCount, updateProductionCount } from "../../js/08-production-panels.js";
 import { runBrollRefresh } from "../../js/08d-broll-panel.js";
 import { scheduleBrollRefresh, updateBrollBadge } from "../../js/08c-broll.js";
-import { captureReplyDrafts, commentsChanged, renderComments, syncAnchorResolvedClasses } from "../../js/10-comments.js";
+import { captureReplyDrafts, commentsChanged, renderComments } from "../../features/comments/comments.js";
 import { onPresencePaint, paintPresence } from "../../js/13a-presence.js";
 import { presence } from "../../legacy/presence-bridge.ts";
 import { drawWriter, paintWriterDraw, updateWriterStats } from "../../js/19-writer.js";
@@ -50,7 +51,7 @@ export function mountPanelListenersFeature(): void {
   stopPanelListenersFeature();
   const stops: (() => void)[] = [
     onPainted((kind: string) => {
-      if (kind === "rows") syncAnchorResolvedClasses();
+      if (kind === "rows") syncAnchorResolvedClasses(currentDocument(), document);
       else if (kind === "screen") {
         if (viewFlags().writerOpen()) paintWriterDraw(drawWriter());
         updateScriptStats();
