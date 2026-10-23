@@ -23,7 +23,8 @@ test("shared draft resume follows recovery restarts without capturing the owner"
   const start = () => startRecovery({
     indexedDB: null, limits: DRAFT_LIMITS, now: () => 0, writerId: "test",
     desktop: () => null, sessionStorage: () => null, localStorage: () => null,
-    internImage: () => {}, merge: () => { throw new Error("Unexpected merge"); }
+    internImage: () => {}, merge: () => { throw new Error("Unexpected merge"); },
+    drafts: { flush: () => Promise.resolve({ ok: true }), armServer: () => Promise.resolve(false), offerAfterLinkOff: () => Promise.resolve(false) }
   });
   assert.throws(() => resume.restorePending(), /The draft recovery is not started yet/);
   let stop = start();
