@@ -12,7 +12,7 @@ const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { flushDraftNow } = await import("../js/20g-drafts.js");
+const { flushDraftNow } = await import("../legacy/recovery-bridge.ts");
 const { setHome } = await import("../legacy/location-bridge.ts");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 
