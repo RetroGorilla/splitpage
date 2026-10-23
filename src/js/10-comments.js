@@ -23,7 +23,7 @@ import { sidePanels } from "../legacy/panels-bridge.ts";
 import { inertBody, plainText, safeId, sanitizeHtml } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
 import { editableCellHtml } from "./05-render.js";
-import { resetDraftHistory } from "./05d-draft-edit.js";
+import { resetDraftHistory } from "../features/editing/draft-edit.js";
 import { personColor } from "./13a-presence.js";
 import { autoSavePolicy, resumeAutoSave } from "../legacy/save-bridge.ts";
 import { commentBodyText, commentEntries, formatTimestampAbsolute } from "../adapters/formats/export-projections.ts";
