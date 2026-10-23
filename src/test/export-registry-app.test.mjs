@@ -14,7 +14,7 @@ const { buildFileData, exportBaseName } = await import("../js/18-local-files.js"
 const {
   closeExportDialog, exportAgain, exportAgainItemState, exportActionReason, exportFileNameFor, exportSummary, lastExportAction,
   openExportDialog
-} = await import("../js/18c-export-dialog.js");
+} = await import("../bootstrap/wiring/file-menu-export-controls.ts");
 
 const CARD = { id: "demo", group: "part", name: "Demo sheet", ext: ".demo", icon: "i-file", purpose: "A throwaway format for the test" };
 
