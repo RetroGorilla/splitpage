@@ -1,13 +1,14 @@
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import "./_export-services-started.mjs";
+import "./_project-file-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { STATE_FIELDS, migrateRows, missingStateFields } from "../js/02-state.js";
 import { cellOf } from "../js/04c-doc-model.js";
 import { collectTagsFromRows } from "../js/07-production-tags.js";
 import { brollInCell } from "../js/08c-broll.js";
-import { buildSplitpageFile } from "../js/20d-formats.js";
+import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
 import { STARTERS, starterById } from "../js/_starters.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";

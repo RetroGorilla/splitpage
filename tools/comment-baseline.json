@@ -248,9 +248,6 @@
     "src/js/13-hosted.js": [
       "/* global google -- injected at runtime by Google Identity Services; see above */"
     ],
-    "src/js/20d-formats.js": [
-      "/* headless: keep rows as-is, no prompt */"
-    ],
     "start.bat": [
       "rem",
       "rem",

@@ -2,6 +2,7 @@ import { rowContentEqual } from "../core/merge/rows.ts";
 import { hasSetLength, parseSceneLength } from "../core/document/timing.ts";
 import "./_dom.mjs";
 import "./_export-services-started.mjs";
+import "./_project-file-services-started.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -18,12 +19,7 @@ import { mergeStates } from "../js/03-sync.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { applyStepsLive, diffStates } from "../js/12a-undo.js";
 import { invertSteps } from "../js/04c-doc-model.js";
-import {
-  applyMarkdownProject,
-  buildMarkdownProject,
-  buildSplitpageFile,
-  parseMarkdownProject
-} from "../js/20d-formats.js";
+import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject } from "../adapters/formats/project-file.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";

@@ -10,7 +10,7 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { buildSplitpageFile } = await import("../js/20d-formats.js");
+const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { handleToolbarCmd } = await import("../js/05-render.js");
 const { cellEditing } = await import("../legacy/editor-bridge.ts");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");

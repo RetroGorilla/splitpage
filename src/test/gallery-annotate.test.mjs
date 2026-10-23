@@ -1,5 +1,6 @@
 import "./_dom.mjs";
 import "./_export-services-started.mjs";
+import "./_project-file-services-started.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -10,7 +11,7 @@ import {
 } from "../adapters/storage/02d-gallery.js";
 import { mergeStates } from "../js/03-sync.js";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject } from "../js/20d-formats.js";
+import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject } from "../adapters/formats/project-file.ts";
 import { refsIn } from "../../shared/blob-policy.js";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
