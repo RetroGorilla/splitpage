@@ -1,3 +1,4 @@
+import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.js";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { rowActions } from "../../features/rows/actions.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -5,7 +6,7 @@ import { ROOT_CLICK_ORDER, ROOT_MOUSEDOWN_ORDER, createRootRouter } from "../../
 import type { RootClickSlot, RootMouseDownSlot, RootRoute } from "../../features/routing/root-router.ts";
 import { createReviewClickGate } from "../../features/review/click-gate.ts";
 import { createCellEditing } from "../../application/editing/cell-editing.ts";
-import { caretTextOffset, placeCaretAtTextOffset } from "../../features/editing/caret.ts";
+import { caretTextOffset, placeCaretAtTextOffset } from "../../features/common/caret.ts";
 import { createCellPage, isDraftBox, isScriptCell } from "../../features/editing/cell-page.ts";
 import { mountComposition } from "../../features/editing/composition.ts";
 import type { CompositionCell } from "../../features/editing/composition.ts";
@@ -23,6 +24,8 @@ import type { RowsEditorPorts } from "../../features/rows/editor.ts";
 import { mountRowRoutes } from "../../features/rows/routes.ts";
 import type { RowRoutePorts } from "../../features/rows/routes.ts";
 import { mountTitleRoutes } from "../../features/title/routes.ts";
+import type { Run } from "../../core/text/runs.ts";
+import { caretAfterStep } from "../../features/undo/caret.ts";
 import { mountUndoRoutes, undoGesture } from "../../features/undo/routes.ts";
 import { mountVideoPopover } from "../../features/video/popover.ts";
 import { mountWriterRoutes } from "../../features/writer/routes.ts";
@@ -30,11 +33,11 @@ import type { WriterRoutePorts } from "../../features/writer/routes.ts";
 import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
 import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
 import { cellEditing, focusMemory, installCellEditing, installPicturePicker, mergeUndo, paintGuard, rowDrag, undoGuard } from "../../legacy/editor-bridge.ts";
-import { REVIEW_ONLY, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "../../legacy/session-bridge.ts";
+import { REVIEW_ONLY, currentDocument, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "../../legacy/session-bridge.ts";
 import { fromHtml } from "../../legacy/richtext.ts";
 import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
-import { cycleRowStatus } from "../../js/01-scene-status.js";
-import { expandHiddenShotStrip } from "../../js/01b-hide-shot.js";
+import { cycleRowStatus } from "./scene-status.ts";
+import { expandHiddenShotStrip } from "./hide-shot.ts";
 import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
 import { restoreMergeSnapshot } from "../../js/03-sync.js";
 import { installMergeBanner } from "../../legacy/merge-bridge.ts";
@@ -68,7 +71,7 @@ import {
   draftUndo,
   noteDraftInput,
   pasteIntoDraft
-} from "../../js/05d-draft-edit.js";
+} from "../../features/editing/draft-edit.js";
 import {
   addRow,
   addRowAndFocus,
@@ -122,14 +125,12 @@ import {
   captureReplyDrafts,
   jumpToComment,
   openCommentsPanel,
-  renderComments,
-  syncAnchorResolvedClasses
-} from "../../js/10-comments.js";
+  renderComments
+} from "../../features/comments/comments.js";
 import { showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
 import {
   breakUndoCoalescing,
-  caretAfterStep,
   compositionUndoMark,
   configureUndo,
   dropEmptyStepsSince,
@@ -138,7 +139,7 @@ import {
   redo,
   settleAfterApply,
   undo
-} from "../../js/12a-undo.js";
+} from "../../legacy/undo-bridge.ts";
 import { onServerDoc } from "../../js/13-hosted.js";
 import { runExport } from "../../js/18-local-files.js";
 import {
@@ -157,6 +158,12 @@ interface UndoCellStep {
   readonly op: string;
   readonly rowId: string;
   readonly key: string;
+  readonly before?: unknown;
+  readonly after?: unknown;
+}
+
+function decodeCell(html: unknown): Run[] {
+  return fromHtml(html);
 }
 
 interface PasteAttached {
@@ -487,7 +494,7 @@ function afterUndoApplied(steps: readonly unknown[]): void {
     const cell = document.querySelector<HTMLElement>((viewFlags().writerOpen() ? "#writer-doc " : "#rows ") + sel) || document.querySelector<HTMLElement>(sel);
     if (cell) {
       cell.focus();
-      placeCaretAtTextOffset(cell, caretAfterStep(cellStep));
+      placeCaretAtTextOffset(cell, caretAfterStep(decodeCell, cellStep));
     }
   }
 }
@@ -532,7 +539,7 @@ export function mountCompositionFeature(): ReturnType<typeof mountComposition> {
       ports: {
         cellOf: scriptCellOf,
         epoch: function () { return liveSession().epoch(); },
-        mark: function (cell): unknown { return compositionUndoMark(cell.rowId, cell.field); },
+        mark: function (cell) { return compositionUndoMark(cell.rowId, cell.field); },
         dropEmptySince: dropEmptyStepsSince
       }
     });
@@ -693,7 +700,7 @@ function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, ex
     }
   }
   if (res.movedComments) {
-    syncAnchorResolvedClasses();
+    syncAnchorResolvedClasses(currentDocument(), document);
     captureReplyDrafts();
     renderComments();
   }

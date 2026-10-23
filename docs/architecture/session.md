@@ -121,7 +121,7 @@ A legacy edit (`noteEdit`) and `settle` catch and report the same way, and do no
 
 The bridge supplies `CapabilityPort.edit` from `12-dirty-toast.js`: `reviewMode()` gives `{ allowed: false, reason: REVIEW_ONLY }`, where `REVIEW_ONLY` is `"review"`. The session returns `rejected` with that reason. There is no toast port: the session does not know about toasts. The view maps the reason to wording and calls `showToast` with `"warn"`:
 
-- `cycleRowStatus` (`01-scene-status.js`) shows "This is a review copy ..." for status (D8) when the outcome is `rejected` with `REVIEW_ONLY`;
+- `cycleRowStatus` (`features/rows/scene-status.ts`) shows "This is a review copy ..." for status (D8) when the outcome is `rejected` with `REVIEW_ONLY`;
 - `setSceneLength` (`05r-read-time.js`) does the same for length (D9);
 - opening the length editor is not a command, so `openReadTimeEditor` shows D9's toast from its own `reviewMode()` check. The two refusals share the predicate and the wording;
 - the visible status lamp in a review copy has no `data-action`, so `onRootClick` in `src/bootstrap/wiring/editor.ts` routes a click on it to `cycleRowStatus`, and the command's refusal shows the toast. A forced or stale `cycle-status` button is still refused by the click guard with "Viewing only", and `REVIEW_SAFE_ACTIONS` is unchanged (Adam's decision (a) on #414);

@@ -6,7 +6,6 @@ import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../js/02-state.js";
@@ -22,7 +21,9 @@ import { spokenText, toDocxRuns, toMarkdown, toPlainText } from "../core/text/pr
 import { toHtml } from "../core/text/html.ts";
 import { clipboardOfCell } from "../features/clipboard/cell-clipboard.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { replaceInHtml } from "../js/09-find-replace.js";
+import { sharedPorts as findSharedPorts } from "../bootstrap/wiring/shared-ports.ts";
+import { __init as initFind, replaceInHtml } from "../features/find/find.js";
+initFind(findSharedPorts());
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
 import { toMarkdownDoc } from "../adapters/formats/export-text.ts";
@@ -37,7 +38,6 @@ import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
-initSceneStatus();
 
 const T = (text, marks) => ({ text, marks: marks || {} });
 const D = (text, marks) => ({ text, marks: Object.assign({ dir: true }, marks || {}) });

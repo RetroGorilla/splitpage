@@ -8,7 +8,7 @@ import { owned } from "../../features/routing/owned.ts";
 import { videoHostLabel } from "../../adapters/formats/video-host.ts";
 import { galleryBadgeHtml, gallerySlotPictureHtml } from "../../js/05-render.js";
 import { hasSessionVideo, sessionVideoUrl } from "../../js/06-rows.js";
-import { foldIntoEdit } from "../../js/12a-undo.js";
+import { foldIntoEdit } from "../../legacy/undo-bridge.ts";
 import { cellEditing, pickPictureFor } from "../../legacy/editor-bridge.ts";
 import { preferences } from "../../legacy/preferences-bridge.ts";
 import { desktopVideo } from "./desktop-video.ts";
