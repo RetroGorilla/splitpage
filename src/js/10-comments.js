@@ -24,13 +24,8 @@ import {
   pushSnapshot,
   syncPanelClass
 } from "./03-sync.js";
-import {
-  cssAttr,
-  inertBody,
-  plainText,
-  safeId,
-  sanitizeHtml
-} from "./04-richtext.js";
+import { inertBody, plainText, safeId, sanitizeHtml } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import { editableCellHtml } from "./05-render.js";
 import { resetDraftHistory } from "./05d-draft-edit.js";
 import { personColor } from "./13a-presence.js";

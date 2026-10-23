@@ -6,7 +6,7 @@ import { runFromButton } from "../../legacy/app-actions.ts";
 import { mountFind } from "../../features/find/mount.ts";
 import { mountTags } from "../../features/tags/mount.ts";
 import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
-import { cssAttr } from "../../js/04-richtext.js";
+import { cssAttr } from "../../features/common/dom.ts";
 import {
   acceptTagGhost,
   acceptUntaggedMention,

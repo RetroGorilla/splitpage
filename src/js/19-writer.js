@@ -3,12 +3,8 @@ import { totalSeconds } from "./01-scene-status.js";
 import { renderRowGroups } from "./01b-hide-shot.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { closeAllSidePanels } from "./03b-side-panels.js";
-import {
-  cssAttr,
-  ensureTrailingCaretSpot,
-  sanitizeHtml,
-  storedHtmlFromDom
-} from "./04-richtext.js";
+import { ensureTrailingCaretSpot, sanitizeHtml, storedHtmlFromDom } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import {
   cellFormatState,
   editableCellHtml,
@@ -23,7 +19,7 @@ import { bothScenesHaveVisual, joinScenesCommand } from "../application/commands
 import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../application/preferences/preferences.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
-import { VIEWING_ONLY } from "../legacy/review-wording.ts";
+import { VIEWING_ONLY } from "../application/collaboration/review.ts";
 import { currentDocument, editAllowed, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
 import { cellEditing, editorSelection, focusMemory, paintGuard } from "../legacy/editor-bridge.ts";
 import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";

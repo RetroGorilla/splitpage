@@ -8,7 +8,7 @@ import { setBackend as setBlobBackend } from "../adapters/storage/02c-blobs.js";
 import { isPristineSeedDocument } from "./03a-history-store.js";
 import { hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
-import { cssAttr } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import { showToast } from "./12-dirty-toast.js";
 import { openServerDoc, pointTabAt } from "./13-hosted.js";
 import { openProjectFile } from "./18-local-files.js";

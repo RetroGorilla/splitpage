@@ -1,6 +1,7 @@
 import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
 import { pushSnapshot, stampRow } from "./03-sync.js";
-import { cssAttr, sanitizeHtml } from "./04-richtext.js";
+import { sanitizeHtml } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import { declineBrollAnchoring } from "./08c-broll.js";
 import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
