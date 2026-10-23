@@ -11,7 +11,7 @@ import {
   scheduleAutoSave
 } from "./14-export.js";
 import { noteDraftChange } from "./20g-drafts.js";
-import { heldDocument, noteAbsorbedDirty, noteSessionEdit } from "../legacy/session-bridge.ts";
+import { noteAbsorbedDirty, noteSessionEdit, stampDocument } from "../legacy/session-bridge.ts";
 import { autoSavePolicy, confirmSavedNow, noteSaveChange, saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
 import { saveButtonView, saveStatus } from "../application/save/status.ts";
 import { changeSet } from "../application/session/change-set.ts";
@@ -29,8 +29,7 @@ function myColorPlan(doc) {
 }
 
 function signLegacyEdit() {
-  var plan = myColorPlan(heldDocument());
-  if (plan) plan.apply(heldDocument());
+  stampDocument({ name: "sign-my-color", plan: myColorPlan });
 }
 
 export function hasUnsavedChanges() { return unsavedChanges(); }
