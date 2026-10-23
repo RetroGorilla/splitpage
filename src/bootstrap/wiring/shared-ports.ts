@@ -1,21 +1,26 @@
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { EditorSelectionPort } from "../../application/editing/selection.ts";
 import type { ExportRegistry } from "../../application/export/registry.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
+import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
+import type { SaveOwnershipPort } from "../../application/save/coordinator.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { ProductionIndexOwner } from "../../core/production/index.ts";
+import { blobImgHtml, bytesForSync, dataUrlForSync, ensureBytes, intern, internDataUrl, isDurableSync, persist, queuePersist, recordFor, urlForSync } from "../../adapters/storage/02c-blobs.js";
 import { arrivingOnLink } from "../../js/13-hosted.js";
 import { appActions } from "../../legacy/app-actions.ts";
 import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
+import { editorSelection } from "../../legacy/editor-bridge.ts";
 import { exportFormats } from "../../legacy/export-formats.ts";
 import {
   currentConn, currentHome, documentLocation, fileHome, homeConn, importHome, reviewBlocked, reviewMode,
@@ -28,6 +33,7 @@ import { productionIndex } from "../../legacy/production-index-bridge.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
 import { currentDocument, editAllowed, onDocumentReplaced, onRefresh, onSessionChange, readSession, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../../legacy/session-bridge.ts";
+import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
 
 const actions: Pick<ActionRegistry, "invoke" | "view"> = {
   invoke: (id, source, input) => appActions.invoke(id, source, input),
@@ -111,6 +117,22 @@ const effects: EffectPorts<Element> = {
   clipboard: { copyText: copyShareText }
 };
 
+const ownership: SaveOwnershipPort = { capture: captureOperation, stillOwns };
+
+const pictures: PictureStore = {
+  intern,
+  internDataUrl,
+  recordFor,
+  bytesFor: bytesForSync,
+  urlFor: urlForSync,
+  dataUrlFor: dataUrlForSync,
+  isDurable: isDurableSync,
+  queuePersist,
+  persist,
+  ensureBytes: (shas) => ensureBytes(shas),
+  imgHtml: blobImgHtml
+};
+
 const saves: SaveState = {
   unsaved: () => unsavedChanges(),
   busy: () => saveBusy(),
@@ -126,6 +148,10 @@ const production: ProductionIndexOwner = {
   derived: () => productionIndex().derived(),
   resetDerived: () => { productionIndex().resetDerived(); },
   recordsPlan: (doc, viewed) => productionIndex().recordsPlan(doc, viewed)
+};
+
+const selection: EditorSelectionPort = {
+  dropLink: () => { editorSelection().dropLink(); }
 };
 
 const exports: Pick<ExportRegistry, "card" | "cards" | "exporters" | "byAction" | "isAction" | "onChange"> = {
@@ -150,7 +176,10 @@ const shared = {
   text,
   saves,
   production,
-  exports
+  selection,
+  exports,
+  ownership,
+  pictures
 };
 
 export function sharedPorts(): typeof shared {
