@@ -298,7 +298,7 @@ Why this order:
 
 [legacy-reduction.md](legacy-reduction.md)'s L5 section says the remaining files are "feature code in the wrong folder" that move "when a 4.1 feature next changes" them. With this document:
 
-- L5 becomes scheduled work in four waves, not left to feature work. The plan leaves that choice to Adam, so this is a proposal.
+- L5 becomes scheduled work in five waves (0 to 4), not left to feature work. The plan leaves that choice to Adam, so this is a proposal.
 - 16 of the files go, wholly or partly, to `src/application/` or `src/adapters/`, not `src/features/`.
 - The bridges retire move by move: each bridge's last numbered importer is in the inventory, and its bridge goes in the same PR.
 - The Wave 0 PRs add three files outside `src/js`: `src/bootstrap/wiring/shared-ports.ts`, `tests/features/fakes.ts` and `tests/bootstrap/action-order.test.ts`.
