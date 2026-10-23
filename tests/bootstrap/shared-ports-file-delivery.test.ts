@@ -1,12 +1,12 @@
-import "../../test/_dom.mjs";
+import "../../src/test/_dom.mjs";
 import test from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { restoreDesktop, useDesktopForTest } from "../../adapters/desktop/desktop-port.ts";
-import { sharedPorts } from "../../bootstrap/wiring/shared-ports.ts";
-import { startEffects } from "../../legacy/effects-bridge.ts";
-import type { NoticeKind } from "../effects/ports.ts";
-import type { DeliverOptions, FileDelivery } from "./file-delivery.ts";
+import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
+import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
+import { startEffects } from "../../src/legacy/effects-bridge.ts";
+import type { NoticeKind } from "../../src/application/effects/ports.ts";
+import type { DeliverOptions, FileDelivery } from "../../src/application/files/file-delivery.ts";
 
 function recordNotices(t: TestContext): [string, NoticeKind | undefined][] {
   const shown: [string, NoticeKind | undefined][] = [];

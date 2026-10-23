@@ -1,5 +1,4 @@
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
-import { deliverBytes } from "../../adapters/files/deliver.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
@@ -26,6 +25,7 @@ import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import { blobImgHtml, bytesForSync, dataUrlForSync, ensureBytes, intern, internDataUrl, isDurableSync, persist, queuePersist, recordFor, urlForSync } from "../../adapters/storage/02c-blobs.js";
 import { arrivingOnLink } from "../../js/13-hosted.js";
 import { appActions } from "../../legacy/app-actions.ts";
+import { deliverFile } from "../../legacy/file-delivery.ts";
 import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
@@ -201,12 +201,7 @@ const recents: RecentFiles = {
 };
 
 const fileDelivery: FileDelivery = {
-  async deliver(filename, data, opts) {
-    const delivered = await deliverBytes(filename, data);
-    if (delivered === "saved") showToast((opts && opts.savedMsg) || ("Saved " + filename), "ok");
-    else if (delivered === "failed") showToast("Could not save the file. Please try again.", "error");
-    return delivered === "saved";
-  }
+  deliver: (filename, data, options) => deliverFile(filename, data, options)
 };
 
 const transitions: Transitions<DocumentDestination> = {
