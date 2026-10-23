@@ -4,7 +4,7 @@ import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { intern } from "../adapters/storage/02c-blobs.js";
@@ -46,7 +46,7 @@ test("a Splitpage export reopens as exactly its script: no comment rows, no comm
         body: cPic.html, resolved: true, resolvedBy: "Ann", replies: [] }
     ]
   }));
-  const expected = plainRows(S.state.rows);
+  const expected = plainRows(currentDocument().rows);
   const bytes = buildDocx(...liveWithAssets());
 
   const parsed = await docxToRows(asFile(bytes));
@@ -294,8 +294,8 @@ test("the breakdown is grouped by category and no item's row splits across a pag
 
 test("the b-roll shot list, by scene, with a box for each shot", async () => {
   loadRoundTrip();
-  S.state.brollShots = [{ id: "bs_1", name: "dust in the light", status: "shot", location: "Workbench", reshoot: true, notes: "Needs a haze.", props: [] }];
-  loadTestDocument(migrateRows(S.state));
+  currentDocument().brollShots = [{ id: "bs_1", name: "dust in the light", status: "shot", location: "Workbench", reshoot: true, notes: "Needs a haze.", props: [] }];
+  loadTestDocument(migrateRows(currentDocument()));
   const { body } = await parts(buildDocx(...liveWithAssets()));
   const paras = kids(body, "p").map((p) => p.textContent);
   const at = paras.indexOf("B-roll shot list");

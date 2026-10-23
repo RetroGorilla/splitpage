@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { saveChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
@@ -67,7 +67,7 @@ async function open(doc) {
   flushEdits();
 }
 
-const row = (id) => S.state.rows.find((r) => r.id === id);
+const row = (id) => currentDocument().rows.find((r) => r.id === id);
 const cellOf = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
 const para = (id) => document.querySelector('#writer-doc .wr-para[data-id="' + id + '"]');
 
@@ -172,7 +172,7 @@ test("a split of a media cell cuts the runs at the caret: both halves are in can
   const at = textNodeAt(el, 3);
   caretAt(at[0], at[1]);
   key(el, "Enter", { altKey: true });
-  const created = S.state.rows[1].id;
+  const created = currentDocument().rows[1].id;
   assert.equal(row("r1").audioText, "Bef");
   assert.equal(row(created).audioText, "ore <strong><em>bold</em></strong> " + STORED_CARD + " after");
 });
@@ -185,12 +185,12 @@ test("a split just after a video card keeps the card in the first scene", async 
   const card = el.querySelector(".video-embed-card");
   caretAt(el, Array.prototype.indexOf.call(el.childNodes, card) + 1);
   key(el, "Enter", { altKey: true });
-  const created = S.state.rows[1].id;
+  const created = currentDocument().rows[1].id;
   assert.equal(row("r1").audioText, "Ab " + STORED_CARD);
   assert.equal(row(created).audioText, " cd");
   undo();
   assert.equal(row("r1").audioText, "Ab " + STORED_CARD + " cd");
-  assert.equal(S.state.rows.length, 2);
+  assert.equal(currentDocument().rows.length, 2);
 });
 
 test("a join with media in the later scene joins the runs: no doubled space, formatting merged", async () => {
@@ -202,7 +202,7 @@ test("a join with media in the later scene joins the runs: no doubled space, for
   const start = textNodeAt(p, 0);
   caretAt(start[0], start[1]);
   key(p, "Backspace");
-  assert.deepEqual(S.state.rows.map((r) => r.id), ["j1"]);
+  assert.deepEqual(currentDocument().rows.map((r) => r.id), ["j1"]);
   assert.equal(row("j1").audioText, "<strong>Bold more</strong> " + STORED_CARD);
   writer.closeWriter();
 });
