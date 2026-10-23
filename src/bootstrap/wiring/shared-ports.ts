@@ -1,3 +1,6 @@
+import { randomIds, systemClock } from "../../adapters/identity/ids.ts";
+import { sidePanels } from "../../legacy/panels-bridge.ts";
+import { deleteConfirmation } from "../../legacy/production-editing-bridge.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { EffectPorts } from "../../application/effects/ports.ts";
@@ -11,7 +14,7 @@ import type { LastFile } from "../../application/files/last-file.ts";
 import type { RecentFiles } from "../../application/files/recent-files.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
-import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
+import type { CommentFilter, PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 import type { SaveOwnershipPort } from "../../application/save/coordinator.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
@@ -24,7 +27,7 @@ import type { DocumentDestination } from "../../application/transitions/ports.ts
 import type { Transitions } from "../../application/transitions/transitions.ts";
 import { normalizeTagName } from "../../core/document/tags.ts";
 import { loadLastFileHandle } from "../../js/00-prelude.js";
-import { breakUndoCoalescing, flushEdits, lastUndoEntry, redo, undo } from "../../js/12a-undo.js";
+import { breakUndoCoalescing, flushEdits, lastUndoEntry, redo, undo } from "../../legacy/undo-bridge.ts";
 import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import { blobImgHtml, bytesForSync, dataUrlForSync, ensureBytes, intern, internDataUrl, isDurableSync, persist, queuePersist, recordFor, urlForSync } from "../../adapters/storage/02c-blobs.js";
 import { arrivingOnLink } from "../../js/13-hosted.js";
@@ -262,7 +265,29 @@ const shared = {
   fileDelivery,
   undo: undoControl,
   transitions,
-  startup
+  startup,
+  ids: randomIds,
+  clock: systemClock,
+  preferences: {
+    clock: () => preferences().clock(),
+    commentAuthor: () => preferences().commentAuthor(),
+    rememberCommentAuthor: (name: string) => preferences().rememberCommentAuthor(name),
+    commentsSort: () => preferences().commentsSort(),
+    setCommentsSort: (mode: string) => preferences().setCommentsSort(mode),
+    commentFilter: () => preferences().commentFilter(),
+    setCommentFilter: (filter: CommentFilter) => preferences().setCommentFilter(filter),
+    taggingHelpShown: () => preferences().taggingHelpShown(),
+    taggingHelpDismissed: () => preferences().taggingHelpDismissed()
+  },
+  sidePanels: {
+    open: (id: string) => sidePanels().open(id),
+    close: (id: string) => sidePanels().close(id)
+  },
+  deletion: {
+    armedId: (...args: Parameters<ReturnType<typeof deleteConfirmation>["armedId"]>) => deleteConfirmation().armedId(...args),
+    arm: (...args: Parameters<ReturnType<typeof deleteConfirmation>["arm"]>) => deleteConfirmation().arm(...args),
+    disarm: (...args: Parameters<ReturnType<typeof deleteConfirmation>["disarm"]>) => deleteConfirmation().disarm(...args)
+  }
 };
 
 export function sharedPorts(): typeof shared {

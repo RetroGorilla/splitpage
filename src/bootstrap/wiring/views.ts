@@ -32,7 +32,7 @@ import {
 } from "../../application/prompter-state.ts";
 import { captureOperation, openDocument, stillOwns } from "../../legacy/transition-bridge.ts";
 import { importHome } from "../../legacy/location-bridge.ts";
-import { expandHiddenShotStrip } from "../../js/01b-hide-shot.js";
+import { expandHiddenShotStrip } from "./hide-shot.ts";
 import {
   promptForName,
   promptForWpm,

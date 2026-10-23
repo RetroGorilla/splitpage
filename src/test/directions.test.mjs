@@ -21,7 +21,9 @@ import { spokenText, toDocxRuns, toMarkdown, toPlainText } from "../core/text/pr
 import { toHtml } from "../core/text/html.ts";
 import { clipboardOfCell } from "../features/clipboard/cell-clipboard.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { replaceInHtml } from "../js/09-find-replace.js";
+import { sharedPorts as findSharedPorts } from "../bootstrap/wiring/shared-ports.ts";
+import { __init as initFind, replaceInHtml } from "../features/find/find.js";
+initFind(findSharedPorts());
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
 import { toMarkdownDoc } from "../adapters/formats/export-text.ts";

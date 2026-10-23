@@ -58,7 +58,7 @@ test("a status click on a scene that is gone adds none", () => {
 
 test("in review mode a scene length is refused with a warning toast and has no other effect", async () => {
   const { liveSession } = await import("../legacy/session-bridge.ts");
-  const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
+  const { flushEdits, undoSizes } = await import("../legacy/undo-bridge.ts");
   window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
   flushEdits();
   const host = document.getElementById("toast-host");
@@ -81,7 +81,7 @@ test("in review mode a scene length is refused with a warning toast and has no o
 
 test("in review mode a status click is refused with a warning toast and has no other effect", async () => {
   const { liveSession } = await import("../legacy/session-bridge.ts");
-  const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
+  const { flushEdits, undoSizes } = await import("../legacy/undo-bridge.ts");
   window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
   flushEdits();
   const host = document.getElementById("toast-host");
@@ -104,7 +104,7 @@ test("in review mode a status click is refused with a warning toast and has no o
 
 async function reviewClick(selector, wording) {
   const { liveSession } = await import("../legacy/session-bridge.ts");
-  const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
+  const { flushEdits, undoSizes } = await import("../legacy/undo-bridge.ts");
   window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
   flushEdits();
   const target = document.querySelector(selector);
@@ -147,7 +147,7 @@ function backToEditMode() {
 }
 
 test("in edit mode a click on a scene's length opens the editor and shows no toast", async () => {
-  const { flushEdits } = await import("../js/12a-undo.js");
+  const { flushEdits } = await import("../legacy/undo-bridge.ts");
   const host = backToEditMode();
   flushEdits();
   const target = document.querySelector('#rows .row[data-id="r1"] .row-read');
@@ -161,7 +161,7 @@ test("in edit mode a click on a scene's length opens the editor and shows no toa
 });
 
 test("in edit mode a click on the status button cycles the status and shows no toast", async () => {
-  const { flushEdits } = await import("../js/12a-undo.js");
+  const { flushEdits } = await import("../legacy/undo-bridge.ts");
   const host = backToEditMode();
   flushEdits();
   const target = document.querySelector('#rows .row[data-id="r1"] [data-action="cycle-status"]');

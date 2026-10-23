@@ -25,10 +25,8 @@ import { sidePanels } from "../legacy/panels-bridge.ts";
 import { safeId } from "./04-richtext.js";
 import { targetSectionHtml, wireTargetSection } from "../legacy/target-section.ts";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
-import {
-  formatTimestamp,
-  getSavedAuthorName
-} from "./10-comments.js";
+import { formatTimestamp } from "../features/common/comment-time.js";
+import { getSavedAuthorName } from "../application/comment-author.js";
 import { cleanAuthorName } from "../core/document/people.ts";
 import { showToast } from "./12-dirty-toast.js";
 import { presence } from "../legacy/presence-bridge.ts";
@@ -44,7 +42,7 @@ export { mergeTargetLength } from "../core/merge/scalars.ts";
 
 
 export function getEditorName() {
-  return getSavedAuthorName() || "Anonymous";
+  return getSavedAuthorName(preferences()) || "Anonymous";
 }
 
 export function stampRow(row) {
@@ -96,7 +94,7 @@ async function restoreSnapshot(id, opts) {
     adoptRestoredState(parsed);
     noteAbsorbedDirty("recovery");
     sidePanels().close("history-panel");
-    showToast(opts.restoredText || "Restored the version from " + formatTimestamp(snap.meta && snap.meta.at), "ok");
+    showToast(opts.restoredText || "Restored the version from " + formatTimestamp(snap.meta && snap.meta.at, preferences().clock()), "ok");
     if (!opts.local) autoSavePolicy().dueNow();
     return "restored";
   } finally {
@@ -188,7 +186,7 @@ function mergeStates(base, mine, theirs) {
 }
 
 export function updateIdentityChip() {
-  var name = getSavedAuthorName();
+  var name = getSavedAuthorName(preferences());
   var chip = document.getElementById("identity-chip");
   document.getElementById("identity-name").textContent = name || "Set your name";
   chip.classList.toggle("unnamed", !name);
@@ -297,7 +295,7 @@ export function personSwatchesHtml(name, radioName, legendClass) {
 }
 
 export function promptForName() {
-  var current = getSavedAuthorName();
+  var current = getSavedAuthorName(preferences());
   var host = document.getElementById("identity-chip");
   var wrap = openAnchorPopover(host, "identity-editor", "Your name and colour",
     '<label class="anchor-popover-label" for="identity-input">Your name</label>' +

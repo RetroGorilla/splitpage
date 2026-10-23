@@ -7,7 +7,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { commentBodyText, commentEntries } from "../js/10-comments.js";
+import { commentBodyText, commentEntries } from "../adapters/formats/export-projections.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
 import { buildDocx } from "../adapters/formats/docx.ts";
