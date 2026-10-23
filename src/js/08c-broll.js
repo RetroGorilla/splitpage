@@ -1,6 +1,6 @@
 import { productionReaders } from "../legacy/document-ports.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
-import { domToPos } from "../features/editing/cell-dom.ts";
+import { domToPos } from "../features/common/cell-dom.ts";
 import { rowIndexOf } from "../core/document/rows.ts";
 import {
   ensureTrailingCaretSpot,

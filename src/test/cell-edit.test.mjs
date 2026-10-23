@@ -1,8 +1,8 @@
-import { domToPos } from "../features/editing/cell-dom.ts";
+import { domToPos } from "../features/common/cell-dom.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { posToDom } from "../features/editing/cell-dom.ts";
+import { posToDom } from "../features/common/cell-dom.ts";
 import { cellLength, fromHtml, toHtml } from "../js/04c-doc-model.js";
 
 const tag = (name, inner) => `<span class="tag-anchor" data-tag-cat="prop" data-tag-name="${name}" contenteditable="false">${inner || name}</span>`;
