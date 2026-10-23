@@ -243,7 +243,7 @@ Two existing ports grow:
 | `firstTabOfLaunch`, `hadPriorSession`, `launchIntent`, `hasDraftToRestore`, `appVersion`, `getSessionInfo` | `13b`, `20b`, `20f`, `20g`, `20h`, `20j` | P24 |
 | `listRecents`, `removeRecent`, `clearRecents`, `readFile`, `routeOpen` | `18`, `18b`, `20f`, `20j` | P27 |
 | `grantVideoFile`, `openVideoFile`, `videoThumbnail` | `05v`, `06` | P28 |
-| `history*` (`03a`), `connection` and `driveStatus` (`13`, `20f`), `saveFileDialog` (`14`), `openFileDialog` (`18`), the `on…` events, `setDocumentState`, `openPrompterIn…`, `voice…` and `tabId` (`20f`), `writeDraft`, `takeDraft` and `draftRestoreDone` (`20g`) | Wave 4 files | the Wave 4 adapter and owner moves into `adapters/desktop` and `application/`, on Opus |
+| `history*` (`03a`), `connection` and `driveStatus` (`13`, `20f`), `saveFileDialog` (`14`), `openFileDialog` (`18`), the `on…` events, `setDocumentState`, `openPrompterIn…`, `voice…`, `tabId`, `blob…` and `drive…` (`20f`), `writeDraft`, `takeDraft` and `draftRestoreDone` (`20g`) | Wave 4 files | the Wave 4 adapter and owner moves into `adapters/desktop` and `application/`, on Opus |
 
 The pure page helpers move once, with their first user:
 
