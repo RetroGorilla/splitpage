@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { createHeldFetch, createHeldImageDecode } from "./_m4-matrix.mjs";
 
 window.Element.prototype.scrollBy = function () {};
@@ -98,12 +98,12 @@ test("video: a retried thumbnail for a scene that was deleted while it loaded ch
   click(document.querySelector('[data-gact="retry-thumb"]'));
   await held.gates.arrived("fetch");
   closeGalleryOverlay();
-  S.state.rows.splice(0, 1);
+  currentDocument().rows.splice(0, 1);
   liveSession().noteEdit();
   flushEdits();
   const before = undoSizes();
   const generation = liveSession().generation();
-  const text = JSON.stringify(S.state);
+  const text = JSON.stringify(currentDocument());
   document.getElementById("toast-host").textContent = "";
   const w = watch();
   try {
@@ -115,7 +115,7 @@ test("video: a retried thumbnail for a scene that was deleted while it loaded ch
   assert.equal(w.seen.length, 0, "nothing published");
   assert.equal(liveSession().generation(), generation);
   assert.deepEqual(undoSizes(), before);
-  assert.equal(JSON.stringify(S.state), text);
+  assert.equal(JSON.stringify(currentDocument()), text);
   assert.match(toasts(), /Could not get this video’s thumbnail/);
 });
 
@@ -130,7 +130,7 @@ function composer() {
 
 test("video: the comment popover's Add puts a video card in the draft only, and closes the popover", async () => {
   await open();
-  const text = JSON.stringify(S.state);
+  const text = JSON.stringify(currentDocument());
   const w = watch();
   const c = composer();
   c.input.value = "youtu.be/dQw4w9WgXcQ";
@@ -139,7 +139,7 @@ test("video: the comment popover's Add puts a video card in the draft only, and 
   w.stop();
   assert.equal(c.popover.hidden, true);
   assert.ok(c.body.querySelector(".video-embed-card"), "the draft has the video card");
-  assert.equal(JSON.stringify(S.state), text, "the document is untouched");
+  assert.equal(JSON.stringify(currentDocument()), text, "the document is untouched");
   assert.equal(w.seen.length, 0, "nothing published");
   closeCommentComposer(false);
 });

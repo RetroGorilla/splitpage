@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import "./_export-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import "./_preferences-started.mjs";
 import { preferences } from "../legacy/preferences-bridge.ts";
 import { __init as initSceneStatus } from "../js/01-scene-status.js";
@@ -30,12 +30,12 @@ function withPicture(salt, visualText) {
     schema: 5, title: "Pictures", docId: "d" + "8".repeat(32),
     rows: [{ id: "r1", visualText: visualText || "", audioText: "", status: "todo", imageRef: rec.ref || rec }]
   }));
-  return S.state;
+  return currentDocument();
 }
 
 test("a Markdown export of a scene that holds only a picture writes the picture, or a blank scene when the bytes are missing", () => {
   withPicture(51);
-  const doc = exportDocumentOf(S.state);
+  const doc = exportDocumentOf(currentDocument());
   const assets = exportAssetsNow(doc);
   assert.ok(assets.picture(doc.scenes[0].imageRef.sha256), "setup: the bytes are held");
   const withBytes = toMarkdownDoc(doc, { assets });
@@ -52,7 +52,7 @@ test("plain-text and project-Markdown comment times use the clock captured with 
   loadTestDocument(migrateRows(copy(LONG_DEMO.state)));
   preferences().setClock("12");
   try {
-    const doc = exportDocumentOf(S.state);
+    const doc = exportDocumentOf(currentDocument());
     const text = htmlToPlainScript(doc);
     const project = toMarkdownTableDoc(doc);
     assert.ok(MARKS_PM.test(text), "setup: the captured clock is 12-hour");
@@ -67,7 +67,7 @@ test("plain-text and project-Markdown comment times use the clock captured with 
 
 test("the two-column Markdown table takes its picture from the operation's asset map, not the shared cache", () => {
   withPicture(52, "Wide");
-  const doc = exportDocumentOf(S.state);
+  const doc = exportDocumentOf(currentDocument());
   const held = exportAssetsNow(doc);
   blobStore.forgetMemory();
   const fromMap = toMarkdownTableDoc(doc, { export: true, assets: held });
