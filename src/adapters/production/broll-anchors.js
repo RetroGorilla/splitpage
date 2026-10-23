@@ -89,7 +89,7 @@ function brollWrapHtmlLine(body, line, id) {
     if (line.nodes[i].parentNode === body) ref = line.nodes[i];
   }
   if (!ref) ref = line.br;
-  var holder = document.createElement("div");
+  var holder = body.ownerDocument.createElement("div");
   holder.innerHTML = brollKeyHtml(id, m[1] + m[2]) + " ";
   Array.prototype.slice.call(holder.childNodes).forEach(function (n) {
     body.insertBefore(n, ref);
