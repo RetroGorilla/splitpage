@@ -380,8 +380,6 @@ function onPrefChanged(key) {
     var hist = document.getElementById("history-panel");
     if (hist && !hist.hidden) renderHistory();
   }
-  if (name === "collabServer") updateCollaborateMenu();
-  if (name === "commentAuthor" || name === "personColor") updateIdentityChip();
   if (settingsOpen()) renderSettings(key);
 }
 

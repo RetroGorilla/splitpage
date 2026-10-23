@@ -5,8 +5,7 @@ import { currentConn, currentHome, documentLocation, reviewMode, serverHomeId, s
 import { normalizeServerUrl } from "../../shared/server-links.js";
 import { personSwatchesHtml, setMyColor } from "./03-sync.js";
 import { getSavedAuthorName } from "./10-comments.js";
-import { apiFetch, applyHealth, applyReviewMode, clearServerToken, finishServerDetect, isLinkGuest, onServerDoc, pointTabAt, publishToServer, rememberTokenForServer, rememberedTokenForServer, serverDocShareUrl, setServerToken, shareAccessNote, updateServerMenu } from "./13-hosted.js";
-import { updateConnectMenu } from "./20e-connect.js";
+import { apiFetch, applyHealth, applyReviewMode, clearServerToken, finishServerDetect, isLinkGuest, onServerDoc, pointTabAt, publishToServer, rememberTokenForServer, rememberedTokenForServer, serverDocShareUrl, setServerToken, shareAccessNote } from "./13-hosted.js";
 import { updateFileChip } from "./18-local-files.js";
 import { openSettings } from "./20s-settings.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
@@ -338,7 +337,6 @@ async function publishStep(c) {
     go(c, "error");
     return;
   }
-  updateServerMenu();
   updateFileChip();
   loadLinks(c);
 }
