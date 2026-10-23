@@ -39,8 +39,8 @@ function adopt<Loaded extends WrittenMarks, Doc, Report>(ports: InitialDocumentP
   });
   if (ports.liveDocument() !== applied.state) {
     ports.open(applied.state, BOOT_OPEN_REASON);
-    ports.firstDraw();
   }
+  ports.firstDraw();
   for (const refresh of ports.refreshChrome) refresh();
   if (applied.report) ports.reportRecovery(applied.report);
   else ports.toastLastEditor(loaded);
