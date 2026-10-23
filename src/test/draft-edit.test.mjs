@@ -1,6 +1,6 @@
-import { domToPos } from "../features/editing/cell-dom.ts";
+import { domToPos } from "../features/common/cell-dom.ts";
 import "./_dom.mjs";
-import test from "node:test";
+import test, { after, before } from "node:test";
 import assert from "node:assert/strict";
 import {
   historyCommit,
@@ -13,9 +13,13 @@ import {
   mediaTable,
   newHistory,
   stripMediaMarks
-} from "../js/05d-draft-edit.js";
+} from "../features/editing/draft-edit.js";
 import { cellLength, fromHtml, projection, setMark } from "../js/04c-doc-model.js";
-import { posToDom } from "../features/editing/cell-dom.ts";
+import { posToDom } from "../features/common/cell-dom.ts";
+import { mountDraftEditFeature, stopDraftEditFeature } from "../bootstrap/wiring/draft-edit.ts";
+
+before(mountDraftEditFeature);
+after(stopDraftEditFeature);
 
 const SHA = "a".repeat(64);
 const SHA2 = "b".repeat(64);

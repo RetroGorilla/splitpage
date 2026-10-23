@@ -2,6 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createDraftResume } from "../../src/application/recovery/draft-resume.ts";
 import type { ServerResume } from "../../src/application/recovery/draft-resume.ts";
+import "../../src/test/_dom.mjs";
+import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
+import { draftResume, startRecovery } from "../../src/legacy/recovery-bridge.ts";
+import { DRAFT_LIMITS } from "../../src/adapters/storage/draft-store-idb.ts";
 
 function serverResume(id: string, heard: string[]): ServerResume {
   return { id: id, rev: 2, base: null, mine: { rows: [] }, at: 5, onDone: function (outcome: string): void { heard.push(id + ":" + outcome); } };
@@ -12,6 +16,27 @@ test("a new draft resume holds nothing: no server resume waits and no restore is
   assert.equal(resume.serverResume(), null);
   assert.equal(resume.restorePending(), false);
   assert.ok(Object.isFrozen(resume));
+});
+
+test("shared draft resume follows recovery restarts without capturing the owner", () => {
+  const resume = sharedPorts().draftResume;
+  const start = () => startRecovery({
+    indexedDB: null, limits: DRAFT_LIMITS, now: () => 0, writerId: "test",
+    desktop: () => null, sessionStorage: () => null, localStorage: () => null,
+    internImage: () => {}, merge: () => { throw new Error("Unexpected merge"); }
+  });
+  assert.throws(() => resume.restorePending(), /The draft recovery is not started yet/);
+  let stop = start();
+  try {
+    assert.equal(resume.restorePending(), false);
+    draftResume().setRestorePending(true);
+    assert.equal(resume.restorePending(), true);
+    stop();
+    stop = start();
+    assert.equal(resume.restorePending(), false);
+  } finally {
+    stop();
+  }
 });
 
 test("an armed server resume is handed back as it was armed until it is dropped", () => {

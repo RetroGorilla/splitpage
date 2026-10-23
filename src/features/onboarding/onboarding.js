@@ -1,20 +1,14 @@
-import { currentHome } from "../legacy/location-bridge.ts";
-import { loadLastFileHandle } from "./00-prelude.js";
-import { sidePanels } from "../legacy/panels-bridge.ts";
-import { arrivingOnLink, launcherFetch } from "./13-hosted.js";
-import { onFileMenuChoice } from "./18-local-files.js";
-import { deliverFile } from "../legacy/file-delivery.ts";
-import { addServerBookmark } from "./20e-connect.js";
-import { escapeHtml } from "../core/document/text-policy.ts";
-import { appActions } from "../legacy/app-actions.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { preferences } from "../legacy/preferences-bridge.ts";
-import { draftResume } from "../legacy/recovery-bridge.ts";
-import { seedCheckPasses } from "../legacy/seed-check.ts";
-import { joinErrorText } from "../../shared/server-links.js";
-import { desktopPort } from "../adapters/desktop/desktop-port.ts";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
+import { escapeHtml } from "../../core/document/text-policy.ts";
+import { joinErrorText } from "../../../shared/server-links.js";
 
+var ports = null;
+var listeners = [];
+var activeMount = null;
+
+function listen(target, type, listener) {
+  target.addEventListener(type, listener);
+  listeners.push(function () { target.removeEventListener(type, listener); });
+}
 
 var onboardStep = 1;
 var onboardReturnFocus = null;
@@ -64,7 +58,7 @@ function renderOnboardStep() {
 export function openOnboarding() {
   var modal = onboardModal();
   if (!modal) return;
-  sidePanels().closeAll();
+  ports.sidePanels.closeAll();
   onboardReturnFocus = document.activeElement;
   resetOnboardUi();
   modal.hidden = false;
@@ -84,7 +78,7 @@ function closeOnboarding() {
 }
 
 function finishOnboarding(skipped) {
-  preferences().recordOnboarding(!!skipped, new Date().toISOString());
+  ports.preferences.recordOnboarding(!!skipped, new Date().toISOString());
   closeOnboarding();
 }
 
@@ -101,7 +95,7 @@ function onboardBack() {
 
 function onboardFinishAndTour() {
   finishOnboarding(false);
-  appActions.invoke("tour", "button");
+  ports.actions.invoke("tour", "button");
 }
 
 function noLauncherHtml() {
@@ -141,14 +135,16 @@ function renderLauncherInfo(info) {
 async function loadLauncherInfo() {
   if (launcherInfoState !== "unloaded") return;
   launcherInfoState = "loading";
-  if (runningOnDesktop()) {
+  if (ports.desktop()) {
     launcherInfoState = "done";
     renderLauncherInfoBody(desktopInstallHtml());
     return;
   }
+  var mounted = activeMount;
   var info;
-  try { info = await launcherFetch("api/launcher/info"); }
+  try { info = await ports.launcherInfo(); }
   catch (e) { info = null; }
+  if (activeMount !== mounted) return;
   launcherInfoState = "done";
   if (onboardStep !== 2) return;
   if (!info) renderLauncherInfoBody(noLauncherHtml());
@@ -177,7 +173,7 @@ async function copyOnboardHostCmd() {
   var text = onboardHostCommandText();
   try {
     await navigator.clipboard.writeText(text);
-    if (typeof showToast === "function") showToast("Command copied.", "ok");
+    if (typeof ports.notices.show === "function") ports.notices.show("Command copied.", "ok");
     return;
   } catch (e) { }
   try {
@@ -190,9 +186,9 @@ async function copyOnboardHostCmd() {
     ta.select();
     document.execCommand("copy");
     ta.remove();
-    if (typeof showToast === "function") showToast("Command copied.", "ok");
+    if (typeof ports.notices.show === "function") ports.notices.show("Command copied.", "ok");
   } catch (err) {
-    if (typeof showToast === "function") showToast("Could not copy — select the command and copy it by hand.", "warn");
+    if (typeof ports.notices.show === "function") ports.notices.show("Could not copy — select the command and copy it by hand.", "warn");
   }
 }
 
@@ -209,7 +205,7 @@ function saveOnboardHostCmd() {
     text,
     "pause"
   ];
-  deliverFile("splitpage-host.cmd", lines.join("\r\n") + "\r\n", { savedMsg: "Saved the host command." });
+  ports.fileDelivery.deliver("splitpage-host.cmd", lines.join("\r\n") + "\r\n", { savedMsg: "Saved the host command." });
 }
 
 function setJoinError(message) {
@@ -231,7 +227,7 @@ async function submitOnboardJoin() {
   if (btn) { btn.disabled = true; btn.textContent = "Joining…"; }
   var result;
   try {
-    result = await addServerBookmark(name, url, { pin: pin, remember: remember });
+    result = await ports.addServerBookmark(name, url, { pin: pin, remember: remember });
   } finally {
     if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = was; }
   }
@@ -239,46 +235,50 @@ async function submitOnboardJoin() {
     setJoinError(typeof joinErrorText === "function" ? joinErrorText(result.error) : ("Could not join: " + result.error));
     return;
   }
-  if (typeof showToast === "function") {
-    showToast("Joined" + (result.bookmark ? " " + result.bookmark.name : "") + ".", "ok");
+  if (typeof ports.notices.show === "function") {
+    ports.notices.show("Joined" + (result.bookmark ? " " + result.bookmark.name : "") + ".", "ok");
   }
   onboardStep = 4;
   renderOnboardStep();
 }
 
 async function onboardEligibleForAutoShow() {
-  if (!seedCheckPasses()) return false;
-  if (preferences().onboarding()) return false;
-  if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
-  if (runningOnDesktop() && draftResume().restorePending()) return false;
-  if (currentHome().kind === "server" || currentHome().kind === "file") return false;
-  if (runningOnDesktop()) {
-    if (!desktopPort().firstTabOfLaunch || desktopPort().hadPriorSession ||
-        (desktopPort().launchIntent && desktopPort().launchIntent.type !== "blank") ||
-        desktopPort().hasDraftToRestore) return false;
+  if (!ports.seedCheck.passes()) return false;
+  if (ports.preferences.onboarding()) return false;
+  if (ports.place.arrivingOnLink()) return false;
+  if (ports.desktop() && ports.draftResume.restorePending()) return false;
+  if (ports.place.home().kind === "server" || ports.place.home().kind === "file") return false;
+  if (ports.desktop()) {
+    if (!ports.launchFacts.firstTabOfLaunch() || ports.launchFacts.hadPriorSession() ||
+        (ports.launchFacts.launchIntent() && ports.launchFacts.launchIntent().type !== "blank") ||
+        ports.launchFacts.hasDraftToRestore()) return false;
   } else {
     var handle;
-    try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
+    try { handle = await ports.lastFile.load(); } catch (e) { handle = null; }
     if (handle) return false;
   }
-  if (preferences().onboarding()) return false;
-  if (currentHome().kind === "server" || currentHome().kind === "file") return false;
+  if (ports.preferences.onboarding()) return false;
+  if (ports.place.home().kind === "server" || ports.place.home().kind === "file") return false;
   return true;
 }
 
 async function maybeAutoShowOnboarding() {
+  var mounted = activeMount;
   var eligible;
   try { eligible = await onboardEligibleForAutoShow(); } catch (e) { eligible = false; }
-  if (eligible) openOnboarding();
+  if (eligible && activeMount === mounted) openOnboarding();
 }
 
-export function __init() {
+export function __init(given) {
+  ports = given;
+  var mounted = {};
+  activeMount = mounted;
 
   (function wireOnboardingModal() {
     var modal = onboardModal();
     if (!modal) return;
 
-    modal.addEventListener("click", function (e) {
+    listen(modal, "click", function (e) {
       var action = e.target.closest("[data-onboard-action]");
       if (action) {
         var name = action.getAttribute("data-onboard-action");
@@ -289,8 +289,8 @@ export function __init() {
         else if (name === "host-save") saveOnboardHostCmd();
         else if (name === "join-submit") submitOnboardJoin();
         else if (name === "finish-tour") onboardFinishAndTour();
-        else if (name === "open-servers") { e.preventDefault(); closeOnboarding(); appActions.invoke("servers", "button"); }
-        else if (name === "open-help") { e.preventDefault(); closeOnboarding(); appActions.invoke("help", "button"); }
+        else if (name === "open-servers") { e.preventDefault(); closeOnboarding(); ports.actions.invoke("servers", "button"); }
+        else if (name === "open-help") { e.preventDefault(); closeOnboarding(); ports.actions.invoke("help", "button"); }
         return;
       }
       var card = e.target.closest("[data-onboard-work]");
@@ -298,7 +298,7 @@ export function __init() {
       if (e.target === modal) onboardSkip();
     });
 
-    modal.addEventListener("keydown", function (e) {
+    listen(modal, "keydown", function (e) {
       if (e.key !== "Enter") return;
       var joinPanel = document.getElementById("onboard-join-panel");
       if (joinPanel && !joinPanel.hidden && joinPanel.contains(e.target)) {
@@ -307,11 +307,11 @@ export function __init() {
       }
     });
 
-    window.addEventListener("keydown", function (e) {
+    listen(window, "keydown", function (e) {
       if (e.key === "Escape" && !modal.hidden) { e.preventDefault(); onboardSkip(); }
     });
 
-    modal.addEventListener("keydown", function (e) {
+    listen(modal, "keydown", function (e) {
       if (e.key !== "Tab") return;
       var focusables = Array.prototype.filter.call(
         modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'),
@@ -324,13 +324,27 @@ export function __init() {
     });
   })();
 
-  onFileMenuChoice(function () { closeOnboarding(); });
+  listeners.push(ports.onFileMenuChoice(function () { closeOnboarding(); }));
 
   var autoShowDecided = maybeAutoShowOnboarding();
 
   window.__onboarding = {
-    seedCheckPasses: seedCheckPasses,
+    seedCheckPasses: function () { return ports.seedCheck.passes(); },
     eligible: onboardEligibleForAutoShow,
     autoShowDecided: function () { return autoShowDecided; }
+  };
+  var probe = window.__onboarding;
+  var disposed = false;
+  return {
+    openOnboarding: function () { if (!disposed) openOnboarding(); },
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      while (listeners.length) listeners.pop()();
+      closeOnboarding();
+      if (window.__onboarding === probe) delete window.__onboarding;
+      activeMount = null;
+      ports = null;
+    }
   };
 }
