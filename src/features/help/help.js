@@ -1,9 +1,10 @@
-import { currentDocument } from "../legacy/session-bridge.ts";
-import { sidePanels } from "../legacy/panels-bridge.ts";
-import { appActions } from "../legacy/app-actions.ts";
-import { handTourPauseTo } from "../legacy/tour-pause.ts";
-import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
-import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
+var ports = null;
+var listeners = [];
+
+function listen(target, type, handler, options) {
+  target.addEventListener(type, handler, options);
+  listeners.push(function () { target.removeEventListener(type, handler, options); });
+}
 
 function scrollHelpTo(id) {
   var body = document.getElementById("help-body");
@@ -20,7 +21,7 @@ export function openHelp(anchor) {
   var modal = document.getElementById("help-modal");
   if (!modal) return;
   suspendTourForHelp();
-  sidePanels().closeAll();
+  ports.sidePanels.closeAll();
   helpReturnFocus = document.activeElement;
   modal.hidden = false;
   if (anchor) scrollHelpTo(anchor);
@@ -53,7 +54,7 @@ function suspendTourForHelp() {
   if (!overlay) return;
   tourSuspendedAt = tourStepIndex;
   tourStepIndex = -1;
-  viewFlags().setTourOpen(false);
+  ports.viewFlags.setTourOpen(false);
   overlay.hidden = true;
 }
 
@@ -64,7 +65,7 @@ function resumeTourAfterHelp() {
   var overlay = document.getElementById("tour-overlay");
   if (!overlay) return;
   tourStepIndex = at;
-  viewFlags().setTourOpen(true);
+  ports.viewFlags.setTourOpen(true);
   overlay.hidden = false;
   renderTourStep();
 }
@@ -79,7 +80,7 @@ function injectTaggingHelpGuideLink() {
   var a = document.createElement("a");
   a.href = "#";
   a.textContent = "Open the full guide";
-  a.addEventListener("click", function (e) {
+  listen(a, "click", function (e) {
     e.preventDefault();
     openHelp("help-tagging-and-the-production-breakdown");
   });
@@ -135,7 +136,7 @@ export function tourShowing() {
 }
 
 function markTourDone() {
-  preferences().tourFinished();
+  ports.preferences.tourFinished();
 }
 
 function tourTarget(step) {
@@ -200,6 +201,7 @@ function renderTourStep() {
     e.preventDefault();
     openHelp(step.slug);
   };
+  tourReadMoreLink = link;
 
   document.getElementById("tour-back").disabled = tourStepIndex === 0;
   document.getElementById("tour-next").textContent =
@@ -226,7 +228,7 @@ function interruptTour() {
   tourInterruptedAt = at;
   tourSuspendedAt = -1;
   tourStepIndex = -1;
-  viewFlags().setTourOpen(false);
+  ports.viewFlags.setTourOpen(false);
   var overlay = document.getElementById("tour-overlay");
   if (overlay) overlay.hidden = true;
   var taggingHelp = document.getElementById("tagging-help");
@@ -236,7 +238,7 @@ function interruptTour() {
 function resumePausedTour() {
   tourPausedToast = null;
   tourResumeFrom = tourInterruptedAt;
-  var outcome = appActions.invoke("tour", "button");
+  var outcome = ports.actions.invoke("tour", "button");
   tourResumeFrom = -1;
   if (outcome.kind !== "ran") offerTourResume();
 }
@@ -244,9 +246,9 @@ function resumePausedTour() {
 function offerTourResume() {
   if (tourInterruptedAt < 0) return;
   dismissPausedToast();
-  var el = showActionToast("The tour was paused.", "", "Resume tour", resumePausedTour, true);
+  var el = ports.notices.showAction("The tour was paused.", "", "Resume tour", resumePausedTour, true);
   tourPausedToast = el;
-  el.addEventListener("click", function () {
+  listen(el, "click", function () {
     if (tourPausedToast !== el) return;
     tourPausedToast = null;
     tourInterruptedAt = -1;
@@ -256,13 +258,13 @@ function offerTourResume() {
 export function startTour() {
   var from = tourResumeFrom;
   tourResumeFrom = -1;
-  if (!currentDocument()) {
-    if (typeof showToast === "function") showToast("Still loading…", "warn");
+  if (!ports.document.current()) {
+    ports.notices.show("Still loading…", "warn");
     return;
   }
   var overlay = document.getElementById("tour-overlay");
   if (!overlay) return;
-  sidePanels().closeAll();
+  ports.sidePanels.closeAll();
   tourSuspendedAt = -1;
   tourInterruptedAt = -1;
   dismissPausedToast();
@@ -271,14 +273,14 @@ export function startTour() {
   tourTaggingHelpWasHidden = taggingHelp ? taggingHelp.hidden : true;
 
   tourStepIndex = from >= 0 ? from : 0;
-  viewFlags().setTourOpen(true);
+  ports.viewFlags.setTourOpen(true);
   overlay.hidden = false;
   renderTourStep();
 
   if (!tourResizeHandler) {
     tourResizeHandler = function () { positionTourStep(); };
-    window.addEventListener("resize", tourResizeHandler);
-    window.addEventListener("scroll", tourResizeHandler, true);
+    listen(window, "resize", tourResizeHandler);
+    listen(window, "scroll", tourResizeHandler, true);
   }
 }
 
@@ -289,21 +291,24 @@ function endTour() {
   var taggingHelp = document.getElementById("tagging-help");
   if (taggingHelp) taggingHelp.hidden = tourTaggingHelpWasHidden;
   tourStepIndex = -1;
-  viewFlags().setTourOpen(false);
+  ports.viewFlags.setTourOpen(false);
   markTourDone();
 }
 
 function tourNext() {
-  if (tourStepIndex < TOUR_STEPS.length - 1) { tourStepIndex++; viewFlags().setTourOpen(true); renderTourStep(); }
+  if (tourStepIndex < TOUR_STEPS.length - 1) { tourStepIndex++; ports.viewFlags.setTourOpen(true); renderTourStep(); }
   else endTour();
 }
 
 function tourBack() {
-  if (tourStepIndex > 0) { tourStepIndex--; viewFlags().setTourOpen(true); renderTourStep(); }
+  if (tourStepIndex > 0) { tourStepIndex--; ports.viewFlags.setTourOpen(true); renderTourStep(); }
 }
 
-export function __init() {
-  handTourPauseTo({ interrupt: interruptTour, offerResume: offerTourResume });
+var tourReadMoreLink = null;
+
+export function __init(given) {
+  ports = given;
+  var guideExisted = document.getElementById("tagging-help-fullguide");
   injectTaggingHelpGuideLink();
 
   (function wireHelpModal() {
@@ -312,14 +317,14 @@ export function __init() {
     if (!modal) return;
 
     var closeBtn = document.getElementById("help-close");
-    if (closeBtn) closeBtn.addEventListener("click", closeHelp);
+    if (closeBtn) listen(closeBtn, "click", closeHelp);
 
-    modal.addEventListener("click", function (e) {
+    listen(modal, "click", function (e) {
       if (e.target.id === "help-modal") closeHelp();
     });
 
     if (toc) {
-      toc.addEventListener("click", function (e) {
+      listen(toc, "click", function (e) {
         var a = e.target.closest('a[href^="#"]');
         if (!a) return;
         e.preventDefault();
@@ -327,11 +332,11 @@ export function __init() {
       });
     }
 
-    window.addEventListener("keydown", function (e) {
+    listen(window, "keydown", function (e) {
       if (e.key === "Escape" && !modal.hidden) { e.preventDefault(); closeHelp(); }
     });
 
-    document.addEventListener("focusin", function (e) {
+    listen(document, "focusin", function (e) {
       if (modal.hidden || modal.contains(e.target)) return;
       e.stopPropagation();
       var target = document.getElementById("help-close");
@@ -342,14 +347,44 @@ export function __init() {
   (function wireTour() {
     var overlay = document.getElementById("tour-overlay");
     if (!overlay) return;
-    document.getElementById("tour-next").addEventListener("click", tourNext);
-    document.getElementById("tour-back").addEventListener("click", tourBack);
-    document.getElementById("tour-skip").addEventListener("click", function () { endTour(); });
-    window.addEventListener("keydown", function (e) {
+    listen(document.getElementById("tour-next"), "click", tourNext);
+    listen(document.getElementById("tour-back"), "click", tourBack);
+    listen(document.getElementById("tour-skip"), "click", function () { endTour(); });
+    listen(window, "keydown", function (e) {
       if (e.key === "Escape" && !e.defaultPrevented && !overlay.hidden) {
         e.preventDefault();
         endTour();
       }
     });
   })();
+  var disposed = false;
+  return {
+    openHelp, startTour,
+    tour: {
+      interrupt: function () { if (!disposed) interruptTour(); },
+      offerResume: function () { if (!disposed) offerTourResume(); }
+    },
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      dismissPausedToast();
+      while (listeners.length) listeners.pop()();
+      if (tourReadMoreLink) tourReadMoreLink.onclick = null;
+      tourReadMoreLink = null;
+      var overlay = document.getElementById("tour-overlay");
+      if (overlay) overlay.hidden = true;
+      var modal = document.getElementById("help-modal");
+      if (modal) modal.hidden = true;
+      var taggingHelp = document.getElementById("tagging-help");
+      if (taggingHelp && tourStepIndex >= 0) taggingHelp.hidden = tourTaggingHelpWasHidden;
+      if (!guideExisted) {
+        var guide = document.getElementById("tagging-help-fullguide");
+        if (guide) guide.remove();
+      }
+      ports.viewFlags.setTourOpen(false);
+      tourStepIndex = tourSuspendedAt = tourInterruptedAt = tourResumeFrom = -1;
+      tourResizeHandler = helpReturnFocus = null;
+      ports = null;
+    }
+  };
 }

@@ -1,6 +1,6 @@
 import { parseSceneLength, targetLengthOf } from "../core/document/timing.ts";
 import { formatDuration } from "../core/production/timing.ts";
-import { onRundownPaint, rundownLayout } from "./05f-rundown.js";
+import { onRundownPaint, rundownLayout } from "../features/rundown/rundown.js";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { targetLengthCommand } from "../application/commands/document-settings.ts";
 import { currentDocument, runDocumentEdit } from "../legacy/session-bridge.ts";
