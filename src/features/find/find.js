@@ -1,26 +1,21 @@
-import { normalizeTagName, registryTagHooks } from "../core/document/tags.ts";
-import { isBlankTagName } from "../core/production/tags.ts";
-import { TAG_CATEGORIES, tagCategory } from "../core/production/looks.ts";
-import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
-import { rowIndexOf } from "../core/document/rows.ts";
-import { currentDocument, readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
-import { rewriteCellsCommand, rewrittenCopies } from "../application/commands/document-edit.ts";
-import { tagCellsCommand } from "../application/commands/production-records.ts";
-import { inertBody, sanitizeHtml } from "./04-richtext.js";
-import { cssAttr } from "../features/common/dom.ts";
-import { bulkTagRows } from "../application/commands/bulk-tags.ts";
-import { breakUndoCoalescing } from "./12a-undo.js";
-import { BROLL_MARKER_RE } from "../core/document/broll.ts";
-import { idMap } from "../core/document/id-map.ts";
-import { escapeHtml, withoutLoneSurrogates } from "../core/document/text-policy.ts";
-import { replaceText } from "../core/text/edits.ts";
-import { toHtml } from "../core/text/html.ts";
-import { projection } from "../core/text/runs.ts";
-import { cellOf } from "../legacy/richtext.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { findMatchesCase } from "../application/find-options.ts";
-import { viewFlags } from "../legacy/preferences-bridge.ts";
-import { reviewBlocked } from "../legacy/location-bridge.ts";
+import { domRangeFor } from "../common/find-dom.js";
+import { mountFind } from "./mount.ts";
+import { normalizeTagName, registryTagHooks } from "../../core/document/tags.ts";
+import { isBlankTagName } from "../../core/production/tags.ts";
+import { TAG_CATEGORIES, tagCategory } from "../../core/production/looks.ts";
+import { rowIndexOf } from "../../core/document/rows.ts";
+import { rewriteCellsCommand, rewrittenCopies } from "../../application/commands/document-edit.ts";
+import { tagCellsCommand } from "../../application/commands/production-records.ts";
+import { cssAttr } from "../common/dom.ts";
+import { bulkTagRows } from "../../application/commands/bulk-tags.ts";
+import { idMap } from "../../core/document/id-map.ts";
+import { escapeHtml, withoutLoneSurrogates } from "../../core/document/text-policy.ts";
+import { replaceText } from "../../core/text/edits.ts";
+import { toHtml } from "../../core/text/html.ts";
+import { projection } from "../../core/text/runs.ts";
+import { findMatchesCase, setFindMatchCase } from "../../application/find-options.ts";
+
+var ports = null;
 
 var findMatches = [];
 var findIndex = -1;
@@ -97,7 +92,7 @@ export function findInRows(rows, needle, matchCase) {
   if (!needle) return { matches: matches, inTags: inTags };
   (rows || []).forEach(function (row) {
     ["visualText", "audioText"].forEach(function (field) {
-      var pieces = searchablePieces(cellOf(row[field]));
+      var pieces = searchablePieces(ports.text.cellOf(row[field]));
       var n = matchesInPieces(pieces, needle, matchCase).length;
       for (var i = 0; i < n; i++) matches.push({ rowId: row.id, field: field, nth: i });
       inTags += countInPieces(pieces, needle, matchCase);
@@ -111,74 +106,15 @@ export function noMatchLabel(inTags) {
   return "No matches · " + (inTags === 1 ? "1 in a tag" : inTags + " in tags");
 }
 
-export function domProjection(root) {
-  var out = [];
-  function at(node, index) { return { sc: node, so: index, ec: node, eo: index + 1 }; }
-  function push(ch, pos) { pos.text = ch; out.push(pos); }
-  (function walk(parent) {
-    for (var i = 0; i < parent.childNodes.length; i++) {
-      var child = parent.childNodes[i];
-      if (child.nodeType === 3) {
-        var v = child.nodeValue || "";
-        for (var k = 0; k < v.length; k++) {
-          var c = v[k];
-          if (c === "\n" || c === "\r") {
-            var e = k + 1;
-            while (e < v.length && (v[e] === "\n" || v[e] === "\r")) e++;
-            push(" ", { sc: child, so: k, ec: child, eo: e });
-            k = e - 1;
-          } else if (!DROPPED_CHAR_RE.test(c)) {
-            push(c, at(child, k));
-          }
-        }
-        continue;
-      }
-      if (child.nodeType !== 1) continue;
-      var tag = child.tagName;
-      var cls = child.classList;
-      if (tag === "BR") { push("\n", at(parent, i)); continue; }
-      if (tag === "IMG") continue;
-      if (tag === "A" && cls && cls.contains("video-embed-card")) continue;
-      if (tag === "SPAN" && cls && cls.contains("broll-key") &&
-          BROLL_MARKER_RE.test((child.textContent || "").replace(DROPPED_CHARS_RE, "").trim())) {
-        push(OBJ, at(parent, i));
-        continue;
-      }
-      if (tag === "DIV" || tag === "P") {
-        var blank = child.childNodes.length === 1 && child.firstChild.nodeType === 1 && child.firstChild.tagName === "BR";
-        if (!blank) walk(child);
-        push("\n", { sc: parent, so: i + 1, ec: parent, eo: i + 1 });
-        continue;
-      }
-      walk(child);
-    }
-  })(root);
-  return out;
-}
-
-var DROPPED_CHAR_RE = /[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/;
-var DROPPED_CHARS_RE = /[\u0000-\u0008\u000B-\u001F\u200B\uFFFC]/g;
-var OBJ = "\uFFFC";
-
-export function domRangeFor(root, from, to, expect) {
-  var chars = domProjection(root);
-  var text = chars.map(function (c) { return c.text; }).join("");
-  if (text !== expect || from >= to || to > chars.length) return null;
-  var range = (root.ownerDocument || document).createRange();
-  range.setStart(chars[from].sc, chars[from].so);
-  range.setEnd(chars[to - 1].ec, chars[to - 1].eo);
-  return range;
-}
-
 export function replaceInHtml(html, needle, replacement, nth, matchCase, hooks) {
-  var cell = cellOf(html);
+  var cell = ports.text.cellOf(html);
   var matches = findInCell(cell, needle, matchCase);
   if (nth !== -1) matches = matches[nth] ? [matches[nth]] : [];
   if (!matches.length) return { html: html, changed: 0 };
   var text = replacement == null ? "" : String(replacement);
   var todo = matches.slice().reverse();
   if (/<img[\s>]|video-embed-card/i.test(html || "")) {
-    var body = inertBody(html);
+    var body = ports.text.inertBody(html);
     var expect = projection(cell);
     for (var i = 0; i < todo.length; i++) {
       var range = domRangeFor(body, todo[i].from, todo[i].to, expect);
@@ -190,14 +126,14 @@ export function replaceInHtml(html, needle, replacement, nth, matchCase, hooks) 
     Array.prototype.forEach.call(body.querySelectorAll("strong, em, u, s, mark, a, span.cmt-anchor, span.stage-dir"), function (el) {
       if (el.parentNode && !el.textContent && !el.querySelector("img, br")) el.parentNode.removeChild(el);
     });
-    return { html: sanitizeHtml(body.innerHTML), changed: matches.length };
+    return { html: ports.text.sanitizeHtml(body.innerHTML), changed: matches.length };
   }
   todo.forEach(function (m) { cell = replaceText(cell, m.from, m.to, text); });
   return { html: toHtml(cell, hooks), changed: matches.length };
 }
 
 export function refreshFindMatches(keepIndex) {
-  var found = findInRows(currentDocument()?.rows ?? [], findNeedle(), findMatchesCase());
+  var found = findInRows(ports.document.current()?.rows ?? [], findNeedle(), findMatchesCase());
   findMatches = found.matches;
   findInTags = found.inTags;
   if (!findMatches.length) findIndex = -1;
@@ -228,9 +164,9 @@ function currentMatchRange() {
   var m = findMatches[findIndex];
   var cell = document.querySelector('#rows .row[data-id="' + cssAttr(m.rowId) + '"] .cell-editable[data-field="' + m.field + '"]');
   if (!cell) return null;
-  var idx = readSession(function (doc) { return rowIndexOf(doc, m.rowId); });
+  var idx = ports.document.read(function (doc) { return rowIndexOf(doc, m.rowId); });
   if (idx === -1) return null;
-  var model = cellOf(currentDocument().rows[idx][m.field]);
+  var model = ports.text.cellOf(ports.document.current().rows[idx][m.field]);
   var hit = findInCell(model, findNeedle(), findMatchesCase())[m.nth];
   if (!hit) return null;
   var range = domRangeFor(cell, hit.from, hit.to, projection(model));
@@ -245,7 +181,7 @@ function highlightsSupported() {
 
 function revealFindMatch() {
   var m = findMatches[findIndex];
-  if (m) shotHiding().reveal(m.rowId);
+  if (m) ports.shotHiding().reveal(m.rowId);
   var hit = currentMatchRange();
   if (highlightsSupported()) {
     if (hit) CSS.highlights.set(FIND_HL, new Highlight(hit.range));
@@ -269,11 +205,11 @@ export function stepFind(dir) {
 }
 
 export function replaceCurrent() {
-  if (reviewBlocked()) return;
+  if (ports.review.refuseInReview()) return;
   var needle = findNeedle();
   if (!needle || findIndex < 0 || !findMatches[findIndex]) return;
   var m = findMatches[findIndex];
-  var idx = readSession(function (doc) { return rowIndexOf(doc, m.rowId); });
+  var idx = ports.document.read(function (doc) { return rowIndexOf(doc, m.rowId); });
   if (idx === -1) return;
   var replacement = document.getElementById("replace-input").value || "";
   var matchCase = findMatchesCase();
@@ -283,13 +219,13 @@ export function replaceCurrent() {
     var res = replaceInHtml(row[m.field], needle, replacement, m.nth, matchCase, registryTagHooks(doc.productionTags));
     return res.changed ? [{ rowId: m.rowId, field: m.field, html: res.html }] : [];
   }
-  if (!runDocumentEdit(rewriteCellsCommand("replace-match", replaced, sessionStamps, { needs: "edit", stamped: true }))) return;
+  if (!ports.edits.edit(rewriteCellsCommand("replace-match", replaced, ports.edits.stamps, { needs: "edit", stamped: true }))) return;
   refreshFindMatches(true);
   revealFindMatch();
 }
 
 export function replaceAll() {
-  if (reviewBlocked()) return;
+  if (ports.review.refuseInReview()) return;
   var needle = findNeedle();
   if (!needle) return;
   var replacement = document.getElementById("replace-input").value || "";
@@ -307,23 +243,23 @@ export function replaceAll() {
     });
     return out;
   }
-  var total = readSession(replacedAll).total;
-  var inTags = currentDocument().rows.reduce(function (n, row) {
-    return n + countInTags(cellOf(row.visualText), needle, findMatchesCase()) +
-               countInTags(cellOf(row.audioText), needle, findMatchesCase());
+  var total = ports.document.read(replacedAll).total;
+  var inTags = ports.document.current().rows.reduce(function (n, row) {
+    return n + countInTags(ports.text.cellOf(row.visualText), needle, findMatchesCase()) +
+               countInTags(ports.text.cellOf(row.audioText), needle, findMatchesCase());
   }, 0);
   var tagNote = inTags
     ? " · " + inTags + " left inside tag" + (inTags === 1 ? "" : "s") + " — rename those in Production"
     : "";
-  if (!total || !runDocumentEdit(rewriteCellsCommand("replace-all", function (doc) { return replacedAll(doc).rewrites; }, sessionStamps, { needs: "edit", stamped: true }))) {
-    showToast(inTags
+  if (!total || !ports.edits.edit(rewriteCellsCommand("replace-all", function (doc) { return replacedAll(doc).rewrites; }, ports.edits.stamps, { needs: "edit", stamped: true }))) {
+    ports.notices.show(inTags
       ? "Only found inside tags — rename it in Production instead."
       : "Nothing to replace.", "warn");
     return;
   }
   refreshFindMatches(false);
   revealFindMatch();
-  showToast("Replaced " + total + " match" + (total === 1 ? "" : "es") + tagNote, "ok");
+  ports.notices.show("Replaced " + total + " match" + (total === 1 ? "" : "es") + tagNote, "ok");
 }
 
 var bulkTagCat = null;
@@ -357,7 +293,7 @@ function bulkTagRefusal(needle, plan) {
 
 function renderBulkTagRow() {
   var needle = bulkTagNeedle();
-  var plan = bulkTagRows(currentDocument()?.rows ?? [], needle, bulkTagCat, needle, findMatchesCase(), true);
+  var plan = bulkTagRows(ports.document.current()?.rows ?? [], needle, bulkTagCat, needle, findMatchesCase(), true);
   var why = bulkTagRefusal(needle, plan);
   var ask = document.getElementById("find-tag-ask");
   var go = document.getElementById("find-tag-go");
@@ -385,7 +321,7 @@ function renderBulkTagRow() {
 
 function defaultBulkTagCat(needle) {
   var key = normalizeTagName(needle);
-  var tags = currentDocument()?.productionTags || [];
+  var tags = ports.document.current()?.productionTags || [];
   for (var i = 0; i < tags.length; i++) {
     if (normalizeTagName(tags[i].name) === key && tagCategory(tags[i].cat)) return tags[i].cat;
   }
@@ -393,8 +329,8 @@ function defaultBulkTagCat(needle) {
 }
 
 export function openBulkTag() {
-  if (reviewBlocked()) return;
-  if (!currentDocument()) return;
+  if (ports.review.refuseInReview()) return;
+  if (!ports.document.current()) return;
   bulkTagCat = defaultBulkTagCat(bulkTagNeedle());
   var row = bulkTagRowEl();
   row.hidden = false;
@@ -422,34 +358,34 @@ function refreshBulkTagRow() {
 }
 
 export function runBulkTag() {
-  if (reviewBlocked()) return;
-  var doc = currentDocument();
+  if (ports.review.refuseInReview()) return;
+  var doc = ports.document.current();
   if (!doc) return;
   var needle = bulkTagNeedle();
   var cat = tagCategory(bulkTagCat) || TAG_CATEGORIES[0];
   var plan = bulkTagRows(doc.rows, needle, cat.id, needle, findMatchesCase(), true);
   var why = bulkTagRefusal(needle, plan);
-  if (why) { showToast(why, "warn"); return; }
-  breakUndoCoalescing();
+  if (why) { ports.notices.show(why, "warn"); return; }
+  ports.undo.breakCoalescing();
   var done = plan;
   var matchCase = findMatchesCase();
   var tagged = rewrittenCopies(["visualText"], function (rows) { bulkTagRows(rows, needle, cat.id, needle, matchCase, false); });
-  if (!done.hits || !runDocumentEdit(tagCellsCommand("bulk-tag", tagged, { cat: cat.id, name: needle }, sessionStamps))) {
-    showToast(bulkTagRefusal(needle, done) || "Nothing to tag.", "warn");
+  if (!done.hits || !ports.edits.edit(tagCellsCommand("bulk-tag", tagged, { cat: cat.id, name: needle }, ports.edits.stamps))) {
+    ports.notices.show(bulkTagRefusal(needle, done) || "Nothing to tag.", "warn");
     return;
   }
-  breakUndoCoalescing();
+  ports.undo.breakCoalescing();
   closeBulkTag();
   refreshFindMatches(false);
   revealFindMatch();
   var note = "";
   if (done.inTags) note += " \u00b7 " + done.inTags + " already tagged";
   if (done.skipped) note += " \u00b7 " + done.skipped + " skipped";
-  showToast("Tagged " + done.hits + " as " + cat.label + note, "ok");
+  ports.notices.show("Tagged " + done.hits + " as " + cat.label + note, "ok");
 }
 
 export function openFindBar() {
-  viewFlags().setFindOpen(true);
+  ports.flags.setFindOpen(true);
   document.getElementById("findbar").hidden = false;
   var input = document.getElementById("find-input");
   var sel = window.getSelection();
@@ -472,11 +408,11 @@ function firstMatchFrom(range) {
   var el = node.nodeType === 1 ? node : node.parentNode;
   var cell = el && el.closest ? el.closest("#rows .cell-editable[data-field]") : null;
   var rowEl = cell && cell.closest(".row");
-  var rowIdx = rowEl ? readSession(function (doc) { return rowIndexOf(doc, rowEl.getAttribute("data-id")); }) : -1;
+  var rowIdx = rowEl ? ports.document.read(function (doc) { return rowIndexOf(doc, rowEl.getAttribute("data-id")); }) : -1;
   if (rowIdx === -1) return 0;
   var field = cell.getAttribute("data-field");
-  var rows = currentDocument().rows;
-  var model = cellOf(rows[rowIdx][field]);
+  var rows = ports.document.current().rows;
+  var model = ports.text.cellOf(rows[rowIdx][field]);
   var expect = projection(model);
   var hits = findInCell(model, findNeedle(), findMatchesCase());
   var nth = 0;
@@ -496,7 +432,7 @@ function firstMatchFrom(range) {
 }
 
 export function closeFindBar() {
-  viewFlags().setFindOpen(false);
+  ports.flags.setFindOpen(false);
   document.getElementById("findbar").hidden = true;
   findMatches = [];
   findIndex = -1;
@@ -515,4 +451,34 @@ export function leaveFindAtMatch() {
   sel.addRange(hit.range);
 }
 
-export function __init() {}
+export function __init(given) {
+  ports = given;
+  var disposed = false;
+  return {
+    openFindBar,
+    closeFindBar,
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      if (document.getElementById("findbar")) closeFindBar();
+      else {
+        ports.flags.setFindOpen(false);
+        findMatches = [];
+        findIndex = -1;
+        findInTags = 0;
+        if (highlightsSupported()) CSS.highlights.delete(FIND_HL);
+      }
+      bulkTagCat = null;
+      ports = null;
+    }
+  };
+}
+
+export function mountFindEvents() {
+  return mountFind({ window: window, ports: {
+    closeFindBar, stepFind, replaceCurrent, replaceAll, toggleBulkTag, runBulkTag,
+    closeBulkTag, pickBulkTagCat, findQueryChanged, leaveFindAtMatch, bulkTagOpen,
+    getFindMatchCase: findMatchesCase,
+    setFindMatchCase: setFindMatchCase
+  } });
+}

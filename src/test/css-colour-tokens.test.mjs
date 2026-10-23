@@ -65,6 +65,7 @@ test("every CSS variable has a CSS definition or a runtime assignment", () => {
   for (const file of [
     "src/features/rows/row-motion.js",
     "src/features/title/topbar.ts",
+    "src/features/comments/comments.js",
     "src/features/notices/busy.js",
     "src/features/editing/cell-reach.js",
     "src/features/notices/phone-bar.ts",

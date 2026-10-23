@@ -1,3 +1,4 @@
+export { mountCommentsLogicFeature } from "./wiring/comments.ts";
 import { wireProductionIndex } from "./wiring/production-index.ts";
 export { mountReadTimeFeature } from "./wiring/read-time.ts";
 export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
@@ -5,9 +6,11 @@ export { mountDraftEditFeature } from "./wiring/draft-edit.ts";
 export { mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature } from "./wiring/rundown.ts";
 export { mountHelpFeature } from "./wiring/help.ts";
 export { derivedRecordsPlan, mountBrollFeature } from "./wiring/broll.ts";
+export { mountFindFeature } from "./wiring/find.ts";
 export { mountSettingsFeature } from "./wiring/settings.ts";
-export { mountGalleryFeature, mountGalleryOverlayFeature } from "./wiring/gallery.ts";
 export { mountCopyPasteFeature } from "./wiring/clipboard.ts";
+export { mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature } from "./wiring/gallery.ts";
+export { mountSceneStatusFeature } from "./wiring/scene-status.ts";
 export { mountHideShotFeature } from "./wiring/hide-shot.ts";
 export { mountFileMenuExportFeature } from "./wiring/file-menu-export.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
@@ -44,6 +47,7 @@ import type { RecordsReconciler, SessionBridgePorts, SessionUndoPorts } from "..
 import { captureOperation, documentSources, startTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import type { LegacyDocumentSource, LegacyTransitionPorts } from "../legacy/transition-bridge.ts";
 import { createUndoAdapter, routeReplays } from "../legacy/undo-adapter.ts";
+import { flushEdits, legacyUndoPorts, startUndo, undoSizes } from "../legacy/undo-bridge.ts";
 
 export interface SessionEffects {
   readonly dirty: (change: SessionChange) => void;
@@ -101,6 +105,7 @@ export const WIRING_STEPS = Object.freeze([
   "project file services",
   "export registry",
   "built-in exporters",
+  "undo",
   "session",
   "saves",
   "save destinations",
@@ -369,6 +374,11 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("project file services", () => deps.projectFiles(), installProjectFileServices);
   const exports = build("export registry", () => createExportRegistry(), installExportFormats);
   build("built-in exporters", () => checkedExporters((deps.exporters ?? registerBuiltInExporters)(exports)), (drop) => drop);
+  build("undo", () => {
+    const stop = startUndo(legacyUndoPorts());
+    Object.assign(window, { __undoTest: { sizes: undoSizes, flush: flushEdits } });
+    return stop;
+  }, (stop) => stop);
   build("session", () => {
     const stopIndex = wireProductionIndex(deps.bulkTags);
     try {

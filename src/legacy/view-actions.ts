@@ -1,8 +1,6 @@
-import type { ActionRegistry, ActionDefinition, Availability } from "../application/actions.ts";
-import { registerAll } from "../application/actions.ts";
+import type { ActionDefinition, Availability } from "../application/actions.ts";
 import { openGearPanel, openProductionPanel } from "../js/08-production-panels.js";
 import { openBrollPanel } from "../js/08d-broll-panel.js";
-import { openCommentsPanel } from "../js/10-comments.js";
 import { VIEWING_ONLY } from "../js/13-hosted.js";
 import { openWriter } from "../js/19-writer.js";
 import { openPrompter } from "../js/20-teleprompter.js";
@@ -47,7 +45,7 @@ function panel(id: string, label: string, buttonId: string, panelId: string, wor
   };
 }
 
-export function registerViewActions(registry: ActionRegistry): () => void {
+export function viewActions(): ActionDefinition[] {
   const definitions: ActionDefinition[] = [
     panel("panel-production", "Production panel", "btn-production", "production-panel",
       "breakdown tags props locations cast show hide toggle", true, openProductionPanel),
@@ -55,8 +53,6 @@ export function registerViewActions(registry: ActionRegistry): () => void {
       "gear equipment kit camera show hide toggle", true, openGearPanel),
     panel("panel-broll", "B-roll panel", "btn-broll", "broll-panel",
       "broll b roll shots cutaways show hide toggle", false, openBrollPanel),
-    panel("panel-comments", "Comments panel", "btn-comments", "comments-panel",
-      "comments notes review feedback show hide toggle", true, openCommentsPanel),
     {
       id: "write",
       label: "Write",
@@ -80,5 +76,5 @@ export function registerViewActions(registry: ActionRegistry): () => void {
       run: () => { openPrompter(); }
     }
   ];
-  return registerAll(registry, definitions);
+  return definitions;
 }
