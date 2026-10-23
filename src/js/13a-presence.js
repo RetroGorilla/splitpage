@@ -1,5 +1,5 @@
-import { S } from "./_state.js";
 import { homeConn, serverHomeId, serverStatus } from "../legacy/location-bridge.ts";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import {
   normalizePersonColors,
   paletteColor,
@@ -87,7 +87,7 @@ export function personColor(seed) {
     self: getSavedAuthorName(),
     selfColor: preferences().myColor(),
     live: presenceLiveColors,
-    doc: S.state && S.state.personColors
+    doc: currentDocument() && currentDocument().personColors
   });
 }
 
