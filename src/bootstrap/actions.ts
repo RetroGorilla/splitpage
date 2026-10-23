@@ -8,7 +8,7 @@ import { nativeMenuRunner } from "../legacy/native-menu.ts";
 import { registerShareActions } from "../legacy/share-actions.ts";
 import { registerThisDocumentActions } from "../legacy/this-document-actions.ts";
 import { registerViewActions } from "../legacy/view-actions.ts";
-import { registerZoomActions } from "../legacy/zoom-actions.ts";
+import { registerZoomActions } from "./wiring/script-zoom.ts";
 
 let running: (() => void) | null = null;
 

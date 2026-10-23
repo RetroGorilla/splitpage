@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { PREF_EVENT, preferences, startPreferences } from "../legacy/preferences-bridge.ts";
 import { __init as initRundown, isRundownMinimized, toggleRundownMinimized } from "../js/05f-rundown.js";
-import { __init as initZoom, scriptScale, setScriptScale } from "../features/script-zoom/script-zoom.js";
+import { __init as initZoom, scriptScale, setScriptScale } from "../bootstrap/wiring/script-zoom.ts";
 import { dismissDesktopAppNotice, renderDesktopAppNotice } from "../js/20a-update.js";
 
 const frames = new Map();

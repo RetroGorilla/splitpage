@@ -19,7 +19,6 @@ import { __init as init_05g_scene_clip } from "./05g-scene-clip.js";
 import { __init as init_05h_scene_select } from "./05h-scene-select.js";
 import { __init as init_05p_rundown_presence } from "./05p-rundown-presence.js";
 import { __init as init_05r_read_time } from "./05r-read-time.js";
-import { __init as init_05s_script_zoom } from "../features/script-zoom/script-zoom.js";
 import { __init as init_05t_target } from "./05t-target.js";
 import { __init as init_05v_video } from "./05v-video.js";
 import { __init as init_05w_annotate } from "./05w-annotate.js";
@@ -65,7 +64,7 @@ import { legacySessionEffects } from "./12-dirty-toast.js";
 import { legacyFileDestination, legacySavePorts } from "./14-export.js";
 import { serverSaveDestination } from "./13-hosted.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
-import { wireApp } from "../bootstrap/wiring.ts";
+import { wireApp, initScriptZoom as init_script_zoom } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -108,7 +107,7 @@ if (wiring) {
   init_05h_scene_select();
   init_05p_rundown_presence();
   init_05r_read_time();
-  init_05s_script_zoom();
+  init_script_zoom();
   init_05t_target();
   init_05v_video();
   init_05w_annotate();

@@ -1,7 +1,4 @@
-import { currentDocument } from "../../legacy/session-bridge.ts";
-import { prompterIsOpen } from "../../application/prompter-state.ts";
-import { appActions } from "../../legacy/app-actions.ts";
-import { PREF_EVENT, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
+var ports = null;
 
 export var SCRIPT_SCALE_MIN = 0.7;
 export var SCRIPT_SCALE_MAX = 2;
@@ -62,8 +59,8 @@ function step() {
 function storeScale() {
   storing = true;
   try {
-    if (Math.abs(scale - 1) < 0.005) preferences().clearScriptScale();
-    else preferences().setScriptScale(scale);
+    if (Math.abs(scale - 1) < 0.005) ports.clearScriptScale();
+    else ports.setScriptScale(scale);
   }
   finally { storing = false; }
 }
@@ -164,7 +161,7 @@ function hideReadoutSoon() {
 }
 
 export function scriptViewActive() {
-  return !!currentDocument() && !prompterIsOpen() && !viewFlags().writerOpen() &&
+  return !!ports.currentDocument() && !ports.prompterIsOpen() && !ports.writerOpen() &&
     !document.documentElement.classList.contains("is-newtab-open");
 }
 
@@ -192,26 +189,37 @@ function onKeydown(e) {
   var z = zoomKey(e);
   if (!z) return;
   var id = z === 2 ? "script-zoom-reset" : z > 0 ? "script-zoom-in" : "script-zoom-out";
-  if (appActions.invoke(id, "shortcut").kind === "ran") e.preventDefault();
+  if (ports.runAction(id, "shortcut").kind === "ran") e.preventDefault();
 }
 
-export function __init() {
-  scale = target = preferences().scriptScale();
+export function __init(given) {
+  ports = given;
+  scale = target = ports.scriptScale();
   paintScale(scale);
   var rowsEl = document.getElementById("rows");
   if (rowsEl) rowsEl.addEventListener("wheel", onWheel, { passive: false });
   document.addEventListener("keydown", onKeydown, true);
-  document.addEventListener(PREF_EVENT, function (e) {
+  function onPreference(e) {
     if (storing) return;
     var d = e && e.detail;
-    if (!d || preferences().nameOf(d.key) !== "scriptScale") return;
-    var v = d.value == null ? preferences().scriptScale() : clampScriptScale(parseFloat(d.value));
+    if (!d || !ports.isScriptScaleKey(d.key)) return;
+    var v = d.value == null ? ports.scriptScale() : clampScriptScale(parseFloat(d.value));
     anchorAtCaretOrMiddle();
     setScriptScale(v, { now: true, quiet: true, noStore: true });
-  });
-  window.addEventListener("storage", function (e) {
-    if (preferences().nameOf(e.key) !== "scriptScale") return;
+  }
+  function onStorage(e) {
+    if (!ports.isScriptScaleKey(e.key)) return;
     anchorAtCaretOrMiddle();
-    setScriptScale(preferences().scriptScale(), { now: true, quiet: true, noStore: true });
-  });
+    setScriptScale(ports.scriptScale(), { now: true, quiet: true, noStore: true });
+  }
+  document.addEventListener(ports.preferenceEvent, onPreference);
+  window.addEventListener("storage", onStorage);
+  return { dispose: function () {
+    if (rowsEl) rowsEl.removeEventListener("wheel", onWheel);
+    document.removeEventListener("keydown", onKeydown, true);
+    document.removeEventListener(given.preferenceEvent, onPreference);
+    window.removeEventListener("storage", onStorage);
+    if (frame) { cancelAnimationFrame(frame); frame = 0; }
+    clearTimeout(readoutTimer);
+  } };
 }
