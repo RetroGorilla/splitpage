@@ -55,7 +55,7 @@ const { LONG_DEMO } = await import("../js/_starters.js");
 const { migrateRows } = await import("../js/02-state.js");
 const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { adoptRestoredState, migrateDocument, standaloneHtmlFor } = await import("../js/02b-doc-id.js");
-const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
@@ -68,8 +68,8 @@ const { preferences } = await import("../legacy/preferences-bridge.ts");
 const { saveAuthorName } = await import("../js/10-comments.js");
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { startNewScript } = await import("../js/18b-file-menu.js");
-const { openProjectFile, parseProjectFileState } = await import("../js/18-local-files.js");
-const { finishServerDetect, openServerDoc, publishToServer } = await import("../js/13-hosted.js");
+const { parseProjectFileState } = await import("../js/18-local-files.js");
+const { finishServerDetect, publishToServer } = await import("../js/13-hosted.js");
 const { SERVER_RESUME_KEY } = await import("../application/location/server-status.ts");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { setHome } = homeModule;
@@ -84,6 +84,7 @@ after(closeApp);
 
 const { runIdleRefresh } = await import("../js/07-production-tags.js");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
 const refreshed = { into: null };
 await rewireRunningApp({ refresh: (due) => (refreshed.into ? refreshed.into.push(...due) : runIdleRefresh(due)) });
 
@@ -299,7 +300,7 @@ rightToday("T2a-boot", "the boot document opens its epoch at the transition, not
 rightToday("T2b", "an opened file opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before open"));
   const epoch = session.epoch();
-  const events = await traced(() => openProjectFile(splitpageFile(script("Opened", { docId: "d" + "5".repeat(32) })), null, { skipSnapshot: true, silent: true }));
+  const events = await traced(() => openDocument({ kind: "file", file: splitpageFile(script("Opened", { docId: "d" + "5".repeat(32) })), handle: null, options: { skipSnapshot: true, silent: true } }));
   assertAdoptedAtOnce(events, epoch);
 });
 
@@ -310,7 +311,7 @@ rightToday("T2c-open", "a server document opens its epoch at the transition, not
   const uninstall = held.install();
   try {
     const epoch = session.epoch();
-    const events = await traced(async () => { assert.equal(await openServerDoc("server-b"), true); });
+    const events = await traced(async () => { assert.equal(await openDocument({ kind: "server", id: "server-b" }), true); });
     assertAdoptedAtOnce(events, epoch);
   } finally {
     uninstall();
@@ -337,7 +338,7 @@ rightToday("T2c-resume", "a resumed server draft opens its epoch at the transiti
   serverStatus().recordMode({ available: true });
   try {
     const epoch = session.epoch();
-    const events = await traced(async () => { assert.equal(await openServerDoc("server-r"), true); });
+    const events = await traced(async () => { assert.equal(await openDocument({ kind: "server", id: "server-r" }), true); });
     assert.equal(currentDocument().rows[0].audioText, "Unsaved in the browser.", "the draft was resumed");
     assert.equal(currentDocument().rows[1].audioText, "Changed on the server.");
     assertAdoptedAtOnce(events, epoch);
@@ -369,14 +370,14 @@ rightToday("T2c-resume-switch", "a late server resume leaves a document opened d
   serverStatus().recordMode({ available: true });
   let resuming;
   try {
-    resuming = openServerDoc("server-late-resume");
+    resuming = openDocument({ kind: "server", id: "server-late-resume" });
     await held.gates.arrived("fetch");
     assert.equal(draftResume().serverResume().id, "server-late-resume", "setup: the held fetch belongs to a server draft resume");
     const connection = homeModule.currentConn();
     const replacement = script("Opened during resume", { docId: "d" + "f".repeat(32) });
     const file = splitpageFile(replacement, "opened-during-resume.splitpage");
     const target = createHeldFileHandle({ name: file.name });
-    await openProjectFile(file, target.handle, { skipSnapshot: true, silent: true });
+    await openDocument({ kind: "file", file: file, handle: target.handle, options: { skipSnapshot: true, silent: true } });
     assert.equal(currentDocument().title, replacement.title, "setup: the replacement document opened while the resume fetch was held");
     assert.equal(homeModule.currentConn(), connection, "setup: opening the file kept the same connection");
     const opened = JSON.stringify(currentDocument());
@@ -451,7 +452,7 @@ rightToday("T2c-reopen-switch", "a late sign-in resume leaves a document opened 
     const replacement = script("Opened during sign-in resume", { docId: "d" + "b".repeat(32) });
     const file = splitpageFile(replacement, "opened-during-sign-in.splitpage");
     const target = createHeldFileHandle({ name: file.name });
-    await openProjectFile(file, target.handle, { skipSnapshot: true, silent: true });
+    await openDocument({ kind: "file", file: file, handle: target.handle, options: { skipSnapshot: true, silent: true } });
     assert.equal(currentDocument().title, replacement.title, "setup: the replacement document opened while the resume fetch was held");
     assert.equal(homeModule.currentConn(), connection, "setup: opening the file kept the same connection");
     const opened = JSON.stringify(currentDocument());
@@ -502,7 +503,7 @@ rightToday("T2c-reopen-stale", "a sign-in resume dropped for a newly opened docu
     const replacement = script("Opened during the dropped sign-in resume", { docId: "d" + "9".repeat(32) });
     const file = splitpageFile(replacement, "opened-during-dropped-sign-in.splitpage");
     const target = createHeldFileHandle({ name: file.name });
-    await openProjectFile(file, target.handle, { skipSnapshot: true, silent: true });
+    await openDocument({ kind: "file", file: file, handle: target.handle, options: { skipSnapshot: true, silent: true } });
     held.gates.release("fetch");
     await detecting;
     for (let turn = 0; turn < 50; turn++) await new Promise((resolve) => setImmediate(resolve));
@@ -548,7 +549,7 @@ rightToday("T2e", "a restored history version opens its epoch at the transition,
   useDocument(script("History"));
   const point = cloneState(currentDocument());
   point.rows[0].audioText = "As it was.";
-  const ticket = pushSnapshot("A point to go back to", point);
+  const ticket = keepSnapshot("A point to go back to", point);
   await ticket.done;
   const button = document.createElement("button");
   button.setAttribute("data-id", ticket.id);
@@ -604,10 +605,10 @@ rightToday("T1", "Save As, publish and detached recovery fork the id; open, rest
 
   useDocument(script("Before open"));
   const opened = script("Opened", { docId: idOf("5") });
-  await openProjectFile(splitpageFile(opened), null, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: splitpageFile(opened), handle: null, options: { skipSnapshot: true, silent: true } });
   assert.equal(currentDocument().docId, idOf("5"), "open keeps the file's id");
   const epoch = session.epoch();
-  await openProjectFile(splitpageFile(opened), null, { skipSnapshot: true, silent: true });
+  await openDocument({ kind: "file", file: splitpageFile(opened), handle: null, options: { skipSnapshot: true, silent: true } });
   assert.equal(currentDocument().docId, idOf("5"), "a same-id reopen keeps the id");
   assert.ok(session.epoch() > epoch, "and is a new epoch all the same");
 
@@ -754,7 +755,7 @@ rightToday("L1b", "an autosave or draft the old document armed writes nothing fo
     const picked = await fake.saveFileDialog({ suggestedName: "old.splitpage" });
     await fake.writeFile(picked.id, new TextEncoder().encode(buildSplitpageFile(exportDocumentOf(script("Old file", { docId: "d" + "a".repeat(32) })))));
     const handle = makeDesktopHandle(picked);
-    await openProjectFile(await handle.getFile(), handle, { skipSnapshot: true, silent: true });
+    await openDocument({ kind: "file", file: await handle.getFile(), handle: handle, options: { skipSnapshot: true, silent: true } });
     held.calls.length = 0;
     const fileBefore = new TextDecoder().decode((await fake.readFile(picked.id)).bytes);
     currentDocument().rows[0].audioText = "Typed in the old document.";

@@ -12,7 +12,6 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { copyFromCell, pasteIntoCell } = await import("../js/05c-clipboard.js");
 const { render } = await import("../js/05-render.js");
@@ -20,6 +19,7 @@ const { cellEditing } = await import("../legacy/editor-bridge.ts");
 const { cellSelection } = await import("../features/editing/cell-selection.ts");
 const { armDeleteComment } = await import("../js/10-comments.js");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../js/12a-undo.js");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -53,7 +53,7 @@ function fixture() {
 let opened = 0;
 async function open(doc) {
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(doc || fixture())))], "cut-" + (++opened) + ".splitpage", { lastModified: opened });
-  await openProjectFile(file, null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
 }
 

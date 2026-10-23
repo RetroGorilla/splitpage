@@ -16,7 +16,8 @@ import {
 import { startHistoryMigration } from "../../js/03a-history-store.js";
 import { renderFirstDraw } from "../../js/05-render.js";
 import { hasUnsavedChanges, updateSaveStatus } from "../../js/12-dirty-toast.js";
-import { applyStashedWork, updateAutoSaveMenu } from "../../js/14-export.js";
+import { updateAutoSaveMenu } from "../../js/14-export.js";
+import { applyStashedWork } from "../../legacy/recovery-bridge.ts";
 import { tryResumeLastProject } from "../../js/18-local-files.js";
 import { seedCheckPasses } from "../../legacy/seed-check.ts";
 import { desktopBridge, initDesktop, notifyDesktopDocumentState } from "../../js/20f-desktop.js";
@@ -37,8 +38,10 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
       load: loadInitialState,
       clone: cloneState,
       applyStash: function (loaded, options) {
-        const applied: StashResult<ValidatedDocument, unknown> = applyStashedWork(loaded, null, options);
-        return applied;
+        const applied = applyStashedWork(loaded, null, { ...options });
+        if (applied instanceof Promise) throw new Error("The stashed work opened at startup must merge without waiting for an undo point");
+        const result: StashResult<ValidatedDocument, unknown> = applied;
+        return result;
       },
       liveDocument: function () { return heldDocument(); },
       open: function (doc, reason) { documentTransitions().open({ from: { document: doc }, reason: reason }); },
