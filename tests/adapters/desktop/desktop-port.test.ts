@@ -5,7 +5,8 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import {
-  DESKTOP_PORT_MEMBERS, UNUSED_DESKTOP_MEMBERS, attachDesktop, desktopDrive, desktopPort, restoreDesktop, useDesktopForTest
+  DESKTOP_PORT_MEMBERS, UNUSED_DESKTOP_MEMBERS, attachDesktop, canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopDrive, desktopPort,
+  restoreDesktop, useDesktopForTest
 } from "../../../src/adapters/desktop/desktop-port.ts";
 import type { DesktopMember, DesktopPort } from "../../../src/adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../../../src/application/desktop-presence.ts";
@@ -279,4 +280,14 @@ test("a Drive call that answers nothing, throws, rejects or has no bridge reads 
   } finally {
     restoreDesktop();
   }
+});
+
+test("the prompter can open in a browser or Chromium only when the attached desktop app offers it", () => {
+  useDesktopForTest(null);
+  assert.deepEqual([canOpenPrompterInBrowser(), canOpenPrompterInChromium()], [false, false]);
+  useDesktopForTest({ openPrompterInBrowser: () => Promise.resolve(null) });
+  assert.deepEqual([canOpenPrompterInBrowser(), canOpenPrompterInChromium()], [true, false]);
+  useDesktopForTest({ openPrompterInChromium: () => Promise.resolve(null) });
+  assert.deepEqual([canOpenPrompterInBrowser(), canOpenPrompterInChromium()], [false, true]);
+  restoreDesktop();
 });

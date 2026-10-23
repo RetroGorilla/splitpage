@@ -19,8 +19,8 @@ import {
 } from "./08-production-panels.js";
 import { queueAutoSave } from "./14-export.js";
 import { adoptProjectState, parseProjectFileState } from "./18-local-files.js";
+import { canOpenPrompterInBrowser } from "../adapters/desktop/desktop-port.ts";
 import {
-  canOpenPrompterInBrowser,
   createDesktopRecognition,
   desktopVoiceAvailable,
   desktopVoiceKnown,

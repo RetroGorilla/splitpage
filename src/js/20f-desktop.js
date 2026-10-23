@@ -13,7 +13,6 @@ import { markDirty, showToast } from "./12-dirty-toast.js";
 import { openServerDoc, pointTabAt } from "./13-hosted.js";
 import { saveDoc } from "./14-export.js";
 import { openProjectFile } from "./18-local-files.js";
-import { openServersDialog } from "./20e-connect.js";
 import { flushDraftNow } from "./20g-drafts.js";
 import { draftResume, recoveryStarted } from "../legacy/recovery-bridge.ts";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
@@ -21,7 +20,8 @@ import { concatBytes, strBytes } from "../adapters/formats/bytes.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { mimeForFilename } from "../../shared/file-names.js";
 import { startupReady } from "../legacy/startup-bridge.ts";
-import { desktopPort, restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
+import { appActions } from "../legacy/app-actions.ts";
+import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort, restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
 
 export function makeDesktopHandle(entry) {
@@ -134,14 +134,6 @@ function runDesktopMenuCommand(cmd) {
 }
 
 var prompterBrowserBusy = false;
-
-export function canOpenPrompterInBrowser() {
-  return !!(runningOnDesktop() && typeof desktopPort().openPrompterInBrowser === "function");
-}
-
-export function canOpenPrompterInChromium() {
-  return !!(runningOnDesktop() && typeof desktopPort().openPrompterInChromium === "function");
-}
 
 export function driveOpenShown() {
   return !runningOnDesktop() || typeof desktopPort().driveStatus === "function";
@@ -478,7 +470,7 @@ export function initDesktop() {
   notifyDesktopDocumentState();
 
   desktopPort().getSessionInfo().then(function (info) {
-    if (info && info.hosting && typeof openServersDialog === "function") openServersDialog();
+    if (info && info.hosting) appActions.invoke("servers", "button");
   }).catch(function () {});
 }
 

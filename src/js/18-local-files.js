@@ -36,7 +36,7 @@ import { warnImagesLeftOut } from "./14-export.js";
 import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
-import { refreshFileMenu, toggleFileMenu } from "./18b-file-menu.js";
+import { refreshFileMenu } from "./18b-file-menu.js";
 import { isExportAction, rememberExport } from "./18c-export-dialog.js";
 import {
   applyMarkdownProject,
@@ -726,7 +726,7 @@ export function runExportAction(action) {
 
 export function handleFileMenuAction(action, source) {
   noteFileMenuChoice(action);
-  if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") toggleFileMenu(false);
+  if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") appActions.invoke("close-file-menu", "button");
   if (isExportAction(action)) rememberExport(action);
   if (appActions.has(action)) {
     appActions.invoke(action, source || "menu");

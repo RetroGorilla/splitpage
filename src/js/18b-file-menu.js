@@ -8,11 +8,8 @@ import { resetProductionPanelState } from "../legacy/production-editing-bridge.t
 import { clearDirty, updateSaveStatus } from "./12-dirty-toast.js";
 import { applyReviewMode, updateServerMenu } from "./13-hosted.js";
 import { openProjectFile } from "./18-local-files.js";
-import {
-  canOpenPrompterInBrowser,
-  canOpenPrompterInChromium,
-  makeDesktopHandle
-} from "./20f-desktop.js";
+import { makeDesktopHandle } from "./20f-desktop.js";
+import { canOpenPrompterInBrowser, canOpenPrompterInChromium } from "../adapters/desktop/desktop-port.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { LONG_DEMO } from "./_starters.js";
 import { NO_DESTINATION, documentTransitions } from "../legacy/transition-bridge.ts";
