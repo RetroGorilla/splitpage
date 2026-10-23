@@ -1,8 +1,7 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { mintDocId, nowIso } from "../adapters/identity/ids.ts";
 import { documentIdStamp, editStamp } from "../application/commands/save-stamps.ts";
-import { stampDocument } from "../legacy/session-bridge.ts";
-import { S } from "./_state.js";
+import { currentDocument, stampDocument } from "../legacy/session-bridge.ts";
 import { amendHome, currentHome, documentLocation, fileHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
 import { rememberLastFileHandle } from "./00-prelude.js";
 import { migrateRows } from "./02-state.js";
@@ -120,12 +119,12 @@ async function writeDoc(opts, job) {
   }
 
   var forkDocId = (saveAs && opts.saveAs && documentLocation().writtenOut()) ? mintDocId() : null;
-  var docIdAtSave = S.state.docId;
+  var docIdAtSave = currentDocument().docId;
   var homeAtSave = currentHome();
   var copyOfHosted = homeAtSave.kind === "server";
   var captured = captureExportDocument({
     docId: forkDocId,
-    stamp: { rev: (S.state.rev || 0) + 1, lastEditedBy: getEditorName(), lastEditedAt: nowIso() }
+    stamp: { rev: (currentDocument().rev || 0) + 1, lastEditedBy: getEditorName(), lastEditedAt: nowIso() }
   });
   var published = cloneState(captured.document);
   var seqAtSave = saveChanges();
@@ -386,8 +385,8 @@ export function destinationKeyOf(h) {
 }
 
 function reportObsoleteSave(request, here) {
-  if (!here || currentHome().kind === "server" || !S.state) return;
-  showToast(obsoleteSaveText(S.state.title), "warn");
+  if (!here || currentHome().kind === "server" || !currentDocument()) return;
+  showToast(obsoleteSaveText(currentDocument().title), "warn");
 }
 
 export function obsoleteSaveText(title) {

@@ -1,4 +1,4 @@
-import { S } from "./_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { currentHome, reviewMode, serverStatus } from "../legacy/location-bridge.ts";
 import { savedStatusText, savedWhenText } from "../../shared/clock.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
@@ -110,12 +110,12 @@ function savedWord(at) {
 }
 
 export function fileCardView() {
-  if (!S.state) return { name: "Loading…", bits: [] };
+  if (!currentDocument()) return { name: "Loading…", bits: [] };
   if (currentHome().kind === "server") {
     var srv = serverStatus().sessionExpired() ? { text: "Signed out — reload to sign in", unsaved: true }
       : serverStatus().linkTurnedOff() ? { text: "Link turned off — not saving", unsaved: true }
       : savedWord(null);
-    return { name: S.state.title || "Untitled Script", bits: [srv, { text: "On the server · v" + currentHome().rev }] };
+    return { name: currentDocument().title || "Untitled Script", bits: [srv, { text: "On the server · v" + currentHome().rev }] };
   }
   if (currentHome().kind === "file") {
     return {
@@ -312,7 +312,7 @@ async function openRecentFile(fileId) {
 }
 
 export function startNewScript() {
-  if (!S.state) { showToast("Still loading…", "warn"); return false; }
+  if (!currentDocument()) { showToast("Still loading…", "warn"); return false; }
   var kept = replaceWithNewDocument(migrateRows({
     title: "Untitled Script",
     rows: [{ id: makeId("r"), visualText: "", imageRef: null, audioText: "" }],
@@ -325,7 +325,7 @@ export function startNewScript() {
 }
 
 export function openLongDemo() {
-  if (!S.state) { showToast("Still loading…", "warn"); return false; }
+  if (!currentDocument()) { showToast("Still loading…", "warn"); return false; }
   var kept = replaceWithNewDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))),
     "openLongDemo: a new copy of the long demo", "Before opening the long demo");
   showToast("The long demo — " + LONG_DEMO.state.rows.length + " scenes, not saved anywhere yet." +
@@ -336,8 +336,8 @@ export function openLongDemo() {
 function replaceWithNewDocument(next, reason, keepLabel) {
   var active = document.activeElement;
   if (active && active !== document.body && typeof active.blur === "function") active.blur();
-  var kept = S.state.rows.length ? pushSnapshot(keepLabel) : null;
-  if (kept) pushSnapshot(keepLabel, Object.assign({}, S.state, { docId: next.docId }));
+  var kept = currentDocument().rows.length ? pushSnapshot(keepLabel) : null;
+  if (kept) pushSnapshot(keepLabel, Object.assign({}, currentDocument(), { docId: next.docId }));
   resetProductionPanelState();
   documentTransitions().startNew({ from: { document: next }, reason: reason, destination: NO_DESTINATION });
   confirmSavedNow();
