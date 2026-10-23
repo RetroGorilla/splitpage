@@ -8,8 +8,7 @@ import {
   collabServerView,
   normalizeCollabServer,
   readCollabServer,
-  signOutCollab,
-  updateCollaborateMenu
+  signOutCollab
 } from "./13b-collaborate.js";
 import { setAutoSaveEnabled } from "./14-export.js";
 import { applyWriterSize, readWriterSize } from "./19-writer.js";
@@ -383,7 +382,6 @@ function onPrefChanged(key) {
     if (hist && !hist.hidden) renderHistory();
   }
   if (name === "commentAuthor" || name === "personColor") updateIdentityChip();
-  if (name === "collabServer") updateCollaborateMenu();
   if (settingsOpen()) renderSettings(key);
 }
 

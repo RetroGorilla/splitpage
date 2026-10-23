@@ -15,8 +15,7 @@ import {
   connectPortOr,
   newBookmarkId,
   renderConnect,
-  saveBookmarks,
-  updateConnectMenu
+  saveBookmarks
 } from "./20e-connect.js";
 import { cappedName } from "../core/document/text-policy.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
@@ -298,7 +297,6 @@ function appDataMergeBookmarks(list) {
     try {
       var modal = document.getElementById("connect-modal");
       if (modal && !modal.hidden) renderConnect();
-      updateConnectMenu();
     } catch (e) { }
   }
   return out;
