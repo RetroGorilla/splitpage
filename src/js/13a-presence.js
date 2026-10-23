@@ -1,5 +1,5 @@
 import { homeConn, serverHomeId, serverStatus } from "../legacy/location-bridge.ts";
-import { cssAttr } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import { PRESENCE_MAX_SHOWN } from "../application/collaboration/presence.ts";
 import { presence, presenceStarted } from "../legacy/presence-bridge.ts";
 import { getSavedAuthorName } from "./10-comments.js";
