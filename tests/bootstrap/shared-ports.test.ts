@@ -14,8 +14,10 @@ import { autoSavePolicy, haltAutoSave, noteSaveChange, saveDestinations, startSa
 import type { LegacySavePorts } from "../../src/legacy/save-bridge.ts";
 import { cacheSeal } from "../../src/legacy/cache-freeze.ts";
 import { productionReaders } from "../../src/legacy/document-ports.ts";
+import { editorSelection, startEditor } from "../../src/legacy/editor-bridge.ts";
 import { installExportFormats } from "../../src/legacy/export-formats.ts";
 import { productionIndex, startProductionIndex } from "../../src/legacy/production-index-bridge.ts";
+import { liveDocumentPort } from "../../src/legacy/session-bridge.ts";
 import { migrateRows } from "../../src/js/02-state.js";
 
 test("shared ports follow their current owners, announce synchronously in subscription order and unsubscribe", () => {
@@ -133,6 +135,33 @@ test("the save state port follows the running save owner: unsaved, busy, its cha
   }
 });
 
+test("the save state setter forwards to the running save owner and preferences after a restart", () => {
+  const saves = sharedPorts().saves;
+  const timers = { start: () => null, stop: () => {} };
+  const stopPreferences = startPreferences();
+  let stop = startSaves(savePorts(), timers);
+  try {
+    saves.setAutoSaveEnabled(false);
+    assert.equal(preferences().autosave(), false);
+    assert.equal(autoSavePolicy().enabled(), false);
+    saves.setAutoSaveEnabled(true);
+    assert.equal(preferences().autosave(), true);
+    assert.equal(autoSavePolicy().enabled(), true);
+    const first = autoSavePolicy();
+    stop();
+    stop = startSaves(savePorts(), timers);
+    assert.notEqual(autoSavePolicy(), first);
+    saves.setAutoSaveEnabled(false);
+    assert.equal(preferences().autosave(), false);
+    assert.equal(autoSavePolicy().enabled(), false);
+    assert.equal(first.enabled(), true);
+  } finally {
+    stop();
+    stopPreferences();
+    localStorage.clear();
+  }
+});
+
 test("the production index port forwards each call to the running production index and follows a restart", () => {
   const production = sharedPorts().production;
   assert.throws(() => production.entries(null), /The production index is not started yet/);
@@ -155,6 +184,34 @@ test("the production index port forwards each call to the running production ind
     assert.equal(production.derived(), productionIndex().derived(), "the port reads the production index running now");
     production.resetDerived();
     assert.equal(productionIndex().derived(), 0);
+  } finally {
+    stop();
+  }
+});
+
+test("the selection port drops the running editor's held link and follows a restart", () => {
+  const selection = sharedPorts().selection;
+  assert.throws(() => selection.dropLink(), /The editor's owners are not started yet/);
+  let stop = startEditor(liveDocumentPort);
+  try {
+    const range = document.createRange();
+    const cell = document.createElement("div");
+    const first = editorSelection();
+    first.holdLink(range, cell);
+    assert.deepEqual(first.heldLink(), { range, cell });
+    selection.dropLink();
+    assert.equal(first.heldLink(), null);
+    first.holdLink(range, cell);
+    stop();
+    assert.throws(() => selection.dropLink(), /The editor's owners are not started yet/);
+    stop = startEditor(liveDocumentPort);
+    const second = editorSelection();
+    assert.notEqual(second, first);
+    second.holdLink(range, cell);
+    assert.deepEqual(second.heldLink(), { range, cell });
+    selection.dropLink();
+    assert.equal(second.heldLink(), null);
+    assert.deepEqual(first.heldLink(), { range, cell }, "the port drops only the running editor's link");
   } finally {
     stop();
   }
