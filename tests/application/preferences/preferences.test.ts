@@ -159,12 +159,12 @@ test("the script zoom reads 1 unless a value in range is stored, rounds writes a
   prefs.setScriptScale(1.304);
   assert.equal(storage.items.get("splitpage-script-scale"), "1.3");
   prefs.setScriptScale(1);
-  assert.equal(storage.items.has("splitpage-script-scale"), false);
-  prefs.setScriptScale(1.004);
+  assert.equal(storage.items.get("splitpage-script-scale"), "1");
+  prefs.clearScriptScale();
   assert.equal(storage.items.has("splitpage-script-scale"), false);
   assert.deepEqual(announced, [
     { key: "splitpage-script-scale", value: "1.3" },
-    { key: "splitpage-script-scale", value: null },
+    { key: "splitpage-script-scale", value: "1" },
     { key: "splitpage-script-scale", value: null }
   ]);
 });
@@ -232,7 +232,7 @@ test("rundown and zoom still export and import their stored forms silently, excl
   assert.equal(target.prefs.scriptScale(), 1.25);
   assert.equal(target.prefs.desktopNoticeDismissed(), false);
   assert.deepEqual(target.announced, []);
-  source.prefs.setScriptScale(1);
+  source.prefs.clearScriptScale();
   assert.equal(source.prefs.appDataExport(settingsAppData())["scriptScale"], null);
 });
 
@@ -243,7 +243,7 @@ test("desktop notice and zoom writes still announce when storage is unavailable"
   prefs.dismissDesktopNotice();
   prefs.resetDesktopNotice();
   prefs.setScriptScale(1.25);
-  prefs.setScriptScale(1);
+  prefs.clearScriptScale();
   assert.deepEqual(announced, [
     { key: "splitpage-desktop-notice-dismissed", value: "1" },
     { key: "splitpage-desktop-notice-dismissed", value: null },
