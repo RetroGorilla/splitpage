@@ -25,7 +25,7 @@ Each start function returns a stop function that clears the bridge's state; test
 | Field | Meaning | Source in the app |
 | --- | --- | --- |
 | `epoch` | The session's epoch: a new one opens when a document is adopted or recovered, even with the same document id | `liveSession().epoch()` |
-| `docId` | The live document's id, or `null` | `S.state.docId` |
+| `docId` | The live document's id, or `null` | `currentDocument().docId` |
 | `destination` | The destination's identity | The current `home` record (`_home.js`) |
 | `destinationGeneration` | The generation the current destination has confirmed | `confirmedGeneration()` in the save bridge |
 | `generation` | The session's count of accepted edits | `liveSession().generation()` |
@@ -56,17 +56,17 @@ Callers outside saving use it for work that waits: the pasted-picture and droppe
 
 An arrival (`open`, `startNew`, `recover`) may carry `keep`, a label: the history snapshot taken before a replacement (L3h PR 3). If the live document has rows, the transition hands the label to the history port before the new document is assigned, and `Arrived.kept` says whether a snapshot was stored. `restore` never keeps one.
 
-The input is `{ document }` (already a `ValidatedDocument`) or `{ raw }` (migrated through the entry port, `migrateRows`). Every method that makes a document live does the same three things in order: assign it to `S.state`, adopt it in the session at once (`adoptReplacement` in the session bridge, which disposes the old session and starts one at the same epoch and generation), and then settle the destination. A transition returns `Arrived` (`document`, `forkedFrom`).
+The input is `{ document }` (already a `ValidatedDocument`) or `{ raw }` (migrated through the entry port, `migrateRows`). Every method that makes a document live does the same three things in order: hand it to `liveDocumentPort.assign`, which is `adoptReplacement` in the session bridge (it disposes the old session and starts one at the same epoch and generation), and then settle the destination. A transition returns `Arrived` (`document`, `forkedFrom`).
 
 The ports, all supplied by the legacy modules:
 
 | Port | In the app | Does |
 | --- | --- | --- |
 | `entry` | `migrateRows` (`02-state.js`) | Brands raw input as a `ValidatedDocument` |
-| `live` | `liveDocumentPort` (`02b-doc-id.js`) | Reads and assigns `S.state` |
+| `live` | `liveDocumentPort` (`src/legacy/session-bridge.ts`) | Reads the session's document and replaces it |
 | `session` | `adoptReplacement` (`session-bridge.ts`) | Adopts a document in the session now |
 | `destination` | `documentDestinationPort` (`03-sync.js`) | `set` calls `setHome`; `confirm` calls `setBaseState` with a clone of the baseline |
-| `identity` | `documentIdentityPort` (`02b-doc-id.js`) | Mints ids and reads and writes `S.docIdWrittenOut` |
+| `identity` | `documentIdentityPort` (`02b-doc-id.js`) | Mints ids and reads and writes whether the id was written out, through the document location owner (`documentLocation()`) |
 | `history` | `documentHistoryPort` (`03-sync.js`) | `keep(label, doc?)` takes a history snapshot of `doc`, or of the live document when none is given |
 | `ownership` | The operation context | `stillOwns` |
 
