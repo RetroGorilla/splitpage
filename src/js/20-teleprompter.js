@@ -17,7 +17,7 @@ import {
   setTagNotes,
   setTagOwner
 } from "./08-production-panels.js";
-import { queueAutoSave } from "./14-export.js";
+import { autoSavePolicy } from "../legacy/save-bridge.ts";
 import { adoptProjectState, parseProjectFileState } from "./18-local-files.js";
 import {
   canOpenPrompterInBrowser,
@@ -1022,7 +1022,7 @@ export function wireTagEntityContainer(id, rootClick) {
       setAddingPerson: function (value) { setTagAddingPerson(value); },
       setTagOwner: setTagOwner,
       setTagNotes: setTagNotes,
-      queueAutoSave: queueAutoSave
+      queueAutoSave: function () { autoSavePolicy().dueNow(); }
     }
   });
 }

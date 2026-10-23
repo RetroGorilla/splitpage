@@ -12,15 +12,16 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { render } = await import("../js/05-render.js");
-const { productionEntries } = await import("../js/07-production-tags.js");
 const { updateTagBadges } = await import("../bootstrap/wiring/panels.ts");
+const { productionIndex } = await import("../legacy/production-index-bridge.ts");
+const { currentDocument } = await import("../legacy/session-bridge.ts");
 const { openProductionPanel, renderProduction, setTagNotes, setTagStatus } = await import("../js/08-production-panels.js");
 const { anchorBrollInLeftCell, brollEntries, updateBrollBadge } = await import("../js/08c-broll.js");
 const { openBrollPanel, renderBroll, runBrollRefresh } = await import("../js/08d-broll-panel.js");
 const { sidePanels } = await import("../legacy/panels-bridge.ts");
-const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits, undo } = await import("../js/12a-undo.js");
-const { saveDoc, setAutoSaveEnabled } = await import("../js/14-export.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
@@ -52,7 +53,7 @@ async function open(doc = fixture()) {
   const handle = createHeldFileHandle({ name: "repair-" + (++opened) + ".splitpage", text: buildSplitpageFile(exportDocumentOf(doc)), lastModified: 1000 });
   await openProjectFile(await handle.handle.getFile(), handle.handle, { skipSnapshot: true, silent: true });
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   return handle;
 }
 
@@ -97,7 +98,7 @@ test("6.5: render, the idle refreshes, the panels, the badges and the export kit
       "b-roll badge": () => updateBrollBadge(),
       "b-roll panel": () => { openBrollPanel(); renderBroll(); sidePanels().close("broll-panel"); },
       "b-roll entries": () => brollEntries(),
-      "production entries": () => productionEntries(),
+      "production entries": () => productionIndex().entries(currentDocument()),
       "export kit": () => buildSplitpageFile(exportDocumentOf(S.state))
     };
     for (const [where, read] of Object.entries(reads)) {
@@ -105,7 +106,7 @@ test("6.5: render, the idle refreshes, the panels, the badges and the export kit
       assertUntouched(before, seen, where);
     }
     assert.deepEqual(brollEntries().map((e) => e.name), ["Steam", "Hands"]);
-    assert.ok(productionEntries().some((e) => e.key === "prop mug" && e.id === null), "the read shows the unregistered tag as it is");
+    assert.ok(productionIndex().entries(currentDocument()).some((e) => e.key === "prop mug" && e.id === null), "the read shows the unregistered tag as it is");
   } finally {
     stop();
   }
@@ -116,7 +117,7 @@ test("6.5: a save changes nothing in the held document; the file carries the ent
   setAutoSaveEnabled(false);
   try {
     const target = await open();
-    markDirty();
+    noteSessionEdit();
     lagging();
     const held = JSON.stringify(S.state.rows) + JSON.stringify(S.state.productionTags) + JSON.stringify(S.state.brollShots);
     const entry = migrateRows(JSON.parse(JSON.stringify(S.state)));
@@ -137,7 +138,7 @@ test("6.5: a save changes nothing in the held document; the file carries the ent
     assert.deepEqual(saved.brollShots.map((x) => x.name), entry.brollShots.map((x) => x.name));
   } finally {
     homeModule.setHome("none");
-    clearDirty();
+    confirmSavedNow();
   }
 });
 

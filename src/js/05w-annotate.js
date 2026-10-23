@@ -1,7 +1,6 @@
-import { S } from "./_state.js";
 import { ensureBytes, intern, persist, urlForSync } from "../adapters/storage/02c-blobs.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { readSession } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession } from "../legacy/session-bridge.ts";
 import { slotPoster } from "./05-render.js";
 import { cellEditing } from "../legacy/editor-bridge.ts";
 import { ANNOTATION_COLORS, annotateGallerySlot, normalizeMarks, rowSlots, slotOriginal } from "../core/document/gallery.ts";
@@ -46,10 +45,10 @@ function round4(v) { return Math.round(Math.min(1, Math.max(0, v)) * 10000) / 10
 export function annotatorOpen() { return !!ed; }
 
 export function openAnnotator(rowId, at) {
-  if (ed || reviewMode() || !S.state) return false;
+  if (ed || reviewMode() || !currentDocument()) return false;
   var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
   if (idx === -1) return false;
-  var slot = rowSlots(S.state.rows[idx])[at];
+  var slot = rowSlots(currentDocument().rows[idx])[at];
   if (!slot || !slot.ref || slotPoster(slot)) return false;
   var original = slotOriginal(slot);
   var marks = slot.annotation ? normalizeMarks(slot.annotation.marks) : [];
@@ -142,7 +141,7 @@ export function closeAnnotator() {
 function locate() {
   var idx = readSession(function (doc) { return rowIndexOf(doc, ed.rowId); });
   if (idx === -1) return -1;
-  var slots = rowSlots(S.state.rows[idx]);
+  var slots = rowSlots(currentDocument().rows[idx]);
   var s = slots[ed.at];
   if (s && s.ref && s.ref.sha256 === ed.sha && !slotPoster(s)) return ed.at;
   for (var i = 0; i < slots.length; i++) {

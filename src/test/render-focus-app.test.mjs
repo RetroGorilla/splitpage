@@ -19,7 +19,7 @@ const { setHideShotScenes } = await import("../js/01b-hide-shot.js");
 const { runBrollRefresh, closeBrollPage, openBrollPage, openBrollPanel } = await import("../js/08d-broll-panel.js");
 const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { flushEdits, undoSizes } = await import("../js/12a-undo.js");
-const { clearDirty } = await import("../js/12-dirty-toast.js");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
@@ -58,7 +58,7 @@ function fresh(title, build = fixture) {
   loadTestDocument(migrateRows(build(title)));
   flushEdits();
   renderAbsorbed();
-  clearDirty();
+  confirmSavedNow();
   document.getElementById("toast-host").textContent = "";
   return S.state;
 }
@@ -348,7 +348,7 @@ function focusShotField(title, f) {
   openBrollPanel();
   if (!panelEl().querySelector('.broll-card[data-id="bs1"]')) panelEl().querySelector('.broll-row-main[data-id="bs1"]').click();
   if (f.open) panelEl().querySelector('[data-action="' + f.open + '"][data-id="bs1"]').click();
-  clearDirty();
+  confirmSavedNow();
   const box = shotBox(f.cls);
   box.focus();
   assert.equal(document.activeElement, box);
@@ -445,7 +445,7 @@ for (const f of PANEL_FIELDS) {
       observe(() => runBrollRefresh());
       assert.equal(shot()[f.key], "Typed " + f.name + ".");
       assert.equal(document.activeElement, shotBox(f.cls));
-      clearDirty();
+      confirmSavedNow();
       const got = observe(() => {
         merge(theirsFor(S.state, f.key, "Theirs later " + f.name + "."));
         runBrollRefresh();
@@ -476,7 +476,7 @@ for (const n of NORMALISED) {
         observe(() => runBrollRefresh());
         const saved = shot()[f.key];
         assert.notEqual(saved, undefined);
-        clearDirty();
+        confirmSavedNow();
         const got = observe(() => {
           merge(theirsFor(S.state, f.key, "Theirs."));
           runBrollRefresh();
@@ -501,7 +501,7 @@ function focusPageNote(title, note) {
     return d;
   });
   openBrollPage();
-  clearDirty();
+  confirmSavedNow();
   const box = pageBox();
   assert.equal(box.tagName, "TEXTAREA");
   box.focus();
@@ -522,7 +522,7 @@ test("typing in the b-roll page note box that a redraw already saved is not writ
     observe(() => runBrollRefresh());
     assert.equal(shot().notes, "Typed note.");
     assert.equal(document.activeElement, pageBox());
-    clearDirty();
+    confirmSavedNow();
     const got = observe(() => {
       merge(theirsFor(S.state, "notes", "Theirs later."));
       runBrollRefresh();
@@ -542,7 +542,7 @@ for (const n of NORMALISED.filter((v) => v.fields.includes("page note"))) {
       focusPageNote("Page normalised", "Mine note.");
       typeInto(pageBox(), n.text);
       observe(() => runBrollRefresh());
-      clearDirty();
+      confirmSavedNow();
       const got = observe(() => {
         merge(theirsFor(S.state, "notes", "Theirs."));
         runBrollRefresh();

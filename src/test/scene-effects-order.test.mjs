@@ -8,7 +8,7 @@ import { S } from "../js/_state.js";
 register("./_fanout-hooks.mjs", import.meta.url);
 
 const stubs = await import("./_fanout-stubs.mjs");
-const { cycleRowStatus, onScriptStats, updateScriptStats } = await import("../js/01-scene-status.js");
+const { cycleRowStatus, onScriptStats, statsFollowChange, updateScriptStats } = await import("../js/01-scene-status.js");
 const { setSceneLength } = await import("../js/05r-read-time.js");
 const bridge = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
@@ -29,6 +29,7 @@ const wired = stubs.wireSession({
 });
 bridge.liveSession().subscribe(function (change) { published.push(change); });
 onScriptStats(function () { stubs.renderRundown(); stubs.paintTargetOverlay(); });
+bridge.liveSession().subscribe(statsFollowChange);
 
 function lengthDoc(rows) {
   const opening = migrateRows({ title: "Order", rows: rows.map((r) => Object.assign({ visualText: "", audioText: "", updatedAt: "" }, r)) });
@@ -66,7 +67,7 @@ test("with shot scenes hidden, reaching shot arms the grace after the effects an
   cycleRowStatus("r2");
   assert.equal(S.state.rows[1].status, "shot");
   assert.equal(S.state.rows[0].status, "ready");
-  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "armShotHideGrace:r2", ...STATS]);
+  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", ...STATS, "armShotHideGrace:r2"]);
 });
 
 test("with shot scenes hidden, leaving shot clears the grace in the same place", () => {
@@ -75,7 +76,7 @@ test("with shot scenes hidden, leaving shot clears the grace in the same place",
   cycleRowStatus("r2");
   assert.equal(S.state.rows[1].status, "todo");
   assert.equal(S.state.rows[0].status, "shot");
-  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "clearShotHideGrace:r2", ...STATS]);
+  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", ...STATS, "clearShotHideGrace:r2"]);
 });
 
 test("with shot scenes hidden, todo to ready touches no grace", () => {
@@ -156,7 +157,7 @@ test("a status click whose commit is followed by a throw still arms the grace an
   const reported = withThrowingListener(() => cycleRowStatus("r1"));
   assert.deepEqual(reported, ["listener broke"]);
   assert.equal(S.state.rows[0].status, "shot");
-  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "armShotHideGrace:r1", ...STATS]);
+  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", ...STATS, "armShotHideGrace:r1"]);
 });
 
 test("a scene length whose commit is followed by a throw still runs the stats and answers true, and throws nothing", () => {
@@ -166,14 +167,14 @@ test("a scene length whose commit is followed by a throw still runs the stats an
   const reported = withThrowingListener(() => { answer = setSceneLength("r1", 45); });
   assert.deepEqual(reported, ["listener broke"]);
   assert.equal(answer, true);
-  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "updateScriptStats"]);
+  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", ...STATS]);
 });
 
 test("a scene length: the command sets and stamps the row, one effect pass with an immediate save, then the stats; the script screen repaints the row itself by hearing the change", () => {
   stubs.resetFanout();
   lengthDoc([{ id: "r1", status: "todo" }, { id: "r2", status: "todo" }]);
   assert.equal(setSceneLength("r2", 90), true);
-  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", "updateScriptStats"]);
+  assert.deepEqual(stubs.calls, ["dirty", "draft", "save now", ...STATS]);
   assert.equal(stubs.dirtied[0][1].lengthSeconds, 90, "the length is set before the effects run");
   assert.notEqual(stubs.dirtied[0][1].updatedAt, "", "and the row is already stamped");
   assert.equal(S.state.rows[0].updatedAt, "", "no other row is stamped");

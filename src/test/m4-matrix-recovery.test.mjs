@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IDBFactory } from "fake-indexeddb";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import {
   createFakeLocks,
   createFaultyIdbFactory,
@@ -27,9 +27,9 @@ const { migrateRows } = await import("../js/02-state.js");
 const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { pushSnapshot, restoreSnapshotFromCard } = await import("../js/03-sync.js");
-const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const exportModule = await import("../js/14-export.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { openProjectFile } = await import("../js/18-local-files.js");
 const { startNewScript } = await import("../js/18b-file-menu.js");
@@ -82,7 +82,7 @@ function splitpageFile(doc, name) {
 function useDocument(doc) {
   loadTestDocument(doc);
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   return doc;
 }
 
@@ -92,8 +92,8 @@ function serverDocument(serverId, title, docLetter) {
 }
 
 function typeInto(text) {
-  S.state.rows[0].audioText = text;
-  markDirty();
+  currentDocument().rows[0].audioText = text;
+  noteSessionEdit();
 }
 
 function draftKey(serverId) {
@@ -118,12 +118,12 @@ function browserStore(wrap) {
 }
 
 async function endCase() {
-  clearDirty();
+  confirmSavedNow();
   await flushDraftNow();
   draftResume().dropServerResume();
   window.__hostedTest.setSession({ docId: null });
   drafts().browser.useIndexedDB(new IDBFactory());
-  exportModule.setAutoSaveEnabled(true);
+  setAutoSaveEnabled(true);
 }
 
 async function cleanly(run) {
@@ -151,7 +151,7 @@ rightToday("B1", "a late draft write for the previous document neither removes t
   setBlobBackend(blobs.backend);
   try {
     serverDocument("srv-a", "Document A", "a");
-    addGalleryPicture(S.state.rows[0], internDataUrl(PNG), "a.png");
+    addGalleryPicture(currentDocument().rows[0], internDataUrl(PNG), "a.png");
     window.__hostedTest.setSession({ docId: "srv-a", rev: 1 });
     blobs.holdOp("put");
     typeInto("Edited in A.");
@@ -237,7 +237,7 @@ async function advance(clock, ms) {
 }
 
 async function quotaSetup(clock, faults) {
-  exportModule.setAutoSaveEnabled(false);
+  setAutoSaveEnabled(false);
   let faulty = null;
   const idb = browserStore((factory) => {
     faulty = createFaultyIdbFactory(factory);
@@ -297,7 +297,7 @@ rightToday("B4b", "a change noted while a retry is in flight does not bring the 
 
 rightToday("B5", "unavailable storage turns browser drafts off quietly, with no retry and no notice", (t) => cleanly(async () => {
   const clock = mockClock(t);
-  exportModule.setAutoSaveEnabled(false);
+  setAutoSaveEnabled(false);
   let opens = 0;
   browserStore(() => ({ open() { opens++; throw new Error("SecurityError"); } }));
   serverDocument("srv-u", "Unavailable", "f");
@@ -334,7 +334,7 @@ rightToday("B6", "a corrupt draft record reads as none: nothing is resumed, offe
     assert.equal(drafts().restorePending(), false, kind + ": no restore is pending");
     window.__hostedTest.setSession({ docId: null });
     assert.equal(await offerBrowserDraftAfterLinkOff("srv-k"), false, kind + ": not offered after a link was turned off");
-    assert.equal(S.state.title, "Corrupt", kind + ": the open document is untouched");
+    assert.equal(currentDocument().title, "Corrupt", kind + ": the open document is untouched");
   }
   await idb.store.remove(draftKey("srv-k"));
   const raw = await new Promise((resolve, reject) => {
@@ -355,7 +355,7 @@ rightToday("B6", "a corrupt draft record reads as none: nothing is resumed, offe
 
 rightToday("B7", "a writer discards only the draft it wrote: a newer generation from another tab survives", (t) => cleanly(async () => {
   const clock = mockClock(t);
-  exportModule.setAutoSaveEnabled(false);
+  setAutoSaveEnabled(false);
   const idb = browserStore();
   serverDocument("srv-g", "Generations", "2");
   typeInto("Mine, generation one.");
@@ -366,7 +366,7 @@ rightToday("B7", "a writer discards only the draft it wrote: a newer generation 
   theirs.rows[0].audioText = "Theirs, generation two.";
   await idb.store.put(record("srv-g", theirs, OTHER, { editSeq: 99 }));
   const discardsBefore = drafts().status().discards;
-  clearDirty();
+  confirmSavedNow();
   await flushDraftNow();
   assert.equal(drafts().status().discards, discardsBefore + 1, "setup: this tab tried to discard its draft");
   const kept = await idb.store.get(key);
@@ -377,7 +377,7 @@ rightToday("B7", "a writer discards only the draft it wrote: a newer generation 
 
 rightToday("B8", "restoring a browser draft onto a server document, or an unsaved script, writes neither the server nor a file", (t) => cleanly(async () => {
   const clock = mockClock(t);
-  exportModule.setAutoSaveEnabled(true);
+  setAutoSaveEnabled(true);
   const base = script("Restored", { docId: idOf("3") });
   const mine = cloneState(base);
   mine.rows[0].audioText = "Unsaved in the browser.";
@@ -396,8 +396,8 @@ rightToday("B8", "restoring a browser draft onto a server document, or an unsave
     useDocument(script("Before the server draft"));
     const { openServerDoc } = await import("../js/13-hosted.js");
     assert.equal(await openServerDoc("srv-r"), true);
-    assert.equal(S.state.rows[0].audioText, "Unsaved in the browser.", "the draft was resumed");
-    assert.equal(S.state.rows[1].audioText, "Changed on the server.");
+    assert.equal(currentDocument().rows[0].audioText, "Unsaved in the browser.", "the draft was resumed");
+    assert.equal(currentDocument().rows[1].audioText, "Changed on the server.");
     assert.equal(unsavedChanges(), true, "the resumed work is unsaved");
     await advance(clock, 40000);
     assert.deepEqual(sent.requests.filter((r) => r.method !== "GET").map((r) => r.method + " " + r.url), [], "nothing was written to the server");
@@ -405,7 +405,7 @@ rightToday("B8", "restoring a browser draft onto a server document, or an unsave
     useDocument(script("Before the untitled draft"));
     const outcome = await applyTakenDraft({ header: { origin: { kind: "untitled" }, docIdWrittenOut: false }, stateJson: JSON.stringify(mine) });
     assert.equal(outcome, "applied");
-    assert.equal(S.state.rows[0].audioText, "Unsaved in the browser.", "the recovered work is on screen");
+    assert.equal(currentDocument().rows[0].audioText, "Unsaved in the browser.", "the recovered work is on screen");
     assert.equal(unsavedChanges(), true, "and unsaved");
     await advance(clock, 40000);
     assert.deepEqual(sent.requests.filter((r) => r.method !== "GET").map((r) => r.method + " " + r.url), [], "still nothing written");
@@ -434,10 +434,10 @@ rightToday("B9", "a revoked link keeps the draft as an unsaved local copy and se
     window.__hostedTest.setSession({ docId: null });
     assert.equal(await openServerDoc("srv-gone"), false);
     await until(() => !drafts().restorePending(), "the restore settled");
-    assert.equal(S.state.rows[0].audioText, "Kept for the user.", "the draft's work is open");
+    assert.equal(currentDocument().rows[0].audioText, "Kept for the user.", "the draft's work is open");
     assert.equal(unsavedChanges(), true, "as unsaved work");
     assert.equal(homeModule.currentHome().kind, "none", "with no server destination");
-    assert.notEqual(S.state.docId, idOf("5"), "and its own new identity");
+    assert.notEqual(currentDocument().docId, idOf("5"), "and its own new identity");
     assert.deepEqual(sent.requests.filter((r) => r.method !== "GET").map((r) => r.method + " " + r.url), [], "no write went to the server");
     assert.ok(toasts().some((x) => /unsaved copy/.test(x)), "the user is told it is an unsaved copy");
   } finally {
@@ -458,7 +458,7 @@ rightToday("B10", "a draft whose pictures could not be persisted carries them in
   try {
     serverDocument("srv-p", "Pictures", "7");
     const rec = internDataUrl(PNG);
-    addGalleryPicture(S.state.rows[0], rec, "p.png");
+    addGalleryPicture(currentDocument().rows[0], rec, "p.png");
     window.__hostedTest.setSession({ docId: "srv-p", rev: 1 });
     typeInto("With a picture.");
     await advance(clock, 1500);
@@ -485,7 +485,7 @@ rightToday("B10b", "a draft whose pictures are stored locally carries only their
     const rec = internDataUrl(PNG);
     assert.deepEqual(await persist([rec.sha256]), [], "setup: the picture is stored");
     assert.equal(isDurableSync(rec.sha256), true);
-    addGalleryPicture(S.state.rows[0], rec, "q.png");
+    addGalleryPicture(currentDocument().rows[0], rec, "q.png");
     window.__hostedTest.setSession({ docId: "srv-q", rev: 1 });
     typeInto("With a stored picture.");
     await advance(clock, 1500);
@@ -519,8 +519,8 @@ rightToday("B11", "after a restart, the unsaved work left by the closed session 
     left.rows[0].audioText = "Typed before the crash.";
     const outcome = await applyTakenDraft({ header: { origin: { kind: "untitled" }, docIdWrittenOut: false, writtenAt: Date.now() - 60000 }, stateJson: JSON.stringify(left), ageMs: 60000 });
     assert.equal(outcome, "applied");
-    assert.equal(S.state.title, "Left behind");
-    assert.equal(S.state.rows[0].audioText, "Typed before the crash.");
+    assert.equal(currentDocument().title, "Left behind");
+    assert.equal(currentDocument().rows[0].audioText, "Typed before the crash.");
     assert.equal(unsavedChanges(), true, "it is marked unsaved");
     assert.ok(toasts().some((x) => /Restored your unsaved script/.test(x) && /save it somewhere/.test(x)), "the user is told it was never saved");
     const gone = await applyTakenDraft({ header: { origin: { kind: "file", fileName: "gone.splitpage" }, docIdWrittenOut: true }, stateJson: JSON.stringify(left) });
@@ -559,13 +559,13 @@ rightToday("K1", "a desktop file-draft restore whose document is replaced across
     });
     await held.arrivedAt("readFile");
     startNewScript();
-    assert.equal(S.state.title, "Untitled Script", "setup: the user replaced the document meanwhile");
+    assert.equal(currentDocument().title, "Untitled Script", "setup: the user replaced the document meanwhile");
     held.releaseOp("readFile");
     const outcome = await restoring;
     assert.ok(!["unreadable", "untitled-copy"].includes(outcome), "setup: the restore read the file");
     assert.equal(outcome, "kept", "the restore tells the desktop app the draft is kept, so it opens nothing over the replacement");
-    assert.equal(S.state.title, "Untitled Script", "the replacement document is still the open document");
-    assert.equal(S.state.rows.some((r) => r.audioText === "Unsaved here."), false, "the late restore put none of its text into the replacement");
+    assert.equal(currentDocument().title, "Untitled Script", "the replacement document is still the open document");
+    assert.equal(currentDocument().rows.some((r) => r.audioText === "Unsaved here."), false, "the late restore put none of its text into the replacement");
   } finally {
     held.gates.releaseAll("desktop.readFile");
     restore();
@@ -591,16 +591,16 @@ rightToday("K1b", "a desktop file-draft merge whose document is replaced while i
       stateJson: JSON.stringify(mine),
       baseJson: JSON.stringify(original)
     });
-    await until(() => S.state.title === "On disk", "the restore opened the changed file");
+    await until(() => currentDocument().title === "On disk", "the restore opened the changed file");
     await settleIo(20);
-    assert.equal(S.state.rows[0].audioText, "One.", "setup: the merge is waiting for its backup");
+    assert.equal(currentDocument().rows[0].audioText, "One.", "setup: the merge is waiting for its backup");
     startNewScript();
-    assert.equal(S.state.title, "Untitled Script", "setup: the user replaced the document meanwhile");
+    assert.equal(currentDocument().title, "Untitled Script", "setup: the user replaced the document meanwhile");
     window.__historyTest.releaseDelayedPut();
     const outcome = await restoring;
     assert.equal(outcome, "kept", "the restore keeps the draft for the next launch");
-    assert.equal(S.state.title, "Untitled Script", "the replacement document is still the open document");
-    assert.equal(S.state.rows.some((r) => r.audioText === "Unsaved here." || r.audioText === "Changed on disk."), false,
+    assert.equal(currentDocument().title, "Untitled Script", "the replacement document is still the open document");
+    assert.equal(currentDocument().rows.some((r) => r.audioText === "Unsaved here." || r.audioText === "Changed on disk."), false,
       "the late merge put none of its text into the replacement");
     assert.equal(homeModule.currentHome().kind, "none", "and the replacement keeps its own destination");
   } finally {
@@ -638,7 +638,7 @@ rightToday("K2", "a desktop draft write that lands after the tab navigated is re
     assert.equal(store.hasDraft(TAB), true);
   } finally {
     window.__desktopTest.restoreBackend();
-    clearDirty();
+    confirmSavedNow();
     await flushDraftNow();
     rmSync(dir, { recursive: true, force: true });
   }
@@ -647,8 +647,8 @@ rightToday("K2", "a desktop draft write that lands after the tab navigated is re
 async function snapshotRestore(setup) {
   const doc = script("History", { docId: idOf("b") });
   await openProjectFile(splitpageFile(doc), null, { skipSnapshot: true, silent: true });
-  clearDirty();
-  const point = cloneState(S.state);
+  confirmSavedNow();
+  const point = cloneState(currentDocument());
   point.rows[0].audioText = "As it was.";
   const ticket = pushSnapshot("A point to go back to", point);
   await ticket.done;
@@ -661,7 +661,7 @@ async function snapshotRestore(setup) {
   try {
     await settleIo(20);
     assert.equal(finished, false, "setup: the restore is waiting for its backup");
-    S.state.rows[1].audioText = "Typed while the backup was being stored.";
+    currentDocument().rows[1].audioText = "Typed while the backup was being stored.";
     await setup(doc);
   } finally {
     window.__historyTest.releaseDelayedPut();
@@ -671,16 +671,16 @@ async function snapshotRestore(setup) {
 
 rightToday("H1", "a history restore that completes after a same-id reopen does not overwrite the reopened session", async () => {
   const outcome = await snapshotRestore(async (doc) => {
-    const replaced = S.state;
+    const replaced = currentDocument();
     await openProjectFile(splitpageFile(doc), null, { skipSnapshot: true, silent: true });
-    clearDirty();
-    assert.notEqual(S.state, replaced, "setup: the reopen put a new document in place");
-    assert.equal(S.state.docId, replaced.docId, "setup: the reopened document has the same id");
-    S.state.rows[1].audioText = "Typed in the reopened session.";
-    markDirty();
+    confirmSavedNow();
+    assert.notEqual(currentDocument(), replaced, "setup: the reopen put a new document in place");
+    assert.equal(currentDocument().docId, replaced.docId, "setup: the reopened document has the same id");
+    currentDocument().rows[1].audioText = "Typed in the reopened session.";
+    noteSessionEdit();
   });
-  assert.equal(S.state.rows[0].audioText, "One.", "the reopened session's first scene is untouched");
-  assert.equal(S.state.rows[1].audioText, "Typed in the reopened session.", "its own typing is still there");
+  assert.equal(currentDocument().rows[0].audioText, "One.", "the reopened session's first scene is untouched");
+  assert.equal(currentDocument().rows[1].audioText, "Typed in the reopened session.", "its own typing is still there");
   assert.notEqual(outcome, "restored", "the late restore was refused");
 });
 
@@ -688,20 +688,20 @@ rightToday("H1-switch", "a history restore that completes after another document
   const other = script("Another script", { docId: idOf("c") });
   const outcome = await snapshotRestore(async () => {
     await openProjectFile(splitpageFile(other), null, { skipSnapshot: true, silent: true });
-    clearDirty();
+    confirmSavedNow();
   });
   assert.equal(outcome, "changed");
-  assert.equal(S.state.title, "Another script", "the other document is untouched");
-  assert.equal(S.state.rows[0].audioText, "One.");
+  assert.equal(currentDocument().title, "Another script", "the other document is untouched");
+  assert.equal(currentDocument().rows[0].audioText, "One.");
   assert.ok(toasts().some((x) => /A different document was opened while restoring, so nothing was restored/.test(x)), "the user is told nothing was restored");
 });
 
 rightToday("H2", "a snapshot holds the document as it was when pushSnapshot was called", async () => {
   useDocument(script("Before the snapshot", { docId: idOf("d") }));
   const ticket = pushSnapshot("Before the edit");
-  S.state.rows[0].audioText = "Typed after the snapshot call.";
-  S.state.title = "Renamed after the snapshot call";
-  markDirty();
+  currentDocument().rows[0].audioText = "Typed after the snapshot call.";
+  currentDocument().title = "Renamed after the snapshot call";
+  noteSessionEdit();
   const stored = await ticket.done;
   assert.equal(stored.stored, true);
   const got = await window.__historyTest.read({ docId: idOf("d"), id: ticket.id });

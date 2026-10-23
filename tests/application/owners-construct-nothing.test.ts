@@ -15,6 +15,8 @@ import * as legacySnapshots from "../../src/application/recovery/legacy-snapshot
 import * as saveCoordinator from "../../src/application/save/coordinator.ts";
 import * as saveStatus from "../../src/application/save/status.ts";
 import * as autoSave from "../../src/application/save/autosave.ts";
+import * as saveDestinations from "../../src/application/save/destinations.ts";
+import * as serverDestination from "../../src/application/save/server-destination.ts";
 import * as rowDrag from "../../src/application/editing/row-drag.ts";
 import * as cellEditing from "../../src/application/editing/cell-editing.ts";
 import * as focusMemory from "../../src/application/editing/focus-memory.ts";
@@ -100,7 +102,7 @@ test("E12: importing the owners constructs nothing: each export is a constructor
   const loaded: Record<string, Record<string, unknown>> = {
     operation: operation, transitionPorts: transitionPorts, transitions: transitions, recoveryPorts: recoveryPorts, draftWriter: draftWriter,
     draftResume: draftResume, conflictStash: conflictStash, legacySnapshots: legacySnapshots,
-    saveCoordinator: saveCoordinator, saveStatus: saveStatus, autoSave: autoSave,
+    saveCoordinator: saveCoordinator, saveStatus: saveStatus, autoSave: autoSave, saveDestinations: saveDestinations, serverDestination: serverDestination,
     rowDrag: rowDrag, cellEditing: cellEditing, focusMemory: focusMemory, paintGuard: paintGuard, selection: selection, deleteConfirm: deleteConfirm, productionSelection: productionSelection, mergeUndo: mergeUndo,
     preferences: preferences, viewFlags: viewFlags, panelWidths: panelWidths,
     documentLocation: documentLocation, serverStatus: serverStatus
@@ -118,5 +120,7 @@ test("E12: importing the owners constructs nothing: each export is a constructor
   assert.equal(typeof conflictStash.createConflictStash, "function");
   assert.equal(typeof legacySnapshots.createLegacySnapshots, "function");
   assert.equal(typeof saveCoordinator.createSaveCoordinator, "function");
+  assert.equal(typeof saveDestinations.createSaveDestinations, "function");
+  assert.equal(typeof serverDestination.createServerDestination, "function");
   assert.equal(typeof cellEditing.createCellEditing, "function");
 });

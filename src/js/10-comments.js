@@ -31,7 +31,7 @@ import {
 import { editableCellHtml } from "./05-render.js";
 import { resetDraftHistory } from "./05d-draft-edit.js";
 import { personColor } from "./13a-presence.js";
-import { queueAutoSave, resumeAutoSave } from "./14-export.js";
+import { autoSavePolicy, resumeAutoSave } from "../legacy/save-bridge.ts";
 import { commentBodyText, commentEntries, formatTimestampAbsolute } from "../adapters/formats/export-projections.ts";
 import { makeId, nowIso } from "../adapters/identity/ids.ts";
 import {
@@ -577,7 +577,7 @@ export function postComment() {
 
 function sendNow() {
   if (reviewMode()) resumeAutoSave();
-  queueAutoSave();
+  autoSavePolicy().dueNow();
 }
 
 function findCommentIndex(id) {
