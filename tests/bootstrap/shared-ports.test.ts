@@ -28,7 +28,7 @@ test("external links check the current desktop capability and forward each addre
     useDesktopForTest({});
     assert.equal(externalLinks.available(), false);
     externalLinks.open(url);
-    assert.deepEqual(opened, []);
+    assert.deepEqual(opened as unknown, []);
     useDesktopForTest({ openExternal: (address) => { opened.push(["first", address]); } });
     assert.equal(externalLinks.available(), true);
     externalLinks.open(url);
