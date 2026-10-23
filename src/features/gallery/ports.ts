@@ -1,8 +1,11 @@
+import type { UndoEntry, UndoState } from "../../application/editing/undo/history.ts";
+import type { Step } from "../../core/text/steps.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
+import type { DesktopVideo } from "../../application/media/desktop-video.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { SaveOwnershipPort } from "../../application/save/coordinator.ts";
@@ -62,5 +65,23 @@ export interface GalleryOverlayPorts {
 }
 
 export interface GalleryOverlayMount {
+  readonly dispose: () => void;
+}
+
+export interface UndoFold {
+  readonly fold: (entry: UndoEntry | null | undefined, touches: (step: Step) => boolean, change: (draft: UndoState) => boolean) => boolean;
+}
+
+export interface GalleryVideoPorts {
+  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly pictures: Pick<PictureStore, "intern" | "persist">;
+  readonly ownership: SaveOwnershipPort;
+  readonly undo: UndoFold;
+  readonly thumbnailsAllowed: () => boolean;
+  readonly desktop: Pick<DesktopVideo, "present" | "thumbnail">;
+}
+
+export interface GalleryVideoMount extends Omit<GalleryVideo, "hostLabel"> {
+  readonly thumbnailsAfterPaste: (rowId: string | null, hrefs: readonly unknown[] | null | undefined, entry: unknown) => void;
   readonly dispose: () => void;
 }
