@@ -11,7 +11,7 @@ import {
   toggleResolveCommand,
   unwrapCommentAnchorCommand
 } from "../application/commands/comments.ts";
-import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
+import { captureOperation, keepSnapshot, stillOwns } from "../legacy/transition-bridge.ts";
 import { editorSelection } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
@@ -21,7 +21,6 @@ import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { normalizeImageRef } from "../../shared/blob-policy.js";
 import {
   openSidePanel,
-  pushSnapshot,
   syncPanelClass
 } from "./03-sync.js";
 import {
@@ -962,7 +961,7 @@ export function restoreConflictValue(commentId) {
   if (ci === -1) return;
   const c = doc.comments[ci];
   if (c.field === "title") {
-    pushSnapshot("Before using your version of the title");
+    keepSnapshot("Before using your version of the title");
     runDocumentEdit(restoreConflictCommand(commentId, { kind: "title", title: c.emptyValue ? "" : (c.titleValue || "") }, sessionStamps));
     showToast("Restored your version of the title", "ok");
     return;
@@ -970,7 +969,7 @@ export function restoreConflictValue(commentId) {
   var ri = readSession(function (doc) { return rowIndexOf(doc, c.rowId); });
   if (ri === -1) { showToast("That scene no longer exists.", "warn"); return; }
 
-  pushSnapshot("Before using your version of " + (c.conflictField || "a field"));
+  keepSnapshot("Before using your version of " + (c.conflictField || "a field"));
   var value = c.field === "visualImage"
     ? { kind: "image", imageRef: c.emptyValue ? null : (normalizeImageRef(c.imageValue) || null) }
     : { kind: "text", html: c.emptyValue ? "" : sanitizeHtml(c.body) };

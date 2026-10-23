@@ -10,7 +10,6 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { cellEditing } = await import("../legacy/editor-bridge.ts");
 const { toggleCellFormat, maybeCueShortcut } = await import("../js/05-render.js");
@@ -19,6 +18,7 @@ const { liveSession } = await import("../legacy/session-bridge.ts");
 const { setMark } = await import("../js/04c-doc-model.js");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -42,7 +42,7 @@ let opened = 0;
 async function open() {
   if (viewFlags().writerOpen()) writer.closeWriter();
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "cell-edit-" + (++opened) + ".splitpage", { lastModified: opened });
-  await openProjectFile(file, null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
 }
 

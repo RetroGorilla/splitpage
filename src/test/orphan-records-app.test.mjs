@@ -10,7 +10,6 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { maybeAutoTagShortcut } = await import("../js/07-production-tags.js");
 const { maybeOpenPlainTag, closePlainTag, cancelPlainTag } = await import("../js/07b-plain-tags.js");
@@ -21,6 +20,7 @@ const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -53,7 +53,7 @@ async function open(make = fixture) {
   if (viewFlags().writerOpen()) writer.closeWriter();
   cancelPlainTag();
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(make())))], "orphans-" + (++opened) + ".splitpage", { lastModified: opened });
-  await openProjectFile(file, null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
 }
 

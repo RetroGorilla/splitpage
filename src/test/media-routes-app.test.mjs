@@ -12,12 +12,12 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { openProjectFile } = await import("../js/18-local-files.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { rowSlots } = await import("../core/document/gallery.ts");
 const { openGalleryOverlay, closeGalleryOverlay } = await import("../js/05e-gallery-overlay.js");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 function pngDataUrl(red, green, blue) {
@@ -75,7 +75,7 @@ let opened = 0;
 async function open(role) {
   window.__hostedTest.setSession({ role: role || "edit", docId: null });
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "media-routes-" + (++opened) + ".splitpage", { lastModified: opened });
-  await openProjectFile(file, null, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
 }
 

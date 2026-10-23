@@ -17,13 +17,14 @@ const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { applyMerge } = await import("../js/03-sync.js");
 const { mergeUndo } = await import("../legacy/editor-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
-const { finishServerDetect, openServerDoc } = await import("../js/13-hosted.js");
+const { finishServerDetect } = await import("../js/13-hosted.js");
 const { SERVER_RESUME_KEY } = await import("../application/location/server-status.ts");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
-const { openProjectFile, reloadFileFromDisk } = await import("../js/18-local-files.js");
+const { reloadFileFromDisk } = await import("../js/18-local-files.js");
 const { applyTakenDraft } = await import("../js/20g-drafts.js");
 const { loadTestDocument } = await import("./_document.mjs");
+const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
@@ -234,7 +235,7 @@ const handle = { kind: "file", name: "reload.txt", getFile: async () => disk };
 async function openImport() {
   disk = new File(["Wide\tOne.\nClose\tTwo."], "reload.txt", { lastModified: 1 });
   handle.name = "reload.txt";
-  await openProjectFile(disk, handle, { skipSnapshot: true });
+  await openDocument({ kind: "file", file: disk, handle: handle, options: { skipSnapshot: true } });
   hearReplacement();
 }
 
@@ -486,7 +487,7 @@ test("opening a legacy .html file whose state is no document is refused as not a
       ["old.splitpage", JSON.stringify(raw)]
     ]) {
       const start = holding("Open " + name);
-      const opened = await openProjectFile(new File([body], name, { lastModified: 1 }), null, {});
+      const opened = await openDocument({ kind: "file", file: new File([body], name, { lastModified: 1 }), handle: null, options: {} });
       assert.equal(opened, false, name + " " + JSON.stringify(raw));
       assert.deepEqual(toasts(), [name + " doesn't look like a Splitpage file."]);
       unchangedBy(name + " " + JSON.stringify(raw), start, start.epoch, start.gen);
@@ -497,7 +498,7 @@ test("opening a legacy .html file whose state is no document is refused as not a
 test("opening a server document whose state is no document is refused like an empty one, and nothing changes (#407)", async () => {
   for (const raw of NOT_DOCUMENTS) {
     const start = holding("Server open");
-    const opened = await withServer((ask) => ask === "GET api/docs/doc-open" ? reply(200, { id: "doc-open", rev: 4, state: raw }) : null, () => openServerDoc("doc-open"));
+    const opened = await withServer((ask) => ask === "GET api/docs/doc-open" ? reply(200, { id: "doc-open", rev: 4, state: raw }) : null, () => openDocument({ kind: "server", id: "doc-open" }));
     assert.equal(opened, false, JSON.stringify(raw));
     assert.deepEqual(toasts(), ["That document is empty."]);
     unchangedBy("open " + JSON.stringify(raw), start, start.epoch, start.gen);
@@ -632,7 +633,7 @@ test("a server open that takes a pending browser draft and finds a state that is
   modal.hidden = false;
   serverStatus().recordMode({ checked: true });
   const opened = await withServer((ask) => ask === "GET api/docs/doc-draft" ? reply(200, { id: "doc-draft", rev: 2, state: [] }) : null, async (asked) => {
-    const result = await openServerDoc("doc-draft");
+    const result = await openDocument({ kind: "server", id: "doc-draft" });
     assert.deepEqual(asked, ["GET api/docs/doc-draft"]);
     return result;
   });
