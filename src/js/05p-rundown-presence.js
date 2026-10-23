@@ -1,5 +1,5 @@
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { rundownEdge } from "./05f-rundown.js";
+import { rundownEdge } from "../features/rundown/rundown.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { presenceShown } from "./13a-presence.js";
 import { idMap } from "../core/document/id-map.ts";

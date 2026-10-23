@@ -1,6 +1,5 @@
 import type { ActionDefinition, ActionRegistry, Availability } from "../application/actions.ts";
 import { registerAll } from "../application/actions.ts";
-import { goToScene } from "../js/05f-rundown.js";
 import { openAnnotator } from "../js/05w-annotate.js";
 import { openGalleryLink } from "../js/06-rows.js";
 import { openTagComposer } from "../js/07-production-tags.js";
@@ -34,10 +33,6 @@ function opener(id: string, label: string, run: (input: unknown) => void): Actio
 
 export function registerEditorOpenActions(registry: ActionRegistry): () => void {
   return registerAll(registry, [
-    opener("go-to-scene", "Go to scene", (input) => {
-      if (input !== null && typeof input !== "string") throw new TypeError("go-to-scene needs a scene id");
-      goToScene(input);
-    }),
     opener("annotate-picture", "Draw on picture", (input) => {
       const at = fields("annotate-picture", input, ["rowId"], ["slot"]);
       openAnnotator(at["rowId"], at["slot"]);

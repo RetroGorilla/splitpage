@@ -8,14 +8,16 @@ import { actionForKey } from "../../src/application/shortcuts.ts";
 import { registerFileActions } from "../../src/legacy/file-actions.ts";
 import { registerHelpActions } from "../../src/legacy/help-actions.ts";
 import { registerShareActions } from "../../src/legacy/share-actions.ts";
-import { registerThisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
 import { scriptZoomActions } from "../../src/bootstrap/wiring/script-zoom.ts";
 
 function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   const registry = createActionRegistry();
-  const disposers = [
-    registerThisDocumentActions(registry), registerFileActions(registry), registerViewActions(registry),
+  mountRundownFeature();
+  const disposers = [stopRundownFeature,
+    registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerFileActions(registry), registerViewActions(registry),
     registerHelpActions(registry), registerShareActions(registry), registerAll(registry, scriptZoomActions())
   ];
   return { registry, dispose: () => { for (const d of disposers) d(); } };
