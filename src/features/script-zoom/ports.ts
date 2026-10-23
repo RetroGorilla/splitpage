@@ -1,8 +1,7 @@
 import type { ActionRegistry } from "../../application/actions.ts";
-import type { DocumentView } from "../../application/session/document-session.ts";
 
 export interface ScriptZoomPorts {
-  readonly currentDocument: () => DocumentView | null;
+  readonly hasDocument: () => boolean;
   readonly prompterIsOpen: () => boolean;
   readonly runAction: ActionRegistry["invoke"];
   readonly scriptScale: () => number;
@@ -11,5 +10,4 @@ export interface ScriptZoomPorts {
   readonly isScriptScaleKey: (key: string | null) => boolean;
   readonly preferenceEvent: string;
   readonly writerOpen: () => boolean;
-  readonly hideShot: () => boolean;
 }

@@ -161,7 +161,7 @@ function hideReadoutSoon() {
 }
 
 export function scriptViewActive() {
-  return !!ports.currentDocument() && !ports.prompterIsOpen() && !ports.writerOpen() &&
+  return ports.hasDocument() && !ports.prompterIsOpen() && !ports.writerOpen() &&
     !document.documentElement.classList.contains("is-newtab-open");
 }
 
