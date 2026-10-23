@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createStashedWork } from "../../src/application/recovery/stashed-work.ts";
+import { createLocalWorkStash, createStashedWork } from "../../src/application/recovery/stashed-work.ts";
 import type { StashMerged } from "../../src/application/recovery/stashed-work.ts";
 import type { ConflictStash, StashedWork } from "../../src/application/recovery/conflict-stash.ts";
 import { SERVER_RESUME_KEY } from "../../src/application/location/server-status.ts";
@@ -116,4 +116,61 @@ test("a merge that waits answers a promise of the same answer", async () => {
   const out = w.apply(doc("Loaded"), { mine: doc("Mine", MINE_ID) }, { awaitUndoPoint: true });
   assert.ok(out instanceof Promise);
   assert.deepEqual(await out, { state: doc("Later"), report: null, snapshot: null, replaced: false });
+});
+
+function localStash(mine: Record<string, unknown> | null, base: Record<string, unknown> | null, durable: readonly string[] = []): { readonly saved: StashedWork[]; readonly stashLocal: () => boolean } {
+  const saved: StashedWork[] = [];
+  const stash: ConflictStash = {
+    save: (payload) => { saved.push(payload); return true; },
+    read: () => null,
+    clear: () => {},
+    accept: (given) => given,
+    dropReloadGuard: () => {}
+  };
+  const stashLocal = createLocalWorkStash<Record<string, unknown>>({
+    stash: stash,
+    current: () => mine,
+    base: () => base,
+    now: () => "2026-10-23T00:00:00.000Z",
+    editor: () => "Ann",
+    durable: (sha) => durable.includes(sha),
+    dataUrl: (sha) => (sha.startsWith("a") ? "data:image/png;base64," + sha.slice(0, 4) : null)
+  });
+  return { saved, stashLocal };
+}
+
+const SHA_A = "a".repeat(64);
+const SHA_B = "b".repeat(64);
+const SHA_C = "a".repeat(63) + "c";
+
+function pictured(sha: string): Record<string, unknown> {
+  return { docId: MINE_ID, rows: [{ id: "r1", imageRef: { sha256: sha, mime: "image/png", w: 1, h: 1, bytes: 1 } }] };
+}
+
+test("local work stash: with no document nothing is saved", () => {
+  const w = localStash(null, null);
+  assert.equal(w.stashLocal(), false);
+  assert.deepEqual(w.saved, []);
+});
+
+test("local work stash: saves when, who, the merge base and my document, with the bytes of pictures that are not durable and that have bytes", () => {
+  const mine = pictured(SHA_A);
+  const base = { docId: MINE_ID, rows: [pictured(SHA_C)["rows"], pictured(SHA_B)["rows"]].flat() };
+  const w = localStash(mine, base);
+  assert.equal(w.stashLocal(), true);
+  assert.equal(w.saved.length, 1);
+  const payload = w.saved[0];
+  assert.deepEqual(Object.keys(payload ?? {}), ["at", "by", "base", "mine", "blobs"]);
+  assert.equal(payload?.["at"], "2026-10-23T00:00:00.000Z");
+  assert.equal(payload?.["by"], "Ann");
+  assert.equal(payload?.mine, mine);
+  assert.equal(payload?.["base"], base);
+  assert.deepEqual(payload?.["blobs"], { [SHA_A]: "data:image/png;base64,aaaa", [SHA_C]: "data:image/png;base64,aaaa" });
+});
+
+test("local work stash: durable pictures carry no bytes, and with none left the payload has no blobs", () => {
+  const w = localStash(pictured(SHA_A), null, [SHA_A]);
+  assert.equal(w.stashLocal(), true);
+  assert.deepEqual(Object.keys(w.saved[0] ?? {}), ["at", "by", "base", "mine"]);
+  assert.equal(w.saved[0]?.["base"], null);
 });
