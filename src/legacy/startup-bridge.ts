@@ -1,6 +1,4 @@
-export interface StartupSignal {
-  readonly ready: () => Promise<unknown> | null;
-}
+import type { StartupSignal } from "../application/startup-signal.ts";
 
 let connected: StartupSignal | null = null;
 
