@@ -17,6 +17,35 @@ import type { Command, CommandOutcome, DocumentView, SessionListener } from "../
 import type { UndoControl } from "../../src/application/editing/undo-control.ts";
 import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
 import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
+import type { TextServices } from "../../src/application/text/services.ts";
+
+export function fakeTextServices(document: Document) {
+  const calls: { method: string; html: unknown }[] = [];
+  const inertBody = (html: unknown): HTMLElement => {
+    const body = document.createElement("div");
+    body.innerHTML = String(html ?? "");
+    return body;
+  };
+  const text: Pick<TextServices<HTMLElement>, "fromHtml" | "inertBody" | "sanitizeHtml" | "storedHtmlFromDom"> = {
+    fromHtml: (html) => {
+      calls.push({ method: "fromHtml", html });
+      return [{ text: inertBody(html).textContent ?? "", marks: {} }];
+    },
+    inertBody: (html) => {
+      calls.push({ method: "inertBody", html });
+      return inertBody(html);
+    },
+    sanitizeHtml: (html) => {
+      calls.push({ method: "sanitizeHtml", html });
+      return String(html ?? "");
+    },
+    storedHtmlFromDom: (html) => {
+      calls.push({ method: "storedHtmlFromDom", html });
+      return html;
+    }
+  };
+  return { text, calls };
+}
 
 export function fakeNotices() {
   const shown: { message: string; kind: NoticeKind | undefined; label?: string; action?: () => void; sticky: boolean | undefined; notice: ReturnType<typeof notice> }[] = [];
