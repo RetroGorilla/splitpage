@@ -25,6 +25,8 @@ import { legacyPresencePorts, presenceStarted, startPresence } from "../../src/l
 import { effectsStarted, startEffects } from "../../src/legacy/effects-bridge.ts";
 import type { EffectPorts } from "../../src/application/effects/ports.ts";
 import { recoveryStarted } from "../../src/legacy/recovery-bridge.ts";
+import { mergeStarted } from "../../src/legacy/merge-bridge.ts";
+import type { LegacyMergePorts } from "../../src/legacy/merge-bridge.ts";
 import { requestSave, savesStarted, savesWaiting } from "../../src/legacy/save-bridge.ts";
 import { startupReady } from "../../src/legacy/startup-bridge.ts";
 import type { LegacySaveJob, LegacySavePorts } from "../../src/legacy/save-bridge.ts";
@@ -40,7 +42,7 @@ import {
   startSessionBridge
 } from "../../src/legacy/session-bridge.ts";
 import type { ReplayRunner, SessionUndoPorts } from "../../src/legacy/session-bridge.ts";
-import { documentSources, documentTransitions, openDocument, startTransitions } from "../../src/legacy/transition-bridge.ts";
+import { captureOperation, documentSources, documentTransitions, openDocument, startTransitions } from "../../src/legacy/transition-bridge.ts";
 import { createUndoAdapter, routeReplays } from "../../src/legacy/undo-adapter.ts";
 import { sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
 import { migrateRows } from "../../src/js/02-state.js";
@@ -49,7 +51,7 @@ import type { ProjectFileServices } from "../../src/application/formats/project-
 
 after(closeApp);
 
-const OWNERS = ["location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions", "recovery", "editor", "productionEditing", "preferences", "shotHiding", "presence"] as const;
+const OWNERS = ["location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions", "merge", "recovery", "editor", "productionEditing", "preferences", "shotHiding", "presence"] as const;
 
 type Owner = (typeof OWNERS)[number];
 type Started = Record<Owner, boolean>;
@@ -75,6 +77,7 @@ function started(): Started {
     session: sessionStarted() && live(() => liveSession().epoch()),
     saves: savesStarted(),
     transitions: live(() => documentTransitions()),
+    merge: mergeStarted(),
     recovery: recoveryStarted(),
     editor: editorStarted(),
     productionEditing: productionEditingStarted(),
@@ -125,6 +128,23 @@ function transitionPorts(): TransitionDeps {
     destination: { set: () => {}, confirm: () => {} },
     identity: { mint: () => "d" + "0".repeat(32), writtenOut: () => false, markWrittenOut: () => {} },
     history: { keep: () => null }
+  };
+}
+
+function mergePorts(): LegacyMergePorts {
+  return {
+    states: (_base, _mine, theirs) => ({ merged: theirs, conflicts: [], stats: { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 } }),
+    entry: (raw) => migrateRows(raw),
+    isDocument: (raw) => !!raw && typeof raw === "object",
+    snapshot: () => null,
+    current: () => null,
+    adopt: (_kind, next) => next,
+    documentId: () => null,
+    noteHistoryFrom: () => {},
+    armUndo: () => {},
+    setBase: () => {},
+    capture: () => captureOperation(),
+    stillOwns: () => true
   };
 }
 
@@ -203,11 +223,16 @@ function fakes(): Fakes {
       note("sources");
       return [{ id: "probe", takes: () => true, open: () => true }];
     },
+    merge: () => {
+      note("merge");
+      return mergePorts();
+    },
     recovery: () => {
       note("recovery");
       return {
         indexedDB: null, limits: { maxAgeMs: 1, maxCount: 1, maxBytes: 1 }, now: () => 0, writerId: "w", desktop: () => null,
-        sessionStorage: () => null, localStorage: () => null, internImage: () => {}, merge: (request) => ({ state: migrateRows(request["theirs"]) })
+        sessionStorage: () => null, localStorage: () => null, internImage: () => {}, merge: (request) => ({ state: migrateRows(request["theirs"]) }),
+        drafts: { flush: () => Promise.resolve({ ok: true }), armServer: () => Promise.resolve(false), offerAfterLinkOff: () => Promise.resolve(false) }
       };
     },
     projectFiles: () => {
@@ -260,7 +285,8 @@ test("startup: wireApp builds every owner in order, each step sees only the owne
     ["saves", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session")],
     ["destinations", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves")],
     ["sources", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions")],
-    ["recovery", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions")]
+    ["merge", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions")],
+    ["recovery", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions", "merge")]
   ]);
   assert.deepEqual(started(), EVERYTHING);
   assert.equal(wiring.session, liveSession());
@@ -276,7 +302,7 @@ test("startup: wireApp builds every owner in order, each step sees only the owne
 });
 
 test("failed partial startup: each missing dependency is named and nothing is built", () => {
-  const required: (keyof WiringDeps)[] = ["entry", "effects", "editorName", "refresh", "records", "saves", "destinations", "transitions", "sources", "recovery", "projectFiles", "keyTarget"];
+  const required: (keyof WiringDeps)[] = ["entry", "effects", "editorName", "refresh", "records", "saves", "destinations", "transitions", "sources", "merge", "recovery", "projectFiles", "keyTarget"];
   for (const name of required) {
     const f = fakes();
     const error = refused(() => wireLoose(without(f.deps, name)));
@@ -467,9 +493,10 @@ test("failed partial startup: a timers port, undo adapter or key target that lac
   wiring.dispose();
 });
 
-test("failed partial startup: an actions, exporters or recovery factory that returns something malformed fails its step, names what is missing and leaves no owner", () => {
+test("failed partial startup: an actions, exporters, merge or recovery factory that returns something malformed fails its step, names what is missing and leaves no owner", () => {
   const registryMethods = ["register", "has", "shortcuts", "view", "list", "invoke", "presentRefusals"] as const;
-  const recoveryMethods = ["now", "desktop", "sessionStorage", "localStorage", "internImage"] as const;
+  const recoveryMethods = ["now", "desktop", "sessionStorage", "localStorage", "internImage", "merge"] as const;
+  const mergeMethods = ["states", "entry", "isDocument", "snapshot", "current", "adopt", "documentId", "noteHistoryFrom", "armUndo", "setBase", "capture", "stillOwns"] as const;
   type Spoilt = [string, (f: Fakes) => WiringDeps | Record<string, unknown>, string, string];
   const cases: Spoilt[] = [
     ["actions nothing", (f) => ({ ...f.deps, actions: () => undefined }), "action registry", "the actions dependency returned no action registry"],
@@ -479,7 +506,16 @@ test("failed partial startup: an actions, exporters or recovery factory that ret
     ]),
     ["exporters nothing", (f) => ({ ...f.deps, exporters: () => undefined }), "built-in exporters", "the exporters dependency returned no function to remove them"],
     ["exporters not a function", (f) => ({ ...f.deps, exporters: () => 7 }), "built-in exporters", "the exporters dependency returned no function to remove them"],
+    ["merge nothing", (f) => ({ ...f.deps, merge: () => undefined }), "merge", "the merge dependency returned no merge ports"],
+    ...mergeMethods.flatMap((method): Spoilt[] => [
+      ["merge " + method, (f) => ({ ...f.deps, merge: () => without(f.deps.merge(), method) }), "merge", "the merge dependency returned no " + method + " function"],
+      ["merge " + method + " not a function", (f) => ({ ...f.deps, merge: () => ({ ...f.deps.merge(), [method]: 7 }) }), "merge", "the merge dependency returned no " + method + " function"]
+    ]),
     ["recovery nothing", (f) => ({ ...f.deps, recovery: () => undefined }), "recovery", "the recovery dependency returned no recovery ports"],
+    ["recovery drafts nothing", (f) => ({ ...f.deps, recovery: () => without(f.deps.recovery(), "drafts") }), "recovery", "the recovery dependency returned no draft ports"],
+    ...(["flush", "armServer", "offerAfterLinkOff"] as const).map((method): Spoilt => [
+      "recovery drafts " + method, (f) => ({ ...f.deps, recovery: () => ({ ...f.deps.recovery(), drafts: without(f.deps.recovery().drafts, method) }) }), "recovery", "the recovery dependency's draft ports have no " + method + " function"
+    ]),
     ...recoveryMethods.flatMap((method): Spoilt[] => [
       ["recovery " + method, (f) => ({ ...f.deps, recovery: () => without(f.deps.recovery(), method) }), "recovery", "the recovery dependency returned no " + method + " function"],
       ["recovery " + method + " not a function", (f) => ({ ...f.deps, recovery: () => ({ ...f.deps.recovery(), [method]: 7 }) }), "recovery", "the recovery dependency returned no " + method + " function"]
@@ -532,6 +568,7 @@ test("failed partial startup: a step that throws undoes every step before it, in
     "save destinations": (f) => ({ deps: { ...f.deps, destinations: () => { throw boom; } } }),
     transitions: (f) => ({ deps: f.deps, cleanup: startTransitions({ ...transitionPorts(), live: liveDocumentPort }), cause: false }),
     "document sources": (f) => ({ deps: { ...f.deps, sources: () => { throw boom; } } }),
+    merge: (f) => ({ deps: { ...f.deps, merge: () => { throw boom; } } }),
     recovery: (f) => ({ deps: { ...f.deps, recovery: () => { throw boom; } } }),
     editor: (f) => ({ deps: f.deps, cleanup: startEditor(liveDocumentPort), cause: false }),
     "production editing": (f) => ({ deps: f.deps, cleanup: startProductionEditing(must(f.deps.timers)), cause: false }),

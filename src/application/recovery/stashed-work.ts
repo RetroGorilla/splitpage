@@ -1,3 +1,4 @@
+import { refsIn } from "../../../shared/blob-policy.js";
 import { normalizeDocId } from "../../../shared/doc-id-policy.js";
 import { SERVER_RESUME_KEY } from "../location/server-status.ts";
 import type { ConflictStash, KeyValueStorage, StashedWork } from "./conflict-stash.ts";
@@ -83,5 +84,44 @@ export function createStashedWork<D extends { docId: string }, R>(ports: Stashed
       mine: stash.mine,
       undoPoint: ports.copy(loaded)
     });
+  };
+}
+
+export interface LocalWorkPorts<D> {
+  readonly stash: ConflictStash;
+  readonly current: () => D | null;
+  readonly base: () => D | null;
+  readonly now: () => string;
+  readonly editor: () => string;
+  readonly durable: (sha: string) => boolean;
+  readonly dataUrl: (sha: string) => string | null | undefined;
+}
+
+export function createLocalWorkStash<D>(ports: LocalWorkPorts<D>): () => boolean {
+  function blobsFor(docs: readonly (D | null)[]): Record<string, string> | null {
+    const blobs: Record<string, string> = {};
+    let any = false;
+    for (const doc of docs) {
+      for (const ref of refsIn(doc)) {
+        const sha = String(ref);
+        if (blobs[sha] || ports.durable(sha)) continue;
+        const url = ports.dataUrl(sha);
+        if (url) {
+          blobs[sha] = url;
+          any = true;
+        }
+      }
+    }
+    return any ? blobs : null;
+  }
+
+  return function stashLocalWork() {
+    const mine = ports.current();
+    if (!mine) return false;
+    const base = ports.base();
+    const payload: StashedWork = { at: ports.now(), by: ports.editor(), base: base, mine: mine };
+    const blobs = blobsFor([mine, base]);
+    if (blobs) payload["blobs"] = blobs;
+    return ports.stash.save(payload);
   };
 }

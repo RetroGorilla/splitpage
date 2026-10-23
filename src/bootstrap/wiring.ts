@@ -23,8 +23,10 @@ import { startLocation } from "../legacy/location-bridge.ts";
 import { startPreferences } from "../legacy/preferences-bridge.ts";
 import { legacyShotHidingPorts, startShotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { legacyPresencePorts, startPresence } from "../legacy/presence-bridge.ts";
+import { startMerge } from "../legacy/merge-bridge.ts";
+import type { LegacyMergePorts } from "../legacy/merge-bridge.ts";
 import { startRecovery } from "../legacy/recovery-bridge.ts";
-import type { LegacyRecoveryPorts } from "../legacy/recovery-bridge.ts";
+import type { LegacyDraftPorts, LegacyRecoveryPorts } from "../legacy/recovery-bridge.ts";
 import { saveDestinations, startSaves } from "../legacy/save-bridge.ts";
 import type { LegacyAutoSavePorts, LegacySaveDestination, LegacySavePorts } from "../legacy/save-bridge.ts";
 import { liveDocumentPort, liveSession, startSessionBridge } from "../legacy/session-bridge.ts";
@@ -52,6 +54,7 @@ export interface WiringDeps {
   readonly destinations: () => readonly LegacySaveDestination[];
   readonly transitions: TransitionDeps;
   readonly sources: () => readonly LegacyDocumentSource[];
+  readonly merge: () => LegacyMergePorts;
   readonly recovery: () => LegacyRecoveryPorts;
   readonly projectFiles: () => ProjectFileServices;
   readonly keyTarget: EventTarget;
@@ -93,6 +96,7 @@ export const WIRING_STEPS = Object.freeze([
   "save destinations",
   "transitions",
   "document sources",
+  "merge",
   "recovery",
   "editor",
   "production editing",
@@ -113,6 +117,7 @@ const REQUIRED: readonly (readonly [keyof WiringDeps, "function" | "object"])[] 
   ["destinations", "function"],
   ["transitions", "object"],
   ["sources", "function"],
+  ["merge", "function"],
   ["recovery", "function"],
   ["projectFiles", "function"],
   ["keyTarget", "object"]
@@ -153,6 +158,10 @@ const KEY_TARGET_METHODS: readonly (keyof EventTarget)[] = ["addEventListener", 
 const ACTION_REGISTRY_METHODS: readonly (keyof ActionRegistry)[] = ["register", "has", "shortcuts", "view", "list", "invoke", "presentRefusals"];
 
 const RECOVERY_METHODS: readonly (keyof LegacyRecoveryPorts)[] = ["now", "desktop", "sessionStorage", "localStorage", "internImage", "merge"];
+
+const DRAFT_METHODS: readonly (keyof LegacyDraftPorts)[] = ["flush", "armServer", "offerAfterLinkOff"];
+
+const MERGE_METHODS: readonly (keyof LegacyMergePorts)[] = ["states", "entry", "isDocument", "snapshot", "current", "adopt", "documentId", "noteHistoryFrom", "armUndo", "setBase", "capture", "stillOwns"];
 
 function present(value: unknown, kind: "function" | "object"): boolean {
   return value !== null && typeof value === kind;
@@ -211,10 +220,20 @@ function registerDestinations(list: readonly LegacySaveDestination[]): () => voi
   return () => { drain(drops); };
 }
 
+function checkedMerge(ports: LegacyMergePorts | null | undefined): LegacyMergePorts {
+  if (!ports || !present(ports, "object")) throw new WiringError("merge", "Wiring: the merge dependency returned no merge ports");
+  const missing = lacking(ports, MERGE_METHODS);
+  if (missing) throw new WiringError("merge", "Wiring: the merge dependency returned no " + missing + " function");
+  return ports;
+}
+
 function checkedRecovery(ports: LegacyRecoveryPorts | null | undefined): LegacyRecoveryPorts {
   if (!ports || !present(ports, "object")) throw new WiringError("recovery", "Wiring: the recovery dependency returned no recovery ports");
   const missing = lacking(ports, RECOVERY_METHODS);
   if (missing) throw new WiringError("recovery", "Wiring: the recovery dependency returned no " + missing + " function");
+  if (!present(ports.drafts, "object")) throw new WiringError("recovery", "Wiring: the recovery dependency returned no draft ports");
+  const draft = lacking(ports.drafts, DRAFT_METHODS);
+  if (draft) throw new WiringError("recovery", "Wiring: the recovery dependency's draft ports have no " + draft + " function");
   return ports;
 }
 
@@ -356,6 +375,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("save destinations", () => registerDestinations(checkedDestinations(deps.destinations())), (drop) => drop);
   build("transitions", () => startTransitions({ ...deps.transitions, live: liveDocumentPort }), (stop) => stop);
   build("document sources", () => registerSources(checkedSources(deps.sources())), (drop) => drop);
+  build("merge", () => startMerge(checkedMerge(deps.merge())), (stop) => stop);
   build("recovery", () => startRecovery(checkedRecovery(deps.recovery())), (stop) => stop);
   build("editor", () => startEditor(liveDocumentPort), (stop) => stop);
   build("production editing", () => wireProductionEditing(deps.timers ?? SYSTEM_TIMERS), (stop) => stop);

@@ -77,7 +77,7 @@ A feature's `ports.ts` has three kinds of field:
 A port never carries:
 
 - a pure helper or a constant: the feature imports it from `src/core/`, `shared/` or `src/features/common/`;
-- a function of another feature or a numbered file: that becomes an action, an owner or a callback ([Rule 5](#rule-5-features-reach-each-other-four-ways));
+- a function of another feature or a numbered file: that becomes an action, an owner or a callback ([Rule 5](#rule-5-features-reach-each-other-four-ways)), or, while that numbered file hasn't moved yet, a field shaped for the need (Rule 5, "Calls into a file that moves later");
 - storage keys, DOM event names or `storage` events: those are the owner's business, and the feature hears about changes through the owner's `onChange`;
 - a field the feature doesn't use. The typecheck can't catch this, so the reviewer does.
 
@@ -123,6 +123,8 @@ A feature never imports another feature, and nothing outside its own folder, the
 A quick test: if feature B is about to call `a.something()`, then A does something (an action), A knows something (an owner), or A tells something (a callback).
 
 **Numbered importers during the move.** When a file moves, the numbered files that imported it switch, in the same PR, to the action, owner, callback or common helper above. The one exception is a numbered file that moves into the same feature folder next, such as `05p-rundown-presence` and `05t-target` after the rundown. The PR lists those. The rule enforces itself in the end: when that importer moves, the layer rule fails until the crossing is designed.
+
+**Calls into a file that moves later.** Sometimes the moved code needs an answer from a numbered file that moves in a later wave, and there is no owner or action for it yet. An action can't help when the caller needs a result, since `invoke` returns only whether it ran. In that case the port field is shaped for what the feature needs. It is typed in the feature's `ports.ts` when only that feature needs it, or as the owner-to-be's interface in `src/application/` when several do. The wiring fills it from the numbered file, since bootstrap may import anything. When that file moves, its own move PR gives the field its lasting source (the new owner, or the moved feature's control object), and the feature that uses it doesn't change. The PR lists each such field. This differs from copying the import list: the field is named and typed for the need, not for the file that provides it today.
 
 **Bridges that import the moved file.** A bridge may not import a feature (`layerAllows` lets `src/legacy/` import numbered files but not `src/features/`), so the move PR also settles every bridge import of the file, listed under "Imported by bridges" in the [inventory](feature-ports-inventory.md):
 
@@ -185,7 +187,49 @@ Each is built in `sharedPorts()` from the owners and, until they retire, the bri
 | P13 Picture store | `PictureStore`, new, `application/media/picture-store.ts`: intern, persist, read and render stored pictures | | `adapters/storage/02c-blobs.js`, `02d-gallery.js` | 16 | gallery (`05e`) | Opus: durable storage |
 | P14 Side panels | `SidePanels`, from L3f (`application/side-panels.ts`) | | panels bridge | 6 | help | done in L3f |
 | P15 Save status | `SaveStatus`, new, `application/save/`: `unsaved()`, `busy()`, `onChange(listener)`, `dueNow()` | read only, plus "autosave now" and "resume autosave" | save bridge | 16 | copy, paste and scene selection (`05h` asks for an autosave now) | Opus |
-| P16 Document place | `DocumentPlace`, new, `application/location/`: where the document lives and the server's status, read only | | location bridge | 30 | its own PR at the start of Wave 3, since the first Wave 3 users (`13a`, `13b`, `20b`) are Codex | Opus |
+| P16 Document place | `DocumentPlace`, new, `application/location/`: where the document lives, the server's status, and `arrivingOnLink()` (whether this page opened from a share link, used by `20a`, `20b` and `20j`), read only | | location bridge, and `arrivingOnLink` from `13-hosted` until it moves | 30 | its own PR at the start of Wave 3, since the first Wave 3 users (`13a`, `13b`, `20b`) are Codex | Opus |
+| P17 File delivery | `FileDelivery`, new, `application/files/file-delivery.ts`: `deliver(filename, data, options)` saves a file for the person and says whether it was saved, with the same saved or failed notice | | file-delivery bridge, which calls `adapters/files/deliver.ts` | 6 | onboarding (`20b`) | Codex, with the desktop smoke: on the desktop the adapter saves through the preload bridge, and the port only forwards to it |
+| P18 Draft resume | `DraftResume`, which exists in `application/recovery/draft-resume.ts`, narrowed. Onboarding and new tab need only `restorePending()` | | recovery bridge (`draftResume()`), forwarded at call time | 5 | onboarding (`20b`) | Codex for the read-only `restorePending()`. The Opus moves of `13`, `20f` and `20g` widen the `Pick` |
+| P19 Seed check | `SeedCheck`, new, beside `seedCheckMatches` in `application/preferences/seed-check.ts`: `passes()`, true while the page still holds its untouched starting document | | seed-check bridge | 3 | onboarding (`20b`) | Codex |
+| P20 Document transitions | `Transitions` (`application/transitions/transitions.ts`), narrowed. The destination type and `NO_DESTINATION` move from `legacy/transition-bridge.ts` to `application/transitions/ports.ts` | | transition bridge (`documentTransitions`) | 6 | the first of `18b` and `20j` (Wave 3) | Opus: bringing a document in |
+| P21 Production index | `ProductionIndexOwner` (`core/production/index.ts`), narrowed | | production-index bridge | 4 | b-roll records (`08c`) | Opus: the tag ghost reads it on every keystroke |
+| P22 Export formats | `ExportRegistry` (`application/export/registry.ts`), narrowed | | export-formats bridge | 3 | the first of `18c` and `18d` | Codex |
+| P23 Startup signal | `StartupSignal` moves from `legacy/startup-bridge.ts` to `application/startup-signal.ts`: `ready()` | | startup bridge (`startupReady`) | 3 | the first of `20` and `20j` | Opus, with that move |
+| P24 Launch facts | `LaunchFacts`, new, beside `runningOnDesktop` in `application/desktop-presence.ts`: `firstTabOfLaunch()`, `hadPriorSession()`, `launchIntent()`, `hasDraftToRestore()`, read only | | `desktopPort()` (`adapters/desktop/desktop-port.ts`), read at call time | 4 (`20b`, `20f`, `20g`, `20j`) | onboarding (`20b`) | Codex, with the desktop smoke |
+| P25 Last file | `LastFile`, new, `application/files/last-file.ts`: `load()`, the file handle stored from the last session. The Opus moves of `14` and `18` add `remember(handle)` | | `loadLastFileHandle` in `00-prelude` until it moves (Wave 4) | 3 (`18`, `20b`, `20j`) | onboarding (`20b`) | Codex for the read-only `load()` |
+
+Two existing ports grow:
+
+- **P6 Screen** also forwards `askingFromLauncher(read)` and `launcherShown()` for the command menu (`18d`). The "launcher is listing" flag stays in `legacy/screen.ts` while the legacy action files read it through `screenNow()`.
+- **P10 Editing page** gains `resetProductionPanel()`, the same three calls `resetProductionPanelState()` makes (tag panel, tag delete confirmation, production selection). Its callers are lifecycle files (`03`, `13`, `18`, `18b`, `20g`, `20j`), so it lands with the first of them to move, `18b` or `20j`, on Opus.
+
+**Every bridge numbered files reach**, and where each name goes:
+
+| Bridge | Goes to |
+| --- | --- |
+| `session-bridge` | P1, P9. `heldDocument`, `stampDocument` and `mergeBase` go with the Wave 4 owner moves |
+| `location-bridge` | P5, P16. `handServerCheckTo` is a hand-off ([Rule 5](#rule-5-features-reach-each-other-four-ways)) |
+| `effects-bridge` | P2 |
+| `preferences-bridge` | P3 |
+| `richtext`, `plain-text`, `cache-freeze`, `document-ports` (`productionReaders`) | P8. `withDocumentPorts` (`02`, `02b`, `03`) goes with the Wave 4 owner moves |
+| `save-bridge` | P15. Everything else (`saveDoc`, `requestSave`, `haltAutoSave` and the rest) goes with the Wave 4 save moves |
+| `editor-bridge`, `production-editing-bridge` | P10 |
+| `merge-bridge` | `applyMerge`, `mergeStates` and `reportMerge` (`13`, `20g`) go with the Opus moves of `13` and `20g` (Wave 4), as the document-merge owner's interface in `src/application/`. No feature reads it before then |
+| `transition-bridge` | P12 (`captureOperation`, `stillOwns`), P20 (`documentTransitions`, `NO_DESTINATION`) |
+| `app-actions` | P4 |
+| `recovery-bridge` | P18 (`draftResume`). The rest (`captureRestore`, `conflictStash`, `stillRestoring`, `browserDrafts`, `desktopDrafts`, `legacySnapshots`, `recoveryStarted`, `useBrowserDraftFactory`) goes with the Wave 4 owner moves of `03`, `03a`, `13`, `14`, `20f` and `20g`, on Opus |
+| `file-delivery` | P17 |
+| `review-wording` | P5 |
+| `production-index-bridge` | P21 |
+| `seed-check` | P19 |
+| `export-formats` | P22 |
+| `startup-bridge` | P23 |
+| `screen` | P6 |
+| `panels-bridge` | P14 |
+| `tour-pause` | a hand-off ([Rule 5](#rule-5-features-reach-each-other-four-ways)) |
+| `document-guard` | goes with `02b` (Wave 4, Opus). P1 keeps the guard's read-only view |
+| `tag-rewrites` (`retagMentions`, `retagRewrites`, used by `08`) | The retag planners move to `application/commands/`, taking P8 as an argument instead of importing the richtext bridge. That happens in their own Codex PR, before `08` moves, and `08` then runs them through P9 |
+| the action files (`*-actions.ts`, `native-menu`) | [Rule 6](#rule-6-features-own-their-action-definitions-bootstrap-owns-their-order) |
 
 The pure page helpers move once, with their first user:
 
@@ -211,7 +255,7 @@ A **move** is a group of numbered files that become one feature folder (or one o
 | 2 | Undo | `12a` | 981 | 1 | 16 | 2 | history and recording to `application/editing/undo`, caret and focus to `features/undo` | Opus |
 | 2 | Gallery | `05e`, `05w`, `05v` | 1,672 | 11 | 0 | 6 | `features/gallery` | Opus (`05w` alone is Codex, after `05e`); `05e` lands P12 and P13 |
 | 2 | Copy, paste and scene selection | `05c`, `05g`, `05h`, and `04c` deleted | 1,380 | 15 | 1 | 8 | `features/clipboard` | Opus; `05h` lands P15 |
-| 2 | B-roll records | `08c` | 282 | 5 | 7 | 6 | `features/broll`; the records reconciler to `application/production` | Opus |
+| 2 | B-roll records | `08c` | 282 | 5 | 7 | 6 | `features/broll`; the records reconciler to `application/production` | Opus; lands P21 |
 | 2 | Rows, without the render | `06`, `01`, `01b` | 687 | 6 | 14 | 8 | `features/rows` | `01b`'s shot-hiding state is in the shot-hiding owner (`application/shot-hiding.ts`); `06` Opus, `01` and `01b` Codex |
 | 3 | Document place port (P16) | none | | | | | `application/location/` | Opus, its own PR before the moves below that read where the document lives |
 | 3 | The render | `05-render` | 1,286 | 20 | 7 | 8 | `features/rows` | Opus, perf-ab; after L3g |
@@ -224,7 +268,7 @@ A **move** is a group of numbered files that become one feature folder (or one o
 | 3 | Command menu | `18d` | 337 | 9 | 3 | 4 | `features/command-menu` | Codex |
 | 3 | Collaboration | `13a`, `13b`, `20e` | 1,760 | 23 | 19 | 8 | `features/collaboration` | `13a`'s presence state goes to an owner in its own PR first; then `13a` and `13b` Codex, `20e` Opus |
 | 3 | Update notices | `20a` | 384 | 1 | 5 | 1 | `features/update` | Codex, desktop smoke |
-| 3 | Onboarding | `20b` | 337 | 6 | 1 | 7 | `features/onboarding` | Codex |
+| 3 | Onboarding | `20b` | 337 | 6 | 1 | 7 | `features/onboarding` | Codex, after P16; lands P17, P18, P19, P24 and P25 |
 | 3 | New tab | `20j` | 379 | 13 | 1 | 12 | `features/newtab` | Opus |
 | 3 | Settings and app data | `20s`, `20h` | 838 | 23 | 3 | 6 | `features/settings` | `20s` Codex, `20h` Opus |
 | 4 | Document identity and entry | `00-prelude`, `02-state`, `02b` | 343 | 3 | 18 | 6 | `application/` identity owner, `adapters/files` (last-file handle), `bootstrap/startup` | Opus |
@@ -299,7 +343,7 @@ Why this order:
 | `19-writer` | 383 | yes | 7 | 9 | 3 | `features/writer` | 3 | Opus | Writer typing; perf-ab |
 | `20-teleprompter` | 1,061 | yes | 9 | 6 | 2 | `features/prompter` | 3 | Opus | Opens a project in the prompter window |
 | `20a-update` | 384 | yes | 1 | 1 | 4 | `features/update` | 3 | Codex | Calls the desktop port; desktop smoke |
-| `20b-onboarding` | 337 | | 7 | 5 | 1 | `features/onboarding` | 3 | Codex | |
+| `20b-onboarding` | 337 | | 7 | 5 | 1 | `features/onboarding` | 3 | Codex | After P16 (its own Opus PR), which also gives `arrivingOnLink()`. Lands P17 (`deliverFile`, with the desktop smoke), P18 (`restorePending()` only), P19 (`seedCheckPasses`), P24 (the desktop port's launch and session facts, with the desktop smoke) and P25 (`loadLastFileHandle`). Uses P14 for `sidePanels().closeAll()`. Three feature-local fields, filled by the wiring from files that move later (Rule 5): `launcherInfo()` from `13-hosted`'s `launcherFetch("api/launcher/info")`, `addServerBookmark(name, url, options)` from `20e-connect`, and `onFileMenuChoice(listener)` from `18-local-files`. `18` has no way to remove a listener, so the wiring registers once and passes each choice to the mounted onboarding, and `dispose` stops it |
 | `20c-help` | 351 | | 5 | 1 | 2 | `features/help` | 1 | Codex | After L3f and P1. First, in its own Codex PR, the tour's showing state goes to `ViewFlags` as `tourOpen`/`setTourOpen` (beside `writerOpen`), so `screen-state` reads the owner instead of `tourShowing()`. In the move: the `help` and `tour` definitions leave `legacy/help-actions.ts` for `features/help/actions.ts`. The tour pause is a hand-off: the mount returns `tour: { interrupt, offerResume }`, the help wiring hands it to `handTourPauseTo`, and `20e` keeps calling the bridge. When `20e` moves (Wave 3), connect gets an output callback for its dialog opening and closing, the wiring connects it to the tour, and `tour-pause.ts` goes |
 | `20d-formats` | 263 | yes | 4 | 7 | 2 | `adapters/formats`, `application/save` | 4 | Opus | L3h PR 4 moves its codecs |
 | `20e-connect` | 511 | yes | 5 | 2 | 5 | `features/collaboration` | 3 | Opus | Sets where the document lives |
