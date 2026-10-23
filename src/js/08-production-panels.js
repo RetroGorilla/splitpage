@@ -5,13 +5,13 @@ import { nextTagStatus, normalizeTagName } from "../core/document/tags.ts";
 import { formatDuration, pad2, rowSeconds } from "../core/production/timing.ts";
 import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, groupTagsByCategory, tagStatus } from "../core/production/looks.ts";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
-import { revealRow } from "./01b-hide-shot.js";
+import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { plainText, safeId } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
 import { tagStatusLampHtml } from "./07-production-tags.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
-import { personColor } from "./13a-presence.js";
+import { presence } from "../legacy/presence-bridge.ts";
 import { breakdownRows, breakdownTable } from "../adapters/formats/export-projections.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
@@ -20,7 +20,8 @@ import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddC
 import { PERSON_NAME_MAX, personById as personIn, personNamed, registryEntryOf } from "../core/production/records.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { currentDocument, readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
-import { retagMentions, retagRewrites } from "../legacy/tag-rewrites.ts";
+import { retagMentions, retagRewrites } from "../application/commands/tag-rewrites.ts";
+import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { bulkTagRows } from "../application/commands/bulk-tags.ts";
 import { rewrittenCopies } from "../application/commands/document-edit.ts";
@@ -31,7 +32,11 @@ export { breakdownRows, breakdownTable };
 
 export var IS_TOUCH;
 
-const tagEditPorts = { run: runDocumentEdit, read: readSession, stamps: sessionStamps, rewrites: retagRewrites, mentions: retagMentions };
+const tagEditPorts = {
+  run: runDocumentEdit, read: readSession, stamps: sessionStamps,
+  rewrites: (tags, toName) => retagRewrites(sharedPorts().text, tags, toName),
+  mentions: (doc, tags) => retagMentions(sharedPorts().text, doc, tags)
+};
 
 function productionEntries() {
   return productionIndex().entries(currentDocument());
@@ -216,7 +221,7 @@ function mentionLinksHtml(item) {
 
 function personAvatarHtml(name) {
   var initial = Array.from(String(name || "").trim())[0] || "?";
-  return '<span class="person-avatar" style="--presence:' + personColor(name) + '" aria-hidden="true">' +
+  return '<span class="person-avatar" style="--presence:' + presence().personColor(name) + '" aria-hidden="true">' +
     escapeHtml(initial.toUpperCase()) + '</span>';
 }
 
@@ -678,7 +683,7 @@ function findTagByKey(key) {
 }
 
 export function jumpToTag(rowId, key) {
-  revealRow(rowId);
+  shotHiding().reveal(rowId);
   var row = document.querySelector('#rows .row[data-id="' + safeId(rowId, "r") + '"]');
   if (!row) { showToast("That scene is no longer here.", "warn"); return; }
   row.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -820,11 +825,11 @@ export function bulkDeleteSelected() {
   if (!items.length) return;
   breakUndoCoalescing();
   var labelled = items.filter(function (item) { return !item.orphaned; }).map(tagRef);
-  var unlabelled = readSession(function (doc) { return retagMentions(doc, labelled); });
+  var unlabelled = readSession(function (doc) { return retagMentions(sharedPorts().text, doc, labelled); });
   clearProductionSelection();
   runDocumentEdit(deleteTagsCommand(items.map(function (item) {
     return { cat: item.cat.id, name: item.name, unlabel: !item.orphaned };
-  }), retagRewrites(labelled, null), sessionStamps));
+  }), retagRewrites(sharedPorts().text, labelled, null), sessionStamps));
   var n = items.length;
   breakUndoCoalescing();
   showToast("Deleted " + n + " item" + (n === 1 ? "" : "s") +
