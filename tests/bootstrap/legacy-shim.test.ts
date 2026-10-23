@@ -15,7 +15,7 @@ const FROZEN_SHIM_IMPORTS: readonly string[] = [
   "./00-prelude.js", "./01-scene-status.js", "./01b-hide-shot.js", "./02-state.js", "./02b-doc-id.js",
   "../adapters/storage/02c-blobs.js", "../adapters/storage/02d-gallery.js", "./03-sync.js", "./03a-history-store.js", "./03b-side-panels.js", "./04-richtext.js",
   "./04c-doc-model.js", "./05-render.js", "./05c-clipboard.js",
-  "./05d-draft-edit.js", "./05e-gallery-overlay.js", "./05g-scene-clip.js", "./05h-scene-select.js",
+  "./05d-draft-edit.js", "./05g-scene-clip.js", "./05h-scene-select.js",
   "./05v-video.js",
   "./06-rows.js", "./07-production-tags.js", "./07b-plain-tags.js", "./08-production-panels.js", "./08c-broll.js", "./08d-broll-panel.js",
   "./09-find-replace.js", "./10-comments.js", "./11-import.js", "./12-dirty-toast.js", "./12a-undo.js", "./13-hosted.js",
@@ -135,9 +135,9 @@ test("no numbered module configures a bridge or starts an owner while it loads: 
   assert.equal(NUMBERED.length, 48, "every remaining numbered module");
   const targets = [...NUMBERED, "src/adapters/formats/export-projections.ts", "src/adapters/formats/export-kit.ts", "src/adapters/formats/export-assets.ts", "src/adapters/formats/export-text.ts", "src/adapters/formats/csv.ts", "src/adapters/formats/xlsx.ts", "src/adapters/formats/docx.ts", "src/adapters/formats/pdf.ts", "src/features/rows/row-motion.js", "src/features/title/topbar.ts", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/script-zoom/script-zoom.js", "src/features/notices/phone-bar.ts", "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts", "src/bootstrap/wiring/exporters.ts", "src/bootstrap/wiring/script-zoom.ts", "src/application/screen.ts", "src/features/script-zoom/actions.ts", "src/bootstrap/wiring/shared-ports.ts", "src/features/help/help.js", "src/features/help/actions.ts", "src/bootstrap/wiring/help.ts",
     "src/features/settings/settings.js", "src/features/settings/actions.ts", "src/bootstrap/wiring/settings.ts",
-    "src/features/gallery/annotate.js", "src/features/gallery/actions.ts", "src/bootstrap/wiring/gallery.ts", "src/features/common/gallery.ts",
-    "src/features/rundown/rundown.js", "src/features/rundown/actions.ts", "src/features/rows/actions.ts", "src/bootstrap/wiring/rundown.ts", "src/features/rows/read-time.js", "src/bootstrap/wiring/read-time.ts", "src/features/rundown/presence.js", "src/features/rundown/target.js"];
-  assert.equal(targets.length, 95);
+    "src/features/gallery/annotate.js", "src/features/gallery/overlay.js", "src/features/gallery/actions.ts", "src/bootstrap/wiring/gallery.ts", "src/features/common/gallery.ts",
+    "src/features/rundown/rundown.js", "src/features/rundown/actions.ts", "src/features/rows/actions.ts", "src/bootstrap/wiring/rundown.ts", "src/features/rows/read-time.js", "src/bootstrap/wiring/read-time.ts", "src/features/rundown/presence.js", "src/features/rundown/target.js", "src/features/update/ports.ts", "src/features/update/actions.ts"];
+  assert.equal(targets.length, 98);
   for (const loadOnly of ["src/features/rows/row-motion.js", "src/features/title/topbar.ts", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/notices/phone-bar.ts", "src/adapters/storage/03c-history-idb.js", "src/adapters/formats/export-projections.ts", "src/adapters/formats/export-kit.ts", "src/adapters/formats/export-assets.ts", "src/adapters/formats/export-text.ts", "src/adapters/formats/csv.ts", "src/adapters/formats/xlsx.ts", "src/adapters/formats/docx.ts", "src/adapters/formats/pdf.ts", "src/bootstrap/wiring/exporters.ts", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts"]) {
     assert.ok(targets.includes(loadOnly), loadOnly);
   }
