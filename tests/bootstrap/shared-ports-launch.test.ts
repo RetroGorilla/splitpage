@@ -1,9 +1,9 @@
-import "../test/_dom.mjs";
+import "../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
-import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
-import type { LaunchFacts } from "./desktop-presence.ts";
+import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
+import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
+import type { LaunchFacts } from "../../src/application/desktop-presence.ts";
 
 test("launch facts forward each read to the current desktop and stay absent off desktop", async () => {
   useDesktopForTest(null);
