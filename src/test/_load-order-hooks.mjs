@@ -4,7 +4,7 @@ import { relative } from "node:path";
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 
 export const CONFIGURATION = Object.freeze({
-  "src/legacy/session-bridge.ts": { functions: ["startSessionBridge", "onDocumentReplaced"] },
+  "src/legacy/session-bridge.ts": { functions: ["startSessionBridge", "onDocumentReplaced", "onSessionChange", "onRefresh"] },
   "src/legacy/undo-adapter.ts": { functions: ["routeReplays"] },
   "src/js/12a-undo.js": { functions: ["configureUndo", "routeUndoReplays"] },
   "src/legacy/app-actions.ts": { functions: ["installAppActions"], facade: { name: "appActions", methods: ["register", "presentRefusals"] } },
@@ -14,7 +14,7 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/recovery-bridge.ts": { functions: ["startRecovery", "useBrowserDraftFactory"] },
   "src/legacy/production-editing-bridge.ts": { functions: ["startProductionEditing"] },
   "src/legacy/editor-bridge.ts": { functions: ["startEditor", "installPicturePicker", "installCellEditing"] },
-  "src/legacy/preferences-bridge.ts": { functions: ["startPreferences"] },
+  "src/legacy/preferences-bridge.ts": { functions: ["startPreferences", "onPreferenceChange"] },
   "src/legacy/location-bridge.ts": { functions: ["startLocation", "handServerCheckTo"] },
   "src/legacy/effects-bridge.ts": { functions: ["startEffects"] },
   "src/legacy/tour-pause.ts": { functions: ["handTourPauseTo"] },

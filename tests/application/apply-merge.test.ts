@@ -59,7 +59,6 @@ function harness(start: Record<string, unknown> | null = doc("start")) {
     capture: () => owner,
     stillOwns: (ctx) => ctx === owner,
     view: {
-      redraw: () => { calls.push("redraw"); },
       chips: () => { calls.push("chips"); },
       report: (_r, opts) => { calls.push("report:" + opts.kind + ":" + opts.noAutoSave); },
       absorbedDirty: (kind) => { calls.push("dirty:" + kind); },
@@ -103,7 +102,7 @@ test("mergeOnly hands the merge back and touches no screen, baseline or document
   assert.equal(h.base, "untouched");
 });
 
-test("an adopted merge runs in the documented order: adopt, history, undo point, baseline, redraw, chips, report, toast", () => {
+test("an adopted merge runs in the documented order: adopt, history, undo point, baseline, chips, report, toast", () => {
   const h = harness();
   const opts: ApplyMergeOptions = {
     base: doc("b"), mine: doc("m"), theirs: doc("t"), source: "server-resume",
@@ -114,7 +113,7 @@ test("an adopted merge runs in the documented order: adopt, history, undo point,
   assert.deepEqual(h.calls, [
     "snapshot:Before merging your recovered changes:t", "snapshot:Kept:m", "merge",
     "adopt:recovery:true", "historyFrom:d0", "armUndo", "setBase:merge: server-resume",
-    "redraw", "chips", "report:recovery:false", "toast:said m+t:warn:true"
+    "chips", "report:recovery:false", "toast:said m+t:warn:true"
   ]);
   assert.equal(out.state, h.current);
   assert.equal(h.base, "nb");
@@ -126,14 +125,14 @@ test("unchanged adopts theirs with no merge and no undo point; reporting marks i
   assert.equal(out.result, null);
   assert.equal(out.snapshot, null);
   assert.equal(h.merges, 0);
-  assert.deepEqual(h.calls, ["adopt:server:false", "armUndo", "redraw", "dirty:server"]);
+  assert.deepEqual(h.calls, ["adopt:server:false", "armUndo", "dirty:server"]);
   assert.equal(h.undo, null, "an undo point asked for and not taken is cleared, as before");
 });
 
 test("report: false neither reports nor marks unsaved; the kind follows recovery or server-resume", () => {
   const h = harness();
   sync(applyIncomingMerge({ mine: doc("m"), theirs: doc("t"), report: false, noAutoSave: true }, h.ports));
-  assert.deepEqual(h.calls, ["merge", "adopt:server:true", "redraw"]);
+  assert.deepEqual(h.calls, ["merge", "adopt:server:true"]);
   assert.equal(mergeKind({ theirs: null, recovery: true }), "recovery");
   assert.equal(mergeKind({ theirs: null, source: "server-resume" }), "recovery");
   assert.equal(mergeKind({ theirs: null, source: "server-conflict" }), "server");
@@ -196,7 +195,7 @@ test("awaitUndoPoint: a document replaced while the undo point is written is lef
   assert.equal(out.result, null);
   assert.equal(out.state, h.current);
   assert.equal(titleOf(h.current), "start");
-  assert.ok(!h.calls.some((c) => c.startsWith("adopt") || c === "redraw" || c === "armUndo"));
+  assert.ok(!h.calls.some((c) => c.startsWith("adopt") || c === "armUndo"));
 });
 
 test("awaitUndoPoint with no undo point still answers a promise, and a failed write still adopts", async () => {

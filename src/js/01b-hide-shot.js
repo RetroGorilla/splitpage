@@ -1,7 +1,6 @@
 import { S } from "./_state.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { readSession } from "../legacy/session-bridge.ts";
-import { render } from "./05-render.js";
 import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
@@ -14,6 +13,19 @@ function hideShotOn() {
 }
 var expandedShotRowIds = idMap();
 var shotHideTimers = idMap();
+var hidingListeners = [];
+
+export function onShotHiding(listener) {
+  hidingListeners.push(listener);
+  return function () {
+    var at = hidingListeners.indexOf(listener);
+    if (at !== -1) hidingListeners.splice(at, 1);
+  };
+}
+
+function announceHiding() {
+  hidingListeners.slice().forEach(function (listener) { listener(); });
+}
 
 function isRowHiddenByShotToggle(row) {
   return !!(hideShotOn() && row.status === "shot" && !expandedShotRowIds[row.id]);
@@ -32,7 +44,7 @@ export function setHideShotScenes(on) {
   if (on) expandedShotRowIds = idMap();
   preferences().setHideShot(on);
   updateHideShotMenu();
-  if (S.state) render();
+  announceHiding();
 }
 
 export function toggleHideShotScenes() {
@@ -48,7 +60,7 @@ export function armShotHideGrace(rowId) {
   shotHideTimers[rowId] = setTimeout(function () {
     delete shotHideTimers[rowId];
     delete expandedShotRowIds[rowId];
-    render();
+    announceHiding();
   }, HIDE_SHOT_GRACE_MS);
 }
 
@@ -64,7 +76,7 @@ export function revealRow(rowId) {
   while (start > 0 && S.state.rows[start - 1].status === "shot") start--;
   while (end < S.state.rows.length - 1 && S.state.rows[end + 1].status === "shot") end++;
   for (var i = start; i <= end; i++) expandedShotRowIds[S.state.rows[i].id] = true;
-  render();
+  announceHiding();
 }
 
 export function hiddenShotStripHtml(ids) {
@@ -80,7 +92,7 @@ export function hiddenShotStripHtml(ids) {
 export function expandHiddenShotStrip(idsAttr) {
   if (!idsAttr) return;
   idsAttr.split(",").forEach(function (id) { if (id) expandedShotRowIds[id] = true; });
-  render();
+  announceHiding();
 }
 
 export function rowGroupItems(rows) {

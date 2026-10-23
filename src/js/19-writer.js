@@ -1,5 +1,4 @@
 import { formatDuration, pad2 } from "../core/production/timing.ts";
-import { S } from "./_state.js";
 import { totalSeconds } from "./01-scene-status.js";
 import { renderRowGroups } from "./01b-hide-shot.js";
 import { rowIndexOf } from "../core/document/rows.ts";
@@ -13,10 +12,8 @@ import {
 import {
   cellFormatState,
   editableCellHtml,
-  renderAbsorbed,
   toggleCellDirection,
-  toggleCellFormat,
-  whilePainting
+  toggleCellFormat
 } from "./05-render.js";
 import { splitRowFieldCore } from "./06-rows.js";
 import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
@@ -28,8 +25,8 @@ import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../application/preferences/pre
 import { productionReaders } from "../legacy/document-ports.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { VIEWING_ONLY } from "../legacy/review-wording.ts";
-import { editAllowed, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
-import { cellEditing, editorSelection, focusMemory } from "../legacy/editor-bridge.ts";
+import { currentDocument, editAllowed, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
+import { cellEditing, editorSelection, focusMemory, paintGuard } from "../legacy/editor-bridge.ts";
 import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { placeEditorSelection, rememberCellSelection } from "../features/editing/cell-selection.ts";
@@ -68,14 +65,15 @@ function writerBlockHtml(row, i) {
 }
 
 export function renderWriter() {
-  whilePainting(function () { paintWriterDraw(drawWriter()); });
+  paintGuard().whilePainting(function () { paintWriterDraw(drawWriter()); });
 }
 
 export function drawWriter() {
+  var doc = currentDocument();
   return {
-    title: S.state.title || "",
+    title: doc.title || "",
     readOnly: !editAllowed(),
-    html: S.state.rows.length ? renderRowGroups(S.state.rows, writerBlockHtml) : null
+    html: doc.rows.length ? renderRowGroups(doc.rows, writerBlockHtml) : null
   };
 }
 
@@ -106,10 +104,11 @@ export function paintWriterDraw(draw) {
 }
 
 export function updateWriterStats() {
-  if (!viewFlags().writerOpen() || !S.state) return;
+  var doc = currentDocument();
+  if (!viewFlags().writerOpen() || !doc) return;
   var words = 0;
-  S.state.rows.forEach(function (row) { words += productionReaders.wordCount(row.audioText); });
-  document.getElementById("wr-scenes").textContent = String(S.state.rows.length);
+  doc.rows.forEach(function (row) { words += productionReaders.wordCount(row.audioText); });
+  document.getElementById("wr-scenes").textContent = String(doc.rows.length);
   document.getElementById("wr-words").textContent = words.toLocaleString();
   document.getElementById("wr-runtime").textContent = formatDuration(totalSeconds());
 }
@@ -147,15 +146,16 @@ function caretAtEdge(cellEl, range, edge) {
 }
 
 function splitWriterRow(cellEl) {
-  var res = splitRowFieldCore(cellEl);
+  var res = paintGuard().whileShown(function () { return splitRowFieldCore(cellEl); });
   if (!res) return;
   renderWriter();
   focusWriterBlock(res.id, 0);
 }
 
 function mergeWriterRows(intoIdx) {
-  var prev = S.state.rows[intoIdx];
-  var cur = S.state.rows[intoIdx + 1];
+  var rows = currentDocument().rows;
+  var prev = rows[intoIdx];
+  var cur = rows[intoIdx + 1];
   if (!prev || !cur) return;
   if (readSession(bothScenesHaveVisual(prev.id, htmlToPlainText))) {
     showToast("Both scenes have a visual — join them in the split view, so you can pick which one to keep.", "warn");
@@ -167,7 +167,7 @@ function mergeWriterRows(intoIdx) {
 
   breakUndoCoalescing();
   var ports = Object.assign({}, sessionTextPorts, { plainText: htmlToPlainText });
-  var outcome = runCommand(joinScenesCommand(prev.id, ports));
+  var outcome = paintGuard().whileShown(function () { return runCommand(joinScenesCommand(prev.id, ports)); });
   if (outcome.kind === "failed") throw outcome.error;
   if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
   renderWriter();
@@ -200,7 +200,7 @@ export function onWriterKeydown(e) {
     e.stopPropagation();
     cellEditing().sync(cellEl);
     mergeWriterRows(idx - 1);
-  } else if (e.key === "Delete" && idx < S.state.rows.length - 1 && caretAtEdge(cellEl, range, "end")) {
+  } else if (e.key === "Delete" && idx < currentDocument().rows.length - 1 && caretAtEdge(cellEl, range, "end")) {
     e.preventDefault();
     e.stopPropagation();
     cellEditing().sync(cellEl);
@@ -271,7 +271,7 @@ export function openWriter(keepMark) {
   reopenOnRedo = null;
   closeAllSidePanels();
   if (viewFlags().findOpen()) closeFindBar();
-  document.getElementById("writer-title").value = S.state.title || "";
+  document.getElementById("writer-title").value = currentDocument().title || "";
   mirrorFileChipToWriter();
   applyWriterSize(readWriterSize(), false);
   setWriterGutter(writerGutterMode);
@@ -281,12 +281,13 @@ export function openWriter(keepMark) {
   renderWriter();
   document.getElementById("writer-scroll").scrollTop = 0;
 
+  var rows = currentDocument().rows;
   var blank = null;
-  for (var i = 0; i < S.state.rows.length; i++) {
-    if (!htmlToPlainText(S.state.rows[i].audioText)) { blank = S.state.rows[i]; break; }
+  for (var i = 0; i < rows.length; i++) {
+    if (!htmlToPlainText(rows[i].audioText)) { blank = rows[i]; break; }
   }
   if (blank) focusWriterBlock(blank.id, 0);
-  else if (S.state.rows.length) focusWriterBlock(S.state.rows[S.state.rows.length - 1].id, "end");
+  else if (rows.length) focusWriterBlock(rows[rows.length - 1].id, "end");
   updateWriterFormatState();
 }
 
@@ -305,7 +306,6 @@ export function closeWriter() {
   viewFlags().setWriterOpen(false);
   focusMemory().focusedParagraph(null);
   hideTagGhost();
-  renderAbsorbed();
 }
 
 export function writerUndoStep(dir) {
@@ -374,7 +374,7 @@ function guardWriterEdit(e) {
   refuseWriterEdit();
   if (e.type === "input") {
     renderWriter();
-    document.getElementById("writer-title").value = S.state.title || "";
+    document.getElementById("writer-title").value = currentDocument().title || "";
   }
 }
 
