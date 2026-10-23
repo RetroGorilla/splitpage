@@ -2,6 +2,8 @@ import "../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createActionRegistry, registerAll } from "../../src/application/actions.ts";
+import { createExportRegistry } from "../../src/application/export/registry.ts";
+import type { ExportRegistry } from "../../src/application/export/registry.ts";
 import type { PreferenceNotice } from "../../src/application/preferences/preferences.ts";
 import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
 import { mountScriptZoomFeature, scriptZoomActions, stopScriptZoomFeature } from "../../src/bootstrap/wiring/script-zoom.ts";
@@ -12,6 +14,7 @@ import { autoSavePolicy, haltAutoSave, noteSaveChange, saveDestinations, startSa
 import type { LegacySavePorts } from "../../src/legacy/save-bridge.ts";
 import { cacheSeal } from "../../src/legacy/cache-freeze.ts";
 import { productionReaders } from "../../src/legacy/document-ports.ts";
+import { installExportFormats } from "../../src/legacy/export-formats.ts";
 import { productionIndex, startProductionIndex } from "../../src/legacy/production-index-bridge.ts";
 import { migrateRows } from "../../src/js/02-state.js";
 
@@ -130,6 +133,33 @@ test("the save state port follows the running save owner: unsaved, busy, its cha
   }
 });
 
+test("the save state setter forwards to the running save owner and preferences after a restart", () => {
+  const saves = sharedPorts().saves;
+  const timers = { start: () => null, stop: () => {} };
+  const stopPreferences = startPreferences();
+  let stop = startSaves(savePorts(), timers);
+  try {
+    saves.setAutoSaveEnabled(false);
+    assert.equal(preferences().autosave(), false);
+    assert.equal(autoSavePolicy().enabled(), false);
+    saves.setAutoSaveEnabled(true);
+    assert.equal(preferences().autosave(), true);
+    assert.equal(autoSavePolicy().enabled(), true);
+    const first = autoSavePolicy();
+    stop();
+    stop = startSaves(savePorts(), timers);
+    assert.notEqual(autoSavePolicy(), first);
+    saves.setAutoSaveEnabled(false);
+    assert.equal(preferences().autosave(), false);
+    assert.equal(autoSavePolicy().enabled(), false);
+    assert.equal(first.enabled(), true);
+  } finally {
+    stop();
+    stopPreferences();
+    localStorage.clear();
+  }
+});
+
 test("the production index port forwards each call to the running production index and follows a restart", () => {
   const production = sharedPorts().production;
   assert.throws(() => production.entries(null), /The production index is not started yet/);
@@ -153,6 +183,60 @@ test("the production index port forwards each call to the running production ind
     production.resetDerived();
     assert.equal(productionIndex().derived(), 0);
   } finally {
+    stop();
+  }
+});
+
+test("the export formats port delegates to the current registry and follows a restart", () => {
+  const formats = sharedPorts().exports;
+  assert.throws(() => formats.cards(), /The export registry is not started yet/);
+  const registry = (name: string): ExportRegistry => {
+    const owner = createExportRegistry();
+    owner.defineCard({ id: "demo", group: "part", name, ext: ".demo", icon: "i-file", purpose: name });
+    owner.register({
+      id: "demo", action: "export-demo", card: "demo", name, menuLabel: name,
+      fileName: (base) => base + ".demo", build: () => ({ data: name })
+    });
+    return owner;
+  };
+  const check = (owner: ExportRegistry): void => {
+    assert.deepEqual(formats.card("demo"), owner.card("demo"));
+    assert.deepEqual(formats.cards(), owner.cards());
+    assert.deepEqual(formats.exporters(), owner.exporters());
+    assert.equal(formats.byAction("export-demo"), owner.byAction("export-demo"));
+    assert.equal(formats.card("missing"), undefined);
+    assert.equal(formats.byAction("missing"), undefined);
+    assert.equal(formats.isAction("export-demo"), true);
+    assert.equal(formats.isAction("missing"), false);
+    assert.equal(formats.isAction(null), false);
+  };
+  const first = registry("First");
+  let stop = installExportFormats(first);
+  let off = (): void => {};
+  let changes = 0;
+  try {
+    check(first);
+    off = formats.onChange(() => { changes++; });
+    const remove = first.register({ id: "provider", fileName: (base) => base, build: () => ({ data: "" }) });
+    assert.equal(changes, 1);
+    off();
+    remove();
+    assert.equal(changes, 1);
+    stop();
+    assert.throws(() => formats.cards(), /The export registry is not started yet/);
+    const second = registry("Second");
+    stop = installExportFormats(second);
+    check(second);
+    off = formats.onChange(() => { changes++; });
+    const removeSecond = second.register({ id: "provider", fileName: (base) => base, build: () => ({ data: "" }) });
+    assert.equal(changes, 2);
+    first.register({ id: "provider", fileName: (base) => base, build: () => ({ data: "" }) });
+    assert.equal(changes, 2);
+    off();
+    removeSecond();
+    assert.equal(changes, 2);
+  } finally {
+    off();
     stop();
   }
 });
