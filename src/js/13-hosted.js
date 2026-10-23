@@ -39,7 +39,8 @@ import {
   setRemoteSource,
   forgetRemoteMisses
 } from "../adapters/storage/02c-blobs.js";
-import { cssAttr, inertBody } from "./04-richtext.js";
+import { inertBody } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import { withBusyBar } from "../features/notices/busy.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import {
@@ -62,7 +63,7 @@ import { setMenuItemReason } from "./18b-file-menu.js";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
 import { idMap } from "../core/document/id-map.ts";
-import { VIEWING_ONLY } from "../legacy/review-wording.ts";
+import { VIEWING_ONLY } from "../application/collaboration/review.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { normalizeServerUrl, parseLinkFragment, tunnelCommand } from "../../shared/server-links.js";

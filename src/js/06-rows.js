@@ -11,7 +11,7 @@ import { makeId } from "../adapters/identity/ids.ts";
 import { addSceneCommand, deleteSceneCommand, swapScenesCommand } from "../application/commands/rows.ts";
 import { splitSceneCommand, textCut } from "../application/commands/split-join.ts";
 import { REVIEW_ONLY, currentDocument, onDocumentReplaced, readSession, runCommand, sessionStamps, sessionTextPorts } from "../legacy/session-bridge.ts";
-import { VIEWING_ONLY } from "../legacy/review-wording.ts";
+import { VIEWING_ONLY } from "../application/collaboration/review.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { cellEditing, rowDrag } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
