@@ -181,8 +181,8 @@ Each is built in `sharedPorts()` from the owners and, until they retire, the bri
 | P9 Document edits | `DocumentEdits`, new, `application/session/document-edits.ts`: `run(command)`, `edit(command)` (throws on failure, as `runDocumentEdit` does), `allowed()`, `stamps`, `text` | | session bridge: `runCommand`, `runDocumentEdit`, `editAllowed`, `sessionStamps`, `sessionTextPorts`, `REVIEW_ONLY` | 17 | read time | Opus: edits and undo |
 | P10 Editing page | The owner types that exist in `application/editing/`: `CellEditing`, `PaintGuard`, `EditorSelection`, `RowDrag` (gains `onEnd`), `FocusMemory`, `DeleteConfirmation` | narrowed | editor and production-editing bridges | 18 | rundown | Opus: the editing hot path |
 | P11 Undo control | `UndoControl`, new, `application/editing/undo-control.ts`: `breakCoalescing()`, `flush()`, `undo()`, `redo()`, `last()` | | `12a-undo` until it becomes the undo owner (Wave 2) | 13 | read time | Opus: undo |
-| P12 Operation ownership | `SaveOwnershipPort` (`capture`, `stillOwns`), which exists in `application/save/coordinator.ts`: whether an async job still owns the document it started on | | transition bridge | 8 | gallery (`05e`) | Opus: async work against a replaced document |
-| P13 Picture store | `PictureStore`, new, `application/media/picture-store.ts`: intern, persist, read and render stored pictures | | `adapters/storage/02c-blobs.js`, `02d-gallery.js` | 16 | gallery (`05e`) | Opus: durable storage |
+| P12 Operation ownership | `SaveOwnershipPort` (`capture`, `stillOwns`), which exists in `application/save/coordinator.ts`: whether an async job still owns the document it started on | | transition bridge | 8 | its own Opus PR before `05w` (Codex), since `05e` waits on P11 | Opus: async work against a replaced document |
+| P13 Picture store | `PictureStore`, new, `application/media/picture-store.ts`: intern, persist, read and render stored pictures | | `adapters/storage/02c-blobs.js` | 16 | its own Opus PR before `05w` (Codex), since `05e` waits on P11 | Opus: durable storage |
 | P14 Side panels | `SidePanels`, from L3f (`application/side-panels.ts`) | | panels bridge | 6 | help | done in L3f |
 | P15 Save status | `SaveStatus`, new, `application/save/`: `unsaved()`, `busy()`, `onChange(listener)`, `dueNow()` | read only, plus "autosave now" and "resume autosave" | save bridge | 16 | copy, paste and scene selection (`05h` asks for an autosave now) | Opus |
 | P16 Document place | `DocumentPlace`, new, `application/location/`: where the document lives and the server's status, read only | | location bridge | 30 | its own PR at the start of Wave 3, since the first Wave 3 users (`13a`, `13b`, `20b`) are Codex | Opus |
@@ -209,7 +209,7 @@ A **move** is a group of numbered files that become one feature folder (or one o
 | 1 | Read time | `05r` | 155 | 3 | 0 | 5 | `features/rows` | Opus; lands P9 and P11 |
 | 1 | Find and replace | `09` | 518 | 5 | 3 | 5 | `features/find` | Codex |
 | 2 | Undo | `12a` | 981 | 1 | 16 | 2 | history and recording to `application/editing/undo`, caret and focus to `features/undo` | Opus |
-| 2 | Gallery | `05e`, `05w`, `05v` | 1,672 | 11 | 0 | 6 | `features/gallery` | Opus (`05w` alone is Codex, after `05e`); `05e` lands P12 and P13 |
+| 2 | Gallery | `05e`, `05w`, `05v` | 1,672 | 11 | 0 | 6 | `features/gallery` | Opus (`05w` alone is Codex, after `05e`); P12 and P13 land first in their own PR |
 | 2 | Copy, paste and scene selection | `05c`, `05g`, `05h`, and `04c` deleted | 1,380 | 15 | 1 | 8 | `features/clipboard` | Opus; `05h` lands P15 |
 | 2 | B-roll records | `08c` | 282 | 5 | 7 | 6 | `features/broll`; the records reconciler to `application/production` | Opus |
 | 2 | Rows, without the render | `06`, `01`, `01b` | 687 | 6 | 14 | 8 | `features/rows` | `01b`'s shot-hiding state goes to an owner in its own PR first; then `06` Opus, `01` and `01b` Codex |
