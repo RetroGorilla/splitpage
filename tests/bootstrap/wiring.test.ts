@@ -1017,7 +1017,7 @@ test("cleanup: the app-lifetime registrations that survive a stop are the ones m
   const again = await wireReal();
   app.startApp(again);
   await startupReady();
-  const { NO_DESTINATION } = await import("../../src/legacy/transition-bridge.ts");
+  const { NO_DESTINATION } = await import("../../src/application/transitions/ports.ts");
   documentTransitions().startNew({ from: { document: migrateRows({ title: "Fresh", rows: [] }) }, reason: "test: a new script", destination: NO_DESTINATION });
   assert.ok(replaced > 0, "document-replaced listeners registered on the bridge survive a rewire");
   app.stopApp();

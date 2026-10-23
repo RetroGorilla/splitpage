@@ -1,9 +1,12 @@
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { ScreenState } from "../../application/screen.ts";
+import type { DocumentDestination } from "../../application/transitions/ports.ts";
+import type { Transitions } from "../../application/transitions/transitions.ts";
 import { appActions } from "../../legacy/app-actions.ts";
 import { PREF_EVENT, preferences } from "../../legacy/preferences-bridge.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
+import { documentTransitions } from "../../legacy/transition-bridge.ts";
 
 const actions: Pick<ActionRegistry, "invoke" | "view"> = {
   invoke: (id, source) => appActions.invoke(id, source),
@@ -32,10 +35,20 @@ const changes: PreferenceChanges = {
   }
 };
 
+const transitions: Transitions<DocumentDestination> = {
+  open: (opening) => documentTransitions().open(opening),
+  startNew: (arrival) => documentTransitions().startNew(arrival),
+  restore: (restoration) => documentTransitions().restore(restoration),
+  recover: (recovery) => documentTransitions().recover(recovery),
+  publish: (ctx, publication) => documentTransitions().publish(ctx, publication),
+  copyId: () => documentTransitions().copyId()
+};
+
 const shared = {
   actions,
   changes,
-  screen: (): ScreenState => screenNow()
+  screen: (): ScreenState => screenNow(),
+  transitions
 };
 
 export function sharedPorts(): typeof shared {
