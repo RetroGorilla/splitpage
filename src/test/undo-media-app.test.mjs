@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -38,7 +38,7 @@ async function open(audio) {
   flushEdits();
 }
 
-const cell = () => S.state.rows[0].audioText;
+const cell = () => currentDocument().rows[0].audioText;
 const cellEl = () => document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');
 
 function store(html) {

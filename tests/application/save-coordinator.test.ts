@@ -64,14 +64,18 @@ function world(): World {
       }
     },
     report: {
-      obsolete: function (request, here) { w.calls++; w.obsolete.push({ request: request, here: here }); },
-      running: function (running) { w.calls++; w.running.push(running); }
+      obsolete: function (request, here) { w.calls++; w.obsolete.push({ request: request, here: here }); }
     },
     join: function (pending, next) {
       if (pending.kind === "saveAs" || next.kind === "saveAs") return null;
       if (pending.kind === "auto" && next.kind === "auto") return pending;
       return { kind: "save" };
     }
+  });
+  coordinator.onChange(function (change) {
+    if (change !== "running") return;
+    w.calls++;
+    w.running.push(coordinator.running());
   });
   (w as { coordinator: SaveCoordinator<Request, string> }).coordinator = coordinator;
   return w;

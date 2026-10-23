@@ -1,6 +1,6 @@
 import { normalizeBrollProps } from "../core/document/broll.ts";
 import { mintTagId, normalizeTagName, registryKey } from "../core/document/tags.ts";
-import { S } from "./_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { makeId, migrateRows } from "./02-state.js";
 import { dataUrlForSync, internDataUrl, queuePersist } from "../adapters/storage/02c-blobs.js";
 import { isSha256Hex, refsIn } from "../../shared/blob-policy.js";
@@ -261,7 +261,7 @@ export function scenePaste(clip, opts) {
 
 export function insertScenes(clip, opts) {
   opts = opts || {};
-  var state = opts.state || S.state;
+  var state = opts.state || currentDocument();
   var mint = opts.mint || makeId;
   var move = !!opts.move && scenesAway(clip, state);
   var list = function (k) { if (!Array.isArray(state[k])) state[k] = []; return state[k]; };

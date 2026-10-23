@@ -408,7 +408,7 @@ The 4.1 plan for the places where 4.0 fell short of this plan (the legacy layer'
 In this order (Adam, 2026-10-07):
 
 1. The composition root as build entry, replacing `src/js/_entry.js`, as the first 4.x milestone, with the packaged check and an external review of its own.
-2. Any bridge still standing after milestone 6, with the legacy modules that keep it.
+2. Any bridge still standing after milestone 6, with the legacy modules that keep it. `src/legacy/production-index-bridge.ts` exposes the application production index to `07`, `08`, `08c` and `08d`; retire it when their last numbered consumer becomes a feature.
 3. Unused `S` fields.
 4. CSS: sorting the remaining rules into base, layout and components (done: `src/styles/base.css`, `layout.css`, `components.css`, and `overrides*.css` for rules that must follow specific feature styles), then spacing tokens (done).
 

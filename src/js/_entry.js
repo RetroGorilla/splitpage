@@ -58,11 +58,12 @@ import { __init as init_20j_newtab } from "./20j-newtab.js";
 import { __init as init_20s_settings } from "./20s-settings.js";
 import { migrateRows } from "./02-state.js";
 import { documentIdentityPort } from "./02b-doc-id.js";
-import { documentDestinationPort, getEditorName } from "./03-sync.js";
-import { runIdleRefresh } from "./07-production-tags.js";
+import { documentDestinationPort, getEditorName, stampRow } from "./03-sync.js";
+import { bulkTagCell, runIdleRefresh } from "./07-production-tags.js";
 import { derivedRecordsPlan } from "./08c-broll.js";
 import { legacySessionEffects } from "./12-dirty-toast.js";
-import { legacySavePorts } from "./14-export.js";
+import { legacyFileDestination, legacySavePorts } from "./14-export.js";
+import { serverSaveDestination } from "./13-hosted.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { wireApp } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
@@ -75,7 +76,9 @@ try {
     editorName: getEditorName,
     refresh: runIdleRefresh,
     records: derivedRecordsPlan,
+    bulkTags: { cell: bulkTagCell, stamp: stampRow },
     saves: legacySavePorts,
+    destinations: function () { return [legacyFileDestination(), serverSaveDestination()]; },
     transitions: { destination: documentDestinationPort, identity: documentIdentityPort },
     recovery: draftRecoveryPorts,
     keyTarget: window

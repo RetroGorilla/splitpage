@@ -1,6 +1,6 @@
 import { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE, historyUtf8Length, sanitizeHistoryMeta } from "../../shared/history-policy.js";
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument, noteSessionEdit } from "../legacy/session-bridge.ts";
 import { checkServer, currentConn, currentHome, fileHome, homeConn, serverHomeId, serverStatus, setHome } from "../legacy/location-bridge.ts";
 import { normalizeServerUrl } from "../../shared/server-links.js";
 import { reassignDocId } from "./02b-doc-id.js";
@@ -9,14 +9,13 @@ import { isPristineSeedDocument } from "./03a-history-store.js";
 import { hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "./04-richtext.js";
-import { markDirty, showToast } from "./12-dirty-toast.js";
+import { showToast } from "./12-dirty-toast.js";
 import { openServerDoc, pointTabAt } from "./13-hosted.js";
-import { saveDoc } from "./14-export.js";
 import { openProjectFile } from "./18-local-files.js";
 import { openServersDialog } from "./20e-connect.js";
 import { flushDraftNow } from "./20g-drafts.js";
 import { draftResume, recoveryStarted } from "../legacy/recovery-bridge.ts";
-import { unsavedChanges } from "../legacy/save-bridge.ts";
+import { saveDoc, unsavedChanges } from "../legacy/save-bridge.ts";
 import { concatBytes, strBytes } from "../adapters/formats/bytes.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { mimeForFilename } from "../../shared/file-names.js";
@@ -1050,6 +1049,6 @@ export function __init() {
       wireDesktopBlobs(desktopPort());
     },
     get tabId() { var port = desktopPort(); return port && port.tabId; },
-    markDirtyForTest: function () { markDirty(); }
+    markDirtyForTest: function () { noteSessionEdit(); }
   };
 }

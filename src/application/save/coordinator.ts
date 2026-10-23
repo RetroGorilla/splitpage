@@ -44,7 +44,6 @@ export interface SaveWriterPort<R> {
 
 export interface SaveReportPort<R> {
   readonly obsolete: (request: R, here: boolean) => void;
-  readonly running: (running: boolean) => void;
 }
 
 export interface SaveCoordinatorPorts<R> {
@@ -161,10 +160,7 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
     const was = activeCount > 0;
     activeCount += delta;
     const now = activeCount > 0;
-    if (was !== now) {
-      ports.report.running(now);
-      announce("running");
-    }
+    if (was !== now) announce("running");
   }
 
   function acknowledge(key: DestinationKey, generation: number): void {
