@@ -1,11 +1,15 @@
 import "./_dom.mjs";
+import "./_copy-paste-mounted.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
   attachToGallery, brollIdsTaken, cellFromClipboard, clipboardOfCell, cutNonceIn, freshBrollIds, stripComments,
   videoLink, videoLinksInText
-} from "../js/05c-clipboard.js";
-import { commentIds, fromHtml, projection, sliceCell, toHtml } from "../js/04c-doc-model.js";
+} from "../features/clipboard/cell-clipboard.js";
+import { commentIds, projection } from "../core/text/runs.ts";
+import { fromHtml } from "../legacy/richtext.ts";
+import { sliceCell } from "../core/text/edits.ts";
+import { toHtml } from "../core/text/html.ts";
 
 const cmt = (id, inner) => `<span class="cmt-anchor" data-cmt="${id}">${inner}</span>`;
 const tag = (name) => `<span class="tag-anchor" data-tag-cat="prop" data-tag-name="${name}" contenteditable="false">${name}</span>`;

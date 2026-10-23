@@ -32,6 +32,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/rundown.ts": { functions: ["mountRundownFeature", "mountRundownPresenceFeature", "mountTargetFeature"] },
   "src/bootstrap/wiring/help.ts": { functions: ["mountHelpFeature"] },
   "src/bootstrap/wiring/gallery.ts": { functions: ["mountGalleryFeature", "mountGalleryOverlayFeature"] },
+  "src/bootstrap/wiring/clipboard.ts": { functions: ["mountCopyPasteFeature"] },
   "src/application/export/services.ts": { functions: ["installExportServices"] },
   "src/bootstrap/wiring/exporters.ts": { functions: ["registerBuiltInExporters"] },
   "src/bootstrap/wiring.ts": { functions: ["wireApp"] },
