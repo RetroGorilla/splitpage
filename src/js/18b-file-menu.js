@@ -182,7 +182,13 @@ export function refreshOpenFileMenu() {
 }
 
 var extraRefreshers = [];
-export function onFileMenuRefresh(fn) { extraRefreshers.push(fn); }
+export function onFileMenuRefresh(fn) {
+  extraRefreshers.push(fn);
+  return function () {
+    var index = extraRefreshers.indexOf(fn);
+    if (index !== -1) extraRefreshers.splice(index, 1);
+  };
+}
 function refreshExtraMenuItems() {
   extraRefreshers.forEach(function (fn) { try { fn(); } catch (e) { } });
 }

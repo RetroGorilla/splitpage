@@ -39,7 +39,6 @@ import { __init as init_14b_export_kit } from "./14b-export-kit.js";
 import { __init as init_18_local_files } from "./18-local-files.js";
 import { __init as init_18a_local_merge } from "./18a-local-merge.js";
 import { __init as init_18b_file_menu } from "./18b-file-menu.js";
-import { __init as init_18c_export_dialog } from "./18c-export-dialog.js";
 import { __init as init_18d_command_menu } from "./18d-command-menu.js";
 import { __init as init_19_writer } from "./19-writer.js";
 import { __init as init_20_teleprompter } from "./20-teleprompter.js";
@@ -64,7 +63,7 @@ import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireApp, mountRundownFeature, mountScriptZoomFeature, mountHelpFeature, mountGalleryFeature } from "../bootstrap/wiring.ts";
+import { wireApp, mountRundownFeature, mountScriptZoomFeature, mountHelpFeature, mountGalleryFeature, mountFileMenuExportFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -133,7 +132,7 @@ if (wiring) {
   init_18_local_files();
   init_18a_local_merge();
   init_18b_file_menu();
-  init_18c_export_dialog();
+  mountFileMenuExportFeature();
   init_18d_command_menu();
   init_19_writer();
   init_20_teleprompter();

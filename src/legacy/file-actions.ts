@@ -1,9 +1,7 @@
-import type { ActionRegistry } from "../application/actions.ts";
-import { registerAll } from "../application/actions.ts";
+import type { ActionDefinition } from "../application/actions.ts";
 import { saveDoc } from "./save-bridge.ts";
 import { openLocalFile } from "../js/18-local-files.js";
 import { fileMenuOpen, toggleFileMenu } from "../js/18b-file-menu.js";
-import { openExportDialog } from "../js/18c-export-dialog.js";
 import { closeCommandMenu, commandMenuOpen, openCommandMenu } from "../js/18d-command-menu.js";
 import { EVERY_OVERLAY, availableUnless, everyOverlayBut, firstRefusal } from "../application/screen.ts";
 import { inDesktopApp, saveInProgress, screenNow } from "./screen-state.ts";
@@ -16,8 +14,8 @@ function closeFileMenu(): void {
   if (fileMenuOpen()) toggleFileMenu(false);
 }
 
-export function registerFileActions(registry: ActionRegistry): () => void {
-  return registerAll(registry, [
+export function fileActions(): ActionDefinition[] {
+  return [
     {
       id: "save",
       label: "Save",
@@ -66,19 +64,6 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       }
     },
     {
-      id: "export",
-      label: "Export…",
-      group: "Export",
-      icon: "i-export",
-      keys: ["mod+e"],
-      words: "download save as format dialog",
-      availability: () => availableUnless(["loading", ...EVERY_OVERLAY], screenNow()),
-      run: () => {
-        closeFileMenu();
-        openExportDialog();
-      }
-    },
-    {
       id: "command-menu",
       label: "Search commands…",
       group: "File",
@@ -102,5 +87,5 @@ export function registerFileActions(registry: ActionRegistry): () => void {
       availability: () => ({ enabled: true, visible: false }),
       run: () => { toggleFileMenu(false); }
     }
-  ]);
+  ];
 }

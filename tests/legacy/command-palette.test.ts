@@ -1,11 +1,17 @@
 import "../../src/test/_dom.mjs";
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { commandResults } from "../../src/js/18d-command-menu.js";
 import { appActions } from "../../src/legacy/app-actions.ts";
 import { wireRegistries } from "../../src/test/_registries.mjs";
+import { mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../src/bootstrap/wiring/file-menu-export.ts";
 
-wireRegistries();
+const wired = wireRegistries();
+mountFileMenuExportFeature();
+after(() => {
+  stopFileMenuExportFeature();
+  wired.dispose();
+});
 
 interface Listed {
   readonly group: string;

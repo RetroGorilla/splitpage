@@ -5,23 +5,26 @@ import assert from "node:assert/strict";
 import { createActionRegistry, registerAll } from "../../src/application/actions.ts";
 import type { ActionRegistry } from "../../src/application/actions.ts";
 import { actionForKey } from "../../src/application/shortcuts.ts";
-import { registerFileActions } from "../../src/legacy/file-actions.ts";
+import { fileActions } from "../../src/legacy/file-actions.ts";
 import { helpMenuActions } from "../../src/legacy/help-actions.ts";
 import { helpActions, mountHelpFeature, stopHelpFeature } from "../../src/bootstrap/wiring/help.ts";
-import { registerShareActions } from "../../src/legacy/share-actions.ts";
+import { shareActions } from "../../src/legacy/share-actions.ts";
 import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { registerViewActions } from "../../src/legacy/view-actions.ts";
 import { scriptZoomActions } from "../../src/bootstrap/wiring/script-zoom.ts";
+import { fileMenuExportActions, mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../src/bootstrap/wiring/file-menu-export.ts";
+
 
 function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   const registry = createActionRegistry();
   mountRundownFeature();
+  mountFileMenuExportFeature();
   mountHelpFeature();
   const menu = helpMenuActions();
-  const disposers = [stopRundownFeature,
-    registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerFileActions(registry), registerViewActions(registry),
-    registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]), registerShareActions(registry), registerAll(registry, scriptZoomActions()), stopHelpFeature
+  const disposers = [stopRundownFeature, stopFileMenuExportFeature,
+    registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerViewActions(registry),
+    registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]), registerAll(registry, [...shareActions().slice(0, 11), ...fileMenuExportActions().slice(1), ...shareActions().slice(11)]), registerAll(registry, scriptZoomActions()), stopHelpFeature
   ];
   return { registry, dispose: () => { for (const d of disposers) d(); } };
 }
