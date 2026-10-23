@@ -23,7 +23,7 @@ import {
 } from "../../legacy/location-bridge.ts";
 import { htmlToPlainText } from "../../legacy/plain-text.ts";
 import { PREF_EVENT, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
-import { autoSavePolicy, onSaveChange, resumeAutoSave, saveBusy, unsavedChanges } from "../../legacy/save-bridge.ts";
+import { autoSavePolicy, onSaveChange, resumeAutoSave, saveBusy, setAutoSaveEnabled, unsavedChanges } from "../../legacy/save-bridge.ts";
 import { productionIndex } from "../../legacy/production-index-bridge.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
@@ -115,7 +115,8 @@ const saves: SaveState = {
   busy: () => saveBusy(),
   onChange: (listener) => onSaveChange(listener),
   dueNow: () => { autoSavePolicy().dueNow(); },
-  resume: () => { resumeAutoSave(); }
+  resume: () => { resumeAutoSave(); },
+  setAutoSaveEnabled: (on) => { setAutoSaveEnabled(on); }
 };
 
 const production: ProductionIndexOwner = {
