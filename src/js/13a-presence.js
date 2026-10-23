@@ -1,7 +1,7 @@
 import { homeConn, serverHomeId, serverStatus } from "../legacy/location-bridge.ts";
 import { cssAttr } from "./04-richtext.js";
 import { PRESENCE_MAX_SHOWN } from "../application/collaboration/presence.ts";
-import { presence } from "../legacy/presence-bridge.ts";
+import { presence, presenceStarted } from "../legacy/presence-bridge.ts";
 import { getSavedAuthorName } from "./10-comments.js";
 import {
   apiUrl,
@@ -80,8 +80,12 @@ function presencePayload(gone) {
   };
 }
 
+function peopleHere() {
+  return presenceStarted() ? presence().here() : [];
+}
+
 function clearPresence() {
-  if (!presence().here().length) { paintPresence(); return; }
+  if (!peopleHere().length) { paintPresence(); return; }
   presence().apply([]);
 }
 
@@ -89,7 +93,7 @@ async function presenceTick() {
   var next = PRESENCE_BEAT_MS;
   var ctx = null;
   try {
-    if (!presenceWanted()) { clearPresence(); return; }
+    if (!presenceStarted() || !presenceWanted()) { clearPresence(); return; }
     presenceSends++;
     ctx = captureOperation();
     var body = await serverTransport(ctx.connection).request("api/presence", { method: "POST", body: presencePayload(false) });
@@ -129,7 +133,7 @@ export function onPresencePaint(listener) {
 
 export function paintPresence() {
   var bar = document.getElementById("presence-bar");
-  var list = presence().here().slice(0, PRESENCE_MAX_SHOWN);
+  var list = peopleHere().slice(0, PRESENCE_MAX_SHOWN);
   var mine = presenceLocation();
   if (bar) fitPresenceBar(bar);
   paintListeners.slice().forEach(function (listener) { listener(); });
@@ -158,13 +162,13 @@ export function paintPresence() {
 }
 
 function presenceBarHtml(shown) {
-  var html = presence().here().slice(0, shown).map(function (p) {
+  var html = peopleHere().slice(0, shown).map(function (p) {
     var name = presence().nameOf(p);
     return '<span class="presence-chip" style="--presence:' + presence().colorOf(p) +
       '" title="' + escapeHtml(name) + ' is in this document">' +
       escapeHtml(presenceInitials(name)) + '</span>';
   }).join("");
-  var rest = presence().here().slice(shown);
+  var rest = peopleHere().slice(shown);
   if (rest.length) {
     var names = rest.map(presence().nameOf).join(", ");
     html += '<span class="presence-more" title="' + escapeHtml(names) +
@@ -174,9 +178,9 @@ function presenceBarHtml(shown) {
 }
 
 function fitPresenceBar(bar) {
-  var shown = Math.min(presence().here().length, PRESENCE_MAX_SHOWN);
+  var shown = Math.min(peopleHere().length, PRESENCE_MAX_SHOWN);
   bar.innerHTML = presenceBarHtml(shown);
-  bar.hidden = !presence().here().length;
+  bar.hidden = !peopleHere().length;
   var left = bar.closest(".topbar-left");
   if (!left || bar.hidden) return;
   while (shown > 0 && left.scrollWidth > left.clientWidth + 1) {
@@ -187,7 +191,7 @@ function fitPresenceBar(bar) {
 
 var presenceFitFrame = 0;
 function refitPresenceBar() {
-  if (presenceFitFrame || !presence().here().length) return;
+  if (presenceFitFrame || !peopleHere().length) return;
   presenceFitFrame = requestAnimationFrame(function () {
     presenceFitFrame = 0;
     var bar = document.getElementById("presence-bar");
