@@ -1,5 +1,7 @@
+import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { RecentFiles } from "../../application/files/recent-files.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
@@ -110,6 +112,14 @@ const production: ProductionIndexOwner = {
   recordsPlan: (doc, viewed) => productionIndex().recordsPlan(doc, viewed)
 };
 
+const recents: RecentFiles = {
+  list: () => desktopPort()?.listRecents(),
+  remove: (fileId) => desktopPort()?.removeRecent(fileId),
+  clear: () => desktopPort()?.clearRecents(),
+  read: (id) => desktopPort()?.readFile(id),
+  routeOpen: (request) => desktopPort()?.routeOpen(request)
+};
+
 const shared = {
   actions,
   changes,
@@ -120,7 +130,8 @@ const shared = {
   review,
   text,
   saves,
-  production
+  production,
+  recents
 };
 
 export function sharedPorts(): typeof shared {
