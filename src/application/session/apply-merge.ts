@@ -1,11 +1,12 @@
 import type { MergedStates } from "../../core/merge-states.ts";
 import type { MergeInput } from "./merge-incoming.ts";
+import type { NoticeKind } from "../effects/ports.ts";
 
 export type MergeKind = "server" | "recovery";
 
 export interface MergeToast {
   readonly text: string | (() => string);
-  readonly tone?: string;
+  readonly tone?: NoticeKind;
   readonly sticky?: boolean;
 }
 
@@ -51,7 +52,7 @@ export interface MergeView {
   readonly chips?: () => void;
   readonly report: (result: MergedStates, opts: { readonly noAutoSave: boolean; readonly kind: MergeKind }) => void;
   readonly absorbedDirty: (kind: MergeKind) => void;
-  readonly toast: (text: string, tone: string, sticky: boolean) => void;
+  readonly toast: (text: string, tone: NoticeKind, sticky: boolean) => void;
 }
 
 export interface ApplyMergePorts<Ctx> {
