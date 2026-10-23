@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { createServer } from "node:net";
+import { createServer, connect } from "node:net";
 import { readdirSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,7 +31,8 @@ export const USAGE = `usage: node tools/run-suites.mjs [out-dir] [filter] [optio
 
   --lanes N        suites run at once (default 6; env LANES)
   --port-base N    a multiple of 10 (default 0; env PORT_BASE). Lane n uses HTTP 18100+N+10n and
-                   CDP 19300+N+10n and holds both ports + 1 for the whole run
+                   CDP 19300+N+10n, forwarded to Chromium's bound port. CDP and both ports + 1
+                   stay held for the whole run
   --timeout S      seconds per suite, 1 to 86400 (default 600; env SUITE_TIMEOUT)
   --suites DIR     the suite folder (env SPLITPAGE_SUITE_DIR)
   --driver FILE    the driver script (env SPLITPAGE_SUITE_DRIVER)
@@ -167,6 +168,7 @@ export function driverCommand(config, file, lane) {
       config.driver,
       "--port", String(http),
       "--cdp-port", String(cdp),
+      "--cdp-proxy",
       "--script", join(config.suiteDir, file),
       "--shot-dir", join(config.out, "shots"),
       ...(config.freezeCaches ? ["--freeze-caches"] : []),
@@ -175,9 +177,9 @@ export function driverCommand(config, file, lane) {
   };
 }
 
-function bindPort(port) {
+function bindPort(port, accept = (socket) => socket.destroy()) {
   return new Promise((resolveBind) => {
-    const server = createServer((socket) => socket.destroy());
+    const server = createServer(accept);
     server.once("error", (e) => resolveBind({ server: null, code: e.code ?? e.message }));
     server.listen(port, "127.0.0.1", () => resolveBind({ server, code: null }));
   });
@@ -190,20 +192,38 @@ function closeServer(server) {
 export async function claimPorts(plan) {
   const held = [];
   const busy = [];
+  const targets = new Map();
+  const sockets = new Set();
   for (const entry of plan) {
     for (const kind of PORT_KINDS) {
-      const { server, code } = await bindPort(entry[kind]);
+      const accept = kind === "cdp" ? (socket) => {
+        const port = targets.get(entry.lane);
+        if (!port) { socket.destroy(); return; }
+        const upstream = connect(port, "127.0.0.1");
+        sockets.add(socket);
+        sockets.add(upstream);
+        socket.on("error", () => upstream.destroy());
+        upstream.on("error", () => socket.destroy());
+        socket.on("close", () => { sockets.delete(socket); upstream.destroy(); });
+        upstream.on("close", () => { sockets.delete(upstream); });
+        socket.pipe(upstream).pipe(socket);
+      } : undefined;
+      const { server, code } = await bindPort(entry[kind], accept);
       if (!server) { busy.push(`${entry[kind]} (lane ${entry.lane}'s ${PORT_LABEL[kind]}, ${code})`); continue; }
-      if (RESERVED.has(kind)) held.push(server);
+      if (kind === "cdp" || RESERVED.has(kind)) held.push(server);
       else await closeServer(server);
     }
   }
-  const release = () => Promise.all(held.splice(0).map(closeServer));
+  const release = () => {
+    targets.clear();
+    for (const socket of sockets) socket.destroy();
+    return Promise.all(held.splice(0).map(closeServer));
+  };
   if (busy.length) {
     await release();
     throw new ConfigError(`port collision: cannot bind ${busy.join(", ")}; the port is in use by another run-suites or something else, or reserved. Nothing was started. Pick a --port-base at least 10 x lanes away from any other run's`);
   }
-  return { release };
+  return { release, forward: (lane, port) => targets.set(lane, port) };
 }
 
 export function createSummaryScanner() {
@@ -335,7 +355,7 @@ const LEFTOVER_NOTE = IS_WINDOWS
   ? "Windows cannot trace its tree once it has exited, so nothing was killed"
   : "killing what is left of its process group";
 
-function runOne(config, file, lane, owned) {
+function runOne(config, file, lane, owned, claim) {
   const { cmd, args } = driverCommand(config, file, lane);
   return new Promise((resolveRun) => {
     let log = "";
@@ -351,6 +371,7 @@ function runOne(config, file, lane, owned) {
       settled = true;
       for (const t of Object.values(timers)) if (t) clearTimeout(t);
       if (child) signalTree(child);
+      claim.forward(lane, null);
       owned.delete(entry);
       resolveRun({ file, log, ...classify(outcome, scanner.end()) });
     };
@@ -375,7 +396,7 @@ function runOne(config, file, lane, owned) {
         cwd: REPO,
         detached: !IS_WINDOWS,
         windowsHide: true,
-        stdio: ["ignore", "pipe", "pipe"]
+        stdio: ["ignore", "pipe", "pipe", "ipc"]
       });
     } catch (e) {
       outcome.launchError = e.message;
@@ -383,6 +404,12 @@ function runOne(config, file, lane, owned) {
       return;
     }
     owned.add(entry);
+    child.on("message", (message) => {
+      const port = message?.cdpPort;
+      if (settled || !Number.isInteger(port) || port < 1 || port > PORT_MAX || port === config.ports[lane].cdp) return;
+      claim.forward(lane, port);
+      child.send({ cdpReady: true });
+    });
 
     timers.suite = setTimeout(() => {
       timers.suite = null;
@@ -448,7 +475,7 @@ export async function runSuites(config, files, { print = console.log, owned = ne
     async function lane(i) {
       while (failure === null && next < files.length) {
         const file = files[next++];
-        const r = await runOne(lanesConfig, file, i, owned);
+        const r = await runOne(lanesConfig, file, i, owned, claim);
         if (failure !== null) return;
         writeFileSync(join(config.out, `${file}.log`), r.log);
         results.push(r);

@@ -1,4 +1,4 @@
-import { checkServer, currentConn, currentHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
+import { checkServer, currentConn, currentHome, documentLocation, serverStatus, setHome } from "../legacy/location-bridge.ts";
 import {
   applyReviewMode,
   fetchReviewLink,
@@ -280,7 +280,6 @@ async function addBookmarkFromForm() {
     return;
   }
   renderConnect();
-  updateConnectMenu();
   showToast("Saved " + bookmark.name + ".", "ok");
 }
 
@@ -296,7 +295,6 @@ export async function addServerBookmark(name, url, opts) {
   var bookmark = { id: newBookmarkId(), name: (name || "").trim() || shortHost(base), url: base };
   serverStatus().addBookmarks([bookmark]);
   saveBookmarks();
-  updateConnectMenu();
   if (joined && joined.ok) {
     await useServer(bookmark, { token: joined.token, remember: !!opts.remember });
   }
@@ -320,7 +318,6 @@ async function useServer(bookmark, opts) {
   }
   closePinDialogForAnotherServer();
   if (opts.token) setServerToken(opts.token, !!opts.remember);
-  updateConnectMenu();
   renderConnect();
   await checkServer();
   applyReviewMode();
@@ -358,7 +355,6 @@ function removeBookmark(id) {
     document.getElementById("connect-ssh-out").hidden = true;
   }
   renderConnect();
-  updateConnectMenu();
   showToast("Forgot " + (b.name || shortHost(b.url)) + ".", "ok");
 }
 
@@ -367,7 +363,6 @@ async function backToThisCopy() {
   serverStatus().forgetMode();
   pointTabAt("", { makeDefault: true });
   closePinDialogForAnotherServer();
-  updateConnectMenu();
   await checkServer();
   applyReviewMode();
   renderConnect();
@@ -446,6 +441,12 @@ function saveSshCmd() {
 }
 
 export function __init() {
+  documentLocation().onChange(function (change) {
+    if (change === "connection") updateConnectMenu();
+  });
+  serverStatus().onChange(function (change) {
+    if (change === "bookmarks") updateConnectMenu();
+  });
   serverStatus().loadBookmarks();
 
   (function wireConnectUi() {
@@ -506,6 +507,4 @@ export function __init() {
       else closeServersDialog();
     }, true);
   })();
-
-  updateConnectMenu();
 }

@@ -7,10 +7,11 @@ import { personSwatchesHtml, setMyColor } from "./03-sync.js";
 import { getSavedAuthorName } from "./10-comments.js";
 import { apiFetch, applyHealth, applyReviewMode, clearServerToken, finishServerDetect, isLinkGuest, onServerDoc, pointTabAt, publishToServer, rememberTokenForServer, rememberedTokenForServer, serverDocShareUrl, setServerToken, shareAccessNote, updateServerMenu } from "./13-hosted.js";
 import { updateConnectMenu } from "./20e-connect.js";
+import { updateFileChip } from "./18-local-files.js";
 import { openSettings } from "./20s-settings.js";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
-import { preferences, preferencesStarted } from "../legacy/preferences-bridge.ts";
+import { onPreferenceChange, preferences, preferencesStarted } from "../legacy/preferences-bridge.ts";
 import { copyShareText, setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
 import { cleanAuthorName } from "../core/document/people.ts";
 import { parseLinkFragment } from "../../shared/server-links.js";
@@ -83,7 +84,6 @@ export function signOutCollab() {
   rememberTokenForServer(view.url, "");
   if (currentConn().serverUrl === view.url && currentConn().token && !isLinkGuest()) {
     clearServerToken();
-    updateServerMenu();
   }
   showToast("Signed out of " + view.label + " on this device.", "ok");
 }
@@ -208,7 +208,6 @@ async function connectStep(c) {
       if (own && own.ok) {
         t.url = ""; t.onTab = true;
         applyHealth(own);
-        updateServerMenu();
       }
     } catch (e) { if (stale(c)) return; }
     t.maybeHere = false;
@@ -225,7 +224,7 @@ async function connectStep(c) {
   if (stale(c)) return;
   if (!health || !health.ok) { c.error = { code: "auth" }; go(c, "unreachable"); return; }
   c.health = health;
-  if (t.onTab) { applyHealth(health); updateServerMenu(); updateConnectMenu(); }
+  if (t.onTab) applyHealth(health);
   if (health.readOnly && !onServerDoc()) {
     c.error = { code: "read-only" };
     go(c, "error");
@@ -288,7 +287,6 @@ async function signInStep(c) {
   if (t.onTab) {
     setServerToken(joined.token, remember);
     documentLocation().updateConnection({ role: "edit", scope: "" });
-    updateServerMenu();
     applyReviewMode();
     finishServerDetect();
   } else {
@@ -326,8 +324,6 @@ async function publishStep(c) {
     applyHealth(c.health);
     if (c.token || !c.health.authRequired) documentLocation().updateConnection({ role: "edit", scope: "" });
     t.onTab = true;
-    updateConnectMenu();
-    updateServerMenu();
   }
   var failure = null;
   var ok = await publishToServer({ quiet: true, onError: function (e) { failure = e; } });
@@ -343,6 +339,7 @@ async function publishStep(c) {
     return;
   }
   updateServerMenu();
+  updateFileChip();
   loadLinks(c);
 }
 
@@ -873,14 +870,24 @@ function wireGuest(m) {
 }
 
 export function __init() {
+  let homeKind = currentHome().kind;
+  documentLocation().onChange(function (change) {
+    const nextKind = currentHome().kind;
+    if (change === "connection" || (change === "home" && nextKind !== homeKind)) updateCollaborateMenu();
+    homeKind = nextKind;
+  });
+  serverStatus().onChange(function (change) {
+    if (change === "mode" || change === "link") updateCollaborateMenu();
+  });
+  onPreferenceChange(function (change) {
+    if (preferences().nameOf(change.key) === "collabServer") updateCollaborateMenu();
+  });
   updateCollaborateMenu();
   var headBtn = document.getElementById("btn-collab");
   if (headBtn) {
     headBtn.addEventListener("click", function () {
       appActions.invoke("collaborate", "button");
     });
-    headBtn.addEventListener("pointerenter", updateCollaborateMenu);
-    headBtn.addEventListener("focus", updateCollaborateMenu);
   }
 
   window.__collabTest = {
