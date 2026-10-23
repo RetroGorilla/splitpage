@@ -1,13 +1,9 @@
-import { ensureBytes, intern, persist, urlForSync } from "../adapters/storage/02c-blobs.js";
-import { rowIndexOf } from "../core/document/rows.ts";
-import { currentDocument, readSession } from "../legacy/session-bridge.ts";
-import { slotPoster } from "./05-render.js";
-import { cellEditing } from "../legacy/editor-bridge.ts";
-import { ANNOTATION_COLORS, annotateGallerySlot, normalizeMarks, rowSlots, slotOriginal } from "../core/document/gallery.ts";
-import { cappedLongText, codePointPrefix } from "../core/document/text-policy.ts";
-import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { reviewMode } from "../legacy/location-bridge.ts";
+import { rowIndexOf } from "../../core/document/rows.ts";
+import { slotPoster } from "../common/gallery.ts";
+import { ANNOTATION_COLORS, annotateGallerySlot, normalizeMarks, rowSlots, slotOriginal } from "../../core/document/gallery.ts";
+import { cappedLongText, codePointPrefix } from "../../core/document/text-policy.ts";
+
+var ports = null;
 
 var COLOR_NAMES = ["Red", "Yellow", "Green", "Blue", "Black", "White"];
 var SIZES = {
@@ -30,6 +26,8 @@ var memory = { tool: "pen", color: {}, size: { pen: 1, highlight: 1, text: 1 } }
 
 var ed = null;
 var drawQueued = false;
+var drawFrame = null;
+var fontTimers = new Set();
 var measureCtx = null;
 var fontFamily = "";
 
@@ -45,10 +43,10 @@ function round4(v) { return Math.round(Math.min(1, Math.max(0, v)) * 10000) / 10
 export function annotatorOpen() { return !!ed; }
 
 export function openAnnotator(rowId, at) {
-  if (ed || reviewMode() || !currentDocument()) return false;
-  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
+  if (ed || ports.review.reviewing() || !ports.document.current()) return false;
+  var idx = ports.document.read(function (doc) { return rowIndexOf(doc, rowId); });
   if (idx === -1) return false;
-  var slot = rowSlots(currentDocument().rows[idx])[at];
+  var slot = rowSlots(ports.document.current().rows[idx])[at];
   if (!slot || !slot.ref || slotPoster(slot)) return false;
   var original = slotOriginal(slot);
   var marks = slot.annotation ? normalizeMarks(slot.annotation.marks) : [];
@@ -90,12 +88,12 @@ export function openAnnotator(rowId, at) {
 function loadOriginal() {
   var sha = ed.original.sha256;
   var mine = ed;
-  ensureBytes([sha]).then(function (missing) {
+  ports.pictures.ensureBytes([sha]).then(function (missing) {
     if (ed !== mine) return;
-    var url = missing.length ? null : urlForSync(sha);
+    var url = missing.length ? null : ports.pictures.urlFor(sha);
     if (!url) {
       closeAnnotator();
-      showToast("The original of this picture isn’t available here, so it can’t be annotated right now.", "warn");
+      ports.notices.show("The original of this picture isn’t available here, so it can’t be annotated right now.", "warn");
       return;
     }
     var img = imgEl();
@@ -113,7 +111,7 @@ function loadOriginal() {
       img.onload = img.onerror = null;
       if (ed !== mine) return;
       closeAnnotator();
-      showToast("This picture couldn’t be opened for annotating.", "warn");
+      ports.notices.show("This picture couldn’t be opened for annotating.", "warn");
     };
     img.src = url;
   });
@@ -139,9 +137,9 @@ export function closeAnnotator() {
 }
 
 function locate() {
-  var idx = readSession(function (doc) { return rowIndexOf(doc, ed.rowId); });
+  var idx = ports.document.read(function (doc) { return rowIndexOf(doc, ed.rowId); });
   if (idx === -1) return -1;
-  var slots = rowSlots(currentDocument().rows[idx]);
+  var slots = rowSlots(ports.document.current().rows[idx]);
   var s = slots[ed.at];
   if (s && s.ref && s.ref.sha256 === ed.sha && !slotPoster(s)) return ed.at;
   for (var i = 0; i < slots.length; i++) {
@@ -157,7 +155,7 @@ export function refreshAnnotator() {
 
 function lost() {
   closeAnnotator();
-  showToast("This picture was changed or removed while you were drawing on it, so your marks weren’t saved.", "warn");
+  ports.notices.show("This picture was changed or removed while you were drawing on it, so your marks weren’t saved.", "warn");
 }
 
 function layout() {
@@ -183,7 +181,9 @@ function layout() {
 }
 
 function redraw() {
+  if (drawFrame !== null) cancelAnimationFrame(drawFrame);
   drawQueued = false;
+  drawFrame = null;
   if (!ed || !ed.ready) return;
   var c = canvasEl();
   var ctx = c.getContext("2d");
@@ -197,7 +197,7 @@ function redraw() {
 function queueRedraw() {
   if (drawQueued) return;
   drawQueued = true;
-  requestAnimationFrame(redraw);
+  drawFrame = requestAnimationFrame(redraw);
 }
 
 function uiFont() {
@@ -211,7 +211,10 @@ function textFont(px) { return "700 " + px + "px " + uiFont(); }
 
 function fontsReady() {
   var loaded = document.fonts && document.fonts.load ? document.fonts.load(textFont(32)).then(null, function () {}) : Promise.resolve();
-  return Promise.race([loaded, new Promise(function (r) { setTimeout(r, 1500); })]);
+  return Promise.race([loaded, new Promise(function (r) {
+    var timer = setTimeout(function () { fontTimers.delete(timer); r(); }, 1500);
+    fontTimers.add(timer);
+  })]);
 }
 
 function outlineFor(hex) {
@@ -652,9 +655,9 @@ function disarmCancel() {
 function done() {
   commitText();
   if (!ed.ready || ed.saving) return;
-  if (reviewMode()) {
+  if (ports.review.reviewing()) {
     closeAnnotator();
-    showToast("This script can only be commented on now, so the annotations weren’t saved.", "warn");
+    ports.notices.show("This script can only be commented on now, so the annotations weren’t saved.", "warn");
     return;
   }
   var marks = normalizeMarks(ed.marks);
@@ -662,20 +665,20 @@ function done() {
   if (locate() === -1) { lost(); return; }
   if (!marks.length) { save(null, marks); return; }
   var mine = ed;
-  var ctx = captureOperation();
+  var ctx = ports.ownership.capture();
   ed.saving = true;
   setStatus("Saving…");
   paintTools();
   flatten(marks).then(function (rec) {
     if (ed !== mine) return;
     ed.saving = false;
-    if (!stillOwns(ctx)) {
+    if (!ports.ownership.stillOwns(ctx)) {
       closeAnnotator();
-      showToast("The annotations were not saved because the script changed.", "warn");
+      ports.notices.show("The annotations were not saved because the script changed.", "warn");
       return;
     }
     paintTools();
-    if (!rec) { showToast("Could not save the annotated picture — it may be too large for this browser.", "warn"); return; }
+    if (!rec) { ports.notices.show("Could not save the annotated picture — it may be too large for this browser.", "warn"); return; }
     save(rec, marks);
   });
 }
@@ -685,13 +688,13 @@ function save(rec, marks) {
   if (at === -1) { lost(); return; }
   var original = ed.original;
   ed.committing = true;
-  var ok = cellEditing().editGallery(ed.rowId, marks.length ? "Picture annotated" : "Annotations removed", function (row) {
+  var ok = ports.cells.editGallery(ed.rowId, marks.length ? "Picture annotated" : "Annotations removed", function (row) {
     return annotateGallerySlot(row, at, rec, original, marks);
   });
   if (!ed) return;
   ed.committing = false;
   if (!ok) {
-    showToast("Could not save the annotations to this picture.", "warn");
+    ports.notices.show("Could not save the annotations to this picture.", "warn");
     return;
   }
   closeAnnotator();
@@ -699,6 +702,7 @@ function save(rec, marks) {
 
 function flatten(marks) {
   var img = imgEl();
+  var pictures = ports.pictures;
   return fontsReady().then(function () {
     var w = img.naturalWidth, h = img.naturalHeight;
     var c = document.createElement("canvas");
@@ -715,8 +719,8 @@ function flatten(marks) {
   }).then(function (blob) {
     return blob ? blob.arrayBuffer() : null;
   }).then(function (buf) {
-    var rec = buf ? intern(new Uint8Array(buf)) : null;
-    if (rec) persist([rec.sha256]);
+    var rec = buf ? pictures.intern(new Uint8Array(buf)) : null;
+    if (rec) pictures.persist([rec.sha256]);
     return rec;
   }).then(null, function () { return null; });
 }
@@ -808,28 +812,71 @@ function buildSwatches() {
   });
 }
 
-export function __init() {
+export function __init(given) {
+  ports = given;
   memory.color = { pen: ANNOTATION_COLORS[0], highlight: ANNOTATION_COLORS[1], text: ANNOTATION_COLORS[0] };
   var m = modal();
-  if (!m) return;
-  buildSwatches();
-  m.addEventListener("click", onClick);
   var f = frameEl();
-  f.addEventListener("pointerdown", onPointerDown);
-  f.addEventListener("pointermove", onPointerMove);
-  f.addEventListener("pointerup", onPointerUp);
-  f.addEventListener("pointercancel", onPointerCancel);
-  f.addEventListener("lostpointercapture", onPointerUp);
-  window.addEventListener("keydown", onWindowKeydown, true);
-  if (typeof ResizeObserver === "function") {
-    new ResizeObserver(function () { if (ed) layout(); }).observe(document.getElementById("annotate-stage"));
-  } else {
-    window.addEventListener("resize", function () { if (ed) layout(); });
+  var observer = null;
+  var resize = function () { if (ed) layout(); };
+  var previousTest = window.__annotateTest;
+  var swatches = [];
+  if (m) {
+    buildSwatches();
+    swatches = Array.from(document.getElementById("annotate-colors").children);
+    m.addEventListener("click", onClick);
+    f.addEventListener("pointerdown", onPointerDown);
+    f.addEventListener("pointermove", onPointerMove);
+    f.addEventListener("pointerup", onPointerUp);
+    f.addEventListener("pointercancel", onPointerCancel);
+    f.addEventListener("lostpointercapture", onPointerUp);
+    window.addEventListener("keydown", onWindowKeydown, true);
+    if (typeof ResizeObserver === "function") {
+      observer = new ResizeObserver(resize);
+      observer.observe(document.getElementById("annotate-stage"));
+    } else {
+      window.addEventListener("resize", resize);
+    }
   }
-  window.__annotateTest = {
+  var hook = {
     state: function () {
       return ed ? { tool: memory.tool, marks: copy(ed.marks), undo: ed.undo.length, redo: ed.redo.length,
         text: ed.text ? copy(ed.text.mark) : null, ready: ed.ready, at: ed.at, w: ed.w, h: ed.h } : null;
+    }
+  };
+  if (m) window.__annotateTest = hook;
+  var disposed = false;
+  return {
+    openAnnotator: openAnnotator,
+    refreshAnnotator: refreshAnnotator,
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      closeAnnotator();
+      if (m) {
+        m.removeEventListener("click", onClick);
+        f.removeEventListener("pointerdown", onPointerDown);
+        f.removeEventListener("pointermove", onPointerMove);
+        f.removeEventListener("pointerup", onPointerUp);
+        f.removeEventListener("pointercancel", onPointerCancel);
+        f.removeEventListener("lostpointercapture", onPointerUp);
+        window.removeEventListener("keydown", onWindowKeydown, true);
+        if (observer) observer.disconnect();
+        else window.removeEventListener("resize", resize);
+      }
+      swatches.forEach(function (swatch) { swatch.remove(); });
+      if (drawFrame !== null) cancelAnimationFrame(drawFrame);
+      drawFrame = null;
+      drawQueued = false;
+      fontTimers.forEach(function (timer) { clearTimeout(timer); });
+      fontTimers.clear();
+      measureCtx = null;
+      fontFamily = "";
+      if (window.__annotateTest === hook) {
+        if (previousTest === undefined) delete window.__annotateTest;
+        else window.__annotateTest = previousTest;
+      }
+      ports = null;
     }
   };
 }

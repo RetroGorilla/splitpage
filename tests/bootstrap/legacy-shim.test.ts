@@ -16,7 +16,7 @@ const FROZEN_SHIM_IMPORTS: readonly string[] = [
   "../adapters/storage/02c-blobs.js", "../adapters/storage/02d-gallery.js", "./03-sync.js", "./03a-history-store.js", "./03b-side-panels.js", "./04-richtext.js",
   "./04c-doc-model.js", "./05-render.js", "./05c-clipboard.js",
   "./05d-draft-edit.js", "./05e-gallery-overlay.js", "./05f-rundown.js", "./05g-scene-clip.js", "./05h-scene-select.js", "./05p-rundown-presence.js",
-  "./05r-read-time.js", "./05t-target.js", "./05v-video.js", "./05w-annotate.js",
+  "./05r-read-time.js", "./05t-target.js", "./05v-video.js",
   "./06-rows.js", "./07-production-tags.js", "./07b-plain-tags.js", "./08-production-panels.js", "./08c-broll.js", "./08d-broll-panel.js",
   "./09-find-replace.js", "./10-comments.js", "./11-import.js", "./12-dirty-toast.js", "./12a-undo.js", "./13-hosted.js",
   "./13a-presence.js", "./13b-collaborate.js", "./14-export.js", "./14b-export-kit.js", "./18-local-files.js", "./18a-local-merge.js", "./18b-file-menu.js",
@@ -37,10 +37,10 @@ function importsOf(path: string): readonly Import[] {
   return analysis.imports;
 }
 
-test("the frozen shim import set has the 56 started modules and the two bootstrap modules", () => {
+test("the frozen shim import set has the 55 started modules and the two bootstrap modules", () => {
   assert.equal(new Set(FROZEN_SHIM_IMPORTS).size, FROZEN_SHIM_IMPORTS.length);
-  assert.equal(FROZEN_SHIM_IMPORTS.length, 58);
-  assert.equal(FROZEN_SHIM_IMPORTS.filter((s) => /^\.\/\d/.test(s)).length, 54);
+  assert.equal(FROZEN_SHIM_IMPORTS.length, 57);
+  assert.equal(FROZEN_SHIM_IMPORTS.filter((s) => /^\.\/\d/.test(s)).length, 53);
   assert.ok(!FROZEN_SHIM_IMPORTS.includes("./14e-export-formats.js"));
 });
 
@@ -132,9 +132,10 @@ test("the load-order check catches a module that configures a bridge while it lo
 });
 
 test("no numbered module configures a bridge or starts an owner while it loads: each is imported alone, with fresh module state", { timeout: 600_000 }, async () => {
-  assert.equal(NUMBERED.length, 54, "every remaining numbered module");
-  const targets = [...NUMBERED, "src/adapters/formats/export-projections.ts", "src/adapters/formats/export-kit.ts", "src/adapters/formats/export-assets.ts", "src/adapters/formats/export-text.ts", "src/adapters/formats/csv.ts", "src/adapters/formats/xlsx.ts", "src/adapters/formats/docx.ts", "src/adapters/formats/pdf.ts", "src/features/rows/row-motion.js", "src/features/title/topbar.ts", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/script-zoom/script-zoom.js", "src/features/notices/phone-bar.ts", "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts", "src/bootstrap/wiring/exporters.ts", "src/bootstrap/wiring/script-zoom.ts", "src/application/screen.ts", "src/features/script-zoom/actions.ts", "src/bootstrap/wiring/shared-ports.ts", "src/features/help/help.js", "src/features/help/actions.ts", "src/bootstrap/wiring/help.ts"];
-  assert.equal(targets.length, 86);
+  assert.equal(NUMBERED.length, 53, "every remaining numbered module");
+  const targets = [...NUMBERED, "src/adapters/formats/export-projections.ts", "src/adapters/formats/export-kit.ts", "src/adapters/formats/export-assets.ts", "src/adapters/formats/export-text.ts", "src/adapters/formats/csv.ts", "src/adapters/formats/xlsx.ts", "src/adapters/formats/docx.ts", "src/adapters/formats/pdf.ts", "src/features/rows/row-motion.js", "src/features/title/topbar.ts", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/script-zoom/script-zoom.js", "src/features/notices/phone-bar.ts", "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts", "src/bootstrap/wiring/exporters.ts", "src/bootstrap/wiring/script-zoom.ts", "src/application/screen.ts", "src/features/script-zoom/actions.ts", "src/bootstrap/wiring/shared-ports.ts", "src/features/help/help.js", "src/features/help/actions.ts", "src/bootstrap/wiring/help.ts",
+    "src/features/gallery/annotate.js", "src/features/gallery/actions.ts", "src/bootstrap/wiring/gallery.ts", "src/features/common/gallery.ts"];
+  assert.equal(targets.length, 89);
   for (const loadOnly of ["src/features/rows/row-motion.js", "src/features/title/topbar.ts", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/notices/phone-bar.ts", "src/adapters/storage/03c-history-idb.js", "src/adapters/formats/export-projections.ts", "src/adapters/formats/export-kit.ts", "src/adapters/formats/export-assets.ts", "src/adapters/formats/export-text.ts", "src/adapters/formats/csv.ts", "src/adapters/formats/xlsx.ts", "src/adapters/formats/docx.ts", "src/adapters/formats/pdf.ts", "src/bootstrap/wiring/exporters.ts", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts"]) {
     assert.ok(targets.includes(loadOnly), loadOnly);
   }
