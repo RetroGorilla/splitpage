@@ -1,3 +1,4 @@
+import { preferences } from "../legacy/preferences-bridge.ts";
 import { flushEdits } from "./12a-undo.js";
 import { sanitizeHtml } from "../legacy/richtext.ts";
 import { currentDocument, noteAbsorbedDirty, noteReload } from "../legacy/session-bridge.ts";
@@ -15,7 +16,7 @@ import { stampRow } from "./03-sync.js";
 import { beginBusy, endBusy, withBusyBar } from "../features/notices/busy.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { brollPrintView } from "./08d-broll-panel.js";
-import { formatTimestamp } from "./10-comments.js";
+import { formatTimestamp } from "../features/common/comment-time.js";
 import { captureExportDocument, loadExportAssets } from "./14b-export-kit.js";
 import { exportAssetsRequest } from "../adapters/formats/export-assets.ts";
 import {
@@ -470,7 +471,7 @@ export function showFileConflictView(conflict) {
     return;
   }
   var when = currentFile.lastModified
-    ? formatTimestamp(new Date(currentFile.lastModified).toISOString())
+    ? formatTimestamp(new Date(currentFile.lastModified).toISOString(), preferences().clock())
     : "recently";
   document.getElementById("file-conflict-detail").textContent =
     fileName + " changed on disk at " + when +

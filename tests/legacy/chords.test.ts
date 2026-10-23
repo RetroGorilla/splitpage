@@ -1,3 +1,4 @@
+import { commentsPanelActions, commentsHelpActions } from "../../src/bootstrap/wiring/comments.ts";
 import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
 import { test } from "node:test";
@@ -11,7 +12,7 @@ import { helpActions, mountHelpFeature, stopHelpFeature } from "../../src/bootst
 import { registerShareActions } from "../../src/legacy/share-actions.ts";
 import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
-import { registerViewActions } from "../../src/legacy/view-actions.ts";
+import { viewActions } from "../../src/legacy/view-actions.ts";
 import { scriptZoomActions } from "../../src/bootstrap/wiring/script-zoom.ts";
 
 function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
@@ -20,8 +21,8 @@ function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   mountHelpFeature();
   const menu = helpMenuActions();
   const disposers = [stopRundownFeature,
-    registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerFileActions(registry), registerViewActions(registry),
-    registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3)]), registerShareActions(registry), registerAll(registry, scriptZoomActions()), stopHelpFeature
+    registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerFileActions(registry), registerAll(registry, [...viewActions().slice(0, 3), ...commentsPanelActions(), ...viewActions().slice(3)]),
+    registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 6), ...commentsHelpActions(), ...menu.slice(6)]), registerShareActions(registry), registerAll(registry, scriptZoomActions()), stopHelpFeature
   ];
   return { registry, dispose: () => { for (const d of disposers) d(); } };
 }

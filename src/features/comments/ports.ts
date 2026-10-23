@@ -1,0 +1,40 @@
+import type { PictureStore } from "../../application/media/picture-store.ts";
+import type { CommentSorting } from "../../application/comment-sort.ts";
+import type { Presence } from "../../application/collaboration/presence.ts";
+import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { DeleteConfirm } from "../../application/editing/delete-confirm.ts";
+import type { EditorSelectionPort } from "../../application/editing/selection.ts";
+import type { NoticePort } from "../../application/effects/ports.ts";
+import type { Preferences } from "../../application/preferences/preferences.ts";
+import type { SaveOwnershipPort } from "../../application/save/coordinator.ts";
+import type { SaveState } from "../../application/save/save-state.ts";
+import type { DocumentEdits } from "../../application/session/document-edits.ts";
+import type { DocumentReader } from "../../application/session/document-reader.ts";
+import type { SidePanels } from "../../application/side-panels.ts";
+import type { ShotHiding } from "../../application/shot-hiding.ts";
+import type { TextServices } from "../../application/text/services.ts";
+import type { HistoryPort } from "../../application/transitions/ports.ts";
+import type { Clock, IdSource } from "../../core/document/ports.ts";
+
+export interface CommentStatePorts {
+  readonly sort: CommentSorting;
+  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
+  readonly notices: Pick<NoticePort, "show">;
+  readonly preferences: Pick<Preferences, "clock" | "commentAuthor" | "rememberCommentAuthor" | "commentsSort" | "setCommentsSort" | "commentFilter" | "setCommentFilter" | "taggingHelpShown" | "taggingHelpDismissed">;
+  readonly review: Pick<ReviewFacts, "reviewing" | "refuseInReview">;
+  readonly sidePanels: Pick<SidePanels, "open" | "close">;
+  readonly text: Pick<TextServices<HTMLElement>, "inertBody" | "sanitizeHtml">;
+  readonly ids: Pick<IdSource, "id">;
+  readonly clock: Clock;
+  readonly saves: Pick<SaveState, "resume" | "dueNow">;
+  readonly selection: EditorSelectionPort;
+  readonly deletion: Pick<DeleteConfirm, "armedId" | "arm" | "disarm">;
+  readonly ownership: SaveOwnershipPort;
+  readonly history: HistoryPort;
+  readonly presence: Pick<Presence, "personColor">;
+  readonly shots: Pick<ShotHiding, "reveal">;
+  readonly pictures: Pick<PictureStore, "imgHtml">;
+  readonly clearDraftUndo: (box: HTMLElement) => void;
+  readonly onThreadsSent: (listener: () => void) => () => void;
+}

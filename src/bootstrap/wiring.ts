@@ -1,3 +1,4 @@
+export { mountCommentsLogicFeature } from "./wiring/comments.ts";
 import { wireProductionIndex } from "./wiring/production-index.ts";
 export { mountReadTimeFeature } from "./wiring/read-time.ts";
 export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";

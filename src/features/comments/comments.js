@@ -1,7 +1,9 @@
-import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
-import { pad2 } from "../core/production/timing.ts";
-import { rowIndexOf } from "../core/document/rows.ts";
-import { currentDocument, readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
+import { plainText, safeId as safeIdFrom } from "../../core/document/text-policy.ts";
+import { editableCellHtml } from "../common/editable-cell.js";
+import { formatTimestampAbsolute } from "../../../shared/clock.js";
+
+import { pad2 } from "../../core/production/timing.ts";
+import { rowIndexOf } from "../../core/document/rows.ts";
 import {
   addCommentCommand,
   addReplyCommand,
@@ -10,38 +12,32 @@ import {
   setCommentAssigneeCommand,
   toggleResolveCommand,
   unwrapCommentAnchorCommand
-} from "../application/commands/comments.ts";
-import { captureOperation, keepSnapshot, stillOwns } from "../legacy/transition-bridge.ts";
-import { editorSelection } from "../legacy/editor-bridge.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { preferences } from "../legacy/preferences-bridge.ts";
-import { formatClock, formatDateClock } from "../../shared/clock.js";
-import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
-import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
-import { normalizeImageRef } from "../../shared/blob-policy.js";
-import { sidePanels } from "../legacy/panels-bridge.ts";
-import { inertBody, plainText, safeId, sanitizeHtml } from "./04-richtext.js";
-import { cssAttr } from "../features/common/dom.ts";
-import { editableCellHtml } from "./05-render.js";
-import { resetDraftHistory } from "./05d-draft-edit.js";
-import { presence } from "../legacy/presence-bridge.ts";
-import { autoSavePolicy, resumeAutoSave } from "../legacy/save-bridge.ts";
-import { commentBodyText, commentEntries, formatTimestampAbsolute } from "../adapters/formats/export-projections.ts";
-import { makeId, nowIso } from "../adapters/identity/ids.ts";
+} from "../../application/commands/comments.ts";
+import { normalizeImageRef } from "../../../shared/blob-policy.js";
+import { cssAttr } from "../common/dom.ts";
 import {
   commentMatchesFilterMode,
   commentMatchesAssigneeFilter as matchesAssignee,
   commentRecentOrder,
   compareCommentPositions
-} from "../core/document/comments.ts";
-import { idMap } from "../core/document/id-map.ts";
-import { normalizeTagName } from "../core/document/tags.ts";
-import { EDITOR_NAME_MAX } from "../core/document/fields.ts";
-import { codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
-import { commentSortMode, setCommentSort } from "../application/comment-sort.ts";
-import { cleanAuthorName } from "../core/document/people.ts";
-import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
-export { commentBodyText, commentEntries };
+} from "../../core/document/comments.ts";
+import { idMap } from "../../core/document/id-map.ts";
+import { normalizeTagName } from "../../core/document/tags.ts";
+import { EDITOR_NAME_MAX } from "../../core/document/fields.ts";
+import { codePointPrefix, escapeHtml } from "../../core/document/text-policy.ts";
+import { cleanAuthorName } from "../../core/document/people.ts";
+
+var ports = null;
+var commentDisposers = [];
+
+function listen(target, type, handler, options) {
+  target.addEventListener(type, handler, options);
+  commentDisposers.push(function () { target.removeEventListener(type, handler, options); });
+}
+
+function safeId(id, prefix) {
+  return safeIdFrom(id, prefix, ports.ids);
+}
 
 var commentFilter;
 
@@ -60,7 +56,7 @@ export function showTaggingHelp() {
     taggingHelpReturn = { el: active, range: range };
   }
   card.hidden = false;
-  preferences().taggingHelpShown();
+  ports.preferences.taggingHelpShown();
   card.focus({ preventScroll: true });
   updateTaggingHelpCover();
 }
@@ -71,7 +67,7 @@ export function hideTaggingHelp() {
   var hadFocus = card.contains(document.activeElement);
   card.hidden = true;
   card.classList.remove("is-covering");
-  preferences().taggingHelpDismissed();
+  ports.preferences.taggingHelpDismissed();
   var back = taggingHelpReturn;
   taggingHelpReturn = null;
   if (!hadFocus || !back || !document.contains(back.el)) return;
@@ -152,19 +148,23 @@ function scheduleTaggingHelpCover() {
 function initTaggingHelp() {
   var card = document.getElementById("tagging-help");
   if (!card) return;
-  document.getElementById("tagging-help-dismiss").addEventListener("click", hideTaggingHelp);
-  card.addEventListener("keydown", function (e) {
+  listen(document.getElementById("tagging-help-dismiss"), "click", hideTaggingHelp);
+  listen(card, "keydown", function (e) {
     if (e.key !== "Escape" || e.defaultPrevented) return;
     e.preventDefault();
     e.stopPropagation();
     hideTaggingHelp();
   });
-  document.addEventListener("selectionchange", scheduleTaggingHelpCover);
-  document.addEventListener("input", scheduleTaggingHelpCover, true);
-  window.addEventListener("scroll", scheduleTaggingHelpCover, true);
-  window.addEventListener("resize", scheduleTaggingHelpCover);
+  listen(document, "selectionchange", scheduleTaggingHelpCover);
+  listen(document, "input", scheduleTaggingHelpCover, true);
+  listen(window, "scroll", scheduleTaggingHelpCover, true);
+  listen(window, "resize", scheduleTaggingHelpCover);
   var bar = document.querySelector(".topbar");
-  if (bar && typeof ResizeObserver === "function") new ResizeObserver(scheduleTaggingHelpCover).observe(bar);
+  if (bar && typeof ResizeObserver === "function") {
+    var observer = new ResizeObserver(scheduleTaggingHelpCover);
+    observer.observe(bar);
+    commentDisposers.push(function () { observer.disconnect(); });
+  }
 }
 
 var pendingComment = null;
@@ -173,12 +173,12 @@ var bindingsVersion = 0;
 var commentTimers = new Set();
 
 function ownsDocument(operation) {
-  return stillOwns(Object.assign({}, operation, { connection: captureOperation().connection }));
+  return ports.ownership.stillOwns(Object.assign({}, operation, { connection: ports.ownership.capture().connection }));
 }
 
 function commentTimer(fn, delay) {
   var version = bindingsVersion;
-  var operation = captureOperation();
+  var operation = ports.ownership.capture();
   var timer = setTimeout(function () {
     if (version !== bindingsVersion) return;
     commentTimers.delete(timer);
@@ -189,12 +189,12 @@ function commentTimer(fn, delay) {
 }
 
 export function captureCommentComposer() {
-  var operation = captureOperation();
+  var operation = ports.ownership.capture();
   var version = composerVersion;
   var modal = document.getElementById("comment-modal");
   var body = document.getElementById("comment-body-editable");
   return function () {
-    if (!ownsDocument(operation) || version !== composerVersion) return null;
+    if (!ports || version !== composerVersion || !ownsDocument(operation)) return null;
     var liveModal = document.getElementById("comment-modal");
     var liveBody = document.getElementById("comment-body-editable");
     return liveModal === modal && liveBody === body && liveModal && !liveModal.hidden ? liveBody : null;
@@ -206,17 +206,17 @@ export function resetCommentBindings() {
   composerVersion++;
   commentTimers.forEach(function (timer) { clearTimeout(timer); });
   commentTimers.clear();
-  deleteConfirmation().disarm("comment");
+  ports.deletion.disarm("comment");
   closeCommentMenu(false);
   pendingComment = null;
   expandedReplyIds = idMap();
   replyDrafts = idMap();
   document.getElementById("comment-modal").hidden = true;
-  sidePanels().close("comments-panel");
+  ports.sidePanels.close("comments-panel");
   closeFieldPopovers(document.getElementById("comment-modal"));
   var body = document.getElementById("comment-body-editable");
   body.innerHTML = "";
-  resetDraftHistory(body);
+  ports.clearDraftUndo(body);
 }
 
 var expandedReplyIds = idMap();
@@ -244,15 +244,15 @@ export function limitAuthorNameField(field) {
   field.setSelectionRange(cut, cut);
 }
 export function getSavedAuthorName() {
-  return cleanAuthorName(preferences().commentAuthor());
+  return cleanAuthorName(ports.preferences.commentAuthor());
 }
 export function saveAuthorName(name) {
-  preferences().rememberCommentAuthor(cleanAuthorName(name));
+  ports.preferences.rememberCommentAuthor(cleanAuthorName(name));
 }
 
 export function setCommentSortMode(mode) {
-  const chosen = setCommentSort(mode);
-  preferences().setCommentsSort(chosen);
+  const chosen = ports.sort.choose(mode);
+  ports.preferences.setCommentsSort(chosen);
   captureReplyDrafts();
   renderComments();
 }
@@ -261,13 +261,13 @@ var COMMENT_FILTER_MODES = { open: true, resolved: true, all: true };
 
 export function setCommentFilterMode(mode) {
   commentFilter.mode = COMMENT_FILTER_MODES[mode] ? mode : "open";
-  preferences().setCommentFilter(commentFilter);
+  ports.preferences.setCommentFilter(commentFilter);
   captureReplyDrafts();
   renderComments();
 }
 export function setCommentAssigneeFilter(value) {
   commentFilter.assignee = value || "";
-  preferences().setCommentFilter(commentFilter);
+  ports.preferences.setCommentFilter(commentFilter);
   captureReplyDrafts();
   renderComments();
 }
@@ -285,8 +285,8 @@ function commentAssigneeCandidates() {
     seen[norm] = true;
     out.push(clean);
   }
-  (currentDocument()?.people || []).forEach(function (p) { add(p.name); });
-  (currentDocument()?.comments || []).forEach(function (c) {
+  (ports.document.current()?.people || []).forEach(function (p) { add(p.name); });
+  (ports.document.current()?.comments || []).forEach(function (c) {
     add(c.author);
     (c.replies || []).forEach(function (r) { add(r.author); });
   });
@@ -297,15 +297,15 @@ function commentAssigneeCandidates() {
 export function setCommentAssignee(id, name) {
   var idx = findCommentIndex(id);
   if (idx === -1) return;
-  if (reviewBlocked()) { renderComments(); return; }
-  runDocumentEdit(setCommentAssigneeCommand(id, name, sessionStamps.clock));
+  if (ports.review.refuseInReview()) { renderComments(); return; }
+  ports.edits.edit(setCommentAssigneeCommand(id, name, ports.edits.stamps.clock));
 }
 
 function commentAssigneeOptionsHtml(current) {
   var candidates = commentAssigneeCandidates();
   var found = false;
   var html = '<option value=""' + (current ? "" : " selected") + '>' +
-    (current || reviewMode() ? "Unassigned" : "Assign…") + '</option>';
+    (current || ports.review.reviewing() ? "Unassigned" : "Assign…") + '</option>';
   candidates.forEach(function (name) {
     var sel = normalizeTagName(name) === normalizeTagName(current || "");
     if (sel) found = true;
@@ -318,7 +318,7 @@ function commentAssigneeOptionsHtml(current) {
 }
 
 function renderCommentFilterBar() {
-  const doc = currentDocument();
+  const doc = ports.document.current();
   if (!doc) return;
   var seg = document.getElementById("comments-filter-seg");
   if (seg) {
@@ -369,21 +369,11 @@ function renderCommentFilterBar() {
   select.value = current;
 }
 
-export function formatTimestamp(iso) {
-  try {
-    var d = new Date(iso);
-    if (isNaN(d.getTime())) return "";
-    var sameDay = d.toDateString() === new Date().toDateString();
-    var clock = preferences().clock();
-    return sameDay ? formatClock(d, clock) : formatDateClock(d, null, clock);
-  } catch (e) { return ""; }
-}
-
 function formatRelativeTime(iso) {
   try {
     var d = new Date(iso);
     if (isNaN(d.getTime())) return "";
-    var sec = Math.round((Date.now() - d.getTime()) / 1000);
+    var sec = Math.round((Date.parse(ports.clock.nowIso()) - d.getTime()) / 1000);
     if (sec < 60) return "just now";
     var min = Math.round(sec / 60);
     if (min < 60) return min + (min === 1 ? " minute ago" : " minutes ago");
@@ -400,7 +390,7 @@ function formatRelativeTime(iso) {
 
 function commentLocationHtml(rowId, field) {
   if (field === "title") return "Document title";
-  var idx = readSession(function (doc) { return rowIndexOf(doc, rowId); });
+  var idx = ports.document.read(function (doc) { return rowIndexOf(doc, rowId); });
   var fieldLabel = field === "audioText" ? "Audio" : "Visual";
   if (idx === -1) return "Deleted scene · " + fieldLabel;
   return 'Scene <span class="comment-loc-num">' + pad2(idx + 1) + '</span> · ' + fieldLabel;
@@ -423,28 +413,28 @@ function commentThreadNumbers() {
 
 function commentAvatarHtml(name) {
   var first = Array.from(String(name || "").trim())[0] || "?";
-  return '<span class="person-avatar comment-avatar" style="--size:28px;--presence:' + presence().personColor(name) +
+  return '<span class="person-avatar comment-avatar" style="--size:28px;--presence:' + ports.presence.personColor(name) +
     '" aria-hidden="true">' + escapeHtml(first.toUpperCase()) + '</span>';
 }
 
 function commentTimeHtml(iso, cls) {
   return '<time class="' + cls + '" datetime="' + escapeHtml(iso || "") + '" title="' +
-    escapeHtml(formatTimestampAbsolute(iso, preferences().clock())) + '">' + escapeHtml(formatRelativeTime(iso)) + '</time>';
+    escapeHtml(formatTimestampAbsolute(iso, ports.preferences.clock())) + '">' + escapeHtml(formatRelativeTime(iso)) + '</time>';
 }
 
 function commentPositionCompare(a, b) {
-  return compareCommentPositions(a, b, function (id) { return readSession(function (doc) { return rowIndexOf(doc, id); }); });
+  return compareCommentPositions(a, b, function (id) { return ports.document.read(function (doc) { return rowIndexOf(doc, id); }); });
 }
 
 function anchorTextFromState(cmtId) {
-  const doc = currentDocument();
+  const doc = ports.document.current();
   if (!doc) return null;
   var cIdx = findCommentIndex(cmtId);
   if (cIdx === -1) return null;
   const c = doc.comments[cIdx];
-  const row = doc.rows[readSession(function (doc) { return rowIndexOf(doc, c.rowId); })];
+  const row = doc.rows[ports.document.read(function (doc) { return rowIndexOf(doc, c.rowId); })];
   if (!row) return null;
-  var body = inertBody(row[c.field] || "");
+  var body = ports.text.inertBody(row[c.field] || "");
   var span = body.querySelector('.cmt-anchor[data-cmt="' + cssAttr(cmtId) + '"]');
   return span ? span.textContent : null;
 }
@@ -459,24 +449,13 @@ function anchorUnwrapped(rowId, field, cmtId) {
   return function (doc) {
     var row = doc.rows[rowIndexOf(doc, rowId)];
     if (!row) return [];
-    var container = inertBody(row[field] || "");
+    var container = ports.text.inertBody(row[field] || "");
     var anchor = container.querySelector('.cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
     if (!anchor) return [];
     while (anchor.firstChild) anchor.parentNode.insertBefore(anchor.firstChild, anchor);
     anchor.parentNode.removeChild(anchor);
     return [{ rowId: rowId, field: field, html: container.innerHTML }];
   };
-}
-
-export function syncAnchorResolvedClasses() {
-  const doc = currentDocument();
-  if (!doc) return;
-  var resolvedIds = idMap();
-  doc.comments.forEach(function (c) { if (c.resolved) resolvedIds[c.id] = true; });
-  document.querySelectorAll("#rows .cmt-anchor").forEach(function (el) {
-    var id = el.getAttribute("data-cmt");
-    el.classList.toggle("resolved", !!resolvedIds[id]);
-  });
 }
 
 var COUNTED_KINDS = { adopt: true, server: true, recovery: true, reload: true };
@@ -486,7 +465,7 @@ export function commentsChanged(change) {
 }
 
 function updateCommentsCount() {
-  const doc = currentDocument();
+  const doc = ports.document.current();
   if (!doc) return;
   const open = doc.comments.filter(function (c) { return !c.resolved; }).length;
   var badge = document.getElementById("comments-badge");
@@ -505,7 +484,7 @@ function closeFieldPopovers(root) {
 export function openCommentComposer(ctx) {
   composerVersion++;
   pendingComment = ctx;
-  editorSelection().dropLink();
+  ports.selection.dropLink();
   closeFieldPopovers(document.getElementById("comment-modal"));
   document.getElementById("comment-modal-quote").innerHTML =
     '“<span class="comment-quote-words">' + escapeHtml(ctx.quotedText) + '</span>”';
@@ -513,7 +492,7 @@ export function openCommentComposer(ctx) {
   nameInput.value = getSavedAuthorName();
   var bodyEl = document.getElementById("comment-body-editable");
   bodyEl.innerHTML = "";
-  resetDraftHistory(bodyEl);
+  ports.clearDraftUndo(bodyEl);
   document.getElementById("comment-modal").hidden = false;
   var resolveComposer = captureCommentComposer();
   commentTimer(function () { var body = resolveComposer(); if (body) body.focus(); }, 0);
@@ -523,13 +502,13 @@ export function closeCommentComposer(cancelled) {
   composerVersion++;
   document.getElementById("comment-modal").hidden = true;
   if (cancelled && pendingComment) {
-    runDocumentEdit(unwrapCommentAnchorCommand(anchorUnwrapped(pendingComment.rowId, pendingComment.field, pendingComment.id)));
+    ports.edits.edit(unwrapCommentAnchorCommand(anchorUnwrapped(pendingComment.rowId, pendingComment.field, pendingComment.id)));
   }
   pendingComment = null;
-  editorSelection().dropLink();
+  ports.selection.dropLink();
   closeFieldPopovers(document.getElementById("comment-modal"));
   document.getElementById("comment-body-editable").innerHTML = "";
-  resetDraftHistory(document.getElementById("comment-body-editable"));
+  ports.clearDraftUndo(document.getElementById("comment-body-editable"));
 }
 
 export function postComment() {
@@ -538,13 +517,13 @@ export function postComment() {
   var author = cleanAuthorName(nameInput.value) || "Anonymous";
   saveAuthorName(author);
   var bodyEl = document.getElementById("comment-body-editable");
-  var bodyHtml = sanitizeHtml(bodyEl.innerHTML);
+  var bodyHtml = ports.text.sanitizeHtml(bodyEl.innerHTML);
   var hasMedia = /<img|video-embed-card/.test(bodyHtml);
   if (!bodyEl.textContent.trim() && !hasMedia) {
-    showToast("Write a comment before posting.", "warn");
+    ports.notices.show("Write a comment before posting.", "warn");
     return;
   }
-  runDocumentEdit(addCommentCommand({
+  ports.edits.edit(addCommentCommand({
     id: pendingComment.id,
     rowId: pendingComment.rowId,
     field: pendingComment.field,
@@ -556,8 +535,8 @@ export function postComment() {
     resolvedBy: null,
     resolvedAt: null,
     assignee: "",
-    createdAt: nowIso(),
-    updatedAt: nowIso(),
+    createdAt: ports.clock.nowIso(),
+    updatedAt: ports.clock.nowIso(),
     kind: "anchor",
     replies: []
   }));
@@ -565,36 +544,36 @@ export function postComment() {
   composerVersion++;
   pendingComment = null;
   bodyEl.innerHTML = "";
-  resetDraftHistory(bodyEl);
+  ports.clearDraftUndo(bodyEl);
   sendNow();
 }
 
 function sendNow() {
-  if (reviewMode()) resumeAutoSave();
-  autoSavePolicy().dueNow();
+  if (ports.review.reviewing()) ports.saves.resume();
+  ports.saves.dueNow();
 }
 
 function findCommentIndex(id) {
-  const doc = currentDocument();
+  const doc = ports.document.current();
   if (!doc) return -1;
   for (let i = 0; i < doc.comments.length; i++) if (doc.comments[i].id === id) return i;
   return -1;
 }
 
 export function openCommentsPanel() {
-  if (!currentDocument()) return;
-  sidePanels().open("comments-panel");
+  if (!ports.document.current()) return;
+  ports.sidePanels.open("comments-panel");
   captureReplyDrafts();
   renderComments();
 }
 
 export function toggleResolve(id) {
-  if (reviewMode()) return;
-  runDocumentEdit(toggleResolveCommand(id, sessionStamps));
+  if (ports.review.reviewing()) return;
+  ports.edits.edit(toggleResolveCommand(id, ports.edits.stamps));
 }
 
 function deleteComment(id) {
-  const doc = currentDocument();
+  const doc = ports.document.current();
   if (!doc) return;
   var idx = findCommentIndex(id);
   if (idx === -1) return;
@@ -602,16 +581,16 @@ function deleteComment(id) {
   delete expandedReplyIds[id];
   delete replyDrafts[id];
   if (commentMenuFor === id) commentMenuFor = null;
-  runDocumentEdit(deleteCommentCommand(id, anchorUnwrapped(c.rowId, c.field, c.anchorId)));
+  ports.edits.edit(deleteCommentCommand(id, anchorUnwrapped(c.rowId, c.field, c.anchorId)));
 }
 
 export function armDeleteComment(btn, id) {
-  if (deleteConfirmation().armedId("comment") === id) {
-    deleteConfirmation().disarm("comment");
+  if (ports.deletion.armedId("comment") === id) {
+    ports.deletion.disarm("comment");
     deleteComment(id);
     return;
   }
-  deleteConfirmation().arm("comment", id, function () {
+  ports.deletion.arm("comment", id, function () {
     renderComments();
   }, undefined, { start: commentTimer, stop: function (timer) { clearTimeout(timer); } });
   captureReplyDrafts();
@@ -638,30 +617,30 @@ export function postReply(id) {
   var bodyEl = card.querySelector(".cell-editable");
   var author = cleanAuthorName(nameInput.value) || "Anonymous";
   saveAuthorName(author);
-  var bodyHtml = sanitizeHtml(bodyEl.innerHTML);
+  var bodyHtml = ports.text.sanitizeHtml(bodyEl.innerHTML);
   if (!bodyEl.textContent.trim()) {
-    showToast("Write a reply before posting.", "warn");
+    ports.notices.show("Write a reply before posting.", "warn");
     return;
   }
   delete expandedReplyIds[id];
   delete replyDrafts[id];
-  runDocumentEdit(addReplyCommand(id, {
-    id: makeId("rp"),
+  ports.edits.edit(addReplyCommand(id, {
+    id: ports.ids.id("rp"),
     author: author,
     body: bodyHtml,
-    createdAt: nowIso()
-  }, sessionStamps.clock));
+    createdAt: ports.clock.nowIso()
+  }, ports.edits.stamps.clock));
   sendNow();
 }
 
 export function jumpToAnchor(cmtId) {
-  const doc = currentDocument();
+  const doc = ports.document.current();
   if (!doc) return;
   var cIdx = findCommentIndex(cmtId);
-  if (cIdx !== -1) shotHiding().reveal(doc.comments[cIdx].rowId);
+  if (cIdx !== -1) ports.shots.reveal(doc.comments[cIdx].rowId);
   var el = document.querySelector('#rows .cmt-anchor[data-cmt="' + safeId(cmtId, "c") + '"]');
   if (!el) {
-    showToast("That text is no longer in the script.", "warn");
+    ports.notices.show("That text is no longer in the script.", "warn");
     return;
   }
   el.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -671,7 +650,7 @@ export function jumpToAnchor(cmtId) {
 }
 
 export function jumpToComment(cmtId) {
-  const doc = currentDocument();
+  const doc = ports.document.current();
   if (!doc) return;
   var idx = findCommentIndex(cmtId);
   const target = idx === -1 ? null : doc.comments[idx];
@@ -679,7 +658,7 @@ export function jumpToComment(cmtId) {
       !commentMatchesAssigneeFilter(target, commentFilter.assignee))) {
     commentFilter.mode = "all";
     commentFilter.assignee = "";
-    preferences().setCommentFilter(commentFilter);
+    ports.preferences.setCommentFilter(commentFilter);
     captureReplyDrafts();
     renderComments();
   }
@@ -744,7 +723,7 @@ var commentMenuFor = null;
 
 function commentMoreHtml(c) {
   var open = commentMenuFor === c.id;
-  var armed = deleteConfirmation().armedId("comment") === c.id;
+  var armed = ports.deletion.armedId("comment") === c.id;
   return '<span class="comment-more-wrap">' +
     '<button type="button" class="btn-outline is-icon comment-more" data-action="comment-menu" data-id="' + c.id +
       '" aria-haspopup="menu" aria-expanded="' + (open ? 'true' : 'false') + '" aria-label="More actions for this thread" title="More">' +
@@ -786,7 +765,7 @@ function closeCommentMenu(refocus) {
   if (!id) return;
   var menu = commentMenuEl();
   commentMenuFor = null;
-  if (deleteConfirmation().armedId("comment") === id) { deleteConfirmation().disarm("comment"); }
+  if (ports.deletion.armedId("comment") === id) { ports.deletion.disarm("comment"); }
   if (!menu) return;
   var btn = menu.parentNode.querySelector(".comment-more");
   menu.parentNode.removeChild(menu);
@@ -860,7 +839,7 @@ function commentCardHtml(c, num) {
   var liveText = anchorLiveText(c.id);
   var orphaned = liveText === null || liveText.length === 0;
   var changed = !orphaned && liveText !== c.quotedText;
-  var review = reviewMode();
+  var review = ports.review.reviewing();
   var entries = commentEntryHtml(c.author, c.createdAt, c.body, false) +
     c.replies.map(function (r) { return commentEntryHtml(r.author, r.createdAt, r.body, true); }).join("");
   return (
@@ -914,7 +893,7 @@ function commentCardHtml(c, num) {
 function conflictBodyHtml(c) {
   if (c.field === "visualImage") {
     var ref = normalizeImageRef(c.imageValue);
-    return ref ? blobImgHtml(ref, "comment-img") : "";
+    return ref ? ports.pictures.imgHtml(ref, "comment-img") : "";
   }
   return c.body;
 }
@@ -937,7 +916,7 @@ function conflictCardHtml(c) {
         commentEntryHtml(c.author, c.createdAt,
           '<div class="conflict-body">' + (c.emptyValue ? "<em>(you had cleared this)</em>" : conflictBodyHtml(c)) + '</div>', false) +
       '</ol>' +
-      (reviewMode() ? '' :
+      (ports.review.reviewing() ? '' :
         '<div class="comment-actions comment-foot">' +
           '<button type="button" class="btn-outline" data-action="restore-conflict" data-id="' + c.id + '">Use my version</button>' +
           '<button type="button" class="btn-outline" data-action="toggle-resolve" data-id="' + c.id + '">' +
@@ -949,26 +928,26 @@ function conflictCardHtml(c) {
 }
 
 export function restoreConflictValue(commentId) {
-  const doc = currentDocument();
+  const doc = ports.document.current();
   if (!doc) return;
   var ci = findCommentIndex(commentId);
   if (ci === -1) return;
   const c = doc.comments[ci];
   if (c.field === "title") {
-    keepSnapshot("Before using your version of the title");
-    runDocumentEdit(restoreConflictCommand(commentId, { kind: "title", title: c.emptyValue ? "" : (c.titleValue || "") }, sessionStamps));
-    showToast("Restored your version of the title", "ok");
+    ports.history.keep("Before using your version of the title");
+    ports.edits.edit(restoreConflictCommand(commentId, { kind: "title", title: c.emptyValue ? "" : (c.titleValue || "") }, ports.edits.stamps));
+    ports.notices.show("Restored your version of the title", "ok");
     return;
   }
-  var ri = readSession(function (doc) { return rowIndexOf(doc, c.rowId); });
-  if (ri === -1) { showToast("That scene no longer exists.", "warn"); return; }
+  var ri = ports.document.read(function (doc) { return rowIndexOf(doc, c.rowId); });
+  if (ri === -1) { ports.notices.show("That scene no longer exists.", "warn"); return; }
 
-  keepSnapshot("Before using your version of " + (c.conflictField || "a field"));
+  ports.history.keep("Before using your version of " + (c.conflictField || "a field"));
   var value = c.field === "visualImage"
     ? { kind: "image", imageRef: c.emptyValue ? null : (normalizeImageRef(c.imageValue) || null) }
-    : { kind: "text", html: c.emptyValue ? "" : sanitizeHtml(c.body) };
-  runDocumentEdit(restoreConflictCommand(commentId, value, sessionStamps));
-  showToast("Restored your version of " + (c.conflictField || "the field"), "ok");
+    : { kind: "text", html: c.emptyValue ? "" : ports.text.sanitizeHtml(c.body) };
+  ports.edits.edit(restoreConflictCommand(commentId, value, ports.edits.stamps));
+  ports.notices.show("Restored your version of " + (c.conflictField || "the field"), "ok");
 }
 
 export function captureReplyDrafts() {
@@ -984,7 +963,7 @@ export function captureReplyDrafts() {
 var COMMENTS_HINT_HTML = '<p class="comments-hint">To start a thread, select words in the script and choose Comment.</p>';
 
 export function renderComments() {
-  const doc = currentDocument();
+  const doc = ports.document.current();
   if (!doc) return;
   var listEl = document.getElementById("comments-list");
   if (!listEl) return;
@@ -992,7 +971,7 @@ export function renderComments() {
   let items = doc.comments.filter(function (c) {
     return commentMatchesFilterMode(c, commentFilter.mode) && commentMatchesAssigneeFilter(c, commentFilter.assignee);
   });
-  items = items.slice().sort(commentSortMode() === "recent" ? commentRecentOrder : commentPositionCompare);
+  items = items.slice().sort(ports.sort.current() === "recent" ? commentRecentOrder : commentPositionCompare);
   if (!items.length) {
     listEl.innerHTML = '<div class="comments-empty">' + (doc.comments.length ? "No comments match this filter." : "No comments yet.") + '</div>' +
       COMMENTS_HINT_HTML;
@@ -1010,13 +989,30 @@ export function renderComments() {
   }
 }
 
-export function __init() {
-  setCommentSort(preferences().commentsSort());
+export function __init(nextPorts) {
+  ports = nextPorts;
+  ports.sort.choose(ports.preferences.commentsSort());
 
-  commentFilter = preferences().commentFilter();
+  commentFilter = ports.preferences.commentFilter();
 
-  document.addEventListener("mousedown", onCommentMenuMouseDown, true);
-  document.addEventListener("keydown", onCommentMenuKeydown, true);
+  listen(document, "mousedown", onCommentMenuMouseDown, true);
+  listen(document, "keydown", onCommentMenuKeydown, true);
 
   initTaggingHelp();
+  commentDisposers.push(ports.onThreadsSent(function () {
+    captureReplyDrafts();
+    renderComments();
+  }));
+  var active = true;
+  return { dispose: function () {
+    if (!active) return;
+    active = false;
+    commentDisposers.splice(0).reverse().forEach(function (off) { off(); });
+    if (taggingHelpCoverFrame) cancelAnimationFrame(taggingHelpCoverFrame);
+    taggingHelpCoverFrame = 0;
+    taggingHelpReturn = null;
+    resetCommentBindings();
+    commentFilter = undefined;
+    ports = null;
+  } };
 }

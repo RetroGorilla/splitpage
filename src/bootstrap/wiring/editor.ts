@@ -1,3 +1,4 @@
+import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.js";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { rowActions } from "../../features/rows/actions.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -30,7 +31,7 @@ import type { WriterRoutePorts } from "../../features/writer/routes.ts";
 import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
 import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
 import { cellEditing, focusMemory, installCellEditing, installPicturePicker, mergeUndo, paintGuard, rowDrag, undoGuard } from "../../legacy/editor-bridge.ts";
-import { REVIEW_ONLY, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "../../legacy/session-bridge.ts";
+import { REVIEW_ONLY, currentDocument, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from"../../legacy/session-bridge.ts";
 import { fromHtml } from "../../legacy/richtext.ts";
 import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 import { cycleRowStatus } from "../../js/01-scene-status.js";
@@ -122,9 +123,8 @@ import {
   captureReplyDrafts,
   jumpToComment,
   openCommentsPanel,
-  renderComments,
-  syncAnchorResolvedClasses
-} from "../../js/10-comments.js";
+  renderComments
+} from "../../features/comments/comments.js";
 import { showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
 import {
@@ -693,7 +693,7 @@ function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, ex
     }
   }
   if (res.movedComments) {
-    syncAnchorResolvedClasses();
+    syncAnchorResolvedClasses(currentDocument(), document);
     captureReplyDrafts();
     renderComments();
   }

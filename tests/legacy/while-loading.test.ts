@@ -1,3 +1,4 @@
+import { commentsPanelActions } from "../../src/bootstrap/wiring/comments.ts";
 import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
 import { test } from "node:test";
@@ -9,12 +10,12 @@ import { loadTestDocument } from "../../src/test/_document.mjs";
 import { registerFileActions } from "../../src/legacy/file-actions.ts";
 import { hideShotActions, thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
-import { registerViewActions } from "../../src/legacy/view-actions.ts";
+import { viewActions } from "../../src/legacy/view-actions.ts";
 
 function loadingRegistry(): { registry: ActionRegistry; restore: () => void } {
   const registry = createActionRegistry();
   mountRundownFeature();
-  const disposers = [stopRundownFeature, registerFileActions(registry), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerViewActions(registry)];
+  const disposers = [stopRundownFeature, registerFileActions(registry), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerAll(registry, [...viewActions().slice(0, 3), ...commentsPanelActions(), ...viewActions().slice(3)])];
   const was: unknown = currentDocument();
   loadTestDocument(null);
   return {

@@ -43,12 +43,8 @@ import { inertBody } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
 import { withBusyBar } from "../features/notices/busy.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
-import {
-  captureReplyDrafts,
-  formatTimestamp,
-  getSavedAuthorName,
-  renderComments
-} from "./10-comments.js";
+import { formatTimestamp } from "../features/common/comment-time.js";
+import { getSavedAuthorName } from "../application/comment-author.js";
 import { showActionToast, showToast } from "./12-dirty-toast.js";
 import { confirmSavedNow, haltAutoSave, requestSave, resumeAutoSave, saveBusy, saveChanges, saveDoc, scheduleAutoSave, unsavedChanges } from "../legacy/save-bridge.ts";
 import { createServerDestination } from "../application/save/server-destination.ts";
@@ -738,7 +734,7 @@ export async function finishServerDetect() {
       : (role === "review" ? currentConn().scope : "");
     try { documentLocation().updateConnection({ role: role, scope: scope }); }
     catch (e2) { documentLocation().updateConnection({ role: role, scope: "" }); }
-    if (serverIdentity && serverIdentity.name && !getSavedAuthorName()) {
+    if (serverIdentity && serverIdentity.name && !getSavedAuthorName(preferences())) {
       preferences().setCommentAuthor(cleanAuthorName(serverIdentity.name));
     }
   } catch (e) {
@@ -868,7 +864,7 @@ function renderServerPicker() {
         '<span class="server-doc-meta">' + d.rows + ' scene' + (d.rows === 1 ? '' : 's') +
           ' · v' + d.rev +
           (d.updatedBy ? ' · ' + escapeHtml(d.updatedBy) : '') +
-          (d.updatedAt ? ' · ' + escapeHtml(formatTimestamp(d.updatedAt)) : '') +
+          (d.updatedAt ? ' · ' + escapeHtml(formatTimestamp(d.updatedAt, preferences().clock())) : '') +
         '</span>' +
       '</button>' +
       (isOpen ? '<span class="server-doc-current">Open</span>' : '') +
@@ -1596,7 +1592,7 @@ async function sendReviewWrites() {
   } finally {
     reviewWriting = false;
   }
-  if (!redraw && sentAny) { captureReplyDrafts(); renderComments(); }
+  if (!redraw && sentAny) commentsSentListeners.forEach(function (listener) { listener(); });
   var refusedHere = false;
   (currentDocument().comments || []).forEach(function (c) {
     if (!c) return;
@@ -2176,7 +2172,7 @@ function renderDriveList() {
         '<span class="drive-row-icon">' + driveIconFor(it.mimeType) + '</span>' +
         '<span class="drive-row-name">' + escapeHtml(it.name) + '</span>' +
         '<span class="drive-row-meta">' + (isFolder ? "Folder" : driveFormatSize(it.size)) +
-          (it.modifiedTime ? ' · ' + escapeHtml(formatTimestamp(it.modifiedTime)) : '') + '</span>' +
+          (it.modifiedTime ? ' · ' + escapeHtml(formatTimestamp(it.modifiedTime, preferences().clock())) : '') + '</span>' +
       '</button>' +
       '<div class="drive-row-actions">' +
         (canWrite ? '<button type="button" class="drive-row-btn" data-action="drive-rename" data-id="' +
@@ -2518,4 +2514,11 @@ export function __init() {
     caps: function () { return Object.assign({}, capsOf(currentConn())); },
     fetchBlob: fetchBlob
   };
+}
+
+const commentsSentListeners = new Set();
+
+export function onCommentsSent(listener) {
+  commentsSentListeners.add(listener);
+  return function () { commentsSentListeners.delete(listener); };
 }

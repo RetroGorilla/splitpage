@@ -62,7 +62,10 @@ const { exportFacts } = await import("../adapters/formats/export-kit.ts");
 const { buildMarkdownProject, buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
 const { preferences } = await import("../legacy/preferences-bridge.ts");
-const { saveAuthorName } = await import("../js/10-comments.js");
+
+import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";
+import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+function saveAuthorName(name) { saveAuthorNameWith(commentPreferences(), name); }
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { startNewScript } = await import("../js/18b-file-menu.js");
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");

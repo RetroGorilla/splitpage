@@ -1,3 +1,12 @@
+import { commentsPanelActions as panelDefinitions, commentsHelpActions as helpDefinitions, commentsOpenActions as openDefinitions } from "../../features/comments/actions.ts";
+import { __init as mountCommentState } from "../../features/comments/comments.js";
+import type { CommentStatePorts } from "../../features/comments/ports.ts";
+import { sharedPorts } from "./shared-ports.ts";
+import { keepSnapshot } from "../../legacy/transition-bridge.ts";
+import { presence } from "../../legacy/presence-bridge.ts";
+import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
+import { onCommentsSent } from "../../js/13-hosted.js";
+import { resetDraftHistory } from "../../js/05d-draft-edit.js";
 import type { CommentsPorts } from "../../features/comments/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runFromButton } from "../../legacy/app-actions.ts";
@@ -35,7 +44,7 @@ import {
   toggleCommentMenu,
   toggleReplyComposer,
   toggleResolve
-} from "../../js/10-comments.js";
+} from "../../features/comments/comments.js";
 import { showToast } from "../../legacy/effects-bridge.ts";
 import { sidePanels } from "../../legacy/panels-bridge.ts";
 import {
@@ -47,7 +56,7 @@ import {
   onRootPaste,
   routeRootClick
 } from "./editor.ts";
-import { commentSortMode } from "../../application/comment-sort.ts";
+import { commentSortMode, setCommentSort } from "../../application/comment-sort.ts";
 
 const comments = owned<ReturnType<typeof mountComments>>();
 
@@ -108,3 +117,49 @@ export function mountCommentsFeature(): ReturnType<typeof mountComments> {
 }
 
 export const stopCommentsFeature = comments.stop;
+
+const state = owned<ReturnType<typeof mountCommentState>>();
+
+export function mountCommentsLogicFeature(): ReturnType<typeof mountCommentState> {
+  return state.replace(() => {
+    const shared = sharedPorts();
+    const ports: CommentStatePorts = {
+      sort: { current: commentSortMode, choose: setCommentSort },
+      document: shared.document,
+      edits: shared.edits,
+      notices: shared.notices,
+      preferences: shared.preferences,
+      review: shared.review,
+      sidePanels: shared.sidePanels,
+      text: shared.text,
+      ids: shared.ids,
+      clock: shared.clock,
+      saves: shared.saves,
+      selection: shared.selection,
+      deletion: shared.deletion,
+      ownership: shared.ownership,
+      history: { keep: keepSnapshot },
+      presence: { personColor: (name) => presence().personColor(name) },
+      shots: { reveal: (id) => shotHiding().reveal(id) },
+      pictures: shared.pictures,
+      clearDraftUndo: resetDraftHistory,
+      onThreadsSent: onCommentsSent
+    };
+    return mountCommentState(ports);
+  });
+}
+
+export const stopCommentsLogicFeature = state.stop;
+
+export function commentsPanelActions() {
+  const shared = sharedPorts();
+  return panelDefinitions(shared.screen, shared.sidePanels);
+}
+
+export function commentsHelpActions() {
+  return helpDefinitions(sharedPorts().screen);
+}
+
+export function commentsOpenActions() {
+  return openDefinitions();
+}
