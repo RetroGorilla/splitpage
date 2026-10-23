@@ -2,13 +2,16 @@ import type { ActionDefinition } from "../../application/actions.ts";
 import { galleryActions as definitions } from "../../features/gallery/actions.ts";
 import { __init as mountGallery } from "../../features/gallery/annotate.js";
 import { __init as mountOverlay } from "../../features/gallery/overlay.js";
-import type { GalleryMount, GalleryOverlayMount, GalleryOverlayPorts, GalleryPorts } from "../../features/gallery/ports.ts";
+import { __init as mountVideo } from "../../features/gallery/video.js";
+import type { GalleryMount, GalleryOverlayMount, GalleryOverlayPorts, GalleryPorts, GalleryVideoMount, GalleryVideoPorts } from "../../features/gallery/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { videoHostLabel } from "../../adapters/formats/video-host.ts";
 import { galleryBadgeHtml, gallerySlotPictureHtml } from "../../js/05-render.js";
-import { embedRefusal, fetchThumbnailRecord, playerSrc, thumbnailsAllowed } from "../../js/05v-video.js";
 import { hasSessionVideo, sessionVideoUrl } from "../../js/06-rows.js";
+import { foldIntoEdit } from "../../js/12a-undo.js";
 import { cellEditing, pickPictureFor } from "../../legacy/editor-bridge.ts";
+import { preferences } from "../../legacy/preferences-bridge.ts";
+import { desktopVideo } from "./desktop-video.ts";
 import { sharedPorts } from "./shared-ports.ts";
 
 const gallery = owned<GalleryMount>();
@@ -50,7 +53,13 @@ export function mountGalleryOverlayFeature(): GalleryOverlayMount {
       changes: shared.changes,
       pickPicture: pickPictureFor,
       render: { slotPictureHtml: gallerySlotPictureHtml, badgeHtml: galleryBadgeHtml },
-      video: { embedRefusal, playerSrc, thumbnailsAllowed, fetchThumbnail: fetchThumbnailRecord, hostLabel: videoHostLabel },
+      video: {
+        embedRefusal: (v) => video.owner()?.embedRefusal(v) ?? "",
+        playerSrc: (v) => video.owner()?.playerSrc(v) ?? null,
+        thumbnailsAllowed: () => video.owner()?.thumbnailsAllowed() ?? false,
+        fetchThumbnail: (href) => video.owner()?.fetchThumbnail(href) ?? Promise.resolve(null),
+        hostLabel: videoHostLabel
+      },
       sessionVideos: { has: hasSessionVideo, url: sessionVideoUrl }
     };
     return mountOverlay(ports);
@@ -58,3 +67,26 @@ export function mountGalleryOverlayFeature(): GalleryOverlayMount {
 }
 
 export const stopGalleryOverlayFeature = overlay.stop;
+
+const video = owned<GalleryVideoMount>();
+
+export function mountGalleryVideoFeature(): GalleryVideoMount {
+  return video.replace(() => {
+    const shared = sharedPorts();
+    const ports: GalleryVideoPorts = {
+      document: shared.document,
+      pictures: shared.pictures,
+      ownership: shared.ownership,
+      undo: { fold: foldIntoEdit },
+      thumbnailsAllowed: () => preferences().videoThumbs(),
+      desktop: desktopVideo
+    };
+    return mountVideo(ports);
+  });
+}
+
+export const stopGalleryVideoFeature = video.stop;
+
+export function thumbnailsAfterPaste(rowId: string | null, hrefs: readonly unknown[] | null | undefined, entry: unknown): void {
+  video.owner()?.thumbnailsAfterPaste(rowId, hrefs, entry);
+}
