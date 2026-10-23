@@ -35,6 +35,10 @@ export function updateHideShotMenu(): void {
   hideShot.owner()?.updateMenu();
 }
 
+export function setHideShotScenes(on: boolean): void {
+  hideShot.owner()?.set(on);
+}
+
 export function expandHiddenShotStrip(idsAttr: string | null | undefined): void {
   hideShot.owner()?.expand(idsAttr);
 }
