@@ -34,12 +34,10 @@ import { captureOperation, openDocument, stillOwns } from "../../legacy/transiti
 import { importHome } from "../../legacy/location-bridge.ts";
 import { expandHiddenShotStrip } from "../../js/01b-hide-shot.js";
 import {
-  closeHistoryPanel,
   promptForName,
   promptForWpm,
   restoreSnapshotFromCard
 } from "../../js/03-sync.js";
-import { initSidePanelResizeHandles } from "../../js/03b-side-panels.js";
 import { openGalleryOverlay } from "../../js/05e-gallery-overlay.js";
 import {
   clearPendingFileRows,
@@ -53,7 +51,10 @@ import {
 } from "../../js/11-import.js";
 import { updateSaveStatus } from "../../js/12-dirty-toast.js";
 import { showToast } from "../../legacy/effects-bridge.ts";
-import { preferences } from "../../legacy/preferences-bridge.ts";
+import { panelWidths, preferences } from "../../legacy/preferences-bridge.ts";
+import { sidePanels } from "../../legacy/panels-bridge.ts";
+import { SIDE_PANEL_IDS } from "../../application/preferences/panel-widths.ts";
+import { mountPanels } from "../../features/panels/mount.ts";
 import {
   armDriveDelete,
   armServerDelete,
@@ -216,7 +217,7 @@ export function mountHistoryFeature(): ReturnType<typeof mountHistory> {
   return replaceViewMount("mountHistory", function () {
     const ports: HistoryPorts = {
       promptForWpm: promptForWpm,
-      closeHistoryPanel: closeHistoryPanel,
+      closeHistoryPanel: () => { sidePanels().close("history-panel"); },
       onRootClick: onRootClick
     };
     return mountHistory({ window: window, ports: ports });
@@ -308,7 +309,14 @@ export function mountConflictsFeature(): ReturnType<typeof mountConflicts> {
 
 export function mountPanelsFeature(): Disposable {
   return replaceViewMount("mountPanels", function () {
-    return { dispose: initSidePanelResizeHandles() };
+    return mountPanels({ window: window, ports: {
+      ids: SIDE_PANEL_IDS,
+      readWidth: (id) => panelWidths().read(id),
+      defaultWidth: (id) => panelWidths().defaultWidth(id),
+      clampWidth: (width, id) => panelWidths().clamp(width, id),
+      applyWidth: (id, width) => { sidePanels().applyWidth(id, width); },
+      saveWidth: (id, width) => { panelWidths().save(id, width); }
+    } });
   });
 }
 

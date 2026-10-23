@@ -39,7 +39,7 @@ import {
   parseMarkdownProject
 } from "./20d-formats.js";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
-import { closeNewTabPage } from "./20j-newtab.js";
+import { sidePanels } from "../legacy/panels-bridge.ts";
 import { exportToggleOptions } from "../application/export/registry.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { appActions } from "../legacy/app-actions.ts";
@@ -326,7 +326,8 @@ async function openProjectFile(file, handle, opts) {
 
 function adoptProjectState(newState, file, handle, kind, opts) {
   opts = opts || {};
-  if (typeof closeNewTabPage === "function") closeNewTabPage();
+  sidePanels().close("newtab-page");
+
   resetProductionPanelState();
   documentTransitions().open({
     from: { document: newState },
@@ -456,7 +457,7 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   noteAbsorbedDirty(opts.reload ? "reload" : "adopt");
   amendHome(imported, { dirty: false });
-  if (typeof closeNewTabPage === "function") closeNewTabPage();
+  sidePanels().close("newtab-page");
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   showToast(opts.reload
     ? "Reloaded " + file.name + " — " + newRows.length + " row" + (newRows.length === 1 ? "" : "s")
