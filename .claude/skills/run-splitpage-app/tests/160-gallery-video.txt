@@ -1,4 +1,4 @@
-# YouTube and Vimeo in a scene's gallery (#141, #168; 05v-video.js,
+# YouTube and Vimeo in a scene's gallery (#141, #168; features/gallery/video.js,
 # 05e-gallery-overlay.js, shared/video-embed.js), against a FAKE host — no
 # request in this suite leaves the page (the drivers set
 # __splitpageNoRemote, and window.__videoTest stands in for the network):
