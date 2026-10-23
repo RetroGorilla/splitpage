@@ -1,9 +1,8 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { mintDocId, nowIso } from "../adapters/identity/ids.ts";
 import { editStamp } from "../application/commands/save-stamps.ts";
-import { mergeBase, stampDocument } from "../legacy/session-bridge.ts";
+import { currentDocument, mergeBase, stampDocument } from "../legacy/session-bridge.ts";
 import { changeSet } from "../application/session/change-set.ts";
-import { S } from "./_state.js";
 import { authorityOf, isLinkGuest as guestAuthority, isReviewer } from "../application/collaboration/authority.ts";
 import {
   amendHome,
@@ -448,7 +447,7 @@ async function resumeServerDoc() {
   if (!pending || !pending.id) return false;
 
   var seqAtStart = saveChanges();
-  var stateAtStart = S.state ? cloneState(S.state) : null;
+  var stateAtStart = currentDocument() ? cloneState(currentDocument()) : null;
   var op = captureOperation();
 
   var body;
@@ -505,7 +504,7 @@ async function resumeServerDoc() {
     if (typedDuringResume) {
       applyMerge({
         base: stateAtStart,
-        mine: S.state,
+        mine: currentDocument(),
         theirs: theirs,
         source: "server-resume",
         newBase: cloneState(theirs),
@@ -514,7 +513,7 @@ async function resumeServerDoc() {
         toast: {
           text: function () {
             return "Signed back in — merged what you typed while " +
-              (S.state.title || body.id) + " was reopening";
+              (currentDocument().title || body.id) + " was reopening";
           },
           tone: "warn",
           sticky: true
@@ -529,7 +528,7 @@ async function resumeServerDoc() {
       writtenOut: true
     });
     clearDirty();
-    showToast("Signed back in — reopened " + (S.state.title || body.id), "ok");
+    showToast("Signed back in — reopened " + (currentDocument().title || body.id), "ok");
     if (override) { try { override.onDone("server-resumed"); } catch (e) {} }
     return true;
   }
@@ -537,7 +536,7 @@ async function resumeServerDoc() {
   if (!override) stashes.clear();
   var mine = migrateRows(cloneState(stash.mine));
   if (typedDuringResume) {
-    mine = mergeStates(stateAtStart, migrateRows(cloneState(S.state)), mine).merged;
+    mine = mergeStates(stateAtStart, migrateRows(cloneState(currentDocument())), mine).merged;
   }
   applyMerge({
     base: stash.base || null,
@@ -553,7 +552,7 @@ async function resumeServerDoc() {
     toast: {
       text: function () {
         return override
-          ? "Reopened " + (S.state.title || body.id) +
+          ? "Reopened " + (currentDocument().title || body.id) +
             " — the changes recovered from the last session were merged back in"
           : "Signed back in — your unsaved edits were merged back in";
       }
@@ -892,7 +891,7 @@ function renderServerPicker() {
 
 export async function openServerDoc(id) {
   if (!runningOnDesktop() && !draftResume().serverResume() && await armBrowserServerDraft(id)) {
-    if (S.state && S.state.rows.length) pushSnapshot("Before opening a script from the server");
+    if (currentDocument() && currentDocument().rows.length) pushSnapshot("Before opening a script from the server");
     var resumed = await resumeServerDoc() === true;
     if (resumed) {
       if (typeof closeNewTabPage === "function") closeNewTabPage();
@@ -912,7 +911,7 @@ export async function openServerDoc(id) {
   if (!body || !isDocumentObject(body.state)) { showToast("That document is empty.", "warn"); return false; }
   forgetRemoteMisses();
 
-  if (S.state && S.state.rows.length) pushSnapshot("Before opening " + (body.state.title || id));
+  if (currentDocument() && currentDocument().rows.length) pushSnapshot("Before opening " + (body.state.title || id));
 
   resetProductionPanelState();
   documentTransitions().open({
@@ -926,8 +925,8 @@ export async function openServerDoc(id) {
   clearDirty();
   applyReviewMode();
   closeServerPicker();
-  showToast("Opened " + (S.state.title || id) + " from the server — " + S.state.rows.length +
-    " scene" + (S.state.rows.length === 1 ? "" : "s"), "ok");
+  showToast("Opened " + (currentDocument().title || id) + " from the server — " + currentDocument().rows.length +
+    " scene" + (currentDocument().rows.length === 1 ? "" : "s"), "ok");
   return true;
 }
 
@@ -951,9 +950,9 @@ export async function publishToServer(opts) {
     showToast("Your link opens this one script — only its owner can put a script on the server.", "warn");
     return false;
   }
-  var published = cloneState(S.state);
+  var published = cloneState(currentDocument());
   var seqAtPublish = saveChanges();
-  var oldId = S.state.docId;
+  var oldId = currentDocument().docId;
   var forkDocId = documentLocation().writtenOut() ? mintDocId() : null;
   if (forkDocId) published.docId = forkDocId;
   var body;
@@ -996,7 +995,7 @@ export async function publishToServer(opts) {
   if (saveChanges() === seqAtPublish) clearDirty();
   else scheduleAutoSave();
   if (!opts.quiet) {
-    showToast("Published to the server as “" + (S.state.title || body.id) + "” — collaborators can open it now", "ok");
+    showToast("Published to the server as “" + (currentDocument().title || body.id) + "” — collaborators can open it now", "ok");
   }
   return true;
 }
@@ -1228,7 +1227,7 @@ async function writeToServer(job) {
     attempts++;
     if (!job.owns()) return true;
     stampDocument(editStamp({ lastEditedBy: getEditorName(), lastEditedAt: nowIso() }));
-    var published = cloneState(S.state);
+    var published = cloneState(currentDocument());
     var seqAtSave = saveChanges();
     var baseRevAtSave = currentHome().rev;
 
@@ -1254,19 +1253,19 @@ async function writeToServer(job) {
       if (!job.owns()) return true;
 
       if (err && err.code === "conflict" && err.payload && isDocumentObject(err.payload.state)) {
-        var prevDocId = S.state.docId;
+        var prevDocId = currentDocument().docId;
         forgetRemoteMisses();
         var theirs = migrateDocument(cloneState(err.payload.state), {
           kind: "server",
           serverId: docId,
-          fallbackId: S.state.docId
+          fallbackId: currentDocument().docId
         });
         mergeResult = applyMerge({
           base: mergeBase(),
-          mine: S.state,
+          mine: currentDocument(),
           theirs: theirs,
           source: "server-conflict",
-          undoPoint: mergeResult ? null : cloneState(S.state),
+          undoPoint: mergeResult ? null : cloneState(currentDocument()),
           historyFrom: prevDocId,
           report: false
         }).result;
@@ -1308,7 +1307,7 @@ function jsonCopy(v) { return JSON.parse(JSON.stringify(v)); }
 
 function nextReviewWrite() {
   var base = (mergeBase() && mergeBase().comments) || [];
-  var list = (S.state && S.state.comments) || [];
+  var list = (currentDocument() && currentDocument().comments) || [];
   for (var i = 0; i < list.length; i++) {
     var c = list[i];
     if (!c || c.kind === "conflict") continue;
@@ -1367,7 +1366,7 @@ function dropLocalResolves() {
 
 function reviewAnchorFor(c) {
   if (c.field !== "visualText" && c.field !== "audioText") return null;
-  var row = rowIn(S.state, c.rowId);
+  var row = rowIn(currentDocument(), c.rowId);
   var baseRow = rowIn(mergeBase(), c.rowId);
   if (!row || !baseRow) return null;
   var body = inertBody(row[c.field] || "");
@@ -1565,7 +1564,7 @@ async function sendReviewWrites() {
       if (!op) break;
       if (sentKeys[op.key]) { reviewRefused[op.key] = true; continue; }
       sentKeys[op.key] = true;
-      var c = S.state.comments[commentIndexIn(S.state.comments, op.id)];
+      var c = currentDocument().comments[commentIndexIn(currentDocument().comments, op.id)];
       var req = reviewRequest(op, c);
       var body;
       try {
@@ -1600,7 +1599,7 @@ async function sendReviewWrites() {
   }
   if (!redraw && sentAny) { captureReplyDrafts(); renderComments(); }
   var refusedHere = false;
-  (S.state.comments || []).forEach(function (c) {
+  (currentDocument().comments || []).forEach(function (c) {
     if (!c) return;
     if (reviewRefused["c:" + c.id]) refusedHere = true;
     (c.replies || []).forEach(function (r) { if (r && reviewRefused["r:" + c.id + ":" + r.id]) refusedHere = true; });
@@ -1662,7 +1661,7 @@ async function pullServerDoc(docId) {
   var theirs = migrateDocument(cloneState(body.state), {
     kind: "server",
     serverId: docId,
-    fallbackId: S.state.docId
+    fallbackId: currentDocument().docId
   });
 
   amendHome(currentHome(), { rev: rev });
@@ -1671,10 +1670,10 @@ async function pullServerDoc(docId) {
     return;
   }
 
-  var prevDocId = S.state.docId;
+  var prevDocId = currentDocument().docId;
   var merged = applyMerge({
     base: mergeBase(),
-    mine: S.state,
+    mine: currentDocument(),
     theirs: theirs,
     historyFrom: prevDocId,
     newBase: cloneState(theirs),
@@ -2443,6 +2442,15 @@ export function driveSignOut() {
   renderDriveList();
 }
 
+var serverModeView = new Proxy({}, {
+  get: function (_, key) { return serverStatus().mode()[key]; },
+  set: function (_, key, value) { serverStatus().recordMode({ [key]: value }); return true; },
+  ownKeys: function () { return Reflect.ownKeys(serverStatus().mode()); },
+  getOwnPropertyDescriptor: function (_, key) {
+    return Object.getOwnPropertyDescriptor(serverStatus().mode(), key) && { value: serverStatus().mode()[key], writable: true, enumerable: true, configurable: true };
+  }
+});
+
 export function __init() {
   documentLocation().onChange(function (change) {
     if (change === "connection") updateServerMenu();
@@ -2466,7 +2474,7 @@ export function __init() {
     url: serverDocShareUrl,
     note: shareAccessNote,
     publishAndCopy: publishAndCopyShareLink,
-    mode: function () { return serverStatus().mode(); },
+    mode: function () { return serverModeView; },
     updateMenu: updateServerMenu,
     sharedDocId: function () { return sharedDocId; },
     setIdentity: function (who) { serverIdentity = who; }
@@ -2481,7 +2489,7 @@ export function __init() {
       documentLocation().updateConnection({ role: opts.role || "edit", scope: opts.scope || "" });
       if (opts.docId === null) { if (currentHome().kind === "server") setHome("none"); }
       else setHome("server", { id: opts.docId || "doc-test", rev: opts.rev || 1 });
-      if (onServerDoc() && opts.base !== false) setBaseState(cloneState(S.state), "__hostedTest.setSession: as openServerDoc would");
+      if (onServerDoc() && opts.base !== false) setBaseState(cloneState(currentDocument()), "__hostedTest.setSession: as openServerDoc would");
       if (opts.blobs !== undefined) noteCaps(currentConn(), { blobs: opts.blobs ? 1 : 0 }, false);
       applyReviewMode();
     },
