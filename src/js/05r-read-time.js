@@ -1,7 +1,7 @@
 import { hasSetLength, parseSceneLength } from "../core/document/timing.ts";
 import { estimatedSeconds, formatDuration, rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
-import { cssAttr } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import { paintGuard } from "../legacy/editor-bridge.ts";
 import { redo, undo } from "./12a-undo.js";
 import { sceneAt, sceneLengthCommand } from "../application/commands/scene-length.ts";

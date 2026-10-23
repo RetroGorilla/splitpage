@@ -7,7 +7,8 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { revealRow } from "./01b-hide-shot.js";
 import { openSidePanel, syncPanelClass } from "./03-sync.js";
 import { closeAllSidePanels } from "./03b-side-panels.js";
-import { cssAttr, plainText } from "./04-richtext.js";
+import { plainText } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import { focusRowField } from "./06-rows.js";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import {

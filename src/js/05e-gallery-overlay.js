@@ -9,7 +9,7 @@ import {
 } from "../adapters/storage/02d-gallery.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { currentDocument, readSession } from "../legacy/session-bridge.ts";
-import { cssAttr } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import {
   galleryBadgeHtml,
   gallerySlotPictureHtml,
