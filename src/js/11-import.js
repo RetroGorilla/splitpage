@@ -6,13 +6,12 @@ import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf, inertBody } from "../legacy/richtext.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
-import { markDirty } from "./12-dirty-toast.js";
 import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
 import { importModeTouched, resetImportMode } from "../application/import-mode.ts";
 import { importRowsCommand } from "../application/commands/import-rows.ts";
 import { escapeHtml, truncateForPreview } from "../core/document/text-policy.ts";
-import { REVIEW_ONLY, editAllowed, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
+import { REVIEW_ONLY, editAllowed, noteSessionEdit, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
@@ -499,7 +498,7 @@ export function confirmImport() {
     var found = "";
     newRows.forEach(stampRow);
     importIntoNewDocument(newRows, function (doc) { found = scan(doc, doc.rows); });
-    markDirty();
+    noteSessionEdit();
     finishImport(newRows.length, found);
     return;
   }
