@@ -3,12 +3,11 @@ import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { cellOf, projection, tagNameOf, toHtml } from "../js/04c-doc-model.js";
 import { tagFieldOccurrences, tagOccurrences, tagsInField } from "../js/07-production-tags.js";
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
-import { runDocumentEdit, sessionStamps, readSession } from "../legacy/session-bridge.ts";
+import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../legacy/session-bridge.ts";
 import { retagRewrites, retagMentions } from "../legacy/tag-rewrites.ts";
 import { domProjection } from "../js/09-find-replace.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
@@ -242,13 +241,13 @@ test("rename and remove leave every stored cell reading as the old code left it,
       const [cat, name] = key.split("\u0000");
       const target = name.toUpperCase() === name ? name.toLowerCase() : name.toUpperCase();
       const was = oldRename(html, cat, name, target);
-      const n = withRows([html], () => { renameTag(cat, name, target, { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }); return S.state.rows[0].visualText; });
+      const n = withRows([html], () => { renameTag(cat, name, target, { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }); return currentDocument().rows[0].visualText; });
       assert.deepEqual(cellOf(n), cellOf(was.html), JSON.stringify({ html, name }));
       assert.equal(sanitizeHtml(n), n);
 
       const gone = oldRemove(html, cat, name);
       let count = 0;
-      const m = withRows([html], () => { count = removeTag(cat, name, { run: runDocumentEdit, read: readSession, mentions: retagMentions, rewrites: retagRewrites, stamps: sessionStamps }); return S.state.rows[0].visualText; });
+      const m = withRows([html], () => { count = removeTag(cat, name, { run: runDocumentEdit, read: readSession, mentions: retagMentions, rewrites: retagRewrites, stamps: sessionStamps }); return currentDocument().rows[0].visualText; });
       assert.equal(count, modelMentions(html, cat, name), html);
       assert.ok(count <= gone.changed, html);
       if (count < gone.changed) joined++;
@@ -265,12 +264,12 @@ test("rename: other tags keep their exact spelling; a cell without the tag is no
   const plain = "<em><strong>untouched</strong></em>";
   withRows([cellA, plain], () => {
     assert.ok(renameTag("prop", "MUG", "Cup", { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }));
-    assert.equal(S.state.rows[0].visualText,
+    assert.equal(currentDocument().rows[0].visualText,
       '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Cup" contenteditable="false">the mug</span> and ' +
       '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Kettle" contenteditable="false">kettle</span> <strong><em>x</em></strong>');
-    assert.equal(S.state.rows[1].visualText, plain);
+    assert.equal(currentDocument().rows[1].visualText, plain);
     assert.equal(removeTag("prop", "cup", { run: runDocumentEdit, read: readSession, mentions: retagMentions, rewrites: retagRewrites, stamps: sessionStamps }), 1);
-    assert.equal(S.state.rows[0].visualText,
+    assert.equal(currentDocument().rows[0].visualText,
       'the mug and <span class="tag-anchor" data-tag-cat="prop" data-tag-name="Kettle" contenteditable="false">kettle</span> <strong><em>x</em></strong>');
   });
 });
@@ -279,7 +278,7 @@ test("rename and remove: two spans of one tag side by side are one mention, as t
   const html = tagSpan("prop", "Mug", "a") + tagSpan("prop", "Mug", "b");
   withRows([html], () => {
     assert.equal(removeTag("prop", "mug", { run: runDocumentEdit, read: readSession, mentions: retagMentions, rewrites: retagRewrites, stamps: sessionStamps }), 1);
-    assert.equal(S.state.rows[0].visualText, "ab");
+    assert.equal(currentDocument().rows[0].visualText, "ab");
   });
 });
 
@@ -287,11 +286,11 @@ test("rename and remove in a cell still holding a video card keep the card", () 
   const html = sanitizeHtml(tagSpan("prop", "Mug", "mug") + ' <a class="video-embed-card" href="https://youtu.be/x">x</a>');
   withRows([html], () => {
     assert.ok(renameTag("prop", "Mug", "Cup", { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }));
-    assert.match(S.state.rows[0].visualText, /data-tag-name="Cup"/);
-    assert.match(S.state.rows[0].visualText, /video-embed-card/);
+    assert.match(currentDocument().rows[0].visualText, /data-tag-name="Cup"/);
+    assert.match(currentDocument().rows[0].visualText, /video-embed-card/);
     assert.equal(removeTag("prop", "Cup", { run: runDocumentEdit, read: readSession, mentions: retagMentions, rewrites: retagRewrites, stamps: sessionStamps }), 1);
-    assert.doesNotMatch(S.state.rows[0].visualText, /tag-anchor/);
-    assert.match(S.state.rows[0].visualText, /video-embed-card/);
+    assert.doesNotMatch(currentDocument().rows[0].visualText, /tag-anchor/);
+    assert.match(currentDocument().rows[0].visualText, /video-embed-card/);
   });
 });
 

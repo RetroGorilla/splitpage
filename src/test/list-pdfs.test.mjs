@@ -3,7 +3,7 @@ import "./_export-services-started.mjs";
 import { liveDoc, printData } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
@@ -358,7 +358,7 @@ test("the shot list: a landscape table under the head, its columns on every page
 
 test("the shot list's rows: done, the scene, the shot, its props, the flag and why, a note, and lines to write on", () => {
   demo();
-  const shot = (name) => S.state.brollShots.find((r) => r.name === name);
+  const shot = (name) => currentDocument().brollShots.find((r) => r.name === name);
   shot("slow-motion shutter firing at one second").props = [{ name: "button cell battery" }, { name: "naphtha" }];
   shot("battery dropping into the base plate").notes = "Ask the shop first.";
   const pages = pagesOf(buildShotListPdf(liveDoc(), printData({ filter: "all", group: "scene" })));
@@ -408,7 +408,7 @@ test("by scene: no bands — the Scene column groups the rows, a scene named on 
   assert.deepEqual(all.filter((t) => / shot$/.test(t.str) && t.size === 8.5).map((t) => t.str), ["0/1 shot"]);
   const numbers = at(all, "scene").filter((t) => t.font === "F2").map((t) => t.str);
   assert.deepEqual(numbers, ["01", "02"]);
-  assert.deepEqual(at(all, "scene").filter((t) => t.font === "F1" && t.rgb === rgb(C.faint)).map((t) => t.str), sceneFacts(exportDocumentOf(S.state)).slice(0, 2).map((f) => f.start));
+  assert.deepEqual(at(all, "scene").filter((t) => t.font === "F1" && t.rgb === rgb(C.faint)).map((t) => t.str), sceneFacts(exportDocumentOf(currentDocument())).slice(0, 2).map((f) => f.start));
   one(all, "1 of 3 shot · 1 flagged · by scene · " + exportDateText());
 });
 
@@ -435,7 +435,7 @@ function shotsDoc(n) {
 test("a shot's Cuts against opening never ends in half an emoji (#434)", () => {
   shotsDoc(0);
   groupBy("person");
-  S.state.brollShots[0].audioRef = "Every " + "x".repeat(77) + String.fromCodePoint(0x1F600) + "tail";
+  currentDocument().brollShots[0].audioRef = "Every " + "x".repeat(77) + String.fromCodePoint(0x1F600) + "tail";
   const all = pagesOf(buildShotListPdf(liveDoc(), printData())).map(textsOf).flat();
   const joined = all.map((t) => t.str).join("");
   assert.ok(joined.includes("x".repeat(20)), "the opening is drawn");
@@ -462,7 +462,7 @@ test("by person: a shot's description on its own lines, its props with their sta
   groupBy("location");
   const byPlace = pagesOf(buildShotListPdf(liveDoc(), printData())).map(textsOf).flat();
   const boats = rowTexts(byPlace, "boats at dawn");
-  assert.deepEqual(at(boats, "scene").map((t) => t.str), ["02", sceneFacts(exportDocumentOf(S.state))[1].start]);
+  assert.deepEqual(at(boats, "scene").map((t) => t.str), ["02", sceneFacts(exportDocumentOf(currentDocument()))[1].start]);
   assert.deepEqual(at(boats, "owner").map((t) => t.str), ["Ada Brenner"]);
 });
 

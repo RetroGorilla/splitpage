@@ -3,7 +3,7 @@ import "./_preferences-started.mjs";
 import "./_export-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
@@ -34,7 +34,7 @@ const demo = () => { loadTestDocument(migrateRows(copy(LONG_DEMO.state))); };
 test("the document's facts: scenes, running time, target, shot count", (t) => {
   t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 8, 26, 12) });
   demo();
-  const f = exportFacts(exportDocumentOf(S.state));
+  const f = exportFacts(exportDocumentOf(currentDocument()));
   assert.equal(f.title, LONG_DEMO.state.title);
   assert.equal(f.scenes, 30);
   assert.equal(f.runtime, "9:44");
@@ -49,19 +49,19 @@ test("the document's facts: scenes, running time, target, shot count", (t) => {
 test("a script with no target and one scene says so in the singular", () => {
   loadTestDocument(migrateRows({ schema: 2, title: "One", comments: [],
     rows: [{ id: "r0", visualText: "", audioText: "Hello there, and welcome to a line long enough to take a few seconds.", status: "todo" }] }));
-  const parts = exportSummaryParts(exportFacts(exportDocumentOf(S.state)));
+  const parts = exportSummaryParts(exportFacts(exportDocumentOf(currentDocument())));
   assert.equal(parts[0], "1 scene");
   assert.equal(parts.some((p) => /Target/.test(p)), false);
   assert.equal(parts[2], "0 of 1 shot");
-  S.state.targetSeconds = 1;
-  assert.match(exportSummaryParts(exportFacts(exportDocumentOf(S.state)))[2], / over$/);
-  S.state.targetSeconds = 3600;
-  assert.match(exportSummaryParts(exportFacts(exportDocumentOf(S.state)))[2], / under$/);
+  currentDocument().targetSeconds = 1;
+  assert.match(exportSummaryParts(exportFacts(exportDocumentOf(currentDocument())))[2], / over$/);
+  currentDocument().targetSeconds = 3600;
+  assert.match(exportSummaryParts(exportFacts(exportDocumentOf(currentDocument())))[2], / under$/);
 });
 
 test("each scene's gutter: number, start timecode, read time, set by hand or not, status", () => {
   demo();
-  const scenes = sceneFacts(exportDocumentOf(S.state));
+  const scenes = sceneFacts(exportDocumentOf(currentDocument()));
   assert.equal(scenes.length, 30);
   assert.equal(scenes[0].number, "01");
   assert.equal(scenes[0].start, "00:00");
@@ -77,14 +77,14 @@ test("each scene's gutter: number, start timecode, read time, set by hand or not
 
 test("the open threads are numbered down the script, a resolved one not at all", () => {
   demo();
-  const nums = commentNumbers(exportDocumentOf(S.state));
-  const open = S.state.comments.filter((c) => !c.resolved);
-  const resolved = S.state.comments.filter((c) => c.resolved);
+  const nums = commentNumbers(exportDocumentOf(currentDocument()));
+  const open = currentDocument().comments.filter((c) => !c.resolved);
+  const resolved = currentDocument().comments.filter((c) => c.resolved);
   assert.equal(Object.keys(nums).length, open.length);
   assert.deepEqual(Object.values(nums).sort(), open.map((_, i) => i + 1));
   for (const c of resolved) assert.equal(nums[c.id], undefined);
-  const list = exportComments(exportDocumentOf(S.state));
-  assert.equal(list.length, S.state.comments.length);
+  const list = exportComments(exportDocumentOf(currentDocument()));
+  assert.equal(list.length, currentDocument().comments.length);
   const numbered = list.filter((c) => c.number);
   assert.deepEqual(numbered.map((c) => c.number), [1, 2, 3]);
   assert.equal(list[0].where, "Scene 03 · Audio");
@@ -104,8 +104,8 @@ test("nested and overlapping spans count the way the script's counter does", () 
       author: "Ann", body: id, resolved: id === "c"
     }))
   }));
-  assert.deepEqual({ ...commentNumbers(exportDocumentOf(S.state)) }, { b: 1, a: 2, d: 3, e: 4 });
-  const runs = exportRuns(S.state.rows[0].audioText, exportDocumentOf(S.state).commentNumbers);
+  assert.deepEqual({ ...commentNumbers(exportDocumentOf(currentDocument())) }, { b: 1, a: 2, d: 3, e: 4 });
+  const runs = exportRuns(currentDocument().rows[0].audioText, exportDocumentOf(currentDocument()).commentNumbers);
   const marked = runs.filter((r) => r.markers);
   assert.equal(marked.length, 1);
   assert.equal(marked[0].text, "two");
@@ -114,18 +114,18 @@ test("nested and overlapping spans count the way the script's counter does", () 
 
 test("a cell's runs carry their tag and its colour, the b-roll key, and the markers", () => {
   demo();
-  const nums = commentNumbers(exportDocumentOf(S.state));
-  const v1 = exportRuns(S.state.rows[0].visualText, nums);
+  const nums = commentNumbers(exportDocumentOf(currentDocument()));
+  const v1 = exportRuns(currentDocument().rows[0].visualText, nums);
   const tagged = v1.filter((r) => r.tag);
   assert.ok(tagged.length >= 3);
   const pentax = tagged.find((r) => r.tag.name === "Pentax K1000");
   assert.deepEqual(pentax.tag, { cat: "prop", name: "Pentax K1000", color: "764AA2" });
   assert.equal(pentax.text, "Pentax K1000");
-  const v4 = exportRuns(S.state.rows[3].visualText, nums);
+  const v4 = exportRuns(currentDocument().rows[3].visualText, nums);
   const key = v4.find((r) => r.broll);
   assert.ok(key, "scene 04 has a b-roll key");
   assert.match(key.text, /^B-roll/);
-  const a3 = exportRuns(S.state.rows[2].audioText, nums);
+  const a3 = exportRuns(currentDocument().rows[2].audioText, nums);
   const m = a3.filter((r) => r.markers);
   assert.equal(m.length, 1);
   assert.deepEqual(m[0].markers, [1]);
@@ -135,7 +135,7 @@ test("a cell's runs carry their tag and its colour, the b-roll key, and the mark
 
 test("the breakdown by category, in the panel's order and words", () => {
   demo();
-  const groups = breakdownGroups(exportDocumentOf(S.state));
+  const groups = breakdownGroups(exportDocumentOf(currentDocument()));
   assert.deepEqual(groups.map((g) => g.catId), ["prop", "location", "cast", "vfx", "sound", "gear"]);
   assert.equal(groups[0].label, "Props & set dressing");
   assert.equal(groups[0].color, "764AA2");
@@ -144,16 +144,16 @@ test("the breakdown by category, in the panel's order and words", () => {
 
 test("the b-roll by scene, with each scene's start and count", () => {
   demo();
-  const groups = exportBrollScenes(exportDocumentOf(S.state));
+  const groups = exportBrollScenes(exportDocumentOf(currentDocument()));
   const all = groups.reduce((n, g) => n + g.items.length, 0);
   assert.equal(all, 9);
   assert.equal(groups[0].label, "Scene 04");
   assert.equal(groups[0].start, "01:03");
   assert.equal(groups[0].done, 1);
   assert.equal(brollSummaryText(groups), "3 of 9 shot · 1 flagged");
-  const s = S.state.brollShots.length;
-  exportBrollScenes(exportDocumentOf(S.state));
-  assert.equal(S.state.brollShots.length, s, "reading the list adds nothing to it");
+  const s = currentDocument().brollShots.length;
+  exportBrollScenes(exportDocumentOf(currentDocument()));
+  assert.equal(currentDocument().brollShots.length, s, "reading the list adds nothing to it");
 });
 
 test("the PDF wrap keeps a run's annotations and makes room for its markers", () => {

@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
@@ -60,10 +60,10 @@ for (const scenario of ["dispose and reopen", "same-ID replacement", "stale comp
         open();
         replacement = mountImportsFeature();
       } else if (scenario === "same-ID replacement") {
-        const prior = S.state;
+        const prior = currentDocument();
         open();
-        assert.notEqual(S.state, prior);
-        assert.equal(S.state.docId, prior.docId);
+        assert.notEqual(currentDocument(), prior);
+        assert.equal(currentDocument().docId, prior.docId);
       } else if (scenario === "same-document modal reopen") {
         closeImportModal();
         openImportModal();
