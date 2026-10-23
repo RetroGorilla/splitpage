@@ -107,8 +107,12 @@ function announceReplaced(): void {
   for (const listener of replacedListeners.slice()) listener();
 }
 
-export function onDocumentReplaced(listener: () => void): void {
+export function onDocumentReplaced(listener: () => void): () => void {
   replacedListeners.push(listener);
+  return function () {
+    const at = replacedListeners.indexOf(listener);
+    if (at !== -1) replacedListeners.splice(at, 1);
+  };
 }
 
 export function onRefresh(listener: (jobs: ReadonlySet<string>) => void): () => void {

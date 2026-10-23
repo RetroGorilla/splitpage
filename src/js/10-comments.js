@@ -20,13 +20,8 @@ import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
 import { normalizeImageRef } from "../../shared/blob-policy.js";
 import { sidePanels } from "../legacy/panels-bridge.ts";
-import {
-  cssAttr,
-  inertBody,
-  plainText,
-  safeId,
-  sanitizeHtml
-} from "./04-richtext.js";
+import { inertBody, plainText, safeId, sanitizeHtml } from "./04-richtext.js";
+import { cssAttr } from "../features/common/dom.ts";
 import { editableCellHtml } from "./05-render.js";
 import { resetDraftHistory } from "./05d-draft-edit.js";
 import { presence } from "../legacy/presence-bridge.ts";
