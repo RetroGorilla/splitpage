@@ -10,8 +10,7 @@ import {
 import { cellEditing, paintGuard } from "../legacy/editor-bridge.ts";
 import {
   isInsideTagOrLink,
-  scheduleIdleRefresh,
-  tagRecordsPlan
+  scheduleIdleRefresh
 } from "./07-production-tags.js";
 import { makeId, randomIds } from "../adapters/identity/ids.ts";
 import {
@@ -25,9 +24,7 @@ import {
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { cellRuns, cellTextCommand } from "../application/commands/cell-text.ts";
 import {
-  anchorBrollCell,
   applyBrollRecords,
-  brollAnchorTodo,
   brollEntries as readBrollEntries,
   brollInCell,
   brollMarkerLines,
@@ -36,7 +33,6 @@ import {
   brollSeedRef,
   brollSortedForList,
   hasBrollRecordWork,
-  planBrollAnchors,
   planBrollRecords
 } from "../core/production/broll.ts";
 import { holdsMedia } from "../core/production/tags.ts";
@@ -46,9 +42,12 @@ import { projection } from "../core/text/runs.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { cellOf, scriptCellOf } from "../legacy/richtext.ts";
 import { currentDocument, heldDocument, readSession, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../legacy/session-bridge.ts";
-import { addShotCommand, addShotPropCommand, removeShotPropCommand } from "../application/commands/broll-records.ts";
+import { addShotPropCommand } from "../application/commands/broll-records.ts";
 import { rewriteCellsCommand } from "../application/commands/document-edit.ts";
 import { addBrollRecord, brollRecord } from "../core/production/records.ts";
+import { productionIndex } from "../legacy/production-index-bridge.ts";
+import { anchorBrollInRows, brollHtmlLines, brollKeyHtml } from "../adapters/production/broll-anchors.ts";
+import { declineBrollRows, resetBrollAnchoring } from "../application/broll-anchoring.ts";
 export {
   BROLL_MARKER_RE,
   BROLL_PROPS_MAX,
@@ -57,7 +56,7 @@ export {
   brollPropsInCell
 };
 
-var brollAnchorDeclined;
+const brollAnchorPorts = { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml };
 
 var BROLL_STATUS_LOOKS = {
   unshot: { label: "To shoot", color: "var(--text-dim)" },
@@ -76,44 +75,6 @@ export function brollStatus(id) {
   return null;
 }
 
-function brollHtmlLines(body) {
-  hoistNestedBrs(body);
-  var kids = Array.prototype.slice.call(body.childNodes);
-  var lines = [], start = 0;
-  kids.forEach(function (n, i) {
-    if (n.nodeType === 1 && n.tagName === "BR") {
-      lines.push({ nodes: kids.slice(start, i), br: n });
-      start = i + 1;
-    }
-  });
-  lines.push({ nodes: kids.slice(start), br: null });
-  return lines;
-}
-
-function hoistNestedBrs(body) {
-  var guard = 0;
-  while (guard++ < 1000) {
-    var brs = body.getElementsByTagName("br");
-    var br = null;
-    for (var i = 0; i < brs.length; i++) {
-      if (brs[i].parentNode !== body) { br = brs[i]; break; }
-    }
-    if (!br) return;
-    var parent = br.parentNode;
-    var grand = parent.parentNode;
-    if (!grand) return;
-    var tail = parent.cloneNode(false);
-    while (br.nextSibling) tail.appendChild(br.nextSibling);
-    parent.removeChild(br);
-    var ref = parent.nextSibling;
-    grand.insertBefore(br, ref);
-    if (tail.childNodes.length) grand.insertBefore(tail, ref);
-  }
-}
-
-function brollHtmlLineText(nodes) {
-  return nodes.map(function (n) { return n.textContent || ""; }).join("");
-}
 
 function brollRow(rowId) {
   var i = rowId ? readSession(function (doc) { return rowIndexOf(doc, rowId); }) : -1;
@@ -127,12 +88,6 @@ function seedRef(row) {
 
 function seedLocation(row) {
   return brollSeedLocation(row, productionReaders);
-}
-
-export function newBrollRecord(fields) {
-  var rec = newBrollShot(makeId("bs"), fields || {});
-  runDocumentEdit(addShotCommand(rec));
-  return rec;
 }
 
 export function brollSeedOf(row) {
@@ -165,7 +120,7 @@ function unkeyedScope(changes) {
 
 export function derivedRecordsPlan(doc, changes) {
   if (!doc || doc !== heldDocument()) return null;
-  var tags = tagRecordsPlan(doc);
+  var tags = productionIndex().recordsPlan(doc, currentDocument());
   var shots = planBrollRecords(doc, productionReaders, randomIds, htmlToPlainText, unkeyedScope(changes));
   var fields = [];
   if (tags && tags.apply) fields.push("productionTags");
@@ -183,10 +138,6 @@ export function derivedRecordsPlan(doc, changes) {
 
 export function addBrollProp(shotId, rawName) {
   return runDocumentEdit(addShotPropCommand(shotId, rawName));
-}
-
-export function removeBrollProp(shotId, ref) {
-  return runDocumentEdit(removeShotPropCommand(shotId, ref));
 }
 
 export function brollShotsByProp() {
@@ -252,110 +203,18 @@ export function maybeCaptureBroll(e, cellEl) {
   scheduleBrollRefresh();
 }
 
-function brollKeyHtml(id, text) {
-  return '<span class="broll-key" data-broll-id="' + escapeHtml(id) +
-    '" contenteditable="false">' + escapeHtml(text) + '</span>';
-}
-
-function brollLineTextNodes(nodes) {
-  var out = [];
-  (function walk(list) {
-    for (var i = 0; i < list.length; i++) {
-      var n = list[i];
-      if (n.nodeType === 3) out.push(n);
-      else if (n.nodeType === 1) walk(n.childNodes);
-    }
-  })(nodes);
-  return out;
-}
-
-function brollPruneEmpty(el, body) {
-  while (el && el !== body && el.parentNode && !el.childNodes.length) {
-    var parent = el.parentNode;
-    parent.removeChild(el);
-    el = parent;
-  }
-}
-
-function brollWrapHtmlLine(body, line, id) {
-  var m = BROLL_MARKER_RE.exec(brollHtmlLineText(line.nodes));
-  if (!m) return false;
-  var left = m[0].length;
-  brollLineTextNodes(line.nodes).forEach(function (t) {
-    if (left <= 0) return;
-    var val = t.nodeValue || "";
-    if (val.length > left) { t.nodeValue = val.slice(left); left = 0; return; }
-    left -= val.length;
-    var parent = t.parentNode;
-    if (!parent) return;
-    parent.removeChild(t);
-    brollPruneEmpty(parent, body);
-  });
-
-  var ref = null;
-  for (var i = 0; i < line.nodes.length && !ref; i++) {
-    if (line.nodes[i].parentNode === body) ref = line.nodes[i];
-  }
-  if (!ref) ref = line.br;
-  var holder = document.createElement("div");
-  holder.innerHTML = brollKeyHtml(id, m[1] + m[2]) + " ";
-  Array.prototype.slice.call(holder.childNodes).forEach(function (n) {
-    body.insertBefore(n, ref);
-  });
-  return true;
-}
-
-function brollRekeyHtmlLine(line, id) {
-  for (var i = 0; i < line.nodes.length; i++) {
-    var n = line.nodes[i];
-    if (n.nodeType !== 1) continue;
-    var key = n.classList.contains("broll-key") ? n : n.querySelector(".broll-key");
-    if (key) { key.setAttribute("data-broll-id", id); return true; }
-  }
-  return false;
-}
 
 export function declineBrollAnchoring(rows) {
-  (rows || []).forEach(function (row) { brollAnchorDeclined[row.id] = true; });
+  declineBrollRows(rows);
 }
 
-export function anchorBrollInRows(doc, only) {
-  var rows = only || (doc && doc.rows);
-  if (!doc || !rows || !rows.length) return 0;
-  var plan = planBrollAnchors(doc, productionReaders, randomIds);
-  var total = 0;
-  rows.forEach(function (row) {
-    if (brollAnchorDeclined[row.id]) return;
-    var html = row.visualText;
-    var cell = cellOf(html);
-    var todo = brollAnchorTodo(cell, row.id, plan);
-    if (!todo.length) return;
-    var n = 0;
-    if (holdsMedia(html)) {
-      var body = inertBody(html);
-      var htmlLines = brollHtmlLines(body);
-      todo.forEach(function (t) {
-        var line = htmlLines[t.found.index];
-        if (!line) return;
-        if (t.found.marker.key ? brollRekeyHtmlLine(line, t.id) : brollWrapHtmlLine(body, line, t.id)) n++;
-      });
-      if (n) row.visualText = sanitizeHtml(body.innerHTML);
-    } else {
-      var anchored = anchorBrollCell(cell, todo);
-      n = anchored.anchored;
-      if (n) row.visualText = toHtml(anchored.cell);
-    }
-    total += n;
-  });
-  return total;
-}
 
 export function anchorBrollInLeftCell(cellEl) {
   if (!currentDocument() || cellEl.getAttribute("data-field") !== "visualText") return 0;
   var row = brollRow(cellEl.getAttribute("data-id"));
   if (!row) return 0;
   var copy = { id: row.id, visualText: row.visualText };
-  var n = readSession(function (doc) { return anchorBrollInRows(doc, [copy]); });
+  var n = readSession(function (doc) { return anchorBrollInRows(doc, [copy], brollAnchorPorts); });
   if (!n) return 0;
   var took = paintGuard().whileShown(function () {
     var outcome = runCommand(cellTextCommand(row.id, "visualText", cellRuns(scriptCellOf(copy.visualText)), sessionTextPorts));
@@ -418,5 +277,5 @@ export function scheduleBrollRefresh() {
 }
 
 export function __init() {
-  brollAnchorDeclined = Object.create(null);
+  resetBrollAnchoring();
 }

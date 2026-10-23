@@ -27,7 +27,6 @@ export interface LegacySavePorts {
   readonly destination: () => unknown;
   readonly keyOf: (identity: unknown) => DestinationKey;
   readonly obsolete: (request: LegacySaveRequest, here: boolean) => void;
-  readonly running: (running: boolean) => void;
   readonly ownership: SaveOwnershipPort;
   readonly autosave: LegacyAutoSavePorts;
 }
@@ -95,7 +94,7 @@ export function startSaves(ports: LegacySavePorts, timers: Pick<TimerPort, "star
       ownership: ports.ownership,
       destination: { current: ports.destination, keyOf: ports.keyOf },
       writer: { write: ports.write },
-      report: { obsolete: ports.obsolete, running: ports.running },
+      report: { obsolete: ports.obsolete },
       join: joinSaves
     }),
     autosave: createAutoSavePolicy({
@@ -143,7 +142,10 @@ export function saveChanges(): number {
 }
 
 export function confirmSavedNow(): void {
-  running().confirmClean();
+  const now = live();
+  now.autosave.clear();
+  now.autosave.resume();
+  now.coordinator.confirmClean();
 }
 
 export function confirmBaseline<B>(baseline: B | null): B | null {

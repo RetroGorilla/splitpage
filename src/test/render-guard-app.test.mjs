@@ -25,7 +25,7 @@ const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { cellEditing, focusMemory, mergeUndo } = await import("../legacy/editor-bridge.ts");
 const find = await import("../js/09-find-replace.js");
-const { clearDirty } = await import("../js/12-dirty-toast.js");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { openServerDoc } = await import("../js/13-hosted.js");
 const { openProjectFile, reloadFileFromDisk, updateFileChip } = await import("../js/18-local-files.js");
 const { openLongDemo } = await import("../js/18b-file-menu.js");
@@ -116,7 +116,7 @@ function fresh(title) {
   loadTestDocument(migrateRows(table304Document(title)));
   flushEdits();
   renderAbsorbed();
-  clearDirty();
+  confirmSavedNow();
   updateFileChip();
   document.getElementById("identity-name").textContent = "Stale name";
   mergeUndo().arm(null);
@@ -439,7 +439,7 @@ test("a desktop file draft over an untouched file whose render throws still rest
     });
     return {
       draft: { header: { origin: { kind: "file", fileName: "guard.splitpage" }, docIdWrittenOut: true }, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(disk), file: { id: "f-guard", name: "guard.splitpage" } },
-      observe: () => { const book = unsavedChanges(); clearDirty(); setHome("none"); return book; }
+      observe: () => { const book = unsavedChanges(); confirmSavedNow(); setHome("none"); return book; }
     };
   }, (ctx) => applyTakenDraft(ctx.draft), "late", 2);
   assert.equal(seen.value, "applied");
@@ -882,7 +882,7 @@ test("on a stale screen the picture annotator's Ctrl+Z and Ctrl+Y still undo and
       loadTestDocument(migrateRows(doc));
       flushEdits();
       renderAbsorbed();
-      clearDirty();
+      confirmSavedNow();
       quiet();
       typedOnce();
       assert.equal(annotate.openAnnotator("r1", 0), true);

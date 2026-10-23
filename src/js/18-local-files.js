@@ -1,10 +1,10 @@
 import { docIdEmbeddedIn } from "../core/document/ids.ts";
 import { S } from "./_state.js";
 import { flushEdits } from "./12a-undo.js";
-import { inertBody } from "../legacy/richtext.ts";
-import { noteReload } from "../legacy/session-bridge.ts";
+import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
+import { noteAbsorbedDirty, noteReload } from "../legacy/session-bridge.ts";
 import { documentTransitions } from "../legacy/transition-bridge.ts";
-import { autoSavePolicy, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, confirmSavedNow, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
 import { amendHome, currentHome, fileHome, importHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import {
@@ -24,10 +24,8 @@ import { captureExportDocument, loadExportAssets } from "./14b-export-kit.js";
 import { exportAssetsRequest } from "../adapters/formats/export-assets.ts";
 import {
   detectTwoColumnFormat,
-  normalizeImportedRows,
   parseImportRows
 } from "./11-import.js";
-import { clearDirty, markAbsorbedDirty } from "./12-dirty-toast.js";
 import {
   blobSourceNow,
   onServerDoc
@@ -35,8 +33,9 @@ import {
 import { warnImagesLeftOut } from "./14-export.js";
 import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
+import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
 import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
-import { refreshFileMenu, toggleFileMenu } from "./18b-file-menu.js";
+import { toggleFileMenu } from "./18b-file-menu.js";
 import { isExportAction, rememberExport } from "./18c-export-dialog.js";
 import {
   applyMarkdownProject,
@@ -62,8 +61,6 @@ import { runningOnDesktop } from "../application/desktop-presence.ts";
 export function updateFileChip() {
   updateHeaderFileChip();
   updateReadonlyBanner();
-  var menu = document.getElementById("file-menu");
-  if (menu && !menu.hidden) refreshFileMenu();
 }
 
 export function fileChipListeners(refresh) {
@@ -335,7 +332,7 @@ export function adoptProjectState(newState, file, handle, kind, opts) {
     writtenOut: true
   });
 
-  clearDirty();
+  confirmSavedNow();
   var commentNote = S.state.comments.length
     ? ", " + S.state.comments.length + " comment" + (S.state.comments.length === 1 ? "" : "s") : "";
   if (!opts.silent) showToast((opts.resumed ? "Resumed " : "Opened ") + (S.state.title || file.name) + " — " +
@@ -399,14 +396,14 @@ async function loadFileIntoEditor(file, handle, opts) {
       newRows = parsed.rows;
       if (!newRows.length && parsed.looseText) {
         var looseMode = detectTwoColumnFormat(parsed.looseText) ? "twocolumn" : "paragraph";
-        newRows = normalizeImportedRows(parseImportRows(parsed.looseText, looseMode));
+        newRows = normalizeImportedRows(parseImportRows(parsed.looseText, looseMode), sanitizeHtml);
       }
     } else if (kind === "csv") {
       newRows = csvToRows(await file.text());
     } else {
       var text = await file.text();
       var mode = detectTwoColumnFormat(text) ? "twocolumn" : "paragraph";
-      newRows = normalizeImportedRows(parseImportRows(text, mode));
+      newRows = normalizeImportedRows(parseImportRows(text, mode), sanitizeHtml);
       var firstHeading = /^#\s+(.+)$/m.exec(text);
       if (firstHeading) newTitle = firstHeading[1].trim();
     }
@@ -452,7 +449,7 @@ async function loadFileIntoEditor(file, handle, opts) {
   }
   var imported = importHome();
 
-  markAbsorbedDirty(opts.reload ? "reload" : "adopt");
+  noteAbsorbedDirty(opts.reload ? "reload" : "adopt");
   amendHome(imported, { dirty: false });
   if (typeof closeNewTabPage === "function") closeNewTabPage();
   if (typeof syncDocIdentity === "function") syncDocIdentity();

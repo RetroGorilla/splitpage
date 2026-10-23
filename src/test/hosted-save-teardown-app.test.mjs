@@ -9,11 +9,13 @@ import { holdMergeBase, liveDocumentPort, mergeBase } from "../legacy/session-br
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
-const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { saveDoc } = await import("../js/14-export.js");
 const homeModule = await import("../legacy/location-bridge.ts");
 const app = await import("../bootstrap/app.ts");
+const { mountDocumentChromeFeature, stopDocumentChromeFeature } = await import("../bootstrap/wiring/document-chrome.ts");
 const { confirmedSave } = await import("../legacy/save-bridge.ts");
 const { saveInProgress } = await import("../legacy/screen-state.ts");
 const { loadTestDocument } = await import("./_document.mjs");
@@ -69,16 +71,16 @@ async function settle() {
 function openOnServer(docId) {
   loadTestDocument(script());
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   homeModule.setHome("none");
   window.__hostedTest.setSession({ docId: docId, rev: 1 });
   documentLocation().markWrittenOut(true);
-  clearDirty();
+  confirmSavedNow();
 }
 
 function type(row, text) {
   S.state.rows[row].audioText = text;
-  markDirty();
+  noteSessionEdit();
 }
 
 function warnToasts() {
@@ -106,6 +108,8 @@ test("a hosted save that lands after its wiring was disposed and the app rewired
   app.stopApp();
   const wiring = await rewireApp();
   t.after(() => wiring.dispose());
+  mountDocumentChromeFeature();
+  t.after(stopDocumentChromeFeature);
   assert.equal(S.state, null, "the replacement's session holds no document until one is handed to it");
   assert.equal(mergeBase(), null, "nor a merge base");
   liveDocumentPort.assign(doc);
