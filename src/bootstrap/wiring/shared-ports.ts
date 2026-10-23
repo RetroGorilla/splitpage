@@ -1,5 +1,6 @@
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
+import type { LaunchFacts } from "../../application/desktop-presence.ts";
 import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { EditorSelectionPort } from "../../application/editing/selection.ts";
@@ -198,6 +199,15 @@ const recents: RecentFiles = {
   routeOpen: (request) => desktopPort()?.routeOpen(request)
 };
 
+const launch: LaunchFacts = {
+  firstTabOfLaunch: () => desktopPort()?.firstTabOfLaunch,
+  hadPriorSession: () => desktopPort()?.hadPriorSession,
+  launchIntent: () => desktopPort()?.launchIntent,
+  hasDraftToRestore: () => desktopPort()?.hasDraftToRestore,
+  appVersion: () => desktopPort()?.appVersion,
+  sessionInfo: () => desktopPort()?.getSessionInfo()
+};
+
 const transitions: Transitions<DocumentDestination> = {
   open: (opening) => documentTransitions().open(opening),
   startNew: (arrival) => documentTransitions().startNew(arrival),
@@ -225,6 +235,7 @@ const shared = {
   ownership,
   pictures,
   recents,
+  launch,
   undo: undoControl,
   transitions
 };
