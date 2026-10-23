@@ -41,8 +41,8 @@ export const USAGE = `usage: node tools/run-suites.mjs [out-dir] [filter] [optio
 
 Env SPLITPAGE_FREEZE_CACHES=1 opens every suite's page with freeze-caches=1, so the app's caches
 deep-freeze what they hand out and a write into one throws.
-Env SPLITPAGE_DOCUMENT_GUARD=1 opens every suite's page with document-guard=1, so S.state is a
-read-only view of the session's document and a write through it is refused and fails the suite.
+Env SPLITPAGE_DOCUMENT_GUARD=1 opens every suite's page with document-guard=1, so the session's
+document is read-only and a write to it is refused and fails the suite.
 
 Numbers are plain decimal digits. --option=value works too.
 Exit status: 0 every suite PASS; 1 any other suite status; 2 a bad option, nothing matched,

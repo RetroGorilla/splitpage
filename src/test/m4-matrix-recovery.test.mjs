@@ -32,7 +32,8 @@ const { confirmSavedNow, setAutoSaveEnabled } = await import("../legacy/save-bri
 const { flushEdits } = await import("../js/12a-undo.js");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { startNewScript } = await import("../js/18b-file-menu.js");
-const { applyTakenDraft, armBrowserServerDraft, flushDraftNow, offerBrowserDraftAfterLinkOff } = await import("../js/20g-drafts.js");
+const { applyTakenDraft } = await import("../js/20g-drafts.js");
+const { armBrowserServerDraft, flushDraftNow, offerBrowserDraftAfterLinkOff } = await import("../legacy/recovery-bridge.ts");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 const { bytesForSync, createMemoryBackend, ensureBytes, has, internDataUrl, isDurableSync, persist, setBackend: setBlobBackend } = await import("../adapters/storage/02c-blobs.js");
