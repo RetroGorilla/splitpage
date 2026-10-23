@@ -4,7 +4,6 @@ import assert from "node:assert/strict";
 
 globalThis.location = new URL("https://splitpage.test/index.html?freeze-caches=1");
 
-const { S } = await import("../js/_state.js");
 const { migrateRows } = await import("../js/02-state.js");
 const { healTagRegistry, productionIndexStats, resetProductionIndexStats } = await import("../js/07-production-tags.js");
 const { productionIndex } = await import("../legacy/production-index-bridge.ts");
@@ -27,7 +26,7 @@ const row = (id, audioText, visualText) => ({ id, status: "todo", audioText, vis
 
 function load(rows, productionTags) {
   loadTestDocument(migrateRows({ schema: 2, title: "Frozen", docId: "d" + "7".repeat(32), rows, comments: [] }));
-  S.state.productionTags = productionTags;
+  currentDocument().productionTags = productionTags;
   resetProductionIndexStats();
 }
 
@@ -125,12 +124,12 @@ test("with the flag, prose edits keep the index without writing into it", () => 
   load([row("r1", "Put the " + tag("prop", "kettle") + " on.", "")], []);
   const index = productionIndex().current(currentDocument());
   const sig = JSON.stringify(index);
-  S.state.rows[0].audioText = "Now put the " + tag("prop", "kettle") + " on, slowly.";
+  currentDocument().rows[0].audioText = "Now put the " + tag("prop", "kettle") + " on, slowly.";
   assert.doesNotThrow(() => productionIndex().entries(currentDocument()));
   assert.equal(productionIndexStats().derived, 1, "a prose edit re-derived the index");
   assert.equal(JSON.stringify(index), sig, "the index handed out before the edit is unchanged");
-  assert.equal(productionIndex().current(currentDocument()).rowSig[2], S.state.rows[0].audioText);
-  assert.deepEqual(productionIndex().current(currentDocument()), deriveProductionIndex(S.state, productionReaders));
+  assert.equal(productionIndex().current(currentDocument()).rowSig[2], currentDocument().rows[0].audioText);
+  assert.deepEqual(productionIndex().current(currentDocument()), deriveProductionIndex(currentDocument(), productionReaders));
 });
 
 test("with the flag, a heal leaves what it handed out alone, and both views take the new ids (#326)", () => {
@@ -144,7 +143,7 @@ test("with the flag, a heal leaves what it handed out alone, and both views take
   assert.deepEqual(index.entries.map((e) => e.id), ["t_kitchen", null]);
   assert.equal(index.unregistered.length, 1);
   assert.deepEqual(productionIndex().entries(currentDocument()).map((e) => [e.key, e.id]), [["location kitchen", "t_kitchen"], ["prop kettle", mintTagId("prop", "kettle")]]);
-  assert.deepEqual(productionIndex().current(currentDocument()), deriveProductionIndex(S.state, productionReaders));
+  assert.deepEqual(productionIndex().current(currentDocument()), deriveProductionIndex(currentDocument(), productionReaders));
   assert.deepEqual(frozenThrough(productionIndex().current(currentDocument())), []);
   assert.equal(healTagRegistry(), 0);
 });

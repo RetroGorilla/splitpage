@@ -5,7 +5,7 @@ import "./_preferences-started.mjs";
 import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { intern } from "../adapters/storage/02c-blobs.js";
@@ -146,7 +146,7 @@ test("Word: every picture in the Visual cell, the video links under them, and ba
 test("Markdown and PDF name every picture and every link", () => {
   loadTestDocument(doc([{ visualText: "Wide", audioText: "Hello.", imageRef: P1, imageLinks: [{ href: "https://youtu.be/abc" }],
     moreImages: [{ imageRef: P2, links: [{ name: "b.mov", size: 3 }] }] }]));
-  const md = toMarkdownDoc(exportDocumentOf(S.state));
+  const md = toMarkdownDoc(exportDocumentOf(currentDocument()));
   assert.ok(md.indexOf("](images/scene-01.jpg)") !== -1);
   assert.ok(md.indexOf("](images/scene-01-2.jpg)") !== -1);
   assert.ok(md.indexOf("▶ [youtu.be/abc](https://youtu.be/abc)") !== -1);

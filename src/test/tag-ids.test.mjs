@@ -3,13 +3,12 @@ import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { migrateRows } from "../js/02-state.js";
 import { mergeProductionTags, mergeStates } from "../js/03-sync.js";
 import { fromHtml, toHtml } from "../js/04c-doc-model.js";
 import { ensureTagIds, isTagId, registryEntryById } from "../js/07-production-tags.js";
 import { renameTag } from "../application/commands/production-actions.ts";
-import { runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
+import { runDocumentEdit, sessionStamps, currentDocument } from "../legacy/session-bridge.ts";
 import { retagRewrites } from "../legacy/tag-rewrites.ts";
 import { loadTestDocument } from "./_document.mjs";
 
@@ -53,14 +52,14 @@ test("a rename keeps the id, and a rename onto an existing name folds into that 
     schema: 2, title: "T",
     rows: [{ id: "r1", audioText: span("prop", "Mug") + " and " + span("prop", "Cup") }]
   }));
-  const mugId = S.state.productionTags.find((t) => t.name === "Mug").id;
-  const cupId = S.state.productionTags.find((t) => t.name === "Cup").id;
+  const mugId = currentDocument().productionTags.find((t) => t.name === "Mug").id;
+  const cupId = currentDocument().productionTags.find((t) => t.name === "Cup").id;
   assert.ok(renameTag("prop", "Mug", "Big mug", { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }));
   assert.equal(registryEntryById(mugId).name, "Big mug");
   assert.ok(renameTag("prop", "Big mug", "cup", { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }));
   assert.equal(registryEntryById(mugId), null);
   assert.equal(registryEntryById(cupId).name, "Cup");
-  assert.equal(S.state.productionTags.length, 1);
+  assert.equal(currentDocument().productionTags.length, 1);
 });
 
 test("merge: a rename on one side and an assignment on the other are one item with both", () => {

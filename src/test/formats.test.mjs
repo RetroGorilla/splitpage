@@ -5,7 +5,7 @@ import "./_export-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { htmlToMarkdown } from "../js/04-richtext.js";
@@ -79,7 +79,7 @@ function sortAll(v) {
 }
 
 function withState(s, fn) {
-  const was = S.state;
+  const was = currentDocument();
   loadTestDocument(s);
   try { return fn(s); } finally { loadTestDocument(was); }
 }
@@ -429,7 +429,7 @@ function oldMdCell(value) {
     .replace(/\r\n|\r|\n/g, " ");
 }
 function oldAppendMarkdownTail(lines) {
-  var breakdown = breakdownRows(exportDocumentOf(S.state));
+  var breakdown = breakdownRows(exportDocumentOf(currentDocument()));
   if (breakdown.length) {
     lines.push("## Production breakdown");
     lines.push("");
@@ -441,7 +441,7 @@ function oldAppendMarkdownTail(lines) {
     });
     lines.push("");
   }
-  var comments = commentEntries(exportDocumentOf(S.state), { pieces: true });
+  var comments = commentEntries(exportDocumentOf(currentDocument()), { pieces: true });
   if (comments.length) {
     lines.push("## Comments");
     lines.push("");
@@ -471,7 +471,7 @@ function oldMdRichTableCell(md) {
   return String(md || "").replace(/\|/g, "\\|").replace(/\r\n|\r|\n/g, "<br>");
 }
 function oldToMarkdownTableDoc(s) {
-  s = s || S.state;
+  s = s || currentDocument();
   var lines = [];
   lines.push("# " + (s.title || "Untitled Script"));
   lines.push("");

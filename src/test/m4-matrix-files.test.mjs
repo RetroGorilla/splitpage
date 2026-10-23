@@ -23,13 +23,14 @@ const { closeImportModal, handleImportFile, openImportModal } = await import("..
 const { zipRead } = await import("../adapters/formats/zip.ts");
 const { setBackend: setBlobBackend } = await import("../adapters/storage/02c-blobs.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
-const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow, fileConflicts, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
-const { closeFileConflict, exportAs, openProjectFile, saveBackToFile, showFileConflict } = await import("../js/18-local-files.js");
+const { exportAs, openProjectFile, saveBackToFile } = await import("../js/18-local-files.js");
 const { finishServerDetect } = await import("../js/13-hosted.js");
 const homeModule = await import("../legacy/location-bridge.ts");
-const { makeDesktopHandle, openPrompterInBrowser } = await import("../js/20f-desktop.js");
+const { openPrompterInBrowser } = await import("../js/20f-desktop.js");
+const { makeDesktopHandle } = await import("../adapters/desktop/desktop-handle.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
@@ -106,7 +107,7 @@ function scene(run) {
       delete window.showSaveFilePicker;
       window.__desktopTest.restoreBackend();
       setBlobBackend(null);
-      closeFileConflict();
+      fileConflicts().close();
       document.getElementById("save-error-banner").hidden = true;
       setHome("none");
     }
@@ -329,12 +330,12 @@ directCaller("F5-retry", "the save-error retry waits for the save that is runnin
 });
 
 directCaller("F5-overwrite", "the conflict overwrite waits for the save that is running", async () => {
-  showFileConflict("held.splitpage", null, { kind: "project" });
+  fileConflicts().show({ fileName: "held.splitpage", current: null, kind: "project" });
   document.getElementById("file-conflict-overwrite").click();
 });
 
 directCaller("F5-copy", "the conflict copy waits for the save that is running", async () => {
-  showFileConflict("held.splitpage", null, { kind: "project" });
+  fileConflicts().show({ fileName: "held.splitpage", current: null, kind: "project" });
   document.getElementById("file-conflict-copy").click();
 });
 
@@ -443,7 +444,7 @@ rightToday("F7", "a handle whose permission is refused fails without retargeting
   assert.equal(target.commits.length, 0, "an existing handle without permission wrote nothing");
   assert.equal(target.calls.includes("createWritable"), false, "and was not asked for a writer");
   assertSame(before, "document after a refused Save");
-  closeFileConflict();
+  fileConflicts().close();
 
   const refused = createHeldFileHandle({ name: "refused.splitpage", permission: "prompt" });
   window.showSaveFilePicker = async () => refused.handle;

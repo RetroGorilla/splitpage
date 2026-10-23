@@ -1,7 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { S } from "../js/_state.js";
 import { saveChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
@@ -15,7 +14,7 @@ const { buildSplitpageFile } = await import("../js/20d-formats.js");
 const { SCENES_MIME, buildScenePayload } = await import("../js/05g-scene-clip.js");
 const { deleteSelectedScenes, newScriptFromSelection, pasteScenesAt } = await import("../js/05h-scene-select.js");
 const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 
@@ -51,7 +50,7 @@ async function open(blankLast) {
 }
 
 const settle = () => new Promise((r) => setImmediate(r));
-const ids = () => S.state.rows.map((r) => r.id);
+const ids = () => currentDocument().rows.map((r) => r.id);
 const cellOf = (id, field) => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="' + field + '"]');
 
 function clipboardWith(data) {
@@ -64,7 +63,7 @@ function clipboardWith(data) {
 }
 
 function copiedScenes(rowIds) {
-  const out = buildScenePayload(S.state, rowIds);
+  const out = buildScenePayload(currentDocument(), rowIds);
   return clipboardWith({ [SCENES_MIME]: out.json, "text/html": out.html, "text/plain": out.text });
 }
 
@@ -99,10 +98,10 @@ test("pasting copied scenes is one paste-scenes transaction: one generation, one
     w.stop();
   }
   await settle();
-  assert.equal(S.state.rows.length, 4);
+  assert.equal(currentDocument().rows.length, 4);
   const pasted = ids()[3];
   assert.notEqual(pasted, "r1");
-  assert.equal(S.state.comments.length, 2, "the comment came with its scene");
+  assert.equal(currentDocument().comments.length, 2, "the comment came with its scene");
   assert.equal(liveSession().generation(), was.generation + 1);
   assert.equal(saveChanges(), was.seq + 1);
   assert.deepEqual(undoSizes(), { undo: was.sizes.undo + 1, redo: 0 });
@@ -116,7 +115,7 @@ test("pasting copied scenes is one paste-scenes transaction: one generation, one
   assert.equal(change.changes.saveNow, true);
   undo();
   assert.deepEqual(ids(), ["r1", "r2", "r3"]);
-  assert.equal(S.state.comments.length, 1);
+  assert.equal(currentDocument().comments.length, 1);
 });
 
 test("pasting onto a blank scene replaces it inside the same transaction", async () => {
@@ -128,7 +127,7 @@ test("pasting onto a blank scene replaces it inside the same transaction", async
   } finally {
     w.stop();
   }
-  assert.equal(S.state.rows.length, 3);
+  assert.equal(currentDocument().rows.length, 3);
   assert.equal(ids().indexOf("r3"), -1);
   assert.equal(w.seen.length, 1);
   assert.deepEqual(w.seen[0].changes.rowsRemoved, ["r3"]);
@@ -178,7 +177,7 @@ test("deleting selected scenes is one transaction, and its undo brings the scene
   assert.deepEqual(w.seen[0].changes.rowsRemoved, ["r1", "r2"]);
   undo();
   assert.deepEqual(ids(), ["r1", "r2", "r3"]);
-  assert.equal(S.state.comments[0].rowId, "r1");
+  assert.equal(currentDocument().comments[0].rowId, "r1");
 });
 
 test("a new script from selected scenes takes its title in the same transaction as the scenes", async () => {
@@ -186,14 +185,14 @@ test("a new script from selected scenes takes its title in the same transaction 
   window.__sceneSelectTest.select("r2", "r2");
   newScriptFromSelection();
   await settle();
-  assert.equal(S.state.rows.length, 1);
-  assert.equal(S.state.rows[0].audioText, "Mara mends nets.");
-  assert.equal(S.state.title, "Scene clipboard — 1 scene");
+  assert.equal(currentDocument().rows.length, 1);
+  assert.equal(currentDocument().rows[0].audioText, "Mara mends nets.");
+  assert.equal(currentDocument().title, "Scene clipboard — 1 scene");
   assert.deepEqual(undoSizes(), { undo: 1, redo: 0 }, "the scenes and the title are one step");
   undo();
-  assert.equal(S.state.title, "Untitled Script", "undo takes the title back with the scenes");
-  assert.equal(S.state.rows.length, 1);
-  assert.equal(S.state.rows[0].audioText, "");
+  assert.equal(currentDocument().title, "Untitled Script", "undo takes the title back with the scenes");
+  assert.equal(currentDocument().rows.length, 1);
+  assert.equal(currentDocument().rows[0].audioText, "");
 });
 
 test("on a server document the pasted comments land in a second transaction, as before, and the paste is still one undo entry", async () => {
@@ -214,11 +213,11 @@ test("on a server document the pasted comments land in a second transaction, as 
     assert.equal(edits[0].changes.saveNow, false, "the save waits for the comments' step");
     assert.deepEqual(edits[1].changes.docFields, ["comments"]);
     assert.equal(edits[1].changes.saveNow, true);
-    assert.equal(S.state.comments.length, 2);
+    assert.equal(currentDocument().comments.length, 2);
     assert.deepEqual(undoSizes(), { undo: was.sizes.undo + 1, redo: 0 });
     undo();
     assert.deepEqual(ids(), ["r1", "r2", "r3"]);
-    assert.equal(S.state.comments.length, 2, "a server document's comments are sent: undo leaves them, as before");
+    assert.equal(currentDocument().comments.length, 2, "a server document's comments are sent: undo leaves them, as before");
   } finally {
     window.__hostedTest.setSession({ role: "edit", docId: null });
   }
@@ -229,7 +228,7 @@ test("in review mode a scene paste, cut and delete are refused: nothing publishe
   const cd = copiedScenes(["r1"]);
   window.__hostedTest.setSession({ role: "review", docId: "scene-clip-review" });
   try {
-    const before = JSON.stringify(S.state);
+    const before = JSON.stringify(currentDocument());
     const was = counters();
     const w = watch();
     try {
@@ -241,7 +240,7 @@ test("in review mode a scene paste, cut and delete are refused: nothing publishe
     } finally {
       w.stop();
     }
-    assert.equal(JSON.stringify(S.state), before);
+    assert.equal(JSON.stringify(currentDocument()), before);
     assert.equal(liveSession().generation(), was.generation);
     assert.deepEqual(w.seen, []);
   } finally {
@@ -253,7 +252,7 @@ test("a scene paste that fails part way is thrown and leaves the document, the e
   await open();
   const cd = copiedScenes(["r1", "r2"]);
   await settle();
-  const before = JSON.stringify(S.state);
+  const before = JSON.stringify(currentDocument());
   const was = counters();
   const w = watch();
   const real = Date.prototype.toISOString;
@@ -264,7 +263,7 @@ test("a scene paste that fails part way is thrown and leaves the document, the e
     Date.prototype.toISOString = real;
     w.stop();
   }
-  assert.equal(JSON.stringify(S.state), before);
+  assert.equal(JSON.stringify(currentDocument()), before);
   assert.equal(liveSession().generation(), was.generation);
   assert.equal(saveChanges(), was.seq);
   assert.deepEqual(undoSizes(), was.sizes);

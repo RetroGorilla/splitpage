@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import zlib from "node:zlib";
-import { S } from "../js/_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { createHeldImageDecode } from "./_m4-matrix.mjs";
 import { saveChanges } from "../legacy/save-bridge.ts";
 
@@ -80,7 +80,7 @@ async function open(role) {
 }
 
 const settle = async () => { for (let i = 0; i < 6; i++) await new Promise((r) => setImmediate(r)); };
-const row = (id) => S.state.rows.find((r) => r.id === id);
+const row = (id) => currentDocument().rows.find((r) => r.id === id);
 const button = (rowId, action) => document.querySelector('#rows [data-action="' + action + '"][data-id="' + rowId + '"]');
 const GALLERY = ["imageAnnotation", "imageLinks", "imageName", "imageRef", "moreImages", "visualImage"];
 
