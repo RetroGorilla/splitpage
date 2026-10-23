@@ -3,7 +3,7 @@ import type { ExportDocument, ExportPerson, ExportShotEntry, ClockMode } from ".
 import type { DocumentRow } from "../../core/document/validated.ts";
 import type { Frozen } from "../../core/document/freeze.ts";
 import type { RowStatusId } from "../../core/document/timing.ts";
-import { formatDateClock } from "../../../shared/clock.js";
+import { formatTimestampAbsolute } from "../../../shared/clock.js";
 import { isSha256Hex, normalizeImageRef } from "../../../shared/blob-policy.js";
 import { exportServices } from "../../application/export/services.ts";
 import { compareCommentPositions } from "../../core/document/comments.ts";
@@ -397,14 +397,6 @@ function capturedLocationLabel(rowIndex: number, field: string): string {
   if (field === "title") return "Document title";
   const rowLabel = rowIndex === -1 ? "Deleted row" : ("Row " + pad2(rowIndex + 1));
   return rowLabel + " · " + (field === "audioText" ? "Audio" : "Visual");
-}
-
-export function formatTimestampAbsolute(iso: string | null | undefined, clockMode?: ClockMode): string {
-  try {
-    const d = new Date(iso === null ? 0 : iso === undefined ? NaN : iso);
-    if (isNaN(d.getTime())) return "";
-    return formatDateClock(d, { year: true }, clockMode);
-  } catch (e) { return ""; }
 }
 
 export function commentEntries(doc: ExportDocument, opts?: CommentOptions | null, services: ExportServices = exportServices()): CommentEntry[] {

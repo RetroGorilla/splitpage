@@ -5,7 +5,7 @@ import type { SettingsMount, SettingsPorts } from "../../features/settings/ports
 import { owned } from "../../features/routing/owned.ts";
 import { setHideShotScenes } from "../../legacy/hide-shot-bridge.ts";
 import { personSwatchesHtml } from "../../js/03-sync.js";
-import { getSavedAuthorName } from "../../js/10-comments.js";
+import { getSavedAuthorName } from "../../application/comment-author.js";
 import { DEFAULT_COLLAB_SERVER, collabServerView, normalizeCollabServer, readCollabServer, signOutCollab } from "../../js/13b-collaborate.js";
 import { applyWriterSize, readWriterSize } from "../../js/19-writer.js";
 import { setPrompterFlip, setPrompterMirror, setPrompterSceneMode } from "../../js/20-teleprompter.js";
@@ -34,6 +34,7 @@ export function mountSettingsFeature(): SettingsMount {
         announceTaggingHelp: () => preferences().announceTaggingHelp(),
         autosave: () => preferences().autosave(),
         clock: () => preferences().clock(),
+        commentAuthor: () => preferences().commentAuthor(),
         defaultWpm: () => preferences().defaultWpm(),
         hideShot: () => preferences().hideShot(),
         prompterFlag: (value) => preferences().prompterFlag(value),
@@ -56,7 +57,7 @@ export function mountSettingsFeature(): SettingsMount {
         videoThumbs: () => preferences().videoThumbs(),
       },
       editor: { writerSize: readWriterSize, setWriterSize: applyWriterSize, hideShot: setHideShotScenes, autoSave: setAutoSaveEnabled },
-      identity: { name: getSavedAuthorName, swatchesHtml: personSwatchesHtml },
+      identity: { name: () => getSavedAuthorName(preferences()), swatchesHtml: personSwatchesHtml },
       prompter: { mirror: setPrompterMirror, flip: setPrompterFlip, sceneMode: setPrompterSceneMode },
       collaboration: {
         defaultServer: DEFAULT_COLLAB_SERVER, view: collabServerView, normalize: normalizeCollabServer,

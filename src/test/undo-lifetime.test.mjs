@@ -6,7 +6,7 @@ import { migrateRows } from "../js/02-state.js";
 import {
   absorbRemoteChange, flushEdits, lastUndoEntry, noteEdit, noteRemoteChange, redo, resetUndo, trackDocument,
   undo, undoLifetime, undoMark, undoSizes
-} from "../js/12a-undo.js";
+} from "../legacy/undo-bridge.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 function doc(title) {
