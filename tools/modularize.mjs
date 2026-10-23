@@ -325,18 +325,6 @@ for (const frag of perFragment) {
   writeFileSync(join(OUT, frag.name), lines.join("\n") + "\n");
 }
 
-function wrapComment(text, indent, width) {
-  const words = text.split(" ");
-  const lines = [];
-  let line = "";
-  for (const w of words) {
-    if (line && (line + " " + w).length + indent.length + 3 > width) { lines.push(line); line = w; }
-    else line = line ? line + " " + w : w;
-  }
-  if (line) lines.push(line);
-  return lines.map((l, i) => indent + (i === 0 ? "/* " : "   ") + l).join("\n") + " */";
-}
-
 const entryImports = names.map((n) => {
   const alias = "init_" + n.replace(/\.js$/, "").replace(/[^A-Za-z0-9]/g, "_");
   return { n, alias };
