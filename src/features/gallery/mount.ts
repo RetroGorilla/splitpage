@@ -1,3 +1,5 @@
+import { listenAnnotator } from "./annotator.ts";
+
 export interface HistoryGalleryPorts {
   restore: (button: HTMLElement) => void;
   open: (row: string | null, slot: number, videos: boolean) => void;
@@ -5,6 +7,7 @@ export interface HistoryGalleryPorts {
 
 export function mountHistoryGallery(ports: HistoryGalleryPorts): { restoreClick: (event: MouseEvent) => boolean; galleryClick: (event: MouseEvent) => boolean; dispose: () => void } {
   let active = true;
+  const stopAnnotator = listenAnnotator();
   return {
     restoreClick(event): boolean {
       if (!active) return false;
@@ -20,6 +23,10 @@ export function mountHistoryGallery(ports: HistoryGalleryPorts): { restoreClick:
       ports.open(tile.getAttribute("data-id"), Number(tile.getAttribute("data-slot")) || 0, tile.getAttribute("data-action") === "gallery-open-videos");
       return true;
     },
-    dispose(): void { active = false; }
+    dispose(): void {
+      if (!active) return;
+      active = false;
+      stopAnnotator();
+    }
   };
 }

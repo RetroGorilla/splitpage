@@ -9,10 +9,9 @@ import {
 } from "./04-richtext.js";
 import { plainTagOpen } from "./07b-plain-tags.js";
 import { renderProduction, updateGearCount } from "./08-production-panels.js";
-import { runBrollRefresh, updateBrollBadge } from "./08c-broll.js";
+import { updateBrollBadge } from "./08c-broll.js";
 import { domRangeFor } from "./09-find-replace.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
-import { updateWriterStats } from "./19-writer.js";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { contentMemo } from "../core/document/memo.ts";
@@ -259,9 +258,7 @@ export function runIdleRefresh(jobs) {
   if (!currentDocument()) return;
   idleFlushes++;
   if (jobs.has("production")) refreshProductionNow();
-  if (jobs.has("writerStats")) updateWriterStats();
   if (jobs.has("untagged")) scanUntaggedMentions();
-  if (jobs.has("broll")) runBrollRefresh();
 }
 
 function refreshProductionNow() {

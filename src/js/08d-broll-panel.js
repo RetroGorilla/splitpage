@@ -716,6 +716,11 @@ export function renderBrollViews() {
   renderBrollPage();
 }
 
+export function runBrollRefresh() {
+  updateBrollBadge();
+  renderBrollViews();
+}
+
 function entryById(id) {
   var all = brollEntries();
   for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
@@ -1166,6 +1171,7 @@ export function mountBrollFeature() {
       hasSelection: function () { return !!Object.keys(selection).length; },
       clearSelection: clearSelection,
       render: renderBrollViews,
+      refresh: runBrollRefresh,
       reset: function () {
         openId = null; renamingId = null; addingPersonFor = null;
         editingLocFor = null; editingRefFor = null;

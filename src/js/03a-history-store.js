@@ -4,10 +4,7 @@ import { S } from "./_state.js";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { currentHome } from "../legacy/location-bridge.ts";
 import { dataUrlForSync, ensureBytes, inlineStateJson, intern, persist, recordFor } from "../adapters/storage/02c-blobs.js";
-import {
-  getEditorName,
-  renderHistory
-} from "./03-sync.js";
+import { getEditorName } from "./03-sync.js";
 import { legacySnapshots } from "../legacy/recovery-bridge.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 import { createIdbHistoryBackend, hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
@@ -524,12 +521,18 @@ function historyLocalEntries(docId, status) {
   }).sort(function (a, b) { return a.meta.atMs - b.meta.atMs; });
 }
 
-function historyRenderSoon() {
-  if (typeof renderHistory !== "function") return;
-  try {
-    var p = renderHistory();
-    if (p && typeof p.then === "function") p.then(historyNoop, historyNoop);
-  } catch (e) { if (window.console) console.error(e); }
+var historyChangeListeners = [];
+
+export function onHistoryChange(listener) {
+  historyChangeListeners.push(listener);
+  return function () {
+    var at = historyChangeListeners.indexOf(listener);
+    if (at !== -1) historyChangeListeners.splice(at, 1);
+  };
+}
+
+function historyChanged() {
+  historyChangeListeners.slice().forEach(function (listener) { listener(); });
 }
 
 function historyMarkPending(entry) {
@@ -623,14 +626,14 @@ export function captureSnapshot(label, src, opts) {
       return historyStoreEntry(backend, entry);
     }).then(function (r) {
       if (r.stored && historyLocalEntries(null, "pending").length) retryPendingSnapshots();
-      historyRenderSoon();
+      historyChanged();
       return r;
     });
   }, function () {
     if (historyLocal[historyLocalKey(docId, id)] === entry) historyMarkPending(entry);
     return { stored: false, code: "io" };
   });
-  historyRenderSoon();
+  historyChanged();
   return { id: id, docId: docId, done: done };
 }
 
@@ -650,7 +653,7 @@ function retryPendingSnapshots() {
         return historyStoreEntry(backend, entry).then(function (r) { return r.stored ? next() : null; });
       }
       return next();
-    }).then(function () { historyRenderSoon(); });
+    }).then(function () { historyChanged(); });
   }, function () { historyRetryQueued = false; return null; });
 }
 
@@ -730,7 +733,7 @@ function historyTouchDocument(docId, title) {
 
 export function historyDocumentChanged() {
   if (currentDocument() && normalizeDocId(currentDocument().docId)) historyTouchDocument(currentDocument().docId, currentDocument().title);
-  historyRenderSoon();
+  historyChanged();
 }
 
 export function copyHistory(from, to) {
@@ -761,7 +764,7 @@ export function copyHistory(from, to) {
           delete historyLocal[historyLocalKey(old.docId, old.meta.id)];
         }
       }
-      historyRenderSoon();
+      historyChanged();
       return { ok: !!r.ok, copied: (r.copied || 0) + extra, code: r.code };
     });
   }, function () { return { ok: false, copied: 0, code: "io" }; }).then(function (r) {
@@ -1151,7 +1154,7 @@ export async function importHistoryBundle(bundle) {
     if (window.console) console.error(e);
     if (!result.code) result.code = "io";
   }
-  historyRenderSoon();
+  historyChanged();
   return result;
 }
 
@@ -1236,7 +1239,7 @@ function runHistoryMigration() {
           if (!confirmed) return result;
           if (historyLegacyRaw() !== raw) return loop();
           if (legacySnapshots().remove()) result.removedKey = true;
-          historyRenderSoon();
+          historyChanged();
           return result;
         });
       });
