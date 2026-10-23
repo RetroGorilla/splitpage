@@ -24,7 +24,7 @@ import { inertBody, plainText, safeId, sanitizeHtml } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
 import { editableCellHtml } from "./05-render.js";
 import { resetDraftHistory } from "./05d-draft-edit.js";
-import { personColor } from "./13a-presence.js";
+import { presence } from "../legacy/presence-bridge.ts";
 import { autoSavePolicy, resumeAutoSave } from "../legacy/save-bridge.ts";
 import { commentBodyText, commentEntries, formatTimestampAbsolute } from "../adapters/formats/export-projections.ts";
 import { makeId, nowIso } from "../adapters/identity/ids.ts";
@@ -423,7 +423,7 @@ function commentThreadNumbers() {
 
 function commentAvatarHtml(name) {
   var first = Array.from(String(name || "").trim())[0] || "?";
-  return '<span class="person-avatar comment-avatar" style="--size:28px;--presence:' + personColor(name) +
+  return '<span class="person-avatar comment-avatar" style="--size:28px;--presence:' + presence().personColor(name) +
     '" aria-hidden="true">' + escapeHtml(first.toUpperCase()) + '</span>';
 }
 

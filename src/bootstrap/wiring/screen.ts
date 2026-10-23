@@ -2,7 +2,7 @@ import { onRefresh, onSessionChange, onStamped } from "../../legacy/session-brid
 import { documentLocation } from "../../legacy/location-bridge.ts";
 import { onPreferenceChange, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
-import { onPresenceRecolor } from "../../js/13a-presence.js";
+import { presence } from "../../legacy/presence-bridge.ts";
 import { screenListeners } from "../../js/05-render.js";
 
 let stopScreen: (() => void) | null = null;
@@ -19,7 +19,7 @@ export function mountScreenFeature(): void {
     onRefresh(screen.refresh),
     onStamped(screen.stamped),
     shotHiding().onHiding(screen.hiding),
-    onPresenceRecolor(screen.colours),
+    presence().onRecolor(screen.colours),
     documentLocation().onChange(screen.location),
     viewFlags().onChange(screen.flag)
   ];
