@@ -14,7 +14,7 @@ The per-file detail (every import, importer and bridge name) is in [feature-port
 - So the common connections get built once, as **shared ports**, and every move uses them. A move then only has to design the connections that are really its own.
 - Not every numbered file is a feature. 16 files (the 15 in Wave 4, and `12a-undo`) are wholly or partly owners or adapters in the wrong folder: document identity, version history, sync and merge, undo, the server client, saving, opening files, file formats, the desktop glue and drafts. Those parts go to `src/application/` or `src/adapters/`, not `src/features/`.
 - Order: Wave 0 is the two moves in flight, reworked onto the first shared ports. Waves 1 and 2 are files outside the loop. Wave 3 waits for L3f to L3h to empty the loop. Wave 4 is the owners and adapters.
-- Who: 20 files (9,530 lines) are Codex-safe and 35 (20,316 lines) need Opus. `03b-side-panels` (122 lines) is deleted by L3f.
+- Who: 19 files (9,436 lines) are Codex-safe and 36 (20,410 lines) need Opus. `03b-side-panels` (122 lines) is deleted by L3f.
 
 ## Words used here
 
@@ -139,39 +139,40 @@ A quick test: if feature B is about to call `a.something()`, then A does somethi
 
 ### Rule 8. What a move PR contains
 
-1. `git mv` of the file to its destination, kept as JavaScript (with its path added to the browser-globals list in `eslint.config.mjs`). Converting it to TypeScript is a separate PR.
-2. `ports.ts` built per [Rule 2](#rule-2-a-port-is-built-from-shared-ports-owner-types-and-the-features-own-needs), using shared ports that exist, or adding the ones it is the first user of ([catalog](#the-shared-ports)).
-3. The wiring module, the `_entry.js` slot and the action definitions per Rules 4 and 6.
-4. Every numbered importer switched per [Rule 5](#rule-5-features-reach-each-other-four-ways), or listed as moving into the same feature next.
-5. `tests/features/<name>/mount.test.ts`, plus fakes for any new shared port.
-6. `tools/dep-baseline.json`: the file's `legacy-file`, `loop-import` and `cycle-edge` entries pruned; nothing added.
-7. The "Structure" section: which responsibility moves where, which bridges and numbered files the moved code no longer imports, and the `--legacy-metrics` figures before and after.
-8. Gates: lint, types, `check:deps`, `check:comments` and the file's tests; one perf-ab run if the file is on the typing path (Adam's lighter rule of 2026-10-23); the desktop smoke if it calls the desktop port.
+1. Before the move, in its own PR: if other areas read state the file holds, that state moves to an owner (Rule 5). A move PR doesn't create owners.
+2. `git mv` of the file to its destination, kept as JavaScript (with its path added to the browser-globals list in `eslint.config.mjs`). Converting it to TypeScript is a separate PR.
+3. `ports.ts` built per [Rule 2](#rule-2-a-port-is-built-from-shared-ports-owner-types-and-the-features-own-needs), using shared ports that exist, or adding the ones it is the first user of ([catalog](#the-shared-ports)).
+4. The wiring module, the `_entry.js` slot and the action definitions per Rules 4 and 6.
+5. Every numbered importer switched per [Rule 5](#rule-5-features-reach-each-other-four-ways), or listed as moving into the same feature next.
+6. `tests/features/<name>/mount.test.ts`, plus fakes for any new shared port.
+7. `tools/dep-baseline.json`: the file's `legacy-file`, `loop-import` and `cycle-edge` entries pruned; nothing added.
+8. The "Structure" section: which responsibility moves where, which bridges and numbered files the moved code no longer imports, and the `--legacy-metrics` figures before and after.
+9. Gates: lint, types, `check:deps`, `check:comments` and the file's tests; one perf-ab run if the file is on the typing path (Adam's lighter rule of 2026-10-23); the desktop smoke if it calls the desktop port.
 
-**Opus or Codex.** A move is Opus when the moved code *does* one of: run on the typing path, record or replay undo, save, recover or keep drafts, bring a document in (open, import, paste, merge, server, starters), talk to the preload bridge, or handle close and quit. A move is Codex-safe when the code only *calls* those through an existing port, unchanged. The PR lists each such call so the reviewer, who is Opus anyway, can check it.
+**Opus or Codex.** A move is Opus when the moved code *does* one of: run on the typing path, record or replay undo, save, recover or keep drafts, bring a document in (open, import, paste, merge, server, starters), talk to the preload bridge, or handle close and quit. A move is Codex-safe when the code only *calls* those through a port that has already landed, unchanged. The PR lists each such call so the reviewer, who is Opus anyway, can check it.
 
 ## The shared ports
 
-Each is built in `sharedPorts()` from the owners and, until they retire, the bridges. Each lands with the first move that needs it, not on its own, because a port nobody uses yet moves no responsibility. "Files" counts the numbered files that import the bridge names it replaces.
+Each is built in `sharedPorts()` from the owners and, until they retire, the bridges. Each lands with the first move that needs it, not on its own, because a port nobody uses yet moves no responsibility. A port marked Opus lands in an Opus PR: with the first Opus move that needs it, or, when Codex moves need it first, in its own Opus PR before them. A Codex move only uses an Opus port after it has landed. "Files" counts the numbered files that import the bridge names it replaces.
 
 | Port | Type and where it lives | What a feature gets | Built from | Files | Lands with | Who |
 | --- | --- | --- | --- | --- | --- | --- |
 | P1 Document reader | `DocumentReader`, new, `application/session/document-reader.ts` | `current()`, `read(select)`, `onChange(listener)`, `onReplaced(listener)`, `onRefresh(listener)` | session bridge: `currentDocument` (which returns the document guard's read-only view when the guard is on), `readSession`, `onSessionChange`, `onDocumentReplaced`, `onRefresh` | 40 | rundown | Opus: it is how 40 files will read the document, and it must keep the guard's view |
 | P2 Notices, menu items, clipboard | `NoticePort`, `MenuItemPort`, `ClipboardPort`, which exist in `application/effects/ports.ts` | as they are | effects bridge | 29 | help | Codex |
-| P3 Preferences | `Preferences` and `ViewFlags`, which exist, narrowed with `Pick`; plus `PreferenceChanges`, new beside them: `onChange(listener)` with `{ name, value, elsewhere }`, where `elsewhere` is true when another window made the change | | preferences bridge. The `splitpage:pref` and `storage` listeners move into the port; each subscription adds the same two listeners the feature added before, so order and timing don't change | 28 | script zoom | Codex |
+| P3 Preferences | `Preferences` and `ViewFlags`, which exist, narrowed with `Pick`; plus `PreferenceChanges`, new beside them: `onChange(listener)` with `{ name, value, elsewhere }`, where `elsewhere` is true when another window made the change | | preferences bridge. The `splitpage:pref` and `storage` listeners move into the port; each subscription adds the same two listeners the feature added before, so order and timing don't change | 28 | script zoom | Codex, with Opus review and three gates, because this is cross-window input over stored settings: browser suite `133-clock-format` (it changes the clock by sending a raw `splitpage:pref` event), `src/test/preferences-callers.test.mjs`, and a new test that one raw `splitpage:pref` event and one `storage` event each reach a `PreferenceChanges` subscriber exactly once |
 | P4 Actions | `Pick<ActionRegistry, "invoke" \| "view">`, which exists | | `appActions` | 11 | script zoom | Codex |
 | P5 Review | `ReviewFacts`, new, `application/collaboration/review.ts`: `reviewing()`, `refuseInReview()` (shows the viewing-only notice and returns true, as `reviewBlocked` does). `VIEWING_ONLY` moves there from `legacy/review-wording.ts` | | location bridge | 19 | rundown | Codex |
 | P6 Screen | `ScreenState` and its pure rules (`availableUnless`, `inFront`, `everyOverlayBut`, `firstRefusal`, `EVERY_OVERLAY`) move from `legacy/screen.ts` to `application/screen.ts`; the port is `screen(): ScreenState` | | `screenNow()` (`legacy/screen-state.ts`), which the wiring assembles | 5 legacy action files, the native menu and the command menu, and script zoom | script zoom | Codex |
 | P7 Ids and clock | `IdSource` and `Clock`, which exist in `core/document/ports.ts` | | `adapters/identity/ids.ts` | 17 | first user | Codex |
-| P8 Text services | `TextServices`, which generalises `ExportServices` (`application/export/services.ts`) into `application/text/services.ts`: `cellOf`, `scriptCellOf`, `fromHtml`, `inertBody`, `sanitize`, `storedHtmlFromDom`, `imageRefOf`, `htmlToPlainText`, `videoCard`, `productionReaders`, `cacheSeal`. `ExportServices` becomes a `Pick` of it | | richtext, plain-text, document-ports and cache-freeze bridges. The same objects as today, so caches and the frozen-cache run behave as before, as in L4b | 24 | rundown | Opus: cell decoding runs on the typing path |
+| P8 Text services | `TextServices`, which generalises `ExportServices` (`application/export/services.ts`) into `application/text/services.ts`: `cellOf`, `scriptCellOf`, `fromHtml`, `inertBody`, `sanitize`, `storedHtmlFromDom`, `imageRefOf`, `htmlToMarkdown`, `htmlToPlainText`, `videoCard`, `productionReaders`, `cacheSeal`. `ExportServices` becomes a `Pick` of it | | richtext, plain-text, document-ports and cache-freeze bridges. The same objects as today, so caches and the frozen-cache run behave as before, as in L4b | 24 | rundown | Opus: cell decoding runs on the typing path |
 | P9 Document edits | `DocumentEdits`, new, `application/session/document-edits.ts`: `run(command)`, `edit(command)` (throws on failure, as `runDocumentEdit` does), `allowed()`, `stamps`, `text` | | session bridge: `runCommand`, `runDocumentEdit`, `editAllowed`, `sessionStamps`, `sessionTextPorts`, `REVIEW_ONLY` | 17 | read time | Opus: edits and undo |
 | P10 Editing page | The owner types that exist in `application/editing/`: `CellEditing`, `PaintGuard`, `EditorSelection`, `RowDrag` (gains `onEnd`), `FocusMemory`, `DeleteConfirmation` | narrowed | editor and production-editing bridges | 18 | rundown | Opus: the editing hot path |
 | P11 Undo control | `UndoControl`, new, `application/editing/undo-control.ts`: `breakCoalescing()`, `flush()`, `undo()`, `redo()`, `last()` | | `12a-undo` until it becomes the undo owner (Wave 2) | 13 | read time | Opus: undo |
-| P12 Operation ownership | `SaveOwnershipPort` (`capture`, `stillOwns`), which exists in `application/save/coordinator.ts`: whether an async job still owns the document it started on | | transition bridge | 8 | gallery | Opus: async work against a replaced document |
-| P13 Picture store | `PictureStore`, new, `application/media/picture-store.ts`: intern, persist, read and render stored pictures | | `adapters/storage/02c-blobs.js`, `02d-gallery.js` | 16 | gallery | Opus: durable storage |
+| P12 Operation ownership | `SaveOwnershipPort` (`capture`, `stillOwns`), which exists in `application/save/coordinator.ts`: whether an async job still owns the document it started on | | transition bridge | 8 | gallery (`05e`) | Opus: async work against a replaced document |
+| P13 Picture store | `PictureStore`, new, `application/media/picture-store.ts`: intern, persist, read and render stored pictures | | `adapters/storage/02c-blobs.js`, `02d-gallery.js` | 16 | gallery (`05e`) | Opus: durable storage |
 | P14 Side panels | `SidePanels`, from L3f (`application/side-panels.ts`) | | panels bridge | 6 | help | done in L3f |
-| P15 Save status | `SaveStatus`, new, `application/save/`: `unsaved()`, `busy()`, `onChange(listener)`, `dueNow()` | read only, plus "save now" for review mode | save bridge | 16 | comments | Opus |
-| P16 Document place | `DocumentPlace`, new, `application/location/`: where the document lives and the server's status, read only | | location bridge | 30 | collaboration | Opus |
+| P15 Save status | `SaveStatus`, new, `application/save/`: `unsaved()`, `busy()`, `onChange(listener)`, `dueNow()` | read only, plus "autosave now" and "resume autosave" | save bridge | 16 | copy, paste and scene selection (`05h` asks for an autosave now) | Opus |
+| P16 Document place | `DocumentPlace`, new, `application/location/`: where the document lives and the server's status, read only | | location bridge | 30 | its own PR at the start of Wave 3, since the first Wave 3 users (`13a`, `13b`, `20b`) are Codex | Opus |
 
 The pure page helpers move once, with their first user:
 
@@ -195,19 +196,20 @@ A **move** is a group of numbered files that become one feature folder (or one o
 | 1 | Read time | `05r` | 155 | 3 | 0 | 5 | `features/rows` | Opus; lands P9 and P11 |
 | 1 | Find and replace | `09` | 518 | 5 | 3 | 5 | `features/find` | Codex |
 | 2 | Undo | `12a` | 981 | 1 | 16 | 2 | history and recording to `application/editing/undo`, caret and focus to `features/undo` | Opus |
-| 2 | Gallery | `05e`, `05w`, `05v` | 1,672 | 11 | 0 | 6 | `features/gallery` | Opus (`05w` alone is Codex); lands P12 and P13 |
-| 2 | Copy, paste and scene selection | `05c`, `05g`, `05h`, and `04c` deleted | 1,380 | 15 | 1 | 8 | `features/clipboard` | Opus |
+| 2 | Gallery | `05e`, `05w`, `05v` | 1,672 | 11 | 0 | 6 | `features/gallery` | Opus (`05w` alone is Codex, after `05e`); `05e` lands P12 and P13 |
+| 2 | Copy, paste and scene selection | `05c`, `05g`, `05h`, and `04c` deleted | 1,380 | 15 | 1 | 8 | `features/clipboard` | Opus; `05h` lands P15 |
 | 2 | B-roll records | `08c` | 282 | 5 | 7 | 6 | `features/broll`; the records reconciler to `application/production` | Opus |
-| 2 | Rows, without the render | `06`, `01`, `01b` | 687 | 6 | 14 | 8 | `features/rows` | `06` Opus, `01` and `01b` Codex |
+| 2 | Rows, without the render | `06`, `01`, `01b` | 687 | 6 | 14 | 8 | `features/rows` | `01b`'s shot-hiding state goes to an owner in its own PR first; then `06` Opus, `01` and `01b` Codex |
+| 3 | Document place port (P16) | none | | | | | `application/location/` | Opus, its own PR before the moves below that read where the document lives |
 | 3 | The render | `05-render` | 1,286 | 20 | 7 | 8 | `features/rows` | Opus, perf-ab; after L3g |
 | 3 | Tags | `07`, `07b`, `08` | 2,029 | 11 | 19 | 10 | `features/tags` | `07` and `07b` Opus (perf-ab), `08` Codex |
 | 3 | B-roll panel | `08d` | 1,360 | 14 | 4 | 6 | `features/broll` | Codex |
-| 3 | Comments | `10` | 1,036 | 12 | 8 | 8 | `features/comments` | Codex; lands P15 |
+| 3 | Comments | `10` | 1,036 | 12 | 8 | 8 | `features/comments` | Codex; uses P15 |
 | 3 | Writer | `19` | 383 | 21 | 3 | 7 | `features/writer` | Opus, perf-ab |
 | 3 | Prompter | `20` | 1,061 | 16 | 4 | 9 | `features/prompter` | Opus |
 | 3 | File menu and export dialog | `18b`, `18c` | 1,080 | 15 | 17 | 9 | `features/file-menu` | `18b` Opus, `18c` Codex |
 | 3 | Command menu | `18d` | 337 | 9 | 3 | 4 | `features/command-menu` | Codex |
-| 3 | Collaboration | `13a`, `13b`, `20e` | 1,760 | 23 | 19 | 8 | `features/collaboration` | `13a` and `13b` Codex, `20e` Opus; lands P16 |
+| 3 | Collaboration | `13a`, `13b`, `20e` | 1,760 | 23 | 19 | 8 | `features/collaboration` | `13a`'s presence state goes to an owner in its own PR first; then `13a` and `13b` Codex, `20e` Opus |
 | 3 | Update notices | `20a` | 384 | 1 | 5 | 1 | `features/update` | Codex, desktop smoke |
 | 3 | Onboarding | `20b` | 337 | 6 | 1 | 7 | `features/onboarding` | Codex |
 | 3 | New tab | `20j` | 379 | 13 | 1 | 12 | `features/newtab` | Opus |
@@ -218,7 +220,7 @@ A **move** is a group of numbered files that become one feature folder (or one o
 | 4 | Import | `11` | 574 | 5 | 6 | 5 | `features/imports` dialog, `adapters/formats` | Opus; after L3h PR 3 |
 | 4 | Save status | `12-dirty-toast` | 182 | 4 | 2 | 4 | `application/save` (session effects), `features/title` (status) | Opus |
 | 4 | Server | `13` | 2,522 | 26 | 27 | 9 | `adapters/transport`, `application/collaboration`, `features/server` | Opus |
-| 4 | Saving and files | `14`, `14b`, `18`, `20d` | 1,383 | 36 | 15 | 12 | `application/save`, `adapters/files`, `adapters/formats` | Opus (`14b` Codex); after L3h PRs 3 and 4 |
+| 4 | Saving and files | `14`, `14b`, `18`, `20d` | 1,383 | 36 | 15 | 12 | `application/save`, `adapters/files`, `adapters/formats` | Opus; after L3h PRs 3 and 4 |
 | 4 | Desktop | `20f` | 1,009 | 9 | 12 | 5 | `adapters/desktop`, desktop UI to a feature | Opus, desktop smoke |
 | 4 | Drafts | `20g` | 1,011 | 9 | 4 | 6 | `application/recovery`, `adapters/storage` | Opus |
 | 4 | Last | `04-richtext` deleted; the `_entry.js` list becomes a wiring step | 36 | 0 | 9 | 1 | | Codex |
@@ -239,7 +241,7 @@ Why this order:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `00-prelude` | 61 | | 0 | 0 | 6 | `bootstrap/startup`, `adapters/files`, identity owner | 4 | Opus | Close (unload warning), stored file handles, desktop attach |
 | `01-scene-status` | 114 | | 4 | 2 | 1 | `features/rows` | 2 | Codex | Runs one command through P9; tells the rundown its extra seconds through a callback |
-| `01b-hide-shot` | 125 | | 3 | 0 | 10 | `features/rows`, with its state in a shot-hiding owner | 2 | Codex | 9 numbered importers; `revealRow` is already the `reveal-row` action by then |
+| `01b-hide-shot` | 125 | | 3 | 0 | 10 | `features/rows` | 2 | Codex | Its expanded strips and grace timers move to a shot-hiding owner in `src/application/` in their own PR first (Rule 5). 9 numbered importers; `revealRow` is already the `reveal-row` action by then |
 | `02-state` | 48 | | 1 | 1 | 13 | deleted: importers use `src/core/`, P7 and the document entry | 4 | Opus | `migrateRows` is the document entry |
 | `02b-doc-id` | 234 | yes | 6 | 3 | 10 | `application/` identity owner, adapters | 4 | Opus | State ingress |
 | `03-sync` | 781 | yes | 9 | 9 | 17 | `application/session` merge, `features/merge`, `features/history` | 4 | Opus | Merge |
@@ -267,15 +269,15 @@ Why this order:
 | `08c-broll` | 282 | | 6 | 2 | 4 | `features/broll`, reconciler to `application/production` | 2 | Opus | The session's records reconciler; captures b-roll while typing |
 | `08d-broll-panel` | 1,360 | yes | 6 | 9 | 4 | `features/broll` | 3 | Codex | Panel; commands only |
 | `09-find-replace` | 518 | | 5 | 3 | 3 | `features/find` | 1 | Codex | Replace runs through P9 and P11, unchanged |
-| `10-comments` | 1,036 | yes | 8 | 6 | 10 | `features/comments` | 3 | Codex | Asks the save port to save now in review mode |
+| `10-comments` | 1,036 | yes | 8 | 6 | 10 | `features/comments` | 3 | Codex | Resumes autosave in review mode and asks for an autosave now, through P15 |
 | `11-import` | 574 | yes | 5 | 3 | 4 | `features/imports`, `adapters/formats` | 4 | Opus | State ingress |
 | `12-dirty-toast` | 182 | yes | 4 | 4 | 6 | `application/save`, `features/title` | 4 | Opus | Save |
 | `12a-undo` | 981 | | 2 | 1 | 14 | `application/editing/undo`, `features/undo` | 2 | Opus | Undo |
 | `13-hosted` | 2,522 | yes | 9 | 11 | 15 | `adapters/transport`, `application/collaboration`, `features/server` | 4 | Opus | Server ingress and saving |
-| `13a-presence` | 343 | yes | 4 | 3 | 7 | `features/collaboration`, presence owner | 3 | Codex | |
+| `13a-presence` | 343 | yes | 4 | 3 | 7 | `features/collaboration` | 3 | Codex | Who is here, where they are and their colours move to a presence owner in `src/application/` in their own PR first (Rule 5) |
 | `13b-collaborate` | 906 | yes | 5 | 4 | 3 | `features/collaboration` | 3 | Codex | Publishes through the server's port, unchanged |
 | `14-export` | 332 | yes | 7 | 6 | 2 | `application/save`, `adapters/files` | 4 | Opus | Save |
-| `14b-export-kit` | 94 | | 2 | 1 | 4 | `application/save/capture`, `adapters/formats` | 4 | Codex | Read-only capture |
+| `14b-export-kit` | 94 | | 2 | 1 | 4 | `application/save/capture`, `adapters/formats` | 4 | Opus | The save capture: it serializes the document for saving and export |
 | `18-local-files` | 694 | yes | 10 | 14 | 14 | `adapters/files`, `application/transitions`, `features/file-menu` | 4 | Opus | Opening and saving files |
 | `18a-local-merge` | 386 | yes | 4 | 4 | 1 | `features/merge`, `src/core/merge` | 4 | Opus | Merge |
 | `18b-file-menu` | 430 | yes | 7 | 7 | 9 | `features/file-menu` | 3 | Opus | Builds the new-script and demo documents |
