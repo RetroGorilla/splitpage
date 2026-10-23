@@ -22,7 +22,7 @@ import {
 } from "./07-production-tags.js";
 import { formatTimestamp } from "./10-comments.js";
 import { appActions } from "../legacy/app-actions.ts";
-import { personColor } from "./13a-presence.js";
+import { presence } from "../legacy/presence-bridge.ts";
 import { videoHostLabel } from "../adapters/formats/video-host.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
@@ -175,7 +175,7 @@ function rowGutterHtml(row, index, review) {
       '<div class="row-controls">' + controls + '</div>' +
       (row.updatedBy
         ? '<div class="row-meta" title="Last edited by ' + escapeHtml(row.updatedBy) + '">' +
-            '<span class="row-meta-who"><span class="person-dot" style="--person:' + personColor(row.updatedBy) +
+            '<span class="row-meta-who"><span class="person-dot" style="--person:' + presence().personColor(row.updatedBy) +
               '" aria-hidden="true"></span>' + escapeHtml(String(row.updatedBy).split(/\s+/)[0]) + '</span><br>' +
             formatTimestamp(row.updatedAt) + '</div>'
         : '') +

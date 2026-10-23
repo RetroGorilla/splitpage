@@ -2,6 +2,7 @@ import type { ActionRegistry } from "../../application/actions.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
+import type { SaveState } from "../../application/save/save-state.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
@@ -17,6 +18,7 @@ import {
 } from "../../legacy/location-bridge.ts";
 import { htmlToPlainText } from "../../legacy/plain-text.ts";
 import { PREF_EVENT, preferences } from "../../legacy/preferences-bridge.ts";
+import { autoSavePolicy, onSaveChange, resumeAutoSave, saveBusy, unsavedChanges } from "../../legacy/save-bridge.ts";
 import { productionIndex } from "../../legacy/production-index-bridge.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
@@ -93,6 +95,14 @@ const text: TextServices<HTMLElement> = {
   cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal
 };
 
+const saves: SaveState = {
+  unsaved: () => unsavedChanges(),
+  busy: () => saveBusy(),
+  onChange: (listener) => onSaveChange(listener),
+  dueNow: () => { autoSavePolicy().dueNow(); },
+  resume: () => { resumeAutoSave(); }
+};
+
 const production: ProductionIndexOwner = {
   entries: (doc) => productionIndex().entries(doc),
   current: (doc) => productionIndex().current(doc),
@@ -110,6 +120,7 @@ const shared = {
   place,
   review,
   text,
+  saves,
   production
 };
 
