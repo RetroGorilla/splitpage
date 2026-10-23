@@ -1,5 +1,5 @@
 import { productionReaders } from "../legacy/document-ports.ts";
-import { armShotHideGrace, clearShotHideGrace } from "./01b-hide-shot.js";
+import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { setRundownExtraSeconds } from "./05f-rundown.js";
 import { sceneStatus, sceneStatusCommand, shotGrace } from "../application/commands/scene-status.ts";
 import { REVIEW_ONLY, currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
@@ -105,8 +105,8 @@ export function cycleRowStatus(rowId) {
   if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
   if (viewFlags().hideShot()) {
     var grace = shotGrace(before, readSession(sceneStatus(rowId)));
-    if (grace === "arm") armShotHideGrace(rowId);
-    else if (grace === "clear") clearShotHideGrace(rowId);
+    if (grace === "arm") shotHiding().armGrace(rowId);
+    else if (grace === "clear") shotHiding().clearGrace(rowId);
   }
 }
 

@@ -5,13 +5,13 @@ import { nextTagStatus, normalizeTagName } from "../core/document/tags.ts";
 import { formatDuration, pad2, rowSeconds } from "../core/production/timing.ts";
 import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, groupTagsByCategory, tagStatus } from "../core/production/looks.ts";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
-import { revealRow } from "./01b-hide-shot.js";
+import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { plainText, safeId } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
 import { tagStatusLampHtml } from "./07-production-tags.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
-import { personColor } from "./13a-presence.js";
+import { presence } from "../legacy/presence-bridge.ts";
 import { breakdownRows, breakdownTable } from "../adapters/formats/export-projections.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
@@ -221,7 +221,7 @@ function mentionLinksHtml(item) {
 
 function personAvatarHtml(name) {
   var initial = Array.from(String(name || "").trim())[0] || "?";
-  return '<span class="person-avatar" style="--presence:' + personColor(name) + '" aria-hidden="true">' +
+  return '<span class="person-avatar" style="--presence:' + presence().personColor(name) + '" aria-hidden="true">' +
     escapeHtml(initial.toUpperCase()) + '</span>';
 }
 
@@ -683,7 +683,7 @@ function findTagByKey(key) {
 }
 
 export function jumpToTag(rowId, key) {
-  revealRow(rowId);
+  shotHiding().reveal(rowId);
   var row = document.querySelector('#rows .row[data-id="' + safeId(rowId, "r") + '"]');
   if (!row) { showToast("That scene is no longer here.", "warn"); return; }
   row.scrollIntoView({ behavior: "smooth", block: "center" });
