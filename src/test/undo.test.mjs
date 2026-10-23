@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { applyStepsLive, caretAfterStep, changedBetween, createUndoHistory, diffStates } from "../js/12a-undo.js";
-import { invertSteps } from "../js/04c-doc-model.js";
+import { invertSteps } from "../core/text/steps.ts";
 import { PROTOTYPE_IDS } from "../core/document/id-map.ts";
 
 const row = (id, audio, extra) => Object.assign({ id, status: "todo", visualText: "", audioText: audio || "" }, extra);

@@ -1,6 +1,6 @@
 # Splitting and joining scenes through the document model (#85, design
 # §3.2; splitRowFieldCore in 06-rows.js, mergeWriterRows in 19-writer.js,
-# syncCommentAnchors in 04c-doc-model.js).
+# syncCommentAnchors in src/core/text).
 #
 #   * a split through the middle of a commented phrase leaves the comment
 #     marked in both halves, and its card points at the first;
