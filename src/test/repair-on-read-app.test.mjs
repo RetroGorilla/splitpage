@@ -12,7 +12,9 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { render } = await import("../js/05-render.js");
-const { productionEntries, updateTagBadges } = await import("../js/07-production-tags.js");
+const { updateTagBadges } = await import("../js/07-production-tags.js");
+const { productionIndex } = await import("../legacy/production-index-bridge.ts");
+const { currentDocument } = await import("../legacy/session-bridge.ts");
 const { openProductionPanel, closeProductionPanel, renderProduction, setTagNotes, setTagStatus } = await import("../js/08-production-panels.js");
 const { anchorBrollInLeftCell, brollEntries, runBrollRefresh, updateBrollBadge } = await import("../js/08c-broll.js");
 const { openBrollPanel, closeBrollPanel, renderBroll } = await import("../js/08d-broll-panel.js");
@@ -96,7 +98,7 @@ test("6.5: render, the idle refreshes, the panels, the badges and the export kit
       "b-roll badge": () => updateBrollBadge(),
       "b-roll panel": () => { openBrollPanel(); renderBroll(); closeBrollPanel(); },
       "b-roll entries": () => brollEntries(),
-      "production entries": () => productionEntries(),
+      "production entries": () => productionIndex().entries(currentDocument()),
       "export kit": () => buildSplitpageFile(exportDocumentOf(S.state))
     };
     for (const [where, read] of Object.entries(reads)) {
@@ -104,7 +106,7 @@ test("6.5: render, the idle refreshes, the panels, the badges and the export kit
       assertUntouched(before, seen, where);
     }
     assert.deepEqual(brollEntries().map((e) => e.name), ["Steam", "Hands"]);
-    assert.ok(productionEntries().some((e) => e.key === "prop mug" && e.id === null), "the read shows the unregistered tag as it is");
+    assert.ok(productionIndex().entries(currentDocument()).some((e) => e.key === "prop mug" && e.id === null), "the read shows the unregistered tag as it is");
   } finally {
     stop();
   }

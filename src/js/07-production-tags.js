@@ -1,7 +1,6 @@
 import { domToPos } from "../features/editing/cell-dom.ts";
 import { updateScriptStats } from "./01-scene-status.js";
 import { rowIndexOf } from "../core/document/rows.ts";
-import { stampRow } from "./03-sync.js";
 import {
   inertBody,
   safeId,
@@ -19,34 +18,28 @@ import { contentMemo } from "../core/document/memo.ts";
 import {
   ensureTagIds,
   isTagId,
-  registryKey,
   tagKey,
   tagStatusRank
 } from "../core/document/tags.ts";
 import { cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
-import { TAG_CATEGORIES, TAG_STATUSES, groupTagsByCategory, tagCategory, tagStatus } from "../core/production/looks.ts";
+import { TAG_CATEGORIES, TAG_STATUSES, tagCategory, tagStatus } from "../core/production/looks.ts";
+import { productionIndex } from "../legacy/production-index-bridge.ts";
 import {
   bulkTagCell as bulkTagCellWith,
   collectTagsFromRows as collectTagGroups,
-  deriveProductionIndex,
   isBlankTagName,
   missingRegistryTags as missingRegistryTagsIn,
-  planRegistryHealing,
-  refreshedProductionIndex,
-  registrySignature,
   tagFieldOccurrences as tagFieldOccurrencesWith,
   tagOccurrences
 } from "../core/production/tags.ts";
 import { replaceWithTag } from "../core/text/edits.ts";
 import { namedTagId, projection } from "../core/text/runs.ts";
-import { cacheSeal } from "../legacy/cache-freeze.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { currentDocument, readSession, requestRefresh, runDocumentEdit, sessionStamps, stampDocument } from "../legacy/session-bridge.ts";
-import { retagMentions, retagRewrites } from "../legacy/tag-rewrites.ts";
 import { changeSet } from "../application/session/change-set.ts";
-import { addPersonCommand, registerTagCommand, retagCommand, tagCellsCommand } from "../application/commands/production-records.ts";
-import { personById as personByIdIn, personNamed, registryEntryById as registryEntryByIdIn, registryEntryOf } from "../core/production/records.ts";
+import { addPersonCommand, registerTagCommand, tagCellsCommand } from "../application/commands/production-records.ts";
+import { personNamed, registryEntryById as registryEntryByIdIn } from "../core/production/records.ts";
 import { cellEditing, focusMemory } from "../legacy/editor-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
@@ -60,6 +53,7 @@ export {
 };
 
 var TAG_SHORTCUT_CHARS;
+
 
 export function tagIconSvg(cat) {
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2.2" ' +
@@ -107,10 +101,6 @@ export function collectTagsFromRows(rows) {
   });
 }
 
-export function registryEntry(cat, name) {
-  return readSession(function (doc) { return registryEntryOf(doc, cat, name); });
-}
-
 export function registerProductionTag(cat, name) {
   return runDocumentEdit(registerTagCommand({ cat: cat, name: String(name == null ? "" : name) }));
 }
@@ -119,95 +109,23 @@ export function registryEntryById(id) {
   return readSession(function (doc) { return registryEntryByIdIn(doc, id); });
 }
 
-export function personById(id) {
-  return readSession(function (doc) { return personByIdIn(doc, id); });
-}
-
 export function findOrAddPerson(name) {
   runDocumentEdit(addPersonCommand(name, randomIds));
   var person = readSession(function (doc) { return personNamed(doc, name); });
   return person ? person.id : "";
 }
 
-var prodIndex = null;
-var prodIndexDerived = 0;
 
-function presentEntry(e) {
-  return {
-    key: e.key,
-    id: e.id,
-    cat: tagCategory(e.catId),
-    name: e.name,
-    mentions: e.mentions,
-    orphaned: e.orphaned,
-    owner: e.owner,
-    notes: e.notes,
-    status: e.status
-  };
+function productionEntries() {
+  return productionIndex().entries(currentDocument());
 }
 
-function holdIndex(core, entries, state) {
-  prodIndex = { core: cacheSeal(core), entries: cacheSeal(entries), state: state };
-  return prodIndex;
+function currentProductionIndex() {
+  return productionIndex().current(currentDocument());
 }
 
-function productionIndex() {
-  const doc = currentDocument();
-  if (!doc) return { core: null, entries: [] };
-  const kept = prodIndex && prodIndex.state === doc ? refreshedProductionIndex(prodIndex.core, doc, productionReaders) : null;
-  if (kept && kept === prodIndex.core) return prodIndex;
-  if (kept) return holdIndex(kept, prodIndex.entries, prodIndex.state);
-  prodIndexDerived++;
-  const core = deriveProductionIndex(doc, productionReaders);
-  return holdIndex(core, core.entries.map(presentEntry), doc);
-}
-
-export function productionEntries() {
-  return productionIndex().entries.slice();
-}
-
-export function currentProductionIndex() {
-  return productionIndex().core;
-}
-
-function adoptRegisteredIds(ix, doc) {
-  var ids = Object.create(null), left = Object.create(null);
-  ix.core.unregistered.forEach(function (t) {
-    var key = registryKey(t.catId, t.name);
-    var reg = registryEntryOf(doc, t.catId, t.name);
-    if (reg) ids[key] = reg.id;
-    else left[key] = true;
-  });
-  function withId(e) {
-    return e.key in ids ? Object.assign({}, e, { id: ids[e.key] }) : e;
-  }
-  function registeredFirst(entries) {
-    var stay = [], after = [];
-    entries.forEach(function (e) { (e.key in left ? after : stay).push(withId(e)); });
-    return stay.concat(after);
-  }
-  var core = Object.assign({}, ix.core, {
-    entries: registeredFirst(ix.core.entries),
-    unregistered: ix.core.unregistered.filter(function (t) { return registryKey(t.catId, t.name) in left; }),
-    tagSig: registrySignature(doc.productionTags)
-  });
-  holdIndex(core, registeredFirst(ix.entries), ix.state);
-}
-
-export function tagRecordsPlan(doc) {
-  if (!doc) return null;
-  var ix = productionIndex();
-  var plan = planRegistryHealing(doc, productionReaders, cueSnapshot, ix.core);
-  return {
-    apply: plan.count ? function (into) {
-      plan.retitle.forEach(function (r) { into.productionTags[r.at].name = r.name; });
-      plan.register.forEach(function (t) { into.productionTags.push(t); });
-      adoptRegisteredIds(ix, into);
-      if (plan.retitle.length) prodIndex = null;
-      return plan.count;
-    } : null,
-    commit: function () { cueSnapshot = plan.cues; }
-  };
+function tagRecordsPlan(doc) {
+  return productionIndex().recordsPlan(doc, currentDocument());
 }
 
 const REGISTRY_CHANGE = changeSet({ docFields: ["productionTags"] });
@@ -230,23 +148,17 @@ export function healTagRegistry() {
   return count;
 }
 
-var cueSnapshot = null;
-
 export function missingRegistryTags(rows, registry) {
   return missingRegistryTagsIn(rows, registry, productionReaders);
 }
 
 export function productionIndexStats() {
-  return { derived: prodIndexDerived, flushes: idleFlushes };
+  return { derived: productionIndex().derived(), flushes: idleFlushes };
 }
 
 export function resetProductionIndexStats() {
-  prodIndexDerived = 0;
+  productionIndex().resetDerived();
   idleFlushes = 0;
-}
-
-export function tagsByCategory(all) {
-  return groupTagsByCategory(all || productionEntries());
 }
 
 var idleFlushes = 0;
@@ -607,21 +519,6 @@ export function bulkTagCell(html, phrase, cat, name, matchCase, countOnly) {
   return bulkTagCellWith(html, phrase, cat, name, matchCase, countOnly, productionReaders, wrapTagInHtml);
 }
 
-export function bulkTagRows(rows, phrase, cat, name, matchCase, countOnly) {
-  var total = { hits: 0, inTags: 0, skipped: 0 };
-  (rows || []).forEach(function (row) {
-    var res = bulkTagCell(row.visualText, phrase, cat, name, matchCase, countOnly);
-    total.hits += res.hits;
-    total.inTags += res.inTags;
-    total.skipped += res.skipped;
-    if (!countOnly && res.hits && res.html !== row.visualText) {
-      row.visualText = res.html;
-      stampRow(row);
-    }
-  });
-  return total;
-}
-
 function allOccurrencesTagged(doc, phrase, cat, name) {
   var needle = String(phrase || "").trim();
   var out = { hits: 0, rewrites: [] };
@@ -647,20 +544,6 @@ function countPhraseMatches(phrase) {
     });
   });
   return total;
-}
-
-export function renameTag(cat, oldName, newName) {
-  var clean = cappedText(newName, 80);
-  if (!clean) return false;
-  var tag = { cat: cat, name: oldName };
-  return runDocumentEdit(retagCommand(tag, clean, retagRewrites([tag], clean), sessionStamps));
-}
-
-export function removeTag(cat, name) {
-  var tag = { cat: cat, name: name };
-  var n = readSession(function (doc) { return retagMentions(doc, [tag]); });
-  if (!n) return 0;
-  return runDocumentEdit(retagCommand(tag, null, retagRewrites([tag], null), sessionStamps)) ? n : 0;
 }
 
 var pendingTag = null;

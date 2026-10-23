@@ -7,7 +7,8 @@ import { migrateRows } from "../js/02-state.js";
 import { applyMerge, baseStateReason, mergeStates, setBaseState } from "../js/03-sync.js";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { getHistorySnapshot, listDocHistory } from "../js/03a-history-store.js";
-import { personById } from "../js/07-production-tags.js";
+import { personById } from "../core/production/records.ts";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { loadTestDocument } from "./_document.mjs";
 import { holdMergeBase, mergeBase } from "../legacy/session-bridge.ts";
@@ -118,8 +119,8 @@ test("a recovered stash where both sides added the same person: the merged scrip
   const out = applyMerge({ base: base, mine: mine, theirs: theirs, source: "stash", mergeOnly: true });
   loadTestDocument(out.state);
   assert.deepEqual(S.state.people, [{ id: "pTheirs", name: "ada" }]);
-  assert.equal(personById(S.state.productionTags.find((t) => t.name === "Lamp").owner).name, "ada");
-  assert.equal(personById(S.state.brollShots[0].owner).name, "ada");
+  assert.equal(personById(currentDocument(), S.state.productionTags.find((t) => t.name === "Lamp").owner).name, "ada");
+  assert.equal(personById(currentDocument(), S.state.brollShots[0].owner).name, "ada");
   assert.deepEqual(migrateRows(cloneState(S.state)).brollShots[0].owner, "pTheirs", "and a reload keeps it");
 });
 

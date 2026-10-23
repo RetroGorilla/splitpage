@@ -104,6 +104,7 @@ export async function appWiringDeps() {
     editorName: sync.getEditorName,
     refresh: production.runIdleRefresh,
     records: broll.derivedRecordsPlan,
+    bulkTags: { cell: production.bulkTagCell, stamp: sync.stampRow },
     saves: exporting.legacySavePorts,
     transitions: { destination: sync.documentDestinationPort, identity: docId.documentIdentityPort },
     recovery: drafts.draftRecoveryPorts,
