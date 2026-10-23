@@ -3,7 +3,7 @@ import { estimatedSeconds, formatDuration, rowSeconds } from "../core/production
 import { productionReaders } from "../legacy/document-ports.ts";
 import { updateScriptStats } from "./01-scene-status.js";
 import { cssAttr } from "./04-richtext.js";
-import { afterThisPaint, render, renderRow } from "./05-render.js";
+import { paintGuard } from "../legacy/editor-bridge.ts";
 import { redo, undo } from "./12a-undo.js";
 import { sceneAt, sceneLengthCommand } from "../application/commands/scene-length.ts";
 import { REVIEW_ONLY, currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
@@ -25,7 +25,6 @@ function applySceneLength(rowId, seconds) {
 
 export function setSceneLength(rowId, seconds) {
   if (!applySceneLength(rowId, seconds)) return false;
-  if (!renderRow(rowId)) render();
   updateScriptStats();
   return true;
 }
@@ -84,7 +83,7 @@ export function closeReadTimeEditor(commit, fromBlur) {
       } else {
         editing = null;
         teardown(ed);
-        afterThisPaint(
+        paintGuard().afterThisPaint(
           function () { setSceneLength(ed.rowId, secs); },
           function () { applySceneLength(ed.rowId, secs); }
         );

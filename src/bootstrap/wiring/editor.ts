@@ -26,7 +26,7 @@ import { mountWriterRoutes } from "../../features/writer/routes.ts";
 import type { WriterRoutePorts } from "../../features/writer/routes.ts";
 import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
 import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
-import { cellEditing, focusMemory, installCellEditing, installPicturePicker, mergeUndo, rowDrag, undoGuard } from "../../legacy/editor-bridge.ts";
+import { cellEditing, focusMemory, installCellEditing, installPicturePicker, mergeUndo, paintGuard, rowDrag, undoGuard } from "../../legacy/editor-bridge.ts";
 import { REVIEW_ONLY, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "../../legacy/session-bridge.ts";
 import { fromHtml } from "../../legacy/richtext.ts";
 import { VIEWING_ONLY } from "../../legacy/review-wording.ts";
@@ -47,8 +47,6 @@ import {
   maybeDirectionShortcut,
   noteFieldPainted,
   paintingScreen,
-  render,
-  renderRow,
   screenIsStale,
   syncPageTitle,
   toggleCellFormat,
@@ -141,7 +139,6 @@ import {
   cycleWriterGutter,
   onWriterFormat,
   onWriterKeydown,
-  renderWriter,
   scheduleWriterStats,
   updateWriterFormatState,
   writerUndoStep
@@ -314,7 +311,7 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
       },
       stale: screenIsStale,
       painted: noteFieldPainted,
-      redraw: function () { render(); },
+      shown: function <T>(edit: () => T): T { return paintGuard().whileShown(edit); },
       announce: announceGalleryEdit,
       refused: function (reason) { if (reason === REVIEW_ONLY) showToast(VIEWING_ONLY, "warn"); }
     });
@@ -470,10 +467,7 @@ function afterUndoApplied(steps: readonly unknown[]): void {
     if (!doc.rows.some(function (r) { return r.id === st.rowId; })) continue;
     if (!cellStep && (st.key === "visualText" || st.key === "audioText")) cellStep = st;
   }
-  undoGuard().whileApplying(function () {
-    if (viewFlags().writerOpen()) renderWriter(); else render();
-    renderProduction();
-  });
+  undoGuard().whileApplying(renderProduction);
   settleAfterApply();
   if (cellStep) {
     const sel = '.cell-editable[data-id="' + cssAttr(cellStep.rowId) + '"][data-field="' + cellStep.key + '"]';
@@ -547,7 +541,7 @@ export function mountTitlesFeature(): ReturnType<typeof mountTitleRoutes> {
       main: document.getElementById("doc-title") as HTMLInputElement,
       writer: document.getElementById("writer-title") as HTMLInputElement,
       ports: {
-        run: runCommand,
+        run: function (command) { return paintGuard().whileShown(function () { return runCommand(command); }); },
         current: function () {
           const doc = liveDocument.current();
           return doc ? doc.title || "" : null;
@@ -679,7 +673,6 @@ function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, ex
   if (lost) showToast((lost === 1 ? "A picture" : lost + " pictures") + " couldn't be added — only a link to it was copied. Save it, then paste or drop the file.", "warn");
   if (res.attached) {
     const attachedRowId = cellEl.getAttribute("data-id");
-    renderRow(attachedRowId);
     announceAttached(res.attached, res.rowIndex, before);
     if (res.attached.links && res.attached.links.length) {
       const entry = lastUndoEntry();
@@ -774,12 +767,7 @@ export function onRootKeydown(e: KeyboardEvent): void {
     const mvField = cellEl.getAttribute("data-field");
     const mvOffset = caretTextOffset(cellEl);
     if (swapAdjacentRows(mvId, e.key === "ArrowUp" ? -1 : 1)) {
-      if (viewFlags().writerOpen()) {
-        renderWriter();
-      } else {
-        render();
-        focusRowField(mvId, mvField, mvOffset);
-      }
+      if (!viewFlags().writerOpen()) focusRowField(mvId, mvField, mvOffset);
       renderProduction();
     }
     return;

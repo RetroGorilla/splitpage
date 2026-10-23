@@ -1,11 +1,9 @@
 import { productionReaders } from "../legacy/document-ports.ts";
-import { S } from "./_state.js";
 import { armShotHideGrace, clearShotHideGrace } from "./01b-hide-shot.js";
-import { paintRowTimes, render, renderRow } from "./05-render.js";
 import { renderRundown, setRundownExtraSeconds } from "./05f-rundown.js";
 import { paintTargetOverlay } from "./05t-target.js";
 import { sceneStatus, sceneStatusCommand, shotGrace } from "../application/commands/scene-status.ts";
-import { REVIEW_ONLY, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
+import { REVIEW_ONLY, currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
 import {
@@ -28,7 +26,7 @@ export {
 };
 
 export function totalSeconds() {
-  return totalSecondsIn(S.state, productionReaders);
+  return totalSecondsIn(currentDocument(), productionReaders);
 }
 
 var LENGTH_TITLE = "The script's read time, from the Audio column — click to set your reading speed or a target length";
@@ -43,11 +41,12 @@ function paintLength(el, totalHtml, slotHtml, title) {
 }
 
 export function updateScriptStats() {
-  if (!S.state) return;
-  var target = targetLengthOf(S.state);
+  var doc = currentDocument();
+  if (!doc) return;
+  var target = targetLengthOf(doc);
   var total = totalSeconds();
-  var remaining = viewFlags().hideShot() ? S.state.rows.reduce(function (n, r) {
-    return n + (r.status === "shot" ? 0 : rowSeconds(r, S.state, productionReaders));
+  var remaining = viewFlags().hideShot() ? doc.rows.reduce(function (n, r) {
+    return n + (r.status === "shot" ? 0 : rowSeconds(r, doc, productionReaders));
   }, 0) : 0;
   var totalText = formatDuration(total);
   var totalHtml = totalText;
@@ -69,7 +68,6 @@ export function updateScriptStats() {
   }
   paintLength(document.getElementById("runtime-chip"), totalHtml, slotHtml, title);
   paintLength(document.getElementById("length-status"), totalHtml, slotHtml, title);
-  paintRowTimes();
   setRundownExtraSeconds(target || 0);
   renderRundown();
   paintTargetOverlay();
@@ -77,10 +75,11 @@ export function updateScriptStats() {
   var chip = document.getElementById("progress-chip");
   var text = document.getElementById("progress-text");
   if (!chip || !text) return;
-  var shot = S.state.rows.filter(function (r) { return r.status === "shot"; }).length;
+  var rows = currentDocument().rows;
+  var shot = rows.filter(function (r) { return r.status === "shot"; }).length;
   if (!shot) { chip.hidden = true; return; }
   chip.hidden = false;
-  text.textContent = shot + "/" + S.state.rows.length + " shot";
+  text.textContent = shot + "/" + rows.length + " shot";
 }
 
 var STATUS_REVIEW_REFUSAL = "This is a review copy — comment on a scene instead of changing its status.";
@@ -96,7 +95,6 @@ export function cycleRowStatus(rowId) {
     if (grace === "arm") armShotHideGrace(rowId);
     else if (grace === "clear") clearShotHideGrace(rowId);
   }
-  if (!renderRow(rowId)) render();
   updateScriptStats();
 }
 

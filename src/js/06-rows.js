@@ -2,7 +2,6 @@ import { S } from "./_state.js";
 import { internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { safeHref, safeId, storedHtmlFromDom } from "./04-richtext.js";
-import { render } from "./05-render.js";
 import { armDeleteButton, disarmDeleteButton } from "../features/rows/delete-button.ts";
 import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
 import { isBlankScene } from "./05g-scene-clip.js";
@@ -33,7 +32,6 @@ function runRowCommand(command) {
 export function addRow(afterId) {
   var createdId = makeId();
   if (!runRowCommand(addSceneCommand(afterId || null, createdId, sessionStamps))) return null;
-  render();
   return createdId;
 }
 
@@ -70,7 +68,6 @@ export function splitRowFieldCore(cellEl) {
 export function splitCellField(cellEl) {
   var res = splitRowFieldCore(cellEl);
   if (!res) return;
-  render();
   focusRowField(res.id, res.field, 0);
 }
 
@@ -157,8 +154,7 @@ export function updateDragScroll(clientX, clientY) {
 }
 
 function deleteRow(id) {
-  if (!runRowCommand(deleteSceneCommand(id))) return;
-  render();
+  runRowCommand(deleteSceneCommand(id));
 }
 
 export function swapAdjacentRows(id, dir) {
@@ -166,8 +162,7 @@ export function swapAdjacentRows(id, dir) {
 }
 
 export function moveRow(id, dir) {
-  if (!swapAdjacentRows(id, dir)) return;
-  render();
+  swapAdjacentRows(id, dir);
 }
 
 export function armDelete(btn, id) {

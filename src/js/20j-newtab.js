@@ -6,7 +6,6 @@ import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
 import { escapeHtml, makeId, migrateRows } from "./02-state.js";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { updateIdentityChip } from "./03-sync.js";
-import { renderAbsorbed } from "./05-render.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { openGdocModal, openImportModal } from "./11-import.js";
 import { clearDirty, updateSaveStatus } from "./12-dirty-toast.js";
@@ -81,10 +80,9 @@ function starterDocumentState(id) {
 
 function adoptNewDocument(next, reason) {
   var leaves = currentHome().kind === "file" || currentHome().kind === "import";
+  resetProductionPanelState();
   documentTransitions().startNew({ from: { document: next }, reason: reason, destination: leaves ? NO_DESTINATION : undefined });
   clearDirty();
-  resetProductionPanelState();
-  renderAbsorbed();
   updateFileChip();
   updateIdentityChip();
   updateSaveStatus();
