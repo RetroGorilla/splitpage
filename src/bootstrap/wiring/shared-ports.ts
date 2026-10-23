@@ -1,8 +1,10 @@
+import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { EditorSelectionPort } from "../../application/editing/selection.ts";
 import type { ExportRegistry } from "../../application/export/registry.ts";
+import type { RecentFiles } from "../../application/files/recent-files.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
@@ -163,6 +165,14 @@ const exports: Pick<ExportRegistry, "card" | "cards" | "exporters" | "byAction" 
   onChange: (listener) => exportFormats.onChange(listener)
 };
 
+const recents: RecentFiles = {
+  list: () => desktopPort()?.listRecents(),
+  remove: (fileId) => desktopPort()?.removeRecent(fileId),
+  clear: () => desktopPort()?.clearRecents(),
+  read: (id) => desktopPort()?.readFile(id),
+  routeOpen: (request) => desktopPort()?.routeOpen(request)
+};
+
 const shared = {
   ...effects,
   actions,
@@ -179,7 +189,8 @@ const shared = {
   selection,
   exports,
   ownership,
-  pictures
+  pictures,
+  recents
 };
 
 export function sharedPorts(): typeof shared {
