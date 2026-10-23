@@ -1,83 +1,22 @@
-import { rowIndexOf } from "../core/document/rows.ts";
-import { currentDocument, readSession } from "../legacy/session-bridge.ts";
-import { idMap } from "../core/document/id-map.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
-import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
-
-var HIDE_SHOT_GRACE_MS = 1400;
-
-function hideShotOn() {
-  return viewFlags().hideShot();
-}
-var expandedShotRowIds = idMap();
-var shotHideTimers = idMap();
-var hidingListeners = [];
-
-export function onShotHiding(listener) {
-  hidingListeners.push(listener);
-  return function () {
-    var at = hidingListeners.indexOf(listener);
-    if (at !== -1) hidingListeners.splice(at, 1);
-  };
-}
-
-function announceHiding() {
-  hidingListeners.slice().forEach(function (listener) { listener(); });
-}
-
-function isRowHiddenByShotToggle(row) {
-  return !!(hideShotOn() && row.status === "shot" && !expandedShotRowIds[row.id]);
-}
+import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 
 export function updateHideShotMenu() {
   var item = document.getElementById("menu-hide-shot");
   if (!item) return;
-  item.setAttribute("aria-checked", hideShotOn() ? "true" : "false");
+  item.setAttribute("aria-checked", shotHiding().on() ? "true" : "false");
 }
 
 export function setHideShotScenes(on) {
-  on = !!on;
-  if (on === hideShotOn()) return;
-  viewFlags().setHideShot(on);
-  if (on) expandedShotRowIds = idMap();
-  preferences().setHideShot(on);
-  updateHideShotMenu();
-  announceHiding();
+  if (shotHiding().set(on)) updateHideShotMenu();
 }
 
 export function toggleHideShotScenes() {
-  setHideShotScenes(!hideShotOn());
-  showToast(hideShotOn()
+  setHideShotScenes(!shotHiding().on());
+  showToast(shotHiding().on()
     ? "Hiding shot scenes — collapsed into strips you can click open."
     : "Showing every scene again.", "ok");
-}
-
-export function armShotHideGrace(rowId) {
-  expandedShotRowIds[rowId] = true;
-  if (shotHideTimers[rowId]) clearTimeout(shotHideTimers[rowId]);
-  shotHideTimers[rowId] = setTimeout(function () {
-    delete shotHideTimers[rowId];
-    delete expandedShotRowIds[rowId];
-    announceHiding();
-  }, HIDE_SHOT_GRACE_MS);
-}
-
-export function clearShotHideGrace(rowId) {
-  if (shotHideTimers[rowId]) { clearTimeout(shotHideTimers[rowId]); delete shotHideTimers[rowId]; }
-}
-
-export function revealRow(rowId) {
-  var doc = currentDocument();
-  if (!hideShotOn() || !doc) return;
-  var idx = readSession(function (held) { return rowIndexOf(held, rowId); });
-  var rows = doc.rows;
-  if (idx === -1 || !isRowHiddenByShotToggle(rows[idx])) return;
-  var start = idx, end = idx;
-  while (start > 0 && rows[start - 1].status === "shot") start--;
-  while (end < rows.length - 1 && rows[end + 1].status === "shot") end++;
-  for (var i = start; i <= end; i++) expandedShotRowIds[rows[i].id] = true;
-  announceHiding();
 }
 
 export function hiddenShotStripHtml(ids) {
@@ -92,31 +31,11 @@ export function hiddenShotStripHtml(ids) {
 
 export function expandHiddenShotStrip(idsAttr) {
   if (!idsAttr) return;
-  idsAttr.split(",").forEach(function (id) { if (id) expandedShotRowIds[id] = true; });
-  announceHiding();
-}
-
-export function rowGroupItems(rows) {
-  var items = [];
-  var i = 0;
-  while (i < rows.length) {
-    var row = rows[i];
-    if (isRowHiddenByShotToggle(row)) {
-      var ids = [];
-      var j = i;
-      while (j < rows.length && isRowHiddenByShotToggle(rows[j])) { ids.push(rows[j].id); j++; }
-      items.push({ strip: ids });
-      i = j;
-    } else {
-      items.push({ row: row, index: i });
-      i++;
-    }
-  }
-  return items;
+  shotHiding().expand(idsAttr.split(","));
 }
 
 export function renderRowGroups(rows, rowRenderer) {
-  return rowGroupItems(rows).map(function (item) {
+  return shotHiding().groups(rows).map(function (item) {
     return item.strip ? hiddenShotStripHtml(item.strip) : rowRenderer(item.row, item.index);
   }).join("");
 }
