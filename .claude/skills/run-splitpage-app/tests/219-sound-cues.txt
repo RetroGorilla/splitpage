@@ -1,7 +1,7 @@
 # Sound cues in the Audio column (#219).
 #
 # "SFX:" or "Music:" starting a line of an Audio cell makes that whole line
-# a cue: the `cue` mark (04c-doc-model.js), stored as
+# a cue: the `cue` mark (src/core/text), stored as
 # <span class="audio-cue">, shown small, after a note, in the Music/SFX
 # colour. It turns into one when its colon is typed, and one Ctrl+Z gives
 # the plain words back. Typing on is more of the cue; Enter at its end

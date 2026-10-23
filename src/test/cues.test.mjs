@@ -11,13 +11,16 @@ import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
 import { sanitizeHtml } from "../js/04-richtext.js";
-import {
-  breakLine, cellLength, cueShortcut, cuesInCell, deleteRange, editCues, flattenCues, fromHtml, importCues,
-  insertText, mergeCells, normalizeCell, spokenText, toDocxRuns, toHtml, toMarkdown, toPlainText, withoutCues
-} from "../js/04c-doc-model.js";
+import { breakLine, deleteRange, insertText } from "../core/text/edits.ts";
+import { cellLength, normalizeCell } from "../core/text/runs.ts";
+import { cueShortcut, cuesInCell, editCues, flattenCues, importCues, withoutCues } from "../core/text/cues.ts";
+import { fromHtml } from "../legacy/richtext.ts";
+import { mergeCells } from "../core/merge/cells.ts";
+import { spokenText, toDocxRuns, toMarkdown, toPlainText } from "../core/text/projections.ts";
+import { toHtml } from "../core/text/html.ts";
 import { __init as initTags, healTagRegistry, tagsInField } from "../js/07-production-tags.js";
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
-import { runDocumentEdit, sessionStamps, readSession } from "../legacy/session-bridge.ts";
+import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../legacy/session-bridge.ts";
 import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions } from "../application/commands/tag-rewrites.ts";
 import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
 
@@ -25,7 +28,6 @@ const retagText = sharedPorts().text;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
 import { productionIndex } from "../legacy/production-index-bridge.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { audioDirectionsHtml, buildDocx, buildNarrationText } from "../adapters/formats/docx.ts";
 import { prompterSceneHtml, trimPrompterCell } from "../js/20-teleprompter.js";
