@@ -1,26 +1,16 @@
-import { setHideShotScenes } from "./01b-hide-shot.js";
-import { personSwatchesHtml } from "./03-sync.js";
-import { getSavedAuthorName } from "./10-comments.js";
-import {
-  DEFAULT_COLLAB_SERVER,
-  collabServerView,
-  normalizeCollabServer,
-  readCollabServer,
-  signOutCollab
-} from "./13b-collaborate.js";
-import { setAutoSaveEnabled } from "../legacy/save-bridge.ts";
-import { applyWriterSize, readWriterSize } from "./19-writer.js";
-import { setPrompterFlip, setPrompterMirror, setPrompterSceneMode } from "./20-teleprompter.js";
-import { renderDesktopAppNotice } from "./20a-update.js";
-import { SCRIPT_SCALE_MAX, SCRIPT_SCALE_MIN, WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../application/preferences/preferences.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
-import { appActions } from "../legacy/app-actions.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { PREF_EVENT, preferences } from "../legacy/preferences-bridge.ts";
-import { applyTagIcons, applyTheme } from "../features/settings/appearance.ts";
-import { formatClock } from "../../shared/clock.js";
-import { cleanAuthorName } from "../core/document/people.ts";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
+import { SCRIPT_SCALE_MAX, SCRIPT_SCALE_MIN, WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../../application/preferences/preferences.ts";
+import { escapeHtml } from "../../core/document/text-policy.ts";
+import { cleanAuthorName } from "../../core/document/people.ts";
+import { formatClock } from "../../../shared/clock.js";
+import { applyTagIcons, applyTheme } from "./appearance.ts";
+
+var ports = null;
+var listeners = [];
+
+function listen(target, type, handler) {
+  target.addEventListener(type, handler);
+  listeners.push(function () { target.removeEventListener(type, handler); });
+}
 
 var SETTINGS_ID = "settings-modal";
 var settingsReturnFocus = null;
@@ -33,7 +23,7 @@ export function settingsOpen() {
 }
 
 function currentWriterSize() {
-  var n = readWriterSize();
+  var n = ports.editor.writerSize();
   if (n != null) return n;
   var el = document.getElementById("wr-size");
   var v = el ? parseInt(el.value, 10) : NaN;
@@ -70,20 +60,20 @@ function clockExample(mode) {
 }
 
 function importAvailable() {
-  var view = appActions.view("import-app-data", "button");
+  var view = ports.actions.view("import-app-data", "button");
   return !!view && view.visible;
 }
 
 function collaborationHtml() {
-  var v = collabServerView();
+  var v = ports.collaboration.view();
   var where = v.servedHere
     ? '<p class="settings-hint settings-hint-flat">This page comes from <strong>' + escapeHtml(v.label) +
         '</strong>, so Collaborate stores scripts there.</p>'
     : '<div class="settings-field settings-inline">' +
         '<label class="settings-label" for="settings-collab-server">Server address</label>' +
         '<span class="settings-inline-control"><input type="text" id="settings-collab-server" class="settings-wide" autocomplete="off" ' +
-          'spellcheck="false" autocapitalize="off" placeholder="' + escapeHtml(DEFAULT_COLLAB_SERVER) + '" value="' +
-          escapeHtml(readCollabServer()) + '">' +
+          'spellcheck="false" autocapitalize="off" placeholder="' + escapeHtml(ports.collaboration.defaultServer) + '" value="' +
+          escapeHtml(ports.collaboration.address()) + '">' +
           (v.isDefault ? '' : '<button type="button" class="btn-outline is-small" data-settings-action="collab-default">Use the default</button>') +
         '</span>' +
       '</div>' +
@@ -102,26 +92,26 @@ function collaborationHtml() {
 }
 
 function bodyHtml() {
-  var clock = preferences().clock();
-  var scale = preferences().scriptScale();
+  var clock = ports.preferences.clock();
+  var scale = ports.preferences.scriptScale();
   var wsize = currentWriterSize();
-  var name = getSavedAuthorName();
+  var name = ports.identity.name();
   return section("Appearance",
-      segHtml("theme", "Theme", [["system", "System"], ["light", "Light"], ["dark", "Dark"]], preferences().theme()) +
+      segHtml("theme", "Theme", [["system", "System"], ["light", "Light"], ["dark", "Dark"]], ports.preferences.theme()) +
       segHtml("clock", "Clock", [["system", "System"], ["12", "12-hour"], ["24", "24-hour"]], clock) +
       '<p class="settings-hint settings-clock-example" id="settings-clock-example">' + escapeHtml(clockExample(clock)) + '</p>' +
-      switchHtml("settings-rundown-min", "Minimise the rundown strip", "Keep the strip of scenes under the header small.", preferences().rundownMin()) +
+      switchHtml("settings-rundown-min", "Minimise the rundown strip", "Keep the strip of scenes under the header small.", ports.preferences.rundownMin()) +
       switchHtml("settings-tag-icons", "Show icons on tags",
-        "Put a small icon for its category before each tag, as well as its colour.", preferences().tagIcons())) +
+        "Put a small icon for its category before each tag, as well as its colour.", ports.preferences.tagIcons())) +
     section("Editor",
-      switchHtml("settings-hide-shot", "Hide shot scenes", "Collapse scenes marked Shot into a thin strip.", preferences().hideShot()) +
-      switchHtml("settings-autosave", "Autosave", "Write each change to the file you saved to, a moment after you stop typing.", preferences().autosave()) +
+      switchHtml("settings-hide-shot", "Hide shot scenes", "Collapse scenes marked Shot into a thin strip.", ports.preferences.hideShot()) +
+      switchHtml("settings-autosave", "Autosave", "Write each change to the file you saved to, a moment after you stop typing.", ports.preferences.autosave()) +
       switchHtml("settings-video-thumbs", "Fetch video thumbnails",
-        "When you paste a YouTube or Vimeo link, ask the site for its picture once and keep it with the script.", preferences().videoThumbs()) +
+        "When you paste a YouTube or Vimeo link, ask the site for its picture once and keep it with the script.", ports.preferences.videoThumbs()) +
       '<div class="settings-field settings-inline">' +
         '<label class="settings-label" for="settings-default-wpm">Reading speed for new scripts</label>' +
         '<span class="settings-inline-control"><input type="number" id="settings-default-wpm" min="60" max="400" step="5" value="' +
-          preferences().defaultWpm() + '"><span class="settings-unit">words a minute</span></span>' +
+          ports.preferences.defaultWpm() + '"><span class="settings-unit">words a minute</span></span>' +
       '</div>' +
       '<p class="settings-hint">Each script keeps its own speed — click its length on the rundown to change it.</p>' +
       '<div class="settings-field settings-inline">' +
@@ -138,9 +128,9 @@ function bodyHtml() {
           '<button type="button" class="btn-outline is-small" data-settings-action="scale-reset"' + (scale === 1 ? " disabled" : "") + '>Reset to 100 %</button></span>' +
       '</div>') +
     section("Present",
-      switchHtml("settings-prompter-mirror", "Mirror", "Flip the teleprompter left to right, for a beam-splitter glass.", preferences().prompterFlag("prompterMirror")) +
-      switchHtml("settings-prompter-flip", "Flip", "Turn it upside down, for a monitor mounted that way.", preferences().prompterFlag("prompterFlip")) +
-      switchHtml("settings-prompter-scene", "One scene at a time", "Pause at the end of each scene.", preferences().prompterFlag("prompterSceneMode"))) +
+      switchHtml("settings-prompter-mirror", "Mirror", "Flip the teleprompter left to right, for a beam-splitter glass.", ports.preferences.prompterFlag("prompterMirror")) +
+      switchHtml("settings-prompter-flip", "Flip", "Turn it upside down, for a monitor mounted that way.", ports.preferences.prompterFlag("prompterFlip")) +
+      switchHtml("settings-prompter-scene", "One scene at a time", "Pause at the end of each scene.", ports.preferences.prompterFlag("prompterSceneMode"))) +
     section("You",
       '<div class="settings-field settings-inline">' +
         '<label class="settings-label" for="settings-name">Your name</label>' +
@@ -148,7 +138,7 @@ function bodyHtml() {
           escapeHtml(name) + '"></span>' +
       '</div>' +
       '<p class="settings-hint">Signs your edits and comments.</p>' +
-      personSwatchesHtml(name, "settings-person-color", "settings-label")) +
+      ports.identity.swatchesHtml(name, "settings-person-color", "settings-label")) +
     section("Collaboration", collaborationHtml()) +
     section("Help & tips",
       '<div class="settings-actions">' +
@@ -189,9 +179,9 @@ function ensureModal() {
 
 function typedFields() {
   return {
-    "settings-name": function (key) { return preferences().nameOf(key) === "commentAuthor"; },
-    "settings-default-wpm": function (key) { return preferences().nameOf(key) === "defaultWpm"; },
-    "settings-collab-server": function (key) { return preferences().nameOf(key) === "collabServer"; }
+    "settings-name": function (key) { return key === "commentAuthor"; },
+    "settings-default-wpm": function (key) { return key === "defaultWpm"; },
+    "settings-collab-server": function (key) { return key === "collabServer"; }
   };
 }
 
@@ -256,44 +246,44 @@ export function closeSettings() {
 
 function applyChange(target) {
   var id = target.id, name = target.name;
-  if (name === "settings-theme") { preferences().setTheme(target.value); return; }
-  if (name === "settings-clock") { preferences().setClock(target.value); return; }
-  if (name === "settings-person-color") { preferences().setMyColor(target.value); return; }
-  if (id === "settings-rundown-min") { preferences().setRundownMin(target.checked); return; }
-  if (id === "settings-tag-icons") { preferences().setTagIcons(target.checked); return; }
-  if (id === "settings-video-thumbs") { preferences().setVideoThumbs(target.checked); return; }
-  if (id === "settings-hide-shot") { setHideShotScenes(target.checked); return; }
-  if (id === "settings-autosave") { setAutoSaveEnabled(target.checked); return; }
-  if (id === "settings-prompter-mirror") { setPrompterMirror(target.checked); return; }
-  if (id === "settings-prompter-flip") { setPrompterFlip(target.checked); return; }
-  if (id === "settings-prompter-scene") { setPrompterSceneMode(target.checked); return; }
+  if (name === "settings-theme") { ports.preferences.setTheme(target.value); return; }
+  if (name === "settings-clock") { ports.preferences.setClock(target.value); return; }
+  if (name === "settings-person-color") { ports.preferences.setMyColor(target.value); return; }
+  if (id === "settings-rundown-min") { ports.preferences.setRundownMin(target.checked); return; }
+  if (id === "settings-tag-icons") { ports.preferences.setTagIcons(target.checked); return; }
+  if (id === "settings-video-thumbs") { ports.preferences.setVideoThumbs(target.checked); return; }
+  if (id === "settings-hide-shot") { ports.editor.hideShot(target.checked); return; }
+  if (id === "settings-autosave") { ports.editor.autoSave(target.checked); return; }
+  if (id === "settings-prompter-mirror") { ports.prompter.mirror(target.checked); return; }
+  if (id === "settings-prompter-flip") { ports.prompter.flip(target.checked); return; }
+  if (id === "settings-prompter-scene") { ports.prompter.sceneMode(target.checked); return; }
   if (id === "settings-default-wpm") {
     var n = Math.round(Number(target.value));
-    if (isFinite(n) && n >= 60 && n <= 400) preferences().setDefaultWpm(n);
-    else target.value = preferences().defaultWpm();
+    if (isFinite(n) && n >= 60 && n <= 400) ports.preferences.setDefaultWpm(n);
+    else target.value = ports.preferences.defaultWpm();
     return;
   }
-  if (id === "settings-writer-size") { applyWriterSize(Number(target.value), true); return; }
+  if (id === "settings-writer-size") { ports.editor.setWriterSize(Number(target.value), true); return; }
   if (id === "settings-script-scale") {
     var s = Math.round(Number(target.value)) / 100;
-    if (isFinite(s) && s >= SCRIPT_SCALE_MIN && s <= SCRIPT_SCALE_MAX) preferences().setScriptScale(s);
+    if (isFinite(s) && s >= SCRIPT_SCALE_MIN && s <= SCRIPT_SCALE_MAX) ports.preferences.setScriptScale(s);
     return;
   }
   if (id === "settings-name") {
     var v = cleanAuthorName(target.value);
-    if (!v || v === getSavedAuthorName()) { target.value = getSavedAuthorName(); return; }
-    preferences().setCommentAuthor(v);
+    if (!v || v === ports.identity.name()) { target.value = ports.identity.name(); return; }
+    ports.preferences.setCommentAuthor(v);
   }
   if (id === "settings-collab-server") {
     var raw = (target.value || "").trim();
-    var url = raw ? normalizeCollabServer(raw) : DEFAULT_COLLAB_SERVER;
+    var url = raw ? ports.collaboration.normalize(raw) : ports.collaboration.defaultServer;
     if (!url) {
-      showToast("That isn't a web address — something like https://script.example.com/", "warn");
-      target.value = readCollabServer();
+      ports.notices.show("That isn't a web address — something like https://script.example.com/", "warn");
+      target.value = ports.collaboration.address();
       return;
     }
-    if (url === readCollabServer()) { target.value = url; return; }
-    preferences().setCollabServer(url === DEFAULT_COLLAB_SERVER ? null : url);
+    if (url === ports.collaboration.address()) { target.value = url; return; }
+    ports.preferences.setCollabServer(url === ports.collaboration.defaultServer ? null : url);
   }
 }
 
@@ -309,41 +299,41 @@ function applyInput(target) {
 
 function runAction(action) {
   if (action === "close") { closeSettings(); return; }
-  if (action === "scale-reset") { preferences().setScriptScale(1); return; }
+  if (action === "scale-reset") { ports.preferences.setScriptScale(1); return; }
   if (action === "tagging-help") {
     closeSettings();
-    appActions.invoke("tagging-help", "button");
-    preferences().announceTaggingHelp();
+    ports.actions.invoke("tagging-help", "button");
+    ports.preferences.announceTaggingHelp();
     return;
   }
   if (action === "tour") {
     closeSettings();
-    preferences().resetTour();
-    appActions.invoke("tour", "button");
+    ports.preferences.resetTour();
+    ports.actions.invoke("tour", "button");
     return;
   }
   if (action === "desktop-notice") {
-    preferences().resetDesktopNotice();
-    if (typeof renderDesktopAppNotice === "function") renderDesktopAppNotice();
-    showToast(runningOnDesktop() ? "The desktop-app notice only shows in the browser." : "The desktop-app notice will show again.", "ok");
+    ports.preferences.resetDesktopNotice();
+    if (typeof ports.desktop.renderNotice === "function") ports.desktop.renderNotice();
+    ports.notices.show(ports.desktop.running() ? "The desktop-app notice only shows in the browser." : "The desktop-app notice will show again.", "ok");
     return;
   }
-  if (action === "collab-default") { preferences().setCollabServer(null); return; }
+  if (action === "collab-default") { ports.preferences.setCollabServer(null); return; }
   if (action === "collab-signout") {
-    signOutCollab();
+    ports.collaboration.signOut();
     renderSettings();
     return;
   }
-  if (action === "servers") { closeSettings(); appActions.invoke("servers", "button"); return; }
-  if (action === "drive") { closeSettings(); appActions.invoke("drive-open", "button"); return; }
-  if (action === "export-app-data") { closeSettings(); appActions.invoke("export-app-data", "button"); return; }
-  if (action === "import-app-data") { closeSettings(); appActions.invoke("import-app-data", "button"); }
+  if (action === "servers") { closeSettings(); ports.actions.invoke("servers", "button"); return; }
+  if (action === "drive") { closeSettings(); ports.actions.invoke("drive-open", "button"); return; }
+  if (action === "export-app-data") { closeSettings(); ports.actions.invoke("export-app-data", "button"); return; }
+  if (action === "import-app-data") { closeSettings(); ports.actions.invoke("import-app-data", "button"); }
 }
 
 function wireModal(m) {
-  m.addEventListener("change", function (e) { if (e.target && e.target.closest(".settings-body")) applyChange(e.target); });
-  m.addEventListener("input", function (e) { if (e.target) applyInput(e.target); });
-  m.addEventListener("keydown", function (e) {
+  listen(m, "change", function (e) { if (e.target && e.target.closest(".settings-body")) applyChange(e.target); });
+  listen(m, "input", function (e) { if (e.target) applyInput(e.target); });
+  listen(m, "keydown", function (e) {
     if (e.key === "Enter" && e.target && (e.target.id === "settings-name" || e.target.id === "settings-default-wpm" ||
         e.target.id === "settings-collab-server")) {
       e.preventDefault();
@@ -361,7 +351,7 @@ function wireModal(m) {
     if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
     else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
   });
-  m.addEventListener("click", function (e) {
+  listen(m, "click", function (e) {
     if (e.target === m) { closeSettings(); return; }
     var btn = e.target.closest("[data-settings-action]");
     if (btn && !btn.disabled) runAction(btn.getAttribute("data-settings-action"));
@@ -369,24 +359,34 @@ function wireModal(m) {
 }
 
 function onPrefChanged(key) {
-  var name = preferences().nameOf(key);
-  if (name === "theme") applyTheme(window, preferences().theme());
-  if (name === "tagIcons") applyTagIcons(window, preferences().tagIcons());
+  var name = key;
+  if (name === "theme") applyTheme(window, ports.preferences.theme());
+  if (name === "tagIcons") applyTagIcons(window, ports.preferences.tagIcons());
   if (settingsOpen()) renderSettings(key);
 }
 
-export function __init() {
-  document.addEventListener(PREF_EVENT, function (e) {
-    onPrefChanged(e.detail && e.detail.key);
+export function __init(given) {
+  ports = given;
+  var unsubscribe = ports.changes.onChange(function (change) {
+    onPrefChanged(change.name);
   });
-  window.addEventListener("storage", function (e) {
-    if (e.key && e.key.indexOf("splitpage-") === 0) onPrefChanged(e.key);
-  });
-
-
-  window.__settingsTest = {
+  var test = {
     open: openSettings,
     close: closeSettings,
     isOpen: settingsOpen
+  };
+  window.__settingsTest = test;
+  return {
+    openSettings: openSettings,
+    dispose: function () {
+      unsubscribe();
+      closeSettings();
+      while (listeners.length) listeners.pop()();
+      var m = modal();
+      if (m) m.remove();
+      if (window.__settingsTest === test) delete window.__settingsTest;
+      settingsReturnFocus = null;
+      ports = null;
+    }
   };
 }

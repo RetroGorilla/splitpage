@@ -38,6 +38,8 @@ test("the app's actions start, stop and start again with one key listener and no
   try {
     const stop = startActions(registry, target);
     const started = registry.list().map((v) => v.id);
+    const settingsAt = started.indexOf("settings");
+    assert.deepEqual(started.slice(settingsAt - 2, settingsAt + 4), ["servers", "show-servers-dialog", "settings", "help", "tour", "long-demo"]);
     assert.ok(started.includes("save") && started.includes("toggle-hide-shot") && started.length > 30, `registers the app's actions (${started.length})`);
     assert.equal(target.listeners, 1);
     target.dispatchEvent(probeKey());
