@@ -214,6 +214,7 @@ Two existing ports grow:
 | `richtext`, `plain-text`, `cache-freeze`, `document-ports` (`productionReaders`) | P8. `withDocumentPorts` (`02`, `02b`, `03`) goes with the Wave 4 owner moves |
 | `save-bridge` | P15. Everything else (`saveDoc`, `requestSave`, `haltAutoSave` and the rest) goes with the Wave 4 save moves |
 | `editor-bridge`, `production-editing-bridge` | P10 |
+| `merge-bridge` | `applyMerge`, `mergeStates` and `reportMerge` (`13`, `20g`) go with the Opus moves of `13` and `20g` (Wave 4), as the document-merge owner's interface in `src/application/`. No feature reads it before then |
 | `transition-bridge` | P12 (`captureOperation`, `stillOwns`), P20 (`documentTransitions`, `NO_DESTINATION`) |
 | `app-actions` | P4 |
 | `recovery-bridge` | P18 (`draftResume`). The rest (`captureRestore`, `conflictStash`, `stillRestoring`, `browserDrafts`, `desktopDrafts`, `legacySnapshots`, `recoveryStarted`, `useBrowserDraftFactory`) goes with the Wave 4 owner moves of `03`, `03a`, `13`, `14`, `20f` and `20g`, on Opus |
