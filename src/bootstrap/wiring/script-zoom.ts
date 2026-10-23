@@ -8,14 +8,12 @@ import { appActions } from "../../legacy/app-actions.ts";
 import { PREF_EVENT, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { currentDocument } from "../../legacy/session-bridge.ts";
 
-export { scriptScale, setScriptScale } from "../../features/script-zoom/script-zoom.js";
-
 const scriptZoom = owned<ReturnType<typeof mountScriptZoom>>();
 
 export function mountScriptZoomFeature(): ReturnType<typeof mountScriptZoom> {
   return scriptZoom.replace(function () {
     const ports: ScriptZoomPorts = {
-      currentDocument: currentDocument,
+      hasDocument: () => !!currentDocument(),
       prompterIsOpen: prompterIsOpen,
       runAction: (id, source) => appActions.invoke(id, source),
       scriptScale: () => preferences().scriptScale(),
@@ -23,8 +21,7 @@ export function mountScriptZoomFeature(): ReturnType<typeof mountScriptZoom> {
       clearScriptScale: () => preferences().clearScriptScale(),
       isScriptScaleKey: (key) => key !== null && preferences().nameOf(key) === "scriptScale",
       preferenceEvent: PREF_EVENT,
-      writerOpen: () => viewFlags().writerOpen(),
-      hideShot: () => viewFlags().hideShot()
+      writerOpen: () => viewFlags().writerOpen()
     };
     return mountScriptZoom(ports);
   });
