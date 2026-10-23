@@ -5,6 +5,7 @@ export { mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature } 
 export { mountHelpFeature } from "./wiring/help.ts";
 export { mountGalleryFeature, mountGalleryOverlayFeature } from "./wiring/gallery.ts";
 export { mountCopyPasteFeature } from "./wiring/clipboard.ts";
+export { mountScenesFeature, mountSceneMediaFeature } from "./wiring/rows.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
 import { registerBuiltInExporters } from "./wiring/exporters.ts";
 import { wireProductionEditing } from "./wiring/production-editing.ts";

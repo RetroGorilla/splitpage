@@ -242,7 +242,7 @@ test("a click on a video link opens it and edits nothing", async () => {
 
 test("when the session refuses edits, a gallery change writes nothing", async () => {
   await open();
-  const { removeImage } = await import("../js/06-rows.js");
+  const { removeImage } = await import("../bootstrap/wiring/rows.ts");
   const before = JSON.stringify(row("r2"));
   const seq = saveChanges();
   window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
