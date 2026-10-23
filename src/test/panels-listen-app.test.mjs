@@ -20,7 +20,8 @@ const { cellEditing } = await import("../legacy/editor-bridge.ts");
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
 const { targetLengthCommand } = await import("../application/commands/document-settings.ts");
-const { openProductionPanel, closeProductionPanel } = await import("../js/08-production-panels.js");
+const { openProductionPanel } = await import("../js/08-production-panels.js");
+const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { mountPanelListenersFeature, stopPanelListenersFeature } = await import("../bootstrap/wiring/panels.ts");
 const writer = await import("../js/19-writer.js");
@@ -111,7 +112,7 @@ test("tagging text with an existing tag refreshes the open production panel with
   flushEdits();
   announceTagged();
   const after = list.innerHTML;
-  closeProductionPanel();
+  sidePanels().close("production-panel");
   assert.equal(after.includes("tag-orphan-badge"), false);
 });
 
