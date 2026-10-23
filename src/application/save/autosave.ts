@@ -53,6 +53,7 @@ export interface AutoSavePolicy {
   readonly idleFor: (target: AutoSaveTarget) => number;
   readonly schedule: (target: AutoSaveTarget) => void;
   readonly clear: () => void;
+  readonly dueNow: () => void;
   readonly pending: () => boolean;
   readonly scheduled: () => number;
   readonly stop: () => void;
@@ -124,6 +125,9 @@ export function createAutoSavePolicy(ports: AutoSavePolicyPorts): AutoSavePolicy
       if (maxTimer === null) maxTimer = ports.timers.start(due, timing.max);
     },
     clear: clear,
+    dueNow: function () {
+      if (!stopped) due();
+    },
     pending: function () { return idleTimer !== null || maxTimer !== null; },
     scheduled: function () { return arms; },
     stop: function () {

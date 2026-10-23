@@ -11,7 +11,8 @@ import { mergeBase } from "../legacy/session-bridge.ts";
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
-const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const exportModule = await import("../js/14-export.js");
 const { saveDoc } = exportModule;
@@ -92,17 +93,17 @@ async function settle() {
 function openHosted(id, rev) {
   loadTestDocument(script());
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   homeModule.setHome("none");
   window.__hostedTest.setSession({ docId: id, rev: rev });
   documentLocation().markWrittenOut(true);
-  clearDirty();
+  confirmSavedNow();
 }
 
 function leave() {
   homeModule.setHome("none");
   window.__hostedTest.setSession({ docId: null });
-  clearDirty();
+  confirmSavedNow();
 }
 
 function warnToasts() {
@@ -117,7 +118,7 @@ test("a hosted save that lands after a same-id reopen is not adopted, and the ne
   openHosted("srv-a", 1);
 
   S.state.rows[0].audioText = "Typed before the save.";
-  markDirty();
+  noteSessionEdit();
   held.holdWhen((r) => r.method === "PUT");
   const saving = saveDoc({ auto: true });
   await held.gates.arrived("fetch");
@@ -139,7 +140,7 @@ test("a hosted save that lands after a same-id reopen is not adopted, and the ne
   assert.equal(server.docs.get("srv-a").rev, 2, "the late save reached the server");
 
   S.state.rows[1].audioText = "Typed after the reopen.";
-  markDirty();
+  noteSessionEdit();
   await saveDoc();
   await settle();
 
@@ -164,7 +165,7 @@ test("a hosted save that lands after another server document was opened is not r
   openHosted("srv-e", 1);
 
   S.state.rows[0].audioText = "Typed in E.";
-  markDirty();
+  noteSessionEdit();
   held.holdWhen((r) => r.method === "PUT");
   const saving = saveDoc();
   await held.gates.arrived("fetch");
@@ -193,7 +194,7 @@ test("a history restore made while a hosted save is in flight sticks, on screen 
   await ticket.done;
 
   S.state.rows[0].audioText = "Typed then regretted.";
-  markDirty();
+  noteSessionEdit();
   held.holdWhen((r) => r.method === "PUT");
   const saving = saveDoc({ auto: true });
   await held.gates.arrived("fetch");
@@ -228,7 +229,7 @@ test("a hosted save whose revision the reopen already fetched is not reported", 
   openHosted("srv-h", 1);
 
   S.state.rows[0].audioText = "Saved before the reopen.";
-  markDirty();
+  noteSessionEdit();
   const releaseReply = server.holdPutReply();
   const saving = saveDoc({ auto: true });
   for (let turn = 0; turn < 2000 && !server.answered.length; turn++) await new Promise((resolve) => setImmediate(resolve));
@@ -255,7 +256,7 @@ test("a pull noticed while a hosted save waits for its reply does not run, and t
   openHosted("srv-b", 1);
 
   S.state.rows[0].audioText = "Typed and saved.";
-  markDirty();
+  noteSessionEdit();
   const releaseReply = server.holdPutReply();
   const saving = hosted.saveToServer();
   for (let turn = 0; turn < 2000 && !server.answered.length; turn++) await new Promise((resolve) => setImmediate(resolve));
@@ -307,7 +308,7 @@ test("a plain hosted save adopts its revision and baseline and clears the unsave
   openHosted("srv-c", 1);
 
   S.state.rows[0].audioText = "Saved plainly.";
-  markDirty();
+  noteSessionEdit();
   const warnedBefore = warnToasts().length;
   await saveDoc();
   await settle();

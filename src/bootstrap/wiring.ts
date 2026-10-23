@@ -114,7 +114,7 @@ const TRANSITION_PORTS: { readonly [P in keyof TransitionDeps]: readonly (keyof 
   identity: ["mint", "writtenOut", "markWrittenOut"]
 };
 
-const SAVE_PORTS: readonly (keyof Omit<LegacySavePorts, "ownership" | "autosave">)[] = ["write", "destination", "keyOf", "obsolete", "running"];
+const SAVE_PORTS: readonly (keyof Omit<LegacySavePorts, "ownership" | "autosave">)[] = ["write", "destination", "keyOf", "obsolete"];
 
 const OWNERSHIP_PORTS: readonly (keyof SaveOwnershipPort)[] = ["capture", "stillOwns"];
 

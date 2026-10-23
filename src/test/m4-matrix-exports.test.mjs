@@ -11,7 +11,7 @@ const { LONG_DEMO } = await import("../js/_starters.js");
 const { migrateRows } = await import("../js/02-state.js");
 const { blobStore, createMemoryBackend, intern, setBackend } = await import("../adapters/storage/02c-blobs.js");
 const { brollShotListForPrint } = await import("../js/08d-broll-panel.js");
-const { clearDirty } = await import("../js/12-dirty-toast.js");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { captureExportDocument } = await import("../js/14b-export-kit.js");
 const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts");
@@ -39,7 +39,7 @@ function demo() {
 function useDocument(doc) {
   loadTestDocument(doc);
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   return doc;
 }
 
@@ -352,7 +352,7 @@ rightToday("X21", "an export of a server document fetches its missing pictures f
     hosted.pointTabAt("");
     homeModule.documentLocation().updateConnection({ token: "", role: "", scope: "" });
     setBackend(createMemoryBackend());
-    clearDirty();
+    confirmSavedNow();
   }
 });
 

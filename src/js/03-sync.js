@@ -3,7 +3,7 @@ import { S } from "./_state.js";
 import { reviewMode, setHome } from "../legacy/location-bridge.ts";
 import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
 import { dataUrlForSync, isDurableSync } from "../adapters/storage/02c-blobs.js";
-import { heldDocument, holdMergeBase, mergeBase, noteMerged, noteRecovery, noteServerUpdate, runDocumentEdit } from "../legacy/session-bridge.ts";
+import { heldDocument, holdMergeBase, mergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteServerUpdate, runDocumentEdit } from "../legacy/session-bridge.ts";
 import { wordsPerMinuteCommand } from "../application/commands/document-settings.ts";
 import { applyIncomingMerge } from "../application/session/apply-merge.ts";
 import { mergeIncoming } from "../application/session/merge-incoming.ts";
@@ -40,10 +40,10 @@ import {
   getSavedAuthorName
 } from "./10-comments.js";
 import { cleanAuthorName } from "../core/document/people.ts";
-import { markAbsorbedDirty, showToast } from "./12-dirty-toast.js";
+import { showToast } from "./12-dirty-toast.js";
 import { personColor } from "./13a-presence.js";
-import { haltAutoSave, queueAutoSave } from "./14-export.js";
-import { confirmBaseline, saveChanges } from "../legacy/save-bridge.ts";
+import { haltAutoSave } from "./14-export.js";
+import { autoSavePolicy, confirmBaseline, saveChanges } from "../legacy/save-bridge.ts";
 import { captureRestore, conflictStash, stillRestoring } from "../legacy/recovery-bridge.ts";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { driveFormatSize } from "../../shared/text.js";
@@ -105,10 +105,10 @@ async function restoreSnapshot(id, opts) {
 
     resetProductionPanelState();
     adoptRestoredState(parsed);
-    markAbsorbedDirty("recovery");
+    noteAbsorbedDirty("recovery");
     closeHistoryPanel();
     showToast(opts.restoredText || "Restored the version from " + formatTimestamp(snap.meta && snap.meta.at), "ok");
-    if (!opts.local) queueAutoSave();
+    if (!opts.local) autoSavePolicy().dueNow();
     return "restored";
   } finally {
     releaseHold();
@@ -716,11 +716,11 @@ export function toastLastEditor(loaded) {
 export function reportMerge(result, opts) {
   opts = opts || {};
   if (mergeBanner) mergeBanner.show(result, { undo: opts.undo });
-  if (!opts.alreadySaved) { markAbsorbedDirty(opts.kind || "server"); noteMergeAutoSave(opts); }
+  if (!opts.alreadySaved) { noteAbsorbedDirty(opts.kind || "server"); noteMergeAutoSave(opts); }
 }
 
 function noteMergeAutoSave(opts) {
-  if (!opts.noAutoSave) { queueAutoSave(); return; }
+  if (!opts.noAutoSave) { autoSavePolicy().dueNow(); return; }
   haltAutoSave("Autosave is paused — changes recovered for you are on screen but not in your file yet. " +
                "Press Save once you have looked them over.");
 }
@@ -748,7 +748,7 @@ var mergePorts = {
   stillOwns: function (ctx) { return stillRestoring(ctx); },
   view: {
     report: function (result, opts) { reportMerge(result, opts); },
-    absorbedDirty: function (kind) { markAbsorbedDirty(kind); },
+    absorbedDirty: function (kind) { noteAbsorbedDirty(kind); },
     toast: function (text, tone, sticky) { showToast(text, tone, sticky); }
   }
 };

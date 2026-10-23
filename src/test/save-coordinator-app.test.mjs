@@ -9,7 +9,8 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
-const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { obsoleteSaveText, saveDoc, setAutoSaveEnabled } = await import("../js/14-export.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
@@ -36,13 +37,13 @@ function heldFile(doc, name) {
 async function openFrom(target) {
   loadTestDocument(script("Placeholder", ID("0")));
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   await openProjectFile(await target.handle.getFile(), target.handle, { skipSnapshot: true, silent: true });
 }
 
 function edit(text) {
   S.state.rows[0].audioText = text;
-  markDirty();
+  noteSessionEdit();
 }
 
 function warnings() {
@@ -64,7 +65,7 @@ function scene(run) {
       await run(t);
     } finally {
       homeModule.setHome("none");
-      clearDirty();
+      confirmSavedNow();
     }
   };
 }
@@ -134,7 +135,7 @@ test("INV-20: while a save waits behind another, both Save buttons stay busy unt
   assert.ok(target.text().includes("Second."), "the file ends with the later save");
 }));
 
-test("clearDirty confirms the open destination at the current generation, and an edit puts it behind again", scene(async () => {
+test("confirmSavedNow confirms the open destination at the current generation, and an edit puts it behind again", scene(async () => {
   const target = heldFile(script("Generations", ID("e")), "generations.splitpage");
   await openFrom(target);
   assert.equal(saves.unsavedFor(), false);

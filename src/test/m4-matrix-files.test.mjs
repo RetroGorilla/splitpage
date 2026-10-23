@@ -23,7 +23,8 @@ const { buildDocx } = await import("../adapters/formats/docx.ts");
 const { closeImportModal, handleImportFile, openImportModal } = await import("../js/11-import.js");
 const { zipRead } = await import("../adapters/formats/zip.ts");
 const { setBackend: setBlobBackend } = await import("../adapters/storage/02c-blobs.js");
-const { clearDirty, markDirty } = await import("../js/12-dirty-toast.js");
+const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../js/12a-undo.js");
 const { saveDoc, setAutoSaveEnabled } = await import("../js/14-export.js");
 const { buildSplitpageFile } = await import("../js/20d-formats.js");
@@ -58,7 +59,7 @@ function heldFile(doc, name) {
 function useDocument(doc) {
   loadTestDocument(doc);
   flushEdits();
-  clearDirty();
+  confirmSavedNow();
   return doc;
 }
 
@@ -71,7 +72,7 @@ async function openFrom(target) {
 
 function edit(text) {
   S.state.rows[0].audioText = text;
-  markDirty();
+  noteSessionEdit();
 }
 
 async function turns(count) {
@@ -527,7 +528,7 @@ rightToday("I1", "an edit while import writeback awaits its bytes leaves the imp
   await importFrom(target);
   const imported = homeModule.currentHome();
   S.state.rows[0].imageRef = { sha256: "a".repeat(64), width: 4, height: 4, mime: "image/png" };
-  markDirty();
+  noteSessionEdit();
   assert.equal(imported.dirty, true, "the import home has unsaved changes");
   const gates = createGates();
   gates.hold("blob.get");

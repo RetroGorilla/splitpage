@@ -3,14 +3,13 @@ import { internDataUrl, queuePersist } from "../adapters/storage/02c-blobs.js";
 import { pushSnapshot, stampRow } from "./03-sync.js";
 import { cssAttr, safeImageSrc, sanitizeHtml } from "./04-richtext.js";
 import { anchorBrollInRows, declineBrollAnchoring } from "./08c-broll.js";
-import { markDirty } from "./12-dirty-toast.js";
 import { audioDirectionsHtml, docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
 import { importModeTouched, resetImportMode } from "../application/import-mode.ts";
 import { importRowsCommand } from "../application/commands/import-rows.ts";
 import { makeId } from "../adapters/identity/ids.ts";
 import { escapeHtml, legacyMdToHtml, truncateForPreview } from "../core/document/text-policy.ts";
-import { REVIEW_ONLY, editAllowed, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
+import { REVIEW_ONLY, editAllowed, noteSessionEdit, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
@@ -518,7 +517,7 @@ export function confirmImport() {
     var found = "";
     newRows.forEach(stampRow);
     importIntoNewDocument(newRows, function (doc) { found = scan(doc, doc.rows); });
-    markDirty();
+    noteSessionEdit();
     finishImport(newRows.length, found);
     return;
   }
