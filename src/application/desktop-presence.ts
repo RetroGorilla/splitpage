@@ -1,3 +1,8 @@
+export interface ExternalLinks {
+  readonly available: () => boolean;
+  readonly open: (url: string) => void;
+}
+
 let present = false;
 
 export const runningOnDesktop = (): boolean => present;
