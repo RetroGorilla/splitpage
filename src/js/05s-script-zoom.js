@@ -1,4 +1,4 @@
-import { S } from "./_state.js";
+import { currentDocument } from "../legacy/session-bridge.ts";
 import { prompterIsOpen } from "../application/prompter-state.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { PREF_EVENT, preferences, viewFlags } from "../legacy/preferences-bridge.ts";
@@ -161,7 +161,7 @@ function hideReadoutSoon() {
 }
 
 export function scriptViewActive() {
-  return !!S.state && !prompterIsOpen() && !viewFlags().writerOpen() &&
+  return !!currentDocument() && !prompterIsOpen() && !viewFlags().writerOpen() &&
     !document.documentElement.classList.contains("is-newtab-open");
 }
 
