@@ -15,7 +15,11 @@ const { liveSession, runDocumentEdit, stampDocument } = await import("../legacy/
 const { setTargetLength } = await import("../js/05t-target.js");
 const { registerProductionTag, findOrAddPerson } = await import("../js/07-production-tags.js");
 const { renameTag, removeTag, newBrollRecord, removeBrollProp } = await import("../application/commands/production-actions.ts");
-const { retagRewrites, retagMentions } = await import("../legacy/tag-rewrites.ts");
+const { retagRewrites: planRetagRewrites, retagMentions: countRetagMentions } = await import("../application/commands/tag-rewrites.ts");
+const { sharedPorts } = await import("../bootstrap/wiring/shared-ports.ts");
+const retagText = sharedPorts().text;
+const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
+const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
 const { sessionStamps, readSession } = await import("../legacy/session-bridge.ts");
 const { randomIds } = await import("../adapters/identity/ids.ts");
 const { addBrollProp } = await import("../js/08c-broll.js");
