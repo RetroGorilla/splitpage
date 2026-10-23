@@ -23,7 +23,7 @@ import {
   rundownSpan,
   rundownTicks
 } from "../features/rundown/rundown.js";
-import { targetOverlayParts } from "../js/05t-target.js";
+import { targetOverlayParts } from "../features/rundown/target.js";
 
 const BOARD = [
   { seconds: 15, status: "shot" },

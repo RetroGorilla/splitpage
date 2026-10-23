@@ -125,7 +125,7 @@ export interface DesktopPort {
   readonly checkForUpdate: () => Promise<DesktopResult | null>;
   readonly downloadUpdate: () => Promise<DesktopResult | null>;
   readonly installUpdate: () => Promise<DesktopResult | null>;
-  readonly onUpdateStatus: (cb: Listener<unknown>) => void;
+  readonly onUpdateStatus: (cb: Listener<unknown> | null) => void;
 
   readonly openPrompterInBrowser: () => Promise<DesktopResult | null>;
   readonly openPrompterInChromium: () => Promise<DesktopResult | null>;
