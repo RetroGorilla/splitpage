@@ -10,7 +10,9 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { applyStepsLive, undo, redo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
+const { undo, redo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
+const { applyStepsLive } = await import("../application/editing/undo/history.ts");
+const { cellRuns } = await import("./_cell-runs.mjs");
 const { invertSteps } = await import("../core/text/steps.ts");
 const { rememberCellSelection, placeEditorSelection, cellSelection } = await import("../features/editing/cell-selection.ts");
 const { editorSelection } = await import("../legacy/editor-bridge.ts");
@@ -87,16 +89,16 @@ for (const [name, media] of [["picture", PICTURE], ["video card", CARD]]) {
   test("a three-way undo over a cell that gained a " + name + " since keeps it", () => {
     const step = { op: "rowField", rowId: "r1", key: "audioText", before: "alpha bravo charlie", after: "alpha BRAVO charlie" };
     const live = { title: "T", rows: [{ id: "r1", visualText: "", audioText: "alpha BRAVO charlie " + media, status: "todo" }], comments: [], productionTags: [], people: [], brollShots: [] };
-    assert.deepEqual(applyStepsLive(live, invertSteps([step])), { ok: true });
+    assert.deepEqual(applyStepsLive(cellRuns, live, invertSteps([step])), { ok: true });
     assert.equal(live.rows[0].audioText, "alpha bravo charlie " + media);
-    assert.deepEqual(applyStepsLive(live, [step]), { ok: true });
+    assert.deepEqual(applyStepsLive(cellRuns, live, [step]), { ok: true });
     assert.equal(live.rows[0].audioText, "alpha BRAVO charlie " + media);
   });
 
   test("a three-way undo over a " + name + " the step itself added keeps text typed since", () => {
     const step = { op: "rowField", rowId: "r1", key: "audioText", before: "alpha bravo", after: "alpha " + media + " bravo" };
     const live = { title: "T", rows: [{ id: "r1", visualText: "", audioText: "alpha " + media + " bravo charlie", status: "todo" }], comments: [], productionTags: [], people: [], brollShots: [] };
-    assert.deepEqual(applyStepsLive(live, invertSteps([step])), { ok: true });
+    assert.deepEqual(applyStepsLive(cellRuns, live, invertSteps([step])), { ok: true });
     assert.equal(live.rows[0].audioText, "alpha bravo charlie");
   });
 }

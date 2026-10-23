@@ -3,7 +3,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
-import { applyStepsLive, diffStates, flushEdits, noteEdit, redo, undo } from "../js/12a-undo.js";
+import { flushEdits, noteEdit, redo, undo } from "../js/12a-undo.js";
+import { applyStepsLive, diffStates } from "../application/editing/undo/history.ts";
+import { cellRuns } from "./_cell-runs.mjs";
 import { invertSteps } from "../core/text/steps.ts";
 import { loadTestDocument } from "./_document.mjs";
 
@@ -18,7 +20,7 @@ test("replaying an edit that adds a person moves a collaborator's same-named per
   const steps = diffStates(doc(), doc({ people: [person("pM", "Ada")], productionTags: [tag("t_kettle", "Kettle", "pM")] }));
   const live = doc({ people: [person("pT", "ada")], productionTags: [tag("t_lamp", "Lamp", "pT")],
     brollShots: [shot("bs_pier", "Pier", "pT")] });
-  assert.deepEqual(applyStepsLive(live, steps), { ok: true });
+  assert.deepEqual(applyStepsLive(cellRuns, live, steps), { ok: true });
   assert.deepEqual(live.people, [person("pM", "Ada")]);
   assert.equal(ownerOf(live.productionTags, "Kettle"), "pM");
   assert.equal(ownerOf(live.productionTags, "Lamp"), "pM", "an item of theirs in the merged list too");
@@ -36,7 +38,7 @@ test("undoing a person's removal moves a same-named person's items, added since,
   const live = doc({ people: [person("pT", "ADA")], productionTags: [tag("t_kettle", "Kettle", "")],
     brollShots: [shot("bs_pier", "Pier", "pT"), shot("bs_dock", "Dock", "pT")] });
   const pier = live.brollShots[0];
-  assert.deepEqual(applyStepsLive(live, steps), { ok: true });
+  assert.deepEqual(applyStepsLive(cellRuns, live, steps), { ok: true });
   assert.deepEqual(live.people, [person("pM", "Ada")]);
   assert.equal(ownerOf(live.productionTags, "Kettle"), "pM");
   assert.deepEqual(live.brollShots.map((b) => b.owner), ["pM", "pM"]);
@@ -47,7 +49,7 @@ test("an owner from the replayed list's own same-named duplicate goes to the per
   const steps = diffStates(doc(), doc({ people: [person("pM", "Ada"), person("pQ", "ada")],
     productionTags: [tag("t_kettle", "Kettle", "pQ")] }));
   const live = doc({ people: [person("pB", "Bo")] });
-  assert.deepEqual(applyStepsLive(live, steps), { ok: true });
+  assert.deepEqual(applyStepsLive(cellRuns, live, steps), { ok: true });
   assert.deepEqual(live.people, [person("pM", "Ada"), person("pB", "Bo")]);
   assert.equal(ownerOf(live.productionTags, "Kettle"), "pM");
 });
@@ -58,7 +60,7 @@ test("a replayed people merge re-points only the ids it folded into another pers
     productionTags: [tag("t_kettle", "Kettle", "pB"), tag("t_lamp", "Lamp", "pT"), tag("t_cup", "Cup", "pGone")],
     brollShots: [shot("bs_pier", "Pier", "pB"), shot("bs_dock", "Dock", "")] });
   const shots = live.brollShots;
-  assert.deepEqual(applyStepsLive(live, steps), { ok: true, cleared: 1 });
+  assert.deepEqual(applyStepsLive(cellRuns, live, steps), { ok: true, cleared: 1 });
   assert.deepEqual(live.people, [person("pM", "Ada"), person("pB", "Bo")]);
   assert.deepEqual(live.productionTags.map((t) => t.owner), ["pB", "pM", ""]);
   assert.deepEqual(live.brollShots.map((b) => b.owner), ["pB", ""]);
@@ -70,7 +72,7 @@ test("a replay that sets the people list as recorded hands an owner it dropped t
     doc({ people: [person("pY", "bo"), person("pC", "Cy")] }));
   const live = doc({ people: [person("pX", "Bo"), person("pC", "Cy")],
     brollShots: [shot("bs_pier", "Pier", "pX"), shot("bs_dock", "Dock", "pC")] });
-  assert.deepEqual(applyStepsLive(live, steps), { ok: true });
+  assert.deepEqual(applyStepsLive(cellRuns, live, steps), { ok: true });
   assert.deepEqual(live.people, [person("pY", "bo"), person("pC", "Cy")]);
   assert.equal(ownerOf(live.brollShots, "Pier"), "pY");
   assert.equal(ownerOf(live.brollShots, "Dock"), "pC");
@@ -83,7 +85,7 @@ test("a replayed list merge hands an item to its live owner when the replayed ow
     doc({ people: people, productionTags: [tag("t_kettle", "Kettle", "pS")], brollShots: [shot("bs_pier", "Pier", "pS")] }));
   const live = doc({ people: [person("pA", "Ada")], productionTags: [tag("t_kettle", "Kettle", "pA")],
     brollShots: [shot("bs_pier", "Pier", "pA")] });
-  assert.deepEqual(applyStepsLive(live, steps), { ok: true });
+  assert.deepEqual(applyStepsLive(cellRuns, live, steps), { ok: true });
   assert.equal(ownerOf(live.productionTags, "Kettle"), "pA");
   assert.equal(ownerOf(live.brollShots, "Pier"), "pA");
 });
@@ -94,7 +96,7 @@ test("a replayed list merge judges owners against the people the replay leaves, 
   const steps = invertSteps(diffStates(before, after));
   const live = clone(after);
   live.productionTags[0].notes = "dented";
-  assert.deepEqual(applyStepsLive(live, steps), { ok: true });
+  assert.deepEqual(applyStepsLive(cellRuns, live, steps), { ok: true });
   assert.deepEqual(live.people, [person("pS", "Sam"), person("pA", "Ada")]);
   assert.deepEqual(live.productionTags, [tag("t_kettle", "Kettle", "pS", { notes: "dented" })]);
 });
