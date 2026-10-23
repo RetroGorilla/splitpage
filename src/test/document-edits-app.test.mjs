@@ -23,7 +23,7 @@ const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
 const { sessionStamps, readSession } = await import("../legacy/session-bridge.ts");
 const { randomIds } = await import("../adapters/identity/ids.ts");
 const { addBrollProp } = await import("../js/08c-broll.js");
-const { setCommentAssignee, toggleResolve } = await import("../js/10-comments.js");
+const { setCommentAssignee, toggleResolve } = await import("../features/comments/comments.js");
 const { wordsPerMinuteCommand } = await import("../application/commands/document-settings.ts");
 const { deletePersonCommand } = await import("../application/commands/production-records.ts");
 const { editStamp, documentIdStamp } = await import("../application/commands/save-stamps.ts");
