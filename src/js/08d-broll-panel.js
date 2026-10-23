@@ -16,7 +16,7 @@ import {
   updateBrollBadge
 } from "./08c-broll.js";
 import { breakUndoCoalescing } from "./12a-undo.js";
-import { personColor } from "./13a-presence.js";
+import { presence } from "../legacy/presence-bridge.ts";
 import { brollGroups as brollGroupsFrom, brollShotListForPrint, brollTable, filterCounts, FILTERS, matchesFilter, oneOf, PAGE_GROUPS, pageSummaryText, sceneLabel, shotRecordForFile, startOf } from "../adapters/formats/export-projections.ts";
 import { exportAs } from "./18-local-files.js";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
@@ -139,7 +139,7 @@ function initials(name) {
 
 function avatarHtml(person) {
   return '<span class="person-avatar broll-avatar" aria-hidden="true" style="--presence:' +
-    escapeHtml(personColor(person.name)) + '">' + escapeHtml(initials(person.name)) + '</span>';
+    escapeHtml(presence().personColor(person.name)) + '">' + escapeHtml(initials(person.name)) + '</span>';
 }
 
 function plural(n, one, many) {

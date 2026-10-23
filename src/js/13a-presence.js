@@ -1,12 +1,7 @@
 import { homeConn, serverHomeId, serverStatus } from "../legacy/location-bridge.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
-import {
-  normalizePersonColors,
-  paletteColor,
-  personKey,
-  resolvePersonColor
-} from "../core/document/person-colors.ts";
 import { cssAttr } from "./04-richtext.js";
+import { PRESENCE_MAX_SHOWN } from "../application/collaboration/presence.ts";
+import { presence } from "../legacy/presence-bridge.ts";
 import { getSavedAuthorName } from "./10-comments.js";
 import {
   apiUrl,
@@ -15,7 +10,7 @@ import {
   serverTransport
 } from "./13-hosted.js";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
-import { cappedName, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
+import { codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 
 var presenceLastActive;
@@ -24,11 +19,9 @@ var PRESENCE_BEAT_MS = 2000;
 var PRESENCE_IDLE_MS = 4 * 60 * 1000;
 var PRESENCE_BACKOFF_MS = 30000;
 var PRESENCE_SOON_MS = 300;
-var PRESENCE_MAX_SHOWN = 8;
 var PRESENCE_ID_KEY = "splitpage-presence-id";
 
 var presenceSelf = "";
-var presenceHere = [];
 var presenceWhere = { rowId: null, field: null };
 var presenceTimer = null;
 var presenceFailures = 0;
@@ -43,68 +36,6 @@ function presenceSelfId() {
     try { sessionStorage.setItem(PRESENCE_ID_KEY, presenceSelf); } catch (e) { }
   }
   return presenceSelf;
-}
-
-function presenceName(p) {
-  return (p && p.name) || "Guest";
-}
-
-function presenceSeed(p) {
-  return (p && p.name) || (p && p.id) || "";
-}
-
-function presenceColor(p) {
-  return paletteColor(p && p.color) || personColor(presenceSeed(p));
-}
-
-var presenceLiveColors = {};
-
-var recolorListeners = [];
-
-export function onPresenceRecolor(listener) {
-  recolorListeners.push(listener);
-  return function () {
-    var at = recolorListeners.indexOf(listener);
-    if (at !== -1) recolorListeners.splice(at, 1);
-  };
-}
-
-function noteLiveColors(list) {
-  var next = {};
-  (list || []).forEach(function (p) {
-    var color = paletteColor(p && p.color);
-    var key = personKey(p && p.name);
-    if (color && key) next[key] = color;
-  });
-  var changed = JSON.stringify(next) !== JSON.stringify(presenceLiveColors);
-  presenceLiveColors = next;
-  return changed;
-}
-
-export function personColor(seed) {
-  return resolvePersonColor(seed, {
-    self: getSavedAuthorName(),
-    selfColor: preferences().myColor(),
-    live: presenceLiveColors,
-    doc: currentDocument() && currentDocument().personColors
-  });
-}
-
-export function personColorsWithMine(state) {
-  if (!state) return null;
-  var name = getSavedAuthorName().trim();
-  var color = preferences().myColor();
-  if (!name || !color) return null;
-  var map = state.personColors && typeof state.personColors === "object" ? state.personColors : null;
-  var have = "";
-  if (map) {
-    Object.keys(map).forEach(function (k) { if (personKey(k) === personKey(name)) have = k; });
-    if (have && map[have] === color) return null;
-  }
-  var next = {};
-  if (map) Object.keys(map).forEach(function (k) { if (k !== have) next[k] = map[k]; });
-  next[cappedName(name, 80)] = color;
-  return normalizePersonColors(next);
 }
 
 export function presenceInitials(name) {
@@ -150,15 +81,8 @@ function presencePayload(gone) {
 }
 
 function clearPresence() {
-  if (!presenceHere.length) { paintPresence(); return; }
-  setPresenceHere([]);
-}
-
-function setPresenceHere(list) {
-  presenceHere = list || [];
-  var recolored = noteLiveColors(presenceHere);
-  paintPresence();
-  if (recolored) recolorListeners.slice().forEach(function (listener) { listener(); });
+  if (!presence().here().length) { paintPresence(); return; }
+  presence().apply([]);
 }
 
 async function presenceTick() {
@@ -172,7 +96,7 @@ async function presenceTick() {
     if (!stillOwns(ctx)) { next = PRESENCE_SOON_MS; return; }
     presenceFailures = 0;
     presenceAnnounced = true;
-    setPresenceHere((body && body.here) || []);
+    presence().apply((body && body.here) || []);
     notePresenceRev(body);
   } catch (e) {
     if (ctx && !stillOwns(ctx)) { next = PRESENCE_SOON_MS; return; }
@@ -205,7 +129,7 @@ export function onPresencePaint(listener) {
 
 export function paintPresence() {
   var bar = document.getElementById("presence-bar");
-  var list = presenceHere.slice(0, PRESENCE_MAX_SHOWN);
+  var list = presence().here().slice(0, PRESENCE_MAX_SHOWN);
   var mine = presenceLocation();
   if (bar) fitPresenceBar(bar);
   paintListeners.slice().forEach(function (listener) { listener(); });
@@ -226,23 +150,23 @@ export function paintPresence() {
     if (!target) return;
     var mark = document.createElement("span");
     mark.className = "presence-mark" + (sameField ? " is-field" : "");
-    mark.style.setProperty("--presence", presenceColor(p));
-    mark.title = presenceName(p) + (sameField ? " is in this field" : " is in this scene");
-    mark.textContent = presenceInitials(presenceName(p));
+    mark.style.setProperty("--presence", presence().colorOf(p));
+    mark.title = presence().nameOf(p) + (sameField ? " is in this field" : " is in this scene");
+    mark.textContent = presenceInitials(presence().nameOf(p));
     target.appendChild(mark);
   });
 }
 
 function presenceBarHtml(shown) {
-  var html = presenceHere.slice(0, shown).map(function (p) {
-    var name = presenceName(p);
-    return '<span class="presence-chip" style="--presence:' + presenceColor(p) +
+  var html = presence().here().slice(0, shown).map(function (p) {
+    var name = presence().nameOf(p);
+    return '<span class="presence-chip" style="--presence:' + presence().colorOf(p) +
       '" title="' + escapeHtml(name) + ' is in this document">' +
       escapeHtml(presenceInitials(name)) + '</span>';
   }).join("");
-  var rest = presenceHere.slice(shown);
+  var rest = presence().here().slice(shown);
   if (rest.length) {
-    var names = rest.map(presenceName).join(", ");
+    var names = rest.map(presence().nameOf).join(", ");
     html += '<span class="presence-more" title="' + escapeHtml(names) +
       (rest.length === 1 ? " is" : " are") + ' in this document">+' + rest.length + '</span>';
   }
@@ -250,9 +174,9 @@ function presenceBarHtml(shown) {
 }
 
 function fitPresenceBar(bar) {
-  var shown = Math.min(presenceHere.length, PRESENCE_MAX_SHOWN);
+  var shown = Math.min(presence().here().length, PRESENCE_MAX_SHOWN);
   bar.innerHTML = presenceBarHtml(shown);
-  bar.hidden = !presenceHere.length;
+  bar.hidden = !presence().here().length;
   var left = bar.closest(".topbar-left");
   if (!left || bar.hidden) return;
   while (shown > 0 && left.scrollWidth > left.clientWidth + 1) {
@@ -263,23 +187,11 @@ function fitPresenceBar(bar) {
 
 var presenceFitFrame = 0;
 function refitPresenceBar() {
-  if (presenceFitFrame || !presenceHere.length) return;
+  if (presenceFitFrame || !presence().here().length) return;
   presenceFitFrame = requestAnimationFrame(function () {
     presenceFitFrame = 0;
     var bar = document.getElementById("presence-bar");
     if (bar) fitPresenceBar(bar);
-  });
-}
-
-export function presenceShown() {
-  return presenceHere.slice(0, PRESENCE_MAX_SHOWN).map(function (p) {
-    return {
-      id: String((p && p.id) || presenceSeed(p)),
-      name: presenceName(p),
-      color: presenceColor(p),
-      rowId: (p && p.rowId) || "",
-      field: (p && p.field) || ""
-    };
   });
 }
 
@@ -328,7 +240,7 @@ export function __init() {
   })();
 
   window.__presenceTest = {
-    apply: function (here) { presenceFailures = 0; setPresenceHere(here || []); },
+    apply: function (here) { presenceFailures = 0; presence().apply(here || []); },
     payload: presencePayload,
     wanted: presenceWanted,
     beat: presenceTick,
@@ -336,7 +248,7 @@ export function __init() {
     where: presenceLocation,
     setWhere: function (w) { presenceWhere = w || { rowId: null, field: null }; paintPresence(); },
     goIdle: function () { presenceLastActive = 0; },
-    color: presenceColor,
+    color: function (p) { return presence().colorOf(p); },
     id: presenceSelfId
   };
 }

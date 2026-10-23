@@ -18,7 +18,7 @@ const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { renderComments, setCommentAssignee } = await import("../js/10-comments.js");
 const NAME_KEY = "splitpage-comment-author";
 const { preferences } = await import("../legacy/preferences-bridge.ts");
-const { personColorsWithMine } = await import("../js/13a-presence.js");
+const { presence } = await import("../legacy/presence-bridge.ts");
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
 const { loadTestDocument } = await import("./_document.mjs");
@@ -170,7 +170,7 @@ test("13a my colour is recorded under my name cut by code point (#344)", () => {
   preferences().setCommentAuthor(x(29) + GRIN + "y");
   preferences().setMyColor(PERSON_COLORS[1]);
   const state = { personColors: null };
-  assert.deepEqual(personColorsWithMine(state), { [x(29) + GRIN]: PERSON_COLORS[1] });
+  assert.deepEqual(presence().colorsWithMine(state), { [x(29) + GRIN]: PERSON_COLORS[1] });
   assert.equal(state.personColors, null, "working out the colours writes nothing");
 });
 
