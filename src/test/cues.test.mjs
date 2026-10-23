@@ -18,7 +18,12 @@ import {
 import { __init as initTags, healTagRegistry, tagsInField } from "../js/07-production-tags.js";
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, readSession } from "../legacy/session-bridge.ts";
-import { retagRewrites, retagMentions } from "../legacy/tag-rewrites.ts";
+import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions } from "../application/commands/tag-rewrites.ts";
+import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
+
+const retagText = sharedPorts().text;
+const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
+const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { zipRead } from "../adapters/formats/zip.ts";

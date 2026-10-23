@@ -21,3 +21,17 @@ test("two row drags do not share a scene", () => {
   one.start("r1");
   assert.equal(two.dragging(), null);
 });
+
+test("each end tells the end listeners after the drag is cleared, and an unsubscribed listener hears nothing more", () => {
+  const drag = createRowDrag();
+  const heard: (string | null)[] = [];
+  const off = drag.onEnd(() => { heard.push(drag.dragging()); });
+  drag.start("r1");
+  drag.end();
+  drag.end();
+  assert.deepEqual(heard, [null, null]);
+  off();
+  drag.start("r2");
+  drag.end();
+  assert.deepEqual(heard, [null, null]);
+});

@@ -57,8 +57,12 @@ export interface PreferenceNotice {
   readonly elsewhere: boolean;
 }
 
+export interface PreferenceHearing {
+  readonly elsewhere?: boolean;
+}
+
 export interface PreferenceChanges {
-  readonly onChange: (listener: (change: PreferenceNotice) => void) => () => void;
+  readonly onChange: (listener: (change: PreferenceNotice) => void, hearing?: PreferenceHearing) => () => void;
 }
 
 export interface PreferencePorts {

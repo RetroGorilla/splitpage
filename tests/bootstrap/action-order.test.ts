@@ -19,7 +19,7 @@ test("bootstrap registers today's actions in order, with the zoom actions after 
       "servers", "show-servers-dialog", "settings", "help", "tour", "long-demo", "setup", "about", "tagging-help", "export-app-data", "import-app-data",
       "save-back", "autosave", "new", "server-open", "paste", "gdoc-import", "show-gdoc-import", "drive-open", "collaborate", "ask-guest-name", "server-publish", "export-again", "set-target", "prompter-open-in-browser", "prompter-open-in-chromium",
       "script-zoom-in", "script-zoom-out", "script-zoom-reset",
-      "go-to-scene", "annotate-picture", "open-picture-link", "comment-on-selection", "tag-selection"
+      "go-to-scene", "annotate-picture", "open-picture-link", "comment-on-selection", "tag-selection", "reveal-row"
     ]);
   } finally {
     stop();

@@ -4,21 +4,16 @@ import { createDocumentSources } from "../application/transitions/sources.ts";
 import type { DocumentSource, DocumentSources } from "../application/transitions/sources.ts";
 import { createTransitions } from "../application/transitions/transitions.ts";
 import type { Transitions } from "../application/transitions/transitions.ts";
-import type { DestinationPort, HistoryPort, IdentityPort, LiveDocumentPort } from "../application/transitions/ports.ts";
+import type { DestinationPort, DocumentDestination, HistoryPort, IdentityPort, LiveDocumentPort } from "../application/transitions/ports.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
 import { migrateRows } from "../js/02-state.js";
 import { currentConn, currentHome, documentLocation } from "./location-bridge.ts";
 import { confirmedGeneration } from "./save-bridge.ts";
 import { liveSession } from "./session-bridge.ts";
 
-export interface LegacyDestination {
-  readonly kind: string;
-  readonly fields?: Readonly<Record<string, unknown>> | undefined;
-}
-
 export interface LegacyTransitionPorts {
   readonly live: LiveDocumentPort;
-  readonly destination: DestinationPort<LegacyDestination>;
+  readonly destination: DestinationPort<DocumentDestination>;
   readonly identity: IdentityPort;
   readonly history: HistoryPort;
 }
@@ -31,10 +26,8 @@ export interface LegacyOpening {
 export type LegacyDocumentSource = DocumentSource<LegacyOpening>;
 export type LegacyDocumentSources = DocumentSources<LegacyOpening>;
 
-export const NO_DESTINATION: LegacyDestination = Object.freeze({ kind: "none" });
-
 interface Started {
-  readonly transitions: Transitions<LegacyDestination>;
+  readonly transitions: Transitions<DocumentDestination>;
   readonly operations: Operations;
   readonly sources: LegacyDocumentSources;
   readonly history: HistoryPort;
@@ -75,7 +68,7 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
       }
     }
   });
-  const transitions = createTransitions<LegacyDestination>({
+  const transitions = createTransitions<DocumentDestination>({
     entry: migrateRows,
     live: ports.live,
     destination: ports.destination,
@@ -95,7 +88,7 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
   };
 }
 
-export function documentTransitions(): Transitions<LegacyDestination> {
+export function documentTransitions(): Transitions<DocumentDestination> {
   return running().transitions;
 }
 
