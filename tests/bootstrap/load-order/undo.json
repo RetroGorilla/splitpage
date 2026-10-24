@@ -1,0 +1,7 @@
+{
+  "legacyImports": [],
+  "loadOnly": [
+    "src/legacy/undo-bridge.ts"
+  ],
+  "expectedLoads": 1
+}

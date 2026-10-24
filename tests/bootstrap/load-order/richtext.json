@@ -1,0 +1,7 @@
+{
+  "legacyImports": [
+    "./04-richtext.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 1
+}

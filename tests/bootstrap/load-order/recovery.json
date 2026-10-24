@@ -1,0 +1,7 @@
+{
+  "legacyImports": [
+    "./20g-drafts.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 1
+}

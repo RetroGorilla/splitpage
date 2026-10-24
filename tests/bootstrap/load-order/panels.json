@@ -1,0 +1,7 @@
+{
+  "legacyImports": [
+    "./03b-side-panels.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 1
+}

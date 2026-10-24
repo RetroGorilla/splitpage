@@ -1,0 +1,18 @@
+{
+  "legacyImports": [
+    "./14b-export-kit.js",
+    "./20d-formats.js"
+  ],
+  "loadOnly": [
+    "src/adapters/formats/export-projections.ts",
+    "src/adapters/formats/export-kit.ts",
+    "src/adapters/formats/export-assets.ts",
+    "src/adapters/formats/export-text.ts",
+    "src/adapters/formats/csv.ts",
+    "src/adapters/formats/xlsx.ts",
+    "src/adapters/formats/docx.ts",
+    "src/adapters/formats/pdf.ts",
+    "src/bootstrap/wiring/exporters.ts"
+  ],
+  "expectedLoads": 11
+}

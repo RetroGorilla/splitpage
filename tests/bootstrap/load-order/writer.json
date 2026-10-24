@@ -1,0 +1,7 @@
+{
+  "legacyImports": [
+    "./19-writer.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 1
+}
