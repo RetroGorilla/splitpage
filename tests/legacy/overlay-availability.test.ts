@@ -1,3 +1,4 @@
+import { onboardingActions, mountOnboardingFeature, stopOnboardingFeature } from "../../src/bootstrap/wiring/onboarding.ts";
 import { commentsPanelActions, commentsHelpActions } from "../../src/bootstrap/wiring/comments.ts";
 import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
@@ -75,12 +76,13 @@ function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
     Object.defineProperty(target, "Highlight", { configurable: true, writable: true, value: Highlight });
   }
   mountHelpFeature();
+  mountOnboardingFeature();
   const registry = createActionRegistry();
   mountRundownFeature();
   mountFileMenuExportFeature();
   mountFindFeature();
   const disposers = [stopRundownFeature, stopFileMenuExportFeature, stopFindFeature, registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerAll(registry, [...viewActions().slice(0, 3), ...commentsPanelActions(), ...viewActions().slice(3)]),
-    registerAll(registry, [...shareActions().slice(0, 11), ...fileMenuExportActions().slice(1), ...shareActions().slice(11)]), stopHelpFeature];
+    registerAll(registry, [...shareActions().slice(0, 11), ...fileMenuExportActions().slice(1), ...shareActions().slice(11)]), stopHelpFeature, stopOnboardingFeature];
   const was = { state: currentDocument() as unknown, prompterOpen: prompterIsOpen() };
   loadTestDocument({ rows: [] });
   setPrompterOpen(false);
@@ -158,7 +160,7 @@ const DIALOG_OPENERS = ["about", "settings", "servers", "setup", "tagging-help",
 test("a command that opens a dialog, Help among them, is refused over a dialog but opens over Present", () => {
   const { registry, restore } = loadedRegistry();
   const menu = helpMenuActions();
-  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 5), ...updateActions(), ...commentsHelpActions(), ...menu.slice(5)]);
+  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 4), ...onboardingActions(), ...updateActions(), ...commentsHelpActions(), ...menu.slice(4)]);
   try {
     for (const id of [...DIALOG_OPENERS, "help"]) assert.equal(refusal(registry, id, "menu"), null, id);
     document.body.innerHTML = '<div class="modal-backdrop"></div>';
@@ -175,7 +177,7 @@ test("a command that opens a dialog, Help among them, is refused over a dialog b
 test("the tour is refused over a dialog and starts over Present and the shot list", () => {
   const { registry, restore } = loadedRegistry();
   const menu = helpMenuActions();
-  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 5), ...updateActions(), ...commentsHelpActions(), ...menu.slice(5)]);
+  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 4), ...onboardingActions(), ...updateActions(), ...commentsHelpActions(), ...menu.slice(4)]);
   try {
     assert.equal(refusal(registry, "tour", "menu"), null);
     document.body.innerHTML = '<div class="modal-backdrop"></div>';

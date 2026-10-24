@@ -28,7 +28,6 @@ import { __init as init_18d_command_menu } from "./18d-command-menu.js";
 import { __init as init_19_writer } from "./19-writer.js";
 import { __init as init_20_teleprompter } from "./20-teleprompter.js";
 import { __init as init_20a_update } from "./20a-update.js";
-import { __init as init_20b_onboarding } from "./20b-onboarding.js";
 import { __init as init_20d_formats } from "./20d-formats.js";
 import { __init as init_20e_connect } from "./20e-connect.js";
 import { __init as init_20f_desktop } from "./20f-desktop.js";
@@ -46,7 +45,7 @@ import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature, mountCopyPasteFeature, mountSettingsFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature, mountBrollFeature, mountScenesFeature, mountSceneMediaFeature, derivedRecordsPlan } from "../bootstrap/wiring.ts";
+import { wireApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature, mountCopyPasteFeature, mountSettingsFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature, mountBrollFeature, mountScenesFeature, mountSceneMediaFeature, derivedRecordsPlan, mountOnboardingFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -118,7 +117,7 @@ if (wiring) {
   init_19_writer();
   init_20_teleprompter();
   init_20a_update();
-  init_20b_onboarding();
+  mountOnboardingFeature();
   mountHelpFeature();
   init_20d_formats();
   init_20e_connect();

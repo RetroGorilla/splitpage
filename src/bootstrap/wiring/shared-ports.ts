@@ -1,3 +1,7 @@
+import type { DraftResume } from "../../application/recovery/draft-resume.ts";
+import type { SeedCheck } from "../../application/preferences/seed-check.ts";
+import { draftResume as currentDraftResume } from "../../legacy/recovery-bridge.ts";
+import { seedCheckPasses } from "../../legacy/seed-check.ts";
 import { randomIds, systemClock } from "../../adapters/identity/ids.ts";
 import { sidePanels } from "../../legacy/panels-bridge.ts";
 import { deleteConfirmation } from "../../legacy/production-editing-bridge.ts";
@@ -241,6 +245,12 @@ const startup: StartupSignal = {
   ready: () => startupReady()
 };
 
+const draftResume: Pick<DraftResume, "restorePending"> = {
+  restorePending: () => currentDraftResume().restorePending()
+};
+
+const seedCheck: SeedCheck = { passes: () => seedCheckPasses() };
+
 const shared = {
   ...effects,
   actions,
@@ -263,6 +273,8 @@ const shared = {
   recents,
   launch,
   fileDelivery,
+  draftResume,
+  seedCheck,
   undo: undoControl,
   transitions,
   startup,
@@ -281,7 +293,8 @@ const shared = {
   },
   sidePanels: {
     open: (id: string) => sidePanels().open(id),
-    close: (id: string) => sidePanels().close(id)
+    close: (id: string) => sidePanels().close(id),
+    closeAll: () => sidePanels().closeAll()
   },
   deletion: {
     armedId: (...args: Parameters<ReturnType<typeof deleteConfirmation>["armedId"]>) => deleteConfirmation().armedId(...args),

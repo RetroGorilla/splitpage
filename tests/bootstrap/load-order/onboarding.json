@@ -1,7 +1,9 @@
 {
-  "legacyImports": [
-    "./20b-onboarding.js"
+  "legacyImports": [],
+  "loadOnly": [
+    "src/features/onboarding/onboarding.js",
+    "src/features/onboarding/actions.ts",
+    "src/bootstrap/wiring/onboarding.ts"
   ],
-  "loadOnly": [],
-  "expectedLoads": 1
+  "expectedLoads": 3
 }

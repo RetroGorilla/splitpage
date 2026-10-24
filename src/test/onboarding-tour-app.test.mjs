@@ -6,7 +6,7 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { openOnboarding } = await import("../js/20b-onboarding.js");
+const { openOnboarding } = await import("../features/onboarding/onboarding.js");
 
 after(closeApp);
 
