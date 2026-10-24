@@ -28,7 +28,7 @@ export function mountOnboardingFeature(): OnboardingMount {
       fileDelivery: shared.fileDelivery,
       draftResume: shared.draftResume,
       seedCheck: shared.seedCheck,
-      launchFacts: shared.launchFacts,
+      launchFacts: shared.launch,
       lastFile: shared.lastFile,
       launcherInfo: () => launcherFetch("api/launcher/info"),
       onFileMenuChoice: (listener) => onFileMenuChoice(listener),

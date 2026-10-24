@@ -1,3 +1,3 @@
 export interface LastFile {
-  readonly load: () => Promise<unknown | null>;
+  readonly load: () => Promise<unknown>;
 }

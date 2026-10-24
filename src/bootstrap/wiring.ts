@@ -1,8 +1,20 @@
-import { wireProductionIndex } from "./wiring/production-index.ts";
-export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
-export { mountHelpFeature } from "./wiring/help.ts";
 export { mountOnboardingFeature } from "./wiring/onboarding.ts";
+export { mountCommentsLogicFeature } from "./wiring/comments.ts";
+import { wireProductionIndex } from "./wiring/production-index.ts";
+export { mountReadTimeFeature } from "./wiring/read-time.ts";
+export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
 export { mountDraftEditFeature } from "./wiring/draft-edit.ts";
+export { mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature } from "./wiring/rundown.ts";
+export { mountHelpFeature } from "./wiring/help.ts";
+export { derivedRecordsPlan, mountBrollFeature } from "./wiring/broll.ts";
+export { mountFindFeature } from "./wiring/find.ts";
+export { mountSettingsFeature } from "./wiring/settings.ts";
+export { mountCopyPasteFeature } from "./wiring/clipboard.ts";
+export { mountScenesFeature, mountSceneMediaFeature } from "./wiring/rows.ts";
+export { mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature } from "./wiring/gallery.ts";
+export { mountSceneStatusFeature } from "./wiring/scene-status.ts";
+export { mountHideShotFeature } from "./wiring/hide-shot.ts";
+export { mountFileMenuExportFeature } from "./wiring/file-menu-export.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
 import { registerBuiltInExporters } from "./wiring/exporters.ts";
 import { wireProductionEditing } from "./wiring/production-editing.ts";
@@ -24,6 +36,8 @@ import { installExportFormats } from "../legacy/export-formats.ts";
 import { startEditor } from "../legacy/editor-bridge.ts";
 import { startLocation } from "../legacy/location-bridge.ts";
 import { startPreferences } from "../legacy/preferences-bridge.ts";
+import { legacyShotHidingPorts, startShotHiding } from "../legacy/shot-hiding-bridge.ts";
+import { legacyPresencePorts, startPresence } from "../legacy/presence-bridge.ts";
 import { startMerge } from "../legacy/merge-bridge.ts";
 import type { LegacyMergePorts } from "../legacy/merge-bridge.ts";
 import { startRecovery } from "../legacy/recovery-bridge.ts";
@@ -35,6 +49,7 @@ import type { RecordsReconciler, SessionBridgePorts, SessionUndoPorts } from "..
 import { captureOperation, documentSources, startTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import type { LegacyDocumentSource, LegacyTransitionPorts } from "../legacy/transition-bridge.ts";
 import { createUndoAdapter, routeReplays } from "../legacy/undo-adapter.ts";
+import { flushEdits, legacyUndoPorts, startUndo, undoSizes } from "../legacy/undo-bridge.ts";
 
 export interface SessionEffects {
   readonly dirty: (change: SessionChange) => void;
@@ -92,6 +107,7 @@ export const WIRING_STEPS = Object.freeze([
   "project file services",
   "export registry",
   "built-in exporters",
+  "undo",
   "session",
   "saves",
   "save destinations",
@@ -101,7 +117,9 @@ export const WIRING_STEPS = Object.freeze([
   "recovery",
   "editor",
   "production editing",
-  "preferences"
+  "preferences",
+  "shot hiding",
+  "presence"
 ] as const);
 
 export type WiringStep = (typeof WIRING_STEPS)[number];
@@ -358,6 +376,11 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("project file services", () => deps.projectFiles(), installProjectFileServices);
   const exports = build("export registry", () => createExportRegistry(), installExportFormats);
   build("built-in exporters", () => checkedExporters((deps.exporters ?? registerBuiltInExporters)(exports)), (drop) => drop);
+  build("undo", () => {
+    const stop = startUndo(legacyUndoPorts());
+    Object.assign(window, { __undoTest: { sizes: undoSizes, flush: flushEdits } });
+    return stop;
+  }, (stop) => stop);
   build("session", () => {
     const stopIndex = wireProductionIndex(deps.bulkTags);
     try {
@@ -379,6 +402,8 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("editor", () => startEditor(liveDocumentPort), (stop) => stop);
   build("production editing", () => wireProductionEditing(deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
   build("preferences", () => startPreferences(), (stop) => stop);
+  build("shot hiding", () => startShotHiding(legacyShotHidingPorts(deps.timers ?? SYSTEM_TIMERS)), (stop) => stop);
+  build("presence", () => startPresence(legacyPresencePorts()), (stop) => stop);
   let disposed = false;
   const dispose = (): void => {
     if (disposed) return;

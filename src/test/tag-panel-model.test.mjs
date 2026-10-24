@@ -4,12 +4,19 @@ import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
-import { cellOf, projection, tagNameOf, toHtml } from "../js/04c-doc-model.js";
+import { cellOf } from "../legacy/richtext.ts";
+import { projection, tagNameOf } from "../core/text/runs.ts";
+import { toHtml } from "../core/text/html.ts";
 import { tagFieldOccurrences, tagOccurrences, tagsInField } from "../js/07-production-tags.js";
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../legacy/session-bridge.ts";
-import { retagRewrites, retagMentions } from "../legacy/tag-rewrites.ts";
-import { domProjection } from "../js/09-find-replace.js";
+import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions } from "../application/commands/tag-rewrites.ts";
+import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
+
+const retagText = sharedPorts().text;
+const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
+const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
+import { domProjection } from "../features/common/find-dom.js";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 import { loadTestDocument } from "./_document.mjs";
 

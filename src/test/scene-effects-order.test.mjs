@@ -1,15 +1,14 @@
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
-import { register } from "node:module";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 
-register("./_fanout-hooks.mjs", import.meta.url);
-
 const stubs = await import("./_fanout-stubs.mjs");
-const { cycleRowStatus, onScriptStats, statsFollowChange, updateScriptStats } = await import("../js/01-scene-status.js");
-const { setSceneLength } = await import("../js/05r-read-time.js");
+const { createSceneStatus } = await import("../features/rows/scene-status.ts");
+const { cycleRowStatus, onScriptStats, statsFollowChange, updateScriptStats } = createSceneStatus(stubs.sceneStatusPorts());
+const { __init: mountReadTime, setSceneLength } = await import("../features/rows/read-time.js");
+mountReadTime(stubs.readTimePorts());
 const bridge = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { loadTestDocument } = await import("./_document.mjs");
@@ -28,7 +27,7 @@ const wired = stubs.wireSession({
   edit: function () { return reviewing.on ? { allowed: false, reason: bridge.REVIEW_ONLY } : { allowed: true }; }
 });
 bridge.liveSession().subscribe(function (change) { published.push(change); });
-onScriptStats(function () { stubs.renderRundown(); stubs.paintTargetOverlay(); });
+onScriptStats(function (targetSeconds) { stubs.setRundownExtraSeconds(targetSeconds); stubs.renderRundown(); stubs.paintTargetOverlay(); });
 bridge.liveSession().subscribe(statsFollowChange);
 
 function lengthDoc(rows) {

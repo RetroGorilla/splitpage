@@ -1,0 +1,399 @@
+import { normalizeBrollProps } from "../../core/document/broll.ts";
+import { mintTagId, normalizeTagName, registryKey } from "../../core/document/tags.ts";
+import { isSha256Hex, refsIn } from "../../../shared/blob-policy.js";
+import { commentIds, normalizeCell } from "../../core/text/runs.ts";
+import { toHtml } from "../../core/text/html.ts";
+import { toPlainText } from "../../core/text/projections.ts";
+import { syncCommentAnchors } from "../../core/text/anchors.ts";
+import { brollIdsTaken, clipboardOfCell, freshBrollIds } from "./cell-clipboard.js";
+import { SCHEMA_VERSION } from "../../core/document/fields.ts";
+import { cappedLongText } from "../../core/document/text-policy.ts";
+import { isBlankScene } from "../../application/commands/rows.ts";
+
+export var SCENES_MIME = "application/x-splitpage-scenes";
+export var SCENES_ATTR = "data-splitpage-scenes";
+var FORMAT = "splitpage-scenes";
+var VERSION = 1;
+
+export var SCENE_BLOB_CAP = 16 * 1024 * 1024;
+
+var ports = null;
+var liveCut = null;
+
+export function setLiveCut(nonce, docId) { liveCut = nonce ? { nonce: String(nonce), docId: docId || null } : null; }
+export function liveCutNonce() { return liveCut ? liveCut.nonce : null; }
+
+export function isMove(clip, state) {
+  return !!(liveCut && clip && clip.cut && clip.cut === liveCut.nonce && state && state.docId === liveCut.docId) &&
+    scenesAway(clip, state);
+}
+
+function scenesAway(clip, state) {
+  var here = Object.create(null);
+  (state.rows || []).forEach(function (r) { if (r) here[r.id] = true; });
+  return !clip.rows.some(function (r) { return here[r.id]; });
+}
+
+function clone(v) { return v === undefined ? undefined : JSON.parse(JSON.stringify(v)); }
+
+function cellIdsOf(rows, pick) {
+  var out = Object.create(null);
+  rows.forEach(function (row) {
+    ["visualText", "audioText"].forEach(function (f) { pick(ports.text.cellOf(row[f] || ""), out); });
+  });
+  return out;
+}
+
+export function buildScenePayload(state, rowIds, opts) {
+  opts = opts || {};
+  var want = Object.create(null);
+  (rowIds || []).forEach(function (id) { want[id] = true; });
+  var rows = (state.rows || []).filter(function (r) { return r && want[r.id]; }).map(clone);
+  var rowSet = Object.create(null);
+  rows.forEach(function (r) { rowSet[r.id] = true; });
+
+  var marked = cellIdsOf(rows, function (cell, out) {
+    commentIds(cell).forEach(function (id) { out[id] = true; });
+  });
+  var comments = (state.comments || []).filter(function (c) {
+    if (!c || c.field === "title") return false;
+    return rowSet[c.rowId] || marked[c.anchorId || c.id];
+  }).map(clone);
+
+  var tagKeys = Object.create(null);
+  ports.tagsInRows(rows).forEach(function (t) { tagKeys[registryKey(t.cat.id, t.name)] = true; });
+  var keyIds = cellIdsOf(rows, function (cell, out) {
+    cell.forEach(function (r) { if (r.atom && r.id) out[r.id] = true; });
+  });
+  var brollShots = (state.brollShots || []).filter(function (b) { return b && keyIds[b.id]; }).map(clone);
+  var propIds = Object.create(null);
+  brollShots.forEach(function (b) { (b.props || []).forEach(function (p) { if (p && p.id) propIds[p.id] = true; }); });
+  var productionTags = (state.productionTags || []).filter(function (t) {
+    return t && (tagKeys[registryKey(t.cat, t.name)] || propIds[t.id]);
+  }).map(clone);
+
+  var owners = Object.create(null);
+  productionTags.concat(brollShots).forEach(function (x) { if (x.owner) owners[x.owner] = true; });
+  var people = (state.people || []).filter(function (p) { return p && owners[p.id]; }).map(clone);
+
+  var dataUrl = opts.dataUrl || ports.pictures.dataUrlFor;
+  var cap = typeof opts.cap === "number" ? opts.cap : SCENE_BLOB_CAP;
+  var blobs = {}, leftOut = [], used = 0;
+  refsIn({ rows: rows, comments: comments }).forEach(function (sha) {
+    var uri = dataUrl(sha);
+    var size = uri ? Math.floor((uri.length - uri.indexOf(",") - 1) * 3 / 4) : 0;
+    if (!uri || used + size > cap) { leftOut.push(sha); return; }
+    used += size;
+    blobs[sha] = uri;
+  });
+
+  var payload = {
+    format: FORMAT, version: VERSION,
+    source: { docId: state.docId || null, title: state.title || "" },
+    rows: rows, comments: comments, people: people,
+    productionTags: productionTags, brollShots: brollShots,
+    blobs: blobs, blobsLeftOut: leftOut
+  };
+  if (opts.cut) payload.cut = String(opts.cut);
+  return {
+    payload: payload,
+    json: JSON.stringify(payload),
+    html: scenesTableHtml(rows, payload),
+    text: scenesPlainText(rows),
+    rows: rows.length,
+    leftOut: leftOut
+  };
+}
+
+var NBSP_RE = new RegExp(String.fromCharCode(160), "g");
+
+function plainOf(html) {
+  return toPlainText(ports.text.cellOf(html || "")).replace(NBSP_RE, " ");
+}
+
+export function scenesPlainText(rows) {
+  return rows.map(function (r) {
+    return "Visual: " + plainOf(r.visualText) + "\nAudio: " + plainOf(r.audioText);
+  }).join("\n\n");
+}
+
+function escAttr(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+export function scenesTableHtml(rows, payload) {
+  var marker = "";
+  if (payload) {
+    var lean = Object.assign({}, payload, {
+      blobs: {},
+      blobsLeftOut: Object.keys(payload.blobs || {}).concat(payload.blobsLeftOut || [])
+    });
+    marker = " " + SCENES_ATTR + '="' + escAttr(JSON.stringify(lean)) + '"';
+  }
+  var cell = function (html) { return clipboardOfCell(ports.text.cellOf(html || "")).html; };
+  return '<table border="1" cellpadding="6" style="border-collapse:collapse"' + marker + ">" +
+    "<thead><tr><th>Visual</th><th>Audio</th></tr></thead><tbody>" +
+    rows.map(function (r) {
+      return '<tr><td style="vertical-align:top">' + cell(r.visualText) + '</td><td style="vertical-align:top">' + cell(r.audioText) + "</td></tr>";
+    }).join("") +
+    "</tbody></table>";
+}
+
+function readType(getData, type) {
+  try { return String(getData(type) || ""); } catch (e) { return ""; }
+}
+
+export function scenesOnClipboard(getData) {
+  var json = readType(getData, SCENES_MIME);
+  if (json) {
+    var clip = parseScenePayload(json);
+    if (clip) return clip;
+  }
+  var html = readType(getData, "text/html");
+  if (html.indexOf(SCENES_ATTR) === -1) return null;
+  var el = ports.text.inertBody(html).querySelector("[" + SCENES_ATTR + "]");
+  return el ? parseScenePayload(el.getAttribute(SCENES_ATTR)) : null;
+}
+
+export function parseScenePayload(json) {
+  var p;
+  try { p = typeof json === "string" ? JSON.parse(json) : json; } catch (e) { return null; }
+  if (!p || typeof p !== "object" || p.format !== FORMAT || typeof p.version !== "number" || p.version < 1) return null;
+  if (!Array.isArray(p.rows) || !p.rows.length) return null;
+  var carried = [];
+  var blobs = p.blobs && typeof p.blobs === "object" ? p.blobs : {};
+  Object.keys(blobs).forEach(function (sha) {
+    if (!isSha256Hex(sha) || typeof blobs[sha] !== "string") return;
+    var rec = ports.pictures.internDataUrl(blobs[sha]);
+    if (rec && rec.sha256 === sha) carried.push(sha);
+  });
+  if (carried.length) ports.pictures.queuePersist(carried);
+  var list = function (v) { return Array.isArray(v) ? clone(v) : []; };
+  var doc = ports.migrate({
+    schema: SCHEMA_VERSION,
+    title: "",
+    rows: list(p.rows),
+    comments: list(p.comments),
+    people: list(p.people),
+    productionTags: list(p.productionTags),
+    brollShots: list(p.brollShots)
+  });
+  if (!doc.rows.length) return null;
+  var source = p.source && typeof p.source === "object" ? p.source : {};
+  return {
+    rows: doc.rows,
+    comments: doc.comments,
+    people: doc.people,
+    productionTags: doc.productionTags,
+    brollShots: doc.brollShots,
+    cut: typeof p.cut === "string" && /^[A-Za-z0-9]{1,64}$/.test(p.cut) ? p.cut : null,
+    source: {
+      docId: typeof source.docId === "string" ? source.docId : null,
+      title: typeof source.title === "string" ? cappedLongText(source.title, 300) : ""
+    },
+    carried: carried,
+    refs: refsIn(doc)
+  };
+}
+
+function mintFree(prefix, taken, mint) {
+  var id, guard = 0;
+  do { id = mint(prefix); } while (taken[id] && ++guard < 100);
+  taken[id] = true;
+  return id;
+}
+
+function sceneRowIds(clip, state, move, mint) {
+  var rowTaken = Object.create(null);
+  state.rows.forEach(function (r) { rowTaken[r.id] = true; });
+  var rowMap = Object.create(null);
+  clip.rows.forEach(function (r) {
+    if (move && !rowTaken[r.id]) { rowTaken[r.id] = true; rowMap[r.id] = r.id; }
+    else rowMap[r.id] = mintFree("r", rowTaken, mint);
+  });
+  return rowMap;
+}
+
+export function scenePaste(clip, opts) {
+  opts = opts || {};
+  var mint = opts.mint || ports.ids.id;
+  var planned = null;
+  var result = null;
+  return {
+    plan: function (doc) {
+      if (!clip || !clip.rows || !clip.rows.length) return null;
+      var row = doc.rows.filter(function (r) { return r.id === opts.afterRowId; })[0];
+      var move = isMove(clip, doc);
+      var rowMap = sceneRowIds(clip, doc, move, mint);
+      planned = { move: move, rowMap: rowMap, replaceRowId: row && isBlankScene(doc, row, ports.text) ? row.id : null };
+      return {
+        inserted: clip.rows.map(function (r) { return rowMap[r.id]; }),
+        replaced: planned.replaceRowId,
+        title: !!opts.title,
+        saveNow: !opts.holdComments
+      };
+    },
+    apply: function (live) {
+      result = insertScenes(clip, {
+        state: live,
+        rowMap: planned.rowMap,
+        afterRowId: opts.afterRowId,
+        replaceRowId: planned.replaceRowId,
+        move: planned.move,
+        holdComments: !!opts.holdComments,
+        mint: mint,
+        stamp: opts.stamp
+      });
+      if (opts.title) live.title = opts.title;
+    },
+    result: function () { return result; }
+  };
+}
+
+export function insertScenes(clip, opts) {
+  opts = opts || {};
+  var state = opts.state || ports.document.current();
+  var mint = opts.mint || ports.ids.id;
+  var move = !!opts.move && scenesAway(clip, state);
+  var list = function (k) { if (!Array.isArray(state[k])) state[k] = []; return state[k]; };
+
+  var rowMap = opts.rowMap || sceneRowIds(clip, state, move, mint);
+  var firstRowId = rowMap[clip.rows[0].id];
+
+  var comments = list("comments");
+  var cmtTaken = Object.create(null);
+  comments.forEach(function (c) { if (c) { cmtTaken[c.id] = true; if (c.anchorId) cmtTaken[c.anchorId] = true; } });
+  var liveRows = Object.create(null);
+  state.rows.forEach(function (r) { liveRows[r.id] = true; });
+  var anchorMap = Object.create(null);
+  var added = [];
+  var rpTaken = Object.create(null);
+  clip.comments.forEach(function (c) {
+    var anchor = c.anchorId || c.id;
+    if (move) {
+      var here = comments.filter(function (x) { return x && x.id === c.id; })[0];
+      if (here) {
+        anchorMap[anchor] = here.anchorId || here.id;
+        if (!liveRows[here.rowId] && rowMap[c.rowId]) here.rowId = rowMap[c.rowId];
+        return;
+      }
+      if (!cmtTaken[c.id] && !cmtTaken[anchor]) {
+        cmtTaken[c.id] = true;
+        anchorMap[anchor] = anchor;
+        added.push(Object.assign(clone(c), { rowId: rowMap[c.rowId] || firstRowId }));
+        return;
+      }
+    }
+    var id = mintFree("c", cmtTaken, mint);
+    anchorMap[anchor] = id;
+    var copy = clone(c);
+    copy.id = id;
+    copy.anchorId = id;
+    copy.rowId = rowMap[c.rowId] || firstRowId;
+    copy.replies = (copy.replies || []).map(function (rep) {
+      return Object.assign(rep, { id: mintFree("rp", rpTaken, mint) });
+    });
+    added.push(copy);
+  });
+
+  var takenKeys = brollIdsTaken(state, null, null, null, move);
+  var kept = [], minted = [];
+  var mintedByRow = Object.create(null);
+  var rows = clip.rows.map(function (r) {
+    var row = clone(r);
+    row.id = rowMap[r.id];
+    ["visualText", "audioText"].forEach(function (f) {
+      var cell = ports.text.fromHtml(row[f] || "").map(function (run) {
+        if (!run.marks || !run.marks.cmt) return run;
+        var marks = Object.assign({}, run.marks);
+        marks.cmt = marks.cmt.map(function (id) { return anchorMap[id]; }).filter(Boolean);
+        return Object.assign({}, run, { marks: marks });
+      });
+      var fresh = freshBrollIds(normalizeCell(cell), takenKeys, function () { return mint("bs"); });
+      fresh.cell.forEach(function (run) {
+        if (!run.atom || !run.id) return;
+        takenKeys[run.id] = true;
+        if (fresh.minted.indexOf(run.id) === -1) kept.push(run.id);
+      });
+      minted = minted.concat(fresh.minted);
+      if (f === "visualText" && fresh.minted.length) mintedByRow[row.id] = { cell: fresh.cell, ids: fresh.minted };
+      row[f] = toHtml(fresh.cell);
+    });
+    if (opts.stamp) opts.stamp(row);
+    return row;
+  });
+
+  var at = state.rows.length;
+  var replaceAt = opts.replaceRowId ? state.rows.findIndex(function (r) { return r.id === opts.replaceRowId; }) : -1;
+  if (replaceAt !== -1) {
+    at = replaceAt;
+    state.rows.splice(replaceAt, 1);
+  } else if (opts.afterRowId) {
+    var after = state.rows.findIndex(function (r) { return r.id === opts.afterRowId; });
+    if (after !== -1) at = after + 1;
+  }
+  Array.prototype.splice.apply(state.rows, [at, 0].concat(rows));
+
+  var people = list("people");
+  var personMap = Object.create(null);
+  var peopleTaken = Object.create(null);
+  people.forEach(function (p) { peopleTaken[p.id] = true; });
+  function ownerFor(id) {
+    if (!id) return "";
+    if (personMap[id] !== undefined) return personMap[id];
+    var theirs = clip.people.filter(function (p) { return p.id === id; })[0];
+    if (!theirs) return (personMap[id] = "");
+    var norm = normalizeTagName(theirs.name);
+    var mine = people.filter(function (p) { return normalizeTagName(p.name) === norm; })[0];
+    if (!mine) {
+      mine = { id: peopleTaken[theirs.id] ? mintFree("p", peopleTaken, mint) : theirs.id, name: theirs.name };
+      peopleTaken[mine.id] = true;
+      people.push(mine);
+    }
+    return (personMap[id] = mine.id);
+  }
+
+  var registry = list("productionTags");
+  var haveTag = Object.create(null);
+  registry.forEach(function (t) { haveTag[registryKey(t.cat, t.name)] = true; });
+  clip.productionTags.forEach(function (t) {
+    var key = registryKey(t.cat, t.name);
+    if (haveTag[key]) return;
+    haveTag[key] = true;
+    registry.push({ id: mintTagId(t.cat, t.name, registry), cat: t.cat, name: t.name,
+                    owner: ownerFor(t.owner), notes: t.notes || "", status: t.status });
+  });
+
+  var shots = list("brollShots");
+  var haveShot = Object.create(null);
+  shots.forEach(function (b) { haveShot[b.id] = true; });
+  var keptSet = Object.create(null);
+  kept.forEach(function (id) { keptSet[id] = true; });
+  clip.brollShots.forEach(function (b) {
+    if (!keptSet[b.id] || haveShot[b.id]) return;
+    haveShot[b.id] = true;
+    var rec = clone(b);
+    rec.owner = ownerFor(b.owner);
+    rec.props = normalizeBrollProps((b.props || []).map(function (p) { return { id: "", name: p.name }; }), registry);
+    shots.push(rec);
+  });
+  Object.keys(mintedByRow).forEach(function (rowId) {
+    ports.recordPastedBroll(state, rowId, mintedByRow[rowId].cell, mintedByRow[rowId].ids);
+  });
+
+  if (!opts.holdComments) added.forEach(function (c) { comments.push(c); });
+  syncCommentAnchors(state, ports.text.cellOf);
+
+  return {
+    rowIds: rows.map(function (r) { return r.id; }),
+    comments: opts.holdComments ? 0 : added.length,
+    held: opts.holdComments ? added : [],
+    broll: { kept: kept, minted: minted }
+  };
+}
+
+export function __init(given) {
+  ports = given;
+  liveCut = null;
+  return { dispose: function () { liveCut = null; } };
+}

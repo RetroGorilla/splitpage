@@ -1,7 +1,7 @@
-export interface FileDeliveryOptions {
+export interface DeliverOptions {
   readonly savedMsg?: string;
 }
 
 export interface FileDelivery {
-  readonly deliver: (filename: string, data: unknown, options?: FileDeliveryOptions | null) => Promise<boolean>;
+  readonly deliver: (filename: string, data: unknown, options?: DeliverOptions | null) => Promise<boolean>;
 }

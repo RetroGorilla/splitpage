@@ -7,16 +7,19 @@ import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 await bootApp();
 
 const { liveSession } = await import("../legacy/session-bridge.ts");
-const { cycleRowStatus } = await import("../js/01-scene-status.js");
+const { cycleRowStatus } = await import("../bootstrap/wiring/scene-status.ts");
 const { migrateRows } = await import("../js/02-state.js");
 const { render } = await import("../js/05-render.js");
-const { setSceneLength } = await import("../js/05r-read-time.js");
+const { setSceneLength } = await import("../features/rows/read-time.js");
 const { noteAbsorbedDirty, noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
-const { flushEdits, lastUndoEntry, undo, undoSizes } = await import("../js/12a-undo.js");
+const { flushEdits, lastUndoEntry, undo, undoSizes } = await import("../legacy/undo-bridge.ts");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
 const { preferences } = await import("../legacy/preferences-bridge.ts");
-const { saveAuthorName } = await import("../js/10-comments.js");
+
+import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";
+import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+function saveAuthorName(name) { saveAuthorNameWith(commentPreferences(), name); }
 const NAME_KEY = "splitpage-comment-author";
 const { loadTestDocument } = await import("./_document.mjs");
 

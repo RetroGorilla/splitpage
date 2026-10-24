@@ -25,7 +25,7 @@ export interface OnboardingPorts {
   readonly fileDelivery: FileDelivery;
   readonly draftResume: Pick<DraftResume, "restorePending">;
   readonly seedCheck: SeedCheck;
-  readonly launchFacts: LaunchFacts;
+  readonly launchFacts: Pick<LaunchFacts, "firstTabOfLaunch" | "hadPriorSession" | "launchIntent" | "hasDraftToRestore">;
   readonly lastFile: LastFile;
   readonly launcherInfo: () => Promise<{ readonly root?: string } | null>;
   readonly onFileMenuChoice: (listener: () => void) => () => void;

@@ -2,7 +2,8 @@ import { amendHome, currentHome, homeConn, reviewMode, serverStatus } from "../l
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "../../shared/clock.js";
 import { onServerDoc } from "./13-hosted.js";
-import { personColorsWithMine } from "./13a-presence.js";
+import { colorsWithMine } from "../core/document/person-colors.ts";
+import { cleanAuthorName } from "../core/document/people.ts";
 import { noteDraftChange } from "./20g-drafts.js";
 import { autoSavePolicy, autoSaveTarget, noteSaveChange, saveBusy, scheduleAutoSave, unsavedChanges } from "../legacy/save-bridge.ts";
 import { saveButtonView, saveStatus } from "../application/save/status.ts";
@@ -15,7 +16,7 @@ var MY_COLOR = changeSet({ docFields: ["personColors"] });
 
 function myColorPlan(doc) {
   if (!doc || reviewMode()) return null;
-  var next = personColorsWithMine(doc);
+  var next = colorsWithMine(doc.personColors, cleanAuthorName(preferences().commentAuthor()).trim(), preferences().myColor());
   if (!next) return null;
   return { changes: MY_COLOR, apply: function (live) { live.personColors = next; } };
 }

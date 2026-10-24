@@ -1,7 +1,8 @@
 import { viewFlags } from "../legacy/preferences-bridge.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { REVIEW_ONLY, currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
+import { productionReaders as documentReaders } from "../legacy/document-ports.ts";
 import { hasSetLength as coreHasSetLength } from "../core/document/timing.ts";
-import { noteEdit } from "../js/12a-undo.js";
+import { noteEdit } from "../legacy/undo-bridge.ts";
 import { startTestSession } from "./_session.mjs";
 
 export function wireSession(effects) {
@@ -49,8 +50,12 @@ export function markDirty() {
   if (answers.noteEdit) noteEdit();
 }
 
-export function armShotHideGrace(id) { calls.push("armShotHideGrace:" + id); }
-export function clearShotHideGrace(id) { calls.push("clearShotHideGrace:" + id); }
+export function shotHiding() {
+  return {
+    armGrace: function (id) { calls.push("armShotHideGrace:" + id); },
+    clearGrace: function (id) { calls.push("clearShotHideGrace:" + id); }
+  };
+}
 
 export function renderRow(id) {
   calls.push("renderRow:" + id);
@@ -81,3 +86,28 @@ export const productionReaders = { wordCount: () => 0 };
 export function hasSetLength(row) { return coreHasSetLength(row); }
 export function formatDuration(s) { return String(s); }
 export function parseSceneLength() { return null; }
+
+export function readTimePorts() {
+  return {
+    document: { current: currentDocument, read: readSession },
+    text: { productionReaders: documentReaders },
+    edits: { run: runCommand, stamps: sessionStamps },
+    undo: { undo, redo },
+    paint: { afterThisPaint },
+    review: { reviewing: reviewMode },
+    notices: { show: showToast }
+  };
+}
+
+export function sceneStatusPorts() {
+  return {
+    document: { current: currentDocument, read: readSession },
+    edits: { run: runCommand, stamps: sessionStamps },
+    reviewRefusal: REVIEW_ONLY,
+    text: { productionReaders: documentReaders },
+    notices: { show: showToast },
+    hideShot: () => viewFlags().hideShot(),
+    shots: shotHiding(),
+    element: (id) => document.getElementById(id)
+  };
+}

@@ -6,7 +6,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
-const { openBulkTag, closeBulkTag, runBulkTag } = await import("../js/09-find-replace.js");
+const { openBulkTag, closeBulkTag, runBulkTag } = await import("../features/find/find.js");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
