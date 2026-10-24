@@ -1,0 +1,7 @@
+{
+  "legacyImports": [],
+  "loadOnly": [
+    "src/features/title/topbar.ts"
+  ],
+  "expectedLoads": 1
+}

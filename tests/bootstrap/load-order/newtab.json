@@ -1,0 +1,7 @@
+{
+  "legacyImports": [
+    "./20j-newtab.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 1
+}

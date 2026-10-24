@@ -1,0 +1,7 @@
+{
+  "legacyImports": [
+    "./03a-history-store.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 1
+}

@@ -1,0 +1,19 @@
+{
+  "legacyImports": [
+    "./05-render.js",
+    "./06-rows.js"
+  ],
+  "loadOnly": [
+    "src/features/rows/row-motion.js",
+    "src/features/rows/actions.ts",
+    "src/features/rows/read-time.js",
+    "src/bootstrap/wiring/read-time.ts",
+    "src/bootstrap/wiring/hide-shot.ts",
+    "src/bootstrap/wiring/scene-status.ts",
+    "src/features/rows/scenes.js",
+    "src/features/rows/scene-media.js",
+    "src/bootstrap/wiring/rows.ts",
+    "src/legacy/rows-bridge.ts"
+  ],
+  "expectedLoads": 12
+}

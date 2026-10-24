@@ -1,0 +1,9 @@
+{
+  "legacyImports": [],
+  "loadOnly": [
+    "src/features/help/help.js",
+    "src/features/help/actions.ts",
+    "src/bootstrap/wiring/help.ts"
+  ],
+  "expectedLoads": 3
+}

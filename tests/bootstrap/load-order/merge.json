@@ -1,0 +1,8 @@
+{
+  "legacyImports": [
+    "./03-sync.js",
+    "./18a-local-merge.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 2
+}

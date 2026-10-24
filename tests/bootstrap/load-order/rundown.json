@@ -1,0 +1,11 @@
+{
+  "legacyImports": [],
+  "loadOnly": [
+    "src/features/rundown/rundown.js",
+    "src/features/rundown/actions.ts",
+    "src/bootstrap/wiring/rundown.ts",
+    "src/features/rundown/presence.js",
+    "src/features/rundown/target.js"
+  ],
+  "expectedLoads": 5
+}

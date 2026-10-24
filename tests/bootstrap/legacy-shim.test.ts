@@ -1,28 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFile } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
-import { availableParallelism } from "node:os";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { analyzeScript, resolveSpecifier } from "../../tools/dep-report.mjs";
 import { REPO, isScript, listRepoFiles } from "../../tools/source-scan.mjs";
-import { CONFIGURATION } from "../../src/test/_load-order-hooks.mjs";
+import { frozenShimImports, readLoadManifests } from "./load-manifests.ts";
 
 const SHIM = "src/js/_entry.js";
-
-const FROZEN_SHIM_IMPORTS: readonly string[] = [
-  "./00-prelude.js", "./02-state.js", "./02b-doc-id.js",
-  "../adapters/storage/02c-blobs.js", "../adapters/storage/02d-gallery.js", "./03-sync.js", "./03a-history-store.js", "./03b-side-panels.js", "./04-richtext.js",
-  "./05-render.js",
-  "./06-rows.js", "./07-production-tags.js", "./07b-plain-tags.js", "./08-production-panels.js", "./08d-broll-panel.js",
-  "./11-import.js", "./12-dirty-toast.js", "./13-hosted.js",
-  "./13a-presence.js", "./13b-collaborate.js", "./14-export.js", "./14b-export-kit.js", "./18-local-files.js", "./18a-local-merge.js", "./18b-file-menu.js",
-  "./18d-command-menu.js", "./19-writer.js", "./20-teleprompter.js", "./20a-update.js",
-  "./20d-formats.js", "./20e-connect.js", "./20f-desktop.js", "./20g-drafts.js", "./20h-appdata.js",
-  "./20j-newtab.js",
-  "../bootstrap/wiring.ts", "../bootstrap/app.ts"
-];
+const FROZEN_SHIM_IMPORTS = frozenShimImports(readLoadManifests());
 
 const MIGRATED = ["src/application/", "src/features/", "src/bootstrap/"];
 
@@ -35,10 +20,8 @@ function importsOf(path: string): readonly Import[] {
   return analysis.imports;
 }
 
-test("the frozen shim import set has the 35 started modules and the two bootstrap modules", () => {
+test("the frozen shim import set contains no duplicates or retired export registry", () => {
   assert.equal(new Set(FROZEN_SHIM_IMPORTS).size, FROZEN_SHIM_IMPORTS.length);
-  assert.equal(FROZEN_SHIM_IMPORTS.length, 37);
-  assert.equal(FROZEN_SHIM_IMPORTS.filter((s) => /^\.\/\d/.test(s)).length, 33);
   assert.ok(!FROZEN_SHIM_IMPORTS.includes("./14e-export-formats.js"));
 });
 
@@ -67,86 +50,4 @@ test("no migrated module under application, features or bootstrap imports the le
 test("the resolver used by the scan does find an import of the shim", () => {
   const fileSet = new Set([SHIM, "src/bootstrap/probe.ts"]);
   assert.deepEqual(resolveSpecifier("src/bootstrap/probe.ts", "../js/_entry.js", fileSet), { kind: "file", target: SHIM });
-});
-
-interface LoadReport {
-  readonly target: string;
-  readonly calls: readonly { readonly file: string; readonly name: string; readonly from: string }[];
-  readonly error: string | null;
-  readonly owners: Readonly<Record<string, boolean | string>>;
-}
-
-const NOTHING_STARTED = { session: false, saves: false, recovery: false, merge: false, editor: false, productionEditing: false, preferences: false, location: false, effects: false, transitions: false, actions: false, exports: false, exportServices: false, projectFileServices: false, shotHiding: false, presence: false, undo: false };
-const CONFIGURES = /^(?:start|install|register|provide|configure|route|watch|hand|use|on)[A-Z]/;
-const run = promisify(execFile);
-
-async function loadAlone(target: string): Promise<LoadReport> {
-  const { stdout } = await run(process.execPath, [join(REPO, "src/test/_load-order-probe.mjs"), target], { cwd: REPO, maxBuffer: 1 << 24 });
-  return JSON.parse(stdout.trim().split("\n").pop() ?? "") as LoadReport;
-}
-
-async function loadEachAlone(targets: readonly string[]): Promise<LoadReport[]> {
-  const reports: LoadReport[] = [];
-  const queue = [...targets];
-  const worker = async (): Promise<void> => {
-    for (let next = queue.shift(); next !== undefined; next = queue.shift()) reports.push(await loadAlone(next));
-  };
-  await Promise.all(Array.from({ length: Math.max(1, Math.min(8, availableParallelism())) }, worker));
-  return reports.sort((a, b) => (a.target < b.target ? -1 : 1));
-}
-
-const NUMBERED = readdirSync(join(REPO, "src/js")).filter((name) => /^\d/.test(name) && name.endsWith(".js")).map((name) => "src/js/" + name);
-
-test("every configuration function the load-order check spies on exists, and every bridge or bootstrap export that configures is spied on", () => {
-  const listed = new Set<string>();
-  for (const [file, entry] of Object.entries(CONFIGURATION)) {
-    const spec = entry as { readonly functions: readonly string[]; readonly facade?: { readonly name: string } };
-    const source = readFileSync(join(REPO, file), "utf8");
-    for (const name of spec.functions) {
-      assert.equal(source.split("export function " + name + "(").length, 2, file + " declares " + name + " once");
-      listed.add(file + "#" + name);
-    }
-    if (spec.facade) assert.match(source, new RegExp("export const " + spec.facade.name + "\\b"), file + " has the " + spec.facade.name + " facade");
-  }
-  const unlisted: string[] = [];
-  const files = (listRepoFiles(REPO) as readonly string[]).filter((f) => /^src\/(?:legacy|bootstrap)\/.+\.ts$/.test(f));
-  for (const file of files) {
-    for (const found of readFileSync(join(REPO, file), "utf8").matchAll(/^export (?:async )?function (\w+)/gm)) {
-      const name = found[1] ?? "";
-      if (CONFIGURES.test(name) && !listed.has(file + "#" + name)) unlisted.push(file + "#" + name);
-    }
-  }
-  assert.deepEqual(unlisted, [], "a new function that stores a callback, an effect or an owner is added to the spy list");
-});
-
-test("the load-order check catches a module that configures a bridge while it loads, including one that only stores a callback", async () => {
-  const report = await loadAlone("src/test/_configures-on-load.mjs");
-  assert.equal(report.error, null);
-  assert.deepEqual(report.calls.map((c) => [c.file, c.name, c.from]), [
-    ["src/legacy/tour-pause.ts", "handTourPauseTo", "src/test/_configures-on-load.mjs"],
-    ["src/legacy/export-formats.ts", "installExportFormats", "src/test/_configures-on-load.mjs"]
-  ]);
-  assert.deepEqual(report.owners, { ...NOTHING_STARTED, exports: true });
-});
-
-test("no numbered module configures a bridge or starts an owner while it loads: each is imported alone, with fresh module state", { timeout: 600_000 }, async () => {
-  assert.equal(NUMBERED.length, 33, "every remaining numbered module");
-  const targets = [...NUMBERED, "src/adapters/formats/export-projections.ts", "src/adapters/formats/export-kit.ts", "src/adapters/formats/export-assets.ts", "src/adapters/formats/export-text.ts", "src/adapters/formats/csv.ts", "src/adapters/formats/xlsx.ts", "src/adapters/formats/docx.ts", "src/adapters/formats/pdf.ts", "src/features/rows/row-motion.js", "src/features/title/topbar.ts", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/script-zoom/script-zoom.js", "src/features/notices/phone-bar.ts", "src/adapters/storage/02c-blobs.js", "src/adapters/storage/02d-gallery.js", "src/adapters/storage/03c-history-idb.js", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts", "src/bootstrap/wiring/exporters.ts", "src/bootstrap/wiring/script-zoom.ts", "src/application/screen.ts", "src/features/script-zoom/actions.ts", "src/bootstrap/wiring/shared-ports.ts", "src/features/help/help.js", "src/features/help/actions.ts", "src/bootstrap/wiring/help.ts",
-    "src/features/settings/settings.js", "src/features/settings/actions.ts", "src/bootstrap/wiring/settings.ts",
-    "src/features/find/find.js", "src/features/find/actions.ts", "src/bootstrap/wiring/find.ts", "src/features/common/find-dom.js",
-    "src/features/gallery/annotate.js", "src/features/gallery/overlay.js", "src/features/gallery/actions.ts", "src/bootstrap/wiring/gallery.ts", "src/features/common/gallery.ts",
-    "src/features/rundown/rundown.js", "src/features/rundown/actions.ts", "src/features/rows/actions.ts", "src/bootstrap/wiring/rundown.ts", "src/features/rows/read-time.js", "src/bootstrap/wiring/read-time.ts", "src/features/rundown/presence.js", "src/legacy/undo-bridge.ts", "src/features/rundown/target.js", "src/features/update/ports.ts", "src/features/update/actions.ts",
-    "src/features/clipboard/cell-clipboard.js", "src/features/clipboard/scene-clip.js", "src/features/clipboard/scene-select.js", "src/bootstrap/wiring/clipboard.ts", "src/bootstrap/wiring/hide-shot.ts", "src/bootstrap/wiring/scene-status.ts", "src/features/editing/draft-edit.js", "src/bootstrap/wiring/draft-edit.ts",
-    "src/features/file-menu/export-dialog.js", "src/features/file-menu/actions.ts", "src/features/file-menu/ports.ts", "src/bootstrap/wiring/file-menu-export.ts", "src/bootstrap/wiring/file-menu-export-controls.ts",
-    "src/features/comments/comments.js", "src/features/comments/actions.ts", "src/features/common/comment-time.js", "src/features/common/comment-anchors.js", "src/features/common/editable-cell.js", "src/application/comment-author.js", "src/bootstrap/wiring/desktop-video.ts", "src/features/gallery/video.js", "src/application/media/desktop-video.ts", "src/bootstrap/wiring/broll.ts", "src/features/broll/records.ts", "src/application/production/broll-records.ts", "src/legacy/broll-bridge.ts", "src/features/rows/scenes.js", "src/features/rows/scene-media.js", "src/bootstrap/wiring/rows.ts", "src/legacy/rows-bridge.ts", "src/features/onboarding/onboarding.js", "src/features/onboarding/actions.ts", "src/bootstrap/wiring/onboarding.ts"];
-  assert.equal(targets.length, 121);
-  for (const loadOnly of ["src/features/rows/row-motion.js", "src/features/title/topbar.ts", "src/features/notices/busy.js", "src/features/editing/cell-reach.js", "src/features/notices/phone-bar.ts", "src/adapters/storage/03c-history-idb.js", "src/adapters/formats/export-projections.ts", "src/adapters/formats/export-kit.ts", "src/adapters/formats/export-assets.ts", "src/adapters/formats/export-text.ts", "src/adapters/formats/csv.ts", "src/adapters/formats/xlsx.ts", "src/adapters/formats/docx.ts", "src/adapters/formats/pdf.ts", "src/bootstrap/wiring/exporters.ts", "src/bootstrap/wiring/editor.ts", "src/bootstrap/wiring/production.ts", "src/bootstrap/wiring/production-editing.ts", "src/bootstrap/wiring/comments.ts", "src/bootstrap/wiring/views.ts", "src/bootstrap/wiring/overlay.ts", "src/bootstrap/wiring/startup.ts"]) {
-    assert.ok(targets.includes(loadOnly), loadOnly);
-  }
-  const reports = await loadEachAlone(targets);
-  assert.equal(reports.length, targets.length);
-  const offenders = reports
-    .filter((r) => r.error !== null || r.calls.length || JSON.stringify(r.owners) !== JSON.stringify(NOTHING_STARTED))
-    .map((r) => ({ target: r.target, error: r.error?.split("\n")[0] ?? null, calls: r.calls.map((c) => c.from + " -> " + c.file + "#" + c.name), owners: r.owners }));
-  assert.deepEqual(offenders, []);
 });
