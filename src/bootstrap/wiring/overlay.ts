@@ -2,7 +2,7 @@ import type { OverlayPorts } from "../../features/overlay/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { mountOverlay } from "../../features/overlay/mount.ts";
 import { paintingScreen } from "../../js/05-render.js";
-import { closeRowMenus } from "../../js/06-rows.js";
+import { closeRowMenus } from "../../features/rows/row-menu.js";
 import { hideTagGhost, tagGhost } from "../../js/07-production-tags.js";
 import { clearProductionSelection, selectedKeys } from "../../legacy/production-editing-bridge.ts";
 import { renderProduction } from "../../js/08-production-panels.js";

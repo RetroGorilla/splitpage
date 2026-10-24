@@ -9,7 +9,7 @@ import { sidePanels } from "../legacy/panels-bridge.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
 import { plainText } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
-import { focusRowField } from "./06-rows.js";
+import { focusRowField } from "../legacy/rows-bridge.ts";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import {
   addBrollProp,

@@ -9,7 +9,7 @@ import { cellSelection } from "../../features/common/cell-selection.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { migrateRows } from "../../js/02-state.js";
 import { stampRow } from "../../js/03-sync.js";
-import { closeRowMenus } from "../../js/06-rows.js";
+import { closeRowMenus } from "../../features/rows/row-menu.js";
 import { collectTagsFromRows, scheduleProductionRefresh } from "../../js/07-production-tags.js";
 import { onServerDoc } from "../../js/13-hosted.js";
 import { startNewScript } from "../../js/18b-file-menu.js";
