@@ -1,9 +1,10 @@
 import "../../../src/test/_dom.mjs";
+import { undoControl as portUndo } from "../../../src/bootstrap/wiring/ports/editing.ts";
 import { test } from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import type { UndoControl } from "../../../src/application/editing/undo-control.ts";
-import { sharedPorts } from "../../../src/bootstrap/wiring/shared-ports.ts";
+
 import { migrateRows } from "../../../src/js/02-state.js";
 import {
   breakUndoCoalescing,
@@ -19,7 +20,7 @@ import {
 import { heldDocument, liveSession, startSessionBridge } from "../../../src/legacy/session-bridge.ts";
 import { createUndoAdapter, routeReplays } from "../../../src/legacy/undo-adapter.ts";
 
-const control: UndoControl = sharedPorts().undo;
+const control: UndoControl = portUndo;
 
 function open(t: TestContext) {
   t.after(startUndo(legacyUndoPorts()));
@@ -47,7 +48,7 @@ function open(t: TestContext) {
 }
 
 test("undo control exposes exactly the five legacy functions without wrappers", () => {
-  assert.equal(sharedPorts().undo, control);
+  assert.equal(portUndo, control);
   assert.deepEqual(Object.keys(control).sort(), ["breakCoalescing", "flush", "last", "redo", "undo"]);
   assert.equal(control.breakCoalescing, breakUndoCoalescing);
   assert.equal(control.flush, flushEdits);

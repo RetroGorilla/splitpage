@@ -1,4 +1,12 @@
 import type { ActionDefinition } from "../../application/actions.ts";
+import { documentReader as portDocument } from "./ports/document.ts";
+import { review as portReview } from "./ports/location.ts";
+import { notices as portNotices } from "./ports/effects.ts";
+import { pictures as portPictures } from "./ports/pictures.ts";
+import { ownership as portOwnership } from "./ports/saving.ts";
+import { undoControl as portUndo } from "./ports/editing.ts";
+import { actions as portActions } from "./ports/actions.ts";
+import { changes as portChanges } from "./ports/preferences.ts";
 import { galleryActions as definitions } from "../../features/gallery/actions.ts";
 import { __init as mountGallery } from "../../features/gallery/annotate.js";
 import { __init as mountOverlay } from "../../features/gallery/overlay.js";
@@ -12,19 +20,17 @@ import { foldIntoEdit } from "../../legacy/undo-bridge.ts";
 import { cellEditing, pickPictureFor } from "../../legacy/editor-bridge.ts";
 import { preferences } from "../../legacy/preferences-bridge.ts";
 import { desktopVideo } from "./desktop-video.ts";
-import { sharedPorts } from "./shared-ports.ts";
 
 const gallery = owned<GalleryMount>();
 
 export function mountGalleryFeature(): GalleryMount {
   return gallery.replace(() => {
-    const shared = sharedPorts();
     const ports: GalleryPorts = {
-      document: shared.document,
-      review: shared.review,
-      notices: shared.notices,
-      pictures: shared.pictures,
-      ownership: shared.ownership,
+      document: portDocument,
+      review: portReview,
+      notices: portNotices,
+      pictures: portPictures,
+      ownership: portOwnership,
       cells: { editGallery: (...a) => cellEditing().editGallery(...a) }
     };
     return mountGallery(ports);
@@ -41,16 +47,15 @@ const overlay = owned<GalleryOverlayMount>();
 
 export function mountGalleryOverlayFeature(): GalleryOverlayMount {
   return overlay.replace(() => {
-    const shared = sharedPorts();
     const ports: GalleryOverlayPorts = {
-      document: shared.document,
-      review: shared.review,
-      notices: shared.notices,
-      ownership: shared.ownership,
+      document: portDocument,
+      review: portReview,
+      notices: portNotices,
+      ownership: portOwnership,
       cells: { editGallery: (...a) => cellEditing().editGallery(...a) },
-      undo: shared.undo,
-      actions: shared.actions,
-      changes: shared.changes,
+      undo: portUndo,
+      actions: portActions,
+      changes: portChanges,
       pickPicture: pickPictureFor,
       render: { slotPictureHtml: gallerySlotPictureHtml, badgeHtml: galleryBadgeHtml },
       video: {
@@ -72,11 +77,10 @@ const video = owned<GalleryVideoMount>();
 
 export function mountGalleryVideoFeature(): GalleryVideoMount {
   return video.replace(() => {
-    const shared = sharedPorts();
     const ports: GalleryVideoPorts = {
-      document: shared.document,
-      pictures: shared.pictures,
-      ownership: shared.ownership,
+      document: portDocument,
+      pictures: portPictures,
+      ownership: portOwnership,
       undo: { fold: foldIntoEdit },
       thumbnailsAllowed: () => preferences().videoThumbs(),
       desktop: desktopVideo

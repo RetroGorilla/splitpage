@@ -1,8 +1,9 @@
 import { test } from "node:test";
+import { launch as portLaunch } from "../../src/bootstrap/wiring/ports/desktop.ts";
 import assert from "node:assert/strict";
 import { runningOnDesktop, setRunningOnDesktop } from "../../src/application/desktop-presence.ts";
 import "../../src/test/_dom.mjs";
-import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
+
 import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
 
 test("running on desktop starts false and follows what it is told", () => {
@@ -14,7 +15,7 @@ test("running on desktop starts false and follows what it is told", () => {
 });
 
 test("launch facts read each current desktop bridge at call time", () => {
-  const facts = sharedPorts().launch;
+  const facts = portLaunch;
   const read = () => [facts.firstTabOfLaunch(), facts.hadPriorSession(), facts.launchIntent(), facts.hasDraftToRestore()];
   try {
     useDesktopForTest(null);

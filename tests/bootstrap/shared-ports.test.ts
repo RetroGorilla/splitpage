@@ -1,4 +1,12 @@
 import "../../src/test/_dom.mjs";
+import { externalLinks as portExternalLinks } from "../../src/bootstrap/wiring/ports/desktop.ts";
+import { changes as portChanges } from "../../src/bootstrap/wiring/ports/preferences.ts";
+import { actions as portActions } from "../../src/bootstrap/wiring/ports/actions.ts";
+import { screen as portScreen } from "../../src/bootstrap/wiring/ports/screen.ts";
+import { saves as portSaves } from "../../src/bootstrap/wiring/ports/saving.ts";
+import { production as portProduction } from "../../src/bootstrap/wiring/ports/production.ts";
+import { selection as portSelection } from "../../src/bootstrap/wiring/ports/editing.ts";
+import { exports as portExports } from "../../src/bootstrap/wiring/ports/files.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
@@ -7,7 +15,7 @@ import type { ExternalLinks } from "../../src/application/desktop-presence.ts";
 import { createExportRegistry } from "../../src/application/export/registry.ts";
 import type { ExportRegistry } from "../../src/application/export/registry.ts";
 import type { PreferenceNotice } from "../../src/application/preferences/preferences.ts";
-import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
+
 import { mountScriptZoomFeature, scriptZoomActions, stopScriptZoomFeature } from "../../src/bootstrap/wiring/script-zoom.ts";
 import { installAppActions } from "../../src/legacy/app-actions.ts";
 import { PREF_EVENT, preferences, startPreferences, viewFlags } from "../../src/legacy/preferences-bridge.ts";
@@ -23,7 +31,7 @@ import { liveDocumentPort } from "../../src/legacy/session-bridge.ts";
 import { migrateRows } from "../../src/js/02-state.js";
 
 test("external links check the current desktop capability and forward each address to the current bridge", () => {
-  const externalLinks: ExternalLinks = sharedPorts().externalLinks;
+  const externalLinks: ExternalLinks = portExternalLinks;
   const opened: string[][] = [];
   const url = "https://splitpage.test/releases?version=4.2#download";
   try {
@@ -53,8 +61,6 @@ test("external links check the current desktop capability and forward each addre
 });
 
 test("shared ports follow their current owners, announce synchronously in subscription order and unsubscribe", () => {
-  const shared = sharedPorts();
-  assert.equal(sharedPorts(), shared);
   const notices: PreferenceNotice[] = [];
   const order: string[] = [];
   const before = (): void => { order.push("before"); };
@@ -64,7 +70,7 @@ test("shared ports follow their current owners, announce synchronously in subscr
     announce: (change) => document.dispatchEvent(new window.CustomEvent(PREF_EVENT, { detail: change }))
   });
   document.addEventListener(PREF_EVENT, before);
-  const off = shared.changes.onChange((change) => { order.push("change"); notices.push(change); });
+  const off = portChanges.onChange((change) => { order.push("change"); notices.push(change); });
   document.addEventListener(PREF_EVENT, after);
   const first = createActionRegistry();
   let ran = 0;
@@ -85,22 +91,22 @@ test("shared ports follow their current owners, announce synchronously in subscr
     window.dispatchEvent(new window.StorageEvent("storage", { key: "unrelated" }));
     document.dispatchEvent(new window.CustomEvent(PREF_EVENT, { detail: { key: "unrelated", value: "1" } }));
     assert.equal(notices.length, 2);
-    assert.equal(shared.actions.view("probe")?.label, "First");
-    assert.equal(shared.actions.invoke("probe", "button").kind, "ran");
-    assert.equal(shared.actions.invoke("probe", "button", { at: 3 }).kind, "ran");
+    assert.equal(portActions.view("probe")?.label, "First");
+    assert.equal(portActions.invoke("probe", "button").kind, "ran");
+    assert.equal(portActions.invoke("probe", "button", { at: 3 }).kind, "ran");
     assert.deepEqual(inputs, [undefined, { at: 3 }]);
     assert.equal(ran, 2);
     viewFlags().setWriterOpen(true);
-    assert.equal(shared.screen().writer, true);
+    assert.equal(portScreen().writer, true);
     stopActions();
     stopPreferences();
     const second = createActionRegistry();
     second.register({ id: "probe", label: "Second", group: "Test", run: () => { ran += 10; } });
     stopActions = installAppActions(second);
     stopPreferences = start();
-    assert.equal(shared.screen().writer, false);
-    assert.equal(shared.actions.view("probe")?.label, "Second");
-    assert.equal(shared.actions.invoke("probe", "button").kind, "ran");
+    assert.equal(portScreen().writer, false);
+    assert.equal(portActions.view("probe")?.label, "Second");
+    assert.equal(portActions.invoke("probe", "button").kind, "ran");
     assert.equal(ran, 12);
     preferences().clearScriptScale();
     assert.deepEqual(notices[2], { name: "scriptScale", value: null, elsewhere: false });
@@ -130,7 +136,7 @@ function savePorts(): LegacySavePorts {
 }
 
 test("the save state port follows the running save owner: unsaved, busy, its changes, an autosave now and resuming autosave", async () => {
-  const saves = sharedPorts().saves;
+  const saves = portSaves;
   const timers = { start: () => null, stop: () => {} };
   assert.equal(saves.unsaved(), false);
   assert.equal(saves.busy(), false);
@@ -168,7 +174,7 @@ test("the save state port follows the running save owner: unsaved, busy, its cha
 });
 
 test("the save state setter forwards to the running save owner and preferences after a restart", () => {
-  const saves = sharedPorts().saves;
+  const saves = portSaves;
   const timers = { start: () => null, stop: () => {} };
   const stopPreferences = startPreferences();
   let stop = startSaves(savePorts(), timers);
@@ -195,7 +201,7 @@ test("the save state setter forwards to the running save owner and preferences a
 });
 
 test("the production index port forwards each call to the running production index and follows a restart", () => {
-  const production = sharedPorts().production;
+  const production = portProduction;
   assert.throws(() => production.entries(null), /The production index is not started yet/);
   const doc = migrateRows({ schema: 2, title: "T", comments: [], rows: [{ id: "r1", audioText: 'Put the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="kettle" contenteditable="false">kettle</span> on.' }] });
   let stop = startProductionIndex(productionReaders, cacheSeal);
@@ -222,7 +228,7 @@ test("the production index port forwards each call to the running production ind
 });
 
 test("the selection port drops the running editor's held link and follows a restart", () => {
-  const selection = sharedPorts().selection;
+  const selection = portSelection;
   assert.throws(() => selection.dropLink(), /The editor's owners are not started yet/);
   let stop = startEditor(liveDocumentPort);
   try {
@@ -250,7 +256,7 @@ test("the selection port drops the running editor's held link and follows a rest
 });
 
 test("the export formats port delegates to the current registry and follows a restart", () => {
-  const formats = sharedPorts().exports;
+  const formats = portExports;
   assert.throws(() => formats.cards(), /The export registry is not started yet/);
   const registry = (name: string): ExportRegistry => {
     const owner = createExportRegistry();
@@ -343,7 +349,7 @@ test("a preference subscriber that does not hear other windows adds no storage l
   const notices: PreferenceNotice[] = [];
   let off = (): void => {};
   try {
-    off = sharedPorts().changes.onChange((change) => { notices.push(change); }, { elsewhere: false });
+    off = portChanges.onChange((change) => { notices.push(change); }, { elsewhere: false });
     assert.deepEqual(added, []);
     preferences().setRundownMin(true);
     window.dispatchEvent(new window.StorageEvent("storage", { key: "splitpage-rundown-min", newValue: "0" }));

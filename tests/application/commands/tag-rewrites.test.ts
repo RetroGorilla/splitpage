@@ -1,13 +1,14 @@
 import "../../../src/test/_dom.mjs";
+import { text as portText } from "../../../src/bootstrap/wiring/ports/text.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { retagMentions, retagRewrites } from "../../../src/application/commands/tag-rewrites.ts";
 import type { DocumentView } from "../../../src/application/session/document-session.ts";
-import { sharedPorts } from "../../../src/bootstrap/wiring/shared-ports.ts";
+
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 
-const text = sharedPorts().text;
+const text = portText;
 const mug = { cat: "prop", name: "MUG" };
 
 function tag(cat: string, name: string, content: string): string {

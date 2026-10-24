@@ -1,4 +1,5 @@
 import { productionReaders } from "../legacy/document-ports.ts";
+import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import { mintTagId } from "../core/document/tags.ts";
 import "./_dom.mjs";
 import test from "node:test";
@@ -7,9 +8,8 @@ import { migrateRows } from "../js/02-state.js";
 import { healTagRegistry, productionIndexStats, registerProductionTag } from "../js/07-production-tags.js";
 import { renameTag, newBrollRecord } from "../application/commands/production-actions.ts";
 import { retagRewrites as planRetagRewrites } from "../application/commands/tag-rewrites.ts";
-import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
 
-const retagText = sharedPorts().text;
+const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 import { sessionStamps } from "../legacy/session-bridge.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
@@ -24,7 +24,6 @@ import { seededHealRounds } from "./_heal-rounds.mjs";
 import { loadTestDocument } from "./_document.mjs";
 import { deletePersonCommand } from "../application/commands/production-records.ts";
 import { runDocumentEdit } from "../legacy/session-bridge.ts";
-
 
 const tag = (cat, name) =>
   `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${name}</span>`;
