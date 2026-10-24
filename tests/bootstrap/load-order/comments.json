@@ -1,0 +1,13 @@
+{
+  "legacyImports": [],
+  "loadOnly": [
+    "src/bootstrap/wiring/comments.ts",
+    "src/features/comments/comments.js",
+    "src/features/comments/actions.ts",
+    "src/features/common/comment-time.js",
+    "src/features/common/comment-anchors.js",
+    "src/features/common/editable-cell.js",
+    "src/application/comment-author.js"
+  ],
+  "expectedLoads": 7
+}

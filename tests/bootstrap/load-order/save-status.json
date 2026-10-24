@@ -1,0 +1,7 @@
+{
+  "legacyImports": [
+    "./12-dirty-toast.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 1
+}

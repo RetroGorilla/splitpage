@@ -1,0 +1,7 @@
+{
+  "legacyImports": [
+    "./20b-onboarding.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 1
+}
