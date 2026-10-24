@@ -38,7 +38,9 @@ While a pull request is being written, run the focused checks for what it
 touches. CI then runs every fast gate on every pull request: lint, types, the
 dependency and comment gates, the build, every discovered unit, desktop and
 tool test, and the smoke, CSP and persistence browser suites. CI never
-narrows to the test files a change touched; `--only` is a local tool.
+narrows to the test files a change touched; `--only` is a local tool. CI
+distributes the full discovered test set across two required shards, while
+lint, types and the other checks run in a separate job.
 
 | Change | Run while working |
 | --- | --- |
@@ -367,7 +369,17 @@ src/test/formats`, `npm run test:all -- --only tools/test-comment-gate`.
 Discovery and its orphan, overlap and empty-group checks still run over
 everything, the selected files are listed, and the run says it is not the
 full gate. A filter that matches nothing exits 2. It is for local feedback
-only; CI always runs `npm run test:all` unfiltered.
+only; CI runs the whole set through both required shards.
+
+`--shard <index/total>` distributes each group's sorted files by alternating
+index. For example, `npm run test:all -- --shard 1/2` and `--shard 2/2`
+together run every discovered file exactly once. Full discovery, area coverage,
+orphan, overlap, required-group and golden-update guards still run in each
+shard. A group can have no files assigned to one shard, but a shard with no
+assigned files at all fails. Invalid shard coordinates and combining `--shard`
+with `--only` are errors. `--list --shard 1/2` lists the first shard without
+executing it. A shard's success covers only its printed share; all shards must
+pass. Local `npm run verify` remains an unsharded full run.
 
 `tools/test-run-tests.mjs` links the repository's `node_modules` into a
 temporary repository to type-check it. On Windows the link is a directory
@@ -592,8 +604,9 @@ above and nothing else.
 | Job | Runs |
 | --- | --- |
 | `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? |
-| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, test:all, then through `tools/run-suites.mjs` the smoke and CSP suites (`01-core.txt`, `52-csp.txt`) and the persistence suite (`265-browser-drafts.txt`); uploads the built app |
-| `gate` | Passes when `checks` passed, or when the change was prose only and it was skipped |
+| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, then through `tools/run-suites.mjs` the smoke and CSP suites (`01-core.txt`, `52-csp.txt`) and the persistence suite (`265-browser-drafts.txt`); uploads the built app |
+| `tests` | Two independent matrix jobs run `test:all -- --shard 1/2` and `2/2`, after building their own app and checking the worker stamp. Together they execute every discovered unit, desktop and tool test exactly once. They run in parallel with `checks`, subject to available runner slots |
+| `gate` | Requires successful classification, `checks` and both test shards for code changes; for prose only, requires both `checks` and `tests` to be skipped |
 | `desktop-smoke` | Electron dev-target smoke, on pushes to `main` only |
 
 The persistence suite costs little: on its first hosted run (PR #270,
