@@ -33,6 +33,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/scene-status.ts": { functions: ["mountSceneStatusFeature", "onScriptStats"] },
   "src/bootstrap/wiring/rundown.ts": { functions: ["mountRundownFeature", "mountRundownPresenceFeature", "mountTargetFeature"] },
   "src/bootstrap/wiring/find.ts": { functions: ["mountFindFeature", "mountFindEventsFeature"] },
+  "src/bootstrap/wiring/onboarding.ts": { functions: ["mountOnboardingFeature"] },
   "src/bootstrap/wiring/help.ts": { functions: ["mountHelpFeature"] },
   "src/bootstrap/wiring/settings.ts": { functions: ["mountSettingsFeature"] },
   "src/bootstrap/wiring/clipboard.ts": { functions: ["mountCopyPasteFeature"] },

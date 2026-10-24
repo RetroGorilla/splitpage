@@ -1,3 +1,4 @@
+import { onboardingActions } from "./wiring/onboarding.ts";
 import { commentsPanelActions, commentsHelpActions, commentsOpenActions } from "./wiring/comments.ts";
 import type { ActionRegistry, ActionSource, Refusal } from "../application/actions.ts";
 import { registerAll } from "../application/actions.ts";
@@ -42,7 +43,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     },
     () => {
       const menu = helpMenuActions();
-      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 5), ...updateActions(), ...commentsHelpActions(), ...menu.slice(5)]);
+      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 4), ...onboardingActions(), ...updateActions(), ...commentsHelpActions(), ...menu.slice(4)]);
     },
     () => {
       const share = shareActions();

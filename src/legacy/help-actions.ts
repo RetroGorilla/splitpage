@@ -1,7 +1,6 @@
 import type { ActionDefinition, Availability } from "../application/actions.ts";
 import { openSettings, settingsAction } from "../application/settings-actions.ts";
 import { openLongDemo } from "../js/18b-file-menu.js";
-import { openOnboarding } from "../js/20b-onboarding.js";
 import { openServersDialog, serversMenuLabel } from "../js/20e-connect.js";
 import { appDataImportShown } from "../js/20f-desktop.js";
 import { exportAppData, openImportAppData } from "../js/20h-appdata.js";
@@ -43,15 +42,6 @@ export function helpMenuActions(): ActionDefinition[] {
       icon: "i-file-plus",
       words: "demo example sample long thirty 30 scenes test try every feature",
       run: () => { openLongDemo(); }
-    },
-    {
-      id: "setup",
-      label: "Set up Splitpage…",
-      group: "Help",
-      icon: "i-sliders",
-      words: "setup settings wizard install",
-      availability: overDialogs,
-      run: () => { openOnboarding(); }
     },
     {
       id: "export-app-data",
