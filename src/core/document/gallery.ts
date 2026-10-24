@@ -1,7 +1,7 @@
 import { normalizeImageRef } from "../../../shared/blob-policy.js";
 import { rowImage } from "./media.ts";
 import type { ImageRef, ImageSource } from "./ports.ts";
-import { cappedLongText, codePointPrefix, plainText, safeHref, safeImageSrc, settledNames } from "./text-policy.ts";
+import { cappedLongText, codePointPrefix, plainText, safeHref, safeImageSrc, settledNames, unitSafePrefix } from "./text-policy.ts";
 
 export interface VideoLink {
   href?: string;
@@ -193,6 +193,13 @@ export function normalizePictureName(v: unknown): string {
 export function videoLinkKey(l: VideoLink | null | undefined): string {
   if (!l) return "";
   return l.href ? "u:" + l.href : "f:" + l.name + ":" + (l.size || 0);
+}
+
+export function videoLinkLabel(l: VideoLink | null | undefined): string {
+  if (!l) return "";
+  if (!l.href) return l.name as string;
+  const s = String(l.href).replace(/^https?:\/\//i, "").replace(/^www\./i, "").replace(/\/$/, "");
+  return s.length > 48 ? unitSafePrefix(s, 45) + "…" : s;
 }
 
 export function normalizeVideoLinks(list: unknown): VideoLink[] {

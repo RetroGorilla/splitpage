@@ -12,7 +12,7 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, saveDoc, saveToServer } = await import("../legacy/save-bridge.ts");
-const { flushEdits } = await import("../js/12a-undo.js");
+const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const hosted = await import("../js/13-hosted.js");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { restoreSnapshotFromCard } = await import("../js/03-sync.js");

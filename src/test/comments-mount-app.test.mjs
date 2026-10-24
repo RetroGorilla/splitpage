@@ -13,7 +13,7 @@ const { mountCommentsFeature } = await import("../bootstrap/wiring/comments.ts")
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../js/05-render.js");
 const { documentLocation } = await import("../legacy/location-bridge.ts");
-const { openCommentComposer, openCommentsPanel, closeCommentComposer } = await import("../js/10-comments.js");
+const { openCommentComposer, openCommentsPanel, closeCommentComposer } = await import("../features/comments/comments.js");
 after(closeApp);
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";

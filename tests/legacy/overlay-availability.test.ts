@@ -1,3 +1,5 @@
+import { onboardingActions, mountOnboardingFeature, stopOnboardingFeature } from "../../src/bootstrap/wiring/onboarding.ts";
+import { commentsPanelActions, commentsHelpActions } from "../../src/bootstrap/wiring/comments.ts";
 import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
 import "../../src/test/_location-started.mjs";
@@ -8,16 +10,21 @@ import type { ActionRegistry, ActionSource } from "../../src/application/actions
 import { currentDocument } from "../../src/legacy/session-bridge.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
 import { prompterIsOpen, setPrompterOpen } from "../../src/application/prompter-state.ts";
-import { registerFileActions } from "../../src/legacy/file-actions.ts";
+import { fileActions } from "../../src/legacy/file-actions.ts";
 import { helpMenuActions } from "../../src/legacy/help-actions.ts";
 import { helpActions, mountHelpFeature, stopHelpFeature } from "../../src/bootstrap/wiring/help.ts";
-import { onboardingActions, mountOnboardingFeature, stopOnboardingFeature } from "../../src/bootstrap/wiring/onboarding.ts";
+import { updateActions } from "../../src/bootstrap/wiring/update.ts";
 import { availableUnless, EVERY_OVERLAY, everyOverlayBut, inFront, OPENS_A_DIALOG } from "../../src/application/screen.ts";
 import type { Blocker, ScreenState } from "../../src/application/screen.ts";
-import { registerShareActions } from "../../src/legacy/share-actions.ts";
-import { registerThisDocumentActions } from "../../src/legacy/this-document-actions.ts";
-import { registerViewActions } from "../../src/legacy/view-actions.ts";
+import { shareActions } from "../../src/legacy/share-actions.ts";
+import { thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { hideShotActions } from "../../src/bootstrap/wiring/hide-shot.ts";
+import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
+import { viewActions } from "../../src/legacy/view-actions.ts";
 import { viewFlags } from "../../src/legacy/preferences-bridge.ts";
+import { findActions, mountFindFeature, stopFindFeature } from "../../src/bootstrap/wiring/find.ts";
+import { fileMenuExportActions, mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../src/bootstrap/wiring/file-menu-export.ts";
+
 
 const NOTHING: ScreenState = {
   loading: false, dialog: false, launcher: false, tour: false, prompter: false, writer: false, shotlist: false
@@ -60,11 +67,22 @@ test("each blocker refuses with its own reason", () => {
 });
 
 function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
+  const globals = [window, globalThis].flatMap((target) =>
+    ["CSS", "Highlight"].map((name) => ({ target, name, descriptor: Object.getOwnPropertyDescriptor(target, name) })));
+  const css = { highlights: new Map() };
+  class Highlight extends Set {}
+  for (const target of [window, globalThis]) {
+    Object.defineProperty(target, "CSS", { configurable: true, writable: true, value: css });
+    Object.defineProperty(target, "Highlight", { configurable: true, writable: true, value: Highlight });
+  }
   mountHelpFeature();
   mountOnboardingFeature();
   const registry = createActionRegistry();
-  const disposers = [registerFileActions(registry), registerThisDocumentActions(registry), registerViewActions(registry),
-    registerShareActions(registry), stopHelpFeature, stopOnboardingFeature];
+  mountRundownFeature();
+  mountFileMenuExportFeature();
+  mountFindFeature();
+  const disposers = [stopRundownFeature, stopFileMenuExportFeature, stopFindFeature, registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerAll(registry, [...viewActions().slice(0, 3), ...commentsPanelActions(), ...viewActions().slice(3)]),
+    registerAll(registry, [...shareActions().slice(0, 11), ...fileMenuExportActions().slice(1), ...shareActions().slice(11)]), stopHelpFeature, stopOnboardingFeature];
   const was = { state: currentDocument() as unknown, prompterOpen: prompterIsOpen() };
   loadTestDocument({ rows: [] });
   setPrompterOpen(false);
@@ -74,7 +92,14 @@ function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
       loadTestDocument(was.state);
       setPrompterOpen(was.prompterOpen);
       document.body.innerHTML = "";
-      for (const dispose of disposers) dispose();
+      try {
+        for (const dispose of disposers) dispose();
+      } finally {
+        for (const { target, name, descriptor } of globals) {
+          if (descriptor) Object.defineProperty(target, name, descriptor);
+          else Reflect.deleteProperty(target, name);
+        }
+      }
     }
   };
 }
@@ -135,7 +160,7 @@ const DIALOG_OPENERS = ["about", "settings", "servers", "setup", "tagging-help",
 test("a command that opens a dialog, Help among them, is refused over a dialog but opens over Present", () => {
   const { registry, restore } = loadedRegistry();
   const menu = helpMenuActions();
-  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 4), ...onboardingActions(), ...menu.slice(4)]);
+  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 4), ...onboardingActions(), ...updateActions(), ...commentsHelpActions(), ...menu.slice(4)]);
   try {
     for (const id of [...DIALOG_OPENERS, "help"]) assert.equal(refusal(registry, id, "menu"), null, id);
     document.body.innerHTML = '<div class="modal-backdrop"></div>';
@@ -152,7 +177,7 @@ test("a command that opens a dialog, Help among them, is refused over a dialog b
 test("the tour is refused over a dialog and starts over Present and the shot list", () => {
   const { registry, restore } = loadedRegistry();
   const menu = helpMenuActions();
-  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 4), ...onboardingActions(), ...menu.slice(4)]);
+  const help = registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 4), ...onboardingActions(), ...updateActions(), ...commentsHelpActions(), ...menu.slice(4)]);
   try {
     assert.equal(refusal(registry, "tour", "menu"), null);
     document.body.innerHTML = '<div class="modal-backdrop"></div>';

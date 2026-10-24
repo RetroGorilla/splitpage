@@ -1,4 +1,4 @@
-import { domToPos } from "../features/common/cell-dom.ts";
+import { domToPos, posToDom } from "../features/common/cell-dom.ts";
 import "./_dom.mjs";
 import test, { after, before } from "node:test";
 import assert from "node:assert/strict";
@@ -14,8 +14,9 @@ import {
   newHistory,
   stripMediaMarks
 } from "../features/editing/draft-edit.js";
-import { cellLength, fromHtml, projection, setMark } from "../js/04c-doc-model.js";
-import { posToDom } from "../features/common/cell-dom.ts";
+import { cellLength, projection } from "../core/text/runs.ts";
+import { fromHtml } from "../legacy/richtext.ts";
+import { setMark } from "../core/text/edits.ts";
 import { mountDraftEditFeature, stopDraftEditFeature } from "../bootstrap/wiring/draft-edit.ts";
 
 before(mountDraftEditFeature);

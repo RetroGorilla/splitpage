@@ -10,9 +10,9 @@ await bootApp(JSON.stringify({ schema: 2, title: "Mine", rows: [], rev: 5 }));
 
 const { migrateRows } = await import("../js/02-state.js");
 const { promptForName } = await import("../js/03-sync.js");
-const { toggleReplyComposer } = await import("../js/10-comments.js");
+const { toggleReplyComposer } = await import("../features/comments/comments.js");
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
-const { openSettings } = await import("../js/20s-settings.js");
+const { openSettings } = await import("../features/settings/settings.js");
 const { render } = await import("../js/05-render.js");
 const { loadTestDocument } = await import("./_document.mjs");
 

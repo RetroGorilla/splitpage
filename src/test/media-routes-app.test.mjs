@@ -13,10 +13,10 @@ await bootApp();
 const { migrateRows } = await import("../js/02-state.js");
 const { exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { undo, undoSizes, flushEdits } = await import("../js/12a-undo.js");
+const { undo, undoSizes, flushEdits } = await import("../legacy/undo-bridge.ts");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { rowSlots } = await import("../core/document/gallery.ts");
-const { openGalleryOverlay, closeGalleryOverlay } = await import("../js/05e-gallery-overlay.js");
+const { openGalleryOverlay, closeGalleryOverlay } = await import("../features/gallery/overlay.js");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
@@ -242,7 +242,7 @@ test("a click on a video link opens it and edits nothing", async () => {
 
 test("when the session refuses edits, a gallery change writes nothing", async () => {
   await open();
-  const { removeImage } = await import("../js/06-rows.js");
+  const { removeImage } = await import("../bootstrap/wiring/rows.ts");
   const before = JSON.stringify(row("r2"));
   const seq = saveChanges();
   window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });

@@ -4,7 +4,7 @@ import { onPreferenceChange, viewFlags } from "../../legacy/preferences-bridge.t
 import { onSaveChange } from "../../legacy/save-bridge.ts";
 import { identityChipListeners } from "../../js/03-sync.js";
 import { saveStatusListeners } from "../../js/12-dirty-toast.js";
-import { onPresenceRecolor } from "../../js/13a-presence.js";
+import { presence } from "../../legacy/presence-bridge.ts";
 import { fileChipListeners, mirrorFileChipToWriter, updateFileChip } from "../../js/18-local-files.js";
 import { refreshOpenFileMenu } from "../../js/18b-file-menu.js";
 import { desktopDocumentListeners } from "../../js/20f-desktop.js";
@@ -36,7 +36,7 @@ export function mountDocumentChromeFeature(): void {
   stops.push(
     onSessionChange(identity.session),
     onPreferenceChange(identity.preference),
-    onPresenceRecolor(identity.colours),
+    presence().onRecolor(identity.colours),
     onSessionChange(desktop.session),
     documentLocation().onChange(desktop.location),
     onSaveChange(desktop.save),

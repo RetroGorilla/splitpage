@@ -7,12 +7,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { __init as initStatus } from "../js/01-scene-status.js";
 import { migrateRows } from "../js/02-state.js";
 import { htmlToMarkdown } from "../js/04-richtext.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { breakdownRows } from "../js/08-production-panels.js";
-import { commentBodyText, commentEntries } from "../js/10-comments.js";
+import { commentBodyText, commentEntries } from "../adapters/formats/export-projections.ts";
 import { mdSceneCellSource, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
 import { LONG_DEMO } from "../js/_starters.js";
 import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, fileImagesMissing, parseMarkdownProject } from "../adapters/formats/project-file.ts";
@@ -22,7 +21,6 @@ import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
-initStatus();
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const PNG_BYTES = Buffer.from(PNG.slice(PNG.indexOf(",") + 1), "base64");

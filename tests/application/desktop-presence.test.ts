@@ -14,11 +14,11 @@ test("running on desktop starts false and follows what it is told", () => {
 });
 
 test("launch facts read each current desktop bridge at call time", () => {
-  const facts = sharedPorts().launchFacts;
+  const facts = sharedPorts().launch;
   const read = () => [facts.firstTabOfLaunch(), facts.hadPriorSession(), facts.launchIntent(), facts.hasDraftToRestore()];
   try {
     useDesktopForTest(null);
-    assert.deepEqual(read(), [false, false, null, false]);
+    assert.deepEqual(read(), [undefined, undefined, undefined, undefined]);
     const intent = { type: "blank" };
     useDesktopForTest({ firstTabOfLaunch: true, hadPriorSession: false, launchIntent: intent, hasDraftToRestore: false });
     assert.deepEqual(read(), [true, false, { type: "blank" }, false]);

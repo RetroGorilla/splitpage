@@ -23,15 +23,13 @@ import {
 } from "./03a-history-store.js";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { safeId } from "./04-richtext.js";
-import { targetSectionHtml, wireTargetSection } from "./05t-target.js";
+import { targetSectionHtml, wireTargetSection } from "../legacy/target-section.ts";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
-import {
-  formatTimestamp,
-  getSavedAuthorName
-} from "./10-comments.js";
+import { formatTimestamp } from "../features/common/comment-time.js";
+import { getSavedAuthorName } from "../application/comment-author.js";
 import { cleanAuthorName } from "../core/document/people.ts";
 import { showToast } from "./12-dirty-toast.js";
-import { personColor } from "./13a-presence.js";
+import { presence } from "../legacy/presence-bridge.ts";
 import { autoSavePolicy, confirmBaseline, saveChanges } from "../legacy/save-bridge.ts";
 import { captureRestore, stillRestoring } from "../legacy/recovery-bridge.ts";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
@@ -44,7 +42,7 @@ export { mergeTargetLength } from "../core/merge/scalars.ts";
 
 
 export function getEditorName() {
-  return getSavedAuthorName() || "Anonymous";
+  return getSavedAuthorName(preferences()) || "Anonymous";
 }
 
 export function stampRow(row) {
@@ -96,7 +94,7 @@ async function restoreSnapshot(id, opts) {
     adoptRestoredState(parsed);
     noteAbsorbedDirty("recovery");
     sidePanels().close("history-panel");
-    showToast(opts.restoredText || "Restored the version from " + formatTimestamp(snap.meta && snap.meta.at), "ok");
+    showToast(opts.restoredText || "Restored the version from " + formatTimestamp(snap.meta && snap.meta.at, preferences().clock()), "ok");
     if (!opts.local) autoSavePolicy().dueNow();
     return "restored";
   } finally {
@@ -188,14 +186,14 @@ function mergeStates(base, mine, theirs) {
 }
 
 export function updateIdentityChip() {
-  var name = getSavedAuthorName();
+  var name = getSavedAuthorName(preferences());
   var chip = document.getElementById("identity-chip");
   document.getElementById("identity-name").textContent = name || "Set your name";
   chip.classList.toggle("unnamed", !name);
   var dot = chip.querySelector(".identity-dot");
   if (dot) {
     dot.setAttribute("aria-hidden", "true");
-    if (name) dot.style.setProperty("--person", personColor(name));
+    if (name) dot.style.setProperty("--person", presence().personColor(name));
     else dot.style.removeProperty("--person");
   }
 }
@@ -283,7 +281,7 @@ function openAnchorPopover(host, id, label, html) {
 }
 
 export function personSwatchesHtml(name, radioName, legendClass) {
-  var current = preferences().myColor() || personColor(name || "");
+  var current = preferences().myColor() || presence().personColor(name || "");
   return '<fieldset class="swatch-group" role="radiogroup" aria-label="Your colour">' +
     '<legend class="' + (legendClass || "anchor-popover-label") + '">Your colour</legend>' +
     '<div class="swatch-row">' +
@@ -297,7 +295,7 @@ export function personSwatchesHtml(name, radioName, legendClass) {
 }
 
 export function promptForName() {
-  var current = getSavedAuthorName();
+  var current = getSavedAuthorName(preferences());
   var host = document.getElementById("identity-chip");
   var wrap = openAnchorPopover(host, "identity-editor", "Your name and colour",
     '<label class="anchor-popover-label" for="identity-input">Your name</label>' +
@@ -457,7 +455,7 @@ function historyInitials(name) {
 function historyPersonHtml(name) {
   name = String(name || "").trim();
   if (!name) return '<span class="history-none">—</span>';
-  return '<span class="person-avatar" style="--size: 20px; --presence: ' + escapeHtml(personColor(name)) + '" aria-hidden="true">' +
+  return '<span class="person-avatar" style="--size: 20px; --presence: ' + escapeHtml(presence().personColor(name)) + '" aria-hidden="true">' +
       escapeHtml(historyInitials(name)) + '</span>' +
     '<span class="history-person">' + escapeHtml(name) + '</span>';
 }

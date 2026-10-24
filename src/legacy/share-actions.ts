@@ -1,5 +1,4 @@
-import type { ActionDefinition, ActionRegistry, Availability } from "../application/actions.ts";
-import { registerAll } from "../application/actions.ts";
+import type { ActionDefinition, Availability } from "../application/actions.ts";
 import { promptForTarget } from "../js/03-sync.js";
 import { openGdocModal, openImportModal } from "../js/11-import.js";
 import { openDriveModal, openServerPicker, publishToServer, serverOpenItemState, serverPublishItemState } from "../js/13-hosted.js";
@@ -7,7 +6,6 @@ import { collaborateBlockedReason, maybeAskGuestName, openCollaborate } from "..
 import { autoSavePolicy, savesStarted, toggleAutoSave } from "./save-bridge.ts";
 import { saveBackItemState, saveBackToFile } from "../js/18-local-files.js";
 import { pasteItemState, startNewScript } from "../js/18b-file-menu.js";
-import { exportAgain, exportAgainItemState } from "../js/18c-export-dialog.js";
 import { canOpenPrompterInBrowser, canOpenPrompterInChromium } from "../adapters/desktop/desktop-port.ts";
 import {
   driveOpenShown,
@@ -34,7 +32,7 @@ function desktopKeys(keys: readonly string[]): () => readonly string[] {
   return () => (inDesktopApp() ? keys : []);
 }
 
-export function registerShareActions(registry: ActionRegistry): () => void {
+export function shareActions(): ActionDefinition[] {
   const definitions: ActionDefinition[] = [
     {
       id: "save-back",
@@ -138,15 +136,6 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       run: async () => { await publishToServer(); }
     },
     {
-      id: "export-again",
-      label: () => exportAgainItemState().label || "Export again",
-      group: "Export",
-      icon: "i-repeat",
-      words: "export again repeat last",
-      availability: (source) => ({ ...loaded(itemAvailability(exportAgainItemState(), source)), visible: false }),
-      run: () => { exportAgain(); }
-    },
-    {
       id: "set-target",
       label: "Set target length…",
       group: "This document",
@@ -176,5 +165,5 @@ export function registerShareActions(registry: ActionRegistry): () => void {
       run: async () => { await openPrompterInChromium(); }
     }
   ];
-  return registerAll(registry, definitions);
+  return definitions;
 }

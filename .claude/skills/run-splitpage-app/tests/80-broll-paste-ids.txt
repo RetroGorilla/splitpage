@@ -1,5 +1,5 @@
-# A pasted b-roll key is a line of its own (#85, src/js/05c-clipboard.js
-# freshBrollIds, 08c-broll.js recordPastedBroll and the anchoring pass):
+# A pasted b-roll key is a line of its own (#85, src/features/clipboard/cell-clipboard.js
+# freshBrollIds, application/production/broll-records.ts recordPastedBroll and the anchoring pass):
 #
 #   * a copy of a "B-roll:" line pasted into another scene, into the same
 #     cell, or pasted a second time, gets a new id every time — never the
