@@ -93,7 +93,7 @@ import {
 } from "./rows.ts";
 import { closeRowMenus, rowMenuKeydown, toggleRowMenu } from "../../features/rows/row-menu.js";
 import { compressImageFile, videoFirstFrame } from "../../features/rows/scene-media.js";
-import { grantVideoFile, openGalleryLink } from "../../js/06-rows.js";
+import { videoFiles } from "./video-files.ts";
 import {
   acceptTagGhost,
   acceptUntaggedMention,
@@ -393,7 +393,7 @@ const mediaRoutePorts: MediaRoutePorts = {
   addPicture: handleImageFile,
   removePicture: removeImage,
   removeLink: removeImageLink,
-  openLink: openGalleryLink
+  openLink: videoFiles.openGallery
 };
 
 export function mountMediaFeature(): ReturnType<typeof mountMediaRoutes> {
@@ -651,7 +651,7 @@ const clipboardRoutePorts = {
   pasteDraft: pasteIntoDraft,
   hasMedia: hasMediaFiles,
   readMedia: function (files: FileList | readonly File[]) {
-    return readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: grantVideoFile });
+    return readClipboardFiles(files, compressImageFile, { frame: videoFirstFrame, grant: videoFiles.grant });
   },
   capture: captureOperation,
   stillOwns: stillOwns,

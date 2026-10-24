@@ -77,7 +77,8 @@ const { applyTakenDraft } = await import("../js/20g-drafts.js");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 const { makeDesktopHandle } = await import("../adapters/desktop/desktop-handle.ts");
-const { grantVideoFile, hasSessionVideo, sessionVideoUrl } = await import("../js/06-rows.js");
+const { videoFiles } = await import("../bootstrap/wiring/video-files.ts");
+const { grant: grantVideoFile, has: hasSessionVideo, url: sessionVideoUrl } = videoFiles;
 const { normalizeVideoLink } = await import("../core/document/gallery.ts");
 
 after(closeApp);
