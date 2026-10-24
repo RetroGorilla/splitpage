@@ -10,7 +10,7 @@ const { documentLocation, serverStatus } = await import("../legacy/location-brid
 const { PREF_EVENT, preferences } = await import("../legacy/preferences-bridge.ts");
 const { adoptReplacement, onSessionChange } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
-const { flushEdits } = await import("../js/12a-undo.js");
+const { flushEdits } = await import("../legacy/undo-bridge.ts");
 
 after(closeApp);
 

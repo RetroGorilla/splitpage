@@ -1,7 +1,6 @@
-import { groupTagsByCategory } from "../core/production/looks.ts";
+import { groupTagsByCategory, TAG_CATEGORIES, TAG_STATUSES, tagCategory, tagStatus } from "../core/production/looks.ts";
 import { BROLL_NAME_MAX, BROLL_TEXT_MAX, normalizeBrollProps } from "../core/document/broll.ts";
 import { nextTagStatus, normalizeTagName, registryKey } from "../core/document/tags.ts";
-import { TAG_CATEGORIES, TAG_STATUSES, tagCategory, tagStatus } from "../core/production/looks.ts";
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import "./_location-started.mjs";
@@ -9,17 +8,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { migrateRows } from "../js/02-state.js";
-import { cellOf } from "../js/04c-doc-model.js";
+import { cellOf, inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { bulkTagCell, healTagRegistry, tagKey, tagOccurrences, tagStatusRank, tagsInField } from "../js/07-production-tags.js";
 import { bulkTagRows } from "../application/commands/bulk-tags.ts";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
-import { BROLL_PROPS_MAX, BROLL_STATUSES, __init as initBroll, brollEntries, derivedRecordsPlan, brollInCell, brollPropKey, brollShotsByProp, brollStatus } from "../js/08c-broll.js";
+import { BROLL_PROPS_MAX, brollPropKey } from "../core/document/broll.ts";
+import { brollInCell } from "../core/production/broll.ts";
+import { BROLL_STATUSES, brollStatus } from "../features/broll/records.ts";
+import { derivedRecordsPlan } from "../bootstrap/wiring/broll.ts";
+import { brollEntries } from "../legacy/broll-bridge.ts";
+import { broll } from "./_broll-mounted.mjs";
 import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
-import { inertBody } from "../legacy/richtext.ts";
-import { sanitizeHtml } from "../legacy/richtext.ts";
 import { __init as initHistory } from "../js/03a-history-store.js";
 import { applyGearQuickAdd } from "../js/08-production-panels.js";
 import { LONG_DEMO } from "../js/_starters.js";
@@ -40,7 +42,6 @@ startSaves({
   ownership: { capture: () => { throw new Error("no save runs here"); }, stillOwns: () => false },
   autosave: { enabledAtStart: () => false, changed: () => {} }
 }, { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });
-initBroll();
 initHistory();
 
 const MINTED_SHOT = /\bbs[0-9a-z]{6,}\b/g;
@@ -109,7 +110,7 @@ function readAll() {
     entries: entriesView(productionIndex().entries(currentDocument())),
     byCategory: categoriesView(groupTagsByCategory(productionIndex().entries(currentDocument()))),
     brollRead: brollView(brollEntries()),
-    shotsByProp: jsonCopy(brollShotsByProp())
+    shotsByProp: jsonCopy(broll.brollShotsByProp())
   };
   out.readsWroteNothing = JSON.stringify(currentDocument()) === before;
   return out;

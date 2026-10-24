@@ -6,6 +6,7 @@ import type { Run } from "../../core/text/runs.ts";
 export interface TextServices<Body = unknown> {
   readonly cellOf: (html: unknown) => Frozen<Run[]>;
   readonly inertBody: (html: unknown) => Body;
+  readonly retagBody: (body: Body, cat: string, target: string, toName: string | null) => string;
   readonly fromHtml: (html: unknown, opts?: DecodeOptions | null) => Run[];
   readonly sanitizeHtml: (html: unknown) => string;
   readonly storedHtmlFromDom: <T>(html: T) => T | string;

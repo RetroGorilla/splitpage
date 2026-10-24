@@ -32,13 +32,13 @@ import {
 } from "../../application/prompter-state.ts";
 import { captureOperation, openDocument, stillOwns } from "../../legacy/transition-bridge.ts";
 import { importHome } from "../../legacy/location-bridge.ts";
-import { expandHiddenShotStrip } from "../../js/01b-hide-shot.js";
+import { expandHiddenShotStrip } from "./hide-shot.ts";
 import {
   promptForName,
   promptForWpm,
   restoreSnapshotFromCard
 } from "../../js/03-sync.js";
-import { openGalleryOverlay } from "../../js/05e-gallery-overlay.js";
+import { openGalleryOverlay } from "../../features/gallery/overlay.js";
 import {
   clearPendingFileRows,
   captureImportPreview,

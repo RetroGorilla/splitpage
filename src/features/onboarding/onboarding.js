@@ -4,6 +4,7 @@ import { joinErrorText } from "../../../shared/server-links.js";
 var ports = null;
 var listeners = [];
 var activeMount = null;
+var pendingJoins = new Set();
 
 function listen(target, type, listener) {
   target.addEventListener(type, listener);
@@ -170,12 +171,15 @@ function onboardHostCommandText() {
 }
 
 async function copyOnboardHostCmd() {
+  var mounted = activeMount;
   var text = onboardHostCommandText();
   try {
     await navigator.clipboard.writeText(text);
+    if (activeMount !== mounted) return;
     if (typeof ports.notices.show === "function") ports.notices.show("Command copied.", "ok");
     return;
   } catch (e) { }
+  if (activeMount !== mounted) return;
   try {
     var ta = document.createElement("textarea");
     ta.value = text;
@@ -216,6 +220,7 @@ function setJoinError(message) {
 }
 
 async function submitOnboardJoin() {
+  var mounted = activeMount;
   var name = document.getElementById("onboard-join-name").value;
   var url = document.getElementById("onboard-join-url").value.trim();
   var pin = document.getElementById("onboard-join-pin").value.trim();
@@ -225,12 +230,18 @@ async function submitOnboardJoin() {
   var btn = document.querySelector('#onboard-join-panel [data-onboard-action="join-submit"]');
   var was = btn ? btn.textContent : "";
   if (btn) { btn.disabled = true; btn.textContent = "Joining…"; }
+  var restoreButton = function () {
+    if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = was; }
+  };
+  pendingJoins.add(restoreButton);
   var result;
   try {
     result = await ports.addServerBookmark(name, url, { pin: pin, remember: remember });
   } finally {
-    if (btn && btn.isConnected) { btn.disabled = false; btn.textContent = was; }
+    pendingJoins.delete(restoreButton);
+    if (activeMount === mounted) restoreButton();
   }
+  if (activeMount !== mounted) return;
   if (!result.ok) {
     setJoinError(typeof joinErrorText === "function" ? joinErrorText(result.error) : ("Could not join: " + result.error));
     return;
@@ -340,6 +351,8 @@ export function __init(given) {
     dispose: function () {
       if (disposed) return;
       disposed = true;
+      pendingJoins.forEach(function (restore) { restore(); });
+      pendingJoins.clear();
       while (listeners.length) listeners.pop()();
       closeOnboarding();
       if (window.__onboarding === probe) delete window.__onboarding;

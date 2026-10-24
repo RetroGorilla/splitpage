@@ -1,11 +1,9 @@
 import type { ActionDefinition, Availability } from "../application/actions.ts";
-import { showTaggingHelp } from "../js/10-comments.js";
+import { openSettings, settingsAction } from "../application/settings-actions.ts";
 import { openLongDemo } from "../js/18b-file-menu.js";
-import { showAbout } from "../js/20a-update.js";
 import { openServersDialog, serversMenuLabel } from "../js/20e-connect.js";
 import { appDataImportShown } from "../js/20f-desktop.js";
 import { exportAppData, openImportAppData } from "../js/20h-appdata.js";
-import { openSettings } from "../js/20s-settings.js";
 import { OPENS_A_DIALOG, availableUnless } from "../application/screen.ts";
 import { onlyDialogOpen } from "./screen.ts";
 import { screenNow } from "./screen-state.ts";
@@ -36,15 +34,7 @@ export function helpMenuActions(): ActionDefinition[] {
       availability: () => ({ enabled: true, visible: false }),
       run: () => { openServersDialog(); }
     },
-    {
-      id: "settings",
-      label: "Settings",
-      group: "Help",
-      icon: "i-settings",
-      words: "settings preferences options theme dark light mode clock 12 24 hour colour color name zoom",
-      availability: overDialogs,
-      run: (_source, input) => { openSettings(input); }
-    },
+    settingsAction(() => ({ openSettings }), screenNow),
     {
       id: "long-demo",
       label: "Open the long demo (30 scenes)",
@@ -52,24 +42,6 @@ export function helpMenuActions(): ActionDefinition[] {
       icon: "i-file-plus",
       words: "demo example sample long thirty 30 scenes test try every feature",
       run: () => { openLongDemo(); }
-    },
-    {
-      id: "about",
-      label: "About Splitpage",
-      group: "Help",
-      icon: "i-info",
-      words: "version about",
-      availability: overDialogs,
-      run: () => { showAbout(); }
-    },
-    {
-      id: "tagging-help",
-      label: "Tagging reference",
-      group: "Tags",
-      icon: "i-tag",
-      words: "tags tagging reference shortcuts brackets help",
-      availability: overDialogs,
-      run: () => { showTaggingHelp(); }
     },
     {
       id: "export-app-data",

@@ -1,38 +1,60 @@
-import type { ActionRegistry } from "../../application/actions.ts";
-import type { LaunchFacts } from "../../application/desktop-presence.ts";
-import type { FileDelivery } from "../../application/files/file-delivery.ts";
-import type { LastFile } from "../../application/files/last-file.ts";
-import type { SeedCheck } from "../../application/preferences/seed-check.ts";
 import type { DraftResume } from "../../application/recovery/draft-resume.ts";
-import type { SidePanels } from "../../application/side-panels.ts";
-import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
-import { loadLastFileHandle } from "../../js/00-prelude.js";
-import { deliverFile } from "../../legacy/file-delivery.ts";
-import { sidePanels as currentSidePanels } from "../../legacy/panels-bridge.ts";
+import type { SeedCheck } from "../../application/preferences/seed-check.ts";
 import { draftResume as currentDraftResume } from "../../legacy/recovery-bridge.ts";
 import { seedCheckPasses } from "../../legacy/seed-check.ts";
+import { randomIds, systemClock } from "../../adapters/identity/ids.ts";
+import { sidePanels } from "../../legacy/panels-bridge.ts";
+import { deleteConfirmation } from "../../legacy/production-editing-bridge.ts";
+import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
+import type { ActionRegistry } from "../../application/actions.ts";
 import type { EffectPorts } from "../../application/effects/ports.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { ExternalLinks, LaunchFacts } from "../../application/desktop-presence.ts";
+import type { EditorSelectionPort } from "../../application/editing/selection.ts";
+import type { UndoControl } from "../../application/editing/undo-control.ts";
+import type { ExportRegistry } from "../../application/export/registry.ts";
+import type { FileDelivery } from "../../application/files/file-delivery.ts";
+import type { LastFile } from "../../application/files/last-file.ts";
+import type { RecentFiles } from "../../application/files/recent-files.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
-import type { PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
+import type { PictureStore } from "../../application/media/picture-store.ts";
+import type { CommentFilter, PreferenceChange, PreferenceChanges } from "../../application/preferences/preferences.ts";
+import type { ViewFlags } from "../../application/preferences/view-flags.ts";
+import type { SaveOwnershipPort } from "../../application/save/coordinator.ts";
+import type { SaveState } from "../../application/save/save-state.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
+import type { StartupSignal } from "../../application/startup-signal.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import type { DocumentDestination } from "../../application/transitions/ports.ts";
+import type { Transitions } from "../../application/transitions/transitions.ts";
+import { normalizeTagName } from "../../core/document/tags.ts";
+import { loadLastFileHandle } from "../../js/00-prelude.js";
+import { breakUndoCoalescing, flushEdits, lastUndoEntry, redo, undo } from "../../legacy/undo-bridge.ts";
+import type { ProductionIndexOwner } from "../../core/production/index.ts";
+import { blobImgHtml, bytesForSync, dataUrlForSync, ensureBytes, intern, internDataUrl, isDurableSync, persist, queuePersist, recordFor, urlForSync } from "../../adapters/storage/02c-blobs.js";
 import { arrivingOnLink } from "../../js/13-hosted.js";
 import { appActions } from "../../legacy/app-actions.ts";
+import { deliverFile } from "../../legacy/file-delivery.ts";
 import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { cacheSeal } from "../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../legacy/document-ports.ts";
+import { editorSelection } from "../../legacy/editor-bridge.ts";
+import { exportFormats } from "../../legacy/export-formats.ts";
 import {
   currentConn, currentHome, documentLocation, fileHome, homeConn, importHome, reviewBlocked, reviewMode,
   serverHomeId, serverStatus, stillOnServer
 } from "../../legacy/location-bridge.ts";
 import { htmlToPlainText } from "../../legacy/plain-text.ts";
-import { PREF_EVENT, preferences } from "../../legacy/preferences-bridge.ts";
+import { PREF_EVENT, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
+import { autoSavePolicy, onSaveChange, resumeAutoSave, saveBusy, setAutoSaveEnabled, unsavedChanges } from "../../legacy/save-bridge.ts";
+import { productionIndex } from "../../legacy/production-index-bridge.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
 import { screenNow } from "../../legacy/screen-state.ts";
 import { currentDocument, editAllowed, onDocumentReplaced, onRefresh, onSessionChange, readSession, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../../legacy/session-bridge.ts";
+import { startupReady } from "../../legacy/startup-bridge.ts";
+import { captureOperation, documentTransitions, stillOwns } from "../../legacy/transition-bridge.ts";
 
 const actions: Pick<ActionRegistry, "invoke" | "view"> = {
   invoke: (id, source, input) => appActions.invoke(id, source, input),
@@ -40,7 +62,7 @@ const actions: Pick<ActionRegistry, "invoke" | "view"> = {
 };
 
 const changes: PreferenceChanges = {
-  onChange(listener) {
+  onChange(listener, hearing) {
     const onPreference = (event: Event): void => {
       const change = (event as CustomEvent<PreferenceChange | undefined>).detail;
       if (!change) return;
@@ -52,11 +74,12 @@ const changes: PreferenceChanges = {
       const name = preferences().nameOf(event.key);
       if (name) listener({ name, value: event.newValue, elsewhere: true });
     };
+    const elsewhere = hearing?.elsewhere !== false;
     document.addEventListener(PREF_EVENT, onPreference);
-    window.addEventListener("storage", onStorage);
+    if (elsewhere) window.addEventListener("storage", onStorage);
     return () => {
       document.removeEventListener(PREF_EVENT, onPreference);
-      window.removeEventListener("storage", onStorage);
+      if (elsewhere) window.removeEventListener("storage", onStorage);
     };
   }
 };
@@ -78,6 +101,11 @@ const edits: DocumentEdits = {
 };
 
 const review: ReviewFacts = { reviewing: reviewMode, refuseInReview: reviewBlocked };
+
+const flags: Pick<ViewFlags, "findOpen" | "setFindOpen"> = {
+  findOpen: () => viewFlags().findOpen(),
+  setFindOpen: (open) => viewFlags().setFindOpen(open)
+};
 
 const place: DocumentPlace = {
   home: () => currentHome(),
@@ -101,7 +129,27 @@ const place: DocumentPlace = {
 };
 
 const text: TextServices<HTMLElement> = {
-  cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal
+  cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal,
+  retagBody(body, cat, target, toName) {
+    body.querySelectorAll(".tag-anchor").forEach(function (el) {
+      if (el.getAttribute("data-tag-cat") !== cat) return;
+      if (normalizeTagName(el.getAttribute("data-tag-name")) !== target) return;
+      if (toName !== null) { el.setAttribute("data-tag-name", toName); return; }
+      const parent = el.parentNode;
+      if (!parent) return;
+      while (el.firstChild) parent.insertBefore(el.firstChild, el);
+      parent.removeChild(el);
+    });
+    return body.innerHTML;
+  }
+};
+
+const undoControl: UndoControl = {
+  breakCoalescing: breakUndoCoalescing,
+  flush: flushEdits,
+  undo,
+  redo,
+  last: lastUndoEntry
 };
 
 const effects: EffectPorts<Element> = {
@@ -110,12 +158,91 @@ const effects: EffectPorts<Element> = {
   clipboard: { copyText: copyShareText }
 };
 
-const sidePanels: Pick<SidePanels, "closeAll"> = {
-  closeAll: () => currentSidePanels().closeAll()
+const ownership: SaveOwnershipPort = { capture: captureOperation, stillOwns };
+
+const pictures: PictureStore = {
+  intern,
+  internDataUrl,
+  recordFor,
+  bytesFor: bytesForSync,
+  urlFor: urlForSync,
+  dataUrlFor: dataUrlForSync,
+  isDurable: isDurableSync,
+  queuePersist,
+  persist,
+  ensureBytes: (shas) => ensureBytes(shas),
+  imgHtml: blobImgHtml
+};
+
+const saves: SaveState = {
+  unsaved: () => unsavedChanges(),
+  busy: () => saveBusy(),
+  onChange: (listener) => onSaveChange(listener),
+  dueNow: () => { autoSavePolicy().dueNow(); },
+  resume: () => { resumeAutoSave(); },
+  setAutoSaveEnabled: (on) => { setAutoSaveEnabled(on); }
+};
+
+const production: ProductionIndexOwner = {
+  entries: (doc) => productionIndex().entries(doc),
+  current: (doc) => productionIndex().current(doc),
+  derived: () => productionIndex().derived(),
+  resetDerived: () => { productionIndex().resetDerived(); },
+  recordsPlan: (doc, viewed) => productionIndex().recordsPlan(doc, viewed)
+};
+
+const externalLinks: ExternalLinks = {
+  available: () => typeof desktopPort()?.openExternal === "function",
+  open: (url) => { desktopPort()?.openExternal?.(url); }
+};
+
+const selection: EditorSelectionPort = {
+  dropLink: () => { editorSelection().dropLink(); }
+};
+
+const exports: Pick<ExportRegistry, "card" | "cards" | "exporters" | "byAction" | "isAction" | "onChange"> = {
+  card: (id) => exportFormats.card(id),
+  cards: () => exportFormats.cards(),
+  exporters: () => exportFormats.exporters(),
+  byAction: (action) => exportFormats.byAction(action),
+  isAction: (action) => exportFormats.isAction(action),
+  onChange: (listener) => exportFormats.onChange(listener)
+};
+
+const lastFile: LastFile = { load: loadLastFileHandle };
+
+const recents: RecentFiles = {
+  list: () => desktopPort()?.listRecents(),
+  remove: (fileId) => desktopPort()?.removeRecent(fileId),
+  clear: () => desktopPort()?.clearRecents(),
+  read: (id) => desktopPort()?.readFile(id),
+  routeOpen: (request) => desktopPort()?.routeOpen(request)
+};
+
+const launch: LaunchFacts = {
+  firstTabOfLaunch: () => desktopPort()?.firstTabOfLaunch,
+  hadPriorSession: () => desktopPort()?.hadPriorSession,
+  launchIntent: () => desktopPort()?.launchIntent,
+  hasDraftToRestore: () => desktopPort()?.hasDraftToRestore,
+  appVersion: () => desktopPort()?.appVersion,
+  sessionInfo: () => desktopPort()?.getSessionInfo()
 };
 
 const fileDelivery: FileDelivery = {
   deliver: (filename, data, options) => deliverFile(filename, data, options)
+};
+
+const transitions: Transitions<DocumentDestination> = {
+  open: (opening) => documentTransitions().open(opening),
+  startNew: (arrival) => documentTransitions().startNew(arrival),
+  restore: (restoration) => documentTransitions().restore(restoration),
+  recover: (recovery) => documentTransitions().recover(recovery),
+  publish: (ctx, publication) => documentTransitions().publish(ctx, publication),
+  copyId: () => documentTransitions().copyId()
+};
+
+const startup: StartupSignal = {
+  ready: () => startupReady()
 };
 
 const draftResume: Pick<DraftResume, "restorePending"> = {
@@ -124,31 +251,56 @@ const draftResume: Pick<DraftResume, "restorePending"> = {
 
 const seedCheck: SeedCheck = { passes: () => seedCheckPasses() };
 
-const launchFacts: LaunchFacts = {
-  firstTabOfLaunch: () => desktopPort()?.firstTabOfLaunch ?? false,
-  hadPriorSession: () => desktopPort()?.hadPriorSession ?? false,
-  launchIntent: () => desktopPort()?.launchIntent ?? null,
-  hasDraftToRestore: () => desktopPort()?.hasDraftToRestore ?? false
-};
-
-const lastFile: LastFile = { load: () => loadLastFileHandle() };
-
 const shared = {
   ...effects,
   actions,
   changes,
-  sidePanels,
-  fileDelivery,
-  draftResume,
-  seedCheck,
-  launchFacts,
-  lastFile,
   screen: (): ScreenState => screenNow(),
   document: documentReader,
   edits,
   place,
   review,
-  text
+  flags,
+  text,
+  saves,
+  production,
+  externalLinks,
+  selection,
+  exports,
+  ownership,
+  pictures,
+  lastFile,
+  recents,
+  launch,
+  fileDelivery,
+  draftResume,
+  seedCheck,
+  undo: undoControl,
+  transitions,
+  startup,
+  ids: randomIds,
+  clock: systemClock,
+  preferences: {
+    clock: () => preferences().clock(),
+    commentAuthor: () => preferences().commentAuthor(),
+    rememberCommentAuthor: (name: string) => preferences().rememberCommentAuthor(name),
+    commentsSort: () => preferences().commentsSort(),
+    setCommentsSort: (mode: string) => preferences().setCommentsSort(mode),
+    commentFilter: () => preferences().commentFilter(),
+    setCommentFilter: (filter: CommentFilter) => preferences().setCommentFilter(filter),
+    taggingHelpShown: () => preferences().taggingHelpShown(),
+    taggingHelpDismissed: () => preferences().taggingHelpDismissed()
+  },
+  sidePanels: {
+    open: (id: string) => sidePanels().open(id),
+    close: (id: string) => sidePanels().close(id),
+    closeAll: () => sidePanels().closeAll()
+  },
+  deletion: {
+    armedId: (...args: Parameters<ReturnType<typeof deleteConfirmation>["armedId"]>) => deleteConfirmation().armedId(...args),
+    arm: (...args: Parameters<ReturnType<typeof deleteConfirmation>["arm"]>) => deleteConfirmation().arm(...args),
+    disarm: (...args: Parameters<ReturnType<typeof deleteConfirmation>["disarm"]>) => deleteConfirmation().disarm(...args)
+  }
 };
 
 export function sharedPorts(): typeof shared {

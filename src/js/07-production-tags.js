@@ -1,3 +1,4 @@
+import { isInsideTagOrLink } from "../features/common/dom.ts";
 import { domToPos } from "../features/common/cell-dom.ts";
 import { rowIndexOf } from "../core/document/rows.ts";
 import {
@@ -6,8 +7,8 @@ import {
   sanitizeHtml
 } from "./04-richtext.js";
 import { plainTagOpen } from "./07b-plain-tags.js";
-import { domRangeFor } from "./09-find-replace.js";
-import { breakUndoCoalescing } from "./12a-undo.js";
+import { domRangeFor } from "../features/common/find-dom.js";
+import { breakUndoCoalescing } from "../legacy/undo-bridge.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { idMap } from "../core/document/id-map.ts";
 import { contentMemo } from "../core/document/memo.ts";
@@ -82,10 +83,6 @@ function hasShortcutChar(s) {
     if (TAG_SHORTCUT_CHARS.indexOf(s.charAt(i)) !== -1) return true;
   }
   return false;
-}
-
-export function isInsideTagOrLink(el) {
-  return !!(el && el.closest && el.closest(".tag-anchor, a"));
 }
 
 

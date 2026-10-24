@@ -1,7 +1,8 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cellOf, toDocxRuns, toMarkdown, toPlainText } from "../js/04c-doc-model.js";
+import { cellOf } from "../legacy/richtext.ts";
+import { toDocxRuns, toMarkdown, toPlainText } from "../core/text/projections.ts";
 import { htmlToMarkdown, inertBody, sanitizeHtml } from "../js/04-richtext.js";
 import { tagsInField } from "../js/07-production-tags.js";
 import { htmlToRuns } from "../adapters/formats/html-runs.ts";

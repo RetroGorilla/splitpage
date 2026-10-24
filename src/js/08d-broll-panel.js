@@ -4,21 +4,21 @@ import { tagCategory, tagStatus } from "../core/production/looks.ts";
 import { normalizeTagName } from "../core/document/tags.ts";
 import { formatTimecode, rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
-import { revealRow } from "./01b-hide-shot.js";
+import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { viewFlags } from "../legacy/preferences-bridge.ts";
 import { plainText } from "./04-richtext.js";
 import { cssAttr } from "../features/common/dom.ts";
-import { focusRowField } from "./06-rows.js";
+import { focusRowField } from "../legacy/rows-bridge.ts";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import {
   addBrollProp,
   brollEntries,
   renameBrollInScript,
   updateBrollBadge
-} from "./08c-broll.js";
-import { breakUndoCoalescing } from "./12a-undo.js";
-import { personColor } from "./13a-presence.js";
+} from "../legacy/broll-bridge.ts";
+import { breakUndoCoalescing } from "../legacy/undo-bridge.ts";
+import { presence } from "../legacy/presence-bridge.ts";
 import { brollGroups as brollGroupsFrom, brollShotListForPrint, brollTable, filterCounts, FILTERS, matchesFilter, oneOf, PAGE_GROUPS, pageSummaryText, sceneLabel, shotRecordForFile, startOf } from "../adapters/formats/export-projections.ts";
 import { exportAs } from "./18-local-files.js";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
@@ -141,7 +141,7 @@ function initials(name) {
 
 function avatarHtml(person) {
   return '<span class="person-avatar broll-avatar" aria-hidden="true" style="--presence:' +
-    escapeHtml(personColor(person.name)) + '">' + escapeHtml(initials(person.name)) + '</span>';
+    escapeHtml(presence().personColor(person.name)) + '">' + escapeHtml(initials(person.name)) + '</span>';
 }
 
 function plural(n, one, many) {
@@ -863,7 +863,7 @@ function addBrollFromPanel() {
 export function jumpToBrollShot(id) {
   var e = entryById(id);
   if (!e || !e.rowId) return false;
-  revealRow(e.rowId);
+  shotHiding().reveal(e.rowId);
   focusRowField(e.rowId, "visualText");
   return true;
 }

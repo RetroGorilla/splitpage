@@ -1,4 +1,4 @@
-import { settledNames } from "./text-policy.ts";
+import { cappedName, settledNames } from "./text-policy.ts";
 
 export type PersonColors = Record<string, string>;
 
@@ -102,4 +102,18 @@ export function resolvePersonColor(name: unknown, ctx?: PersonColorContext | nul
     if (doc) return doc;
   }
   return hashedPersonColor(name);
+}
+
+export function colorsWithMine(current: unknown, name: string, color: string): PersonColors | null {
+  if (!name || !color) return null;
+  const map = current && typeof current === "object" ? current as Readonly<Record<string, string>> : null;
+  let have = "";
+  if (map) {
+    Object.keys(map).forEach(function (k) { if (personKey(k) === personKey(name)) have = k; });
+    if (have && map[have] === color) return null;
+  }
+  const next: Record<string, string> = {};
+  if (map) Object.keys(map).forEach(function (k) { if (k !== have) next[k] = map[k] as string; });
+  next[cappedName(name, 80)] = color;
+  return normalizePersonColors(next);
 }
