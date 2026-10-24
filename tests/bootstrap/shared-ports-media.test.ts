@@ -1,8 +1,10 @@
 import "../../src/test/_dom.mjs";
+import { ownership as portOwnership } from "../../src/bootstrap/wiring/ports/saving.ts";
+import { pictures as portPictures } from "../../src/bootstrap/wiring/ports/pictures.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { blobImgHtml, has, setBackend } from "../../src/adapters/storage/02c-blobs.js";
-import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
+
 import { captureOperation, stillOwns } from "../../src/legacy/transition-bridge.ts";
 import { image } from "../../src/test/golden-helpers.mjs";
 import { fakeOwnership, fakePictures } from "../features/fakes.ts";
@@ -21,13 +23,13 @@ function recordingBackend(puts: string[]) {
 }
 
 test("operation ownership is the transition bridge's capture and stillOwns", () => {
-  const { ownership } = sharedPorts();
+  const ownership = portOwnership;
   assert.equal(ownership.capture, captureOperation);
   assert.equal(ownership.stillOwns, stillOwns);
 });
 
 test("the picture store interns, reads, renders and persists through the blob store", async () => {
-  const { pictures } = sharedPorts();
+  const pictures = portPictures;
   const pic = image("png", 23, 17);
   const puts: string[] = [];
   setBackend(recordingBackend(puts));

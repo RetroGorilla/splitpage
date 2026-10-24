@@ -1,10 +1,13 @@
 import "../../src/test/_dom.mjs";
+import { review as portReview } from "../../src/bootstrap/wiring/ports/location.ts";
+import { documentReader as portDocument } from "../../src/bootstrap/wiring/ports/document.ts";
+import { text as portText } from "../../src/bootstrap/wiring/ports/text.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { EffectPorts, Notice } from "../../src/application/effects/ports.ts";
 import { VIEWING_ONLY } from "../../src/application/collaboration/review.ts";
 import { legacyExportServices } from "../../src/bootstrap/export-services.ts";
-import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
+
 import { startEffects } from "../../src/legacy/effects-bridge.ts";
 import { documentLocation, setHome, startLocation } from "../../src/legacy/location-bridge.ts";
 import { sanitizeHtml, storedHtmlFromDom } from "../../src/legacy/richtext.ts";
@@ -13,7 +16,7 @@ import { loadTestDocument } from "../../src/test/_document.mjs";
 import { migrateRows } from "../../src/js/02-state.js";
 
 test("review facts follow the location and refuse through the notices only while reviewing", () => {
-  const { review } = sharedPorts();
+  const review = portReview;
   const stopLocation = startLocation({ storage: () => null });
   const shown: unknown[][] = [];
   const notice: Notice = { isConnected: true, dismiss: () => {}, removeEventListener: () => {} };
@@ -41,7 +44,7 @@ test("review facts follow the location and refuse through the notices only while
 });
 
 test("the document reader reads the session's document and hears replacements until unsubscribed", () => {
-  const { document: reader } = sharedPorts();
+  const reader = portDocument;
   const first = migrateRows({ title: "First", rows: [{ id: "r1", visualText: "", audioText: "a", updatedAt: "" }] });
   loadTestDocument(first);
   assert.equal(reader.current()?.title, "First");
@@ -57,7 +60,7 @@ test("the document reader reads the session's document and hears replacements un
 });
 
 test("the text services are the same functions and caches the export services use", () => {
-  const { text } = sharedPorts();
+  const text = portText;
   const exported = legacyExportServices();
   for (const name of ["cellOf", "inertBody", "fromHtml", "htmlToMarkdown", "htmlToPlainText", "productionReaders", "cacheSeal"] as const) {
     assert.equal(text[name], exported[name], name);

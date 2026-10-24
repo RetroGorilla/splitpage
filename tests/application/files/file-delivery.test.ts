@@ -1,14 +1,15 @@
 import "../../../src/test/_dom.mjs";
+import { fileDelivery as portFileDelivery } from "../../../src/bootstrap/wiring/ports/files.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { FileDelivery } from "../../../src/application/files/file-delivery.ts";
 import { useDesktopForTest, restoreDesktop } from "../../../src/adapters/desktop/desktop-port.ts";
-import { sharedPorts } from "../../../src/bootstrap/wiring/shared-ports.ts";
+
 import { startEffects } from "../../../src/legacy/effects-bridge.ts";
 import { fakeNotices } from "../../features/fakes.ts";
 
 test("file delivery forwards to the current desktop adapter and keeps saved, cancelled and failed notices", async () => {
-  const delivery: FileDelivery = sharedPorts().fileDelivery;
+  const delivery: FileDelivery = portFileDelivery;
   const notices = fakeNotices();
   const stop = startEffects({ notices: notices.notices, menuItems: { setLabel: () => {}, setReason: () => {} }, clipboard: { copyText: async () => true } });
   const dialogs: unknown[] = [];

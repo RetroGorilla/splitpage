@@ -1,4 +1,5 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
+import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
@@ -11,8 +12,8 @@ const { applyTag, findOrAddPerson, openTagComposer, registerProductionTag } = aw
 const { renameTag } = await import("../application/commands/production-actions.ts");
 const { runDocumentEdit, sessionStamps } = await import("../legacy/session-bridge.ts");
 const { retagRewrites: planRetagRewrites } = await import("../application/commands/tag-rewrites.ts");
-const { sharedPorts } = await import("../bootstrap/wiring/shared-ports.ts");
-const retagText = sharedPorts().text;
+
+const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 const { plainTagPhrase } = await import("../js/07b-plain-tags.js");
 const { addBrollProp } = await import("../legacy/broll-bridge.ts");

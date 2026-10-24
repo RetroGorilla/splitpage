@@ -5,7 +5,23 @@
     "src/bootstrap/wiring/overlay.ts",
     "src/bootstrap/wiring/startup.ts",
     "src/application/screen.ts",
-    "src/bootstrap/wiring/shared-ports.ts"
+    "src/bootstrap/wiring/ports/actions.ts",
+    "src/bootstrap/wiring/ports/preferences.ts",
+    "src/bootstrap/wiring/ports/document.ts",
+    "src/bootstrap/wiring/ports/location.ts",
+    "src/bootstrap/wiring/ports/text.ts",
+    "src/bootstrap/wiring/ports/editing.ts",
+    "src/bootstrap/wiring/ports/effects.ts",
+    "src/bootstrap/wiring/ports/saving.ts",
+    "src/bootstrap/wiring/ports/transitions.ts",
+    "src/bootstrap/wiring/ports/pictures.ts",
+    "src/bootstrap/wiring/ports/production.ts",
+    "src/bootstrap/wiring/ports/desktop.ts",
+    "src/bootstrap/wiring/ports/files.ts",
+    "src/bootstrap/wiring/ports/startup.ts",
+    "src/bootstrap/wiring/ports/panels.ts",
+    "src/bootstrap/wiring/ports/screen.ts",
+    "src/bootstrap/wiring/ports/identity.ts"
   ],
-  "expectedLoads": 5
+  "expectedLoads": 21
 }

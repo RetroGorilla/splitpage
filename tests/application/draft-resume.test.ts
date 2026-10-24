@@ -1,9 +1,10 @@
 import { test } from "node:test";
+import { draftResume as portDraftResume } from "../../src/bootstrap/wiring/ports/startup.ts";
 import assert from "node:assert/strict";
 import { createDraftResume } from "../../src/application/recovery/draft-resume.ts";
 import type { ServerResume } from "../../src/application/recovery/draft-resume.ts";
 import "../../src/test/_dom.mjs";
-import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
+
 import { draftResume, startRecovery } from "../../src/legacy/recovery-bridge.ts";
 import { DRAFT_LIMITS } from "../../src/adapters/storage/draft-store-idb.ts";
 
@@ -19,7 +20,7 @@ test("a new draft resume holds nothing: no server resume waits and no restore is
 });
 
 test("shared draft resume follows recovery restarts without capturing the owner", () => {
-  const resume = sharedPorts().draftResume;
+  const resume = portDraftResume;
   const start = () => startRecovery({
     indexedDB: null, limits: DRAFT_LIMITS, now: () => 0, writerId: "test",
     desktop: () => null, sessionStorage: () => null, localStorage: () => null,

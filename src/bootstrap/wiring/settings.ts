@@ -1,4 +1,7 @@
 import { installSettingsControls } from "../../application/settings-actions.ts";
+import { actions as portActions } from "./ports/actions.ts";
+import { notices as portNotices } from "./ports/effects.ts";
+import { changes as portChanges } from "./ports/preferences.ts";
 import { runningOnDesktop } from "../../application/desktop-presence.ts";
 import { __init as mountSettings } from "../../features/settings/settings.js";
 import type { SettingsMount, SettingsPorts } from "../../features/settings/ports.ts";
@@ -12,17 +15,15 @@ import { setPrompterFlip, setPrompterMirror, setPrompterSceneMode } from "../../
 import { renderDesktopAppNotice } from "../../js/20a-update.js";
 import { preferences } from "../../legacy/preferences-bridge.ts";
 import { setAutoSaveEnabled } from "../../legacy/save-bridge.ts";
-import { sharedPorts } from "./shared-ports.ts";
 
 const settings = owned<SettingsMount>();
 
 export function mountSettingsFeature(): SettingsMount {
   return settings.replace(() => {
-    const shared = sharedPorts();
     const ports: SettingsPorts = {
-      actions: shared.actions,
-      notices: shared.notices,
-      changes: shared.changes,
+      actions: portActions,
+      notices: portNotices,
+      changes: portChanges,
       elsewhere: (listener) => {
         const onStorage = (event: StorageEvent): void => {
           if (event.key && event.key.indexOf("splitpage-") === 0) listener(preferences().nameOf(event.key));

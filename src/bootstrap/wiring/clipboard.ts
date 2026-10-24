@@ -1,4 +1,11 @@
 import { randomHexBytes, randomIds } from "../../adapters/identity/ids.ts";
+import { documentReader as portDocument } from "./ports/document.ts";
+import { edits as portEdits, undoControl as portUndo } from "./ports/editing.ts";
+import { pictures as portPictures } from "./ports/pictures.ts";
+import { text as portText } from "./ports/text.ts";
+import { saves as portSaves } from "./ports/saving.ts";
+import { review as portReview } from "./ports/location.ts";
+import { notices as portNotices } from "./ports/effects.ts";
 import { brollSeedOf, recordPastedBroll } from "../../application/production/broll-records.ts";
 import { __init as mountCellClipboard } from "../../features/clipboard/cell-clipboard.js";
 import type { CellClipboardPorts, CopyPasteMount, SceneClipPorts, SceneSelectPorts } from "../../features/clipboard/ports.ts";
@@ -17,7 +24,6 @@ import { cellEditing, paintGuard, rowDrag } from "../../legacy/editor-bridge.ts"
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
 import { imageRefOf } from "../../legacy/richtext.ts";
 import { REVIEW_ONLY } from "../../legacy/session-bridge.ts";
-import { sharedPorts } from "./shared-ports.ts";
 
 const copyPaste = owned<CopyPasteMount>();
 
@@ -27,39 +33,38 @@ function nonce(): string {
 
 export function mountCopyPasteFeature(): CopyPasteMount {
   return copyPaste.replace(() => {
-    const shared = sharedPorts();
     const cellPorts: CellClipboardPorts = {
-      document: shared.document,
-      edits: shared.edits,
-      undo: shared.undo,
-      pictures: shared.pictures,
-      text: shared.text,
+      document: portDocument,
+      edits: portEdits,
+      undo: portUndo,
+      pictures: portPictures,
+      text: portText,
       imageRefOf,
       ids: randomIds,
       nonce,
       selection: cellSelection,
       cells: { open: (cell) => cellEditing().open(cell), close: (cell, html, sel) => cellEditing().close(cell, html, sel) },
       paintGuard: { whileShown: (edit) => paintGuard().whileShown(edit) },
-      brollSeed: (row) => brollSeedOf(row, shared.text)
+      brollSeed: (row) => brollSeedOf(row, portText)
     };
     const clipPorts: SceneClipPorts = {
-      document: shared.document,
+      document: portDocument,
       ids: randomIds,
-      pictures: shared.pictures,
-      text: shared.text,
+      pictures: portPictures,
+      text: portText,
       migrate: migrateRows,
       tagsInRows: collectTagsFromRows,
-      recordPastedBroll: (doc, rowId, cell, ids) => { recordPastedBroll(doc, rowId, cell, ids, shared.text, randomIds); }
+      recordPastedBroll: (doc, rowId, cell, ids) => { recordPastedBroll(doc, rowId, cell, ids, portText, randomIds); }
     };
     const selectPorts: SceneSelectPorts = {
-      document: shared.document,
-      edits: shared.edits,
+      document: portDocument,
+      edits: portEdits,
       reviewRefusal: REVIEW_ONLY,
-      undo: shared.undo,
-      saves: shared.saves,
-      pictures: shared.pictures,
-      review: shared.review,
-      notices: shared.notices,
+      undo: portUndo,
+      saves: portSaves,
+      pictures: portPictures,
+      review: portReview,
+      notices: portNotices,
       cells: { sync: (cell) => { cellEditing().sync(cell); } },
       rowDrag: { dragging: () => rowDrag().dragging() },
       scriptCell: isScriptCell,

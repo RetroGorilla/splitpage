@@ -1,4 +1,5 @@
 import { mintTagId, registryTagHooks } from "../core/document/tags.ts";
+import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
@@ -13,9 +14,8 @@ import { ensureTagIds, isTagId, registryEntryById } from "../js/07-production-ta
 import { renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, currentDocument } from "../legacy/session-bridge.ts";
 import { retagRewrites as planRetagRewrites } from "../application/commands/tag-rewrites.ts";
-import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
 
-const retagText = sharedPorts().text;
+const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 import { loadTestDocument } from "./_document.mjs";
 

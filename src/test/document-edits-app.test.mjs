@@ -1,4 +1,5 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
+import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { confirmSavedNow, unsavedChanges } from "../legacy/save-bridge.ts";
@@ -16,8 +17,8 @@ const { setTargetLength } = await import("../features/rundown/target.js");
 const { registerProductionTag, findOrAddPerson } = await import("../js/07-production-tags.js");
 const { renameTag, removeTag, newBrollRecord, removeBrollProp } = await import("../application/commands/production-actions.ts");
 const { retagRewrites: planRetagRewrites, retagMentions: countRetagMentions } = await import("../application/commands/tag-rewrites.ts");
-const { sharedPorts } = await import("../bootstrap/wiring/shared-ports.ts");
-const retagText = sharedPorts().text;
+
+const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
 const { sessionStamps, readSession } = await import("../legacy/session-bridge.ts");
