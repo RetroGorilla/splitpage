@@ -1,0 +1,7 @@
+{
+  "legacyImports": [
+    "./13-hosted.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 1
+}

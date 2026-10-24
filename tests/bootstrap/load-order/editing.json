@@ -1,0 +1,10 @@
+{
+  "legacyImports": [],
+  "loadOnly": [
+    "src/features/editing/cell-reach.js",
+    "src/bootstrap/wiring/editor.ts",
+    "src/features/editing/draft-edit.js",
+    "src/bootstrap/wiring/draft-edit.ts"
+  ],
+  "expectedLoads": 4
+}

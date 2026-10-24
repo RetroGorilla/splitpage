@@ -22,6 +22,16 @@ Linux/macOS, `run-tests.ps1` on Windows, `node desktop/test/smoke.mjs` for
 Electron. How to drive the browser suites is in
 [the run-splitpage-app skill](../../.claude/skills/run-splitpage-app/SKILL.md).
 
+## Bootstrap load-only coverage
+
+`tests/bootstrap/legacy-shim.test.ts` checks the allowed shim imports and the rule that migrated code cannot import the shim. `configuration-spies.test.ts` checks the spy list and its positive canary. `module-load.test.ts` imports the declared targets one at a time in fresh processes and reports the result by area; it retains one queue with at most eight child processes.
+
+Each feature or responsibility owns a JSON manifest under `tests/bootstrap/load-order/`. `legacyImports` records its remaining numbered shim imports. `loadOnly` names its additional extracted modules. `expectedLoads` pins their combined count. When code moves, update that area's manifest, not the common test files. Every remaining numbered module must appear exactly once, every declared target must exist, and duplicate targets fail.
+
+`load-order-areas.json` registers the areas once. Deleting or renaming a whole manifest fails, including an area with only extracted modules. A genuinely new area is registered there; ordinary migrations within an existing area do not edit it. The manifest tests exercise missing files, missing numbered coverage, deleted or renamed manifests, duplicates and a removed extracted target.
+
+Run the four suites with `node --test tests/bootstrap/legacy-shim.test.ts tests/bootstrap/configuration-spies.test.ts tests/bootstrap/load-manifests.test.ts tests/bootstrap/module-load.test.ts`. `test:all` discovers them normally. Keep the existing probe and its side-effect, callback and owner-state assertions; moving coverage into a manifest is not permission to drop it.
+
 ## What to run for which change
 
 While a pull request is being written, run the focused checks for what it

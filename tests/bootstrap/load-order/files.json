@@ -1,0 +1,8 @@
+{
+  "legacyImports": [
+    "./14-export.js",
+    "./18-local-files.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 2
+}

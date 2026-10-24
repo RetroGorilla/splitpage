@@ -1,0 +1,10 @@
+{
+  "legacyImports": [],
+  "loadOnly": [
+    "src/features/find/find.js",
+    "src/features/find/actions.ts",
+    "src/bootstrap/wiring/find.ts",
+    "src/features/common/find-dom.js"
+  ],
+  "expectedLoads": 4
+}

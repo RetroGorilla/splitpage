@@ -1,0 +1,7 @@
+{
+  "legacyImports": [
+    "./20f-desktop.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 1
+}

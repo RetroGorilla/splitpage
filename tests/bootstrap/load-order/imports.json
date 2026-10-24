@@ -1,0 +1,7 @@
+{
+  "legacyImports": [
+    "./11-import.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 1
+}
