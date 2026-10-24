@@ -1,4 +1,4 @@
-# A target length per script (#170, src/js/05t-target.js).
+# A target length per script (#170, src/features/rundown/target.js).
 #
 # Set from the script length's popover (the reading speed's box, #193) — a
 # field taking the scene-length forms Adam signed off (1:30, 90, 90s, 1m30),

@@ -13,10 +13,10 @@ function page() {
   win.document.body.innerHTML = '<button id="outside">Outside</button><div id="onboarding-modal" hidden>' +
     '<button class="modal-close" data-onboard-action="skip">Skip</button>' +
     '<button data-onboard-action="back">Back</button><button data-onboard-action="next">Next</button>' +
-    '<button data-onboard-action="host-save">Save</button><button data-onboard-action="join-submit">Join</button>' +
+    '<button data-onboard-action="host-save">Save</button>' +
     '<button data-onboard-action="finish-tour">Tour</button><button data-onboard-action="open-help">Help</button>' +
     '<div id="onboard-install-body"></div><div id="onboard-host-panel" hidden></div>' +
-    '<div id="onboard-join-panel" hidden><input id="onboard-join-name" value="Team">' +
+    '<div id="onboard-join-panel" hidden><button data-onboard-action="join-submit">Join</button><input id="onboard-join-name" value="Team">' +
     '<input id="onboard-join-url" value=" http://team.test/ "><input id="onboard-join-pin" value=" 1234 ">' +
     '<input type="checkbox" id="onboard-join-remember" checked></div><p id="onboard-join-error" hidden></p>' +
     '<section class="onboard-step" data-onboard-step="1"></section><section class="onboard-step" data-onboard-step="2" hidden></section>' +
@@ -146,4 +146,59 @@ test("a disposed mount cannot auto-open after a last-file read completes", async
   await settled();
   assert.equal(modal().hidden, true);
   assert.equal(h.choices.size, 0);
+});
+
+test("a join from a disposed mount cannot update a remounted wizard", async () => {
+  for (const result of [{ ok: true, bookmark: { name: "Old team" } }, { ok: false, error: "offline" }]) {
+    page();
+    const original = fakeOnboardingPorts();
+    let resolve: (value: typeof result) => void = () => {};
+    const first = __init({ ...original.ports, addServerBookmark: () => new Promise((done) => { resolve = done; }) });
+    await settled();
+    click("join-submit");
+    const button = win.document.querySelector<HTMLButtonElement>('[data-onboard-action="join-submit"]');
+    assert.ok(button);
+    assert.equal(button.disabled, true);
+    first.dispose();
+    assert.equal(button.disabled, false);
+    assert.equal(button.textContent, "Join");
+    const replacement = fakeOnboardingPorts();
+    const second = __init(replacement.ports);
+    try {
+      await settled();
+      resolve(result);
+      await settled();
+      assert.deepEqual(replacement.notices.shown, []);
+      assert.equal(win.document.querySelector('[data-onboard-step="1"]')?.hasAttribute("hidden"), false);
+      assert.equal(win.document.getElementById("onboard-join-error")?.textContent, "");
+    } finally {
+      second.dispose();
+    }
+  }
+});
+
+test("a clipboard copy from a disposed mount cannot notify a replacement", async () => {
+  page();
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  let resolve: () => void = () => {};
+  const copying = new Promise<void>((done) => { resolve = done; });
+  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { clipboard: { writeText: () => copying } } });
+  const button = win.document.createElement("button");
+  button.setAttribute("data-onboard-action", "host-copy");
+  modal().appendChild(button);
+  const first = __init(fakeOnboardingPorts().ports);
+  await settled();
+  click("host-copy");
+  first.dispose();
+  const replacement = fakeOnboardingPorts();
+  const second = __init(replacement.ports);
+  try {
+    resolve();
+    await settled();
+    assert.deepEqual(replacement.notices.shown, []);
+  } finally {
+    second.dispose();
+    if (descriptor) Object.defineProperty(globalThis, "navigator", descriptor);
+    else Reflect.deleteProperty(globalThis, "navigator");
+  }
 });

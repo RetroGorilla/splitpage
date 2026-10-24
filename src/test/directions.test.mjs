@@ -6,21 +6,24 @@ import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { __init as initSceneStatus } from "../js/01-scene-status.js";
 import { rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
 import { htmlToMarkdown, sanitizeHtml } from "../js/04-richtext.js";
-import {
-  breakLine, cellLength, directionRangeAt, directionShortcut, flattenDirections, fromHtml, importDirections,
-  insideDirection, joinCells, mergeCells, normalizeCell, projection, replaceText, sliceCell, splitCell,
-  spokenText, toDocxRuns, toHtml, toMarkdown, toPlainText, toggleDirection, typingMarks
-} from "../js/04c-doc-model.js";
-import { clipboardOfCell } from "../js/05c-clipboard.js";
+import { breakLine, insideDirection, joinCells, replaceText, sliceCell, splitCell, typingMarks } from "../core/text/edits.ts";
+import { cellLength, normalizeCell, projection } from "../core/text/runs.ts";
+import { directionRangeAt, directionShortcut, flattenDirections, importDirections, toggleDirection } from "../core/text/directions.ts";
+import { fromHtml } from "../legacy/richtext.ts";
+import { mergeCells } from "../core/merge/cells.ts";
+import { spokenText, toDocxRuns, toMarkdown, toPlainText } from "../core/text/projections.ts";
+import { toHtml } from "../core/text/html.ts";
+import { clipboardOfCell } from "../features/clipboard/cell-clipboard.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { replaceInHtml } from "../js/09-find-replace.js";
+import { sharedPorts as findSharedPorts } from "../bootstrap/wiring/shared-ports.ts";
+import { __init as initFind, replaceInHtml } from "../features/find/find.js";
+initFind(findSharedPorts());
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
 import { toMarkdownDoc } from "../adapters/formats/export-text.ts";
@@ -35,7 +38,6 @@ import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
-initSceneStatus();
 
 const T = (text, marks) => ({ text, marks: marks || {} });
 const D = (text, marks) => ({ text, marks: Object.assign({ dir: true }, marks || {}) });

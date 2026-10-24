@@ -3,6 +3,13 @@ import type { CommandOutcome, Stamp } from "../session/document-session.ts";
 import type { OperationContext } from "../session/operation.ts";
 import type { DocumentEntry } from "../session/ports.ts";
 
+export interface DocumentDestination {
+  readonly kind: string;
+  readonly fields?: Readonly<Record<string, unknown>> | undefined;
+}
+
+export const NO_DESTINATION: DocumentDestination = Object.freeze({ kind: "none" });
+
 export interface LiveDocumentPort {
   readonly current: () => ValidatedDocument | null;
   readonly assign: (doc: ValidatedDocument) => void;

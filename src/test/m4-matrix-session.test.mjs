@@ -55,14 +55,17 @@ const { adoptRestoredState, migrateDocument, standaloneHtmlFor } = await import(
 const { restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
-const { flushEdits } = await import("../js/12a-undo.js");
+const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const { exportMetaLine, toMarkdownDoc } = await import("../adapters/formats/export-text.ts");
 const { captureExportDocument, exportDocumentOf } = await import("../js/14b-export-kit.js");
 const { exportFacts } = await import("../adapters/formats/export-kit.ts");
 const { buildMarkdownProject, buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
 const { preferences } = await import("../legacy/preferences-bridge.ts");
-const { saveAuthorName } = await import("../js/10-comments.js");
+
+import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";
+import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+function saveAuthorName(name) { saveAuthorNameWith(commentPreferences(), name); }
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { startNewScript } = await import("../js/18b-file-menu.js");
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");

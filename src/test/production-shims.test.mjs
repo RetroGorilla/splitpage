@@ -6,13 +6,18 @@ import assert from "node:assert/strict";
 import { migrateRows } from "../js/02-state.js";
 import { healTagRegistry, productionIndexStats, registerProductionTag } from "../js/07-production-tags.js";
 import { renameTag, newBrollRecord } from "../application/commands/production-actions.ts";
-import { retagRewrites } from "../legacy/tag-rewrites.ts";
+import { retagRewrites as planRetagRewrites } from "../application/commands/tag-rewrites.ts";
+import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
+
+const retagText = sharedPorts().text;
+const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 import { sessionStamps } from "../legacy/session-bridge.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { deriveProductionIndex } from "../core/production/tags.ts";
-import { __init as initBroll, brollEntries, updateBrollBadge } from "../js/08c-broll.js";
+import { brollEntries, updateBrollBadge } from "../legacy/broll-bridge.ts";
+import "./_broll-mounted.mjs";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { planBrollRecords } from "../core/production/broll.ts";
 import { seededHealRounds } from "./_heal-rounds.mjs";
@@ -20,7 +25,6 @@ import { loadTestDocument } from "./_document.mjs";
 import { deletePersonCommand } from "../application/commands/production-records.ts";
 import { runDocumentEdit } from "../legacy/session-bridge.ts";
 
-initBroll();
 
 const tag = (cat, name) =>
   `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${name}</span>`;

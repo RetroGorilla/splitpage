@@ -7,7 +7,7 @@ import { rowStatus, tagCategory, tagStatus } from "../core/production/looks.ts";
 import { amendHome, fileHome } from "../legacy/location-bridge.ts";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import { blobImgHtml, rowImage, rowImageKey } from "../adapters/storage/02c-blobs.js";
-import { videoLinkLabel } from "../adapters/storage/02d-gallery.js";
+import { videoLinkLabel } from "../core/document/gallery.ts";
 import { textMergeContext } from "./03-sync.js";
 import { parseProjectFileState } from "../adapters/formats/project-file.ts";
 import { fileConflicts } from "../legacy/save-bridge.ts";

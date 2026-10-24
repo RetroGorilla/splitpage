@@ -1,4 +1,4 @@
-import { targetLengthOf } from "../core/document/timing.ts";
+import { normalizeTargetLength, targetLengthOf } from "../core/document/timing.ts";
 import "./_dom.mjs";
 import "./_export-services-started.mjs";
 import "./_project-file-services-started.mjs";
@@ -6,26 +6,22 @@ import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import {
-  __init as initSceneStatus,
-  normalizeTargetLength,
-  targetClock
-} from "../js/01-scene-status.js";
+import { targetClock } from "../core/production/timing.ts";
 import { migrateRows } from "../js/02-state.js";
 import { mergeTargetLength } from "../js/03-sync.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
-import { TARGET_PRESETS, targetOverlayParts } from "../js/05t-target.js";
+import { TARGET_PRESETS, targetOverlayParts } from "../features/rundown/target.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { applyStepsLive, diffStates } from "../js/12a-undo.js";
-import { invertSteps } from "../js/04c-doc-model.js";
+import { applyStepsLive, diffStates } from "../application/editing/undo/history.ts";
+import { cellRuns } from "./_cell-runs.mjs";
+import { invertSteps } from "../core/text/steps.ts";
 import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject } from "../adapters/formats/project-file.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
-initSceneStatus();
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 
@@ -217,8 +213,8 @@ test("undo's diff sees it as one docField step, and the step takes it back and f
   const steps = diffStates(before, after);
   assert.deepEqual(steps.map((s) => s.op + ":" + s.key), ["docField:targetSeconds"]);
   const live = clone(before);
-  assert.deepEqual(applyStepsLive(live, steps), { ok: true });
+  assert.deepEqual(applyStepsLive(cellRuns, live, steps), { ok: true });
   assert.equal(live.targetSeconds, 120);
-  assert.deepEqual(applyStepsLive(live, invertSteps(steps)), { ok: true });
+  assert.deepEqual(applyStepsLive(cellRuns, live, invertSteps(steps)), { ok: true });
   assert.ok(!("targetSeconds" in live), "undo takes the key away, not sets it undefined");
 });

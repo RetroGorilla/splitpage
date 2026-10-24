@@ -22,8 +22,8 @@ import {
   rundownScale,
   rundownSpan,
   rundownTicks
-} from "../js/05f-rundown.js";
-import { targetOverlayParts } from "../js/05t-target.js";
+} from "../features/rundown/rundown.js";
+import { targetOverlayParts } from "../features/rundown/target.js";
 
 const BOARD = [
   { seconds: 15, status: "shot" },

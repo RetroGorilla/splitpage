@@ -4,6 +4,8 @@ import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Plan } from "../session/document-session.ts";
 import type { StampPorts } from "../session/ports.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
+import { toPlainText } from "../../core/text/projections.ts";
+import type { TextServices } from "../text/services.ts";
 
 export const ROW_ORDER_DERIVES: readonly string[] = CELL_TEXT_DERIVES;
 
@@ -118,4 +120,23 @@ export function swapScenesCommand(rowId: string, dir: -1 | 1): Command {
       };
     }
   };
+}
+
+const NBSP_RE = new RegExp(String.fromCharCode(160), "g");
+
+function hasItems(value: unknown): boolean {
+  return !!value && !!(value as { readonly length?: unknown }).length;
+}
+
+export function isBlankScene(
+  doc: Pick<DocumentView, "comments">,
+  row: DocumentView["rows"][number] | null | undefined,
+  text: Pick<TextServices, "cellOf">
+): boolean {
+  if (!row) return false;
+  const plainOf = (html: unknown): string => toPlainText(text.cellOf(html || "")).replace(NBSP_RE, " ");
+  if (plainOf(row.visualText).trim() || plainOf(row.audioText).trim()) return false;
+  if (row["imageRef"] || hasItems(row["moreImages"]) || hasItems(row["imageLinks"])) return false;
+  if (typeof row["lengthSeconds"] === "number") return false;
+  return !(doc.comments || []).some(function (c) { return c && c["rowId"] === row.id; });
 }

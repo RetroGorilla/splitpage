@@ -20,6 +20,9 @@ import { exportFormats, installExportFormats } from "../../src/legacy/export-for
 import { editorStarted, startEditor } from "../../src/legacy/editor-bridge.ts";
 import { locationStarted, startLocation } from "../../src/legacy/location-bridge.ts";
 import { preferencesStarted, startPreferences } from "../../src/legacy/preferences-bridge.ts";
+import { legacyShotHidingPorts, shotHidingStarted, startShotHiding } from "../../src/legacy/shot-hiding-bridge.ts";
+import { legacyPresencePorts, presenceStarted, startPresence } from "../../src/legacy/presence-bridge.ts";
+import { legacyUndoPorts, startUndo, undoStarted } from "../../src/legacy/undo-bridge.ts";
 import { effectsStarted, startEffects } from "../../src/legacy/effects-bridge.ts";
 import type { EffectPorts } from "../../src/application/effects/ports.ts";
 import { recoveryStarted } from "../../src/legacy/recovery-bridge.ts";
@@ -49,7 +52,7 @@ import type { ProjectFileServices } from "../../src/application/formats/project-
 
 after(closeApp);
 
-const OWNERS = ["location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions", "merge", "recovery", "editor", "productionEditing", "preferences"] as const;
+const OWNERS = ["location", "effects", "actions", "exportServices", "projectFiles", "exports", "undo", "session", "saves", "transitions", "merge", "recovery", "editor", "productionEditing", "preferences", "shotHiding", "presence"] as const;
 
 type Owner = (typeof OWNERS)[number];
 type Started = Record<Owner, boolean>;
@@ -79,7 +82,10 @@ function started(): Started {
     recovery: recoveryStarted(),
     editor: editorStarted(),
     productionEditing: productionEditingStarted(),
-    preferences: preferencesStarted()
+    preferences: preferencesStarted(),
+    shotHiding: shotHidingStarted(),
+    presence: presenceStarted(),
+    undo: undoStarted()
   };
 }
 
@@ -277,12 +283,12 @@ test("startup: wireApp builds every owner in order, each step sees only the owne
     ["actions", only("location", "effects")],
     ["projectFiles", only("location", "effects", "actions", "exportServices")],
     ["exporters", only("location", "effects", "actions", "exportServices", "projectFiles", "exports")],
-    ["undo route", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session")],
-    ["saves", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session")],
-    ["destinations", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves")],
-    ["sources", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions")],
-    ["merge", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions")],
-    ["recovery", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "session", "saves", "transitions", "merge")]
+    ["undo route", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "undo", "session")],
+    ["saves", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "undo", "session")],
+    ["destinations", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "undo", "session", "saves")],
+    ["sources", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "undo", "session", "saves", "transitions")],
+    ["merge", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "undo", "session", "saves", "transitions")],
+    ["recovery", only("location", "effects", "actions", "exportServices", "projectFiles", "exports", "undo", "session", "saves", "transitions", "merge")]
   ]);
   assert.deepEqual(started(), EVERYTHING);
   assert.equal(wiring.session, liveSession());
@@ -559,6 +565,7 @@ test("failed partial startup: a step that throws undoes every step before it, in
     "project file services": (f) => ({ deps: { ...f.deps, projectFiles: () => { throw boom; } } }),
     "export registry": (f) => ({ deps: f.deps, cleanup: installExportFormats(createExportRegistry()), cause: false }),
     "built-in exporters": (f) => ({ deps: { ...f.deps, exporters: () => { throw boom; } } }),
+    undo: (f) => ({ deps: f.deps, cleanup: startUndo(legacyUndoPorts()), cause: false }),
     session: (f) => ({ deps: { ...f.deps, undo: { ...must(f.deps.undo), route: () => { throw boom; } } } }),
     saves: (f) => ({ deps: { ...f.deps, saves: () => { throw boom; } } }),
     "save destinations": (f) => ({ deps: { ...f.deps, destinations: () => { throw boom; } } }),
@@ -568,9 +575,11 @@ test("failed partial startup: a step that throws undoes every step before it, in
     recovery: (f) => ({ deps: { ...f.deps, recovery: () => { throw boom; } } }),
     editor: (f) => ({ deps: f.deps, cleanup: startEditor(liveDocumentPort), cause: false }),
     "production editing": (f) => ({ deps: f.deps, cleanup: startProductionEditing(must(f.deps.timers)), cause: false }),
-    preferences: (f) => ({ deps: f.deps, cleanup: startPreferences(), cause: false })
+    preferences: (f) => ({ deps: f.deps, cleanup: startPreferences(), cause: false }),
+    "shot hiding": (f) => ({ deps: f.deps, cleanup: startShotHiding(legacyShotHidingPorts(must(f.deps.timers))), cause: false }),
+    presence: (f) => ({ deps: f.deps, cleanup: startPresence(legacyPresencePorts()), cause: false })
   };
-  const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { location: "location", "page effects": "effects", "export services": "exportServices", "export registry": "exports", transitions: "transitions", editor: "editor", "production editing": "productionEditing", preferences: "preferences" };
+  const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { location: "location", "page effects": "effects", "export services": "exportServices", "export registry": "exports", undo: "undo", transitions: "transitions", editor: "editor", "production editing": "productionEditing", preferences: "preferences", "shot hiding": "shotHiding", presence: "presence" };
   assert.deepEqual(Object.keys(breakers), [...WIRING_STEPS], "every step is broken once");
   for (const step of WIRING_STEPS) {
     const f = fakes();
@@ -603,7 +612,8 @@ test("undo teardown: callbacks retained from the routing do nothing after dispos
 });
 
 test("undo teardown: an old uninstall run after a newer installation leaves the newer one in place", async () => {
-  const { flushEdits, noteEdit, undo } = await import("../../src/js/12a-undo.js");
+  const { flushEdits, noteEdit, undo } = await import("../../src/legacy/undo-bridge.ts");
+  const stopUndo = startUndo(legacyUndoPorts());
   const stopSession = startSessionBridge(legacySessionPorts({ ...fakes().deps, undo: { adapter: createUndoAdapter(), route: () => () => {} } }));
   const doc = migrateRows({ title: "Undo", rows: [{ id: "r1", visualText: "", audioText: "a", status: "todo" }] });
   liveDocumentPort.assign(doc);
@@ -620,6 +630,7 @@ test("undo teardown: an old uninstall run after a newer installation leaves the 
   assert.deepEqual(ran, ["new"]);
   unrouteNew();
   stopSession();
+  stopUndo();
 });
 
 test("a session built by wireApp runs exactly the effects it was handed: a probe counts one call of each per edit", () => {
@@ -1017,7 +1028,7 @@ test("cleanup: the app-lifetime registrations that survive a stop are the ones m
   const again = await wireReal();
   app.startApp(again);
   await startupReady();
-  const { NO_DESTINATION } = await import("../../src/legacy/transition-bridge.ts");
+  const { NO_DESTINATION } = await import("../../src/application/transitions/ports.ts");
   documentTransitions().startNew({ from: { document: migrateRows({ title: "Fresh", rows: [] }) }, reason: "test: a new script", destination: NO_DESTINATION });
   assert.ok(replaced > 0, "document-replaced listeners registered on the bridge survive a rewire");
   app.stopApp();
