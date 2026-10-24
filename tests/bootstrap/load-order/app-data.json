@@ -1,0 +1,7 @@
+{
+  "legacyImports": [
+    "./20h-appdata.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 1
+}

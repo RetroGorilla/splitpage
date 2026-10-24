@@ -1,0 +1,7 @@
+{
+  "legacyImports": [
+    "./18d-command-menu.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 1
+}

@@ -1,0 +1,11 @@
+{
+  "legacyImports": [],
+  "loadOnly": [
+    "src/bootstrap/wiring/views.ts",
+    "src/bootstrap/wiring/overlay.ts",
+    "src/bootstrap/wiring/startup.ts",
+    "src/application/screen.ts",
+    "src/bootstrap/wiring/shared-ports.ts"
+  ],
+  "expectedLoads": 5
+}

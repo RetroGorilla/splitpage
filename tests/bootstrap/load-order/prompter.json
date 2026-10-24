@@ -1,0 +1,7 @@
+{
+  "legacyImports": [
+    "./20-teleprompter.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 1
+}
