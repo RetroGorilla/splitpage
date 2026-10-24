@@ -1,0 +1,9 @@
+{
+  "legacyImports": [],
+  "loadOnly": [
+    "src/features/script-zoom/script-zoom.js",
+    "src/bootstrap/wiring/script-zoom.ts",
+    "src/features/script-zoom/actions.ts"
+  ],
+  "expectedLoads": 3
+}

@@ -1,0 +1,9 @@
+{
+  "legacyImports": [
+    "./00-prelude.js",
+    "./02-state.js",
+    "./02b-doc-id.js"
+  ],
+  "loadOnly": [],
+  "expectedLoads": 3
+}
