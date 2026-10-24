@@ -1,4 +1,8 @@
 import { createRecordsReconciler } from "../../application/production/broll-records.ts";
+import { text as portText } from "./ports/text.ts";
+import { documentReader as portDocument } from "./ports/document.ts";
+import { edits as portEdits } from "./ports/editing.ts";
+import { production as portProduction } from "./ports/production.ts";
 import type { RecordsReconciler } from "../../application/production/broll-records.ts";
 import { randomIds } from "../../adapters/identity/ids.ts";
 import { anchorBrollInRows, brollHtmlLines, brollKeyHtml } from "../../adapters/production/broll-anchors.ts";
@@ -11,17 +15,15 @@ import { handBrollPanelTo } from "../../legacy/broll-bridge.ts";
 import { cellEditing, paintGuard } from "../../legacy/editor-bridge.ts";
 import { scriptCellOf } from "../../legacy/richtext.ts";
 import { currentDocument, heldDocument, requestRefresh } from "../../legacy/session-bridge.ts";
-import { sharedPorts } from "./shared-ports.ts";
 
 const broll = owned<BrollRecordsMount>();
 
 export function mountBrollFeature(): BrollRecordsMount {
   return broll.replace(() => {
-    const shared = sharedPorts();
-    const text = shared.text;
+    const text = portText;
     const records = createBrollRecords({
-      document: { current: currentDocument, read: shared.document.read },
-      edits: shared.edits,
+      document: { current: currentDocument, read: portDocument.read },
+      edits: portEdits,
       cells: { edit: (cell, change) => cellEditing().edit(cell, change) },
       paint: { whileShown: (edit) => paintGuard().whileShown(edit) },
       text,
@@ -46,8 +48,8 @@ export const stopBrollFeature = broll.stop;
 export const derivedRecordsPlan: RecordsReconciler = createRecordsReconciler({
   held: heldDocument,
   viewed: currentDocument,
-  production: sharedPorts().production,
-  text: sharedPorts().text,
+  production: portProduction,
+  text: portText,
   ids: randomIds
 });
 

@@ -1,13 +1,14 @@
 import "../test/_dom.mjs";
+import { startup as portStartup } from "../bootstrap/wiring/ports/startup.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { StartupSignal } from "./startup-signal.ts";
-import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
+
 import { connectStartup, startupReady } from "../legacy/startup-bridge.ts";
 
 test("the startup signal forwards the current ready result unchanged across connections", () => {
-  const startup: StartupSignal = sharedPorts().startup;
-  assert.equal(sharedPorts().startup, startup);
+  const startup: StartupSignal = portStartup;
+  assert.equal(portStartup, startup);
   assert.equal(startup.ready(), null);
   for (const promise of [Promise.resolve("first"), Promise.resolve("second")]) {
     let ready: Promise<unknown> | null = null;
@@ -39,7 +40,7 @@ test("the startup signal forwards the current ready result unchanged across conn
 });
 
 test("the startup signal preserves synchronous errors and rejected promise identity", async () => {
-  const startup: StartupSignal = sharedPorts().startup;
+  const startup: StartupSignal = portStartup;
   const failure = new Error("startup failed");
   const disconnectThrowing = connectStartup({ ready: () => { throw failure; } });
   try {

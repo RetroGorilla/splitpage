@@ -1,7 +1,19 @@
 import { commentsPanelActions as panelDefinitions, commentsHelpActions as helpDefinitions, commentsOpenActions as openDefinitions } from "../../features/comments/actions.ts";
+import { documentReader as portDocument } from "./ports/document.ts";
+import { edits as portEdits, selection as portSelection } from "./ports/editing.ts";
+import { notices as portNotices } from "./ports/effects.ts";
+import { preferenceValues as portPreferences } from "./ports/preferences.ts";
+import { review as portReview } from "./ports/location.ts";
+import { panelControl as portSidePanels } from "./ports/panels.ts";
+import { text as portText } from "./ports/text.ts";
+import { ids as portIds, clock as portClock } from "./ports/identity.ts";
+import { saves as portSaves, ownership as portOwnership } from "./ports/saving.ts";
+import { deletion as portDeletion } from "./ports/production.ts";
+import { pictures as portPictures } from "./ports/pictures.ts";
+import { screen as portScreen } from "./ports/screen.ts";
 import { __init as mountCommentState } from "../../features/comments/comments.js";
 import type { CommentStatePorts } from "../../features/comments/ports.ts";
-import { sharedPorts } from "./shared-ports.ts";
+
 import { keepSnapshot } from "../../legacy/transition-bridge.ts";
 import { presence } from "../../legacy/presence-bridge.ts";
 import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
@@ -122,26 +134,25 @@ const state = owned<ReturnType<typeof mountCommentState>>();
 
 export function mountCommentsLogicFeature(): ReturnType<typeof mountCommentState> {
   return state.replace(() => {
-    const shared = sharedPorts();
     const ports: CommentStatePorts = {
       sort: { current: commentSortMode, choose: setCommentSort },
-      document: shared.document,
-      edits: shared.edits,
-      notices: shared.notices,
-      preferences: shared.preferences,
-      review: shared.review,
-      sidePanels: shared.sidePanels,
-      text: shared.text,
-      ids: shared.ids,
-      clock: shared.clock,
-      saves: shared.saves,
-      selection: shared.selection,
-      deletion: shared.deletion,
-      ownership: shared.ownership,
+      document: portDocument,
+      edits: portEdits,
+      notices: portNotices,
+      preferences: portPreferences,
+      review: portReview,
+      sidePanels: portSidePanels,
+      text: portText,
+      ids: portIds,
+      clock: portClock,
+      saves: portSaves,
+      selection: portSelection,
+      deletion: portDeletion,
+      ownership: portOwnership,
       history: { keep: keepSnapshot },
       presence: { personColor: (name) => presence().personColor(name) },
       shots: { reveal: (id) => shotHiding().reveal(id) },
-      pictures: shared.pictures,
+      pictures: portPictures,
       clearDraftUndo: resetDraftHistory,
       onThreadsSent: onCommentsSent
     };
@@ -152,12 +163,11 @@ export function mountCommentsLogicFeature(): ReturnType<typeof mountCommentState
 export const stopCommentsLogicFeature = state.stop;
 
 export function commentsPanelActions() {
-  const shared = sharedPorts();
-  return panelDefinitions(shared.screen, shared.sidePanels);
+  return panelDefinitions(portScreen, portSidePanels);
 }
 
 export function commentsHelpActions() {
-  return helpDefinitions(sharedPorts().screen);
+  return helpDefinitions(portScreen);
 }
 
 export function commentsOpenActions() {

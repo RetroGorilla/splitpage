@@ -1,11 +1,14 @@
 import type { SessionChange } from "../../application/session/change-set.ts";
+import { documentReader as portDocument } from "./ports/document.ts";
+import { edits as portEdits } from "./ports/editing.ts";
+import { text as portText } from "./ports/text.ts";
+import { notices as portNotices } from "./ports/effects.ts";
 import { createSceneStatus } from "../../features/rows/scene-status.ts";
 import type { SceneStatus } from "../../features/rows/scene-status.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
 import { REVIEW_ONLY } from "../../legacy/session-bridge.ts";
 import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
-import { sharedPorts } from "./shared-ports.ts";
 
 type SceneStatusMount = SceneStatus & { readonly dispose: () => void };
 
@@ -13,13 +16,12 @@ const sceneStatus = owned<SceneStatusMount>();
 
 export function mountSceneStatusFeature(): SceneStatusMount {
   return sceneStatus.replace(() => {
-    const shared = sharedPorts();
     const status = createSceneStatus({
-      document: shared.document,
-      edits: shared.edits,
+      document: portDocument,
+      edits: portEdits,
       reviewRefusal: REVIEW_ONLY,
-      text: shared.text,
-      notices: shared.notices,
+      text: portText,
+      notices: portNotices,
       hideShot: () => viewFlags().hideShot(),
       shots: {
         armGrace: (rowId) => { shotHiding().armGrace(rowId); },

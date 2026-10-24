@@ -1,12 +1,13 @@
 import "../../src/test/_dom.mjs";
+import { panelControl as portSidePanels } from "../../src/bootstrap/wiring/ports/panels.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { SidePanels } from "../../src/application/side-panels.ts";
-import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
+
 import { startSidePanels } from "../../src/legacy/panels-bridge.ts";
 
 test("shared side panels close the current owner across restarts", () => {
-  const panels = sharedPorts().sidePanels;
+  const panels = portSidePanels;
   const calls: string[] = [];
   const owner = (name: string): SidePanels => ({
     registerPanel: () => () => {}, registerPage: () => () => {}, open: () => {}, close: () => {},

@@ -1,14 +1,14 @@
 import "../../src/test/_dom.mjs";
+import { launch as portLaunch } from "../../src/bootstrap/wiring/ports/desktop.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
-import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
+
 import type { LaunchFacts } from "../../src/application/desktop-presence.ts";
 
 test("launch facts forward each read to the current desktop and stay absent off desktop", async () => {
   useDesktopForTest(null);
-  const shared = sharedPorts();
-  const launch: LaunchFacts = shared.launch;
+  const launch: LaunchFacts = portLaunch;
   const absent = (): void => {
     assert.equal(launch.firstTabOfLaunch(), undefined);
     assert.equal(launch.hadPriorSession(), undefined);
@@ -37,8 +37,7 @@ test("launch facts forward each read to the current desktop and stay absent off 
         }
       };
       useDesktopForTest(desktop);
-      assert.equal(sharedPorts(), shared);
-      assert.equal(sharedPorts().launch, launch);
+      assert.equal(portLaunch, launch);
       assert.deepEqual(reads, []);
       assert.equal(launch.firstTabOfLaunch(), first);
       assert.equal(launch.hadPriorSession(), first);
@@ -59,7 +58,7 @@ test("launch facts forward each read to the current desktop and stay absent off 
 });
 
 test("launch facts leave session info failures to the caller", async () => {
-  const launch = sharedPorts().launch;
+  const launch = portLaunch;
   const failure = new Error("session info unavailable");
   try {
     useDesktopForTest({ getSessionInfo: () => { throw failure; } });

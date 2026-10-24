@@ -1,9 +1,10 @@
 import "../../src/test/_dom.mjs";
+import { fileDelivery as portFileDelivery } from "../../src/bootstrap/wiring/ports/files.ts";
 import test from "node:test";
 import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
-import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
+
 import { startEffects } from "../../src/legacy/effects-bridge.ts";
 import type { NoticeKind } from "../../src/application/effects/ports.ts";
 import type { DeliverOptions, FileDelivery } from "../../src/application/files/file-delivery.ts";
@@ -25,7 +26,7 @@ function recordNotices(t: TestContext): [string, NoticeKind | undefined][] {
 
 test("file delivery forwards desktop saves and preserves every saved-message option", async (t) => {
   const shown = recordNotices(t);
-  const delivery: FileDelivery = sharedPorts().fileDelivery;
+  const delivery: FileDelivery = portFileDelivery;
   const data = new Uint8Array([1, 2, 3]);
   const cases: readonly [DeliverOptions | null | undefined, string][] = [
     [undefined, "Saved notes.txt"],
@@ -40,7 +41,7 @@ test("file delivery forwards desktop saves and preserves every saved-message opt
       saveFileDialog: (input) => { calls.push(["saveFileDialog", input]); return Promise.resolve({ id: "picked", name: "notes.txt" }); },
       writeFile: (id, bytes) => { calls.push(["writeFile", id, bytes]); return Promise.resolve(null); }
     });
-    assert.equal(sharedPorts().fileDelivery, delivery);
+    assert.equal(portFileDelivery, delivery);
     assert.equal(await delivery.deliver("notes.txt", data, options), true);
     assert.deepEqual(calls, [
       ["saveFileDialog", { suggestedName: "notes.txt", filters: [{ name: "TXT file", extensions: ["txt"] }] }],
@@ -58,7 +59,7 @@ test("file delivery returns false without a notice or write when the desktop dia
     saveFileDialog: () => Promise.resolve(null),
     writeFile: () => { writes++; return Promise.resolve(null); }
   });
-  assert.equal(await sharedPorts().fileDelivery.deliver("notes.txt", "hello", { savedMsg: "Saved the notes" }), false);
+  assert.equal(await portFileDelivery.deliver("notes.txt", "hello", { savedMsg: "Saved the notes" }), false);
   assert.equal(writes, 0);
   assert.deepEqual(shown, []);
 });
@@ -72,7 +73,7 @@ for (const failure of ["dialog", "write"]) {
         : Promise.resolve({ id: "picked", name: "notes.txt" }),
       writeFile: () => Promise.reject(new Error("disk full"))
     });
-    assert.equal(await sharedPorts().fileDelivery.deliver("notes.txt", "hello", { savedMsg: "Saved the notes" }), false);
+    assert.equal(await portFileDelivery.deliver("notes.txt", "hello", { savedMsg: "Saved the notes" }), false);
     assert.deepEqual(shown, [["Could not save the file. Please try again.", "error"]]);
   });
 }
@@ -90,7 +91,7 @@ test("file delivery forwards browser downloads through the adapter and shows the
   t.mock.method(window.HTMLAnchorElement.prototype, "click", function (this: HTMLAnchorElement) {
     downloads.push([this.download, this.href, this.isConnected]);
   });
-  assert.equal(await sharedPorts().fileDelivery.deliver("notes.txt", data), true);
+  assert.equal(await portFileDelivery.deliver("notes.txt", data), true);
   assert.equal(blobs.length, 1);
   assert.equal(blobs[0], data);
   assert.deepEqual(downloads, [["notes.txt", "blob:test/1", true]]);
@@ -104,6 +105,6 @@ test("file delivery returns false and preserves the failed notice when a browser
   const shown = recordNotices(t);
   useDesktopForTest(null);
   t.mock.method(URL, "createObjectURL", () => { throw new Error("download failed"); });
-  assert.equal(await sharedPorts().fileDelivery.deliver("notes.txt", "hello"), false);
+  assert.equal(await portFileDelivery.deliver("notes.txt", "hello"), false);
   assert.deepEqual(shown, [["Could not save the file. Please try again.", "error"]]);
 });

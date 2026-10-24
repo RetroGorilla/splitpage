@@ -1,13 +1,14 @@
 import "../../../src/test/_dom.mjs";
+import { lastFile as portLastFile } from "../../../src/bootstrap/wiring/ports/files.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { IDBFactory as FakeIDBFactory } from "fake-indexeddb";
 import type { LastFile } from "../../../src/application/files/last-file.ts";
-import { sharedPorts } from "../../../src/bootstrap/wiring/shared-ports.ts";
+
 import { rememberLastFileHandle } from "../../../src/js/00-prelude.js";
 
 test("last file reads the handle stored by the legacy prelude at call time", async () => {
-  const last: LastFile = sharedPorts().lastFile;
+  const last: LastFile = portLastFile;
   const factory = new FakeIDBFactory();
   const previous = Object.getOwnPropertyDescriptor(globalThis, "indexedDB");
   const previousWindow = Object.getOwnPropertyDescriptor(window, "indexedDB");

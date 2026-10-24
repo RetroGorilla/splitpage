@@ -1,4 +1,5 @@
 import { bulkDeleteArmed, clearProductionSelection, deleteConfirmation, disarmBulkDelete, productionSelection, pruneProductionSelection, selectedKeys } from "../legacy/production-editing-bridge.ts";
+import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { nextTagStatus, normalizeTagName } from "../core/document/tags.ts";
@@ -21,7 +22,7 @@ import { PERSON_NAME_MAX, personById as personIn, personNamed, registryEntryOf }
 import { randomIds } from "../adapters/identity/ids.ts";
 import { currentDocument, readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
 import { retagMentions, retagRewrites } from "../application/commands/tag-rewrites.ts";
-import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
+
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { bulkTagRows } from "../application/commands/bulk-tags.ts";
 import { rewrittenCopies } from "../application/commands/document-edit.ts";
@@ -34,8 +35,8 @@ export var IS_TOUCH;
 
 const tagEditPorts = {
   run: runDocumentEdit, read: readSession, stamps: sessionStamps,
-  rewrites: (tags, toName) => retagRewrites(sharedPorts().text, tags, toName),
-  mentions: (doc, tags) => retagMentions(sharedPorts().text, doc, tags)
+  rewrites: (tags, toName) => retagRewrites(portText, tags, toName),
+  mentions: (doc, tags) => retagMentions(portText, doc, tags)
 };
 
 function productionEntries() {
@@ -63,7 +64,6 @@ export function openProductionPanel() {
   sidePanels().open("production-panel");
   renderProduction();
 }
-
 
 function gearEntries() {
   return productionEntries().filter(function (e) { return e.cat.id === "gear"; });
@@ -825,11 +825,11 @@ export function bulkDeleteSelected() {
   if (!items.length) return;
   breakUndoCoalescing();
   var labelled = items.filter(function (item) { return !item.orphaned; }).map(tagRef);
-  var unlabelled = readSession(function (doc) { return retagMentions(sharedPorts().text, doc, labelled); });
+  var unlabelled = readSession(function (doc) { return retagMentions(portText, doc, labelled); });
   clearProductionSelection();
   runDocumentEdit(deleteTagsCommand(items.map(function (item) {
     return { cat: item.cat.id, name: item.name, unlabel: !item.orphaned };
-  }), retagRewrites(sharedPorts().text, labelled, null), sessionStamps));
+  }), retagRewrites(portText, labelled, null), sessionStamps));
   var n = items.length;
   breakUndoCoalescing();
   showToast("Deleted " + n + " item" + (n === 1 ? "" : "s") +

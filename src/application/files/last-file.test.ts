@@ -1,7 +1,8 @@
 import "../../test/_dom.mjs";
+import { lastFile as portLastFile } from "../../bootstrap/wiring/ports/files.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sharedPorts } from "../../bootstrap/wiring/shared-ports.ts";
+
 import { loadLastFileHandle } from "../../js/00-prelude.js";
 import type { LastFile } from "./last-file.ts";
 
@@ -27,8 +28,8 @@ test("the last file port forwards to the legacy loader for stored handles, empty
     });
   }
 
-  const lastFile: LastFile = sharedPorts().lastFile;
-  assert.equal(sharedPorts().lastFile, lastFile);
+  const lastFile: LastFile = portLastFile;
+  assert.equal(portLastFile, lastFile);
   assert.equal(lastFile.load, loadLastFileHandle);
   assert.equal(await lastFile.load(), null);
 
