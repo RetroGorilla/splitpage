@@ -1,16 +1,17 @@
 import "../../../src/test/_dom.mjs";
+import { place as portPlace } from "../../../src/bootstrap/wiring/ports/location.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { DocumentPlace } from "../../../src/application/location/document-place.ts";
-import { sharedPorts } from "../../../src/bootstrap/wiring/shared-ports.ts";
+
 import { arrivingOnLink } from "../../../src/js/13-hosted.js";
 import {
   currentConn, currentHome, documentLocation, locationStarted, serverStatus, setHome, startLocation
 } from "../../../src/legacy/location-bridge.ts";
 
 test("document place is built without starting owners and exposes only reads and existing subscriptions", () => {
-  const place: DocumentPlace = sharedPorts().place;
-  assert.equal(sharedPorts().place, place);
+  const place: DocumentPlace = portPlace;
+  assert.equal(portPlace, place);
   assert.equal(locationStarted(), false);
   assert.deepEqual(Object.keys(place).sort(), [
     "arrivingOnLink", "bookmarkById", "bookmarks", "connection", "fileHome", "home", "homeConn", "importHome",
@@ -43,12 +44,12 @@ test("document place is built without starting owners and exposes only reads and
 });
 
 test("document place delegates arrivingOnLink to the existing hosted function", () => {
-  const place: DocumentPlace = sharedPorts().place;
+  const place: DocumentPlace = portPlace;
   assert.equal(place.arrivingOnLink(), arrivingOnLink());
 });
 
 test("document place returns the bridge's live location records and follows a stop and restart", () => {
-  const place: DocumentPlace = sharedPorts().place;
+  const place: DocumentPlace = portPlace;
   let stop = startLocation({ storage: () => null });
   try {
     const location = documentLocation();
@@ -103,7 +104,7 @@ test("document place returns the bridge's live location records and follows a st
     assert.throws(() => place.serverMode(), { name: "Error", message: "The document location is not started yet" });
     assert.equal(place.stillOnServer(updated), false);
     stop = startLocation({ storage: () => null });
-    assert.equal(sharedPorts().place, place);
+    assert.equal(portPlace, place);
     assert.equal(place.home(), home);
     assert.equal(place.connection(), updated);
     assert.equal(place.serverHomeRev(), 5);
@@ -127,7 +128,7 @@ test("document place returns the bridge's live location records and follows a st
 });
 
 test("document place forwards server facts and subscriptions synchronously in the owners' listener order", () => {
-  const place: DocumentPlace = sharedPorts().place;
+  const place: DocumentPlace = portPlace;
   const stop = startLocation({ storage: () => null });
   const location = documentLocation();
   const status = serverStatus();

@@ -105,7 +105,29 @@ A feature imports from `src/application/` only types and pure functions, such as
 ### Rule 4. How the wiring mounts
 
 - **One wiring module per feature**, `src/bootstrap/wiring/<name>.ts`. It exports `mount<Name>Feature()` and `stop<Name>Feature()`, built on `owned()`, and the feature's action definitions if it has any ([Rule 6](#rule-6-features-own-their-action-definitions-bootstrap-owns-their-order)). It doesn't export `__init` and doesn't re-export the feature's functions.
-- **Shared ports are built in one place**, `src/bootstrap/wiring/shared-ports.ts` (new), as `sharedPorts()`. Each shared port object forwards to its owner or bridge at call time, as `appActions` in `legacy/app-actions.ts` already does, so it can be built once and still follows a restart. A feature's wiring takes only the fields its port names.
+- **Shared ports are built by responsibility** under `src/bootstrap/wiring/ports/`. Feature wiring imports the individual objects it needs directly from their modules; there is no central builder or compatibility barrel. Each object forwards to its owner or bridge at call time, so it can be built once and still follows a restart. Importing a port module does not start an owner, install a listener, or configure a bridge. The bootstrap load manifest tests every module in isolation.
+
+  | Module | Ports |
+  | --- | --- |
+  | `actions.ts` | Action invocation and availability |
+  | `document.ts` | Document reads and subscriptions |
+  | `editing.ts` | Document edits, undo control and editor selection |
+  | `text.ts` | Rich-text services and tag-body rewriting |
+  | `preferences.ts` | Preference changes, view flags and preference values |
+  | `screen.ts` | Current screen facts |
+  | `effects.ts` | Notices, menu items and clipboard |
+  | `location.ts` | Document location and review facts |
+  | `saving.ts` | Save state and operation ownership |
+  | `transitions.ts` | Document transitions |
+  | `files.ts` | Export registry, last file and file delivery |
+  | `desktop.ts` | External links, recent files and launch facts |
+  | `pictures.ts` | Picture storage |
+  | `production.ts` | Production index and delete confirmation |
+  | `panels.ts` | Side-panel control |
+  | `startup.ts` | Startup readiness, draft resume and seed checking |
+  | `identity.ts` | IDs and clock |
+
+  The split preserves the existing implementations, including `text.ts`'s tag-body rewriting. Moving that logic to its final owner remains a separate audit follow-up. Port contract types remain with their application or core owners. The retired `sharedPorts()` references in the original wave schedule below describe how those PRs first landed, rather than an API for new work.
 - **Start position.** A moved file's slot in the `_entry.js` start list is replaced, at the same position, by a call to its wiring's mount. `_entry.js` reaches the mount through one named re-export in `bootstrap/wiring.ts` (`export { mountScriptZoomFeature } from "./wiring/script-zoom.ts"`), because the frozen-shim test allows the entry only `wiring.ts` and `app.ts`. This is the only re-export the pattern allows. A move PR doesn't move the mount into `startApp` (`bootstrap/app.ts`): that would change when the feature starts, which is a behaviour change.
 - **Stopping.** Features mounted from the `_entry.js` list are not stopped by `stopApp`, just as the numbered files they replace were not. The last L5 step turns that list into a wiring step, which stops them in reverse order.
 
@@ -168,7 +190,7 @@ These are connections between two areas, not shared ports. When the file that ha
 
 ## The shared ports
 
-Each is built in `sharedPorts()` from the owners and, until they retire, the bridges. Each lands with the first move that needs it, not on its own, because a port nobody uses yet moves no responsibility. A port marked Opus lands in an Opus PR: with the first Opus move that needs it, or, when Codex moves need it first, in its own Opus PR before them. A Codex move only uses an Opus port after it has landed. "Files" counts the numbered files that import the bridge names it replaces.
+Each is built in its responsibility module under `src/bootstrap/wiring/ports/` from the owners and, until they retire, the bridges. Each lands with the first move that needs it, not on its own, because a port nobody uses yet moves no responsibility. A port marked Opus lands in an Opus PR: with the first Opus move that needs it, or, when Codex moves need it first, in its own Opus PR before them. A Codex move only uses an Opus port after it has landed. "Files" counts the numbered files that import the bridge names it replaces.
 
 | Port | Type and where it lives | What a feature gets | Built from | Files | Lands with | Who |
 | --- | --- | --- | --- | --- | --- | --- |

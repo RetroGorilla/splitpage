@@ -1,9 +1,10 @@
 import "../../src/test/_dom.mjs";
+import { transitions as portTransitions } from "../../src/bootstrap/wiring/ports/transitions.ts";
 import "../../src/test/_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { NO_DESTINATION } from "../../src/application/transitions/ports.ts";
-import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
+
 import { migrateRows } from "../../src/js/02-state.js";
 import { currentDocument, liveDocumentPort } from "../../src/legacy/session-bridge.ts";
 import { startTransitions } from "../../src/legacy/transition-bridge.ts";
@@ -17,7 +18,7 @@ function script(title: string) {
 }
 
 test("the transitions port reaches the running transitions when called, and refuses before they start", () => {
-  const { transitions } = sharedPorts();
+  const transitions = portTransitions;
   assert.throws(() => transitions.copyId(), /not started yet/);
   const log: string[] = [];
   const stop = startTransitions({

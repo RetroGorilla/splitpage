@@ -1,11 +1,12 @@
 import "../../src/test/_dom.mjs";
+import { flags as portFlags } from "../../src/bootstrap/wiring/ports/preferences.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
+
 import { startPreferences, viewFlags } from "../../src/legacy/preferences-bridge.ts";
 
 test("the find flags port reads and writes the current legacy view flags across restarts", () => {
-  const { flags } = sharedPorts();
+  const flags = portFlags;
   const start = (): (() => void) => startPreferences({ storage: () => null, announce: () => {} });
   let stop = start();
   try {

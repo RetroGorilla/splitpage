@@ -1,4 +1,5 @@
 import { normalizeTagName } from "../core/document/tags.ts";
+import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
@@ -11,9 +12,8 @@ import { tagFieldOccurrences, tagOccurrences, tagsInField } from "../js/07-produ
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../legacy/session-bridge.ts";
 import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions } from "../application/commands/tag-rewrites.ts";
-import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
 
-const retagText = sharedPorts().text;
+const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
 import { domProjection } from "../features/common/find-dom.js";

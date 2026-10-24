@@ -1,4 +1,10 @@
 import { owned } from "../../features/routing/owned.ts";
+import { documentReader as portDocument } from "./ports/document.ts";
+import { edits as portEdits, undoControl as portUndo } from "./ports/editing.ts";
+import { notices as portNotices } from "./ports/effects.ts";
+import { text as portText } from "./ports/text.ts";
+import { ownership as portOwnership } from "./ports/saving.ts";
+import { pictures as portPictures } from "./ports/pictures.ts";
 import { placeCaretAtTextOffset } from "../../features/common/caret.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
 import type { PastePlace, SceneMedia, SceneMediaPorts, ScenePorts, Scenes } from "../../features/rows/ports.ts";
@@ -8,22 +14,20 @@ import { randomIds } from "../../adapters/identity/ids.ts";
 import { cellEditing, rowDrag } from "../../legacy/editor-bridge.ts";
 import { deleteConfirmation } from "../../legacy/production-editing-bridge.ts";
 import { handScenesTo } from "../../legacy/rows-bridge.ts";
-import { sharedPorts } from "./shared-ports.ts";
 
 const scenes = owned<Scenes>();
 const media = owned<SceneMedia>();
 
 export function mountScenesFeature(): Scenes {
   return scenes.replace(function () {
-    const shared = sharedPorts();
     const ports: ScenePorts = {
-      document: shared.document,
-      edits: shared.edits,
-      notices: shared.notices,
+      document: portDocument,
+      edits: portEdits,
+      notices: portNotices,
       ids: randomIds,
-      text: shared.text,
+      text: portText,
       cells: { sync: (cell) => { cellEditing().sync(cell); } },
-      undo: shared.undo,
+      undo: portUndo,
       selection: { of: cellSelection },
       placeCaret: placeCaretAtTextOffset,
       rowDrag: { dragging: () => rowDrag().dragging() },
@@ -41,14 +45,13 @@ export const stopScenesFeature = scenes.stop;
 
 export function mountSceneMediaFeature(): SceneMedia {
   return media.replace(function () {
-    const shared = sharedPorts();
     const ports: SceneMediaPorts = {
-      document: shared.document,
-      notices: shared.notices,
-      ownership: shared.ownership,
-      pictures: shared.pictures,
+      document: portDocument,
+      notices: portNotices,
+      ownership: portOwnership,
+      pictures: portPictures,
       cells: { editGallery: (rowId, message, edit) => cellEditing().editGallery(rowId, message, edit) },
-      text: shared.text,
+      text: portText,
       selection: { of: cellSelection, set: setCellSelection }
     };
     return mountSceneMedia(ports);

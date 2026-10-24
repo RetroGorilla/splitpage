@@ -1,11 +1,12 @@
 import "../../../src/test/_dom.mjs";
+import { edits as portEdits } from "../../../src/bootstrap/wiring/ports/editing.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { DocumentEdits } from "../../../src/application/session/document-edits.ts";
 import { changeSet } from "../../../src/application/session/change-set.ts";
 import type { ChangeSet } from "../../../src/application/session/change-set.ts";
 import type { Command } from "../../../src/application/session/document-session.ts";
-import { sharedPorts } from "../../../src/bootstrap/wiring/shared-ports.ts";
+
 import { migrateRows } from "../../../src/core/migrate.ts";
 import {
   REVIEW_ONLY, editAllowed, liveSession, onSessionChange, readSession, runCommand, runDocumentEdit,
@@ -61,8 +62,8 @@ function titleCommand(title: string, needs: Command["needs"] = "edit"): Command 
 }
 
 test("document edits expose exactly the session bridge functions and stamp and text objects", () => {
-  const edits: DocumentEdits = sharedPorts().edits;
-  assert.equal(sharedPorts().edits, edits);
+  const edits: DocumentEdits = portEdits;
+  assert.equal(portEdits, edits);
   assert.deepEqual(Object.keys(edits), ["run", "edit", "allowed", "stamps", "text"]);
   assert.equal(edits.run, runCommand);
   assert.equal(edits.edit, runDocumentEdit);
@@ -74,7 +75,7 @@ test("document edits expose exactly the session bridge functions and stamp and t
 });
 
 test("document edits preserve outcomes, one undo record per edit and listener order", () => {
-  const edits: DocumentEdits = sharedPorts().edits;
+  const edits: DocumentEdits = portEdits;
   const h = start("First");
   const offFirst = onSessionChange(() => { h.log.push("first"); });
   const offSecond = onSessionChange(() => { h.log.push("second"); });
@@ -108,7 +109,7 @@ test("document edits preserve outcomes, one undo record per edit and listener or
 });
 
 test("document edits preserve the exact review refusal and commands needing no edit permission", () => {
-  const edits: DocumentEdits = sharedPorts().edits;
+  const edits: DocumentEdits = portEdits;
   const h = start("Reviewer");
   try {
     liveSession().adopt({ title: "Initial", rows: [] });
@@ -133,7 +134,7 @@ test("document edits preserve the exact review refusal and commands needing no e
 });
 
 test("run returns failures while edit throws the same error and rolls back failed writes", () => {
-  const edits: DocumentEdits = sharedPorts().edits;
+  const edits: DocumentEdits = portEdits;
   const h = start("First");
   const failure = new Error("edit failed");
   const planning: Command = { name: "broken-plan", needs: "edit", plan: () => { throw failure; } };
@@ -162,7 +163,7 @@ test("run returns failures while edit throws the same error and rolls back faile
 });
 
 test("document edits preserve committed outcomes and edit succeeds after an undo reporting error", () => {
-  const edits: DocumentEdits = sharedPorts().edits;
+  const edits: DocumentEdits = portEdits;
   const failure = new Error("undo failed");
   const h = start("First", () => { throw failure; });
   try {
@@ -182,7 +183,7 @@ test("document edits preserve committed outcomes and edit succeeds after an undo
 });
 
 test("the same document edits port follows restarted sessions and their editor and permission ports", () => {
-  const edits: DocumentEdits = sharedPorts().edits;
+  const edits: DocumentEdits = portEdits;
   const first = start("First");
   try {
     liveSession().adopt({ title: "First document", rows: [] });
@@ -196,7 +197,7 @@ test("the same document edits port follows restarted sessions and their editor a
   try {
     liveSession().adopt({ title: "Second document", rows: [] });
     second.deny(REVIEW_ONLY);
-    assert.equal(sharedPorts().edits, edits);
+    assert.equal(portEdits, edits);
     assert.equal(edits.stamps.editor.name(), "Second");
     assert.equal(edits.text.editor.name(), "Second");
     assert.equal(edits.allowed(), false);

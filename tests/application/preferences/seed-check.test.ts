@@ -1,9 +1,9 @@
 import { test } from "node:test";
+import { seedCheck as portSeedCheck } from "../../../src/bootstrap/wiring/ports/startup.ts";
 import assert from "node:assert/strict";
 import { seedCheckMatches } from "../../../src/application/preferences/seed-check.ts";
 import { checksumText } from "../../../shared/text.js";
 import "../../../src/test/_dom.mjs";
-import { sharedPorts } from "../../../src/bootstrap/wiring/shared-ports.ts";
 
 test("the seed check passes when the page's content is the length and checksum of its state text", () => {
   const text = "{\"rows\":[]}";
@@ -11,7 +11,7 @@ test("the seed check passes when the page's content is the length and checksum o
 });
 
 test("the shared seed check reads the page again on every call", () => {
-  const seed = sharedPorts().seedCheck;
+  const seed = portSeedCheck;
   const meta = document.createElement("meta");
   meta.name = "splitpage-seed-check";
   const state = document.createElement("script");

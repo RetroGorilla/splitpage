@@ -1,4 +1,10 @@
 import "./_dom.mjs";
+import { documentReader as portDocument } from "../bootstrap/wiring/ports/document.ts";
+import { edits as portEdits, undoControl as portUndo } from "../bootstrap/wiring/ports/editing.ts";
+import { text as portText } from "../bootstrap/wiring/ports/text.ts";
+import { review as portReview } from "../bootstrap/wiring/ports/location.ts";
+import { notices as portNotices } from "../bootstrap/wiring/ports/effects.ts";
+import { flags as portFlags } from "../bootstrap/wiring/ports/preferences.ts";
 import "./_export-services-started.mjs";
 import "./_project-file-services-started.mjs";
 import "./_preferences-started.mjs";
@@ -21,9 +27,9 @@ import { spokenText, toDocxRuns, toMarkdown, toPlainText } from "../core/text/pr
 import { toHtml } from "../core/text/html.ts";
 import { clipboardOfCell } from "../features/clipboard/cell-clipboard.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { sharedPorts as findSharedPorts } from "../bootstrap/wiring/shared-ports.ts";
+
 import { __init as initFind, replaceInHtml } from "../features/find/find.js";
-initFind(findSharedPorts());
+initFind({ document: portDocument, edits: portEdits, text: portText, review: portReview, undo: portUndo, notices: portNotices, flags: portFlags });
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
 import { toMarkdownDoc } from "../adapters/formats/export-text.ts";

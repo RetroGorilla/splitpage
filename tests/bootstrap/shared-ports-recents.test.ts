@@ -1,13 +1,13 @@
 import "../../src/test/_dom.mjs";
+import { recents as portRecents } from "../../src/bootstrap/wiring/ports/desktop.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
 import type { RecentFileOpenRequest, RecentFiles } from "../../src/application/files/recent-files.ts";
-import { sharedPorts } from "../../src/bootstrap/wiring/shared-ports.ts";
 
 test("the recent files port forwards each call and follows the current desktop", async () => {
   useDesktopForTest(null);
-  const recents: RecentFiles = sharedPorts().recents;
+  const recents: RecentFiles = portRecents;
   const request: RecentFileOpenRequest = { kind: "file", fileId: "file-1" };
   try {
     assert.equal(recents.list(), undefined);
@@ -30,7 +30,7 @@ test("the recent files port forwards each call and follows the current desktop",
         routeOpen(input: RecentFileOpenRequest) { assert.equal(this, desktop); calls.push(["routeOpen", input]); return routed; }
       };
       useDesktopForTest(desktop);
-      assert.equal(sharedPorts().recents, recents);
+      assert.equal(portRecents, recents);
       assert.deepEqual(calls, []);
       assert.equal(recents.list(), listed);
       assert.equal(recents.remove(id + "-removed"), removed);

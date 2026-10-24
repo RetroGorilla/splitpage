@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import "./_export-services-started.mjs";
 import { liveDoc, printData } from "./_export-now.mjs";
 import test from "node:test";
@@ -19,9 +20,8 @@ import { randomIds } from "../adapters/identity/ids.ts";
 import { removeBrollProp, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, currentDocument } from "../legacy/session-bridge.ts";
 import { retagRewrites as planRetagRewrites } from "../application/commands/tag-rewrites.ts";
-import { sharedPorts } from "../bootstrap/wiring/shared-ports.ts";
 
-const retagText = sharedPorts().text;
+const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 
 import { buildBreakdownCsv, buildBrollCsv } from "../adapters/formats/csv.ts";
@@ -30,7 +30,6 @@ import { exportDocumentOf } from "../js/14b-export-kit.js";
 import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 import { loadTestDocument } from "./_document.mjs";
-
 
 function brollFieldLines(body) {
   hoistNestedBrs(body);

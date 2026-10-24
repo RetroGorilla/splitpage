@@ -1,12 +1,12 @@
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
+import { screen as portScreen } from "./ports/screen.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { updateActions as definitions } from "../../features/update/actions.ts";
 import type { UpdatePorts, UpdateStatus } from "../../features/update/ports.ts";
 import { showAbout } from "../../js/20a-update.js";
-import { sharedPorts } from "./shared-ports.ts";
 
 export function updateActions(): ActionDefinition[] {
-  return definitions({ screen: sharedPorts().screen, showAbout });
+  return definitions({ screen: portScreen, showAbout });
 }
 
 export const updates: UpdatePorts["updates"] = {
