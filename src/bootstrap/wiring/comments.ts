@@ -24,7 +24,7 @@ import {
   pasteIntoDraft
 } from "../../features/editing/draft-edit.js";
 import { isDraftBox } from "../../features/editing/cell-page.ts";
-import { compressImageFile } from "../../js/06-rows.js";
+import { compressImageFile } from "../../features/rows/scene-media.js";
 import {
   AUTHOR_NAME_FIELDS,
   armDeleteComment,

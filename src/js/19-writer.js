@@ -10,7 +10,7 @@ import {
   toggleCellDirection,
   toggleCellFormat
 } from "./05-render.js";
-import { splitRowFieldCore } from "./06-rows.js";
+import { splitRowFieldCore } from "../legacy/rows-bridge.ts";
 import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
 import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "../legacy/undo-bridge.ts";
 import { bothScenesHaveVisual, joinScenesCommand } from "../application/commands/split-join.ts";

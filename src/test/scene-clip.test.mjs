@@ -6,12 +6,13 @@ import { migrateRows } from "../js/02-state.js";
 import { dataUrlForSync, intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { commentIds } from "../core/text/runs.ts";
-import { fromHtml } from "../legacy/richtext.ts";
+import { cellOf, fromHtml } from "../legacy/richtext.ts";
+import { isBlankScene } from "../application/commands/rows.ts";
 import { createUndoHistory, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";
 import { detectTwoColumnFormat, parseImportRows } from "../js/11-import.js";
 import {
-  SCENES_ATTR, SCENES_MIME, buildScenePayload, insertScenes, isBlankScene, isMove, parseScenePayload,
+  SCENES_ATTR, SCENES_MIME, buildScenePayload, insertScenes, isMove, parseScenePayload,
   scenesOnClipboard, setLiveCut
 } from "../features/clipboard/scene-clip.js";
 import { loadTestDocument } from "./_document.mjs";
@@ -373,8 +374,8 @@ test("deleting or cutting a scene points a comment split across it at the words 
 
 test("a paste onto a blank scene takes its place; comments can be held back for a second step", () => {
   const t = target();
-  assert.equal(isBlankScene(t, t.rows[1]), true);
-  assert.equal(isBlankScene(t, t.rows[0]), false);
+  assert.equal(isBlankScene(t, t.rows[1], { cellOf }), true);
+  assert.equal(isBlankScene(t, t.rows[0], { cellOf }), false);
   loadTestDocument(t);
   n = 0;
   const res = insertScenes(clip(buildScenePayload(source(), ["r2"])), { replaceRowId: "t2", holdComments: true, mint });

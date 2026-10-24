@@ -78,12 +78,9 @@ import {
   armDelete,
   capturePastePlace,
   clearDropMarkers,
-  compressImageFile,
-  grantVideoFile,
   focusRowField,
   handleImageFile,
   moveRow,
-  openGalleryLink,
   removeImage,
   removeImageLink,
   restorePastePlace,
@@ -92,12 +89,11 @@ import {
   splitCellField,
   stopDragScroll,
   swapAdjacentRows,
-  closeRowMenus,
-  rowMenuKeydown,
-  toggleRowMenu,
-  updateDragScroll,
-  videoFirstFrame
-} from "../../js/06-rows.js";
+  updateDragScroll
+} from "./rows.ts";
+import { closeRowMenus, rowMenuKeydown, toggleRowMenu } from "../../features/rows/row-menu.js";
+import { compressImageFile, videoFirstFrame } from "../../features/rows/scene-media.js";
+import { grantVideoFile, openGalleryLink } from "../../js/06-rows.js";
 import {
   acceptTagGhost,
   acceptUntaggedMention,
