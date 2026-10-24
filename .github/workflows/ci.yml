@@ -78,9 +78,6 @@ jobs:
             exit 1
           }
 
-      - name: Unit, desktop and tool tests
-        run: npm run test:all
-
       - name: Install Chromium
         run: |
           npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
@@ -129,25 +126,55 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  tests:
+    name: Tests (${{ matrix.shard }}/2)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install tooling
+        run: npm ci
+
+      - name: Build index.html and stamp sw.js
+        run: node build.mjs
+
+      - name: sw.js is committed with the current VERSION stamp
+        run: git diff --exit-code -- sw.js
+
+      - name: Unit, desktop and tool test shard
+        run: npm run test:all -- --shard "${{ matrix.shard }}/2"
+
   gate:
-    needs: [changes, checks]
+    needs: [changes, checks, tests]
     if: always()
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 2
     steps:
       - name: Every required job passed, or the change was prose only
         run: |
-          echo "changes=$CHANGES code=$CODE checks=$CHECKS"
+          echo "changes=$CHANGES code=$CODE checks=$CHECKS tests=$TESTS"
           [ "$CHANGES" = success ] || exit 1
           if [ "$CODE" = true ]; then
-            [ "$CHECKS" = success ]
+            [ "$CHECKS" = success ] && [ "$TESTS" = success ]
           else
-            [ "$CHECKS" = skipped ]
+            [ "$CHECKS" = skipped ] && [ "$TESTS" = skipped ]
           fi
         env:
           CHANGES: ${{ needs.changes.result }}
           CODE: ${{ needs.changes.outputs.code }}
           CHECKS: ${{ needs.checks.result }}
+          TESTS: ${{ needs.tests.result }}
 
   desktop-smoke:
     needs: changes
