@@ -3,7 +3,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 import { startEffects } from "../legacy/effects-bridge.ts";
-import { grantVideoFile, hasSessionVideo, sessionVideoUrl, releaseSessionVideoUrls, openVideoFile } from "../js/06-rows.js";
+import { videoFiles, mountVideoFilesFeature, stopVideoFilesFeature } from "../bootstrap/wiring/video-files.ts";
+
+mountVideoFilesFeature();
+test.after(stopVideoFilesFeature);
+const { grant: grantVideoFile, has: hasSessionVideo, url: sessionVideoUrl, releaseUrls: releaseSessionVideoUrls, openFile: openVideoFile } = videoFiles;
 
 function notices(t) {
   const heard = [];

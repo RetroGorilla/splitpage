@@ -15,7 +15,7 @@ import type { GalleryMount, GalleryOverlayMount, GalleryOverlayPorts, GalleryPor
 import { owned } from "../../features/routing/owned.ts";
 import { videoHostLabel } from "../../adapters/formats/video-host.ts";
 import { galleryBadgeHtml, gallerySlotPictureHtml } from "../../js/05-render.js";
-import { hasSessionVideo, sessionVideoUrl } from "../../js/06-rows.js";
+import { videoFiles } from "./video-files.ts";
 import { foldIntoEdit } from "../../legacy/undo-bridge.ts";
 import { cellEditing, pickPictureFor } from "../../legacy/editor-bridge.ts";
 import { preferences } from "../../legacy/preferences-bridge.ts";
@@ -65,7 +65,7 @@ export function mountGalleryOverlayFeature(): GalleryOverlayMount {
         fetchThumbnail: (href) => video.owner()?.fetchThumbnail(href) ?? Promise.resolve(null),
         hostLabel: videoHostLabel
       },
-      sessionVideos: { has: hasSessionVideo, url: sessionVideoUrl }
+      sessionVideos: { has: videoFiles.has, url: videoFiles.url }
     };
     return mountOverlay(ports);
   });
