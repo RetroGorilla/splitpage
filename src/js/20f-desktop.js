@@ -9,7 +9,7 @@ import { isPristineSeedDocument } from "./03a-history-store.js";
 import { hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
 import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
 import { cssAttr } from "../features/common/dom.ts";
-import { showToast } from "./12-dirty-toast.js";
+import { showToast } from "../legacy/effects-bridge.ts";
 import { pointTabAt } from "./13-hosted.js";
 import { openDocument } from "../legacy/transition-bridge.ts";
 import { draftResume, flushDraftNow, recoveryStarted } from "../legacy/recovery-bridge.ts";
