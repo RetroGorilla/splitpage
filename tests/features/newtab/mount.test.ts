@@ -33,6 +33,7 @@ async function settled() {
 
 function harness() {
   const calls: unknown[][] = [];
+  const arrivals: Parameters<NewTabPorts["transitions"]["startNew"]>[0][] = [];
   const state = { home: { kind: "none" } as ReturnType<NewTabPorts["place"]["home"]>, desktop: false, seed: true, link: false, pending: false, draft: false, intent: { type: "blank" }, last: null as unknown };
   const actions = fakeActions();
   const notices = fakeNotices();
@@ -48,7 +49,7 @@ function harness() {
     seedCheck: { passes: () => state.seed },
     draftResume: { restorePending: () => state.pending },
     startup: { ready: () => null },
-    transitions: { startNew: (arrival) => { calls.push(["startNew", arrival]); assert.ok("document" in arrival.from); return { document: arrival.from.document, forkedFrom: null, kept: false }; } },
+    transitions: { startNew: (arrival) => { arrivals.push(arrival); calls.push(["startNew", arrival]); assert.ok("document" in arrival.from); return { document: arrival.from.document, forkedFrom: null, kept: false }; } },
     opening: { open: async (opening) => { calls.push(["openDocument", opening]); return true; } },
     text: { productionReaders: { wordCount: () => 1 } },
     notices: notices.notices,
@@ -65,7 +66,7 @@ function harness() {
     starters: [starter], findStarter: (id) => id === "sample" ? starter : null,
     recentHandle: (entry) => { calls.push(["makeDesktopHandle", entry]); return { getFile: async () => new win.File(["file"], entry.name) }; }
   };
-  return { ports, state, calls, actions, notices, starter, pasted: () => pasted };
+  return { ports, state, calls, arrivals, actions, notices, starter, pasted: () => pasted };
 }
 
 test("blank and starter creation keep preparation, reset, transition, confirmation and identity call order", async () => {
@@ -80,7 +81,8 @@ test("blank and starter creation keep preparation, reset, transition, confirmati
       assert.deepEqual(h.calls.map((call) => call[0]), ["makeId", "migrateRows", "resetProductionPanelState", "startNew", "confirmSavedNow", "syncDocIdentity"]);
       assert.deepEqual(h.calls[0], ["makeId", "r"]);
       assert.deepEqual(h.calls[1], ["migrateRows", { title: "Untitled Script", rows: [{ id: "r-new", visualText: "", imageRef: null, audioText: "" }], wordsPerMinute: 180 }]);
-      const transition = h.calls[3]?.[1] as Parameters<NewTabPorts["transitions"]["startNew"]>[0];
+      const transition = h.arrivals[0];
+      assert.ok(transition);
       assert.equal(transition.reason, "startBlankScript: a new blank document");
       assert.equal(transition.destination, kind === "none" ? undefined : NO_DESTINATION);
       h.calls.length = 0;
@@ -88,7 +90,7 @@ test("blank and starter creation keep preparation, reset, transition, confirmati
       assert.deepEqual(h.calls.map((call) => call[0]), ["migrateRows", "resetProductionPanelState", "startNew", "confirmSavedNow", "syncDocIdentity"]);
       assert.deepEqual(h.calls[0]?.[1], h.starter.state);
       assert.notEqual(h.calls[0]?.[1], h.starter.state);
-      assert.equal((h.calls[2]?.[1] as Parameters<NewTabPorts["transitions"]["startNew"]>[0]).reason, "startStarterScript: a new document from the sample starter");
+      assert.equal(h.arrivals[1]?.reason, "startStarterScript: a new document from the sample starter");
     } finally { mounted.dispose(); }
   }
 });
