@@ -25,7 +25,7 @@ jobs:
       GIT_CONFIG_VALUE_0: 'false'
       GIT_CONFIG_KEY_1: core.longpaths
       GIT_CONFIG_VALUE_1: 'true'
-      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/splitpage-pw-browsers
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.pw-browsers
     steps:
       - uses: actions/checkout@v7
         with:
