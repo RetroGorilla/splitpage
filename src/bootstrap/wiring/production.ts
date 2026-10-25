@@ -1,6 +1,6 @@
 import { mountBrollPanelFeature } from "./broll.ts";
 import { __init as mountPanelState } from "../../features/tags/panels.js";
-import type { TagPanelPorts } from "../../features/tags/ports.ts";
+import type { TagPanelMount, TagPanelPorts } from "../../features/tags/ports.ts";
 import { tagPanelActions as panelDefinitions } from "../../features/tags/actions.ts";
 import { installTagPanelCommands } from "../../application/tag-panel-commands.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
@@ -65,9 +65,9 @@ import { reviewBlocked, reviewMode } from "../../legacy/location-bridge.ts";
 
 const tags = owned<ReturnType<typeof mountTags>>();
 
-const panelState = owned<ReturnType<typeof mountPanelState>>();
+const panelState = owned<TagPanelMount>();
 
-export function mountTagPanelsFeature(): ReturnType<typeof mountPanelState> {
+export function mountTagPanelsFeature(): TagPanelMount {
   return panelState.replace(() => {
     const ports: TagPanelPorts = {
       view: portView, document: portDocument, edits: portEdits, text: portText,
@@ -76,13 +76,13 @@ export function mountTagPanelsFeature(): ReturnType<typeof mountPanelState> {
       notices: portNotices, review: portReview, undo: portUndo, ids: portIds
     };
     return mountPanelState(ports);
-  }, () => [() => installTagPanelCommands({ renderProduction, saveTagRename, addPersonForTag, setTagOwner, setTagNotes })]);
+  }, (owner) => [() => installTagPanelCommands(owner)]);
 }
 
 export const stopTagPanelsFeature = panelState.stop;
 
 export function tagPanelActions() {
-  return panelDefinitions(portScreen, portPanels);
+  return panelDefinitions(panelState.owner, portScreen, portPanels);
 }
 
 export function mountTagsFeature(): ReturnType<typeof mountTags> {

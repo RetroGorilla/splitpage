@@ -1090,14 +1090,30 @@ export function __init(nextPorts) {
 
   IS_TOUCH = window.matchMedia && window.matchMedia("(hover: none)").matches;
   var active = true;
-  return { dispose: function () {
-    if (!active) return;
-    active = false;
-    document.removeEventListener("click", onTagMenuClick);
-    document.removeEventListener("keydown", onTagMenuKeydown, true);
-    closeTagMenu(false);
-    IS_TOUCH = undefined;
-    tagEditPorts = null;
-    ports = null;
-  } };
+  function command(handler) {
+    return function (...args) {
+      if (active && ports === nextPorts) return handler(...args);
+    };
+  }
+  return {
+    openProductionPanel: command(openProductionPanel),
+    openGearPanel: command(openGearPanel),
+    renderProduction: command(renderProduction),
+    saveTagRename: command(saveTagRename),
+    addPersonForTag: command(addPersonForTag),
+    setTagOwner: command(setTagOwner),
+    setTagNotes: command(setTagNotes),
+    dispose: function () {
+      if (!active) return;
+      active = false;
+      document.removeEventListener("click", onTagMenuClick);
+      document.removeEventListener("keydown", onTagMenuKeydown, true);
+      ports.deletion.disarm("tag");
+      ports.selection.disarm();
+      closeTagMenu(false);
+      IS_TOUCH = undefined;
+      tagEditPorts = null;
+      ports = null;
+    }
+  };
 }
