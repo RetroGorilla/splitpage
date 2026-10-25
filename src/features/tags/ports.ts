@@ -11,8 +11,10 @@ import type { SidePanels } from "../../application/side-panels.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import type { ProductionIndexOwner } from "../../core/production/index.ts";
+import type { TagPanelState } from "../../application/tag-panel-state.ts";
 
 export interface TagPanelPorts {
+  readonly view: Pick<TagPanelState, "gearGroupBy" | "productionGroupBy" | "setTagAddingPerson" | "setTagRenaming" | "tagAddingPersonKey" | "tagExpandedKey" | "tagRenamingKey">;
   readonly document: Pick<DocumentReader, "current" | "read">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "productionReaders" | "inertBody" | "retagBody" | "sanitizeHtml">;

@@ -13,7 +13,6 @@ import { retagMentions, retagRewrites } from "../../application/commands/tag-rew
 import { removeTag, renameTag } from "../../application/commands/production-actions.ts";
 import { bulkTagRows } from "../../application/commands/bulk-tags.ts";
 import { rewrittenCopies } from "../../application/commands/document-edit.ts";
-import { gearGroupBy, productionGroupBy, setTagAddingPerson, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../../application/tag-panel-state.ts";
 
 
 export var IS_TOUCH;
@@ -107,7 +106,7 @@ export function renderGearList() {
   updateGearHeadCount(entries.length);
 
   document.querySelectorAll("#gear-modes [data-group]").forEach(function (b) {
-    var on = b.getAttribute("data-group") === gearGroupBy();
+    var on = b.getAttribute("data-group") === ports.view.gearGroupBy();
     b.classList.toggle("is-active", on);
     b.setAttribute("aria-checked", on ? "true" : "false");
   });
@@ -120,7 +119,7 @@ export function renderGearList() {
     return;
   }
 
-  if (gearGroupBy() === "scene") {
+  if (ports.view.gearGroupBy() === "scene") {
     var untracked = entries.filter(function (e) { return e.orphaned; }).length;
     listEl.innerHTML = renderProductionByScene(entries.filter(function (e) { return !e.orphaned; })) +
       (untracked ? '<div class="tag-orphan-note">' + untracked +
@@ -245,8 +244,8 @@ function iconHtml(id, cls) {
 
 function dropEditingForReview() {
   if (!ports.review.reviewing()) return;
-  setTagRenaming(null);
-  setTagAddingPerson(null);
+  ports.view.setTagRenaming(null);
+  ports.view.setTagAddingPerson(null);
   if (ports.selection.selectedKeys().length) ports.selection.clear();
   if (ports.selection.armed()) ports.selection.disarm();
 }
@@ -325,7 +324,7 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
       '" title="Add someone to the crew list"' +
       (gear ? ' aria-label="Add a person to the crew list">' + iconHtml("i-plus") + 'Person' : '>Add person') +
     '</button>';
-  var personRow = tagAddingPersonKey() === item.key
+  var personRow = ports.view.tagAddingPersonKey() === item.key
     ? '<div class="tag-person-row">' +
         '<input type="text" class="tag-person-input ev-field" data-key="' + k +
           '" placeholder="Their name" maxlength="60" aria-label="The new person’s name">' +
@@ -391,8 +390,8 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
 function tagEntityHtml(item, opts) {
   opts = opts || {};
   var gear = !!opts.gear;
-  var renaming = tagRenamingKey() === item.key;
-  var expanded = tagExpandedKey() === item.key || renaming;
+  var renaming = ports.view.tagRenamingKey() === item.key;
+  var expanded = ports.view.tagExpandedKey() === item.key || renaming;
   var k = escapeHtml(item.key);
   var selected = opts.selection && !ports.review.reviewing() && ports.selection.selected(item.key);
   var detailId = tagFieldId("detail", gear, item.key);
@@ -585,7 +584,7 @@ function renderProductionList(entries) {
   entries = entries || productionEntries();
 
   document.querySelectorAll("#production-modes [data-group]").forEach(function (b) {
-    var on = b.getAttribute("data-group") === productionGroupBy();
+    var on = b.getAttribute("data-group") === ports.view.productionGroupBy();
     b.classList.toggle("is-active", on);
     b.setAttribute("aria-checked", on ? "true" : "false");
   });
@@ -594,10 +593,10 @@ function renderProductionList(entries) {
   var cols = document.getElementById("production-cols");
   if (cols) {
     cols.hidden = !groups.length ||
-      (productionGroupBy() !== "cat" && productionGroupBy() !== "person");
+      (ports.view.productionGroupBy() !== "cat" && ports.view.productionGroupBy() !== "person");
   }
 
-  if (productionGroupBy() === "shoot") {
+  if (ports.view.productionGroupBy() === "shoot") {
     listEl.innerHTML = renderProductionByShoot(entries);
     return;
   }
@@ -612,7 +611,7 @@ function renderProductionList(entries) {
     return;
   }
 
-  if (productionGroupBy() === "scene") {
+  if (ports.view.productionGroupBy() === "scene") {
     var orphanCount = groups.reduce(function (n, g) {
       return n + g.items.filter(function (i) { return i.orphaned; }).length;
     }, 0);
@@ -624,7 +623,7 @@ function renderProductionList(entries) {
     return;
   }
 
-  if (productionGroupBy() === "person") {
+  if (ports.view.productionGroupBy() === "person") {
     listEl.innerHTML = renderProductionByPerson(entries);
     return;
   }
@@ -801,7 +800,7 @@ export function bulkSetStatus(statusId) {
 export function bulkAddPerson() {
   var input = document.getElementById("bulk-person-input");
   if (!input) return;
-  setTagAddingPerson(null);
+  ports.view.setTagAddingPerson(null);
   if (!cappedText(input.value, PERSON_NAME_MAX)) { renderProduction(); return; }
   setOwnerOf(selectedEntries(), { name: input.value });
 }
@@ -833,7 +832,7 @@ function renderBulkBar(entries) {
   var bar = document.getElementById("production-bulk");
   if (!bar) return;
   var items = selectedEntries(entries);
-  var cardView = productionGroupBy() === "cat" || productionGroupBy() === "person";
+  var cardView = ports.view.productionGroupBy() === "cat" || ports.view.productionGroupBy() === "person";
   if (!items.length || !cardView || ports.review.reviewing()) { bar.hidden = true; bar.innerHTML = ""; return; }
 
   var n = items.length;
@@ -873,7 +872,7 @@ function renderBulkBar(entries) {
           : 'Delete') +
       '</button>' +
     '</div>' +
-    (tagAddingPersonKey() === "__bulk__"
+    (ports.view.tagAddingPersonKey() === "__bulk__"
       ? '<div class="bulk-row bulk-person-row">' +
           '<input type="text" class="ev-field" id="bulk-person-input" placeholder="Their name" maxlength="60" ' +
             'aria-label="The new person’s name">' +
@@ -913,7 +912,7 @@ export function setTagNotes(key, text) {
 export function addPersonForTag(key) {
   var input = document.querySelector('.tag-person-input[data-key="' + cssAttr(key) + '"]');
   if (!input) return;
-  setTagAddingPerson(null);
+  ports.view.setTagAddingPerson(null);
   var item = findTagByKey(key);
   if (item) updateTags([item], { owner: { name: input.value } });
   else ports.edits.edit(addPersonCommand(input.value, ports.ids));
@@ -939,9 +938,9 @@ export function armPersonDelete(btn, personId) {
 export function saveTagRename(key) {
   var input = document.querySelector('.tag-rename-input[data-key="' + cssAttr(key) + '"]');
   var item = findTagByKey(key);
-  if (!input || !item) { setTagRenaming(null); renderProduction(); return; }
+  if (!input || !item) { ports.view.setTagRenaming(null); renderProduction(); return; }
   var renamed = input.value;
-  setTagRenaming(null);
+  ports.view.setTagRenaming(null);
   ports.undo.breakCoalescing();
   var changed = renameTag(item.cat.id, item.name, renamed, tagEditPorts);
   if (changed) {
