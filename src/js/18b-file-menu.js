@@ -11,7 +11,7 @@ import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { LONG_DEMO } from "./_starters.js";
 import { documentTransitions, keepSnapshot, openDocument } from "../legacy/transition-bridge.ts";
 import { NO_DESTINATION } from "../application/transitions/ports.ts";
-import { setMenuItemLabel, setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
+import { setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
 import { confirmSavedNow, saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
@@ -66,8 +66,6 @@ function renderKeyChips(root) {
     }).join("+"));
   });
 }
-
-export { setMenuItemLabel, setMenuItemReason };
 
 export function menuItemReason(item) {
   var why = item && item.querySelector(".mi-why");
