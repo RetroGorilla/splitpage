@@ -1,4 +1,5 @@
 export { mountOnboardingFeature } from "./wiring/onboarding.ts";
+export { mountDesktopFeature } from "./wiring/desktop.ts";
 export { mountVideoFilesFeature } from "./wiring/video-files.ts";
 export { mountCommentsLogicFeature } from "./wiring/comments.ts";
 import { wireProductionIndex } from "./wiring/production-index.ts";

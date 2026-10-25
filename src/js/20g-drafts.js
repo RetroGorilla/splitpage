@@ -24,7 +24,7 @@ import { documentTransitions, openDocument } from "../legacy/transition-bridge.t
 import { NO_DESTINATION } from "../application/transitions/ports.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 import { parseProjectFileState } from "../adapters/formats/project-file.ts";
-import { notifyDesktopDocumentState } from "./20f-desktop.js";
+import { notifyDesktopDocumentState } from "../legacy/desktop-bridge.ts";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { SCHEMA_VERSION } from "../core/document/fields.ts";
 import { createCaptureSchedule } from "../application/recovery/capture-schedule.ts";
