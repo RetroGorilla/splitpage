@@ -2,7 +2,7 @@ import type { ActionDefinition } from "./actions.ts";
 import { OPENS_A_DIALOG, availableUnless } from "./screen.ts";
 import type { ScreenState } from "./screen.ts";
 
-interface SettingsControls {
+export interface SettingsControls {
   readonly openSettings: (input?: unknown) => void;
 }
 

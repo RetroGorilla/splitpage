@@ -1,11 +1,8 @@
-export interface TourPauseHandlers {
-  readonly interrupt: () => void;
-  readonly offerResume: () => void;
-}
+import type { TourPause } from "../application/tour-pause.ts";
 
-let handlers: TourPauseHandlers | null = null;
+let handlers: TourPause | null = null;
 
-export function handTourPauseTo(next: TourPauseHandlers): void {
+export function handTourPauseTo(next: TourPause): void {
   handlers = next;
 }
 
