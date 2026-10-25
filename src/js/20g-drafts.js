@@ -1,5 +1,5 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
-import { currentConn, currentHome, documentLocation, fileHome, importHome, reviewMode, serverStatus, stillOnServer } from "../legacy/location-bridge.ts";
+import { currentConn, currentHome, documentLocation, fileHome, importHome, reviewMode, serverStatus, stillOnServer, onServerDoc } from "../legacy/location-bridge.ts";
 import { migrateRows } from "./02-state.js";
 import { inlineStateJson, internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
@@ -9,7 +9,6 @@ import {
 } from "./02b-doc-id.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
-import { onServerDoc } from "./13-hosted.js";
 import { DRAFT_LIMITS, browserDraftKey, draftBaseOf } from "../adapters/storage/draft-store-idb.ts";
 import {
   applyStashedWork,

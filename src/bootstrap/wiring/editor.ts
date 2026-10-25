@@ -136,7 +136,6 @@ import {
   settleAfterApply,
   undo
 } from "../../legacy/undo-bridge.ts";
-import { onServerDoc } from "../../js/13-hosted.js";
 import { runExport } from "../../js/18-local-files.js";
 import {
   cycleWriterGutter,
@@ -146,7 +145,7 @@ import {
   updateWriterFormatState,
   writerUndoStep
 } from "../../js/19-writer.js";
-import { reviewBlocked, reviewMode } from "../../legacy/location-bridge.ts";
+import { reviewBlocked, reviewMode, onServerDoc } from "../../legacy/location-bridge.ts";
 
 type RootInput = Pick<Event, "target">;
 

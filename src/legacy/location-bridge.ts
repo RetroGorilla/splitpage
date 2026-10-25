@@ -53,6 +53,10 @@ export function currentHome(): Home {
   return running().location.home();
 }
 
+export function onServerDoc(): boolean {
+  return currentHome().kind === "server";
+}
+
 export function currentConn(): Connection {
   return running().location.connection();
 }
