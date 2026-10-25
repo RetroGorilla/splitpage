@@ -1,3 +1,19 @@
+import type { ActionDefinition } from "../../application/actions.ts";
+import { __init as mountPanelState, mountBrollPanel } from "../../features/broll/panel.js";
+import { brollPanelActions as panelDefinitions } from "../../features/broll/actions.ts";
+import type { BrollPanelEventsPorts, BrollPanelPorts, BrollPanelState } from "../../features/broll/ports.ts";
+import { handBrollPrintViewTo } from "../../legacy/broll-print-view.ts";
+import { ids as portIds } from "./ports/identity.ts";
+import { flags as portFlags } from "./ports/preferences.ts";
+import { panelControl as portPanels } from "./ports/panels.ts";
+import { shotHiding as portShotHiding } from "./ports/shot-hiding.ts";
+import { presence as portPresence } from "./ports/presence.ts";
+import { rows as portRows } from "./ports/rows.ts";
+import { review as portReview } from "./ports/location.ts";
+import { actions as portActions } from "./ports/actions.ts";
+import { notices as portNotices } from "./ports/effects.ts";
+import { undoControl as portUndo } from "./ports/editing.ts";
+import { screen as portScreen } from "./ports/screen.ts";
 import { createRecordsReconciler } from "../../application/production/broll-records.ts";
 import { text as portText } from "./ports/text.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
@@ -11,7 +27,6 @@ import { createBrollRecords } from "../../features/broll/records.ts";
 import { domToPos } from "../../features/common/cell-dom.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { ensureTrailingCaretSpot } from "../../js/04-richtext.js";
-import { handBrollPanelTo } from "../../legacy/broll-bridge.ts";
 import { cellEditing, paintGuard } from "../../legacy/editor-bridge.ts";
 import { scriptCellOf } from "../../legacy/richtext.ts";
 import { currentDocument, heldDocument, requestRefresh } from "../../legacy/session-bridge.ts";
@@ -38,8 +53,7 @@ export function mountBrollFeature(): BrollRecordsMount {
       },
       refresh: requestRefresh
     });
-    handBrollPanelTo(records);
-    return { ...records, dispose: () => { handBrollPanelTo(null); records.dispose(); } };
+    return records;
   });
 }
 
@@ -67,4 +81,48 @@ export function scheduleBrollRefresh(): void {
 
 export function updateBrollBadge(): void {
   broll.owner()?.updateBrollBadge();
+}
+
+const panelState = owned<BrollPanelState>();
+const panelEvents = owned<{ dispose: () => void }>();
+
+export function mountBrollPanelStateFeature(): BrollPanelState {
+  return panelState.replace(() => {
+    const ports: BrollPanelPorts = {
+      document: portDocument,
+      edits: portEdits,
+      text: portText,
+      ids: portIds,
+      production: portProduction,
+      shotHiding: portShotHiding,
+      panels: portPanels,
+      flags: portFlags,
+      presence: portPresence,
+      undo: portUndo,
+      review: portReview,
+      actions: portActions,
+      notices: portNotices,
+      rows: portRows,
+      records: {
+        brollEntries: () => broll.owner()?.brollEntries() ?? [],
+        addBrollProp: (id, name) => broll.owner()?.addBrollProp(id, name) ?? false,
+        renameBrollInScript: (entry, name) => broll.owner()?.renameBrollInScript(entry, name) ?? false,
+        updateBrollBadge: () => broll.owner()?.updateBrollBadge()
+      }
+    };
+    return mountPanelState(ports);
+  }, (owner) => [() => {
+    handBrollPrintViewTo(owner.brollPrintView);
+    return () => { handBrollPrintViewTo(null); };
+  }]);
+}
+
+export function mountBrollPanelFeature(ports: BrollPanelEventsPorts): { dispose: () => void } {
+  return panelEvents.replace(() => mountBrollPanel(ports));
+}
+
+export const stopBrollPanelFeature = panelEvents.stop;
+
+export function brollPanelActions(): ActionDefinition[] {
+  return panelDefinitions(panelState.owner, { screen: portScreen, panels: portPanels });
 }

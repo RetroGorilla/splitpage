@@ -36,6 +36,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "merge/states.ts": await import("../../src/core/merge/states.ts"),
   "merge/text-field.ts": await import("../../src/core/merge/text-field.ts"),
   "migrate.ts": await import("../../src/core/migrate.ts"),
+  "production/broll-view.ts": await import("../../src/core/production/broll-view.ts"),
   "production/broll.ts": await import("../../src/core/production/broll.ts"),
   "production/index.ts": await import("../../src/core/production/index.ts"),
   "production/looks.ts": await import("../../src/core/production/looks.ts"),

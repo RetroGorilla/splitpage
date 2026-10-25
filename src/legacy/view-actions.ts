@@ -1,6 +1,5 @@
 import type { ActionDefinition, Availability } from "../application/actions.ts";
 import { openGearPanel, openProductionPanel } from "../js/08-production-panels.js";
-import { openBrollPanel } from "../js/08d-broll-panel.js";
 import { VIEWING_ONLY } from "../js/13-hosted.js";
 import { openWriter } from "../js/19-writer.js";
 import { openPrompter } from "../js/20-teleprompter.js";
@@ -51,8 +50,6 @@ export function viewActions(): ActionDefinition[] {
       "breakdown tags props locations cast show hide toggle", true, openProductionPanel),
     panel("panel-gear", "Gear panel", "btn-gear", "gear-panel",
       "gear equipment kit camera show hide toggle", true, openGearPanel),
-    panel("panel-broll", "B-roll panel", "btn-broll", "broll-panel",
-      "broll b roll shots cutaways show hide toggle", false, openBrollPanel),
     {
       id: "write",
       label: "Write",

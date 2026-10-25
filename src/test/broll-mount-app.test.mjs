@@ -5,8 +5,8 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
-const { openBrollPanel, openBrollPage } = await import("../js/08d-broll-panel.js");
-const { mountBrollPanelFeature: mountBrollFeature } = await import("../bootstrap/wiring/production.ts");
+const { openBrollPanel, openBrollPage } = await import("../features/broll/panel.js");
+const { mountBrollEventsFeature: mountBrollFeature } = await import("../bootstrap/wiring/production.ts");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../js/05-render.js");
 after(closeApp);

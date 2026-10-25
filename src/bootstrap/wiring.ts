@@ -7,7 +7,7 @@ export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
 export { mountDraftEditFeature } from "./wiring/draft-edit.ts";
 export { mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature } from "./wiring/rundown.ts";
 export { mountHelpFeature } from "./wiring/help.ts";
-export { derivedRecordsPlan, mountBrollFeature } from "./wiring/broll.ts";
+export { derivedRecordsPlan, mountBrollFeature, mountBrollPanelStateFeature } from "./wiring/broll.ts";
 export { mountFindFeature } from "./wiring/find.ts";
 export { mountSettingsFeature } from "./wiring/settings.ts";
 export { mountCopyPasteFeature } from "./wiring/clipboard.ts";

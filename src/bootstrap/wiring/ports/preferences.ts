@@ -25,7 +25,9 @@ export const changes: PreferenceChanges = {
   }
 };
 
-export const flags: Pick<ViewFlags, "findOpen" | "setFindOpen"> = {
+export const flags: Pick<ViewFlags, "findOpen" | "setFindOpen" | "brollPageOpen" | "setBrollPageOpen"> = {
+  brollPageOpen: () => viewFlags().brollPageOpen(),
+  setBrollPageOpen: (open) => viewFlags().setBrollPageOpen(open),
   findOpen: () => viewFlags().findOpen(),
   setFindOpen: (open) => viewFlags().setFindOpen(open)
 };

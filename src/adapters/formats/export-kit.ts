@@ -6,8 +6,10 @@ import { brollSortedForList } from "../../core/production/broll.ts";
 import { TAG_CATEGORIES, rowStatus } from "../../core/production/looks.ts";
 import { formatDuration, pad2, rowSeconds as rowSecondsIn, targetClock } from "../../core/production/timing.ts";
 import { tagPrintColor } from "./print-colors.ts";
-import { breakdownRows, commentEntries, sceneFacts, shotRecordForFile } from "./export-projections.ts";
-import type { CommentEntry, CommentOptions, ShotRecord } from "./export-projections.ts";
+import { shotRecordForFile } from "../../core/production/broll-view.ts";
+import { breakdownRows, commentEntries, sceneFacts } from "./export-projections.ts";
+import type { ShotRecord } from "../../core/production/broll-view.ts";
+import type { CommentEntry, CommentOptions } from "./export-projections.ts";
 import { toDocxRuns } from "../../core/text/projections.ts";
 import type { DocxRun } from "../../core/text/projections.ts";
 
