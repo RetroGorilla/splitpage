@@ -1,3 +1,4 @@
+export { mountCommandMenuFeature } from "./wiring/command-menu.ts";
 export { mountOnboardingFeature } from "./wiring/onboarding.ts";
 export { mountVideoFilesFeature } from "./wiring/video-files.ts";
 export { mountCommentsLogicFeature } from "./wiring/comments.ts";

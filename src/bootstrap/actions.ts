@@ -1,3 +1,4 @@
+import { commandMenuActions } from "./wiring/command-menu.ts";
 import { onboardingActions } from "./wiring/onboarding.ts";
 import { commentsPanelActions, commentsHelpActions, commentsOpenActions } from "./wiring/comments.ts";
 import type { ActionRegistry, ActionSource, Refusal } from "../application/actions.ts";
@@ -36,7 +37,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]),
     () => {
       const menu = fileActions();
-      return registerAll(registry, [...menu.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...menu.slice(3)]);
+      return registerAll(registry, [...menu.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...menu.slice(3)]);
     },
     () => {
       const views = viewActions();
