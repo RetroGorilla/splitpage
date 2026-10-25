@@ -6,7 +6,7 @@ import type { AppDataMount, AppDataPorts } from "../../features/settings/ports.t
 import { exportHistoryAll, importHistoryBundle, normalizeLegacySnapshots } from "../../js/03a-history-store.js";
 import { readEmbeddedVersion } from "../../js/20a-update.js";
 import { connectPortOr, newBookmarkId, renderConnect, saveBookmarks } from "../../js/20e-connect.js";
-import { appDataImportShown } from "../../js/20f-desktop.js";
+import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { setBackend as setBlobBackend } from "../../adapters/storage/02c-blobs.js";
 import { appDataPreferences } from "./ports/preferences.ts";
 import { bookmarks } from "./ports/location.ts";
@@ -121,5 +121,5 @@ export function mountAppDataFeature(): AppDataMount {
 export const stopAppDataFeature = appData.stop;
 
 export function appDataActions(): ActionDefinition[] {
-  return appDataDefinitions(appData.owner, { screen, importShown: appDataImportShown });
+  return appDataDefinitions(appData.owner, { screen, importShown: () => !!desktopPort() });
 }

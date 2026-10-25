@@ -1,4 +1,5 @@
-import { setRunningOnDesktop } from "../../application/desktop-presence.ts";
+import { runningOnDesktop, setRunningOnDesktop } from "../../application/desktop-presence.ts";
+import type { DesktopDocumentState } from "../../application/desktop/document-state.ts";
 
 export type Listener<T> = (value: T) => void;
 
@@ -29,18 +30,6 @@ export interface DesktopConnection {
 
 export interface DesktopLaunchIntent {
   readonly type: string;
-}
-
-export interface DesktopDocumentState {
-  readonly title: string;
-  readonly dirty: boolean;
-  readonly pristine: boolean;
-  readonly docId: string | null;
-  readonly fileId: string | null;
-  readonly serverKey: string | null;
-  readonly serverUrl: string | null;
-  readonly tunnel: unknown;
-  readonly role: string | null;
 }
 
 export interface DesktopRouteRequest {
@@ -190,6 +179,10 @@ export function canOpenPrompterInBrowser(): boolean {
 
 export function canOpenPrompterInChromium(): boolean {
   return current !== null && typeof current.openPrompterInChromium === "function";
+}
+
+export function driveOpenShown(): boolean {
+  return !runningOnDesktop() || typeof (current as DesktopPort).driveStatus === "function";
 }
 
 export function useDesktopForTest(fake: Partial<DesktopPort> | null | undefined): void {

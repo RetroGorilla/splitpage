@@ -124,7 +124,7 @@ import {
   loadUpdateStatus,
   renderDesktopAppNotice
 } from "../../js/20a-update.js";
-import { routeServerOpen } from "../../js/20f-desktop.js";
+import { routeServerOpen } from "./desktop.ts";
 import { finishMarkdownRowChoice } from "../../js/20d-formats.js";
 import { onRootClick, routeRootClick } from "./editor.ts";
 

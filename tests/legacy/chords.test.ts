@@ -1,3 +1,4 @@
+import { desktopActions, mountDesktopFeature, stopDesktopFeature } from "../../src/bootstrap/wiring/desktop.ts";
 import { brollPanelActions, mountBrollPanelStateFeature, stopBrollPanelStateFeature } from "../../src/bootstrap/wiring/broll.ts";
 import { onboardingActions, mountOnboardingFeature, stopOnboardingFeature } from "../../src/bootstrap/wiring/onboarding.ts";
 import { commentsPanelActions, commentsHelpActions } from "../../src/bootstrap/wiring/comments.ts";
@@ -37,11 +38,12 @@ function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   mountFileMenuExportFeature();
   mountHelpFeature();
   mountOnboardingFeature();
+  mountDesktopFeature();
   mountFindFeature();
   const menu = helpMenuActions();
   const disposers = [stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFindFeature,
     registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...viewActions().slice(0, 2), ...brollPanelActions(), ...commentsPanelActions(), ...viewActions().slice(2)]),
-    registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 4), ...onboardingActions(), ...updateActions(), ...commentsHelpActions(), ...menu.slice(4)]), registerAll(registry, [...shareActions().slice(0, 11), ...fileMenuExportActions().slice(1), ...shareActions().slice(11)]), registerAll(registry, scriptZoomActions()), stopHelpFeature, stopOnboardingFeature
+    registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 4), ...onboardingActions(), ...updateActions(), ...commentsHelpActions(), ...menu.slice(4)]), registerAll(registry, [...shareActions().slice(0, 11), ...fileMenuExportActions().slice(1), ...shareActions().slice(11), ...desktopActions()]), stopDesktopFeature, registerAll(registry, scriptZoomActions()), stopHelpFeature, stopOnboardingFeature
   ];
   return { registry, dispose: () => {
     try {
