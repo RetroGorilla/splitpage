@@ -1,12 +1,10 @@
 import type { ActionDefinition, Availability } from "../application/actions.ts";
-import { openGearPanel, openProductionPanel } from "../js/08-production-panels.js";
 import { VIEWING_ONLY } from "../js/13-hosted.js";
 import { openWriter } from "../js/19-writer.js";
 import { openPrompter } from "../js/20-teleprompter.js";
-import { EVERY_OVERLAY, availableUnless, everyOverlayBut, firstRefusal } from "../application/screen.ts";
+import { availableUnless, everyOverlayBut } from "../application/screen.ts";
 import { screenNow } from "./screen-state.ts";
 import { reviewMode } from "./location-bridge.ts";
-import { sidePanels } from "./panels-bridge.ts";
 
 const VIEWING_ONLY_LISTED = "Viewing only — the writer changes the script";
 
@@ -19,37 +17,8 @@ function withButton(id: string, availability: Availability): Availability {
   return shownButton(id) ? availability : { ...availability, visible: false };
 }
 
-function panelOpen(id: string): boolean {
-  const panel = document.getElementById(id);
-  return panel !== null && !panel.hidden;
-}
-
-function loadingRefusal(waits: boolean): Availability {
-  return waits ? availableUnless(["loading"], screenNow()) : { enabled: true };
-}
-
-function panel(id: string, label: string, buttonId: string, panelId: string, words: string, waitsForLoad: boolean,
-  open: () => void): ActionDefinition {
-  return {
-    id,
-    label,
-    group: "View",
-    icon: "i-panel",
-    words,
-    availability: () => withButton(buttonId, firstRefusal(loadingRefusal(waitsForLoad), availableUnless(EVERY_OVERLAY, screenNow()))),
-    run: () => {
-      if (panelOpen(panelId)) sidePanels().close(panelId);
-      else open();
-    }
-  };
-}
-
 export function viewActions(): ActionDefinition[] {
   const definitions: ActionDefinition[] = [
-    panel("panel-production", "Production panel", "btn-production", "production-panel",
-      "breakdown tags props locations cast show hide toggle", true, openProductionPanel),
-    panel("panel-gear", "Gear panel", "btn-gear", "gear-panel",
-      "gear equipment kit camera show hide toggle", true, openGearPanel),
     {
       id: "write",
       label: "Write",

@@ -12,7 +12,7 @@ import { renderRundown, setRundownExtraSeconds } from "../../features/rundown/ru
 import { paintRundownPresence } from "../../features/rundown/presence.js";
 import { paintTargetOverlay } from "../../features/rundown/target.js";
 import { refreshAnnotator } from "../../features/gallery/annotate.js";
-import { productionPanelsOpen, renderProduction, updateGearCount, updateProductionCount } from "../../js/08-production-panels.js";
+import { productionPanelsOpen, renderProduction, updateGearCount, updateProductionCount } from "../../features/tags/panels.js";
 import { runBrollRefresh } from "../../features/broll/panel.js";
 import { scheduleBrollRefresh, updateBrollBadge } from "./broll.ts";
 import { captureReplyDrafts, commentsChanged, renderComments } from "../../features/comments/comments.js";

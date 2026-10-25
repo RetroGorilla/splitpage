@@ -1,53 +1,36 @@
-import { bulkDeleteArmed, clearProductionSelection, deleteConfirmation, disarmBulkDelete, productionSelection, pruneProductionSelection, selectedKeys } from "../legacy/production-editing-bridge.ts";
-import { retagTagAnchors } from "../adapters/richtext/tag-anchors.ts";
-import { cellOf, inertBody, sanitizeHtml } from "../legacy/richtext.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { nextTagStatus, normalizeTagName } from "../core/document/tags.ts";
-import { formatDuration, pad2, rowSeconds } from "../core/production/timing.ts";
-import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, groupTagsByCategory, tagStatus } from "../core/production/looks.ts";
-import { productionIndex } from "../legacy/production-index-bridge.ts";
-import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
-import { sidePanels } from "../legacy/panels-bridge.ts";
-import { plainText, safeId } from "./04-richtext.js";
-import { cssAttr } from "../features/common/dom.ts";
-import { tagStatusLampHtml } from "./07-production-tags.js";
-import { breakUndoCoalescing } from "../legacy/undo-bridge.ts";
-import { presence } from "../legacy/presence-bridge.ts";
-import { breakdownRows, breakdownTable } from "../adapters/formats/export-projections.ts";
-import { idMap } from "../core/document/id-map.ts";
-import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
-import { planQuickAdd } from "../core/production/tags.ts";
-import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddCommand, tagCellsCommand, updateTagsCommand } from "../application/commands/production-records.ts";
-import { PERSON_NAME_MAX, personById as personIn, personNamed, registryEntryOf } from "../core/production/records.ts";
-import { randomIds } from "../adapters/identity/ids.ts";
-import { currentDocument, readSession, runDocumentEdit, sessionStamps } from "../legacy/session-bridge.ts";
-import { retagMentions, retagRewrites } from "../application/commands/tag-rewrites.ts";
+import { tagStatusLampHtml } from "../common/tag-status.ts";
+import { nextTagStatus, normalizeTagName } from "../../core/document/tags.ts";
+import { formatDuration, pad2, rowSeconds } from "../../core/production/timing.ts";
+import { ROW_STATUSES, rowStatus, TAG_CATEGORIES, TAG_STATUSES, groupTagsByCategory, tagStatus } from "../../core/production/looks.ts";
+import { cssAttr } from "../common/dom.ts";
+import { idMap } from "../../core/document/id-map.ts";
+import { cappedLongText, cappedText, escapeHtml, plainText, safeId as safeIdFrom } from "../../core/document/text-policy.ts";
+import { planQuickAdd } from "../../core/production/tags.ts";
+import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddCommand, tagCellsCommand, updateTagsCommand } from "../../application/commands/production-records.ts";
+import { PERSON_NAME_MAX, personById as personIn, personNamed, registryEntryOf } from "../../core/production/records.ts";
+import { retagMentions, retagRewrites } from "../../application/commands/tag-rewrites.ts";
 
-import { removeTag, renameTag } from "../application/commands/production-actions.ts";
-import { bulkTagRows } from "../application/commands/bulk-tags.ts";
-import { rewrittenCopies } from "../application/commands/document-edit.ts";
-import { gearGroupBy, productionGroupBy, setTagAddingPerson, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../application/tag-panel-state.ts";
-import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
+import { removeTag, renameTag } from "../../application/commands/production-actions.ts";
+import { bulkTagRows } from "../../application/commands/bulk-tags.ts";
+import { rewrittenCopies } from "../../application/commands/document-edit.ts";
+import { gearGroupBy, productionGroupBy, setTagAddingPerson, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../../application/tag-panel-state.ts";
 
-export { breakdownRows, breakdownTable };
 
 export var IS_TOUCH;
 
-const retagText = { cellOf, productionReaders, inertBody, retagBody: retagTagAnchors, sanitizeHtml };
+var ports = null;
+var tagEditPorts = null;
 
-const tagEditPorts = {
-  run: runDocumentEdit, read: readSession, stamps: sessionStamps,
-  rewrites: (tags, toName) => retagRewrites(retagText, tags, toName),
-  mentions: (doc, tags) => retagMentions(retagText, doc, tags)
-};
+function safeId(id, prefix) {
+  return safeIdFrom(id, prefix, ports.ids);
+}
 
 function productionEntries() {
-  return productionIndex().entries(currentDocument());
+  return ports.production.entries(ports.document.current());
 }
 
 function currentProductionIndex() {
-  return productionIndex().current(currentDocument());
+  return ports.production.current(ports.document.current());
 }
 
 function tagsByCategory(all) {
@@ -55,16 +38,16 @@ function tagsByCategory(all) {
 }
 
 function registryEntry(cat, name) {
-  return registryEntryOf(currentDocument(), cat, name);
+  return registryEntryOf(ports.document.current(), cat, name);
 }
 
 function personById(id) {
-  return personIn(currentDocument(), id);
+  return personIn(ports.document.current(), id);
 }
 
 export function openProductionPanel() {
-  if (!currentDocument()) return;
-  sidePanels().open("production-panel");
+  if (!ports.document.current()) return;
+  ports.panels.open("production-panel");
   renderProduction();
 }
 
@@ -73,8 +56,8 @@ function gearEntries() {
 }
 
 export function openGearPanel() {
-  if (!currentDocument()) return;
-  sidePanels().open("gear-panel");
+  if (!ports.document.current()) return;
+  ports.panels.open("gear-panel");
   fillGearQuickAdd();
   renderProduction();
 }
@@ -87,7 +70,7 @@ function updateGearBadge(n) {
 }
 
 export function updateGearCount() {
-  updateGearBadge(currentDocument() ? gearEntries().length : 0);
+  updateGearBadge(ports.document.current() ? gearEntries().length : 0);
 }
 
 function updateProductionBadge(n) {
@@ -98,7 +81,7 @@ function updateProductionBadge(n) {
 }
 
 export function updateProductionCount() {
-  updateProductionBadge(currentDocument() ? productionEntries().length : 0);
+  updateProductionBadge(ports.document.current() ? productionEntries().length : 0);
 }
 
 export function productionPanelsOpen() {
@@ -116,7 +99,7 @@ function updateGearHeadCount(n) {
 
 export function renderGearList() {
   var panel = document.getElementById("gear-panel");
-  if (!panel || panel.hidden || !currentDocument()) return;
+  if (!panel || panel.hidden || !ports.document.current()) return;
   dropEditingForReview();
   var listEl = document.getElementById("gear-list");
   var entries = gearEntries();
@@ -160,19 +143,19 @@ function fillGearQuickAdd() {
 }
 
 export function applyGearQuickAdd() {
-  if (reviewBlocked()) return;
+  if (ports.review.refuseInReview()) return;
   var raw = document.getElementById("gear-quickadd-input").value || "";
-  function planned(doc) { return planQuickAdd(doc, productionReaders, raw, currentProductionIndex()); }
-  var plan = readSession(planned);
+  function planned(doc) { return planQuickAdd(doc, ports.text.productionReaders, raw, currentProductionIndex()); }
+  var plan = ports.document.read(planned);
   var added = plan.added, removed = plan.removed;
 
-  if (!runDocumentEdit(gearQuickAddCommand(planned))) { fillGearQuickAdd(); return; }
+  if (!ports.edits.edit(gearQuickAddCommand(planned))) { fillGearQuickAdd(); return; }
   renderProduction();
   fillGearQuickAdd();
   var parts = [];
   if (added) parts.push("added " + added);
   if (removed) parts.push("removed " + removed);
-  showToast("Gear list updated — " + parts.join(", ") + ".", "ok");
+  ports.notices.show("Gear list updated — " + parts.join(", ") + ".", "ok");
 }
 
 function joinSceneLinks(links) {
@@ -224,7 +207,7 @@ function mentionLinksHtml(item) {
 
 function personAvatarHtml(name) {
   var initial = Array.from(String(name || "").trim())[0] || "?";
-  return '<span class="person-avatar" style="--presence:' + presence().personColor(name) + '" aria-hidden="true">' +
+  return '<span class="person-avatar" style="--presence:' + ports.presence.personColor(name) + '" aria-hidden="true">' +
     escapeHtml(initial.toUpperCase()) + '</span>';
 }
 
@@ -242,7 +225,7 @@ function statusCellHtml(item) {
   var st = tagStatus(item.status) || TAG_STATUSES[0];
   var k = escapeHtml(item.key);
   var inner = tagStatusLampHtml(st.id) + escapeHtml(st.label);
-  if (reviewMode()) {
+  if (ports.review.reviewing()) {
     return '<span class="tag-status-pill is-static" data-action="tag-expand" data-key="' + k + '">' + inner + '</span>';
   }
   var nextSt = tagStatus(nextTagStatus(st.id)) || TAG_STATUSES[0];
@@ -261,16 +244,16 @@ function iconHtml(id, cls) {
 }
 
 function dropEditingForReview() {
-  if (!reviewMode()) return;
+  if (!ports.review.reviewing()) return;
   setTagRenaming(null);
   setTagAddingPerson(null);
-  if (selectedKeys().length) clearProductionSelection();
-  if (bulkDeleteArmed()) disarmBulkDelete();
+  if (ports.selection.selectedKeys().length) ports.selection.clear();
+  if (ports.selection.armed()) ports.selection.disarm();
 }
 
 function untaggedMentionCount(item) {
-  if (!currentDocument() || !item.name) return 0;
-  return bulkTagRows(currentDocument().rows, item.name, item.cat.id, item.name, false, true).hits;
+  if (!ports.document.current() || !item.name) return 0;
+  return bulkTagRows(ports.document.current().rows, item.name, item.cat.id, item.name, false, true).hits;
 }
 
 function untaggedMentionsHtml(item, ro) {
@@ -284,25 +267,25 @@ function untaggedMentionsHtml(item, ro) {
 }
 
 export function tagAllMentions(key) {
-  if (reviewBlocked()) return;
+  if (ports.review.refuseInReview()) return;
   var item = findTagByKey(key);
   if (!item) return;
-  breakUndoCoalescing();
+  ports.undo.breakCoalescing();
   var done = bulkTagRows(jsonRows(), item.name, item.cat.id, item.name, false, true);
   var tagged = rewrittenCopies(["visualText"], function (rows) { bulkTagRows(rows, item.name, item.cat.id, item.name, false, false); });
-  if (!done.hits || !runDocumentEdit(tagCellsCommand("tag-all-mentions", tagged, tagRef(item), sessionStamps))) {
-    showToast("No untagged mentions of " + item.name + " left.", "warn");
+  if (!done.hits || !ports.edits.edit(tagCellsCommand("tag-all-mentions", tagged, tagRef(item), ports.edits.stamps))) {
+    ports.notices.show("No untagged mentions of " + item.name + " left.", "warn");
     return;
   }
-  breakUndoCoalescing();
-  showToast("Tagged " + done.hits + " mention" + (done.hits === 1 ? "" : "s") + " of " + item.name, "ok");
+  ports.undo.breakCoalescing();
+  ports.notices.show("Tagged " + done.hits + " mention" + (done.hits === 1 ? "" : "s") + " of " + item.name, "ok");
 }
 
 function tagEntityDetailHtml(item, renaming, gear, detailId) {
   var k = escapeHtml(item.key);
   var name = escapeHtml(item.name);
   var st = tagStatus(item.status) || TAG_STATUSES[0];
-  var ro = reviewMode();
+  var ro = ports.review.reviewing();
   var off = ro ? ' disabled' : '';
   var ownerId = tagFieldId("owner", gear, item.key);
   var notesId = tagFieldId("notes", gear, item.key);
@@ -330,7 +313,7 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
       '<select class="tag-owner-select' + (personById(item.owner) ? '' : ' is-unassigned') + '" id="' + ownerId +
         '" data-key="' + k + '"' + off + '>' +
         '<option value=""' + (item.owner ? '' : ' selected') + '>Unassigned</option>' +
-        (currentDocument()?.people || []).map(function (p) {
+        (ports.document.current()?.people || []).map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '"' +
             (p.id === item.owner ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
         }).join("") +
@@ -411,7 +394,7 @@ function tagEntityHtml(item, opts) {
   var renaming = tagRenamingKey() === item.key;
   var expanded = tagExpandedKey() === item.key || renaming;
   var k = escapeHtml(item.key);
-  var selected = opts.selection && !reviewMode() && productionSelection().selected(item.key);
+  var selected = opts.selection && !ports.review.reviewing() && ports.selection.selected(item.key);
   var detailId = tagFieldId("detail", gear, item.key);
   var dot = '<span class="tag-row-dot" data-tag-cat="' + item.cat.id + '" aria-hidden="true"></span>';
   return '<li class="tag-entity' + (gear ? ' is-gear' : '') + (item.orphaned ? ' is-orphaned' : '') +
@@ -466,7 +449,7 @@ function renderProductionByPerson(all) {
     if (!buckets[id]) { buckets[id] = { id: id, label: label, items: [] }; order.push(id); }
     return buckets[id];
   }
-  (currentDocument()?.people || []).forEach(function (p) { bucket(p.id, p.name); });
+  (ports.document.current()?.people || []).forEach(function (p) { bucket(p.id, p.name); });
   all.forEach(function (item) {
     var p = personById(item.owner);
     bucket(p ? p.id : "", p ? p.name : "Unassigned").items.push(item);
@@ -480,7 +463,7 @@ function renderProductionByPerson(all) {
         (id ? personAvatarHtml(g.label) : iconHtml("i-person", "tag-person-none")) +
         '<span class="tag-person-name">' + escapeHtml(g.label) + '</span>' +
         '<span class="tag-group-count">' + g.items.length + '</span>' +
-        (id && !reviewMode() ? '<button type="button" class="tag-person-remove" data-action="person-delete" ' +
+        (id && !ports.review.reviewing() ? '<button type="button" class="tag-person-remove" data-action="person-delete" ' +
                 'data-person="' + escapeHtml(id) + '" title="Remove from the crew list" aria-label="' +
                 escapeHtml("Remove " + g.label + " from the crew list") + '">' +
                 iconHtml("i-close") + '</button>' : '') +
@@ -495,7 +478,7 @@ function renderProductionByPerson(all) {
 }
 
 function renderProductionByShoot(entries) {
-  const doc = currentDocument();
+  const doc = ports.document.current();
   if (!doc) return '<div class="comments-empty">Nothing to schedule yet.</div>';
   var live = entries || productionEntries();
   var byRow = {};
@@ -535,7 +518,7 @@ function renderProductionByShoot(entries) {
   return order.map(function (key) {
     var g = groups[key];
     const shot = g.rows.filter(function (i) { return doc.rows[i].status === "shot"; }).length;
-    const secs = g.rows.reduce(function (n, i) { return n + rowSeconds(doc.rows[i], doc, productionReaders); }, 0);
+    const secs = g.rows.reduce(function (n, i) { return n + rowSeconds(doc.rows[i], doc, ports.text.productionReaders); }, 0);
     var done = shot === g.rows.length;
     return '<section class="shoot-group" style="--dot:' + (key ? TAG_CATEGORIES[1].color : "var(--border-strong)") + '">' +
       '<h3 class="shoot-head">' +
@@ -586,10 +569,10 @@ export function renderProduction() {
 
 function renderProductionPanel() {
   var panel = document.getElementById("production-panel");
-  if (!panel || panel.hidden || !currentDocument()) return;
+  if (!panel || panel.hidden || !ports.document.current()) return;
   dropEditingForReview();
   var entries = productionEntries();
-  if (selectedKeys().length) pruneProductionSelection(entries);
+  if (ports.selection.selectedKeys().length) ports.selection.prune(entries);
   renderProductionList(entries);
   renderBulkBar(entries);
   updateProductionBadge(entries.length);
@@ -598,7 +581,7 @@ function renderProductionPanel() {
 function renderProductionList(entries) {
   var listEl = document.getElementById("production-list");
   var panel = document.getElementById("production-panel");
-  if (!listEl || !panel || panel.hidden || !currentDocument()) return;
+  if (!listEl || !panel || panel.hidden || !ports.document.current()) return;
   entries = entries || productionEntries();
 
   document.querySelectorAll("#production-modes [data-group]").forEach(function (b) {
@@ -661,7 +644,7 @@ function renderProductionList(entries) {
 }
 
 function jsonRows() {
-  return readSession(function (doc) {
+  return ports.document.read(function (doc) {
     return doc ? doc.rows.map(function (row) { return { id: row.id, visualText: row.visualText }; }) : [];
   });
 }
@@ -676,7 +659,7 @@ function entryValue(item, field) {
 }
 
 function updateTags(items, change) {
-  return runDocumentEdit(updateTagsCommand(items.map(tagRef), change, randomIds));
+  return ports.edits.edit(updateTagsCommand(items.map(tagRef), change, ports.ids));
 }
 
 function findTagByKey(key) {
@@ -686,9 +669,9 @@ function findTagByKey(key) {
 }
 
 export function jumpToTag(rowId, key) {
-  shotHiding().reveal(rowId);
+  ports.shotHiding.reveal(rowId);
   var row = document.querySelector('#rows .row[data-id="' + safeId(rowId, "r") + '"]');
-  if (!row) { showToast("That scene is no longer here.", "warn"); return; }
+  if (!row) { ports.notices.show("That scene is no longer here.", "warn"); return; }
   row.scrollIntoView({ behavior: "smooth", block: "center" });
   var item = findTagByKey(key);
   if (!item) return;
@@ -710,18 +693,18 @@ export function jumpToTag(rowId, key) {
 }
 
 export function armRemoveTag(btn, key) {
-  if (deleteConfirmation().armedId("tag") === key) {
-    deleteConfirmation().disarm("tag");
+  if (ports.deletion.armedId("tag") === key) {
+    ports.deletion.disarm("tag");
     var item = findTagByKey(key);
     if (!item) return;
-    breakUndoCoalescing();
+    ports.undo.breakCoalescing();
     var n = removeTag(item.cat.id, item.name, tagEditPorts);
-    breakUndoCoalescing();
-    showToast("Removed " + item.name + " from " + n + " mention" + (n === 1 ? "" : "s"), "ok");
+    ports.undo.breakCoalescing();
+    ports.notices.show("Removed " + item.name + " from " + n + " mention" + (n === 1 ? "" : "s"), "ok");
     return;
   }
   var disarm;
-  deleteConfirmation().arm("tag", key, function () {
+  ports.deletion.arm("tag", key, function () {
     disarm();
   }, function () { disarm = armButton(btn); });
 }
@@ -741,39 +724,39 @@ function armButton(btn) {
 }
 
 export function armDeleteTag(btn, key) {
-  if (deleteConfirmation().armedId("tag") === key) {
-    deleteConfirmation().disarm("tag");
+  if (ports.deletion.armedId("tag") === key) {
+    ports.deletion.disarm("tag");
     var item = findTagByKey(key);
     if (!item) return;
-    runDocumentEdit(deleteTagsCommand([{ cat: item.cat.id, name: item.name, unlabel: false }], function () { return []; }, sessionStamps));
-    showToast("Deleted " + item.name + " from the production list", "ok");
+    ports.edits.edit(deleteTagsCommand([{ cat: item.cat.id, name: item.name, unlabel: false }], function () { return []; }, ports.edits.stamps));
+    ports.notices.show("Deleted " + item.name + " from the production list", "ok");
     return;
   }
   var disarm;
-  deleteConfirmation().arm("tag", key, function () {
+  ports.deletion.arm("tag", key, function () {
     disarm();
   }, function () { disarm = armButton(btn); });
 }
 
 export function toggleCardSelection(key) {
-  if (reviewMode()) return;
-  productionSelection().toggle(key);
-  disarmBulkDelete();
+  if (ports.review.reviewing()) return;
+  ports.selection.toggle(key);
+  ports.selection.disarm();
   renderProduction();
 }
 
 export function handleSelectionClick(e, card) {
-  if (reviewMode()) return false;
+  if (ports.review.reviewing()) return false;
   var key = card.getAttribute("data-key");
   if (!key) return false;
   var order = Array.prototype.map.call(
     document.querySelectorAll("#production-list .tag-entity"),
     function (el) { return el.getAttribute("data-key"); });
-  if (!productionSelection().select(key, order, e.shiftKey)) return false;
+  if (!ports.selection.select(key, order, e.shiftKey)) return false;
 
   var sel = window.getSelection();
   if (sel && sel.removeAllRanges) sel.removeAllRanges();
-  disarmBulkDelete();
+  ports.selection.disarm();
   renderProduction();
   return true;
 }
@@ -781,7 +764,7 @@ export function handleSelectionClick(e, card) {
 function selectedEntries(entries) {
   var byKey = {};
   (entries || productionEntries()).forEach(function (e) { byKey[e.key] = e; });
-  return selectedKeys().map(function (k) { return byKey[k]; }).filter(Boolean);
+  return ports.selection.selectedKeys().map(function (k) { return byKey[k]; }).filter(Boolean);
 }
 
 export function bulkSetOwner(personId) {
@@ -790,14 +773,14 @@ export function bulkSetOwner(personId) {
 
 function setOwnerOf(items, choice) {
   if (!items.length) return;
-  var known = "id" in choice ? personById(choice.id) : readSession(function (doc) { return personNamed(doc, choice.name); });
+  var known = "id" in choice ? personById(choice.id) : ports.document.read(function (doc) { return personNamed(doc, choice.name); });
   var owner = known ? known.id : "";
   var n = items.filter(function (item) { return (!known && "name" in choice) || entryValue(item, "owner") !== owner; }).length;
   updateTags(items, { owner: choice });
   renderProduction();
   if (!n) return;
-  var who = "id" in choice ? personById(choice.id) : readSession(function (doc) { return personNamed(doc, choice.name); });
-  showToast(who ? ("Assigned " + n + " item" + (n === 1 ? "" : "s") + " to " + who.name)
+  var who = "id" in choice ? personById(choice.id) : ports.document.read(function (doc) { return personNamed(doc, choice.name); });
+  ports.notices.show(who ? ("Assigned " + n + " item" + (n === 1 ? "" : "s") + " to " + who.name)
                 : ("Unassigned " + n + " item" + (n === 1 ? "" : "s")), "ok");
 }
 
@@ -812,7 +795,7 @@ export function bulkSetStatus(statusId) {
   updateTags(items, { status: want.id });
   renderProduction();
   if (!n) return;
-  showToast("Marked " + n + " item" + (n === 1 ? "" : "s") + " " + want.label, "ok");
+  ports.notices.show("Marked " + n + " item" + (n === 1 ? "" : "s") + " " + want.label, "ok");
 }
 
 export function bulkAddPerson() {
@@ -826,16 +809,16 @@ export function bulkAddPerson() {
 export function bulkDeleteSelected() {
   var items = selectedEntries();
   if (!items.length) return;
-  breakUndoCoalescing();
+  ports.undo.breakCoalescing();
   var labelled = items.filter(function (item) { return !item.orphaned; }).map(tagRef);
-  var unlabelled = readSession(function (doc) { return retagMentions(retagText, doc, labelled); });
-  clearProductionSelection();
-  runDocumentEdit(deleteTagsCommand(items.map(function (item) {
+  var unlabelled = ports.document.read(function (doc) { return retagMentions(ports.text, doc, labelled); });
+  ports.selection.clear();
+  ports.edits.edit(deleteTagsCommand(items.map(function (item) {
     return { cat: item.cat.id, name: item.name, unlabel: !item.orphaned };
-  }), retagRewrites(retagText, labelled, null), sessionStamps));
+  }), retagRewrites(ports.text, labelled, null), ports.edits.stamps));
   var n = items.length;
-  breakUndoCoalescing();
-  showToast("Deleted " + n + " item" + (n === 1 ? "" : "s") +
+  ports.undo.breakCoalescing();
+  ports.notices.show("Deleted " + n + " item" + (n === 1 ? "" : "s") +
     (unlabelled ? " and removed " + unlabelled + " label" + (unlabelled === 1 ? "" : "s") +
       " from the script" : ""), "ok");
 }
@@ -851,7 +834,7 @@ function renderBulkBar(entries) {
   if (!bar) return;
   var items = selectedEntries(entries);
   var cardView = productionGroupBy() === "cat" || productionGroupBy() === "person";
-  if (!items.length || !cardView || reviewMode()) { bar.hidden = true; bar.innerHTML = ""; return; }
+  if (!items.length || !cardView || ports.review.reviewing()) { bar.hidden = true; bar.innerHTML = ""; return; }
 
   var n = items.length;
   var liveMentions = bulkCountsLabel(items);
@@ -867,7 +850,7 @@ function renderBulkBar(entries) {
         '<select class="bulk-select" id="bulk-owner" aria-label="Assign the selected items to">' +
           '<option value="__none__" selected>Assign to…</option>' +
           '<option value="">Unassigned</option>' +
-          (currentDocument()?.people || []).map(function (p) {
+          (ports.document.current()?.people || []).map(function (p) {
             return '<option value="' + escapeHtml(p.id) + '">' + escapeHtml(p.name) + '</option>';
           }).join("") +
         '</select>' + iconHtml("i-chevron-down", "ev-chevron") +
@@ -882,9 +865,9 @@ function renderBulkBar(entries) {
           }).join("") +
         '</select>' + iconHtml("i-chevron-down", "ev-chevron") +
       '</span>' +
-      '<button type="button" class="bulk-btn btn-outline is-small danger' + (bulkDeleteArmed() ? ' armed' : '') + '" ' +
+      '<button type="button" class="bulk-btn btn-outline is-small danger' + (ports.selection.armed() ? ' armed' : '') + '" ' +
         'data-action="bulk-delete">' + iconHtml("i-trash") +
-        (bulkDeleteArmed()
+        (ports.selection.armed()
           ? 'Delete ' + n + (liveMentions ? ' + ' + liveMentions + ' label' +
               (liveMentions === 1 ? '' : 's') : '') + '?'
           : 'Delete') +
@@ -898,7 +881,7 @@ function renderBulkBar(entries) {
           '<button type="button" class="tag-quiet-btn" data-action="bulk-person-cancel">Cancel</button>' +
         '</div>'
       : '') +
-    (bulkDeleteArmed()
+    (ports.selection.armed()
       ? '<div class="bulk-note">Removes ' + n + ' item' + (n === 1 ? '' : 's') +
           ' from the breakdown' +
           (liveMentions ? ', and their labels from the script — the words stay, the labels go' : '') +
@@ -933,22 +916,22 @@ export function addPersonForTag(key) {
   setTagAddingPerson(null);
   var item = findTagByKey(key);
   if (item) updateTags([item], { owner: { name: input.value } });
-  else runDocumentEdit(addPersonCommand(input.value, randomIds));
+  else ports.edits.edit(addPersonCommand(input.value, ports.ids));
   renderProduction();
 }
 
 export function armPersonDelete(btn, personId) {
-  if (deleteConfirmation().armedId("tag") === "person:" + personId) {
-    deleteConfirmation().disarm("tag");
+  if (ports.deletion.armedId("tag") === "person:" + personId) {
+    ports.deletion.disarm("tag");
     var person = personById(personId);
-    runDocumentEdit(deletePersonCommand(personId));
+    ports.edits.edit(deletePersonCommand(personId));
     renderProduction();
-    showToast("Removed " + (person ? person.name : "that person") +
+    ports.notices.show("Removed " + (person ? person.name : "that person") +
       " — their items are now unassigned", "ok");
     return;
   }
   var disarm;
-  deleteConfirmation().arm("tag", "person:" + personId, function () {
+  ports.deletion.arm("tag", "person:" + personId, function () {
     disarm();
   }, function () { disarm = armButton(btn); });
 }
@@ -959,11 +942,11 @@ export function saveTagRename(key) {
   if (!input || !item) { setTagRenaming(null); renderProduction(); return; }
   var renamed = input.value;
   setTagRenaming(null);
-  breakUndoCoalescing();
+  ports.undo.breakCoalescing();
   var changed = renameTag(item.cat.id, item.name, renamed, tagEditPorts);
   if (changed) {
-    breakUndoCoalescing();
-    showToast("Renamed to " + plainText(renamed).trim(), "ok");
+    ports.undo.breakCoalescing();
+    ports.notices.show("Renamed to " + plainText(renamed).trim(), "ok");
   } else {
     renderProduction();
   }
@@ -1096,9 +1079,26 @@ function onTagMenuKeydown(e) {
   }
 }
 
-export function __init() {
+export function __init(nextPorts) {
+  ports = nextPorts;
+  tagEditPorts = {
+    run: ports.edits.edit, read: ports.document.read, stamps: ports.edits.stamps,
+    rewrites: (tags, toName) => retagRewrites(ports.text, tags, toName),
+    mentions: (doc, tags) => retagMentions(ports.text, doc, tags)
+  };
   document.addEventListener("click", onTagMenuClick);
   document.addEventListener("keydown", onTagMenuKeydown, true);
 
   IS_TOUCH = window.matchMedia && window.matchMedia("(hover: none)").matches;
+  var active = true;
+  return { dispose: function () {
+    if (!active) return;
+    active = false;
+    document.removeEventListener("click", onTagMenuClick);
+    document.removeEventListener("keydown", onTagMenuKeydown, true);
+    closeTagMenu(false);
+    IS_TOUCH = undefined;
+    tagEditPorts = null;
+    ports = null;
+  } };
 }
