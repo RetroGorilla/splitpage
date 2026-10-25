@@ -1,7 +1,7 @@
 import { createDraftWriter } from "../application/recovery/draft-writer.ts";
-import type { DraftWriter } from "../application/recovery/draft-writer.ts";
 import { restoreOwnership } from "../application/recovery/restore-policy.ts";
-import type { DesktopDraftStore, DraftLimits, KeyedDraftStore } from "../application/recovery/ports.ts";
+import type { DesktopDraftStore, DraftLimits } from "../application/recovery/ports.ts";
+import type { BrowserDrafts, DraftFlush } from "../application/recovery/drafts-ports.ts";
 import { createConflictStash } from "../application/recovery/conflict-stash.ts";
 import type { ConflictStash, KeyValueStorage } from "../application/recovery/conflict-stash.ts";
 import { createDraftResume } from "../application/recovery/draft-resume.ts";
@@ -37,20 +37,11 @@ export interface LegacyRecoveryPorts {
   readonly drafts: LegacyDraftPorts;
 }
 
-export interface DraftFlush {
-  readonly ok: boolean;
-  readonly code?: string;
-}
-
 export interface LegacyDraftPorts {
   readonly flush: (opts?: { readonly keep?: boolean } | null) => Promise<DraftFlush>;
   readonly armServer: (docId: string) => Promise<boolean>;
   readonly offerAfterLinkOff: (docId: string) => Promise<boolean>;
-}
-
-export interface BrowserDrafts {
-  readonly store: KeyedDraftStore;
-  readonly writer: DraftWriter;
+  readonly noteChange: () => void;
 }
 
 interface Started {
@@ -144,6 +135,10 @@ export function stashLocalWork(): boolean {
 
 export function flushDraftNow(opts?: { readonly keep?: boolean } | null): Promise<DraftFlush> {
   return running().ports.drafts.flush(opts);
+}
+
+export function noteDraftChange(): void {
+  started?.ports.drafts.noteChange();
 }
 
 export function armBrowserServerDraft(docId: string): Promise<boolean> {
