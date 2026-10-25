@@ -15,6 +15,9 @@ export interface RecentFileOpenRequest {
 }
 
 export interface RecentFiles {
+  readonly available: () => boolean;
+  readonly canRemove: () => boolean;
+  readonly canClear: () => boolean;
   readonly list: () => Promise<readonly unknown[]> | undefined;
   readonly remove: (fileId: string) => Promise<readonly unknown[]> | undefined;
   readonly clear: () => Promise<readonly unknown[]> | undefined;

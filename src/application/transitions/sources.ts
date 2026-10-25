@@ -1,3 +1,7 @@
+export interface DocumentOpening {
+  readonly open: (opening: { readonly kind: "file"; readonly file: unknown; readonly handle: unknown }) => Promise<unknown>;
+}
+
 export interface DocumentSource<O, A = unknown> {
   readonly id: string;
   readonly takes: (opening: O) => boolean;
