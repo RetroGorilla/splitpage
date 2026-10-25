@@ -37,7 +37,7 @@ Run the four suites with `node --test tests/bootstrap/legacy-shim.test.ts tests/
 While a pull request is being written, run the focused checks for what it
 touches. CI then runs every fast gate on every pull request: lint, types, the
 dependency and comment gates, the build, every discovered unit, desktop and
-tool test, and the smoke, CSP and persistence browser suites. CI never
+tool test, and, for app-affecting changes, the smoke, CSP and persistence browser suites. CI never
 narrows to the test files a change touched; `--only` is a local tool. CI
 distributes the full discovered test set across two required shards, while
 lint, types and the other checks run in a separate job.
@@ -604,7 +604,7 @@ above and nothing else.
 | Job | Runs |
 | --- | --- |
 | `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? On a push to `4.1-development`, `tools/ci-tested-tree.mjs`: did another run already pass this exact tree? ([ci.md](ci.md)) |
-| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, then through `tools/run-suites.mjs` the smoke and CSP suites (`01-core.txt`, `52-csp.txt`) and the persistence suite (`265-browser-drafts.txt`); uploads the built app |
+| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps and check:comments for non-prose changes requiring a fresh run; for app-affecting changes, also build, check the `sw.js` stamp, run browser suites 01, 52 and 265, and upload the built app |
 | `tests` | Two independent matrix jobs run `test:all -- --shard 1/2` and `2/2`, after building their own app and checking the worker stamp. Together they execute every discovered unit, desktop and tool test exactly once. They run in parallel with `checks`, subject to available runner slots |
 | `gate` | Requires successful classification, `checks` and both test shards for code changes; for prose only, or a tree another run already passed, requires both `checks` and `tests` to be skipped. After `checks` and both shards pass it uploads the `ci-passed-tree-<tree>` marker |
 | `desktop-smoke` | Electron dev-target smoke, on pushes to `main` only |
