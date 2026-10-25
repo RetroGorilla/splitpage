@@ -5,7 +5,7 @@ import type { ActionRegistry, ActionSource, Refusal } from "../application/actio
 import { registerAll } from "../application/actions.ts";
 import { mountShortcuts } from "../features/shortcuts/mount.ts";
 import { showRefusal } from "../js/12-dirty-toast.js";
-import { runMenuCommandsWith } from "../js/20f-desktop.js";
+import { runMenuCommandsWith } from "../application/desktop/menu-commands.ts";
 import { editorOpenActions } from "../legacy/editor-open-actions.ts";
 import { videoFiles } from "./wiring/video-files.ts";
 import { fileActions } from "../legacy/file-actions.ts";

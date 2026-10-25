@@ -7,7 +7,7 @@ import { saveStatusListeners } from "../../js/12-dirty-toast.js";
 import { presence } from "../../legacy/presence-bridge.ts";
 import { fileChipListeners, mirrorFileChipToWriter, updateFileChip } from "../../js/18-local-files.js";
 import { refreshOpenFileMenu } from "../../js/18b-file-menu.js";
-import { desktopDocumentListeners } from "../../js/20f-desktop.js";
+import { desktopDocumentListeners } from "../../legacy/desktop-bridge.ts";
 
 let stopChrome: (() => void) | null = null;
 
