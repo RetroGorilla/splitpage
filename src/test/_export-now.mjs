@@ -1,6 +1,6 @@
 import "./_preferences-started.mjs";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { brollPrintView } from "../legacy/broll-print-view.ts";
+import { brollView } from "../application/preferences/broll-view.ts";
 import { brollShotListForPrint } from "../adapters/formats/export-projections.ts";
 import { exportAssetsNow } from "../adapters/formats/export-assets.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
@@ -15,5 +15,5 @@ export function liveWithAssets() {
 }
 
 export function printData(as) {
-  return brollShotListForPrint(liveDoc(), brollPrintView(as));
+  return brollShotListForPrint(liveDoc(), brollView.printView(as));
 }

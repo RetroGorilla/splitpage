@@ -6,7 +6,7 @@
     "src/features/broll/panel.js",
     "src/features/broll/actions.ts",
     "src/application/production/broll-records.ts",
-    "src/legacy/broll-print-view.ts"
+    "src/application/preferences/broll-view.ts"
   ],
   "expectedLoads": 6
 }

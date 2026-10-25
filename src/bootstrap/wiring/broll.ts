@@ -2,9 +2,8 @@ import type { ActionDefinition } from "../../application/actions.ts";
 import { __init as mountPanelState, mountBrollPanel } from "../../features/broll/panel.js";
 import { brollPanelActions as panelDefinitions } from "../../features/broll/actions.ts";
 import type { BrollPanelEventsPorts, BrollPanelPorts, BrollPanelState } from "../../features/broll/ports.ts";
-import { handBrollPrintViewTo } from "../../legacy/broll-print-view.ts";
 import { ids as portIds } from "./ports/identity.ts";
-import { flags as portFlags } from "./ports/preferences.ts";
+import { flags as portFlags, brollView as portBrollView } from "./ports/preferences.ts";
 import { panelControl as portPanels } from "./ports/panels.ts";
 import { shotHiding as portShotHiding } from "./ports/shot-hiding.ts";
 import { presence as portPresence } from "./ports/presence.ts";
@@ -89,6 +88,7 @@ const panelEvents = owned<{ dispose: () => void }>();
 export function mountBrollPanelStateFeature(): BrollPanelState {
   return panelState.replace(() => {
     const ports: BrollPanelPorts = {
+      view: portBrollView,
       document: portDocument,
       edits: portEdits,
       text: portText,
@@ -111,10 +111,7 @@ export function mountBrollPanelStateFeature(): BrollPanelState {
       }
     };
     return mountPanelState(ports);
-  }, (owner) => [() => {
-    handBrollPrintViewTo(owner.brollPrintView);
-    return () => { handBrollPrintViewTo(null); };
-  }]);
+  });
 }
 
 export function mountBrollPanelFeature(ports: BrollPanelEventsPorts): { dispose: () => void } {
@@ -126,3 +123,9 @@ export const stopBrollPanelFeature = panelEvents.stop;
 export function brollPanelActions(): ActionDefinition[] {
   return panelDefinitions(panelState.owner, { screen: portScreen, panels: portPanels });
 }
+
+export function currentBrollRecords(): BrollRecordsMount | null {
+  return broll.owner();
+}
+
+export const stopBrollPanelStateFeature = panelState.stop;

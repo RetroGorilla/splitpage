@@ -4,7 +4,7 @@ import { tagCategory, tagStatus } from "../../core/production/looks.ts";
 import { normalizeTagName } from "../../core/document/tags.ts";
 import { formatTimecode, rowSeconds } from "../../core/production/timing.ts";
 import { cssAttr } from "../common/dom.ts";
-import { brollGroups as brollGroupsFrom, filterCounts, FILTERS, matchesFilter, oneOf, PAGE_GROUPS, pageSummaryText, sceneLabel, startOf } from "../../core/production/broll-view.ts";
+import { BROLL_PANEL_GROUPS as GROUPS, brollGroups as brollGroupsFrom, filterCounts, FILTERS, matchesFilter, pageSummaryText, sceneLabel, startOf } from "../../core/production/broll-view.ts";
 import { cappedLongText, cappedText, escapeHtml, plainText } from "../../core/document/text-policy.ts";
 import { mountBroll } from "./mount.ts";
 import { deleteShotCommand, setShotsCommand } from "../../application/commands/broll-records.ts";
@@ -19,36 +19,8 @@ function productionEntries() {
   return ports.production.entries(ports.document.current());
 }
 
-var VIEW_KEY = "splitpage-broll-view";
-
-var GROUPS = [
-  { id: "scene",    label: "Scene",    button: "By scene" },
-  { id: "location", label: "Location", button: "By location" },
-  { id: "flat",     label: "None",     button: "Not grouped" }
-];
-
-var view = { filter: "all", group: "scene" };
-
-function loadView() {
-  try {
-    var saved = JSON.parse(localStorage.getItem(VIEW_KEY) || "null");
-    if (saved && typeof saved === "object") {
-      view.filter = oneOf(FILTERS, saved.filter, view.filter);
-      view.group = oneOf(GROUPS, saved.group, view.group);
-      loadPageView(saved);
-    }
-  } catch (e) { }
-}
-
-function saveView() {
-  try {
-    localStorage.setItem(VIEW_KEY, JSON.stringify(Object.assign({}, view, pageViewToSave())));
-  } catch (e) { }
-}
-
 function setFilter(id) {
-  view.filter = oneOf(FILTERS, id, "all");
-  saveView();
+  ports.view.setFilter(id);
   renderBrollViews();
 }
 
@@ -257,7 +229,7 @@ function filterTabsHtml(entries) {
   var n = filterCounts(entries);
   return '<div class="panel-tabs broll-tabs" role="radiogroup" aria-label="Show shots">' +
     FILTERS.map(function (f) {
-      var on = f.id === view.filter;
+      var on = f.id === ports.view.current().filter;
       return '<button type="button" class="panel-tab broll-chip' + (on ? ' is-active' : '') +
         '" role="radio" aria-checked="' + (on ? 'true' : 'false') + '" data-action="broll-filter" data-filter="' +
         f.id + '">' + escapeHtml(f.label) + ' <span class="panel-count broll-chip-n">' + n[f.id] + '</span></button>';
@@ -269,7 +241,7 @@ function filterChipsHtml(entries) {
   var n = filterCounts(entries);
   return '<div class="broll-filters" role="radiogroup" aria-label="Show">' +
     FILTERS.map(function (f) {
-      var on = f.id === view.filter;
+      var on = f.id === ports.view.current().filter;
       return '<button type="button" class="broll-chip' + (on ? ' is-active' : '') +
         '" role="radio" aria-checked="' + (on ? 'true' : 'false') + '" data-action="broll-filter" data-filter="' +
         f.id + '">' + escapeHtml(f.label) + ' <span class="broll-chip-n">' + n[f.id] + '</span></button>';
@@ -278,7 +250,7 @@ function filterChipsHtml(entries) {
 }
 
 function groupMenuHtml() {
-  var current = GROUPS.filter(function (g) { return g.id === view.group; })[0] || GROUPS[0];
+  var current = GROUPS.filter(function (g) { return g.id === ports.view.current().group; })[0] || GROUPS[0];
   return '<div class="broll-group-wrap">' +
       '<button type="button" class="broll-group-btn" data-action="broll-group-menu" aria-haspopup="menu" ' +
         'aria-expanded="' + (groupMenuOpen ? 'true' : 'false') + '" title="Group the shots">' + escapeHtml(current.button) +
@@ -286,7 +258,7 @@ function groupMenuHtml() {
       (groupMenuOpen
         ? '<div class="broll-menu broll-group-menu" role="menu" aria-label="Group shots by">' +
             GROUPS.map(function (g) {
-              var on = g.id === view.group;
+              var on = g.id === ports.view.current().group;
               return '<button type="button" role="menuitemradio" aria-checked="' + (on ? 'true' : 'false') +
                 '" class="broll-menu-item' + (on ? ' is-active' : '') + '" data-action="broll-group" data-group="' +
                 g.id + '">' + escapeHtml(g.label) + (on ? icon("check", "broll-menu-check") : '') + '</button>';
@@ -651,7 +623,7 @@ function emptyListHtml(entries) {
     unshot: "Nothing left to shoot — everything on the list is in the can.",
     shot: "Nothing shot yet.",
     flagged: "Nothing flagged."
-  }[view.filter] || "No shots match.";
+  }[ports.view.current().filter] || "No shots match.";
   return '<div class="broll-empty">' + escapeHtml(msg) + '</div>';
 }
 
@@ -670,10 +642,10 @@ export function renderBroll() {
     pruneSelection(entries);
     if (summary) summary.innerHTML = entries.length ? summaryHtml(entries) : '';
     controls.innerHTML = entries.length ? filterTabsHtml(entries) + groupMenuHtml() : '';
-    var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
+    var shown = entries.filter(function (e) { return matchesFilter(e, ports.view.current().filter); });
     var starts = sceneStarts();
     listEl.innerHTML = datalistsHtml() + (shown.length
-      ? brollGroups(shown, view.group).map(function (g) {
+      ? brollGroups(shown, ports.view.current().group).map(function (g) {
           return '<div class="broll-group" role="group" aria-label="' + escapeHtml(g.label || "Shots") + '">' +
             groupHeadHtml(g, starts) + g.items.map(function (e) { return rowHtml(e, starts); }).join("") + '</div>';
         }).join("")
@@ -939,9 +911,8 @@ function onBrollClick(e, root, exportAs) {
       if (first) first.focus();
     }
   } else if (action === "broll-group") {
-    view.group = oneOf(GROUPS, btn.getAttribute("data-group"), "scene");
+    ports.view.setGroup(btn.getAttribute("data-group"));
     groupMenuOpen = false;
-    saveView();
     renderBrollViews();
     var gb = root.querySelector(".broll-group-btn");
     if (gb) gb.focus();
@@ -1146,8 +1117,7 @@ export function mountBrollPanel(exportPort) {
       closePage: closeBrollPage,
       pageOpen: function () { return ports.flags.brollPageOpen(); },
       setPageGroup: function (value) {
-        pageView.group = oneOf(PAGE_GROUPS, value, "location");
-        saveView();
+        ports.view.setPageGroup(value);
         renderBrollPage();
       },
       menusOpen: function () { return groupMenuOpen || !!menuFor; },
@@ -1184,17 +1154,8 @@ export function stopBrollFeature() {
   if (owner) owner.dispose();
 }
 
-var pageView = { group: "location" };
 var pageReturnFocus = null;
 var pagePanelWasOpen = false;
-
-function loadPageView(saved) {
-  pageView.group = oneOf(PAGE_GROUPS, saved.pageGroup, pageView.group);
-}
-
-function pageViewToSave() {
-  return { pageGroup: pageView.group };
-}
 
 function brollPageEl() {
   return document.getElementById("broll-page");
@@ -1291,10 +1252,10 @@ export function renderBrollPage() {
   dropEditingForReview();
   keepingFocus(page, function () {
     var entries = ports.records.brollEntries();
-    var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
+    var shown = entries.filter(function (e) { return matchesFilter(e, ports.view.current().filter); });
     document.getElementById("broll-page-summary").textContent = pageSummaryText(entries);
     var sel = document.getElementById("broll-page-group");
-    if (sel) sel.value = pageView.group;
+    if (sel) sel.value = ports.view.current().pageGroup;
     document.getElementById("broll-page-filters").innerHTML = filterChipsHtml(entries);
     document.getElementById("broll-page-table").innerHTML = shown.length
       ? '<table class="broll-page-table">' +
@@ -1302,19 +1263,12 @@ export function renderBrollPage() {
           '<col class="broll-page-w-props"><col class="broll-page-w-cuts"><col class="broll-page-w-owner"><col class="broll-page-w-note"></colgroup>' +
           '<thead><tr><th scope="col"><span class="broll-sr">Shot or to shoot</span></th><th scope="col">Shot</th><th scope="col">Scene</th>' +
             '<th scope="col">Props</th><th scope="col">Cuts against</th><th scope="col">Assigned</th><th scope="col">Note</th></tr></thead>' +
-          brollGroups(shown, pageView.group).map(function (g) {
+          brollGroups(shown, ports.view.current().pageGroup).map(function (g) {
             return '<tbody>' + pageGroupHeadHtml(g) + g.items.map(pageRowHtml).join("") + '</tbody>';
           }).join("") +
         '</table>'
       : emptyListHtml(entries);
   });
-}
-
-export function brollPrintView(as) {
-  return {
-    filter: as && as.filter ? oneOf(FILTERS, as.filter, "all") : view.filter,
-    group: as && as.group ? oneOf(PAGE_GROUPS, as.group, "scene") : pageView.group
-  };
 }
 
 function onBrollPageAction(action, btn, exportAs) {
@@ -1332,13 +1286,13 @@ function onBrollPageAction(action, btn, exportAs) {
 
 export function __init(nextPorts) {
   ports = nextPorts;
-  loadView();
+  ports.view.load();
   window.__brollTest = {
-    view: function () { return JSON.parse(JSON.stringify(Object.assign({}, view, pageViewToSave()))); },
+    view: function () { return ports.view.current(); },
     selected: function () { return Object.keys(selection); }
   };
   var active = true;
-  return { openBrollPanel, brollPrintView, dispose: function () {
+  return { openBrollPanel: function () { if (active) openBrollPanel(); }, dispose: function () {
     if (!active) return;
     active = false;
     stopBrollFeature();

@@ -1,3 +1,5 @@
+import { brollView as brollViewOwner, useBrollViewStorage } from "../../../application/preferences/broll-view.ts";
+import type { BrollView } from "../../../application/preferences/broll-view.ts";
 import type { CommentFilter, PreferenceChange, PreferenceChanges } from "../../../application/preferences/preferences.ts";
 import type { ViewFlags } from "../../../application/preferences/view-flags.ts";
 import { PREF_EVENT, preferences, viewFlags } from "../../../legacy/preferences-bridge.ts";
@@ -42,4 +44,19 @@ export const preferenceValues = {
   setCommentFilter: (filter: CommentFilter) => preferences().setCommentFilter(filter),
   taggingHelpShown: () => preferences().taggingHelpShown(),
   taggingHelpDismissed: () => preferences().taggingHelpDismissed()
+};
+
+export const brollView: BrollView = {
+  load: () => {
+    useBrollViewStorage({
+      read: () => localStorage.getItem("splitpage-broll-view"),
+      write: (value) => { localStorage.setItem("splitpage-broll-view", value); }
+    });
+    brollViewOwner.load();
+  },
+  current: () => brollViewOwner.current(),
+  setFilter: (value) => brollViewOwner.setFilter(value),
+  setGroup: (value) => brollViewOwner.setGroup(value),
+  setPageGroup: (value) => brollViewOwner.setPageGroup(value),
+  printView: (overrides) => brollViewOwner.printView(overrides)
 };

@@ -1,3 +1,4 @@
+import type { BrollView } from "../../application/preferences/broll-view.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { Presence } from "../../application/collaboration/presence.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
@@ -59,6 +60,7 @@ export interface BrollRecordsMount extends BrollRecords {
 }
 
 export interface BrollPanelPorts {
+  readonly view: Pick<BrollView, "load" | "current" | "setFilter" | "setGroup" | "setPageGroup">;
   readonly document: Pick<DocumentReader, "current" | "read">;
   readonly edits: Pick<DocumentEdits, "edit">;
   readonly text: Pick<TextServices<HTMLElement>, "productionReaders">;
@@ -78,7 +80,6 @@ export interface BrollPanelPorts {
 
 export interface BrollPanelState {
   readonly openBrollPanel: () => void;
-  readonly brollPrintView: (as?: unknown) => { filter: string; group: string };
   readonly dispose: () => void;
 }
 
