@@ -9,7 +9,8 @@ import {
 } from "./02b-doc-id.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
-import { DRAFT_LIMITS, browserDraftKey, draftBaseOf } from "../adapters/storage/draft-store-idb.ts";
+import { DRAFT_LIMITS, browserDraftKey, draftBaseOf, normalizeDraftBase } from "../adapters/storage/draft-store-idb.ts";
+import { browserWriterId, browserWriterIsLive, holdBrowserWriterLock as holdWriterLock, releaseBrowserWriterLock } from "../adapters/storage/draft-writer-lock.js";
 import {
   applyStashedWork,
   browserDrafts,
@@ -69,14 +70,6 @@ var draftStats = { writes: 0, failures: 0, discards: 0, obsolete: 0, lastCode: n
 var draftPendingFor = null;
 var draftServerSettle = null;
 
-var browserWriterId = (function () {
-  var bytes = new Uint8Array(16);
-  try { crypto.getRandomValues(bytes); } catch (e) {
-    for (var i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
-  }
-  return Array.prototype.map.call(bytes, function (b) { return (b < 16 ? "0" : "") + b.toString(16); }).join("");
-})();
-var BROWSER_DRAFT_LOCK = "splitpage-draft-writer-";
 var browserDraftsOff = false;
 var browserCopyOf = null;
 
@@ -165,41 +158,13 @@ function draftBackendDiscard(seq) {
 
 function draftWriterLive() {
   if (draftStopped) return false;
-  if (runningOnDesktop()) return typeof desktopPort().writeDraft === "function";
+  if (runningOnDesktop()) return desktopDrafts().writable();
   return !browserDraftsOff && (!!browserKeyOnDisk() || !!browserDraftTarget());
 }
 
-var browserLockRelease = null;
-var browserLockWanted = false;
-
 function holdBrowserWriterLock() {
-  if (runningOnDesktop() || browserLockWanted) return;
-  browserLockWanted = true;
-  try {
-    if (!navigator.locks || typeof navigator.locks.request !== "function") return;
-    navigator.locks.request(BROWSER_DRAFT_LOCK + browserWriterId, function () {
-      if (!browserLockWanted) return null;
-      return new Promise(function (resolve) { browserLockRelease = resolve; });
-    }).then(null, function () {});
-  } catch (e) {}
-}
-
-function releaseBrowserWriterLock() {
-  browserLockWanted = false;
-  var release = browserLockRelease;
-  browserLockRelease = null;
-  if (release) release();
-}
-
-function browserWriterIsLive(writerId) {
-  if (!writerId) return Promise.resolve(false);
-  if (writerId === browserWriterId) return Promise.resolve(true);
-  try {
-    if (!navigator.locks || typeof navigator.locks.query !== "function") return Promise.resolve(false);
-    return navigator.locks.query().then(function (s) {
-      return ((s && s.held) || []).some(function (l) { return l && l.name === BROWSER_DRAFT_LOCK + writerId; });
-    }, function () { return false; });
-  } catch (e) { return Promise.resolve(false); }
+  if (runningOnDesktop()) return;
+  holdWriterLock();
 }
 
 export function noteDraftChange() {
@@ -602,15 +567,6 @@ export function armServerDraftResume(t) {
   });
 }
 
-function draftNormalizeBase(v) {
-  var s = String(v == null ? "" : v).trim();
-  if (!s) return "";
-  try {
-    var u = new URL(s, location.href);
-    return (u.origin + u.pathname).replace(/\/+$/, "");
-  } catch (e) { return s.replace(/\/+$/, ""); }
-}
-
 function draftWaitForServerDetect() {
   var deadline = Date.now() + draftTiming.serverWait;
   return new Promise(function (resolve) {
@@ -641,8 +597,8 @@ async function restoreServerDraft(t, mine, origin) {
   var title = draftTitleOf(mine, server.docId);
   await draftWaitForServerDetect();
 
-  var headerBase = draftNormalizeBase(server.base);
-  if (headerBase && headerBase !== draftNormalizeBase(currentConn().serverUrl)) {
+  var headerBase = normalizeDraftBase(server.base, location.href);
+  if (headerBase && headerBase !== normalizeDraftBase(currentConn().serverUrl, location.href)) {
     resume.dropServerResume();
     if (draftServerSettle) draftServerSettle.settle("server-copy");
     recoverDraftAsUnsavedCopy(t,
@@ -906,9 +862,9 @@ function offerBrowserDraftAfterLinkOff(docId) {
 }
 
 export function desktopDraftTaker() {
-  var desktop = desktopPort();
-  if (!(desktop && draftResume().restorePending() && typeof desktop.takeDraft === "function")) return null;
-  return function () { return desktop.takeDraft(); };
+  var take = desktopDrafts().taker();
+  if (!(take && draftResume().restorePending())) return null;
+  return take;
 }
 
 export async function applyTakenDraft(t) {
@@ -923,8 +879,8 @@ export async function applyTakenDraft(t) {
       "next launch.", "warn", true);
   }
   resume.setRestorePending(false);
-  if (runningOnDesktop() && typeof desktopPort().draftRestoreDone === "function") {
-    try { desktopPort().draftRestoreDone(outcome); } catch (e2) {}
+  if (runningOnDesktop()) {
+    try { desktopDrafts().restoreDone(outcome); } catch (e2) {}
   }
   if (!runningOnDesktop() && t && t.browserKey) browserDraftRestoreDone(t, outcome);
   if (typeof notifyDesktopDocumentState === "function") notifyDesktopDocumentState();
@@ -933,9 +889,9 @@ export async function applyTakenDraft(t) {
 }
 
 export function __init() {
-  draftResume().setRestorePending(!!(runningOnDesktop() && desktopPort().hasDraftToRestore));
+  draftResume().setRestorePending(!!(runningOnDesktop() && desktopDrafts().hasDraftToRestore()));
 
-  draftOnDisk = !!(runningOnDesktop() && desktopPort().hasDraftToRestore);
+  draftOnDisk = !!(runningOnDesktop() && desktopDrafts().hasDraftToRestore());
 
   window.addEventListener("blur", function () { flushDraftNow(); });
 
