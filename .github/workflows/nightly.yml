@@ -20,7 +20,6 @@ jobs:
     runs-on: ${{ vars.CI_RUNNER }}
     timeout-minutes: 180
     env:
-      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.pw-browsers
       SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
     steps:
       - uses: actions/checkout@v7
@@ -36,6 +35,11 @@ jobs:
 
       - name: Build index.html and stamp sw.js
         run: node build.mjs
+
+      - name: Select persistent Chromium cache
+        run: |
+          test -n "$RUNNER_TOOL_CACHE"
+          echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TOOL_CACHE/splitpage-playwright/$PLAYWRIGHT_VERSION" >> "$GITHUB_ENV"
 
       - name: Install Chromium
         run: |

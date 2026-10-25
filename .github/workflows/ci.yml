@@ -27,6 +27,7 @@ jobs:
       code: ${{ steps.classify.outputs.code }}
       tree: ${{ steps.tested.outputs.tree }}
       tested: ${{ steps.tested.outputs.tested }}
+      app: ${{ steps.classify.outputs.app }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -55,7 +56,6 @@ jobs:
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 25
     env:
-      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.pw-browsers
       SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
     steps:
       - uses: actions/checkout@v7
@@ -80,16 +80,25 @@ jobs:
         run: npm run check:comments
 
       - name: Build index.html and stamp sw.js
+        if: needs.changes.outputs.app == 'true'
         run: node build.mjs
 
       - name: sw.js is committed with the current VERSION stamp
+        if: needs.changes.outputs.app == 'true'
         run: |
           git diff --exit-code -- sw.js || {
             echo "::error file=sw.js::sw.js's cache name does not match VERSION — run \`node build.mjs\` and commit sw.js"
             exit 1
           }
 
+      - name: Select persistent Chromium cache
+        if: needs.changes.outputs.app == 'true'
+        run: |
+          test -n "$RUNNER_TOOL_CACHE"
+          echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TOOL_CACHE/splitpage-playwright/$PLAYWRIGHT_VERSION" >> "$GITHUB_ENV"
+
       - name: Install Chromium
+        if: needs.changes.outputs.app == 'true'
         run: |
           npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
           exe=$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -type f -path '*/chromium-*/*' -name chrome -print -quit)
@@ -101,15 +110,18 @@ jobs:
           echo "SPLITPAGE_CHROME=$exe" >> "$GITHUB_ENV"
 
       - name: Pick this runner's port block
+        if: needs.changes.outputs.app == 'true'
         run: |
           n=${RUNNER_NAME##*-}
           case "$n" in ''|*[!0-9]*|?????*) n=1 ;; esac
           echo "PORT_BASE=$(( (10#$n + 9) % 10 * 100 ))" >> "$GITHUB_ENV"
 
       - name: Browser suites 01 (core) and 52 (content security policy)
+        if: needs.changes.outputs.app == 'true'
         run: node tools/run-suites.mjs "$RUNNER_TEMP/suites" '^(01-core|52-csp)\.txt$' --lanes 2 --port-base "$PORT_BASE"
 
       - name: Browser suite 265 (drafts kept in IndexedDB and restored, persistence)
+        if: needs.changes.outputs.app == 'true'
         run: node tools/run-suites.mjs "$RUNNER_TEMP/suites/persistence" '^265-browser-drafts\.txt$' --lanes 1 --port-base "$PORT_BASE"
 
       - name: Upload the suite logs
@@ -122,6 +134,7 @@ jobs:
           retention-days: 7
 
       - name: Upload the built app
+        if: needs.changes.outputs.app == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: splitpage-app
