@@ -20,8 +20,13 @@ jobs:
   changes:
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     outputs:
       code: ${{ steps.classify.outputs.code }}
+      tree: ${{ steps.tested.outputs.tree }}
+      tested: ${{ steps.tested.outputs.tested }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -38,9 +43,15 @@ jobs:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
 
+      - name: Find a passed run of this exact tree
+        id: tested
+        run: node tools/ci-tested-tree.mjs ${{ github.event_name == 'push' && github.ref == 'refs/heads/4.1-development' && '--lookup' || '' }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
   checks:
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 25
     env:
@@ -129,7 +140,7 @@ jobs:
   tests:
     name: Tests (${{ matrix.shard }}/2)
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 25
     strategy:
@@ -163,9 +174,9 @@ jobs:
     steps:
       - name: Every required job passed, or the change was prose only
         run: |
-          echo "changes=$CHANGES code=$CODE checks=$CHECKS tests=$TESTS"
+          echo "changes=$CHANGES code=$CODE tested=$TESTED checks=$CHECKS tests=$TESTS"
           [ "$CHANGES" = success ] || exit 1
-          if [ "$CODE" = true ]; then
+          if [ "$CODE" = true ] && [ "$TESTED" != true ]; then
             [ "$CHECKS" = success ] && [ "$TESTS" = success ]
           else
             [ "$CHECKS" = skipped ] && [ "$TESTS" = skipped ]
@@ -173,8 +184,24 @@ jobs:
         env:
           CHANGES: ${{ needs.changes.result }}
           CODE: ${{ needs.changes.outputs.code }}
+          TESTED: ${{ needs.changes.outputs.tested }}
           CHECKS: ${{ needs.checks.result }}
           TESTS: ${{ needs.tests.result }}
+
+      - name: Write the passed tree's marker
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && needs.changes.outputs.tree != ''
+        run: echo "$TREE" > "$RUNNER_TEMP/passed-tree.txt"
+        env:
+          TREE: ${{ needs.changes.outputs.tree }}
+
+      - name: Upload the passed tree's marker
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && needs.changes.outputs.tree != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ci-passed-tree-${{ needs.changes.outputs.tree }}
+          path: ${{ runner.temp }}/passed-tree.txt
+          if-no-files-found: error
+          retention-days: 30
 
   desktop-smoke:
     needs: changes
