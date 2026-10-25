@@ -1,7 +1,8 @@
 {
   "legacyImports": [],
   "loadOnly": [
-    "src/js/20f-desktop.js",
+    "src/features/desktop/desktop.js",
+    "src/features/desktop/actions.ts",
     "src/adapters/desktop/desktop-blobs.js",
     "src/adapters/desktop/desktop-voice.js",
     "src/adapters/desktop/fake-desktop.js",
@@ -10,5 +11,5 @@
     "src/legacy/desktop-bridge.ts",
     "src/bootstrap/wiring/desktop.ts"
   ],
-  "expectedLoads": 8
+  "expectedLoads": 9
 }

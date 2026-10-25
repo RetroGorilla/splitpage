@@ -1,5 +1,6 @@
 import { createDesktopDocumentState } from "../application/desktop/document-state.ts";
 import type { DesktopDocumentListeners, DesktopDocumentState, DesktopDocumentStateOwner, DesktopDocumentStatePorts } from "../application/desktop/document-state.ts";
+import type { DesktopHandOff, PrompterElsewhere } from "../application/desktop/shell.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
 import { isPristineSeedDocument } from "../js/03a-history-store.js";
@@ -9,6 +10,7 @@ import { currentDocument } from "./session-bridge.ts";
 import { currentHome, homeConn, serverHomeId } from "./location-bridge.ts";
 
 let started: DesktopDocumentStateOwner | null = null;
+let handOff: DesktopHandOff | null = null;
 
 export function legacyDesktopDocumentPorts(): DesktopDocumentStatePorts {
   return Object.freeze({
@@ -59,4 +61,16 @@ export function desktopDocumentListeners(): DesktopDocumentListeners {
     location: function () { started?.listeners().location(); },
     save: function (change) { started?.listeners().save(change); }
   };
+}
+
+export function handDesktopTo(next: DesktopHandOff | null): void {
+  handOff = next;
+}
+
+export function renderDesktopShareInfo(): Promise<void> {
+  return handOff ? handOff.renderShareInfo() : Promise.resolve();
+}
+
+export function openPrompterInBrowser(): Promise<PrompterElsewhere> {
+  return handOff ? handOff.openPrompterInBrowser() : Promise.resolve({ ok: false, message: "" });
 }

@@ -1,48 +1,28 @@
-import { currentDocument, noteSessionEdit } from "../legacy/session-bridge.ts";
-import { checkServer, currentConn, currentHome, fileHome, homeConn, serverHomeId, serverStatus, setHome } from "../legacy/location-bridge.ts";
-import { normalizeServerUrl } from "../../shared/server-links.js";
-import { reassignDocId } from "./02b-doc-id.js";
-import { cssAttr } from "../features/common/dom.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { pointTabAt } from "./13-hosted.js";
-import { openDocument } from "../legacy/transition-bridge.ts";
-import { flushDraftNow } from "../legacy/recovery-bridge.ts";
-import { saveDoc, unsavedChanges } from "../legacy/save-bridge.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
-import { startupReady } from "../legacy/startup-bridge.ts";
-import { appActions } from "../legacy/app-actions.ts";
-import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort, restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
-import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
-import { makeDesktopBlobBackend, wireDesktopBlobs } from "../adapters/desktop/desktop-blobs.js";
-import { forgetDesktopVoice } from "../adapters/desktop/desktop-voice.js";
-import { makeFakeDesktopBackend } from "../adapters/desktop/fake-desktop.js";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
-import { runMenuCommand } from "../application/desktop/menu-commands.ts";
-import { awaitHandedDocument, handedDocumentSettled, notifyDesktopDocumentState } from "../legacy/desktop-bridge.ts";
+import { normalizeServerUrl } from "../../../shared/server-links.js";
+import { cssAttr } from "../common/dom.ts";
+import { escapeHtml } from "../../core/document/text-policy.ts";
+
+var ports = null;
 
 function runDesktopMenuCommand(cmd) {
-  if (runMenuCommand(cmd)) return;
+  if (ports.menuCommands.run(cmd)) return;
   var item = document.querySelector('#file-menu [data-file-action="' + cssAttr(cmd) + '"]');
   if (item && !item.disabled) item.click();
 }
 
 var prompterBrowserBusy = false;
 
-export function driveOpenShown() {
-  return !runningOnDesktop() || typeof desktopPort().driveStatus === "function";
-}
-
-export function appDataImportShown() {
+function appDataImportShown() {
   return !!desktopBridge();
 }
 
 function desktopBridge() {
-  return desktopPort();
+  return ports.shell();
 }
 
-export function routeServerOpen(id) {
+function routeServerOpen(id) {
   var bridge = desktopBridge();
-  return bridge ? bridge.routeOpen({ kind: "server", serverDocId: id, serverUrl: currentConn().serverUrl, token: currentConn().token, tunnel: currentConn().tunnel }).then(function (result) { return !!result && result.where === "this-tab"; }) : null;
+  return bridge ? bridge.routeOpen({ kind: "server", serverDocId: id, serverUrl: ports.place.connection().serverUrl, token: ports.place.connection().token, tunnel: ports.place.connection().tunnel }).then(function (result) { return !!result && result.where === "this-tab"; }) : null;
 }
 
 var PROMPTER_BROWSER_MESSAGES = {
@@ -61,13 +41,13 @@ var PROMPTER_BROWSER_MESSAGES = {
 };
 
 function prompterBrowserResult(ok, message, kind) {
-  showToast(message, kind || (ok ? "ok" : "warn"), !ok);
+  ports.notices.show(message, kind || (ok ? "ok" : "warn"), !ok);
   return { ok: ok, message: message };
 }
 
 async function copyPrompterLinkForRemoteServer(id) {
   var link;
-  try { link = new URL("?doc=" + encodeURIComponent(id) + "&teleprompter=1", homeConn().serverUrl).href; }
+  try { link = new URL("?doc=" + encodeURIComponent(id) + "&teleprompter=1", ports.place.homeConn().serverUrl).href; }
   catch (e) { return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.NO_SERVER); }
   var copied;
   try { await navigator.clipboard.writeText(link); copied = true; } catch (e) { copied = false; }
@@ -77,33 +57,33 @@ async function copyPrompterLinkForRemoteServer(id) {
     copied ? "ok" : "warn");
 }
 
-export function openPrompterInBrowser() {
+function openPrompterInBrowser() {
   return openPrompterElsewhere(false);
 }
 
-export function openPrompterInChromium() {
+function openPrompterInChromium() {
   return openPrompterElsewhere(true);
 }
 
 async function openPrompterElsewhere(chromium) {
-  if (!(chromium ? canOpenPrompterInChromium() : canOpenPrompterInBrowser())) return { ok: false, message: "" };
+  if (!(chromium ? ports.canOpenPrompter.chromium() : ports.canOpenPrompter.browser())) return { ok: false, message: "" };
   if (prompterBrowserBusy) return { ok: false, message: "" };
   prompterBrowserBusy = true;
   try {
-    if (!currentDocument()) return prompterBrowserResult(false, "Still loading…");
-    var serverId = serverHomeId();
-    var hc = homeConn();
+    if (!ports.document.current()) return prompterBrowserResult(false, "Still loading…");
+    var serverId = ports.place.serverHomeId();
+    var hc = ports.place.homeConn();
     if (serverId && hc && hc.serverUrl) return await copyPrompterLinkForRemoteServer(serverId);
-    var fh = fileHome();
+    var fh = ports.place.fileHome();
     var onDisk = !!(fh && fh.handle && fh.handle._desktopId);
     if (!onDisk && !serverId) return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.NOT_SAVED);
-    if (unsavedChanges()) {
+    if (ports.saves.unsaved()) {
       if (onDisk && fh.format === "html") return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.NOT_SAVED);
-      await saveDoc();
-      if (unsavedChanges()) return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.SAVE_FAILED);
+      await ports.saves.save();
+      if (ports.saves.unsaved()) return prompterBrowserResult(false, PROMPTER_BROWSER_MESSAGES.SAVE_FAILED);
     }
     var answer;
-    try { answer = await (chromium ? desktopPort().openPrompterInChromium() : desktopPort().openPrompterInBrowser()); }
+    try { answer = await (chromium ? ports.shell().openPrompterInChromium() : ports.shell().openPrompterInBrowser()); }
     catch (e) { answer = { ok: false, code: "OPEN_FAILED" }; }
     if (answer && answer.ok && chromium) {
       var browserName = typeof answer.browser === "string" && answer.browser ? answer.browser : "a Chromium browser";
@@ -122,11 +102,11 @@ async function openPrompterElsewhere(chromium) {
   }
 }
 
-export async function renderDesktopShareInfo() {
+async function renderDesktopShareInfo() {
   var el = document.getElementById("desktop-share-info");
-  if (!el || !runningOnDesktop()) return;
+  if (!el || !ports.running()) return;
   var info;
-  try { info = await desktopPort().getSessionInfo(); } catch (e) { info = null; }
+  try { info = await ports.shell().getSessionInfo(); } catch (e) { info = null; }
   if (!info || !info.hosting) { el.hidden = true; el.innerHTML = ""; return; }
   var lanUrls = info.lanUrls || [];
   var addrs = lanUrls.length
@@ -160,90 +140,97 @@ export async function renderDesktopShareInfo() {
 }
 
 function wireReassignDocId() {
-  if (!runningOnDesktop() || typeof desktopPort().onReassignDocId !== "function") return;
-  desktopPort().onReassignDocId(function (msg) {
-    if (!msg) return;
-    if (reassignDocId(msg.toId, msg)) notifyDesktopDocumentState();
+  if (!ports.running() || typeof ports.shell().onReassignDocId !== "function") return;
+  ports.shell().onReassignDocId(function (msg) {
+    if (!ports || !msg) return;
+    if (ports.reassignDocId(msg.toId, msg)) ports.documentState.notify();
   });
 }
 
-export function initDesktop() {
-  if (!runningOnDesktop()) return;
+function initDesktop() {
+  if (!ports.running()) return;
 
-  wireDesktopBlobs(desktopPort());
+  ports.wireBlobs();
 
   var driveItem = document.getElementById("menu-drive-open");
-  if (driveItem) driveItem.hidden = !driveOpenShown();
+  if (driveItem) driveItem.hidden = !ports.driveOpenShown();
 
   var exportAppItem = document.getElementById("menu-export-app-data");
   if (exportAppItem) exportAppItem.hidden = false;
   var importAppItem = document.getElementById("menu-import-app-data");
   if (importAppItem) importAppItem.hidden = !appDataImportShown();
 
-  var intent = desktopPort().launchIntent && desktopPort().launchIntent.type;
-  awaitHandedDocument(intent);
+  var intent = ports.shell().launchIntent && ports.shell().launchIntent.type;
+  ports.documentState.awaitHanded(intent);
 
-  desktopPort().onOpenFile(function (entry) {
+  ports.shell().onOpenFile(function (entry) {
+    if (!ports) return;
+    var mine = ports;
     function proceed() {
-      var handle = makeDesktopHandle(entry);
+      var handle = mine.makeHandle(entry);
       handle.getFile().then(function (file) {
-        return openDocument({ kind: "file", file: file, handle: handle });
+        return mine.documents.open({ kind: "file", file: file, handle: handle });
       }).catch(function () {
-        showToast("Could not open " + ((entry && entry.name) || "that file") + ".", "error");
-      }).then(handedDocumentSettled);
+        mine.notices.show("Could not open " + ((entry && entry.name) || "that file") + ".", "error");
+      }).then(mine.documentState.settled);
     }
-    var ready = currentDocument() ? null : startupReady();
+    var ready = ports.document.current() ? null : ports.startup.ready();
     if (ready) ready.then(proceed);
     else proceed();
   });
 
-  desktopPort().onOpenServerDoc(function (payload) {
+  ports.shell().onOpenServerDoc(function (payload) {
+    if (!ports) return;
     var serverDocId = payload && payload.serverDocId;
     if (!serverDocId) return;
     function proceed() {
       adoptPayloadServer(payload);
       openPendingServerDocForTab(serverDocId);
     }
-    var ready = currentDocument() ? null : startupReady();
+    var ready = ports.document.current() ? null : ports.startup.ready();
     if (ready) ready.then(proceed);
     else proceed();
   });
 
-  desktopPort().onRestoreNotice(function (notice) {
+  ports.shell().onRestoreNotice(function (notice) {
+    if (!ports) return;
     var skipped = (notice && notice.skipped) || [];
     if (!skipped.length) return;
     var reasonWord = { missing: "missing", unreadable: "unreadable", "server-unreachable": "server unreachable" };
     var lines = skipped.map(function (s) {
       return (s.name || "a document") + " (" + (reasonWord[s.reason] || s.reason || "unknown") + ")";
     });
-    showToast("Could not restore: " + lines.join(", ") + ".", "warn", true);
+    ports.notices.show("Could not restore: " + lines.join(", ") + ".", "warn", true);
   });
 
   wireReassignDocId();
 
-  desktopPort().onMenuCommand(runDesktopMenuCommand);
+  ports.shell().onMenuCommand(function (cmd) {
+    if (ports) runDesktopMenuCommand(cmd);
+  });
 
-  if (typeof desktopPort().onDraftFlush === "function") desktopPort().onDraftFlush(flushDraftNow);
+  if (typeof ports.shell().onDraftFlush === "function") ports.shell().onDraftFlush(ports.flushDraft);
 
-  notifyDesktopDocumentState();
+  ports.documentState.notify();
 
-  desktopPort().getSessionInfo().then(function (info) {
-    if (info && info.hosting) appActions.invoke("show-servers-dialog", "button");
+  var actions = ports.actions;
+  ports.shell().getSessionInfo().then(function (info) {
+    if (info && info.hosting) actions.invoke("show-servers-dialog", "button");
   }).catch(function () {});
 }
 
 function adoptPayloadServer(payload) {
   if (typeof payload.serverUrl !== "string") return;
   var url = normalizeServerUrl(payload.serverUrl);
-  if (url === currentConn().serverUrl) return;
-  if (currentHome().kind === "server") setHome("none");
-  serverStatus().forgetMode();
+  if (url === ports.place.connection().serverUrl) return;
+  if (ports.place.home().kind === "server") ports.server.setHome("none");
+  ports.server.forgetMode();
   try {
-    pointTabAt(url, { token: typeof payload.token === "string" ? payload.token : "", tunnel: payload.tunnel || null });
+    ports.server.pointTabAt(url, { token: typeof payload.token === "string" ? payload.token : "", tunnel: payload.tunnel || null });
   } catch (e) {
-    pointTabAt(url, { token: typeof payload.token === "string" ? payload.token : "" });
+    ports.server.pointTabAt(url, { token: typeof payload.token === "string" ? payload.token : "" });
   }
-  checkServer();
+  ports.server.check();
 }
 
 function openPendingServerDocForTab(serverDocId) {
@@ -251,17 +238,18 @@ function openPendingServerDocForTab(serverDocId) {
   var AUTH_TIMEOUT_MS = 10 * 60 * 1000;
   var POLL_MS = 500;
   var checkStart = Date.now();
+  var mine = ports;
 
-  function isChecked() { return serverStatus().mode().checked; }
+  function isChecked() { return mine.place.serverMode().checked; }
   function needsAuth() {
-    return serverStatus().mode().authRequired && !currentConn().token;
+    return mine.place.serverMode().authRequired && !mine.place.connection().token;
   }
   var retried = false;
   function openIt() {
-    openDocument({ kind: "server", id: serverDocId }).then(function (ok) {
+    mine.documents.open({ kind: "server", id: serverDocId }).then(function (ok) {
       if (ok === false && !retried && needsAuth()) { retried = true; afterDetect(); return; }
-      handedDocumentSettled();
-    }, handedDocumentSettled);
+      mine.documentState.settled();
+    }, mine.documentState.settled);
   }
 
   (function waitForDetect() {
@@ -279,26 +267,19 @@ function openPendingServerDocForTab(serverDocId) {
   }
 }
 
-export function __init() {
-  if (runningOnDesktop()) wireDesktopBlobs(desktopPort());
-  window.__desktopTest = {
-    makeHandle: makeDesktopHandle,
-    runMenuCommand: runDesktopMenuCommand,
-    makeFakeBackend: makeFakeDesktopBackend,
-    makeBlobBackend: makeDesktopBlobBackend,
+export function __init(given) {
+  ports = given;
+  var mounted = ports;
+  return {
+    renderShareInfo: renderDesktopShareInfo,
+    openPrompterInBrowser: openPrompterInBrowser,
+    openPrompterInChromium: openPrompterInChromium,
+    routeServerOpen: routeServerOpen,
     initDesktop: initDesktop,
-    setBackend: function (fake) {
-      useDesktopForTest(fake);
-      forgetDesktopVoice();
-      if (fake && typeof fake.blobPut === "function") wireDesktopBlobs(fake);
-      wireReassignDocId();
-    },
-    restoreBackend: function () {
-      restoreDesktop();
-      forgetDesktopVoice();
-      wireDesktopBlobs(desktopPort());
-    },
-    get tabId() { var port = desktopPort(); return port && port.tabId; },
-    markDirtyForTest: function () { noteSessionEdit(); }
+    runMenuCommand: runDesktopMenuCommand,
+    wireReassignDocId: wireReassignDocId,
+    dispose: function () {
+      if (ports === mounted) ports = null;
+    }
   };
 }
