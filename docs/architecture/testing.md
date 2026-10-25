@@ -603,10 +603,10 @@ above and nothing else.
 
 | Job | Runs |
 | --- | --- |
-| `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? |
+| `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? On a push to `4.1-development`, `tools/ci-tested-tree.mjs`: did another run already pass this exact tree? ([ci.md](ci.md)) |
 | `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, then through `tools/run-suites.mjs` the smoke and CSP suites (`01-core.txt`, `52-csp.txt`) and the persistence suite (`265-browser-drafts.txt`); uploads the built app |
 | `tests` | Two independent matrix jobs run `test:all -- --shard 1/2` and `2/2`, after building their own app and checking the worker stamp. Together they execute every discovered unit, desktop and tool test exactly once. They run in parallel with `checks`, subject to available runner slots |
-| `gate` | Requires successful classification, `checks` and both test shards for code changes; for prose only, requires both `checks` and `tests` to be skipped |
+| `gate` | Requires successful classification, `checks` and both test shards for code changes; for prose only, or a tree another run already passed, requires both `checks` and `tests` to be skipped. After `checks` and both shards pass it uploads the `ci-passed-tree-<tree>` marker |
 | `desktop-smoke` | Electron dev-target smoke, on pushes to `main` only |
 
 The persistence suite costs little: on its first hosted run (PR #270,

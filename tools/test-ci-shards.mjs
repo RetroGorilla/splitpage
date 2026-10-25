@@ -25,6 +25,19 @@ assert.equal(step.env.TESTS, "${{ needs.tests.result }}");
 assert.equal(step.env.CHECKS, "${{ needs.checks.result }}");
 assert.equal(step.env.CHANGES, "${{ needs.changes.result }}");
 assert.equal(step.env.CODE, "${{ needs.changes.outputs.code }}");
+assert.equal(step.env.TESTED, "${{ needs.changes.outputs.tested }}");
+assert.equal(checks.if, "needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true'");
+assert.equal(changes.outputs.tested, "${{ steps.tested.outputs.tested }}");
+assert.equal(changes.outputs.tree, "${{ steps.tested.outputs.tree }}");
+assert.equal(changes.permissions.actions, "read");
+const lookup = changes.steps.find((s) => s.id === "tested");
+assert.equal(lookup.run, "node tools/ci-tested-tree.mjs ${{ github.event_name == 'push' && github.ref == 'refs/heads/4.1-development' && '--lookup' || '' }}");
+const ran = "needs.checks.result == 'success' && needs.tests.result == 'success' && needs.changes.outputs.tree != ''";
+const upload = gate.steps.find((s) => s.uses?.startsWith("actions/upload-artifact@"));
+assert.equal(upload.with.name, "ci-passed-tree-${{ needs.changes.outputs.tree }}");
+assert.equal(upload.if, ran);
+assert.ok(gate.steps.indexOf(upload) > 0);
+assert.ok(gate.steps.slice(1).every((s) => s.if === ran));
 
 const gitPath = process.platform === "win32" ? spawnSync("git", ["--exec-path"], { encoding: "utf8" }).stdout?.trim() : null;
 const candidates = process.platform === "win32" ? [...(gitPath ? [resolve(gitPath, "../../../bin/bash.exe")] : []), "bash"] : ["bash"];
@@ -33,16 +46,18 @@ if (!bash && (process.platform !== "win32" || process.env.CI)) throw new Error("
 let cases = 0;
 for (const change of bash ? ["success", "failure", "cancelled", "skipped"] : []) {
   for (const code of ["true", "false"]) {
-    for (const check of ["success", "failure", "cancelled", "skipped"]) {
-      for (const test of ["success", "failure", "cancelled", "skipped"]) {
-        const result = spawnSync(bash, ["-e", "-c", step.run], {
-          env: { ...process.env, CHANGES: change, CODE: code, CHECKS: check, TESTS: test },
-          encoding: "utf8",
-          timeout: 5000
-        });
-        const expected = change === "success" && (code === "true" ? check === "success" && test === "success" : check === "skipped" && test === "skipped");
-        assert.equal(result.status === 0, expected, JSON.stringify({ change, code, check, test, error: result.error?.message }));
-        cases++;
+    for (const tested of ["true", "false", ""]) {
+      for (const check of ["success", "failure", "cancelled", "skipped"]) {
+        for (const test of ["success", "failure", "cancelled", "skipped"]) {
+          const result = spawnSync(bash, ["-e", "-c", step.run], {
+            env: { ...process.env, CHANGES: change, CODE: code, TESTED: tested, CHECKS: check, TESTS: test },
+            encoding: "utf8",
+            timeout: 5000
+          });
+          const expected = change === "success" && (code === "true" && tested !== "true" ? check === "success" && test === "success" : check === "skipped" && test === "skipped");
+          assert.equal(result.status === 0, expected, JSON.stringify({ change, code, tested, check, test, error: result.error?.message }));
+          cases++;
+        }
       }
     }
   }
