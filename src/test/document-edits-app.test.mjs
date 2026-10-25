@@ -23,7 +23,8 @@ const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toNam
 const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
 const { sessionStamps, readSession } = await import("../legacy/session-bridge.ts");
 const { randomIds } = await import("../adapters/identity/ids.ts");
-const { addBrollProp } = await import("../legacy/broll-bridge.ts");
+import { broll } from "./_broll-mounted.mjs";
+const { addBrollProp } = broll;
 const { setCommentAssignee, toggleResolve } = await import("../features/comments/comments.js");
 const { wordsPerMinuteCommand } = await import("../application/commands/document-settings.ts");
 const { deletePersonCommand } = await import("../application/commands/production-records.ts");

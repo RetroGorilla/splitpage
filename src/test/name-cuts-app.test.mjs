@@ -16,8 +16,9 @@ const { retagRewrites: planRetagRewrites } = await import("../application/comman
 const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 const { plainTagPhrase } = await import("../js/07b-plain-tags.js");
-const { addBrollProp } = await import("../legacy/broll-bridge.ts");
-const { openBrollPanel } = await import("../js/08d-broll-panel.js");
+import { broll } from "./_broll-mounted.mjs";
+const { addBrollProp } = broll;
+const { openBrollPanel } = await import("../features/broll/panel.js");
 const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { renderComments, setCommentAssignee } = await import("../features/comments/comments.js");
 const NAME_KEY = "splitpage-comment-author";

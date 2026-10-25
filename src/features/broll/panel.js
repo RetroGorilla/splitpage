@@ -1,40 +1,22 @@
-import { brollSortedForList } from "../core/production/broll.ts";
-import { BROLL_NAME_MAX, BROLL_TEXT_MAX } from "../core/document/broll.ts";
-import { tagCategory, tagStatus } from "../core/production/looks.ts";
-import { normalizeTagName } from "../core/document/tags.ts";
-import { formatTimecode, rowSeconds } from "../core/production/timing.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
-import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
-import { sidePanels } from "../legacy/panels-bridge.ts";
-import { viewFlags } from "../legacy/preferences-bridge.ts";
-import { plainText } from "./04-richtext.js";
-import { cssAttr } from "../features/common/dom.ts";
-import { focusRowField } from "../legacy/rows-bridge.ts";
-import { productionIndex } from "../legacy/production-index-bridge.ts";
-import {
-  addBrollProp,
-  brollEntries,
-  renameBrollInScript,
-  updateBrollBadge
-} from "../legacy/broll-bridge.ts";
-import { breakUndoCoalescing } from "../legacy/undo-bridge.ts";
-import { presence } from "../legacy/presence-bridge.ts";
-import { brollGroups as brollGroupsFrom, brollShotListForPrint, brollTable, filterCounts, FILTERS, matchesFilter, oneOf, PAGE_GROUPS, pageSummaryText, sceneLabel, shotRecordForFile, startOf } from "../adapters/formats/export-projections.ts";
-import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
-import { appActions } from "../legacy/app-actions.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { mountBroll } from "../features/broll/mount.ts";
-import { reviewBlocked, reviewMode } from "../legacy/location-bridge.ts";
-import { deleteShotCommand, setShotsCommand } from "../application/commands/broll-records.ts";
-import { newBrollRecord, removeBrollProp } from "../application/commands/production-actions.ts";
-import { brollRecord as shotIn, personById as personIn, personNamed } from "../core/production/records.ts";
-import { randomIds } from "../adapters/identity/ids.ts";
-import { currentDocument, readSession, runDocumentEdit } from "../legacy/session-bridge.ts";
+import { brollSortedForList } from "../../core/production/broll.ts";
+import { BROLL_NAME_MAX, BROLL_TEXT_MAX } from "../../core/document/broll.ts";
+import { tagCategory, tagStatus } from "../../core/production/looks.ts";
+import { normalizeTagName } from "../../core/document/tags.ts";
+import { formatTimecode, rowSeconds } from "../../core/production/timing.ts";
+import { cssAttr } from "../common/dom.ts";
+import { brollGroups as brollGroupsFrom, filterCounts, FILTERS, matchesFilter, oneOf, PAGE_GROUPS, pageSummaryText, sceneLabel, startOf } from "../../core/production/broll-view.ts";
+import { cappedLongText, cappedText, escapeHtml, plainText } from "../../core/document/text-policy.ts";
+import { mountBroll } from "./mount.ts";
+import { deleteShotCommand, setShotsCommand } from "../../application/commands/broll-records.ts";
+import { newBrollRecord, removeBrollProp } from "../../application/commands/production-actions.ts";
+import { brollRecord as shotIn, personById as personIn, personNamed } from "../../core/production/records.ts";
 
-const shotEditPorts = { run: runDocumentEdit, ids: randomIds };
+var ports = null;
+
+const shotEditPorts = { run: (...args) => ports.edits.edit(...args), get ids() { return ports.ids; } };
 
 function productionEntries() {
-  return productionIndex().entries(currentDocument());
+  return ports.production.entries(ports.document.current());
 }
 
 var VIEW_KEY = "splitpage-broll-view";
@@ -88,7 +70,7 @@ var BROLL_REVIEW_SAFE_ACTIONS = {
 };
 
 function dropEditingForReview() {
-  if (!reviewMode()) return;
+  if (!ports.review.reviewing()) return;
   renamingId = null; addingPersonFor = null; editingLocFor = null; editingRefFor = null;
   menuFor = null;
   clearSelection();
@@ -140,7 +122,7 @@ function initials(name) {
 
 function avatarHtml(person) {
   return '<span class="person-avatar broll-avatar" aria-hidden="true" style="--presence:' +
-    escapeHtml(presence().personColor(person.name)) + '">' + escapeHtml(initials(person.name)) + '</span>';
+    escapeHtml(ports.presence.personColor(person.name)) + '">' + escapeHtml(initials(person.name)) + '</span>';
 }
 
 function plural(n, one, many) {
@@ -149,8 +131,8 @@ function plural(n, one, many) {
 
 function sceneStarts() {
   var t = 0, out = Object.create(null);
-  const doc = currentDocument();
-  (doc?.rows || []).forEach(function (row) { out[row.id] = t; t += rowSeconds(row, doc, productionReaders); });
+  const doc = ports.document.current();
+  (doc?.rows || []).forEach(function (row) { out[row.id] = t; t += rowSeconds(row, doc, ports.text.productionReaders); });
   return out;
 }
 
@@ -239,7 +221,7 @@ function knownLocations() {
     out.push(clean);
   }
   productionEntries().forEach(function (t) { if (t.cat.id === "location") add(t.name); });
-  (currentDocument()?.brollShots || []).forEach(function (r) { add(r.location); });
+  (ports.document.current()?.brollShots || []).forEach(function (r) { add(r.location); });
   return out.sort(function (a, b) { return a.localeCompare(b); });
 }
 
@@ -314,10 +296,8 @@ function groupMenuHtml() {
     '</div>';
 }
 
-export { brollShotListForPrint, brollTable, shotRecordForFile };
-
 export function brollGroups(entries, by, from) {
-  return brollGroupsFrom(entries, by, from || { rows: currentDocument()?.rows || [], people: currentDocument()?.people || [] });
+  return brollGroupsFrom(entries, by, from || { rows: ports.document.current()?.rows || [], people: ports.document.current()?.people || [] });
 }
 
 function doneCountHtml(items, cls) {
@@ -378,7 +358,7 @@ function rowStateIconsHtml(e) {
 
 function checkHtml(e) {
   var shot = e.status === "shot";
-  var ro = reviewMode();
+  var ro = ports.review.reviewing();
   return '<button type="button" class="broll-check" role="checkbox" aria-checked="' + (shot ? 'true' : 'false') +
     '"' + (ro ? ' disabled' : '') + ' data-action="broll-status-toggle" data-id="' + escapeHtml(e.id) + '" aria-label="' +
     escapeHtml("Shot: " + (e.name || "Untitled shot")) + '" title="' +
@@ -436,7 +416,7 @@ function statusFieldHtml(e, ro) {
 
 function cardHtml(e, starts) {
   var id = escapeHtml(e.id);
-  var ro = reviewMode();
+  var ro = ports.review.reviewing();
   var off = ro ? ' disabled' : '';
   var renaming = renamingId === e.id;
 
@@ -464,7 +444,7 @@ function cardHtml(e, starts) {
       '<span class="ev-field broll-owner-field">' + (who ? avatarHtml(who) : '') +
         '<select class="broll-owner-select' + (who ? '' : ' is-empty') + '" data-id="' + id + '" aria-label="Assigned to"' + off + '>' +
           '<option value=""' + (e.owner ? '' : ' selected') + '>Unassigned</option>' +
-          (currentDocument()?.people || []).map(function (p) {
+          (ports.document.current()?.people || []).map(function (p) {
             return '<option value="' + escapeHtml(p.id) + '"' + (p.id === e.owner ? ' selected' : '') + '>' +
               escapeHtml(p.name) + '</option>';
           }).join("") +
@@ -545,7 +525,7 @@ function selectedIds(entries) {
 }
 
 function bulkBarHtml(entries) {
-  if (reviewMode()) return "";
+  if (ports.review.reviewing()) return "";
   var chosen = entries.filter(function (e) { return selection[e.id]; });
   if (!chosen.length) return "";
   var allShot = chosen.every(function (e) { return e.status === "shot"; });
@@ -557,7 +537,7 @@ function bulkBarHtml(entries) {
       '<select class="broll-bulk-select" id="broll-bulk-owner" aria-label="Assign the selected shots">' +
         '<option value="__none__" selected>Assign</option>' +
         '<option value="">Unassigned</option>' +
-        (currentDocument()?.people || []).map(function (p) {
+        (ports.document.current()?.people || []).map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '">' + escapeHtml(p.name) + '</option>';
         }).join("") +
         '<option value="__new__">+ Person…</option>' +
@@ -638,7 +618,7 @@ function keepingFocus(container, draw) {
   if (active && container.contains(active)) {
     var typed = active.tagName === "TEXTAREA" || (active.tagName === "INPUT" && active.type === "text");
     var ownValue = recordField(active) ? typedSinceDrawn(active) : typed;
-    if (ownValue && !reviewMode()) {
+    if (ownValue && !ports.review.reviewing()) {
       var change = typedChange(active);
       if (change) writeRecord(active.getAttribute("data-id"), change);
     }
@@ -676,9 +656,9 @@ function emptyListHtml(entries) {
 }
 
 export function renderBroll() {
-  updateBrollBadge();
+  ports.records.updateBrollBadge();
   var panel = document.getElementById("broll-panel");
-  if (!panel || panel.hidden || !currentDocument()) return;
+  if (!panel || panel.hidden || !ports.document.current()) return;
   dropEditingForReview();
   var summary = document.getElementById("broll-summary");
   var controls = document.getElementById("broll-controls");
@@ -686,7 +666,7 @@ export function renderBroll() {
   var bulk = document.getElementById("broll-bulk");
 
   keepingFocus(panel, function () {
-    var entries = brollEntries();
+    var entries = ports.records.brollEntries();
     pruneSelection(entries);
     if (summary) summary.innerHTML = entries.length ? summaryHtml(entries) : '';
     controls.innerHTML = entries.length ? filterTabsHtml(entries) + groupMenuHtml() : '';
@@ -722,27 +702,27 @@ export function renderBrollViews() {
 }
 
 export function runBrollRefresh() {
-  updateBrollBadge();
+  ports.records.updateBrollBadge();
   renderBrollViews();
 }
 
 function entryById(id) {
-  var all = brollEntries();
+  var all = ports.records.brollEntries();
   for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i];
   return null;
 }
 
 function brollRecord(id) {
-  return readSession(function (doc) { return shotIn(doc, id); });
+  return ports.document.read(function (doc) { return shotIn(doc, id); });
 }
 
 function personById(id) {
-  return readSession(function (doc) { return personIn(doc, id); });
+  return ports.document.read(function (doc) { return personIn(doc, id); });
 }
 
 function writeRecord(id, fields) {
   if (!brollRecord(id)) return false;
-  runDocumentEdit(setShotsCommand([id], fields));
+  ports.edits.edit(setShotsCommand([id], fields));
   return true;
 }
 
@@ -757,30 +737,30 @@ export function toggleBrollShot(id) {
 }
 
 function bulkUpdate(fields, describe, owner) {
-  var entries = brollEntries();
+  var entries = ports.records.brollEntries();
   var ids = selectedIds(entries);
   if (!ids.length) return;
-  breakUndoCoalescing();
+  ports.undo.breakCoalescing();
   var n = ids.filter(function (id) {
     var rec = brollRecord(id);
     return rec && Object.keys(fields).some(function (k) { return rec[k] !== fields[k]; });
   }).length;
-  if (!n || !runDocumentEdit(setShotsCommand(ids, fields, owner, randomIds))) { renderBrollViews(); return; }
+  if (!n || !ports.edits.edit(setShotsCommand(ids, fields, owner, ports.ids))) { renderBrollViews(); return; }
   renderBrollViews();
-  showToast(describe(n), "ok");
+  ports.notices.show(describe(n), "ok");
 }
 
 function shotsWord(n) { return plural(n, "shot", "shots"); }
 
 function bulkMarkShot() {
-  var entries = brollEntries().filter(function (e) { return selection[e.id]; });
+  var entries = ports.records.brollEntries().filter(function (e) { return selection[e.id]; });
   var allShot = entries.length && entries.every(function (e) { return e.status === "shot"; });
   var want = allShot ? "unshot" : "shot";
   bulkUpdate({ status: want }, function (n) { return "Marked " + shotsWord(n) + (want === "shot" ? " shot" : " to shoot") + "."; });
 }
 
 function bulkFlag() {
-  var entries = brollEntries().filter(function (e) { return selection[e.id]; });
+  var entries = ports.records.brollEntries().filter(function (e) { return selection[e.id]; });
   var want = !(entries.length && entries.every(function (e) { return e.reshoot; }));
   bulkUpdate({ reshoot: want }, function (n) { return (want ? "Flagged " : "Unflagged ") + shotsWord(n) + "."; });
 }
@@ -799,19 +779,19 @@ function bulkLocation(name) {
 }
 
 function bulkAssignNewPerson(name) {
-  var entries = brollEntries();
+  var entries = ports.records.brollEntries();
   var ids = selectedIds(entries);
   if (!ids.length) return;
-  breakUndoCoalescing();
-  var known = readSession(function (doc) { return personNamed(doc, name); });
+  ports.undo.breakCoalescing();
+  var known = ports.document.read(function (doc) { return personNamed(doc, name); });
   var n = ids.filter(function (sid) {
     var rec = brollRecord(sid);
     return rec && (!known || rec.owner !== known.id);
   }).length;
-  if (!runDocumentEdit(setShotsCommand(ids, {}, { name: name }, randomIds))) { renderBrollViews(); return; }
+  if (!ports.edits.edit(setShotsCommand(ids, {}, { name: name }, ports.ids))) { renderBrollViews(); return; }
   renderBrollViews();
-  var who = readSession(function (doc) { return personNamed(doc, name); });
-  showToast("Assigned " + shotsWord(n) + " to " + (who ? who.name : "them") + ".", "ok");
+  var who = ports.document.read(function (doc) { return personNamed(doc, name); });
+  ports.notices.show("Assigned " + shotsWord(n) + " to " + (who ? who.name : "them") + ".", "ok");
 }
 
 function clearSelection() {
@@ -847,7 +827,7 @@ function shownOrder(container) {
 }
 
 function addBrollFromPanel() {
-  if (reviewBlocked()) return;
+  if (ports.review.refuseInReview()) return;
   var input = document.getElementById("broll-add-input");
   if (!input) return;
   var name = cappedText(input.value, BROLL_NAME_MAX);
@@ -856,14 +836,14 @@ function addBrollFromPanel() {
   input.value = "";
   openId = rec.id;
   renderBrollViews();
-  showToast("Added to the b-roll list.", "ok");
+  ports.notices.show("Added to the b-roll list.", "ok");
 }
 
 export function jumpToBrollShot(id) {
   var e = entryById(id);
   if (!e || !e.rowId) return false;
-  shotHiding().reveal(e.rowId);
-  focusRowField(e.rowId, "visualText");
+  ports.shotHiding.reveal(e.rowId);
+  ports.rows.focusField(e.rowId, "visualText");
   return true;
 }
 
@@ -872,7 +852,7 @@ function commitPropInput(input) {
   var name = input.value;
   input.value = "";
   if (!plainText(name).trim()) return;
-  addBrollProp(id, name);
+  ports.records.addBrollProp(id, name);
   renderBrollViews();
   var again = document.querySelector('.broll-prop-input[data-id="' + cssAttr(id) + '"]');
   if (again) again.focus();
@@ -889,20 +869,20 @@ function renameShot(id, box) {
   var e = entryById(id);
   var next = box ? cappedText(box.value, BROLL_NAME_MAX) : "";
   renamingId = null;
-  breakUndoCoalescing();
-  if (e && next && next !== e.name) renameBrollInScript(e, next);
+  ports.undo.breakCoalescing();
+  if (e && next && next !== e.name) ports.records.renameBrollInScript(e, next);
   renderBrollViews();
 }
 
 function deleteShot(id) {
   var e = entryById(id);
   if (!e) return;
-  runDocumentEdit(deleteShotCommand(id));
+  ports.edits.edit(deleteShotCommand(id));
   if (openId === id) openId = null;
   menuFor = null;
   delete selection[id];
   renderBrollViews();
-  showToast(e.rowId ? "Removed from the list — the line stays in the script." : "Removed from the list.", "ok");
+  ports.notices.show(e.rowId ? "Removed from the list — the line stays in the script." : "Removed from the list.", "ok");
 }
 
 function onBrollClick(e, root, exportAs) {
@@ -914,8 +894,8 @@ function onBrollClick(e, root, exportAs) {
   var action = btn.getAttribute("data-action");
   var id = btn.getAttribute("data-id");
 
-  if (reviewMode() && !BROLL_REVIEW_SAFE_ACTIONS[action]) {
-    reviewBlocked();
+  if (ports.review.reviewing() && !BROLL_REVIEW_SAFE_ACTIONS[action]) {
+    ports.review.refuseInReview();
     return;
   }
   if (action !== "broll-group-menu" && action !== "broll-group") groupMenuOpen = false;
@@ -928,7 +908,7 @@ function onBrollClick(e, root, exportAs) {
     var again = fromField && root.querySelector('.broll-status-btn[data-id="' + cssAttr(id) + '"]');
     if (again) again.focus();
   } else if (action === "broll-expand") {
-    if ((e.shiftKey || e.ctrlKey || e.metaKey) && !reviewMode()) {
+    if ((e.shiftKey || e.ctrlKey || e.metaKey) && !ports.review.reviewing()) {
       e.preventDefault();
       selectWithModifier(e, id, shownOrder(root));
       renderBrollViews();
@@ -1003,9 +983,9 @@ function onBrollClick(e, root, exportAs) {
   } else if (action === "broll-person-save") {
     var nameBox = root.querySelector('.broll-person-input[data-id="' + cssAttr(id) + '"]');
     addingPersonFor = null;
-    breakUndoCoalescing();
+    ports.undo.breakCoalescing();
     var named = nameBox ? nameBox.value : "";
-    if (brollRecord(id)) runDocumentEdit(setShotsCommand([id], {}, { name: named }, randomIds));
+    if (brollRecord(id)) ports.edits.edit(setShotsCommand([id], {}, { name: named }, ports.ids));
     renderBrollViews();
   } else if (action === "broll-person-cancel") {
     addingPersonFor = null;
@@ -1035,9 +1015,9 @@ function onBrollClick(e, root, exportAs) {
 
 function onBrollChange(e) {
   var t = e.target;
-  if (reviewMode()) {
+  if (ports.review.reviewing()) {
     if (t.classList.contains("broll-owner-select") || t.id === "broll-bulk-owner" || t.id === "broll-bulk-location") {
-      reviewBlocked();
+      ports.review.refuseInReview();
       renderBrollViews();
     }
     return;
@@ -1059,7 +1039,7 @@ function focusBulkInput() {
 }
 
 function onBrollFocusOut(e) {
-  if (reviewMode() || drawingPanel) return;
+  if (ports.review.reviewing() || drawingPanel) return;
   var el = e.target;
   var field = recordField(el);
   if (!field || !brollRecord(el.getAttribute("data-id"))) return;
@@ -1102,8 +1082,8 @@ function onBrollKeydown(e, root) {
     return;
   }
   if (e.key !== "Enter") return;
-  if (reviewMode()) {
-    if (t.tagName === "INPUT" && !t.readOnly) { e.preventDefault(); reviewBlocked(); }
+  if (ports.review.reviewing()) {
+    if (t.tagName === "INPUT" && !t.readOnly) { e.preventDefault(); ports.review.refuseInReview(); }
     return;
   }
   if (t.id === "broll-add-input") { e.preventDefault(); addBrollFromPanel(); }
@@ -1124,7 +1104,7 @@ function onBrollKeydown(e, root) {
 }
 
 function onBrollInput(e) {
-  if (reviewMode()) return;
+  if (ports.review.reviewing()) return;
   var box = e.target;
   if (box.tagName === "TEXTAREA" && box.classList.contains("ev-field")) fitTextarea(box);
   if (box.classList && box.classList.contains("broll-prop-input") &&
@@ -1134,8 +1114,8 @@ function onBrollInput(e) {
 }
 
 export function openBrollPanel() {
-  if (!currentDocument()) return;
-  sidePanels().open("broll-panel");
+  if (!ports.document.current()) return;
+  ports.panels.open("broll-panel");
   renderBroll();
 }
 
@@ -1147,24 +1127,24 @@ function brollPanelClosed() {
 var brollMount = null;
 var brollPanelRegistration = null;
 
-export function mountBrollFeature(ports) {
+export function mountBrollPanel(exportPort) {
   stopBrollFeature();
-  brollPanelRegistration = sidePanels().registerPanel("broll-panel", brollPanelClosed);
+  brollPanelRegistration = ports.panels.registerPanel("broll-panel", brollPanelClosed);
   var panel = document.getElementById("broll-panel");
   var page = brollPageEl();
   brollMount = mountBroll({
     window: window,
     ports: {
-      click: function (event, root) { onBrollClick(event, root, ports.exportAs); },
+      click: function (event, root) { onBrollClick(event, root, exportPort.exportAs); },
       change: onBrollChange,
       focusout: onBrollFocusOut,
       keydown: onBrollKeydown,
       input: onBrollInput,
       add: addBrollFromPanel,
-      closePanel: function () { sidePanels().close("broll-panel"); },
-      openPanel: function () { appActions.invoke("panel-broll", "button"); },
+      closePanel: function () { ports.panels.close("broll-panel"); },
+      openPanel: function () { ports.actions.invoke("panel-broll", "button"); },
       closePage: closeBrollPage,
-      pageOpen: function () { return viewFlags().brollPageOpen(); },
+      pageOpen: function () { return ports.flags.brollPageOpen(); },
       setPageGroup: function (value) {
         pageView.group = oneOf(PAGE_GROUPS, value, "location");
         saveView();
@@ -1185,10 +1165,10 @@ export function mountBrollFeature(ports) {
         if (panel && document.getElementById("broll-panel") === panel) panel.hidden = true;
         if (page && brollPageEl() === page) {
           page.hidden = true;
-          viewFlags().setBrollPageOpen(false);
+          ports.flags.setBrollPageOpen(false);
           document.body.classList.remove("broll-page-open");
         }
-        sidePanels().sync();
+        ports.panels.sync();
       }
     }
   });
@@ -1222,15 +1202,15 @@ function brollPageEl() {
 
 export function openBrollPage() {
   var page = brollPageEl();
-  if (!page || !currentDocument()) return;
+  if (!page || !ports.document.current()) return;
   pageReturnFocus = document.activeElement;
   var panel = document.getElementById("broll-panel");
   pagePanelWasOpen = !!panel && !panel.hidden;
   groupMenuOpen = false;
   menuFor = null;
-  sidePanels().closeAll();
+  ports.panels.closeAll();
   page.hidden = false;
-  viewFlags().setBrollPageOpen(true);
+  ports.flags.setBrollPageOpen(true);
   document.body.classList.add("broll-page-open");
   renderBrollPage();
   var back = document.getElementById("broll-page-close");
@@ -1241,7 +1221,7 @@ export function closeBrollPage(andThen) {
   var page = brollPageEl();
   if (!page || page.hidden) return;
   page.hidden = true;
-  viewFlags().setBrollPageOpen(false);
+  ports.flags.setBrollPageOpen(false);
   document.body.classList.remove("broll-page-open");
   if (pagePanelWasOpen) openBrollPanel();
   if (andThen) { andThen(); return; }
@@ -1275,7 +1255,7 @@ function pageGroupHeadHtml(g) {
 
 function pageRowHtml(e) {
   var id = escapeHtml(e.id);
-  var ro = reviewMode();
+  var ro = ports.review.reviewing();
   var props = e.props.map(function (p) { return p.name; }).join(", ");
   return '<tr class="broll-page-row' + (e.status === "shot" ? ' is-shot' : '') + (e.reshoot ? ' is-flagged' : '') +
       '" data-id="' + id + '">' +
@@ -1293,7 +1273,7 @@ function pageRowHtml(e) {
     '<td class="broll-page-c-owner" data-label="Assigned">' +
       '<select class="broll-owner-select broll-page-owner" data-id="' + id + '" aria-label="' + escapeHtml("Assigned to, " + (e.name || "Untitled shot")) + '"' + (ro ? ' disabled' : '') + '>' +
         '<option value=""' + (e.owner ? '' : ' selected') + '>Unassigned</option>' +
-        (currentDocument()?.people || []).map(function (p) {
+        (ports.document.current()?.people || []).map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '"' + (p.id === e.owner ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
         }).join("") +
       '</select></td>' +
@@ -1307,10 +1287,10 @@ function pageRowHtml(e) {
 
 export function renderBrollPage() {
   var page = brollPageEl();
-  if (!page || page.hidden || !currentDocument()) return;
+  if (!page || page.hidden || !ports.document.current()) return;
   dropEditingForReview();
   keepingFocus(page, function () {
-    var entries = brollEntries();
+    var entries = ports.records.brollEntries();
     var shown = entries.filter(function (e) { return matchesFilter(e, view.filter); });
     document.getElementById("broll-page-summary").textContent = pageSummaryText(entries);
     var sel = document.getElementById("broll-page-group");
@@ -1345,15 +1325,24 @@ function onBrollPageAction(action, btn, exportAs) {
     closeBrollPage(function () { jumpToBrollShot(id); });
   } else if (action === "broll-page-csv") exportAs("b-roll csv");
   else if (action === "broll-page-print") {
-    if (!brollEntries().length) { showToast("There is no b-roll to print yet.", "warn"); return; }
+    if (!ports.records.brollEntries().length) { ports.notices.show("There is no b-roll to print yet.", "warn"); return; }
     exportAs("b-roll pdf");
   }
 }
 
-export function __init() {
+export function __init(nextPorts) {
+  ports = nextPorts;
   loadView();
   window.__brollTest = {
     view: function () { return JSON.parse(JSON.stringify(Object.assign({}, view, pageViewToSave()))); },
     selected: function () { return Object.keys(selection); }
   };
+  var active = true;
+  return { openBrollPanel, brollPrintView, dispose: function () {
+    if (!active) return;
+    active = false;
+    stopBrollFeature();
+    ports = null;
+    delete window.__brollTest;
+  } };
 }

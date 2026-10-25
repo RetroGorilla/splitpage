@@ -2,7 +2,7 @@ import { startActions } from "./actions.ts";
 import { beginStartup } from "./startup.ts";
 import type { Wiring } from "./wiring.ts";
 import { whenDocumentReady } from "./startup/dom-ready.ts";
-import { stopBrollFeature } from "../js/08d-broll-panel.js";
+import { stopBrollPanelFeature as stopBrollFeature } from "./wiring/broll.ts";
 import {
   mountCellEditingFeature,
   mountClipboardFeature,
@@ -31,7 +31,7 @@ import {
   stopVideoFeature,
   stopWriterFeature
 } from "./wiring/editor.ts";
-import { mountBrollPanelFeature as mountBrollFeature, mountTagsFeature, stopTagsFeature } from "./wiring/production.ts";
+import { mountBrollEventsFeature as mountBrollFeature, mountTagsFeature, stopTagsFeature } from "./wiring/production.ts";
 import { mountFindEventsFeature, stopFindEventsFeature } from "./wiring/find.ts";
 import { mountCommentsFeature, stopCommentsFeature } from "./wiring/comments.ts";
 import {
