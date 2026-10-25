@@ -22,7 +22,7 @@ import { seedCheckPasses } from "../../legacy/seed-check.ts";
 import { startDesktopShell } from "./desktop.ts";
 import { notifyDesktopDocumentState } from "../../legacy/desktop-bridge.ts";
 import { runningOnDesktop } from "../../application/desktop-presence.ts";
-import { applyTakenDraft, armServerDraftResume, desktopDraftTaker } from "../../js/20g-drafts.js";
+import { applyTakenDraft, armServerDraftResume, desktopDraftTaker } from "./drafts.ts";
 import { checkServer } from "../../legacy/location-bridge.ts";
 
 export function startupPorts(): StartupPorts<unknown, ValidatedDocument, ValidatedDocument, MergedStates> {

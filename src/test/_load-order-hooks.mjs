@@ -35,6 +35,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/rundown.ts": { functions: ["mountRundownFeature", "mountRundownPresenceFeature", "mountTargetFeature"] },
   "src/bootstrap/wiring/find.ts": { functions: ["mountFindFeature", "mountFindEventsFeature"] },
   "src/bootstrap/wiring/onboarding.ts": { functions: ["mountOnboardingFeature"] },
+  "src/bootstrap/wiring/drafts.ts": { functions: ["mountDraftsFeature"] },
   "src/bootstrap/wiring/desktop.ts": { functions: ["mountDesktopFeature", "startDesktopShell", "routeServerOpen"] },
   "src/bootstrap/wiring/help.ts": { functions: ["mountHelpFeature"] },
   "src/bootstrap/wiring/settings.ts": { functions: ["mountSettingsFeature"] },
