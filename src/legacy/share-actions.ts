@@ -6,16 +6,12 @@ import { collaborateBlockedReason, maybeAskGuestName, openCollaborate } from "..
 import { autoSavePolicy, savesStarted, toggleAutoSave } from "./save-bridge.ts";
 import { saveBackItemState, saveBackToFile } from "../js/18-local-files.js";
 import { pasteItemState, startNewScript } from "../js/18b-file-menu.js";
-import { canOpenPrompterInBrowser, canOpenPrompterInChromium } from "../adapters/desktop/desktop-port.ts";
-import {
-  driveOpenShown,
-  openPrompterInBrowser,
-  openPrompterInChromium
-} from "../js/20f-desktop.js";
+import { driveOpenShown } from "../adapters/desktop/desktop-port.ts";
+
 import { greyedOut, itemAvailability, shownWhen } from "./menu-items.ts";
 import { OPENS_A_DIALOG, availableUnless, firstRefusal } from "../application/screen.ts";
 import type { Blocker } from "../application/screen.ts";
-import { inDesktopApp, screenNow } from "./screen-state.ts";
+import { screenNow } from "./screen-state.ts";
 import { reviewMode } from "./location-bridge.ts";
 
 const LOADED: readonly Blocker[] = ["loading"];
@@ -28,9 +24,6 @@ function loaded(own: Availability = { enabled: true }, blockers: readonly Blocke
   return firstRefusal(availableUnless(blockers, screenNow()), own);
 }
 
-function desktopKeys(keys: readonly string[]): () => readonly string[] {
-  return () => (inDesktopApp() ? keys : []);
-}
 
 export function shareActions(): ActionDefinition[] {
   const definitions: ActionDefinition[] = [
@@ -143,27 +136,8 @@ export function shareActions(): ActionDefinition[] {
       words: "target length goal duration aim runtime running time clock back timing over under minutes",
       availability: () => loaded(reviewMode() ? { enabled: false, reason: "Viewing only — the writer sets the target" } : { enabled: true }),
       run: () => { promptForTarget(); }
-    },
-    {
-      id: "prompter-open-in-browser",
-      label: "Present in browser (Follow My Voice)",
-      group: "This document",
-      icon: "i-present",
-      keys: desktopKeys(["mod+shift+p"]),
-      bindKeys: () => false,
-      words: "teleprompter browser follow my voice present",
-      availability: () => loaded(shownWhen(canOpenPrompterInBrowser()), NO_DIALOG),
-      run: async () => { await openPrompterInBrowser(); }
-    },
-    {
-      id: "prompter-open-in-chromium",
-      label: "Use Chromium Speech Recognition",
-      group: "This document",
-      icon: "i-mic",
-      words: "teleprompter chrome edge chromium speech recognition voice",
-      availability: () => loaded(shownWhen(canOpenPrompterInChromium()), NO_DIALOG),
-      run: async () => { await openPrompterInChromium(); }
     }
   ];
+
   return definitions;
 }
