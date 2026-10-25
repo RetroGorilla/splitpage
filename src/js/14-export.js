@@ -11,7 +11,6 @@ import {
 import { ensureBytes } from "../adapters/storage/02c-blobs.js";
 import { refsIn } from "../../shared/blob-policy.js";
 import {
-  getEditorName,
   setBaseState
 } from "./03-sync.js";
 import { captureExportDocument } from "./14b-export-kit.js";
@@ -21,7 +20,7 @@ import { checkFileConflict, existingTarget, isAbort, pickTarget, writeToHandle }
 import { deliverFile } from "../legacy/file-delivery.ts";
 import { autoSavePolicy, confirmSavedNow, flushAutoSave, haltAutoSave, resumeAutoSave, saveChanges } from "../legacy/save-bridge.ts";
 import { showToast, warnImagesLeftOut } from "../legacy/effects-bridge.ts";
-import { preferences } from "../legacy/preferences-bridge.ts";
+import { getEditorName, preferences } from "../legacy/preferences-bridge.ts";
 import { autoSaveWhere } from "../application/save/autosave.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { fileKindFromName } from "../../shared/file-names.js";
