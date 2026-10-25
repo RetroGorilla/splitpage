@@ -8,7 +8,12 @@ const desktop = owned<Disposable>();
 export function mountDesktopFeature(): void {
   desktop.replace(() => {
     const stop = startDesktopDocumentState(legacyDesktopDocumentPorts());
-    initDesktopGlue();
+    try {
+      initDesktopGlue();
+    } catch (error) {
+      stop();
+      throw error;
+    }
     return { dispose: stop };
   });
 }
