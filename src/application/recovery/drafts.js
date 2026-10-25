@@ -1,39 +1,57 @@
-import { normalizeDocId } from "../../shared/doc-id-policy.js";
-import { currentConn, currentHome, documentLocation, fileHome, importHome, reviewMode, serverStatus, stillOnServer, onServerDoc } from "../legacy/location-bridge.ts";
-import { migrateRows } from "./02-state.js";
-import { inlineStateJson, internDataUrl, persist } from "../adapters/storage/02c-blobs.js";
-import { refsIn } from "../../shared/blob-policy.js";
-import {
-  copyDocHistorySafe,
-  syncDocIdentity
-} from "./02b-doc-id.js";
-import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { DRAFT_LIMITS, browserDraftKey, draftBaseOf, normalizeDraftBase } from "../adapters/storage/draft-store-idb.ts";
-import { browserWriterId, browserWriterIsLive, holdBrowserWriterLock as holdWriterLock, releaseBrowserWriterLock } from "../adapters/storage/draft-writer-lock.js";
-import {
-  applyStashedWork,
-  browserDrafts,
-  captureRestore,
-  desktopDrafts,
-  draftResume,
-  recoveryStarted,
-  stillRestoring,
-  useBrowserDraftFactory
-} from "../legacy/recovery-bridge.ts";
-import { documentTransitions, openDocument } from "../legacy/transition-bridge.ts";
-import { NO_DESTINATION } from "../application/transitions/ports.ts";
-import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
-import { parseProjectFileState } from "../adapters/formats/project-file.ts";
-import { notifyDesktopDocumentState } from "../legacy/desktop-bridge.ts";
-import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
-import { SCHEMA_VERSION } from "../core/document/fields.ts";
-import { createCaptureSchedule } from "../application/recovery/capture-schedule.ts";
-import { cloneState } from "../core/document/clone.ts";
-import { desktopPort } from "../adapters/desktop/desktop-port.ts";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
-import { currentDocument, mergeBase, noteAbsorbedDirty } from "../legacy/session-bridge.ts";
-import { applyMerge } from "../legacy/merge-bridge.ts";
+import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { refsIn } from "../../../shared/blob-policy.js";
+import { NO_DESTINATION } from "../transitions/ports.ts";
+import { SCHEMA_VERSION } from "../../core/document/fields.ts";
+import { createCaptureSchedule } from "./capture-schedule.ts";
+import { cloneState } from "../../core/document/clone.ts";
+
+var ports = null;
+
+function runningOnDesktop() { return ports.running(); }
+function currentDocument() { return ports.document.current(); }
+function mergeBase() { return ports.session.mergeBase(); }
+function noteAbsorbedDirty(reason) { ports.session.noteAbsorbedDirty(reason); }
+function currentConn() { return ports.place.connection(); }
+function currentHome() { return ports.place.home(); }
+function fileHome() { return ports.place.fileHome(); }
+function importHome() { return ports.place.importHome(); }
+function stillOnServer(connection) { return ports.place.stillOnServer(connection); }
+function onServerDoc() { return ports.onServerDoc(); }
+function reviewMode() { return ports.review.reviewing(); }
+function serverStatus() { return { mode: ports.place.serverMode }; }
+function documentLocation() { return { writtenOut: ports.place.writtenOut, markWrittenOut: ports.markWrittenOut }; }
+function migrateRows(raw) { return ports.entry.migrate(raw); }
+function persist(refs) { return ports.pictures.persist(refs); }
+function inlineStateJson(json, failed) { return ports.pictures.inline(json, failed); }
+function copyDocHistorySafe(fromId, toId) { ports.identity.copyHistory(fromId, toId); }
+function syncDocIdentity() { ports.identity.sync(); }
+function resetProductionPanelState() { ports.resetProductionPanel(); }
+function showToast(message, kind, sticky) { return ports.notices.show(message, kind, sticky); }
+function browserDraftKey(base, docId) { return ports.browserDraft.key(base, docId); }
+function draftBaseOf(serverUrl) { return ports.browserDraft.base(serverUrl); }
+function normalizeDraftBase(value) { return ports.browserDraft.normalizeBase(value); }
+function browserWriterIsLive(writerId) { return ports.lock.isLive(writerId); }
+function holdWriterLock() { ports.lock.hold(); }
+function releaseBrowserWriterLock() { ports.lock.release(); }
+function applyStashedWork(disk, work, options) { return ports.recovery.applyStashedWork(disk, work, options); }
+function browserDrafts() { return ports.recovery.browserDrafts(); }
+function captureRestore() { return ports.recovery.captureRestore(); }
+function desktopDrafts() { return ports.recovery.desktopDrafts(); }
+function draftResume() { return ports.recovery.draftResume(); }
+function recoveryStarted() { return ports.recovery.started(); }
+function stillRestoring(ctx) { return ports.recovery.stillRestoring(ctx); }
+function useBrowserDraftFactory(factory) { return ports.recovery.useBrowserDraftFactory(factory); }
+function documentTransitions() { return ports.transitions; }
+function openDocument(opening) { return ports.documents.open(opening); }
+function saveChanges() { return ports.saves.editSeq(); }
+function unsavedChanges() { return ports.saves.unsaved(); }
+function parseProjectFileState(file) { return ports.files.parse(file); }
+function makeDesktopHandle(entry) { return ports.files.handle(entry); }
+function notifyDesktopDocumentState() { ports.documentState.notify(); }
+function now() { return ports.clock.now(); }
+function setTimer(run, ms) { return ports.timers.set(run, ms); }
+function clearTimer(handle) { ports.timers.clear(handle); }
+function reportError(error) { ports.report(error); }
 
 var draftOnDisk;
 
@@ -51,8 +69,8 @@ var draftTiming = {
 var draftSchedule = createCaptureSchedule({
   timing: function () { return draftTiming; },
   timers: {
-    set: function (run, ms) { return setTimeout(run, ms); },
-    clear: function (handle) { clearTimeout(handle); }
+    set: function (run, ms) { return setTimer(run, ms); },
+    clear: function (handle) { clearTimer(handle); }
   },
   capture: function () { captureAndSendDraft(); }
 });
@@ -72,27 +90,6 @@ var draftServerSettle = null;
 
 var browserDraftsOff = false;
 var browserCopyOf = null;
-
-export function draftRecoveryPorts() {
-  var factory;
-  try { factory = window.indexedDB || null; } catch (e) { factory = null; }
-  return {
-    indexedDB: factory,
-    limits: DRAFT_LIMITS,
-    now: function () { return Date.now(); },
-    writerId: browserWriterId,
-    desktop: desktopPort,
-    sessionStorage: function () { return sessionStorage; },
-    localStorage: function () { return localStorage; },
-    internImage: internDataUrl,
-    merge: applyMerge,
-    drafts: {
-      flush: flushDraftNow,
-      armServer: armBrowserServerDraft,
-      offerAfterLinkOff: offerBrowserDraftAfterLinkOff
-    }
-  };
-}
 
 function browserDraftStore() {
   return browserDrafts().store;
@@ -116,7 +113,7 @@ function browserDraftTarget() {
 }
 
 function browserDraftCapture(server) {
-  var base = server ? draftBaseOf(server.base, location.href) : "";
+  var base = server ? draftBaseOf(server.base) : "";
   if (!server || !base || !server.docId) return null;
   return { base: base, draft: browserDrafts().writer.capture(browserDraftKey(base, server.docId)) };
 }
@@ -167,7 +164,7 @@ function holdBrowserWriterLock() {
   holdWriterLock();
 }
 
-export function noteDraftChange() {
+function noteDraftChange() {
   if (!draftWriterLive()) return;
   draftSchedule.noteChange();
 }
@@ -254,7 +251,7 @@ function captureAndSendDraft(keepClean) {
     return Promise.resolve(null);
   }
 
-  var startedAt = Date.now();
+  var startedAt = now();
   var stateJson;
   try {
     stateJson = JSON.stringify(currentDocument());
@@ -263,7 +260,7 @@ function captureAndSendDraft(keepClean) {
     showDraftPaused("TOO_LARGE");
     return Promise.resolve({ ok: false, code: "TOO_LARGE" });
   }
-  var elapsed = Date.now() - startedAt;
+  var elapsed = now() - startedAt;
   draftSchedule.setSlow(stateJson.length > draftTiming.largeBytes || elapsed > draftTiming.slowStringifyMs);
 
   var editSeqAtCapture = saveChanges();
@@ -342,7 +339,7 @@ function captureAndSendDraft(keepClean) {
     return r;
   }, function (err) {
     draftInFlight = null;
-    if (window.console && window.console.error) window.console.error(err);
+    reportError(err);
     noteDraftWriteRefused("offline");
     return { ok: false, code: "offline" };
   });
@@ -417,7 +414,7 @@ function flushDraftNow(opts) {
   }).then(function (r) {
     return r || { ok: true };
   }, function (err) {
-    if (window.console && window.console.error) window.console.error(err);
+    reportError(err);
     return { ok: false, code: "EIO" };
   });
 }
@@ -487,32 +484,23 @@ function draftTitleOf(s, fallback) {
 }
 
 function hideDraftPendingBanner() {
-  var banner = document.getElementById("draft-pending-banner");
-  if (banner) banner.hidden = true;
+  ports.banner.hide();
   draftPendingFor = null;
 }
 
+function copyPendingDraft() {
+  var waiting = draftPendingFor;
+  if (!waiting) { hideDraftPendingBanner(); return; }
+  draftResume().dropServerResume();
+  hideDraftPendingBanner();
+  recoverDraftAsUnsavedCopy(waiting,
+    "These recovered changes are open here as an unsaved copy — the server document they came " +
+    "from was not reached. Save them wherever you want them.");
+  if (draftServerSettle) draftServerSettle.settle("server-copy");
+}
+
 function showDraftPendingBanner(t, title) {
-  var banner = document.getElementById("draft-pending-banner");
-  var text = document.getElementById("draft-pending-text");
-  var btn = document.getElementById("draft-pending-copy");
-  if (!banner || !text) return;
-  draftPendingFor = t;
-  text.textContent = "Recovered changes to “" + title + "” are waiting for the server";
-  banner.hidden = false;
-  if (btn && !btn._draftWired) {
-    btn._draftWired = true;
-    btn.addEventListener("click", function () {
-      var waiting = draftPendingFor;
-      if (!waiting) { hideDraftPendingBanner(); return; }
-      draftResume().dropServerResume();
-      hideDraftPendingBanner();
-      recoverDraftAsUnsavedCopy(waiting,
-        "These recovered changes are open here as an unsaved copy — the server document they came " +
-        "from was not reached. Save them wherever you want them.");
-      if (draftServerSettle) draftServerSettle.settle("server-copy");
-    });
-  }
+  if (ports.banner.show("Recovered changes to “" + title + "” are waiting for the server", copyPendingDraft)) draftPendingFor = t;
 }
 
 function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
@@ -538,7 +526,7 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
   return true;
 }
 
-export function armServerDraftResume(t) {
+function armServerDraftResume(t) {
   if (!t || !t.header) return;
   var origin = t.header.origin;
   if (!origin || origin.kind !== "server" || !origin.server || !origin.server.docId) return;
@@ -568,11 +556,11 @@ export function armServerDraftResume(t) {
 }
 
 function draftWaitForServerDetect() {
-  var deadline = Date.now() + draftTiming.serverWait;
+  var deadline = now() + draftTiming.serverWait;
   return new Promise(function (resolve) {
     (function tick() {
-      if (serverStatus().mode().checked || Date.now() > deadline) { resolve(); return; }
-      setTimeout(tick, 50);
+      if (serverStatus().mode().checked || now() > deadline) { resolve(); return; }
+      setTimer(tick, 50);
     })();
   });
 }
@@ -581,11 +569,11 @@ function draftRaceTimeout(promise, ms) {
   if (ms <= 0) return Promise.resolve(null);
   return new Promise(function (resolve) {
     var done = false;
-    var timer = setTimeout(function () { if (!done) { done = true; resolve(null); } }, ms);
+    var timer = setTimer(function () { if (!done) { done = true; resolve(null); } }, ms);
     promise.then(function (v) {
       if (done) return;
       done = true;
-      clearTimeout(timer);
+      clearTimer(timer);
       resolve(v);
     });
   });
@@ -597,8 +585,8 @@ async function restoreServerDraft(t, mine, origin) {
   var title = draftTitleOf(mine, server.docId);
   await draftWaitForServerDetect();
 
-  var headerBase = normalizeDraftBase(server.base, location.href);
-  if (headerBase && headerBase !== normalizeDraftBase(currentConn().serverUrl, location.href)) {
+  var headerBase = normalizeDraftBase(server.base);
+  if (headerBase && headerBase !== normalizeDraftBase(currentConn().serverUrl)) {
     resume.dropServerResume();
     if (draftServerSettle) draftServerSettle.settle("server-copy");
     recoverDraftAsUnsavedCopy(t,
@@ -785,7 +773,7 @@ function takenFromBrowserDraft(rec, key) {
     },
     stateJson: rec.stateJson,
     baseJson: rec.baseJson,
-    ageMs: at ? Math.max(0, Date.now() - at) : undefined,
+    ageMs: at ? Math.max(0, now() - at) : undefined,
     browserKey: key
   };
 }
@@ -807,7 +795,7 @@ function armBrowserServerDraft(docId) {
   var resume = draftResume();
   if (runningOnDesktop() || browserDraftsOff || !docId || resume.restorePending() || resume.serverResume()) return Promise.resolve(false);
   if (currentConn().role === "review") return Promise.resolve(false);
-  var base = draftBaseOf(currentConn().serverUrl, location.href);
+  var base = draftBaseOf(currentConn().serverUrl);
   if (!base) return Promise.resolve(false);
   var key = browserDraftKey(base, docId);
   var via = currentConn();
@@ -828,7 +816,7 @@ function armBrowserServerDraft(docId) {
 function offerBrowserDraftAfterLinkOff(docId) {
   var resume = draftResume();
   if (runningOnDesktop() || browserDraftsOff || resume.restorePending() || onServerDoc() || unsavedChanges()) return Promise.resolve(false);
-  var base = draftBaseOf(currentConn().serverUrl, location.href);
+  var base = draftBaseOf(currentConn().serverUrl);
   if (!base) return Promise.resolve(false);
   var store = browserDraftStore();
   return store.list().then(function (metas) {
@@ -861,19 +849,19 @@ function offerBrowserDraftAfterLinkOff(docId) {
   }).then(null, function () { return false; });
 }
 
-export function desktopDraftTaker() {
+function desktopDraftTaker() {
   var take = desktopDrafts().taker();
   if (!(take && draftResume().restorePending())) return null;
   return take;
 }
 
-export async function applyTakenDraft(t) {
+async function applyTakenDraft(t) {
   var resume = draftResume();
   var outcome;
   try {
     outcome = await runDraftRestore(t);
   } catch (e) {
-    if (window.console && window.console.error) window.console.error(e);
+    reportError(e);
     outcome = "failed";
     showToast("Could not restore the changes from the last session — they have been kept for the " +
       "next launch.", "warn", true);
@@ -888,27 +876,24 @@ export async function applyTakenDraft(t) {
   return outcome;
 }
 
-export function __init() {
+export function __init(given) {
+  ports = given;
+  var mounted = given;
   draftResume().setRestorePending(!!(runningOnDesktop() && desktopDrafts().hasDraftToRestore()));
 
   draftOnDisk = !!(runningOnDesktop() && desktopDrafts().hasDraftToRestore());
 
-  window.addEventListener("blur", function () { flushDraftNow(); });
-
-  document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "hidden") flushDraftNow();
-  });
-  window.addEventListener("pagehide", function () {
-    flushDraftNow();
-    releaseBrowserWriterLock();
-  });
-  window.addEventListener("pageshow", function (e) {
-    if (e && e.persisted) holdBrowserWriterLock();
-  });
-  holdBrowserWriterLock();
-
-  if (window.__desktopTest) {
-    window.__desktopTest.drafts = {
+  return {
+    flush: flushDraftNow,
+    noteChange: noteDraftChange,
+    armBrowserServer: armBrowserServerDraft,
+    offerAfterLinkOff: offerBrowserDraftAfterLinkOff,
+    armServerResume: armServerDraftResume,
+    desktopTaker: desktopDraftTaker,
+    applyTaken: applyTakenDraft,
+    holdLock: holdBrowserWriterLock,
+    releaseLock: releaseBrowserWriterLock,
+    testing: {
       flushNow: function () { return flushDraftNow(); },
       status: function () {
         return {
@@ -945,7 +930,7 @@ export function __init() {
       browser: {
         list: function () { return browserDraftStore().list(); },
         get: function (docId, serverUrl) {
-          var base = draftBaseOf(serverUrl === undefined ? currentConn().serverUrl : serverUrl, location.href);
+          var base = draftBaseOf(serverUrl === undefined ? currentConn().serverUrl : serverUrl);
           return browserDraftStore().get(browserDraftKey(base, docId));
         },
         all: function () {
@@ -954,7 +939,7 @@ export function __init() {
             return Promise.all(metas.map(function (m) { return store.get(m.key); }));
           });
         },
-        writerId: function () { return browserWriterId; },
+        writerId: function () { return ports.lock.writerId(); },
         status: function () {
           var target = browserDraftTarget();
           return { off: browserDraftsOff, keyOnDisk: browserKeyOnDisk(), copy: !!browserCopyOf,
@@ -965,6 +950,12 @@ export function __init() {
           browserDraftsOff = false;
         }
       }
-    };
-  }
+    },
+    dispose: function () {
+      if (ports !== mounted) return;
+      draftSchedule.cancel();
+      draftSchedule.cancelRetry();
+      ports = null;
+    }
+  };
 }

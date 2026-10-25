@@ -44,7 +44,7 @@ How a document reaches `adopt`: 12a's `restart()` calls the `adopted` hook (regi
 
 Undo learns of a new document from the session's adopt and replace announcements, and diffs the session's document (legacy reduction L3d PR 3), so no read or command has to look for a document swapped in behind the session's back: the session is the document's only holder.
 
-Recovery that enters as a whole replacement is published as `adopt`, not `recovery`. That covers the three draft restores in `20g-drafts.js`, history restore (`restoreSnapshot` in `03-sync.js`, which goes through `adoptRestoredState`) and importing a file. Labelling them `recovery` would route them through `noteRemoteChange`, which keeps the undo stack, and 12a clears it today. They open an epoch and add no generation or undo entry. Their effects run through `settle`. Since 4.8, 4.12 and 4.18 each of them arrives through a transition (`restore`, `recover` or `open`), which calls `adoptReplacement`: the bridge starts a new session at the old one's epoch and generation, disposes the old one, and adopts the document, so the epoch opens at the transition and not at the next render. A subscription made for the old document hears nothing after it.
+Recovery that enters as a whole replacement is published as `adopt`, not `recovery`. That covers the three draft restores in `application/recovery/drafts.js`, history restore (`restoreSnapshot` in `03-sync.js`, which goes through `adoptRestoredState`) and importing a file. Labelling them `recovery` would route them through `noteRemoteChange`, which keeps the undo stack, and 12a clears it today. They open an epoch and add no generation or undo entry. Their effects run through `settle`. Since 4.8, 4.12 and 4.18 each of them arrives through a transition (`restore`, `recover` or `open`), which calls `adoptReplacement`: the bridge starts a new session at the old one's epoch and generation, disposes the old one, and adopts the document, so the epoch opens at the transition and not at the next render. A subscription made for the old document hears nothing after it.
 
 `settle(kind)` runs `undo.record` with a whole-document change set and one effect pass tagged with the given kind at the current generation. It does not advance the generation and does not publish. `markAbsorbedDirty(kind)` in `12-dirty-toast.js` is `settle`. Callers: `reportMerge` and the unmerged adopt in `03-sync.js` (the merge's kind), history restore and the three draft restores (`recovery`), and `loadFileIntoEditor` (`reload` or `adopt`).
 
@@ -165,7 +165,7 @@ What each effect does in the app (`12-dirty-toast.js` exports them as `legacySes
 | Effect | Does |
 | --- | --- |
 | `dirty` | `noteSaveChange()`: the coordinator's change count rises, so `unsavedChanges()` is true |
-| `draft` | `noteDraftChange()` (20g) |
+| `draft` | `noteDraftChange()` (the recovery bridge, forwarding to the drafts owner) |
 | `save` | Sets the save buttons to "Save •" unless a save is running, calls `scheduleAutoSave()`, marks the imported file's home dirty and updates the file chip (or the chip alone on a server document), and calls `queueAutoSave()` last when the change set has `saveNow` |
 | `refresh` | `runIdleRefresh` in `07-production-tags.js`, passed to `wireApp` as `refresh` |
 

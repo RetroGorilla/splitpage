@@ -3,7 +3,7 @@ import { syncDocIdentity } from "./02b-doc-id.js";
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "../../shared/clock.js";
 import { colorsWithMine } from "../core/document/person-colors.ts";
 import { cleanAuthorName } from "../core/document/people.ts";
-import { noteDraftChange } from "./20g-drafts.js";
+import { noteDraftChange } from "../legacy/recovery-bridge.ts";
 import { autoSavePolicy, autoSaveTarget, noteSaveChange, saveBusy, scheduleAutoSave, unsavedChanges } from "../legacy/save-bridge.ts";
 import { saveButtonView, saveStatus } from "../application/save/status.ts";
 import { changeSet } from "../application/session/change-set.ts";

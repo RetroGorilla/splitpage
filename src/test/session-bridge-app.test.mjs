@@ -21,7 +21,7 @@ const { flushEdits, lastUndoEntry, undoSizes } = await import("../legacy/undo-br
 const { reloadFileFromDisk } = await import("../js/18-local-files.js");
 const { startNewScript } = await import("../js/18b-file-menu.js");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { applyTakenDraft } = await import("../js/20g-drafts.js");
+const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
 
