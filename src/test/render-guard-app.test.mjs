@@ -28,7 +28,7 @@ const find = await import("../features/find/find.js");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { reloadFileFromDisk, updateFileChip } = await import("../js/18-local-files.js");
 const { openLongDemo } = await import("../js/18b-file-menu.js");
-const { applyTakenDraft } = await import("../js/20g-drafts.js");
+const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
 

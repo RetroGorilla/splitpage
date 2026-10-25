@@ -234,7 +234,7 @@ function fakes(): Fakes {
       return {
         indexedDB: null, limits: { maxAgeMs: 1, maxCount: 1, maxBytes: 1 }, now: () => 0, writerId: "w", desktop: () => null,
         sessionStorage: () => null, localStorage: () => null, internImage: () => {}, merge: (request) => ({ state: migrateRows(request["theirs"]) }),
-        drafts: { flush: () => Promise.resolve({ ok: true }), armServer: () => Promise.resolve(false), offerAfterLinkOff: () => Promise.resolve(false) }
+        drafts: { flush: () => Promise.resolve({ ok: true }), armServer: () => Promise.resolve(false), offerAfterLinkOff: () => Promise.resolve(false), noteChange: () => {} }
       };
     },
     projectFiles: () => {
@@ -515,7 +515,7 @@ test("failed partial startup: an actions, exporters, merge or recovery factory t
     ]),
     ["recovery nothing", (f) => ({ ...f.deps, recovery: () => undefined }), "recovery", "the recovery dependency returned no recovery ports"],
     ["recovery drafts nothing", (f) => ({ ...f.deps, recovery: () => without(f.deps.recovery(), "drafts") }), "recovery", "the recovery dependency returned no draft ports"],
-    ...(["flush", "armServer", "offerAfterLinkOff"] as const).map((method): Spoilt => [
+    ...(["flush", "armServer", "offerAfterLinkOff", "noteChange"] as const).map((method): Spoilt => [
       "recovery drafts " + method, (f) => ({ ...f.deps, recovery: () => ({ ...f.deps.recovery(), drafts: without(f.deps.recovery().drafts, method) }) }), "recovery", "the recovery dependency's draft ports have no " + method + " function"
     ]),
     ...recoveryMethods.flatMap((method): Spoilt[] => [
