@@ -23,6 +23,7 @@ import { galleryActions } from "./wiring/gallery.ts";
 import { findActions } from "./wiring/find.ts";
 import { fileMenuExportActions } from "./wiring/file-menu-export.ts";
 import { hideShotActions } from "./wiring/hide-shot.ts";
+import { desktopActions } from "./wiring/desktop.ts";
 
 let running: (() => void) | null = null;
 
@@ -49,7 +50,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     },
     () => {
       const share = shareActions();
-      return registerAll(registry, [...share.slice(0, 11), ...fileMenuExportActions().slice(1), ...share.slice(11)]);
+      return registerAll(registry, [...share.slice(0, 11), ...fileMenuExportActions().slice(1), ...share.slice(11), ...desktopActions()]);
     },
     () => registerAll(registry, scriptZoomActions()),
     () => {
