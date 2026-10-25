@@ -27,7 +27,7 @@ Electron. How to drive the browser suites is in
 While a pull request is being written, run the focused checks for what it
 touches. CI then runs every fast gate on every pull request: lint, types, the
 dependency and comment gates, the build, every discovered unit, desktop and
-tool test, and the smoke, CSP and persistence browser suites. CI never
+tool test, and, for app-affecting changes, the smoke, CSP and persistence browser suites. CI never
 narrows to the test files a change touched; `--only` is a local tool.
 
 | Change | Run while working |
@@ -525,14 +525,15 @@ measures is shown to Windows browsers only.
 ## CI
 
 `.github/workflows/ci.yml` runs on every pull request to `main` or
-`4.0-development` and every push to either branch. Its jobs call the scripts
+`4.1-development` and every push to either branch. Its jobs call the scripts
 above and nothing else.
 
 | Job | Runs |
 | --- | --- |
 | `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? |
-| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps, check:comments, build, the `sw.js` stamp, test:all, then through `tools/run-suites.mjs` the smoke and CSP suites (`01-core.txt`, `52-csp.txt`) and the persistence suite (`265-browser-drafts.txt`); uploads the built app |
-| `gate` | Passes when `checks` passed, or when the change was prose only and it was skipped |
+| `checks` | Node from `.nvmrc`: lint, typecheck, check:deps and check:comments for all non-prose changes; for app-affecting changes, also build, check the `sw.js` stamp, run browser suites 01, 52 and 265, and upload the built app |
+| `tests` | Two required matrix shards of `npm run test:all -- --shard n/2`; each builds and checks the service-worker stamp before its selected unit, desktop and tool tests |
+| `gate` | Requires successful classification, checks and both test shards, or successful prose-only classification with both jobs skipped |
 | `desktop-smoke` | Electron dev-target smoke, on pushes to `main` only |
 
 The persistence suite costs little: on its first hosted run (PR #270,
