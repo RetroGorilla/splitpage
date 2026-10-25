@@ -157,8 +157,8 @@ const emptyBundle = JSON.stringify({ format: "splitpage-app-data", version: 1, h
 
 test("a pending history export completes through its original ports after dispose and remount", async () => {
   const original = setup();
-  const history = deferred<unknown>();
-  const mounted = mountAppData({ ...original.ports, history: { ...original.ports.history, exportAll: () => history.promise } });
+  const history = deferred<Awaited<ReturnType<AppDataPorts["history"]["exportAll"]>>>();
+  const mounted = mountAppData({ ...original.ports, history: { ...original.ports.history, exportAll: () => history.promise } } satisfies AppDataPorts);
   const building = probe().build();
   mounted.dispose();
   const replacement = setup();
@@ -172,8 +172,8 @@ test("a pending history export completes through its original ports after dispos
 
 test("a pending history import finishes the required preference writes through its original ports", async () => {
   const original = setup();
-  const history = deferred<unknown>();
-  const mounted = mountAppData({ ...original.ports, history: { ...original.ports.history, importBundle: () => history.promise } });
+  const history = deferred<Awaited<ReturnType<AppDataPorts["history"]["importBundle"]>>>();
+  const mounted = mountAppData({ ...original.ports, history: { ...original.ports.history, importBundle: () => history.promise } } satisfies AppDataPorts);
   const importing = probe().importText(emptyBundle);
   mounted.dispose();
   const replacement = setup();
@@ -189,7 +189,7 @@ test("a pending file delivery finishes without replacing the next mount's export
   const original = setup();
   const delivery = deferred<boolean>();
   const started = deferred<boolean>();
-  const mounted = mountAppData({ ...original.ports, fileDelivery: { deliver: () => { started.resolve(true); return delivery.promise; } } });
+  const mounted = mountAppData({ ...original.ports, fileDelivery: { deliver: () => { started.resolve(true); return delivery.promise; } } } satisfies AppDataPorts);
   const exporting = mounted.exportAppData();
   await started.promise;
   mounted.dispose();

@@ -61,6 +61,28 @@ export interface AppDataMount {
   readonly dispose: () => void;
 }
 
+export interface AppDataHistoryExport {
+  readonly docs: readonly unknown[];
+  readonly older: readonly unknown[];
+  readonly blobs?: Record<string, unknown>;
+  readonly missingBlobs?: readonly string[];
+  readonly truncated?: boolean;
+}
+
+export interface AppDataHistoryImport {
+  readonly docs: number;
+  readonly added: number;
+  readonly older: number;
+  readonly skipped: number;
+  readonly failed: number;
+  readonly code?: string;
+  readonly blobs: {
+    readonly stored: number;
+    readonly refused: readonly unknown[];
+    readonly failed: readonly unknown[];
+  };
+}
+
 export interface AppDataPorts {
   readonly notices: Pick<NoticePort, "show">;
   readonly fileDelivery: FileDelivery;
@@ -70,8 +92,8 @@ export interface AppDataPorts {
   readonly bookmarks: Pick<ServerStatus, "loadBookmarks" | "bookmarks" | "addBookmarks">;
   readonly commentSorting: Pick<CommentSorting, "choose">;
   readonly history: {
-    readonly exportAll: () => Promise<unknown>;
-    readonly importBundle: (bundle: { readonly docs: readonly unknown[]; readonly older: readonly unknown[]; readonly blobs: Record<string, unknown> | null }) => Promise<unknown>;
+    readonly exportAll: () => Promise<AppDataHistoryExport>;
+    readonly importBundle: (bundle: { readonly docs: readonly unknown[]; readonly older: readonly unknown[]; readonly blobs: Record<string, unknown> | null }) => Promise<AppDataHistoryImport>;
     readonly normalizeSnapshots: (raw: string) => unknown[] | null;
   };
   readonly writer: {
