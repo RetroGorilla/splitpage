@@ -1,7 +1,9 @@
 {
-  "legacyImports": [
-    "./20f-desktop.js"
+  "legacyImports": [],
+  "loadOnly": [
+    "src/js/20f-desktop.js",
+    "src/legacy/desktop-bridge.ts",
+    "src/bootstrap/wiring/desktop.ts"
   ],
-  "loadOnly": [],
-  "expectedLoads": 1
+  "expectedLoads": 3
 }
