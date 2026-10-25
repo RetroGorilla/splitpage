@@ -1,4 +1,4 @@
-import { brollPanelActions } from "../../src/bootstrap/wiring/broll.ts";
+import { brollPanelActions, mountBrollPanelStateFeature, stopBrollPanelStateFeature } from "../../src/bootstrap/wiring/broll.ts";
 import { commentsPanelActions } from "../../src/bootstrap/wiring/comments.ts";
 import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
@@ -18,9 +18,10 @@ import { fileMenuExportActions, mountFileMenuExportFeature, stopFileMenuExportFe
 
 function loadingRegistry(): { registry: ActionRegistry; restore: () => void } {
   const registry = createActionRegistry();
+  mountBrollPanelStateFeature();
   mountRundownFeature();
   mountFileMenuExportFeature();
-  const disposers = [stopRundownFeature, stopFileMenuExportFeature, registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerAll(registry, [...viewActions().slice(0, 2), ...brollPanelActions(), ...commentsPanelActions(), ...viewActions().slice(2)])];
+  const disposers = [stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerAll(registry, [...viewActions().slice(0, 2), ...brollPanelActions(), ...commentsPanelActions(), ...viewActions().slice(2)])];
   const was: unknown = currentDocument();
   loadTestDocument(null);
   return {

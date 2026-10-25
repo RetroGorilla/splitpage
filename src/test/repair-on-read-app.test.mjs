@@ -16,8 +16,8 @@ const { productionIndex } = await import("../legacy/production-index-bridge.ts")
 const { currentDocument } = await import("../legacy/session-bridge.ts");
 const { openProductionPanel, renderProduction, setTagNotes, setTagStatus } = await import("../js/08-production-panels.js");
 const { anchorBrollInLeftCell, updateBrollBadge } = await import("../bootstrap/wiring/broll.ts");
-import { broll } from "./_broll-mounted.mjs";
-const { brollEntries } = broll;
+const { currentBrollRecords } = await import("../bootstrap/wiring/broll.ts");
+const brollEntries = () => currentBrollRecords().brollEntries();
 const { openBrollPanel, renderBroll, runBrollRefresh } = await import("../features/broll/panel.js");
 const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");

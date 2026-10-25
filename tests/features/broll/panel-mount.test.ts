@@ -1,3 +1,6 @@
+import { migrateRows } from "../../../src/core/migrate.ts";
+import { fakeMigration } from "../../core/migrate-ports.ts";
+import { createBrollView } from "../../../src/application/preferences/broll-view.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
@@ -21,7 +24,9 @@ function fixture() {
     '<div id="broll-page" hidden><select id="broll-page-group"><option value="location">Location</option></select></div>';
   const calls: string[] = [];
   let open = false;
+  const view = createBrollView({ read: () => storage.getItem("splitpage-broll-view"), write: (value) => { storage.setItem("splitpage-broll-view", value); } });
   const ports: BrollPanelPorts = {
+    view,
     document: fakeDocument().document,
     edits: fakeEdits().edits,
     text: { productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0 } },
@@ -44,7 +49,7 @@ function fixture() {
     records: { brollEntries: () => [], addBrollProp: () => false, renameBrollInScript: () => false, updateBrollBadge: () => {} },
     rows: { focusField: (id, field) => { calls.push(id + ":" + field); } }
   };
-  return { ports, calls };
+  return { ports, calls, view };
 }
 
 function click(id: string) {
@@ -56,18 +61,18 @@ function click(id: string) {
 test("B-roll mounts with fake ports, keeps live export scope and removes listeners on replacement and disposal", () => {
   const h = fixture();
   const state = __init(h.ports);
-  assert.deepEqual(state.brollPrintView(), { filter: "unshot", group: "person" });
+  assert.deepEqual(h.view.printView(), { filter: "unshot", group: "person" });
   const first = mountBrollPanel({ exportAs: () => {} });
   click("btn-broll");
   assert.equal(h.calls.filter((c) => c === "panel-broll").length, 1);
   click("filter");
-  assert.deepEqual(state.brollPrintView(), { filter: "flagged", group: "person" });
+  assert.deepEqual(h.view.printView(), { filter: "flagged", group: "person" });
   const group = win.document.getElementById("broll-page-group") as HTMLSelectElement;
   group.value = "location";
   group.dispatchEvent(new win.Event("change", { bubbles: true }));
-  assert.deepEqual(state.brollPrintView(), { filter: "flagged", group: "location" });
-  assert.deepEqual(state.brollPrintView({ filter: "shot", group: "scene" }), { filter: "shot", group: "scene" });
-  assert.deepEqual(state.brollPrintView(), { filter: "flagged", group: "location" });
+  assert.deepEqual(h.view.printView(), { filter: "flagged", group: "location" });
+  assert.deepEqual(h.view.printView({ filter: "shot", group: "scene" }), { filter: "shot", group: "scene" });
+  assert.deepEqual(h.view.printView(), { filter: "flagged", group: "location" });
   const second = mountBrollPanel({ exportAs: () => {} });
   first.dispose();
   click("btn-broll");
@@ -82,3 +87,27 @@ test("B-roll mounts with fake ports, keeps live export scope and removes listene
   assert.equal(win.document.body.classList.contains("broll-page-open"), false);
 });
 
+
+test("retained B-roll state controls do nothing after disposal and cannot operate a replacement", () => {
+  const first = fixture();
+  const doc = migrateRows({ rows: [] }, fakeMigration().ports);
+  const initial = __init({ ...first.ports, document: fakeDocument(doc).document });
+  initial.openBrollPanel();
+  assert.deepEqual(first.calls, ["open:broll-panel"]);
+  initial.dispose();
+  assert.doesNotThrow(() => initial.openBrollPanel());
+  assert.deepEqual(first.calls, ["open:broll-panel"]);
+  const next = fixture();
+  const replacement = __init({ ...next.ports, document: fakeDocument(doc).document });
+  initial.openBrollPanel();
+  initial.dispose();
+  assert.deepEqual(next.calls, []);
+  replacement.openBrollPanel();
+  assert.deepEqual(next.calls, ["open:broll-panel"]);
+  next.view.setFilter("shot");
+  next.view.setPageGroup("scene");
+  replacement.dispose();
+  replacement.openBrollPanel();
+  assert.deepEqual(next.calls, ["open:broll-panel"]);
+  assert.deepEqual(next.view.printView(), { filter: "shot", group: "scene" });
+});

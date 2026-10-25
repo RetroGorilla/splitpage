@@ -15,7 +15,7 @@ import {
 import { stampRow } from "./03-sync.js";
 import { beginBusy, endBusy, withBusyBar } from "../features/notices/busy.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
-import { brollPrintView } from "../legacy/broll-print-view.ts";
+import { brollView } from "../application/preferences/broll-view.ts";
 import { formatTimestamp } from "../features/common/comment-time.js";
 import { captureExportDocument, loadExportAssets } from "./14b-export-kit.js";
 import { exportAssetsRequest } from "../adapters/formats/export-assets.ts";
@@ -143,7 +143,7 @@ export function exportRequest(kind, opts) {
     doc: doc,
     options: Object.freeze(Object.assign(exportToggleOptions(exportFormats, exporter, opts), {
       allowImageBundle: !!opts.allowImageBundle,
-      brollView: Object.freeze(brollPrintView(opts.brollView))
+      brollView: Object.freeze(brollView.printView(opts.brollView))
     })),
     assets: exportAssetsRequest(doc, blobSourceNow())
   });

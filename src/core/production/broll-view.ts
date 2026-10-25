@@ -147,3 +147,9 @@ export function brollGroups(entries: readonly Shot[], by: string, from: { rows: 
   return groups;
 }
 
+
+export const BROLL_PANEL_GROUPS = [
+  { id: "scene", label: "Scene", button: "By scene" },
+  { id: "location", label: "Location", button: "By location" },
+  { id: "flat", label: "None", button: "Not grouped" }
+];

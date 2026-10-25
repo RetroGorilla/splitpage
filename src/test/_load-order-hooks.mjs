@@ -25,7 +25,6 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/tour-pause.ts": { functions: ["handTourPauseTo"] },
   "src/legacy/target-section.ts": { functions: ["handTargetSectionTo"] },
   "src/legacy/rows-bridge.ts": { functions: ["handScenesTo"] },
-  "src/legacy/broll-print-view.ts": { functions: ["handBrollPrintViewTo"] },
   "src/legacy/hide-shot-bridge.ts": { functions: ["handHideShotTo"] },
   "src/bootstrap/wiring/script-zoom.ts": { functions: ["mountScriptZoomFeature"] },
   "src/bootstrap/wiring/read-time.ts": { functions: ["mountReadTimeFeature"] },

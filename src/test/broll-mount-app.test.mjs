@@ -112,3 +112,45 @@ test("b-roll app: remount adds once, preserves review refusal, and disposal clea
     replacement.dispose();
   }
 });
+
+test("export capture keeps the owner's live scope with the panel stopped", async () => {
+  const { brollView } = await import("../application/preferences/broll-view.ts");
+  const { exportRequest } = await import("../js/18-local-files.js");
+  const { stopBrollPanelStateFeature, mountBrollPanelStateFeature } = await import("../bootstrap/wiring/broll.ts");
+  const saved = brollView.current();
+  open();
+  try {
+    brollView.setFilter("flagged");
+    brollView.setPageGroup("person");
+    stopBrollPanelStateFeature();
+    assert.ok(currentDocument());
+    const captured = exportRequest("b-roll csv");
+    assert.deepEqual(captured.options.brollView, { filter: "flagged", group: "person" });
+    brollView.setFilter("shot");
+    assert.deepEqual(captured.options.brollView, { filter: "flagged", group: "person" });
+    assert.deepEqual(exportRequest("b-roll csv").options.brollView, { filter: "shot", group: "person" });
+    assert.deepEqual(exportRequest("b-roll csv", { brollView: { filter: "all", group: "scene" } }).options.brollView, { filter: "all", group: "scene" });
+  } finally {
+    brollView.setFilter(saved.filter);
+    brollView.setGroup(saved.group);
+    brollView.setPageGroup(saved.pageGroup);
+    mountBrollPanelStateFeature();
+  }
+});
+
+test("records lookup follows the booted instance, replacement and stop", async () => {
+  const { currentBrollRecords, mountBrollFeature: mountRecords, stopBrollFeature: stopRecords } = await import("../bootstrap/wiring/broll.ts");
+  const first = currentBrollRecords();
+  assert.ok(first);
+  try {
+    const second = mountRecords();
+    assert.notEqual(first, second);
+    assert.equal(currentBrollRecords(), second);
+    stopRecords();
+    assert.equal(currentBrollRecords(), null);
+  } finally {
+    const replacement = mountRecords();
+    assert.equal(currentBrollRecords(), replacement);
+    assert.notEqual(currentBrollRecords(), first);
+  }
+});

@@ -15,6 +15,7 @@ export function brollPanelActions(current: () => BrollPanelState | null, ports: 
     icon: "i-panel",
     words: "broll b roll shots cutaways show hide toggle",
     availability: () => {
+      if (!current()) return { enabled: false };
       const button = document.getElementById("btn-broll");
       const availability = availableUnless(EVERY_OVERLAY, ports.screen());
       return button && !button.hidden ? availability : { ...availability, visible: false };
