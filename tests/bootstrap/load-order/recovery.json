@@ -1,9 +1,10 @@
 {
-  "legacyImports": [
-    "./20g-drafts.js"
-  ],
+  "legacyImports": [],
   "loadOnly": [
-    "src/adapters/storage/draft-writer-lock.js"
+    "src/adapters/storage/draft-writer-lock.js",
+    "src/application/recovery/drafts.js",
+    "src/features/recovery/pending-banner.ts",
+    "src/bootstrap/wiring/drafts.ts"
   ],
-  "expectedLoads": 2
+  "expectedLoads": 4
 }

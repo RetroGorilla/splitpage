@@ -1,5 +1,6 @@
 export { mountOnboardingFeature } from "./wiring/onboarding.ts";
 export { mountDesktopFeature } from "./wiring/desktop.ts";
+export { draftRecoveryPorts, mountDraftsFeature } from "./wiring/drafts.ts";
 export { mountVideoFilesFeature } from "./wiring/video-files.ts";
 export { mountCommentsLogicFeature } from "./wiring/comments.ts";
 import { wireProductionIndex } from "./wiring/production-index.ts";
@@ -178,7 +179,7 @@ const ACTION_REGISTRY_METHODS: readonly (keyof ActionRegistry)[] = ["register", 
 
 const RECOVERY_METHODS: readonly (keyof LegacyRecoveryPorts)[] = ["now", "desktop", "sessionStorage", "localStorage", "internImage", "merge"];
 
-const DRAFT_METHODS: readonly (keyof LegacyDraftPorts)[] = ["flush", "armServer", "offerAfterLinkOff"];
+const DRAFT_METHODS: readonly (keyof LegacyDraftPorts)[] = ["flush", "armServer", "offerAfterLinkOff", "noteChange"];
 
 const MERGE_METHODS: readonly (keyof LegacyMergePorts)[] = ["states", "entry", "isDocument", "snapshot", "current", "adopt", "documentId", "noteHistoryFrom", "armUndo", "setBase", "capture", "stillOwns"];
 
