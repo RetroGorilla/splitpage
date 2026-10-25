@@ -35,6 +35,7 @@ export const flags: Pick<ViewFlags, "findOpen" | "setFindOpen" | "brollPageOpen"
 };
 
 export const preferenceValues = {
+  defaultWpm: () => preferences().defaultWpm(),
   clock: () => preferences().clock(),
   commentAuthor: () => preferences().commentAuthor(),
   rememberCommentAuthor: (name: string) => preferences().rememberCommentAuthor(name),

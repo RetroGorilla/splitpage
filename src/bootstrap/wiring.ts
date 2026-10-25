@@ -418,3 +418,5 @@ export function wireApp(deps: WiringDeps): Wiring {
   };
   return Object.freeze({ actions: actions, exports: exports, session: liveSession(), keyTarget: deps.keyTarget, dispose: dispose });
 }
+
+export { mountNewTabFeature } from "./wiring/newtab.ts";

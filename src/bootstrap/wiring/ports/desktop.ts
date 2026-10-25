@@ -8,6 +8,9 @@ export const externalLinks: ExternalLinks = {
 };
 
 export const recents: RecentFiles = {
+  available: () => typeof desktopPort()?.listRecents === "function",
+  canRemove: () => typeof desktopPort()?.removeRecent === "function",
+  canClear: () => typeof desktopPort()?.clearRecents === "function",
   list: () => desktopPort()?.listRecents(),
   remove: (fileId) => desktopPort()?.removeRecent(fileId),
   clear: () => desktopPort()?.clearRecents(),
