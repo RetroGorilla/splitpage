@@ -29,10 +29,13 @@ lists what each job runs.
 runner, `splitpage-windows`. It uses the unique `splitpage-windows` label,
 not `splitpage-local`, so normal Linux CI cannot be assigned to this PC.
 Start the local runner, then select Actions → Windows PC CI → Run workflow.
-Only dispatch trusted branches: the workflow executes their code on the PC.
+Keep the workflow branch on `main` and set its `ref` input to the trusted
+branch, tag or commit to test (default `4.1-development`). The selected ref
+does not need to contain this workflow. Only dispatch trusted code: it runs
+on the maintainer's PC.
 The workflow must reach the repository's default branch before GitHub offers
-the manual dispatch control. A temporary push trigger on `ci/native-windows`
-allows the initial setup to be verified before that merge.
+the manual dispatch control. It has no push or pull-request trigger, so the
+PC only receives explicitly dispatched runs.
 
 The workflow runs lint, types, dependency and comment checks, the build and
 service-worker stamp check, all unit/desktop/tool tests, and browser suites

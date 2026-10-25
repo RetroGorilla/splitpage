@@ -2,8 +2,12 @@ name: Windows PC CI
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ci/native-windows]
+    inputs:
+      ref:
+        description: Trusted branch, tag or commit to test
+        required: true
+        default: 4.1-development
+        type: string
 
 permissions:
   contents: read
@@ -29,6 +33,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.ref || '4.1-development' }}
           persist-credentials: false
 
       - uses: actions/setup-node@v7
