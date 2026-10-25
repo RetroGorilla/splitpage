@@ -1,5 +1,6 @@
 import { bulkDeleteArmed, clearProductionSelection, deleteConfirmation, disarmBulkDelete, productionSelection, pruneProductionSelection, selectedKeys } from "../legacy/production-editing-bridge.ts";
-import { text as portText } from "../bootstrap/wiring/ports/text.ts";
+import { retagTagAnchors } from "../adapters/richtext/tag-anchors.ts";
+import { cellOf, inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { nextTagStatus, normalizeTagName } from "../core/document/tags.ts";
@@ -33,10 +34,12 @@ export { breakdownRows, breakdownTable };
 
 export var IS_TOUCH;
 
+const retagText = { cellOf, productionReaders, inertBody, retagBody: retagTagAnchors, sanitizeHtml };
+
 const tagEditPorts = {
   run: runDocumentEdit, read: readSession, stamps: sessionStamps,
-  rewrites: (tags, toName) => retagRewrites(portText, tags, toName),
-  mentions: (doc, tags) => retagMentions(portText, doc, tags)
+  rewrites: (tags, toName) => retagRewrites(retagText, tags, toName),
+  mentions: (doc, tags) => retagMentions(retagText, doc, tags)
 };
 
 function productionEntries() {
@@ -825,11 +828,11 @@ export function bulkDeleteSelected() {
   if (!items.length) return;
   breakUndoCoalescing();
   var labelled = items.filter(function (item) { return !item.orphaned; }).map(tagRef);
-  var unlabelled = readSession(function (doc) { return retagMentions(portText, doc, labelled); });
+  var unlabelled = readSession(function (doc) { return retagMentions(retagText, doc, labelled); });
   clearProductionSelection();
   runDocumentEdit(deleteTagsCommand(items.map(function (item) {
     return { cat: item.cat.id, name: item.name, unlabel: !item.orphaned };
-  }), retagRewrites(portText, labelled, null), sessionStamps));
+  }), retagRewrites(retagText, labelled, null), sessionStamps));
   var n = items.length;
   breakUndoCoalescing();
   showToast("Deleted " + n + " item" + (n === 1 ? "" : "s") +
