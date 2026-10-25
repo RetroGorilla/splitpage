@@ -66,7 +66,7 @@ function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boole
     entry: { migrate: (raw) => migrateRows(raw, fakeMigration().ports) },
     identity: { copyHistory: (fromId, toId) => { log.push("copy:" + fromId + ">" + toId); }, sync: () => { log.push("sync"); } },
     transitions: {
-      recover: (recovery) => { recovered.push(recovery); return { document: doc, forkedFrom: null, kept: false }; },
+      recover: (recovery) => { recovered.push(recovery); log.push("recover"); return { document: doc, forkedFrom: null, kept: false }; },
       restore: () => ({ document: doc, forkedFrom: null, kept: false })
     },
     documents: { open: () => Promise.resolve(true) },
@@ -122,8 +122,12 @@ test("a change is captured after the idle wait and written as the same desktop d
   try {
     drafts.noteChange();
     assert.deepEqual(h.timers.filter((t) => t.live).map((t) => t.ms).sort((a, b) => a - b), [1500, 5000]);
-    fireDue(h.timers);
+    const idle = h.timers.find((t) => t.live && t.ms === 1500);
+    assert.ok(idle);
+    idle.live = false;
+    idle.run();
     await settle();
+    assert.equal(h.timers.some((t) => t.live), false, "the idle capture cancels the maximum wait");
     assert.equal(h.written.length, 1);
     const sent = h.written[0] ?? {};
     assert.equal(sent["editSeq"], 1);
@@ -203,7 +207,7 @@ test("an untitled draft is adopted through recover, reported to the desktop, and
     assert.deepEqual([recovery.detached, recovery.writtenOut, recovery.baseline], [false, true, null]);
     assert.equal(h.resume.restorePending(), false);
     assert.deepEqual(h.restoreDone, ["applied"]);
-    assert.deepEqual(h.log.filter((entry) => ["resetPanel", "sync", "absorbed:recovery", "notify"].includes(entry)), ["resetPanel", "sync", "absorbed:recovery", "notify"]);
+    assert.deepEqual(h.log.filter((entry) => ["resetPanel", "recover", "sync", "absorbed:recovery", "notify"].includes(entry)), ["resetPanel", "recover", "sync", "absorbed:recovery", "notify"]);
   } finally {
     drafts.dispose();
   }
