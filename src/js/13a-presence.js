@@ -1,14 +1,9 @@
-import { homeConn, serverHomeId, serverStatus } from "../legacy/location-bridge.ts";
+import { homeConn, serverHomeId, serverStatus, onServerDoc } from "../legacy/location-bridge.ts";
 import { cssAttr } from "../features/common/dom.ts";
 import { PRESENCE_MAX_SHOWN } from "../application/collaboration/presence.ts";
 import { presence, presenceStarted } from "../legacy/presence-bridge.ts";
 import { getSavedAuthorName } from "../application/comment-author.js";
-import {
-  apiUrl,
-  notePresenceRev,
-  onServerDoc,
-  serverTransport
-} from "./13-hosted.js";
+import { apiUrl, notePresenceRev, serverTransport } from "./13-hosted.js";
 import { captureOperation, stillOwns } from "../legacy/transition-bridge.ts";
 import { codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";

@@ -1,7 +1,6 @@
-import { amendHome, currentHome, homeConn, reviewMode, serverStatus } from "../legacy/location-bridge.ts";
+import { amendHome, currentHome, homeConn, reviewMode, serverStatus, onServerDoc } from "../legacy/location-bridge.ts";
 import { syncDocIdentity } from "./02b-doc-id.js";
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "../../shared/clock.js";
-import { onServerDoc } from "./13-hosted.js";
 import { colorsWithMine } from "../core/document/person-colors.ts";
 import { cleanAuthorName } from "../core/document/people.ts";
 import { noteDraftChange } from "./20g-drafts.js";

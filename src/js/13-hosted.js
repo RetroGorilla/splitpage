@@ -10,6 +10,7 @@ import {
   currentHome,
   documentLocation,
   handServerCheckTo,
+  onServerDoc,
   reviewMode,
   serverHomeId,
   serverStatus,
@@ -80,8 +81,6 @@ var linkKey = "";
 var linkKeyFresh = false;
 var serverIdentity = null;
 var serverDocs = [];
-
-export function onServerDoc() { return currentHome().kind === "server"; }
 
 var ApiError = apiError;
 

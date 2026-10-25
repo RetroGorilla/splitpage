@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { setHome } from "../legacy/location-bridge.ts";
+import { setHome, onServerDoc } from "../legacy/location-bridge.ts";
 import "./_location-started.mjs";
 
 test("autoSaveTarget answers server, file or null off the home", async () => {
   await import("./_dom.mjs");
   const { autoSaveTarget, saveDestinations, startSaves } = await import("../legacy/save-bridge.ts");
   const { legacyFileDestination, legacySavePorts } = await import("../js/14-export.js");
-  const { onServerDoc, serverSaveDestination } = await import("../js/13-hosted.js");
+  const { serverSaveDestination } = await import("../js/13-hosted.js");
   const stopSaves = startSaves(legacySavePorts({ capture: () => Object.freeze({}), stillOwns: () => true }), { start: () => null, stop: () => {} });
   const drops = [saveDestinations().register(legacyFileDestination()), saveDestinations().register(serverSaveDestination())];
 
