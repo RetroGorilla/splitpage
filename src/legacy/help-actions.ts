@@ -2,8 +2,6 @@ import type { ActionDefinition, Availability } from "../application/actions.ts";
 import { openSettings, settingsAction } from "../application/settings-actions.ts";
 import { openLongDemo } from "../js/18b-file-menu.js";
 import { openServersDialog, serversMenuLabel } from "../js/20e-connect.js";
-import { appDataImportShown } from "../js/20f-desktop.js";
-import { exportAppData, openImportAppData } from "../js/20h-appdata.js";
 import { OPENS_A_DIALOG, availableUnless } from "../application/screen.ts";
 import { onlyDialogOpen } from "./screen.ts";
 import { screenNow } from "./screen-state.ts";
@@ -42,27 +40,6 @@ export function helpMenuActions(): ActionDefinition[] {
       icon: "i-file-plus",
       words: "demo example sample long thirty 30 scenes test try every feature",
       run: () => { openLongDemo(); }
-    },
-    {
-      id: "export-app-data",
-      label: "Export app data…",
-      group: "Help",
-      icon: "i-box",
-      words: "backup move desktop app data history bookmarks",
-      availability: () => availableUnless(["loading"], screenNow()),
-      run: () => exportAppData()
-    },
-    {
-      id: "import-app-data",
-      label: "Import app data…",
-      group: "Help",
-      icon: "i-box",
-      words: "restore move desktop app data history bookmarks",
-      availability: () => {
-        const screen = availableUnless(["loading"], screenNow());
-        return appDataImportShown() ? screen : { ...screen, visible: false };
-      },
-      run: () => { openImportAppData(); }
     }
   ];
   return definitions;

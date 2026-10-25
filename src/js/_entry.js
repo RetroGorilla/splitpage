@@ -30,7 +30,6 @@ import { __init as init_20d_formats } from "./20d-formats.js";
 import { __init as init_20e_connect } from "./20e-connect.js";
 import { __init as init_20f_desktop } from "./20f-desktop.js";
 import { __init as init_20g_drafts } from "./20g-drafts.js";
-import { __init as init_20h_appdata } from "./20h-appdata.js";
 import { __init as init_20j_newtab } from "./20j-newtab.js";
 import { migrateRows } from "./02-state.js";
 import { documentIdentityPort } from "./02b-doc-id.js";
@@ -43,7 +42,7 @@ import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireLegacyApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature, mountCopyPasteFeature, mountSettingsFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature, mountBrollFeature, mountBrollPanelStateFeature, mountScenesFeature, mountSceneMediaFeature, derivedRecordsPlan, mountOnboardingFeature, mountVideoFilesFeature } from "../bootstrap/wiring.ts";
+import { wireLegacyApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature, mountCopyPasteFeature, mountSettingsFeature, mountAppDataFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature, mountBrollFeature, mountBrollPanelStateFeature, mountScenesFeature, mountSceneMediaFeature, derivedRecordsPlan, mountOnboardingFeature, mountVideoFilesFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -120,7 +119,7 @@ if (wiring) {
   init_20e_connect();
   init_20f_desktop();
   init_20g_drafts();
-  init_20h_appdata();
+  mountAppDataFeature();
   init_20j_newtab();
   mountSettingsFeature();
   startAppWhenReady(document, wiring);

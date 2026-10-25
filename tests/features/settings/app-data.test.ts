@@ -1,0 +1,222 @@
+import "../../../src/test/_dom.mjs";
+import test from "node:test";
+import assert from "node:assert/strict";
+import { mountAppData } from "../../../src/features/settings/app-data.js";
+import { appDataActions } from "../../../src/features/settings/actions.ts";
+import type { AppDataPorts } from "../../../src/features/settings/ports.ts";
+import type { ScreenState } from "../../../src/application/screen.ts";
+
+interface Probe {
+  readonly build: () => Promise<{ readonly appVersion: string }>;
+  readonly importText: (text: string) => Promise<unknown>;
+  readonly useBlobBackend: (backend: null) => boolean;
+}
+
+function probe(): Probe {
+  return (window as unknown as { readonly __appDataTest: Probe }).__appDataTest;
+}
+
+function setup() {
+  localStorage.clear();
+  document.body.innerHTML = '<input id="import-app-data-input" type="file"><div id="connect-modal"></div>';
+  const calls: { name: string; args: unknown[] }[] = [];
+  const note = (name: string, ...args: unknown[]): void => { calls.push({ name, args }); };
+  const ports: AppDataPorts = {
+    notices: { show: () => ({ isConnected: false, dismiss: () => undefined, removeEventListener: () => undefined }) },
+    fileDelivery: { deliver: () => Promise.resolve(true) },
+    preferences: {
+      appDataExport: (extra) => { note("preferences.export", extra); return {}; },
+      appDataImport: (incoming, extra) => { note("preferences.import", incoming, extra); return ["commentsSort", "writerSize"]; },
+      commentsSort: () => { note("preferences.commentsSort"); return "recent"; }
+    },
+    desktop: () => false,
+    launchFacts: { appVersion: () => "desktop-version" },
+    bookmarks: {
+      loadBookmarks: () => { note("bookmarks.load"); },
+      bookmarks: () => { note("bookmarks.read"); return []; },
+      addBookmarks: (added) => { note("bookmarks.add", added); }
+    },
+    commentSorting: { choose: (mode) => { note("comments.choose", mode); return "recent"; } },
+    history: {
+      exportAll: () => { note("history.export"); return Promise.resolve({ docs: [], older: [] }); },
+      normalizeSnapshots: (raw) => { note("history.normalize", raw); return [{ legacy: true }]; },
+      importBundle: (bundle) => {
+        note("history.import", bundle);
+        return Promise.resolve({ docs: 1, added: 1, older: 0, skipped: 0, failed: 0, blobs: { stored: 0, refused: [], failed: [] } });
+      }
+    },
+    writer: { size: () => { note("writer.read"); return 20; }, setSize: (size, persist) => { note("writer.apply", size, persist); } },
+    embeddedVersion: () => "embedded-version",
+    bookmarkEditor: {
+      newId: () => { note("bookmarks.newId"); return "new-mark"; },
+      portOr: (value, fallback) => { note("bookmarks.portOr", value, fallback); return fallback; },
+      save: () => { note("bookmarks.save"); },
+      render: () => { note("bookmarks.render"); }
+    },
+    useBlobBackend: (backend) => { note("blob.backend", backend); }
+  };
+  return { ports, calls };
+}
+
+test("app data export reads legacy storage, history, bookmarks and preferences in the same order", async () => {
+  const { ports, calls } = setup();
+  const storage = Object.getPrototypeOf(localStorage) as Storage;
+  const getItem = storage.getItem;
+  storage.getItem = function (key: string): string | null {
+    calls.push({ name: "storage.get", args: [key] });
+    return getItem.call(this, key);
+  };
+  const mounted = mountAppData(ports);
+  try {
+    assert.equal((await probe().build()).appVersion, "embedded-version");
+    assert.deepEqual(calls.map((call) => call.name), ["storage.get", "history.export", "storage.get", "preferences.export"]);
+    assert.deepEqual(calls[0]?.args, ["splitpage-snapshots"]);
+    assert.deepEqual(calls[2]?.args, ["splitpage-server-bookmarks"]);
+    const extra = calls[3]?.args[0] as readonly { readonly name: string }[];
+    assert.equal(extra[0]?.name, "theme");
+    assert.equal(extra.at(-1)?.name, "scriptScale");
+  } finally {
+    storage.getItem = getItem;
+    mounted.dispose();
+  }
+});
+
+test("app data import preserves each history, bookmark, preference and writer call and argument", async () => {
+  const { ports, calls } = setup();
+  const mounted = mountAppData(ports);
+  const snapshots = [{ old: "snapshot" }];
+  const docs = [{ docId: "doc", title: "Title", lastOpenedAt: 3, snapshots: [] }];
+  const older = [{ old: "history" }];
+  try {
+    await probe().importText(JSON.stringify({
+      format: "splitpage-app-data", version: 1, snapshots,
+      history: { docs, older }, blobs: {},
+      bookmarks: [{ name: "Server", url: "https://server.test", ssh: { userHost: "adam@server", remotePort: "9000", localPort: 9001 } }],
+      prefs: { commentsSort: "recent", writerSize: "20" }
+    }));
+    assert.deepEqual(calls.map((call) => call.name), ["history.normalize", "history.import", "bookmarks.load", "bookmarks.read", "bookmarks.newId", "bookmarks.portOr", "bookmarks.portOr", "bookmarks.add", "bookmarks.save", "bookmarks.render", "preferences.import", "preferences.commentsSort", "comments.choose", "writer.read", "writer.apply"]);
+    assert.deepEqual(calls[0]?.args, [JSON.stringify(snapshots)]);
+    assert.deepEqual(calls[1]?.args, [{ docs, older: [...older, { legacy: true }], blobs: {} }]);
+    assert.deepEqual(calls[5]?.args, ["9000", 8791]);
+    assert.deepEqual(calls[6]?.args, [9001, 8791]);
+    assert.deepEqual(calls[7]?.args, [[{ id: "new-mark", name: "Server", url: "https://server.test/", ssh: { userHost: "adam@server", remotePort: 8791, localPort: 8791 } }]]);
+    assert.deepEqual(calls[12]?.args, ["recent"]);
+    assert.deepEqual(calls[14]?.args, [20, false]);
+    const incoming = calls[10]?.args[0] as Record<string, unknown>;
+    assert.equal(incoming.commentsSort, "recent");
+    assert.equal(incoming.writerSize, "20");
+  } finally {
+    mounted.dispose();
+  }
+});
+
+test("app data mount releases the lazy change listener and probe across dispose and remount", () => {
+  const { ports, calls } = setup();
+  const input = document.getElementById("import-app-data-input");
+  assert.ok(input);
+  const events: string[] = [];
+  const add = input.addEventListener.bind(input);
+  const remove = input.removeEventListener.bind(input);
+  input.addEventListener = (...args: Parameters<typeof add>) => { events.push("add " + args[0]); add(...args); };
+  input.removeEventListener = (...args: Parameters<typeof remove>) => { events.push("remove " + args[0]); remove(...args); };
+  for (let i = 0; i < 2; i++) {
+    const mounted = mountAppData(ports);
+    assert.equal(probe().useBlobBackend(null), true);
+    mounted.openImportAppData();
+    mounted.openImportAppData();
+    mounted.dispose();
+    mounted.dispose();
+    mounted.openImportAppData();
+    assert.equal("__appDataTest" in window, false);
+  }
+  assert.deepEqual(events, ["add change", "remove change", "add change", "remove change"]);
+  assert.deepEqual(calls, [{ name: "blob.backend", args: [null] }, { name: "blob.backend", args: [null] }]);
+});
+
+test("app data actions invoke their mounted controls and retain import visibility", () => {
+  const calls: string[] = [];
+  let shown = false;
+  const definitions = appDataActions(() => ({ exportAppData: () => { calls.push("export"); return Promise.resolve(); }, openImportAppData: () => { calls.push("import"); }, dispose: () => undefined }), { screen: () => ({}) as ScreenState, importShown: () => shown });
+  assert.deepEqual(definitions.map((definition) => definition.id), ["export-app-data", "import-app-data"]);
+  for (const definition of definitions) void definition.run("button");
+  assert.deepEqual(calls, ["export", "import"]);
+  const availability = definitions[1]?.availability;
+  assert.ok(availability);
+  assert.equal(availability("button").visible, false);
+  shown = true;
+  assert.notEqual(availability("button").visible, false);
+});
+
+function deferred<T>() {
+  let resolve: (value: T) => void = () => { throw new Error("No promise"); };
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+const emptyBundle = JSON.stringify({ format: "splitpage-app-data", version: 1, history: { docs: [], older: [] }, prefs: {} });
+
+test("a pending history export completes through its original ports after dispose and remount", async () => {
+  const original = setup();
+  const history = deferred<unknown>();
+  const mounted = mountAppData({ ...original.ports, history: { ...original.ports.history, exportAll: () => history.promise } });
+  const building = probe().build();
+  mounted.dispose();
+  const replacement = setup();
+  const next = mountAppData(replacement.ports);
+  history.resolve({ docs: [], older: [] });
+  await building;
+  assert.deepEqual(original.calls.map((call) => call.name), ["preferences.export"]);
+  assert.deepEqual(replacement.calls, []);
+  next.dispose();
+});
+
+test("a pending history import finishes the required preference writes through its original ports", async () => {
+  const original = setup();
+  const history = deferred<unknown>();
+  const mounted = mountAppData({ ...original.ports, history: { ...original.ports.history, importBundle: () => history.promise } });
+  const importing = probe().importText(emptyBundle);
+  mounted.dispose();
+  const replacement = setup();
+  const next = mountAppData(replacement.ports);
+  history.resolve({ docs: 0, added: 0, older: 0, skipped: 0, failed: 0, blobs: { stored: 0, refused: [], failed: [] } });
+  await importing;
+  assert.deepEqual(original.calls.map((call) => call.name), ["preferences.import", "preferences.commentsSort", "comments.choose", "writer.read", "writer.apply"]);
+  assert.deepEqual(replacement.calls, []);
+  next.dispose();
+});
+
+test("a pending file delivery finishes without replacing the next mount's export summary", async () => {
+  const original = setup();
+  const delivery = deferred<boolean>();
+  const started = deferred<boolean>();
+  const mounted = mountAppData({ ...original.ports, fileDelivery: { deliver: () => { started.resolve(true); return delivery.promise; } } });
+  const exporting = mounted.exportAppData();
+  await started.promise;
+  mounted.dispose();
+  const replacement = setup();
+  const next = mountAppData(replacement.ports);
+  delivery.resolve(true);
+  await exporting;
+  assert.deepEqual(replacement.calls, []);
+  const state = (window as unknown as { readonly __appDataTest: { readonly exportSummary: () => unknown } }).__appDataTest;
+  assert.equal(state.exportSummary(), null);
+  next.dispose();
+});
+
+test("a pending file read imports through its original ports after remount", async () => {
+  const original = setup();
+  const text = deferred<string>();
+  const mounted = mountAppData(original.ports);
+  mounted.openImportAppData();
+  const input = document.getElementById("import-app-data-input") as HTMLInputElement;
+  Object.defineProperty(input, "files", { value: [{ size: 10, text: () => text.promise }] });
+  input.dispatchEvent(new window.Event("change"));
+  mounted.dispose();
+  const replacement = setup();
+  const next = mountAppData(replacement.ports);
+  text.resolve(emptyBundle);
+  await new Promise<void>((done) => setTimeout(done, 0));
+  assert.deepEqual(original.calls.map((call) => call.name), ["history.import", "preferences.import", "preferences.commentsSort", "comments.choose", "writer.read", "writer.apply"]);
+  assert.deepEqual(replacement.calls, []);
+  next.dispose();
+});
