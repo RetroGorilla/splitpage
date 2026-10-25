@@ -6,6 +6,7 @@ import { mountShortcuts } from "../features/shortcuts/mount.ts";
 import { showRefusal } from "../js/12-dirty-toast.js";
 import { runMenuCommandsWith } from "../js/20f-desktop.js";
 import { editorOpenActions } from "../legacy/editor-open-actions.ts";
+import { videoFiles } from "./wiring/video-files.ts";
 import { fileActions } from "../legacy/file-actions.ts";
 import { helpMenuActions } from "../legacy/help-actions.ts";
 import { nativeMenuRunner } from "../legacy/native-menu.ts";
@@ -51,7 +52,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     },
     () => registerAll(registry, scriptZoomActions()),
     () => {
-      const openers = editorOpenActions();
+      const openers = editorOpenActions(videoFiles.openGallery);
       return registerAll(registry, [...rundownSceneActions(), ...galleryActions(), ...openers.slice(0, 1), ...commentsOpenActions(), ...openers.slice(1)]);
     },
     () => registerAll(registry, rowsActions()),
