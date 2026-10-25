@@ -6,6 +6,10 @@ import { desktopActions } from "../../../src/features/desktop/actions.ts";
 import type { DesktopMount, DesktopPorts, DocumentOpening } from "../../../src/features/desktop/ports.ts";
 import type { DesktopOpenedFile, DesktopReassign, DesktopRestoreNotice, DesktopServerDoc, DesktopServerRoute } from "../../../src/application/desktop/shell.ts";
 import { fakeActions, fakeNotices, fakeScreen } from "../fakes.ts";
+import { migrateRows } from "../../../src/core/migrate.ts";
+import { fakeMigration } from "../../core/migrate-ports.ts";
+
+const pilot = migrateRows({ title: "Pilot", rows: [] }, fakeMigration().ports);
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -56,14 +60,14 @@ function harness(start: { running?: boolean; intent?: string; doc?: boolean; hos
     driveOpenShown: () => false,
     makeHandle: (entry) => ({ getFile: () => Promise.resolve("file:" + entry.name) }),
     wireBlobs: () => { log.push("blobs"); },
-    document: { current: () => (state.doc ? ({ title: "Pilot" } as never) : null) },
+    document: { current: () => (state.doc ? pilot : null) },
     place: {
-      home: () => ({ kind: "none" }) as never,
-      connection: () => ({ serverUrl: "http://team.test/", token: "tok", tunnel: null, role: "", scope: "" }) as never,
-      fileHome: () => ({ kind: "file", handle: { _desktopId: "file-1" }, format: "md" }) as never,
+      home: () => ({ kind: "none" }),
+      connection: () => ({ serverUrl: "http://team.test/", token: "tok", tunnel: null, role: "", scope: "" }),
+      fileHome: () => ({ kind: "file", handle: { _desktopId: "file-1" }, format: "md" }),
       homeConn: () => null,
       serverHomeId: () => null,
-      serverMode: () => ({ checked: true, authRequired: false }) as never
+      serverMode: () => ({ available: true, readOnly: false, checked: true, authRequired: false, reviewAvailable: false, version: null, links: false, linksPersist: false })
     },
     server: {
       setHome: () => { log.push("setHome"); },

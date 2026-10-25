@@ -7,7 +7,6 @@ import { autoSavePolicy, savesStarted, toggleAutoSave } from "./save-bridge.ts";
 import { saveBackItemState, saveBackToFile } from "../js/18-local-files.js";
 import { pasteItemState, startNewScript } from "../js/18b-file-menu.js";
 import { driveOpenShown } from "../adapters/desktop/desktop-port.ts";
-
 import { greyedOut, itemAvailability, shownWhen } from "./menu-items.ts";
 import { OPENS_A_DIALOG, availableUnless, firstRefusal } from "../application/screen.ts";
 import type { Blocker } from "../application/screen.ts";
@@ -23,7 +22,6 @@ const OPENS_ONE: readonly Blocker[] = ["loading", ...OPENS_A_DIALOG];
 function loaded(own: Availability = { enabled: true }, blockers: readonly Blocker[] = LOADED): Availability {
   return firstRefusal(availableUnless(blockers, screenNow()), own);
 }
-
 
 export function shareActions(): ActionDefinition[] {
   const definitions: ActionDefinition[] = [
@@ -138,6 +136,5 @@ export function shareActions(): ActionDefinition[] {
       run: () => { promptForTarget(); }
     }
   ];
-
   return definitions;
 }
