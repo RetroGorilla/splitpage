@@ -1,7 +1,6 @@
 {
   "legacyImports": [
-    "./05-render.js",
-    "./06-rows.js"
+    "./05-render.js"
   ],
   "loadOnly": [
     "src/features/rows/row-motion.js",
@@ -13,7 +12,9 @@
     "src/features/rows/scenes.js",
     "src/features/rows/scene-media.js",
     "src/bootstrap/wiring/rows.ts",
-    "src/legacy/rows-bridge.ts"
+    "src/legacy/rows-bridge.ts",
+    "src/features/gallery/video-files.js",
+    "src/bootstrap/wiring/video-files.ts"
   ],
-  "expectedLoads": 12
+  "expectedLoads": 13
 }
