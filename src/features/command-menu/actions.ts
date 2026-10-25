@@ -13,7 +13,9 @@ export function commandMenuActions(current: () => CommandMenuControls | null, sc
       keys: ["mod+k"],
       words: "command palette search run",
       availability: (source) => {
-        if (current()?.commandMenuOpen()) return { enabled: true };
+        const mounted = current();
+        if (!mounted) return { enabled: false };
+        if (mounted.commandMenuOpen()) return { enabled: true };
         const screen = availableUnless(["loading", ...everyOverlayBut("launcher")], screenNow());
         return !screen.enabled && source === "button" ? { enabled: false, reason: "" } : screen;
       },
