@@ -8,7 +8,7 @@ import {
   syncDocIdentity
 } from "./02b-doc-id.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
-import { showToast } from "./12-dirty-toast.js";
+import { showToast } from "../legacy/effects-bridge.ts";
 import { onServerDoc } from "./13-hosted.js";
 import { DRAFT_LIMITS, browserDraftKey, draftBaseOf } from "../adapters/storage/draft-store-idb.ts";
 import {

@@ -9,7 +9,7 @@ import { autoSavePolicy, autoSaveTarget, noteSaveChange, saveBusy, scheduleAutoS
 import { saveButtonView, saveStatus } from "../application/save/status.ts";
 import { changeSet } from "../application/session/change-set.ts";
 import { authorityOf, editCapability } from "../application/collaboration/authority.ts";
-import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
+import { showToast } from "../legacy/effects-bridge.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";
 
 var MY_COLOR = changeSet({ docFields: ["personColors"] });
@@ -165,8 +165,6 @@ export function showRefusal(outcome) {
   var text = outcome.reason;
   showToast(/[.!?…]$/.test(text) ? text : text + ".", "warn");
 }
-
-export { showActionToast, showToast };
 
 export function __init() {
   if (typeof document !== "undefined" && document.addEventListener) {
