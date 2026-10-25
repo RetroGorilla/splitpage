@@ -72,6 +72,17 @@ export function draftBaseOf(serverUrl: unknown, pageHref: string): string {
   }
 }
 
+export function normalizeDraftBase(value: unknown, pageHref: string): string {
+  const s = String(value == null ? "" : value).trim();
+  if (!s) return "";
+  try {
+    const u = new URL(s, pageHref);
+    return (u.origin + u.pathname).replace(/\/+$/, "");
+  } catch {
+    return s.replace(/\/+$/, "");
+  }
+}
+
 export function planDraftEviction(metas: unknown, now: number, limits?: DraftLimits, keepKey?: string): string[] {
   const lim = limits || DRAFT_LIMITS;
   const list = (Array.isArray(metas) ? metas as Array<EvictionMeta | null> : []).filter(function (m): m is EvictionMeta & { key: string } {

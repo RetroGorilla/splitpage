@@ -97,7 +97,7 @@ export async function appWiringDeps() {
     import("../bootstrap/wiring/broll.ts"),
     import("../js/12-dirty-toast.js"),
     import("../js/14-export.js"),
-    import("../js/20g-drafts.js"),
+    import("../bootstrap/wiring/drafts.ts"),
     import("../js/13-hosted.js"),
     import("../js/18-local-files.js"),
     import("../js/11-import.js"),
