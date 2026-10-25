@@ -21,13 +21,8 @@ import { autoSavePolicy } from "../legacy/save-bridge.ts";
 import { parseProjectFileState } from "../adapters/formats/project-file.ts";
 import { openDocument } from "../legacy/transition-bridge.ts";
 import { canOpenPrompterInBrowser } from "../adapters/desktop/desktop-port.ts";
-import {
-  createDesktopRecognition,
-  desktopVoiceAvailable,
-  desktopVoiceKnown,
-  loadDesktopVoice,
-  openPrompterInBrowser
-} from "./20f-desktop.js";
+import { createDesktopRecognition, desktopVoiceAvailable, desktopVoiceKnown, loadDesktopVoice } from "../adapters/desktop/desktop-voice.js";
+import { openPrompterInBrowser } from "./20f-desktop.js";
 import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "../adapters/desktop/voice-relay.js";
 import { pad2, formatTimecode, rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
