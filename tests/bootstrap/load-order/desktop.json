@@ -3,8 +3,13 @@
   "loadOnly": [
     "src/features/desktop/desktop.js",
     "src/features/desktop/actions.ts",
+    "src/adapters/desktop/desktop-blobs.js",
+    "src/adapters/desktop/desktop-voice.js",
+    "src/adapters/desktop/fake-desktop.js",
+    "src/application/desktop/document-state.ts",
+    "src/application/desktop/menu-commands.ts",
     "src/legacy/desktop-bridge.ts",
     "src/bootstrap/wiring/desktop.ts"
   ],
-  "expectedLoads": 4
+  "expectedLoads": 9
 }
