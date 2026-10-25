@@ -30,8 +30,17 @@ function fixture() {
   const document = fakeDocument(doc);
   const edits = fakeEdits();
   const calls: string[] = [];
+  let renaming: string | null = null;
+  let addingPerson: string | null = null;
   const timers = { start: () => 0, stop: () => {} };
   const ports: TagPanelPorts = {
+    view: {
+      gearGroupBy: () => "flat", productionGroupBy: () => "cat",
+      setTagAddingPerson: (key) => { addingPerson = key; },
+      setTagRenaming: (key) => { renaming = key; },
+      tagAddingPersonKey: () => addingPerson, tagRenamingKey: () => renaming,
+      tagExpandedKey: () => null
+    },
     document: document.document,
     edits: edits.edits,
     production: createProductionIndex(migration.ports.readers, deepFreeze),
@@ -52,7 +61,7 @@ function fixture() {
     notices: fakeNotices().notices,
     ids: migration.ids
   };
-  return { ports, calls, edits };
+  return { ports, calls, edits, doc };
 }
 
 test("production panels mount with fake ports and remove both menu listeners on disposal and remount", () => {
@@ -83,7 +92,7 @@ test("production panel commands use the document, edit and panel ports", () => {
   try {
     openProductionPanel();
     assert.deepEqual(h.calls, ["production-panel"]);
-    const entry = h.ports.production.entries(h.ports.document.current())[0];
+    const entry = h.ports.production.entries(h.doc)[0];
     assert.ok(entry);
     setTagNotes(entry.key, "Notes");
     assert.equal(h.edits.ran.length, 1);
