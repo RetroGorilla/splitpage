@@ -20,7 +20,6 @@ import {
 import { breakUndoCoalescing } from "../legacy/undo-bridge.ts";
 import { presence } from "../legacy/presence-bridge.ts";
 import { brollGroups as brollGroupsFrom, brollShotListForPrint, brollTable, filterCounts, FILTERS, matchesFilter, oneOf, PAGE_GROUPS, pageSummaryText, sceneLabel, shotRecordForFile, startOf } from "../adapters/formats/export-projections.ts";
-import { exportAs } from "./18-local-files.js";
 import { cappedLongText, cappedText, escapeHtml } from "../core/document/text-policy.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
@@ -906,7 +905,7 @@ function deleteShot(id) {
   showToast(e.rowId ? "Removed from the list — the line stays in the script." : "Removed from the list.", "ok");
 }
 
-function onBrollClick(e, root) {
+function onBrollClick(e, root, exportAs) {
   var btn = e.target.closest("[data-action]");
   if (!btn || !root.contains(btn)) {
     if (groupMenuOpen || menuFor) { groupMenuOpen = false; menuFor = null; renderBrollViews(); }
@@ -1030,7 +1029,7 @@ function onBrollClick(e, root) {
     bulkInput = null;
     renderBrollViews();
   } else {
-    onBrollPageAction(action, btn, e);
+    onBrollPageAction(action, btn, exportAs);
   }
 }
 
@@ -1148,7 +1147,7 @@ function brollPanelClosed() {
 var brollMount = null;
 var brollPanelRegistration = null;
 
-export function mountBrollFeature() {
+export function mountBrollFeature(ports) {
   stopBrollFeature();
   brollPanelRegistration = sidePanels().registerPanel("broll-panel", brollPanelClosed);
   var panel = document.getElementById("broll-panel");
@@ -1156,7 +1155,7 @@ export function mountBrollFeature() {
   brollMount = mountBroll({
     window: window,
     ports: {
-      click: onBrollClick,
+      click: function (event, root) { onBrollClick(event, root, ports.exportAs); },
       change: onBrollChange,
       focusout: onBrollFocusOut,
       keydown: onBrollKeydown,
@@ -1338,7 +1337,7 @@ export function brollPrintView(as) {
   };
 }
 
-function onBrollPageAction(action, btn) {
+function onBrollPageAction(action, btn, exportAs) {
   if (action === "broll-open-page") openBrollPage();
   else if (action === "broll-page-close") closeBrollPage();
   else if (action === "broll-page-jump") {

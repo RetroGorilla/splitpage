@@ -28,7 +28,7 @@ import { resetProductionPanelState } from "../legacy/production-editing-bridge.t
 import { formatTimestamp } from "../features/common/comment-time.js";
 import { getSavedAuthorName } from "../application/comment-author.js";
 import { cleanAuthorName } from "../core/document/people.ts";
-import { showToast } from "./12-dirty-toast.js";
+import { showToast } from "../legacy/effects-bridge.ts";
 import { presence } from "../legacy/presence-bridge.ts";
 import { autoSavePolicy, confirmBaseline, saveChanges } from "../legacy/save-bridge.ts";
 import { captureRestore, stillRestoring } from "../legacy/recovery-bridge.ts";

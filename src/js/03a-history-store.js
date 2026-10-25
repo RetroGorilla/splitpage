@@ -7,7 +7,7 @@ import { getEditorName } from "./03-sync.js";
 import { legacySnapshots } from "../legacy/recovery-bridge.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 import { createIdbHistoryBackend, hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
-import { showToast } from "./12-dirty-toast.js";
+import { showToast } from "../legacy/effects-bridge.ts";
 import { seedCheckPasses } from "../legacy/seed-check.ts";
 import {
   HISTORY_OLDER_KEY,

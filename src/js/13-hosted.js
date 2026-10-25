@@ -45,7 +45,7 @@ import { withBusyBar } from "../features/notices/busy.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { formatTimestamp } from "../features/common/comment-time.js";
 import { getSavedAuthorName } from "../application/comment-author.js";
-import { showActionToast, showToast } from "./12-dirty-toast.js";
+import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
 import { confirmSavedNow, haltAutoSave, requestSave, resumeAutoSave, saveBusy, saveChanges, saveDoc, scheduleAutoSave, unsavedChanges } from "../legacy/save-bridge.ts";
 import { createServerDestination } from "../application/save/server-destination.ts";
 import { armBrowserServerDraft, conflictStash, draftResume, offerBrowserDraftAfterLinkOff, stashLocalWork } from "../legacy/recovery-bridge.ts";
