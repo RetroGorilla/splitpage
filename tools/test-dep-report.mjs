@@ -549,6 +549,18 @@ eq("a richtext helper that parses HTML is reported", htmlCells({
   "src/adapters/richtext/tag-anchors.ts": 'export const retagTagAnchors = (s) => new DOMParser().parseFromString(s, "text/html");\n',
   "src/js/08-production-panels.js": 'import { retagTagAnchors } from "../adapters/richtext/tag-anchors.ts";\nexport const text = retagTagAnchors;\n'
 }), ["src/js/08-production-panels.js:1 src/adapters/richtext/tag-anchors.ts"]);
+eq("an unclassified richtext helper assigning detached innerHTML is reported", htmlCells({
+  "src/adapters/richtext/detached.ts": 'export const parse = (html) => { const body = document.createElement("div"); body.innerHTML = html; return body; };\n',
+  "src/js/08-production-panels.js": 'import { parse } from "../adapters/richtext/detached.ts";\nexport const body = parse("");\n'
+}), ["src/js/08-production-panels.js:1 src/adapters/richtext/detached.ts"]);
+eq("an unclassified richtext helper calling a bound HTML parser is reported", htmlCells({
+  "src/adapters/richtext/bound.ts": 'const parser = new DOMParser();\nconst parse = parser.parseFromString.bind(parser);\nexport const body = (html) => parse(html, "text/html");\n',
+  "src/js/08-production-panels.js": 'import { body } from "../adapters/richtext/bound.ts";\nexport const parsed = body("");\n'
+}), ["src/js/08-production-panels.js:1 src/adapters/richtext/bound.ts"]);
+eq("an unclassified richtext helper with no recognized parsing calls is conservatively reported", htmlCells({
+  "src/adapters/richtext/unknown.ts": 'export const helper = (value) => value;\n',
+  "src/js/08-production-panels.js": 'import { helper } from "../adapters/richtext/unknown.ts";\nexport const value = helper("");\n'
+}), ["src/js/08-production-panels.js:1 src/adapters/richtext/unknown.ts"]);
 eq("bootstrap importing the adapter is reported", htmlCells({
   "src/bootstrap/main.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nexport const r = createRichText();\n'
 }), ["src/bootstrap/main.ts:1 src/adapters/richtext/richtext.ts"]);
