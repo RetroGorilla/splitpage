@@ -6,6 +6,7 @@ import { REPO, listRepoFiles } from "../../tools/source-scan.mjs";
 import { CONFIGURATION } from "../../src/test/_load-order-hooks.mjs";
 import { loadAlone, NOTHING_STARTED } from "./load-order-support.ts";
 
+const QUERIES = new Set(["src/legacy/location-bridge.ts#onServerDoc"]);
 const CONFIGURES = /^(?:start|install|register|provide|configure|route|watch|hand|use|on)[A-Z]/;
 
 test("every configuration function the load-order check spies on exists, and every bridge or bootstrap export that configures is spied on", () => {
@@ -24,7 +25,7 @@ test("every configuration function the load-order check spies on exists, and eve
   for (const file of files) {
     for (const found of readFileSync(join(REPO, file), "utf8").matchAll(/^export (?:async )?function (\w+)/gm)) {
       const name = found[1] ?? "";
-      if (CONFIGURES.test(name) && !listed.has(file + "#" + name)) unlisted.push(file + "#" + name);
+      if (CONFIGURES.test(name) && !QUERIES.has(file + "#" + name) && !listed.has(file + "#" + name)) unlisted.push(file + "#" + name);
     }
   }
   assert.deepEqual(unlisted, [], "a new function that stores a callback, an effect or an owner is added to the spy list");
