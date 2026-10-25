@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, symlinkSync, unlin
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
-import { discover, runTests, parseArgs, nodeVersionWarning, unsupportedNodeError, SETS } from "./run-tests.mjs";
+import { discover, runTests, parseArgs, selectShard, nodeVersionWarning, unsupportedNodeError, SETS } from "./run-tests.mjs";
 import { typecheck, CONFIGS } from "./typecheck.mjs";
 
 let passed = 0;
@@ -211,6 +211,55 @@ check("an unknown flag is a usage error", Boolean(parseArgs(["--changed"]).error
 
   const listed = focusedRun(["tools/"], SETS, { listOnly: true });
   eq("--list with --only prints the selection and runs nothing", [listed.code, listed.calls.length, listed.out.includes("selects 2 of 5")], [0, 0, true]);
+}
+
+console.log("\nsharded runs (--shard):\n");
+
+eq("--shard takes a one-based index and total", parseArgs(["all", "--shard", "1/2"]), { sets: SETS, listOnly: false, only: [], shard: { index: 1, total: 2 } });
+eq("--shard= works with --list", parseArgs(["unit", "--list", "--shard=2/3"]), { sets: ["unit"], listOnly: true, only: [], shard: { index: 2, total: 3 } });
+for (const value of ["", "0/2", "1/0", "3/2", "1", "1.5/2", "-1/2", "1/two", "1/2/3", "1/9007199254740992"]) {
+  check(`invalid shard ${JSON.stringify(value)} is a usage error`, Boolean(parseArgs(["--shard", value]).error));
+}
+check("a missing shard is a usage error", Boolean(parseArgs(["--shard"]).error));
+check("a repeated shard is a usage error", Boolean(parseArgs(["--shard=1/2", "--shard=2/2"]).error));
+check("shards cannot hide partial coverage behind --only", Boolean(parseArgs(["--shard=1/2", "--only", "src/test/a"]).error));
+
+{
+  const tree = listRepoFiles(REPO);
+  const found = discover(tree);
+  const all = found.groups.flatMap((g) => g.files).sort();
+  for (const total of [1, 2, 3]) {
+    const covered = [];
+    for (const group of found.groups) {
+      const chunks = Array.from({ length: total }, (_, index) => selectShard(group.files, { index: index + 1, total }));
+      covered.push(...chunks.flat());
+      check(`${group.group.name} is balanced across ${total} shards`, Math.max(...chunks.map((s) => s.length)) - Math.min(...chunks.map((s) => s.length)) <= 1);
+    }
+    eq(`${total} shards cover the real discovered tree exactly once`, covered.sort(), all);
+    eq(`${total} shards are independent of filesystem enumeration order`, discover([...tree].reverse()).groups.map((g) => selectShard(g.files, { index: 1, total })), found.groups.map((g) => selectShard(g.files, { index: 1, total })));
+  }
+
+  const repo = repoWith({
+    "src/test/a.test.mjs": passingFrontend,
+    "src/test/b.test.mjs": 'import { test } from "node:test";\ntest("failure on shard two", () => { throw new Error("shard failure canary"); });\n'
+  });
+  const groups = [{ ...found.groups[0].group, requiredWhen: () => true }];
+  const files = ["src/test/b.test.mjs", "src/test/a.test.mjs"];
+  const first = runIn(repo, { files, groups, shard: { index: 1, total: 2 } });
+  const second = runIn(repo, { files, groups, shard: { index: 2, total: 2 } });
+  eq("the passing shard passes a real child process", first.code, 0);
+  eq("a failure confined to the other shard fails that shard", second.code, 1);
+  check("the shard summary names the incomplete share of the full gate", first.out.includes("SHARD 1/2: 1 of 2 discovered test files ran; every shard is required"), first.out);
+  check("the failed shard reports its file as failed", second.out.includes("frontend: 1 of 1 selected files executed (2 discovered), FAILED"), second.out);
+  const listed = runIn(repo, { files, groups, shard: { index: 1, total: 2 }, listOnly: true, spawn: () => { throw new Error("list must not execute"); } });
+  eq("a shard can be listed without running it", listed.code, 0);
+  eq("an empty shard refuses to pass", runIn(repo, { files, groups, shard: { index: 3, total: 3 } }).code, 2);
+  eq("direct calls cannot combine a shard with --only", runIn(repo, { files, groups, shard: { index: 1, total: 2 }, only: ["a.test"] }).code, 2);
+  eq("direct calls reject invalid shard coordinates", runIn(repo, { files, groups, shard: { index: 0, total: 2 } }).code, 2);
+  eq("an orphan outside the shard still fails discovery", runIn(repo, { files: [...files, "server/orphan.test.mjs"], groups, shard: { index: 1, total: 2 } }).code, 1);
+  eq("an untested area outside the shard still fails discovery", runIn(repo, { files: [...files, "src/application/missing.ts"], groups, shard: { index: 1, total: 2 } }).code, 1);
+  const required = [{ name: "missing", set: "unit", runner: "script", matches: () => false, requiredWhen: () => true }];
+  eq("an empty required group still fails a shard", runIn(repo, { files, groups: [...groups, ...required], shard: { index: 1, total: 2 } }).code, 1);
 }
 
 console.log("\na stray GOLDEN_UPDATE:\n");
