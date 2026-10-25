@@ -535,6 +535,20 @@ eq("another legacy module importing the adapter is reported", htmlCells({
 eq("a numbered legacy module importing the decoder is reported", htmlCells({
   "src/js/05-x.js": 'import { decode } from "../adapters/richtext/decode.ts";\nexport const d = decode;\n'
 }), ["src/js/05-x.js:1 src/adapters/richtext/decode.ts"]);
+eq("bootstrap and numbered files may import a richtext helper that only rewrites an existing body", htmlCells({
+  "src/adapters/richtext/tag-anchors.ts": 'export const retagTagAnchors = (body) => body.innerHTML;\n',
+  "src/bootstrap/wiring/ports/text.ts": 'import { retagTagAnchors } from "../../../adapters/richtext/tag-anchors.ts";\nexport const text = { retagBody: retagTagAnchors };\n',
+  "src/js/08-production-panels.js": 'import { retagTagAnchors } from "../adapters/richtext/tag-anchors.ts";\nexport const text = { retagBody: retagTagAnchors };\n'
+}), []);
+eq("a richtext helper that reaches the decoder indirectly is reported", htmlCells({
+  "src/adapters/richtext/tag-anchors.ts": 'import { helper } from "./helper.ts";\nexport const retagTagAnchors = helper;\n',
+  "src/adapters/richtext/helper.ts": 'import { decode } from "./decode.ts";\nexport const helper = decode;\n',
+  "src/js/08-production-panels.js": 'import { retagTagAnchors } from "../adapters/richtext/tag-anchors.ts";\nexport const text = retagTagAnchors;\n'
+}), ["src/js/08-production-panels.js:1 src/adapters/richtext/tag-anchors.ts"]);
+eq("a richtext helper that parses HTML is reported", htmlCells({
+  "src/adapters/richtext/tag-anchors.ts": 'export const retagTagAnchors = (s) => new DOMParser().parseFromString(s, "text/html");\n',
+  "src/js/08-production-panels.js": 'import { retagTagAnchors } from "../adapters/richtext/tag-anchors.ts";\nexport const text = retagTagAnchors;\n'
+}), ["src/js/08-production-panels.js:1 src/adapters/richtext/tag-anchors.ts"]);
 eq("bootstrap importing the adapter is reported", htmlCells({
   "src/bootstrap/main.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nexport const r = createRichText();\n'
 }), ["src/bootstrap/main.ts:1 src/adapters/richtext/richtext.ts"]);
