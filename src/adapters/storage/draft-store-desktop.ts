@@ -3,6 +3,13 @@ import type { DesktopDraftResult, DesktopDraftStore } from "../../application/re
 export interface DesktopDraftBridge {
   readonly writeDraft?: ((payload: unknown) => Promise<DesktopDraftResult | null | undefined>) | undefined;
   readonly discardDraft?: ((seq: number) => Promise<DesktopDraftResult | null | undefined>) | undefined;
+  readonly takeDraft?: (() => Promise<unknown>) | undefined;
+  readonly draftRestoreDone?: ((outcome: string) => void) | undefined;
+  readonly hasDraftToRestore?: boolean | undefined;
+}
+
+interface DesktopDraftTaking {
+  readonly takeDraft: () => Promise<unknown>;
 }
 
 export interface DesktopDraftStorePorts {
@@ -34,6 +41,19 @@ export function createDesktopDraftStore(ports: DesktopDraftStorePorts): DesktopD
       const b = bridge();
       if (typeof b.discardDraft !== "function") throw new Error("desktop drafts: the bridge cannot discard a draft");
       return b.discardDraft(seq);
+    },
+    taker: function () {
+      const desktop = ports.bridge();
+      if (!(desktop && typeof desktop.takeDraft === "function")) return null;
+      return function () { return (desktop as DesktopDraftTaking).takeDraft(); };
+    },
+    restoreDone: function (outcome: string) {
+      const b = ports.bridge();
+      if (b && typeof b.draftRestoreDone === "function") b.draftRestoreDone(outcome);
+    },
+    hasDraftToRestore: function () {
+      const b = ports.bridge();
+      return !!(b && b.hasDraftToRestore);
     }
   });
 }

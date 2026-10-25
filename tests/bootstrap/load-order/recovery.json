@@ -2,6 +2,8 @@
   "legacyImports": [
     "./20g-drafts.js"
   ],
-  "loadOnly": [],
-  "expectedLoads": 1
+  "loadOnly": [
+    "src/adapters/storage/draft-writer-lock.js"
+  ],
+  "expectedLoads": 2
 }
