@@ -11,7 +11,7 @@ lists what each job runs.
 | Where | Why |
 | --- | --- |
 | `checks` job, `SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage` | Ubuntu 24.04's AppArmor blocks the user namespaces Chromium's sandbox needs. Without these flags the browser dies before it opens a DevTools (CDP) port, and every browser step fails. |
-| `changes`, `checks` and `gate` jobs, `runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' \|\| vars.CI_RUNNER \|\| 'ubuntu-latest' }}` | The label `ci-github` on a pull request sends only that pull request's runs to GitHub's runners, so one queued run can skip the queue without moving every other run (see [Testing](testing.md#ci)). The label's string literal makes the comment gate's runner reading `unknown`, so a comment in these jobs' scripts that reads differently as bash and as PowerShell needs a `shell:` on its step. The repository variable `CI_RUNNER` (`splitpage-local`) sends these jobs to the self-hosted runners with that label: `splitpage-unraid-1` and `splitpage-unraid-2` on the unRAID server, `splitpage-wsl` and `splitpage-wsl-2` in WSL Ubuntu on the maintainer's PC. Delete the variable and they go back to GitHub's runners. While no runner with that label is online, jobs wait in the queue for up to a day, the `gate` check with them. `desktop-smoke` and `docker.yml` stay on GitHub's runners: they need `sudo apt-get` and Docker. `CI_RUNNER` must name a Linux runner: the comment gate reads a `runs-on` expression by its string literals, here `'ubuntu-latest'`, and so scans these jobs' scripts as bash. The runner needs git, a workspace on the Linux filesystem (not under `/mnt/`) and Chromium's libraries. Each run downloads Playwright's Chromium again, because checkout cleans the workspace. Pull requests from forks must never reach it: delete `CI_RUNNER` before the repository goes public. |
+| `changes`, `checks` and `gate` jobs, `runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' \|\| vars.CI_RUNNER \|\| 'ubuntu-latest' }}` | The label `ci-github` on a pull request sends only that pull request's runs to GitHub's runners, so one queued run can skip the queue without moving every other run (see [Testing](testing.md#ci)). The label's string literal makes the comment gate's runner reading `unknown`, so a comment in these jobs' scripts that reads differently as bash and as PowerShell needs a `shell:` on its step. The repository variable `CI_RUNNER` (`splitpage-local`) sends these jobs to the self-hosted runners with that label: `splitpage-unraid-1` and `splitpage-unraid-2` on the unRAID server. The former WSL runners on the maintainer's PC are stopped, disabled at boot and no longer carry `splitpage-local`; the native Windows runner uses its own manual workflow below. Delete the variable and they go back to GitHub's runners. While no runner with that label is online, jobs wait in the queue for up to a day, the `gate` check with them. `desktop-smoke` and `docker.yml` stay on GitHub's runners: they need `sudo apt-get` and Docker. `CI_RUNNER` must name a Linux runner: the comment gate reads a `runs-on` expression by its string literals, here `'ubuntu-latest'`, and so scans these jobs' scripts as bash. The runner needs git, a workspace on the Linux filesystem (not under `/mnt/`) and Chromium's libraries. Each run downloads Playwright's Chromium again, because checkout cleans the workspace. Pull requests from forks must never reach it: delete `CI_RUNNER` before the repository goes public. |
 | Tab strip width check | Removed by the maintainer's decision (2026-10-14). It guarded PR #17's bug (editing one tab's title resized every other tab) and cost about 55 s per run; see `ci-audit.md` in the project files. `desktop/tabstrip/` still ships. |
 | Node 24 | CI has no separate Node 24 job: the single `checks` and `gate` runs read `.nvmrc`, which pins Node 24.22.0 since the end-of-M5 upgrade (with `Dockerfile` and `Dockerfile.prebuilt` on `node:24-alpine`). Node 22 stays inside `package.json`'s `engines` for the portable install, which uses the user's own Node, but CI no longer runs it. |
 | `on.push` and `concurrency` | Every merge to `4.0-development` runs CI again on the merged commit, the only run that tests the merged result when the base moved after the pull request's last run. A push run classifies only the files its own push changed (`github.event.before` to the new commit), so a docs-only merge skips `checks`. `cancel-in-progress` on `ci-${{ github.ref }}` cancels a push run when the next merge lands before it finishes. If that next merge is docs-only, the cancelled merge's code is never tested after merging; rerun the cancelled run by hand. |
@@ -22,6 +22,29 @@ lists what each job runs.
 | `desktop-smoke` job, step `Install desktop dependencies`, `npm_config_arch` | `desktop/.npmrc` pins `arch=arm64` for the maintainer's Windows-on-ARM machine. An `npm_config_*` environment variable outranks `.npmrc`, so the runner's own architecture wins. Plan section 8 replaces the unconditional pin. |
 | `desktop-smoke` job, step `Fetch the dev Electron binary` | Runs `node node_modules/electron/install.js` directly, not through npm: npm would turn `desktop/.npmrc`'s `arch=arm64` into `npm_config_arch` and fetch a binary the x64 runner cannot execute. |
 | `desktop-smoke` job, step `Desktop smoke (dev target)` | Xvfb is started by hand because `xvfb-run` intermittently returns its own cleanup failure as the exit status. The `grep` on Xvfb's stderr drops xkbcomp's harmless unknown-keysym warnings, about 1,700 lines a run. |
+
+## `.github/workflows/windows-local.yml`
+
+`Windows PC CI` is an optional workflow for the maintainer's native Windows
+runner, `splitpage-windows`. It uses the unique `splitpage-windows` label,
+not `splitpage-local`, so normal Linux CI cannot be assigned to this PC.
+Start the local runner, then select Actions → Windows PC CI → Run workflow.
+Keep the workflow branch on `main` and set its `ref` input to the trusted
+branch, tag or commit to test (default `4.1-development`). The selected ref
+does not need to contain this workflow. Only dispatch trusted code: it runs
+on the maintainer's PC.
+The workflow must reach the repository's default branch before GitHub offers
+the manual dispatch control. It has no push or pull-request trigger, so the
+PC only receives explicitly dispatched runs.
+
+The workflow runs lint, types, dependency and comment checks, the build and
+service-worker stamp check, all unit/desktop/tool tests, and browser suites
+01, 52 and 265. The Electron UI smoke job, Docker and release jobs keep their
+existing workflows. PowerShell is explicit; Git line-ending conversion is
+disabled to keep generated-file comparisons consistent. Browser suites use
+port block 800 to avoid the usual local test ports. This optional workflow
+does not replace the required Linux CI gate. While this runner is stopped,
+manually dispatched jobs wait in GitHub's queue.
 
 ## `.github/workflows/docker.yml`
 
