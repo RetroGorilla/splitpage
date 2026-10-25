@@ -1,0 +1,63 @@
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { parse } from "yaml";
+import { REPO } from "./source-scan.mjs";
+
+const readWorkflow = (name) => parse(readFileSync(join(REPO, `.github/workflows/${name}.yml`), "utf8"));
+const ci = readWorkflow("ci");
+const steps = ci.jobs.checks.steps;
+const appSteps = ["Build index.html and stamp sw.js", "sw.js is committed with the current VERSION stamp", "Select persistent Chromium cache", "Install Chromium", "Pick this runner's port block", "Browser suites 01 (core) and 52 (content security policy)", "Browser suite 265 (drafts kept in IndexedDB and restored, persistence)", "Upload the built app"];
+assert.equal(ci.jobs.changes.outputs.app, "${{ steps.classify.outputs.app }}");
+assert.equal(ci.jobs.checks.if, "needs.changes.outputs.code == 'true'");
+assert.equal(ci.jobs.tests.if, ci.jobs.checks.if);
+for (const name of appSteps) assert.equal(steps.find((s) => s.name === name)?.if, "needs.changes.outputs.app == 'true'", name);
+for (const name of ["Lint", "Types", "Layers and dependencies", "No new comments"]) {
+  const step = steps.find((s) => s.name === name);
+  assert.ok(step, name);
+  assert.equal(step.if, undefined, name);
+}
+assert.equal(steps.some((s) => s.run?.includes("npm run test:all")), false);
+const cache = steps.find((s) => s.name === "Select persistent Chromium cache");
+assert.equal(ci.jobs.checks.env.PLAYWRIGHT_BROWSERS_PATH, undefined);
+if (existsSync(join(REPO, ".github/workflows/nightly.yml"))) {
+  const job = readWorkflow("nightly").jobs.suites;
+  assert.equal(cache.run, job.steps.find((s) => s.name === cache.name)?.run);
+  assert.equal(job.env.PLAYWRIGHT_BROWSERS_PATH, undefined);
+}
+assert.ok(cache.run.includes("$RUNNER_TOOL_CACHE/splitpage-playwright/$PLAYWRIGHT_VERSION"));
+assert.ok(!cache.run.includes("github.workspace"));
+assert.ok(steps.findIndex((s) => s.name === cache.name) < steps.findIndex((s) => s.name === "Install Chromium"));
+assert.ok(steps.find((s) => s.name === "Install Chromium").run.includes("--with-deps"));
+
+const gitPath = process.platform === "win32" ? spawnSync("git", ["--exec-path"], { encoding: "utf8" }).stdout?.trim() : null;
+const bash = process.platform === "win32" ? resolve(gitPath, "../../../bin/bash.exe") : "bash";
+const work = mkdtempSync(join(tmpdir(), "splitpage-cache-check-"));
+try {
+  const output = join(work, "github-env");
+  const toolCache = join(work, "tool cache").replaceAll("\\", "/");
+  const result = spawnSync(bash, ["-e", "-c", cache.run], {
+    env: { ...process.env, RUNNER_TOOL_CACHE: toolCache, PLAYWRIGHT_VERSION: "1.63.0", GITHUB_ENV: output.replaceAll("\\", "/") },
+    encoding: "utf8"
+  });
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
+  assert.equal(readFileSync(output, "utf8").trim(), `PLAYWRIGHT_BROWSERS_PATH=${toolCache}/splitpage-playwright/1.63.0`);
+  assert.notEqual(spawnSync(bash, ["-e", "-c", cache.run], {
+    env: { ...process.env, RUNNER_TOOL_CACHE: "", PLAYWRIGHT_VERSION: "1.63.0", GITHUB_ENV: output.replaceAll("\\", "/") }
+  }).status, 0);
+} finally {
+  rmSync(work, { recursive: true, force: true });
+}
+
+if (existsSync(join(REPO, ".github/workflows/windows-local.yml"))) {
+  const windows = readWorkflow("windows-local");
+  const job = windows.jobs.windows;
+  const windowsCache = job.steps.find((s) => s.name === cache.name);
+  assert.ok(windowsCache?.run.includes("$env:RUNNER_TOOL_CACHE"));
+  assert.ok(windowsCache.run.includes("$env:PLAYWRIGHT_VERSION"));
+  assert.equal(windows.env.PLAYWRIGHT_VERSION, ci.env.PLAYWRIGHT_VERSION);
+  assert.equal(job.env.PLAYWRIGHT_BROWSERS_PATH, undefined);
+}
+console.log("CI filtering preserves required checks; persistent versioned browser cache works with spaces");

@@ -69,7 +69,7 @@ export const GROUPS = [
     name: "desktop",
     set: "desktop",
     runner: "script",
-    matches: (p) => /^desktop\/test\/[^/]+\.test\.mjs$/.test(p),
+    matches: (p) => /^desktop\/(?:test\/)?[^/]+\.test\.mjs$/.test(p),
     requiredWhen: () => true
   },
   {
@@ -105,6 +105,15 @@ export function selectFiles(files, only) {
   return files.filter((f) => patterns.some((p) => f.includes(p)));
 }
 
+function validShard(shard) {
+  return Number.isSafeInteger(shard?.index) && Number.isSafeInteger(shard?.total)
+    && shard.index >= 1 && shard.total >= shard.index;
+}
+
+export function selectShard(files, shard) {
+  return shard ? files.filter((_, index) => index % shard.total === shard.index - 1) : files;
+}
+
 function runGroup(entry, { repo, node, print, spawn }) {
   const { group } = entry;
   const files = entry.selected;
@@ -135,9 +144,14 @@ export function runTests({
   spawn = spawnSync,
   listOnly = false,
   only = [],
+  shard = null,
   env = process.env,
   nodeError = null
 } = {}) {
+  if (shard !== null && (!validShard(shard) || only.length)) {
+    printError("run-tests: --shard needs an index/total with 1 <= index <= total and cannot be combined with --only");
+    return 2;
+  }
   if (env.GOLDEN_UPDATE !== undefined) {
     printError(`run-tests: GOLDEN_UPDATE is set (${JSON.stringify(env.GOLDEN_UPDATE)}), which would make the golden tests rewrite their fixtures instead of checking them.`);
     printError("run-tests: unset it; to regenerate fixtures on purpose run: node src/test/golden-helpers.mjs --update <name>[,<name>...] | all");
@@ -145,7 +159,7 @@ export function runTests({
   }
   const { groups: found, overlaps, orphans, untested } = discover(files, groups);
   const focused = only.length > 0;
-  const chosen = found.filter((e) => sets.includes(e.group.set)).map((e) => ({ ...e, selected: selectFiles(e.files, only) }));
+  const chosen = found.filter((e) => sets.includes(e.group.set)).map((e) => ({ ...e, selected: selectShard(selectFiles(e.files, only), shard) }));
   let failed = false;
 
   for (const e of chosen) {
@@ -169,9 +183,18 @@ export function runTests({
     for (const e of chosen) for (const f of e.selected) print(`  ${f}`);
     print("focused run: this is NOT the full gate; `npm run test:all`, which CI runs, executes every discovered file");
   }
+  if (shard) {
+    print(`\nshard ${shard.index}/${shard.total}: ${picked} of ${discovered} discovered test files in ${sets.join(", ")}`);
+    for (const e of chosen) for (const f of e.selected) print(`  ${f}`);
+    print("sharded run: every shard must pass to complete the full gate");
+  }
   if (failed) return 1;
   if (focused && picked === 0) {
     printError(`run-tests: --only ${scope} matched no discovered test file in ${sets.join(", ")}`);
+    return 2;
+  }
+  if (shard && picked === 0) {
+    printError(`run-tests: shard ${shard.index}/${shard.total} matched no discovered test file`);
     return 2;
   }
   if (listOnly) return 0;
@@ -182,16 +205,17 @@ export function runTests({
 
   const summary = [];
   for (const e of chosen) {
-    const extra = focused ? ` (${e.files.length} discovered)` : "";
+    const extra = focused || shard ? ` (${e.files.length} discovered)` : "";
     if (e.files.length === 0) { summary.push(`${e.group.name}: no files`); continue; }
     if (e.selected.length === 0) { summary.push(`${e.group.name}: none selected${extra}`); continue; }
     const r = runGroup(e, { repo, node, print, spawn });
-    summary.push(`${e.group.name}: ${r.executed} of ${e.selected.length} ${focused ? "selected " : ""}files executed${extra}, ${r.ok ? "passed" : "FAILED"}`);
+    summary.push(`${e.group.name}: ${r.executed} of ${e.selected.length} ${focused || shard ? "selected " : ""}files executed${extra}, ${r.ok ? "passed" : "FAILED"}`);
     if (!r.ok || r.executed !== e.selected.length) failed = true;
   }
   print("\nrun-tests summary");
   for (const line of summary) print(`  ${line}`);
   if (focused) print(`  FOCUSED: ${picked} of ${discovered} discovered test files ran; this is not the full gate`);
+  if (shard) print(`  SHARD ${shard.index}/${shard.total}: ${picked} of ${discovered} discovered test files ran; every shard is required`);
   return failed ? 1 : 0;
 }
 
@@ -235,6 +259,7 @@ export function parseArgs(args) {
   const only = [];
   const named = [];
   let listOnly = false;
+  let shard = null;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--list") listOnly = true;
@@ -242,13 +267,20 @@ export function parseArgs(args) {
       const value = a === "--only" ? args[++i] : a.slice("--only=".length);
       if (!value || value.startsWith("--")) return { error: "--only needs a path or a substring of one" };
       only.push(value);
-    } else if (a.startsWith("--")) return { error: `unknown flag ${a}; use --list or --only <path-or-substring>` };
+    } else if (a === "--shard" || a.startsWith("--shard=")) {
+      if (shard) return { error: "--shard may only be specified once" };
+      const value = a === "--shard" ? args[++i] : a.slice("--shard=".length);
+      const match = /^(\d+)\/(\d+)$/.exec(value ?? "");
+      shard = match ? { index: Number(match[1]), total: Number(match[2]) } : null;
+      if (!validShard(shard)) return { error: "--shard needs an index/total with 1 <= index <= total" };
+    } else if (a.startsWith("--")) return { error: `unknown flag ${a}; use --list, --shard <index/total> or --only <path-or-substring>` };
     else named.push(a);
   }
   const unknown = named.filter((a) => !SETS.includes(a) && a !== "all");
   if (unknown.length) return { error: `unknown set ${unknown.join(", ")}; use ${SETS.join(", ")} or all` };
   const sets = named.length === 0 || named.includes("all") ? SETS : named;
-  return { sets, listOnly, only };
+  if (shard && only.length) return { error: "--shard cannot be combined with --only" };
+  return { sets, listOnly, only, ...(shard ? { shard } : {}) };
 }
 
 if (isMain(import.meta.url)) {
