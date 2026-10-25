@@ -19,7 +19,7 @@ import {
   tagStatusRank
 } from "../core/document/tags.ts";
 import { cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
-import { TAG_CATEGORIES, TAG_STATUSES, tagCategory, tagStatus } from "../core/production/looks.ts";
+import { TAG_CATEGORIES, tagCategory } from "../core/production/looks.ts";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import {
   bulkTagCell as bulkTagCellWith,
@@ -63,13 +63,6 @@ export function tagIconCss() {
   }).join("\n");
 }
 
-export function tagStatusLampHtml(id) {
-  var st = tagStatus(id) || TAG_STATUSES[0];
-  if (st.id === "returned") {
-    return '<svg class="item-lamp is-returned" aria-hidden="true" focusable="false"><use href="#i-return"/></svg>';
-  }
-  return '<span class="item-lamp is-' + st.id + '" aria-hidden="true"></span>';
-}
 
 var TAG_SHORTCUTS = [
   { open: "[", close: "]", cat: "prop" },

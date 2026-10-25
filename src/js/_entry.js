@@ -10,8 +10,7 @@ import { __init as init_04_richtext } from "./04-richtext.js";
 import { __init as init_05_render } from "./05-render.js";
 import { __init as init_07_production_tags } from "./07-production-tags.js";
 import { __init as init_07b_plain_tags } from "./07b-plain-tags.js";
-import { __init as init_08_production_panels } from "./08-production-panels.js";
-import { mountFindFeature } from "../bootstrap/wiring.ts";
+import { mountFindFeature, mountTagPanelsFeature } from "../bootstrap/wiring.ts";
 import { __init as init_11_import } from "./11-import.js";
 import { __init as init_12_dirty_toast } from "./12-dirty-toast.js";
 import { __init as init_13_hosted } from "./13-hosted.js";
@@ -94,7 +93,7 @@ if (wiring) {
   mountSceneMediaFeature();
   init_07_production_tags();
   init_07b_plain_tags();
-  init_08_production_panels();
+  mountTagPanelsFeature();
   mountBrollFeature();
   mountBrollPanelStateFeature();
   mountFindFeature();

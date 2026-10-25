@@ -1,12 +1,12 @@
 {
   "legacyImports": [
     "./07-production-tags.js",
-    "./07b-plain-tags.js",
-    "./08-production-panels.js"
+    "./07b-plain-tags.js"
   ],
   "loadOnly": [
     "src/bootstrap/wiring/production.ts",
-    "src/bootstrap/wiring/production-editing.ts"
+    "src/bootstrap/wiring/production-editing.ts",
+    "src/features/tags/panels.js"
   ],
   "expectedLoads": 5
 }
