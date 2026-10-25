@@ -14,6 +14,7 @@ import { tagPanelActions } from "../../../src/features/tags/actions.ts";
 import { TAG_STATUSES } from "../../../src/core/production/looks.ts";
 import { tagStatusLampHtml } from "../../../src/features/common/tag-status.ts";
 import * as commands from "../../../src/application/tag-panel-commands.ts";
+import { owned } from "../../../src/features/routing/owned.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -32,7 +33,14 @@ function fixture() {
   const calls: string[] = [];
   let renaming: string | null = null;
   let addingPerson: string | null = null;
-  const timers = { start: () => 0, stop: () => {} };
+  const pending = new Map<unknown, () => void>();
+  let timerId = 0;
+  const timers = {
+    start: (run: () => void) => { const id = ++timerId; pending.set(id, run); return id; },
+    stop: (handle: unknown) => { pending.delete(handle); }
+  };
+  const deletion = createDeleteConfirm(timers);
+  const selection = createProductionSelection(timers);
   const ports: TagPanelPorts = {
     view: {
       gearGroupBy: () => "flat", productionGroupBy: () => "cat",
@@ -51,8 +59,8 @@ function fixture() {
       retagBody: (body) => body.innerHTML,
       sanitizeHtml: (html) => String(html ?? "")
     },
-    deletion: createDeleteConfirm(timers),
-    selection: createProductionSelection(timers),
+    deletion,
+    selection,
     shotHiding: { reveal: (id) => { calls.push(id); } },
     panels: { open: (id) => { calls.push(id); } },
     presence: { personColor: () => "blue" },
@@ -61,7 +69,7 @@ function fixture() {
     notices: fakeNotices().notices,
     ids: migration.ids
   };
-  return { ports, calls, edits, doc };
+  return { ports, calls, edits, doc, pending, deletion, selection };
 }
 
 test("production panels mount with fake ports and remove both menu listeners on disposal and remount", () => {
@@ -99,11 +107,44 @@ test("production panel commands use the document, edit and panel ports", () => {
   } finally { mounted.dispose(); }
 });
 
+test("replaced and disposed panel controls cannot act on the next mount", () => {
+  const h = fixture();
+  const state = owned<ReturnType<typeof __init>>();
+  const first = state.replace(() => __init(h.ports));
+  first.openProductionPanel();
+  assert.deepEqual(h.calls, ["production-panel"]);
+  h.selection.arm(() => { assert.fail("a replaced mount's bulk-delete timer fired"); });
+  h.deletion.arm("tag", "hat", () => { assert.fail("a replaced mount's tag-delete timer fired"); });
+  assert.equal(h.pending.size, 2);
+  const second = state.replace(() => __init(h.ports));
+  assert.equal(h.pending.size, 0);
+  const entry = h.ports.production.entries(h.doc)[0];
+  assert.ok(entry);
+  first.openProductionPanel();
+  first.openGearPanel();
+  first.renderProduction();
+  first.saveTagRename(entry.key);
+  first.addPersonForTag(entry.key);
+  first.setTagOwner(entry.key, "ada");
+  first.setTagNotes(entry.key, "Stale");
+  first.dispose();
+  assert.deepEqual(h.calls, ["production-panel"]);
+  assert.equal(h.edits.ran.length, 0);
+  second.openProductionPanel();
+  assert.deepEqual(h.calls, ["production-panel", "production-panel"]);
+  state.stop();
+  second.openProductionPanel();
+  second.setTagNotes(entry.key, "Disposed");
+  assert.deepEqual(h.calls, ["production-panel", "production-panel"]);
+  assert.equal(h.edits.ran.length, 0);
+});
+
 test("production actions preserve their order, availability and panel toggles", () => {
-  fixture();
+  const h = fixture();
+  let owner: ReturnType<typeof __init> | null = __init(h.ports);
   const screen = fakeScreen();
   const calls: string[] = [];
-  const actions = tagPanelActions(screen.screen, { close: (id) => { calls.push(id); } });
+  const actions = tagPanelActions(() => owner, screen.screen, { close: (id) => { calls.push(id); } });
   assert.deepEqual(actions.map((action) => action.id), ["panel-production", "panel-gear"]);
   const production = actions[0];
   assert.ok(production);
@@ -111,6 +152,11 @@ test("production actions preserve their order, availability and panel toggles", 
   screen.state.loading = true;
   assert.equal(production.availability?.("button").enabled, false);
   (win.document.getElementById("production-panel") as HTMLElement).hidden = false;
+  production.run("button");
+  assert.deepEqual(calls, ["production-panel"]);
+  owner.dispose();
+  owner = null;
+  assert.equal(production.availability?.("button").enabled, false);
   production.run("button");
   assert.deepEqual(calls, ["production-panel"]);
 });

@@ -12,6 +12,13 @@ import type { TextServices } from "../../application/text/services.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import type { TagPanelState } from "../../application/tag-panel-state.ts";
+import type { TagPanelCommands } from "../../application/tag-panel-commands.ts";
+
+export interface TagPanelMount extends TagPanelCommands {
+  readonly openProductionPanel: () => void;
+  readonly openGearPanel: () => void;
+  readonly dispose: () => void;
+}
 
 export interface TagPanelPorts {
   readonly view: Pick<TagPanelState, "gearGroupBy" | "productionGroupBy" | "setTagAddingPerson" | "setTagRenaming" | "tagAddingPersonKey" | "tagExpandedKey" | "tagRenamingKey">;

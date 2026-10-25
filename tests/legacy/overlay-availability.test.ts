@@ -1,4 +1,5 @@
-import { tagPanelActions } from "../../src/bootstrap/wiring/production.ts";
+import { startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
+import { tagPanelActions, mountTagPanelsFeature, stopTagPanelsFeature } from "../../src/bootstrap/wiring/production.ts";
 import { desktopActions, mountDesktopFeature, stopDesktopFeature } from "../../src/bootstrap/wiring/desktop.ts";
 import { brollPanelActions, mountBrollPanelStateFeature, stopBrollPanelStateFeature } from "../../src/bootstrap/wiring/broll.ts";
 import { onboardingActions, mountOnboardingFeature, stopOnboardingFeature } from "../../src/bootstrap/wiring/onboarding.ts";
@@ -82,11 +83,13 @@ function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
   mountOnboardingFeature();
   mountDesktopFeature();
   const registry = createActionRegistry();
+  const stopProductionEditing = startProductionEditing({ start: () => 0, stop: () => {} });
+  mountTagPanelsFeature();
   mountBrollPanelStateFeature();
   mountRundownFeature();
   mountFileMenuExportFeature();
   mountFindFeature();
-  const disposers = [stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFindFeature, registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...viewActions()]),
+  const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFindFeature, registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...viewActions()]),
     registerAll(registry, [...shareActions().slice(0, 11), ...fileMenuExportActions().slice(1), ...shareActions().slice(11), ...desktopActions()]), stopDesktopFeature, stopHelpFeature, stopOnboardingFeature];
   const was = { state: currentDocument() as unknown, prompterOpen: prompterIsOpen() };
   loadTestDocument({ rows: [] });

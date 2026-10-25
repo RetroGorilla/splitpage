@@ -1,4 +1,5 @@
-import { tagPanelActions } from "../../src/bootstrap/wiring/production.ts";
+import { startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
+import { tagPanelActions, mountTagPanelsFeature, stopTagPanelsFeature } from "../../src/bootstrap/wiring/production.ts";
 import { brollPanelActions, mountBrollPanelStateFeature, stopBrollPanelStateFeature } from "../../src/bootstrap/wiring/broll.ts";
 import { commentsPanelActions } from "../../src/bootstrap/wiring/comments.ts";
 import "../../src/test/_dom.mjs";
@@ -19,10 +20,12 @@ import { fileMenuExportActions, mountFileMenuExportFeature, stopFileMenuExportFe
 
 function loadingRegistry(): { registry: ActionRegistry; restore: () => void } {
   const registry = createActionRegistry();
+  const stopProductionEditing = startProductionEditing({ start: () => 0, stop: () => {} });
+  mountTagPanelsFeature();
   mountBrollPanelStateFeature();
   mountRundownFeature();
   mountFileMenuExportFeature();
-  const disposers = [stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...viewActions()])];
+  const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...viewActions()])];
   const was: unknown = currentDocument();
   loadTestDocument(null);
   return {
