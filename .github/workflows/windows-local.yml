@@ -12,6 +12,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PLAYWRIGHT_VERSION: '1.63.0'
+
 concurrency:
   group: windows-pc-${{ github.ref }}
   cancel-in-progress: false
@@ -29,7 +32,6 @@ jobs:
       GIT_CONFIG_VALUE_0: 'false'
       GIT_CONFIG_KEY_1: core.longpaths
       GIT_CONFIG_VALUE_1: 'true'
-      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.pw-browsers
     steps:
       - uses: actions/checkout@v7
         with:
@@ -64,8 +66,13 @@ jobs:
       - name: Unit, desktop and tool tests
         run: npm run test:all
 
+      - name: Select persistent Chromium cache
+        run: |
+          if (-not $env:RUNNER_TOOL_CACHE) { throw 'RUNNER_TOOL_CACHE is required' }
+          "PLAYWRIGHT_BROWSERS_PATH=$env:RUNNER_TOOL_CACHE/splitpage-playwright/$env:PLAYWRIGHT_VERSION" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Install Windows Chromium
-        run: npx --yes playwright@1.63.0 install chromium
+        run: npx --yes "playwright@$env:PLAYWRIGHT_VERSION" install chromium
 
       - name: Locate Windows Chromium
         run: |
