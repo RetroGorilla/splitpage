@@ -10,10 +10,10 @@ import { __init as initTags } from "../js/07-production-tags.js";
 import "./_broll-mounted.mjs";
 import { exportComments } from "../adapters/formats/export-kit.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { brollGroups } from "../core/production/broll-view.ts";
 import {
   breakdownRows,
   breakdownTable,
-  brollGroups,
   brollShotListForPrint,
   brollTable,
   commentBodyText,

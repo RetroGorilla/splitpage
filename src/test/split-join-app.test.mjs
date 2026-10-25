@@ -15,7 +15,7 @@ const { currentDocument, liveSession } = await import("../legacy/session-bridge.
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { openProductionPanel } = await import("../js/08-production-panels.js");
-const { openBrollPanel } = await import("../js/08d-broll-panel.js");
+const { openBrollPanel } = await import("../features/broll/panel.js");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);

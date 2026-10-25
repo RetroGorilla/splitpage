@@ -64,6 +64,7 @@ test("every CSS variable has a CSS definition or a runtime assignment", () => {
   const definitions = runtimeDefinitions(new URL("src/js/", repoUrl));
   for (const file of [
     "src/features/rows/row-motion.js",
+    "src/features/broll/panel.js",
     "src/features/title/topbar.ts",
     "src/features/comments/comments.js",
     "src/features/notices/busy.js",
