@@ -36,7 +36,7 @@ import { createAppActions, installAppActions } from "../legacy/app-actions.ts";
 import { installExportFormats } from "../legacy/export-formats.ts";
 import { startEditor } from "../legacy/editor-bridge.ts";
 import { startLocation } from "../legacy/location-bridge.ts";
-import { startPreferences } from "../legacy/preferences-bridge.ts";
+import { getEditorName, startPreferences } from "../legacy/preferences-bridge.ts";
 import { legacyShotHidingPorts, startShotHiding } from "../legacy/shot-hiding-bridge.ts";
 import { legacyPresencePorts, startPresence } from "../legacy/presence-bridge.ts";
 import { startMerge } from "../legacy/merge-bridge.ts";
@@ -354,6 +354,10 @@ function drain(disposers: (() => void)[]): unknown[] {
     }
   }
   return failures;
+}
+
+export function wireLegacyApp(deps: Omit<WiringDeps, "editorName">): Wiring {
+  return wireApp({ ...deps, editorName: getEditorName });
 }
 
 export function wireApp(deps: WiringDeps): Wiring {

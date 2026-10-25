@@ -14,15 +14,16 @@ localStorage.setItem(NAME_KEY, NAME_33);
 await bootApp(JSON.stringify({ schema: 2, title: "Mine", rows: [], rev: 5, lastEditedBy: NAME_33 }));
 
 const { migrateRows } = await import("../js/02-state.js");
-const { getEditorName, promptForName } = await import("../js/03-sync.js");
+const { promptForName } = await import("../js/03-sync.js");
 const { openCommentComposer, postComment, postReply, toggleReplyComposer } = await import("../features/comments/comments.js");
 import { getSavedAuthorName as getSavedAuthorNameWith } from "../application/comment-author.js";
-import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+import { getEditorName, preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
 function getSavedAuthorName() { return getSavedAuthorNameWith(commentPreferences()); }
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { openSettings } = await import("../features/settings/settings.js");
 const { render } = await import("../js/05-render.js");
 const { toastLastEditor } = await import("../js/03-sync.js");
+const { captureSnapshot, getHistorySnapshot } = await import("../js/03a-history-store.js");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
@@ -159,4 +160,22 @@ test("the guest name field takes 30 characters and saves them", () => {
   assert.equal(typeInto(field, "x".repeat(29) + GRIN + "tail"), NAME_30_EMOJI);
   document.querySelector('#guest-modal [data-guest-action="save"]').click();
   assert.equal(localStorage.getItem(NAME_KEY), NAME_30_EMOJI);
+});
+
+test("history captures the current cleaned editor name and the exact Anonymous fallback", async () => {
+  const saved = localStorage.getItem(NAME_KEY);
+  try {
+    for (const [stored, expected] of [["  Sam  ", "Sam"], [NAME_33, NAME_33.slice(0, 30).trimEnd()], [null, "Anonymous"], [" ", "Anonymous"]]) {
+      if (stored === null) localStorage.removeItem(NAME_KEY);
+      else localStorage.setItem(NAME_KEY, stored);
+      const capture = captureSnapshot("Attribution", currentDocument());
+      assert.ok(capture);
+      const snapshot = await getHistorySnapshot(capture);
+      assert.equal(snapshot.meta.by, expected);
+      await capture.done;
+    }
+  } finally {
+    if (saved === null) localStorage.removeItem(NAME_KEY);
+    else localStorage.setItem(NAME_KEY, saved);
+  }
 });
