@@ -7,7 +7,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import "./_broll-mounted.mjs";
-import { __init as initBrollPanel } from "../js/08d-broll-panel.js";
+import { mountBrollPanelStateFeature as initBrollPanel } from "../bootstrap/wiring/broll.ts";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import { PRINT_COLORS, exportDateText } from "../adapters/formats/export-kit.ts";
 import { exportDocumentOf } from "../js/14b-export-kit.js";

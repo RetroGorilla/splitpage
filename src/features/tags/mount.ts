@@ -1,3 +1,4 @@
+import type { ButtonActions } from "../../application/actions.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
 type TagEvent = MouseEvent & { readonly target: HTMLElement & { value: string }; readonly key: string; readonly pointerType: string };
@@ -14,7 +15,7 @@ interface EntityPorts {
   readonly setTagNotes: (key: string | null, value: string) => void;
   readonly queueAutoSave: () => void;
 }
-export interface TagsPorts extends EntityPorts {
+export interface TagsPorts extends EntityPorts, Pick<ButtonActions, "runFromButton"> {
   readonly acceptTagGhost: () => void;
   readonly acceptUntaggedMention: () => void;
   readonly applyTag: () => void;
@@ -58,7 +59,6 @@ export interface TagsPorts extends EntityPorts {
   readonly cssAttr: (value: string | null) => string;
   readonly exportAs: (format: string) => void;
   readonly runExport: (format: string) => void;
-  readonly runFromButton: (action: string) => void;
   readonly capture: () => () => boolean;
   readonly installEntity: (id: string) => () => void;
 }

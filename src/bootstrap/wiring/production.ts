@@ -1,4 +1,4 @@
-import { mountBrollFeature } from "../../js/08d-broll-panel.js";
+import { mountBrollPanelFeature } from "./broll.ts";
 import { bulkDeleteArmed, clearProductionSelection, disarmBulkDelete, productionSelection, selectedKeys } from "../../legacy/production-editing-bridge.ts";
 import type { TagsPorts } from "../../features/tags/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -123,6 +123,6 @@ export function mountTagsFeature(): ReturnType<typeof mountTags> {
 
 export const stopTagsFeature = tags.stop;
 
-export function mountBrollPanelFeature(): ReturnType<typeof mountBrollFeature> {
-  return mountBrollFeature({ exportAs: exportAs });
+export function mountBrollEventsFeature(): ReturnType<typeof mountBrollPanelFeature> {
+  return mountBrollPanelFeature({ exportAs: exportAs });
 }

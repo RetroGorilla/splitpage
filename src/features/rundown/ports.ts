@@ -8,6 +8,7 @@ import type { PreferenceChanges, Preferences } from "../../application/preferenc
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import type { TargetSection } from "../../application/target-section.ts";
 
 export interface RundownPorts {
   readonly document: Pick<DocumentReader, "current" | "read">;
@@ -33,12 +34,7 @@ export interface TargetPorts {
   readonly notices: Pick<NoticePort, "show">;
 }
 
-export interface TargetSection {
-  readonly html: () => string;
-  readonly wire: (wrap: Element, close: () => void) => void;
-}
-
 export interface TargetMount {
-  readonly section: TargetSection;
+  readonly section: TargetSection<Element>;
   readonly dispose: () => void;
 }

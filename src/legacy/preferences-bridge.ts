@@ -2,17 +2,11 @@ import { getSavedAuthorName } from "../application/comment-author.js";
 import { createPanelWidths } from "../application/preferences/panel-widths.ts";
 import type { PanelWidths } from "../application/preferences/panel-widths.ts";
 import { createPreferences } from "../application/preferences/preferences.ts";
-import type { PreferenceChange, Preferences } from "../application/preferences/preferences.ts";
+import type { PreferenceChange, PreferencePorts, Preferences } from "../application/preferences/preferences.ts";
 import { createViewFlags } from "../application/preferences/view-flags.ts";
 import type { ViewFlags } from "../application/preferences/view-flags.ts";
-import type { KeyValueStorage } from "../application/recovery/conflict-stash.ts";
 
 export const PREF_EVENT = "splitpage:pref";
-
-export interface LegacyPreferencePorts {
-  readonly storage: () => KeyValueStorage | null | undefined;
-  readonly announce: (change: PreferenceChange) => void;
-}
 
 interface Started {
   readonly preferences: Preferences;
@@ -47,7 +41,7 @@ function running(): Started {
   return started;
 }
 
-export function browserPreferencePorts(): LegacyPreferencePorts {
+export function browserPreferencePorts(): PreferencePorts {
   return {
     storage: function () {
       try { return window.localStorage; } catch (e) { return null; }
@@ -58,7 +52,7 @@ export function browserPreferencePorts(): LegacyPreferencePorts {
   };
 }
 
-export function startPreferences(ports: LegacyPreferencePorts = browserPreferencePorts()): () => void {
+export function startPreferences(ports: PreferencePorts = browserPreferencePorts()): () => void {
   if (started) throw new Error("The preferences are already started; stop them first");
   const preferences = createPreferences({
     storage: ports.storage,

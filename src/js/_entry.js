@@ -11,7 +11,6 @@ import { __init as init_05_render } from "./05-render.js";
 import { __init as init_07_production_tags } from "./07-production-tags.js";
 import { __init as init_07b_plain_tags } from "./07b-plain-tags.js";
 import { __init as init_08_production_panels } from "./08-production-panels.js";
-import { __init as init_08d_broll_panel } from "./08d-broll-panel.js";
 import { mountFindFeature } from "../bootstrap/wiring.ts";
 import { __init as init_11_import } from "./11-import.js";
 import { __init as init_12_dirty_toast } from "./12-dirty-toast.js";
@@ -44,7 +43,7 @@ import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireLegacyApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature, mountCopyPasteFeature, mountSettingsFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature, mountBrollFeature, mountScenesFeature, mountSceneMediaFeature, derivedRecordsPlan, mountOnboardingFeature, mountVideoFilesFeature } from "../bootstrap/wiring.ts";
+import { wireLegacyApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature, mountCopyPasteFeature, mountSettingsFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature, mountBrollFeature, mountBrollPanelStateFeature, mountScenesFeature, mountSceneMediaFeature, derivedRecordsPlan, mountOnboardingFeature, mountVideoFilesFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -97,7 +96,7 @@ if (wiring) {
   init_07b_plain_tags();
   init_08_production_panels();
   mountBrollFeature();
-  init_08d_broll_panel();
+  mountBrollPanelStateFeature();
   mountFindFeature();
   mountCommentsLogicFeature();
   init_11_import();

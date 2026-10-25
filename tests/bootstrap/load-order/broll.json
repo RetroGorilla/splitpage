@@ -1,12 +1,12 @@
 {
-  "legacyImports": [
-    "./08d-broll-panel.js"
-  ],
+  "legacyImports": [],
   "loadOnly": [
     "src/bootstrap/wiring/broll.ts",
     "src/features/broll/records.ts",
+    "src/features/broll/panel.js",
+    "src/features/broll/actions.ts",
     "src/application/production/broll-records.ts",
-    "src/legacy/broll-bridge.ts"
+    "src/application/preferences/broll-view.ts"
   ],
-  "expectedLoads": 5
+  "expectedLoads": 6
 }
