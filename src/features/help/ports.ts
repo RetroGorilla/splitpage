@@ -5,11 +5,7 @@ import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { SidePanels } from "../../application/side-panels.ts";
-
-export interface TourPause {
-  readonly interrupt: () => void;
-  readonly offerResume: () => void;
-}
+import type { TourPause } from "../../application/tour-pause.ts";
 
 export interface HelpControls {
   readonly openHelp: (anchor?: string) => void;

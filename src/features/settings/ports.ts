@@ -2,10 +2,7 @@ import type { ActionRegistry } from "../../application/actions.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { PreferenceChanges, PreferenceName, Preferences } from "../../application/preferences/preferences.ts";
 import type { ScreenState } from "../../application/screen.ts";
-
-export interface SettingsControls {
-  readonly openSettings: (input?: unknown) => void;
-}
+import type { SettingsControls } from "../../application/settings-actions.ts";
 
 export interface SettingsMount extends SettingsControls {
   readonly dispose: () => void;
