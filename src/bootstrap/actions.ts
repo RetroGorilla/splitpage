@@ -5,7 +5,7 @@ import type { ActionRegistry, ActionSource, Refusal } from "../application/actio
 import { registerAll } from "../application/actions.ts";
 import { mountShortcuts } from "../features/shortcuts/mount.ts";
 import { showRefusal } from "../js/12-dirty-toast.js";
-import { runMenuCommandsWith } from "../js/20f-desktop.js";
+import { runMenuCommandsWith } from "../application/desktop/menu-commands.ts";
 import { editorOpenActions } from "../legacy/editor-open-actions.ts";
 import { videoFiles } from "./wiring/video-files.ts";
 import { fileActions } from "../legacy/file-actions.ts";
@@ -23,6 +23,7 @@ import { galleryActions } from "./wiring/gallery.ts";
 import { findActions } from "./wiring/find.ts";
 import { fileMenuExportActions } from "./wiring/file-menu-export.ts";
 import { hideShotActions } from "./wiring/hide-shot.ts";
+import { desktopActions } from "./wiring/desktop.ts";
 
 let running: (() => void) | null = null;
 
@@ -49,7 +50,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     },
     () => {
       const share = shareActions();
-      return registerAll(registry, [...share.slice(0, 11), ...fileMenuExportActions().slice(1), ...share.slice(11)]);
+      return registerAll(registry, [...share.slice(0, 11), ...fileMenuExportActions().slice(1), ...share.slice(11), ...desktopActions()]);
     },
     () => registerAll(registry, scriptZoomActions()),
     () => {

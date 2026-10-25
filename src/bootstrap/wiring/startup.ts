@@ -19,13 +19,15 @@ import { updateAutoSaveMenu } from "../../js/14-export.js";
 import { applyStashedWork } from "../../legacy/recovery-bridge.ts";
 import { tryResumeLastProject } from "../../js/18-local-files.js";
 import { seedCheckPasses } from "../../legacy/seed-check.ts";
-import { desktopBridge, initDesktop, notifyDesktopDocumentState } from "../../js/20f-desktop.js";
-import { applyTakenDraft, armServerDraftResume, desktopDraftTaker } from "../../js/20g-drafts.js";
+import { startDesktopShell } from "./desktop.ts";
+import { notifyDesktopDocumentState } from "../../legacy/desktop-bridge.ts";
+import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { applyTakenDraft, armServerDraftResume, desktopDraftTaker } from "./drafts.ts";
 import { checkServer } from "../../legacy/location-bridge.ts";
 
 export function startupPorts(): StartupPorts<unknown, ValidatedDocument, ValidatedDocument, MergedStates> {
   return {
-    desktop: !!desktopBridge(),
+    desktop: runningOnDesktop(),
     draft: {
       taker: desktopDraftTaker(),
       detectServer: checkServer,
@@ -59,7 +61,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
       snapshotKey: LEGACY_SNAPSHOTS_KEY,
       unsaved: function () { return hasUnsavedChanges() && !suppressUnloadWarning; }
     },
-    startDesktop: initDesktop
+    startDesktop: startDesktopShell
   };
 }
 

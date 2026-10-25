@@ -7,7 +7,7 @@ import {
   setServerToken
 } from "./13-hosted.js";
 import { deliverFile } from "../legacy/file-delivery.ts";
-import { renderDesktopShareInfo } from "./20f-desktop.js";
+import { renderDesktopShareInfo } from "../legacy/desktop-bridge.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { joinServer } from "../adapters/transport/server-join.ts";
 import { appActions } from "../legacy/app-actions.ts";
