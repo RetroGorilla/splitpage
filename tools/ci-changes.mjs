@@ -14,15 +14,29 @@ const PROSE_ONLY = [
 
 const BUILD_PROSE = new Set(["docs/help.md"]);
 
+const NON_APP = [
+  /^(tests|src\/test|desktop\/test)\//,
+  /^tools\/test-[^/]+\.mjs$/,
+  /^tools\/ci-changes\.mjs$/,
+  /^\.github\/ISSUE_TEMPLATE\//,
+  /^\.github\/dependabot\.yml$/,
+  /^\.github\/workflows\/(windows-local|release|docker)\.yml$/
+];
+
 export function needsChecks(files) {
   if (files === null || files.length === 0) return true;
   return files.some((f) => BUILD_PROSE.has(f) || !(f.endsWith(".md") || PROSE_ONLY.some((re) => re.test(f))));
 }
 
+export function needsAppChecks(files) {
+  if (files === null || files.length === 0) return true;
+  return files.some((f) => needsChecks([f]) && !NON_APP.some((re) => re.test(f)));
+}
+
 export function changedFiles(base, head, repo = REPO) {
   if (!base || /^0+$/.test(base) || !head) return null;
   try {
-    const out = execFileSync("git", ["diff", "--name-only", "-z", `${base}...${head}`], { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    const out = execFileSync("git", ["diff", "--no-renames", "--name-only", "-z", `${base}...${head}`], { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
     return out.split("\0").filter(Boolean);
   } catch {
     return null;
@@ -33,8 +47,10 @@ if (isMain(import.meta.url)) {
   const [base, head] = process.argv.slice(2);
   const files = changedFiles(base, head);
   const code = needsChecks(files);
+  const app = needsAppChecks(files);
   console.log(files === null ? "ci-changes: no usable diff, running every check" : `ci-changes: ${files.length} files changed`);
   for (const f of files ?? []) console.log(`  ${f}`);
   console.log(`ci-changes: code=${code}`);
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\n`);
+  console.log(`ci-changes: app=${app}`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\napp=${app}\n`);
 }
