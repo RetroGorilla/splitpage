@@ -1,11 +1,8 @@
-export interface TargetSectionHandlers {
-  readonly html: () => string;
-  readonly wire: (wrap: Element, close: () => void) => void;
-}
+import type { TargetSection } from "../application/target-section.ts";
 
-let handlers: TargetSectionHandlers | null = null;
+let handlers: TargetSection<Element> | null = null;
 
-export function handTargetSectionTo(next: TargetSectionHandlers): void {
+export function handTargetSectionTo(next: TargetSection<Element>): void {
   handlers = next;
 }
 

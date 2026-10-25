@@ -5,6 +5,10 @@ export type { KeyedAction } from "./shortcuts.ts";
 
 export type ActionSource = "menu" | "command-menu" | "shortcut" | "button" | "native-menu";
 
+export interface ButtonActions {
+  readonly runFromButton: (id: string) => void;
+}
+
 export interface Availability {
   readonly enabled: boolean;
   readonly reason?: string;

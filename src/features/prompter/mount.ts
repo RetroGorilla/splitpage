@@ -1,3 +1,4 @@
+import type { ButtonActions } from "../../application/actions.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
 export interface PrompterVisibilityPorts {
@@ -15,9 +16,7 @@ export function mountPrompterVisibility(mount: { window: Window; ports: Prompter
   return { dispose: life.dispose };
 }
 
-export interface PrompterOpenPorts {
-  readonly runFromButton: (id: string) => void;
-}
+export type PrompterOpenPorts = Pick<ButtonActions, "runFromButton">;
 
 export function mountPrompterOpen(mount: { window: Window; ports: PrompterOpenPorts }): { dispose: () => void } {
   const { window, ports } = mount;
