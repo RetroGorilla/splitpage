@@ -16,6 +16,7 @@ function memory() {
 test("before the preferences are started, every accessor throws instead of running on a default", () => {
   assert.equal(bridge.preferencesStarted(), false);
   assert.throws(() => bridge.preferences(), /The preferences are not started yet/);
+  assert.throws(() => bridge.getEditorName(), /The preferences are not started yet/);
   assert.throws(() => bridge.viewFlags(), /not started yet/);
   assert.throws(() => bridge.panelWidths(), /not started yet/);
 });
@@ -92,4 +93,23 @@ test("a change heard from outside the owner reaches the change listeners; the ow
   bridge.notePreferenceChange({ key: "splitpage-clock", value: "24" });
   unlisten();
   assert.equal(changes.length, 2);
+});
+
+test("editor names read the active preferences each time, clean names and keep the Anonymous fallback", () => {
+  const storage = memory();
+  const stop = bridge.startPreferences({ storage: () => storage, announce: () => {} });
+  try {
+    assert.equal(bridge.getEditorName(), "Anonymous");
+    storage.items.set("splitpage-comment-author", "  Sam  ");
+    assert.equal(bridge.getEditorName(), "Sam");
+    storage.items.set("splitpage-comment-author", "x".repeat(29) + String.fromCodePoint(0x1F600) + "tail");
+    assert.equal(bridge.getEditorName(), "x".repeat(29) + String.fromCodePoint(0x1F600));
+    storage.items.set("splitpage-comment-author", " ");
+    assert.equal(bridge.getEditorName(), "Anonymous");
+    storage.items.delete("splitpage-comment-author");
+    assert.equal(bridge.getEditorName(), "Anonymous");
+  } finally {
+    stop();
+  }
+  assert.throws(() => bridge.getEditorName(), /The preferences are not started yet/);
 });

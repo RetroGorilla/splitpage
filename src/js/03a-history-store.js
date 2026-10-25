@@ -1,9 +1,9 @@
+import { getEditorName } from "../legacy/preferences-bridge.ts";
 import { sha256Bytes } from "../core/document/ids.ts";
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { currentHome } from "../legacy/location-bridge.ts";
 import { dataUrlForSync, ensureBytes, inlineStateJson, intern, persist, recordFor } from "../adapters/storage/02c-blobs.js";
-import { getEditorName } from "./03-sync.js";
 import { legacySnapshots } from "../legacy/recovery-bridge.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 import { createIdbHistoryBackend, hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";

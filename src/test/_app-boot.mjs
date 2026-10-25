@@ -1,4 +1,5 @@
 import "./_dom.mjs";
+import { getEditorName } from "../legacy/preferences-bridge.ts";
 import "fake-indexeddb/auto";
 import { readFileSync } from "node:fs";
 import { checksumText } from "../../shared/text.js";
@@ -105,7 +106,7 @@ export async function appWiringDeps() {
   return {
     entry: migrateRows,
     effects: dirty.legacySessionEffects(),
-    editorName: sync.getEditorName,
+    editorName: getEditorName,
     refresh: production.runIdleRefresh,
     records: broll.derivedRecordsPlan,
     bulkTags: { cell: production.bulkTagCell, stamp: sync.stampRow },

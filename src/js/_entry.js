@@ -35,7 +35,7 @@ import { __init as init_20h_appdata } from "./20h-appdata.js";
 import { __init as init_20j_newtab } from "./20j-newtab.js";
 import { migrateRows } from "./02-state.js";
 import { documentIdentityPort } from "./02b-doc-id.js";
-import { documentDestinationPort, documentHistoryPort, getEditorName, legacyMergePorts, stampRow } from "./03-sync.js";
+import { documentDestinationPort, documentHistoryPort, legacyMergePorts, stampRow } from "./03-sync.js";
 import { bulkTagCell, runIdleRefresh } from "./07-production-tags.js";
 import { legacySessionEffects } from "./12-dirty-toast.js";
 import { legacyFileDestination, legacySavePorts } from "./14-export.js";
@@ -44,15 +44,14 @@ import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature, mountCopyPasteFeature, mountSettingsFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature, mountBrollFeature, mountScenesFeature, mountSceneMediaFeature, derivedRecordsPlan, mountOnboardingFeature, mountVideoFilesFeature } from "../bootstrap/wiring.ts";
+import { wireLegacyApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature, mountCopyPasteFeature, mountSettingsFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature, mountBrollFeature, mountScenesFeature, mountSceneMediaFeature, derivedRecordsPlan, mountOnboardingFeature, mountVideoFilesFeature } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
 try {
-  wiring = wireApp({
+  wiring = wireLegacyApp({
     entry: migrateRows,
     effects: legacySessionEffects(),
-    editorName: getEditorName,
     refresh: runIdleRefresh,
     records: derivedRecordsPlan,
     bulkTags: { cell: bulkTagCell, stamp: stampRow },
