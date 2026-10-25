@@ -907,8 +907,8 @@ export function cycleEdges(modules) {
 
 export function findViolations(modules) {
   const found = new Map();
-  const htmlCellModules = new Set([RICHTEXT_ADAPTER + "richtext.ts", RICHTEXT_ADAPTER + "decode.ts"]);
   const richtextModules = [...modules.values()].filter((m) => m.path.startsWith(RICHTEXT_ADAPTER));
+  const htmlCellModules = new Set(richtextModules.filter((m) => m.path !== RICHTEXT_ADAPTER + "tag-anchors.ts").map((m) => m.path));
   for (const m of richtextModules) if (m.htmlParses.length) htmlCellModules.add(m.path);
   let addedHtmlCellModule = true;
   while (addedHtmlCellModule) {
