@@ -1,3 +1,4 @@
+import { getSavedAuthorName } from "../application/comment-author.js";
 import { createPanelWidths } from "../application/preferences/panel-widths.ts";
 import type { PanelWidths } from "../application/preferences/panel-widths.ts";
 import { createPreferences } from "../application/preferences/preferences.ts";
@@ -88,6 +89,10 @@ export function preferencesStarted(): boolean {
 
 export function preferences(): Preferences {
   return running().preferences;
+}
+
+export function getEditorName(): string {
+  return getSavedAuthorName(preferences()) || "Anonymous";
 }
 
 export function viewFlags(): ViewFlags {

@@ -19,14 +19,13 @@ import {
 import { SERVER_RESUME_KEY } from "../application/location/server-status.ts";
 import { shortHost } from "../adapters/transport/server-address.ts";
 import { cleanAuthorName } from "../core/document/people.ts";
-import { preferences } from "../legacy/preferences-bridge.ts";
+import { getEditorName, preferences } from "../legacy/preferences-bridge.ts";
 import { escapeHtml, migrateRows } from "./02-state.js";
 import {
   copyDocHistorySafe,
   migrateDocument
 } from "./02b-doc-id.js";
 import {
-  getEditorName,
   setBaseState
 } from "./03-sync.js";
 import { applyMerge, mergeStates, reportMerge } from "../legacy/merge-bridge.ts";

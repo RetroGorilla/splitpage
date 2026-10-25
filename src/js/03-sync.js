@@ -9,7 +9,7 @@ import { mergeStates as mergeStatesWith } from "../core/merge-states.ts";
 import { isDocumentObject } from "../core/migrate.ts";
 import { textMergeContext as coreTextMergeContext } from "../core/merge/text-field.ts";
 import { withDocumentPorts } from "../legacy/document-ports.ts";
-import { preferences } from "../legacy/preferences-bridge.ts";
+import { getEditorName, preferences } from "../legacy/preferences-bridge.ts";
 import { fromHtml } from "../legacy/richtext.ts";
 import {
   adoptRestoredState,
@@ -40,10 +40,6 @@ import { cloneState } from "../core/document/clone.ts";
 export { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
 export { mergeTargetLength } from "../core/merge/scalars.ts";
 
-
-export function getEditorName() {
-  return getSavedAuthorName(preferences()) || "Anonymous";
-}
 
 export function stampRow(row) {
   row.updatedAt = nowIso();
