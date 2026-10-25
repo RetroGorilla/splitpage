@@ -1,0 +1,86 @@
+name: Windows PC CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ci/native-windows]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-pc-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    runs-on: [self-hosted, Windows, X64, splitpage-windows]
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: powershell
+    env:
+      GIT_CONFIG_COUNT: '2'
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: 'false'
+      GIT_CONFIG_KEY_1: core.longpaths
+      GIT_CONFIG_VALUE_1: 'true'
+      PLAYWRIGHT_BROWSERS_PATH: ${{ runner.temp }}/splitpage-pw-browsers
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+
+      - name: Install tooling
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Types
+        run: npm run typecheck
+
+      - name: Layers and dependencies
+        run: npm run check:deps
+
+      - name: No new comments
+        run: npm run check:comments
+
+      - name: Build the app
+        run: node build.mjs
+
+      - name: Check the service worker version stamp
+        run: git diff --exit-code -- sw.js
+
+      - name: Unit, desktop and tool tests
+        run: npm run test:all
+
+      - name: Install Windows Chromium
+        run: npx --yes playwright@1.63.0 install chromium
+
+      - name: Locate Windows Chromium
+        run: |
+          $chrome = Get-ChildItem -LiteralPath $env:PLAYWRIGHT_BROWSERS_PATH -Filter chrome.exe -Recurse |
+            Where-Object { $_.FullName -match '[\\/]chromium-\d+[\\/]' } |
+            Select-Object -First 1
+          if (-not $chrome) { throw 'Playwright Chromium was not found' }
+          "SPLITPAGE_CHROME=$($chrome.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Browser suites 01 and 52
+        run: node tools/run-suites.mjs "$env:RUNNER_TEMP/suites/core" '^(01-core|52-csp)\.txt$' --lanes 2 --port-base 800
+
+      - name: Browser persistence suite 265
+        run: node tools/run-suites.mjs "$env:RUNNER_TEMP/suites/persistence" '^265-browser-drafts\.txt$' --lanes 1 --port-base 800
+
+      - name: Upload failed browser logs
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-suite-logs
+          path: ${{ runner.temp }}/suites
+          if-no-files-found: ignore
+          retention-days: 7

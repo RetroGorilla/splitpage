@@ -23,6 +23,26 @@ lists what each job runs.
 | `desktop-smoke` job, step `Fetch the dev Electron binary` | Runs `node node_modules/electron/install.js` directly, not through npm: npm would turn `desktop/.npmrc`'s `arch=arm64` into `npm_config_arch` and fetch a binary the x64 runner cannot execute. |
 | `desktop-smoke` job, step `Desktop smoke (dev target)` | Xvfb is started by hand because `xvfb-run` intermittently returns its own cleanup failure as the exit status. The `grep` on Xvfb's stderr drops xkbcomp's harmless unknown-keysym warnings, about 1,700 lines a run. |
 
+## `.github/workflows/windows-local.yml`
+
+`Windows PC CI` is an optional workflow for the maintainer's native Windows
+runner, `splitpage-windows`. It uses the unique `splitpage-windows` label,
+not `splitpage-local`, so normal Linux CI cannot be assigned to this PC.
+Start the local runner, then select Actions → Windows PC CI → Run workflow.
+Only dispatch trusted branches: the workflow executes their code on the PC.
+The workflow must reach the repository's default branch before GitHub offers
+the manual dispatch control. A temporary push trigger on `ci/native-windows`
+allows the initial setup to be verified before that merge.
+
+The workflow runs lint, types, dependency and comment checks, the build and
+service-worker stamp check, all unit/desktop/tool tests, and browser suites
+01, 52 and 265. The Electron UI smoke job, Docker and release jobs keep their
+existing workflows. PowerShell is explicit; Git line-ending conversion is
+disabled to keep generated-file comparisons consistent. Browser suites use
+port block 800 to avoid the usual local test ports. This optional workflow
+does not replace the required Linux CI gate. While this runner is stopped,
+manually dispatched jobs wait in GitHub's queue.
+
 ## `.github/workflows/docker.yml`
 
 `image` builds the root `Dockerfile` with the legacy builder (as `deploy.sh`
