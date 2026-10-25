@@ -32,7 +32,7 @@ const { confirmSavedNow, setAutoSaveEnabled } = await import("../legacy/save-bri
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { startNewScript } = await import("../js/18b-file-menu.js");
-const { applyTakenDraft } = await import("../js/20g-drafts.js");
+const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { armBrowserServerDraft, flushDraftNow, offerBrowserDraftAfterLinkOff } = await import("../legacy/recovery-bridge.ts");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));

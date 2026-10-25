@@ -28,7 +28,6 @@ import { __init as init_20_teleprompter } from "./20-teleprompter.js";
 import { __init as init_20a_update } from "./20a-update.js";
 import { __init as init_20d_formats } from "./20d-formats.js";
 import { __init as init_20e_connect } from "./20e-connect.js";
-import { __init as init_20g_drafts } from "./20g-drafts.js";
 import { __init as init_20h_appdata } from "./20h-appdata.js";
 import { __init as init_20j_newtab } from "./20j-newtab.js";
 import { migrateRows } from "./02-state.js";
@@ -40,9 +39,8 @@ import { legacyFileDestination, legacySavePorts } from "./14-export.js";
 import { importDocumentSource } from "./11-import.js";
 import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
-import { draftRecoveryPorts } from "./20g-drafts.js";
 import { legacyProjectFileServices } from "./20d-formats.js";
-import { wireLegacyApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature, mountCopyPasteFeature, mountSettingsFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature, mountBrollFeature, mountBrollPanelStateFeature, mountScenesFeature, mountSceneMediaFeature, derivedRecordsPlan, mountOnboardingFeature, mountVideoFilesFeature, mountDesktopFeature } from "../bootstrap/wiring.ts";
+import { wireLegacyApp, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature, mountCopyPasteFeature, mountSettingsFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature, mountBrollFeature, mountBrollPanelStateFeature, mountScenesFeature, mountSceneMediaFeature, derivedRecordsPlan, mountOnboardingFeature, mountVideoFilesFeature, mountDesktopFeature, mountDraftsFeature, draftRecoveryPorts } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
 var wiring = null;
@@ -118,7 +116,7 @@ if (wiring) {
   init_20d_formats();
   init_20e_connect();
   mountDesktopFeature();
-  init_20g_drafts();
+  mountDraftsFeature();
   init_20h_appdata();
   init_20j_newtab();
   mountSettingsFeature();
