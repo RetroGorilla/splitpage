@@ -907,6 +907,19 @@ export function cycleEdges(modules) {
 
 export function findViolations(modules) {
   const found = new Map();
+  const htmlCellModules = new Set([RICHTEXT_ADAPTER + "richtext.ts", RICHTEXT_ADAPTER + "decode.ts"]);
+  const richtextModules = [...modules.values()].filter((m) => m.path.startsWith(RICHTEXT_ADAPTER));
+  for (const m of richtextModules) if (m.htmlParses.length) htmlCellModules.add(m.path);
+  let addedHtmlCellModule = true;
+  while (addedHtmlCellModule) {
+    addedHtmlCellModule = false;
+    for (const m of richtextModules) {
+      if (!htmlCellModules.has(m.path) && m.edges.some((e) => e.kind === "file" && !e.typeOnly && htmlCellModules.has(e.target))) {
+        htmlCellModules.add(m.path);
+        addedHtmlCellModule = true;
+      }
+    }
+  }
   const add = (rule, source, target, line, detail) => {
     const v = { rule, source, target };
     if (!found.has(key(v))) found.set(key(v), { ...v, line, detail });
@@ -936,7 +949,7 @@ export function findViolations(modules) {
     }
     if (isProduction(m.layer) && !ownsHtmlCells(m.path)) {
       for (const e of m.edges) {
-        if (e.kind === "file" && !e.typeOnly && e.target.startsWith(RICHTEXT_ADAPTER)) {
+        if (e.kind === "file" && !e.typeOnly && htmlCellModules.has(e.target)) {
           add("html-cells", m.path, e.target, e.line, `reaches the HTML decoder; only ${RICHTEXT_BRIDGE} may import ${RICHTEXT_ADAPTER}`);
         }
       }
