@@ -1,3 +1,4 @@
+import { brollPanelActions, mountBrollPanelStateFeature, stopBrollPanelStateFeature } from "../../src/bootstrap/wiring/broll.ts";
 import { onboardingActions, mountOnboardingFeature, stopOnboardingFeature } from "../../src/bootstrap/wiring/onboarding.ts";
 import { commentsPanelActions, commentsHelpActions } from "../../src/bootstrap/wiring/comments.ts";
 import "../../src/test/_dom.mjs";
@@ -78,10 +79,11 @@ function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
   mountHelpFeature();
   mountOnboardingFeature();
   const registry = createActionRegistry();
+  mountBrollPanelStateFeature();
   mountRundownFeature();
   mountFileMenuExportFeature();
   mountFindFeature();
-  const disposers = [stopRundownFeature, stopFileMenuExportFeature, stopFindFeature, registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerAll(registry, [...viewActions().slice(0, 3), ...commentsPanelActions(), ...viewActions().slice(3)]),
+  const disposers = [stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFindFeature, registerAll(registry, [...fileActions().slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...fileActions().slice(3)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerAll(registry, [...viewActions().slice(0, 2), ...brollPanelActions(), ...commentsPanelActions(), ...viewActions().slice(2)]),
     registerAll(registry, [...shareActions().slice(0, 11), ...fileMenuExportActions().slice(1), ...shareActions().slice(11)]), stopHelpFeature, stopOnboardingFeature];
   const was = { state: currentDocument() as unknown, prompterOpen: prompterIsOpen() };
   loadTestDocument({ rows: [] });

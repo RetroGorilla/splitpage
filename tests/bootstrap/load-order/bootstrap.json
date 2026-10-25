@@ -21,7 +21,10 @@
     "src/bootstrap/wiring/ports/startup.ts",
     "src/bootstrap/wiring/ports/panels.ts",
     "src/bootstrap/wiring/ports/screen.ts",
-    "src/bootstrap/wiring/ports/identity.ts"
+    "src/bootstrap/wiring/ports/identity.ts",
+    "src/bootstrap/wiring/ports/shot-hiding.ts",
+    "src/bootstrap/wiring/ports/presence.ts",
+    "src/bootstrap/wiring/ports/rows.ts"
   ],
-  "expectedLoads": 21
+  "expectedLoads": 24
 }

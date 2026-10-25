@@ -1,3 +1,13 @@
+import type { BrollView } from "../../application/preferences/broll-view.ts";
+import type { ActionRegistry } from "../../application/actions.ts";
+import type { Presence } from "../../application/collaboration/presence.ts";
+import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { NoticePort } from "../../application/effects/ports.ts";
+import type { UndoControl } from "../../application/editing/undo-control.ts";
+import type { ViewFlags } from "../../application/preferences/view-flags.ts";
+import type { ShotHiding } from "../../application/shot-hiding.ts";
+import type { SidePanels } from "../../application/side-panels.ts";
+import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
 import type { PaintGuard } from "../../application/editing/paint-guard.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
@@ -47,4 +57,32 @@ export interface BrollRecords {
 
 export interface BrollRecordsMount extends BrollRecords {
   readonly dispose: () => void;
+}
+
+export interface BrollPanelPorts {
+  readonly view: Pick<BrollView, "load" | "current" | "setFilter" | "setGroup" | "setPageGroup">;
+  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly edits: Pick<DocumentEdits, "edit">;
+  readonly text: Pick<TextServices<HTMLElement>, "productionReaders">;
+  readonly ids: IdSource;
+  readonly production: Pick<ProductionIndexOwner, "entries">;
+  readonly shotHiding: Pick<ShotHiding, "reveal">;
+  readonly panels: Pick<SidePanels, "open" | "close" | "closeAll" | "registerPanel" | "sync">;
+  readonly flags: Pick<ViewFlags, "brollPageOpen" | "setBrollPageOpen">;
+  readonly presence: Pick<Presence, "personColor">;
+  readonly undo: Pick<UndoControl, "breakCoalescing">;
+  readonly review: ReviewFacts;
+  readonly actions: Pick<ActionRegistry, "invoke">;
+  readonly notices: Pick<NoticePort, "show">;
+  readonly records: Pick<BrollRecords, "brollEntries" | "addBrollProp" | "renameBrollInScript" | "updateBrollBadge">;
+  readonly rows: { readonly focusField: (rowId: string, field: string) => void };
+}
+
+export interface BrollPanelState {
+  readonly openBrollPanel: () => void;
+  readonly dispose: () => void;
+}
+
+export interface BrollPanelEventsPorts {
+  readonly exportAs: (format: string) => unknown;
 }
