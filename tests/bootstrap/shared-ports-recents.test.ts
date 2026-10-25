@@ -10,6 +10,9 @@ test("the recent files port forwards each call and follows the current desktop",
   const recents: RecentFiles = portRecents;
   const request: RecentFileOpenRequest = { kind: "file", fileId: "file-1" };
   try {
+    assert.equal(recents.available(), false);
+    assert.equal(recents.canRemove(), false);
+    assert.equal(recents.canClear(), false);
     assert.equal(recents.list(), undefined);
     assert.equal(recents.remove("file-1"), undefined);
     assert.equal(recents.clear(), undefined);
@@ -30,6 +33,9 @@ test("the recent files port forwards each call and follows the current desktop",
         routeOpen(input: RecentFileOpenRequest) { assert.equal(this, desktop); calls.push(["routeOpen", input]); return routed; }
       };
       useDesktopForTest(desktop);
+      assert.equal(recents.available(), true);
+      assert.equal(recents.canRemove(), true);
+      assert.equal(recents.canClear(), true);
       assert.equal(portRecents, recents);
       assert.deepEqual(calls, []);
       assert.equal(recents.list(), listed);
@@ -51,6 +57,9 @@ test("the recent files port forwards each call and follows the current desktop",
     const failure = new Error("file missing");
     const rejected = Promise.reject(failure);
     useDesktopForTest({ readFile: () => rejected, routeOpen: () => Promise.resolve(null) });
+    assert.equal(recents.available(), false);
+    assert.equal(recents.canRemove(), false);
+    assert.equal(recents.canClear(), false);
     assert.equal(recents.read("missing"), rejected);
     await assert.rejects(rejected, (error: unknown) => error === failure);
     assert.equal(await recents.routeOpen(request), null);
