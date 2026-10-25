@@ -86,10 +86,17 @@ function installTestHooks(mounted: DesktopMount): void {
 export function mountDesktopFeature(): DesktopMount {
   return desktop.replace(() => {
     const stopState = startDesktopDocumentState(legacyDesktopDocumentPorts());
-    if (runningOnDesktop()) wireDesktopBlobs(desktopPort());
-    const mounted = mountDesktop(desktopPorts());
-    handDesktopTo({ renderShareInfo: mounted.renderShareInfo, openPrompterInBrowser: mounted.openPrompterInBrowser });
-    installTestHooks(mounted);
+    let mounted: DesktopMount;
+    try {
+      if (runningOnDesktop()) wireDesktopBlobs(desktopPort());
+      mounted = mountDesktop(desktopPorts());
+      handDesktopTo({ renderShareInfo: mounted.renderShareInfo, openPrompterInBrowser: mounted.openPrompterInBrowser });
+      installTestHooks(mounted);
+    } catch (error) {
+      handDesktopTo(null);
+      stopState();
+      throw error;
+    }
     return {
       ...mounted,
       dispose: () => {
