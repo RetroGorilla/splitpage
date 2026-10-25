@@ -3,7 +3,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { mountAppData } from "../../../src/features/settings/app-data.js";
 import { appDataActions } from "../../../src/features/settings/actions.ts";
-import type { AppDataPorts } from "../../../src/features/settings/ports.ts";
+import { createActionRegistry } from "../../../src/application/actions.ts";
+import { appDataActions as wiredAppDataActions, mountAppDataFeature, stopAppDataFeature } from "../../../src/bootstrap/wiring/settings.ts";
+import type { AppDataMount, AppDataPorts } from "../../../src/features/settings/ports.ts";
 import type { ScreenState } from "../../../src/application/screen.ts";
 
 interface Probe {
@@ -219,4 +221,59 @@ test("a pending file read imports through its original ports after remount", asy
   assert.deepEqual(original.calls.map((call) => call.name), ["history.import", "preferences.import", "preferences.commentsSort", "comments.choose", "writer.read", "writer.apply"]);
   assert.deepEqual(replacement.calls, []);
   next.dispose();
+});
+
+test("app data actions refuse before the feature mounts and after its wiring stops", () => {
+  stopAppDataFeature();
+  const registry = createActionRegistry();
+  for (const definition of wiredAppDataActions()) registry.register(definition);
+  const ids = ["export-app-data", "import-app-data"];
+  const refuse = (): void => {
+    for (const id of ids) {
+      assert.equal(registry.view(id)?.enabled, false);
+      assert.equal(registry.invoke(id, "button").kind, "unavailable");
+    }
+  };
+  refuse();
+  mountAppDataFeature();
+  stopAppDataFeature();
+  refuse();
+});
+
+test("mounted app data actions retain loading refusal, import visibility and invocation", () => {
+  const calls: string[] = [];
+  let loading = false;
+  let shown = true;
+  const controls: AppDataMount = {
+    exportAppData: () => { calls.push("export"); return Promise.resolve(); },
+    openImportAppData: () => { calls.push("import"); },
+    dispose: () => undefined
+  };
+  let current: AppDataMount | null = null;
+  const registry = createActionRegistry();
+  for (const definition of appDataActions(() => current, { screen: () => ({ loading }) as ScreenState, importShown: () => shown })) registry.register(definition);
+  const ids = ["export-app-data", "import-app-data"];
+  for (const id of ids) {
+    assert.equal(registry.view(id)?.enabled, false);
+    assert.equal(registry.invoke(id, "button").kind, "unavailable");
+  }
+  current = controls;
+  for (const id of ids) {
+    assert.equal(registry.view(id)?.enabled, true);
+    assert.equal(registry.view(id)?.visible, true);
+    assert.equal(registry.invoke(id, "button").kind, "ran");
+  }
+  assert.deepEqual(calls, ["export", "import"]);
+  loading = true;
+  for (const id of ids) {
+    assert.equal(registry.view(id)?.reason, "Still loading…");
+    assert.equal(registry.invoke(id, "button").kind, "unavailable");
+  }
+  loading = false;
+  shown = false;
+  assert.equal(registry.view("import-app-data")?.visible, false);
+  assert.equal(registry.view("export-app-data")?.visible, true);
+  current = null;
+  for (const id of ids) assert.equal(registry.invoke(id, "button").kind, "unavailable");
+  assert.deepEqual(calls, ["export", "import"]);
 });
