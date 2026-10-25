@@ -1,4 +1,4 @@
-import { currentHome, documentLocation } from "../legacy/location-bridge.ts";
+import { currentHome, documentLocation, onServerDoc } from "../legacy/location-bridge.ts";
 import { mintDocId, randomHexBytes } from "../adapters/identity/ids.ts";
 import { documentIdStamp } from "../application/commands/save-stamps.ts";
 import { currentDocument, heldDocument, stampDocument } from "../legacy/session-bridge.ts";
@@ -14,7 +14,6 @@ import { base64Encode } from "../core/document/media.ts";
 import { STATE_FIELDS, buildPublishHtml, defaultState, migrateRows } from "./02-state.js";
 import { inlineStateImages } from "../adapters/storage/02c-blobs.js";
 import { copyHistory, historyDocumentChanged } from "./03a-history-store.js";
-import { onServerDoc } from "./13-hosted.js";
 import {
   decideDuplicateLoser,
   docIdFromSha256Hex,

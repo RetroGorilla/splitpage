@@ -1,3 +1,4 @@
+import { onServerDoc } from "../../legacy/location-bridge.ts";
 import { randomHexBytes, randomIds } from "../../adapters/identity/ids.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits, undoControl as portUndo } from "./ports/editing.ts";
@@ -18,7 +19,6 @@ import { migrateRows } from "../../js/02-state.js";
 import { stampRow } from "../../js/03-sync.js";
 import { closeRowMenus } from "../../features/rows/row-menu.js";
 import { collectTagsFromRows, scheduleProductionRefresh } from "../../js/07-production-tags.js";
-import { onServerDoc } from "../../js/13-hosted.js";
 import { startNewScript } from "../../js/18b-file-menu.js";
 import { cellEditing, paintGuard, rowDrag } from "../../legacy/editor-bridge.ts";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";

@@ -6,7 +6,7 @@ import { documentTransitions, keepSnapshot } from "../legacy/transition-bridge.t
 import { autoSavePolicy, confirmSavedNow, fileConflicts, requestSave, unsavedChanges, unsavedFor } from "../legacy/save-bridge.ts";
 import { deliverFile } from "../legacy/file-delivery.ts";
 import { checkFileConflict } from "../adapters/files/file-target.ts";
-import { amendHome, currentHome, fileHome, importHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
+import { amendHome, currentHome, fileHome, importHome, serverStatus, setHome, onServerDoc } from "../legacy/location-bridge.ts";
 import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
 import {
   standaloneHtmlFor,
@@ -23,10 +23,7 @@ import {
   detectTwoColumnFormat,
   parseImportRows
 } from "./11-import.js";
-import {
-  blobSourceNow,
-  onServerDoc
-} from "./13-hosted.js";
+import { blobSourceNow } from "./13-hosted.js";
 import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
 import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
