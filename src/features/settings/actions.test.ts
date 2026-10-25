@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createActionRegistry, registerAll } from "../../application/actions.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import { settingsActions } from "./actions.ts";
-import type { SettingsControls } from "./ports.ts";
+import type { SettingsControls } from "../../application/settings-actions.ts";
 
 test("settings forwards input only while mounted and available, and unregisters", () => {
   const registry = createActionRegistry();

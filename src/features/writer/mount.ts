@@ -1,8 +1,7 @@
+import type { ButtonActions } from "../../application/actions.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
-export interface WriterOpenPorts {
-  readonly runFromButton: (id: string) => void;
-}
+export type WriterOpenPorts = Pick<ButtonActions, "runFromButton">;
 
 export function mountWriterOpen(mount: { window: Window; ports: WriterOpenPorts }): { dispose: () => void } {
   const { window, ports } = mount;
