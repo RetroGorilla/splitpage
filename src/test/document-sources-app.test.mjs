@@ -6,7 +6,7 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { listDocHistory } = await import("../js/03a-history-store.js");
-const { exportDocumentOf } = await import("../js/14b-export-kit.js");
+const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { documentSources, openDocument } = await import("../legacy/transition-bridge.ts");

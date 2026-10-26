@@ -5,6 +5,7 @@ export { draftRecoveryPorts, mountDraftsFeature } from "./wiring/drafts.ts";
 export { mountVideoFilesFeature } from "./wiring/video-files.ts";
 export { mountCommentsLogicFeature } from "./wiring/comments.ts";
 import { wireProductionIndex } from "./wiring/production-index.ts";
+import { wireExportKit } from "./wiring/export-kit.ts";
 export { mountReadTimeFeature } from "./wiring/read-time.ts";
 export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
 export { mountDraftEditFeature } from "./wiring/draft-edit.ts";
@@ -125,7 +126,8 @@ export const WIRING_STEPS = Object.freeze([
   "production editing",
   "preferences",
   "shot hiding",
-  "presence"
+  "presence",
+  "export capture"
 ] as const);
 
 export type WiringStep = (typeof WIRING_STEPS)[number];
@@ -414,6 +416,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("preferences", () => startPreferences(), (stop) => stop);
   build("shot hiding", () => startShotHiding(legacyShotHidingPorts(deps.timers ?? SYSTEM_TIMERS)), (stop) => stop);
   build("presence", () => startPresence(legacyPresencePorts()), (stop) => stop);
+  build("export capture", () => wireExportKit(deps.entry), (stop) => stop);
   let disposed = false;
   const dispose = (): void => {
     if (disposed) return;

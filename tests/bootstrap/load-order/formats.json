@@ -1,9 +1,11 @@
 {
   "legacyImports": [
-    "./14b-export-kit.js",
     "./20d-formats.js"
   ],
   "loadOnly": [
+    "src/application/save/export-kit.ts",
+    "src/legacy/export-kit-bridge.ts",
+    "src/bootstrap/wiring/export-kit.ts",
     "src/adapters/formats/export-projections.ts",
     "src/adapters/formats/export-kit.ts",
     "src/adapters/formats/export-assets.ts",
@@ -14,5 +16,5 @@
     "src/adapters/formats/pdf.ts",
     "src/bootstrap/wiring/exporters.ts"
   ],
-  "expectedLoads": 11
+  "expectedLoads": 13
 }

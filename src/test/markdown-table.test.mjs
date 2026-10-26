@@ -12,7 +12,7 @@ import { cellOf } from "../legacy/richtext.ts";
 import { toMarkdown } from "../core/text/projections.ts";
 import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
 import { LONG_DEMO } from "../js/_starters.js";
-import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { exportFacts } from "../adapters/formats/export-kit.ts";
 import { loadTestDocument } from "./_document.mjs";
 

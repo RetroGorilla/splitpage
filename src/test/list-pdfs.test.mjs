@@ -10,7 +10,7 @@ import "./_broll-mounted.mjs";
 import { mountBrollPanelStateFeature as initBrollPanel } from "../bootstrap/wiring/broll.ts";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import { PRINT_COLORS, exportDateText } from "../adapters/formats/export-kit.ts";
-import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { buildPackingListPdf, buildShotListPdf, pdfTextWidth } from "../adapters/formats/pdf.ts";
 import { LONG_DEMO } from "../js/_starters.js";

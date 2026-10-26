@@ -14,7 +14,8 @@ import {
   exportFacts,
   exportSummaryParts
 } from "../adapters/formats/export-kit.ts";
-import { commentNumbers, exportDocumentOf } from "../js/14b-export-kit.js";
+import { commentNumbers } from "../application/save/export-kit.ts";
+import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { buildPdf, pdfTextWidth } from "../adapters/formats/pdf.ts";
 import { LONG_DEMO } from "../js/_starters.js";
