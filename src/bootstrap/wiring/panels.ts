@@ -5,7 +5,7 @@ import { onScriptStats, statsFollowChange, updateScriptStats } from "./scene-sta
 import { onHistoryChange } from "../../js/03a-history-store.js";
 import { renderHistory } from "../../js/03-sync.js";
 import { onTagged } from "../../js/07-production-tags.js";
-import { onPlainTagged } from "../../js/07b-plain-tags.js";
+import { currentPlainTags } from "./plain-tags.ts";
 import { onPainted } from "../../js/05-render.js";
 import { refreshGalleryOverlay } from "../../features/gallery/overlay.js";
 import { renderRundown, setRundownExtraSeconds } from "../../features/rundown/rundown.js";
@@ -71,7 +71,7 @@ export function mountPanelListenersFeature(): void {
       }
     }),
     onTagged(refreshTagViews),
-    onPlainTagged(refreshTagViews),
+    currentPlainTags()?.onTagged(refreshTagViews) ?? (() => {}),
     onScriptStats((targetSeconds: number) => {
       setRundownExtraSeconds(targetSeconds);
       renderRundown();

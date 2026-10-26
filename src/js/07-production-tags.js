@@ -3,7 +3,7 @@ import { domToPos } from "../features/common/cell-dom.ts";
 import { rowIndexOf } from "../core/document/rows.ts";
 import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { safeId } from "../adapters/identity/safe-id.ts";
-import { plainTagOpen } from "./07b-plain-tags.js";
+import { plainTagOpen } from "../legacy/plain-tag-bridge.ts";
 import { domRangeFor } from "../features/common/find-dom.js";
 import { breakUndoCoalescing } from "../legacy/undo-bridge.ts";
 import { randomIds } from "../adapters/identity/ids.ts";

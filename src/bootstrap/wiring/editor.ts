@@ -109,14 +109,7 @@ import {
   updateTagGhost,
   updateUntaggedPrompt
 } from "../../js/07-production-tags.js";
-import {
-  cancelPlainTag,
-  closePlainTag,
-  maybeOpenPlainTag,
-  plainTagEmptyAtCaret,
-  plainTagOpen,
-  refreshPlainTag
-} from "../../js/07b-plain-tags.js";
+import { currentPlainTags } from "./plain-tags.ts";
 import { renderProduction } from "../../features/tags/panels.js";
 import { anchorBrollInLeftCell, maybeCaptureBroll, scheduleBrollRefresh } from "./broll.ts";
 import {
@@ -505,7 +498,7 @@ export function onRootInput(e: RootInput): void {
   maybeDirectionShortcut(e, cellEl);
   maybeCueShortcut(e, cellEl);
   maybeCaptureBroll(e, cellEl);
-  maybeOpenPlainTag(e, cellEl);
+  currentPlainTags()?.maybeOpen(e, cellEl);
   cellEditing().sync(cellEl);
   settleEndedComposition(e);
   afterScriptCellChange(cellEl);
@@ -519,7 +512,7 @@ function afterScriptCellChange(cellEl: Element): void {
   focusMemory().unmutePrompt();
   scheduleUntaggedScan();
   updateTagGhost(cellEl);
-  refreshPlainTag();
+  currentPlainTags()?.refresh();
 }
 
 const composition = owned<ReturnType<typeof mountComposition>>();
@@ -595,7 +588,7 @@ const editorFocusPorts: EditorFocusPorts = {
   blurSuppressed: function () { return undoGuard().applying() || paintingScreen(); },
   leftEditable: function () {
     hideTagGhost();
-    cancelPlainTag();
+    currentPlainTags()?.cancel();
     hideUntaggedPrompt();
     focusMemory().unmutePrompt();
   },
@@ -623,7 +616,7 @@ const editorFocusPorts: EditorFocusPorts = {
       if (active.classList.contains("wr-para")) updateWriterFormatState();
       else updateToolbarState(active);
     }
-    refreshPlainTag();
+    currentPlainTags()?.refresh();
     updateUntaggedPrompt();
   }
 };
@@ -748,10 +741,11 @@ export function onRootKeydown(e: KeyboardEvent): void {
   if (!isScriptCell(cellEl) && onDraftUndoKey(e, cellEl)) return;
   const undoOwner = undoRoutes.owner();
   if (undoOwner && undoOwner.key(e)) return;
-  if (plainTagOpen(cellEl)) {
-    if (e.key === "Tab") { e.preventDefault(); closePlainTag(); return; }
-    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); hideTagGhost(); cancelPlainTag(); return; }
-    if (e.key === "Backspace" && plainTagEmptyAtCaret()) cancelPlainTag();
+  const plainTag = currentPlainTags();
+  if (plainTag && plainTag.isOpen(cellEl)) {
+    if (e.key === "Tab") { e.preventDefault(); plainTag.close(); return; }
+    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); hideTagGhost(); plainTag.cancel(); return; }
+    if (e.key === "Backspace" && plainTag.emptyAtCaret()) plainTag.cancel();
   }
   const ghost = shownTagGhost();
   if (e.key === "Tab" && ghost && ghost.cellEl === cellEl) {
