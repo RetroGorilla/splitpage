@@ -19,18 +19,17 @@ import { __init as init_18a_local_merge } from "./18a-local-merge.js";
 import { mountFileMenuDropdownFeature, mountCommandMenuFeature } from "../bootstrap/wiring.ts";
 import { __init as init_19_writer } from "./19-writer.js";
 import { __init as init_20_teleprompter } from "./20-teleprompter.js";
-import { __init as init_20d_formats } from "./20d-formats.js";
 import { __init as init_20e_connect } from "./20e-connect.js";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { documentIdentityPort } from "./02b-doc-id.js";
-import { documentDestinationPort, documentHistoryPort, legacyMergePorts, stampRow } from "./03-sync.js";
-import { bulkTagCell, runIdleRefresh } from "./07-production-tags.js";
+import { documentIdentityPort, adoptRestoredState, docIdEvents, initDocIdentityChannel, migrateDocument, reassignDocId, standaloneHtmlFor } from "./02b-doc-id.js";
+import { documentDestinationPort, documentHistoryPort, legacyMergePorts, stampRow, setBaseState } from "./03-sync.js";
+import { bulkTagCell, runIdleRefresh, tagFieldOccurrences } from "./07-production-tags.js";
 import { legacySessionEffects } from "./12-dirty-toast.js";
 import { legacyFileDestination, legacySavePorts } from "./14-export.js";
 import { importDocumentSource } from "./11-import.js";
 import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
-import { legacyProjectFileServices } from "./20d-formats.js";
+import { mountProjectFiles } from "../bootstrap/wiring.ts";
 import { wireLegacyApp, mountUpdateFeature, mountNewTabFeature, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature, mountCopyPasteFeature, mountSettingsFeature, mountAppDataFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature, mountBrollFeature, mountBrollPanelStateFeature, mountScenesFeature, mountSceneMediaFeature, derivedRecordsPlan, mountOnboardingFeature, mountVideoFilesFeature, mountDesktopFeature, mountDraftsFeature, draftRecoveryPorts } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
 
@@ -48,7 +47,16 @@ try {
     sources: function () { return [projectFileSource(), importDocumentSource(), serverDocumentSource()]; },
     merge: legacyMergePorts,
     recovery: draftRecoveryPorts,
-    projectFiles: legacyProjectFileServices,
+    projectFiles: {
+      prepareDocument: migrateDocument,
+      restoreDocument: adoptRestoredState,
+      changeDocumentId: reassignDocId,
+      identityEvents: docIdEvents,
+      connectIdentity: initDocIdentityChannel,
+      standaloneHtml: standaloneHtmlFor,
+      replaceSyncBase: setBaseState,
+      tagOccurrences: tagFieldOccurrences
+    },
     keyTarget: window
   });
 } catch (error) {
@@ -101,7 +109,7 @@ if (wiring) {
   mountUpdateFeature();
   mountOnboardingFeature();
   mountHelpFeature();
-  init_20d_formats();
+  mountProjectFiles();
   init_20e_connect();
   mountDesktopFeature();
   mountDraftsFeature();

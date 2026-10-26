@@ -101,7 +101,7 @@ export async function appWiringDeps() {
     import("../js/13-hosted.js"),
     import("../js/18-local-files.js"),
     import("../js/11-import.js"),
-    import("../js/20d-formats.js")
+    import("../bootstrap/wiring/project-files.ts")
   ]);
   return {
     entry: migrateRows,
@@ -116,7 +116,16 @@ export async function appWiringDeps() {
     sources: () => [files.projectFileSource(), imports.importDocumentSource(), hosted.serverDocumentSource()],
     merge: sync.legacyMergePorts,
     recovery: drafts.draftRecoveryPorts,
-    projectFiles: formats.legacyProjectFileServices,
+    projectFiles: () => formats.wireProjectFiles({
+      prepareDocument: docId.migrateDocument,
+      restoreDocument: docId.adoptRestoredState,
+      changeDocumentId: docId.reassignDocId,
+      identityEvents: docId.docIdEvents,
+      connectIdentity: docId.initDocIdentityChannel,
+      standaloneHtml: docId.standaloneHtmlFor,
+      replaceSyncBase: sync.setBaseState,
+      tagOccurrences: production.tagFieldOccurrences
+    }).services,
     keyTarget: window
   };
 }
