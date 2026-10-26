@@ -1,5 +1,5 @@
 import { wireProductionIndex } from "../bootstrap/wiring/production-index.ts";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { stampRow } from "../js/03-sync.js";
 import { bulkTagCell } from "../js/07-production-tags.js";
 import { sessionStarted, startSessionBridge } from "../legacy/session-bridge.ts";

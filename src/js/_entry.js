@@ -1,5 +1,4 @@
-import { __init as init_00_prelude } from "./00-prelude.js";
-import { __init as init_02_state } from "./02-state.js";
+import { mountPageEntry } from "../bootstrap/wiring.ts";
 import { __init as init_02b_doc_id } from "./02b-doc-id.js";
 import { __init as init_02c_blobs } from "../adapters/storage/02c-blobs.js";
 import { __init as init_02d_gallery } from "../adapters/storage/02d-gallery.js";
@@ -22,7 +21,7 @@ import { __init as init_19_writer } from "./19-writer.js";
 import { __init as init_20_teleprompter } from "./20-teleprompter.js";
 import { __init as init_20d_formats } from "./20d-formats.js";
 import { __init as init_20e_connect } from "./20e-connect.js";
-import { migrateRows } from "./02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { documentIdentityPort } from "./02b-doc-id.js";
 import { documentDestinationPort, documentHistoryPort, legacyMergePorts, stampRow } from "./03-sync.js";
 import { bulkTagCell, runIdleRefresh } from "./07-production-tags.js";
@@ -56,10 +55,9 @@ try {
   console.error(error);
 }
 if (wiring) {
-  init_00_prelude();
+  mountPageEntry();
   mountSceneStatusFeature();
   mountHideShotFeature();
-  init_02_state();
   init_02b_doc_id();
   init_02c_blobs();
   init_02d_gallery();

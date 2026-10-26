@@ -7,7 +7,7 @@ const scrolled = [];
 window.Element.prototype.scrollIntoView = function () { scrolled.push(this); };
 await bootApp();
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { undo, undoSizes, flushEdits } = await import("../legacy/undo-bridge.ts");

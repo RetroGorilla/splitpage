@@ -10,7 +10,7 @@ import {
   sha256Hex
 } from "../js/02b-doc-id.js";
 import { createHash } from "node:crypto";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 
 const ID_A = "d" + "1".repeat(32);
 const ID_B = "d" + "2".repeat(32);

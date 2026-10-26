@@ -3,7 +3,7 @@ import { lastFile as portLastFile } from "../../bootstrap/wiring/ports/files.ts"
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { loadLastFileHandle } from "../../js/00-prelude.js";
+import { loadLastFileHandle } from "../../adapters/files/last-file.ts";
 import type { LastFile } from "./last-file.ts";
 
 function successRequest<T>(result: T): { readonly result: T; onsuccess?: () => void } {

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 globalThis.location = new URL("https://splitpage.test/index.html?document-guard=1");
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { DocumentWriteError, documentGuardAsked, documentGuardOn, isDocumentView, quietly, rawOf } = await import("../legacy/document-guard.ts");
 const { currentDocument, heldDocument, liveDocumentPort, liveSession, runDocumentEdit, sessionStamps } = await import("../legacy/session-bridge.ts");
 const { changeSet } = await import("../application/session/change-set.ts");

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 await bootApp();
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { listDocHistory } = await import("../js/03a-history-store.js");
 const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");

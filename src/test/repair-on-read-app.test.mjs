@@ -9,7 +9,7 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { render } = await import("../js/05-render.js");
 const { updateTagBadges } = await import("../bootstrap/wiring/panels.ts");
 const { productionIndex } = await import("../legacy/production-index-bridge.ts");

@@ -8,7 +8,7 @@ const FULL = "abcdefghij".repeat(3);
 
 await bootApp(JSON.stringify({ schema: 2, title: "Mine", rows: [], rev: 5 }));
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { promptForName } = await import("../js/03-sync.js");
 const { toggleReplyComposer } = await import("../features/comments/comments.js");
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");

@@ -13,7 +13,7 @@ const OPENED = "Opened the latest version — last edited by ";
 localStorage.setItem(NAME_KEY, NAME_33);
 await bootApp(JSON.stringify({ schema: 2, title: "Mine", rows: [], rev: 5, lastEditedBy: NAME_33 }));
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { promptForName } = await import("../js/03-sync.js");
 const { openCommentComposer, postComment, postReply, toggleReplyComposer } = await import("../features/comments/comments.js");
 import { getSavedAuthorName as getSavedAuthorNameWith } from "../application/comment-author.js";

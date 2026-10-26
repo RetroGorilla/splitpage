@@ -30,7 +30,7 @@ import { productionIndex, startProductionIndex } from "../../src/legacy/producti
 import { liveDocumentPort } from "../../src/legacy/session-bridge.ts";
 import { deleteConfirmation, productionSelection, startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
 import { productionGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../../src/application/tag-panel-state.ts";
-import { migrateRows } from "../../src/js/02-state.js";
+import { migrateRows } from "../../src/legacy/document-ports.ts";
 
 test("external links check the current desktop capability and forward each address to the current bridge", () => {
   const externalLinks: ExternalLinks = portExternalLinks;

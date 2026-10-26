@@ -1,3 +1,4 @@
+export { mountPageEntry } from "./startup/page-entry.ts";
 export { mountCommandMenuFeature } from "./wiring/command-menu.ts";
 export { mountOnboardingFeature } from "./wiring/onboarding.ts";
 export { mountDesktopFeature } from "./wiring/desktop.ts";

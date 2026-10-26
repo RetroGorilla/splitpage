@@ -1,7 +1,8 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { STATE_FIELDS, migrateRows, missingStateFields } from "../js/02-state.js";
+import { STATE_FIELDS, missingStateFields } from "../core/merge/state-fields.ts";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { changedBetween } from "../application/editing/undo/history.ts";
 import { STATE_FIELDS as CORE_FIELDS } from "../core/document/fields.ts";
 import * as sync from "../js/03-sync.js";

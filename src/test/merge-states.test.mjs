@@ -4,7 +4,7 @@ import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { textMergeContext } from "../js/03-sync.js";
 import { stashLocalWork } from "../legacy/recovery-bridge.ts";
 import { mergeStates } from "../legacy/merge-bridge.ts";

@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import "./_copy-paste-mounted.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { dataUrlForSync, intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { commentIds } from "../core/text/runs.ts";

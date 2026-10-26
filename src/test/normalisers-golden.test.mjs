@@ -2,7 +2,7 @@ import { normalizeBrollProps } from "../core/document/broll.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { withPageHead } from "../js/02b-doc-id.js";
 import { plainName, plainText, safeHref, safeImageSrc } from "../core/document/text-policy.ts";
 import { safeId } from "../adapters/identity/safe-id.ts";

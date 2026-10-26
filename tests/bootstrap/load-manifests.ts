@@ -11,7 +11,7 @@ export interface LoadManifest {
 }
 
 const FOLDER = "tests/bootstrap/load-order";
-const BOOTSTRAP_IMPORTS = ["../bootstrap/wiring.ts", "../bootstrap/app.ts"];
+const ENTRY_INFRASTRUCTURE_IMPORTS = ["../bootstrap/wiring.ts", "../bootstrap/app.ts", "../legacy/document-ports.ts"];
 
 function strings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
@@ -69,5 +69,5 @@ export function readLoadManifests(): readonly LoadManifest[] {
 }
 
 export function frozenShimImports(manifests: readonly LoadManifest[]): readonly string[] {
-  return [...BOOTSTRAP_IMPORTS, ...manifests.flatMap((manifest) => manifest.legacyImports)];
+  return [...ENTRY_INFRASTRUCTURE_IMPORTS, ...manifests.flatMap((manifest) => manifest.legacyImports)];
 }

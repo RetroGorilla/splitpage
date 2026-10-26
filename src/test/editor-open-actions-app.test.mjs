@@ -8,7 +8,7 @@ await bootApp();
 
 const { appActions } = await import("../legacy/app-actions.ts");
 const { currentDocument } = await import("../legacy/session-bridge.ts");
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const { closeAnnotator } = await import("../features/gallery/annotate.js");
 const { closeCommentComposer } = await import("../features/comments/comments.js");

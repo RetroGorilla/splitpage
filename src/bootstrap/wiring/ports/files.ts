@@ -1,7 +1,7 @@
 import type { ExportRegistry } from "../../../application/export/registry.ts";
 import type { FileDelivery } from "../../../application/files/file-delivery.ts";
 import type { LastFile } from "../../../application/files/last-file.ts";
-import { loadLastFileHandle } from "../../../js/00-prelude.js";
+import { loadLastFileHandle } from "../../../adapters/files/last-file.ts";
 import { deliverFile } from "../../../legacy/file-delivery.ts";
 import { exportFormats } from "../../../legacy/export-formats.ts";
 
