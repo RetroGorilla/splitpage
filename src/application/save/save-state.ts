@@ -3,6 +3,10 @@ import type { SaveStatusChange } from "./coordinator.ts";
 
 export type SaveChange = SaveStatusChange | AutoSaveChange;
 
+export interface SaveConfirmation {
+  readonly confirmSavedNow: () => void;
+}
+
 export interface SaveState {
   readonly unsaved: () => boolean;
   readonly busy: () => boolean;

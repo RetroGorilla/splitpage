@@ -3,7 +3,7 @@ import { createSidePanels } from "../../features/panels/side-panels.ts";
 import { startSidePanels } from "../../legacy/panels-bridge.ts";
 import { panelWidths } from "../../legacy/preferences-bridge.ts";
 import { holdScriptPlace, sidePanelOpening } from "../../js/03b-side-panels.js";
-import { closeNewTabPage } from "../../js/20j-newtab.js";
+import { newTabControls } from "./newtab.ts";
 
 const PANEL_BUTTONS: readonly (readonly [string, string])[] = [
   ["production-panel", "btn-production"],
@@ -23,7 +23,7 @@ export function mountSidePanelsFeature(): void {
     holdPlace: holdScriptPlace,
     opening: sidePanelOpening
   });
-  const stops = [startSidePanels(panels), panels.registerPage("newtab-page", closeNewTabPage)];
+  const stops = [startSidePanels(panels), panels.registerPage("newtab-page", () => { newTabControls()?.closeNewTabPage(); })];
   stopSidePanels = () => {
     while (stops.length) stops.pop()?.();
   };
