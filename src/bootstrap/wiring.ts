@@ -34,7 +34,7 @@ import type { DocumentSession, DocumentView, Plan } from "../application/session
 import type { ChangeSet, SessionChange } from "../application/session/change-set.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
 import type { Capability, DocumentEntry, ReportPort, TimerPort, UndoPort } from "../application/session/ports.ts";
-import type { SaveOwnershipPort } from "../application/save/coordinator.ts";
+import type { Operations } from "../application/session/operation.ts";
 import { startPageEffects } from "./effects.ts";
 import { legacyExportServices } from "./export-services.ts";
 import { createAppActions, installAppActions } from "../legacy/app-actions.ts";
@@ -72,7 +72,7 @@ export interface WiringDeps {
   readonly refresh: (jobs: ReadonlySet<string>) => void;
   readonly records: RecordsReconciler;
   readonly bulkTags: BulkTagPorts;
-  readonly saves: (ownership: SaveOwnershipPort) => LegacySavePorts;
+  readonly saves: (ownership: Operations) => LegacySavePorts;
   readonly destinations: () => readonly LegacySaveDestination[];
   readonly transitions: TransitionDeps;
   readonly sources: () => readonly LegacyDocumentSource[];
@@ -164,7 +164,7 @@ const TRANSITION_PORTS: { readonly [P in keyof TransitionDeps]: readonly (keyof 
 
 const SAVE_PORTS: readonly (keyof Omit<LegacySavePorts, "ownership" | "autosave">)[] = ["destination", "keyOf", "obsolete"];
 
-const OWNERSHIP_PORTS: readonly (keyof SaveOwnershipPort)[] = ["capture", "stillOwns"];
+const OWNERSHIP_PORTS: readonly (keyof Operations)[] = ["capture", "stillOwns"];
 
 const AUTOSAVE_PORTS: readonly (keyof LegacyAutoSavePorts)[] = ["enabledAtStart", "changed"];
 

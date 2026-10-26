@@ -1,10 +1,10 @@
-import type { OperationContext } from "../session/operation.ts";
-import type { DraftOwnershipPort, DraftPutOptions, DraftWrite, KeyedDraftStore } from "./ports.ts";
+import type { OperationContext, Operations } from "../session/operation.ts";
+import type { DraftPutOptions, DraftWrite, KeyedDraftStore } from "./ports.ts";
 
 export interface DraftWriterPorts {
   readonly store: KeyedDraftStore;
   readonly writerId: string;
-  readonly ownership: DraftOwnershipPort;
+  readonly ownership: Operations;
 }
 
 export interface DraftCapture {
