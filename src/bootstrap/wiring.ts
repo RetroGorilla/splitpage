@@ -428,3 +428,5 @@ export { mountTagPanelsFeature } from "./wiring/production.ts";
 export { mountNewTabFeature } from "./wiring/newtab.ts";
 
 export { mountScriptPlaceFeature } from "./wiring/side-panels.ts";
+
+export { mountUpdateFeature } from "./wiring/update.ts";

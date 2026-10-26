@@ -1,10 +1,10 @@
+import { updateControls } from "./update.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { setCommentSort } from "../../application/comment-sort.ts";
 import { appDataActions as appDataDefinitions } from "../../features/settings/actions.ts";
 import { mountAppData } from "../../features/settings/app-data.js";
 import type { AppDataMount, AppDataPorts } from "../../features/settings/ports.ts";
 import { exportHistoryAll, importHistoryBundle, normalizeLegacySnapshots } from "../../js/03a-history-store.js";
-import { readEmbeddedVersion } from "../../js/20a-update.js";
 import { connectPortOr, newBookmarkId, renderConnect, saveBookmarks } from "../../js/20e-connect.js";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { setBackend as setBlobBackend } from "../../adapters/storage/02c-blobs.js";
@@ -27,7 +27,6 @@ import { getSavedAuthorName } from "../../application/comment-author.js";
 import { DEFAULT_COLLAB_SERVER, collabServerView, normalizeCollabServer, readCollabServer, signOutCollab } from "../../js/13b-collaborate.js";
 import { applyWriterSize, readWriterSize } from "../../js/19-writer.js";
 import { setPrompterFlip, setPrompterMirror, setPrompterSceneMode } from "../../js/20-teleprompter.js";
-import { renderDesktopAppNotice } from "../../js/20a-update.js";
 import { preferences } from "../../legacy/preferences-bridge.ts";
 import { setAutoSaveEnabled } from "../../legacy/save-bridge.ts";
 
@@ -79,7 +78,7 @@ export function mountSettingsFeature(): SettingsMount {
         defaultServer: DEFAULT_COLLAB_SERVER, view: collabServerView, normalize: normalizeCollabServer,
         address: readCollabServer, signOut: signOutCollab
       },
-      desktop: { running: runningOnDesktop, renderNotice: renderDesktopAppNotice }
+      desktop: { running: runningOnDesktop, renderNotice: () => { updateControls()?.renderDesktopAppNotice(); } }
     };
     const mounted: SettingsMount = mountSettings(ports);
     const uninstall = installSettingsControls(mounted);
@@ -110,7 +109,7 @@ export function mountAppDataFeature(): AppDataMount {
       commentSorting: { choose: setCommentSort },
       history: { exportAll: exportHistoryAll, importBundle: importHistoryBundle, normalizeSnapshots: normalizeLegacySnapshots },
       writer: { size: readWriterSize, setSize: applyWriterSize },
-      embeddedVersion: readEmbeddedVersion,
+      embeddedVersion: () => updateControls()?.readEmbeddedVersion() ?? null,
       bookmarkEditor: { newId: newBookmarkId, portOr: connectPortOr, save: saveBookmarks, render: renderConnect },
       useBlobBackend: setBlobBackend
     };

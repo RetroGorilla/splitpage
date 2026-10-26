@@ -1,10 +1,10 @@
 {
-  "legacyImports": [
-    "./20a-update.js"
-  ],
+  "legacyImports": [],
   "loadOnly": [
     "src/features/update/ports.ts",
-    "src/features/update/actions.ts"
+    "src/features/update/actions.ts",
+    "src/features/update/update.js",
+    "src/bootstrap/wiring/update.ts"
   ],
-  "expectedLoads": 3
+  "expectedLoads": 4
 }
