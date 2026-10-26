@@ -120,7 +120,7 @@ import {
   updateVoiceAvailability
 } from "../../js/20-teleprompter.js";
 import { routeServerOpen } from "./desktop.ts";
-import { finishMarkdownRowChoice } from "../../js/20d-formats.js";
+import { finishMarkdownRowChoice } from "./project-files.ts";
 import { onRootClick, routeRootClick } from "./editor.ts";
 
 const viewMounts = new Map<string, Pick<Owned<Disposable>, "stop">>();
