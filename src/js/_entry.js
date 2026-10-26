@@ -13,7 +13,7 @@ import { mountSaveStatusFeature } from "../bootstrap/wiring.ts";
 import { mountHostedFeature } from "../bootstrap/wiring.ts";
 import { __init as init_13a_presence } from "./13a-presence.js";
 import { __init as init_13b_collaborate } from "./13b-collaborate.js";
-import { __init as init_14_export } from "./14-export.js";
+import { mountFileSavingFeature } from "../bootstrap/wiring.ts";
 import { __init as init_18_local_files } from "./18-local-files.js";
 import { mountMergeReviewFeature } from "../bootstrap/wiring.ts";
 import { mountFileMenuDropdownFeature, mountCommandMenuFeature } from "../bootstrap/wiring.ts";
@@ -21,10 +21,9 @@ import { __init as init_19_writer } from "./19-writer.js";
 import { __init as init_20_teleprompter } from "./20-teleprompter.js";
 import { __init as init_20e_connect } from "./20e-connect.js";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { documentIdentityPort, adoptRestoredState, docIdEvents, initDocIdentityChannel, migrateDocument, reassignDocId, standaloneHtmlFor, syncDocIdentity } from "./02b-doc-id.js";
+import { documentIdentityPort, adoptRestoredState, copyDocHistorySafe, docIdEvents, initDocIdentityChannel, migrateDocument, reassignDocId, standaloneHtmlFor, syncDocIdentity } from "./02b-doc-id.js";
 import { documentDestinationPort, documentHistoryPort, legacyMergePorts, stampRow, setBaseState } from "./03-sync.js";
 import { bulkTagCell, runIdleRefresh, tagFieldOccurrences } from "./07-production-tags.js";
-import { legacyFileDestination, legacySavePorts } from "./14-export.js";
 import { importDocumentSource } from "./11-import.js";
 import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
@@ -39,8 +38,8 @@ try {
     refresh: runIdleRefresh,
     records: derivedRecordsPlan,
     bulkTags: { cell: bulkTagCell, stamp: stampRow },
-    saves: legacySavePorts,
-    destinations: function () { return [legacyFileDestination(), importSaveDestination(), serverSaveDestination()]; },
+    fileSaving: { copyHistory: copyDocHistorySafe, syncIdentity: syncDocIdentity, setBaseline: setBaseState },
+    destinations: function () { return [importSaveDestination(), serverSaveDestination()]; },
     transitions: { destination: documentDestinationPort, identity: documentIdentityPort, history: documentHistoryPort },
     sources: function () { return [projectFileSource(), importDocumentSource(), serverDocumentSource()]; },
     merge: legacyMergePorts,
@@ -96,7 +95,7 @@ if (wiring) {
   mountHostedFeature();
   init_13a_presence();
   init_13b_collaborate();
-  init_14_export();
+  mountFileSavingFeature();
   init_18_local_files();
   mountMergeReviewFeature();
   mountFileMenuDropdownFeature();

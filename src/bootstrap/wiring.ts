@@ -30,6 +30,9 @@ export { mountFileMenuExportFeature } from "./wiring/file-menu-export.ts";
 export { mountFileMenuDropdownFeature } from "./wiring/file-menu.ts";
 export { mountSaveStatusFeature } from "./wiring/save-status.ts";
 export { mountHostedFeature } from "./wiring/hosted.ts";
+export { mountFileSavingFeature } from "./wiring/file-saving.ts";
+import { wireFileSaving } from "./wiring/file-saving.ts";
+import type { FileSavingDeferredPorts } from "../application/save/file-saving-ports.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
 import { registerBuiltInExporters } from "./wiring/exporters.ts";
 import { wireProductionEditing } from "./wiring/production-editing.ts";
@@ -364,8 +367,16 @@ function drain(disposers: (() => void)[]): unknown[] {
   return failures;
 }
 
-export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFiles" | "effects"> & { readonly projectFiles: ProjectFileDeferredPorts }): Wiring {
-  return wireApp({ ...deps, effects: sessionEffects(), projectFiles: () => wireProjectFiles(deps.projectFiles).services, editorName: getEditorName });
+export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFiles" | "effects" | "saves"> & { readonly projectFiles: ProjectFileDeferredPorts; readonly fileSaving: FileSavingDeferredPorts }): Wiring {
+  const fileSaving = wireFileSaving(deps.fileSaving);
+  return wireApp({
+    ...deps,
+    effects: sessionEffects(),
+    projectFiles: () => wireProjectFiles(deps.projectFiles).services,
+    saves: fileSaving.savePorts,
+    destinations: () => [fileSaving.destination(), ...deps.destinations()],
+    editorName: getEditorName
+  });
 }
 
 export function wireApp(deps: WiringDeps): Wiring {

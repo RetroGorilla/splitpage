@@ -1,32 +1,48 @@
-import { normalizeDocId } from "../../shared/doc-id-policy.js";
-import { mintDocId, nowIso } from "../adapters/identity/ids.ts";
-import { documentIdStamp, editStamp } from "../application/commands/save-stamps.ts";
-import { currentDocument, stampDocument } from "../legacy/session-bridge.ts";
-import { amendHome, currentHome, documentLocation, fileHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
-import { rememberLastFileHandle } from "../adapters/files/last-file.ts";
-import {
-  copyDocHistorySafe,
-  syncDocIdentity
-} from "./02b-doc-id.js";
-import { ensureBytes } from "../adapters/storage/02c-blobs.js";
-import { refsIn } from "../../shared/blob-policy.js";
-import {
-  setBaseState
-} from "./03-sync.js";
-import { captureExportDocument } from "../legacy/export-kit-bridge.ts";
-import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "../adapters/formats/project-file.ts";
-import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
-import { checkFileConflict, existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";
-import { deliverFile } from "../legacy/file-delivery.ts";
-import { autoSavePolicy, confirmSavedNow, flushAutoSave, haltAutoSave, resumeAutoSave, saveChanges } from "../legacy/save-bridge.ts";
-import { showToast, warnImagesLeftOut } from "../legacy/effects-bridge.ts";
-import { getEditorName, preferences } from "../legacy/preferences-bridge.ts";
-import { autoSaveWhere } from "../application/save/autosave.ts";
-import { cloneState } from "../core/document/clone.ts";
-import { fileKindFromName } from "../../shared/file-names.js";
-import { slugify } from "../../shared/text.js";
-import { desktopPort } from "../adapters/desktop/desktop-port.ts";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
+import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { documentIdStamp, editStamp } from "../commands/save-stamps.ts";
+import { refsIn } from "../../../shared/blob-policy.js";
+import { autoSaveWhere } from "./autosave.ts";
+import { cloneState } from "../../core/document/clone.ts";
+import { fileKindFromName } from "../../../shared/file-names.js";
+import { slugify } from "../../../shared/text.js";
+
+var ports = null;
+
+function mintDocId() { return ports.ids.docId(); }
+function nowIso() { return ports.clock.nowIso(); }
+function currentDocument() { return ports.document.current(); }
+function stampDocument(stamp) { return ports.document.stamp(stamp); }
+function documentLocation() { return ports.location; }
+function currentHome() { return ports.location.home(); }
+function fileHome() { return ports.location.fileHome(); }
+function setHome(kind, fields) { return ports.location.setHome(kind, fields); }
+function amendHome(record, fields) { return ports.location.amendHome(record, fields); }
+function serverStatus() { return ports.server; }
+function rememberLastFileHandle(handle) { return ports.lastFile.remember(handle); }
+function copyDocHistorySafe(fromId, toId) { return ports.deferred.copyHistory(fromId, toId); }
+function syncDocIdentity() { return ports.deferred.syncIdentity(); }
+function setBaseState(state, reason) { return ports.deferred.setBaseline(state, reason); }
+function ensureBytes(shas) { return ports.pictures.ensureBytes(shas); }
+function captureExportDocument(opts) { return ports.exports.captureExportDocument(opts); }
+function buildSplitpageFile(doc) { return ports.formats.buildSplitpage(doc); }
+function buildMarkdownProject(doc) { return ports.formats.buildMarkdown(doc); }
+function fileImagesMissing(doc) { return ports.formats.imagesMissing(doc); }
+function saveDialogs(slug) { return ports.files.dialogs(slug); }
+function pickTarget(dialogs) { return ports.files.pick(dialogs); }
+function existingTarget(handle) { return ports.files.existing(handle); }
+function checkFileConflict(handle, lastModified) { return ports.files.checkConflict(handle, lastModified); }
+function writeToHandle(handle, body) { return ports.files.write(handle, body); }
+function isAbort(error) { return ports.files.isAbort(error); }
+function deliverFile(filename, data, opts) { return ports.delivery.deliver(filename, data, opts); }
+function autoSavePolicy() { return ports.saves.policy(); }
+function confirmSavedNow() { return ports.saves.confirmSavedNow(); }
+function haltAutoSave(reason) { return ports.saves.halt(reason); }
+function resumeAutoSave() { return ports.saves.resume(); }
+function saveChanges() { return ports.saves.changes(); }
+function showToast(message, kind, sticky) { return ports.notices.show(message, kind, sticky); }
+function warnImagesLeftOut(count, name) { return ports.notices.imagesLeftOut(count, name); }
+function getEditorName() { return ports.preferences.editorName(); }
+function preferences() { return ports.preferences; }
 
 var SAVED = Object.freeze({ kind: "saved" });
 var COPIED = Object.freeze({ kind: "copied" });
@@ -34,29 +50,6 @@ var CANCELLED = Object.freeze({ kind: "cancelled" });
 var FAILED = Object.freeze({ kind: "failed" });
 var FILE_CHANGED = "The file changed on disk since it was opened";
 var CONFLICTED = Object.freeze({ kind: "refused", reason: FILE_CHANGED });
-
-function saveDialogs(slug) {
-  return {
-    desktop: runningOnDesktop() ? function () {
-      return desktopPort().saveFileDialog({
-        suggestedName: slug + ".md",
-        filters: [
-          { name: "Markdown script", extensions: ["md"] },
-          { name: "Splitpage script", extensions: ["splitpage"] }
-        ]
-      }).then(function (picked) { return picked ? makeDesktopHandle(picked) : null; });
-    } : null,
-    browser: window.showSaveFilePicker ? function () {
-      return window.showSaveFilePicker({
-        suggestedName: slug + ".md",
-        types: [
-          { description: "Markdown script", accept: { "text/markdown": [".md"] } },
-          { description: "Splitpage script", accept: { "application/json": [".splitpage"] } }
-        ]
-      });
-    } : null
-  };
-}
 
 function confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted, landed) {
   var stamp = captured.document;
@@ -210,8 +203,8 @@ function fileAutoSaveTarget() {
   });
 }
 
-export function updateAutoSaveMenu() {
-  var item = document.getElementById("menu-autosave");
+function updateAutoSaveMenu() {
+  var item = ports.page.getElementById("menu-autosave");
   if (!item) return;
   var on = autoSavePolicy().enabled();
   item.setAttribute("aria-checked", on ? "true" : "false");
@@ -234,13 +227,13 @@ function writeToFile(job) {
   return writeDoc({ auto: kind === "auto" || kind === "autosave", force: kind === "force", saveAs: kind === "saveAs" }, job);
 }
 
-export function legacyFileDestination() {
+function fileDestination() {
   return { id: "file", takes: fileTakes, autoSaveTarget: fileAutoSaveTarget, write: writeToFile };
 }
 
 var NO_DESTINATION_KEY = Object.freeze({});
 
-export function destinationKeyOf(h) {
+function destinationKeyOf(h) {
   if (!h || h.kind === "none") return { owner: NO_DESTINATION_KEY, name: "none" };
   if (h.kind === "server") return { owner: documentLocation().serverOf(h.conn) || h, name: "doc:" + String(h.id) };
   var handle = h.handle;
@@ -270,7 +263,7 @@ function saveOwnership(ownership) {
   };
 }
 
-export function legacySavePorts(ownership) {
+function savePorts(ownership) {
   return {
     destination: function () { return currentHome(); },
     keyOf: destinationKeyOf,
@@ -283,10 +276,15 @@ export function legacySavePorts(ownership) {
   };
 }
 
-export function __init() {
-  window.addEventListener("blur", function () { flushAutoSave(); });
-
-  document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "hidden") flushAutoSave();
-  });
+export function mountFileSaving(given) {
+  ports = given;
+  var mounted = given;
+  return {
+    destination: fileDestination,
+    savePorts: savePorts,
+    updateAutoSaveMenu: updateAutoSaveMenu,
+    dispose: function () {
+      if (ports === mounted) ports = null;
+    }
+  };
 }

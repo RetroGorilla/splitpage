@@ -1,8 +1,11 @@
 {
   "legacyImports": [
-    "./14-export.js",
     "./18-local-files.js"
   ],
-  "loadOnly": [],
-  "expectedLoads": 2
+  "loadOnly": [
+    "src/application/save/file-saving.js",
+    "src/adapters/files/save-dialogs.ts",
+    "src/bootstrap/wiring/file-saving.ts"
+  ],
+  "expectedLoads": 4
 }
