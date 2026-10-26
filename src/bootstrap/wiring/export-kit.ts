@@ -9,14 +9,7 @@ import { startExportKit } from "../../legacy/export-kit-bridge.ts";
 import { documentReader } from "./ports/document.ts";
 import { preferenceValues } from "./ports/preferences.ts";
 
-let owner: ExportKit | null = null;
-
-export function exportKit(): ExportKit {
-  if (!owner) throw new Error("The export kit is not started yet");
-  return owner;
-}
-
-export function wireExportKit(entry: DocumentEntry): () => void {
+export function wireExportKit(entry: DocumentEntry): { readonly owner: ExportKit; readonly stop: () => void } {
   const made = createExportKit({
     read: documentReader.read,
     preferences: preferenceValues,
@@ -27,10 +20,5 @@ export function wireExportKit(entry: DocumentEntry): () => void {
     assets: assetPorts,
     following: Node.DOCUMENT_POSITION_FOLLOWING
   });
-  const stop = startExportKit(made);
-  owner = made;
-  return () => {
-    stop();
-    if (owner === made) owner = null;
-  };
+  return { owner: made, stop: startExportKit(made) };
 }

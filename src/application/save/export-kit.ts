@@ -13,12 +13,6 @@ import { toHtml } from "../../core/text/html.ts";
 import type { DocumentEntry } from "../session/ports.ts";
 import type { DocumentView } from "../session/document-session.ts";
 
-export const PRINT_TOKENS = {
-  text: "--text", dim: "--text-dim", faint: "--text-faint", border: "--border",
-  borderStrong: "--border-strong", surface2: "--surface-2", visual: "--visual",
-  visualSoft: "--visual-soft", audio: "--audio", audioSoft: "--audio-soft", broll: "--broll"
-};
-
 export interface ExportAnchor {
   readonly contains: (other: ExportAnchor) => boolean;
   readonly compareDocumentPosition: (other: ExportAnchor) => number;
@@ -44,10 +38,6 @@ export interface ExportKit {
   readonly captureExportDocument: (opts?: ExportCaptureOptions | null) => ExportDocument;
   readonly loadExportAssets: (request: ExportAssetRequest) => Promise<ExportAssets>;
   readonly exportDocumentOf: (state: unknown, opts?: ExportCaptureOptions | null) => ExportDocument;
-}
-
-export function commentNumbers(doc: ExportDocument): ExportDocument["commentNumbers"] {
-  return doc.commentNumbers;
 }
 
 export function createExportKit(ports: ExportKitPorts): ExportKit {

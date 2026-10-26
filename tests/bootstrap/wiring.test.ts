@@ -581,7 +581,7 @@ test("failed partial startup: a step that throws undoes every step before it, in
     preferences: (f) => ({ deps: f.deps, cleanup: startPreferences(), cause: false }),
     "shot hiding": (f) => ({ deps: f.deps, cleanup: startShotHiding(legacyShotHidingPorts(must(f.deps.timers))), cause: false }),
     presence: (f) => ({ deps: f.deps, cleanup: startPresence(legacyPresencePorts()), cause: false }),
-    "export capture": (f) => ({ deps: f.deps, cleanup: wireExportKit(f.deps.entry), cause: false })
+    "export capture": (f) => ({ deps: f.deps, cleanup: wireExportKit(f.deps.entry).stop, cause: false })
   };
   const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { location: "location", "page effects": "effects", "export services": "exportServices", "export registry": "exports", undo: "undo", transitions: "transitions", editor: "editor", "production editing": "productionEditing", preferences: "preferences", "shot hiding": "shotHiding", presence: "presence", "export capture": "exportCapture" };
   assert.deepEqual(Object.keys(breakers), [...WIRING_STEPS], "every step is broken once");

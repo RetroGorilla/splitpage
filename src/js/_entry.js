@@ -96,7 +96,7 @@ if (wiring) {
   init_18_local_files();
   init_18a_local_merge();
   mountFileMenuDropdownFeature();
-  mountFileMenuExportFeature();
+  mountFileMenuExportFeature(wiring.captureExportDocument);
   mountCommandMenuFeature();
   init_19_writer();
   init_20_teleprompter();

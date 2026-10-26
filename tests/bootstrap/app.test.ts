@@ -1,3 +1,4 @@
+import { captureExportDocument } from "../../src/legacy/export-kit-bridge.ts";
 import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
 import { test } from "node:test";
@@ -13,6 +14,7 @@ test("the app module refuses a second start, and a start waiting for DOM ready i
   const wiring: Wiring = {
     actions: createActionRegistry(),
     exports: createExportRegistry(),
+    captureExportDocument,
     session: liveSession(),
     keyTarget: new EventTarget(),
     dispose: () => { released++; }
@@ -34,6 +36,7 @@ test("the saved theme and tag icons apply while the page is still loading, befor
   const wiring: Wiring = {
     actions: createActionRegistry(),
     exports: createExportRegistry(),
+    captureExportDocument,
     session: liveSession(),
     keyTarget: new EventTarget(),
     dispose: () => {}

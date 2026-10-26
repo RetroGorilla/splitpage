@@ -14,7 +14,6 @@ import {
   exportFacts,
   exportSummaryParts
 } from "../adapters/formats/export-kit.ts";
-import { commentNumbers } from "../application/save/export-kit.ts";
 import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { buildPdf, pdfTextWidth } from "../adapters/formats/pdf.ts";
@@ -129,7 +128,7 @@ test("a tag in its category's colour, underlined in it; the b-roll key a chip", 
 test("each open thread's number after its words, in amber, as the appendix numbers it", () => {
   demo();
   const doc = read(buildPdf(liveDoc(), null));
-  const nums = Object.values(commentNumbers(exportDocumentOf(currentDocument()))).sort();
+  const nums = Object.values(exportDocumentOf(currentDocument()).commentNumbers).sort();
   const amber = rgb(PRINT_COLORS.audio);
   const markers = doc.pages.flatMap((p) => p.texts.filter((o) => o.size === 6 && o.color === amber)).map((o) => +o.str);
   assert.deepEqual(markers, nums);
