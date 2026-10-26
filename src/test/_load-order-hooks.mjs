@@ -4,6 +4,7 @@ import { relative } from "node:path";
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 
 export const CONFIGURATION = Object.freeze({
+  "src/legacy/tag-entity-container.ts": { functions: ["installTagEntityContainerFactory"] },
   "src/legacy/session-bridge.ts": { functions: ["startSessionBridge", "onDocumentReplaced", "onSessionChange", "onRefresh", "onStamped"] },
   "src/legacy/undo-adapter.ts": { functions: ["routeReplays"] },
   "src/legacy/undo-bridge.ts": { functions: ["startUndo", "configureUndo", "routeUndoReplays"] },

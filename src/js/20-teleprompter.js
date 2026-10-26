@@ -1,4 +1,4 @@
-import { mountTagEntityContainer } from "../features/tags/mount.ts";
+import { createTagEntityContainer } from "../legacy/tag-entity-container.ts";
 import {
   prompterIsOpen,
   prompterSkipsShot,
@@ -7,17 +7,9 @@ import {
   setVoiceFollowing,
   voiceIsFollowing
 } from "../application/prompter-state.ts";
-import { reviewBlocked, reviewMode, serverHomeId } from "../legacy/location-bridge.ts";
+import { serverHomeId } from "../legacy/location-bridge.ts";
 import { SpeechRecognitionCtor } from "./00-prelude.js";
 import { sidePanels } from "../legacy/panels-bridge.ts";
-import {
-  addPersonForTag,
-  renderProduction,
-  saveTagRename,
-  setTagNotes,
-  setTagOwner
-} from "../application/tag-panel-commands.ts";
-import { autoSavePolicy } from "../legacy/save-bridge.ts";
 import { parseProjectFileState } from "../adapters/formats/project-file.ts";
 import { openDocument } from "../legacy/transition-bridge.ts";
 import { canOpenPrompterInBrowser } from "../adapters/desktop/desktop-port.ts";
@@ -36,7 +28,6 @@ import { focusMemory } from "../legacy/editor-bridge.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
-import { setTagAddingPerson, setTagRenaming } from "../application/tag-panel-state.ts";
 import { startupReady } from "../legacy/startup-bridge.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
 
@@ -1004,23 +995,7 @@ function startPrompterLaunch(launch) {
 }
 
 export function wireTagEntityContainer(id, rootClick) {
-  return mountTagEntityContainer({
-    window: window,
-    id: id,
-    ports: {
-      rootClick: rootClick,
-      reviewMode: reviewMode,
-      reviewBlocked: reviewBlocked,
-      renderProduction: renderProduction,
-      saveTagRename: saveTagRename,
-      addPersonForTag: addPersonForTag,
-      setRenaming: function (value) { setTagRenaming(value); },
-      setAddingPerson: function (value) { setTagAddingPerson(value); },
-      setTagOwner: setTagOwner,
-      setTagNotes: setTagNotes,
-      queueAutoSave: function () { autoSavePolicy().dueNow(); }
-    }
-  });
+  return createTagEntityContainer(id, rootClick);
 }
 
 export function __init() {

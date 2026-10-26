@@ -6,7 +6,8 @@
   "loadOnly": [
     "src/bootstrap/wiring/production.ts",
     "src/bootstrap/wiring/production-editing.ts",
-    "src/features/tags/panels.js"
+    "src/features/tags/panels.js",
+    "src/legacy/tag-entity-container.ts"
   ],
-  "expectedLoads": 5
+  "expectedLoads": 6
 }
