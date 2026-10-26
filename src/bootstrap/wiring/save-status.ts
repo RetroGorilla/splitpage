@@ -1,5 +1,6 @@
 import type { Refusal } from "../../application/actions.ts";
 import { mountSaveStatus } from "../../features/title/save-status.js";
+import { showRefusal as showRefusalNotice } from "../../features/title/refusal.ts";
 import type { DocumentIdentitySync, SaveStatusListeners, SaveStatusMount } from "../../features/title/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { notices } from "./ports/effects.ts";
@@ -29,7 +30,7 @@ export function updateSaveStatus(): void {
 }
 
 export function showRefusal(refusal: Refusal): void {
-  saveStatus.owner()?.showRefusal(refusal);
+  showRefusalNotice(notices, refusal);
 }
 
 export function saveStatusListeners(): SaveStatusListeners {

@@ -3,9 +3,10 @@
   "loadOnly": [
     "src/features/title/ports.ts",
     "src/features/title/save-status.js",
+    "src/features/title/refusal.ts",
     "src/bootstrap/wiring/save-status.ts",
     "src/application/save/session-effects.ts",
     "src/bootstrap/wiring/session-effects.ts"
   ],
-  "expectedLoads": 5
+  "expectedLoads": 6
 }

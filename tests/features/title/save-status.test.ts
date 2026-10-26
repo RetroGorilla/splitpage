@@ -2,6 +2,7 @@ import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mountSaveStatus } from "../../../src/features/title/save-status.js";
+import { showRefusal } from "../../../src/features/title/refusal.ts";
 import type { SaveStatusMount, SaveStatusPorts } from "../../../src/features/title/ports.ts";
 import type { Home } from "../../../src/application/location/document-location.ts";
 import type { PreferenceName } from "../../../src/application/preferences/preferences.ts";
@@ -166,18 +167,16 @@ test("with nowhere to save and nothing unsaved the line is hidden and the button
   }
 });
 
-test("refusals that are unavailable with a reason become a warning, with a full stop added when it has none", () => {
-  const { mount, shown } = mounted();
-  try {
-    mount.showRefusal({ id: "a", kind: "unavailable", reason: "Close the prompter first" });
-    mount.showRefusal({ id: "b", kind: "unavailable", reason: "Nothing to save…" });
-    mount.showRefusal({ id: "c", kind: "unavailable", reason: "" });
-    Reflect.apply(mount.showRefusal, undefined, [{ id: "d", kind: "unknown", reason: "Unknown action" }]);
-    mount.showRefusal(null);
-    assert.deepEqual(shown.map((s) => [s.message, s.kind]), [["Close the prompter first.", "warn"], ["Nothing to save…", "warn"]]);
-  } finally {
-    mount.dispose();
-  }
+test("refusals that are unavailable with a reason become a warning, with a full stop added when it has none, mounted or not", () => {
+  const { notices, shown } = fakeNotices();
+  showRefusal(notices, { id: "a", kind: "unavailable", reason: "Close the prompter first" });
+  showRefusal(notices, { id: "b", kind: "unavailable", reason: "Nothing to save…" });
+  showRefusal(notices, { id: "c", kind: "unavailable", reason: "Already saved!" });
+  showRefusal(notices, { id: "d", kind: "unavailable", reason: "" });
+  Reflect.apply(showRefusal, undefined, [notices, { id: "e", kind: "unknown", reason: "Unknown action" }]);
+  showRefusal(notices, null);
+  showRefusal(notices, undefined);
+  assert.deepEqual(shown.map((s) => [s.message, s.kind]), [["Close the prompter first.", "warn"], ["Nothing to save…", "warn"], ["Already saved!", "warn"]]);
 });
 
 test("the mount hears cleared crew owners and exposes the test refresh, and dispose removes both", () => {
@@ -196,4 +195,20 @@ test("the mount hears cleared crew owners and exposes the test refresh, and disp
   document.dispatchEvent(new window.CustomEvent("undo-owner-cleared", { detail: { count: 2 } }));
   assert.equal(shown.length, 2);
   assert.equal("__saveStatusTest" in window, false);
+});
+
+test("disposing an earlier mount after a new one leaves the new one painting and hearing", () => {
+  const first = mounted();
+  const second = mounted({ unsaved: true });
+  try {
+    first.mount.dispose();
+    second.mount.refresh();
+    assert.equal(byId("save-status").textContent, "Unsaved changes");
+    document.dispatchEvent(new window.CustomEvent("undo-owner-cleared", { detail: { count: 1 } }));
+    assert.equal(first.shown.length, 0);
+    assert.equal(second.shown.length, 1);
+    assert.equal((window as unknown as { __saveStatusTest?: { refresh: () => void } }).__saveStatusTest?.refresh, second.mount.refresh);
+  } finally {
+    second.mount.dispose();
+  }
 });

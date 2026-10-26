@@ -33,14 +33,14 @@ export interface SessionEffectPorts {
   readonly preferences: Pick<Preferences, "commentAuthor" | "myColor">;
 }
 
-const MY_COLOR = changeSet({ docFields: ["personColors"] });
-
 export function createSessionEffects(ports: SessionEffectPorts): SessionEffects {
+  const myColor = changeSet({ docFields: ["personColors"] });
+
   function myColorPlan(doc: DocumentView): Plan | null {
     if (!doc || ports.review.reviewing()) return null;
     const next = colorsWithMine(doc.personColors, cleanAuthorName(ports.preferences.commentAuthor()).trim(), ports.preferences.myColor());
     if (!next) return null;
-    return { changes: MY_COLOR, apply: function (live) { live.personColors = next; } };
+    return { changes: myColor, apply: function (live) { live.personColors = next; } };
   }
 
   return {

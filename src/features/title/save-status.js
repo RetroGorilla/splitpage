@@ -121,33 +121,30 @@ function updateSaveStatus() {
   }
 }
 
-function showRefusal(outcome) {
-  if (!outcome || outcome.kind !== "unavailable" || !outcome.reason) return;
-  var text = outcome.reason;
-  ports.notices.show(/[.!?…]$/.test(text) ? text : text + ".", "warn");
-}
-
-function onOwnerCleared(e) {
-  var n = (e.detail && e.detail.count) || 0;
-  if (n) ports.notices.show("That person is no longer on the crew, so " + (n === 1 ? "1 item is" : n + " items are") + " now unassigned.", "warn");
-}
+var activeMount = null;
 
 export function mountSaveStatus(nextPorts) {
   ports = nextPorts;
+  var mine = nextPorts;
+  function onOwnerCleared(e) {
+    var n = (e.detail && e.detail.count) || 0;
+    if (n) mine.notices.show("That person is no longer on the crew, so " + (n === 1 ? "1 item is" : n + " items are") + " now unassigned.", "warn");
+  }
   var listening = typeof document !== "undefined" && !!document.addEventListener;
   if (listening) document.addEventListener("undo-owner-cleared", onOwnerCleared);
   var probe = { refresh: updateSaveStatus };
   window.__saveStatusTest = probe;
   var disposed = false;
-  return {
+  var mounted = {
     refresh: updateSaveStatus,
     listeners: saveStatusListeners,
-    showRefusal: showRefusal,
     dispose: function () {
       if (disposed) return;
       disposed = true;
       if (listening) document.removeEventListener("undo-owner-cleared", onOwnerCleared);
       if (window.__saveStatusTest === probe) delete window.__saveStatusTest;
+      if (activeMount !== mounted) return;
+      activeMount = null;
       if (justNowTimer) clearTimeout(justNowTimer);
       justNowTimer = null;
       savedAt = 0;
@@ -155,4 +152,6 @@ export function mountSaveStatus(nextPorts) {
       ports = null;
     }
   };
+  activeMount = mounted;
+  return mounted;
 }

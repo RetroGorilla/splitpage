@@ -1,4 +1,3 @@
-import type { Refusal } from "../../application/actions.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { PreferenceChange, Preferences } from "../../application/preferences/preferences.ts";
@@ -39,6 +38,5 @@ export interface SaveStatusListeners {
 export interface SaveStatusMount {
   readonly refresh: () => void;
   readonly listeners: () => SaveStatusListeners;
-  readonly showRefusal: (outcome: Refusal | null | undefined) => void;
   readonly dispose: () => void;
 }
