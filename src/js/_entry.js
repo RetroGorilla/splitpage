@@ -9,7 +9,7 @@ import { __init as init_07_production_tags } from "./07-production-tags.js";
 import { __init as init_07b_plain_tags } from "./07b-plain-tags.js";
 import { mountScriptPlaceFeature, mountFindFeature, mountTagPanelsFeature } from "../bootstrap/wiring.ts";
 import { __init as init_11_import } from "./11-import.js";
-import { __init as init_12_dirty_toast } from "./12-dirty-toast.js";
+import { mountSaveStatusFeature } from "../bootstrap/wiring.ts";
 import { mountHostedFeature } from "../bootstrap/wiring.ts";
 import { __init as init_13a_presence } from "./13a-presence.js";
 import { __init as init_13b_collaborate } from "./13b-collaborate.js";
@@ -21,10 +21,9 @@ import { __init as init_19_writer } from "./19-writer.js";
 import { __init as init_20_teleprompter } from "./20-teleprompter.js";
 import { __init as init_20e_connect } from "./20e-connect.js";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { documentIdentityPort, adoptRestoredState, docIdEvents, initDocIdentityChannel, migrateDocument, reassignDocId, standaloneHtmlFor } from "./02b-doc-id.js";
+import { documentIdentityPort, adoptRestoredState, docIdEvents, initDocIdentityChannel, migrateDocument, reassignDocId, standaloneHtmlFor, syncDocIdentity } from "./02b-doc-id.js";
 import { documentDestinationPort, documentHistoryPort, legacyMergePorts, stampRow, setBaseState } from "./03-sync.js";
 import { bulkTagCell, runIdleRefresh, tagFieldOccurrences } from "./07-production-tags.js";
-import { legacySessionEffects } from "./12-dirty-toast.js";
 import { legacyFileDestination, legacySavePorts } from "./14-export.js";
 import { importDocumentSource } from "./11-import.js";
 import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
@@ -37,7 +36,6 @@ var wiring = null;
 try {
   wiring = wireLegacyApp({
     entry: migrateRows,
-    effects: legacySessionEffects(),
     refresh: runIdleRefresh,
     records: derivedRecordsPlan,
     bulkTags: { cell: bulkTagCell, stamp: stampRow },
@@ -94,7 +92,7 @@ if (wiring) {
   mountFindFeature();
   mountCommentsLogicFeature();
   init_11_import();
-  init_12_dirty_toast();
+  mountSaveStatusFeature({ sync: syncDocIdentity });
   mountHostedFeature();
   init_13a_presence();
   init_13b_collaborate();

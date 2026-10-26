@@ -52,6 +52,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/file-menu-export.ts": { functions: ["mountFileMenuExportFeature"] },
   "src/bootstrap/wiring/file-menu-controls.ts": { functions: ["onFileMenuRefresh", "startNewScript"] },
   "src/bootstrap/wiring/hosted.ts": { functions: ["mountHostedFeature"] },
+  "src/bootstrap/wiring/save-status.ts": { functions: ["mountSaveStatusFeature"] },
   "src/application/export/services.ts": { functions: ["installExportServices"] },
   "src/application/settings-actions.ts": { functions: ["installSettingsControls"] },
   "src/bootstrap/wiring/exporters.ts": { functions: ["registerBuiltInExporters"] },

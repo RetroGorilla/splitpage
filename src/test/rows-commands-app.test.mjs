@@ -12,7 +12,7 @@ const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { undo, undoSizes, flushEdits } = await import("../legacy/undo-bridge.ts");
 const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
-const { legacySessionEffects } = await import("../js/12-dirty-toast.js");
+const { sessionEffects } = await import("../bootstrap/wiring/session-effects.ts");
 const { addRow } = await import("../bootstrap/wiring/rows.ts");
 const { cellEditing, rowDrag } = await import("../legacy/editor-bridge.ts");
 const writer = await import("../js/19-writer.js");
@@ -21,7 +21,7 @@ const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);
 
-const appEffects = legacySessionEffects();
+const appEffects = sessionEffects();
 const effects = Object.assign({}, appEffects);
 await rewireRunningApp({ effects: effects });
 

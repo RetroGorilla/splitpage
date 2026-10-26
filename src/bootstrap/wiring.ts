@@ -2,6 +2,8 @@ export { mountPageEntry } from "./startup/page-entry.ts";
 export { mountProjectFiles } from "./wiring/project-files.ts";
 import { wireProjectFiles } from "./wiring/project-files.ts";
 import type { ProjectFileDeferredPorts } from "../application/save/project-files.ts";
+import { sessionEffects } from "./wiring/session-effects.ts";
+import type { SessionEffects } from "../application/save/session-effects.ts";
 export { mountCommandMenuFeature } from "./wiring/command-menu.ts";
 export { mountOnboardingFeature } from "./wiring/onboarding.ts";
 export { mountDesktopFeature } from "./wiring/desktop.ts";
@@ -26,6 +28,7 @@ export { mountSceneStatusFeature } from "./wiring/scene-status.ts";
 export { mountHideShotFeature } from "./wiring/hide-shot.ts";
 export { mountFileMenuExportFeature } from "./wiring/file-menu-export.ts";
 export { mountFileMenuDropdownFeature } from "./wiring/file-menu.ts";
+export { mountSaveStatusFeature } from "./wiring/save-status.ts";
 export { mountHostedFeature } from "./wiring/hosted.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
 import { registerBuiltInExporters } from "./wiring/exporters.ts";
@@ -36,10 +39,10 @@ import type { ExportRegistry } from "../application/export/registry.ts";
 import { installExportServices } from "../application/export/services.ts";
 import { installProjectFileServices } from "../application/formats/project-file-services.ts";
 import type { ProjectFileServices } from "../application/formats/project-file-services.ts";
-import type { DocumentSession, DocumentView, Plan } from "../application/session/document-session.ts";
+import type { DocumentSession, DocumentView } from "../application/session/document-session.ts";
 import type { ChangeSet, SessionChange } from "../application/session/change-set.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
-import type { Capability, DocumentEntry, ReportPort, TimerPort, UndoPort } from "../application/session/ports.ts";
+import type { DocumentEntry, ReportPort, TimerPort, UndoPort } from "../application/session/ports.ts";
 import type { Operations } from "../application/session/operation.ts";
 import { startPageEffects } from "./effects.ts";
 import { legacyExportServices } from "./export-services.ts";
@@ -62,14 +65,6 @@ import { captureOperation, documentSources, startTransitions, stillOwns } from "
 import type { LegacyDocumentSource, LegacyTransitionPorts } from "../legacy/transition-bridge.ts";
 import { createUndoAdapter, routeReplays } from "../legacy/undo-adapter.ts";
 import { flushEdits, legacyUndoPorts, startUndo, undoSizes } from "../legacy/undo-bridge.ts";
-
-export interface SessionEffects {
-  readonly dirty: (change: SessionChange) => void;
-  readonly draft: (change: SessionChange) => void;
-  readonly save: (change: SessionChange) => void;
-  readonly edit: () => Capability;
-  readonly attribute: (doc: DocumentView) => Plan | null;
-}
 
 export interface WiringDeps {
   readonly entry: DocumentEntry;
@@ -369,8 +364,8 @@ function drain(disposers: (() => void)[]): unknown[] {
   return failures;
 }
 
-export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFiles"> & { readonly projectFiles: ProjectFileDeferredPorts }): Wiring {
-  return wireApp({ ...deps, projectFiles: () => wireProjectFiles(deps.projectFiles).services, editorName: getEditorName });
+export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFiles" | "effects"> & { readonly projectFiles: ProjectFileDeferredPorts }): Wiring {
+  return wireApp({ ...deps, effects: sessionEffects(), projectFiles: () => wireProjectFiles(deps.projectFiles).services, editorName: getEditorName });
 }
 
 export function wireApp(deps: WiringDeps): Wiring {

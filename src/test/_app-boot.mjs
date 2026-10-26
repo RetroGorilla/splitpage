@@ -89,13 +89,13 @@ export function closeApp() {
 }
 
 export async function appWiringDeps() {
-  const [{ migrateRows }, docId, sync, production, broll, dirty, exporting, drafts, hosted, files, imports, formats] = await Promise.all([
+  const [{ migrateRows }, docId, sync, production, broll, effects, exporting, drafts, hosted, files, imports, formats] = await Promise.all([
     import("../legacy/document-ports.ts"),
     import("../js/02b-doc-id.js"),
     import("../js/03-sync.js"),
     import("../js/07-production-tags.js"),
     import("../bootstrap/wiring/broll.ts"),
-    import("../js/12-dirty-toast.js"),
+    import("../bootstrap/wiring/session-effects.ts"),
     import("../js/14-export.js"),
     import("../bootstrap/wiring/drafts.ts"),
     import("../js/13-hosted.js"),
@@ -105,7 +105,7 @@ export async function appWiringDeps() {
   ]);
   return {
     entry: migrateRows,
-    effects: dirty.legacySessionEffects(),
+    effects: effects.sessionEffects(),
     editorName: getEditorName,
     refresh: production.runIdleRefresh,
     records: broll.derivedRecordsPlan,

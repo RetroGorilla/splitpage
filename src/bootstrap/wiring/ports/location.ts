@@ -1,8 +1,9 @@
 import type { ServerStatus } from "../../../application/location/server-status.ts";
 import type { ReviewFacts } from "../../../application/collaboration/review.ts";
 import type { DocumentPlace } from "../../../application/location/document-place.ts";
+import type { DocumentLocation } from "../../../application/location/document-location.ts";
 import { arrivingOnLink } from "../../../js/13-hosted.js";
-import { currentConn, currentHome, documentLocation, fileHome, homeConn, importHome, reviewBlocked, reviewMode, serverHomeId, serverStatus, stillOnServer } from "../../../legacy/location-bridge.ts";
+import { amendHome, currentConn, currentHome, documentLocation, fileHome, homeConn, importHome, reviewBlocked, reviewMode, serverHomeId, serverStatus, stillOnServer } from "../../../legacy/location-bridge.ts";
 
 export const place: DocumentPlace = {
   home: () => currentHome(),
@@ -26,6 +27,12 @@ export const place: DocumentPlace = {
 };
 
 export const review: ReviewFacts = { reviewing: reviewMode, refuseInReview: reviewBlocked };
+
+export const homes: Pick<DocumentLocation, "home" | "amendHome" | "homeConn"> = {
+  home: () => currentHome(),
+  amendHome: (record, fields) => amendHome(record, fields),
+  homeConn: () => homeConn()
+};
 
 export const bookmarks: Pick<ServerStatus, "loadBookmarks" | "bookmarks" | "addBookmarks"> = {
   loadBookmarks: () => serverStatus().loadBookmarks(),

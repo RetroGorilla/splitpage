@@ -68,6 +68,16 @@ export const appDataPreferences: Pick<Preferences, "appDataExport" | "appDataImp
   commentsSort: () => preferences().commentsSort()
 };
 
+export const attributionPreferences: Pick<Preferences, "commentAuthor" | "myColor"> = {
+  commentAuthor: () => preferences().commentAuthor(),
+  myColor: () => preferences().myColor()
+};
+
+export const saveStatusPreferences: Pick<Preferences, "clock" | "nameOf"> = {
+  clock: () => preferences().clock(),
+  nameOf: (key) => preferences().nameOf(key)
+};
+
 export const updatePreferences: Pick<Preferences, "desktopNoticeDismissed" | "dismissDesktopNotice"> = {
   desktopNoticeDismissed: () => preferences().desktopNoticeDismissed(),
   dismissDesktopNotice: () => preferences().dismissDesktopNotice()

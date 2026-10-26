@@ -50,7 +50,7 @@ import {
   maybeAutoDetectTwoColumn,
   updateImportPreview
 } from "../../js/11-import.js";
-import { updateSaveStatus } from "../../js/12-dirty-toast.js";
+import { updateSaveStatus } from "./save-status.ts";
 import { showToast } from "../../legacy/effects-bridge.ts";
 import { panelWidths, preferences } from "../../legacy/preferences-bridge.ts";
 import { sidePanels } from "../../legacy/panels-bridge.ts";
