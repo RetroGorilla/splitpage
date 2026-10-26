@@ -1,4 +1,6 @@
 import type { EditorSelection } from "../../../application/editing/selection.ts";
+import type { ProductionSelection } from "../../../application/editing/production-selection.ts";
+import { productionSelection as productionSelectionOwner } from "../../../legacy/production-editing-bridge.ts";
 import type { UndoControl } from "../../../application/editing/undo-control.ts";
 import type { DocumentEdits } from "../../../application/session/document-edits.ts";
 import { breakUndoCoalescing, flushEdits, lastUndoEntry, redo, undo } from "../../../legacy/undo-bridge.ts";
@@ -27,4 +29,17 @@ export const selection: Pick<EditorSelection<Element, Range, Element>, "dropLink
   forget: () => { editorSelection().forget(); },
   paintedEpoch: (root) => editorSelection().paintedEpoch(root),
   dropLink: () => { editorSelection().dropLink(); }
+};
+
+export const productionSelection: ProductionSelection = {
+  selectedKeys: () => productionSelectionOwner().selectedKeys(),
+  selected: (key) => productionSelectionOwner().selected(key),
+  anchorKey: () => productionSelectionOwner().anchorKey(),
+  toggle: (key) => { productionSelectionOwner().toggle(key); },
+  select: (key, order, shift) => productionSelectionOwner().select(key, order, shift),
+  prune: (entries) => { productionSelectionOwner().prune(entries); },
+  clear: () => { productionSelectionOwner().clear(); },
+  armed: () => productionSelectionOwner().armed(),
+  arm: (expired) => { productionSelectionOwner().arm(expired); },
+  disarm: () => { productionSelectionOwner().disarm(); }
 };

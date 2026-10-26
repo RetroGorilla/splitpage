@@ -1,5 +1,7 @@
 export { mountCommandMenuFeature } from "./wiring/command-menu.ts";
 export { mountOnboardingFeature } from "./wiring/onboarding.ts";
+export { mountDesktopFeature } from "./wiring/desktop.ts";
+export { draftRecoveryPorts, mountDraftsFeature } from "./wiring/drafts.ts";
 export { mountVideoFilesFeature } from "./wiring/video-files.ts";
 export { mountCommentsLogicFeature } from "./wiring/comments.ts";
 import { wireProductionIndex } from "./wiring/production-index.ts";
@@ -10,7 +12,7 @@ export { mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature } 
 export { mountHelpFeature } from "./wiring/help.ts";
 export { derivedRecordsPlan, mountBrollFeature, mountBrollPanelStateFeature } from "./wiring/broll.ts";
 export { mountFindFeature } from "./wiring/find.ts";
-export { mountSettingsFeature } from "./wiring/settings.ts";
+export { mountSettingsFeature, mountAppDataFeature } from "./wiring/settings.ts";
 export { mountCopyPasteFeature } from "./wiring/clipboard.ts";
 export { mountScenesFeature, mountSceneMediaFeature } from "./wiring/rows.ts";
 export { mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature } from "./wiring/gallery.ts";
@@ -178,7 +180,7 @@ const ACTION_REGISTRY_METHODS: readonly (keyof ActionRegistry)[] = ["register", 
 
 const RECOVERY_METHODS: readonly (keyof LegacyRecoveryPorts)[] = ["now", "desktop", "sessionStorage", "localStorage", "internImage", "merge"];
 
-const DRAFT_METHODS: readonly (keyof LegacyDraftPorts)[] = ["flush", "armServer", "offerAfterLinkOff"];
+const DRAFT_METHODS: readonly (keyof LegacyDraftPorts)[] = ["flush", "armServer", "offerAfterLinkOff", "noteChange"];
 
 const MERGE_METHODS: readonly (keyof LegacyMergePorts)[] = ["states", "entry", "isDocument", "snapshot", "current", "adopt", "documentId", "noteHistoryFrom", "armUndo", "setBase", "capture", "stillOwns"];
 
@@ -419,3 +421,6 @@ export function wireApp(deps: WiringDeps): Wiring {
   };
   return Object.freeze({ actions: actions, exports: exports, session: liveSession(), keyTarget: deps.keyTarget, dispose: dispose });
 }
+
+export { mountTagPanelsFeature } from "./wiring/production.ts";
+export { mountNewTabFeature } from "./wiring/newtab.ts";

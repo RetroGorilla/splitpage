@@ -29,3 +29,31 @@ test("the bridge is read at each call, so a page that gains or loses it is seen"
   assert.equal(store.canDiscard(), false, "a bridge without discardDraft cannot discard");
   assert.throws(() => store.discard(1), /cannot discard/);
 });
+
+test("taking a draft, reporting the restore and the pending-draft flag go to the bridge as they are", async () => {
+  const done: string[] = [];
+  const bridge: DesktopDraftBridge = {
+    takeDraft: function (this: DesktopDraftBridge) { return Promise.resolve(this === bridge ? "taken" : "wrong this"); },
+    draftRestoreDone: function (outcome) { done.push(outcome); },
+    hasDraftToRestore: true
+  };
+  const store = createDesktopDraftStore({ bridge: () => bridge });
+  const take = store.taker();
+  assert.ok(take);
+  assert.equal(await take(), "taken", "takeDraft is called on the bridge it came from");
+  store.restoreDone("applied");
+  assert.deepEqual(done, ["applied"]);
+  assert.equal(store.hasDraftToRestore(), true);
+});
+
+test("without those members, or without a bridge, there is nothing to take, report or restore", () => {
+  let bridge: DesktopDraftBridge | null = null;
+  const store = createDesktopDraftStore({ bridge: () => bridge });
+  assert.equal(store.taker(), null);
+  store.restoreDone("applied");
+  assert.equal(store.hasDraftToRestore(), false);
+  bridge = { writeDraft: () => Promise.resolve({ ok: true }) };
+  assert.equal(store.taker(), null);
+  store.restoreDone("applied");
+  assert.equal(store.hasDraftToRestore(), false);
+});

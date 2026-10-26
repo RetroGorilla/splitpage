@@ -15,7 +15,7 @@ const { applyMerge } = await import("../legacy/merge-bridge.ts");
 const { openLongDemo, startNewScript } = await import("../js/18b-file-menu.js");
 const { seedCheckPasses } = await import("../legacy/seed-check.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { applyTakenDraft } = await import("../js/20g-drafts.js");
+const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);

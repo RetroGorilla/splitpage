@@ -1,3 +1,18 @@
+import type { ActionDefinition } from "../../application/actions.ts";
+import { setCommentSort } from "../../application/comment-sort.ts";
+import { appDataActions as appDataDefinitions } from "../../features/settings/actions.ts";
+import { mountAppData } from "../../features/settings/app-data.js";
+import type { AppDataMount, AppDataPorts } from "../../features/settings/ports.ts";
+import { exportHistoryAll, importHistoryBundle, normalizeLegacySnapshots } from "../../js/03a-history-store.js";
+import { readEmbeddedVersion } from "../../js/20a-update.js";
+import { connectPortOr, newBookmarkId, renderConnect, saveBookmarks } from "../../js/20e-connect.js";
+import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
+import { setBackend as setBlobBackend } from "../../adapters/storage/02c-blobs.js";
+import { appDataPreferences } from "./ports/preferences.ts";
+import { bookmarks } from "./ports/location.ts";
+import { fileDelivery } from "./ports/files.ts";
+import { launch } from "./ports/desktop.ts";
+import { screen } from "./ports/screen.ts";
 import { installSettingsControls } from "../../application/settings-actions.ts";
 import { actions as portActions } from "./ports/actions.ts";
 import { notices as portNotices } from "./ports/effects.ts";
@@ -80,3 +95,31 @@ export function mountSettingsFeature(): SettingsMount {
 
 export const stopSettingsFeature = settings.stop;
 
+
+const appData = owned<AppDataMount>();
+
+export function mountAppDataFeature(): AppDataMount {
+  return appData.replace(() => {
+    const ports: AppDataPorts = {
+      notices: portNotices,
+      fileDelivery,
+      preferences: appDataPreferences,
+      desktop: runningOnDesktop,
+      launchFacts: launch,
+      bookmarks,
+      commentSorting: { choose: setCommentSort },
+      history: { exportAll: exportHistoryAll, importBundle: importHistoryBundle, normalizeSnapshots: normalizeLegacySnapshots },
+      writer: { size: readWriterSize, setSize: applyWriterSize },
+      embeddedVersion: readEmbeddedVersion,
+      bookmarkEditor: { newId: newBookmarkId, portOr: connectPortOr, save: saveBookmarks, render: renderConnect },
+      useBlobBackend: setBlobBackend
+    };
+    return mountAppData(ports);
+  });
+}
+
+export const stopAppDataFeature = appData.stop;
+
+export function appDataActions(): ActionDefinition[] {
+  return appDataDefinitions(appData.owner, { screen, importShown: () => !!desktopPort() });
+}

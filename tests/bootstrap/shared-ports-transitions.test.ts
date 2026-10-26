@@ -1,5 +1,5 @@
 import "../../src/test/_dom.mjs";
-import { transitions as portTransitions } from "../../src/bootstrap/wiring/ports/transitions.ts";
+import { opening, transitions as portTransitions } from "../../src/bootstrap/wiring/ports/transitions.ts";
 import "../../src/test/_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -7,7 +7,7 @@ import { NO_DESTINATION } from "../../src/application/transitions/ports.ts";
 
 import { migrateRows } from "../../src/js/02-state.js";
 import { currentDocument, liveDocumentPort } from "../../src/legacy/session-bridge.ts";
-import { startTransitions } from "../../src/legacy/transition-bridge.ts";
+import { documentSources, startTransitions } from "../../src/legacy/transition-bridge.ts";
 import { startTestSession, unwiredSessionDeps } from "../../src/test/_session.mjs";
 import { fakeTransitions } from "../features/fakes.ts";
 
@@ -17,7 +17,7 @@ function script(title: string) {
   return migrateRows({ title, docId: "d" + "1".repeat(32), rows: [{ id: "r1", visualText: "", audioText: "", status: "todo" }] });
 }
 
-test("the transitions port reaches the running transitions when called, and refuses before they start", () => {
+test("the transitions port reaches the running transitions when called, and refuses before they start", async () => {
   const transitions = portTransitions;
   assert.throws(() => transitions.copyId(), /not started yet/);
   const log: string[] = [];
@@ -34,6 +34,13 @@ test("the transitions port reaches the running transitions when called, and refu
     assert.equal(currentDocument(), next);
     assert.deepEqual(log, ["destination:none", "baseline:a new script", "writtenOut:false"]);
     assert.equal(transitions.copyId(), next.docId);
+    const source = { kind: "file" as const, file: { name: "File.splitpage" }, handle: null };
+    const opened: unknown[] = [];
+    const remove = documentSources().register({ id: "newtab-port", takes: () => true, open: (request) => { opened.push(request); return next; } });
+    try {
+      assert.equal(await opening.open(source), next);
+      assert.equal(opened[0], source);
+    } finally { remove(); }
   } finally {
     stop();
   }

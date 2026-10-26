@@ -14,7 +14,7 @@ const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../le
 const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../js/19-writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
-const { openProductionPanel } = await import("../js/08-production-panels.js");
+const { openProductionPanel } = await import("../features/tags/panels.js");
 const { openBrollPanel } = await import("../features/broll/panel.js");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 

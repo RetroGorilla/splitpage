@@ -7,14 +7,14 @@ import {
   setServerToken
 } from "./13-hosted.js";
 import { deliverFile } from "../legacy/file-delivery.ts";
-import { renderDesktopShareInfo } from "./20f-desktop.js";
+import { renderDesktopShareInfo } from "../legacy/desktop-bridge.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { joinServer } from "../adapters/transport/server-join.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { interruptTourForDialog, offerTourResumeAfterDialog } from "../legacy/tour-pause.ts";
 import { setMenuItemLabel, showToast } from "../legacy/effects-bridge.ts";
 import { joinErrorText, normalizeServerUrl, tunnelCommand } from "../../shared/server-links.js";
-import { shortHost } from "../adapters/transport/server-address.ts";
+import { shortHost } from "../features/common/server-address.ts";
 
 var pinRequest = null;
 var sshShownFor = null;

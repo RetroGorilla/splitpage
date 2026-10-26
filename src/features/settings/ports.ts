@@ -1,3 +1,7 @@
+import type { CommentSorting } from "../../application/comment-sort.ts";
+import type { LaunchFacts } from "../../application/desktop-presence.ts";
+import type { FileDelivery } from "../../application/files/file-delivery.ts";
+import type { ServerStatus } from "../../application/location/server-status.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { PreferenceChanges, PreferenceName, Preferences } from "../../application/preferences/preferences.ts";
@@ -49,4 +53,69 @@ export interface SettingsPorts {
     readonly running: () => boolean;
     readonly renderNotice: () => void;
   };
+}
+
+export interface AppDataMount {
+  readonly exportAppData: () => Promise<void> | undefined;
+  readonly openImportAppData: () => void;
+  readonly dispose: () => void;
+}
+
+export interface AppDataHistoryExport {
+  readonly docs: readonly unknown[];
+  readonly older: readonly unknown[];
+  readonly blobs?: Record<string, unknown>;
+  readonly missingBlobs?: readonly string[];
+  readonly truncated?: boolean;
+}
+
+export interface AppDataHistoryImport {
+  readonly docs: number;
+  readonly added: number;
+  readonly older: number;
+  readonly skipped: number;
+  readonly failed: number;
+  readonly code?: string;
+  readonly blobs: {
+    readonly stored: number;
+    readonly refused: readonly unknown[];
+    readonly failed: readonly unknown[];
+  };
+}
+
+export interface AppDataPorts {
+  readonly notices: Pick<NoticePort, "show">;
+  readonly fileDelivery: FileDelivery;
+  readonly preferences: Pick<Preferences, "appDataExport" | "appDataImport" | "commentsSort">;
+  readonly desktop: () => boolean;
+  readonly launchFacts: Pick<LaunchFacts, "appVersion">;
+  readonly bookmarks: Pick<ServerStatus, "loadBookmarks" | "bookmarks" | "addBookmarks">;
+  readonly commentSorting: Pick<CommentSorting, "choose">;
+  readonly history: {
+    readonly exportAll: () => Promise<AppDataHistoryExport>;
+    readonly importBundle: (bundle: { readonly docs: readonly unknown[]; readonly older: readonly unknown[]; readonly blobs: Record<string, unknown> | null }) => Promise<AppDataHistoryImport>;
+    readonly normalizeSnapshots: (raw: string) => unknown[] | null;
+  };
+  readonly writer: {
+    readonly size: () => number | null;
+    readonly setSize: (size: number | null, persist: boolean) => void;
+  };
+  readonly embeddedVersion: () => string | null;
+  readonly bookmarkEditor: {
+    readonly newId: () => string;
+    readonly portOr: (value: unknown, fallback: number) => number;
+    readonly save: () => void;
+    readonly render: () => void;
+  };
+  readonly useBlobBackend: (backend: {
+    readonly name?: string;
+    readonly persistent?: boolean;
+    readonly get: (sha: string) => Promise<{ bytes: Uint8Array; mime: string } | null>;
+    readonly put: (sha: string, bytes: Uint8Array, mime: string) => Promise<unknown>;
+    readonly missing: (shas: string[]) => Promise<string[]>;
+  } | null) => void;
+}
+
+export interface AppDataActionPorts extends SettingsActionPorts {
+  readonly importShown: () => boolean;
 }
