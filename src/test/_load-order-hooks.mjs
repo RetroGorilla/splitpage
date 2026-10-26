@@ -38,6 +38,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/drafts.ts": { functions: ["mountDraftsFeature"] },
   "src/bootstrap/wiring/desktop.ts": { functions: ["mountDesktopFeature", "startDesktopShell", "routeServerOpen"] },
   "src/bootstrap/wiring/help.ts": { functions: ["mountHelpFeature"] },
+  "src/bootstrap/wiring/command-menu.ts": { functions: ["mountCommandMenuFeature"] },
   "src/bootstrap/wiring/settings.ts": { functions: ["mountSettingsFeature"] },
   "src/bootstrap/wiring/clipboard.ts": { functions: ["mountCopyPasteFeature"] },
   "src/bootstrap/wiring/rows.ts": { functions: ["mountScenesFeature", "mountSceneMediaFeature"] },

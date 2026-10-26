@@ -1,3 +1,4 @@
+export { mountCommandMenuFeature } from "./wiring/command-menu.ts";
 export { mountOnboardingFeature } from "./wiring/onboarding.ts";
 export { mountDesktopFeature } from "./wiring/desktop.ts";
 export { draftRecoveryPorts, mountDraftsFeature } from "./wiring/drafts.ts";

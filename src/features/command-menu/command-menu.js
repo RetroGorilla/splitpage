@@ -1,18 +1,14 @@
-import {
-  IS_MAC,
-  fileMenuOpen,
-  keyChipWords,
-  keyChipsHtml,
-  refreshFileMenu
-} from "./18b-file-menu.js";
-import { exportActionName, exportActionReason } from "../bootstrap/wiring/file-menu-export-controls.ts";
-import { runExportAction } from "./18-local-files.js";
-import { placeEditorSelection, rememberCellSelection } from "../features/common/cell-selection.ts";
-import { editorSelection } from "../legacy/editor-bridge.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
-import { appActions } from "../legacy/app-actions.ts";
-import { exportFormats } from "../legacy/export-formats.ts";
-import { askingFromLauncher, launcherShown } from "../legacy/screen.ts";
+import { IS_MAC, keyChipWords, keyChipsHtml } from "../common/key-chips.js";
+import { placeEditorSelection, rememberCellSelection } from "../common/cell-selection.ts";
+import { escapeHtml } from "../../core/document/text-policy.ts";
+
+var ports = null;
+var listeners = [];
+
+function listen(target, type, handler) {
+  target.addEventListener(type, handler);
+  listeners.push(function () { target.removeEventListener(type, handler); });
+}
 
 var RECENT_KEY = "splitpage-recent-commands";
 var RECENT_MAX = 5;
@@ -35,21 +31,21 @@ var LIST_AFTER_EXPORTS = [
 ];
 
 function listOrder() {
-  return LIST_BEFORE_EXPORTS.concat(exportFormats.exporters().map(function (e) { return e.action; }), LIST_AFTER_EXPORTS);
+  return LIST_BEFORE_EXPORTS.concat(ports.exports.exporters().map(function (e) { return e.action; }), LIST_AFTER_EXPORTS);
 }
 
 function exportEntry(exporter) {
   var action = exporter.action;
-  var why = exportActionReason(action);
+  var why = ports.exportActionReason(action);
   return {
-    cmd: { id: action, group: "Export", words: "export download " + (exporter.words || ""), run: function () { runExportAction(action); } },
-    view: { label: "Export as " + exportActionName(action), icon: "i-export", keys: "", why: why, disabled: !!why, state: "" }
+    cmd: { id: action, group: "Export", words: "export download " + (exporter.words || ""), run: function () { ports.runExportAction(action); } },
+    view: { label: "Export as " + ports.exportActionName(action), icon: "i-export", keys: "", why: why, disabled: !!why, state: "" }
   };
 }
 
 function actionEntry(view) {
   return {
-    cmd: { id: view.id, group: view.group, words: view.words, run: function () { appActions.invoke(view.id, "command-menu"); } },
+    cmd: { id: view.id, group: view.group, words: view.words, run: function () { ports.actions.invoke(view.id, "command-menu"); } },
     view: {
       label: view.label,
       icon: view.icon || "i-file",
@@ -67,9 +63,9 @@ function listRank(id, order) {
 }
 
 function listedEntries() {
-  var views = askingFromLauncher(function () { return appActions.list(); });
+  var views = ports.screen.askingFromLauncher(function () { return ports.actions.list(); });
   var entries = views.filter(function (v) { return v.visible && v.id !== OWN_ACTION; }).map(actionEntry)
-    .concat(exportFormats.exporters().map(exportEntry));
+    .concat(ports.exports.exporters().map(exportEntry));
   var order = listOrder();
   return entries.map(function (entry, i) { return { entry: entry, at: i }; })
     .sort(function (a, b) { return (listRank(a.entry.cmd.id, order) - listRank(b.entry.cmd.id, order)) || (a.at - b.at); })
@@ -227,20 +223,20 @@ function move(delta) {
 }
 
 export function commandMenuOpen() {
-  return launcherShown();
+  return ports.screen.launcherShown();
 }
 
 export function openCommandMenu() {
   if (commandMenuOpen()) return false;
-  if (fileMenuOpen()) appActions.invoke("close-file-menu", "button");
+  if (ports.fileMenuOpen()) ports.actions.invoke("close-file-menu", "button");
   var ae = document.activeElement;
   var range = null;
   var sel = window.getSelection && window.getSelection();
   if (ae && ae.isContentEditable && sel && sel.rangeCount && ae.contains(sel.anchorNode)) range = sel.getRangeAt(0).cloneRange();
   var surface = ae && ae.closest ? ae.closest("#rows, #writer-doc") : null;
-  var editor = surface && rememberCellSelection(editorSelection(), ae) ? surface.id : null;
+  var editor = surface && rememberCellSelection(ports.selection, ae) ? surface.id : null;
   returnFocus = ae && ae !== document.body ? { el: ae, range: range, editor: editor } : null;
-  refreshFileMenu();
+  ports.refreshFileMenu();
   var modal = el("cmdk");
   var input = el("cmdk-input");
   input.value = "";
@@ -261,7 +257,7 @@ export function closeCommandMenu(restore) {
   returnFocus = null;
   if (restore === false || !back) return;
   if (!document.contains(back.el)) {
-    if (back.editor) placeEditorSelection(editorSelection(), document.getElementById(back.editor));
+    if (back.editor) placeEditorSelection(ports.selection, document.getElementById(back.editor));
     return;
   }
   back.el.focus({ preventScroll: true });
@@ -283,53 +279,73 @@ function runAt(i) {
   return true;
 }
 
-export function __init() {
+export function __init(given) {
+  ports = given;
   var modal = el("cmdk");
   var input = el("cmdk-input");
   var list = el("cmdk-list");
-  if (!modal || !input || !list) return;
-  input.addEventListener("input", renderList);
-  input.addEventListener("keydown", function (e) {
-    if (e.isComposing) return;
-    if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
-    else if (e.key === "Enter") { e.preventDefault(); runAt(active); }
-    else if (e.key === "Tab") { e.preventDefault(); move(e.shiftKey ? -1 : 1); }
-  });
-  modal.addEventListener("keydown", function (e) {
-    if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeCommandMenu(); }
-  });
-  list.addEventListener("mousemove", function (e) {
-    var row = e.target.closest(".cmdk-item");
-    if (row && +row.getAttribute("data-index") !== active) setActive(+row.getAttribute("data-index"));
-  });
-  list.addEventListener("mousedown", function (e) { e.preventDefault(); });
-  list.addEventListener("click", function (e) {
-    var row = e.target.closest(".cmdk-item");
-    if (row) runAt(+row.getAttribute("data-index"));
-  });
-  modal.addEventListener("mousedown", function (e) { if (e.target === modal) { e.preventDefault(); closeCommandMenu(); } });
-  var closeBtn = el("cmdk-close");
-  if (closeBtn) {
-    closeBtn.addEventListener("mousedown", function (e) { e.preventDefault(); });
-    closeBtn.addEventListener("click", function () { closeCommandMenu(); });
-  }
-  modal.addEventListener("focusout", function (e) {
-    if (commandMenuOpen() && !(e.relatedTarget && modal.contains(e.relatedTarget))) closeCommandMenu(false);
-  });
+  if (modal && input && list) {
+    listen(input, "input", renderList);
+    listen(input, "keydown", function (e) {
+      if (e.isComposing) return;
+      if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
+      else if (e.key === "Enter") { e.preventDefault(); runAt(active); }
+      else if (e.key === "Tab") { e.preventDefault(); move(e.shiftKey ? -1 : 1); }
+    });
+    listen(modal, "keydown", function (e) {
+      if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeCommandMenu(); }
+    });
+    listen(list, "mousemove", function (e) {
+      var row = e.target.closest(".cmdk-item");
+      if (row && +row.getAttribute("data-index") !== active) setActive(+row.getAttribute("data-index"));
+    });
+    listen(list, "mousedown", function (e) { e.preventDefault(); });
+    listen(list, "click", function (e) {
+      var row = e.target.closest(".cmdk-item");
+      if (row) runAt(+row.getAttribute("data-index"));
+    });
+    listen(modal, "mousedown", function (e) { if (e.target === modal) { e.preventDefault(); closeCommandMenu(); } });
+    var closeBtn = el("cmdk-close");
+    if (closeBtn) {
+      listen(closeBtn, "mousedown", function (e) { e.preventDefault(); });
+      listen(closeBtn, "click", function () { closeCommandMenu(); });
+    }
+    listen(modal, "focusout", function (e) {
+      if (commandMenuOpen() && !(e.relatedTarget && modal.contains(e.relatedTarget))) closeCommandMenu(false);
+    });
 
-  var trigger = el("btn-command");
-  if (trigger) {
-    trigger.title = "Search or run a command (" + keyChipWords("mod+k").join(IS_MAC ? "" : "+") + ")";
-    trigger.addEventListener("click", function () { appActions.invoke("command-menu", "button"); });
+    var trigger = el("btn-command");
+    if (trigger) {
+      trigger.title = "Search or run a command (" + keyChipWords("mod+k").join(IS_MAC ? "" : "+") + ")";
+      listen(trigger, "click", function () { ports.actions.invoke("command-menu", "button"); });
+    }
   }
 
-  window.__commandTest = {
+  var test = {
     results: function (q) {
       return commandResults(q).map(function (g) {
         return { group: g.group, items: g.items.map(function (it) { return { id: it.cmd.id, label: it.view.label, disabled: !!it.view.disabled, why: it.view.why }; }) };
       });
     },
     recent: recentIds
+  };
+  window.__commandTest = test;
+  var disposed = false;
+  return {
+    openCommandMenu: openCommandMenu,
+    closeCommandMenu: closeCommandMenu,
+    commandMenuOpen: commandMenuOpen,
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      closeCommandMenu(false);
+      while (listeners.length) listeners.pop()();
+      if (window.__commandTest === test) delete window.__commandTest;
+      shown = [];
+      active = -1;
+      returnFocus = null;
+      ports = null;
+    }
   };
 }

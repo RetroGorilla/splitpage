@@ -9,7 +9,7 @@ await bootApp();
 after(closeApp);
 
 const { exportFormats } = await import("../legacy/export-formats.ts");
-const { commandResults } = await import("../js/18d-command-menu.js");
+const { commandResults } = await import("../features/command-menu/command-menu.js");
 const { buildFileData, exportBaseName } = await import("../js/18-local-files.js");
 const {
   closeExportDialog, exportAgain, exportAgainItemState, exportActionReason, exportFileNameFor, exportSummary, lastExportAction,
