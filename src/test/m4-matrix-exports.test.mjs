@@ -7,7 +7,7 @@ import { createGates, createHeldFetch, mockClock, rightToday } from "./_m4-matri
 await bootApp();
 after(closeApp);
 
-const { LONG_DEMO } = await import("../js/_starters.js");
+const { LONG_DEMO } = await import("../starters/index.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { blobStore, createMemoryBackend, intern, setBackend } = await import("../adapters/storage/02c-blobs.js");
 const { brollShotListForPrint } = await import("../adapters/formats/export-projections.ts");

@@ -22,7 +22,7 @@ import { syncDocIdentity } from "../../js/02b-doc-id.js";
 import { openImportModal } from "../../js/11-import.js";
 import { applyReviewMode } from "../../js/13-hosted.js";
 import { openLocalFile } from "../../js/18-local-files.js";
-import { LONG_DEMO } from "../../js/_starters.js";
+import { LONG_DEMO } from "../../starters/index.ts";
 
 export function mountFileMenuDropdownFeature(): FileMenuDropdownMount {
   return fileMenu.replace(() => {

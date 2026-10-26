@@ -39,6 +39,11 @@ function writeFiles(repo, files) {
 
 console.log("\nlayers:\n");
 
+eq("the starter catalogue has its own layer", layerOf("src/starters/index.ts"), "starters");
+check("bootstrap may import starters", layerAllows("bootstrap", "starters"));
+check("starters may not import application", !layerAllows("starters", "application"));
+check("a feature may not import starters", !layerAllows("features/newtab", "starters"));
+
 eq("src/core/document is its own layer", layerOf("src/core/document/ids.ts"), "core/document");
 eq("an unlisted core folder is core", layerOf("src/core/timing/x.ts"), "core");
 eq("a feature folder is named", layerOf("src/features/rows/view.ts"), "features/rows");

@@ -14,7 +14,7 @@ import { PRINT_COLORS } from "../adapters/formats/export-kit.ts";
 import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { scriptTable } from "../adapters/formats/csv.ts";
 import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx, colName } from "../adapters/formats/xlsx.ts";
-import { LONG_DEMO } from "../js/_starters.js";
+import { LONG_DEMO } from "../starters/index.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
