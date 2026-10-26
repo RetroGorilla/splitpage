@@ -290,7 +290,9 @@ async function openRecentFile(fileId) {
   }
   if (activeMount !== mounted) return;
   var handle = ports.recentHandle(entry);
-  await ports.opening.open({ kind: "file", file: await handle.getFile(), handle: handle });
+  var file = await handle.getFile();
+  if (activeMount !== mounted) return;
+  await ports.opening.open({ kind: "file", file: file, handle: handle });
 }
 
 function startNewScript() {
