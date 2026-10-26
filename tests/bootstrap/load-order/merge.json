@@ -1,8 +1,11 @@
 {
   "legacyImports": [
-    "./03-sync.js",
-    "./18a-local-merge.js"
+    "./03-sync.js"
   ],
-  "loadOnly": [],
-  "expectedLoads": 2
+  "loadOnly": [
+    "src/features/merge/local-merge.js",
+    "src/bootstrap/wiring/merge-review.ts",
+    "src/legacy/merge-offer-bridge.ts"
+  ],
+  "expectedLoads": 4
 }
