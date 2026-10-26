@@ -1,7 +1,8 @@
 {
-  "legacyImports": [
-    "./20j-newtab.js"
+  "legacyImports": [],
+  "loadOnly": [
+    "src/features/newtab/newtab.js",
+    "src/bootstrap/wiring/newtab.ts"
   ],
-  "loadOnly": [],
-  "expectedLoads": 1
+  "expectedLoads": 2
 }
