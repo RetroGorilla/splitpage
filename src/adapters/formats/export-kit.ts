@@ -67,6 +67,12 @@ export interface BrollScene {
   total: number;
   items: (ShotRecord & { id: string })[];
 }
+export const PRINT_TOKENS = {
+  text: "--text", dim: "--text-dim", faint: "--text-faint", border: "--border",
+  borderStrong: "--border-strong", surface2: "--surface-2", visual: "--visual",
+  visualSoft: "--visual-soft", audio: "--audio", audioSoft: "--audio-soft", broll: "--broll"
+};
+
 export const PRINT_COLORS = {
   text: "171613",
   dim: "4E4D48",

@@ -1,3 +1,4 @@
+import { captureExportDocument } from "../../../src/legacy/export-kit-bridge.ts";
 import "../../../src/test/_dom.mjs";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
@@ -9,7 +10,7 @@ import { mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../../
 import { mountCommandMenuFeature, stopCommandMenuFeature } from "../../../src/bootstrap/wiring/command-menu.ts";
 
 const wired = wireRegistries();
-mountFileMenuExportFeature();
+mountFileMenuExportFeature(captureExportDocument);
 mountCommandMenuFeature();
 after(() => {
   stopCommandMenuFeature();

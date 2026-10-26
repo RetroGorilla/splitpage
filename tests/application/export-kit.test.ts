@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createExportKit, commentNumbers } from "../../src/application/save/export-kit.ts";
+import { createExportKit } from "../../src/application/save/export-kit.ts";
 import type { ExportAnchor, ExportKitPorts } from "../../src/application/save/export-kit.ts";
 import { deepFreeze } from "../../src/core/document/freeze.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
@@ -73,7 +73,7 @@ test("capture keeps preference, session, clock and model reads in order and free
   assert.equal(got.title, "Capture");
   assert.ok(Object.isFrozen(got.document));
   assert.ok(Object.isFrozen(got.scenes));
-  assert.equal(commentNumbers(got), got.commentNumbers);
+  assert.deepEqual({ ...got.commentNumbers }, {});
 });
 
 test("capture without a live document reads preferences and session only", () => {
