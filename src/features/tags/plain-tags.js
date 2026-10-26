@@ -1,15 +1,12 @@
-import { tagCategory } from "../core/production/looks.ts";
-import { isBlankTagName } from "../core/production/tags.ts";
-import { domToPos } from "../features/common/cell-dom.ts";
-import { cellEditing } from "../legacy/editor-bridge.ts";
-import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
-import { isInsideTagOrLink } from "../features/common/dom.ts";
-import { cappedName, escapeHtml } from "../core/document/text-policy.ts";
-import { replaceText, replaceWithTag } from "../core/text/edits.ts";
-import { namedTagId, projection } from "../core/text/runs.ts";
-import { fromHtml, storedHtmlFromDom } from "../legacy/richtext.ts";
-import { registryEntryOf } from "../core/production/records.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { tagCategory } from "../../core/production/looks.ts";
+import { isBlankTagName } from "../../core/production/tags.ts";
+import { domToPos } from "../common/cell-dom.ts";
+import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
+import { isInsideTagOrLink } from "../common/dom.ts";
+import { cappedName, escapeHtml } from "../../core/document/text-policy.ts";
+import { replaceText, replaceWithTag } from "../../core/text/edits.ts";
+import { namedTagId, projection } from "../../core/text/runs.ts";
+import { registryEntryOf } from "../../core/production/records.ts";
 
 export var PLAIN_TAG_KEYWORDS = {
   prop: "prop",
@@ -68,6 +65,7 @@ export function applyPlainTag(cell, from, to, cat, name) {
   return { cell: out, caret: r.end + p.trail, name: tagName, cat: cat };
 }
 
+var ports = null;
 var open = null;
 var HL_PREFIX = "splitpage-open-tag-";
 
@@ -217,8 +215,8 @@ export function maybeOpenPlainTag(e, cellEl) {
 function charBeforeNode(cellEl, node) {
   var pos = domToPos(cellEl, node, 0);
   if (!pos) return "";
-  var html = storedHtmlFromDom(cellEl.innerHTML.replace(ZWSP_RE, ""));
-  return projection(fromHtml(html)).charAt(pos - 1);
+  var html = ports.text.storedHtmlFromDom(cellEl.innerHTML.replace(ZWSP_RE, ""));
+  return projection(ports.text.fromHtml(html)).charAt(pos - 1);
 }
 
 var plainTaggedListeners = [];
@@ -240,9 +238,9 @@ export function closePlainTag() {
   if (!phrase) { cancelPlainTag(); return true; }
   open = null;
   clearPaint();
-  var entry = registryEntryOf(currentDocument(), o.cat, phrase.name);
+  var entry = registryEntryOf(ports.document.current(), o.cat, phrase.name);
   var name = entry ? entry.name : phrase.name;
-  var done = cellEditing().edit(o.cellEl, function (cell) {
+  var done = ports.cells.edit(o.cellEl, function (cell) {
     var from = domToPos(o.cellEl, o.span.firstChild, 0), to = domToPos(o.cellEl, o.tail, at);
     if (from === null || to === null) return null;
     if (projection(cell).slice(from, to) !== o.keyword + typed.replace(ZWSP_RE, "")) return null;
@@ -255,4 +253,22 @@ export function closePlainTag() {
   return true;
 }
 
-export function __init() {}
+export function __init(given) {
+  ports = given;
+  var disposed = false;
+  return {
+    maybeOpen: maybeOpenPlainTag,
+    refresh: refreshPlainTag,
+    cancel: cancelPlainTag,
+    close: closePlainTag,
+    isOpen: plainTagOpen,
+    emptyAtCaret: plainTagEmptyAtCaret,
+    onTagged: onPlainTagged,
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      cancelPlainTag();
+      ports = null;
+    }
+  };
+}

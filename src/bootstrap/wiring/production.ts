@@ -33,7 +33,7 @@ import {
   renderTagCategories,
   tagKey
 } from "../../js/07-production-tags.js";
-import { closePlainTag, plainTagOpen, refreshPlainTag } from "../../js/07b-plain-tags.js";
+import { currentPlainTags } from "./plain-tags.ts";
 import {
   IS_TOUCH,
   addPersonForTag,
@@ -126,12 +126,12 @@ export function mountTagsFeature(): ReturnType<typeof mountTags> {
       openProductionPanel: openProductionPanel,
       renderGearList: renderGearList,
       applyGearQuickAdd: applyGearQuickAdd,
-      closePlainTag: closePlainTag,
-      refreshPlainTag: refreshPlainTag,
+      closePlainTag: function () { currentPlainTags()?.close(); },
+      refreshPlainTag: function () { currentPlainTags()?.refresh(); },
       reviewBlocked: reviewBlocked,
       queueAutoSave: queueAutoSave,
       selectedKeys: selectedKeys,
-      plainTagOpen: plainTagOpen,
+      plainTagOpen: function () { return currentPlainTags()?.isOpen() ?? false; },
       reviewMode: reviewMode,
       addPersonForTag: addPersonForTag,
       saveTagRename: saveTagRename,

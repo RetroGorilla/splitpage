@@ -429,6 +429,7 @@ export function wireApp(deps: WiringDeps): Wiring {
 }
 
 export { mountTagPanelsFeature } from "./wiring/production.ts";
+export { mountPlainTagsFeature } from "./wiring/plain-tags.ts";
 export { mountNewTabFeature } from "./wiring/newtab.ts";
 
 export { mountScriptPlaceFeature } from "./wiring/side-panels.ts";
