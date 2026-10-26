@@ -1,6 +1,6 @@
 # Splitpage 4.1 migration status — 2026-10-26
 
-Measured on `4.1-development` at `8020d3876abf0388caa24f0924a84c6c138d522d` (PR #828, merged 11:13 PDT / 18:13 UTC October 26). This replaces [the October 23 audit](migration-status-2026-10-23.md), which stays as history. It is a dated source audit, not a release-readiness claim.
+Measured on `4.1-development` at `8020d3876abf0388caa24f0924a84c6c138d522d` (PR #828, merged 11:13 PDT / 18:13 UTC October 26). This replaces [the October 23 audit](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/migration-status-2026-10-23.md), which stays as history. It is a dated source audit, not a release-readiness claim.
 
 ## Measurements
 
