@@ -1,6 +1,6 @@
 import { brollView as brollViewOwner, useBrollViewStorage } from "../../../application/preferences/broll-view.ts";
 import type { BrollView } from "../../../application/preferences/broll-view.ts";
-import type { CommentFilter, PreferenceChange, PreferenceChanges } from "../../../application/preferences/preferences.ts";
+import type { CommentFilter, PreferenceChange, PreferenceChanges, Preferences } from "../../../application/preferences/preferences.ts";
 import type { ViewFlags } from "../../../application/preferences/view-flags.ts";
 import { PREF_EVENT, preferences, viewFlags } from "../../../legacy/preferences-bridge.ts";
 
@@ -60,4 +60,10 @@ export const brollView: BrollView = {
   setGroup: (value) => brollViewOwner.setGroup(value),
   setPageGroup: (value) => brollViewOwner.setPageGroup(value),
   printView: (overrides) => brollViewOwner.printView(overrides)
+};
+
+export const appDataPreferences: Pick<Preferences, "appDataExport" | "appDataImport" | "commentsSort"> = {
+  appDataExport: (extra) => preferences().appDataExport(extra),
+  appDataImport: (incoming, extra) => preferences().appDataImport(incoming, extra),
+  commentsSort: () => preferences().commentsSort()
 };
