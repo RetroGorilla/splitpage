@@ -25,7 +25,7 @@ import { randomIds } from "../adapters/identity/ids.ts";
 import { __init as initHistory } from "../js/03a-history-store.js";
 import { mountTagPanelsFeature } from "../bootstrap/wiring/production.ts";
 import { applyGearQuickAdd } from "../features/tags/panels.js";
-import { LONG_DEMO } from "../js/_starters.js";
+import { LONG_DEMO } from "../starters/index.ts";
 import { assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, newTokens } from "./golden-helpers.mjs";
 import { confirmSavedNow, startSaves, unsavedChanges } from "../legacy/save-bridge.ts";
 import { WHOLE_DOCUMENT } from "../application/session/change-set.ts";

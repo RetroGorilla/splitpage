@@ -20,7 +20,7 @@ import {
 import { exportRuns } from "../adapters/formats/export-kit.ts";
 import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { assemblePdf, pdfLampOp, pdfTextWidth, pdfWrapRuns } from "../adapters/formats/pdf.ts";
-import { LONG_DEMO } from "../js/_starters.js";
+import { LONG_DEMO } from "../starters/index.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();

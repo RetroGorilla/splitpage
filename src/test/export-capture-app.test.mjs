@@ -6,7 +6,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 await bootApp();
 after(closeApp);
 
-const { LONG_DEMO } = await import("../js/_starters.js");
+const { LONG_DEMO } = await import("../starters/index.ts");
 const { documentLocation, setHome } = await import("../legacy/location-bridge.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { standaloneHtmlFor } = await import("../js/02b-doc-id.js");

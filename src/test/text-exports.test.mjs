@@ -12,7 +12,7 @@ import { toPlainText } from "../core/text/projections.ts";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { exportMetaLine } from "../adapters/formats/export-text.ts";
 import { buildBreakdownCsv, buildBrollCsv, buildCsv, csvToRows } from "../adapters/formats/csv.ts";
-import { LONG_DEMO } from "../js/_starters.js";
+import { LONG_DEMO } from "../starters/index.ts";
 import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { exportFacts } from "../adapters/formats/export-kit.ts";
 import { loadTestDocument } from "./_document.mjs";

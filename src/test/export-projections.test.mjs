@@ -20,7 +20,7 @@ import {
   commentEntries,
   sceneFacts
 } from "../adapters/formats/export-projections.ts";
-import { LONG_DEMO } from "../js/_starters.js";
+import { LONG_DEMO } from "../starters/index.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();

@@ -10,7 +10,7 @@ import { cellOf } from "../legacy/richtext.ts";
 import { collectTagsFromRows } from "../js/07-production-tags.js";
 import { brollInCell } from "../core/production/broll.ts";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
-import { STARTERS, starterById } from "../js/_starters.js";
+import { STARTERS, starterById } from "../starters/index.ts";
 import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
