@@ -16,7 +16,7 @@ import {
   saveTagRename,
   setTagNotes,
   setTagOwner
-} from "./08-production-panels.js";
+} from "../application/tag-panel-commands.ts";
 import { autoSavePolicy } from "../legacy/save-bridge.ts";
 import { parseProjectFileState } from "../adapters/formats/project-file.ts";
 import { openDocument } from "../legacy/transition-bridge.ts";

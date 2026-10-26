@@ -1,4 +1,19 @@
 import { mountBrollPanelFeature } from "./broll.ts";
+import { __init as mountPanelState } from "../../features/tags/panels.js";
+import type { TagPanelMount, TagPanelPorts } from "../../features/tags/ports.ts";
+import { tagPanelActions as panelDefinitions } from "../../features/tags/actions.ts";
+import { installTagPanelCommands } from "../../application/tag-panel-commands.ts";
+import { documentReader as portDocument } from "./ports/document.ts";
+import { edits as portEdits, productionSelection as portSelection, undoControl as portUndo } from "./ports/editing.ts";
+import { text as portText } from "./ports/text.ts";
+import { production as portProduction, deletion as portDeletion, tagPanelState as portView } from "./ports/production.ts";
+import { panelControl as portPanels } from "./ports/panels.ts";
+import { presence as portPresence } from "./ports/presence.ts";
+import { shotHiding as portShotHiding } from "./ports/shot-hiding.ts";
+import { notices as portNotices } from "./ports/effects.ts";
+import { review as portReview } from "./ports/location.ts";
+import { ids as portIds } from "./ports/identity.ts";
+import { screen as portScreen } from "./ports/screen.ts";
 import { bulkDeleteArmed, clearProductionSelection, disarmBulkDelete, productionSelection, selectedKeys } from "../../legacy/production-editing-bridge.ts";
 import type { TagsPorts } from "../../features/tags/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -40,7 +55,7 @@ import {
   toggleCardSelection,
   setTagOwner,
   setTagNotes
-} from "../../js/08-production-panels.js";
+} from "../../features/tags/panels.js";
 import { queueAutoSave } from "../../legacy/save-bridge.ts";
 import { exportAs, runExport } from "../../js/18-local-files.js";
 import { wireTagEntityContainer } from "../../js/20-teleprompter.js";
@@ -49,6 +64,26 @@ import { productionGroupBy, setGearGroupBy, setProductionGroupBy, setTagAddingPe
 import { reviewBlocked, reviewMode } from "../../legacy/location-bridge.ts";
 
 const tags = owned<ReturnType<typeof mountTags>>();
+
+const panelState = owned<TagPanelMount>();
+
+export function mountTagPanelsFeature(): TagPanelMount {
+  return panelState.replace(() => {
+    const ports: TagPanelPorts = {
+      view: portView, document: portDocument, edits: portEdits, text: portText,
+      production: portProduction, deletion: portDeletion, selection: portSelection,
+      panels: portPanels, presence: portPresence, shotHiding: portShotHiding,
+      notices: portNotices, review: portReview, undo: portUndo, ids: portIds
+    };
+    return mountPanelState(ports);
+  }, (owner) => [() => installTagPanelCommands(owner)]);
+}
+
+export const stopTagPanelsFeature = panelState.stop;
+
+export function tagPanelActions() {
+  return panelDefinitions(panelState.owner, portScreen, portPanels);
+}
 
 export function mountTagsFeature(): ReturnType<typeof mountTags> {
   return tags.replace(function () {

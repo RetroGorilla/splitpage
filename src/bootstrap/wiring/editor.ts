@@ -115,7 +115,7 @@ import {
   plainTagOpen,
   refreshPlainTag
 } from "../../js/07b-plain-tags.js";
-import { renderProduction } from "../../js/08-production-panels.js";
+import { renderProduction } from "../../features/tags/panels.js";
 import { anchorBrollInLeftCell, maybeCaptureBroll, scheduleBrollRefresh } from "./broll.ts";
 import {
   captureReplyDrafts,

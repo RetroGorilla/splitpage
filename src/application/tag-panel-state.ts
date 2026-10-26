@@ -1,3 +1,17 @@
+export interface TagPanelState {
+  readonly tagRenamingKey: () => string | null;
+  readonly setTagRenaming: (key: string | null) => void;
+  readonly tagExpandedKey: () => string | null;
+  readonly setTagExpanded: (key: string | null) => void;
+  readonly tagAddingPersonKey: () => string | null;
+  readonly setTagAddingPerson: (key: string | null) => void;
+  readonly productionGroupBy: () => string;
+  readonly setProductionGroupBy: (group: string) => void;
+  readonly gearGroupBy: () => string;
+  readonly setGearGroupBy: (group: string) => void;
+  readonly resetTagPanel: () => void;
+}
+
 let renaming: string | null = null;
 let expanded: string | null = null;
 let addingPersonFor: string | null = null;
