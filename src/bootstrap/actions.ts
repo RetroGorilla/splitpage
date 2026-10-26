@@ -7,7 +7,7 @@ import { commentsPanelActions, commentsHelpActions, commentsOpenActions } from "
 import type { ActionRegistry, ActionSource, Refusal } from "../application/actions.ts";
 import { registerAll } from "../application/actions.ts";
 import { mountShortcuts } from "../features/shortcuts/mount.ts";
-import { showRefusal } from "../js/12-dirty-toast.js";
+import { showRefusal } from "./wiring/save-status.ts";
 import { runMenuCommandsWith } from "../application/desktop/menu-commands.ts";
 import { editorOpenActions } from "../legacy/editor-open-actions.ts";
 import { videoFiles } from "./wiring/video-files.ts";
