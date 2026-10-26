@@ -57,7 +57,7 @@ Showing a refusal is a port of the registry. `presentRefusals(presenter)`
 installs the one presenter and returns its disposer; `invoke` hands every
 refusal to it with the surface that asked, and `view`/`list` never do. The
 bootstrap installs `presentRefusal` (`src/bootstrap/actions.ts`), which shows
-a refusal as a toast through `showRefusal()` (`features/title/save-status.js`), ending
+a refusal as a toast through `showRefusal()` (`features/title/refusal.ts`), ending
 the reason with a full stop (a reason is written as a menu line, "Close the
 open dialog first", and a toast is a sentence), for every surface but a
 shortcut, which leaves the key to the browser. A refusal without a reason
