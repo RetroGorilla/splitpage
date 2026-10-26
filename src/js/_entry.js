@@ -11,7 +11,7 @@ import { __init as init_07b_plain_tags } from "./07b-plain-tags.js";
 import { mountScriptPlaceFeature, mountFindFeature, mountTagPanelsFeature } from "../bootstrap/wiring.ts";
 import { __init as init_11_import } from "./11-import.js";
 import { __init as init_12_dirty_toast } from "./12-dirty-toast.js";
-import { __init as init_13_hosted } from "./13-hosted.js";
+import { mountHostedFeature } from "../bootstrap/wiring.ts";
 import { __init as init_13a_presence } from "./13a-presence.js";
 import { __init as init_13b_collaborate } from "./13b-collaborate.js";
 import { __init as init_14_export } from "./14-export.js";
@@ -92,7 +92,7 @@ if (wiring) {
   mountCommentsLogicFeature();
   init_11_import();
   init_12_dirty_toast();
-  init_13_hosted();
+  mountHostedFeature();
   init_13a_presence();
   init_13b_collaborate();
   init_14_export();
