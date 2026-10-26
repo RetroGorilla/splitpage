@@ -1,7 +1,8 @@
 import type { Operations } from "../../../application/session/operation.ts";
+import type { FileConflicts } from "../../../application/save/file-conflict.ts";
 import type { AutoSaveReads, SaveConfirmation, SaveState } from "../../../application/save/save-state.ts";
 import type { SaveChangeNotes } from "../../../application/save/session-effects.ts";
-import { autoSavePolicy, autoSaveTarget, confirmSavedNow, noteSaveChange, onSaveChange, resumeAutoSave, saveBusy, scheduleAutoSave, setAutoSaveEnabled, unsavedChanges } from "../../../legacy/save-bridge.ts";
+import { autoSavePolicy, autoSaveTarget, confirmSavedNow, fileConflicts as liveFileConflicts, noteSaveChange, onSaveChange, resumeAutoSave, saveBusy, scheduleAutoSave, setAutoSaveEnabled, unsavedChanges } from "../../../legacy/save-bridge.ts";
 import { captureOperation, stillOwns } from "../../../legacy/transition-bridge.ts";
 
 export const saves: SaveState = {
@@ -20,6 +21,10 @@ export const confirmation: SaveConfirmation = { confirmSavedNow: () => { confirm
 export const saveChangeNotes: SaveChangeNotes = {
   noteChange: () => { noteSaveChange(); },
   scheduleAutoSave: () => { scheduleAutoSave(); }
+};
+
+export const fileConflicts: Pick<FileConflicts, "close"> = {
+  close: () => { liveFileConflicts().close(); }
 };
 
 export const autoSaves: AutoSaveReads = {

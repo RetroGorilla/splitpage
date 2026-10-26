@@ -15,7 +15,7 @@ import { __init as init_13a_presence } from "./13a-presence.js";
 import { __init as init_13b_collaborate } from "./13b-collaborate.js";
 import { __init as init_14_export } from "./14-export.js";
 import { __init as init_18_local_files } from "./18-local-files.js";
-import { __init as init_18a_local_merge } from "./18a-local-merge.js";
+import { mountMergeReviewFeature } from "../bootstrap/wiring.ts";
 import { mountFileMenuDropdownFeature, mountCommandMenuFeature } from "../bootstrap/wiring.ts";
 import { __init as init_19_writer } from "./19-writer.js";
 import { __init as init_20_teleprompter } from "./20-teleprompter.js";
@@ -98,7 +98,7 @@ if (wiring) {
   init_13b_collaborate();
   init_14_export();
   init_18_local_files();
-  init_18a_local_merge();
+  mountMergeReviewFeature();
   mountFileMenuDropdownFeature();
   mountFileMenuExportFeature(wiring.captureExportDocument);
   mountCommandMenuFeature();

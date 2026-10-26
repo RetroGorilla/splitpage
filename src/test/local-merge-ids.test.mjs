@@ -5,10 +5,11 @@ import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { offerFileMerge, openMergeReview, resetMergeOffer } from "../js/18a-local-merge.js";
+import { mountMergeReviewFeature } from "../bootstrap/wiring/merge-review.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();
+const merge = mountMergeReviewFeature();
 
 function shell() {
   document.body.innerHTML =
@@ -27,12 +28,12 @@ async function review(mine, theirs) {
   shell();
   loadTestDocument(migrateRows(JSON.parse(JSON.stringify(mine))));
   const file = new File([JSON.stringify(theirs)], "disk.splitpage", { type: "application/json" });
-  await offerFileMerge(file, null);
+  await merge.offer(file, null);
   assert.equal(document.getElementById("file-conflict-merge").hidden, false, "the merge is offered");
-  openMergeReview();
+  merge.open();
   const heads = Array.from(document.querySelectorAll("#merge-review-list .merge-group-head"), (el) => el.firstChild.textContent);
   const text = document.getElementById("merge-review-list").textContent;
-  resetMergeOffer();
+  merge.reset();
   return { heads: heads, text: text };
 }
 
