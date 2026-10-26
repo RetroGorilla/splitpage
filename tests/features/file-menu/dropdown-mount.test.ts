@@ -6,7 +6,7 @@ import { fileMenuActions } from "../../../src/features/file-menu/actions.ts";
 import type { FileMenuControls, FileMenuDropdownMount, FileMenuDropdownPorts } from "../../../src/features/file-menu/ports.ts";
 import { NO_DESTINATION } from "../../../src/application/transitions/ports.ts";
 import { createActionRegistry, registerAll } from "../../../src/application/actions.ts";
-import type { DocumentView } from "../../../src/application/session/document-reader.ts";
+import type { DocumentView } from "../../../src/application/session/document-session.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeNotices, fakeScreen } from "../fakes.ts";
@@ -30,12 +30,16 @@ async function settled() {
   for (let i = 0; i < 8; i++) await Promise.resolve();
 }
 
-const LONG_DEMO = { state: { title: "Long demo", rows: [{ id: "d1", audioText: "One" }, { id: "d2", audioText: "Two" }] } };
+function documentOf(raw: unknown): DocumentView {
+  return migrateRows(raw, fakeMigration().ports);
+}
+
+const LONG_DEMO ={ state: { title: "Long demo", rows: [{ id: "d1", audioText: "One" }, { id: "d2", audioText: "Two" }] } };
 
 function harness() {
   const calls: unknown[][] = [];
   const state = {
-    document: { title: "Before", docId: "d-old", rows: [{ id: "a" }] } as unknown as DocumentView | null,
+    document: documentOf({ title: "Before", docId: "d-old", rows: [{ id: "a" }] }) as DocumentView | null,
     home: { kind: "none" } as ReturnType<FileMenuDropdownPorts["place"]["home"]>,
     desktop: false, reviewing: false, browser: false, chromium: false, expired: false, linkOff: false,
     busy: false, unsaved: false, kept: { label: "kept" } as unknown, recent: [] as unknown[]
@@ -73,6 +77,12 @@ function harness() {
   return { ports, state, calls, notices };
 }
 
+interface Arrival {
+  readonly from: { readonly document?: unknown };
+  readonly reason: string;
+  readonly destination: unknown;
+}
+
 function names(calls: unknown[][]): unknown[] {
   return calls.map((call) => call[0]);
 }
@@ -91,10 +101,11 @@ test("a new script keeps the owners, arguments and order of the document-creatin
     assert.deepEqual(h.calls[0], ["makeId", "r"]);
     assert.deepEqual(h.calls[1], ["migrateRows", { title: "Untitled Script", rows: [{ id: "r-new", visualText: "", imageRef: null, audioText: "" }], wordsPerMinute: 180 }]);
     assert.deepEqual(h.calls[2], ["keepSnapshot", "Before starting a new script"]);
-    const arrival = h.calls[5]?.[1] as Parameters<FileMenuDropdownPorts["transitions"]["startNew"]>[0];
+    const arrival = h.calls[5]?.[1] as Arrival;
     assert.ok("document" in arrival.from);
-    const next = arrival.from.document as unknown as { docId: string };
-    assert.deepEqual(h.calls[3], ["keepSnapshot", "Before starting a new script", { title: "Before", docId: next.docId, rows: [{ id: "a" }] }]);
+    const next = arrival.from.document as { docId: string };
+    assert.deepEqual(h.calls[3], ["keepSnapshot", "Before starting a new script", { ...h.state.document, docId: next.docId }]);
+    assert.notEqual(next.docId, "d-old");
     assert.equal(arrival.reason, "startNewScript: a new blank document");
     assert.equal(arrival.destination, NO_DESTINATION);
     assert.deepEqual(h.calls[9], ["sidePanels.close", "newtab-page"]);
@@ -105,7 +116,7 @@ test("a new script keeps the owners, arguments and order of the document-creatin
 test("a new script over an empty document keeps no snapshot", () => {
   page();
   const h = harness();
-  h.state.document = { title: "Empty", rows: [] } as unknown as DocumentView;
+  h.state.document = documentOf({ title: "Empty", rows: [] });
   const mounted = __init(h.ports);
   try {
     assert.equal(mounted.startNewScript(), true);
@@ -123,7 +134,7 @@ test("the long demo copies its starter state and creates the document through th
     assert.deepEqual(names(h.calls), ["migrateRows", "keepSnapshot", "keepSnapshot", "resetProductionPanelState", "startNew", "confirmSavedNow", "applyReviewMode", "syncDocIdentity", "sidePanels.close"]);
     assert.deepEqual(h.calls[0], ["migrateRows", LONG_DEMO.state]);
     assert.deepEqual(h.calls[1], ["keepSnapshot", "Before opening the long demo"]);
-    const arrival = h.calls[4]?.[1] as Parameters<FileMenuDropdownPorts["transitions"]["startNew"]>[0];
+    const arrival = h.calls[4]?.[1] as Arrival;
     assert.equal(arrival.reason, "openLongDemo: a new copy of the long demo");
     assert.equal(arrival.destination, NO_DESTINATION);
     assert.deepEqual(LONG_DEMO.state.rows, [{ id: "d1", audioText: "One" }, { id: "d2", audioText: "Two" }]);
@@ -205,6 +216,25 @@ test("a recent file opens through the recent-files, handle and opening ports", a
     assert.ok(opened.handle);
     assert.equal(mounted.fileMenuOpen(), false);
   } finally { mounted.dispose(); }
+});
+
+test("a recent file whose read finishes after disposal is not opened", async () => {
+  page();
+  const h = harness();
+  h.state.desktop = true;
+  h.state.recent = [{ fileId: "f1", name: "Recent.splitpage", title: "Recent" }];
+  let release: () => void = () => {};
+  const read = new Promise<void>((done) => { release = done; });
+  const mounted = __init({ ...h.ports, recentHandle: (entry: { readonly name: string }) => ({ getFile: async () => { await read; return new win.File(["file"], entry.name); } }) });
+  mounted.toggleFileMenu(true);
+  mounted.toggleSubmenu("recent", true);
+  await settled();
+  win.document.querySelector('[data-recent-id="f1"]')?.dispatchEvent(new win.MouseEvent("click", { bubbles: true, cancelable: true }));
+  await settled();
+  mounted.dispose();
+  release();
+  await settled();
+  assert.equal(h.calls.some((call) => call[0] === "openDocument"), false);
 });
 
 test("disposal removes the menu's listeners and test probe and stops the controls", () => {
