@@ -52,7 +52,7 @@ import { armBrowserServerDraft, conflictStash, draftResume, offerBrowserDraftAft
 import { captureOperation, documentTransitions, keepSnapshot, stillOwns } from "../legacy/transition-bridge.ts";
 import { CLIENT_GENERATION, CLIENT_HEADER, apiError, createServerTransport } from "../adapters/transport/server-transport.ts";
 import { deliverFile } from "../legacy/file-delivery.ts";
-import { openPinDialog } from "./20e-connect.js";
+import { openPinDialog } from "../legacy/pin-dialog.ts";
 import { appActions } from "../legacy/app-actions.ts";
 import { joinServer } from "../adapters/transport/server-join.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
