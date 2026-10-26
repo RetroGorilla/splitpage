@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { REPO, commentsIn, listRepoFiles, lineOf } from "./source-scan.mjs";
+import { REPO, commentsIn, isScript, listRepoFiles, lineOf } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 import { configCommentsIn, configKind, DOCKERFILE_PATH, COMPOSE_PATH } from "./config-comments.mjs";
 
@@ -34,6 +34,44 @@ export const REQUIRED_MARKERS = {
 
 export const DIRECTIVES = {};
 
+export const REASON = /^\/\/ why: ((?:docs\/[^\s#]+|[A-Z][A-Z0-9-]*)\.md)#([^\s#]+)(?: \S.*)?$/;
+export const REASON_MAX = 120;
+
+export function headingAnchors(markdown) {
+  const anchors = new Set();
+  const seen = new Map();
+  let fenced = false;
+  for (const line of markdown.split("\n")) {
+    if (/^\s*(```|~~~)/.test(line)) { fenced = !fenced; continue; }
+    if (fenced) continue;
+    for (const m of line.matchAll(/<a\s+(?:id|name)="([^"]+)"/g)) anchors.add(m[1]);
+    const h = /^#{1,6}\s+(.*?)\s*#*\s*$/.exec(line);
+    if (!h) continue;
+    const base = h[1].toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, "").replace(/\s/g, "-");
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    anchors.add(n ? `${base}-${n}` : base);
+  }
+  return anchors;
+}
+
+export function reasonResolver(repo = REPO) {
+  const cache = new Map();
+  return (doc, anchor) => {
+    if (!cache.has(doc)) {
+      const full = join(repo, doc);
+      cache.set(doc, existsSync(full) ? headingAnchors(readFileSync(full, "utf8")) : new Set());
+    }
+    return cache.get(doc).has(anchor);
+  };
+}
+
+export function isReason(path, text, reasons) {
+  if (!isScript(path) || text.length > REASON_MAX) return false;
+  const m = REASON.exec(text);
+  return m !== null && reasons(m[1], m[2]);
+}
+
 export function normalize(text) {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -54,7 +92,7 @@ export function canScan(path) {
   return configKind(path) !== null || commentsIn(path, "") !== null;
 }
 
-export function scanFile(path, text, markers = REQUIRED_MARKERS, directives = DIRECTIVES) {
+export function scanFile(path, text, markers = REQUIRED_MARKERS, directives = DIRECTIVES, reasons = reasonResolver()) {
   const found = commentsFor(path, text);
   if (found === null) return null;
   const allowed = [...(markers[path] ?? [])];
@@ -65,17 +103,18 @@ export function scanFile(path, text, markers = REQUIRED_MARKERS, directives = DI
     if (d !== -1) { allowedDirectives.splice(d, 1); continue; }
     const i = c.directive ? -1 : allowed.indexOf(c.text);
     if (i !== -1) { allowed.splice(i, 1); continue; }
+    if (!c.directive && isReason(path, c.text, reasons)) continue;
     comments.push({ text: normalize(c.text), line: c.line ?? lineOf(text, c.start) });
   }
   return comments;
 }
 
-export function checkComments(files, baseline, markers = REQUIRED_MARKERS, directives = DIRECTIVES) {
+export function checkComments(files, baseline, markers = REQUIRED_MARKERS, directives = DIRECTIVES, reasons = reasonResolver()) {
   const added = [];
   const current = {};
   const known = baseline.files ?? {};
   for (const { path, text } of files) {
-    const comments = scanFile(path, text, markers, directives);
+    const comments = scanFile(path, text, markers, directives, reasons);
     if (!comments || comments.length === 0) continue;
     current[path] = comments.map((c) => c.text).sort();
     const remaining = commentFree(path) ? [] : [...(known[path] ?? [])];
@@ -123,7 +162,7 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
   const baseline = readBaseline(baselinePath);
   let result;
   try {
-    result = checkComments(files, baseline);
+    result = checkComments(files, baseline, REQUIRED_MARKERS, DIRECTIVES, reasonResolver(repo));
   } catch (error) {
     printError(`comment-gate: FAILED — ${error.message}`);
     return 1;
@@ -147,7 +186,8 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
   print(`comment-gate: ${files.length} files scanned, ${total} baselined comments remain`);
   if (added.length) {
     for (const a of added) printError(`  new comment ${a.path}:${a.line} ${short(a.text)}`);
-    printError("comment-gate: FAILED — authored code and configuration carry no comments; see docs/IMPLEMENTATION-PLAN.md section 2");
+    if (added.some((a) => a.text.startsWith("// why:"))) printError(`comment-gate: a reason comment is one line of at most ${REASON_MAX} characters in a script, \`// why: docs/<file>.md#<heading-anchor> <optional short reason>\`, and its heading must exist`);
+    printError("comment-gate: FAILED — authored code and configuration carry no comments except reason comments; see docs/IMPLEMENTATION-PLAN.md section 2");
     return 1;
   }
   if (mode === "prune") {
