@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
-import { htmlToMarkdown } from "../js/04-richtext.js";
+import { htmlToMarkdown } from "../legacy/richtext.ts";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { breakdownRows } from "../adapters/formats/export-projections.ts";
 import { commentBodyText, commentEntries } from "../adapters/formats/export-projections.ts";

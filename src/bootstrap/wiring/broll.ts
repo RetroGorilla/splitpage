@@ -25,7 +25,7 @@ import type { BrollRecordsMount } from "../../features/broll/ports.ts";
 import { createBrollRecords } from "../../features/broll/records.ts";
 import { domToPos } from "../../features/common/cell-dom.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { ensureTrailingCaretSpot } from "../../js/04-richtext.js";
+import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";
 import { cellEditing, paintGuard } from "../../legacy/editor-bridge.ts";
 import { scriptCellOf } from "../../legacy/richtext.ts";
 import { currentDocument, heldDocument, requestRefresh } from "../../legacy/session-bridge.ts";
