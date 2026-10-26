@@ -28,7 +28,7 @@ import { blobSourceNow } from "./13-hosted.js";
 import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";
 import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
-import { offerFileMerge, resetMergeOffer } from "./18a-local-merge.js";
+import { offerFileMerge, resetMergeOffer } from "../legacy/merge-offer-bridge.ts";
 import { isExportAction, rememberExport } from "../bootstrap/wiring/file-menu-export-controls.ts";
 import { parseProjectFileState } from "../adapters/formats/project-file.ts";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";

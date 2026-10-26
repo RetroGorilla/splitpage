@@ -92,7 +92,7 @@ import {
   saveBackToFile,
   showFileConflictView
 } from "../../js/18-local-files.js";
-import { cancelMergeReview, confirmFileMerge, openMergeReview } from "../../js/18a-local-merge.js";
+import { currentMergeReview } from "./merge-review.ts";
 import { toggleFileMenu, toggleSubmenu } from "./file-menu-controls.ts";
 import { applyWriterSize, closeWriter, jumpFromWriterToRow } from "../../js/19-writer.js";
 import {
@@ -287,9 +287,9 @@ export function mountConflictsFeature(): ReturnType<typeof mountConflicts> {
       reloadFileFromDisk: reloadFileFromDisk,
       saveDoc: saveDoc,
       saveBackToFile: saveBackToFile,
-      openMergeReview: openMergeReview,
-      cancelMergeReview: cancelMergeReview,
-      confirmFileMerge: confirmFileMerge,
+      openMergeReview: function () { currentMergeReview()?.open(); },
+      cancelMergeReview: function () { currentMergeReview()?.cancel(); },
+      confirmFileMerge: function () { currentMergeReview()?.confirm(); },
       importHome: importHome as unknown as ConflictsPorts["importHome"],
       buildFileData: buildFileData,
       deliverFile: deliverFile,

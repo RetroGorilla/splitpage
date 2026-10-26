@@ -1,27 +1,39 @@
-import { normalizeTagName, registryKey } from "../core/document/tags.ts";
-import { mergeTextField } from "../core/merge/text-field.ts";
-import { byId, rowContentEqual, rowFieldKey } from "../core/merge/rows.ts";
-import { GALLERY_FIELDS, ROW_FIELDS } from "../core/document/fields.ts";
-import { normalizeDocId } from "../../shared/doc-id-policy.js";
-import { rowStatus, tagCategory, tagStatus } from "../core/production/looks.ts";
-import { amendHome, fileHome } from "../legacy/location-bridge.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
-import { blobImgHtml, rowImage, rowImageKey } from "../adapters/storage/02c-blobs.js";
-import { videoLinkLabel } from "../core/document/gallery.ts";
-import { textMergeContext } from "./03-sync.js";
-import { parseProjectFileState } from "../adapters/formats/project-file.ts";
-import { fileConflicts } from "../legacy/save-bridge.ts";
-import { applyStashedWork } from "../legacy/recovery-bridge.ts";
-import { idMap } from "../core/document/id-map.ts";
-import { safeImageSrc } from "../core/document/text-policy.ts";
-import { pad2 } from "../core/production/timing.ts";
-import { htmlToPlainText } from "../legacy/plain-text.ts";
-import { cloneState } from "../core/document/clone.ts";
-import { currentDocument, mergeBase } from "../legacy/session-bridge.ts";
+import { normalizeTagName, registryKey } from "../../core/document/tags.ts";
+import { mergeTextField } from "../../core/merge/text-field.ts";
+import { byId, rowFieldKey } from "../../core/merge/rows.ts";
+import { GALLERY_FIELDS, ROW_FIELDS } from "../../core/document/fields.ts";
+import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { rowStatus, tagCategory, tagStatus } from "../../core/production/looks.ts";
+import { escapeHtml } from "../../core/document/text-policy.ts";
+import { rowImage, rowImageKey } from "../../core/document/media.ts";
+import { idMap } from "../../core/document/id-map.ts";
+import { safeImageSrc } from "../../core/document/text-policy.ts";
+import { pad2 } from "../../core/production/timing.ts";
+import { cloneState } from "../../core/document/clone.ts";
+import {
+  mergeDiffPairHtml,
+  mergeFieldOutcome,
+  mergeGallerySummary,
+  mergeItemSummary,
+  mergeListEntries,
+  mergeRowFate
+} from "../../core/merge/review.ts";
 
+var ports = null;
 var mergeCandidate = null;
 var mergeProbeToken = 0;
+
+function currentDocument() { return ports.document.current(); }
+function mergeBase() { return ports.session.mergeBase(); }
+function fileHome() { return ports.place.fileHome(); }
+function amendHome(record, fields) { return ports.homes.amendHome(record, fields); }
+function migrateRows(raw) { return ports.entry.migrate(raw); }
+function blobImgHtml(ref, cls) { return ports.pictures.imgHtml(ref, cls); }
+function textMergeContext(base, mine, theirs) { return ports.textMergeContext(base, mine, theirs); }
+function parseProjectFileState(file, opts) { return ports.files.parse(file, opts); }
+function fileConflicts() { return ports.conflicts; }
+function applyStashedWork(disk, work, options) { return ports.recovery.applyStashedWork(disk, work, options); }
+function htmlToPlainText(html) { return ports.text.htmlToPlainText(html); }
 
 function fileMergeBase(home) {
   if (home && home.diskBase) return home.diskBase;
@@ -30,14 +42,14 @@ function fileMergeBase(home) {
   return null;
 }
 
-export function resetMergeOffer() {
+function resetMergeOffer() {
   mergeCandidate = null;
   mergeProbeToken++;
   var btn = document.getElementById("file-conflict-merge");
   if (btn) btn.hidden = true;
 }
 
-export async function offerFileMerge(currentFile, home) {
+async function offerFileMerge(currentFile, home) {
   resetMergeOffer();
   var token = mergeProbeToken;
   if (!currentFile || !currentDocument()) return;
@@ -77,25 +89,6 @@ var MERGE_OUTCOME_TEXT = {
   both: "Both sides are kept"
 };
 
-function mergeFieldOutcome(b, m, t) {
-  if (m === t) return null;
-  if (b !== null && m === b) return "theirs";
-  if (b !== null && t === b) return "mine";
-  return "conflict";
-}
-
-function mergeRowFate(b, m, t) {
-  if (m && t) return null;
-  if (m && !t) {
-    if (b && rowContentEqual(b, m)) return "Deleted in the file on disk — it goes.";
-    return b ? "Deleted in the file on disk, but you changed it — your version stays."
-             : "A scene you added — it stays.";
-  }
-  if (b && rowContentEqual(b, t)) return "You deleted this scene — it stays deleted.";
-  return b ? "You deleted this scene, but it changed on disk — it comes back."
-           : "A new scene from the file on disk.";
-}
-
 function mergeFieldText(row, field) {
   if (!row) return "";
   return htmlToPlainText(row[field] || "");
@@ -104,37 +97,6 @@ function mergeFieldText(row, field) {
 function mergeStatusLabel(id) {
   var s = rowStatus(id);
   return s ? s.label : "To do";
-}
-
-function mergeItemSummary(bits) {
-  return bits.filter(function (b) { return b; }).join(" · ");
-}
-
-function mergeListEntries(label, mineList, theirList, keyOf, nameOf, summaryOf) {
-  var mineMap = idMap(), theirMap = idMap(), order = [], seen = idMap();
-  (mineList || []).forEach(function (it) { if (it) mineMap[keyOf(it)] = it; });
-  (theirList || []).forEach(function (it) { if (it) theirMap[keyOf(it)] = it; });
-  (theirList || []).concat(mineList || []).forEach(function (it) {
-    if (!it) return;
-    var k = keyOf(it);
-    if (seen[k]) return;
-    seen[k] = true;
-    order.push(k);
-  });
-  var entries = [];
-  order.forEach(function (k) {
-    var m = mineMap[k], t = theirMap[k];
-    var ms = m ? summaryOf(m) : "", ts = t ? summaryOf(t) : "";
-    if (ms === ts) return;
-    var pair = mergeDiffPairHtml(ms, ts);
-    entries.push({
-      label: label + ": " + nameOf(m || t),
-      outcome: "both",
-      mineHtml: pair.mine,
-      theirsHtml: pair.theirs
-    });
-  });
-  return entries;
 }
 
 function mergeDiffModel(base, mine, theirs) {
@@ -237,67 +199,6 @@ function mergeDiffModel(base, mine, theirs) {
   return groups;
 }
 
-var MERGE_DIFF_TOKEN_CAP = 600;
-
-function mergeDiffTokenize(s) {
-  return String(s == null ? "" : s).split(/(\s+)/).filter(function (t) { return t !== ""; });
-}
-
-function mergeDiffOps(a, b) {
-  var n = a.length, m = b.length;
-  if (n > MERGE_DIFF_TOKEN_CAP || m > MERGE_DIFF_TOKEN_CAP) return null;
-  var w = m + 1;
-  var lcs = new Int32Array((n + 1) * w);
-  for (var i = n - 1; i >= 0; i--) {
-    for (var j = m - 1; j >= 0; j--) {
-      lcs[i * w + j] = a[i] === b[j]
-        ? lcs[(i + 1) * w + j + 1] + 1
-        : Math.max(lcs[(i + 1) * w + j], lcs[i * w + j + 1]);
-    }
-  }
-  var out = [], x = 0, y = 0;
-  while (x < n && y < m) {
-    if (a[x] === b[y]) { out.push({ op: "same", text: a[x] }); x++; y++; }
-    else if (lcs[(x + 1) * w + y] >= lcs[x * w + y + 1]) { out.push({ op: "del", text: a[x] }); x++; }
-    else { out.push({ op: "add", text: b[y] }); y++; }
-  }
-  while (x < n) out.push({ op: "del", text: a[x++] });
-  while (y < m) out.push({ op: "add", text: b[y++] });
-  return out;
-}
-
-function mergeDiffSideHtml(ops, want) {
-  var html = "", any = false;
-  ops.forEach(function (o) {
-    if (o.op !== "same" && o.op !== want) return;
-    if (o.text.trim()) any = true;
-    html += o.op === "same"
-      ? escapeHtml(o.text)
-      : '<span class="diff-' + want + '">' + escapeHtml(o.text) + "</span>";
-  });
-  return any ? html : '<em class="diff-empty">(empty)</em>';
-}
-
-function mergeDiffWholeHtml(text, cls) {
-  return text ? '<span class="diff-' + cls + '">' + escapeHtml(text) + "</span>"
-              : '<em class="diff-empty">(empty)</em>';
-}
-
-function mergeDiffPairHtml(mineText, theirText) {
-  var ops = mergeDiffOps(mergeDiffTokenize(mineText), mergeDiffTokenize(theirText));
-  if (!ops) return { mine: mergeDiffWholeHtml(mineText, "del"), theirs: mergeDiffWholeHtml(theirText, "add") };
-  return { mine: mergeDiffSideHtml(ops, "del"), theirs: mergeDiffSideHtml(ops, "add") };
-}
-
-function mergeGallerySummary(row, f) {
-  var v = row && Array.isArray(row[f]) ? row[f] : [];
-  if (f === "imageLinks") return v.map(videoLinkLabel).join(", ");
-  if (!v.length) return "";
-  var links = [];
-  v.forEach(function (it) { (it.links || []).forEach(function (l) { links.push(videoLinkLabel(l)); }); });
-  return v.length + (v.length === 1 ? " picture" : " pictures") + (links.length ? " · " + links.join(", ") : "");
-}
-
 function mergeDiffImageHtml(row) {
   var img = rowImage(row);
   if (img && img.ref) return blobImgHtml(img.ref, "diff-img");
@@ -326,7 +227,7 @@ function mergeGroupHtml(g) {
   "</div>";
 }
 
-export function openMergeReview() {
+function openMergeReview() {
   if (!mergeCandidate || !currentDocument()) return;
   var groups = mergeDiffModel(mergeCandidate.base, currentDocument(), mergeCandidate.theirs);
   var count = groups.reduce(function (n, g) { return n + g.entries.length; }, 0);
@@ -346,13 +247,13 @@ export function openMergeReview() {
   document.getElementById("merge-review-confirm").focus();
 }
 
-export function cancelMergeReview() {
+function cancelMergeReview() {
   document.getElementById("merge-review-modal").hidden = true;
   document.getElementById("merge-review-list").innerHTML = "";
   if (mergeCandidate) document.getElementById("file-conflict-modal").hidden = false;
 }
 
-export function confirmFileMerge() {
+function confirmFileMerge() {
   var cand = mergeCandidate;
   if (!cand || !currentDocument()) { cancelMergeReview(); return; }
   document.getElementById("merge-review-modal").hidden = true;
@@ -383,4 +284,20 @@ export function confirmFileMerge() {
   mergeCandidate = null;
 }
 
-export function __init() {}
+export function __init(given) {
+  ports = given;
+  var disposed = false;
+  return {
+    offer: offerFileMerge,
+    reset: resetMergeOffer,
+    open: openMergeReview,
+    cancel: cancelMergeReview,
+    confirm: confirmFileMerge,
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      resetMergeOffer();
+      ports = null;
+    }
+  };
+}

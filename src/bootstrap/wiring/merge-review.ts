@@ -1,0 +1,45 @@
+import { __init as mountMergeReview } from "../../features/merge/local-merge.js";
+import type { MergeReviewControl, MergeReviewMount, MergeReviewPorts } from "../../features/merge/ports.ts";
+import { owned } from "../../features/routing/owned.ts";
+import { parseProjectFileState } from "../../adapters/formats/project-file.ts";
+import { textMergeContext } from "../../js/03-sync.js";
+import { migrateRows } from "../../legacy/document-ports.ts";
+import { handMergeOfferTo } from "../../legacy/merge-offer-bridge.ts";
+import { applyStashedWork } from "../../legacy/recovery-bridge.ts";
+import { mergeBase } from "../../legacy/session-bridge.ts";
+import { documentReader as portDocument } from "./ports/document.ts";
+import { homes as portHomes, place as portPlace } from "./ports/location.ts";
+import { pictures as portPictures } from "./ports/pictures.ts";
+import { fileConflicts as portFileConflicts } from "./ports/saving.ts";
+import { text as portText } from "./ports/text.ts";
+
+const mergeReview = owned<MergeReviewMount>();
+
+function mergeReviewPorts(): MergeReviewPorts {
+  return {
+    document: portDocument,
+    session: { mergeBase: () => mergeBase() },
+    place: portPlace,
+    homes: portHomes,
+    conflicts: portFileConflicts,
+    pictures: portPictures,
+    text: portText,
+    entry: { migrate: (raw) => migrateRows(raw) },
+    files: { parse: (file, opts) => parseProjectFileState(file as Parameters<typeof parseProjectFileState>[0], opts) },
+    recovery: { applyStashedWork: applyStashedWork },
+    textMergeContext: (base, mine, theirs) => textMergeContext(base, mine, theirs)
+  };
+}
+
+export function mountMergeReviewFeature(): MergeReviewMount {
+  return mergeReview.replace(() => mountMergeReview(mergeReviewPorts()), (owner) => [
+    () => {
+      handMergeOfferTo({ offer: owner.offer, reset: owner.reset });
+      return () => { handMergeOfferTo(null); };
+    }
+  ]);
+}
+
+export const stopMergeReviewFeature = mergeReview.stop;
+
+export const currentMergeReview: () => MergeReviewControl | null = mergeReview.owner;

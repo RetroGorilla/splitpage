@@ -30,6 +30,7 @@ const modules: Record<string, Record<string, unknown>> = {
   "merge-states.ts": await import("../../src/core/merge-states.ts"),
   "merge/cells.ts": await import("../../src/core/merge/cells.ts"),
   "merge/lists.ts": await import("../../src/core/merge/lists.ts"),
+  "merge/review.ts": await import("../../src/core/merge/review.ts"),
   "merge/rows.ts": await import("../../src/core/merge/rows.ts"),
   "merge/scalars.ts": await import("../../src/core/merge/scalars.ts"),
   "merge/shape.ts": await import("../../src/core/merge/shape.ts"),
