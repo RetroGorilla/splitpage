@@ -6,10 +6,13 @@ import "./_location-started.mjs";
 test("autoSaveTarget answers server, file or null off the home", async () => {
   await import("./_dom.mjs");
   const { autoSaveTarget, saveDestinations, startSaves } = await import("../legacy/save-bridge.ts");
-  const { legacyFileDestination, legacySavePorts } = await import("../js/14-export.js");
+  const { wireFileSaving } = await import("../bootstrap/wiring/file-saving.ts");
+  const { copyDocHistorySafe, syncDocIdentity } = await import("../js/02b-doc-id.js");
+  const { setBaseState } = await import("../js/03-sync.js");
   const { serverSaveDestination } = await import("../js/13-hosted.js");
-  const stopSaves = startSaves(legacySavePorts({ capture: () => Object.freeze({}), stillOwns: () => true }), { start: () => null, stop: () => {} });
-  const drops = [saveDestinations().register(legacyFileDestination()), saveDestinations().register(serverSaveDestination())];
+  const fileSaving = wireFileSaving({ copyHistory: copyDocHistorySafe, syncIdentity: syncDocIdentity, setBaseline: setBaseState });
+  const stopSaves = startSaves(fileSaving.savePorts({ capture: () => Object.freeze({}), stillOwns: () => true }), { start: () => null, stop: () => {} });
+  const drops = [saveDestinations().register(fileSaving.destination()), saveDestinations().register(serverSaveDestination())];
 
   setHome("none");
   assert.equal(autoSaveTarget(), null);

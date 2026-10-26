@@ -96,13 +96,14 @@ export async function appWiringDeps() {
     import("../js/07-production-tags.js"),
     import("../bootstrap/wiring/broll.ts"),
     import("../bootstrap/wiring/session-effects.ts"),
-    import("../js/14-export.js"),
+    import("../bootstrap/wiring/file-saving.ts"),
     import("../bootstrap/wiring/drafts.ts"),
     import("../js/13-hosted.js"),
     import("../js/18-local-files.js"),
     import("../js/11-import.js"),
     import("../bootstrap/wiring/project-files.ts")
   ]);
+  const fileSaving = exporting.wireFileSaving({ copyHistory: docId.copyDocHistorySafe, syncIdentity: docId.syncDocIdentity, setBaseline: sync.setBaseState });
   return {
     entry: migrateRows,
     effects: effects.sessionEffects(),
@@ -110,8 +111,8 @@ export async function appWiringDeps() {
     refresh: production.runIdleRefresh,
     records: broll.derivedRecordsPlan,
     bulkTags: { cell: production.bulkTagCell, stamp: sync.stampRow },
-    saves: exporting.legacySavePorts,
-    destinations: () => [exporting.legacyFileDestination(), files.importSaveDestination(), hosted.serverSaveDestination()],
+    saves: fileSaving.savePorts,
+    destinations: () => [fileSaving.destination(), files.importSaveDestination(), hosted.serverSaveDestination()],
     transitions: { destination: sync.documentDestinationPort, identity: docId.documentIdentityPort, history: sync.documentHistoryPort },
     sources: () => [files.projectFileSource(), imports.importDocumentSource(), hosted.serverDocumentSource()],
     merge: sync.legacyMergePorts,
