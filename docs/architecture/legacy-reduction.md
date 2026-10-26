@@ -2,7 +2,7 @@
 
 A plan for the places where 4.0 fell short of [the implementation plan](../IMPLEMENTATION-PLAN.md). It is written for 4.1 and lives on `4.1-development`.
 
-Planning baseline: revised on 2026-10-16 after two independent reviews of `c728fbb`; the findings and responses are on the PR. The import loop is cut by giving each shared job an owner, not by handing files their imports at startup ([why](#why-not-hand-files-their-imports-at-startup)). Adam chose to delete the global `S` object within this plan (2026-10-16), and the plan counts the whole of that work, tests included. The historical baseline below is not current progress: `S` is now gone and L5 is underway. See [the October 23 status audit](migration-status-2026-10-23.md) for measured results, outstanding cycles and the remaining queue.
+Planning baseline: revised on 2026-10-16 after two independent reviews of `c728fbb`; the findings and responses are on the PR. The import loop is cut by giving each shared job an owner, not by handing files their imports at startup ([why](#why-not-hand-files-their-imports-at-startup)). Adam chose to delete the global `S` object within this plan (2026-10-16), and the plan counts the whole of that work, tests included. The historical baseline below is not current progress: `S` is now gone and L5 is underway. See [the October 26 status audit](migration-status-2026-10-26.md) for measured results and the remaining numbered files.
 
 ## The rule every step follows
 
