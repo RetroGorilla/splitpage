@@ -39,7 +39,7 @@ import {
   setRemoteSource,
   forgetRemoteMisses
 } from "../adapters/storage/02c-blobs.js";
-import { inertBody } from "./04-richtext.js";
+import { inertBody } from "../legacy/richtext.ts";
 import { cssAttr } from "../features/common/dom.ts";
 import { withBusyBar } from "../features/notices/busy.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";

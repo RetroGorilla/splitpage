@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { storedImageMarkup } from "../../src/core/document/text-policy.ts";
 import * as legacy from "../../src/legacy/richtext.ts";
 import { has, intern, recordFor, setBackend } from "../../src/adapters/storage/02c-blobs.js";
-import * as richtext from "../../src/js/04-richtext.js";
+import { readFileSync } from "node:fs";
 import { image } from "../../src/test/golden-helpers.mjs";
 
 type Put = { sha: string; interned: boolean; bytes: number };
@@ -24,13 +24,22 @@ function recordingBackend(puts: Put[]) {
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-test("04-richtext.js hands out the legacy composition's functions", () => {
-  assert.equal(richtext.inertBody, legacy.inertBody);
-  assert.equal(richtext.sanitizeHtml, legacy.sanitizeHtml);
-  assert.equal(richtext.imageRefOf, legacy.imageRefOf);
-  assert.equal(richtext.storedHtmlFromDom, legacy.storedHtmlFromDom);
-  assert.equal(richtext.htmlToMarkdown, legacy.htmlToMarkdown);
-  assert.equal(richtext.buildVideoCardEl, legacy.buildVideoCardEl);
+test("consumers import richtext functions directly from their owners", () => {
+  const imports = [
+    ["src/js/05-render.js", 'import { buildVideoCardEl, sanitizeHtml, storedHtmlFromDom } from "../legacy/richtext.ts";'],
+    ["src/js/19-writer.js", 'import { sanitizeHtml, storedHtmlFromDom } from "../legacy/richtext.ts";'],
+    ["src/js/07-production-tags.js", 'import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";'],
+    ["src/js/13-hosted.js", 'import { inertBody } from "../legacy/richtext.ts";'],
+    ["src/js/11-import.js", 'import { sanitizeHtml } from "../legacy/richtext.ts";'],
+    ["src/bootstrap/wiring/editor.ts", 'import { sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";'],
+    ["src/bootstrap/wiring/comments.ts", 'import { storedImageHtml } from "../../core/document/text-policy.ts";'],
+    ["src/bootstrap/wiring/broll.ts", 'import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";']
+  ] as const;
+  for (const [file, declaration] of imports) {
+    const source = readFileSync(new URL("../../" + file, import.meta.url), "utf8");
+    assert.ok(source.includes(declaration), file + ": direct owner import");
+    assert.equal(source.includes("04-richtext.js"), false, file);
+  }
 });
 
 test("it parses with the page's DOMParser, into a document of its own", () => {

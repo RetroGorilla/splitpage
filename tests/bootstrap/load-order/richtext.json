@@ -1,7 +1,10 @@
 {
-  "legacyImports": [
-    "./04-richtext.js"
+  "legacyImports": [],
+  "loadOnly": [
+    "src/core/document/text-policy.ts",
+    "src/legacy/richtext.ts",
+    "src/adapters/identity/safe-id.ts",
+    "src/features/common/dom.ts"
   ],
-  "loadOnly": [],
-  "expectedLoads": 1
+  "expectedLoads": 4
 }
