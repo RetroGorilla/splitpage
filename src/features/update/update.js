@@ -1,7 +1,7 @@
-import { preferences } from "../legacy/preferences-bridge.ts";
-import { arrivingOnLink } from "./13-hosted.js";
-import { desktopPort } from "../adapters/desktop/desktop-port.ts";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
+var ports = null;
+var activeMount = null;
+var aboutListeners = [];
+var noticeDisposers = [];
 
 var updateStatus = null;
 var updateNotice = null;
@@ -15,10 +15,9 @@ var updatePollTimer = null;
 
 var stopUpdateStatus = null;
 
-export function loadUpdateStatus() {
+function loadUpdateStatus() {
   if (stopUpdateStatus) stopUpdateStatus();
   var active = true;
-  var desktop = desktopPort();
   updatePolls = 0;
   function apply(status) { if (active) applyUpdateStatus(status); }
   function fetchStatus() {
@@ -40,15 +39,15 @@ export function loadUpdateStatus() {
     if (!active) return;
     active = false;
     if (updatePollTimer) { clearTimeout(updatePollTimer); updatePollTimer = null; }
-    if (desktop && desktop.onUpdateStatus) desktop.onUpdateStatus(null);
+    ports.updates.stopStatus();
     var action = document.getElementById("update-bar-action");
     if (action) action.onclick = null;
     stopUpdateStatus = null;
   }
   stopUpdateStatus = dispose;
-  if (desktop && desktop.getUpdateStatus) {
-    if (desktop.onUpdateStatus) desktop.onUpdateStatus(apply);
-    desktop.getUpdateStatus().then(apply).catch(function () {});
+  if (ports.desktop()) {
+    ports.updates.onStatus(apply);
+    ports.updates.status().then(apply).catch(function () {});
   } else fetchStatus();
   return dispose;
 }
@@ -88,7 +87,7 @@ function startDesktopDownload() {
   updateBusy = true;
   updateNotice = null;
   renderUpdateNotice();
-  desktopPort().downloadUpdate().then(function (result) {
+  ports.updates.download().then(function (result) {
     updateBusy = false;
     if (result && result.ok) {
       updateNotice = null;
@@ -109,7 +108,7 @@ function startDesktopInstall() {
   updateBusy = true;
   updateNotice = "Starting the installer\u2026";
   renderUpdateNotice();
-  desktopPort().installUpdate().then(function (result) {
+  ports.updates.install().then(function (result) {
     if (result && result.ok) return;
     updateBusy = false;
     if (result && result.error === "quit-cancelled") {
@@ -131,7 +130,7 @@ function startDesktopInstall() {
 
 function openReleasesPage() {
   var url = releasesUrl();
-  if (runningOnDesktop() && desktopPort().openExternal) { desktopPort().openExternal(url); return; }
+  if (ports.desktop() && ports.externalLinks.available()) { ports.externalLinks.open(url); return; }
   window.open(url, "_blank", "noopener");
 }
 
@@ -139,7 +138,7 @@ function updateBarPlan() {
   if (!updateStatus) return null;
   var version = updateStatus.version || "?";
 
-  if (runningOnDesktop() && updateStatus.desktop) {
+  if (ports.desktop() && updateStatus.desktop) {
     var dl = updateStatus.download || { state: "idle" };
     if (dl.state === "ready") {
       return {
@@ -164,7 +163,7 @@ function updateBarPlan() {
     if (!updateStatus.canInstall) {
       return {
         text: available,
-        action: function () { desktopPort().openExternal(updateStatus.releaseUrl); },
+        action: function () { ports.externalLinks.open(updateStatus.releaseUrl); },
         label: "Open release page"
       };
     }
@@ -210,21 +209,21 @@ function renderUpdateNotice() {
   bar.hidden = false;
 }
 
-export function dismissUpdateNotice() {
+function dismissUpdateNotice() {
   var bar = document.getElementById("update-bar");
   if (bar) bar.hidden = true;
   updateDismissed = true;
   if (updatePollTimer) { clearTimeout(updatePollTimer); updatePollTimer = null; }
 }
 
-export function desktopAppOffered() {
-  if (runningOnDesktop()) return false;
-  if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
+function desktopAppOffered() {
+  if (ports.desktop()) return false;
+  if (ports.place.arrivingOnLink()) return false;
   var ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
   return /Windows/.test(ua) && !/Mobi|Android/.test(ua);
 }
 
-export function renderDesktopAppNotice() {
+function renderDesktopAppNotice() {
   var active = true;
   function dispose() {
     if (!active) return;
@@ -232,8 +231,9 @@ export function renderDesktopAppNotice() {
     var action = document.getElementById("desktop-app-bar-action");
     if (action) action.onclick = null;
   }
+  noticeDisposers.push(dispose);
   if (!desktopAppOffered()) return dispose;
-  if (preferences().desktopNoticeDismissed()) return dispose;
+  if (ports.preferences.desktopNoticeDismissed()) return dispose;
 
   var bar = document.getElementById("desktop-app-bar");
   if (!bar) return dispose;
@@ -251,22 +251,22 @@ export function renderDesktopAppNotice() {
   return dispose;
 }
 
-export function desktopAppUrl() {
+function desktopAppUrl() {
   return (updateStatus && updateStatus.desktopAppUrl) || RELEASES_URL;
 }
 
-export function dismissDesktopAppNotice() {
+function dismissDesktopAppNotice() {
   var bar = document.getElementById("desktop-app-bar");
   if (bar) bar.hidden = true;
-  preferences().dismissDesktopNotice();
+  ports.preferences.dismissDesktopNotice();
 }
 
-export function showAbout() {
+function showAbout() {
   var lines = [];
   var version = (updateStatus && updateStatus.version) || readEmbeddedVersion();
   var link = null;
 
-  if (runningOnDesktop()) {
+  if (ports.desktop()) {
     var dl = (updateStatus && updateStatus.download) || { state: "idle" };
     if (!updateStatus) {
       lines.push("Could not check for updates.");
@@ -322,10 +322,10 @@ function openAboutDialog(version, lines, link) {
   if (!modal) return;
   if (!aboutWired) {
     aboutWired = true;
-    modal.addEventListener("click", function (e) {
+    listenAbout(modal, "click", function (e) {
       if (e.target === modal || e.target.closest("[data-about-close]")) closeAboutDialog();
     });
-    modal.addEventListener("keydown", function (e) {
+    listenAbout(modal, "keydown", function (e) {
       if (e.key === "Escape") { e.stopPropagation(); closeAboutDialog(); }
     });
   }
@@ -347,12 +347,14 @@ function openAboutDialog(version, lines, link) {
   if (close) close.focus();
 }
 
-export function readEmbeddedVersion() {
+function readEmbeddedVersion() {
   var meta = document.querySelector('meta[name="splitpage-version"]');
   return meta ? meta.getAttribute("content") : null;
 }
 
-export function __init() {
+export function mountUpdate(nextPorts) {
+  if (activeMount) activeMount.dispose();
+  ports = nextPorts;
   window.__updateTest = {
     applyStatus: function (status) {
       updateDismissed = false;
@@ -380,4 +382,39 @@ export function __init() {
     dismiss: dismissUpdateNotice,
     dismissed: function () { return updateDismissed; }
   };
+  var probe = window.__updateTest;
+  var disposed = false;
+  var mounted = {
+    loadUpdateStatus,
+    dismissUpdateNotice,
+    renderDesktopAppNotice,
+    dismissDesktopAppNotice,
+    desktopAppOffered,
+    desktopAppUrl,
+    showAbout,
+    readEmbeddedVersion,
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      if (stopUpdateStatus) stopUpdateStatus();
+      while (noticeDisposers.length) noticeDisposers.pop()();
+      while (aboutListeners.length) aboutListeners.pop()();
+      closeAboutDialog();
+      aboutWired = false;
+      updateStatus = null;
+      updateNotice = null;
+      updateBusy = false;
+      updateDismissed = false;
+      if (window.__updateTest === probe) delete window.__updateTest;
+      activeMount = null;
+      ports = null;
+    }
+  };
+  activeMount = mounted;
+  return mounted;
+}
+
+function listenAbout(target, type, listener) {
+  target.addEventListener(type, listener);
+  aboutListeners.push(function () { target.removeEventListener(type, listener); });
 }

@@ -1,3 +1,4 @@
+import { updateControls } from "./update.ts";
 import { __init as mountNewTab } from "../../features/newtab/newtab.js";
 import type { NewTabMount, NewTabPorts } from "../../features/newtab/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -20,7 +21,6 @@ import { migrateRows } from "../../js/02-state.js";
 import { syncDocIdentity } from "../../js/02b-doc-id.js";
 import { openImportModal } from "../../js/11-import.js";
 import { openLocalFile } from "../../js/18-local-files.js";
-import { desktopAppOffered, desktopAppUrl } from "../../js/20a-update.js";
 import { STARTERS, starterById } from "../../js/_starters.js";
 
 const newTab = owned<NewTabMount>();
@@ -50,7 +50,7 @@ export function mountNewTabFeature(): NewTabMount {
       syncIdentity: () => { syncDocIdentity(); },
       importText: (options) => { openImportModal(options); },
       openFile: () => openLocalFile(),
-      desktopDownload: { url: () => desktopAppUrl() as string, offered: () => desktopAppOffered() },
+      desktopDownload: { url: () => updateControls()?.desktopAppUrl() ?? "", offered: () => updateControls()?.desktopAppOffered() ?? false },
       starters: STARTERS,
       findStarter: (id) => starterById(id),
       recentHandle: (entry) => makeDesktopHandle(entry)

@@ -1303,6 +1303,11 @@ async function caseUpdateStatus(target) {
     record(tag + ": the update notice bar appears", !!barVisible);
     const barText = await evalPage(app.cdp, "(document.getElementById('update-bar-text')||{}).textContent || ''");
     record(tag + ": the update notice mentions the new version", typeof barText === "string" && barText.indexOf("99.0.0") !== -1, barText);
+    await evalPage(app.cdp, "document.getElementById('btn-file').click(); document.querySelector('#file-menu [data-file-action=about]').click()");
+    const about = await poll(app.cdp, "(function(){ var modal = document.getElementById('about-modal'); return modal && !modal.hidden && document.getElementById('about-body').textContent; })()", 5000);
+    record(tag + ": About shows the available desktop version", typeof about === "string" && about.includes("99.0.0"), about);
+    await evalPage(app.cdp, "document.querySelector('#about-modal [data-about-close]').click()");
+    record(tag + ": About closes", await evalPage(app.cdp, "document.getElementById('about-modal').hidden"));
   } finally {
     if (app) {
       await teardown(app, tag);
