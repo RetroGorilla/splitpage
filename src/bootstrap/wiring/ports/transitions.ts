@@ -1,6 +1,9 @@
 import type { DocumentDestination } from "../../../application/transitions/ports.ts";
 import type { Transitions } from "../../../application/transitions/transitions.ts";
-import { documentTransitions } from "../../../legacy/transition-bridge.ts";
+import { documentTransitions, openDocument } from "../../../legacy/transition-bridge.ts";
+import type { DocumentOpening } from "../../../application/transitions/sources.ts";
+
+export const opening: DocumentOpening = { open: (source) => openDocument(source) };
 
 export const transitions: Transitions<DocumentDestination> = {
   open: (opening) => documentTransitions().open(opening),
