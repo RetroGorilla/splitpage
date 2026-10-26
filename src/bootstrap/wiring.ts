@@ -1,4 +1,7 @@
 export { mountPageEntry } from "./startup/page-entry.ts";
+export { mountProjectFiles } from "./wiring/project-files.ts";
+import { wireProjectFiles } from "./wiring/project-files.ts";
+import type { ProjectFileDeferredPorts } from "../application/save/project-files.ts";
 export { mountCommandMenuFeature } from "./wiring/command-menu.ts";
 export { mountOnboardingFeature } from "./wiring/onboarding.ts";
 export { mountDesktopFeature } from "./wiring/desktop.ts";
@@ -366,8 +369,8 @@ function drain(disposers: (() => void)[]): unknown[] {
   return failures;
 }
 
-export function wireLegacyApp(deps: Omit<WiringDeps, "editorName">): Wiring {
-  return wireApp({ ...deps, editorName: getEditorName });
+export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFiles"> & { readonly projectFiles: ProjectFileDeferredPorts }): Wiring {
+  return wireApp({ ...deps, projectFiles: () => wireProjectFiles(deps.projectFiles).services, editorName: getEditorName });
 }
 
 export function wireApp(deps: WiringDeps): Wiring {
