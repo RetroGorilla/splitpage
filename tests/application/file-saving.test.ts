@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { mountFileSaving, obsoleteSaveText } from "../../src/application/save/file-saving.js";
 import type { FileSaveCheck, FileSaveHandle, FileSaveTarget, FileSavingMount, FileSavingPorts } from "../../src/application/save/file-saving-ports.ts";
 import type { Home } from "../../src/application/location/document-location.ts";
-import type { ExportDocument } from "../../src/core/document/export-document.ts";
+import { buildExportDocument } from "../../src/core/document/export-document.ts";
+import type { ExportReadModels } from "../../src/core/document/export-document.ts";
+import { migrateRows } from "../../src/core/migrate.ts";
+import { fakeMigration } from "../core/migrate-ports.ts";
 import type { OperationContext } from "../../src/application/session/operation.ts";
 import type { SaveJob, WriterResult } from "../../src/application/save/coordinator.ts";
 import type { FileSaveRequest } from "../../src/application/save/file-saving-ports.ts";
@@ -19,6 +22,7 @@ interface Setup {
   readonly onDesktop?: boolean;
 }
 
+const NO_MODELS: ExportReadModels = { production: [], commentNumbers: {}, broll: [] };
 const OLD_ID = "d0123456789abcdef0123456789abcdef";
 const NEW_ID = "dfedcba9876543210fedcba9876543210";
 
@@ -30,7 +34,7 @@ function harness(setup: Setup = {}) {
   const log: string[] = [];
   const toasts: string[] = [];
   const state = { home: setup.home ?? ({ kind: "none" } as Home), writtenOut: setup.writtenOut ?? false, changes: 4, menuOn: true };
-  const doc = { docId: OLD_ID, rev: 2, title: "Pilot Script" };
+  const doc = migrateRows({ title: "Pilot Script", docId: OLD_ID, rev: 2, rows: [] }, fakeMigration().ports);
   const menu = {
     attributes: {} as Record<string, string>,
     classes: new Set<string>(),
@@ -46,7 +50,7 @@ function harness(setup: Setup = {}) {
     ids: { docId: () => { log.push("mintDocId"); return NEW_ID; } },
     clock: { nowIso: () => "2026-10-26T00:00:00.000Z" },
     document: {
-      current: () => doc as never,
+      current: () => doc,
       stamp: (stamp) => { log.push("stamp:" + stamp.name); return null; }
     },
     location: {
@@ -61,12 +65,11 @@ function harness(setup: Setup = {}) {
     },
     server: { sessionExpired: () => false, linkTurnedOff: () => false },
     lastFile: { remember: (handle) => { log.push("remember:" + handle.name); return Promise.resolve(); } },
-    pictures: { ensureBytes: (shas) => { log.push("ensureBytes:" + shas.length); return Promise.resolve(); } },
+    pictures: { ensureBytes: (shas) => { log.push("ensureBytes:" + shas.length); return Promise.resolve([]); } },
     exports: {
       captureExportDocument: (opts) => {
-        const stamp = (opts && opts.stamp) as { rev: number; lastEditedBy: string; lastEditedAt: string };
-        log.push("capture:" + String(opts && opts.docId) + ":" + stamp.rev);
-        return { document: { ...doc, docId: (opts && opts.docId) || doc.docId, rev: stamp.rev, lastEditedBy: stamp.lastEditedBy, lastEditedAt: stamp.lastEditedAt } } as unknown as ExportDocument;
+        log.push("capture:" + String(opts && opts.docId) + ":" + String(opts && opts.stamp && opts.stamp.rev) + ":" + String(opts && opts.stamp && opts.stamp.lastEditedBy));
+        return buildExportDocument(doc, "2026-10-26T00:00:00.000Z", NO_MODELS, opts);
       }
     },
     formats: {
@@ -129,7 +132,7 @@ test("a save to the open file checks the disk, writes, then confirms the documen
   assert.deepEqual(result, { kind: "saved" });
   assert.deepEqual(h.log, [
     "resume",
-    "capture:null:3",
+    "capture:null:3:Adam",
     "existing:pilot.md",
     "checkConflict:pilot.md:50",
     "ensureBytes:0",
@@ -176,7 +179,7 @@ test("Save As of a written-out script forks its id, retargets to the picked file
   assert.deepEqual(h.log, [
     "resume",
     "mintDocId",
-    "capture:" + NEW_ID + ":3",
+    "capture:" + NEW_ID + ":3:Adam",
     "dialogs:pilot-script",
     "pick",
     "setHome:file",
