@@ -14,7 +14,8 @@ import { toastLastEditor } from "../../js/03-sync.js";
 import { reportMerge } from "../../legacy/merge-bridge.ts";
 import { startHistoryMigration } from "../../js/03a-history-store.js";
 import { renderFirstDraw } from "../../js/05-render.js";
-import { hasUnsavedChanges, updateSaveStatus } from "../../js/12-dirty-toast.js";
+import { updateSaveStatus } from "./save-status.ts";
+import { saves } from "./ports/saving.ts";
 import { updateAutoSaveMenu } from "../../js/14-export.js";
 import { applyStashedWork } from "../../legacy/recovery-bridge.ts";
 import { tryResumeLastProject } from "../../js/18-local-files.js";
@@ -59,7 +60,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
     page: {
       window: window,
       snapshotKey: LEGACY_SNAPSHOTS_KEY,
-      unsaved: function () { return hasUnsavedChanges() && !suppressUnloadWarning; }
+      unsaved: function () { return saves.unsaved() && !suppressUnloadWarning; }
     },
     startDesktop: startDesktopShell
   };

@@ -3,7 +3,7 @@ import { documentLocation, serverStatus } from "../../legacy/location-bridge.ts"
 import { onPreferenceChange, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { onSaveChange } from "../../legacy/save-bridge.ts";
 import { identityChipListeners } from "../../js/03-sync.js";
-import { saveStatusListeners } from "../../js/12-dirty-toast.js";
+import { saveStatusListeners } from "./save-status.ts";
 import { presence } from "../../legacy/presence-bridge.ts";
 import { fileChipListeners, mirrorFileChipToWriter, updateFileChip } from "../../js/18-local-files.js";
 import { refreshOpenFileMenu } from "./file-menu-controls.ts";
