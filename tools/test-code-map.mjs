@@ -33,10 +33,11 @@ console.log("\nfeature map:\n");
 
 eq("common and routing are not features", [featureOf("src/features/common/dom.ts"), featureOf("src/features/routing/owned.ts"), featureOf("src/features/find/find.js")], [null, null, "find"]);
 eq("action ids are read from definitions", actionIds('[{\n  id: "find",\n  label: "x"\n}, {\n    id: "find-next"\n}]'), ["find", "find-next"]);
+eq("action ids passed to a helper that takes id are read", actionIds('const zoom = (id: string, label: string) => ({ id, label });\nfunction panel(id: string) { return { id }; }\nexport const all = [zoom("zoom-in", "In"), panel("panel-gear"), other("not-an-action")];\n'), ["zoom-in", "panel-gear"]);
 {
   const map = buildMap([
     { path: "src/features/find/find.js", text: "" },
-    { path: "src/features/find/actions.ts", text: '  id: "find",\n' },
+    { path: "src/features/find/actions.ts", text: 'export const findActions = [{\n  id: "find"\n}];\n' },
     { path: "src/features/find/ports.test.ts", text: "" },
     { path: "src/bootstrap/wiring/find.ts", text: 'import { a } from "./ports/document.ts";\nimport { b } from "../../features/find/find.js";\n' },
     { path: "src/bootstrap/wiring/ports/document.ts", text: "" },

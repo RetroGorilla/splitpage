@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
-import { REPO, listRepoFiles } from "./source-scan.mjs";
+import ts from "typescript";
+import { REPO, listRepoFiles, parseScript } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 
 export const MAP_PATH = "docs/architecture/feature-map.md";
@@ -22,7 +23,24 @@ export function featureOf(path) {
 }
 
 export function actionIds(text) {
-  return [...text.matchAll(/^\s*id:\s*"([^"]+)"/gm)].map((m) => m[1]);
+  const source = parseScript("actions.ts", text);
+  const helpers = new Set();
+  const findHelpers = (node) => {
+    if (ts.isFunctionLike(node) && node.parameters?.[0] && ts.isIdentifier(node.parameters[0].name) && node.parameters[0].name.text === "id") {
+      const owner = ts.isFunctionDeclaration(node) ? node.name : ts.isVariableDeclaration(node.parent) ? node.parent.name : null;
+      if (owner && ts.isIdentifier(owner)) helpers.add(owner.text);
+    }
+    ts.forEachChild(node, findHelpers);
+  };
+  findHelpers(source);
+  const ids = [];
+  const findIds = (node) => {
+    if (ts.isPropertyAssignment(node) && ts.isIdentifier(node.name) && node.name.text === "id" && ts.isStringLiteralLike(node.initializer)) ids.push(node.initializer.text);
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && helpers.has(node.expression.text) && node.arguments[0] && ts.isStringLiteralLike(node.arguments[0])) ids.push(node.arguments[0].text);
+    ts.forEachChild(node, findIds);
+  };
+  findIds(source);
+  return ids;
 }
 
 export function buildMap(files) {
