@@ -11,7 +11,9 @@ import { documentTransitions } from "../legacy/transition-bridge.ts";
 import { showToast } from "../legacy/effects-bridge.ts";
 import { neverWrittenOut } from "../application/recovery/pristine.ts";
 import { base64Encode } from "../core/document/media.ts";
-import { STATE_FIELDS, buildPublishHtml, defaultState, migrateRows } from "./02-state.js";
+import { STATE_FIELDS } from "../core/merge/state-fields.ts";
+import { buildPublishHtml, defaultState } from "../adapters/page/page-shell.ts";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { inlineStateImages } from "../adapters/storage/02c-blobs.js";
 import { copyHistory, historyDocumentChanged } from "./03a-history-store.js";
 import {

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 globalThis.location = new URL("https://splitpage.test/index.html?freeze-caches=1");
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { healTagRegistry, productionIndexStats, resetProductionIndexStats } = await import("../js/07-production-tags.js");
 const { productionIndex } = await import("../legacy/production-index-bridge.ts");
 const { currentDocument } = await import("../legacy/session-bridge.ts");

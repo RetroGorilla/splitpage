@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import "./_preferences-started.mjs";
 import { preferences } from "../legacy/preferences-bridge.ts";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { blobStore, intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import "./_broll-mounted.mjs";

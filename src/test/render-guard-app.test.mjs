@@ -13,7 +13,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { currentDocument, liveSession, mergeBase } = await import("../legacy/session-bridge.ts");
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { applyMerge } = await import("../legacy/merge-bridge.ts");
 const { renderAbsorbed } = await import("../js/05-render.js");

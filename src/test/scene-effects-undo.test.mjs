@@ -3,7 +3,7 @@ import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { lastUndoEntry, redo, resetUndo, undo, undoSizes } from "../legacy/undo-bridge.ts";
 
 const stubs = await import("./_fanout-stubs.mjs");

@@ -15,7 +15,7 @@ await bootApp();
 after(closeApp);
 
 const { STARTERS, LONG_DEMO } = await import("../js/_starters.js");
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { standaloneHtmlFor } = await import("../js/02b-doc-id.js");
 const { intern } = await import("../adapters/storage/02c-blobs.js");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");

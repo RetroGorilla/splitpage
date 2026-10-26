@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 await bootApp();
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const saves = await import("../legacy/save-bridge.ts");
 const { currentHome, setHome } = await import("../legacy/location-bridge.ts");

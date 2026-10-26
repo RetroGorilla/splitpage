@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 
 const bridge = await import("../legacy/session-bridge.ts");
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
 const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");

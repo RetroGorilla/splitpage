@@ -7,7 +7,7 @@ import { holdMergeBase, liveDocumentPort, mergeBase, currentDocument } from "../
 
 await bootApp();
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, saveDoc } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../legacy/undo-bridge.ts");

@@ -6,7 +6,7 @@ import { createTransitions } from "../application/transitions/transitions.ts";
 import type { Transitions } from "../application/transitions/transitions.ts";
 import type { DestinationPort, DocumentDestination, HistoryPort, IdentityPort, LiveDocumentPort } from "../application/transitions/ports.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "./document-ports.ts";
 import { currentConn, currentHome, documentLocation } from "./location-bridge.ts";
 import { confirmedGeneration } from "./save-bridge.ts";
 import { liveSession } from "./session-bridge.ts";

@@ -4,7 +4,7 @@ import "./_project-file-services-started.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { intern } from "../adapters/storage/02c-blobs.js";
 import {
   ANNOTATION_COLORS, annotateGallerySlot, moveGallerySlot, normalizeMarks, removeGallerySlot, replaceGalleryPicture, rowSlots, slotOriginal

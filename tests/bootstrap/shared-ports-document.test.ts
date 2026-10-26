@@ -13,7 +13,7 @@ import { documentLocation, setHome, startLocation } from "../../src/legacy/locat
 import { sanitizeHtml, storedHtmlFromDom } from "../../src/legacy/richtext.ts";
 import { adoptReplacement } from "../../src/legacy/session-bridge.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
-import { migrateRows } from "../../src/js/02-state.js";
+import { migrateRows } from "../../src/legacy/document-ports.ts";
 
 test("review facts follow the location and refuse through the notices only while reviewing", () => {
   const review = portReview;

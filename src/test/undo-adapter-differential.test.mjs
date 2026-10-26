@@ -1,7 +1,7 @@
 import "./_dom.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { flushEdits, lastUndoEntry, nextRedoEntry, noteEdit, noteRemoteChange, redo, resetUndo, undo, undoSizes } from "../legacy/undo-bridge.ts";
 import { cellEdit, changeSet } from "../application/session/change-set.ts";
 import { liveSession, currentDocument } from "../legacy/session-bridge.ts";

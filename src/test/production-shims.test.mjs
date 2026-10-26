@@ -4,7 +4,7 @@ import { mintTagId } from "../core/document/tags.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { healTagRegistry, productionIndexStats, registerProductionTag } from "../js/07-production-tags.js";
 import { renameTag, newBrollRecord } from "../application/commands/production-actions.ts";
 import { retagRewrites as planRetagRewrites } from "../application/commands/tag-rewrites.ts";

@@ -9,7 +9,7 @@ import { DRAFT_LIMITS, browserDraftKey, draftBaseOf, normalizeDraftBase } from "
 import { browserWriterId, browserWriterIsLive, holdBrowserWriterLock, releaseBrowserWriterLock } from "../../adapters/storage/draft-writer-lock.js";
 import { createPendingBanner } from "../../features/recovery/pending-banner.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { migrateRows } from "../../js/02-state.js";
+import { migrateRows } from "../../legacy/document-ports.ts";
 import { copyDocHistorySafe, syncDocIdentity } from "../../js/02b-doc-id.js";
 import { notifyDesktopDocumentState } from "../../legacy/desktop-bridge.ts";
 import { documentLocation, onServerDoc } from "../../legacy/location-bridge.ts";

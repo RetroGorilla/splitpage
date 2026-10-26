@@ -58,7 +58,7 @@ const { runIdleRefresh } = await import("../js/07-production-tags.js");
 const refreshed = { into: null };
 await rewireRunningApp({ refresh: (due) => (refreshed.into ? refreshed.into.push(...due) : runIdleRefresh(due)) });
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../legacy/undo-bridge.ts");

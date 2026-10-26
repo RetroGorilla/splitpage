@@ -8,7 +8,7 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { applyMerge } = await import("../legacy/merge-bridge.ts");
 const { render, renderAbsorbed, screenIsStale } = await import("../js/05-render.js");
 const { flushEdits, undoSizes } = await import("../legacy/undo-bridge.ts");

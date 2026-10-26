@@ -90,7 +90,7 @@ export function closeApp() {
 
 export async function appWiringDeps() {
   const [{ migrateRows }, docId, sync, production, broll, dirty, exporting, drafts, hosted, files, imports, formats] = await Promise.all([
-    import("../js/02-state.js"),
+    import("../legacy/document-ports.ts"),
     import("../js/02b-doc-id.js"),
     import("../js/03-sync.js"),
     import("../js/07-production-tags.js"),

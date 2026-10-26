@@ -1,3 +1,6 @@
+import { STATE_FIELDS } from "../core/merge/state-fields.ts";
+import { migrateRows as migrateRowsWith } from "../core/migrate.ts";
+import type { LineShotIds } from "../core/production/broll.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { createRichText } from "../adapters/richtext/richtext.ts";
 import type { RichText } from "../adapters/richtext/richtext.ts";
@@ -40,3 +43,10 @@ export function withDocumentPorts<T>(fields: readonly StateField[], pass: (ports
     keepPending(images);
   }
 }
+
+export function migrateRows(s: unknown, brollLines?: LineShotIds) {
+  return withDocumentPorts(STATE_FIELDS, function (ports) {
+    return migrateRowsWith(s, brollLines ? Object.assign({}, ports, { brollLines: brollLines }) : ports);
+  });
+}
+

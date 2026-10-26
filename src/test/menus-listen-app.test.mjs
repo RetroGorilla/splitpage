@@ -9,7 +9,7 @@ await bootApp();
 const { documentLocation, serverStatus } = await import("../legacy/location-bridge.ts");
 const { PREF_EVENT, preferences } = await import("../legacy/preferences-bridge.ts");
 const { adoptReplacement, onSessionChange } = await import("../legacy/session-bridge.ts");
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
 
 after(closeApp);

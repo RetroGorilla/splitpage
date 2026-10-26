@@ -5,7 +5,7 @@ import { applyMarkdownProject, parseProjectFileState } from "../../../src/adapte
 import type { MarkdownProject } from "../../../src/adapters/formats/project-file.ts";
 import type { InertElement, MarkdownRowChoice, ProjectFileServices } from "../../../src/application/formats/project-file-services.ts";
 import type { DocumentOrigin } from "../../../src/core/migrate.ts";
-import { migrateRows } from "../../../src/js/02-state.js";
+import { migrateRows } from "../../../src/legacy/document-ports.ts";
 
 interface Calls {
   readonly origins: DocumentOrigin[];

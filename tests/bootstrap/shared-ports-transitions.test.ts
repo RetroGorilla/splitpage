@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { NO_DESTINATION } from "../../src/application/transitions/ports.ts";
 
-import { migrateRows } from "../../src/js/02-state.js";
+import { migrateRows } from "../../src/legacy/document-ports.ts";
 import { currentDocument, liveDocumentPort } from "../../src/legacy/session-bridge.ts";
 import { documentSources, startTransitions } from "../../src/legacy/transition-bridge.ts";
 import { startTestSession, unwiredSessionDeps } from "../../src/test/_session.mjs";

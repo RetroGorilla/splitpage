@@ -4,7 +4,7 @@ import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { MergedStates } from "../../core/merge-states.ts";
 import { connectStartup } from "../../legacy/startup-bridge.ts";
 import { documentTransitions } from "../../legacy/transition-bridge.ts";
-import { suppressUnloadWarning } from "../../js/00-prelude.js";
+import { suppressUnloadWarning } from "../startup/page-entry.ts";
 import { updateHideShotMenu } from "./hide-shot.ts";
 import { initDocIdentityChannel, loadInitialState, syncDocIdentity } from "../../js/02b-doc-id.js";
 import { heldDocument } from "../../legacy/session-bridge.ts";

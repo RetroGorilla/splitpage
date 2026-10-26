@@ -4,7 +4,7 @@ import "./_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
 import { flushEdits, noteEdit, noteRemoteChange, redo, undo } from "../legacy/undo-bridge.ts";

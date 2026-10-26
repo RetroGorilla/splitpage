@@ -48,7 +48,7 @@ import type { ReplayRunner, SessionUndoPorts } from "../../src/legacy/session-br
 import { captureOperation, documentSources, documentTransitions, openDocument, startTransitions } from "../../src/legacy/transition-bridge.ts";
 import { createUndoAdapter, routeReplays } from "../../src/legacy/undo-adapter.ts";
 import { sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
-import { migrateRows } from "../../src/js/02-state.js";
+import { migrateRows } from "../../src/legacy/document-ports.ts";
 import { projectFileServices, projectFileServicesStarted } from "../../src/application/formats/project-file-services.ts";
 import type { ProjectFileServices } from "../../src/application/formats/project-file-services.ts";
 

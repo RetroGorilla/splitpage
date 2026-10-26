@@ -2,7 +2,7 @@ import { mintTagId } from "../core/document/tags.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { healTagRegistry, productionIndexStats, resetProductionIndexStats } from "../js/07-production-tags.js";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";

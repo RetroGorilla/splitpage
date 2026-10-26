@@ -1,6 +1,6 @@
 import { productionReaders } from "../legacy/document-ports.ts";
 import assert from "node:assert/strict";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { healTagRegistry, productionIndexStats } from "../js/07-production-tags.js";
 import { productionIndex } from "../legacy/production-index-bridge.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
