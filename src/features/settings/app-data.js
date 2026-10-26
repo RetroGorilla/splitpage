@@ -1,30 +1,11 @@
-import { normalizeServerUrl } from "../../shared/server-links.js";
-import { shortHost } from "../adapters/transport/server-address.ts";
-import { setBackend as setBlobBackend } from "../adapters/storage/02c-blobs.js";
-import { LEGACY_SNAPSHOTS_KEY } from "../application/recovery/legacy-snapshots.ts";
-import {
-  exportHistoryAll,
-  importHistoryBundle,
-  normalizeLegacySnapshots
-} from "./03a-history-store.js";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { deliverFile } from "../legacy/file-delivery.ts";
-import { applyWriterSize, readWriterSize } from "./19-writer.js";
-import { readEmbeddedVersion } from "./20a-update.js";
-import {
-  connectPortOr,
-  newBookmarkId,
-  renderConnect,
-  saveBookmarks
-} from "./20e-connect.js";
-import { cappedName } from "../core/document/text-policy.ts";
-import { preferences } from "../legacy/preferences-bridge.ts";
-import { settingsAppData } from "../application/preferences/preferences.ts";
-import { setCommentSort } from "../application/comment-sort.ts";
-import { desktopPort } from "../adapters/desktop/desktop-port.ts";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
-import { SERVER_BOOKMARKS_KEY } from "../application/location/server-status.ts";
-import { serverStatus } from "../legacy/location-bridge.ts";
+import { normalizeServerUrl } from "../../../shared/server-links.js";
+import { shortHost } from "../common/server-address.ts";
+import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
+import { cappedName } from "../../core/document/text-policy.ts";
+import { settingsAppData } from "../../application/preferences/preferences.ts";
+import { SERVER_BOOKMARKS_KEY } from "../../application/location/server-status.ts";
+
+export function mountAppData(ports) {
 
 var APPDATA_FORMAT = "splitpage-app-data";
 var APPDATA_VERSION = 1;
@@ -44,8 +25,8 @@ function appDataReadJson(key, fallback) {
 }
 
 function appDataVersionString() {
-  if (runningOnDesktop() && typeof desktopPort().appVersion === "string" && desktopPort().appVersion) return desktopPort().appVersion;
-  var embedded = typeof readEmbeddedVersion === "function" ? readEmbeddedVersion() : null;
+  if (ports.desktop() && typeof ports.launchFacts.appVersion() === "string" && ports.launchFacts.appVersion()) return ports.launchFacts.appVersion();
+  var embedded = typeof ports.embeddedVersion === "function" ? ports.embeddedVersion() : null;
   return embedded || "";
 }
 
@@ -64,7 +45,7 @@ async function buildAppDataBundle() {
   }
 
   try {
-    var history = await exportHistoryAll();
+    var history = await ports.history.exportAll();
     bundle.history = history;
     bundle.blobs = history.blobs || {};
     bundle.missingBlobs = history.missingBlobs || [];
@@ -84,7 +65,7 @@ async function buildAppDataBundle() {
   }
 
   try {
-    bundle.prefs = preferences().appDataExport(appDataExtraPrefs());
+    bundle.prefs = ports.preferences.appDataExport(appDataExtraPrefs());
   } catch (e) {
     bundle.prefs = {};
   }
@@ -122,9 +103,9 @@ function appDataFilename() {
 
 var appDataLastExport = null;
 
-export async function exportAppData() {
+async function exportAppData() {
   appDataLastExport = null;
-  showToast("Gathering your Splitpage data…");
+  ports.notices.show("Gathering your Splitpage data…");
   await new Promise(function (resolve) { setTimeout(resolve, 0); });
 
   var bundle;
@@ -132,7 +113,7 @@ export async function exportAppData() {
     bundle = await buildAppDataBundle();
     assertNoSecrets(bundle);
   } catch (e) {
-    showToast((e && e.message) || "Export cancelled — something went wrong building your app data.", "error");
+    ports.notices.show((e && e.message) || "Export cancelled — something went wrong building your app data.", "error");
     return;
   }
 
@@ -140,11 +121,11 @@ export async function exportAppData() {
   try {
     json = JSON.stringify(bundle, null, 2);
   } catch (e) {
-    showToast("Could not build the export file.", "error");
+    ports.notices.show("Could not build the export file.", "error");
     return;
   }
 
-  var saved = await deliverFile(appDataFilename(), json, { savedMsg: "Exported your Splitpage app data" });
+  var saved = await ports.fileDelivery.deliver(appDataFilename(), json, { savedMsg: "Exported your Splitpage app data" });
   var missing = bundle.missingBlobs || [];
   appDataLastExport = {
     ok: !!saved,
@@ -158,7 +139,7 @@ export async function exportAppData() {
       " missing from this device and could not be included. The snapshots that use " +
       (missing.length === 1 ? "it" : "them") + " will show a placeholder.";
     if (window.console) console.warn("Export app data: images not included (bytes not found):", missing);
-    showToast(appDataLastExport.warning, "warn", true);
+    ports.notices.show(appDataLastExport.warning, "warn", true);
   }
 }
 
@@ -262,9 +243,9 @@ function parseAppDataBundle(text) {
 function appDataMergeBookmarks(list) {
   var out = { added: 0, skipped: 0, failed: 0 };
   if (!list || !list.length) return out;
-  serverStatus().loadBookmarks();
+  ports.bookmarks.loadBookmarks();
   var byUrl = {}, ids = {};
-  serverStatus().bookmarks().forEach(function (b) {
+  ports.bookmarks.bookmarks().forEach(function (b) {
     var u = normalizeServerUrl(b.url);
     if (u) byUrl[u] = true;
     if (typeof b.id === "string") ids[b.id] = true;
@@ -275,15 +256,15 @@ function appDataMergeBookmarks(list) {
     if (!url) { out.failed++; return; }
     if (byUrl[url]) { out.skipped++; return; }
     var id = (typeof b.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(b.id)) ? b.id : "";
-    while (!id || ids[id]) id = newBookmarkId();
+    while (!id || ids[id]) id = ports.bookmarkEditor.newId();
     var name = (typeof b.name === "string" && cappedName(b.name, 200)) || shortHost(url);
     var bookmark = { id: id, name: name, url: url };
     var userHost = appDataIsPlainObject(b.ssh) && typeof b.ssh.userHost === "string" ? cappedName(b.ssh.userHost, 300) : "";
     if (userHost) {
       bookmark.ssh = {
         userHost: userHost,
-        remotePort: connectPortOr(b.ssh.remotePort, 8791),
-        localPort: connectPortOr(b.ssh.localPort, 8791)
+        remotePort: ports.bookmarkEditor.portOr(b.ssh.remotePort, 8791),
+        localPort: ports.bookmarkEditor.portOr(b.ssh.localPort, 8791)
       };
     }
     byUrl[url] = true;
@@ -292,11 +273,11 @@ function appDataMergeBookmarks(list) {
     out.added++;
   });
   if (fresh.length) {
-    serverStatus().addBookmarks(fresh);
-    saveBookmarks();
+    ports.bookmarks.addBookmarks(fresh);
+    ports.bookmarkEditor.save();
     try {
       var modal = document.getElementById("connect-modal");
-      if (modal && !modal.hidden) renderConnect();
+      if (modal && !modal.hidden) ports.bookmarkEditor.render();
     } catch (e) { }
   }
   return out;
@@ -307,10 +288,10 @@ function appDataExtraPrefs() {
 }
 
 function appDataMergePrefs(prefs) {
-  var written = preferences().appDataImport(prefs, appDataExtraPrefs());
+  var written = ports.preferences.appDataImport(prefs, appDataExtraPrefs());
   try {
-    if (written.indexOf("commentsSort") !== -1) setCommentSort(preferences().commentsSort());
-    if (written.indexOf("writerSize") !== -1) applyWriterSize(readWriterSize(), false);
+    if (written.indexOf("commentsSort") !== -1) ports.commentSorting.choose(ports.preferences.commentsSort());
+    if (written.indexOf("writerSize") !== -1) ports.writer.setSize(ports.writer.size(), false);
   } catch (e) {}
   return written;
 }
@@ -329,7 +310,7 @@ async function importAppData(text) {
     var refused = { ok: false, code: (e && e.code) || "invalid",
                     message: (e && e.message) || "That file could not be imported." };
     appDataLastSummary = refused;
-    showToast(refused.message, "error");
+    ports.notices.show(refused.message, "error");
     return refused;
   }
 
@@ -337,11 +318,11 @@ async function importAppData(text) {
 
   var legacy = [];
   if (bundle.snapshots) {
-    try { legacy = normalizeLegacySnapshots(JSON.stringify(bundle.snapshots)) || []; } catch (e) { legacy = []; }
+    try { legacy = ports.history.normalizeSnapshots(JSON.stringify(bundle.snapshots)) || []; } catch (e) { legacy = []; }
     summary.legacy = legacy.length;
   }
   var hist = bundle.history || { docs: [], older: [] };
-  summary.history = await importHistoryBundle({ docs: hist.docs, older: hist.older.concat(legacy), blobs: bundle.blobs });
+  summary.history = await ports.history.importBundle({ docs: hist.docs, older: hist.older.concat(legacy), blobs: bundle.blobs });
   summary.blobs = summary.history.blobs;
 
   try {
@@ -365,7 +346,7 @@ async function importAppData(text) {
   summary.toast = "Imported " + appDataPlural(snapshots, "version-history snapshot", "version-history snapshots") +
     " across " + appDataPlural(h.docs, "document", "documents") + ", " +
     appDataPlural(summary.bookmarks.added, "server", "servers") + " and your preferences.";
-  showToast(summary.toast, "ok");
+  ports.notices.show(summary.toast, "ok");
 
   if (h.skipped || h.failed || h.code || badImages || summary.bookmarks.skipped || summary.bookmarks.failed) {
     if (window.console) {
@@ -383,14 +364,14 @@ async function importAppData(text) {
         appDataPlural(h.failed, "snapshot", "snapshots") + ", " +
         appDataPlural(summary.bookmarks.failed, "server", "servers") + ". Details are in the console.";
     }
-    showToast(summary.warning, "warn", true);
+    ports.notices.show(summary.warning, "warn", true);
   }
   if (badImages) {
     var imgWarning = appDataPlural(badImages, "image", "images") + " in that file could not be imported" +
       " — the snapshots that use " + (badImages === 1 ? "it" : "them") + " will show a placeholder." +
       " Details are in the console.";
     summary.warning = summary.warning ? summary.warning + " " + imgWarning : imgWarning;
-    showToast(summary.warning, "warn", true);
+    ports.notices.show(summary.warning, "warn", true);
   }
 
   appDataLastSummary = summary;
@@ -398,12 +379,14 @@ async function importAppData(text) {
 }
 
 var appDataInputWired = false;
+var appDataInput = null;
 
-export function openImportAppData() {
+function openImportAppData() {
   var input = document.getElementById("import-app-data-input");
   if (!input) return;
   if (!appDataInputWired) {
     appDataInputWired = true;
+    appDataInput = input;
     input.addEventListener("change", onImportAppDataChosen);
   }
   input.click();
@@ -415,13 +398,13 @@ async function onImportAppDataChosen(e) {
   if (!file) { input.value = ""; return; }
   try {
     if (file.size > APPDATA_MAX_TEXT) {
-      showToast("That file is too large to be Splitpage app data (over 512 MB).", "error");
+      ports.notices.show("That file is too large to be Splitpage app data (over 512 MB).", "error");
       return;
     }
-    showToast("Importing your Splitpage data…");
+    ports.notices.show("Importing your Splitpage data…");
     var text;
     try { text = await file.text(); } catch (err) {
-      showToast("Could not read that file.", "error");
+      ports.notices.show("Could not read that file.", "error");
       return;
     }
     await importAppData(text);
@@ -430,7 +413,6 @@ async function onImportAppDataChosen(e) {
   }
 }
 
-export function __init() {
   window.__appDataTest = {
     build: buildAppDataBundle,
     assertNoSecrets: assertNoSecrets,
@@ -439,6 +421,20 @@ export function __init() {
     summary: function () { return appDataLastSummary; },
     exportFile: exportAppData,
     exportSummary: function () { return appDataLastExport; },
-    useBlobBackend: function (backend) { setBlobBackend(backend || null); return true; }
+    useBlobBackend: function (backend) { ports.useBlobBackend(backend || null); return true; }
+  };
+  var probe = window.__appDataTest;
+  var disposed = false;
+  return {
+    exportAppData: function () { if (!disposed) return exportAppData(); },
+    openImportAppData: function () { if (!disposed) openImportAppData(); },
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      if (appDataInput) appDataInput.removeEventListener("change", onImportAppDataChosen);
+      appDataInput = null;
+      appDataInputWired = false;
+      if (window.__appDataTest === probe) delete window.__appDataTest;
+    }
   };
 }
