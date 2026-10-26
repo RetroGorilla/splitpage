@@ -1,7 +1,5 @@
 {
   "exceptions": [
-    {"rule":"cycle-edge","source":"src/js/13-hosted.js","target":"src/js/20e-connect.js"},
-    {"rule":"cycle-edge","source":"src/js/20e-connect.js","target":"src/js/13-hosted.js"},
     {"rule":"html-cells","source":"src/legacy/document-ports.ts","target":"src/adapters/richtext/richtext.ts","reason":"builds its own RichText over each migration's image ingestion, which the bridge's shared one cannot take; it moves into the bridge or the composition root when documents open through a session (milestone 3)"},
     {"rule":"legacy-file","source":"src/js/00-prelude.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/02-state.js","target":"src/js"},
@@ -54,7 +52,6 @@
     {"rule":"loop-import","source":"src/js/13-hosted.js","target":"src/js/02b-doc-id.js#copyDocHistorySafe"},
     {"rule":"loop-import","source":"src/js/13-hosted.js","target":"src/js/02b-doc-id.js#migrateDocument"},
     {"rule":"loop-import","source":"src/js/13-hosted.js","target":"src/js/03-sync.js#setBaseState"},
-    {"rule":"loop-import","source":"src/js/13-hosted.js","target":"src/js/20e-connect.js#openPinDialog"},
     {"rule":"loop-import","source":"src/js/13a-presence.js","target":"src/js/13-hosted.js#apiUrl"},
     {"rule":"loop-import","source":"src/js/13a-presence.js","target":"src/js/13-hosted.js#notePresenceRev"},
     {"rule":"loop-import","source":"src/js/13a-presence.js","target":"src/js/13-hosted.js#serverTransport"},
