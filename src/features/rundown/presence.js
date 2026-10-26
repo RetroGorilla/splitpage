@@ -164,7 +164,7 @@ export function paintRundownPresence(seen) {
   placeRundownPresence();
 }
 
-export function __init(given) {
+export function startRundownPresence(given) {
   ports = given;
   activity = idMap();
   lastKey = "";

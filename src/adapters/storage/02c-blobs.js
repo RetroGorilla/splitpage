@@ -270,7 +270,7 @@ function startBlobHydrator() {
   if (initial.length) scheduleHydrate(initial);
 }
 
-export function __init() {
+export function startBlobs() {
   startBlobHydrator();
   window.__blobsTest = {
     intern: function (bytes) { return intern(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || [])); },

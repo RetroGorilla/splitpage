@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { PREF_EVENT, preferences, startPreferences } from "../legacy/preferences-bridge.ts";
-import { mountScriptZoomFeature as __init } from "../bootstrap/wiring/script-zoom.ts";
+import { mountScriptZoomFeature } from "../bootstrap/wiring/script-zoom.ts";
 import { scriptScale, setScriptScale } from "../features/script-zoom/script-zoom.js";
 
 const frames = new Map();
@@ -38,7 +38,7 @@ const stop = startPreferences({
 });
 after(stop);
 document.body.innerHTML = '<div id="root"></div><div id="rows"></div>';
-__init();
+mountScriptZoomFeature();
 
 for (const now of [true, false]) {
   test(`${now ? "immediate" : "animated"} zoom keeps 1.333 and its anchor after saving`, () => {

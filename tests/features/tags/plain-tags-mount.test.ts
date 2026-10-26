@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { __init } from "../../../src/features/tags/plain-tags.js";
+import { startPlainTags } from "../../../src/features/tags/plain-tags.js";
 import type { PlainTagPorts } from "../../../src/features/tags/ports.ts";
-import type { CellChange, CellEdit } from "../../../src/application/editing/cell-editing.ts";
+import type { CellEditResult, CellEdit } from "../../../src/application/editing/cell-editing.ts";
 import { projection } from "../../../src/core/text/runs.ts";
 import type { Run } from "../../../src/core/text/runs.ts";
 import { fakeDocument, fakeTextServices } from "../fakes.ts";
@@ -20,7 +20,7 @@ function fixture(html: string, model: string) {
   win.document.body.innerHTML = '<div id="rows"><div class="cell-editable" data-field="visualText" tabindex="0">' + html + "</div></div>";
   const cell = win.document.querySelector(".cell-editable") as HTMLElement;
   const text = fakeTextServices(win.document);
-  const changes: CellChange[] = [];
+  const changes: CellEditResult[] = [];
   const ports: PlainTagPorts = {
     document: fakeDocument(null).document,
     cells: {
@@ -53,7 +53,7 @@ function typedColon(): Pick<Event, "target"> {
 
 test("plain tags mount with fake ports: the keyword opens, Tab edits through the cells port and the listeners hear it", () => {
   const h = fixture("Shot VFX:", "Shot VFX: flare");
-  const control = __init(h.ports);
+  const control = startPlainTags(h.ports);
   try {
     h.cell.focus();
     caretAt(h.cell.firstChild as Node, 9);
@@ -77,7 +77,7 @@ test("plain tags mount with fake ports: the keyword opens, Tab edits through the
     assert.equal(heard, 1);
     assert.equal(control.isOpen(), false);
     assert.equal(h.changes.length, 1);
-    const change = h.changes[0] as CellChange;
+    const change = h.changes[0] as CellEditResult;
     assert.equal(projection(change.cell), "Shot flare");
     assert.deepEqual(change.sel, { from: 10, to: 10 });
     assert.deepEqual(change.records, { tags: [{ cat: "vfx", name: "flare" }] });
@@ -89,7 +89,7 @@ test("plain tags mount with fake ports: the keyword opens, Tab edits through the
 
 test("a keyword at the start of a text node reads the character before it through the text port", () => {
   const h = fixture("<b>x</b>VFX:", "xVFX:");
-  const control = __init(h.ports);
+  const control = startPlainTags(h.ports);
   try {
     h.cell.focus();
     caretAt(h.cell.lastChild as Node, 4);
@@ -103,7 +103,7 @@ test("a keyword at the start of a text node reads the character before it throug
 
 test("dispose puts an open keyword back and a second mount starts closed", () => {
   const h = fixture("Shot VFX:", "Shot VFX:");
-  const first = __init(h.ports);
+  const first = startPlainTags(h.ports);
   h.cell.focus();
   caretAt(h.cell.firstChild as Node, 9);
   first.maybeOpen(typedColon(), h.cell);
@@ -112,7 +112,7 @@ test("dispose puts an open keyword back and a second mount starts closed", () =>
   first.dispose();
   assert.equal(h.cell.querySelector(".plain-tag-keyword"), null);
   assert.equal(h.cell.textContent, "Shot VFX:");
-  const second = __init(h.ports);
+  const second = startPlainTags(h.ports);
   try {
     assert.equal(second.isOpen(), false);
     assert.equal(second.close(), false);

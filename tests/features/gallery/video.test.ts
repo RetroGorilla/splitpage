@@ -5,7 +5,7 @@ import type { DesktopVideoResult } from "../../../src/application/media/desktop-
 import { migrateRows } from "../../../src/core/migrate.ts";
 import type { GalleryVideoPorts } from "../../../src/features/gallery/ports.ts";
 import type { Step } from "../../../src/core/text/steps.ts";
-import { __init as mountVideo } from "../../../src/features/gallery/video.js";
+import { startGalleryVideo as mountVideo } from "../../../src/features/gallery/video.js";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeOwnership, fakePictures } from "../fakes.ts";
 

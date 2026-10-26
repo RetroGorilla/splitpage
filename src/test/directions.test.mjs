@@ -28,7 +28,7 @@ import { toHtml } from "../core/text/html.ts";
 import { clipboardOfCell } from "../features/clipboard/cell-clipboard.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 
-import { __init as initFind, replaceInHtml } from "../features/find/find.js";
+import { startFind as initFind, replaceInHtml } from "../features/find/find.js";
 initFind({ document: portDocument, edits: portEdits, text: portText, review: portReview, undo: portUndo, notices: portNotices, flags: portFlags });
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";

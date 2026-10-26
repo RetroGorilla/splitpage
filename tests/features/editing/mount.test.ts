@@ -23,7 +23,7 @@ function box(html = "one"): HTMLElement {
 test("draft editing uses the text port and keeps undo, redo and composition local to its box", () => {
   const fake = fakeTextServices(win.document);
   const ports: DraftEditPorts = { text: fake.text };
-  const owner = draft.__init(ports);
+  const owner = draft.startDraftEdit(ports);
   const el = box();
   try {
     draft.noteDraftFocus(el);
@@ -63,14 +63,14 @@ test("owned remount cancels draft timers, clears history and installs the new te
   const cleared = t.mock.method(globalThis, "clearTimeout");
   const first = fakeTextServices(win.document);
   const next = fakeTextServices(win.document);
-  const holder = owned<ReturnType<typeof draft.__init>>();
+  const holder = owned<ReturnType<typeof draft.startDraftEdit>>();
   const el = box();
-  const owner = holder.replace(() => draft.__init({ text: first.text } satisfies DraftEditPorts));
+  const owner = holder.replace(() => draft.startDraftEdit({ text: first.text } satisfies DraftEditPorts));
   try {
     draft.noteDraftFocus(el);
     el.innerHTML = "pending";
     draft.noteDraftInput(el);
-    holder.replace(() => draft.__init({ text: next.text } satisfies DraftEditPorts));
+    holder.replace(() => draft.startDraftEdit({ text: next.text } satisfies DraftEditPorts));
     assert.equal(cleared.mock.callCount(), 1);
     owner.dispose();
     const count = first.calls.length;

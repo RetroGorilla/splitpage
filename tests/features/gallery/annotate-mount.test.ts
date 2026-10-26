@@ -85,7 +85,7 @@ function setup(t: TestContext) {
   const holder: { current: GalleryMount | null } = { current: null };
   const registry = createActionRegistry();
   const unregister = registerAll(registry, galleryActions(() => holder.current));
-  const mount = () => { holder.current = annotate.__init(ports); return holder.current; };
+  const mount = () => { holder.current = annotate.startAnnotate(ports); return holder.current; };
   const loaded = async () => {
     assert.equal(registry.invoke("annotate-picture", "button", { rowId: "r1", slot: 0 }).kind, "ran");
     await settle();

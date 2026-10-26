@@ -7,7 +7,7 @@ import { notices as portNotices } from "./ports/effects.ts";
 import { flags as portFlags } from "./ports/preferences.ts";
 import { screen as portScreen } from "./ports/screen.ts";
 import { findActions as definitions } from "../../features/find/actions.ts";
-import { __init, mountFindEvents } from "../../features/find/find.js";
+import { startFind, mountFindEvents } from "../../features/find/find.js";
 import type { FindControls, FindPorts } from "../../features/find/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
@@ -27,7 +27,7 @@ export function mountFindFeature(): FindControls {
       notices: portNotices,
       flags: portFlags
     };
-    const mounted: FindControls = __init(ports);
+    const mounted: FindControls = startFind(ports);
     let disposed = false;
     return {
       ...mounted,

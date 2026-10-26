@@ -267,7 +267,7 @@ function openPendingServerDocForTab(serverDocId) {
   }
 }
 
-export function __init(given) {
+export function startDesktopView(given) {
   ports = given;
   var mounted = ports;
   return {

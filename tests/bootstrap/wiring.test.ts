@@ -44,7 +44,7 @@ import {
   sessionStarted,
   startSessionBridge
 } from "../../src/legacy/session-bridge.ts";
-import type { ReplayRunner, SessionUndoPorts } from "../../src/legacy/session-bridge.ts";
+import type { SessionReplayRunner, SessionUndoPorts } from "../../src/legacy/session-bridge.ts";
 import { captureOperation, documentSources, documentTransitions, openDocument, startTransitions } from "../../src/legacy/transition-bridge.ts";
 import { createUndoAdapter, routeReplays } from "../../src/legacy/undo-adapter.ts";
 import { sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
@@ -166,7 +166,7 @@ function projectFilePorts(): ProjectFileServices {
 
 interface Fakes {
   readonly log: (readonly [string, Started])[];
-  readonly held: { run: ReplayRunner | null };
+  readonly held: { run: SessionReplayRunner | null };
   readonly live: { exporters: number; undo: number };
   readonly timers: FakeTimers;
   readonly refreshed: string[];
@@ -182,7 +182,7 @@ function fakes(): Fakes {
   const note = (what: string): void => { log.push([what, started()]); };
   const undo: SessionUndoPorts = {
     adapter: { adopt: () => {}, record: () => {}, absorbServer: () => {}, absorbReload: () => {} },
-    route: (run: ReplayRunner) => {
+    route: (run: SessionReplayRunner) => {
       note("undo route");
       counts.undo++;
       held.run = run;
@@ -622,7 +622,7 @@ test("undo teardown: an old uninstall run after a newer installation leaves the 
   const doc = migrateRows({ title: "Undo", rows: [{ id: "r1", visualText: "", audioText: "a", status: "todo" }] });
   liveDocumentPort.assign(doc);
   const ran: string[] = [];
-  const replay = (who: string): ReplayRunner => () => { ran.push(who); return { kind: "noop" }; };
+  const replay = (who: string): SessionReplayRunner => () => { ran.push(who); return { kind: "noop" }; };
   const stamps = { clock: { now: () => "" }, editor: { name: () => "Ann" } } as unknown as StampPorts;
   const unrouteOld = routeReplays(replay("old"), stamps, replay("old"));
   const unrouteNew = routeReplays(replay("new"), stamps, replay("new"));

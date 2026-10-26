@@ -983,7 +983,7 @@ export function renderComments() {
   }
 }
 
-export function __init(nextPorts) {
+export function startComments(nextPorts) {
   ports = nextPorts;
   ports.sort.choose(ports.preferences.commentsSort());
 

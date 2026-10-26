@@ -306,7 +306,7 @@ function tourBack() {
 
 var tourReadMoreLink = null;
 
-export function __init(given) {
+export function startHelp(given) {
   ports = given;
   var guideExisted = document.getElementById("tagging-help-fullguide");
   injectTaggingHelpGuideLink();

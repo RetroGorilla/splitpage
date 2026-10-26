@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import type { TargetPorts } from "../../../src/features/rundown/ports.ts";
-import { __init as mountTarget, paintTargetOverlay, setTargetLength } from "../../../src/features/rundown/target.js";
+import { startTarget as mountTarget, paintTargetOverlay, setTargetLength } from "../../../src/features/rundown/target.js";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices, fakeReview } from "../fakes.ts";
 

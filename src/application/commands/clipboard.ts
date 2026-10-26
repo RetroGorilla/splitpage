@@ -63,14 +63,14 @@ export interface PasteRequest {
   readonly attach: readonly Attachment[];
 }
 
-export interface BrollSeed {
+export interface BrollSeedPlace {
   readonly audioRef: string;
   readonly location: string;
 }
 
 export interface ClipboardPorts extends CellTextPorts {
   readonly ids: Pick<IdSource, "id">;
-  readonly brollSeed: (row: DeepReadonly<DocumentRow>) => BrollSeed;
+  readonly brollSeed: (row: DeepReadonly<DocumentRow>) => BrollSeedPlace;
 }
 
 export interface EditReport {

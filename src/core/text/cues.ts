@@ -1,7 +1,7 @@
 import { CUE_LINE_RE, cellLength, isCueRun, normalizeCell, projection } from "./runs.ts";
 import type { CellInput, Run } from "./runs.ts";
 import { clamp, deleteRange, insertText, replaceText, setMark } from "./edits.ts";
-import type { CellRange } from "./edits.ts";
+import type { TextSpan } from "./edits.ts";
 
 export type CueLine = { from: number; to: number; cue: boolean };
 
@@ -26,7 +26,7 @@ export function cueLines(cell: CellInput): CueLine[] {
   return lines;
 }
 
-function cueNameSpans(runs: readonly Run[], from: number, to: number): CellRange[] {
+function cueNameSpans(runs: readonly Run[], from: number, to: number): TextSpan[] {
   const other: boolean[] = [];
   runs.forEach(function (r) {
     if (r.atom) { other.push(true); return; }
@@ -34,7 +34,7 @@ function cueNameSpans(runs: readonly Run[], from: number, to: number): CellRange
     for (let i = 0; i < r.text.length; i++) other.push(inOther);
   });
   const p = projection(runs);
-  const spans: CellRange[] = [];
+  const spans: TextSpan[] = [];
   let at = -1;
   for (let i = from; i <= to; i++) {
     const plain = i < to && !other[i];
@@ -50,7 +50,7 @@ function cueNameSpans(runs: readonly Run[], from: number, to: number): CellRange
   return spans;
 }
 
-function cueNameOf(p: string, spans: readonly CellRange[]): string {
+function cueNameOf(p: string, spans: readonly TextSpan[]): string {
   return spans.map(function (s) { return p.slice(s.from, s.to); }).join(" ")
     .replace(/\u00a0/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -134,12 +134,12 @@ export function editCues(cell: CellInput, match: (name: string) => unknown, newN
     }
     if (!spans.length) continue;
     for (let k = spans.length - 1; k > 0; k--) {
-      const span = spans[k] as CellRange, before = spans[k - 1] as CellRange;
+      const span = spans[k] as TextSpan, before = spans[k - 1] as TextSpan;
       let from = span.from;
       while (from > before.to && /[ \t\u00a0]/.test(p.charAt(from - 1))) from--;
       out = deleteRange(out, from, span.to);
     }
-    const first = spans[0] as CellRange;
+    const first = spans[0] as TextSpan;
     const at = first.from;
     out = replaceText(out, at, first.to, newName);
     if (at === start) out = insertText(out, at, " ");

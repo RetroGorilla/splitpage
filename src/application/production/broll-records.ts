@@ -8,14 +8,14 @@ import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import type { ProductionRow } from "../../core/production/ports.ts";
 import { addBrollRecord, brollRecord } from "../../core/production/records.ts";
 import type { Run } from "../../core/text/runs.ts";
-import type { BrollSeed } from "../commands/clipboard.ts";
+import type { BrollSeedPlace } from "../commands/clipboard.ts";
 import type { ChangeSet } from "../session/change-set.ts";
 import type { RecordsPlan } from "../session/ports.ts";
 import type { TextServices } from "../text/services.ts";
 
 export type BrollText = Pick<TextServices, "htmlToPlainText" | "productionReaders">;
 
-export function brollSeedOf(row: ProductionRow | null | undefined, text: BrollText): BrollSeed {
+export function brollSeedOf(row: ProductionRow | null | undefined, text: BrollText): BrollSeedPlace {
   return { audioRef: brollSeedRef(row, text.htmlToPlainText), location: brollSeedLocation(row, text.productionReaders) };
 }
 

@@ -22,7 +22,7 @@ export interface NewTabMount {
   readonly dispose: () => void;
 }
 
-export interface Starter {
+export interface StarterChoice {
   readonly id: string;
   readonly name: string;
   readonly desc: string;
@@ -53,7 +53,7 @@ export interface NewTabPorts {
   readonly importText: (options: { readonly intoNewDocument: (rows: unknown[], scan: (document: ValidatedDocument) => void) => void }) => void;
   readonly openFile: () => Promise<unknown>;
   readonly desktopDownload: { readonly url: () => string; readonly offered: () => boolean };
-  readonly starters: readonly Starter[];
-  readonly findStarter: (id: string) => Starter | null | undefined;
+  readonly starters: readonly StarterChoice[];
+  readonly findStarter: (id: string) => StarterChoice | null | undefined;
   readonly recentHandle: (entry: RecentFileData) => { readonly getFile: () => Promise<File> };
 }

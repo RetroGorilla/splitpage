@@ -55,7 +55,7 @@ function touchesGallery(rowId) {
   };
 }
 
-export function __init(ports) {
+export function startGalleryVideo(ports) {
   var testHooks = { fetch: null, bases: null, protocol: null };
 
   function embedRefusal(v) {

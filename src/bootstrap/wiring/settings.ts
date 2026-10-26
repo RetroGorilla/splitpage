@@ -18,7 +18,7 @@ import { actions as portActions } from "./ports/actions.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { changes as portChanges } from "./ports/preferences.ts";
 import { runningOnDesktop } from "../../application/desktop-presence.ts";
-import { __init as mountSettings } from "../../features/settings/settings.js";
+import { startSettings as mountSettings } from "../../features/settings/settings.js";
 import type { SettingsMount, SettingsPorts } from "../../features/settings/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { setHideShotScenes } from "../../legacy/hide-shot-bridge.ts";

@@ -1284,7 +1284,7 @@ function onBrollPageAction(action, btn, exportAs) {
   }
 }
 
-export function __init(nextPorts) {
+export function startBrollPanel(nextPorts) {
   ports = nextPorts;
   ports.view.load();
   window.__brollTest = {
