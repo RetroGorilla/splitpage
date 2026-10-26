@@ -1,3 +1,4 @@
+import { updateControls } from "./update.ts";
 import type { Disposable, Owned } from "../../features/routing/owned.ts";
 import type { NoticesPorts } from "../../features/notices/mount.ts";
 import type { PrompterVisibilityPorts, PrompterOpenPorts, PrompterPorts } from "../../features/prompter/mount.ts";
@@ -118,12 +119,6 @@ import {
   updateSceneReadout,
   updateVoiceAvailability
 } from "../../js/20-teleprompter.js";
-import {
-  dismissDesktopAppNotice,
-  dismissUpdateNotice,
-  loadUpdateStatus,
-  renderDesktopAppNotice
-} from "../../js/20a-update.js";
 import { routeServerOpen } from "./desktop.ts";
 import { finishMarkdownRowChoice } from "../../js/20d-formats.js";
 import { onRootClick, routeRootClick } from "./editor.ts";
@@ -182,10 +177,10 @@ export function mountAppearanceFeature(): ReturnType<typeof mountAppearance> {
 export function mountNoticesFeature(): ReturnType<typeof mountNotices> {
   return replaceViewMount("mountNotices", function () {
     const ports: NoticesPorts = {
-      loadUpdateStatus: loadUpdateStatus,
-      dismissUpdateNotice: dismissUpdateNotice,
-      renderDesktopAppNotice: renderDesktopAppNotice,
-      dismissDesktopAppNotice: dismissDesktopAppNotice
+      loadUpdateStatus: () => updateControls()?.loadUpdateStatus() ?? (() => {}),
+      dismissUpdateNotice: () => { updateControls()?.dismissUpdateNotice(); },
+      renderDesktopAppNotice: () => updateControls()?.renderDesktopAppNotice() ?? (() => {}),
+      dismissDesktopAppNotice: () => { updateControls()?.dismissDesktopAppNotice(); }
     };
     return mountNotices({ window: window, ports: ports });
   });

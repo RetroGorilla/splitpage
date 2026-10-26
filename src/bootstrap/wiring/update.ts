@@ -3,10 +3,28 @@ import { screen as portScreen } from "./ports/screen.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { updateActions as definitions } from "../../features/update/actions.ts";
 import type { UpdatePorts, UpdateStatus } from "../../features/update/ports.ts";
-import { showAbout } from "../../js/20a-update.js";
+import { mountUpdate } from "../../features/update/update.js";
+import type { UpdateMount } from "../../features/update/ports.ts";
+import { owned } from "../../features/routing/owned.ts";
+import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { updatePreferences } from "./ports/preferences.ts";
+import { place } from "./ports/location.ts";
+import { externalLinks } from "./ports/desktop.ts";
+
+const update = owned<UpdateMount>();
+
+export function mountUpdateFeature(): UpdateMount {
+  return update.replace(() => mountUpdate({ updates, preferences: updatePreferences, place, externalLinks, desktop: runningOnDesktop }));
+}
+
+export const stopUpdateFeature = update.stop;
+
+export function updateControls(): UpdateMount | null {
+  return update.owner();
+}
 
 export function updateActions(): ActionDefinition[] {
-  return definitions({ screen: portScreen, showAbout });
+  return definitions({ screen: portScreen, showAbout: () => { update.owner()?.showAbout(); } });
 }
 
 export const updates: UpdatePorts["updates"] = {
