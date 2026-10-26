@@ -5,7 +5,7 @@ import { liveDoc, printData } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { escapeHtml, migrateRows } from "../js/02-state.js";
-import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
+import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { normalizeCell } from "../core/text/runs.ts";
 import { BROLL_MARKER_RE, brollPropKey } from "../core/document/broll.ts";

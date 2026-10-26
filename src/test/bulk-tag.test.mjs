@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeHtml } from "../js/04-richtext.js";
+import { sanitizeHtml } from "../legacy/richtext.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { projection } from "../core/text/runs.ts";
 import { bulkTagCell } from "../js/07-production-tags.js";

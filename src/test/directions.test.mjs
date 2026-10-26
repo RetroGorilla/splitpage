@@ -17,7 +17,7 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
-import { htmlToMarkdown, sanitizeHtml } from "../js/04-richtext.js";
+import { htmlToMarkdown, sanitizeHtml } from "../legacy/richtext.ts";
 import { breakLine, insideDirection, joinCells, replaceText, sliceCell, splitCell, typingMarks } from "../core/text/edits.ts";
 import { cellLength, normalizeCell, projection } from "../core/text/runs.ts";
 import { directionRangeAt, directionShortcut, flattenDirections, importDirections, toggleDirection } from "../core/text/directions.ts";

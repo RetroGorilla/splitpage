@@ -1,7 +1,8 @@
 {
-  "legacyImports": [
-    "./03b-side-panels.js"
+  "legacyImports": [],
+  "loadOnly": [
+    "src/features/panels/script-place.js",
+    "src/bootstrap/wiring/side-panels.ts"
   ],
-  "loadOnly": [],
-  "expectedLoads": 1
+  "expectedLoads": 2
 }
