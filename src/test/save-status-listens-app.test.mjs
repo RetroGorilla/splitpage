@@ -15,7 +15,7 @@ const { autoSavePolicy, confirmSavedNow, saveDoc, unsavedChanges } = await impor
 const { migrateRows } = await import("../js/02-state.js");
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const { titleCommand } = await import("../application/commands/title.ts");
-const { toggleFileMenu } = await import("../js/18b-file-menu.js");
+const { toggleFileMenu } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 const el = (id) => document.getElementById(id);

@@ -1,6 +1,5 @@
 import type { ActionRegistry, RefusalPresenter } from "../application/actions.ts";
 import { handleFileMenuAction, noteFileMenuChoice } from "../js/18-local-files.js";
-import { toggleFileMenu } from "../js/18b-file-menu.js";
 import { exportFormats } from "./export-formats.ts";
 import { availableUnless } from "../application/screen.ts";
 import { screenNow } from "./screen-state.ts";
@@ -28,7 +27,7 @@ function formatRefused(id: string, present: RefusalPresenter): boolean {
   return true;
 }
 
-export function nativeMenuRunner(registry: ActionRegistry, present: RefusalPresenter): (command: string) => boolean {
+export function nativeMenuRunner(registry: ActionRegistry, present: RefusalPresenter, closeFileMenu: () => void): (command: string) => boolean {
   return (command) => {
     const header = HEADER_ACTIONS[command];
     const id = header ?? command;
@@ -37,7 +36,7 @@ export function nativeMenuRunner(registry: ActionRegistry, present: RefusalPrese
     if (view && !view.enabled && !view.reason) return true;
     if (header !== undefined) {
       registry.invoke(id, "native-menu");
-      toggleFileMenu(false);
+      closeFileMenu();
     } else if (isFileMenuItem(id)) {
       handleFileMenuAction(id, "native-menu");
     } else {

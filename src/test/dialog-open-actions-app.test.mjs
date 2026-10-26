@@ -12,7 +12,7 @@ const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const { closeGdocModal } = await import("../js/11-import.js");
 const { preferences } = await import("../legacy/preferences-bridge.ts");
 const { closeSettings, settingsOpen } = await import("../features/settings/settings.js");
-const { fileMenuOpen, toggleFileMenu } = await import("../js/18b-file-menu.js");
+const { fileMenuOpen, toggleFileMenu } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);
