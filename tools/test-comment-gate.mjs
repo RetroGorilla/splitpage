@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from "nod
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { commentsIn } from "./source-scan.mjs";
-import { checkComments, scanFile, run, commentsFor, commentFree, isScanned, REQUIRED_MARKERS } from "./comment-gate.mjs";
+import { checkComments, scanFile, run, commentsFor, commentFree, isScanned, headingAnchors, REQUIRED_MARKERS, DIRECTIVES } from "./comment-gate.mjs";
 import { configKind } from "./config-comments.mjs";
 
 let passed = 0;
@@ -432,6 +432,36 @@ console.log("\nbuild markers:\n");
   eq("files the gate cannot read return null", scanFile("a.md", "<!-- prose -->\n"), null);
 }
 
+console.log("\nreason comments:\n");
+
+{
+  const doc = [
+    "# Saving",
+    "## 4. The save coordinator",
+    "Text.",
+    "```",
+    "# not a heading",
+    "```",
+    "## Flakes, seen",
+    "## Flakes, seen",
+    '<a id="inv-12"></a>'
+  ].join("\n");
+  eq("headings become GitHub anchors, duplicates numbered, fenced lines skipped", [...headingAnchors(doc)].sort(), ["4-the-save-coordinator", "flakes-seen", "flakes-seen-1", "inv-12", "saving"]);
+  const known = (d, a) => d === "docs/saving.md" && headingAnchors(doc).has(a);
+  const scan = (path, text) => scanFile(path, text, REQUIRED_MARKERS, DIRECTIVES, known).map((c) => c.text);
+  eq("a reason comment that names an existing heading passes", scan("src/core/a.ts", "x(); // why: docs/saving.md#4-the-save-coordinator\n"), []);
+  eq("it may carry a short reason", scan("src/features/a.js", "// why: docs/saving.md#inv-12 order matters\nx();\n"), []);
+  eq("a missing heading fails", scan("src/core/a.ts", "// why: docs/saving.md#nope\n"), ["// why: docs/saving.md#nope"]);
+  eq("a missing document fails", scan("src/core/a.ts", "// why: docs/other.md#saving\n"), ["// why: docs/other.md#saving"]);
+  eq("a reason without an anchor fails", scan("src/core/a.ts", "// why: the save order\n"), ["// why: the save order"]);
+  eq("a block comment is never a reason", scan("src/core/a.ts", "/* why: docs/saving.md#saving */\n"), ["/* why: docs/saving.md#saving */"]);
+  eq("a document outside docs/ or the root fails", scan("src/core/a.ts", "// why: src/x.md#saving\n"), ["// why: src/x.md#saving"]);
+  const long = "// why: docs/saving.md#saving " + "x".repeat(120);
+  eq("a reason longer than the limit fails", scan("src/core/a.ts", long + "\n").length, 1);
+  eq("reasons apply only to scripts", scan("a.css", "/* why: docs/saving.md#saving */\n").length, 1);
+  eq("a reason never enters the baseline", checkComments([{ path: "src/js/a.js", text: "// why: docs/saving.md#saving\n" }], { files: {} }, REQUIRED_MARKERS, DIRECTIVES, known).current, {});
+}
+
 console.log("\ncheckComments():\n");
 
 {
@@ -491,6 +521,14 @@ function runIn(repo, mode) {
   mkdirSync(join(repo, "src/core/text"), { recursive: true });
   writeFileSync(join(repo, "src/core/text/runs.ts"), "export const a = 1; // no\n");
   eq("a comment in a migrated folder fails", runIn(repo, "check").code, 1);
+}
+
+{
+  const repo = repoWith({ "docs/a.md": "# Order\n", "src/core/r.ts": "x(); // why: docs/a.md#order\n" });
+  eq("run() resolves reason comments against the repository", runIn(repo, "check").code, 0);
+  writeFileSync(join(repo, "docs/a.md"), "# Renamed\n");
+  const broken = runIn(repo, "check");
+  check("a renamed heading fails the reason that named it, and says how to write one", broken.code === 1 && broken.err.includes("src/core/r.ts:1 // why: docs/a.md#order") && broken.err.includes("its heading must exist"), broken.err);
 }
 
 {
