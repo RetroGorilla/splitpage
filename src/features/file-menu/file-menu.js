@@ -1,30 +1,24 @@
-import { IS_MAC, keyChipWords, keyChipsHtml } from "../features/common/key-chips.js";
-import { currentDocument } from "../legacy/session-bridge.ts";
-import { currentHome, reviewMode, serverStatus } from "../legacy/location-bridge.ts";
-import { savedStatusText, savedWhenText } from "../../shared/clock.js";
-import { escapeHtml, makeId, migrateRows } from "./02-state.js";
-import { syncDocIdentity } from "./02b-doc-id.js";
-import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
-import { applyReviewMode } from "./13-hosted.js";
-import { canOpenPrompterInBrowser, canOpenPrompterInChromium } from "../adapters/desktop/desktop-port.ts";
-import { sidePanels } from "../legacy/panels-bridge.ts";
-import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
-import { LONG_DEMO } from "./_starters.js";
-import { documentTransitions, keepSnapshot, openDocument } from "../legacy/transition-bridge.ts";
-import { NO_DESTINATION } from "../application/transitions/ports.ts";
-import { setMenuItemReason, showToast } from "../legacy/effects-bridge.ts";
-import { confirmSavedNow, saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
-import { desktopPort } from "../adapters/desktop/desktop-port.ts";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
-import { preferences } from "../legacy/preferences-bridge.ts";
+import { IS_MAC, keyChipWords, keyChipsHtml } from "../common/key-chips.js";
+import { savedStatusText, savedWhenText } from "../../../shared/clock.js";
+import { escapeHtml } from "../../core/document/text-policy.ts";
+import { NO_DESTINATION } from "../../application/transitions/ports.ts";
+
+var ports = null;
+var activeMount = null;
+var listeners = [];
+
+function listen(target, type, listener) {
+  target.addEventListener(type, listener);
+  listeners.push(function () { target.removeEventListener(type, listener); });
+}
 
 function el(id) { return document.getElementById(id); }
 
 var ARIA_KEYS = { mod: IS_MAC ? "Meta" : "Control", shift: "Shift", alt: "Alt" };
 
-export function keysWorkHere(item) {
+function keysWorkHere(item) {
   var only = item.getAttribute("data-keys-only");
-  return !only || (only === "desktop" && runningOnDesktop());
+  return !only || (only === "desktop" && ports.desktop());
 }
 
 function renderKeyChips(root) {
@@ -78,32 +72,32 @@ export function timeAgo(at, now) {
 }
 
 function savedWord(at) {
-  if (saveBusy()) return { text: "Saving…" };
-  if (unsavedChanges()) return { text: "Unsaved changes", unsaved: true };
+  if (ports.saves.busy()) return { text: "Saving…" };
+  if (ports.saves.unsaved()) return { text: "Unsaved changes", unsaved: true };
   var now = Date.now();
-  var when = at ? savedWhenText(at, now, preferences().clock()) : "";
+  var when = at ? savedWhenText(at, now, ports.preferences.clock()) : "";
   return { text: savedStatusText(at, now), title: when ? "Last saved at " + when : "" };
 }
 
-export function fileCardView() {
-  if (!currentDocument()) return { name: "Loading…", bits: [] };
-  if (currentHome().kind === "server") {
-    var srv = serverStatus().sessionExpired() ? { text: "Signed out — reload to sign in", unsaved: true }
-      : serverStatus().linkTurnedOff() ? { text: "Link turned off — not saving", unsaved: true }
+function fileCardView() {
+  if (!ports.document.current()) return { name: "Loading…", bits: [] };
+  if (ports.place.home().kind === "server") {
+    var srv = ports.place.sessionExpired() ? { text: "Signed out — reload to sign in", unsaved: true }
+      : ports.place.linkTurnedOff() ? { text: "Link turned off — not saving", unsaved: true }
       : savedWord(null);
-    return { name: currentDocument().title || "Untitled Script", bits: [srv, { text: "On the server · v" + currentHome().rev }] };
+    return { name: ports.document.current().title || "Untitled Script", bits: [srv, { text: "On the server · v" + ports.place.home().rev }] };
   }
-  if (currentHome().kind === "file") {
+  if (ports.place.home().kind === "file") {
     return {
-      name: currentHome().name || (currentHome().handle && currentHome().handle.name) || "Untitled",
-      bits: [savedWord(currentHome().lastModified), { text: FORMAT_NAMES[currentHome().format] || currentHome().format }]
+      name: ports.place.home().name || (ports.place.home().handle && ports.place.home().handle.name) || "Untitled",
+      bits: [savedWord(ports.place.home().lastModified), { text: FORMAT_NAMES[ports.place.home().format] || ports.place.home().format }]
     };
   }
-  if (currentHome().kind === "import") {
+  if (ports.place.home().kind === "import") {
     return {
-      name: currentHome().name,
-      bits: [currentHome().dirty ? { text: "Not written back yet", unsaved: true } : { text: "Up to date" },
-             { text: FORMAT_NAMES[currentHome().format] || currentHome().format }]
+      name: ports.place.home().name,
+      bits: [ports.place.home().dirty ? { text: "Not written back yet", unsaved: true } : { text: "Up to date" },
+             { text: FORMAT_NAMES[ports.place.home().format] || ports.place.home().format }]
     };
   }
   return { name: "Not saved yet", bits: [{ text: "Save to choose where it’s kept" }] };
@@ -123,19 +117,19 @@ function refreshFileCard() {
 }
 
 function recentsSupported() {
-  return !!(runningOnDesktop() && typeof desktopPort().listRecents === "function");
+  return !!(ports.desktop() && ports.recents.available());
 }
 
-export function pasteItemState() {
-  var viewing = reviewMode();
+function pasteItemState() {
+  var viewing = ports.review.reviewing();
   return { hidden: false, disabled: viewing, reason: viewing ? "Viewing only — you can comment, but not change the script" : "" };
 }
 
-export function refreshFileMenu() {
+function refreshFileMenu() {
   var presentBrowser = el("menu-present-browser");
-  if (presentBrowser) presentBrowser.hidden = !canOpenPrompterInBrowser();
+  if (presentBrowser) presentBrowser.hidden = !ports.canOpenPrompter.browser();
   var presentChromium = el("menu-present-chromium");
-  if (presentChromium) presentChromium.hidden = !canOpenPrompterInChromium();
+  if (presentChromium) presentChromium.hidden = !ports.canOpenPrompter.chromium();
   var recent = el("menu-recent");
   if (recent) recent.hidden = !recentsSupported();
 
@@ -143,7 +137,7 @@ export function refreshFileMenu() {
   if (paste) {
     var pasteState = pasteItemState();
     paste.disabled = pasteState.disabled;
-    setMenuItemReason(paste, pasteState.reason);
+    ports.menuItems.setReason(paste, pasteState.reason);
   }
 
   refreshFileCard();
@@ -156,13 +150,13 @@ export function refreshFileMenu() {
   });
 }
 
-export function refreshOpenFileMenu() {
+function refreshOpenFileMenu() {
   var menu = el("file-menu");
   if (menu && !menu.hidden) refreshFileMenu();
 }
 
 var extraRefreshers = [];
-export function onFileMenuRefresh(fn) {
+function onFileMenuRefresh(fn) {
   extraRefreshers.push(fn);
   return function () {
     var index = extraRefreshers.indexOf(fn);
@@ -191,7 +185,7 @@ function positionMenu() {
   if (over > 0) menu.style.left = -Math.min(over, Math.max(0, wrap.left - 12)) + "px";
 }
 
-export function toggleFileMenu(force, opts) {
+function toggleFileMenu(force, opts) {
   opts = opts || {};
   var menu = el("file-menu");
   var btn = el("btn-file");
@@ -220,7 +214,7 @@ export function toggleFileMenu(force, opts) {
   }
 }
 
-export function fileMenuOpen() {
+function fileMenuOpen() {
   var menu = el("file-menu");
   return !!menu && !menu.hidden;
 }
@@ -234,7 +228,7 @@ function closeSubmenus(except) {
   });
 }
 
-export function toggleSubmenu(name, force, focusFirst) {
+function toggleSubmenu(name, force, focusFirst) {
   var parent = document.querySelector('#file-menu .mi-parent[data-submenu="' + name + '"]');
   var sub = parent && el(parent.getAttribute("aria-controls"));
   if (!sub) return;
@@ -257,8 +251,10 @@ function formatRecentWhen(at) {
 async function refreshRecents(focusFirst) {
   var sub = el("menu-sub-recent");
   if (!sub || !recentsSupported()) return;
+  var mounted = activeMount;
   var entries;
-  try { entries = await desktopPort().listRecents(); } catch (e) { entries = []; }
+  try { entries = await ports.recents.list(); } catch (e) { entries = []; }
+  if (activeMount !== mounted) return;
   if (!Array.isArray(entries)) entries = [];
   if (!entries.length) {
     sub.innerHTML = '<div class="menu-sub-empty">Nothing yet — what you open shows up here.</div>';
@@ -280,37 +276,43 @@ async function refreshRecents(focusFirst) {
 
 async function openRecentFile(fileId) {
   if (!fileId || !recentsSupported()) return;
+  var mounted = activeMount;
   var entry;
   try {
-    var r = await desktopPort().routeOpen({ kind: "file", fileId: fileId });
+    var r = await ports.recents.routeOpen({ kind: "file", fileId: fileId });
+    if (activeMount !== mounted) return;
     if (!r || r.where !== "this-tab") return;
-    entry = await desktopPort().readFile(fileId);
+    entry = await ports.recents.read(fileId);
   } catch (e) {
-    showToast("That file isn't there any more — it may have been moved or deleted.", "warn");
+    if (activeMount !== mounted) return;
+    ports.notices.show("That file isn't there any more — it may have been moved or deleted.", "warn");
     return;
   }
-  var handle = makeDesktopHandle(entry);
-  await openDocument({ kind: "file", file: await handle.getFile(), handle: handle });
+  if (activeMount !== mounted) return;
+  var handle = ports.recentHandle(entry);
+  var file = await handle.getFile();
+  if (activeMount !== mounted) return;
+  await ports.opening.open({ kind: "file", file: file, handle: handle });
 }
 
-export function startNewScript() {
-  if (!currentDocument()) { showToast("Still loading…", "warn"); return false; }
-  var kept = replaceWithNewDocument(migrateRows({
+function startNewScript() {
+  if (!ports.document.current()) { ports.notices.show("Still loading…", "warn"); return false; }
+  var kept = replaceWithNewDocument(ports.prepareDocument({
     title: "Untitled Script",
-    rows: [{ id: makeId("r"), visualText: "", imageRef: null, audioText: "" }],
-    wordsPerMinute: preferences().defaultWpm()
+    rows: [{ id: ports.ids.id("r"), visualText: "", imageRef: null, audioText: "" }],
+    wordsPerMinute: ports.preferences.defaultWpm()
   }), "startNewScript: a new blank document", "Before starting a new script");
   var first = document.querySelector('#rows .row .audio-cell .cell-editable');
   if (first) first.focus();
-  showToast(kept ? "New script — the one before is in Version history." : "New script.", "ok");
+  ports.notices.show(kept ? "New script — the one before is in Version history." : "New script.", "ok");
   return true;
 }
 
-export function openLongDemo() {
-  if (!currentDocument()) { showToast("Still loading…", "warn"); return false; }
-  var kept = replaceWithNewDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))),
+function openLongDemo() {
+  if (!ports.document.current()) { ports.notices.show("Still loading…", "warn"); return false; }
+  var kept = replaceWithNewDocument(ports.prepareDocument(JSON.parse(JSON.stringify(ports.longDemo.state))),
     "openLongDemo: a new copy of the long demo", "Before opening the long demo");
-  showToast("The long demo — " + LONG_DEMO.state.rows.length + " scenes, not saved anywhere yet." +
+  ports.notices.show("The long demo — " + ports.longDemo.state.rows.length + " scenes, not saved anywhere yet." +
     (kept ? " The script before is in Version history." : ""), "ok");
   return true;
 }
@@ -318,14 +320,14 @@ export function openLongDemo() {
 function replaceWithNewDocument(next, reason, keepLabel) {
   var active = document.activeElement;
   if (active && active !== document.body && typeof active.blur === "function") active.blur();
-  var kept = currentDocument().rows.length ? keepSnapshot(keepLabel) : null;
-  if (kept) keepSnapshot(keepLabel, Object.assign({}, currentDocument(), { docId: next.docId }));
-  resetProductionPanelState();
-  documentTransitions().startNew({ from: { document: next }, reason: reason, destination: NO_DESTINATION });
-  confirmSavedNow();
-  applyReviewMode();
-  if (typeof syncDocIdentity === "function") syncDocIdentity();
-  sidePanels().close("newtab-page");
+  var kept = ports.document.current().rows.length ? ports.history.keep(keepLabel) : null;
+  if (kept) ports.history.keep(keepLabel, Object.assign({}, ports.document.current(), { docId: next.docId }));
+  ports.resetProductionPanel();
+  ports.transitions.startNew({ from: { document: next }, reason: reason, destination: NO_DESTINATION });
+  ports.saving.confirmSavedNow();
+  ports.applyReviewMode();
+  if (typeof ports.syncIdentity === "function") ports.syncIdentity();
+  ports.panels.close("newtab-page");
   return kept;
 }
 
@@ -376,12 +378,12 @@ function onMenuKeydown(e) {
   }
 }
 
-export function __init() {
+function wireMenu() {
   var menu = el("file-menu");
   var btn = el("btn-file");
   if (!menu || !btn) return;
-  menu.addEventListener("keydown", onMenuKeydown);
-  btn.addEventListener("keydown", function (e) {
+  listen(menu, "keydown", onMenuKeydown);
+  listen(btn, "keydown", function (e) {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
     toggleFileMenu(true, { focusFirst: true });
@@ -389,7 +391,7 @@ export function __init() {
   });
   var recent = el("menu-sub-recent");
   if (recent) {
-    recent.addEventListener("click", function (e) {
+    listen(recent, "click", function (e) {
       var item = e.target.closest("[data-recent-id]");
       if (!item) return;
       e.stopPropagation();
@@ -397,7 +399,7 @@ export function __init() {
       openRecentFile(item.getAttribute("data-recent-id"));
     });
   }
-  window.addEventListener("resize", function () { if (fileMenuOpen()) positionMenu(); });
+  listen(window, "resize", function () { if (fileMenuOpen()) positionMenu(); });
   renderKeyChips(menu);
   var search = el("btn-command");
   if (search && search.parentElement) renderKeyChips(search.parentElement);
@@ -407,5 +409,38 @@ export function __init() {
     timeAgo: timeAgo,
     keyChipWords: keyChipWords,
     navigable: function () { return navigableItems().map(function (b) { return b.getAttribute("data-file-action") || b.getAttribute("data-submenu") || b.getAttribute("data-recent-id") || ""; }); }
+  };
+}
+
+export function __init(given) {
+  ports = given;
+  var mounted = {};
+  activeMount = mounted;
+  wireMenu();
+  var probe = window.__fileMenuTest;
+  var disposed = false;
+  function live(fn) {
+    return function () { return disposed ? undefined : fn.apply(null, arguments); };
+  }
+  return {
+    toggleFileMenu: live(toggleFileMenu),
+    fileMenuOpen: function () { return !disposed && fileMenuOpen(); },
+    toggleSubmenu: live(toggleSubmenu),
+    refreshFileMenu: live(refreshFileMenu),
+    refreshOpenFileMenu: live(refreshOpenFileMenu),
+    onFileMenuRefresh: onFileMenuRefresh,
+    pasteItemState: function () { return pasteItemState(); },
+    startNewScript: function () { return disposed ? false : startNewScript(); },
+    openLongDemo: function () { return disposed ? false : openLongDemo(); },
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      while (listeners.length) listeners.pop()();
+      if (probe && window.__fileMenuTest === probe) delete window.__fileMenuTest;
+      if (activeMount === mounted) {
+        activeMount = null;
+        ports = null;
+      }
+    }
   };
 }

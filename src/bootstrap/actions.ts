@@ -11,7 +11,8 @@ import { showRefusal } from "../js/12-dirty-toast.js";
 import { runMenuCommandsWith } from "../application/desktop/menu-commands.ts";
 import { editorOpenActions } from "../legacy/editor-open-actions.ts";
 import { videoFiles } from "./wiring/video-files.ts";
-import { fileActions } from "../legacy/file-actions.ts";
+import { fileMenuActions } from "./wiring/file-menu.ts";
+import { toggleFileMenu } from "./wiring/file-menu-controls.ts";
 import { helpMenuActions } from "../legacy/help-actions.ts";
 import { nativeMenuRunner } from "../legacy/native-menu.ts";
 import { shareActions } from "../legacy/share-actions.ts";
@@ -40,8 +41,8 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => registry.presentRefusals(presentRefusal),
     () => registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]),
     () => {
-      const menu = fileActions();
-      return registerAll(registry, [...menu.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...menu.slice(3)]);
+      const menu = fileMenuActions();
+      return registerAll(registry, [...menu.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...menu.slice(3, 4)]);
     },
     () => {
       const views = viewActions();
@@ -49,11 +50,12 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     },
     () => {
       const menu = helpMenuActions();
-      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 4), ...onboardingActions(), ...updateActions(), ...commentsHelpActions(), ...appDataActions(), ...menu.slice(4)]);
+      return registerAll(registry, [...menu, ...helpActions(), ...fileMenuActions().slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions(), ...appDataActions()]);
     },
     () => {
       const share = shareActions();
-      return registerAll(registry, [...share.slice(0, 11), ...fileMenuExportActions().slice(1), ...share.slice(11), ...desktopActions()]);
+      const file = fileMenuActions();
+      return registerAll(registry, [...share.slice(0, 2), ...file.slice(4, 5), ...share.slice(2, 3), ...file.slice(5, 6), ...share.slice(3, 9), ...fileMenuExportActions().slice(1), ...share.slice(9), ...desktopActions()]);
     },
     () => registerAll(registry, scriptZoomActions()),
     () => {
@@ -61,7 +63,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
       return registerAll(registry, [...rundownSceneActions(), ...galleryActions(), ...openers.slice(0, 1), ...commentsOpenActions(), ...openers.slice(1)]);
     },
     () => registerAll(registry, rowsActions()),
-    () => runMenuCommandsWith(nativeMenuRunner(registry, presentRefusal)),
+    () => runMenuCommandsWith(nativeMenuRunner(registry, presentRefusal, () => { toggleFileMenu(false); })),
     () => mountShortcuts({ target: keyTarget, registry })
   ];
   const disposers: (() => void)[] = [];

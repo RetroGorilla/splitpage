@@ -1,13 +1,14 @@
 {
-  "legacyImports": [
-    "./18b-file-menu.js"
-  ],
+  "legacyImports": [],
   "loadOnly": [
     "src/features/file-menu/export-dialog.js",
+    "src/features/file-menu/file-menu.js",
     "src/features/file-menu/actions.ts",
     "src/features/file-menu/ports.ts",
     "src/bootstrap/wiring/file-menu-export.ts",
-    "src/bootstrap/wiring/file-menu-export-controls.ts"
+    "src/bootstrap/wiring/file-menu-export-controls.ts",
+    "src/bootstrap/wiring/file-menu.ts",
+    "src/bootstrap/wiring/file-menu-controls.ts"
   ],
-  "expectedLoads": 6
+  "expectedLoads": 8
 }

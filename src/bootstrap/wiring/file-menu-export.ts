@@ -14,8 +14,7 @@ import { __init as mountExportDialog } from "../../features/file-menu/export-dia
 import type { FileMenuExportMount, FileMenuExportPorts } from "../../features/file-menu/ports.ts";
 import { captureExportDocument as capture } from "../../js/14b-export-kit.js";
 import { exportBaseName, exportFileName, handleFileMenuAction, runExportAction } from "../../js/18-local-files.js";
-import { fileMenuOpen, onFileMenuRefresh, toggleFileMenu } from "../../js/18b-file-menu.js";
-
+import { fileMenuOpen, onFileMenuRefresh, toggleFileMenu } from "./file-menu-controls.ts";
 import { fileMenuExport as dialog } from "./file-menu-export-controls.ts";
 
 export function mountFileMenuExportFeature(): FileMenuExportMount {
