@@ -1,6 +1,5 @@
 import type { ActionDefinition, Availability } from "../application/actions.ts";
 import { openSettings, settingsAction } from "../application/settings-actions.ts";
-import { openLongDemo } from "../js/18b-file-menu.js";
 import { openServersDialog, serversMenuLabel } from "../js/20e-connect.js";
 import { OPENS_A_DIALOG, availableUnless } from "../application/screen.ts";
 import { onlyDialogOpen } from "./screen.ts";
@@ -32,15 +31,7 @@ export function helpMenuActions(): ActionDefinition[] {
       availability: () => ({ enabled: true, visible: false }),
       run: () => { openServersDialog(); }
     },
-    settingsAction(() => ({ openSettings }), screenNow),
-    {
-      id: "long-demo",
-      label: "Open the long demo (30 scenes)",
-      group: "Help",
-      icon: "i-file-plus",
-      words: "demo example sample long thirty 30 scenes test try every feature",
-      run: () => { openLongDemo(); }
-    }
+    settingsAction(() => ({ openSettings }), screenNow)
   ];
   return definitions;
 }

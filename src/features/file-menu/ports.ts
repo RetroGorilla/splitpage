@@ -1,9 +1,20 @@
+import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { MenuItemPort, NoticePort } from "../../application/effects/ports.ts";
 import type { ExportCardDecl, ExportChoice, ExportRegistry, FileNameOptions } from "../../application/export/registry.ts";
+import type { RecentFileData, RecentFiles } from "../../application/files/recent-files.ts";
+import type { DocumentPlace } from "../../application/location/document-place.ts";
+import type { Preferences } from "../../application/preferences/preferences.ts";
+import type { SaveConfirmation, SaveState } from "../../application/save/save-state.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
+import type { SidePanels } from "../../application/side-panels.ts";
 import type { TextServices } from "../../application/text/services.ts";
+import type { DocumentDestination, HistoryPort } from "../../application/transitions/ports.ts";
+import type { DocumentOpening } from "../../application/transitions/sources.ts";
+import type { Transitions } from "../../application/transitions/transitions.ts";
+import type { IdSource } from "../../core/document/ports.ts";
 import type { ExportCaptureOptions, ExportDocument } from "../../core/document/export-document.ts";
+import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { DocxRun } from "../../core/text/projections.ts";
 
 export interface ExportPreviewPort {
@@ -86,4 +97,60 @@ export interface FileMenuExportMount extends FileMenuExportControls {
 export interface FileMenuExportActionPorts {
   readonly screen: () => ScreenState;
   readonly closeMenu: () => void;
+}
+
+export interface MenuItemState {
+  readonly hidden: boolean;
+  readonly disabled: boolean;
+  readonly reason: string;
+}
+
+export interface FileMenuControls {
+  readonly toggleFileMenu: (force?: boolean, options?: { focusFirst?: boolean; returnFocus?: boolean }) => void;
+  readonly fileMenuOpen: () => boolean;
+  readonly toggleSubmenu: (name: string | null, force?: boolean, focusFirst?: boolean) => void;
+  readonly refreshFileMenu: () => void;
+  readonly refreshOpenFileMenu: () => void;
+  readonly onFileMenuRefresh: (listener: () => void) => () => void;
+  readonly pasteItemState: () => MenuItemState;
+  readonly startNewScript: () => boolean;
+  readonly openLongDemo: () => boolean;
+}
+
+export interface FileMenuDropdownMount extends FileMenuControls {
+  readonly dispose: () => void;
+}
+
+export interface FileMenuDropdownPorts {
+  readonly document: Pick<DocumentReader, "current">;
+  readonly place: Pick<DocumentPlace, "home" | "sessionExpired" | "linkTurnedOff">;
+  readonly review: Pick<ReviewFacts, "reviewing">;
+  readonly desktop: () => boolean;
+  readonly recents: Pick<RecentFiles, "available" | "list" | "routeOpen" | "read">;
+  readonly recentHandle: (entry: RecentFileData) => { readonly getFile: () => Promise<File> };
+  readonly canOpenPrompter: { readonly browser: () => boolean; readonly chromium: () => boolean };
+  readonly opening: DocumentOpening;
+  readonly transitions: Pick<Transitions<DocumentDestination>, "startNew">;
+  readonly history: HistoryPort;
+  readonly notices: Pick<NoticePort, "show">;
+  readonly menuItems: Pick<MenuItemPort<Element>, "setReason">;
+  readonly saves: Pick<SaveState, "busy" | "unsaved">;
+  readonly saving: SaveConfirmation;
+  readonly preferences: Pick<Preferences, "defaultWpm" | "clock">;
+  readonly panels: Pick<SidePanels, "close">;
+  readonly resetProductionPanel: () => void;
+  readonly ids: Pick<IdSource, "id">;
+  readonly prepareDocument: (raw: unknown) => ValidatedDocument;
+  readonly syncIdentity: () => void;
+  readonly applyReviewMode: () => void;
+  readonly longDemo: { readonly state: { readonly title: string; readonly rows: readonly unknown[] } };
+}
+
+export interface FileMenuActionPorts {
+  readonly screen: () => ScreenState;
+  readonly desktop: () => boolean;
+  readonly saves: Pick<SaveState, "busy">;
+  readonly save: (options?: { saveAs?: boolean }) => Promise<void>;
+  readonly openFile: () => Promise<unknown>;
+  readonly openImport: () => void;
 }

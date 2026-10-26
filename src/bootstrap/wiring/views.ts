@@ -93,7 +93,7 @@ import {
   showFileConflictView
 } from "../../js/18-local-files.js";
 import { cancelMergeReview, confirmFileMerge, openMergeReview } from "../../js/18a-local-merge.js";
-import { toggleFileMenu, toggleSubmenu } from "../../js/18b-file-menu.js";
+import { toggleFileMenu, toggleSubmenu } from "./file-menu-controls.ts";
 import { applyWriterSize, closeWriter, jumpFromWriterToRow } from "../../js/19-writer.js";
 import {
   acquireWakeLock,
