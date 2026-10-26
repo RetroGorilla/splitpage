@@ -2,6 +2,7 @@ import { mountBrollPanelFeature } from "./broll.ts";
 import { __init as mountPanelState } from "../../features/tags/panels.js";
 import type { TagPanelMount, TagPanelPorts } from "../../features/tags/ports.ts";
 import { tagPanelActions as panelDefinitions } from "../../features/tags/actions.ts";
+import * as tagPanelCommands from "../../application/tag-panel-commands.ts";
 import { installTagPanelCommands } from "../../application/tag-panel-commands.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits, productionSelection as portSelection, undoControl as portUndo } from "./ports/editing.ts";
@@ -19,7 +20,7 @@ import type { TagsPorts } from "../../features/tags/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runFromButton } from "../../legacy/app-actions.ts";
 import { sidePanels } from "../../legacy/panels-bridge.ts";
-import { mountTags } from "../../features/tags/mount.ts";
+import { mountTagEntityContainer, mountTags } from "../../features/tags/mount.ts";
 import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
 import { cssAttr } from "../../features/common/dom.ts";
 import {
@@ -58,7 +59,8 @@ import {
 } from "../../features/tags/panels.js";
 import { queueAutoSave } from "../../legacy/save-bridge.ts";
 import { exportAs, runExport } from "../../js/18-local-files.js";
-import { wireTagEntityContainer } from "../../js/20-teleprompter.js";
+import { createTagEntityContainer, installTagEntityContainerFactory } from "../../legacy/tag-entity-container.ts";
+import { saves as portSaves } from "./ports/saving.ts";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";
 import { productionGroupBy, setGearGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey } from "../../application/tag-panel-state.ts";
 import { reviewBlocked, reviewMode } from "../../legacy/location-bridge.ts";
@@ -76,7 +78,26 @@ export function mountTagPanelsFeature(): TagPanelMount {
       notices: portNotices, review: portReview, undo: portUndo, ids: portIds
     };
     return mountPanelState(ports);
-  }, (owner) => [() => installTagPanelCommands(owner)]);
+  }, (owner) => [
+    () => installTagPanelCommands(owner),
+    () => installTagEntityContainerFactory((id, rootClick) => mountTagEntityContainer({
+      window: window,
+      id: id,
+      ports: {
+        rootClick: rootClick,
+        reviewMode: portReview.reviewing,
+        reviewBlocked: portReview.refuseInReview,
+        renderProduction: tagPanelCommands.renderProduction,
+        saveTagRename: (key) => tagPanelCommands.saveTagRename(key as string),
+        addPersonForTag: (key) => tagPanelCommands.addPersonForTag(key as string),
+        setRenaming: portView.setTagRenaming,
+        setAddingPerson: portView.setTagAddingPerson,
+        setTagOwner: (key, value) => tagPanelCommands.setTagOwner(key as string, value),
+        setTagNotes: (key, value) => tagPanelCommands.setTagNotes(key as string, value),
+        queueAutoSave: portSaves.dueNow
+      }
+    }))
+  ]);
 }
 
 export const stopTagPanelsFeature = panelState.stop;
@@ -144,7 +165,7 @@ export function mountTagsFeature(): ReturnType<typeof mountTags> {
       setProductionGroup: function (value) { setProductionGroupBy(value as string); },
       setGearGroup: function (value) { setGearGroupBy(value as string); },
       capture: function () { const context = captureOperation(); return function () { return stillOwns(context); }; },
-      installEntity: function (id) { return wireTagEntityContainer(id, onRootClick); }
+      installEntity: function (id) { return createTagEntityContainer(id, onRootClick); }
     };
     return mountTags({ window: window, ports: ports });
   }, function (owner) {
