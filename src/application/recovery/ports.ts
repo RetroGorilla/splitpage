@@ -1,5 +1,3 @@
-import type { OperationContext } from "../session/operation.ts";
-
 export interface DraftWrite {
   readonly key: string;
   readonly base?: string | undefined;
@@ -71,9 +69,4 @@ export interface DesktopDraftStore {
   readonly taker: () => (() => Promise<unknown>) | null;
   readonly restoreDone: (outcome: string) => void;
   readonly hasDraftToRestore: () => boolean;
-}
-
-export interface DraftOwnershipPort {
-  readonly capture: () => OperationContext;
-  readonly stillOwns: (ctx: OperationContext) => boolean;
 }

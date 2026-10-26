@@ -6,7 +6,7 @@ import type { DeleteConfirm } from "../../application/editing/delete-confirm.ts"
 import type { EditorSelectionPort } from "../../application/editing/selection.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { Preferences } from "../../application/preferences/preferences.ts";
-import type { SaveOwnershipPort } from "../../application/save/coordinator.ts";
+import type { Operations } from "../../application/session/operation.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
@@ -30,7 +30,7 @@ export interface CommentStatePorts {
   readonly saves: Pick<SaveState, "resume" | "dueNow">;
   readonly selection: EditorSelectionPort;
   readonly deletion: Pick<DeleteConfirm, "armedId" | "arm" | "disarm">;
-  readonly ownership: SaveOwnershipPort;
+  readonly ownership: Operations;
   readonly history: HistoryPort;
   readonly presence: Pick<Presence, "personColor">;
   readonly shots: Pick<ShotHiding, "reveal">;

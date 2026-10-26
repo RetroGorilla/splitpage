@@ -1,12 +1,11 @@
-import type { OperationContext } from "../session/operation.ts";
-import type { DraftOwnershipPort } from "./ports.ts";
+import type { OperationContext, Operations } from "../session/operation.ts";
 
 function onServer(destination: unknown): boolean {
   return typeof destination === "object" && destination !== null &&
     (destination as { readonly kind?: unknown }).kind === "server";
 }
 
-export function restoreOwnership(ownership: DraftOwnershipPort): DraftOwnershipPort {
+export function restoreOwnership(ownership: Operations): Operations {
   return Object.freeze({
     capture: ownership.capture,
     stillOwns: function (ctx: OperationContext): boolean {

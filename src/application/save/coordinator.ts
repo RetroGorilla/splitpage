@@ -1,4 +1,4 @@
-import type { OperationContext } from "../session/operation.ts";
+import type { OperationContext, Operations } from "../session/operation.ts";
 import type { FileConflict } from "./file-conflict.ts";
 
 export interface DestinationKey {
@@ -29,11 +29,6 @@ export interface SaveJob<R> {
   readonly moved: () => void;
 }
 
-export interface SaveOwnershipPort {
-  readonly capture: () => OperationContext;
-  readonly stillOwns: (ctx: OperationContext) => boolean;
-}
-
 export interface SaveDestinationPort {
   readonly current: () => unknown;
   readonly keyOf: (identity: unknown) => DestinationKey;
@@ -48,7 +43,7 @@ export interface SaveReportPort<R> {
 }
 
 export interface SaveCoordinatorPorts<R> {
-  readonly ownership: SaveOwnershipPort;
+  readonly ownership: Operations;
   readonly destination: SaveDestinationPort;
   readonly writer: SaveWriterPort<R>;
   readonly report: SaveReportPort<R>;

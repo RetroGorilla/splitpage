@@ -1,3 +1,4 @@
+import type { Operations } from "../application/session/operation.ts";
 import { createAutoSavePolicy } from "../application/save/autosave.ts";
 import type { AutoSaveChange, AutoSavePolicy } from "../application/save/autosave.ts";
 import { createSaveCoordinator } from "../application/save/coordinator.ts";
@@ -7,7 +8,6 @@ import type {
   SaveCoordinator,
   SaveJob,
   SaveOutcome,
-  SaveOwnershipPort,
   WriterResult
 } from "../application/save/coordinator.ts";
 import { createSaveDestinations } from "../application/save/destinations.ts";
@@ -37,7 +37,7 @@ export interface LegacySavePorts {
   readonly destination: () => unknown;
   readonly keyOf: (identity: unknown) => DestinationKey;
   readonly obsolete: (request: LegacySaveRequest, here: boolean) => void;
-  readonly ownership: SaveOwnershipPort;
+  readonly ownership: Operations;
   readonly autosave: LegacyAutoSavePorts;
 }
 
