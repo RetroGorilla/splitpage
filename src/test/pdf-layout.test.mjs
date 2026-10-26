@@ -9,7 +9,7 @@ import { intern } from "../adapters/storage/02c-blobs.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { commentEntries } from "../adapters/formats/export-projections.ts";
 import { buildPdf, pdfCommentImagesFor } from "../adapters/formats/pdf.ts";
-import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();

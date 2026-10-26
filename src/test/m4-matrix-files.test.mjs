@@ -17,7 +17,7 @@ await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
 const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts");
-const { exportDocumentOf } = await import("../js/14b-export-kit.js");
+const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { buildDocx } = await import("../adapters/formats/docx.ts");
 const { closeImportModal, openImportModal } = await import("../js/11-import.js");
 const { zipRead } = await import("../adapters/formats/zip.ts");

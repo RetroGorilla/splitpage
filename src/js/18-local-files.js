@@ -17,7 +17,7 @@ import { beginBusy, endBusy, withBusyBar } from "../features/notices/busy.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { brollView } from "../application/preferences/broll-view.ts";
 import { formatTimestamp } from "../features/common/comment-time.js";
-import { captureExportDocument, loadExportAssets } from "./14b-export-kit.js";
+import { captureExportDocument, loadExportAssets } from "../legacy/export-kit-bridge.ts";
 import { exportAssetsRequest } from "../adapters/formats/export-assets.ts";
 import {
   detectTwoColumnFormat,

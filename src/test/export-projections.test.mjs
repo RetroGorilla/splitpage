@@ -9,7 +9,7 @@ import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
 import "./_broll-mounted.mjs";
 import { exportComments } from "../adapters/formats/export-kit.ts";
-import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { brollGroups } from "../core/production/broll-view.ts";
 import {
   breakdownRows,

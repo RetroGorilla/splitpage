@@ -238,6 +238,7 @@ Two existing ports grow:
 | `preferences-bridge` | P3 |
 | `richtext`, `plain-text`, `cache-freeze`, `document-ports` (`productionReaders`) | P8. `withDocumentPorts` (`02`, `02b`, `03`) goes with the Wave 4 owner moves |
 | `save-bridge` | P15. Everything else (`saveDoc`, `requestSave`, `haltAutoSave` and the rest) goes with the Wave 4 save moves |
+| `export-kit-bridge` | `application/save/export-kit.ts` owns export capture and its cached read models. The wiring starts the bridge for `14`, `18` and `20d`; it retires with their last numbered importer. File-menu wiring receives the owner directly |
 | `editor-bridge`, `production-editing-bridge` | P10 |
 | `merge-bridge` | `applyMerge`, `mergeStates` and `reportMerge` (`13`, `20g`) go with the Opus moves of `13` and `20g` (Wave 4), as the document-merge owner's interface in `src/application/`. No feature reads it before then |
 | `transition-bridge` | P12 (`captureOperation`, `stillOwns`), P20 (`documentTransitions`, `NO_DESTINATION`) |

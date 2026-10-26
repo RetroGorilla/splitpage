@@ -12,12 +12,11 @@ import { tagPrintColor } from "../../adapters/formats/print-colors.ts";
 import { fileMenuExportActions as definitions } from "../../features/file-menu/actions.ts";
 import { __init as mountExportDialog } from "../../features/file-menu/export-dialog.js";
 import type { FileMenuExportMount, FileMenuExportPorts } from "../../features/file-menu/ports.ts";
-import { captureExportDocument as capture } from "../../js/14b-export-kit.js";
 import { exportBaseName, exportFileName, handleFileMenuAction, runExportAction } from "../../js/18-local-files.js";
 import { fileMenuOpen, onFileMenuRefresh, toggleFileMenu } from "./file-menu-controls.ts";
 import { fileMenuExport as dialog } from "./file-menu-export-controls.ts";
 
-export function mountFileMenuExportFeature(): FileMenuExportMount {
+export function mountFileMenuExportFeature(capture: FileMenuExportPorts["capture"]): FileMenuExportMount {
   return dialog.replace(() => {
     const ports: FileMenuExportPorts = {
       document: portDocument,
@@ -57,4 +56,3 @@ export function fileMenuExportActions(): ActionDefinition[] {
     closeMenu: () => { if (fileMenuOpen()) toggleFileMenu(false); }
   });
 }
-

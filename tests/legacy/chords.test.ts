@@ -1,3 +1,4 @@
+import { captureExportDocument } from "../../src/legacy/export-kit-bridge.ts";
 import { commandMenuActions, mountCommandMenuFeature, stopCommandMenuFeature } from "../../src/bootstrap/wiring/command-menu.ts";
 import { startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
 import { tagPanelActions, mountTagPanelsFeature, stopTagPanelsFeature } from "../../src/bootstrap/wiring/production.ts";
@@ -41,7 +42,7 @@ function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   mountBrollPanelStateFeature();
   mountRundownFeature();
   mountFileMenuDropdownFeature();
-  mountFileMenuExportFeature();
+  mountFileMenuExportFeature(captureExportDocument);
   mountHelpFeature();
   mountOnboardingFeature();
   mountCommandMenuFeature();

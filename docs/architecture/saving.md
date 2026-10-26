@@ -230,7 +230,7 @@ The autosave entry points are in the save bridge: `autoSaveTarget()` asks the de
 
 ## 6. Capture (4.6)
 
-`captureExportDocument(opts)` (`14b-export-kit.js`, over `application/save/capture.ts`) reads the session once, synchronously, and returns a frozen `ExportDocument`: the document, the capture time, and core's production index, comment numbers and b-roll entries. It carries no connection, token, link key, handle or path, and no picture bytes: pictures are content hashes. `opts.docId` stamps a different id on the capture, which is how Save As writes a forked id without changing the live document yet. It throws when there is no document.
+`captureExportDocument(opts)` (`application/save/export-kit.ts`, over `application/save/capture.ts`) reads the session once, synchronously, and returns a frozen `ExportDocument`: the document, the capture time, and core's production index, comment numbers and b-roll entries. It carries no connection, token, link key, handle or path, and no picture bytes: pictures are content hashes. `opts.docId` stamps a different id on the capture, which is how Save As writes a forked id without changing the live document yet. It throws when there is no document. The wiring supplies its typed ports and starts `legacy/export-kit-bridge.ts` for the remaining numbered callers; file-menu export wiring uses the owner directly.
 
 The exporters take it: `buildSplitpageFile` and `buildMarkdownProject` (`src/adapters/formats/project-file.ts`, over the project file services the wiring installs; L3h PR 4), `standaloneHtmlFor`, the CSV, DOCX, PDF and XLSX builders and the export dialog, and `exportFacts`. `exportDocumentOf(state)` builds the same shape from a given state; only the formats test hooks in `20d-formats.js` use it.
 

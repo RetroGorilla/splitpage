@@ -14,7 +14,7 @@ const { flushEdits, redo, undo } = await import("../legacy/undo-bridge.ts");
 const { closeImportModal, openImportModal } = await import("../js/11-import.js");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { exportDocumentOf } = await import("../js/14b-export-kit.js");
+const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 

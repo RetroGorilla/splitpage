@@ -229,7 +229,7 @@ export function refreshedProductionIndex(ix: ProductionIndex, state: TagState, r
   return { entries: ix.entries, unregistered: ix.unregistered, rowCount: ix.rowCount, rowSig: rs, tagSig: ix.tagSig };
 }
 
-export function deriveProductionIndex(state: ValidatedDocument, readers: ProductionReaders): ProductionIndex {
+export function deriveProductionIndex(state: Frozen<ValidatedDocument>, readers: ProductionReaders): ProductionIndex {
   const rows = state.rows;
   const live = collectTagsFromRows(rows, readers);
   const liveByKey: Record<string, TagGroup> = {};

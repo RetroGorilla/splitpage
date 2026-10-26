@@ -14,6 +14,8 @@ import type { CommandOutcome, Replay } from "../../src/application/session/docum
 import type { StampPorts, TimerPort } from "../../src/application/session/ports.ts";
 import { WIRING_STEPS, WiringError, legacySessionPorts, wireApp } from "../../src/bootstrap/wiring.ts";
 import { legacyExportServices } from "../../src/bootstrap/export-services.ts";
+import { wireExportKit } from "../../src/bootstrap/wiring/export-kit.ts";
+import { exportKitStarted } from "../../src/legacy/export-kit-bridge.ts";
 import type { TransitionDeps, Wiring, WiringDeps } from "../../src/bootstrap/wiring.ts";
 import { appActions } from "../../src/legacy/app-actions.ts";
 import { exportFormats, installExportFormats } from "../../src/legacy/export-formats.ts";
@@ -52,7 +54,7 @@ import type { ProjectFileServices } from "../../src/application/formats/project-
 
 after(closeApp);
 
-const OWNERS = ["location", "effects", "actions", "exportServices", "projectFiles", "exports", "undo", "session", "saves", "transitions", "merge", "recovery", "editor", "productionEditing", "preferences", "shotHiding", "presence"] as const;
+const OWNERS = ["location", "effects", "actions", "exportServices", "projectFiles", "exports", "undo", "session", "saves", "transitions", "merge", "recovery", "editor", "productionEditing", "preferences", "shotHiding", "presence", "exportCapture"] as const;
 
 type Owner = (typeof OWNERS)[number];
 type Started = Record<Owner, boolean>;
@@ -73,6 +75,7 @@ function started(): Started {
     effects: effectsStarted(),
     actions: live(() => appActions.list()),
     exportServices: exportServicesStarted(),
+    exportCapture: exportKitStarted(),
     projectFiles: projectFileServicesStarted(),
     exports: live(() => exportFormats.cards()),
     session: sessionStarted() && live(() => liveSession().epoch()),
@@ -577,9 +580,10 @@ test("failed partial startup: a step that throws undoes every step before it, in
     "production editing": (f) => ({ deps: f.deps, cleanup: startProductionEditing(must(f.deps.timers)), cause: false }),
     preferences: (f) => ({ deps: f.deps, cleanup: startPreferences(), cause: false }),
     "shot hiding": (f) => ({ deps: f.deps, cleanup: startShotHiding(legacyShotHidingPorts(must(f.deps.timers))), cause: false }),
-    presence: (f) => ({ deps: f.deps, cleanup: startPresence(legacyPresencePorts()), cause: false })
+    presence: (f) => ({ deps: f.deps, cleanup: startPresence(legacyPresencePorts()), cause: false }),
+    "export capture": (f) => ({ deps: f.deps, cleanup: wireExportKit(f.deps.entry).stop, cause: false })
   };
-  const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { location: "location", "page effects": "effects", "export services": "exportServices", "export registry": "exports", undo: "undo", transitions: "transitions", editor: "editor", "production editing": "productionEditing", preferences: "preferences", "shot hiding": "shotHiding", presence: "presence" };
+  const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { location: "location", "page effects": "effects", "export services": "exportServices", "export registry": "exports", undo: "undo", transitions: "transitions", editor: "editor", "production editing": "productionEditing", preferences: "preferences", "shot hiding": "shotHiding", presence: "presence", "export capture": "exportCapture" };
   assert.deepEqual(Object.keys(breakers), [...WIRING_STEPS], "every step is broken once");
   for (const step of WIRING_STEPS) {
     const f = fakes();

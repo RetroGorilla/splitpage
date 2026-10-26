@@ -5,6 +5,8 @@ export { draftRecoveryPorts, mountDraftsFeature } from "./wiring/drafts.ts";
 export { mountVideoFilesFeature } from "./wiring/video-files.ts";
 export { mountCommentsLogicFeature } from "./wiring/comments.ts";
 import { wireProductionIndex } from "./wiring/production-index.ts";
+import type { ExportKit } from "../application/save/export-kit.ts";
+import { wireExportKit } from "./wiring/export-kit.ts";
 export { mountReadTimeFeature } from "./wiring/read-time.ts";
 export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
 export { mountDraftEditFeature } from "./wiring/draft-edit.ts";
@@ -88,6 +90,7 @@ export interface WiringDeps {
 }
 
 export interface Wiring {
+  readonly captureExportDocument: ExportKit["captureExportDocument"];
   readonly actions: ActionRegistry;
   readonly exports: ExportRegistry;
   readonly session: DocumentSession;
@@ -125,7 +128,8 @@ export const WIRING_STEPS = Object.freeze([
   "production editing",
   "preferences",
   "shot hiding",
-  "presence"
+  "presence",
+  "export capture"
 ] as const);
 
 export type WiringStep = (typeof WIRING_STEPS)[number];
@@ -414,6 +418,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("preferences", () => startPreferences(), (stop) => stop);
   build("shot hiding", () => startShotHiding(legacyShotHidingPorts(deps.timers ?? SYSTEM_TIMERS)), (stop) => stop);
   build("presence", () => startPresence(legacyPresencePorts()), (stop) => stop);
+  const capture = build("export capture", () => wireExportKit(deps.entry), (built) => built.stop);
   let disposed = false;
   const dispose = (): void => {
     if (disposed) return;
@@ -421,7 +426,7 @@ export function wireApp(deps: WiringDeps): Wiring {
     const failures = drain(disposers);
     if (failures.length) throw new AggregateError(failures, failures.length + " of the wiring's release steps failed; the rest still ran");
   };
-  return Object.freeze({ actions: actions, exports: exports, session: liveSession(), keyTarget: deps.keyTarget, dispose: dispose });
+  return Object.freeze({ captureExportDocument: capture.owner.captureExportDocument, actions: actions, exports: exports, session: liveSession(), keyTarget: deps.keyTarget, dispose: dispose });
 }
 
 export { mountTagPanelsFeature } from "./wiring/production.ts";
