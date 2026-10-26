@@ -18,8 +18,7 @@ import { __init as init_14_export } from "./14-export.js";
 import { __init as init_14b_export_kit } from "./14b-export-kit.js";
 import { __init as init_18_local_files } from "./18-local-files.js";
 import { __init as init_18a_local_merge } from "./18a-local-merge.js";
-import { __init as init_18b_file_menu } from "./18b-file-menu.js";
-import { mountCommandMenuFeature } from "../bootstrap/wiring.ts";
+import { mountFileMenuDropdownFeature, mountCommandMenuFeature } from "../bootstrap/wiring.ts";
 import { __init as init_19_writer } from "./19-writer.js";
 import { __init as init_20_teleprompter } from "./20-teleprompter.js";
 import { __init as init_20a_update } from "./20a-update.js";
@@ -99,7 +98,7 @@ if (wiring) {
   init_14b_export_kit();
   init_18_local_files();
   init_18a_local_merge();
-  init_18b_file_menu();
+  mountFileMenuDropdownFeature();
   mountFileMenuExportFeature();
   mountCommandMenuFeature();
   init_19_writer();

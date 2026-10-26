@@ -1,11 +1,10 @@
 import type { ActionDefinition, Availability } from "../application/actions.ts";
 import { promptForTarget } from "../js/03-sync.js";
-import { openGdocModal, openImportModal } from "../js/11-import.js";
+import { openGdocModal } from "../js/11-import.js";
 import { openDriveModal, openServerPicker, publishToServer, serverOpenItemState, serverPublishItemState } from "../js/13-hosted.js";
 import { collaborateBlockedReason, maybeAskGuestName, openCollaborate } from "../js/13b-collaborate.js";
 import { autoSavePolicy, savesStarted, toggleAutoSave } from "./save-bridge.ts";
 import { saveBackItemState, saveBackToFile } from "../js/18-local-files.js";
-import { pasteItemState, startNewScript } from "../js/18b-file-menu.js";
 import { driveOpenShown } from "../adapters/desktop/desktop-port.ts";
 import { greyedOut, itemAvailability, shownWhen } from "./menu-items.ts";
 import { OPENS_A_DIALOG, availableUnless, firstRefusal } from "../application/screen.ts";
@@ -47,15 +46,6 @@ export function shareActions(): ActionDefinition[] {
       run: () => { toggleAutoSave(); }
     },
     {
-      id: "new",
-      label: "New script",
-      group: "File",
-      icon: "i-file-plus",
-      words: "blank empty create start fresh document",
-      availability: () => loaded(),
-      run: () => { startNewScript(); }
-    },
-    {
       id: "server-open",
       label: "Open from the server…",
       group: "File",
@@ -63,15 +53,6 @@ export function shareActions(): ActionDefinition[] {
       words: "server hosted shared documents",
       availability: (source) => loaded(itemAvailability(serverOpenItemState(), source), OPENS_ONE),
       run: () => openServerPicker()
-    },
-    {
-      id: "paste",
-      label: "Import: paste a script…",
-      group: "File",
-      icon: "i-clipboard",
-      words: "import revised draft text",
-      availability: (source) => loaded(itemAvailability(pasteItemState(), source), OPENS_ONE),
-      run: () => { openImportModal(); }
     },
     {
       id: "gdoc-import",

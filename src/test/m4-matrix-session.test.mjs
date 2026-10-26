@@ -67,7 +67,7 @@ import { saveAuthorName as saveAuthorNameWith } from "../application/comment-aut
 import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
 function saveAuthorName(name) { saveAuthorNameWith(commentPreferences(), name); }
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
-const { startNewScript } = await import("../js/18b-file-menu.js");
+const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");
 const { finishServerDetect, publishToServer } = await import("../js/13-hosted.js");
 const { SERVER_RESUME_KEY } = await import("../application/location/server-status.ts");
