@@ -8,7 +8,7 @@ import type { NoticePort } from "../../application/effects/ports.ts";
 import type { DesktopVideo } from "../../application/media/desktop-video.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { PreferenceChanges } from "../../application/preferences/preferences.ts";
-import type { SaveOwnershipPort } from "../../application/save/coordinator.ts";
+import type { Operations } from "../../application/session/operation.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { Slot, VideoLink } from "../../core/document/gallery.ts";
 import type { ImageRef } from "../../core/document/ports.ts";
@@ -18,7 +18,7 @@ export interface GalleryPorts {
   readonly review: Pick<ReviewFacts, "reviewing">;
   readonly notices: Pick<NoticePort, "show">;
   readonly pictures: Pick<PictureStore, "ensureBytes" | "urlFor" | "intern" | "persist">;
-  readonly ownership: SaveOwnershipPort;
+  readonly ownership: Operations;
   readonly cells: Pick<CellEditing<Element>, "editGallery">;
 }
 
@@ -53,7 +53,7 @@ export interface GalleryOverlayPorts {
   readonly document: Pick<DocumentReader, "current" | "read">;
   readonly review: Pick<ReviewFacts, "reviewing">;
   readonly notices: Pick<NoticePort, "show" | "showAction">;
-  readonly ownership: SaveOwnershipPort;
+  readonly ownership: Operations;
   readonly cells: Pick<CellEditing<Element>, "editGallery">;
   readonly undo: Pick<UndoControl, "breakCoalescing" | "last" | "undo">;
   readonly actions: Pick<ActionRegistry, "invoke">;
@@ -75,7 +75,7 @@ export interface UndoFold {
 export interface GalleryVideoPorts {
   readonly document: Pick<DocumentReader, "current" | "read">;
   readonly pictures: Pick<PictureStore, "intern" | "persist">;
-  readonly ownership: SaveOwnershipPort;
+  readonly ownership: Operations;
   readonly undo: UndoFold;
   readonly thumbnailsAllowed: () => boolean;
   readonly desktop: Pick<DesktopVideo, "present" | "thumbnail">;

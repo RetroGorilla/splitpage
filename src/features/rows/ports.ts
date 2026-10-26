@@ -6,7 +6,7 @@ import type { RowDrag } from "../../application/editing/row-drag.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
-import type { SaveOwnershipPort } from "../../application/save/coordinator.ts";
+import type { Operations } from "../../application/session/operation.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
@@ -65,7 +65,7 @@ export interface Scenes {
 export interface SceneMediaPorts {
   readonly document: Pick<DocumentReader, "read">;
   readonly notices: Pick<NoticePort, "show">;
-  readonly ownership: SaveOwnershipPort;
+  readonly ownership: Operations;
   readonly pictures: Pick<PictureStore, "internDataUrl" | "persist">;
   readonly cells: Pick<CellEditing<Element>, "editGallery">;
   readonly text: Pick<TextServices<HTMLElement>, "storedHtmlFromDom">;

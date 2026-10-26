@@ -9,7 +9,7 @@ import type { Arrived, Incoming, Transitions } from "../../src/application/trans
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import type { ReviewFacts } from "../../src/application/collaboration/review.ts";
 import type { PictureStore } from "../../src/application/media/picture-store.ts";
-import type { SaveOwnershipPort } from "../../src/application/save/coordinator.ts";
+import type { Operations } from "../../src/application/session/operation.ts";
 import type { OperationContext } from "../../src/application/session/operation.ts";
 import type { ImageRef } from "../../src/core/document/ports.ts";
 import type { DocumentReader } from "../../src/application/session/document-reader.ts";
@@ -295,7 +295,7 @@ export function fakeSaveState(initial: { unsaved?: boolean; busy?: boolean } = {
 
 export function fakeOwnership() {
   let epoch = 1;
-  const ownership: SaveOwnershipPort = {
+  const ownership: Operations = {
     capture: (): OperationContext => Object.freeze({
       epoch, docId: "doc", destination: null, destinationGeneration: 0, generation: 0, connection: null, revision: null
     }),
