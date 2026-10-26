@@ -1,5 +1,6 @@
 import type { Presence } from "../../application/collaboration/presence.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { CellEditing } from "../../application/editing/cell-editing.ts";
 import type { DeleteConfirm } from "../../application/editing/delete-confirm.ts";
 import type { ProductionSelection } from "../../application/editing/production-selection.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
@@ -17,6 +18,26 @@ import type { TagPanelCommands } from "../../application/tag-panel-commands.ts";
 export interface TagPanelMount extends TagPanelCommands {
   readonly openProductionPanel: () => void;
   readonly openGearPanel: () => void;
+  readonly dispose: () => void;
+}
+
+export interface PlainTagPorts {
+  readonly document: Pick<DocumentReader, "current">;
+  readonly cells: Pick<CellEditing<Element>, "edit">;
+  readonly text: Pick<TextServices<HTMLElement>, "fromHtml" | "storedHtmlFromDom">;
+}
+
+export interface PlainTagControl {
+  readonly maybeOpen: (e: Pick<Event, "target">, cellEl: Element) => void;
+  readonly refresh: () => void;
+  readonly cancel: () => void;
+  readonly close: () => boolean;
+  readonly isOpen: (cellEl?: Element | null) => boolean;
+  readonly emptyAtCaret: () => boolean;
+  readonly onTagged: (listener: () => void) => () => void;
+}
+
+export interface PlainTagMount extends PlainTagControl {
   readonly dispose: () => void;
 }
 

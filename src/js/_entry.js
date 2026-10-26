@@ -6,7 +6,7 @@ import { __init as init_03_sync } from "./03-sync.js";
 import { __init as init_03a_history_store } from "./03a-history-store.js";
 import { __init as init_05_render } from "./05-render.js";
 import { __init as init_07_production_tags } from "./07-production-tags.js";
-import { __init as init_07b_plain_tags } from "./07b-plain-tags.js";
+import { mountPlainTagsFeature } from "../bootstrap/wiring.ts";
 import { mountScriptPlaceFeature, mountFindFeature, mountTagPanelsFeature } from "../bootstrap/wiring.ts";
 import { __init as init_11_import } from "./11-import.js";
 import { mountSaveStatusFeature } from "../bootstrap/wiring.ts";
@@ -85,7 +85,7 @@ if (wiring) {
   mountScenesFeature();
   mountSceneMediaFeature();
   init_07_production_tags();
-  init_07b_plain_tags();
+  mountPlainTagsFeature();
   mountTagPanelsFeature();
   mountBrollFeature();
   mountBrollPanelStateFeature();

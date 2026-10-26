@@ -4,7 +4,8 @@ import { productionSelection as productionSelectionOwner } from "../../../legacy
 import type { UndoControl } from "../../../application/editing/undo-control.ts";
 import type { DocumentEdits } from "../../../application/session/document-edits.ts";
 import { breakUndoCoalescing, flushEdits, lastUndoEntry, redo, undo } from "../../../legacy/undo-bridge.ts";
-import { editorSelection } from "../../../legacy/editor-bridge.ts";
+import type { CellEditing } from "../../../application/editing/cell-editing.ts";
+import { cellEditing, editorSelection } from "../../../legacy/editor-bridge.ts";
 import { editAllowed, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../../../legacy/session-bridge.ts";
 
 export const edits: DocumentEdits = {
@@ -21,6 +22,10 @@ export const undoControl: UndoControl = {
   undo,
   redo,
   last: lastUndoEntry
+};
+
+export const cells: Pick<CellEditing<Element>, "edit"> = {
+  edit: (cell, change) => cellEditing().edit(cell, change)
 };
 
 export const selection: Pick<EditorSelection<Element, Range, Element>, "dropLink" | "remember" | "forget" | "paintedEpoch" | "resolve"> = {
