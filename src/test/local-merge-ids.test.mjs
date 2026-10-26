@@ -3,7 +3,7 @@ import "./_project-file-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { __init as initTags } from "../js/07-production-tags.js";
 import { offerFileMerge, openMergeReview, resetMergeOffer } from "../js/18a-local-merge.js";
 import { loadTestDocument } from "./_document.mjs";

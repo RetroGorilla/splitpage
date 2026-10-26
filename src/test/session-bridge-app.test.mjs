@@ -10,7 +10,7 @@ import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-p
 await bootApp();
 
 const { liveSession, noteReload } = await import("../legacy/session-bridge.ts");
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { adoptRestoredState } = await import("../js/02b-doc-id.js");
 const { restoreSnapshotFromCard } = await import("../js/03-sync.js");

@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 
 const seed = migrateRows(JSON.parse(SEED_TEXT));

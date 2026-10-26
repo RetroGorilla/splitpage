@@ -6,7 +6,7 @@ import { LONG_DEMO } from "../js/_starters.js";
 await bootApp();
 
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");
-const { buildPublishHtml } = await import("../js/02-state.js");
+const { buildPublishHtml } = await import("../adapters/page/page-shell.ts");
 const { migrateDocument } = await import("../js/02b-doc-id.js");
 
 after(closeApp);

@@ -17,7 +17,7 @@ import { confirmation } from "./ports/saving.ts";
 import { draftResume, seedCheck, startup } from "./ports/startup.ts";
 import { text } from "./ports/text.ts";
 import { opening, transitions } from "./ports/transitions.ts";
-import { migrateRows } from "../../js/02-state.js";
+import { migrateRows } from "../../legacy/document-ports.ts";
 import { syncDocIdentity } from "../../js/02b-doc-id.js";
 import { openImportModal } from "../../js/11-import.js";
 import { openLocalFile } from "../../js/18-local-files.js";

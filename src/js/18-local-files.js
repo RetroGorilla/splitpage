@@ -7,7 +7,8 @@ import { autoSavePolicy, confirmSavedNow, fileConflicts, requestSave, unsavedCha
 import { deliverFile } from "../legacy/file-delivery.ts";
 import { checkFileConflict } from "../adapters/files/file-target.ts";
 import { amendHome, currentHome, fileHome, importHome, serverStatus, setHome, onServerDoc } from "../legacy/location-bridge.ts";
-import { SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle } from "./00-prelude.js";
+import { SCHEMA_VERSION } from "../core/document/fields.ts";
+import { loadLastFileHandle, rememberLastFileHandle } from "../adapters/files/last-file.ts";
 import {
   standaloneHtmlFor,
   syncDocIdentity

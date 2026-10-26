@@ -1,6 +1,8 @@
 import { normalizeDocId } from "../../shared/doc-id-policy.js";
 import { reviewMode, setHome } from "../legacy/location-bridge.ts";
-import { STATE_FIELDS, escapeHtml, migrateRows } from "./02-state.js";
+import { STATE_FIELDS } from "../core/merge/state-fields.ts";
+import { escapeHtml } from "../core/document/text-policy.ts";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { currentDocument, heldDocument, holdMergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteServerUpdate, runDocumentEdit } from "../legacy/session-bridge.ts";
 import { wordsPerMinuteCommand } from "../application/commands/document-settings.ts";
 import { randomIds, systemClock, nowIso } from "../adapters/identity/ids.ts";

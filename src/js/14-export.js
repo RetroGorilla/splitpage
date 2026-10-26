@@ -3,7 +3,7 @@ import { mintDocId, nowIso } from "../adapters/identity/ids.ts";
 import { documentIdStamp, editStamp } from "../application/commands/save-stamps.ts";
 import { currentDocument, stampDocument } from "../legacy/session-bridge.ts";
 import { amendHome, currentHome, documentLocation, fileHome, serverStatus, setHome } from "../legacy/location-bridge.ts";
-import { rememberLastFileHandle } from "./00-prelude.js";
+import { rememberLastFileHandle } from "../adapters/files/last-file.ts";
 import {
   copyDocHistorySafe,
   syncDocIdentity

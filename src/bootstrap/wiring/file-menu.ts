@@ -17,7 +17,7 @@ import { confirmation, saves } from "./ports/saving.ts";
 import { screen } from "./ports/screen.ts";
 import { history, opening, transitions } from "./ports/transitions.ts";
 import { fileMenu } from "./file-menu-controls.ts";
-import { migrateRows } from "../../js/02-state.js";
+import { migrateRows } from "../../legacy/document-ports.ts";
 import { syncDocIdentity } from "../../js/02b-doc-id.js";
 import { openImportModal } from "../../js/11-import.js";
 import { applyReviewMode } from "../../js/13-hosted.js";

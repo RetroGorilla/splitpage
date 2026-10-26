@@ -10,7 +10,7 @@ const { cycleRowStatus, onScriptStats, statsFollowChange, updateScriptStats } = 
 const { __init: mountReadTime, setSceneLength } = await import("../features/rows/read-time.js");
 mountReadTime(stubs.readTimePorts());
 const bridge = await import("../legacy/session-bridge.ts");
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 const STATS = ["setRundownExtraSeconds", "renderRundown", "paintTargetOverlay"];

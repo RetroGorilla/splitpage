@@ -5,7 +5,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { render } = await import("../js/05-render.js");
 const { registryKey } = await import("../core/document/tags.ts");
 const { openProductionPanel } = await import("../features/tags/panels.js");

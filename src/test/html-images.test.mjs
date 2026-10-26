@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { sanitizeHtml, storedHtmlFromDom } from "../legacy/richtext.ts";
 import { storedImageHtml } from "../core/document/text-policy.ts";
 import { dataUrlForSync, has, inlineStateImages, recordFor } from "../adapters/storage/02c-blobs.js";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { refsIn } from "../../shared/blob-policy.js";
 
 const be32 = (n) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];

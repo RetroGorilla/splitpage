@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { IDBFactory as FakeIDBFactory } from "fake-indexeddb";
 import type { LastFile } from "../../../src/application/files/last-file.ts";
 
-import { rememberLastFileHandle } from "../../../src/js/00-prelude.js";
+import { rememberLastFileHandle } from "../../../src/adapters/files/last-file.ts";
 
 test("last file reads the handle stored by the legacy prelude at call time", async () => {
   const last: LastFile = portLastFile;

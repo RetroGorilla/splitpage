@@ -14,7 +14,8 @@ import {
   resolvePersonColor
 } from "../core/document/person-colors.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { STATE_FIELDS, migrateRows } from "../js/02-state.js";
+import { STATE_FIELDS } from "../core/merge/state-fields.ts";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
 import { buildSplitpageFile, buildMarkdownProject, parseMarkdownProject } from "../adapters/formats/project-file.ts";

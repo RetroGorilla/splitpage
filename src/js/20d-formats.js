@@ -1,6 +1,6 @@
 import { deriveDocId } from "../core/document/ids.ts";
 import { amendHome, documentLocation, fileHome } from "../legacy/location-bridge.ts";
-import { migrateRows } from "./02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import {
   adoptRestoredState,
   docIdEvents,

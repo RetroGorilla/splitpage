@@ -8,7 +8,7 @@ await bootApp();
 
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { cycleRowStatus } = await import("../bootstrap/wiring/scene-status.ts");
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { render } = await import("../js/05-render.js");
 const { setSceneLength } = await import("../features/rows/read-time.js");
 const { noteAbsorbedDirty, noteSessionEdit } = await import("../legacy/session-bridge.ts");

@@ -15,7 +15,7 @@ import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
 
 await bootApp();
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts");
 const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { buildDocx } = await import("../adapters/formats/docx.ts");

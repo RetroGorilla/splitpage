@@ -23,7 +23,7 @@ import { serverStatus } from "../legacy/location-bridge.ts";
 
 await bootApp();
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { restoreSnapshotFromCard } = await import("../js/03-sync.js");

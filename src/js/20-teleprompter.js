@@ -8,7 +8,7 @@ import {
   voiceIsFollowing
 } from "../application/prompter-state.ts";
 import { serverHomeId } from "../legacy/location-bridge.ts";
-import { SpeechRecognitionCtor } from "./00-prelude.js";
+import { SpeechRecognitionCtor } from "../adapters/page/speech-recognition.js";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { parseProjectFileState } from "../adapters/formats/project-file.ts";
 import { openDocument } from "../legacy/transition-bridge.ts";

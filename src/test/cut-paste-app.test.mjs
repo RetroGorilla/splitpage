@@ -8,7 +8,7 @@ window.Element.prototype.scrollIntoView = function () {};
 window.__splitpageNoRemote = true;
 await bootApp();
 
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");

@@ -12,7 +12,7 @@ import { serverStatus } from "../legacy/location-bridge.ts";
 await bootApp();
 
 const { liveSession } = await import("../legacy/session-bridge.ts");
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { applyMerge } = await import("../legacy/merge-bridge.ts");
 const { mergeUndo } = await import("../legacy/editor-bridge.ts");

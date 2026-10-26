@@ -5,7 +5,7 @@ import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import type { UndoControl } from "../../../src/application/editing/undo-control.ts";
 
-import { migrateRows } from "../../../src/js/02-state.js";
+import { migrateRows } from "../../../src/legacy/document-ports.ts";
 import {
   breakUndoCoalescing,
   flushEdits,

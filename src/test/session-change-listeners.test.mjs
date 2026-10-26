@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 const bridge = await import("../legacy/session-bridge.ts");
-const { migrateRows } = await import("../js/02-state.js");
+const { migrateRows } = await import("../legacy/document-ports.ts");
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
 const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");

@@ -1,7 +1,8 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { makeId, migrateRows } from "../js/02-state.js";
+import { makeId } from "../adapters/identity/ids.ts";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { derivedRecordsPlan } from "../bootstrap/wiring/broll.ts";
 import { broll } from "./_broll-mounted.mjs";
 const { brollEntries } = broll;

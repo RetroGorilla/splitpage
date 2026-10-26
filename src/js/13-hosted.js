@@ -21,7 +21,8 @@ import { SERVER_RESUME_KEY } from "../application/location/server-status.ts";
 import { shortHost } from "../features/common/server-address.ts";
 import { cleanAuthorName } from "../core/document/people.ts";
 import { getEditorName, preferences } from "../legacy/preferences-bridge.ts";
-import { escapeHtml, migrateRows } from "./02-state.js";
+import { escapeHtml } from "../core/document/text-policy.ts";
+import { migrateRows } from "../legacy/document-ports.ts";
 import {
   copyDocHistorySafe,
   migrateDocument

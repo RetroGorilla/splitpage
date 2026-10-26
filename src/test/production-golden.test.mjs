@@ -7,7 +7,7 @@ import "./_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { migrateRows } from "../js/02-state.js";
+import { migrateRows } from "../legacy/document-ports.ts";
 import { cellOf, inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { bulkTagCell, healTagRegistry, tagKey, tagOccurrences, tagStatusRank, tagsInField } from "../js/07-production-tags.js";
 import { bulkTagRows } from "../application/commands/bulk-tags.ts";
