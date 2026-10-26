@@ -11,7 +11,7 @@ export type ExportTagEntry = {
   id: string | null;
   catId: string;
   name: string;
-  mentions: ExportTagMention[];
+  mentions: readonly ExportTagMention[];
   orphaned: boolean;
   owner: string;
   notes: string;

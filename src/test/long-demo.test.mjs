@@ -14,7 +14,7 @@ import { collectTagsFromRows, __init as initTags } from "../js/07-production-tag
 import { brollInCell } from "../core/production/broll.ts";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
 import { LONG_DEMO, STARTERS, starterById } from "../js/_starters.js";
-import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
 

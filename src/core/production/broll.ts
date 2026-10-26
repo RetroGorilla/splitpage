@@ -10,6 +10,7 @@ import {
 } from "../document/broll.ts";
 import type { BrollProp, BrollStatusId } from "../document/broll.ts";
 import type { IdSource } from "../document/ports.ts";
+import type { Frozen } from "../document/freeze.ts";
 import { cappedLongText, cappedName, plainText, unitCutName } from "../document/text-policy.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
 import { TAG_STATUS_IDS, normalizeTagName, tagStatusId } from "../document/tags.ts";
@@ -50,7 +51,7 @@ export type BrollShot = {
   owner?: string | undefined;
   audioRef?: string | undefined;
   location?: string | undefined;
-  props?: (BrollPropRef | null | undefined)[] | undefined;
+  props?: readonly (BrollPropRef | null | undefined)[] | undefined;
   origin?: string | undefined;
 };
 
@@ -409,7 +410,7 @@ function seedFields(state: BrollState, found: BrollFound, id: string, readers: P
 }
 
 export function brollEntries(
-  state: ValidatedDocument,
+  state: Frozen<ValidatedDocument>,
   readers: ProductionReaders,
   ids: IdSource,
   plainTextOf: FieldText
@@ -594,7 +595,7 @@ export function brollPropsRenamed(
   (state.brollShots as readonly BrollShot[]).forEach(function (rec, at) {
     if (!Array.isArray(rec.props) || !rec.props.length) return;
     let changed = false;
-    const next = rec.props.map(function (p) {
+    const next = rec.props.map(function (p: BrollPropRef | null | undefined) {
       if (!p) return p;
       if ((fromId && p.id === fromId) || (oldNorm && !p.id && normalizeTagName(p.name) === oldNorm)) {
         changed = true;

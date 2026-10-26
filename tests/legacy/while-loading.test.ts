@@ -1,3 +1,4 @@
+import { captureExportDocument } from "../../src/legacy/export-kit-bridge.ts";
 import { startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
 import { tagPanelActions, mountTagPanelsFeature, stopTagPanelsFeature } from "../../src/bootstrap/wiring/production.ts";
 import { brollPanelActions, mountBrollPanelStateFeature, stopBrollPanelStateFeature } from "../../src/bootstrap/wiring/broll.ts";
@@ -25,7 +26,7 @@ function loadingRegistry(): { registry: ActionRegistry; restore: () => void } {
   mountBrollPanelStateFeature();
   mountRundownFeature();
   mountFileMenuDropdownFeature();
-  mountFileMenuExportFeature();
+  mountFileMenuExportFeature(captureExportDocument);
   const file = fileMenuActions();
   const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFileMenuDropdownFeature, registerAll(registry, [...file.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...file.slice(3, 4)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...viewActions()])];
   const was: unknown = currentDocument();

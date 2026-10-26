@@ -15,9 +15,8 @@ import {
   exportSummaryParts
 } from "../adapters/formats/export-kit.ts";
 import {
-  commentNumbers,
   exportDocumentOf
-} from "../js/14b-export-kit.js";
+} from "../legacy/export-kit-bridge.ts";
 import { exportRuns } from "../adapters/formats/export-kit.ts";
 import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { assemblePdf, pdfLampOp, pdfTextWidth, pdfWrapRuns } from "../adapters/formats/pdf.ts";
@@ -75,7 +74,7 @@ test("each scene's gutter: number, start timecode, read time, set by hand or not
 
 test("the open threads are numbered down the script, a resolved one not at all", () => {
   demo();
-  const nums = commentNumbers(exportDocumentOf(currentDocument()));
+  const nums = exportDocumentOf(currentDocument()).commentNumbers;
   const open = currentDocument().comments.filter((c) => !c.resolved);
   const resolved = currentDocument().comments.filter((c) => c.resolved);
   assert.equal(Object.keys(nums).length, open.length);
@@ -102,7 +101,7 @@ test("nested and overlapping spans count the way the script's counter does", () 
       author: "Ann", body: id, resolved: id === "c"
     }))
   }));
-  assert.deepEqual({ ...commentNumbers(exportDocumentOf(currentDocument())) }, { b: 1, a: 2, d: 3, e: 4 });
+  assert.deepEqual({ ...exportDocumentOf(currentDocument()).commentNumbers }, { b: 1, a: 2, d: 3, e: 4 });
   const runs = exportRuns(currentDocument().rows[0].audioText, exportDocumentOf(currentDocument()).commentNumbers);
   const marked = runs.filter((r) => r.markers);
   assert.equal(marked.length, 1);
@@ -112,7 +111,7 @@ test("nested and overlapping spans count the way the script's counter does", () 
 
 test("a cell's runs carry their tag and its colour, the b-roll key, and the markers", () => {
   demo();
-  const nums = commentNumbers(exportDocumentOf(currentDocument()));
+  const nums = exportDocumentOf(currentDocument()).commentNumbers;
   const v1 = exportRuns(currentDocument().rows[0].visualText, nums);
   const tagged = v1.filter((r) => r.tag);
   assert.ok(tagged.length >= 3);

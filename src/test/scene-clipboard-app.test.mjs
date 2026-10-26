@@ -8,7 +8,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
-const { exportDocumentOf } = await import("../js/14b-export-kit.js");
+const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { SCENES_MIME, buildScenePayload } = await import("../features/clipboard/scene-clip.js");
 const { deleteSelectedScenes, newScriptFromSelection, pasteScenesAt } = await import("../features/clipboard/scene-select.js");
