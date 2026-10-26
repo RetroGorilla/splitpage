@@ -41,7 +41,9 @@ import { expandHiddenShotStrip } from "./hide-shot.ts";
 import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
 import { restoreMergeSnapshot } from "../../js/03-sync.js";
 import { installMergeBanner } from "../../legacy/merge-bridge.ts";
-import { ensureTrailingCaretSpot, safeId, sanitizeHtml, storedHtmlFromDom } from "../../js/04-richtext.js";
+import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";
+import { safeId } from "../../adapters/identity/safe-id.ts";
+import { sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
 import { cssAttr } from "../../features/common/dom.ts";
 import { announceGalleryEdit } from "../../features/gallery/overlay.js";
 import {

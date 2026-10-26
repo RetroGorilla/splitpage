@@ -1,11 +1,8 @@
 import { isInsideTagOrLink } from "../features/common/dom.ts";
 import { domToPos } from "../features/common/cell-dom.ts";
 import { rowIndexOf } from "../core/document/rows.ts";
-import {
-  inertBody,
-  safeId,
-  sanitizeHtml
-} from "./04-richtext.js";
+import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
+import { safeId } from "../adapters/identity/safe-id.ts";
 import { plainTagOpen } from "./07b-plain-tags.js";
 import { domRangeFor } from "../features/common/find-dom.js";
 import { breakUndoCoalescing } from "../legacy/undo-bridge.ts";

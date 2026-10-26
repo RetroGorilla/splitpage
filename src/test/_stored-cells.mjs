@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { sanitizeHtml } from "../js/04-richtext.js";
+import { sanitizeHtml } from "../legacy/richtext.ts";
 
 export function rng(seed) {
   let s = seed >>> 0;

@@ -24,7 +24,7 @@ import { owned } from "../../features/routing/owned.ts";
 import { runFromButton } from "../../legacy/app-actions.ts";
 import { mountComments } from "../../features/comments/mount.ts";
 import { internDataUrl, persist } from "../../adapters/storage/02c-blobs.js";
-import { storedImageHtml } from "../../js/04-richtext.js";
+import { storedImageHtml } from "../../core/document/text-policy.ts";
 import { typePendingMarks } from "../../js/05-render.js";
 import {
   appendDraftMedia,

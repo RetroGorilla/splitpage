@@ -1,7 +1,7 @@
 import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
 import { MD_EXPORT_TAIL_RE, columnIndicesFromHeader, markdownExportScript, parseMarkdownTable } from "../adapters/formats/markdown-table.ts";
 import { stampRow } from "./03-sync.js";
-import { sanitizeHtml } from "./04-richtext.js";
+import { sanitizeHtml } from "../legacy/richtext.ts";
 import { cssAttr } from "../features/common/dom.ts";
 import { declineBrollRows } from "../application/broll-anchoring.ts";
 import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
