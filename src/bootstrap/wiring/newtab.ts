@@ -21,7 +21,7 @@ import { migrateRows } from "../../legacy/document-ports.ts";
 import { syncDocIdentity } from "../../js/02b-doc-id.js";
 import { openImportModal } from "../../js/11-import.js";
 import { openLocalFile } from "../../js/18-local-files.js";
-import { STARTERS, starterById } from "../../js/_starters.js";
+import { STARTERS, starterById } from "../../starters/index.ts";
 
 const newTab = owned<NewTabMount>();
 

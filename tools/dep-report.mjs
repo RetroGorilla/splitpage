@@ -83,7 +83,7 @@ export function layerOf(path) {
   if (/^src\/core\//.test(path)) return "core";
   const feature = /^src\/features\/([^/]+)\//.exec(path);
   if (feature) return `features/${feature[1]}`;
-  const top = /^src\/(application|contracts|adapters|bootstrap|legacy)\//.exec(path);
+  const top = /^src\/(application|contracts|adapters|bootstrap|legacy|starters)\//.exec(path);
   if (top) return top[1];
   if (path.startsWith("src/js/")) return "legacy-js";
   if (path.startsWith("src/")) return "src-unknown";
@@ -116,6 +116,7 @@ export function layerAllows(source, target) {
   }
   switch (source) {
     case "shared": return false;
+    case "starters": return false;
     case "contracts": return target === "shared";
     case "application": return isCore(target) || target === "contracts" || target === "shared";
     case "adapters": return isCore(target) || ["application", "contracts", "shared"].includes(target);

@@ -12,7 +12,7 @@ import "./_broll-mounted.mjs";
 import { exportAssetsNow } from "../adapters/formats/export-assets.ts";
 import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { htmlToPlainScript, toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
-import { LONG_DEMO } from "../js/_starters.js";
+import { LONG_DEMO } from "../starters/index.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();

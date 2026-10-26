@@ -48,7 +48,7 @@ const bootTrace = traceDocument();
 await bootApp();
 bootTrace.stop();
 
-const { LONG_DEMO } = await import("../js/_starters.js");
+const { LONG_DEMO } = await import("../starters/index.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { adoptRestoredState, migrateDocument, standaloneHtmlFor } = await import("../js/02b-doc-id.js");
