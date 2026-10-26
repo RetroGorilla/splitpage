@@ -16,7 +16,7 @@ import { startHistoryMigration } from "../../js/03a-history-store.js";
 import { renderFirstDraw } from "../../js/05-render.js";
 import { updateSaveStatus } from "./save-status.ts";
 import { saves } from "./ports/saving.ts";
-import { updateAutoSaveMenu } from "../../js/14-export.js";
+import { updateAutoSaveMenu } from "./file-saving.ts";
 import { applyStashedWork } from "../../legacy/recovery-bridge.ts";
 import { tryResumeLastProject } from "../../js/18-local-files.js";
 import { seedCheckPasses } from "../../legacy/seed-check.ts";

@@ -12,7 +12,9 @@ const { publishToServer, publishAndCopyShareLink, serverSaveDestination } = awai
 const { setBaseState } = await import("../js/03-sync.js");
 const { noteSessionEdit, currentDocument } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
-const { legacyFileDestination, legacySavePorts } = await import("../js/14-export.js");
+const { wireFileSaving } = await import("../bootstrap/wiring/file-saving.ts");
+const { copyDocHistorySafe, syncDocIdentity } = await import("../js/02b-doc-id.js");
+const fileSaving = wireFileSaving({ copyHistory: copyDocHistorySafe, syncIdentity: syncDocIdentity, setBaseline: setBaseState });
 const { autoSavePolicy, noteSaveChange, saveDestinations, saveToServer, setAutoSaveEnabled, startSaves, unsavedChanges } = await import("../legacy/save-bridge.ts");
 const { documentTransitions, startTransitions } = await import("../legacy/transition-bridge.ts");
 const { NO_DESTINATION } = await import("../application/transitions/ports.ts");
@@ -27,11 +29,11 @@ startTestSession(appSessionDeps());
 
 startTransitions({ live: liveDocumentPort, destination: documentDestinationPort, identity: documentIdentityPort });
 
-startSaves(legacySavePorts({
+startSaves(fileSaving.savePorts({
   capture: () => Object.freeze({ epoch: 0, docId: currentDocument() && currentDocument().docId, destination: homeMod.currentHome(), destinationGeneration: 0, generation: 0, connection: homeMod.currentConn(), revision: null }),
   stillOwns: (ctx) => ctx.destination === homeMod.currentHome() && ctx.docId === (currentDocument() && currentDocument().docId)
 }), { start: (run, ms) => setTimeout(run, ms), stop: (handle) => clearTimeout(handle) });
-saveDestinations().register(legacyFileDestination());
+saveDestinations().register(fileSaving.destination());
 saveDestinations().register(serverSaveDestination());
 
 dom.window.document.body.innerHTML =
