@@ -1,4 +1,5 @@
 import { tagPanelActions } from "./wiring/production.ts";
+import { appDataActions } from "./wiring/settings.ts";
 import { brollPanelActions } from "./wiring/broll.ts";
 import { onboardingActions } from "./wiring/onboarding.ts";
 import { commentsPanelActions, commentsHelpActions, commentsOpenActions } from "./wiring/comments.ts";
@@ -47,7 +48,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     },
     () => {
       const menu = helpMenuActions();
-      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 4), ...onboardingActions(), ...updateActions(), ...commentsHelpActions(), ...menu.slice(4)]);
+      return registerAll(registry, [...menu.slice(0, 3), ...helpActions(), ...menu.slice(3, 4), ...onboardingActions(), ...updateActions(), ...commentsHelpActions(), ...appDataActions(), ...menu.slice(4)]);
     },
     () => {
       const share = shareActions();

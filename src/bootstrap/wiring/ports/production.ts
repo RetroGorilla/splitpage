@@ -1,4 +1,4 @@
-import { deleteConfirmation } from "../../../legacy/production-editing-bridge.ts";
+import { deleteConfirmation, resetProductionPanelState } from "../../../legacy/production-editing-bridge.ts";
 import type { ProductionIndexOwner } from "../../../core/production/index.ts";
 import { productionIndex } from "../../../legacy/production-index-bridge.ts";
 import type { TagPanelState } from "../../../application/tag-panel-state.ts";
@@ -31,3 +31,7 @@ export const deletion = {
   arm: (...args: Parameters<ReturnType<typeof deleteConfirmation>["arm"]>) => deleteConfirmation().arm(...args),
   disarm: (...args: Parameters<ReturnType<typeof deleteConfirmation>["disarm"]>) => deleteConfirmation().disarm(...args)
 };
+
+export function resetProductionPanel(): void {
+  resetProductionPanelState();
+}

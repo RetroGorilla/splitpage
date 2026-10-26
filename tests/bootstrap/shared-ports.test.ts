@@ -3,8 +3,8 @@ import { externalLinks as portExternalLinks } from "../../src/bootstrap/wiring/p
 import { changes as portChanges } from "../../src/bootstrap/wiring/ports/preferences.ts";
 import { actions as portActions } from "../../src/bootstrap/wiring/ports/actions.ts";
 import { screen as portScreen } from "../../src/bootstrap/wiring/ports/screen.ts";
-import { saves as portSaves } from "../../src/bootstrap/wiring/ports/saving.ts";
-import { production as portProduction } from "../../src/bootstrap/wiring/ports/production.ts";
+import { confirmation, saves as portSaves } from "../../src/bootstrap/wiring/ports/saving.ts";
+import { production as portProduction, resetProductionPanel } from "../../src/bootstrap/wiring/ports/production.ts";
 import { selection as portSelection } from "../../src/bootstrap/wiring/ports/editing.ts";
 import { exports as portExports } from "../../src/bootstrap/wiring/ports/files.ts";
 import test from "node:test";
@@ -28,6 +28,8 @@ import { editorSelection, startEditor } from "../../src/legacy/editor-bridge.ts"
 import { installExportFormats } from "../../src/legacy/export-formats.ts";
 import { productionIndex, startProductionIndex } from "../../src/legacy/production-index-bridge.ts";
 import { liveDocumentPort } from "../../src/legacy/session-bridge.ts";
+import { deleteConfirmation, productionSelection, startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
+import { productionGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../../src/application/tag-panel-state.ts";
 import { migrateRows } from "../../src/js/02-state.js";
 
 test("external links check the current desktop capability and forward each address to the current bridge", () => {
@@ -198,6 +200,37 @@ test("the save state setter forwards to the running save owner and preferences a
     stopPreferences();
     localStorage.clear();
   }
+});
+
+test("new-tab save confirmation reaches the current save owner", () => {
+  const stop = startSaves(savePorts(), { start: () => null, stop: () => {} });
+  try {
+    noteSaveChange();
+    assert.equal(portSaves.unsaved(), true);
+    confirmation.confirmSavedNow();
+    assert.equal(portSaves.unsaved(), false);
+  } finally { stop(); }
+});
+
+test("new-tab production reset forwards panel reset, tag disarming and selection clearing in order", () => {
+  const stops: unknown[] = [];
+  let observing = true;
+  const stop = startProductionEditing({ start: () => null, stop: (timer) => { if (observing) stops.push([timer, tagRenamingKey(), deleteConfirmation().armedId("tag"), productionSelection().selectedKeys()]); } });
+  try {
+    setTagRenaming("rename");
+    setTagExpanded("expand");
+    setTagAddingPerson("person");
+    setProductionGroupBy("person");
+    productionSelection().toggle("tag");
+    deleteConfirmation().arm("tag", "tag", () => {});
+    stops.length = 0;
+    resetProductionPanel();
+    assert.deepEqual(stops, [[null, null, "tag", ["tag"]], [null, null, null, []]]);
+    assert.equal(tagExpandedKey(), null);
+    assert.equal(tagAddingPersonKey(), null);
+    assert.equal(productionGroupBy(), "cat");
+    assert.equal(productionSelection().anchorKey(), null);
+  } finally { observing = false; stop(); }
 });
 
 test("the production index port forwards each call to the running production index and follows a restart", () => {

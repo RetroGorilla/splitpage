@@ -1,30 +1,18 @@
-import { currentDocument } from "../legacy/session-bridge.ts";
-import { formatDuration } from "../core/production/timing.ts";
-import { DEFAULT_WPM } from "../core/document/timing.ts";
-import { currentHome } from "../legacy/location-bridge.ts";
-import { SCHEMA_VERSION, loadLastFileHandle } from "./00-prelude.js";
-import { escapeHtml, makeId, migrateRows } from "./02-state.js";
-import { syncDocIdentity } from "./02b-doc-id.js";
-import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
-import { openImportModal } from "./11-import.js";
-import { arrivingOnLink } from "./13-hosted.js";
-import { openLocalFile } from "./18-local-files.js";
-import { desktopAppUrl, desktopAppOffered } from "./20a-update.js";
-import { seedCheckPasses } from "../legacy/seed-check.ts";
-import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
-import { STARTERS, starterById } from "./_starters.js";
-import { appActions } from "../legacy/app-actions.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
-import { documentTransitions, openDocument } from "../legacy/transition-bridge.ts";
-import { NO_DESTINATION } from "../application/transitions/ports.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { draftResume } from "../legacy/recovery-bridge.ts";
-import { confirmSavedNow } from "../legacy/save-bridge.ts";
-import { fileKindFromName } from "../../shared/file-names.js";
-import { startupReady } from "../legacy/startup-bridge.ts";
-import { desktopPort } from "../adapters/desktop/desktop-port.ts";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
-import { preferences } from "../legacy/preferences-bridge.ts";
+import { formatDuration } from "../../core/production/timing.ts";
+import { DEFAULT_WPM } from "../../core/document/timing.ts";
+import { SCHEMA_VERSION } from "../../core/document/fields.ts";
+import { escapeHtml } from "../../core/document/text-policy.ts";
+import { NO_DESTINATION } from "../../application/transitions/ports.ts";
+import { fileKindFromName } from "../../../shared/file-names.js";
+
+var ports = null;
+var activeMount = null;
+var listeners = [];
+
+function listen(target, type, listener) {
+  target.addEventListener(type, listener);
+  listeners.push(function () { target.removeEventListener(type, listener); });
+}
 
 var newTabPageShown = false;
 
@@ -47,7 +35,7 @@ function openNewTabPage() {
   refreshRecents();
 }
 
-export function closeNewTabPage() {
+function closeNewTabPage() {
   var el = newTabPageEl();
   if (!newTabPageShown) return;
   newTabPageShown = false;
@@ -66,31 +54,32 @@ function onNewTabKeydown(e) {
 }
 
 function blankDocumentState() {
-  return migrateRows({
+  return ports.prepareDocument({
     title: "Untitled Script",
-    rows: [{ id: makeId("r"), visualText: "", imageRef: null, audioText: "" }],
-    wordsPerMinute: preferences().defaultWpm()
+    rows: [{ id: ports.ids.id("r"), visualText: "", imageRef: null, audioText: "" }],
+    wordsPerMinute: ports.preferences.defaultWpm()
   });
 }
 
 function starterDocumentState(id) {
-  var starter = starterById(id);
-  return starter ? migrateRows(JSON.parse(JSON.stringify(starter.state))) : null;
+  var starter = ports.findStarter(id);
+  return starter ? ports.prepareDocument(JSON.parse(JSON.stringify(starter.state))) : null;
 }
 
 function adoptNewDocument(next, reason) {
-  var leaves = currentHome().kind === "file" || currentHome().kind === "import";
-  resetProductionPanelState();
-  documentTransitions().startNew({ from: { document: next }, reason: reason, destination: leaves ? NO_DESTINATION : undefined });
-  confirmSavedNow();
-  if (typeof syncDocIdentity === "function") syncDocIdentity();
+  var leaves = ports.place.home().kind === "file" || ports.place.home().kind === "import";
+  ports.resetProductionPanel();
+  ports.transitions.startNew({ from: { document: next }, reason: reason, destination: leaves ? NO_DESTINATION : undefined });
+  ports.saving.confirmSavedNow();
+  if (typeof ports.syncIdentity === "function") ports.syncIdentity();
   closeNewTabPage();
 }
 
 function startNewDocument(makeState, reason) {
-  var ready = currentDocument() ? null : startupReady();
+  var mounted = activeMount;
+  var ready = ports.document.current() ? null : ports.startup.ready();
   if (ready) {
-    return ready.then(function () { return startNewDocument(makeState, reason); });
+    return ready.then(function () { return activeMount === mounted ? startNewDocument(makeState, reason) : false; });
   }
   var next = makeState();
   if (!next) return Promise.resolve(false);
@@ -108,9 +97,11 @@ function startStarterScript(id) {
 }
 
 function openPasteAsNewDocument() {
-  openImportModal({
+  var mounted = activeMount;
+  ports.importText({
     intoNewDocument: function (rows, scan) {
-      var next = migrateRows({ schema: SCHEMA_VERSION, title: "Untitled Script", rows: rows });
+      if (activeMount !== mounted) return;
+      var next = ports.prepareDocument({ schema: SCHEMA_VERSION, title: "Untitled Script", rows: rows });
       scan(next);
       adoptNewDocument(next, "newtab paste: a new document from pasted text");
     }
@@ -118,8 +109,10 @@ function openPasteAsNewDocument() {
 }
 
 async function newTabOpenFile() {
-  await openLocalFile();
-  if (currentHome().kind === "import" || currentHome().kind === "file") closeNewTabPage();
+  var mounted = activeMount;
+  await ports.openFile();
+  if (activeMount !== mounted) return;
+  if (ports.place.home().kind === "import" || ports.place.home().kind === "file") closeNewTabPage();
 }
 
 function isFileDrag(e) {
@@ -137,16 +130,16 @@ function setDropHover(on) {
 function newTabOpenDropped(file) {
   if (!file) return Promise.resolve(false);
   if (!fileKindFromName(file.name)) {
-    showToast("Splitpage opens .md, .splitpage, .docx, .txt and .csv files — " +
+    ports.notices.show("Splitpage opens .md, .splitpage, .docx, .txt and .csv files — " +
       file.name + " isn't one of them.", "warn");
     return Promise.resolve(false);
   }
-  return openDocument({ kind: "file", file: file, handle: null });
+  return ports.opening.open({ kind: "file", file: file, handle: null });
 }
 
 function starterSceneSeconds(state) {
   var wpm = state.wordsPerMinute || DEFAULT_WPM;
-  return state.rows.map(function (row) { return productionReaders.wordCount(row.audioText) / wpm * 60; });
+  return state.rows.map(function (row) { return ports.text.productionReaders.wordCount(row.audioText) / wpm * 60; });
 }
 
 function starterPreviewHtml(state) {
@@ -163,7 +156,7 @@ function starterPreviewHtml(state) {
 function renderStarterCards() {
   var cards = document.getElementById("newtab-cards");
   if (!cards || cards.querySelector('[data-newtab-action="starter"]')) return;
-  cards.insertAdjacentHTML("beforeend", STARTERS.map(function (s) {
+  cards.insertAdjacentHTML("beforeend", ports.starters.map(function (s) {
     var scenes = s.state.rows.length;
     return '<button type="button" class="newtab-card" data-newtab-action="starter" data-starter="' + escapeHtml(s.id) + '">' +
       '<strong class="newtab-card-name">' + escapeHtml(s.name) + '</strong>' +
@@ -181,13 +174,13 @@ function renderStarterCards() {
 function updateDesktopPitch() {
   var pitch = document.getElementById("newtab-desktop");
   if (!pitch) return;
-  pitch.hidden = !desktopAppOffered();
+  pitch.hidden = !ports.desktopDownload.offered();
   var link = document.getElementById("newtab-desktop-link");
-  if (link && desktopAppOffered()) link.href = desktopAppUrl();
+  if (link && ports.desktopDownload.offered()) link.href = ports.desktopDownload.url();
 }
 
 function recentsSupported() {
-  return !!(runningOnDesktop() && typeof desktopPort().listRecents === "function");
+  return !!(ports.desktop() && ports.recents.available());
 }
 
 function formatRecentWhen(at) {
@@ -259,77 +252,95 @@ function renderRecents(entries) {
 }
 
 async function refreshRecents() {
+  var mounted = activeMount;
   updateDesktopPitch();
   if (!recentsSupported()) { renderContinue(null); return; }
   var entries;
-  try { entries = await desktopPort().listRecents(); } catch (e) { return; }
+  try { entries = await ports.recents.list(); } catch (e) { return; }
+  if (activeMount !== mounted) return;
   renderRecents(Array.isArray(entries) ? entries : []);
 }
 
 async function openRecent(fileId) {
+  var mounted = activeMount;
   if (!fileId || !recentsSupported()) return;
   var entry;
   try {
-    var r = await desktopPort().routeOpen({ kind: "file", fileId: fileId });
+    var r = await ports.recents.routeOpen({ kind: "file", fileId: fileId });
+    if (activeMount !== mounted) return;
     if (!r || r.where !== "this-tab") {
       refreshRecents();
       return;
     }
-    entry = await desktopPort().readFile(fileId);
+    entry = await ports.recents.read(fileId);
   } catch (e) {
-    showToast("That file isn't there any more — it may have been moved or deleted. " +
+    if (activeMount !== mounted) return;
+    ports.notices.show("That file isn't there any more — it may have been moved or deleted. " +
       "Use × to take it off this list.", "warn");
     refreshRecents();
     return;
   }
-  var handle = makeDesktopHandle(entry);
-  await openDocument({ kind: "file", file: await handle.getFile(), handle: handle });
+  if (activeMount !== mounted) return;
+  var handle = ports.recentHandle(entry);
+  var file = await handle.getFile();
+  if (activeMount !== mounted) return;
+  await ports.opening.open({ kind: "file", file: file, handle: handle });
 }
 
 async function forgetRecent(fileId) {
-  if (!fileId || !recentsSupported() || typeof desktopPort().removeRecent !== "function") return;
+  var mounted = activeMount;
+  if (!fileId || !recentsSupported() || !ports.recents.canRemove()) return;
   var entries;
-  try { entries = await desktopPort().removeRecent(fileId); } catch (e) { return; }
+  try { entries = await ports.recents.remove(fileId); } catch (e) { return; }
+  if (activeMount !== mounted) return;
   renderRecents(Array.isArray(entries) ? entries : []);
 }
 
 async function clearRecents() {
-  if (!recentsSupported() || typeof desktopPort().clearRecents !== "function") return;
+  var mounted = activeMount;
+  if (!recentsSupported() || !ports.recents.canClear()) return;
   var entries;
-  try { entries = await desktopPort().clearRecents(); } catch (e) { return; }
+  try { entries = await ports.recents.clear(); } catch (e) { return; }
+  if (activeMount !== mounted) return;
   renderRecents(Array.isArray(entries) ? entries : []);
 }
 
 async function newTabEligibleForAutoShow() {
+  var mounted = activeMount;
   if (newTabSuppressed()) return false;
-  if (!seedCheckPasses()) return false;
-  if (typeof arrivingOnLink === "function" && arrivingOnLink()) return false;
-  if (runningOnDesktop() && draftResume().restorePending()) return false;
-  if (currentHome().kind === "server" || currentHome().kind === "file") return false;
-  if (runningOnDesktop()) {
-    if ((desktopPort().launchIntent && desktopPort().launchIntent.type !== "blank") ||
-        desktopPort().hasDraftToRestore) return false;
+  if (!ports.seedCheck.passes()) return false;
+  if (typeof ports.place.arrivingOnLink === "function" && ports.place.arrivingOnLink()) return false;
+  if (ports.desktop() && ports.draftResume.restorePending()) return false;
+  if (ports.place.home().kind === "server" || ports.place.home().kind === "file") return false;
+  if (ports.desktop()) {
+    if ((ports.launch.launchIntent() && ports.launch.launchIntent().type !== "blank") ||
+        ports.launch.hasDraftToRestore()) return false;
   } else {
     var handle;
-    try { handle = await loadLastFileHandle(); } catch (e) { handle = null; }
+    try { handle = await ports.lastFile.load(); } catch (e) { handle = null; }
+    if (activeMount !== mounted) return false;
     if (handle) return false;
   }
-  if (currentHome().kind !== "none") return false;
+  if (ports.place.home().kind !== "none") return false;
   return true;
 }
 
 async function maybeAutoShowNewTabPage() {
+  var mounted = activeMount;
   var eligible;
   try { eligible = await newTabEligibleForAutoShow(); } catch (e) { eligible = false; }
-  if (eligible) openNewTabPage();
+  if (eligible && activeMount === mounted) openNewTabPage();
 }
 
-export function __init() {
+export function __init(given) {
+  ports = given;
+  var mounted = {};
+  activeMount = mounted;
   (function wireNewTabPage() {
     var el = newTabPageEl();
     if (!el) return;
     renderStarterCards();
-    el.addEventListener("click", function (e) {
+    listen(el, "click", function (e) {
       var target = e.target.closest("[data-newtab-action]");
       if (!target) return;
       var action = target.getAttribute("data-newtab-action");
@@ -338,26 +349,26 @@ export function __init() {
       else if (action === "starter") startStarterScript(target.getAttribute("data-starter"));
       else if (action === "long-demo") startStarterScript("long-demo");
       else if (action === "open") newTabOpenFile();
-      else if (action === "join") appActions.invoke("servers", "button");
+      else if (action === "join") ports.actions.invoke("servers", "button");
       else if (action === "paste") openPasteAsNewDocument();
-      else if (action === "gdoc") appActions.invoke("show-gdoc-import", "button");
+      else if (action === "gdoc") ports.actions.invoke("show-gdoc-import", "button");
       else if (action === "dismiss") closeNewTabPage();
-      else if (action === "tour") { closeNewTabPage(); appActions.invoke("tour", "button"); }
+      else if (action === "tour") { closeNewTabPage(); ports.actions.invoke("tour", "button"); }
       else if (action === "open-recent") openRecent(target.getAttribute("data-file-id"));
       else if (action === "forget-recent") forgetRecent(target.getAttribute("data-file-id"));
       else if (action === "clear-recents") clearRecents();
     });
 
-    el.addEventListener("dragover", function (e) {
+    listen(el, "dragover", function (e) {
       if (!isFileDrag(e)) return;
       e.preventDefault();
       try { e.dataTransfer.dropEffect = "copy"; } catch (err) {}
       setDropHover(true);
     });
-    el.addEventListener("dragleave", function (e) {
+    listen(el, "dragleave", function (e) {
       if (!e.relatedTarget || !el.contains(e.relatedTarget)) setDropHover(false);
     });
-    el.addEventListener("drop", function (e) {
+    listen(el, "drop", function (e) {
       if (!isFileDrag(e)) return;
       e.preventDefault();
       setDropHover(false);
@@ -368,12 +379,26 @@ export function __init() {
   maybeAutoShowNewTabPage();
 
   window.__newTab = {
-    open: openNewTabPage,
-    isOpen: function () { return newTabPageShown; },
-    eligible: newTabEligibleForAutoShow,
-    blankState: blankDocumentState,
-    starterIds: function () { return STARTERS.map(function (s) { return s.id; }); },
-    starterState: starterDocumentState,
-    refreshRecents: refreshRecents
+    open: function () { if (activeMount === mounted) openNewTabPage(); },
+    isOpen: function () { return activeMount === mounted && newTabPageShown; },
+    eligible: function () { return activeMount === mounted ? newTabEligibleForAutoShow() : Promise.resolve(false); },
+    blankState: function () { return activeMount === mounted ? blankDocumentState() : null; },
+    starterIds: function () { return activeMount === mounted ? ports.starters.map(function (s) { return s.id; }) : []; },
+    starterState: function (id) { return activeMount === mounted ? starterDocumentState(id) : null; },
+    refreshRecents: function () { return activeMount === mounted ? refreshRecents() : Promise.resolve(); }
+  };
+  var probe = window.__newTab;
+  var disposed = false;
+  return {
+    closeNewTabPage: function () { if (!disposed) closeNewTabPage(); },
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      while (listeners.length) listeners.pop()();
+      closeNewTabPage();
+      if (window.__newTab === probe) delete window.__newTab;
+      activeMount = null;
+      ports = null;
+    }
   };
 }

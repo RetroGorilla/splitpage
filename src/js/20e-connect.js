@@ -14,7 +14,7 @@ import { appActions } from "../legacy/app-actions.ts";
 import { interruptTourForDialog, offerTourResumeAfterDialog } from "../legacy/tour-pause.ts";
 import { setMenuItemLabel, showToast } from "../legacy/effects-bridge.ts";
 import { joinErrorText, normalizeServerUrl, tunnelCommand } from "../../shared/server-links.js";
-import { shortHost } from "../adapters/transport/server-address.ts";
+import { shortHost } from "../features/common/server-address.ts";
 
 var pinRequest = null;
 var sshShownFor = null;
