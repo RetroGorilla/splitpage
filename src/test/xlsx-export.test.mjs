@@ -11,7 +11,7 @@ import { brollTable } from "../adapters/formats/export-projections.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import { PRINT_COLORS } from "../adapters/formats/export-kit.ts";
-import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { scriptTable } from "../adapters/formats/csv.ts";
 import { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx, colName } from "../adapters/formats/xlsx.ts";
 import { LONG_DEMO } from "../js/_starters.js";

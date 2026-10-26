@@ -1,3 +1,4 @@
+import { commentNumbers } from "../application/save/export-kit.ts";
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import "./_export-services-started.mjs";
@@ -15,9 +16,8 @@ import {
   exportSummaryParts
 } from "../adapters/formats/export-kit.ts";
 import {
-  commentNumbers,
   exportDocumentOf
-} from "../js/14b-export-kit.js";
+} from "../legacy/export-kit-bridge.ts";
 import { exportRuns } from "../adapters/formats/export-kit.ts";
 import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { assemblePdf, pdfLampOp, pdfTextWidth, pdfWrapRuns } from "../adapters/formats/pdf.ts";

@@ -8,7 +8,7 @@ import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-p
 await bootApp();
 
 const { migrateRows } = await import("../js/02-state.js");
-const { exportDocumentOf } = await import("../js/14b-export-kit.js");
+const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");

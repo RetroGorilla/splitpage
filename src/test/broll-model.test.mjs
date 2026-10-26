@@ -26,7 +26,7 @@ const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toNam
 
 import { buildBreakdownCsv, buildBrollCsv } from "../adapters/formats/csv.ts";
 import { buildShotListPdf } from "../adapters/formats/pdf.ts";
-import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 import { loadTestDocument } from "./_document.mjs";

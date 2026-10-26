@@ -13,7 +13,7 @@ import { refsIn } from "../../shared/blob-policy.js";
 import {
   setBaseState
 } from "./03-sync.js";
-import { captureExportDocument } from "./14b-export-kit.js";
+import { captureExportDocument } from "../legacy/export-kit-bridge.ts";
 import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "../adapters/formats/project-file.ts";
 import { makeDesktopHandle } from "../adapters/desktop/desktop-handle.ts";
 import { checkFileConflict, existingTarget, isAbort, pickTarget, writeToHandle } from "../adapters/files/file-target.ts";

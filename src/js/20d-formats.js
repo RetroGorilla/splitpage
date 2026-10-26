@@ -12,7 +12,7 @@ import {
 import { setBaseState } from "./03-sync.js";
 import { stashLocalWork } from "../legacy/recovery-bridge.ts";
 import { tagFieldOccurrences } from "./07-production-tags.js";
-import { captureExportDocument, exportDocumentOf } from "./14b-export-kit.js";
+import { captureExportDocument, exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { autoSavePolicy, autoSaveTarget, flushAutoSave, saveDoc, toggleAutoSave } from "../legacy/save-bridge.ts";
 import { currentDocument, heldDocument } from "../legacy/session-bridge.ts";

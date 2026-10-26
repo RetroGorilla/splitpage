@@ -16,7 +16,7 @@ import { mdSceneCellSource, toMarkdownTableDoc } from "../adapters/formats/expor
 import { LONG_DEMO } from "../js/_starters.js";
 import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, fileImagesMissing, parseMarkdownProject } from "../adapters/formats/project-file.ts";
 import { STORED } from "./_stored-cells.mjs";
-import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
 

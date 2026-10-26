@@ -12,7 +12,7 @@ import { zipRead } from "../adapters/formats/zip.ts";
 import { toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
 import { buildDocx } from "../adapters/formats/docx.ts";
 import { buildCsv } from "../adapters/formats/csv.ts";
-import { exportDocumentOf } from "../js/14b-export-kit.js";
+import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();

@@ -11,7 +11,7 @@ await bootApp();
 
 const { liveSession, noteReload } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../js/02-state.js");
-const { exportDocumentOf } = await import("../js/14b-export-kit.js");
+const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { adoptRestoredState } = await import("../js/02b-doc-id.js");
 const { restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { applyMerge } = await import("../legacy/merge-bridge.ts");

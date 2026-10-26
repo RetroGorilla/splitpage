@@ -541,7 +541,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 ### INV-57 — Exports state non-script facts through one kit
 
-- **Behaviour:** Every document export takes everything it states besides the words from `14b-export-kit.js`:
+- **Behaviour:** Every document export takes everything it states besides the words from `application/save/export-kit.ts`:
   - the facts line;
   - each scene's number, start timecode, status and read time;
   - open-thread numbers;
@@ -607,4 +607,3 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Replacement:** — (plan §6: credentials and invitation fragments never enter exports or recovery metadata).
 - **Acceptance:** the suites pass after collaboration moves behind application interfaces. Application test: serialising any session to a project, export or recovery record yields no token or key.
 - **Milestone 4 (4.22):** held. The authority model (`src/application/collaboration/authority.ts`, 4.16) derives who may edit from the connection's token, role and scope and stores no credential; credentials stay per server in this browser. Tests: `src/test/collaboration-authority.test.mjs` and the Collaborate suites above, re-run at the gate. `HANDOFF.md` §5.62 points here.
-
