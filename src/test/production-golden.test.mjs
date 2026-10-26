@@ -23,7 +23,8 @@ const { brollEntries } = broll;
 import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { __init as initHistory } from "../js/03a-history-store.js";
-import { applyGearQuickAdd } from "../js/08-production-panels.js";
+import { mountTagPanelsFeature } from "../bootstrap/wiring/production.ts";
+import { applyGearQuickAdd } from "../features/tags/panels.js";
 import { LONG_DEMO } from "../js/_starters.js";
 import { assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, newTokens } from "./golden-helpers.mjs";
 import { confirmSavedNow, startSaves, unsavedChanges } from "../legacy/save-bridge.ts";
@@ -33,6 +34,7 @@ import { appSessionDeps } from "./_app-session.mjs";
 import { loadTestDocument } from "./_document.mjs";
 
 startTestSession(appSessionDeps());
+mountTagPanelsFeature();
 
 freezeClockAndRandom(0x70726f64);
 startSaves({

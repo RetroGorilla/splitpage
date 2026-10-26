@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../js/02-state.js";
 import { __init as initTags } from "../js/07-production-tags.js";
-import { breakdownRows } from "../js/08-production-panels.js";
+import { breakdownRows } from "../adapters/formats/export-projections.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";

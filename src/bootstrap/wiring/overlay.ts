@@ -5,7 +5,7 @@ import { paintingScreen } from "../../js/05-render.js";
 import { closeRowMenus } from "../../features/rows/row-menu.js";
 import { hideTagGhost, tagGhost } from "../../js/07-production-tags.js";
 import { clearProductionSelection, selectedKeys } from "../../legacy/production-editing-bridge.ts";
-import { renderProduction } from "../../js/08-production-panels.js";
+import { renderProduction } from "../../features/tags/panels.js";
 import { closeCommentComposer } from "../../features/comments/comments.js";
 import { closeWriter } from "../../js/19-writer.js";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
