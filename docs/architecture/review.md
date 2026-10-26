@@ -10,7 +10,7 @@ Every other PR goes through the full process below.
 
 ## 1. The PR
 
-- Each PR has one coherent purpose, normally within one ownership boundary. It may cross boundaries when the change needs it (a shared contract, a composition step like 2.5 in [milestone-2.md](milestone-2.md)). In that case the description names every affected consumer and says how their integration was verified.
+- Each PR has one coherent purpose, normally within one ownership boundary. It may cross boundaries when the change needs it (a shared contract, a composition step like 2.5 in [milestone-2.md](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestone-2.md)). In that case the description names every affected consumer and says how their integration was verified.
 - A behavior fix stays separate from a broad extraction. Unrelated cleanup goes in its own PR.
 - The description briefly states:
   - what changes, and what must stay the same

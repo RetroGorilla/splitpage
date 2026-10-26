@@ -3,11 +3,11 @@
 Every known defect that a test pins as it is, or that work up to and including
 milestone 2 found and deferred, with its disposition. This is the fourth
 commitment of the milestone 2 external review
-([gate record](milestone-2-gate.md#external-review)). The rows cover:
+([gate record](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestone-2-gate.md#external-review)). The rows cover:
 
 - the issues the milestone 1 and 2 reviews filed;
 - every "Found, not changed", "Found, not fixed" and "Left open" item in
-  [milestone-2.md](milestone-2.md);
+  [milestone-2.md](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestone-2.md);
 - the issues filed while fixing those on the closed 3.1.x branches;
 - the defects milestone 3 found, and the cases the milestone 4 race matrix measured as wrong, in the last two sections.
 
@@ -21,7 +21,7 @@ in the module that now owns the code, with a regression test written to fail
 first. A test that pins the old behaviour changes in that PR, on purpose. A
 golden that changes is regenerated in a dedicated commit on
 `4.1-development` that changes nothing else
-([milestone-2.md, Characterisation](milestone-2.md#characterisation-20)). The
+([milestone-2.md, Characterisation](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestone-2.md#characterisation-20)). The
 closed 3.1.x branches hold fixes and fail-first tests to port from:
 `fix/274-overlay-commands`, `fix/276-save-during-load`,
 `fix/278-290-ids-and-nested-links`, `fix/280-282-anchor-tags-and-cue-retitle`
@@ -72,7 +72,7 @@ none, no golden is expected to change.
 | Deleting a person leaves their id as the owner of their b-roll shots until the next load | #305 | Nothing | `src/js/07-production-tags.js` (`deletePerson`) | Fixed by #346: deleting a person clears them as the owner of their b-roll shots at once |
 | After a heal, the cached core production index keeps the old ids, while `productionEntries()` shows the new ones. Nothing reads them yet | #326 | `src/test/production-shims.test.mjs` ("after a heal the cached core index keeps the ids it was derived with…") | `src/js/07-production-tags.js` (`healTagRegistry`, the index cache) | Fixed by #376 (M3 3.3): one owner function, `adoptRegisteredIds`, keeps both views in step, and the pinned test flipped. #385 (3.5) then made the heal build a new index instead of writing into handed-out entries, and #403 fixed the order of a name the registry refuses (#377) |
 | A tag name the registry refuses (only invisible characters) sits out of order in the cached production index after a heal, is missing from `unregistered`, and is counted again by the next heal | #377 | Found in the review of #376. `src/test/production-shims.test.mjs` (pinned the old order and a count of 3; flipped on purpose) | `src/core/production/tags.ts` (`planRegistryHealing`), `src/js/07-production-tags.js` | Fixed by #403: the heal counts only the names it takes into the registry, and a refused name stays unregistered and last, as a fresh derivation and a reload have it. The Gear list and the by-shoot "Needs on the day" list show it there |
-| Reads that repair: drawing the b-roll badge creates and renames shots, and every save heals the registry and repairs shots first | #325 | `src/test/production-shims.test.mjs`, `src/test/broll-id-sequence.test.mjs` (both flipped on purpose in 6.5) | `src/js/08c-broll.js` (the badge), `src/js/14-export.js` (`settleDerivedRecords`) | Fixed in milestone 6 step 6.5 by #611 (records written by the commands that create them) and the repair-on-read PR: entry (`migrateRows`) creates and renames b-roll records, edit transactions keep tag and b-roll records through the session's records port, and render, the idle refreshes, the panels, the badge and save preparation only read. Defect H (an audioRef kept with angle brackets, a bare "B-roll:" line making a shot with no name) is fixed with it; `src/test/entry-fuzz-app.test.mjs` no longer allows either. [milestone-6.md](milestone-6.md) step 6.5 |
+| Reads that repair: drawing the b-roll badge creates and renames shots, and every save heals the registry and repairs shots first | #325 | `src/test/production-shims.test.mjs`, `src/test/broll-id-sequence.test.mjs` (both flipped on purpose in 6.5) | `src/js/08c-broll.js` (the badge), `src/js/14-export.js` (`settleDerivedRecords`) | Fixed in milestone 6 step 6.5 by #611 (records written by the commands that create them) and the repair-on-read PR: entry (`migrateRows`) creates and renames b-roll records, edit transactions keep tag and b-roll records through the session's records port, and render, the idle refreshes, the panels, the badge and save preparation only read. Defect H (an audioRef kept with angle brackets, a bare "B-roll:" line making a shot with no name) is fixed with it; `src/test/entry-fuzz-app.test.mjs` no longer allows either. [milestone-6.md](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestone-6.md) step 6.5 |
 | B-roll keys still lose comment: formatted keys, typed markers, panel rename | #348 | Regression cases from #324 (PR #336) | `src/core/production/broll.ts` (`carriesOnlyComments`, `brollAnchorLine`), `src/js/08c-broll.js` (`renameBrollInScript`) | triage |
 | Gear quick add ignores names like `constructor` and `__proto__`; tag suggestions skip `__proto__` | #354 | Golden `production-gear-quick-add`; unit test "quick-add lines whose key is an Object property…" | `src/core/production/tags.ts` (`planQuickAdd`), `src/js/07-production-tags.js` (`refreshTagNameList`), `src/core/document/id-map.ts` | Fixed by #399: both maps are `idMap`s. The golden and the unit test were changed on purpose |
 
@@ -147,7 +147,7 @@ Added by the 3.15 docs PR (2026-10-08). The first block came from 3.10's seeded 
 
 ### Render invariant cases (PR 4.4)
 
-Added by 4.4 (render invariant tests, #463) as skipped tests in `src/test/render-no-edit-app.test.mjs`, each named by its case id, owned by 4.21 ([milestone-4.md](milestone-4.md#pinned-defects-in-m4)). The case id is the tracker (no separate issues). 4.21 (atomic render) fixed all four and removed the skips, so they run in `npm test` like the other cases.
+Added by 4.4 (render invariant tests, #463) as skipped tests in `src/test/render-no-edit-app.test.mjs`, each named by its case id, owned by 4.21 ([milestone-4.md](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestone-4.md#pinned-defects-in-m4)). The case id is the tracker (no separate issues). 4.21 (atomic render) fixed all four and removed the skips, so they run in `npm test` like the other cases.
 
 | Defect | Case | Pinned by | Owner on 4.0 | Disposition |
 | --- | --- | --- | --- | --- |
@@ -159,7 +159,7 @@ Everything else the cases check passes on the base since #477 and #485: no edit,
 
 ### Race-matrix cases (PRs 4.0, 4.1 and 4.2)
 
-Added by PR 4.0 (the race-matrix harness), PR 4.1 (groups F, I and D) and PR 4.2 (groups S, P, C and A). Each row is a case of the [race matrix](milestone-4.md#the-race-matrix) that the harness measured as wrong (on `f338fea` for 4.0, on `8cc553d` for 4.1 and 4.2) and declares `wrongToday`. The case id is the tracker; no separate issues are filed. `npm test` fails while such a case passes, so the PR named in the last column flips it to `rightToday` in the commit that fixes it. The cases are in `src/test/m4-matrix-session.test.mjs`, except T3, which needs its own boot and is in `src/test/m4-matrix-boot.test.mjs`; F, I and D are in `src/test/m4-matrix-files.test.mjs`; S, P, C and A are in `src/test/m4-matrix-hosted.test.mjs`.
+Added by PR 4.0 (the race-matrix harness), PR 4.1 (groups F, I and D) and PR 4.2 (groups S, P, C and A). Each row is a case of the [race matrix](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestone-4.md#the-race-matrix) that the harness measured as wrong (on `f338fea` for 4.0, on `8cc553d` for 4.1 and 4.2) and declares `wrongToday`. The case id is the tracker; no separate issues are filed. `npm test` fails while such a case passes, so the PR named in the last column flips it to `rightToday` in the commit that fixes it. The cases are in `src/test/m4-matrix-session.test.mjs`, except T3, which needs its own boot and is in `src/test/m4-matrix-boot.test.mjs`; F, I and D are in `src/test/m4-matrix-files.test.mjs`; S, P, C and A are in `src/test/m4-matrix-hosted.test.mjs`.
 
 
 | Defect | Issue or case | Pinned by | Owner on 4.0 | Disposition |
@@ -203,7 +203,7 @@ Added by PR 4.0 (the race-matrix harness), PR 4.1 (groups F, I and D) and PR 4.2
 
 ### Race-matrix cases (PR 4.3)
 
-Added by PR 4.3 (groups B, K, H and M), measured on `758128d`. Each row is a case of the [race matrix](milestone-4.md#the-race-matrix) that the harness measured as wrong and declares `wrongToday`; the case id is the tracker, and the PR named in the last column flips it to `rightToday` in the commit that fixes it. The cases are in `src/test/m4-matrix-recovery.test.mjs` (B, K, H) and `src/test/m4-matrix-continuations.test.mjs` (M).
+Added by PR 4.3 (groups B, K, H and M), measured on `758128d`. Each row is a case of the [race matrix](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestone-4.md#the-race-matrix) that the harness measured as wrong and declares `wrongToday`; the case id is the tracker, and the PR named in the last column flips it to `rightToday` in the commit that fixes it. The cases are in `src/test/m4-matrix-recovery.test.mjs` (B, K, H) and `src/test/m4-matrix-continuations.test.mjs` (M).
 
 | Defect | Issue or case | Pinned by | Owner on 4.0 | Disposition |
 | --- | --- | --- | --- | --- |

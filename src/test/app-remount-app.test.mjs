@@ -60,7 +60,7 @@ function minus(a, b) {
   return out;
 }
 
-const LEDGER = readFileSync(new URL("../../docs/architecture/milestone-6.md", import.meta.url), "utf8");
+const LEDGER = readFileSync(new URL("./fixtures/events-21-ledger.md", import.meta.url), "utf8");
 const CLASS_TARGETS = { ".add-row-bar": "div.add-row-bar", ".toolbar": "div.toolbar", ".writer-bar": "div.writer-bar" };
 const REGISTRATION = /(?:((?:`[^`]+`(?:, `[^`]+`)*|document|window|D|Each `[^`]+`)(?:, if present)?(?:, only while loading)?): )?([a-zA-Z]+)\/([BC])(?:, passive)? `21-events\.js:(\d+)`/g;
 

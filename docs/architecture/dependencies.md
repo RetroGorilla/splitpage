@@ -9,7 +9,7 @@ comments.
 | Command | What it checks | Baseline |
 | --- | --- | --- |
 | `npm run check:deps` (`tools/dep-report.mjs`) | Layer rules, platform imports and globals, HTML parsed into cells outside the rich text adapter, unresolvable modules, computed dynamic loads, cycles through migrated folders, the deleted `S` module, and the legacy debt: `S` importers, `S` writers and runtime cycle edges | `tools/dep-baseline.json` |
-| `npm run check:comments` (`tools/comment-gate.mjs`) | Comments in authored JS/TS, CSS, HTML, shell, PowerShell and batch files, and in YAML (workflow `run:` scripts included), Dockerfiles and JSON | `tools/comment-baseline.json` |
+| `npm run check:comments` (`tools/comment-gate.mjs`) | Comments in authored JS/TS, CSS, HTML, shell, PowerShell and batch files, and in YAML (workflow `run:` scripts included), Dockerfiles and JSON; a `// why: <doc>.md#<anchor>` reason comment in a script passes when the heading exists | `tools/comment-baseline.json` |
 
 Both fail on anything new and on anything the baseline lists that has gone.
 `--prune` removes gone entries and refuses to add new ones. `--init` writes a
