@@ -1,5 +1,7 @@
 # Splitpage 4.1 migration status — 2026-10-23
 
+Superseded by [the October 26 status audit](migration-status-2026-10-26.md). This file is kept as history.
+
 Measured on `4.1-development` at `de712f8d95dc6f112fc9c183cefd91277e643829` (PR #789, 17:09 PDT / 00:09 UTC October 24). This is a dated source audit, not a release-readiness claim. The implementation chat also received Claude's handoff dated October 24; its operational priorities are recorded below separately from measured source facts.
 
 ## Measurements
