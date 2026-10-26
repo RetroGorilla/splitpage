@@ -9,7 +9,7 @@ import { exports } from "./ports/files.ts";
 import { askingFromLauncher, launcherShown, screen } from "./ports/screen.ts";
 import { exportActionName, exportActionReason } from "./file-menu-export-controls.ts";
 import { runExportAction } from "../../js/18-local-files.js";
-import { fileMenuOpen, refreshFileMenu } from "../../js/18b-file-menu.js";
+import { fileMenuOpen, refreshFileMenu } from "./file-menu-controls.ts";
 
 const commandMenu = owned<CommandMenuMount>();
 

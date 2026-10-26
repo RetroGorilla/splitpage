@@ -1,10 +1,15 @@
-import { desktopPort } from "../../../adapters/desktop/desktop-port.ts";
+import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import type { ExternalLinks, LaunchFacts } from "../../../application/desktop-presence.ts";
 import type { RecentFiles } from "../../../application/files/recent-files.ts";
 
 export const externalLinks: ExternalLinks = {
   available: () => typeof desktopPort()?.openExternal === "function",
   open: (url) => { desktopPort()?.openExternal?.(url); }
+};
+
+export const prompterWindows = {
+  browser: () => canOpenPrompterInBrowser(),
+  chromium: () => canOpenPrompterInChromium()
 };
 
 export const recents: RecentFiles = {
