@@ -1,7 +1,7 @@
 {
-  "legacyImports": [
-    "./20h-appdata.js"
+  "legacyImports": [],
+  "loadOnly": [
+    "src/features/settings/app-data.js"
   ],
-  "loadOnly": [],
   "expectedLoads": 1
 }
