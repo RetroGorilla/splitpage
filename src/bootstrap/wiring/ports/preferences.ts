@@ -67,3 +67,8 @@ export const appDataPreferences: Pick<Preferences, "appDataExport" | "appDataImp
   appDataImport: (incoming, extra) => preferences().appDataImport(incoming, extra),
   commentsSort: () => preferences().commentsSort()
 };
+
+export const updatePreferences: Pick<Preferences, "desktopNoticeDismissed" | "dismissDesktopNotice"> = {
+  desktopNoticeDismissed: () => preferences().desktopNoticeDismissed(),
+  dismissDesktopNotice: () => preferences().dismissDesktopNotice()
+};

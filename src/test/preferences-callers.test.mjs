@@ -6,7 +6,7 @@ import { isRundownMinimized, toggleRundownMinimized } from "../features/rundown/
 import { mountRundownFeature as initRundown } from "../bootstrap/wiring/rundown.ts";
 import { mountScriptZoomFeature as initZoom } from "../bootstrap/wiring/script-zoom.ts";
 import { scriptScale, setScriptScale } from "../features/script-zoom/script-zoom.js";
-import { dismissDesktopAppNotice, renderDesktopAppNotice } from "../js/20a-update.js";
+import { mountUpdateFeature } from "../bootstrap/wiring/update.ts";
 
 const frames = new Map();
 let nextFrame = 1;
@@ -35,6 +35,7 @@ after(stop);
 document.body.innerHTML = '<div id="root"></div><div id="rows"></div><div id="rundown"></div><button id="menu-rundown-min"></button><div id="desktop-app-bar" hidden><span id="desktop-app-bar-text"></span><button id="desktop-app-bar-action"></button></div>';
 initRundown();
 initZoom();
+const { dismissDesktopAppNotice, renderDesktopAppNotice } = mountUpdateFeature();
 const heard = [];
 document.addEventListener(PREF_EVENT, (e) => { heard.push(e.detail); });
 

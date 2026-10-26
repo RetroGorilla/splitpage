@@ -5,6 +5,49 @@ import { restoreDesktop, useDesktopForTest } from "../../../src/adapters/desktop
 import type { DesktopPort } from "../../../src/adapters/desktop/desktop-port.ts";
 import { updates as updatesPort } from "../../../src/bootstrap/wiring/update.ts";
 import type { UpdatePorts, UpdateStatus } from "../../../src/features/update/ports.ts";
+import { mountUpdate } from "../../../src/features/update/update.js";
+import type { UpdateFeaturePorts } from "../../../src/features/update/ports.ts";
+
+test("update mount owns its subscription, About listeners and probe across replacement", async () => {
+  document.body.innerHTML = '<meta name="splitpage-version" content="4.1.0"><div id="update-bar" hidden><span id="update-bar-text"></span><button id="update-bar-action"></button></div><div id="about-modal" hidden><span id="about-version"></span><div id="about-body"></div><a id="about-link"></a><button data-about-close></button></div>';
+  let receive: ((status: UpdateStatus) => void) | null = null;
+  let stopped = 0;
+  const ports: UpdateFeaturePorts = {
+    desktop: () => true,
+    place: { arrivingOnLink: () => false },
+    preferences: { desktopNoticeDismissed: () => false, dismissDesktopNotice: () => {} },
+    externalLinks: { available: () => true, open: () => {} },
+    updates: {
+      status: () => Promise.resolve({ version: "4.1.0", latest: "4.2.0", updateAvailable: true, desktop: true, canInstall: true }),
+      onStatus: (listener) => { receive = listener; },
+      stopStatus: () => { stopped++; },
+      download: () => Promise.resolve(null),
+      install: () => Promise.resolve(null)
+    }
+  };
+  const first = mountUpdate(ports);
+  first.loadUpdateStatus();
+  await Promise.resolve();
+  assert.equal((document.getElementById("update-bar") as HTMLElement).hidden, false);
+  assert.equal((document.getElementById("update-bar-action") as HTMLElement).textContent, "Download");
+  first.showAbout();
+  assert.equal((document.getElementById("about-modal") as HTMLElement).hidden, false);
+  assert.equal((document.getElementById("about-version") as HTMLElement).textContent, "Version 4.1.0");
+  const late = receive;
+  const second = mountUpdate(ports);
+  assert.equal(stopped, 1);
+  assert.equal((document.getElementById("about-modal") as HTMLElement).hidden, true);
+  assert.equal((document.getElementById("update-bar-action") as HTMLButtonElement).onclick, null);
+  (late as unknown as (status: UpdateStatus) => void)({ version: "stale" });
+  second.showAbout();
+  assert.equal((document.getElementById("about-version") as HTMLElement).textContent, "Version 4.1.0");
+  (document.querySelector("[data-about-close]") as HTMLButtonElement).click();
+  assert.equal((document.getElementById("about-modal") as HTMLElement).hidden, true);
+  second.dispose();
+  second.dispose();
+  assert.equal(stopped, 1);
+  assert.equal("__updateTest" in window, false);
+});
 
 test("update ports can be wired before mounting and delegate every call and listener cleanup to the current desktop", async () => {
   const ports: UpdatePorts = { updates: updatesPort };
