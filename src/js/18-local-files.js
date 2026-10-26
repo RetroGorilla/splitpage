@@ -23,7 +23,7 @@ import { exportAssetsRequest } from "../adapters/formats/export-assets.ts";
 import {
   detectTwoColumnFormat,
   parseImportRows
-} from "./11-import.js";
+} from "../adapters/formats/import-text.js";
 import { blobSourceNow } from "./13-hosted.js";
 import { docxToRows } from "../adapters/formats/docx.ts";
 import { csvToRows } from "../adapters/formats/csv.ts";

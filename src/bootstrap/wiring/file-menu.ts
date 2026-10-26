@@ -19,7 +19,7 @@ import { history, opening, transitions } from "./ports/transitions.ts";
 import { fileMenu } from "./file-menu-controls.ts";
 import { migrateRows } from "../../legacy/document-ports.ts";
 import { syncDocIdentity } from "../../js/02b-doc-id.js";
-import { openImportModal } from "../../js/11-import.js";
+import { importControls } from "./imports.ts";
 import { applyReviewMode } from "../../js/13-hosted.js";
 import { openLocalFile } from "../../js/18-local-files.js";
 import { LONG_DEMO } from "../../starters/index.ts";
@@ -63,6 +63,6 @@ export function fileMenuActions(): ActionDefinition[] {
     saves,
     save: (options) => saveDoc(options),
     openFile: () => openLocalFile(),
-    openImport: () => { openImportModal(); }
+    openImport: () => { importControls()?.openImportModal(); }
   });
 }

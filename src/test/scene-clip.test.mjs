@@ -10,7 +10,7 @@ import { cellOf, fromHtml } from "../legacy/richtext.ts";
 import { isBlankScene } from "../application/commands/rows.ts";
 import { createUndoHistory, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";
-import { detectTwoColumnFormat, parseImportRows } from "../js/11-import.js";
+import { detectTwoColumnFormat, parseImportRows } from "../adapters/formats/import-text.js";
 import {
   SCENES_ATTR, SCENES_MIME, buildScenePayload, insertScenes, isMove, parseScenePayload,
   scenesOnClipboard, setLiveCut

@@ -1,3 +1,4 @@
+import { importActions } from "./wiring/imports.ts";
 import { commandMenuActions } from "./wiring/command-menu.ts";
 import { tagPanelActions } from "./wiring/production.ts";
 import { appDataActions } from "./wiring/settings.ts";
@@ -55,7 +56,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => {
       const share = shareActions();
       const file = fileMenuActions();
-      return registerAll(registry, [...share.slice(0, 2), ...file.slice(4, 5), ...share.slice(2, 3), ...file.slice(5, 6), ...share.slice(3, 9), ...fileMenuExportActions().slice(1), ...share.slice(9), ...desktopActions()]);
+      return registerAll(registry, [...share.slice(0, 2), ...file.slice(4, 5), ...share.slice(2, 3), ...file.slice(5, 6), ...importActions(), ...share.slice(3, 7), ...fileMenuExportActions().slice(1), ...share.slice(7), ...desktopActions()]);
     },
     () => registerAll(registry, scriptZoomActions()),
     () => {

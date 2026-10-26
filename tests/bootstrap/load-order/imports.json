@@ -1,7 +1,10 @@
 {
-  "legacyImports": [
-    "./11-import.js"
+  "legacyImports": [],
+  "loadOnly": [
+    "src/features/imports/imports.js",
+    "src/features/imports/actions.ts",
+    "src/bootstrap/wiring/imports.ts",
+    "src/adapters/formats/import-text.js"
   ],
-  "loadOnly": [],
-  "expectedLoads": 1
+  "expectedLoads": 4
 }

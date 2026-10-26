@@ -100,7 +100,7 @@ export async function appWiringDeps() {
     import("../bootstrap/wiring/drafts.ts"),
     import("../js/13-hosted.js"),
     import("../js/18-local-files.js"),
-    import("../js/11-import.js"),
+    import("../bootstrap/wiring/imports.ts"),
     import("../bootstrap/wiring/project-files.ts")
   ]);
   const fileSaving = exporting.wireFileSaving({ copyHistory: docId.copyDocHistorySafe, syncIdentity: docId.syncDocIdentity, setBaseline: sync.setBaseState });

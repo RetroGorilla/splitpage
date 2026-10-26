@@ -1,6 +1,5 @@
 import type { ActionDefinition, Availability } from "../application/actions.ts";
 import { promptForTarget } from "../js/03-sync.js";
-import { openGdocModal } from "../js/11-import.js";
 import { openDriveModal, openServerPicker, publishToServer, serverOpenItemState, serverPublishItemState } from "../js/13-hosted.js";
 import { collaborateBlockedReason, maybeAskGuestName, openCollaborate } from "../js/13b-collaborate.js";
 import { autoSavePolicy, savesStarted, toggleAutoSave } from "./save-bridge.ts";
@@ -53,22 +52,6 @@ export function shareActions(): ActionDefinition[] {
       words: "server hosted shared documents",
       availability: (source) => loaded(itemAvailability(serverOpenItemState(), source), OPENS_ONE),
       run: () => openServerPicker()
-    },
-    {
-      id: "gdoc-import",
-      label: "Import: Google Doc link…",
-      group: "File",
-      icon: "i-link",
-      words: "import google docs link url",
-      availability: () => loaded(undefined, OPENS_ONE),
-      run: () => { openGdocModal(); }
-    },
-    {
-      id: "show-gdoc-import",
-      label: "Show the Google Docs import",
-      group: "File",
-      availability: () => ({ enabled: true, visible: false }),
-      run: () => { openGdocModal(); }
     },
     {
       id: "drive-open",
