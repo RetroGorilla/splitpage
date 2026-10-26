@@ -284,7 +284,7 @@ function confirmFileMerge() {
   mergeCandidate = null;
 }
 
-export function __init(given) {
+export function startLocalMerge(given) {
   ports = given;
   var disposed = false;
   return {

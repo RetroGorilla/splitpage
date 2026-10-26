@@ -1,9 +1,6 @@
 import { deliverBytes } from "../adapters/files/deliver.ts";
 import { showToast } from "./effects-bridge.ts";
-
-export interface DeliverOptions {
-  readonly savedMsg?: string;
-}
+import type { DeliverOptions } from "../application/files/file-delivery.ts";
 
 export async function deliverFile(filename: string, data: unknown, opts?: DeliverOptions | null): Promise<boolean> {
   const delivered = await deliverBytes(filename, data);

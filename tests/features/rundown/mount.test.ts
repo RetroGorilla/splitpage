@@ -5,7 +5,7 @@ import { createActionRegistry, registerAll } from "../../../src/application/acti
 import { rundownMinimizeActions, rundownSceneActions } from "../../../src/features/rundown/actions.ts";
 import type { RundownControls } from "../../../src/features/rundown/actions.ts";
 import type { RundownPorts } from "../../../src/features/rundown/ports.ts";
-import { __init as mountRundown, isRundownMinimized, toggleRundownMinimized } from "../../../src/features/rundown/rundown.js";
+import { startRundown as mountRundown, isRundownMinimized, toggleRundownMinimized } from "../../../src/features/rundown/rundown.js";
 import { fakeActions, fakeDocument, fakePreferenceChanges, fakeReview, fakeScreen } from "../fakes.ts";
 
 function setup() {

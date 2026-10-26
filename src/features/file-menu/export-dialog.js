@@ -605,7 +605,7 @@ function refreshExportDialog() {
   choose(keep, false);
 }
 
-export function __init(given) {
+export function startExportDialog(given) {
   ports = given;
   chosenFormat = null;
   chosenChoice = {};

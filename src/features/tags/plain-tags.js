@@ -253,7 +253,7 @@ export function closePlainTag() {
   return true;
 }
 
-export function __init(given) {
+export function startPlainTags(given) {
   ports = given;
   var disposed = false;
   return {

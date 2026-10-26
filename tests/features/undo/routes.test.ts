@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mountUndoRoutes, undoGesture } from "../../../src/features/undo/routes.ts";
-import type { UndoDirection, UndoHooks, UndoRoutes } from "../../../src/features/undo/routes.ts";
+import type { UndoRouteHooks, UndoRoutes } from "../../../src/features/undo/routes.ts";
+import type { UndoDirection } from "../../../src/application/editing/undo/undo.ts";
 import { jsdomWindow } from "../editing/jsdom.mjs";
 
 type Realm = Window & typeof globalThis;
@@ -41,7 +42,7 @@ function harness(p: ReturnType<typeof page>) {
   const state = { stale: false, review: false, writer: false, latest: null as unknown, installs: 0, releases: 0 };
   const replays: UndoDirection[] = [];
   const warnings: string[] = [];
-  const hooks: UndoHooks[] = [];
+  const hooks: UndoRouteHooks[] = [];
   const after = (): void => {};
   const sent = (): boolean => true;
   const mount = (): UndoRoutes => mountUndoRoutes({
@@ -228,7 +229,7 @@ test("the toast's Undo replays only while its entry is the latest, and warns onc
   assert.deepEqual(h.replays, ["undo"]);
   assert.deepEqual(h.warnings, [MOVED_ON]);
   h.state.latest = entry;
-  (h.hooks[0] as UndoHooks).onRefused("a scene was removed", "undo");
+  (h.hooks[0] as UndoRouteHooks).onRefused("a scene was removed", "undo");
   h.state.latest = null;
   routes.undoIfLatest(entry);
   assert.deepEqual(h.replays, ["undo"]);
@@ -241,7 +242,7 @@ test("the installed hooks pass the ports through and word a refusal exactly", ()
   const h = harness(p);
   const routes = h.mount();
   assert.equal(h.state.installs, 1);
-  const hooks = h.hooks[0] as UndoHooks;
+  const hooks = h.hooks[0] as UndoRouteHooks;
   assert.equal(hooks.afterApply, h.after);
   assert.equal(hooks.commentsAreSent, h.sent);
   hooks.onRefused(undefined, "redo");

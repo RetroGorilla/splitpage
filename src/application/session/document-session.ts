@@ -19,14 +19,14 @@ export interface Plan {
   readonly apply: (doc: ValidatedDocument) => void;
 }
 
-export interface Refusal {
+export interface CommandRefusal {
   readonly refused: string;
 }
 
 export interface Command {
   readonly name: string;
   readonly needs: "edit" | "nothing";
-  readonly plan: (doc: DocumentView, capability: CapabilityPort) => Plan | Refusal | null;
+  readonly plan: (doc: DocumentView, capability: CapabilityPort) => Plan | CommandRefusal | null;
 }
 
 export type CommandOutcome =
@@ -44,7 +44,7 @@ export interface ReplayPlan {
 
 export interface Replay {
   readonly name: string;
-  readonly plan: (doc: ValidatedDocument) => ReplayPlan | Refusal | null;
+  readonly plan: (doc: ValidatedDocument) => ReplayPlan | CommandRefusal | null;
 }
 
 export interface Stamp {
@@ -300,7 +300,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
       const can = ports.capability.edit();
       if (!can.allowed) return { kind: "rejected", reason: can.reason };
     }
-    let plan: Plan | Refusal | null;
+    let plan: Plan | CommandRefusal | null;
     try {
       plan = command.plan(doc, ports.capability);
     } catch (error) {
@@ -320,7 +320,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
     if (disposed) return { kind: "rejected", reason: DISPOSED };
     const doc = document;
     if (!doc) return { kind: "rejected", reason: NO_DOCUMENT };
-    let plan: ReplayPlan | Refusal | null;
+    let plan: ReplayPlan | CommandRefusal | null;
     try {
       plan = task.plan(doc);
     } catch (error) {

@@ -207,7 +207,7 @@ function onKeydown(e) {
   if (ports.actions.invoke(id, "shortcut").kind === "ran") e.preventDefault();
 }
 
-export function __init(given) {
+export function startScriptZoom(given) {
   ports = given;
   scale = target = ports.scale.scriptScale();
   paintScale(scale);

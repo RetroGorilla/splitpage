@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { __init } from "../../../src/features/onboarding/onboarding.js";
+import { startOnboarding } from "../../../src/features/onboarding/onboarding.js";
 import { fakeOnboardingPorts } from "../fakes.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
@@ -44,7 +44,7 @@ async function settled() {
 test("onboarding mounts with ports, saves the host command, joins, records completion and starts the tour", async () => {
   page();
   const h = fakeOnboardingPorts();
-  const mounted = __init(h.ports);
+  const mounted = startOnboarding(h.ports);
   try {
     await settled();
     assert.equal(modal().hidden, false);
@@ -94,7 +94,7 @@ test("automatic onboarding respects the seed, saved file, link, document home an
     page();
     const h = fakeOnboardingPorts();
     configure(h);
-    const mounted = __init(h.ports);
+    const mounted = startOnboarding(h.ports);
     try {
       await settled();
       assert.equal(modal().hidden, hidden, name);
@@ -107,7 +107,7 @@ test("automatic onboarding respects the seed, saved file, link, document home an
 test("disposal removes listeners and the file choice subscription and permits a fresh mount", async () => {
   page();
   const h = fakeOnboardingPorts();
-  const first = __init(h.ports);
+  const first = startOnboarding(h.ports);
   await settled();
   assert.equal(h.choices.size, 1);
   for (const listener of h.choices) listener();
@@ -122,7 +122,7 @@ test("disposal removes listeners and the file choice subscription and permits a 
   assert.deepEqual(h.recorded, []);
   first.openOnboarding();
   assert.equal(modal().hidden, true);
-  const next = __init(h.ports);
+  const next = startOnboarding(h.ports);
   try {
     await settled();
     assert.equal(h.choices.size, 1);
@@ -140,7 +140,7 @@ test("a disposed mount cannot auto-open after a last-file read completes", async
   page();
   const h = fakeOnboardingPorts();
   let resolve: (value: unknown) => void = () => {};
-  const mounted = __init({ ...h.ports, lastFile: { load: () => new Promise((done) => { resolve = done; }) } });
+  const mounted = startOnboarding({ ...h.ports, lastFile: { load: () => new Promise((done) => { resolve = done; }) } });
   mounted.dispose();
   resolve(null);
   await settled();
@@ -153,7 +153,7 @@ test("a join from a disposed mount cannot update a remounted wizard", async () =
     page();
     const original = fakeOnboardingPorts();
     let resolve: (value: typeof result) => void = () => {};
-    const first = __init({ ...original.ports, addServerBookmark: () => new Promise((done) => { resolve = done; }) });
+    const first = startOnboarding({ ...original.ports, addServerBookmark: () => new Promise((done) => { resolve = done; }) });
     await settled();
     click("join-submit");
     const button = win.document.querySelector<HTMLButtonElement>('[data-onboard-action="join-submit"]');
@@ -163,7 +163,7 @@ test("a join from a disposed mount cannot update a remounted wizard", async () =
     assert.equal(button.disabled, false);
     assert.equal(button.textContent, "Join");
     const replacement = fakeOnboardingPorts();
-    const second = __init(replacement.ports);
+    const second = startOnboarding(replacement.ports);
     try {
       await settled();
       resolve(result);
@@ -186,12 +186,12 @@ test("a clipboard copy from a disposed mount cannot notify a replacement", async
   const button = win.document.createElement("button");
   button.setAttribute("data-onboard-action", "host-copy");
   modal().appendChild(button);
-  const first = __init(fakeOnboardingPorts().ports);
+  const first = startOnboarding(fakeOnboardingPorts().ports);
   await settled();
   click("host-copy");
   first.dispose();
   const replacement = fakeOnboardingPorts();
-  const second = __init(replacement.ports);
+  const second = startOnboarding(replacement.ports);
   try {
     resolve();
     await settled();

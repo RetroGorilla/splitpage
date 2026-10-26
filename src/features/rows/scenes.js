@@ -175,7 +175,7 @@ function armDelete(btn, id) {
   }, function () { armDeleteButton(btn); });
 }
 
-export function __init(next) {
+export function startSceneRows(next) {
   ports = next;
   return {
     addRow: addRow,

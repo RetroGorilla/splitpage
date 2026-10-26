@@ -2,7 +2,7 @@ import { rowIndexOf } from "../../core/document/rows.ts";
 import { safeHref } from "../../core/document/text-policy.ts";
 import { normalizeVideoLink, rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
 
-export function __init(ports) {
+export function startVideoFiles(ports) {
   var disposed = false;
   var videoFileTokens = {};
   var sessionVideoFiles = {};

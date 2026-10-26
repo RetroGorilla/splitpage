@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createActionRegistry, registerAll } from "../../../src/application/actions.ts";
 import { createEditorSelection } from "../../../src/application/editing/selection.ts";
-import { __init } from "../../../src/features/command-menu/command-menu.js";
+import { startCommandMenu } from "../../../src/features/command-menu/command-menu.js";
 import { commandMenuActions } from "../../../src/features/command-menu/actions.ts";
 import type { CommandMenuPorts } from "../../../src/features/command-menu/ports.ts";
 
@@ -48,7 +48,7 @@ function key(value: string) {
 
 test("command menu mounts with fake ports, lists live availability, runs commands and restores focus", () => {
   const h = setup();
-  const mounted = __init(h.ports);
+  const mounted = startCommandMenu(h.ports);
   const unregister = registerAll(h.actions, commandMenuActions(() => mounted, () => ({ loading: false, dialog: false, launcher: mounted.commandMenuOpen(), tour: false, prompter: false, writer: false, shotlist: false })));
   try {
     el("outside").focus();
@@ -77,7 +77,7 @@ test("command menu mounts with fake ports, lists live availability, runs command
 
 test("dispose removes all command-menu listeners and test hook; remount installs exactly one set", () => {
   const h = setup();
-  let mounted = __init(h.ports);
+  let mounted = startCommandMenu(h.ports);
   for (let round = 0; round < 2; round++) {
     mounted.openCommandMenu();
     const input = el("cmdk-input") as HTMLInputElement;
@@ -91,7 +91,7 @@ test("dispose removes all command-menu listeners and test hook; remount installs
     el("btn-command").click();
     assert.equal(el("cmdk-list").innerHTML, "");
     assert.equal(el("cmdk").hidden, true);
-    mounted = __init(h.ports);
+    mounted = startCommandMenu(h.ports);
     mounted.openCommandMenu();
     const before = h.calls.filter((call) => call === "zebra").length;
     key("Enter");

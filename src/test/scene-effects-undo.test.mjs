@@ -9,7 +9,7 @@ import { lastUndoEntry, redo, resetUndo, undo, undoSizes } from "../legacy/undo-
 const stubs = await import("./_fanout-stubs.mjs");
 const { createSceneStatus } = await import("../features/rows/scene-status.ts");
 const { cycleRowStatus } = createSceneStatus(stubs.sceneStatusPorts());
-const { __init: mountReadTime, setSceneLength } = await import("../features/rows/read-time.js");
+const { startReadTime: mountReadTime, setSceneLength } = await import("../features/rows/read-time.js");
 mountReadTime(stubs.readTimePorts());
 const { loadTestDocument } = await import("./_document.mjs");
 

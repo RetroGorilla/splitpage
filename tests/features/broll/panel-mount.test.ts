@@ -4,7 +4,7 @@ import { createBrollView } from "../../../src/application/preferences/broll-view
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { __init, mountBrollPanel } from "../../../src/features/broll/panel.js";
+import { startBrollPanel, mountBrollPanel } from "../../../src/features/broll/panel.js";
 import type { BrollPanelPorts } from "../../../src/features/broll/ports.ts";
 import { fakeDocument, fakeEdits, fakeReview, fakeNotices } from "../fakes.ts";
 
@@ -60,7 +60,7 @@ function click(id: string) {
 
 test("B-roll mounts with fake ports, keeps live export scope and removes listeners on replacement and disposal", () => {
   const h = fixture();
-  const state = __init(h.ports);
+  const state = startBrollPanel(h.ports);
   assert.deepEqual(h.view.printView(), { filter: "unshot", group: "person" });
   const first = mountBrollPanel({ exportAs: () => {} });
   click("btn-broll");
@@ -91,14 +91,14 @@ test("B-roll mounts with fake ports, keeps live export scope and removes listene
 test("retained B-roll state controls do nothing after disposal and cannot operate a replacement", () => {
   const first = fixture();
   const doc = migrateRows({ rows: [] }, fakeMigration().ports);
-  const initial = __init({ ...first.ports, document: fakeDocument(doc).document });
+  const initial = startBrollPanel({ ...first.ports, document: fakeDocument(doc).document });
   initial.openBrollPanel();
   assert.deepEqual(first.calls, ["open:broll-panel"]);
   initial.dispose();
   assert.doesNotThrow(() => initial.openBrollPanel());
   assert.deepEqual(first.calls, ["open:broll-panel"]);
   const next = fixture();
-  const replacement = __init({ ...next.ports, document: fakeDocument(doc).document });
+  const replacement = startBrollPanel({ ...next.ports, document: fakeDocument(doc).document });
   initial.openBrollPanel();
   initial.dispose();
   assert.deepEqual(next.calls, []);

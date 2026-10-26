@@ -1,5 +1,5 @@
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
-import type { BrollSeed } from "../../application/commands/clipboard.ts";
+import type { BrollSeedPlace } from "../../application/commands/clipboard.ts";
 import type { CellEditing, CellRange } from "../../application/editing/cell-editing.ts";
 import type { PaintGuard } from "../../application/editing/paint-guard.ts";
 import type { RowDrag } from "../../application/editing/row-drag.ts";
@@ -28,7 +28,7 @@ export interface CellClipboardPorts {
   readonly selection: (cell: Element) => CellRange | null;
   readonly cells: Pick<CellEditing<Element>, "open" | "close">;
   readonly paintGuard: Pick<PaintGuard, "whileShown">;
-  readonly brollSeed: (row: DeepReadonly<DocumentRow>) => BrollSeed;
+  readonly brollSeed: (row: DeepReadonly<DocumentRow>) => BrollSeedPlace;
 }
 
 export interface SceneTag {

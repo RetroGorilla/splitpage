@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import type { DesktopVideoResult } from "../../../src/application/media/desktop-video.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { videoLinkKey } from "../../../src/core/document/gallery.ts";
-import { __init as mountVideoFiles } from "../../../src/features/gallery/video-files.js";
+import { startVideoFiles as mountVideoFiles } from "../../../src/features/gallery/video-files.js";
 import type { VideoFilePorts } from "../../../src/features/gallery/video-files-ports.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeNotices } from "../fakes.ts";

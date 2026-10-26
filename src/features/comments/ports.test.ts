@@ -2,7 +2,7 @@ import "../../test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { CommentStatePorts } from "./ports.ts";
-import { __init, captureCommentComposer, openCommentComposer, postComment } from "./comments.js";
+import { startComments, captureCommentComposer, openCommentComposer, postComment } from "./comments.js";
 
 test("tagging help listeners stop on disposal and install once on remount", () => {
   const fake = fixture(false);
@@ -12,14 +12,14 @@ test("tagging help listeners stop on disposal and install once on remount", () =
   dismiss.id = "tagging-help-dismiss";
   card.append(dismiss);
   document.body.append(card);
-  const owner = __init(fake.ports);
+  const owner = startComments(fake.ports);
   dismiss.click();
   assert.equal(card.hidden, true);
   owner.dispose();
   card.hidden = false;
   dismiss.click();
   assert.equal(card.hidden, false);
-  const next = __init(fake.ports);
+  const next = startComments(fake.ports);
   dismiss.click();
   assert.equal(card.hidden, true);
   next.dispose();
@@ -69,7 +69,7 @@ function fixture(reviewing: boolean) {
 for (const reviewing of [false, true]) {
   test("posting requests an immediate save" + (reviewing ? " after resuming review autosave" : ""), () => {
     const fake = fixture(reviewing);
-    const owner = __init(fake.ports);
+    const owner = startComments(fake.ports);
     try {
       openCommentComposer({ id: "c_new", rowId: "r1", field: "audioText", quotedText: "Words" });
       const body = document.getElementById("comment-body-editable");
@@ -88,7 +88,7 @@ for (const reviewing of [false, true]) {
 
 test("disposing cancels composer focus and releases the refresh callback, then remounts once", async () => {
   const fake = fixture(false);
-  const owner = __init(fake.ports);
+  const owner = startComments(fake.ports);
   openCommentComposer({ id: "c_new", rowId: "r1", field: "audioText", quotedText: "Words" });
   const resolveComposer = captureCommentComposer();
   owner.dispose();
@@ -98,7 +98,7 @@ test("disposing cancels composer focus and releases the refresh callback, then r
   assert.equal(fake.listeners.size, 0);
   assert.equal(document.getElementById("comment-modal")?.hidden, true);
   assert.notEqual(document.activeElement?.id, "comment-body-editable");
-  const next = __init(fake.ports);
+  const next = startComments(fake.ports);
   assert.equal(fake.listeners.size, 1);
   next.dispose();
   assert.equal(fake.listeners.size, 0);

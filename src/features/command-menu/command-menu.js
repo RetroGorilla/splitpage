@@ -279,7 +279,7 @@ function runAt(i) {
   return true;
 }
 
-export function __init(given) {
+export function startCommandMenu(given) {
   ports = given;
   var modal = el("cmdk");
   var input = el("cmdk-input");

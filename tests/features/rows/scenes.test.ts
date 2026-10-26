@@ -8,10 +8,10 @@ import type { DeleteArea } from "../../../src/application/editing/delete-confirm
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { deepFreeze } from "../../../src/core/document/freeze.ts";
 import { normalizeCell } from "../../../src/core/text/runs.ts";
-import type { CellRange } from "../../../src/core/text/edits.ts";
+import type { TextSpan } from "../../../src/core/text/edits.ts";
 import type { SceneMediaPorts, ScenePorts } from "../../../src/features/rows/ports.ts";
-import { __init as mountSceneMedia } from "../../../src/features/rows/scene-media.js";
-import { __init as mountScenes } from "../../../src/features/rows/scenes.js";
+import { startSceneMedia as mountSceneMedia } from "../../../src/features/rows/scene-media.js";
+import { startSceneRows as mountScenes } from "../../../src/features/rows/scenes.js";
 import { cellOf, storedHtmlFromDom } from "../../../src/legacy/richtext.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices, fakeOwnership, fakePictures } from "../fakes.ts";
@@ -47,7 +47,7 @@ function setup() {
     text: { cellOf },
     cells: { sync: (cell) => { calls.push("sync " + cell.getAttribute("data-field")); } },
     undo: { breakCoalescing: () => { calls.push("break"); } },
-    selection: { of: (): CellRange => ({ from: 2, to: 2 }) },
+    selection: { of: (): TextSpan => ({ from: 2, to: 2 }) },
     placeCaret: (cell, offset) => { calls.push("caret " + cell.getAttribute("data-field") + " " + offset); },
     rowDrag: { dragging: () => null },
     deletes: {

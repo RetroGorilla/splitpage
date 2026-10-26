@@ -1,14 +1,12 @@
 import { normalizeCell } from "../../core/text/runs.ts";
-import type { Run } from "../../core/text/runs.ts";
-
-export type CellDecoder = (html: unknown) => readonly Run[];
+import type { HtmlRunDecoder } from "../../application/editing/undo/history.ts";
 
 export interface CellStep {
   readonly before?: unknown;
   readonly after?: unknown;
 }
 
-export function caretAfterStep(decode: CellDecoder, step: CellStep): number {
+export function caretAfterStep(decode: HtmlRunDecoder, step: CellStep): number {
   function domChars(h: unknown): { text: string; keys: string[] } {
     let text = "";
     const keys: string[] = [];

@@ -332,7 +332,7 @@ async function maybeAutoShowNewTabPage() {
   if (eligible && activeMount === mounted) openNewTabPage();
 }
 
-export function __init(given) {
+export function startNewTab(given) {
   ports = given;
   var mounted = {};
   activeMount = mounted;
