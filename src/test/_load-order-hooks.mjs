@@ -47,6 +47,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/gallery.ts": { functions: ["mountGalleryFeature", "mountGalleryOverlayFeature", "mountGalleryVideoFeature"] },
   "src/bootstrap/wiring/hide-shot.ts": { functions: ["mountHideShotFeature"] },
   "src/bootstrap/wiring/file-menu-export.ts": { functions: ["mountFileMenuExportFeature"] },
+  "src/bootstrap/wiring/file-menu-controls.ts": { functions: ["onFileMenuRefresh", "startNewScript"] },
   "src/bootstrap/wiring/hosted.ts": { functions: ["mountHostedFeature"] },
   "src/application/export/services.ts": { functions: ["installExportServices"] },
   "src/application/settings-actions.ts": { functions: ["installSettingsControls"] },
