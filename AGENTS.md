@@ -20,13 +20,13 @@ Read this first. It is the short version of the rules; the linked documents hold
 | `src/bootstrap/wiring/<name>.ts` | Builds one feature's ports from the real owners and mounts it | anything |
 | `src/bootstrap/wiring/ports/` | Shared ports, one module per responsibility (document, editing, text, preferences, screen, effects...) | anything |
 | `src/bootstrap/actions.ts` | The one ordered list of actions. Order is what the command menu shows; `tests/bootstrap/action-order.test.ts` pins it | anything |
-| `src/legacy/` | Bridges that hand owners to the old numbered files. Each bridge is deleted when its last numbered importer moves | not features |
+| `src/legacy/` | Bridges that hand owners to the old numbered files. Each bridge is deleted when its last numbered importer moves | core, `application`, `adapters`, `src/js/`, `shared/`; never features or bootstrap |
 | `src/js/NN-*.js` | The old app code, still being moved out. Do not add files or exports here | anything |
 | `server/`, `desktop/`, `shared/` | Hosted server, Electron shell, code shared by all three | see the layer table |
 
 The layer table is enforced by `npm run check:deps`: [dependencies.md, Layers](docs/architecture/dependencies.md#layers).
 
-A feature never imports another feature. To reach one, it runs that feature's action, reads an owner, or gets an output callback from the wiring: [feature-ports.md, Rule 5](docs/architecture/feature-ports.md#rule-5-features-reach-each-other-four-ways).
+A feature never imports another feature. To reach one, it runs that feature's action, reads or subscribes to an owner, gets an output callback from the wiring, or shares a stateless helper in `features/common`: [feature-ports.md, Rule 5](docs/architecture/feature-ports.md#rule-5-features-reach-each-other-four-ways).
 
 ## Finding your way for a feature change
 
