@@ -84,10 +84,12 @@ function downloadProgressText(dl) {
 
 function startDesktopDownload() {
   if (updateBusy) return;
+  var mounted = activeMount;
   updateBusy = true;
   updateNotice = null;
   renderUpdateNotice();
   ports.updates.download().then(function (result) {
+    if (activeMount !== mounted) return;
     updateBusy = false;
     if (result && result.ok) {
       updateNotice = null;
@@ -97,6 +99,7 @@ function startDesktopDownload() {
     }
     renderUpdateNotice();
   }).catch(function (err) {
+    if (activeMount !== mounted) return;
     updateBusy = false;
     updateNotice = "Could not download the update: " + (err && err.message ? err.message : "unknown error");
     renderUpdateNotice();
@@ -105,10 +108,12 @@ function startDesktopDownload() {
 
 function startDesktopInstall() {
   if (updateBusy) return;
+  var mounted = activeMount;
   updateBusy = true;
   updateNotice = "Starting the installer\u2026";
   renderUpdateNotice();
   ports.updates.install().then(function (result) {
+    if (activeMount !== mounted) return;
     if (result && result.ok) return;
     updateBusy = false;
     if (result && result.error === "quit-cancelled") {
@@ -122,6 +127,7 @@ function startDesktopInstall() {
     }
     renderUpdateNotice();
   }).catch(function (err) {
+    if (activeMount !== mounted) return;
     updateBusy = false;
     updateNotice = "Could not start the installer: " + (err && err.message ? err.message : "unknown error");
     renderUpdateNotice();

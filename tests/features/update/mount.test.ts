@@ -7,6 +7,64 @@ import { updates as updatesPort } from "../../../src/bootstrap/wiring/update.ts"
 import type { UpdatePorts, UpdateStatus } from "../../../src/features/update/ports.ts";
 import { mountUpdate } from "../../../src/features/update/update.js";
 import type { UpdateFeaturePorts } from "../../../src/features/update/ports.ts";
+import type { UpdateResult } from "../../../src/features/update/ports.ts";
+
+for (const operation of ["download", "install"] as const) {
+  for (const outcome of ["success", "failure", "rejection"] as const) {
+    for (const replace of [false, true]) {
+      test(`${operation} ${outcome} cannot affect the UI after ${replace ? "replacement" : "disposal"}`, async () => {
+        document.body.innerHTML = '<div id="update-bar" hidden><span id="update-bar-text"></span><button id="update-bar-action"></button></div>';
+        const callbacks: { resolve?: (result: UpdateResult | null) => void; reject?: (error: Error) => void } = {};
+        const pending = new Promise<UpdateResult | null>((resolve, reject) => {
+          callbacks.resolve = resolve;
+          callbacks.reject = reject;
+        });
+        const status: UpdateStatus = {
+          version: "4.1", latest: "4.2", desktop: true, canInstall: true, updateAvailable: true,
+          download: { state: operation === "install" ? "ready" : "idle" }
+        };
+        const ports: UpdateFeaturePorts = {
+          desktop: () => true,
+          place: { arrivingOnLink: () => false },
+          preferences: { desktopNoticeDismissed: () => false, dismissDesktopNotice: () => {} },
+          externalLinks: { available: () => true, open: () => {} },
+          updates: {
+            status: () => Promise.resolve(status),
+            onStatus: () => {}, stopStatus: () => {},
+            download: () => pending, install: () => pending
+          }
+        };
+        const first = mountUpdate(ports);
+        first.loadUpdateStatus();
+        await Promise.resolve();
+        const button = document.getElementById("update-bar-action") as HTMLButtonElement;
+        assert.equal(button.textContent, operation === "install" ? "Install and restart" : "Download");
+        button.click();
+        first.dispose();
+        let second: ReturnType<typeof mountUpdate> | null = null;
+        try {
+          if (replace) {
+            second = mountUpdate({ ...ports, updates: { ...ports.updates, status: () => Promise.resolve({ ...status, latest: "4.3" }) } });
+            second.loadUpdateStatus();
+            await Promise.resolve();
+          }
+          const text = (document.getElementById("update-bar-text") as HTMLElement).textContent;
+          const hidden = button.hidden;
+          assert.ok(callbacks.resolve);
+          assert.ok(callbacks.reject);
+          if (outcome === "rejection") callbacks.reject(new Error("stale request"));
+          else callbacks.resolve(outcome === "success" ? { ok: true } : { ok: false, message: "stale request" });
+          await Promise.resolve();
+          await Promise.resolve();
+          assert.equal((document.getElementById("update-bar-text") as HTMLElement).textContent, text);
+          assert.equal(button.hidden, hidden);
+        } finally {
+          second?.dispose();
+        }
+      });
+    }
+  }
+}
 
 test("update mount owns its subscription, About listeners and probe across replacement", async () => {
   document.body.innerHTML = '<meta name="splitpage-version" content="4.1.0"><div id="update-bar" hidden><span id="update-bar-text"></span><button id="update-bar-action"></button></div><div id="about-modal" hidden><span id="about-version"></span><div id="about-body"></div><a id="about-link"></a><button data-about-close></button></div>';
