@@ -19,6 +19,7 @@ export { mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeatu
 export { mountSceneStatusFeature } from "./wiring/scene-status.ts";
 export { mountHideShotFeature } from "./wiring/hide-shot.ts";
 export { mountFileMenuExportFeature } from "./wiring/file-menu-export.ts";
+export { mountHostedFeature } from "./wiring/hosted.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
 import { registerBuiltInExporters } from "./wiring/exporters.ts";
 import { wireProductionEditing } from "./wiring/production-editing.ts";
