@@ -9,7 +9,7 @@ import { cellOf, fromHtml } from "../legacy/richtext.ts";
 import { mergeCells } from "../core/merge/cells.ts";
 import { toDocxRuns, toMarkdown, toPlainText } from "../core/text/projections.ts";
 import { toHtml } from "../core/text/html.ts";
-import { htmlToMarkdown, inertBody, sanitizeHtml } from "../js/04-richtext.js";
+import { htmlToMarkdown, inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { htmlToRuns } from "../adapters/formats/html-runs.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 

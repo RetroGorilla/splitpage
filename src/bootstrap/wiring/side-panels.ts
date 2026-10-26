@@ -2,8 +2,15 @@ import { SIDE_PANEL_IDS } from "../../application/preferences/panel-widths.ts";
 import { createSidePanels } from "../../features/panels/side-panels.ts";
 import { startSidePanels } from "../../legacy/panels-bridge.ts";
 import { panelWidths } from "../../legacy/preferences-bridge.ts";
-import { holdScriptPlace, sidePanelOpening } from "../../js/03b-side-panels.js";
+import { mountScriptPlace } from "../../features/panels/script-place.js";
+import { owned } from "../../features/routing/owned.ts";
 import { newTabControls } from "./newtab.ts";
+
+const scriptPlace = owned<ReturnType<typeof mountScriptPlace>>();
+
+export function mountScriptPlaceFeature(): ReturnType<typeof mountScriptPlace> {
+  return scriptPlace.replace(() => mountScriptPlace(window));
+}
 
 const PANEL_BUTTONS: readonly (readonly [string, string])[] = [
   ["production-panel", "btn-production"],
@@ -20,8 +27,8 @@ export function mountSidePanelsFeature(): void {
     ids: SIDE_PANEL_IDS,
     buttons: PANEL_BUTTONS,
     readWidth: (id) => panelWidths().read(id),
-    holdPlace: holdScriptPlace,
-    opening: sidePanelOpening
+    holdPlace: () => scriptPlace.owner()?.holdScriptPlace(),
+    opening: (open) => scriptPlace.owner()?.sidePanelOpening(open)
   });
   const stops = [startSidePanels(panels), panels.registerPage("newtab-page", () => { newTabControls()?.closeNewTabPage(); })];
   stopSidePanels = () => {

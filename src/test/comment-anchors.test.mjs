@@ -6,7 +6,7 @@ import { commentRange, joinCells, splitCell } from "../core/text/edits.ts";
 import { fromHtml, cellOf } from "../legacy/richtext.ts";
 import { toHtml } from "../core/text/html.ts";
 import { syncCommentAnchors } from "../core/text/anchors.ts";
-import { sanitizeHtml } from "../js/04-richtext.js";
+import { sanitizeHtml } from "../legacy/richtext.ts";
 import { migrateRows } from "../js/02-state.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";

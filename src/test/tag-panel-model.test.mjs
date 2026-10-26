@@ -4,7 +4,7 @@ import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { inertBody, sanitizeHtml } from "../js/04-richtext.js";
+import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { projection, tagNameOf } from "../core/text/runs.ts";
 import { toHtml } from "../core/text/html.ts";
