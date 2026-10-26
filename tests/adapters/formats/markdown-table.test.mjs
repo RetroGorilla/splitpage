@@ -1,20 +1,20 @@
-import "./_dom.mjs";
-import "./_preferences-started.mjs";
-import "./_export-services-started.mjs";
+import "../../../src/test/_dom.mjs";
+import "../../../src/test/_preferences-started.mjs";
+import "../../../src/test/_export-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
-import { __init as initTags } from "../js/07-production-tags.js";
-import { detectTwoColumnFormat, parseImportRows } from "../js/11-import.js";
-import { parseMarkdownTable } from "../adapters/formats/markdown-table.ts";
-import { cellOf } from "../legacy/richtext.ts";
-import { toMarkdown } from "../core/text/projections.ts";
-import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";
-import { LONG_DEMO } from "../starters/index.ts";
-import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
-import { exportFacts } from "../adapters/formats/export-kit.ts";
-import { loadTestDocument } from "./_document.mjs";
+import { currentDocument } from "../../../src/legacy/session-bridge.ts";
+import { migrateRows } from "../../../src/legacy/document-ports.ts";
+import { __init as initTags } from "../../../src/js/07-production-tags.js";
+import { detectTwoColumnFormat, parseImportRows } from "../../../src/adapters/formats/import-text.js";
+import { parseMarkdownTable } from "../../../src/adapters/formats/markdown-table.ts";
+import { cellOf } from "../../../src/legacy/richtext.ts";
+import { toMarkdown } from "../../../src/core/text/projections.ts";
+import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "../../../src/adapters/formats/export-text.ts";
+import { LONG_DEMO } from "../../../src/starters/index.ts";
+import { exportDocumentOf } from "../../../src/legacy/export-kit-bridge.ts";
+import { exportFacts } from "../../../src/adapters/formats/export-kit.ts";
+import { loadTestDocument } from "../../../src/test/_document.mjs";
 
 initTags();
 

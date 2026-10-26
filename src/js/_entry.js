@@ -8,7 +8,7 @@ import { __init as init_05_render } from "./05-render.js";
 import { __init as init_07_production_tags } from "./07-production-tags.js";
 import { mountPlainTagsFeature } from "../bootstrap/wiring.ts";
 import { mountScriptPlaceFeature, mountFindFeature, mountTagPanelsFeature } from "../bootstrap/wiring.ts";
-import { __init as init_11_import } from "./11-import.js";
+import { mountImportDialogFeature } from "../bootstrap/wiring.ts";
 import { mountSaveStatusFeature } from "../bootstrap/wiring.ts";
 import { mountHostedFeature } from "../bootstrap/wiring.ts";
 import { __init as init_13a_presence } from "./13a-presence.js";
@@ -24,7 +24,6 @@ import { migrateRows } from "../legacy/document-ports.ts";
 import { documentIdentityPort, adoptRestoredState, copyDocHistorySafe, docIdEvents, initDocIdentityChannel, migrateDocument, reassignDocId, standaloneHtmlFor, syncDocIdentity } from "./02b-doc-id.js";
 import { documentDestinationPort, documentHistoryPort, legacyMergePorts, stampRow, setBaseState } from "./03-sync.js";
 import { bulkTagCell, runIdleRefresh, tagFieldOccurrences } from "./07-production-tags.js";
-import { importDocumentSource } from "./11-import.js";
 import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { mountProjectFiles } from "../bootstrap/wiring.ts";
@@ -41,7 +40,7 @@ try {
     fileSaving: { copyHistory: copyDocHistorySafe, syncIdentity: syncDocIdentity, setBaseline: setBaseState },
     destinations: function () { return [importSaveDestination(), serverSaveDestination()]; },
     transitions: { destination: documentDestinationPort, identity: documentIdentityPort, history: documentHistoryPort },
-    sources: function () { return [projectFileSource(), importDocumentSource(), serverDocumentSource()]; },
+    sources: function () { return [projectFileSource(), serverDocumentSource()]; },
     merge: legacyMergePorts,
     recovery: draftRecoveryPorts,
     projectFiles: {
@@ -90,7 +89,7 @@ if (wiring) {
   mountBrollPanelStateFeature();
   mountFindFeature();
   mountCommentsLogicFeature();
-  init_11_import();
+  mountImportDialogFeature({ stampRow });
   mountSaveStatusFeature({ sync: syncDocIdentity });
   mountHostedFeature();
   init_13a_presence();

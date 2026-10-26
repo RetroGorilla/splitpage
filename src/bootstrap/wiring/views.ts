@@ -40,16 +40,7 @@ import {
   restoreSnapshotFromCard
 } from "../../js/03-sync.js";
 import { openGalleryOverlay } from "../../features/gallery/overlay.js";
-import {
-  clearPendingFileRows,
-  captureImportPreview,
-  closeGdocModal,
-  closeImportModal,
-  confirmGdocImport,
-  confirmImport,
-  maybeAutoDetectTwoColumn,
-  updateImportPreview
-} from "../../js/11-import.js";
+import { importControls } from "./imports.ts";
 import { updateSaveStatus } from "./save-status.ts";
 import { showToast } from "../../legacy/effects-bridge.ts";
 import { panelWidths, preferences } from "../../legacy/preferences-bridge.ts";
@@ -350,16 +341,16 @@ export function mountImportsFeature(): ReturnType<typeof mountImports> {
   return replaceViewMount("mountImports", function () {
     const ports: ImportsPorts = {
       finishMarkdownRowChoice: finishMarkdownRowChoice,
-      closeImportModal: closeImportModal,
-      confirmImport: confirmImport,
-      clearPendingFileRows: clearPendingFileRows,
-      maybeAutoDetectTwoColumn: maybeAutoDetectTwoColumn,
-      updateImportPreview: updateImportPreview,
+      closeImportModal: () => { importControls()?.closeImportModal(); },
+      confirmImport: () => { importControls()?.confirmImport(); },
+      clearPendingFileRows: () => { importControls()?.clearPendingFileRows(); },
+      maybeAutoDetectTwoColumn: (value) => { importControls()?.maybeAutoDetectTwoColumn(value); },
+      updateImportPreview: () => { importControls()?.updateImportPreview(); },
       handleImportFile: function (file) { void openDocument({ kind: "import", file: file }); },
       touchMode: touchImportMode,
       capture: function () {
         const ownsDocument = captureViewDocument();
-        const ownsModal = captureImportPreview();
+        const ownsModal = importControls()?.captureImportPreview() ?? (() => false);
         return function () { return ownsDocument() && ownsModal(); };
       }
     };
@@ -370,8 +361,8 @@ export function mountImportsFeature(): ReturnType<typeof mountImports> {
 export function mountGdocFeature(): ReturnType<typeof mountGdoc> {
   return replaceViewMount("mountGdoc", function () {
     const ports: GdocPorts = {
-      closeGdocModal: closeGdocModal,
-      confirmGdocImport: confirmGdocImport
+      closeGdocModal: () => { importControls()?.closeGdocModal(); },
+      confirmGdocImport: () => { importControls()?.confirmGdocImport(); }
     };
     return mountGdoc({ window: window, ports: ports });
   });

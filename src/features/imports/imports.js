@@ -1,202 +1,36 @@
-import { normalizeImportedRows } from "../adapters/formats/import-rows.ts";
-import { MD_EXPORT_TAIL_RE, columnIndicesFromHeader, markdownExportScript, parseMarkdownTable } from "../adapters/formats/markdown-table.ts";
-import { stampRow } from "./03-sync.js";
-import { sanitizeHtml } from "../legacy/richtext.ts";
-import { cssAttr } from "../features/common/dom.ts";
-import { declineBrollRows } from "../application/broll-anchoring.ts";
-import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
-import { cellOf, inertBody } from "../legacy/richtext.ts";
-import { randomIds } from "../adapters/identity/ids.ts";
-import { docxToRows } from "../adapters/formats/docx.ts";
-import { csvToRows } from "../adapters/formats/csv.ts";
-import { importModeTouched, resetImportMode } from "../application/import-mode.ts";
-import { importRowsCommand } from "../application/commands/import-rows.ts";
-import { escapeHtml, truncateForPreview } from "../core/document/text-policy.ts";
-import { REVIEW_ONLY, editAllowed, noteSessionEdit, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
-import { captureOperation, keepSnapshot, stillOwns } from "../legacy/transition-bridge.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { fileKindFromName } from "../../shared/file-names.js";
-import { desktopPort } from "../adapters/desktop/desktop-port.ts";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
+import { importModeTouched, resetImportMode } from "../../application/import-mode.ts";
+import { importRowsCommand } from "../../application/commands/import-rows.ts";
+import { escapeHtml, truncateForPreview } from "../../core/document/text-policy.ts";
+import { cssAttr } from "../common/dom.ts";
+import { fileKindFromName } from "../../../shared/file-names.js";
 
-function splitImportText(text, mode) {
-  var norm = String(text || "").replace(/\r\n/g, "\n").trim();
-  if (!norm) return [];
-  var chunks;
-  if (mode === "line") {
-    chunks = norm.split(/\n/);
-  } else if (mode === "sentence") {
-    var flattened = norm.replace(/\n+/g, " ");
-    chunks = flattened.match(/[^.!?]+[.!?]+(\s+|$)|[^.!?]+$/g) || [flattened];
-  } else {
-    chunks = norm.split(/\n\s*\n+/);
-  }
-  return chunks.map(function (c) { return c.trim(); }).filter(Boolean);
-}
-
-var VISUAL_LABEL_RE = /^\s*(visual|video|scene|shot|b-?roll|image|screen)\s*:\s*(.*)$/i;
-var AUDIO_LABEL_RE = /^\s*(audio|vo|voiceover|voice-over|narration|dialogue|script)\s*:\s*(.*)$/i;
-
-export function detectTwoColumnFormat(text) {
-  if (parseStackedMarkdownExport(text)) return "stacked";
-  var norm = markdownExportScript(String(text || "")).replace(/\r\n/g, "\n");
-  var lines = norm.split("\n");
-  var nonBlank = lines.filter(function (l) { return l.trim() !== ""; });
-  if (nonBlank.length < 2) return null;
-
-  var pipeLines = nonBlank.filter(function (l) { return l.indexOf("|") !== -1; });
-  if (pipeLines.length >= 2 && pipeLines.length / nonBlank.length > 0.6) return "table";
-
-  var tabLines = nonBlank.filter(function (l) { return l.indexOf("\t") !== -1; });
-  if (tabLines.length / nonBlank.length > 0.6) return "tab";
-
-  var hasVisualLabel = nonBlank.some(function (l) { return VISUAL_LABEL_RE.test(l); });
-  var hasAudioLabel = nonBlank.some(function (l) { return AUDIO_LABEL_RE.test(l); });
-  var firstIsLabel = VISUAL_LABEL_RE.test(nonBlank[0]) || AUDIO_LABEL_RE.test(nonBlank[0]);
-  if (hasVisualLabel && hasAudioLabel && firstIsLabel) return "labels";
-
-  return null;
-}
-
-var MD_SCENE_HEADING_RE = /^###\s+Scene\s+\d+(\s+·\s+\d+(:\d\d)+)?\s*$/;
-var MD_SCENE_META_RE = /^_\d+ scenes? · (est\. )?\S+ running time( · .*)?_$/;
-var MD_SCENE_FACTS_RE = /^\*\*[^*]+\*\* · Read \d+(:\d\d)+(, set by hand)?$/;
-var MD_MARKER_RE = /<sup>\d+<\/sup>/g;
-var MD_VISUAL_LEAD_RE = /^\*Visual —\*\s?/;
-var MD_SCENE_MEDIA_RE = /^(!\[visual [^\]]*\]\(images\/[^)]*\)|▶ .*)$/;
-
-function parseStackedMarkdownExport(text) {
-  var lines = String(text || "").replace(/\r\n?/g, "\n").split("\n");
-  var i = 0;
-  while (i < lines.length && !lines[i].trim()) i++;
-  if (i === lines.length || !/^#\s+\S/.test(lines[i])) return null;
-  for (i++; i < lines.length && !MD_SCENE_HEADING_RE.test(lines[i].trim()); i++) {
-    if (lines[i].trim() && !MD_SCENE_META_RE.test(lines[i].trim())) return null;
-  }
-  if (i === lines.length) return null;
-
-  var scenes = [], timed = [];
-  for (; i < lines.length; i++) {
-    if (MD_EXPORT_TAIL_RE.test(lines[i])) break;
-    if (MD_SCENE_HEADING_RE.test(lines[i].trim())) {
-      scenes.push([]);
-      timed.push(lines[i].indexOf("·") !== -1);
-    } else scenes[scenes.length - 1].push(lines[i]);
-  }
-  return scenes.map(function (sc, n) {
-    function cellText(s) {
-      s = s.replace(MD_MARKER_RE, "");
-      return timed[n] ? s.replace(/ {2}\n/g, "\n") : s;
-    }
-    var end = sc.length;
-    while (end > 0 && !sc[end - 1].trim()) end--;
-    if (end > 0 && sc[end - 1].trim() === "---") end--;
-    sc = sc.slice(0, end);
-    var k = 0;
-    while (k < sc.length && !sc[k].trim()) k++;
-    if (k < sc.length && MD_SCENE_FACTS_RE.test(sc[k].trim())) k++;
-    while (k < sc.length && (!sc[k].trim() || MD_SCENE_MEDIA_RE.test(sc[k].trim()))) k++;
-    var visual = [];
-    if (k < sc.length && MD_VISUAL_LEAD_RE.test(sc[k])) {
-      visual.push(sc[k].replace(MD_VISUAL_LEAD_RE, ""));
-      for (k++; k < sc.length && sc[k].trim(); k++) visual.push(sc[k]);
-    }
-    var audio = sc.slice(k).join("\n").trim();
-    return {
-      visualText: cellText(visual.join("\n")).trim(),
-      audioText: audio === "_(blank scene)_" ? "" : cellText(audio)
-    };
-  });
-}
-
-function parseTabDelimited(text) {
-  var lines = text.replace(/\r\n/g, "\n").split("\n");
-  var rows = [];
-  lines.forEach(function (line) {
-    if (line.trim() === "") return;
-    var idx = line.indexOf("\t");
-    if (idx === -1) { rows.push([line.trim(), ""]); return; }
-    rows.push([line.slice(0, idx).trim(), line.slice(idx + 1).replace(/\t/g, " ").trim()]);
-  });
-  if (!rows.length) return [];
-  var visualIdx = 0, audioIdx = 1, startIdx = 0;
-  var header = rows[0].map(function (c) { return c.toLowerCase(); });
-  var idxs = columnIndicesFromHeader(header);
-  if (idxs.visualIdx !== -1 || idxs.audioIdx !== -1) {
-    startIdx = 1;
-    if (idxs.visualIdx !== -1) visualIdx = idxs.visualIdx;
-    if (idxs.audioIdx !== -1) audioIdx = idxs.audioIdx;
-  }
-  var out = [];
-  for (var i = startIdx; i < rows.length; i++) {
-    var v = rows[i][visualIdx] || "", a = rows[i][audioIdx] || "";
-    if (v || a) out.push({ visualText: v, audioText: a });
-  }
-  return out;
-}
-
-function parseLabeledLines(text) {
-  var lines = text.replace(/\r\n/g, "\n").split("\n");
-  var rows = [];
-  var current = null, currentField = null;
-  lines.forEach(function (line) {
-    var vMatch = line.match(VISUAL_LABEL_RE);
-    var aMatch = !vMatch && line.match(AUDIO_LABEL_RE);
-    if (vMatch) {
-      if (current && (current.visualText || current.audioText)) rows.push(current);
-      current = { visualText: vMatch[2] || "", audioText: "" };
-      currentField = "visualText";
-      return;
-    }
-    if (aMatch) {
-      if (!current) current = { visualText: "", audioText: "" };
-      current.audioText = (current.audioText ? current.audioText + " " : "") + (aMatch[2] || "");
-      currentField = "audioText";
-      return;
-    }
-    if (line.trim() === "" || !current || !currentField) return;
-    current[currentField] = (current[currentField] ? current[currentField] + " " : "") + line.trim();
-  });
-  if (current && (current.visualText || current.audioText)) rows.push(current);
-  return rows;
-}
-
-function parseAlternatingLines(text) {
-  var lines = text.replace(/\r\n/g, "\n").split("\n").map(function (l) { return l.trim(); }).filter(Boolean);
-  var out = [];
-  for (var i = 0; i < lines.length; i += 2) {
-    out.push({ visualText: lines[i] || "", audioText: lines[i + 1] || "" });
-  }
-  return out;
-}
-
-function parseTwoColumnText(text) {
-  text = markdownExportScript(text);
-  var detected = detectTwoColumnFormat(text);
-  var rows;
-  if (detected === "stacked") return parseStackedMarkdownExport(text);
-  if (detected === "table") rows = parseMarkdownTable(text);
-  else if (detected === "tab") rows = parseTabDelimited(text);
-  else if (detected === "labels") rows = parseLabeledLines(text);
-  else rows = parseAlternatingLines(text);
-  return rows.filter(function (r) { return r.visualText || r.audioText; });
-}
-
-export function parseImportRows(text, mode) {
-  if (mode === "twocolumn") return parseTwoColumnText(text);
-  return splitImportText(text, mode).map(function (c) { return { visualText: "", audioText: c }; });
-}
-
-const brollAnchorPorts = { readers: productionReaders, ids: randomIds, cellOf: cellOf, inertBody: inertBody, sanitize: sanitizeHtml };
+var ports = null;
+var window = null, document = null;
+function parseImportRows(text, mode) { return ports.formats.parse(text, mode); }
+function detectTwoColumnFormat(text) { return ports.formats.detect(text); }
+function normalizeImportedRows(rows, sanitize) { return ports.formats.normalize(rows, sanitize); }
+function csvToRows(text) { return ports.formats.csv(text); }
+function docxToRows(file) { return ports.formats.docx(file); }
+function sanitizeHtml(html) { return ports.text.sanitizeHtml(html); }
+function captureOperation() { return ports.ownership.capture(); }
+function stillOwns(operation) { return ports.ownership.stillOwns(operation); }
+function keepSnapshot(label) { return ports.history.keep(label); }
+function stampRow(row) { return ports.stampRow(row); }
+function noteSessionEdit() { return ports.noteEdit(); }
+function editAllowed() { return ports.edits.allowed(); }
+function readSession(reader) { return ports.document.read(reader); }
+function runCommand(command) { return ports.edits.run(command); }
+function showToast(message, kind, sticky) { return ports.notices.show(message, kind, sticky); }
+function runningOnDesktop() { return ports.desktop.running(); }
+function desktopPort() { return ports.desktop; }
 
 var IMPORT_SCANS = [
   {
     id: "broll",
     label: "Look for B-roll lines and track them",
     hint: "A line starting “B-roll:” becomes a shot on the b-roll list, and keeps its status when the line is reworded.",
-    apply: function (rows, doc) { return anchorBrollInRows(doc, rows, brollAnchorPorts); },
-    decline: function (rows) { declineBrollRows(rows); },
+    apply: function (rows, doc) { return ports.formats.anchorBroll(doc, rows); },
+    decline: function (rows) { ports.formats.declineBroll(rows); },
     found: function (n) {
       return n + " B-roll line" + (n === 1 ? "" : "s") + " found and tracked.";
     }
@@ -207,7 +41,7 @@ var IMPORT_SCAN_KEY = "splitpage-import-scans";
 
 function importScanPrefs() {
   var saved;
-  try { saved = JSON.parse(localStorage.getItem(IMPORT_SCAN_KEY) || "{}"); } catch (e) { saved = null; }
+  try { saved = JSON.parse(window.localStorage.getItem(IMPORT_SCAN_KEY) || "{}"); } catch (e) { saved = null; }
   return saved && typeof saved === "object" ? saved : {};
 }
 
@@ -238,7 +72,7 @@ function saveImportScanPrefs() {
     var box = importScanBox(scan.id);
     saved[scan.id] = box ? !!box.checked : importScanEnabled(scan.id);
   });
-  try { localStorage.setItem(IMPORT_SCAN_KEY, JSON.stringify(saved)); } catch (e) {}
+  try { window.localStorage.setItem(IMPORT_SCAN_KEY, JSON.stringify(saved)); } catch (e) {}
 }
 
 function chosenImportScan() {
@@ -266,7 +100,7 @@ function getImportMode() {
   return checked ? checked.value : "paragraph";
 }
 
-export function maybeAutoDetectTwoColumn(text) {
+function maybeAutoDetectTwoColumn(text) {
   if (importModeTouched()) return;
   if (detectTwoColumnFormat(text)) {
     var radio = document.querySelector('input[name="import-split"][value="twocolumn"]');
@@ -274,7 +108,7 @@ export function maybeAutoDetectTwoColumn(text) {
   }
 }
 
-export function updateImportPreview() {
+function updateImportPreview() {
   var el0 = document.getElementById("import-preview");
   if (pendingFileRows) {
     var n0 = pendingFileRows.length;
@@ -304,7 +138,7 @@ export function updateImportPreview() {
 var pendingFileRows = null;
 var pendingFileName = "";
 
-export function clearPendingFileRows() {
+function clearPendingFileRows() {
   if (!pendingFileRows) return;
   pendingFileRows = null;
   pendingFileName = "";
@@ -314,7 +148,7 @@ export function clearPendingFileRows() {
 var importIntoNewDocument = null;
 var importModalEpoch = 0;
 
-export function captureImportPreview() {
+function captureImportPreview() {
   var epoch = importModalEpoch;
   return function () { return epoch === importModalEpoch; };
 }
@@ -322,7 +156,7 @@ export function captureImportPreview() {
 var importDecodes = 0;
 var importOperation = null;
 
-export function openImportModal(opts) {
+function openImportModal(opts) {
   importModalEpoch++;
   importIntoNewDocument = (opts && typeof opts.intoNewDocument === "function") ? opts.intoNewDocument : null;
   importOperation = importIntoNewDocument ? null : captureOperation();
@@ -340,7 +174,7 @@ export function openImportModal(opts) {
   document.getElementById("import-textarea").focus();
 }
 
-export function closeImportModal() {
+function closeImportModal() {
   importModalEpoch++;
   document.getElementById("import-modal").hidden = true;
   importIntoNewDocument = null;
@@ -356,7 +190,7 @@ function stillAsked(asked) {
     (!asked.operation || stillOwns(asked.operation));
 }
 
-export function importDocumentSource() {
+function importDocumentSource() {
   return {
     id: "import",
     takes: function (opening) { return opening.kind === "import"; },
@@ -418,7 +252,7 @@ function importFileErrorMessage(err) {
   return "Could not read that file.";
 }
 
-export function confirmImport() {
+function confirmImport() {
   var newRows;
   if (pendingFileRows) {
     newRows = pendingFileRows;
@@ -447,11 +281,11 @@ export function confirmImport() {
   }
   var replace = document.getElementById("import-replace").checked;
   if (replace && editAllowed() && readSession(hasRows)) keepSnapshot("Before replacing rows on import");
-  var imported = importRowsCommand({ rows: newRows, replace: replace, scan: scan }, sessionStamps);
+  var imported = importRowsCommand({ rows: newRows, replace: replace, scan: scan }, ports.edits.stamps);
   var outcome = runCommand(imported.command);
   if (outcome.kind === "failed") throw outcome.error;
   if (outcome.kind !== "applied" && outcome.kind !== "committed") {
-    if (outcome.kind === "rejected" && outcome.reason === REVIEW_ONLY) showToast(IMPORT_REVIEW_REFUSAL, "warn");
+    if (outcome.kind === "rejected" && outcome.reason === ports.reviewOnly) showToast(IMPORT_REVIEW_REFUSAL, "warn");
     closeImportModal();
     return;
   }
@@ -480,17 +314,17 @@ function extractGoogleDocId(input) {
   return null;
 }
 
-export function openGdocModal() {
+function openGdocModal() {
   document.getElementById("gdoc-url-input").value = "";
   document.getElementById("gdoc-modal").hidden = false;
   document.getElementById("gdoc-url-input").focus();
 }
 
-export function closeGdocModal() {
+function closeGdocModal() {
   document.getElementById("gdoc-modal").hidden = true;
 }
 
-export function confirmGdocImport() {
+function confirmGdocImport() {
   var id = extractGoogleDocId(document.getElementById("gdoc-url-input").value);
   if (!id) { showToast("That doesn't look like a Google Doc link.", "warn"); return; }
   var url = "https://docs.google.com/document/d/" + id + "/export?format=docx";
@@ -508,4 +342,32 @@ export function confirmGdocImport() {
   showToast("Downloading the Doc as .docx in a new tab — once it's in your Downloads folder, use File ▸ Open… to bring it in.", "ok", true);
 }
 
-export function __init() {}
+
+export function mountImportDialog(next, realm = globalThis.window) {
+  ports = next;
+  window = realm;
+  document = realm.document;
+  return {
+    maybeAutoDetectTwoColumn,
+    updateImportPreview,
+    clearPendingFileRows,
+    captureImportPreview,
+    openImportModal,
+    closeImportModal,
+    importDocumentSource,
+    confirmImport,
+    openGdocModal,
+    closeGdocModal,
+    confirmGdocImport,
+    dispose: function () {
+      if (ports !== next) return;
+      importModalEpoch++;
+      importDecodes++;
+      importIntoNewDocument = null;
+      importOperation = null;
+      pendingFileRows = null;
+      pendingFileName = "";
+      ports = null;
+    }
+  };
+}

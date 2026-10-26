@@ -1,3 +1,5 @@
+export { mountImportDialogFeature } from "./wiring/imports.ts";
+import { importDocumentSource } from "./wiring/imports.ts";
 export { mountPageEntry } from "./startup/page-entry.ts";
 export { mountProjectFiles } from "./wiring/project-files.ts";
 import { wireProjectFiles } from "./wiring/project-files.ts";
@@ -374,6 +376,7 @@ export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFile
     effects: sessionEffects(),
     projectFiles: () => wireProjectFiles(deps.projectFiles).services,
     saves: fileSaving.savePorts,
+    sources: () => { const sources = [...deps.sources()]; sources.splice(1, 0, importDocumentSource()); return sources; },
     destinations: () => [fileSaving.destination(), ...deps.destinations()],
     editorName: getEditorName
   });

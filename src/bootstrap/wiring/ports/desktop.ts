@@ -1,4 +1,5 @@
 import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort } from "../../../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../../../application/desktop-presence.ts";
 import type { ExternalLinks, LaunchFacts } from "../../../application/desktop-presence.ts";
 import type { RecentFiles } from "../../../application/files/recent-files.ts";
 
@@ -30,4 +31,9 @@ export const launch: LaunchFacts = {
   hasDraftToRestore: () => desktopPort()?.hasDraftToRestore,
   appVersion: () => desktopPort()?.appVersion,
   sessionInfo: () => desktopPort()?.getSessionInfo()
+};
+
+export const importDesktop = {
+  running: runningOnDesktop,
+  openExternal: (url: string) => { const desktop = desktopPort(); if (desktop) return desktop.openExternal(url); }
 };
