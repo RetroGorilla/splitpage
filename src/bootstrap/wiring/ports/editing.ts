@@ -1,4 +1,4 @@
-import type { EditorSelectionPort } from "../../../application/editing/selection.ts";
+import type { EditorSelection } from "../../../application/editing/selection.ts";
 import type { ProductionSelection } from "../../../application/editing/production-selection.ts";
 import { productionSelection as productionSelectionOwner } from "../../../legacy/production-editing-bridge.ts";
 import type { UndoControl } from "../../../application/editing/undo-control.ts";
@@ -23,7 +23,11 @@ export const undoControl: UndoControl = {
   last: lastUndoEntry
 };
 
-export const selection: EditorSelectionPort = {
+export const selection: Pick<EditorSelection<Element, Range, Element>, "dropLink" | "remember" | "forget" | "paintedEpoch" | "resolve"> = {
+  remember: (taken) => editorSelection().remember(taken),
+  resolve: () => editorSelection().resolve(),
+  forget: () => { editorSelection().forget(); },
+  paintedEpoch: (root) => editorSelection().paintedEpoch(root),
   dropLink: () => { editorSelection().dropLink(); }
 };
 

@@ -1,3 +1,4 @@
+import { IS_MAC, keyChipWords, keyChipsHtml } from "../features/common/key-chips.js";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { currentHome, reviewMode, serverStatus } from "../legacy/location-bridge.ts";
 import { savedStatusText, savedWhenText } from "../../shared/clock.js";
@@ -19,26 +20,7 @@ import { preferences } from "../legacy/preferences-bridge.ts";
 
 function el(id) { return document.getElementById(id); }
 
-export var IS_MAC = typeof navigator !== "undefined" &&
-  /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || "");
-
-var KEY_WORDS = {
-  mod: IS_MAC ? "⌘" : "Ctrl",
-  shift: IS_MAC ? "⇧" : "Shift",
-  alt: IS_MAC ? "⌥" : "Alt"
-};
 var ARIA_KEYS = { mod: IS_MAC ? "Meta" : "Control", shift: "Shift", alt: "Alt" };
-
-export function keyChipWords(spec) {
-  return String(spec || "").split("+").filter(Boolean).map(function (part) {
-    var low = part.toLowerCase();
-    return KEY_WORDS[low] || (part.length === 1 ? part.toUpperCase() : part);
-  });
-}
-
-export function keyChipsHtml(spec) {
-  return keyChipWords(spec).map(function (w) { return "<kbd>" + escapeHtml(w) + "</kbd>"; }).join("");
-}
 
 export function keysWorkHere(item) {
   var only = item.getAttribute("data-keys-only");

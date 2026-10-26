@@ -1,7 +1,9 @@
 {
-  "legacyImports": [
-    "./18d-command-menu.js"
+  "legacyImports": [],
+  "loadOnly": [
+    "src/features/command-menu/command-menu.js",
+    "src/features/command-menu/actions.ts",
+    "src/bootstrap/wiring/command-menu.ts"
   ],
-  "loadOnly": [],
-  "expectedLoads": 1
+  "expectedLoads": 3
 }

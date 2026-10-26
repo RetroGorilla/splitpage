@@ -1,14 +1,18 @@
-import "../../src/test/_dom.mjs";
+import "../../../src/test/_dom.mjs";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { commandResults } from "../../src/js/18d-command-menu.js";
-import { appActions } from "../../src/legacy/app-actions.ts";
-import { wireRegistries } from "../../src/test/_registries.mjs";
-import { mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../src/bootstrap/wiring/file-menu-export.ts";
+import { commandResults } from "../../../src/features/command-menu/command-menu.js";
+import { appActions } from "../../../src/legacy/app-actions.ts";
+import { wireRegistries } from "../../../src/test/_registries.mjs";
+import { mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../../src/bootstrap/wiring/file-menu-export.ts";
+
+import { mountCommandMenuFeature, stopCommandMenuFeature } from "../../../src/bootstrap/wiring/command-menu.ts";
 
 const wired = wireRegistries();
 mountFileMenuExportFeature();
+mountCommandMenuFeature();
 after(() => {
+  stopCommandMenuFeature();
   stopFileMenuExportFeature();
   wired.dispose();
 });

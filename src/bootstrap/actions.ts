@@ -1,3 +1,4 @@
+import { commandMenuActions } from "./wiring/command-menu.ts";
 import { tagPanelActions } from "./wiring/production.ts";
 import { appDataActions } from "./wiring/settings.ts";
 import { brollPanelActions } from "./wiring/broll.ts";
@@ -40,7 +41,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]),
     () => {
       const menu = fileActions();
-      return registerAll(registry, [...menu.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...menu.slice(3)]);
+      return registerAll(registry, [...menu.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...menu.slice(3)]);
     },
     () => {
       const views = viewActions();

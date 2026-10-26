@@ -14,7 +14,7 @@ function shownCells(rootEl: Element, field: string): HTMLElement[] {
   return Array.from(rootEl.querySelectorAll<HTMLElement>('.cell-editable[data-id][data-field="' + field + '"]'));
 }
 
-export function rememberCellSelection(owner: CellSelectionOwner, cellEl: Element | null): ModelSelection | null {
+export function rememberCellSelection(owner: Pick<CellSelectionOwner, "remember" | "forget" | "paintedEpoch">, cellEl: Element | null): ModelSelection | null {
   const rootEl = cellEl && cellEl.isConnected ? cellEl.closest("#rows, #writer-doc") : null;
   if (!cellEl || !rootEl) {
     owner.forget();
@@ -39,7 +39,7 @@ export function rememberCellSelection(owner: CellSelectionOwner, cellEl: Element
   });
 }
 
-export function placeEditorSelection(owner: CellSelectionOwner, rootEl: Element | null): HTMLElement | null {
+export function placeEditorSelection(owner: Pick<CellSelectionOwner, "resolve">, rootEl: Element | null): HTMLElement | null {
   const sel = owner.resolve();
   if (!sel || !rootEl) return null;
   const cellEl = shownCells(rootEl, sel.field).find(function (el) { return el.getAttribute("data-id") === sel.rowId; });

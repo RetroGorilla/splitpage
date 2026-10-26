@@ -2,8 +2,7 @@ import type { ActionDefinition } from "../application/actions.ts";
 import { saveDoc } from "./save-bridge.ts";
 import { openLocalFile } from "../js/18-local-files.js";
 import { fileMenuOpen, toggleFileMenu } from "../js/18b-file-menu.js";
-import { closeCommandMenu, commandMenuOpen, openCommandMenu } from "../js/18d-command-menu.js";
-import { EVERY_OVERLAY, availableUnless, everyOverlayBut, firstRefusal } from "../application/screen.ts";
+import { EVERY_OVERLAY, availableUnless, firstRefusal } from "../application/screen.ts";
 import { inDesktopApp, saveInProgress, screenNow } from "./screen-state.ts";
 
 function pageOwnsKeys(): boolean {
@@ -61,23 +60,6 @@ export function fileActions(): ActionDefinition[] {
       run: async () => {
         closeFileMenu();
         await openLocalFile();
-      }
-    },
-    {
-      id: "command-menu",
-      label: "Search commands…",
-      group: "File",
-      icon: "i-search",
-      keys: ["mod+k"],
-      words: "command palette search run",
-      availability: (source) => {
-        if (commandMenuOpen()) return { enabled: true };
-        const screen = availableUnless(["loading", ...everyOverlayBut("launcher")], screenNow());
-        return !screen.enabled && source === "button" ? { enabled: false, reason: "" } : screen;
-      },
-      run: (source) => {
-        if (!commandMenuOpen()) openCommandMenu();
-        else if (source === "shortcut") closeCommandMenu();
       }
     },
     {
