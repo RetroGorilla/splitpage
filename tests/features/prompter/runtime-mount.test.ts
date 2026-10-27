@@ -267,3 +267,213 @@ for (const source of ["browser", "desktop", "relay"] as const) {
     });
   }
 }
+
+for (const outcome of ["reject", "resolve"] as const) {
+  for (const scenario of ["dispose", "remount listening", "remount pending", "restart pending"] as const) {
+    test("late microphone " + outcome + " cannot change " + scenario, async () => {
+      const h = harness();
+      let finishOld: (stream: unknown) => void = () => {};
+      let rejectOld: (error: Error) => void = () => {};
+      const oldPermission = new Promise((resolve, reject) => { finishOld = resolve; rejectOld = reject; });
+      let finishNew: (stream: unknown) => void = () => {};
+      const newPermission = new Promise(resolve => { finishNew = resolve; });
+      let oldStopped = 0;
+      let newStopped = 0;
+      const oldStream = { getTracks: () => [{ stop: () => { oldStopped++; } }], getAudioTracks: () => [{ label: "Old microphone" }] };
+      const newStream = { getTracks: () => [{ stop: () => { newStopped++; } }], getAudioTracks: () => [{ label: "New microphone" }] };
+      let requests = 0;
+      let recognitions = 0;
+      class Recognition {
+        onstart: (() => void) | null = null;
+        constructor() { recognitions++; }
+        start() { this.onstart?.(); }
+        stop() {}
+      }
+      const mediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+      Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: {
+        getUserMedia: (options: unknown) => {
+          assert.deepEqual(options, { audio: true });
+          requests++;
+          return requests === 1 ? oldPermission : requests === 2 ? newPermission : Promise.resolve(newStream);
+        }
+      } });
+      const runtime = startPrompter({ ...h.ports, voice: { ...h.ports.voice, browserRecognition: () => Recognition } });
+      let current = runtime;
+      let next = h;
+      let replacementStarting: Promise<void> | null = null;
+      runtime.buildPrompterContent();
+      const starting = runtime.startVoiceFollow();
+      try {
+        assert.equal(requests, 1);
+        if (scenario === "restart pending") runtime.stopVoiceFollow();
+        else runtime.dispose();
+        if (scenario.startsWith("remount")) {
+          next = harness();
+          current = startPrompter({ ...next.ports, voice: { ...next.ports.voice, browserRecognition: () => Recognition } });
+          current.buildPrompterContent();
+        }
+        if (scenario !== "dispose") {
+          replacementStarting = current.startVoiceFollow();
+          assert.equal(requests, 2);
+          if (scenario === "remount listening") {
+            finishNew(newStream);
+            await replacementStarting;
+            assert.equal(next.state.voice, true);
+            assert.match(document.getElementById("pp-voice-status")?.textContent ?? "", /Listening/);
+          }
+        }
+        const status = document.getElementById("pp-voice-status")?.textContent;
+        const calls = [...next.calls];
+        if (outcome === "reject") rejectOld(Object.assign(new Error("permission refused"), { name: "NotAllowedError" }));
+        else finishOld(oldStream);
+        await assert.doesNotReject(starting);
+        assert.equal(document.getElementById("pp-voice-status")?.textContent, status);
+        assert.deepEqual(next.calls, calls);
+        assert.equal(oldStopped, outcome === "resolve" ? 1 : 0);
+        assert.equal(newStopped, 0);
+        if (scenario.endsWith("pending")) {
+          await current.startVoiceFollow();
+          assert.equal(requests, 2, "the replacement permission request remains the only pending voice start");
+        }
+        if (replacementStarting) {
+          finishNew(newStream);
+          await replacementStarting;
+          assert.equal(recognitions, 1);
+          assert.equal(next.state.voice, true);
+          current.stopVoiceFollow();
+          assert.equal(newStopped, 1, "the replacement keeps ownership of its microphone stream");
+        } else assert.equal(recognitions, 0);
+      } finally {
+        finishOld(oldStream);
+        finishNew(newStream);
+        await starting.catch(() => {});
+        await replacementStarting?.catch(() => {});
+        current.dispose();
+        if (mediaDevices) Object.defineProperty(navigator, "mediaDevices", mediaDevices);
+        else Reflect.deleteProperty(navigator, "mediaDevices");
+      }
+    });
+  }
+}
+
+for (const name of ["NotAllowedError", "NotFoundError"] as const) {
+  test("an active microphone rejection keeps the existing " + name + " message", async () => {
+    const h = harness();
+    const mediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: {
+      getUserMedia: async () => { throw Object.assign(new Error("permission refused"), { name }); }
+    } });
+    class Recognition { start() {} stop() {} }
+    const runtime = startPrompter({ ...h.ports, voice: { ...h.ports.voice, browserRecognition: () => Recognition } });
+    try {
+      runtime.buildPrompterContent();
+      await runtime.startVoiceFollow();
+      assert.match(document.getElementById("pp-voice-status")?.textContent ?? "", name === "NotFoundError" ? /No microphone was found/ : /Microphone blocked/);
+      assert.equal(h.state.voice, false);
+    } finally {
+      runtime.dispose();
+      if (mediaDevices) Object.defineProperty(navigator, "mediaDevices", mediaDevices);
+      else Reflect.deleteProperty(navigator, "mediaDevices");
+    }
+  });
+}
+
+for (const scenario of ["active rejection", "dispose rejection", "remount rejection", "restart resolution"] as const) {
+  test("desktop voice discovery preserves ownership during " + scenario, async () => {
+    const h = harness();
+    let finish: () => void = () => {};
+    let reject: (error: Error) => void = () => {};
+    const discovery = new Promise<void>((resolve, refuse) => { finish = resolve; reject = refuse; });
+    const failure = new Error("desktop voice discovery failed");
+    let known = false;
+    let recognitions = 0;
+    class Recognition {
+      onstart: (() => void) | null = null;
+      constructor() { recognitions++; }
+      start() { this.onstart?.(); }
+      stop() {}
+    }
+    const runtime = startPrompter({
+      ...h.ports, desktop: { ...h.ports.desktop, running: () => true },
+      voice: { ...h.ports.voice, known: () => known, available: () => true, load: () => discovery, createDesktop: () => new Recognition() }
+    });
+    runtime.buildPrompterContent();
+    const starting = runtime.startVoiceFollow();
+    let replacement: ReturnType<typeof startPrompter> | null = null;
+    try {
+      if (scenario === "restart resolution") {
+        runtime.stopVoiceFollow();
+        known = true;
+        await runtime.startVoiceFollow();
+        assert.equal(h.state.voice, true);
+      } else if (scenario !== "active rejection") runtime.dispose();
+      if (scenario === "remount rejection") {
+        const next = harness();
+        replacement = startPrompter(next.ports);
+      }
+      const status = document.getElementById("pp-voice-status")?.textContent;
+      if (scenario === "restart resolution") finish();
+      else reject(failure);
+      if (scenario === "active rejection") await assert.rejects(starting, error => error === failure);
+      else await assert.doesNotReject(starting);
+      assert.equal(recognitions, scenario === "restart resolution" ? 1 : 0);
+      assert.equal(document.getElementById("pp-voice-status")?.textContent, status);
+    } finally {
+      finish();
+      await starting.catch(() => {});
+      runtime.dispose();
+      replacement?.dispose();
+    }
+  });
+}
+
+for (const scenario of ["active", "dispose", "remount"] as const) {
+  test("project parse rejection preserves startup ownership when " + scenario, async () => {
+    const h = harness();
+    const priorFetch = globalThis.fetch;
+    realm.fetch = async () => ({ ok: true, json: async () => ({ name: "Reading.splitpage", text: "script" }) });
+    let reject: (error: Error) => void = () => {};
+    const failure = new Error("project parser failed");
+    const parsed = new Promise((_resolve, refuse) => { reject = refuse; });
+    const runtime = startPrompter({ ...h.ports, files: { parse: () => parsed } });
+    let replacement: ReturnType<typeof startPrompter> | null = null;
+    const hooks = win as unknown as { __prompterTest: { launchFromScript: (token: string) => Promise<boolean> } };
+    const launching = hooks.__prompterTest.launchFromScript("token");
+    try {
+      await new Promise(resolve => setImmediate(resolve));
+      if (scenario !== "active") runtime.dispose();
+      if (scenario === "remount") replacement = startPrompter(harness().ports);
+      reject(failure);
+      if (scenario === "active") await assert.rejects(launching, error => error === failure);
+      else assert.equal(await launching, false);
+      assert.equal(h.calls.some(call => call[0] === "open"), false);
+    } finally {
+      reject(failure);
+      await launching.catch(() => {});
+      runtime.dispose();
+      replacement?.dispose();
+      globalThis.fetch = priorFetch;
+    }
+  });
+}
+
+test("a browser hand-off reply cannot update the voice status after its session stops", async () => {
+  const h = harness();
+  let finish: (result: { ok: boolean; message: string }) => void = () => {};
+  const opening = new Promise<{ ok: boolean; message: string }>(resolve => { finish = resolve; });
+  const runtime = startPrompter({
+    ...h.ports, desktop: { running: () => true, canOpen: () => true, open: () => opening }
+  });
+  try {
+    await runtime.startVoiceFollow();
+    runtime.stopVoiceFollow();
+    const status = document.getElementById("pp-voice-status")?.textContent;
+    finish({ ok: false, message: "Old hand-off failed" });
+    await opening;
+    await Promise.resolve();
+    assert.equal(document.getElementById("pp-voice-status")?.textContent, status);
+  } finally {
+    finish({ ok: true, message: "done" });
+    runtime.dispose();
+  }
+});
