@@ -661,7 +661,7 @@ export function startProductionTags(ports) {
       pendingTag = null;
       taggedListeners = [];
       untaggedList = [];
-      paintUntagged();
+      if (window.CSS && window.CSS.highlights) window.CSS.highlights.delete(UNTAGGED_HL);
       if (window.__cacheTest === cacheTest) delete window.__cacheTest;
     }
   };
