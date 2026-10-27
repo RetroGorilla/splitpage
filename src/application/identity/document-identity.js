@@ -44,7 +44,7 @@ function copyDocHistorySafe(from, to) {
   if (docIdEventLog.length > 200) docIdEventLog.shift();
   if (typeof copyHistory !== "function") return;
   function warn() {
-    if (docIdCopyWarned) return;
+    if (!active || docIdCopyWarned) return;
     docIdCopyWarned = true;
     try {
       showToast("Could not copy this document's version history to its new identity. " +

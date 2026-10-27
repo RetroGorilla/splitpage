@@ -1,3 +1,4 @@
+import { startDocumentGuard } from "../../src/application/identity/document-guard.ts";
 import { productionEditingStarted, startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
 import { bootApp, closeApp, rewireApp } from "../../src/test/_app-boot.mjs";
 import { execFile } from "node:child_process";
@@ -616,6 +617,7 @@ test("undo teardown: callbacks retained from the routing do nothing after dispos
 });
 
 test("undo teardown: an old uninstall run after a newer installation leaves the newer one in place", async () => {
+  const stopGuard = startDocumentGuard(false, () => {});
   const { flushEdits, noteEdit, undo } = await import("../../src/legacy/undo-bridge.ts");
   const stopUndo = startUndo(legacyUndoPorts());
   const stopSession = startSessionBridge(legacySessionPorts({ ...fakes().deps, undo: { adapter: createUndoAdapter(), route: () => () => {} } }));
@@ -635,6 +637,7 @@ test("undo teardown: an old uninstall run after a newer installation leaves the 
   unrouteNew();
   stopSession();
   stopUndo();
+  stopGuard();
 });
 
 test("a session built by wireApp runs exactly the effects it was handed: a probe counts one call of each per edit", () => {

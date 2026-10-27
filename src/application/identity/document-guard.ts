@@ -109,8 +109,15 @@ export function startDocumentGuard(enabled: boolean, report: (error: unknown) =>
   return () => { if (started === mine) { started = null; documentGuardOn = false; } };
 }
 
-export function documentView<T>(doc: T): T { return started ? started.documentView(doc) : doc; }
-export function unwrapped<T>(value: T): T { return started ? started.unwrapped(value) : value; }
-export function quietly<T>(run: () => T): T { return started ? started.quietly(run) : run(); }
-export function rawOf<T>(value: T): T { return started ? started.rawOf(value) : value; }
-export function isDocumentView(value: unknown): boolean { return started ? started.isDocumentView(value) : false; }
+export function documentGuardStarted(): boolean { return started !== null; }
+
+function running(): NonNullable<typeof started> {
+  if (!started) throw new Error("The document guard is not started yet");
+  return started;
+}
+
+export function documentView<T>(doc: T): T { return running().documentView(doc); }
+export function unwrapped<T>(value: T): T { return running().unwrapped(value); }
+export function quietly<T>(run: () => T): T { return running().quietly(run); }
+export function rawOf<T>(value: T): T { return running().rawOf(value); }
+export function isDocumentView(value: unknown): boolean { return running().isDocumentView(value); }
