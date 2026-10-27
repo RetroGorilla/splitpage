@@ -6,6 +6,8 @@ import { toPlainText } from "../../core/text/projections.ts";
 import { projection } from "../../core/text/runs.ts";
 
 var ports = null;
+var initialReadyTimer = null;
+var serverLaunchTimer = null;
 
 export var prompterMirror;
 export var prompterFlip;
@@ -385,7 +387,8 @@ export function setPrompterSceneMode(on) {
 var prompterLeaveSeq = 0;
 
 function lockPageScrollWhenArrived(el) {
-  var lock = function () { if (ports.state.isOpen()) document.body.classList.add("prompter-open"); };
+  var owner = ports;
+  var lock = function () { if (ports === owner && ports.state.isOpen()) document.body.classList.add("prompter-open"); };
   var arriving = el.getAnimations ? el.getAnimations().filter(function (a) {
     return a.effect && a.effect.target === el;
   }) : [];
@@ -565,7 +568,8 @@ export function updateVoiceAvailability() {
   if (!btn) return;
   if (ports.desktop.running() && !ports.voice.known()) {
     btn.disabled = true;
-    ports.voice.load().then(updateVoiceAvailability);
+    var owner = ports;
+    ports.voice.load().then(function () { if (ports === owner) updateVoiceAvailability(); });
     return;
   }
   if (!ports.state.voiceFollowing()) setVoiceLabel(btn, voiceIdleLabel());
@@ -700,12 +704,15 @@ var DESKTOP_VOICE_WARNINGS = {
 var CLEARABLE_VOICE_WARNINGS = ["no-signal", "too-quiet", "blocked-all", "blocked-desktop"];
 
 export async function startVoiceFollow() {
+  var owner = ports;
   var desktop = ports.desktop.running();
   if (desktop && !ports.voice.known()) await ports.voice.load();
+  if (ports !== owner) return;
   if (desktop && !desktopListens()) {
     if (!ports.desktop.canOpen()) { setVoiceStatus(VOICE_DESKTOP_UNAVAILABLE, ""); return; }
     setVoiceStatus("Opening in your browser…", "");
     ports.desktop.open().then(function (result) {
+      if (ports !== owner) return;
       if (result && result.message) setVoiceStatus(result.message, result.ok ? "" : "error");
     });
     return;
@@ -916,11 +923,13 @@ function readPrompterLaunch() {
 }
 
 function whenInitialStateReady() {
+  var owner = ports;
   return new Promise(function (resolve) {
     (function check() {
+      if (ports !== owner) return;
       var ready = ports.startup.ready();
       if (ready) ready.then(resolve, resolve);
-      else setTimeout(check, 50);
+      else initialReadyTimer = setTimeout(check, 50);
     })();
   });
 }
@@ -931,11 +940,13 @@ function showPrompterForLaunch() {
 }
 
 async function launchPrompterFromScript(token) {
+  var owner = ports;
   var body = null;
   try {
     var res = await fetch("prompter-script/" + token, { cache: "no-store", credentials: "same-origin" });
     if (res.ok) body = await res.json();
   } catch (e) { body = null; }
+  if (ports !== owner) return false;
   if (!body || typeof body.name !== "string" || typeof body.text !== "string") {
     try { sessionStorage.removeItem(PROMPTER_LAUNCH_KEY); } catch (e) {}
     ports.notices.show("This teleprompter link has expired — open it again from the Splitpage desktop app " +
@@ -944,6 +955,7 @@ async function launchPrompterFromScript(token) {
   }
   var file = new File([body.text], body.name, { type: "text/plain" });
   var parsed = await ports.files.parse(file);
+  if (ports !== owner) return false;
   if (!parsed || parsed.error) {
     ports.notices.show("Could not read the script the desktop app sent.", "error", true);
     return false;
@@ -955,16 +967,20 @@ async function launchPrompterFromScript(token) {
 }
 
 function launchPrompterForServerDoc() {
+  var owner = ports;
   var deadline = Date.now() + HOSTED_LAUNCH_WAIT_MS;
   (function check() {
+    if (ports !== owner) return;
     if (ports.place.serverHomeId()) { showPrompterForLaunch(); return; }
-    if (Date.now() < deadline) setTimeout(check, 250);
+    if (Date.now() < deadline) serverLaunchTimer = setTimeout(check, 250);
   })();
 }
 
 function startPrompterLaunch(launch) {
+  var owner = ports;
   ports.preferences.skipOnboardingForPrompter();
   whenInitialStateReady().then(function () {
+    if (ports !== owner) return;
     if (launch.token) return launchPrompterFromScript(launch.token);
     launchPrompterForServerDoc();
   });
@@ -1023,6 +1039,9 @@ export function startPrompter(nextPorts) {
     dispose: function () {
       if (ports !== nextPorts) return;
       disposePrompterView();
+      clearTimeout(initialReadyTimer);
+      clearTimeout(serverLaunchTimer);
+      initialReadyTimer = serverLaunchTimer = null;
       delete window.__prompterTest;
       ports = null;
     }
