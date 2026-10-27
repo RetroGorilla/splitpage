@@ -1,3 +1,4 @@
+import { startDocumentGuard } from "../../../src/application/identity/document-guard.ts";
 import "../../../src/test/_dom.mjs";
 import { edits as portEdits } from "../../../src/bootstrap/wiring/ports/editing.ts";
 import test from "node:test";
@@ -21,7 +22,8 @@ function start(editor: string, record: () => void = () => {}) {
   const recorded: ChangeSet[] = [];
   const reported: unknown[] = [];
   let reason: string | null = null;
-  const stop = startSessionBridge({
+  const stopGuard = startDocumentGuard(false, () => {});
+  const stopSession = startSessionBridge({
     entry: (raw) => migrateRows(raw, migration.ports),
     undo: {
       adapter: {
@@ -45,6 +47,7 @@ function start(editor: string, record: () => void = () => {}) {
     report: (error) => { reported.push(error); },
     timers: fakeClock()
   });
+  const stop = (): void => { try { stopSession(); } finally { stopGuard(); } };
   return { stop, log, recorded, reported, deny: (value: string | null): void => { reason = value; } };
 }
 

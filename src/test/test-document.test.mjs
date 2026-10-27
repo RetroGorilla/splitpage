@@ -1,3 +1,5 @@
+import "./_identity-started.mjs";
+import { documentIdentityOwner } from "../bootstrap/wiring/document-identity.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -5,7 +7,7 @@ import assert from "node:assert/strict";
 const bridge = await import("../legacy/session-bridge.ts");
 const homeMod = await import("../legacy/location-bridge.ts");
 const { baseStateReason } = await import("../js/03-sync.js");
-const { documentIdentityPort } = await import("../js/02b-doc-id.js");
+const documentIdentityPort = { mint: (...args) => documentIdentityOwner().documentIdentityPort.mint(...args), writtenOut: (...args) => documentIdentityOwner().documentIdentityPort.writtenOut(...args), markWrittenOut: (...args) => documentIdentityOwner().documentIdentityPort.markWrittenOut(...args) };
 const { loadTestDocument } = await import("./_document.mjs");
 const { liveDocumentPort } = bridge;
 

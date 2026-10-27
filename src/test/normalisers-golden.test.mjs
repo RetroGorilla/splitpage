@@ -3,7 +3,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { withPageHead } from "../js/02b-doc-id.js";
+import { withPageHead } from "../core/document/ids.ts";
 import { plainName, plainText, safeHref, safeImageSrc } from "../core/document/text-policy.ts";
 import { safeId } from "../adapters/identity/safe-id.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";

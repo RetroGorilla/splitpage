@@ -1,0 +1,64 @@
+import { createDocumentIdentityOwner } from "../../application/identity/document-identity.js";
+import type { DocumentIdentityOwner, DocumentIdentityPorts } from "../../application/identity/ports.ts";
+import type { IdentityPort } from "../../application/transitions/ports.ts";
+import { documentGuardOn, documentView, quietly } from "../../application/identity/document-guard.ts";
+import { heldDocument, currentDocument } from "../../legacy/session-bridge.ts";
+import { handDocumentIdentityTo } from "../../legacy/document-identity-bridge.ts";
+import { migrateDocument, adoptRestoredState } from "../startup/document-entry.js";
+import { startStandaloneHtml } from "../../adapters/page/standalone-html.js";
+import { migrateRows } from "../../legacy/document-ports.ts";
+import { documentIdentityPorts } from "./ports/document-identity.ts";
+
+let started: DocumentIdentityOwner | null = null;
+let stop: (() => void) | null = null;
+
+export function documentIdentityOwner(): DocumentIdentityOwner {
+  if (!started) throw new Error("The document identity is not started yet");
+  return started;
+}
+
+export const documentIdentityPort: IdentityPort = Object.freeze({
+  mint: () => documentIdentityOwner().documentIdentityPort.mint(),
+  writtenOut: () => documentIdentityOwner().documentIdentityPort.writtenOut(),
+  markWrittenOut: (value: boolean) => documentIdentityOwner().documentIdentityPort.markWrittenOut(value)
+});
+
+export function mountDocumentIdentityOwner(ports: DocumentIdentityPorts = documentIdentityPorts()): DocumentIdentityOwner {
+  stopDocumentIdentityOwner();
+  const mine: DocumentIdentityOwner = createDocumentIdentityOwner();
+  const dispose = mine.startIdentity(ports);
+  const disconnect = handDocumentIdentityTo(mine, { migrateDocument, adoptRestoredState });
+  const stopHtml = startStandaloneHtml(migrateRows);
+  const hooks = {
+    on: function () { return documentGuardOn; },
+    viewed: function () { const doc = heldDocument(); return doc !== null && documentView(doc) !== doc; },
+    writes: function () {
+      const view = currentDocument();
+      if (!view) throw new Error("There is no document to probe");
+      return [
+        function () { Reflect.set(view, "title", view.title); },
+        function () { Reflect.set(view.rows, "length", view.rows.length); },
+        function () { Reflect.deleteProperty(view, "documentGuardProbe"); },
+        function () { Reflect.defineProperty(view, "title", { value: view.title }); }
+      ].map(function (write) {
+        try { quietly(write); return false; } catch (error) { return error instanceof TypeError; }
+      });
+    }
+  };
+  Object.assign(window, { __documentGuardTest: hooks });
+  started = mine;
+  stop = () => {
+    disconnect();
+    started = null;
+    dispose();
+    stopHtml();
+    if ((window as Window & { __documentGuardTest?: unknown }).__documentGuardTest === hooks) delete (window as Window & { __documentGuardTest?: unknown }).__documentGuardTest;
+  };
+  return mine;
+}
+
+export function stopDocumentIdentityOwner(): void {
+  const dispose = stop;
+  stop = null;
+  dispose?.();
+}

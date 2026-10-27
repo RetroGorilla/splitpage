@@ -12,7 +12,7 @@ await bootApp();
 const { liveSession, noteReload } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
-const { adoptRestoredState } = await import("../js/02b-doc-id.js");
+const { adoptRestoredState } = await import("../bootstrap/startup/document-entry.js");
 const { restoreSnapshotFromCard } = await import("../js/03-sync.js");
 const { applyMerge } = await import("../legacy/merge-bridge.ts");
 const { scheduleIdleRefresh, productionIndexStats } = await import("../features/tags/production-tags.js");

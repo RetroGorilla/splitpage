@@ -3,12 +3,9 @@ import { deriveDocId, docIdEmbeddedIn, sha256Bytes } from "../core/document/ids.
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  decideDuplicateLoser,
-  mergedDocId,
-  migrateDocument,
-  sha256Hex
-} from "../js/02b-doc-id.js";
+import { decideDuplicateLoser } from "../../shared/doc-id-policy.js";
+import { mergedDocId, sha256Hex } from "../core/document/ids.ts";
+import { migrateDocument } from "../bootstrap/startup/document-entry.js";
 import { createHash } from "node:crypto";
 import { migrateRows } from "../legacy/document-ports.ts";
 

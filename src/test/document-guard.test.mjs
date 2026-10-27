@@ -1,3 +1,4 @@
+import { documentGuardAsked } from "../adapters/page/document-guard-query.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -5,7 +6,9 @@ import assert from "node:assert/strict";
 globalThis.location = new URL("https://splitpage.test/index.html?document-guard=1");
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { DocumentWriteError, documentGuardAsked, documentGuardOn, isDocumentView, quietly, rawOf } = await import("../legacy/document-guard.ts");
+(await import("../application/identity/document-guard.ts")).startDocumentGuard(documentGuardAsked(location.search), console.error);
+
+const { DocumentWriteError, documentGuardOn, isDocumentView, quietly, rawOf } = await import("../application/identity/document-guard.ts");
 const { currentDocument, heldDocument, liveDocumentPort, liveSession, runDocumentEdit, sessionStamps } = await import("../legacy/session-bridge.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
