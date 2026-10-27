@@ -14,7 +14,7 @@ localStorage.setItem(NAME_KEY, NAME_33);
 await bootApp(JSON.stringify({ schema: 2, title: "Mine", rows: [], rev: 5, lastEditedBy: NAME_33 }));
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { promptForName } = await import("../js/03-sync.js");
+const { promptForName } = await import("../bootstrap/wiring/title-chrome.ts");
 const { openCommentComposer, postComment, postReply, toggleReplyComposer } = await import("../features/comments/comments.js");
 import { getSavedAuthorName as getSavedAuthorNameWith } from "../application/comment-author.js";
 import { getEditorName, preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
@@ -22,7 +22,7 @@ function getSavedAuthorName() { return getSavedAuthorNameWith(commentPreferences
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { openSettings } = await import("../features/settings/settings.js");
 const { render } = await import("../features/rows/render.js");
-const { toastLastEditor } = await import("../js/03-sync.js");
+const { toastLastEditor } = await import("../bootstrap/wiring/history-panel.ts");
 import { historyOwner } from "../bootstrap/wiring/history.ts";
 const captureSnapshot = (...args) => historyOwner().captureSnapshot(...args);
 const getHistorySnapshot = (...args) => historyOwner().getHistorySnapshot(...args);

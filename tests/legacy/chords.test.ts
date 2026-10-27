@@ -21,7 +21,7 @@ import { helpMenuActions } from "../../src/legacy/help-actions.ts";
 import { helpActions, mountHelpFeature, stopHelpFeature } from "../../src/bootstrap/wiring/help.ts";
 import { updateActions } from "../../src/bootstrap/wiring/update.ts";
 import { shareActions } from "../../src/legacy/share-actions.ts";
-import { thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
+import { historyActions } from "../../src/bootstrap/wiring/history-panel.ts";
 import { hideShotActions } from "../../src/bootstrap/wiring/hide-shot.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { writerActions } from "../../src/bootstrap/wiring/writer.ts";
@@ -55,7 +55,7 @@ function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   const file = fileMenuActions();
   const share = shareActions();
   const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFileMenuDropdownFeature, stopFindFeature,
-    registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]), registerAll(registry, [...file.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...file.slice(3, 4)]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...writerActions(), ...prompterActions(() => ({ openPrompter() {} }), { screen })]),
+    registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...historyActions(), ...findActions()]), registerAll(registry, [...file.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...file.slice(3, 4)]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...writerActions(), ...prompterActions(() => ({ openPrompter() {} }), { screen })]),
     registerAll(registry, [...menu, ...helpActions(), ...file.slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions()]), registerAll(registry, [...share.slice(0, 2), ...file.slice(4, 5), ...share.slice(2, 3), ...file.slice(5, 6), ...importActions(), ...share.slice(3, 7), ...fileMenuExportActions().slice(1), ...share.slice(7), ...desktopActions()]), stopDesktopFeature, registerAll(registry, scriptZoomActions()), stopCommandMenuFeature, stopHelpFeature, stopOnboardingFeature
   ];
   return { registry, dispose: () => {

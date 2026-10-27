@@ -40,7 +40,7 @@ import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 import { cycleRowStatus } from "./scene-status.ts";
 import { expandHiddenShotStrip } from "./hide-shot.ts";
 import { shotHiding } from "./shot-hiding.ts";
-import { restoreMergeSnapshot } from "../../js/03-sync.js";
+import { restoreMergeSnapshot } from "./session-merge.ts";
 import { installMergeBanner } from "../../legacy/merge-bridge.ts";
 import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";
 import { safeId } from "../../adapters/identity/safe-id.ts";

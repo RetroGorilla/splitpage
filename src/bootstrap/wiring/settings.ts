@@ -22,7 +22,7 @@ import { startSettings as mountSettings } from "../../features/settings/settings
 import type { SettingsMount, SettingsPorts } from "../../features/settings/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { setHideShotScenes } from "./hide-shot.ts";
-import { personSwatchesHtml } from "../../js/03-sync.js";
+import { personSwatchesHtml } from "./title-chrome.ts";
 import { getSavedAuthorName } from "../../application/comment-author.js";
 import { DEFAULT_COLLAB_SERVER, collabServerView, normalizeCollabServer, readCollabServer, signOutCollab } from "../../js/13b-collaborate.js";
 import { connectWriter } from "./writer.ts";

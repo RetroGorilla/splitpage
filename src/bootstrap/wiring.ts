@@ -1,3 +1,5 @@
+import { sessionMergePorts, stampRow, setBaseState, documentDestinationPort, documentHistoryPort, stopSessionMergeOwner } from "./wiring/session-merge.ts";
+export { mountSessionMergeOwner } from "./wiring/session-merge.ts";
 import { documentGuardAsked } from "../adapters/page/document-guard-query.ts";
 import { documentIdentityOwner, documentIdentityPort } from "./wiring/document-identity.ts";
 import { migrateDocument, adoptRestoredState } from "./startup/document-entry.js";
@@ -13,7 +15,6 @@ import { importDocumentSource } from "./wiring/imports.ts";
 export { mountPageEntry } from "./startup/page-entry.ts";
 export { mountProjectFiles } from "./wiring/project-files.ts";
 import { wireProjectFiles } from "./wiring/project-files.ts";
-import type { ProjectFileDeferredPorts } from "../application/save/project-files.ts";
 import { sessionEffects } from "./wiring/session-effects.ts";
 import type { SessionEffects } from "../application/save/session-effects.ts";
 export { mountCommandMenuFeature } from "./wiring/command-menu.ts";
@@ -44,7 +45,6 @@ export { mountSaveStatusFeature } from "./wiring/save-status.ts";
 export { mountHostedFeature } from "./wiring/hosted.ts";
 export { mountFileSavingFeature } from "./wiring/file-saving.ts";
 import { wireFileSaving } from "./wiring/file-saving.ts";
-import type { FileSavingDeferredPorts } from "../application/save/file-saving-ports.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
 import { registerBuiltInExporters } from "./wiring/exporters.ts";
 import { wireProductionEditing } from "./wiring/production-editing.ts";
@@ -380,16 +380,17 @@ function drain(disposers: (() => void)[]): unknown[] {
   return failures;
 }
 
-export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFiles" | "effects" | "saves" | "refresh" | "bulkTags" | "transitions"> & { readonly transitions: Omit<TransitionDeps, "identity">; readonly bulkTags: Pick<BulkTagPorts, "stamp">; readonly projectFiles: Pick<ProjectFileDeferredPorts, "replaceSyncBase">; readonly fileSaving: Pick<FileSavingDeferredPorts, "setBaseline"> }): Wiring {
+export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFiles" | "effects" | "saves" | "refresh" | "bulkTags" | "transitions" | "merge">): Wiring {
   const tags = wireTagProduction();
-  const fileSaving = wireFileSaving({ ...deps.fileSaving, copyHistory: (from, to) => documentIdentityOwner().copyDocHistorySafe(from, to), syncIdentity: () => documentIdentityOwner().syncDocIdentity() });
+  const fileSaving = wireFileSaving({ setBaseline: setBaseState, copyHistory: (from, to) => documentIdentityOwner().copyDocHistorySafe(from, to), syncIdentity: () => documentIdentityOwner().syncDocIdentity() });
   return wireApp({
     ...deps,
-    transitions: { ...deps.transitions, identity: documentIdentityPort },
+    transitions: { destination: documentDestinationPort, history: documentHistoryPort, identity: documentIdentityPort },
+    merge: sessionMergePorts,
     effects: sessionEffects(),
     refresh: tags.refresh,
-    bulkTags: { cell: tags.bulkCell, stamp: deps.bulkTags.stamp },
-    projectFiles: () => wireProjectFiles({ ...deps.projectFiles, prepareDocument: migrateDocument, restoreDocument: adoptRestoredState, changeDocumentId: (to, options) => documentIdentityOwner().reassignDocId(to, options), identityEvents: () => documentIdentityOwner().docIdEvents(), connectIdentity: (factory) => documentIdentityOwner().initDocIdentityChannel(factory), standaloneHtml: standaloneHtmlFor, tagOccurrences: tags.tagOccurrences }).services,
+    bulkTags: { cell: tags.bulkCell, stamp: stampRow },
+    projectFiles: () => wireProjectFiles({ replaceSyncBase: setBaseState, prepareDocument: migrateDocument, restoreDocument: adoptRestoredState, changeDocumentId: (to, options) => documentIdentityOwner().reassignDocId(to, options), identityEvents: () => documentIdentityOwner().docIdEvents(), connectIdentity: (factory) => documentIdentityOwner().initDocIdentityChannel(factory), standaloneHtml: standaloneHtmlFor, tagOccurrences: tags.tagOccurrences }).services,
     saves: fileSaving.savePorts,
     sources: () => { const sources = [...deps.sources()]; sources.splice(1, 0, importDocumentSource()); return sources; },
     destinations: () => [fileSaving.destination(), ...deps.destinations()],
@@ -445,6 +446,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("recovery", () => startRecovery(checkedRecovery(deps.recovery())), (stop) => stop);
   disposers.push(stopDocumentIdentityOwner);
   disposers.push(stopHistoryOwner);
+  disposers.push(stopSessionMergeOwner);
   build("editor", () => startEditor(liveDocumentPort), (stop) => stop);
   build("production editing", () => wireProductionEditing(deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
   build("preferences", () => startPreferences(), (stop) => stop);

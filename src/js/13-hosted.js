@@ -29,7 +29,7 @@ import {
 } from "../legacy/document-identity-bridge.ts";
 import {
   setBaseState
-} from "./03-sync.js";
+} from "../legacy/session-merge-bridge.ts";
 import { applyMerge, mergeStates, reportMerge } from "../legacy/merge-bridge.ts";
 import {
   ensureBytes,

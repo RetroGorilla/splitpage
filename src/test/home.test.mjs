@@ -11,7 +11,7 @@ test("autoSaveTarget answers server, file or null off the home", async () => {
   const { wireFileSaving } = await import("../bootstrap/wiring/file-saving.ts");
   const copyDocHistorySafe = (...args) => documentIdentityOwner().copyDocHistorySafe(...args);
   const syncDocIdentity = (...args) => documentIdentityOwner().syncDocIdentity(...args);
-  const { setBaseState } = await import("../js/03-sync.js");
+  const { setBaseState } = await import("../bootstrap/wiring/session-merge.ts");
   const { serverSaveDestination } = await import("../js/13-hosted.js");
   const fileSaving = wireFileSaving({ copyHistory: copyDocHistorySafe, syncIdentity: syncDocIdentity, setBaseline: setBaseState });
   const stopSaves = startSaves(fileSaving.savePorts({ capture: () => Object.freeze({}), stillOwns: () => true }), { start: () => null, stop: () => {} });

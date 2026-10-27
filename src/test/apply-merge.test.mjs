@@ -3,7 +3,7 @@ import { bootApp, clearTimers, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { baseStateReason, setBaseState } from "../js/03-sync.js";
+import { baseStateReason, setBaseState } from "../bootstrap/wiring/session-merge.ts";
 import { applyMerge, mergeStates } from "../legacy/merge-bridge.ts";
 import { mergeUndo } from "../legacy/editor-bridge.ts";
 import { historyOwner } from "../bootstrap/wiring/history.ts";

@@ -3,7 +3,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import type { TargetPorts } from "../../../src/features/rundown/ports.ts";
-import { startTarget as mountTarget, paintTargetOverlay, setTargetLength } from "../../../src/features/rundown/target.js";
+import { startTarget as mountOverlay, paintTargetOverlay, setTargetLength } from "../../../src/features/rundown/target.js";
+import { startTargetSection as mountTarget } from "../../../src/features/title/target-section.js";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices, fakeReview } from "../fakes.ts";
 
@@ -19,7 +20,9 @@ function setup(targetSeconds: number | null = null) {
     review: review.review,
     notices: notices.notices
   };
-  return { edits, review, notices, owner: mountTarget(ports) };
+  const overlay = mountOverlay(ports);
+  const section = mountTarget(ports);
+  return { edits, review, notices, owner: { ...section, dispose: () => { section.dispose(); overlay.dispose(); } } };
 }
 
 function popover(html: string): HTMLElement {

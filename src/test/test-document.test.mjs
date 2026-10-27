@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 
 const bridge = await import("../legacy/session-bridge.ts");
 const homeMod = await import("../legacy/location-bridge.ts");
-const { baseStateReason } = await import("../js/03-sync.js");
+const { baseStateReason } = await import("../bootstrap/wiring/session-merge.ts");
 const documentIdentityPort = { mint: (...args) => documentIdentityOwner().documentIdentityPort.mint(...args), writtenOut: (...args) => documentIdentityOwner().documentIdentityPort.writtenOut(...args), markWrittenOut: (...args) => documentIdentityOwner().documentIdentityPort.markWrittenOut(...args) };
 const { loadTestDocument } = await import("./_document.mjs");
 const { liveDocumentPort } = bridge;

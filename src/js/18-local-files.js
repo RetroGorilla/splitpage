@@ -13,7 +13,7 @@ import {
   standaloneHtmlFor,
   syncDocIdentity
 } from "../legacy/document-identity-bridge.ts";
-import { stampRow } from "./03-sync.js";
+import { stampRow } from "../legacy/session-merge-bridge.ts";
 import { beginBusy, endBusy, withBusyBar } from "../features/notices/busy.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
 import { brollView } from "../application/preferences/broll-view.ts";
