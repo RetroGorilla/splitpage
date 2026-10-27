@@ -12,7 +12,7 @@ await bootApp();
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { render } = await import("../js/05-render.js");
 const { updateTagBadges } = await import("../bootstrap/wiring/panels.ts");
-const { productionIndex } = await import("../legacy/production-index-bridge.ts");
+const { productionIndex } = await import("../application/production/index-owner.ts");
 const { currentDocument } = await import("../legacy/session-bridge.ts");
 const { openProductionPanel, renderProduction, setTagNotes, setTagStatus } = await import("../features/tags/panels.js");
 const { anchorBrollInLeftCell, updateBrollBadge } = await import("../bootstrap/wiring/broll.ts");

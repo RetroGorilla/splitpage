@@ -9,7 +9,7 @@ import { migrateRows } from "../legacy/document-ports.ts";
 import { withPageHead } from "../js/02b-doc-id.js";
 import { cellOf } from "../legacy/richtext.ts";
 import { toPlainText } from "../core/text/projections.ts";
-import { __init as initTags } from "../js/07-production-tags.js";
+import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { exportMetaLine } from "../adapters/formats/export-text.ts";
 import { buildBreakdownCsv, buildBrollCsv, buildCsv, csvToRows } from "../adapters/formats/csv.ts";
 import { LONG_DEMO } from "../starters/index.ts";

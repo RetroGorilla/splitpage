@@ -1,7 +1,7 @@
-import { createProductionIndex } from "../application/production/production-index.ts";
-import type { Seal } from "../core/document/freeze.ts";
-import type { ProductionIndexOwner } from "../core/production/index.ts";
-import type { ProductionReaders } from "../core/production/ports.ts";
+import { createProductionIndex } from "./production-index.ts";
+import type { Seal } from "../../core/document/freeze.ts";
+import type { ProductionIndexOwner } from "../../core/production/index.ts";
+import type { ProductionReaders } from "../../core/production/ports.ts";
 
 let started: ProductionIndexOwner | null = null;
 

@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { htmlToMarkdown } from "../legacy/richtext.ts";
-import { __init as initTags } from "../js/07-production-tags.js";
+import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { breakdownRows } from "../adapters/formats/export-projections.ts";
 import { commentBodyText, commentEntries } from "../adapters/formats/export-projections.ts";
 import { mdSceneCellSource, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";

@@ -1,7 +1,9 @@
+import "./_production-tags-started.mjs";
 import { wireProductionIndex } from "../bootstrap/wiring/production-index.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { stampRow } from "../js/03-sync.js";
-import { bulkTagCell } from "../js/07-production-tags.js";
+import { bulkTagCell } from "../features/tags/production-tags.js";
+
 import { sessionStarted, startSessionBridge } from "../legacy/session-bridge.ts";
 import { legacySessionPorts } from "../bootstrap/wiring.ts";
 import { startPageEffects } from "../bootstrap/effects.ts";

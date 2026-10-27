@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { intern } from "../adapters/storage/02c-blobs.js";
-import { __init as initTags } from "../js/07-production-tags.js";
+import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";

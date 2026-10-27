@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { intern } from "../adapters/storage/02c-blobs.js";
-import { __init as initTags } from "../js/07-production-tags.js";
+import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { commentBodyText, commentEntries } from "../adapters/formats/export-projections.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { toMarkdownDoc, toMarkdownTableDoc } from "../adapters/formats/export-text.ts";

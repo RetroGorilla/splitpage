@@ -14,7 +14,7 @@ const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts
 const { undo, redo, undoSizes, flushEdits, breakUndoCoalescing } = await import("../legacy/undo-bridge.ts");
 const { liveSession, runDocumentEdit, stampDocument } = await import("../legacy/session-bridge.ts");
 const { setTargetLength } = await import("../features/rundown/target.js");
-const { registerProductionTag, findOrAddPerson } = await import("../js/07-production-tags.js");
+const { registerProductionTag, findOrAddPerson } = await import("../features/tags/production-tags.js");
 const { renameTag, removeTag, newBrollRecord, removeBrollProp } = await import("../application/commands/production-actions.ts");
 const { retagRewrites: planRetagRewrites, retagMentions: countRetagMentions } = await import("../application/commands/tag-rewrites.ts");
 

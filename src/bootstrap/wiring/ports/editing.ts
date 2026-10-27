@@ -50,3 +50,5 @@ export const productionSelection: ProductionSelection = {
 };
 
 export const focus = { lastRow: () => focusMemory().lastRow() };
+
+export const tagEditing = { cells: cellEditing, focus: focusMemory };

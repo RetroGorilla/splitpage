@@ -1,5 +1,7 @@
+import "./_production-tags-started.mjs";
 import { getEditorName } from "../legacy/preferences-bridge.ts";
-import { runIdleRefresh } from "../js/07-production-tags.js";
+import { runIdleRefresh } from "../features/tags/production-tags.js";
+
 import { derivedRecordsPlan } from "../bootstrap/wiring/broll.ts";
 import { sessionEffects } from "../bootstrap/wiring/session-effects.ts";
 

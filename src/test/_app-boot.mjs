@@ -93,7 +93,7 @@ export async function appWiringDeps() {
     import("../legacy/document-ports.ts"),
     import("../js/02b-doc-id.js"),
     import("../js/03-sync.js"),
-    import("../js/07-production-tags.js"),
+    import("../features/tags/production-tags.js"),
     import("../bootstrap/wiring/broll.ts"),
     import("../bootstrap/wiring/session-effects.ts"),
     import("../bootstrap/wiring/file-saving.ts"),

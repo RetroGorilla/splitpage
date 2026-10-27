@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { dataUrlForSync, intern } from "../adapters/storage/02c-blobs.js";
-import { __init as initTags } from "../js/07-production-tags.js";
+import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { commentIds } from "../core/text/runs.ts";
 import { cellOf, fromHtml } from "../legacy/richtext.ts";
 import { isBlankScene } from "../application/commands/rows.ts";

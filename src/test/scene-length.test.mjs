@@ -12,7 +12,7 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
-import { __init as initTags } from "../js/07-production-tags.js";
+import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { applyStepsLive, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";
 import { invertSteps } from "../core/text/steps.ts";
