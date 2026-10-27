@@ -26,7 +26,7 @@ import { broll } from "./_broll-mounted.mjs";
 const { brollEntries } = broll;
 import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
-import { __init as initHistory } from "../js/03a-history-store.js";
+import { startTestHistory as initHistory } from "./_history-started.mjs";
 import { mountTagPanelsFeature } from "../bootstrap/wiring/production.ts";
 import { applyGearQuickAdd } from "../features/tags/panels.js";
 import { LONG_DEMO } from "../starters/index.ts";

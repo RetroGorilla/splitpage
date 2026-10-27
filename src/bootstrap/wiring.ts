@@ -1,3 +1,4 @@
+import { stopHistoryOwner } from "./wiring/history.ts";
 export { mountRowsRenderFeature } from "./wiring/render.ts";
 export { mountProductionTagsFeature } from "./wiring/production-tags.ts";
 import { wireTagProduction } from "./wiring/production-tags.ts";
@@ -433,6 +434,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("document sources", () => registerSources(checkedSources(deps.sources())), (drop) => drop);
   build("merge", () => startMerge(checkedMerge(deps.merge())), (stop) => stop);
   build("recovery", () => startRecovery(checkedRecovery(deps.recovery())), (stop) => stop);
+  disposers.push(stopHistoryOwner);
   build("editor", () => startEditor(liveDocumentPort), (stop) => stop);
   build("production editing", () => wireProductionEditing(deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
   build("preferences", () => startPreferences(), (stop) => stop);
@@ -461,3 +463,5 @@ export { mountUpdateFeature } from "./wiring/update.ts";
 export { mountPrompterRuntimeFeature } from "./wiring/prompter.ts";
 
 export { mountWriterRuntimeFeature } from "./wiring/writer.ts";
+
+export { mountHistoryOwner } from "./wiring/history.ts";

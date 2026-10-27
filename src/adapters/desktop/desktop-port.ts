@@ -1,3 +1,4 @@
+import type { HistoryDesktopPort } from "../../application/recovery/history-ports.ts";
 import { runningOnDesktop, setRunningOnDesktop } from "../../application/desktop-presence.ts";
 import type { DesktopDocumentState } from "../../application/desktop/document-state.ts";
 
@@ -41,10 +42,6 @@ export interface DesktopRouteRequest {
   readonly tunnel?: unknown;
 }
 
-export interface DesktopHistoryOptions {
-  readonly protect?: readonly string[];
-  readonly older?: boolean;
-}
 
 export interface DesktopBlob {
   readonly bytes: Uint8Array;
@@ -56,7 +53,7 @@ export interface DesktopTakenDraft {
   readonly [key: string]: unknown;
 }
 
-export interface DesktopPort {
+export interface DesktopPort extends HistoryDesktopPort {
   readonly isDesktop: true;
   readonly platform: string;
   readonly appVersion: string;
@@ -91,12 +88,6 @@ export interface DesktopPort {
   readonly draftRestoreDone: (outcome: unknown) => void;
   readonly onDraftFlush: (cb: (request: { readonly keep: boolean }) => unknown) => void;
 
-  readonly historyPut: (docId: string | null, meta: unknown, stateJson: string, opts?: DesktopHistoryOptions) => Promise<unknown>;
-  readonly historyList: (docId: string | null) => Promise<unknown>;
-  readonly historyGet: (query: unknown, snapshotId: string) => Promise<unknown>;
-  readonly historyCopy: (fromDocId: string, toDocId: string) => Promise<unknown>;
-  readonly historyTouch: (docId: string, title: string) => Promise<unknown>;
-  readonly historyListDocs: () => Promise<unknown>;
 
   readonly blobPut: (sha: string, bytes: Uint8Array) => Promise<unknown>;
   readonly blobGet: (sha: string) => Promise<DesktopBlob | null>;

@@ -2,7 +2,7 @@ import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors
 import { currentDocument, onRefresh, onSessionChange } from "../../legacy/session-bridge.ts";
 import { onPreferenceChange, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { onScriptStats, statsFollowChange, updateScriptStats } from "./scene-status.ts";
-import { onHistoryChange } from "../../js/03a-history-store.js";
+import { historyOwner } from "./history.ts";
 import { renderHistory } from "../../js/03-sync.js";
 import { currentProductionTags } from "./production-tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
@@ -93,7 +93,7 @@ export function mountPanelListenersFeature(): void {
       if (jobs.has("writerStats")) writerControls()?.updateWriterStats();
       if (jobs.has("broll")) runBrollRefresh();
     }),
-    onHistoryChange(renderHistoryPanel),
+    historyOwner().onHistoryChange(renderHistoryPanel),
     onPreferenceChange(clockChanged)
   ];
   stopPanels = () => {
