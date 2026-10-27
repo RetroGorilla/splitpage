@@ -163,6 +163,7 @@ const session: DocumentSession = {
   stamp: function (task: Stamp) { return swept(running().current.stamp(task)); },
   noteEdit: function (changes?: ChangeSet) { running().current.noteEdit(changes); swept(null); },
   refresh: function (job: string) { running().current.refresh(job); },
+  cancelRefresh: function (jobs: readonly string[]) { running().current.cancelRefresh(jobs); },
   subscribe: function (listener: SessionListener) { return running().current.subscribe(listener); },
   dispose: function () {
     const now = running();
@@ -304,6 +305,10 @@ export function noteAbsorbedDirty(kind: AbsorbedKind): void {
 
 export function requestRefresh(job: string): void {
   session.refresh(job);
+}
+
+export function cancelRefresh(jobs: readonly string[]): void {
+  if (started && !started.ended) started.current.cancelRefresh(jobs);
 }
 
 export function liveSession(): DocumentSession {

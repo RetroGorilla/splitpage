@@ -11,6 +11,7 @@ export const REFRESH_TIMING: RefreshTiming = Object.freeze({ idleMs: 180, maxMs:
 export interface EffectScheduler {
   pass: (change: SessionChange) => readonly unknown[];
   refresh: (job: string) => void;
+  cancelRefresh: (jobs: readonly string[]) => void;
   pending: () => readonly string[];
   dispose: () => void;
 }
@@ -29,24 +30,44 @@ export function createEffectScheduler(effects: EffectPort, timers: TimerPort, ti
   let handle: unknown = null;
   let since = 0;
   let stopped = false;
+  let now = 0;
+  let wait = 0;
+  let fire = createFire();
 
-  function fire(): void {
-    armed = false;
-    handle = null;
-    const due = jobs;
-    jobs = new Set<string>();
-    effects.refresh(due);
+  function createFire(): () => void {
+    const mine = (): void => {
+      if (stopped || fire !== mine) return;
+      armed = false;
+      handle = null;
+      const due = jobs;
+      jobs = new Set<string>();
+      effects.refresh(due);
+    };
+    return mine;
   }
 
   function refresh(job: string): void {
     if (stopped) return;
     jobs.add(job);
-    const now = timers.now();
+    now = timers.now();
     if (armed) timers.stop(handle);
     else since = now;
-    const wait = Math.max(0, Math.min(timing.idleMs, since + timing.maxMs - now));
+    wait = Math.max(0, Math.min(timing.idleMs, since + timing.maxMs - now));
     armed = true;
     handle = timers.start(fire, wait);
+  }
+
+  function cancelRefresh(cancelled: readonly string[]): void {
+    for (const job of cancelled) jobs.delete(job);
+    fire = createFire();
+    if (!armed) return;
+    const retiring = handle;
+    armed = false;
+    handle = null;
+    timers.stop(retiring);
+    if (!jobs.size) return;
+    armed = true;
+    handle = timers.start(fire, Math.max(0, now + wait - timers.now()));
   }
 
   function pass(change: SessionChange): readonly unknown[] {
@@ -72,6 +93,7 @@ export function createEffectScheduler(effects: EffectPort, timers: TimerPort, ti
   return {
     pass: pass,
     refresh: refresh,
+    cancelRefresh: cancelRefresh,
     pending: function () { return Array.from(jobs); },
     dispose: dispose
   };
