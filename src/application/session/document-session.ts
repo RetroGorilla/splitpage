@@ -100,6 +100,7 @@ export interface DocumentSession {
   stamp: (stamp: Stamp) => CommandOutcome;
   noteEdit: (changes?: ChangeSet) => void;
   refresh: (job: string) => void;
+  cancelRefresh: (jobs: readonly string[]) => void;
   subscribe: (listener: SessionListener) => () => void;
   dispose: () => void;
 }
@@ -440,6 +441,7 @@ export function createDocumentSession(ports: SessionPorts): DocumentSession {
       commit("edit", noted);
     },
     refresh: function (job) { scheduler.refresh(job); },
+    cancelRefresh: function (jobs) { scheduler.cancelRefresh(jobs); },
     subscribe: function (listener) {
       if (disposed) return function () {};
       listeners.push(listener);
