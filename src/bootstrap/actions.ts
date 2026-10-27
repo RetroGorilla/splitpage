@@ -1,3 +1,4 @@
+import { tagComposerActions } from "./wiring/production-tags.ts";
 import { prompterActions } from "./wiring/prompter.ts";
 import { importActions } from "./wiring/imports.ts";
 import { commandMenuActions } from "./wiring/command-menu.ts";
@@ -62,7 +63,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => registerAll(registry, scriptZoomActions()),
     () => {
       const openers = editorOpenActions(videoFiles.openGallery);
-      return registerAll(registry, [...rundownSceneActions(), ...galleryActions(), ...openers.slice(0, 1), ...commentsOpenActions(), ...openers.slice(1)]);
+      return registerAll(registry, [...rundownSceneActions(), ...galleryActions(), ...openers.slice(0, 1), ...commentsOpenActions(), ...tagComposerActions()]);
     },
     () => registerAll(registry, rowsActions()),
     () => runMenuCommandsWith(nativeMenuRunner(registry, presentRefusal, () => { toggleFileMenu(false); })),

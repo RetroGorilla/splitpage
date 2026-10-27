@@ -1,3 +1,4 @@
+import "./_production-tags-started.mjs";
 import { mintTagId, registryTagHooks } from "../core/document/tags.ts";
 import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import "./_dom.mjs";
@@ -10,7 +11,9 @@ import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
 import { fromHtml } from "../legacy/richtext.ts";
 import { toHtml } from "../core/text/html.ts";
-import { ensureTagIds, isTagId, registryEntryById } from "../js/07-production-tags.js";
+import { registryEntryById } from "../features/tags/production-tags.js";
+import { ensureTagIds } from "../core/document/tags.ts";
+import { isTagId } from "../core/document/tags.ts";
 import { renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, currentDocument } from "../legacy/session-bridge.ts";
 import { retagRewrites as planRetagRewrites } from "../application/commands/tag-rewrites.ts";

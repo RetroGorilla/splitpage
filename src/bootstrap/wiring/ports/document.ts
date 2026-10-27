@@ -1,5 +1,5 @@
 import type { DocumentReader } from "../../../application/session/document-reader.ts";
-import { currentDocument, onDocumentReplaced, onRefresh, onSessionChange, readSession } from "../../../legacy/session-bridge.ts";
+import { cancelRefresh, currentDocument, onDocumentReplaced, onRefresh, onSessionChange, readSession, requestRefresh, stampDocument } from "../../../legacy/session-bridge.ts";
 
 export const documentReader: DocumentReader = {
   current: currentDocument,
@@ -8,3 +8,7 @@ export const documentReader: DocumentReader = {
   onReplaced: onDocumentReplaced,
   onRefresh: onRefresh
 };
+
+export const refresh = { request: requestRefresh, cancel: cancelRefresh };
+
+export const stamping = { stamp: stampDocument };

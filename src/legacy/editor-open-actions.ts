@@ -1,6 +1,5 @@
 import type { ActionDefinition, Availability } from "../application/actions.ts";
 import type { VideoFiles } from "../application/media/video-files.ts";
-import { openTagComposer } from "../js/07-production-tags.js";
 
 const OPENED_FROM_ITS_VIEW: Availability = { enabled: true, visible: false };
 
@@ -33,9 +32,6 @@ export function editorOpenActions(openGalleryLink: VideoFiles["openGallery"]): A
     opener("open-picture-link", "Open picture link", (input) => {
       const at = fields("open-picture-link", input, ["rowId"], ["slot"]);
       openGalleryLink(at["rowId"] as string, at["slot"] as number, at["key"]);
-    }),
-    opener("tag-selection", "Tag selection", (input) => {
-      openTagComposer(fields("tag-selection", input, ["rowId", "field", "quotedText"], ["occurrenceIndex"]));
     })
   ];
 }

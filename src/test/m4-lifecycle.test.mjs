@@ -54,7 +54,7 @@ await bootApp();
 
 after(closeApp);
 
-const { runIdleRefresh } = await import("../js/07-production-tags.js");
+const { runIdleRefresh } = await import("../features/tags/production-tags.js");
 const refreshed = { into: null };
 await rewireRunningApp({ refresh: (due) => (refreshed.into ? refreshed.into.push(...due) : runIdleRefresh(due)) });
 

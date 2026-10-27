@@ -1,3 +1,4 @@
+import "./_production-tags-started.mjs";
 import { normalizeTagName } from "../core/document/tags.ts";
 import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import "./_dom.mjs";
@@ -8,7 +9,8 @@ import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { projection, tagNameOf } from "../core/text/runs.ts";
 import { toHtml } from "../core/text/html.ts";
-import { tagFieldOccurrences, tagOccurrences, tagsInField } from "../js/07-production-tags.js";
+import { tagFieldOccurrences, tagsInField } from "../features/tags/production-tags.js";
+import { tagOccurrences } from "../core/production/tags.ts";
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../legacy/session-bridge.ts";
 import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions } from "../application/commands/tag-rewrites.ts";

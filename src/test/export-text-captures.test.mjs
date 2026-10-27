@@ -7,7 +7,7 @@ import "./_preferences-started.mjs";
 import { preferences } from "../legacy/preferences-bridge.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { blobStore, intern } from "../adapters/storage/02c-blobs.js";
-import { __init as initTags } from "../js/07-production-tags.js";
+import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import "./_broll-mounted.mjs";
 import { exportAssetsNow } from "../adapters/formats/export-assets.ts";
 import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";

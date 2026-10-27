@@ -1,3 +1,4 @@
+import "./_production-tags-started.mjs";
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
@@ -5,7 +6,8 @@ import assert from "node:assert/strict";
 import { sanitizeHtml } from "../legacy/richtext.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { projection } from "../core/text/runs.ts";
-import { bulkTagCell } from "../js/07-production-tags.js";
+import { bulkTagCell } from "../features/tags/production-tags.js";
+
 import { bulkTagRows } from "../application/commands/bulk-tags.ts";
 import { loadTestDocument } from "./_document.mjs";
 

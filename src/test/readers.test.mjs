@@ -1,10 +1,12 @@
+import "./_production-tags-started.mjs";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { cellOf } from "../legacy/richtext.ts";
 import { toDocxRuns, toMarkdown, toPlainText } from "../core/text/projections.ts";
 import { htmlToMarkdown, inertBody, sanitizeHtml } from "../legacy/richtext.ts";
-import { tagsInField } from "../js/07-production-tags.js";
+import { tagsInField } from "../features/tags/production-tags.js";
+
 import { htmlToRuns } from "../adapters/formats/html-runs.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
 import { prompterSceneHtml, trimPrompterCell } from "../features/prompter/prompter.js";

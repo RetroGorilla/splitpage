@@ -1,3 +1,6 @@
+import type { DocumentSession } from "../../application/session/document-session.ts";
+import type { FocusMemory } from "../../application/editing/focus-memory.ts";
+import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 import type { Presence } from "../../application/collaboration/presence.ts";
 import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
@@ -54,6 +57,23 @@ export interface TagPanelPorts {
   readonly presence: Pick<Presence, "personColor">;
   readonly undo: Pick<UndoControl, "breakCoalescing">;
   readonly review: Pick<ReviewFacts, "reviewing" | "refuseInReview">;
+  readonly notices: Pick<NoticePort, "show">;
+  readonly ids: IdSource;
+}
+
+export interface ProductionTagPorts {
+  readonly document: Pick<DocumentReader, "current" | "read">;
+  readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
+  readonly refresh: { readonly request: DocumentSession["refresh"]; readonly cancel: DocumentSession["cancelRefresh"] };
+  readonly stamping: Pick<DocumentSession, "stamp">;
+  readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "inertBody" | "sanitizeHtml" | "productionReaders">;
+  readonly production: () => Pick<ProductionIndexOwner, "entries" | "current" | "recordsPlan" | "derived" | "resetDerived">;
+  readonly editing: {
+    readonly cells: () => Pick<CellEditing<Element>, "edit" | "sync">;
+    readonly focus: () => Pick<FocusMemory<Element>, "promptMutedFor">;
+  };
+  readonly undo: Pick<UndoControl, "breakCoalescing">;
+  readonly view: () => Pick<ViewFlags, "writerOpen">;
   readonly notices: Pick<NoticePort, "show">;
   readonly ids: IdSource;
 }

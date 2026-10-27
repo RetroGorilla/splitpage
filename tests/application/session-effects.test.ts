@@ -5,6 +5,81 @@ import { cellEdit } from "../../src/application/session/change-set.ts";
 import { REFRESH_TIMING, createEffectScheduler } from "../../src/application/session/effects.ts";
 import { fakeClock, harness, rawScript, runConfined } from "./session-fakes.ts";
 
+test("refresh cancellation retires a held callback and preserves other jobs at their original deadline", () => {
+  const clock = fakeClock();
+  const held: (() => void)[] = [];
+  const ran: string[][] = [];
+  const scheduler = createEffectScheduler({
+    dirty: () => {}, draft: () => {}, save: () => {},
+    refresh: (jobs) => { ran.push([...jobs]); }
+  }, { ...clock, start: (run, ms) => { held.push(run); return clock.start(run, ms); } });
+  scheduler.refresh("untagged");
+  clock.advance(50);
+  scheduler.refresh("writerStats");
+  const retired = held[held.length - 1] as () => void;
+  clock.advance(30);
+  scheduler.cancelRefresh(["untagged", "production"]);
+  assert.deepEqual(scheduler.pending(), ["writerStats"]);
+  retired();
+  assert.deepEqual(ran, []);
+  clock.advance(149);
+  assert.deepEqual(ran, []);
+  clock.advance(1);
+  assert.deepEqual(ran, [["writerStats"]]);
+  scheduler.refresh("untagged");
+  retired();
+  clock.advance(180);
+  assert.deepEqual(ran, [["writerStats"], ["untagged"]]);
+  scheduler.dispose();
+});
+
+test("cancelling the final refresh job removes the timer and an old callback cannot consume a fresh request", () => {
+  const clock = fakeClock();
+  const held: (() => void)[] = [];
+  const ran: string[][] = [];
+  const scheduler = createEffectScheduler({
+    dirty: () => {}, draft: () => {}, save: () => {},
+    refresh: (jobs) => { ran.push([...jobs]); }
+  }, { ...clock, start: (run, ms) => { held.push(run); return clock.start(run, ms); } });
+  scheduler.refresh("untagged");
+  const retired = held[0] as () => void;
+  scheduler.cancelRefresh(["untagged", "production"]);
+  assert.equal(clock.armed(), 0);
+  assert.deepEqual(scheduler.pending(), []);
+  retired();
+  assert.deepEqual(ran, []);
+  scheduler.refresh("untagged");
+  retired();
+  assert.deepEqual(scheduler.pending(), ["untagged"]);
+  clock.advance(180);
+  assert.deepEqual(ran, [["untagged"]]);
+  const last = held[held.length - 1] as () => void;
+  scheduler.dispose();
+  last();
+  assert.deepEqual(ran, [["untagged"]]);
+});
+
+test("refresh cancellation preserves a remaining job's deadline at the one-second cap", () => {
+  const clock = fakeClock();
+  const ran: string[][] = [];
+  const scheduler = createEffectScheduler({
+    dirty: () => {}, draft: () => {}, save: () => {},
+    refresh: (jobs) => { ran.push([...jobs]); }
+  }, clock);
+  scheduler.refresh("writerStats");
+  for (let key = 0; key < 9; key++) {
+    clock.advance(100);
+    scheduler.refresh("untagged");
+  }
+  clock.advance(50);
+  scheduler.cancelRefresh(["untagged", "production"]);
+  clock.advance(49);
+  assert.deepEqual(ran, []);
+  clock.advance(1);
+  assert.deepEqual(ran, [["writerStats"]]);
+  scheduler.dispose();
+});
+
 function typeInto(rowId: string, text: string): Command {
   return {
     name: "type",

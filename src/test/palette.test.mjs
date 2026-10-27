@@ -1,3 +1,4 @@
+import "./_production-tags-started.mjs";
 import { TAG_CATEGORIES } from "../core/production/looks.ts";
 import "./_dom.mjs";
 import test from "node:test";
@@ -143,7 +144,8 @@ test("--broll is defined in every theme, off every other hue, and readable as te
   }
 });
 
-import { tagIconCss, tagIconSvg } from "../js/07-production-tags.js";
+import { tagIconCss, tagIconSvg } from "../features/tags/production-tags.js";
+
 import "./_preferences-started.mjs";
 import { settingsAppData } from "../application/preferences/preferences.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";

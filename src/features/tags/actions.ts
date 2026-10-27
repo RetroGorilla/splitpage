@@ -1,4 +1,5 @@
-import type { ActionDefinition } from "../../application/actions.ts";
+import { openTagComposer } from "./production-tags.js";
+import type { Availability, ActionDefinition } from "../../application/actions.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import { EVERY_OVERLAY, availableUnless, firstRefusal } from "../../application/screen.ts";
 import type { SidePanels } from "../../application/side-panels.ts";
@@ -33,4 +34,36 @@ export function tagPanelActions(current: () => TagPanelMount | null, screen: () 
     panel("panel-gear", "Gear panel", "btn-gear", "gear-panel",
       "gear equipment kit camera show hide toggle", (owner) => { owner.openGearPanel(); })
   ];
+}
+
+const OPENED_FROM_ITS_VIEW: Availability = { enabled: true, visible: false };
+
+type Fields = Readonly<Record<string, unknown>>;
+
+function fields(id: string, input: unknown, strings: readonly string[], numbers: readonly string[] = []): Fields {
+  if (typeof input !== "object" || input === null) throw new TypeError(`${id} needs what to open`);
+  const record = input as Fields;
+  for (const key of strings) {
+    if (typeof record[key] !== "string") throw new TypeError(`${id} needs ${key} as text`);
+  }
+  for (const key of numbers) {
+    if (typeof record[key] !== "number") throw new TypeError(`${id} needs ${key} as a number`);
+  }
+  return record;
+}
+
+function opener(id: string, label: string, run: (input: unknown) => void): ActionDefinition {
+  return {
+    id,
+    label,
+    group: "Open",
+    availability: () => OPENED_FROM_ITS_VIEW,
+    run: (_source, input) => { run(input); }
+  };
+}
+
+export function tagComposerActions(): ActionDefinition[] {
+  return [opener("tag-selection", "Tag selection", (input) => {
+    openTagComposer(fields("tag-selection", input, ["rowId", "field", "quotedText"], ["occurrenceIndex"]));
+  })];
 }
