@@ -28,7 +28,7 @@ test("consumers import richtext functions directly from their owners", () => {
   const imports = [
     ["src/js/05-render.js", 'import { buildVideoCardEl, sanitizeHtml, storedHtmlFromDom } from "../legacy/richtext.ts";'],
     ["src/js/19-writer.js", 'import { sanitizeHtml, storedHtmlFromDom } from "../legacy/richtext.ts";'],
-    ["src/js/07-production-tags.js", 'import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";'],
+    ["src/features/tags/production-tags.js", 'import { cappedText, codePointPrefix, escapeHtml, safeId as safeIdFrom } from "../../core/document/text-policy.ts";'],
     ["src/js/13-hosted.js", 'import { inertBody } from "../legacy/richtext.ts";'],
     ["src/bootstrap/wiring/ports/text.ts", 'import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../../legacy/richtext.ts";'],
     ["src/bootstrap/wiring/editor.ts", 'import { sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";'],

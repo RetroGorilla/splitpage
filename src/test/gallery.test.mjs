@@ -14,7 +14,7 @@ import {
 } from "../adapters/storage/02d-gallery.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
-import { __init as initTags } from "../js/07-production-tags.js";
+import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { toMarkdownDoc } from "../adapters/formats/export-text.ts";
 import { buildDocx, docxToRows } from "../adapters/formats/docx.ts";
 import { buildPdf } from "../adapters/formats/pdf.ts";

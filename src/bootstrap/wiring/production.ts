@@ -30,9 +30,9 @@ import {
   closeTagComposer,
   hideTagGhost,
   hideUntaggedPrompt,
-  renderTagCategories,
-  tagKey
-} from "../../js/07-production-tags.js";
+  renderTagCategories
+} from "../../features/tags/production-tags.js";
+import { tagKey } from "../../core/document/tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
 import {
   IS_TOUCH,

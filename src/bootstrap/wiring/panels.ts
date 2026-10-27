@@ -4,7 +4,7 @@ import { onPreferenceChange, preferences, viewFlags } from "../../legacy/prefere
 import { onScriptStats, statsFollowChange, updateScriptStats } from "./scene-status.ts";
 import { onHistoryChange } from "../../js/03a-history-store.js";
 import { renderHistory } from "../../js/03-sync.js";
-import { onTagged } from "../../js/07-production-tags.js";
+import { currentProductionTags } from "./production-tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
 import { onPainted } from "../../js/05-render.js";
 import { refreshGalleryOverlay } from "../../features/gallery/overlay.js";
@@ -70,7 +70,7 @@ export function mountPanelListenersFeature(): void {
         refreshGalleryOverlay();
       }
     }),
-    onTagged(refreshTagViews),
+    currentProductionTags()?.onTagged(refreshTagViews) ?? (() => {}),
     currentPlainTags()?.onTagged(refreshTagViews) ?? (() => {}),
     onScriptStats((targetSeconds: number) => {
       setRundownExtraSeconds(targetSeconds);

@@ -7,7 +7,7 @@ import { loadTestDocument } from "../src/test/_document.mjs";
 import { rowSeconds } from "../src/core/production/timing.ts";
 import { productionReaders } from "../src/legacy/document-ports.ts";
 import { migrateRows } from "../src/legacy/document-ports.ts";
-import { __init as initTags } from "../src/js/07-production-tags.js";
+import { mountProductionTagsFeature as initTags } from "../src/bootstrap/wiring/production-tags.ts";
 
 initTags();
 

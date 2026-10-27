@@ -26,7 +26,7 @@ import { cacheSeal } from "../../src/legacy/cache-freeze.ts";
 import { productionReaders } from "../../src/legacy/document-ports.ts";
 import { editorSelection, startEditor } from "../../src/legacy/editor-bridge.ts";
 import { installExportFormats } from "../../src/legacy/export-formats.ts";
-import { productionIndex, startProductionIndex } from "../../src/legacy/production-index-bridge.ts";
+import { productionIndex, startProductionIndex } from "../../src/application/production/index-owner.ts";
 import { liveDocumentPort } from "../../src/legacy/session-bridge.ts";
 import { deleteConfirmation, productionSelection, startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
 import { productionGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../../src/application/tag-panel-state.ts";

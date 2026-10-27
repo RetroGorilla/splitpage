@@ -1,6 +1,6 @@
 import { deleteConfirmation, resetProductionPanelState } from "../../../legacy/production-editing-bridge.ts";
 import type { ProductionIndexOwner } from "../../../core/production/index.ts";
-import { productionIndex } from "../../../legacy/production-index-bridge.ts";
+import { productionIndex } from "../../../application/production/index-owner.ts";
 import type { TagPanelState } from "../../../application/tag-panel-state.ts";
 import * as tagPanelStateOwner from "../../../application/tag-panel-state.ts";
 
@@ -35,3 +35,5 @@ export const deletion = {
 export function resetProductionPanel(): void {
   resetProductionPanelState();
 }
+
+export const productionOwner: () => ProductionIndexOwner = productionIndex;

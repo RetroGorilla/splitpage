@@ -1,3 +1,4 @@
+import "../../src/test/_production-tags-started.mjs";
 import { deriveDocId } from "../../src/core/document/ids.ts";
 import { dom } from "../../src/test/_dom.mjs";
 import { test } from "node:test";
@@ -10,7 +11,7 @@ import { loadInitialState, migrateDocument } from "../../src/js/02b-doc-id.js";
 import { dataUrlForSync, has, inlineStateImages, recordFor, setBackend } from "../../src/adapters/storage/02c-blobs.js";
 import { createHash } from "node:crypto";
 import { mergeStates } from "../../src/legacy/merge-bridge.ts";
-import * as tags from "../../src/js/07-production-tags.js";
+import * as tags from "../../src/features/tags/production-tags.js";
 import { seedCheckPasses } from "../../src/legacy/seed-check.ts";
 import { image } from "../../src/test/golden-helpers.mjs";
 import { checksumText } from "../../shared/text.js";

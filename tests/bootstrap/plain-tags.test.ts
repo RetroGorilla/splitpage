@@ -2,11 +2,11 @@ import "../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentPlainTags, mountPlainTagsFeature, stopPlainTagsFeature } from "../../src/bootstrap/wiring/plain-tags.ts";
-import { plainTagOpen } from "../../src/legacy/plain-tag-bridge.ts";
+import { plainTagOpen } from "../../src/features/tags/plain-tags.js";
 
 (globalThis as unknown as Record<string, unknown>).CSS = window.CSS;
 
-test("plain-tag wiring hands its open check to the bridge, replaces its mount and clears both when stopped", () => {
+test("plain-tag wiring exposes its open check, replaces its mount and clears both when stopped", () => {
   document.body.innerHTML = '<div id="rows"><div class="cell-editable" data-field="visualText" tabindex="0">Shot VFX:</div></div>';
   const cell = document.querySelector(".cell-editable") as HTMLElement;
   try {

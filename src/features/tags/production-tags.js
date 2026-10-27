@@ -1,23 +1,11 @@
-import { isInsideTagOrLink } from "../features/common/dom.ts";
-import { domToPos } from "../features/common/cell-dom.ts";
-import { rowIndexOf } from "../core/document/rows.ts";
-import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
-import { safeId } from "../adapters/identity/safe-id.ts";
-import { plainTagOpen } from "../legacy/plain-tag-bridge.ts";
-import { domRangeFor } from "../features/common/find-dom.js";
-import { breakUndoCoalescing } from "../legacy/undo-bridge.ts";
-import { randomIds } from "../adapters/identity/ids.ts";
-import { idMap } from "../core/document/id-map.ts";
-import { contentMemo } from "../core/document/memo.ts";
-import {
-  ensureTagIds,
-  isTagId,
-  tagKey,
-  tagStatusRank
-} from "../core/document/tags.ts";
-import { cappedText, codePointPrefix, escapeHtml } from "../core/document/text-policy.ts";
-import { TAG_CATEGORIES, tagCategory } from "../core/production/looks.ts";
-import { productionIndex } from "../legacy/production-index-bridge.ts";
+import { plainTagOpen } from "./plain-tags.js";
+import { isInsideTagOrLink } from "../common/dom.ts";
+import { domToPos } from "../common/cell-dom.ts";
+import { rowIndexOf } from "../../core/document/rows.ts";
+import { domRangeFor } from "../common/find-dom.js";
+import { idMap } from "../../core/document/id-map.ts";
+import { cappedText, codePointPrefix, escapeHtml, safeId as safeIdFrom } from "../../core/document/text-policy.ts";
+import { TAG_CATEGORIES, tagCategory } from "../../core/production/looks.ts";
 import {
   bulkTagCell as bulkTagCellWith,
   collectTagsFromRows as collectTagGroups,
@@ -25,26 +13,18 @@ import {
   missingRegistryTags as missingRegistryTagsIn,
   tagFieldOccurrences as tagFieldOccurrencesWith,
   tagOccurrences
-} from "../core/production/tags.ts";
-import { replaceWithTag } from "../core/text/edits.ts";
-import { namedTagId, projection } from "../core/text/runs.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
-import { cellOf } from "../legacy/richtext.ts";
-import { currentDocument, readSession, requestRefresh, runDocumentEdit, sessionStamps, stampDocument } from "../legacy/session-bridge.ts";
-import { changeSet } from "../application/session/change-set.ts";
-import { addPersonCommand, registerTagCommand, tagCellsCommand } from "../application/commands/production-records.ts";
-import { personNamed, registryEntryById as registryEntryByIdIn } from "../core/production/records.ts";
-import { cellEditing, focusMemory } from "../legacy/editor-bridge.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { viewFlags } from "../legacy/preferences-bridge.ts";
-export {
-  contentMemo,
-  ensureTagIds,
-  isTagId,
-  tagKey,
-  tagOccurrences,
-  tagStatusRank
-};
+} from "../../core/production/tags.ts";
+import { replaceWithTag } from "../../core/text/edits.ts";
+import { namedTagId, projection } from "../../core/text/runs.ts";
+import { changeSet } from "../../application/session/change-set.ts";
+import { addPersonCommand, registerTagCommand, tagCellsCommand } from "../../application/commands/production-records.ts";
+import { personNamed, registryEntryById as registryEntryByIdIn } from "../../core/production/records.ts";
+
+var currentDocument, readSession, requestRefresh, runDocumentEdit, sessionStamps, stampDocument;
+var cellOf, inertBody, sanitizeHtml, productionReaders;
+var productionIndex, cellEditing, focusMemory, breakUndoCoalescing, viewFlags, showToast, randomIds;
+
+function safeId(id, prefix) { return safeIdFrom(id, prefix, randomIds); }
 
 var TAG_SHORTCUT_CHARS;
 
@@ -76,7 +56,7 @@ function hasShortcutChar(s) {
 }
 
 
-export var tagsInField = productionReaders.tagsInField;
+export var tagsInField;
 
 export function collectTagsFromRows(rows) {
   return collectTagGroups(rows, productionReaders).map(function (g) {
@@ -159,10 +139,11 @@ export function runIdleRefresh(jobs) {
 var taggedListeners = [];
 
 export function onTagged(listener) {
-  taggedListeners.push(listener);
+  var listeners = taggedListeners;
+  listeners.push(listener);
   return function () {
-    var at = taggedListeners.indexOf(listener);
-    if (at !== -1) taggedListeners.splice(at, 1);
+    var at = listeners.indexOf(listener);
+    if (at !== -1) listeners.splice(at, 1);
   };
 }
 
@@ -513,6 +494,7 @@ function countPhraseMatches(phrase) {
 }
 
 var pendingTag = null;
+var composerFocusTimers = new Set();
 export function renderTagCategories(selected) {
   document.getElementById("tag-cats").innerHTML = TAG_CATEGORIES.map(function (c) {
     return '<button type="button" class="tag-cat-btn' + (c.id === selected ? ' is-active' : '') +
@@ -556,7 +538,11 @@ export function openTagComposer(ctx) {
   document.getElementById("tag-all").checked = false;
   updateTagHint();
   document.getElementById("tag-modal").hidden = false;
-  setTimeout(function () { nameInput.focus(); nameInput.select(); }, 0);
+  var focusTimer = setTimeout(function () {
+    if (!composerFocusTimers.delete(focusTimer)) return;
+    nameInput.focus(); nameInput.select();
+  }, 0);
+  composerFocusTimers.add(focusTimer);
 }
 
 export function closeTagComposer() {
@@ -610,7 +596,26 @@ export function applyTag() {
   showToast("Labelled as " + name, "ok");
 }
 
-export function __init() {
+export function startProductionTags(ports) {
+  var cancelRefresh = ports.refresh.cancel;
+  currentDocument = ports.document.current;
+  readSession = ports.document.read;
+  requestRefresh = ports.refresh.request;
+  runDocumentEdit = ports.edits.edit;
+  sessionStamps = ports.edits.stamps;
+  stampDocument = ports.stamping.stamp;
+  cellOf = ports.text.cellOf;
+  inertBody = ports.text.inertBody;
+  sanitizeHtml = ports.text.sanitizeHtml;
+  productionReaders = ports.text.productionReaders;
+  tagsInField = productionReaders.tagsInField;
+  productionIndex = ports.production;
+  cellEditing = ports.editing.cells;
+  focusMemory = ports.editing.focus;
+  breakUndoCoalescing = ports.undo.breakCoalescing;
+  viewFlags = ports.view;
+  showToast = ports.notices.show;
+  randomIds = ports.ids;
   TAG_SHORTCUT_CHARS = (function () {
     var s = "";
     TAG_SHORTCUTS.forEach(function (r) {
@@ -625,14 +630,17 @@ export function __init() {
   iconStyle.textContent = tagIconCss();
   document.head.appendChild(iconStyle);
 
-  window.__cacheTest = {
-    index: currentProductionIndex,
+  var disposed = false;
+  var cacheTest = window.__cacheTest = {
+    index: function () { return disposed ? null : currentProductionIndex(); },
     frozen: function () {
+      if (disposed) return [];
       var html = "Put the " + '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="kettle">kettle</span> on.';
       return [cellOf(html), productionReaders.tagsInField(html), productionReaders.cueNamesInField(html), currentProductionIndex()]
         .map(function (v) { return !!v && Object.isFrozen(v); });
     },
     writes: function () {
+      if (disposed) return [];
       var html = '<strong>Probe</strong> the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="probe lamp">lamp</span>.';
       var cell = cellOf(html), tags = productionReaders.tagsInField(html);
       return [
@@ -647,4 +655,32 @@ export function __init() {
     }
   };
 
+  return {
+    onTagged: function (listener) { return disposed ? function () {} : onTagged(listener); },
+    refresh: function (jobs) { if (!disposed) runIdleRefresh(jobs); },
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      try {
+        cancelRefresh(["untagged", "production"]);
+      } finally {
+        composerFocusTimers.forEach(clearTimeout);
+        composerFocusTimers.clear();
+        iconStyle.remove();
+        hideTagGhost();
+        hideUntaggedPrompt();
+        if (document.getElementById("tag-modal")) closeTagComposer();
+        pendingTag = null;
+        taggedListeners = [];
+        untaggedList = [];
+        idleFlushes = 0;
+        if (window.CSS && window.CSS.highlights) window.CSS.highlights.delete(UNTAGGED_HL);
+        if (window.__cacheTest === cacheTest) delete window.__cacheTest;
+        currentDocument = readSession = requestRefresh = runDocumentEdit = sessionStamps = stampDocument = null;
+        cellOf = inertBody = sanitizeHtml = productionReaders = null;
+        productionIndex = cellEditing = focusMemory = breakUndoCoalescing = viewFlags = showToast = randomIds = null;
+        tagsInField = TAG_SHORTCUT_CHARS = cancelRefresh = null;
+      }
+    }
+  };
 }

@@ -5,7 +5,7 @@ import { startGalleryStore as init_02d_gallery } from "../adapters/storage/02d-g
 import { __init as init_03_sync } from "./03-sync.js";
 import { __init as init_03a_history_store } from "./03a-history-store.js";
 import { __init as init_05_render } from "./05-render.js";
-import { __init as init_07_production_tags } from "./07-production-tags.js";
+import { mountProductionTagsFeature } from "../bootstrap/wiring.ts";
 import { mountPlainTagsFeature } from "../bootstrap/wiring.ts";
 import { mountScriptPlaceFeature, mountFindFeature, mountTagPanelsFeature } from "../bootstrap/wiring.ts";
 import { mountImportDialogFeature } from "../bootstrap/wiring.ts";
@@ -23,7 +23,6 @@ import { __init as init_20e_connect } from "./20e-connect.js";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { documentIdentityPort, adoptRestoredState, copyDocHistorySafe, docIdEvents, initDocIdentityChannel, migrateDocument, reassignDocId, standaloneHtmlFor, syncDocIdentity } from "./02b-doc-id.js";
 import { documentDestinationPort, documentHistoryPort, legacyMergePorts, stampRow, setBaseState } from "./03-sync.js";
-import { bulkTagCell, runIdleRefresh, tagFieldOccurrences } from "./07-production-tags.js";
 import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { mountProjectFiles } from "../bootstrap/wiring.ts";
@@ -34,9 +33,8 @@ var wiring = null;
 try {
   wiring = wireLegacyApp({
     entry: migrateRows,
-    refresh: runIdleRefresh,
     records: derivedRecordsPlan,
-    bulkTags: { cell: bulkTagCell, stamp: stampRow },
+    bulkTags: { stamp: stampRow },
     fileSaving: { copyHistory: copyDocHistorySafe, syncIdentity: syncDocIdentity, setBaseline: setBaseState },
     destinations: function () { return [importSaveDestination(), serverSaveDestination()]; },
     transitions: { destination: documentDestinationPort, identity: documentIdentityPort, history: documentHistoryPort },
@@ -51,7 +49,6 @@ try {
       connectIdentity: initDocIdentityChannel,
       standaloneHtml: standaloneHtmlFor,
       replaceSyncBase: setBaseState,
-      tagOccurrences: tagFieldOccurrences
     },
     keyTarget: window
   });
@@ -82,7 +79,7 @@ if (wiring) {
   mountVideoFilesFeature();
   mountScenesFeature();
   mountSceneMediaFeature();
-  init_07_production_tags();
+  mountProductionTagsFeature();
   mountPlainTagsFeature();
   mountTagPanelsFeature();
   mountBrollFeature();

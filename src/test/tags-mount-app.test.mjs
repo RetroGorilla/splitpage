@@ -11,7 +11,7 @@ const { mountTagsFeature } = await import("../bootstrap/wiring/production.ts");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../js/05-render.js");
 const { openProductionPanel } = await import("../features/tags/panels.js");
-const { tagKey } = await import("../js/07-production-tags.js");
+const { tagKey } = await import("../core/document/tags.ts");
 const { selectedKeys, clearProductionSelection } = await import("../legacy/production-editing-bridge.ts");
 after(closeApp);
 
