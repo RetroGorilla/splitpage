@@ -12,14 +12,14 @@ import { cloneState } from "../../core/document/clone.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
 import { toastLastEditor } from "../../js/03-sync.js";
 import { reportMerge } from "../../legacy/merge-bridge.ts";
-import { startHistoryMigration } from "../../js/03a-history-store.js";
+import { historyOwner } from "./history.ts";
 import { currentRowsRender } from "./render.ts";
 import { updateSaveStatus } from "./save-status.ts";
 import { saves } from "./ports/saving.ts";
 import { updateAutoSaveMenu } from "./file-saving.ts";
 import { applyStashedWork } from "../../legacy/recovery-bridge.ts";
 import { tryResumeLastProject } from "../../js/18-local-files.js";
-import { seedCheckPasses } from "../../legacy/seed-check.ts";
+import { seedCheckPasses } from "../../adapters/page/seed-check.ts";
 import { startDesktopShell } from "./desktop.ts";
 import { notifyDesktopDocumentState } from "../../legacy/desktop-bridge.ts";
 import { runningOnDesktop } from "../../application/desktop-presence.ts";
@@ -59,7 +59,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
       syncIdentity: syncDocIdentity,
       openIdentityChannel: function () { initDocIdentityChannel(); },
       notifyDesktop: notifyDesktopDocumentState,
-      startHistoryMigration: startHistoryMigration
+      startHistoryMigration: () => { void historyOwner().startHistoryMigration(); }
     },
     page: {
       window: window,

@@ -1,44 +1,29 @@
-import { getEditorName } from "../legacy/preferences-bridge.ts";
-import { sha256Bytes } from "../core/document/ids.ts";
-import { normalizeDocId } from "../../shared/doc-id-policy.js";
-import { currentDocument } from "../legacy/session-bridge.ts";
-import { currentHome } from "../legacy/location-bridge.ts";
-import { dataUrlForSync, ensureBytes, inlineStateJson, intern, persist, recordFor } from "../adapters/storage/02c-blobs.js";
-import { legacySnapshots } from "../legacy/recovery-bridge.ts";
-import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
-import { createIdbHistoryBackend, hashText as historyHashText } from "../adapters/storage/03c-history-idb.js";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { seedCheckPasses } from "../legacy/seed-check.ts";
-import {
-  HISTORY_OLDER_KEY,
-  HISTORY_OLDER_TTL_MS,
-  HISTORY_PER_DOC,
-  HISTORY_SNAP_ID_RE,
-  historyClip,
-  historyStampAfter,
-  historyUtf8Length,
-  planHistoryEviction,
-  sanitizeHistoryMeta
-} from "../../shared/history-policy.js";
-import { createHistoryStore, createMemoryHistoryBackend } from "../../shared/history-store.js";
-import { imageDims, isSha256Hex, refsIn, sniffImageMime } from "../../shared/blob-policy.js";
-import { makeId, mintDocId } from "../adapters/identity/ids.ts";
-import { checksumText } from "../../shared/text.js";
-import { desktopPort } from "../adapters/desktop/desktop-port.ts";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
-export {
-  HISTORY_OLDER_TTL_MS,
-  HISTORY_PER_DOC,
-  historyStampAfter,
-  planHistoryEviction
-};
+import { sha256Bytes } from "../../core/document/ids.ts";
+import { normalizeDocId } from "../../../shared/doc-id-policy.js";
+import { HISTORY_OLDER_KEY, HISTORY_PER_DOC, HISTORY_SNAP_ID_RE, historyClip, historyUtf8Length, sanitizeHistoryMeta } from "../../../shared/history-policy.js";
+import { imageDims, isSha256Hex, refsIn, sniffImageMime } from "../../../shared/blob-policy.js";
+import { checksumText } from "../../../shared/text.js";
 
+function startHistory(ports) {
+  var active = true;
+  var currentDocument = ports.document.current;
+  var currentHome = ports.location.home;
+  var getEditorName = ports.preferences.editorName;
+  var saveChanges = ports.saving.changes;
+  var unsavedChanges = ports.saving.unsaved;
+  var legacySnapshots = function () { return ports.recovery; };
+  var seedCheckPasses = ports.seed.passes;
+  var showToast = function (...args) { if (active) ports.effects.show(...args); };
+  var { intern, persist, recordFor, ensureBytes } = ports.pictures;
+  var dataUrlForSync = ports.pictures.dataUrlFor;
+  var inlineStateJson = ports.inlinePictures;
+  var mintDocId = ports.ids.docId;
+  var makeId = ports.ids.id;
+  var storage = ports.storage({ now: historyNow, holds: historyProtectedList, desktop: ports.desktop.history, runningOnDesktop: ports.desktop.running });
+  var { resolveHistoryBackend, historyIdbNotice } = storage;
 var historyChain;
 
-var HISTORY_BROWSER_MIN_CAP = 5 * 1024 * 1024;
-var HISTORY_BROWSER_HEADROOM = 50 * 1024 * 1024;
-var HISTORY_ESTIMATE_TTL_MS = 5 * 60 * 1000;
-var HISTORY_MEMORY_CAP = 50 * 1024 * 1024;
+
 var HISTORY_PENDING_PER_DOC = 10;
 var HISTORY_MIGRATION_LOOPS = 3;
 
@@ -46,7 +31,7 @@ function historyNoop() {}
 
 function enqueueHistory(job, fallback) {
   var run = historyChain.then(function () { return job(); }).then(null, function (e) {
-    if (window.console) console.error(e);
+    if (ports.logger) ports.logger.error(e);
     try { return typeof fallback === "function" ? fallback(e) : fallback; } catch (x) { return undefined; }
   });
   historyChain = run.then(historyNoop, historyNoop);
@@ -64,8 +49,9 @@ function historyIdle() {
 
 var historyNowOverride = null;
 function historyNow() {
-  return historyNowOverride != null ? historyNowOverride : Date.now();
+  return historyNowOverride != null ? historyNowOverride : ports.now();
 }
+
 
 function historyStripMeta(m) {
   var out = sanitizeHistoryMeta(m);
@@ -73,87 +59,6 @@ function historyStripMeta(m) {
   return out;
 }
 
-var historyFault = null;
-var historyDelayGate = null;
-var historyDelayRelease = null;
-var historyImportGate = null;
-var historyImportRelease = null;
-var historyImportGateHit = false;
-
-function historyArmFaults(backend) {
-  if (!backend || typeof backend.clearFaults !== "function") return;
-  backend.clearFaults();
-  if (historyFault === "quota-once") backend.failNext("put", "quota", 1);
-  else if (historyFault === "quota-always") backend.failNext("put", "quota", Infinity);
-  else if (historyFault === "io-always") backend.failNext("put", "io", Infinity);
-}
-
-function historyPutFaultGate() {
-  if (historyFault === "delay-put") {
-    if (!historyDelayGate) {
-      historyDelayGate = new Promise(function (resolve) { historyDelayRelease = resolve; });
-    }
-    return historyDelayGate;
-  }
-  return null;
-}
-
-function releaseDelayedPut() {
-  if (historyFault === "delay-put") historyFault = null;
-  var r = historyDelayRelease;
-  historyDelayGate = null;
-  historyDelayRelease = null;
-  if (r) r();
-}
-
-function historyImportFaultGate() {
-  if (historyFault === "delay-import") {
-    historyImportGateHit = true;
-    if (!historyImportGate) {
-      historyImportGate = new Promise(function (resolve) { historyImportRelease = resolve; });
-    }
-    return historyImportGate;
-  }
-  return null;
-}
-
-function releaseDelayedImport() {
-  if (historyFault === "delay-import") historyFault = null;
-  var r = historyImportRelease;
-  historyImportGate = null;
-  historyImportRelease = null;
-  if (r) r();
-}
-
-var historyCapOverride = null;
-var historyEstimateCache = null;
-
-function historyBrowserCap(historyBytes) {
-  if (historyCapOverride != null) return Promise.resolve(historyCapOverride);
-  var c = historyEstimateCache;
-  if (c && Date.now() - c.at < HISTORY_ESTIMATE_TTL_MS) return Promise.resolve(historyCapFrom(c));
-  if (typeof navigator === "undefined" || !navigator.storage || typeof navigator.storage.estimate !== "function") return Promise.resolve(Infinity);
-  return navigator.storage.estimate().then(function (est) {
-    if (!est || !isFinite(Number(est.quota))) return Infinity;
-    historyEstimateCache = { at: Date.now(), quota: Number(est.quota), usage: Number(est.usage) || 0, historyBytes: historyBytes };
-    return historyCapFrom(historyEstimateCache);
-  }, function () { return Infinity; });
-}
-
-function historyCapFrom(c) {
-  var other = Math.max(0, c.usage - c.historyBytes);
-  return Math.max(HISTORY_BROWSER_MIN_CAP, c.quota - other - HISTORY_BROWSER_HEADROOM);
-}
-
-function historyIdbCap(lastTotal) {
-  if (historyCapOverride != null) return historyCapOverride;
-  if (lastTotal == null) return Infinity;
-  return historyBrowserCap(lastTotal);
-}
-
-function historyMemoryCap() {
-  return historyCapOverride != null ? historyCapOverride : HISTORY_MEMORY_CAP;
-}
 
 var historyProtected = {};
 
@@ -166,7 +71,7 @@ function historyProtectedList() {
   });
 }
 
-export function protectHistorySnapshot(q) {
+function protectHistorySnapshot(q) {
   q = q || {};
   var id = typeof q.id === "string" ? q.id : "";
   var bucket = q.older ? HISTORY_OLDER_KEY : normalizeDocId(q.docId);
@@ -183,327 +88,8 @@ export function protectHistorySnapshot(q) {
   };
 }
 
-function historyMakeStore(backend, capBytes) {
-  return createHistoryStore({
-    backend: backend,
-    now: historyNow,
-    hashText: historyHashText,
-    capBytes: capBytes,
-    holds: historyProtectedList
-  });
-}
 
-function historyRecordOf(index, bucket) {
-  var rec = index && index[bucket];
-  if (!rec) return null;
-  var snaps = Array.isArray(rec.snapshots) ? rec.snapshots : [];
-  var out = {
-    docId: bucket,
-    title: rec.title || "",
-    lastOpenedAt: Number(rec.lastOpenedAt) || 0,
-    count: snaps.length,
-    bytes: snaps.reduce(function (n, s) { return n + (Number(s && s.sizeBytes) || 0); }, 0)
-  };
-  if (rec.migratedAt != null) out.migratedAt = rec.migratedAt;
-  if (rec.expiresAt != null) out.expiresAt = rec.expiresAt;
-  return out;
-}
-
-function historyMetasOf(index, bucket) {
-  var rec = index && index[bucket];
-  return (rec && Array.isArray(rec.snapshots) ? rec.snapshots : []).map(function (s) {
-    var m = sanitizeHistoryMeta(s);
-    if (m) m.docId = bucket;
-    return m;
-  }).filter(Boolean);
-}
-
-function historyStoreAdapter(store) {
-  return {
-    name: store.name,
-    persistent: store.persistent,
-    store: store,
-    put: function (docId, meta, stateJson) {
-      return Promise.resolve(historyPutFaultGate()).then(function () {
-        return store.put(docId, meta, stateJson);
-      });
-    },
-    list: function (docId) {
-      return store.list(docId || null).then(function (r) {
-        return store.usage().then(function (u) { r.usage = u; return r; }, function () { r.usage = null; return r; });
-      });
-    },
-    get: function (bucket, id) { return store.get(bucket, id); },
-    copy: function (from, to) { return store.copy(from, to); },
-    touch: function (docId, title) { return store.touch(docId, title); },
-    importOlder: function (entries) {
-      if (historyFault === "import-fail") return Promise.resolve({ ok: false, count: 0, added: 0, code: "io" });
-      return Promise.resolve(historyImportFaultGate()).then(function () {
-        return store.importOlder(entries);
-      });
-    },
-    evict: function (cap) { return store.evict(cap); },
-    rawDocIds: function () {
-      return store.listDocs().then(function (docs) { return docs.map(function (d) { return d.docId; }); });
-    },
-    rawDoc: function (bucket) {
-      return store.rawIndex().then(function (index) { return historyRecordOf(index, bucket); });
-    },
-    rawList: function (bucket) {
-      return store.rawIndex().then(function (index) { return historyMetasOf(index, bucket); });
-    }
-  };
-}
-
-var historyIdb = null;
-var historyMem = null;
-var historyPersistAsked = false;
-
-function historyMemory() {
-  if (!historyMem) {
-    var backend = createMemoryHistoryBackend({ name: "memory" });
-    historyArmFaults(backend);
-    var store = historyMakeStore(backend, historyMemoryCap);
-    historyMem = { backend: backend, store: store, adapter: historyStoreAdapter(store) };
-  }
-  return historyMem;
-}
-
-function historyOpenIdb() {
-  if (historyIdb) return historyIdb.ready;
-  if (historyFault === "idb-open-fail") return Promise.reject(new Error("Injected idb-open-fail"));
-  var factory;
-  try { factory = window.indexedDB || null; } catch (e) { factory = null; }
-  var backend = createIdbHistoryBackend({ indexedDB: factory });
-  historyArmFaults(backend);
-  var store = historyMakeStore(backend, historyIdbCap);
-  var entry = { backend: backend, store: store, adapter: historyStoreAdapter(store), ready: null };
-  historyIdb = entry;
-  entry.ready = backend.open().then(function () {
-    if (!historyPersistAsked && typeof navigator !== "undefined" && navigator.userAgentData && navigator.storage &&
-        typeof navigator.storage.persist === "function") {
-      historyPersistAsked = true;
-      try { navigator.storage.persist().then(historyNoop, historyNoop); } catch (e) {}
-    }
-    return entry.adapter;
-  }, function (e) {
-    if (historyIdb === entry) historyIdb = null;
-    backend.close().then(historyNoop, historyNoop);
-    throw e;
-  });
-  return entry.ready;
-}
-
-function historyIdbNotice() {
-  var e = historyIdb;
-  if (!e) return null;
-  if (e.backend.readOnly) {
-    return { kind: "read-only", text: "Version history is read-only here: a newer version of Splitpage wrote it. New snapshots are kept in this window." };
-  }
-  return null;
-}
-
-var HISTORY_DESKTOP_TIMEOUT_MS = 30000;
-var historyDesktopTimeoutOverride = null;
-
-function historyDesktopUsage(u) {
-  if (!u || typeof u !== "object") return null;
-  return {
-    totalBytes: Number(u.totalBytes) || 0,
-    capBytes: Number(u.capBytes) || 0,
-    overCap: !!u.overCap,
-    docCount: Number(u.docCount) || 0,
-    readOnly: !!u.readOnly
-  };
-}
-
-function historyDesktopCall(run, onTimeout, onReject) {
-  return new Promise(function (resolve) {
-    var settled = false;
-    var timer = null;
-    function finish(v) {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      resolve(v);
-    }
-    timer = setTimeout(function () { finish(onTimeout); },
-      historyDesktopTimeoutOverride != null ? historyDesktopTimeoutOverride : HISTORY_DESKTOP_TIMEOUT_MS);
-    var p;
-    try { p = run(); } catch (e) {
-      if (window.console) console.error(e);
-      finish(onReject);
-      return;
-    }
-    Promise.resolve(p).then(finish, function (e) {
-      if (window.console) console.error(e);
-      finish(onReject);
-    });
-  });
-}
-
-var desktopHistoryBackend = {
-  name: "desktop",
-  persistent: true,
-
-  put: function (docId, meta, stateJson) {
-    var clean = sanitizeHistoryMeta(meta);
-    if (!normalizeDocId(docId) || !clean || typeof stateJson !== "string") {
-      return Promise.resolve({ stored: false, code: "invalid" });
-    }
-    return historyDesktopCall(function () {
-      return desktopPort().historyPut(docId, clean, stateJson, { protect: historyProtectedList() });
-    }, { stored: false, code: "timeout" }, { stored: false, code: "invalid" }).then(function (r) {
-      if (!r || typeof r !== "object") return { stored: false, code: "io" };
-      if (r.stored === false) return r;
-      if (!r.ok) return { stored: false, code: typeof r.code === "string" ? r.code : "io" };
-      var out = { stored: true, evicted: Number(r.evicted) || 0, overCap: !!r.overCap };
-      if (r.duplicate) out.duplicate = true;
-      return out;
-    });
-  },
-
-  list: function (docId, opts) {
-    var empty = { entries: [], older: [], olderExpiresAt: null };
-    var failed = (opts && opts.strict) ? null : empty;
-    return historyDesktopCall(function () {
-      return desktopPort().historyList(docId || null);
-    }, failed, failed).then(function (r) {
-      if (!r || typeof r !== "object") return failed;
-      if (opts && opts.strict && docId && !Array.isArray(r.entries)) return null;
-      var entries = (r.entries || []).map(historyStripMeta).filter(Boolean);
-      if (docId) entries.forEach(function (m) { m.docId = docId; });
-      var older = (r.older || []).map(historyStripMeta).filter(Boolean);
-      older.forEach(function (m) { m.docId = HISTORY_OLDER_KEY; });
-      return {
-        entries: entries,
-        older: older,
-        olderExpiresAt: r.olderExpiresAt == null ? null : Number(r.olderExpiresAt),
-        usage: historyDesktopUsage(r.usage)
-      };
-    });
-  },
-
-  get: function (bucket, id) {
-    var query = bucket === HISTORY_OLDER_KEY
-      ? { older: true, protect: historyProtectedList() }
-      : { docId: bucket, protect: historyProtectedList() };
-    return historyDesktopCall(function () {
-      return desktopPort().historyGet(query, id);
-    }, null, null).then(function (r) {
-      if (!r || typeof r !== "object" || typeof r.stateJson !== "string") return null;
-      var meta = historyStripMeta(r.meta);
-      if (!meta) return null;
-      meta.docId = bucket;
-      return { meta: meta, stateJson: r.stateJson };
-    });
-  },
-
-  copy: function (from, to) {
-    return historyDesktopCall(function () {
-      return desktopPort().historyCopy(from, to);
-    }, { ok: false, copied: 0, code: "timeout" }, { ok: false, copied: 0, code: "invalid" })
-      .then(function (r) {
-        if (!r || typeof r !== "object") return { ok: false, copied: 0, code: "io" };
-        return { ok: !!r.ok, copied: Number(r.copied) || 0, code: r.code };
-      });
-  },
-
-  touch: function (docId, title) {
-    return historyDesktopCall(function () {
-      return desktopPort().historyTouch(docId, title);
-    }, null, null);
-  },
-
-  importOlder: function (entries) {
-    if (!Array.isArray(entries)) return Promise.resolve({ ok: false, count: 0, added: 0, code: "invalid" });
-    var added = 0, count = 0, i = 0;
-    function next() {
-      if (i >= entries.length) return Promise.resolve({ ok: true, count: count, added: added });
-      var e = entries[i++];
-      var meta = e && typeof e === "object" ? sanitizeHistoryMeta(e.meta) : null;
-      if (!meta || typeof e.stateJson !== "string") return next();
-      return historyDesktopCall(function () {
-        return desktopPort().historyPut(null, meta, e.stateJson, { protect: historyProtectedList(), older: true });
-      }, { ok: false, code: "timeout" }, { ok: false, code: "invalid" }).then(function (r) {
-        if (!r || typeof r !== "object") r = { ok: false, code: "io" };
-        if (r.ok) {
-          count++;
-          if (!r.duplicate) added++;
-          return next();
-        }
-        if (r.code === "too-large") return next();
-        return { ok: false, count: count, added: added, code: typeof r.code === "string" ? r.code : "io" };
-      });
-    }
-    return next();
-  },
-
-  evict: function () { return Promise.resolve({ evicted: 0, overCap: false, totalBefore: 0, totalAfter: 0 }); },
-
-  rawDocIds: function () {
-    return historyDesktopCall(function () {
-      return desktopPort().historyListDocs();
-    }, null, null).then(function (r) {
-      if (!Array.isArray(r)) return null;
-      var ids = [];
-      r.forEach(function (d) {
-        var id = normalizeDocId(d && d.docId);
-        if (id) ids.push(id);
-      });
-      return ids;
-    });
-  },
-
-  rawDoc: function (bucket) {
-    return historyDesktopCall(function () {
-      return desktopPort().historyListDocs();
-    }, null, null).then(function (r) {
-      if (!Array.isArray(r)) return null;
-      var hit = null;
-      r.forEach(function (d) {
-        if (d && normalizeDocId(d.docId) === bucket) hit = d;
-      });
-      return hit ? { title: hit.title || "", lastOpenedAt: Number(hit.lastOpenedAt) || 0 } : null;
-    });
-  },
-
-  rawList: function (bucket) {
-    var docId = bucket === HISTORY_OLDER_KEY ? null : bucket;
-    return desktopHistoryBackend.list(docId).then(function (r) {
-      if (!r) return [];
-      return bucket === HISTORY_OLDER_KEY ? r.older : r.entries;
-    });
-  }
-};
-
-var historyForced = null;
-var historyIdbFailed = false;
-var historyBackendNameNow = null;
-
-function historyUseMemory() {
-  historyBackendNameNow = "memory";
-  return historyMemory().adapter;
-}
-
-function resolveHistoryBackend() {
-  if (historyForced === "memory") return Promise.resolve(historyUseMemory());
-  if (!historyForced && runningOnDesktop() && typeof desktopPort().historyPut === "function") {
-    historyBackendNameNow = "desktop";
-    return Promise.resolve(desktopHistoryBackend);
-  }
-  if (historyIdbFailed) return Promise.resolve(historyUseMemory());
-  return historyOpenIdb().then(function (adapter) {
-    historyBackendNameNow = "idb";
-    return adapter;
-  }, function (e) {
-    historyIdbFailed = true;
-    if (window.console) console.warn("Version history: IndexedDB unavailable, keeping history in memory", e);
-    return historyUseMemory();
-  });
-}
-
-export function isPristineSeedDocument() {
+function isPristineSeedDocument() {
   return !!currentDocument() && saveChanges() === 0 && !unsavedChanges() && currentHome().kind === "none" && seedCheckPasses();
 }
 
@@ -522,7 +108,7 @@ function historyLocalEntries(docId, status) {
 
 var historyChangeListeners = [];
 
-export function onHistoryChange(listener) {
+function onHistoryChange(listener) {
   historyChangeListeners.push(listener);
   return function () {
     var at = historyChangeListeners.indexOf(listener);
@@ -531,6 +117,7 @@ export function onHistoryChange(listener) {
 }
 
 function historyChanged() {
+  if (!active) return;
   historyChangeListeners.slice().forEach(function (listener) { listener(); });
 }
 
@@ -541,7 +128,7 @@ function historyMarkPending(entry) {
     var old = mine.shift();
     delete historyLocal[historyLocalKey(old.docId, old.meta.id)];
   }
-  var notice = historyBackendNameNow === "idb" ? historyIdbNotice() : null;
+  var notice = storage.backendName() === "idb" ? historyIdbNotice() : null;
   if (notice) {
     if (!historyWarnedDocs["store:" + notice.kind]) {
       historyWarnedDocs["store:" + notice.kind] = true;
@@ -587,7 +174,7 @@ function historyStoreEntry(backend, entry) {
   });
 }
 
-export function captureSnapshot(label, src, opts) {
+function captureSnapshot(label, src, opts) {
   opts = opts || {};
   if (!src || typeof src !== "object" || !Array.isArray(src.rows)) return null;
   if (opts.allowSeedSkip && src === currentDocument() && isPristineSeedDocument()) return null;
@@ -670,7 +257,7 @@ function historyLocalMetas(docId, lists, seen) {
   return out;
 }
 
-export function listDocHistory(docId) {
+function listDocHistory(docId) {
   docId = normalizeDocId(docId);
   var localBefore = docId ? historyLocalEntries(docId) : [];
   return resolveHistoryBackend().then(function (backend) {
@@ -699,12 +286,12 @@ export function listDocHistory(docId) {
       };
     });
   }).then(null, function (e) {
-    if (window.console) console.error(e);
-    return { entries: [], older: [], olderExpiresAt: null, backend: historyBackendNameNow, persistent: false, usage: null, notice: null };
+    if (ports.logger) ports.logger.error(e);
+    return { entries: [], older: [], olderExpiresAt: null, backend: storage.backendName(), persistent: false, usage: null, notice: null };
   });
 }
 
-export function getHistorySnapshot(q) {
+function getHistorySnapshot(q) {
   q = q || {};
   var id = typeof q.id === "string" ? q.id : "";
   if (!HISTORY_SNAP_ID_RE.test(id)) return Promise.resolve(null);
@@ -730,12 +317,12 @@ function historyTouchDocument(docId, title) {
   }, null);
 }
 
-export function historyDocumentChanged() {
+function historyDocumentChanged() {
   if (currentDocument() && normalizeDocId(currentDocument().docId)) historyTouchDocument(currentDocument().docId, currentDocument().title);
   historyChanged();
 }
 
-export function copyHistory(from, to) {
+function copyHistory(from, to) {
   if (from === HISTORY_OLDER_KEY || to === HISTORY_OLDER_KEY) return Promise.resolve({ ok: false, copied: 0, code: "invalid" });
   from = normalizeDocId(from);
   to = normalizeDocId(to);
@@ -744,7 +331,7 @@ export function copyHistory(from, to) {
   return enqueueHistory(function () {
     return resolveHistoryBackend().then(function (backend) {
       return backend.copy(from, to).then(null, function (e) {
-        if (window.console) console.error(e);
+        if (ports.logger) ports.logger.error(e);
         return { ok: false, copied: 0, code: "io" };
       });
     }).then(function (r) {
@@ -861,7 +448,7 @@ function historyBuildExport(backend, ids) {
   });
 }
 
-export function exportHistoryAll() {
+function exportHistoryAll() {
   return enqueueHistory(function () {
     return resolveHistoryBackend().then(function (backend) {
       return backend.rawDocIds().then(function (ids) {
@@ -937,7 +524,7 @@ var HISTORY_BASE64_RE = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+
 function historyDecodeBase64(b64) {
   if (typeof b64 !== "string" || !HISTORY_BASE64_RE.test(b64)) return null;
   var bin;
-  try { bin = atob(b64); } catch (e) { return null; }
+  try { bin = ports.decodeBase64(b64); } catch (e) { return null; }
   var out = new Uint8Array(bin.length);
   for (var i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out;
@@ -981,7 +568,7 @@ async function historyImportBlobs(blobs, refs) {
     var v = historyVerifyBlob(key, blobs[key]);
     if (!v.bytes) {
       out.refused.push(String(key).slice(0, 64));
-      if (window.console) console.warn("Import app data: image " + String(key).slice(0, 64) + " refused (" + v.reason + ")");
+      if (ports.logger) ports.logger.warn("Import app data: image " + String(key).slice(0, 64) + " refused (" + v.reason + ")");
       continue;
     }
     var rec = intern(v.bytes);
@@ -992,13 +579,13 @@ async function historyImportBlobs(blobs, refs) {
   if (ready.length) {
     out.failed = await persist(ready);
     out.stored = ready.length - out.failed.length;
-    if (out.failed.length && window.console) console.warn("Import app data: the image store did not take", out.failed);
+    if (out.failed.length && ports.logger) ports.logger.warn("Import app data: the image store did not take", out.failed);
   }
   return out;
 }
 
 function historyImportYield() {
-  return new Promise(function (resolve) { setTimeout(resolve, 0); });
+  return ports.yield();
 }
 
 function historyImportIsQuota(code) {
@@ -1024,7 +611,7 @@ function historyImportByAtAscending(a, b) {
   return (a.meta.atMs - b.meta.atMs) || (a.meta.id < b.meta.id ? -1 : a.meta.id > b.meta.id ? 1 : 0);
 }
 
-export async function importHistoryBundle(bundle) {
+async function importHistoryBundle(bundle) {
   var result = { docs: 0, added: 0, skipped: 0, failed: 0, older: 0, capped: 0,
                  blobs: { stored: 0, refused: [], failed: [], ignored: 0 } };
   try {
@@ -1150,7 +737,7 @@ export async function importHistoryBundle(bundle) {
       }
     }
   } catch (e) {
-    if (window.console) console.error(e);
+    if (ports.logger) ports.logger.error(e);
     if (!result.code) result.code = "io";
   }
   historyChanged();
@@ -1161,7 +748,7 @@ function historyLegacyRaw() {
   return legacySnapshots().readRaw();
 }
 
-export function normalizeLegacySnapshots(raw) {
+function normalizeLegacySnapshots(raw) {
   if (typeof raw !== "string") return null;
   var list;
   try { list = JSON.parse(raw); } catch (e) { return null; }
@@ -1198,10 +785,10 @@ export function normalizeLegacySnapshots(raw) {
 
 var historyMigrationPromise = null;
 
-export function startHistoryMigration() {
+function startHistoryMigration() {
   if (historyMigrationPromise) return historyMigrationPromise;
   var p = runHistoryMigration().then(null, function (e) {
-    if (window.console) console.error(e);
+    if (ports.logger) ports.logger.error(e);
     return { migrated: 0, removedKey: false };
   }).then(function (r) {
     if (historyMigrationPromise === p) historyMigrationPromise = null;
@@ -1270,95 +857,34 @@ function historyTestBodyCount(adapter, bucket) {
   });
 }
 
-function historyDropIdb() {
-  var e = historyIdb;
-  historyIdb = null;
-  var closed = e ? e.backend.close().then(historyNoop, historyNoop) : Promise.resolve();
-  return closed.then(function () {
-    return new Promise(function (resolve) {
-      var settled = false;
-      function finish() { if (!settled) { settled = true; resolve(); } }
-      try {
-        var req = indexedDB.deleteDatabase("splitpage-history");
-        req.onsuccess = finish;
-        req.onerror = finish;
-        req.onblocked = function () { setTimeout(finish, 3000); };
-      } catch (x) { finish(); }
-    });
-  });
-}
 
 function historyResetForTest() {
-  historyFault = null;
-  releaseDelayedPut();
-  releaseDelayedImport();
-  historyImportGateHit = false;
+  storage.prepareResetForTest();
   return historyIdle().then(function () {
-    historyForced = null;
     historyNowOverride = null;
-    historyCapOverride = null;
-    historyDesktopTimeoutOverride = null;
-    historyEstimateCache = null;
     historyLastAtMs = 0;
     historyLocal = {};
     historyWarnedDocs = {};
     historyRetryQueued = false;
     historyProtected = {};
-    historyMem = null;
-    historyIdbFailed = false;
-    historyBackendNameNow = null;
-    return historyDropIdb();
-  }).then(function () {
-    return resolveHistoryBackend();
-  }).then(function () { return true; });
+    return storage.reset();
+  }).then(function () { return resolveHistoryBackend(); }).then(function () { return true; });
 }
 
-export function __init() {
   historyChain = Promise.resolve();
-
-  window.__historyTest = {
+  var testControls = {
     idle: historyIdle,
-    backendName: function () { return historyBackendNameNow; },
-    forceBackend: function (name) {
-      historyForced = name === "idb" || name === "memory" ? name : null;
-      if (historyForced === "idb") historyIdbFailed = false;
-      return resolveHistoryBackend().then(function (b) { return b.name; });
-    },
+    ...storage.controls,
     setNow: function (ms) {
       historyNowOverride = (ms == null || !isFinite(Number(ms))) ? null : Number(ms);
       historyLastAtMs = 0;
       return historyNow();
     },
-    setCapOverride: function (bytes) {
-      historyCapOverride = (bytes == null || !isFinite(Number(bytes))) ? null : Number(bytes);
-      historyEstimateCache = null;
-      return historyCapOverride;
-    },
     injectFault: function (name) {
-      var known = ["idb-open-fail", "quota-once", "quota-always", "io-always", "delay-put", "delay-import", "import-fail"];
-      if (name == null) {
-        if (historyFault === "delay-put") releaseDelayedPut();
-        if (historyFault === "delay-import") releaseDelayedImport();
-        historyFault = null;
-        if (historyIdb) historyArmFaults(historyIdb.backend);
-        if (historyMem) historyArmFaults(historyMem.backend);
-        if (historyLocalEntries(null, "pending").length) retryPendingSnapshots();
-        return null;
-      }
-      if (name === "delay-import") historyImportGateHit = false;
-      historyFault = known.indexOf(name) !== -1 ? name : null;
-      if (historyIdb) historyArmFaults(historyIdb.backend);
-      if (historyMem) historyArmFaults(historyMem.backend);
-      if (historyFault === "idb-open-fail") {
-        if (historyIdb) historyIdb.backend.close().then(historyNoop, historyNoop);
-        historyIdb = null;
-        historyIdbFailed = false;
-      }
-      return historyFault;
+      var fault = storage.controls.injectFault(name);
+      if (name == null && historyLocalEntries(null, "pending").length) retryPendingSnapshots();
+      return fault;
     },
-    releaseDelayedPut: releaseDelayedPut,
-    releaseDelayedImport: releaseDelayedImport,
-    importGateHit: function () { return historyImportGateHit; },
     listRaw: function (docId) {
       var bucket = historyTestBucket(docId);
       if (!bucket) return Promise.resolve([]);
@@ -1388,15 +914,67 @@ export function __init() {
     },
     migrate: startHistoryMigration,
     resetForTest: historyResetForTest,
-    notice: function () { var n = historyIdbNotice(); return n ? n.text : null; },
-    setDesktopTimeout: function (ms) {
-      historyDesktopTimeoutOverride = (ms == null || !isFinite(Number(ms))) ? null : Math.max(0, Number(ms));
-      return historyDesktopTimeoutOverride;
-    },
     importBundle: importHistoryBundle,
     setExportCap: function (bytes) {
       historyExportCapOverride = (bytes == null || !isFinite(Number(bytes))) ? null : Math.max(0, Number(bytes));
       return historyExportCapOverride;
     }
+  };
+  var pending = new Set();
+  function guarded(fn) {
+    return function (...args) {
+      if (!active) throw new Error("The version history is not started yet");
+      var result = fn(...args);
+      var promise = result && result.done ? result.done : result;
+      if (promise && typeof promise.then === "function") {
+        pending.add(promise);
+        promise.then(function () { pending.delete(promise); }, function () { pending.delete(promise); });
+      }
+      return result;
+    };
+  }
+  var api = { protectHistorySnapshot, isPristineSeedDocument, onHistoryChange, captureSnapshot, listDocHistory, getHistorySnapshot, historyDocumentChanged, copyHistory, exportHistoryAll, importHistoryBundle, normalizeLegacySnapshots, startHistoryMigration };
+  Object.keys(api).forEach(function (key) { api[key] = guarded(api[key]); });
+  Object.keys(testControls).forEach(function (key) { testControls[key] = guarded(testControls[key]); });
+  api.testControls = testControls;
+  api.dispose = function () {
+    if (!active) return;
+    active = false;
+    historyChangeListeners = [];
+    return Promise.allSettled(Array.from(pending)).then(historyIdle).then(function () { return storage.close(); });
+  };
+  return api;
+}
+
+export function createHistoryOwner() {
+  var started = null;
+  function running() {
+    if (!started) throw new Error("The version history is not started yet");
+    return started;
+  }
+  return {
+    startHistory: function (ports) {
+      if (started) throw new Error("The version history is already started; stop it first");
+      var mine = startHistory(ports);
+      started = mine;
+      return function () {
+        if (started !== mine) return;
+        started = null;
+        return mine.dispose();
+      };
+    },
+    protectHistorySnapshot: function (...args) { return running().protectHistorySnapshot(...args); },
+    isPristineSeedDocument: function (...args) { return running().isPristineSeedDocument(...args); },
+    onHistoryChange: function (...args) { return running().onHistoryChange(...args); },
+    captureSnapshot: function (...args) { return running().captureSnapshot(...args); },
+    listDocHistory: function (...args) { return running().listDocHistory(...args); },
+    getHistorySnapshot: function (...args) { return running().getHistorySnapshot(...args); },
+    historyDocumentChanged: function (...args) { return running().historyDocumentChanged(...args); },
+    copyHistory: function (...args) { return running().copyHistory(...args); },
+    exportHistoryAll: function (...args) { return running().exportHistoryAll(...args); },
+    importHistoryBundle: function (...args) { return running().importHistoryBundle(...args); },
+    normalizeLegacySnapshots: function (...args) { return running().normalizeLegacySnapshots(...args); },
+    startHistoryMigration: function (...args) { return running().startHistoryMigration(...args); },
+    testControls: function () { return running().testControls; }
   };
 }

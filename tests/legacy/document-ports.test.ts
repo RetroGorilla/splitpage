@@ -12,7 +12,7 @@ import { dataUrlForSync, has, inlineStateImages, recordFor, setBackend } from ".
 import { createHash } from "node:crypto";
 import { mergeStates } from "../../src/legacy/merge-bridge.ts";
 import * as tags from "../../src/features/tags/production-tags.js";
-import { seedCheckPasses } from "../../src/legacy/seed-check.ts";
+import { seedCheckPasses } from "../../src/adapters/page/seed-check.ts";
 import { image } from "../../src/test/golden-helpers.mjs";
 import { checksumText } from "../../shared/text.js";
 import { documentLocation } from "../../src/legacy/location-bridge.ts";

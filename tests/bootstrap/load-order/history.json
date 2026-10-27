@@ -1,7 +1,9 @@
 {
-  "legacyImports": [
-    "./03a-history-store.js"
+  "legacyImports": [],
+  "loadOnly": [
+    "src/application/recovery/history.js",
+    "src/adapters/storage/history-backends.js",
+    "src/bootstrap/wiring/history.ts"
   ],
-  "loadOnly": [],
-  "expectedLoads": 1
+  "expectedLoads": 3
 }

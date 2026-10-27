@@ -1,3 +1,4 @@
+import { historyOwner } from "./history.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { runMenuCommand } from "../../application/desktop/menu-commands.ts";
 import { runningOnDesktop } from "../../application/desktop-presence.ts";
@@ -85,7 +86,7 @@ function installTestHooks(mounted: DesktopMount): void {
 
 export function mountDesktopFeature(): DesktopMount {
   return desktop.replace(() => {
-    const stopState = startDesktopDocumentState(legacyDesktopDocumentPorts());
+    const stopState = startDesktopDocumentState(legacyDesktopDocumentPorts({ isPristineSeedDocument: () => historyOwner().isPristineSeedDocument() }));
     let mounted: DesktopMount;
     try {
       if (runningOnDesktop()) wireDesktopBlobs(desktopPort());

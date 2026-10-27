@@ -133,7 +133,10 @@ export async function appWiringDeps() {
 
 export async function rewireApp(overrides) {
   const { wireApp } = await import("../bootstrap/wiring.ts");
-  return wireApp(Object.assign(await appWiringDeps(), overrides));
+  const wiring = wireApp(Object.assign(await appWiringDeps(), overrides));
+  const { mountHistoryOwner } = await import("../bootstrap/wiring/history.ts");
+  mountHistoryOwner();
+  return wiring;
 }
 
 export async function rewireRunningApp(overrides) {

@@ -62,3 +62,5 @@ export const prompterVoice: PrompterVoice = {
     return constructor;
   }
 };
+
+export const historyDesktop = { history: desktopPort, running: runningOnDesktop };
