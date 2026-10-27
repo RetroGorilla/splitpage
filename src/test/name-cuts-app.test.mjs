@@ -7,7 +7,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { render } = await import("../js/05-render.js");
+const { render } = await import("../features/rows/render.js");
 const { applyTag, findOrAddPerson, openTagComposer, registerProductionTag } = await import("../features/tags/production-tags.js");
 const { renameTag } = await import("../application/commands/production-actions.ts");
 const { runDocumentEdit, sessionStamps } = await import("../legacy/session-bridge.ts");

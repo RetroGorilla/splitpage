@@ -10,7 +10,7 @@ import { findActions as definitions } from "../../features/find/actions.ts";
 import { startFind, mountFindEvents } from "../../features/find/find.js";
 import type { FindControls, FindPorts } from "../../features/find/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
+import { shotHiding } from "./shot-hiding.ts";
 
 const find = owned<FindControls>();
 const events = owned<ReturnType<typeof mountFindEvents>>();

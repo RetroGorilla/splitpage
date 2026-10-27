@@ -1,4 +1,4 @@
 import "./_preferences-started.mjs";
-import { legacyShotHidingPorts, shotHidingStarted, startShotHiding } from "../legacy/shot-hiding-bridge.ts";
+import { shotHidingPorts, shotHidingStarted, startShotHiding } from "../bootstrap/wiring/shot-hiding.ts";
 
-if (!shotHidingStarted()) startShotHiding(legacyShotHidingPorts({ start: setTimeout, stop: clearTimeout }));
+if (!shotHidingStarted()) startShotHiding(shotHidingPorts({ start: setTimeout, stop: clearTimeout }));

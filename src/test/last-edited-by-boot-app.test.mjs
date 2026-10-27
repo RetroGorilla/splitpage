@@ -21,7 +21,7 @@ import { getEditorName, preferences as commentPreferences } from "../legacy/pref
 function getSavedAuthorName() { return getSavedAuthorNameWith(commentPreferences()); }
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { openSettings } = await import("../features/settings/settings.js");
-const { render } = await import("../js/05-render.js");
+const { render } = await import("../features/rows/render.js");
 const { toastLastEditor } = await import("../js/03-sync.js");
 const { captureSnapshot, getHistorySnapshot } = await import("../js/03a-history-store.js");
 const { loadTestDocument } = await import("./_document.mjs");

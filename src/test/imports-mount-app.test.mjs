@@ -7,7 +7,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 const { mountImportsFeature } = await import("../bootstrap/wiring/views.ts");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
-const { render } = await import("../js/05-render.js");
+const { render } = await import("../features/rows/render.js");
 const { openImportModal, closeImportModal } = (await import("../bootstrap/wiring/imports.ts")).importControls();
 const { resetImportMode } = await import("../application/import-mode.ts");
 after(closeApp);

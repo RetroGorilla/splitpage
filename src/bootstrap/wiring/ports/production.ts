@@ -3,6 +3,13 @@ import type { ProductionIndexOwner } from "../../../core/production/index.ts";
 import { productionIndex } from "../../../application/production/index-owner.ts";
 import type { TagPanelState } from "../../../application/tag-panel-state.ts";
 import * as tagPanelStateOwner from "../../../application/tag-panel-state.ts";
+import { productionIndexStats, resetProductionIndexStats, scheduleUntaggedScan, tagFieldOccurrences } from "../../../features/tags/production-tags.js";
+
+export const renderDeletes = deleteConfirmation;
+export const renderProduction = {
+  stats: productionIndexStats, resetStats: resetProductionIndexStats,
+  scan: scheduleUntaggedScan, occurrences: tagFieldOccurrences
+};
 
 export const tagPanelState: TagPanelState = {
   tagRenamingKey: () => tagPanelStateOwner.tagRenamingKey(),

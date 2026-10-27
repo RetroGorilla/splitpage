@@ -13,7 +13,7 @@ import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshot
 import { toastLastEditor } from "../../js/03-sync.js";
 import { reportMerge } from "../../legacy/merge-bridge.ts";
 import { startHistoryMigration } from "../../js/03a-history-store.js";
-import { renderFirstDraw } from "../../js/05-render.js";
+import { currentRowsRender } from "./render.ts";
 import { updateSaveStatus } from "./save-status.ts";
 import { saves } from "./ports/saving.ts";
 import { updateAutoSaveMenu } from "./file-saving.ts";
@@ -47,7 +47,11 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
       },
       liveDocument: function () { return heldDocument(); },
       open: function (doc, reason) { documentTransitions().open({ from: { document: doc }, reason: reason }); },
-      firstDraw: renderFirstDraw,
+      firstDraw: () => {
+        const render = currentRowsRender();
+        if (!render) throw new Error("Rows rendering is not started yet");
+        return render.renderFirstDraw();
+      },
       refreshChrome: [updateAutoSaveMenu, updateHideShotMenu, updateSaveStatus],
       reportRecovery: function (report) { reportMerge(report, { kind: "recovery" }); },
       toastLastEditor: toastLastEditor,

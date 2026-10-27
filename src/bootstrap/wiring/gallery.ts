@@ -14,7 +14,7 @@ import { startGalleryVideo as mountVideo } from "../../features/gallery/video.js
 import type { GalleryMount, GalleryOverlayMount, GalleryOverlayPorts, GalleryPorts, GalleryVideoMount, GalleryVideoPorts } from "../../features/gallery/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { videoHostLabel } from "../../adapters/formats/video-host.ts";
-import { galleryBadgeHtml, gallerySlotPictureHtml } from "../../js/05-render.js";
+import { galleryBadgeHtml, gallerySlotPictureHtml } from "../../features/rows/render.js";
 import { videoFiles } from "./video-files.ts";
 import { foldIntoEdit } from "../../legacy/undo-bridge.ts";
 import { cellEditing, pickPictureFor } from "../../legacy/editor-bridge.ts";
