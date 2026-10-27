@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import type { PresencePerson } from "../../../src/application/collaboration/presence.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import type { RundownPresencePorts } from "../../../src/features/rundown/ports.ts";
-import { __init as mountPresence, paintRundownPresence } from "../../../src/features/rundown/presence.js";
+import { startRundownPresence as mountPresence, paintRundownPresence } from "../../../src/features/rundown/presence.js";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeActions, fakeDocument } from "../fakes.ts";
 

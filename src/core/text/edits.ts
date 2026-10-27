@@ -7,9 +7,9 @@ export type TextChar = { atom?: undefined; ch: string; marks: Marks };
 
 export type Char = AtomChar | TextChar;
 
-export type CellEdit = { cell: Run[]; end: number };
+export type EditedCell = { cell: Run[]; end: number };
 
-export type CellRange = { from: number; to: number };
+export type TextSpan = { from: number; to: number };
 
 export function explode(cell: CellInput): Char[] {
   const chars: Char[] = [];
@@ -47,7 +47,7 @@ export function clamp(cell: CellInput, pos: number): number {
   return cutsPair(text, pos) ? pos + 1 : pos;
 }
 
-export function clampRange(cell: CellInput, from: number, to: number): CellRange {
+export function clampRange(cell: CellInput, from: number, to: number): TextSpan {
   const text = projection(cell);
   let a = within(text.length, from), b = within(text.length, to);
   if (b < a) { const x = a; a = b; b = x; }
@@ -126,14 +126,14 @@ export function replaceText(cell: CellInput, from: number, to: number, text: str
   return insertText(deleteRange(cell, from, to), from, text, marks);
 }
 
-export function replaceWithTag(cell: CellInput, from: number, to: number, text: string, id: string): CellEdit {
+export function replaceWithTag(cell: CellInput, from: number, to: number, text: string, id: string): EditedCell {
   const r = clampRange(cell, from, to);
   const next = replaceText(cell, r.from, r.to, text);
   const end = r.from + cleanText(text).length;
   return { cell: setMark(next, r.from, end, "tag", id), end: end };
 }
 
-export function replaceWithBrollKey(cell: CellInput, from: number, to: number, id: string, keyText: string): CellEdit {
+export function replaceWithBrollKey(cell: CellInput, from: number, to: number, id: string, keyText: string): EditedCell {
   const r = clampRange(cell, from, to);
   return { cell: insertBrollKey(deleteRange(cell, r.from, r.to), r.from, id, keyText, {}), end: r.from + 1 };
 }
@@ -216,7 +216,7 @@ export function removeComment(cell: CellInput, id: string, from?: number, to?: n
   return editComment(cell, from === undefined ? 0 : from, to === undefined ? cellLength(cell) : to, id, false);
 }
 
-export function commentRange(cell: CellInput, id: string): CellRange | null {
+export function commentRange(cell: CellInput, id: string): TextSpan | null {
   const chars = explode(cell);
   let from = -1;
   for (let i = 0; i < chars.length; i++) {
@@ -243,7 +243,7 @@ export function splitCell(cell: CellInput, pos: number): [Run[], Run[]] {
   return [sliceCell(cell, 0, pos), sliceCell(cell, pos)];
 }
 
-export function insertCell(cell: CellInput, pos: number, piece: CellInput): CellEdit {
+export function insertCell(cell: CellInput, pos: number, piece: CellInput): EditedCell {
   pos = clamp(cell, pos);
   const halves = splitCell(cell, pos);
   const next = joinCells(joinCells(halves[0], piece), halves[1]);

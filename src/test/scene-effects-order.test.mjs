@@ -7,7 +7,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 const stubs = await import("./_fanout-stubs.mjs");
 const { createSceneStatus } = await import("../features/rows/scene-status.ts");
 const { cycleRowStatus, onScriptStats, statsFollowChange, updateScriptStats } = createSceneStatus(stubs.sceneStatusPorts());
-const { __init: mountReadTime, setSceneLength } = await import("../features/rows/read-time.js");
+const { startReadTime: mountReadTime, setSceneLength } = await import("../features/rows/read-time.js");
 mountReadTime(stubs.readTimePorts());
 const bridge = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");

@@ -1,5 +1,5 @@
 import { mountBrollPanelFeature } from "./broll.ts";
-import { __init as mountPanelState } from "../../features/tags/panels.js";
+import { startTagPanels as mountPanelState } from "../../features/tags/panels.js";
 import type { TagPanelMount, TagPanelPorts } from "../../features/tags/ports.ts";
 import { tagPanelActions as panelDefinitions } from "../../features/tags/actions.ts";
 import * as tagPanelCommands from "../../application/tag-panel-commands.ts";

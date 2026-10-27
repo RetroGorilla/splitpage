@@ -280,7 +280,7 @@ async function maybeAutoShowOnboarding() {
   if (eligible && activeMount === mounted) openOnboarding();
 }
 
-export function __init(given) {
+export function startOnboarding(given) {
   ports = given;
   var mounted = {};
   activeMount = mounted;

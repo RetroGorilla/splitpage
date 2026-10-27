@@ -120,7 +120,7 @@ export function wireTargetSection(wrap, close) {
   });
 }
 
-export function __init(given) {
+export function startTarget(given) {
   ports = given;
   lastOverlayHtml = "";
   var disposed = false;

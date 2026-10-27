@@ -4,7 +4,7 @@ import { actions as portActions } from "./ports/actions.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { screen as portScreen } from "./ports/screen.ts";
 import { helpActions as definitions } from "../../features/help/actions.ts";
-import { __init as mountHelp } from "../../features/help/help.js";
+import { startHelp as mountHelp } from "../../features/help/help.js";
 import type { HelpMount, HelpPorts } from "../../features/help/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { sidePanels } from "../../legacy/panels-bridge.ts";

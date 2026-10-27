@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { __init } from "../../../src/features/newtab/newtab.js";
+import { startNewTab } from "../../../src/features/newtab/newtab.js";
 import type { NewTabPorts } from "../../../src/features/newtab/ports.ts";
 import { NO_DESTINATION } from "../../../src/application/transitions/ports.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
@@ -74,7 +74,7 @@ test("blank and starter creation keep preparation, reset, transition, confirmati
     page();
     const h = harness();
     h.state.home = { kind };
-    const mounted = __init(h.ports);
+    const mounted = startNewTab(h.ports);
     try {
       await settled();
       click("new");
@@ -98,7 +98,7 @@ test("blank and starter creation keep preparation, reset, transition, confirmati
 test("paste scans its migrated document before adoption and dropped files keep their source arguments", async () => {
   page();
   const h = harness();
-  const mounted = __init(h.ports);
+  const mounted = startNewTab(h.ports);
   try {
     await settled();
     click("paste");
@@ -129,7 +129,7 @@ test("auto-show observes location, seed, last file, desktop launch and draft fac
     page();
     const h = harness();
     configure(h);
-    const mounted = __init(h.ports);
+    const mounted = startNewTab(h.ports);
     try { await settled(); assert.equal(win.document.getElementById("newtab-page")?.hidden, hidden, name); }
     finally { mounted.dispose(); }
   }
@@ -138,14 +138,14 @@ test("auto-show observes location, seed, last file, desktop launch and draft fac
 test("disposal removes handlers, closes the page and permits remounting without duplicate actions", async () => {
   page();
   const h = harness();
-  const first = __init(h.ports);
+  const first = startNewTab(h.ports);
   await settled();
   first.dispose();
   first.dispose();
   click("new");
   assert.deepEqual(h.calls, []);
   assert.equal(win.document.getElementById("newtab-page")?.hidden, true);
-  const next = __init(h.ports);
+  const next = startNewTab(h.ports);
   try {
     await settled();
     first.dispose();
@@ -163,7 +163,7 @@ test("disposed startup and last-file reads cannot create or reopen a replacement
   let resolveLast: (value: unknown) => void = () => {};
   const ready = new Promise<unknown>((done) => { resolveReady = done; });
   const last = new Promise<unknown>((done) => { resolveLast = done; });
-  const first = __init({ ...h.ports, startup: { ready: () => ready }, lastFile: { load: () => last } });
+  const first = startNewTab({ ...h.ports, startup: { ready: () => ready }, lastFile: { load: () => last } });
   click("paste");
   const paste = h.pasted();
   assert.ok(paste);
@@ -172,7 +172,7 @@ test("disposed startup and last-file reads cannot create or reopen a replacement
   first.dispose();
   const replacement = harness();
   replacement.state.seed = false;
-  const next = __init(replacement.ports);
+  const next = startNewTab(replacement.ports);
   try {
     resolveReady();
     resolveLast(null);

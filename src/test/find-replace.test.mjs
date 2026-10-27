@@ -6,8 +6,8 @@ import { projection } from "../core/text/runs.ts";
 import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { countInTags, findInCell, findInRows, noMatchLabel, replaceInHtml } from "../features/find/find.js";
 import { domProjection, domRangeFor } from "../features/common/find-dom.js";
-import { __init } from "../features/find/find.js";
-__init({ text: { cellOf, inertBody, sanitizeHtml } });
+import { startFind } from "../features/find/find.js";
+startFind({ text: { cellOf, inertBody, sanitizeHtml } });
 import { STORED, rng, tagSpan } from "./_stored-cells.mjs";
 
 const find = (html, needle, matchCase) => findInCell(cellOf(html), needle, !!matchCase);

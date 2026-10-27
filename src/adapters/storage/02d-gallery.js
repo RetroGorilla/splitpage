@@ -62,4 +62,4 @@ export function videoLinkText(l) {
   return l.href ? l.href : l.name + " (video file)";
 }
 
-export function __init() {}
+export function startGalleryStore() {}

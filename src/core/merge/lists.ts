@@ -3,7 +3,7 @@ import type { BrollProp } from "../document/broll.ts";
 import { idMap } from "../document/id-map.ts";
 import { TAG_STATUS_IDS, normalizeTagName, registryKey, tagStatusId, tagStatusRank } from "../document/tags.ts";
 
-export interface Person {
+export interface PersonEntry {
   id: string;
   name: string;
 }
@@ -26,7 +26,7 @@ export interface TagEntry {
   id?: string;
 }
 
-export interface BrollShot {
+export interface BrollShotEntry {
   id?: string | undefined;
   owner?: unknown;
   notes?: unknown;
@@ -45,9 +45,9 @@ interface PropInput {
 
 type List<T> = readonly (T | null | undefined)[] | null | undefined;
 
-export type PersonList = List<Person>;
+export type PersonList = List<PersonEntry>;
 export type TagList = List<TagInput>;
-export type ShotList = List<BrollShot>;
+export type ShotList = List<BrollShotEntry>;
 
 export type ListMerger = (base: unknown, mine: unknown, theirs: unknown, survives?: PersonSurvives) => unknown[];
 
@@ -70,10 +70,10 @@ function droppedListKeys<T extends object>(baseList: List<T>, mineList: List<T>,
   return dropped;
 }
 
-export function mergePeople(basePeople: PersonList, minePeople: PersonList, theirPeople: PersonList): Person[] {
-  const personKey = function (p: Person): string { return p.name ? normalizeTagName(p.name) : ""; };
+export function mergePeople(basePeople: PersonList, minePeople: PersonList, theirPeople: PersonList): PersonEntry[] {
+  const personKey = function (p: PersonEntry): string { return p.name ? normalizeTagName(p.name) : ""; };
   const dropped = droppedListKeys(basePeople, minePeople, theirPeople, personKey, personKey);
-  const out: Person[] = [], seenId = idMap<boolean>(), seenName = idMap<boolean>();
+  const out: PersonEntry[] = [], seenId = idMap<boolean>(), seenName = idMap<boolean>();
   (theirPeople || []).concat(minePeople || []).forEach(function (p) {
     if (!p || !p.name) return;
     const norm = normalizeTagName(p.name);
@@ -197,27 +197,27 @@ export function mergeProductionTags(baseTags: TagList, mineTags: TagList, theirT
   });
 }
 
-export function mergeBrollShots(baseShots: ShotList, mineShots: ShotList, theirShots: ShotList, survives?: PersonSurvives): BrollShot[] {
+export function mergeBrollShots(baseShots: ShotList, mineShots: ShotList, theirShots: ShotList, survives?: PersonSurvives): BrollShotEntry[] {
   const live = survives || everyoneSurvives;
-  const shotKey = function (b: BrollShot): string { return b.id || ""; };
-  const shotPrint = function (b: BrollShot): string {
+  const shotKey = function (b: BrollShotEntry): string { return b.id || ""; };
+  const shotPrint = function (b: BrollShotEntry): string {
     return JSON.stringify(Object.keys(b).filter(function (k) { return k !== "id"; }).sort()
       .map(function (k) { return [k, b[k]]; }));
   };
   const dropped = droppedListKeys(baseShots, mineShots, theirShots, shotKey, shotPrint);
-  const baseById = idMap<BrollShot>();
+  const baseById = idMap<BrollShotEntry>();
   (baseShots || []).forEach(function (b) { if (b && b.id && !baseById[b.id]) baseById[b.id] = b; });
-  const out: BrollShot[] = [], byId = idMap<BrollShot>(), theirIds = idMap<boolean>();
+  const out: BrollShotEntry[] = [], byId = idMap<BrollShotEntry>(), theirIds = idMap<boolean>();
   (theirShots || []).forEach(function (b) {
     if (!b || !b.id || byId[b.id] || dropped[b.id]) return;
     byId[b.id] = jsonCopy(b);
     theirIds[b.id] = true;
-    out.push(byId[b.id] as BrollShot);
+    out.push(byId[b.id] as BrollShotEntry);
   });
   (mineShots || []).forEach(function (b) {
     if (!b || !b.id || dropped[b.id]) return;
     const existing = byId[b.id];
-    if (!existing) { byId[b.id] = jsonCopy(b); out.push(byId[b.id] as BrollShot); return; }
+    if (!existing) { byId[b.id] = jsonCopy(b); out.push(byId[b.id] as BrollShotEntry); return; }
     if (theirIds[b.id] ? mineOwnerWins(baseById[b.id], existing.owner, b.owner, live) : ownerGivesWay(existing.owner, b.owner, live)) {
       existing.owner = b.owner || "";
     }

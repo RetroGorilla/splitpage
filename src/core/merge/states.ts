@@ -4,7 +4,7 @@ import { mergedDocId } from "../document/ids.ts";
 import { mergePersonColors } from "../document/person-colors.ts";
 import type { Clock, IdSource } from "../document/ports.ts";
 import { LIST_MERGERS, personIdRemap, personSurvives, repointOwners } from "./lists.ts";
-import type { ListMerger, Person, PersonList, PersonSurvives, TagEntry, TagList } from "./lists.ts";
+import type { ListMerger, PersonEntry, PersonList, PersonSurvives, TagEntry, TagList } from "./lists.ts";
 import { conflictComment, mergeComments, mergeRows } from "./rows.ts";
 import type { MergeComment, MergeConflict, MergeRow, MergeStats, RowSide } from "./rows.ts";
 import { mergeChangedSideWins, mergeMaxPlusOne, mergeTargetLength, mergeTheirsWins, mergeTitle } from "./scalars.ts";
@@ -96,7 +96,7 @@ export function mergeStateFields(baseSide: ValidatedDocument | null | undefined,
 
   const tagField = fields.filter(function (f) { return f.key === "productionTags"; })[0] as StateField;
   const peopleField = fields.filter(function (f) { return f.key === "people" && f.merge === "list-union-with-base"; })[0];
-  const sidePeople = [theirs.people, mine.people].flatMap(function (l) { return Array.isArray(l) ? l as Person[] : []; });
+  const sidePeople = [theirs.people, mine.people].flatMap(function (l) { return Array.isArray(l) ? l as PersonEntry[] : []; });
   const mergedPeople = peopleField ? listMerger(peopleField)(base && base.people, mine.people, theirs.people) : undefined;
   const survives = mergedPeople ? personSurvives(sidePeople, mergedPeople as PersonList) : undefined;
   const mergedTags = listMerger(tagField)(base && base.productionTags, mine.productionTags, theirs.productionTags, survives);

@@ -11,7 +11,7 @@ import type { Run } from "../../../core/text/runs.ts";
 import { invertSteps } from "../../../core/text/steps.ts";
 import type { DocFieldStep, RowFieldStep, Step, StepRow } from "../../../core/text/steps.ts";
 
-export type CellRuns = (html: unknown) => readonly Run[];
+export type HtmlRunDecoder = (html: unknown) => readonly Run[];
 
 export type UndoDocument = { rows?: StepRow[]; [key: string]: unknown };
 
@@ -265,7 +265,7 @@ function listMergeFor(key: string): ListMerger | null {
   return LIST_MERGES[key] || null;
 }
 
-function resolveCell(runs: CellRuns, live: unknown, step: { before: unknown; after: unknown }): { value: unknown } | null {
+function resolveCell(runs: HtmlRunDecoder, live: unknown, step: { before: unknown; after: unknown }): { value: unknown } | null {
   if (live === step.before) return { value: step.after };
   const mine = runs(live), base = runs(step.before), want = runs(step.after);
   if (JSON.stringify(mine) === JSON.stringify(base)) return { value: step.after };
@@ -403,7 +403,7 @@ function repointLists(state: UndoState, remap: Record<string, string>): void {
   });
 }
 
-export function planSteps(runs: CellRuns, state: UndoState, steps: readonly Step[]): PlannedSteps | RefusedSteps {
+export function planSteps(runs: HtmlRunDecoder, state: UndoState, steps: readonly Step[]): PlannedSteps | RefusedSteps {
   const order: unknown[] = state.rows.map(function (r) { return r.id; });
   const byId = idMap<StepRow>();
   state.rows.forEach(function (r) { byId[idKey(r.id)] = r; });
@@ -480,12 +480,12 @@ export function writePlanned(state: UndoState, planned: PlannedSteps, out?: Writ
   return resolved.cleared.length ? { ok: true, cleared: resolved.cleared.length } : { ok: true };
 }
 
-export function applyStepsLive(runs: CellRuns, state: UndoState, steps: readonly Step[], out?: WriteReport | null): Applied | RefusedSteps {
+export function applyStepsLive(runs: HtmlRunDecoder, state: UndoState, steps: readonly Step[], out?: WriteReport | null): Applied | RefusedSteps {
   const planned = planSteps(runs, state, steps);
   return planned.ok ? writePlanned(state, planned, out) : planned;
 }
 
-export function replayChanges(runs: CellRuns, steps: readonly Step[], planned: PlannedSteps): ChangeSet {
+export function replayChanges(runs: HtmlRunDecoder, steps: readonly Step[], planned: PlannedSteps): ChangeSet {
   const cells: { rowId: string; field: string }[] = [], inserted: string[] = [], removed: string[] = [], docFields: string[] = [];
   let moved = false, runsMoved = false;
   function field(rowId: string, key: string): void {
@@ -513,7 +513,7 @@ export function replayChanges(runs: CellRuns, steps: readonly Step[], planned: P
   return changeSet({ cells: cells, rowsInserted: inserted, rowsRemoved: removed, rowsMoved: moved, runsMoved: runsMoved, docFields: docFields });
 }
 
-function sameIds(runs: CellRuns, before: unknown, after: unknown): boolean {
+function sameIds(runs: HtmlRunDecoder, before: unknown, after: unknown): boolean {
   return same(commentIds(runs(before)), commentIds(runs(after)));
 }
 
@@ -531,18 +531,18 @@ function insertedText(a: string, b: string): string {
   return b.slice(p, sb);
 }
 
-function projectionOf(runs: CellRuns, html: unknown): string {
+function projectionOf(runs: HtmlRunDecoder, html: unknown): string {
   let out = "";
   normalizeCell(runs(html)).forEach(function (r) { out += r.atom ? "￼" : r.text; });
   return out;
 }
 
-export function cosmetic(runs: CellRuns, step: { readonly op: string; readonly key?: string; readonly before?: unknown; readonly after?: unknown }): boolean {
+export function cosmetic(runs: HtmlRunDecoder, step: { readonly op: string; readonly key?: string; readonly before?: unknown; readonly after?: unknown }): boolean {
   if (step.op !== "rowField" || !TEXT_KEYS[step.key as string]) return false;
   return JSON.stringify(runs(step.before)) === JSON.stringify(runs(step.after));
 }
 
-export function createUndoHistory(runs: CellRuns): UndoHistory {
+export function createUndoHistory(runs: HtmlRunDecoder): UndoHistory {
   const done: UndoEntry[] = [], undone: UndoEntry[] = [];
   let serial = 0;
   let parked: { redo: UndoEntry[]; top: UndoEntry | null; after: unknown; text: string | null } | null = null;

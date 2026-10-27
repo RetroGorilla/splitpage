@@ -1,5 +1,5 @@
 import type { ActionDefinition } from "../../application/actions.ts";
-import { __init as mountPanelState, mountBrollPanel } from "../../features/broll/panel.js";
+import { startBrollPanel as mountPanelState, mountBrollPanel } from "../../features/broll/panel.js";
 import { brollPanelActions as panelDefinitions } from "../../features/broll/actions.ts";
 import type { BrollPanelEventsPorts, BrollPanelPorts, BrollPanelState } from "../../features/broll/ports.ts";
 import { ids as portIds } from "./ports/identity.ts";

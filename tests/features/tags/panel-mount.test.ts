@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { __init, IS_TOUCH, openProductionPanel, setTagNotes } from "../../../src/features/tags/panels.js";
+import { startTagPanels, IS_TOUCH, openProductionPanel, setTagNotes } from "../../../src/features/tags/panels.js";
 import type { TagPanelPorts } from "../../../src/features/tags/ports.ts";
 import { createProductionSelection } from "../../../src/application/editing/production-selection.ts";
 import { createDeleteConfirm } from "../../../src/application/editing/delete-confirm.ts";
@@ -74,7 +74,7 @@ function fixture() {
 
 test("production panels mount with fake ports and remove both menu listeners on disposal and remount", () => {
   const h = fixture();
-  const first = __init(h.ports);
+  const first = startTagPanels(h.ports);
   const button = win.document.getElementById("menu-button") as HTMLButtonElement;
   const menu = win.document.querySelector(".tag-menu") as HTMLElement;
   button.click();
@@ -86,7 +86,7 @@ test("production panels mount with fake ports and remove both menu listeners on 
   assert.equal(IS_TOUCH, undefined);
   button.click();
   assert.equal(menu.hidden, true);
-  const second = __init(h.ports);
+  const second = startTagPanels(h.ports);
   button.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
   assert.equal(menu.hidden, false);
   second.dispose();
@@ -96,7 +96,7 @@ test("production panels mount with fake ports and remove both menu listeners on 
 
 test("production panel commands use the document, edit and panel ports", () => {
   const h = fixture();
-  const mounted = __init(h.ports);
+  const mounted = startTagPanels(h.ports);
   try {
     openProductionPanel();
     assert.deepEqual(h.calls, ["production-panel"]);
@@ -109,14 +109,14 @@ test("production panel commands use the document, edit and panel ports", () => {
 
 test("replaced and disposed panel controls cannot act on the next mount", () => {
   const h = fixture();
-  const state = owned<ReturnType<typeof __init>>();
-  const first = state.replace(() => __init(h.ports));
+  const state = owned<ReturnType<typeof startTagPanels>>();
+  const first = state.replace(() => startTagPanels(h.ports));
   first.openProductionPanel();
   assert.deepEqual(h.calls, ["production-panel"]);
   h.selection.arm(() => { assert.fail("a replaced mount's bulk-delete timer fired"); });
   h.deletion.arm("tag", "hat", () => { assert.fail("a replaced mount's tag-delete timer fired"); });
   assert.equal(h.pending.size, 2);
-  const second = state.replace(() => __init(h.ports));
+  const second = state.replace(() => startTagPanels(h.ports));
   assert.equal(h.pending.size, 0);
   const entry = h.ports.production.entries(h.doc)[0];
   assert.ok(entry);
@@ -141,7 +141,7 @@ test("replaced and disposed panel controls cannot act on the next mount", () => 
 
 test("production actions preserve their order, availability and panel toggles", () => {
   const h = fixture();
-  let owner: ReturnType<typeof __init> | null = __init(h.ports);
+  let owner: ReturnType<typeof startTagPanels> | null = startTagPanels(h.ports);
   const screen = fakeScreen();
   const calls: string[] = [];
   const actions = tagPanelActions(() => owner, screen.screen, { close: (id) => { calls.push(id); } });

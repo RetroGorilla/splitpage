@@ -8,11 +8,11 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { StartupSignal } from "../../application/startup-signal.ts";
 import type { ScreenState } from "../../application/screen.ts";
 
-export type DocumentOpening =
+export type DesktopOpening =
   | { readonly kind: "file"; readonly file: unknown; readonly handle: unknown }
   | { readonly kind: "server"; readonly id: string };
 
-export interface DesktopFileHandle {
+export interface DesktopFileSource {
   readonly getFile: () => Promise<unknown>;
 }
 
@@ -30,7 +30,7 @@ export interface DesktopPorts {
   readonly shell: () => DesktopShell | null;
   readonly canOpenPrompter: { readonly browser: () => boolean; readonly chromium: () => boolean };
   readonly driveOpenShown: () => boolean;
-  readonly makeHandle: (entry: DesktopOpenedFile) => DesktopFileHandle;
+  readonly makeHandle: (entry: DesktopOpenedFile) => DesktopFileSource;
   readonly wireBlobs: () => void;
   readonly document: Pick<DocumentReader, "current">;
   readonly place: Pick<DocumentPlace, "home" | "connection" | "fileHome" | "homeConn" | "serverHomeId" | "serverMode">;
@@ -41,7 +41,7 @@ export interface DesktopPorts {
     readonly pointTabAt: (url: string, options: { readonly token: string; readonly tunnel?: unknown }) => void;
   };
   readonly notices: Pick<NoticePort, "show">;
-  readonly documents: { readonly open: (opening: DocumentOpening) => Promise<unknown> };
+  readonly documents: { readonly open: (opening: DesktopOpening) => Promise<unknown> };
   readonly saves: Pick<SaveState, "unsaved"> & { readonly save: () => Promise<unknown> };
   readonly startup: StartupSignal;
   readonly actions: Pick<ActionRegistry, "invoke">;

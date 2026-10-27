@@ -313,7 +313,7 @@ export function appendDraftMedia(box, mediaHtml) {
   }, [mediaHtml]);
 }
 
-export function __init(given) {
+export function startDraftEdit(given) {
   ports = given;
   histories = new WeakMap();
   composing = new WeakSet();

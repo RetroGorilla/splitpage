@@ -63,13 +63,13 @@ export interface OpenCell {
   readonly sel: CellRange | null;
 }
 
-export interface CellChange {
+export interface CellEditResult {
   readonly cell: readonly Run[];
   readonly sel?: CellRange | null | undefined;
   readonly records?: CellRecords | undefined;
 }
 
-export type CellEdit = (cell: Run[], sel: CellRange | null) => CellChange | null | undefined;
+export type CellEdit = (cell: Run[], sel: CellRange | null) => CellEditResult | null | undefined;
 
 export interface CellEditing<E> {
   readonly open: (cell: E) => OpenCell | null;

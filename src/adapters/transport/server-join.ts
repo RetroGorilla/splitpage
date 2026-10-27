@@ -2,15 +2,15 @@ export type JoinResult =
   | { readonly ok: true; readonly token: string; readonly role: string; readonly docId?: string; readonly scope?: string }
   | { readonly ok: false; readonly error: string };
 
-export interface JoinPorts {
+export interface ServerJoinPorts {
   readonly fetch: (url: string, init: RequestInit) => Promise<Response>;
 }
 
-const PAGE_FETCH: JoinPorts = Object.freeze({
+const PAGE_FETCH: ServerJoinPorts = Object.freeze({
   fetch: function (url: string, init: RequestInit) { return fetch(url, init); }
 });
 
-export async function joinServer(base: string | null | undefined, pin: string | null | undefined, key?: string | null, ports: JoinPorts = PAGE_FETCH): Promise<JoinResult> {
+export async function joinServer(base: string | null | undefined, pin: string | null | undefined, key?: string | null, ports: ServerJoinPorts = PAGE_FETCH): Promise<JoinResult> {
   const url = (base ? String(base).replace(/\/+$/, "") + "/" : "") + "api/join";
   let res: Response;
   try {

@@ -43,9 +43,9 @@ function setup() {
     document: reader.document, actions: runner.actions, notices: notices.notices,
     preferences: preferences.preferences, viewFlags, sidePanels: panels.sidePanels
   };
-  const holder: { current: ReturnType<typeof help.__init> | null } = { current: null };
+  const holder: { current: ReturnType<typeof help.startHelp> | null } = { current: null };
   const unregister = registerAll(registry, helpActions(() => holder.current, { screen: view.screen, desktop: () => false }));
-  const mount = () => { holder.current = help.__init(given); return holder.current; };
+  const mount = () => { holder.current = help.startHelp(given); return holder.current; };
   const loaded = () => { reader.replace(migrateRows({ rows: [] }, fakeMigration().ports)); };
   const dispose = () => { holder.current?.dispose(); holder.current = null; unregister(); };
   return { registry, runner, reader, notices, preferences, viewFlags, panels, view, mount, loaded, dispose };

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { REVIEW_REFUSAL_REASON } from "../../../src/application/collaboration/authority.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import type { ReadTimePorts } from "../../../src/features/rows/ports.ts";
-import { __init as mountReadTime, readTimeEditing, setSceneLength } from "../../../src/features/rows/read-time.js";
+import { startReadTime as mountReadTime, readTimeEditing, setSceneLength } from "../../../src/features/rows/read-time.js";
 import { productionReaders } from "../../../src/legacy/document-ports.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices, fakeReview, fakeUndo } from "../fakes.ts";

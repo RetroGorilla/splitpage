@@ -1,14 +1,10 @@
 import { isSelectionField } from "../../core/text/selection.ts";
 import type { ModelSelection } from "../../core/text/selection.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
+import type { CellRange } from "../../application/editing/cell-editing.ts";
 import { domKeys, domToPos, placeSelection, posToDom, readSelection } from "./cell-dom.ts";
 
 export type CellSelectionOwner = EditorSelection<Element, Range, Element>;
-
-export interface CellRange {
-  readonly from: number;
-  readonly to: number;
-}
 
 function shownCells(rootEl: Element, field: string): HTMLElement[] {
   return Array.from(rootEl.querySelectorAll<HTMLElement>('.cell-editable[data-id][data-field="' + field + '"]'));

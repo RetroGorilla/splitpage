@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { __init } from "../../../src/features/merge/local-merge.js";
+import { startLocalMerge } from "../../../src/features/merge/local-merge.js";
 import type { MergeReviewPorts } from "../../../src/features/merge/ports.ts";
 import type { Home } from "../../../src/application/location/document-location.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
@@ -117,7 +117,7 @@ test("merge review: offers a file that parses, lists each side's changes and con
   const theirs = doc([row("r1", "one three")]);
   const home = { kind: "file", diskBase: copy(base) } as Home;
   const { ports, calls } = setup({ mine, parsed: () => Promise.resolve({ state: copy(theirs) }) });
-  const merge = __init(ports);
+  const merge = startLocalMerge(ports);
   try {
     await merge.offer(file(), home);
     assert.deepEqual(calls.parsed, [{ file: file(), opts: { noAsk: true } }]);
@@ -170,20 +170,20 @@ test("merge review: offers a file that parses, lists each side's changes and con
 test("merge review: a file that does not parse, a different embedded id or a reset during the probe offers nothing", async () => {
   const mine = doc([row("r1", "one")]);
   const bad = setup({ mine, parsed: () => Promise.resolve({ error: "unreadable" }) });
-  const first = __init(bad.ports);
+  const first = startLocalMerge(bad.ports);
   await first.offer(file(), null);
   assert.equal(el("file-conflict-merge").hidden, true);
   first.dispose();
 
   const other = setup({ mine, parsed: () => Promise.resolve({ state: doc([row("r1", "two")], "d" + "2".repeat(32)), docIdEmbedded: true }) });
-  const second = __init(other.ports);
+  const second = startLocalMerge(other.ports);
   await second.offer(file(), null);
   assert.equal(el("file-conflict-merge").hidden, true);
   second.dispose();
 
   let release: (v: unknown) => void = () => {};
   const slow = setup({ mine, parsed: () => new Promise((resolve) => { release = resolve; }) });
-  const third = __init(slow.ports);
+  const third = startLocalMerge(slow.ports);
   const probe = third.offer(file(), null);
   third.reset();
   release({ state: doc([row("r1", "two")]) });
@@ -199,7 +199,7 @@ test("merge review: the session's merge base stands in for the open file only wh
   const theirs = doc([row("r1", "one three")]);
   const home = { kind: "file" } as Home;
   const matched = setup({ mine, mergeBase: doc([row("r1", "one two")]), fileHome: home, parsed: () => Promise.resolve({ state: copy(theirs) }) });
-  const first = __init(matched.ports);
+  const first = startLocalMerge(matched.ports);
   await first.offer(file(), home);
   first.open();
   assert.doesNotMatch(el("merge-review-detail").textContent ?? "", /no earlier version/);
@@ -207,7 +207,7 @@ test("merge review: the session's merge base stands in for the open file only wh
   first.dispose();
 
   const elsewhere = setup({ mine, mergeBase: doc([row("r1", "one two")], "d" + "3".repeat(32)), fileHome: home, parsed: () => Promise.resolve({ state: copy(theirs) }) });
-  const second = __init(elsewhere.ports);
+  const second = startLocalMerge(elsewhere.ports);
   await second.offer(file(), home);
   second.open();
   assert.match(el("merge-review-detail").textContent ?? "", /there is no earlier version of this file to compare both against/);
@@ -220,7 +220,7 @@ test("merge review: stored pictures are drawn through the pictures port", async 
   const mine = doc([row("r1", "one", { imageRef: ref("a") })]);
   const theirs = doc([row("r1", "one", { imageRef: ref("b") })]);
   const { ports, calls } = setup({ mine, parsed: () => Promise.resolve({ state: copy(theirs) }) });
-  const merge = __init(ports);
+  const merge = startLocalMerge(ports);
   try {
     await merge.offer(file(), null);
     merge.open();
@@ -235,7 +235,7 @@ test("merge review: stored pictures are drawn through the pictures port", async 
 test("merge review: cancel brings the conflict back while an offer stands, and dispose drops the offer", async () => {
   const mine = doc([row("r1", "one")]);
   const { ports, calls } = setup({ mine, parsed: () => Promise.resolve({ state: doc([row("r1", "two")]) }) });
-  const merge = __init(ports);
+  const merge = startLocalMerge(ports);
   await merge.offer(file(), null);
   merge.open();
   merge.cancel();
@@ -248,7 +248,7 @@ test("merge review: cancel brings the conflict back while an offer stands, and d
   assert.equal(el("file-conflict-merge").hidden, true);
 
   const again = setup({ mine, parsed: () => Promise.resolve({ state: doc([row("r1", "two")]) }) });
-  const next = __init(again.ports);
+  const next = startLocalMerge(again.ports);
   next.open();
   next.confirm();
   assert.equal(calls.applied.length + again.calls.applied.length, 0, "a fresh mount has no offer from the last one");

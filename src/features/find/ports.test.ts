@@ -5,7 +5,7 @@ import { fakeDocument, fakeNotices } from "../../../tests/features/fakes.ts";
 import { fakeMigration } from "../../../tests/core/migrate-ports.ts";
 import { migrateRows } from "../../core/migrate.ts";
 import type { FindPorts } from "./ports.ts";
-import { __init, findQueryChanged, replaceCurrent } from "./find.js";
+import { startFind, findQueryChanged, replaceCurrent } from "./find.js";
 
 test("find uses owner ports to reveal matches and refuses edits in review", () => {
   const win = jsdomWindow() as unknown as Window & typeof globalThis;
@@ -33,7 +33,7 @@ test("find uses owner ports to reveal matches and refuses edits in review", () =
     notices: fakeNotices().notices,
     flags: { setFindOpen: (value) => { open = value; } }
   };
-  const mounted = __init(ports);
+  const mounted = startFind(ports);
   mounted.openFindBar();
   assert.equal(open, true);
   assert.deepEqual(revealed, [doc.rows[0]?.id]);
@@ -43,7 +43,7 @@ test("find uses owner ports to reveal matches and refuses edits in review", () =
   mounted.dispose();
   mounted.dispose();
   assert.equal(open, false);
-  const again = __init(ports);
+  const again = startFind(ports);
   findQueryChanged();
   assert.equal(win.document.getElementById("find-count")?.textContent, "1 of 1");
   again.dispose();

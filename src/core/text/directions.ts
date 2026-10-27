@@ -1,13 +1,13 @@
 import { isDirRun, normalizeCell, projection } from "./runs.ts";
 import type { CellInput, Run } from "./runs.ts";
 import { clamp, clampRange, deleteRange, explode, isDirChar, markThroughout, setMark } from "./edits.ts";
-import type { CellEdit, CellRange, Char, TextChar } from "./edits.ts";
+import type { EditedCell, TextSpan, Char, TextChar } from "./edits.ts";
 
 export type DirectionToggle = { from: number; to: number; off: boolean };
 
 export const DIRECTION_MAX = 200;
 
-export function directionRangeAt(cell: CellInput, pos: number): CellRange | null {
+export function directionRangeAt(cell: CellInput, pos: number): TextSpan | null {
   const chars = explode(cell);
   pos = clamp(cell, pos);
   const at = isDirChar(chars[pos]) ? pos : isDirChar(chars[pos - 1]) ? pos - 1 : -1;
@@ -34,7 +34,7 @@ export function directionToggleRange(cell: CellInput, from: number, to: number):
   return { from: from, to: to, off: false };
 }
 
-export function directionShortcut(cell: CellInput, pos: number): CellEdit | null {
+export function directionShortcut(cell: CellInput, pos: number): EditedCell | null {
   const chars = explode(cell);
   pos = clamp(cell, pos);
   const p = projection(cell);

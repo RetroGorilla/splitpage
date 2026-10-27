@@ -6,14 +6,14 @@ import { STATE_FIELDS } from "../../../src/core/document/fields.ts";
 import {
   LIST_MERGERS, mergeBrollProps, mergeBrollShots, mergePeople, mergeProductionTags, personIdRemap, personSurvives, repointOwners
 } from "../../../src/core/merge/lists.ts";
-import type { BrollShot, ListMerger, TagInput } from "../../../src/core/merge/lists.ts";
+import type { BrollShotEntry, ListMerger, TagInput } from "../../../src/core/merge/lists.ts";
 import { jsonCopy } from "./fakes.ts";
 
 type ListCase = { fn: string; case: string; base: unknown; mine: unknown; theirs: unknown; out: unknown };
 
 const GOLDEN = new URL("../../../src/test/fixtures/golden/merge-list-mergers.json", import.meta.url);
 
-const shot = (id: string, extra?: Partial<BrollShot>): BrollShot => Object.assign({
+const shot = (id: string, extra?: Partial<BrollShotEntry>): BrollShotEntry => Object.assign({
   id: id, name: "Shot " + id, desc: "", status: "unshot", reshoot: false, notes: "", owner: "", audioRef: "", location: "",
   props: [], origin: "script"
 }, extra || {});
@@ -77,7 +77,7 @@ test("repointOwners rewrites only owners the map names, in place, and skips what
   const shots: unknown[] = [shot("b1", { owner: "p3" }), null, "x", { owner: 7 }];
   repointOwners([tags, shots, undefined, "not a list"], personIdRemap([{ id: "p3", name: "Bo" }], [{ id: "p4", name: "bo" }]));
   assert.deepEqual(tags.map((t) => t.owner), ["p4", "p1", ""]);
-  assert.deepEqual(shots.map((s) => s && typeof s === "object" ? (s as BrollShot).owner : s), ["p4", null, "x", 7]);
+  assert.deepEqual(shots.map((s) => s && typeof s === "object" ? (s as BrollShotEntry).owner : s), ["p4", null, "x", 7]);
 });
 
 test("personSurvives holds for a merged person's id and for an id that moves to one, and nothing else (#353)", () => {

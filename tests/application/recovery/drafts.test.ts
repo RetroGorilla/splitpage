@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { __init } from "../../../src/application/recovery/drafts.js";
+import { startDrafts } from "../../../src/application/recovery/drafts.js";
 import type { DraftsMount, DraftsPorts } from "../../../src/application/recovery/drafts-ports.ts";
 import { createDraftResume } from "../../../src/application/recovery/draft-resume.ts";
 import type { DesktopDraftResult } from "../../../src/application/recovery/ports.ts";
@@ -101,7 +101,7 @@ function fireDue(timers: Timer[]) {
 }
 
 function mount(ports: DraftsPorts): DraftsMount {
-  return __init(ports) as DraftsMount;
+  return startDrafts(ports) as DraftsMount;
 }
 
 test("mounting reads the desktop's pending draft into the resume flag and the on-disk flag", () => {

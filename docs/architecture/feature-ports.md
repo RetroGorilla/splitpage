@@ -59,7 +59,7 @@ Both move a numbered file into a feature folder, give it a `ports.ts`, and mount
 
 A move PR changes how a file is connected, not how it works, so it keeps the diff readable and the behaviour unchanged. A moved file may keep its module variables, but:
 
-- its ports arrive only through its mount (`mount<Name>(ports)`, or `__init(ports)` while that is the file's name for it), and `dispose` removes its listeners and timers and clears the ports;
+- its ports arrive only through its mount (`start<Name>(ports)` in a moved file, where `<Name>` says what it starts, such as `startFind` or `startTagPanels`; never `__init`, which numbered files in `src/js/` still use), and `dispose` removes its listeners and timers and clears the ports;
 - every export other than the mount is either a pure helper (no state and no ports; better placed in `src/core/`, `shared/` or `src/features/common/`) or used only by files in the same feature folder and by tests.
 
 Code written new in a feature uses a factory instead: `create<Name>(ports)` returns an object with the feature's methods and `dispose`, and keeps its state inside, as `createSidePanels` does in L3f. Turning a moved 1,000-line file into a factory is its own later PR, not part of the move.

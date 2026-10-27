@@ -876,7 +876,7 @@ async function applyTakenDraft(t) {
   return outcome;
 }
 
-export function __init(given) {
+export function startDrafts(given) {
   ports = given;
   var mounted = given;
   draftResume().setRestorePending(!!(runningOnDesktop() && desktopDrafts().hasDraftToRestore()));

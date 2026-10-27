@@ -12,12 +12,12 @@ export interface ShotStrip {
   readonly strip: readonly string[];
 }
 
-export interface ShownRow<R extends ShotRow> {
+export interface ShotRowEntry<R extends ShotRow> {
   readonly row: R;
   readonly index: number;
 }
 
-export type ShotGroup<R extends ShotRow> = ShotStrip | ShownRow<R>;
+export type ShotGroup<R extends ShotRow> = ShotStrip | ShotRowEntry<R>;
 
 export interface ShotHidingPorts {
   readonly flags: Pick<ViewFlags, "hideShot" | "setHideShot">;

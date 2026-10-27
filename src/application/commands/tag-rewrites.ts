@@ -2,15 +2,11 @@ import type { CellRewrite, RewritePlanner } from "./document-edit.ts";
 import type { DocumentView } from "../session/document-session.ts";
 import type { TextServices } from "../text/services.ts";
 import { normalizeTagName } from "../../core/document/tags.ts";
+import type { TagName } from "../../core/document/tags.ts";
 import { holdsMedia, retagCell } from "../../core/production/tags.ts";
 import { namedTagId } from "../../core/text/runs.ts";
 
 type RetagText<Body> = Pick<TextServices<Body>, "cellOf" | "productionReaders" | "inertBody" | "retagBody" | "sanitizeHtml">;
-
-export interface TagName {
-  readonly cat: string;
-  readonly name: string;
-}
 
 interface CellCopy {
   readonly id: string;
