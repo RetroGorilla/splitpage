@@ -1,6 +1,6 @@
 import { createViewLifetime } from "../common/view-lifetime.ts";
 
-export interface FindPorts {
+export interface FindBarEvents {
   readonly closeFindBar: () => void;
   readonly stepFind: (direction: number) => void;
   readonly replaceCurrent: () => void;
@@ -18,7 +18,7 @@ export interface FindPorts {
 
 type FindEvent = KeyboardEvent & { readonly target: HTMLElement; readonly currentTarget: HTMLElement };
 
-export function mountFind(mount: { window: Window; ports: FindPorts }): { dispose: () => void } {
+export function mountFind(mount: { window: Window; ports: FindBarEvents }): { dispose: () => void } {
   const doc = mount.window.document;
   const ports = mount.ports;
   const life = createViewLifetime(mount.window, () => true);

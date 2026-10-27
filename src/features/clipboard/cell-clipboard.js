@@ -362,7 +362,7 @@ export function hasMediaFiles(files) {
   });
 }
 
-export function __init(given) {
+export function startCellClipboard(given) {
   ports = given;
   cutNonce = null;
   return { dispose: function () { cutNonce = null; } };

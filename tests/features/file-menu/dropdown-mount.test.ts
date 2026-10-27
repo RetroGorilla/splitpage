@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { __init } from "../../../src/features/file-menu/file-menu.js";
+import { startFileMenu } from "../../../src/features/file-menu/file-menu.js";
 import { fileMenuActions } from "../../../src/features/file-menu/actions.ts";
 import type { FileMenuControls, FileMenuDropdownMount, FileMenuDropdownPorts } from "../../../src/features/file-menu/ports.ts";
 import { NO_DESTINATION } from "../../../src/application/transitions/ports.ts";
@@ -94,7 +94,7 @@ function shown(notices: ReturnType<typeof fakeNotices>): unknown[] {
 test("a new script keeps the owners, arguments and order of the document-creating calls", () => {
   page();
   const h = harness();
-  const mounted = __init(h.ports);
+  const mounted = startFileMenu(h.ports);
   try {
     assert.equal(mounted.startNewScript(), true);
     assert.deepEqual(names(h.calls), ["makeId", "migrateRows", "keepSnapshot", "keepSnapshot", "resetProductionPanelState", "startNew", "confirmSavedNow", "applyReviewMode", "syncDocIdentity", "sidePanels.close"]);
@@ -117,7 +117,7 @@ test("a new script over an empty document keeps no snapshot", () => {
   page();
   const h = harness();
   h.state.document = documentOf({ title: "Empty", rows: [] });
-  const mounted = __init(h.ports);
+  const mounted = startFileMenu(h.ports);
   try {
     assert.equal(mounted.startNewScript(), true);
     assert.deepEqual(names(h.calls), ["makeId", "migrateRows", "resetProductionPanelState", "startNew", "confirmSavedNow", "applyReviewMode", "syncDocIdentity", "sidePanels.close"]);
@@ -128,7 +128,7 @@ test("a new script over an empty document keeps no snapshot", () => {
 test("the long demo copies its starter state and creates the document through the same calls", () => {
   page();
   const h = harness();
-  const mounted = __init(h.ports);
+  const mounted = startFileMenu(h.ports);
   try {
     assert.equal(mounted.openLongDemo(), true);
     assert.deepEqual(names(h.calls), ["migrateRows", "keepSnapshot", "keepSnapshot", "resetProductionPanelState", "startNew", "confirmSavedNow", "applyReviewMode", "syncDocIdentity", "sidePanels.close"]);
@@ -146,7 +146,7 @@ test("while loading, neither a new script nor the demo touches the document owne
   page();
   const h = harness();
   h.state.document = null;
-  const mounted = __init(h.ports);
+  const mounted = startFileMenu(h.ports);
   try {
     assert.equal(mounted.startNewScript(), false);
     assert.equal(mounted.openLongDemo(), false);
@@ -162,7 +162,7 @@ test("refreshing reads review, prompter, desktop and save facts through the port
   h.state.browser = true;
   h.state.unsaved = true;
   h.state.home = { kind: "file", name: "Script.md", format: "md", lastModified: 1 } as ReturnType<FileMenuDropdownPorts["place"]["home"]>;
-  const mounted = __init(h.ports);
+  const mounted = startFileMenu(h.ports);
   try {
     mounted.toggleFileMenu(true);
     assert.equal(mounted.fileMenuOpen(), true);
@@ -185,7 +185,7 @@ test("the file card reads the server's status through the place port", () => {
   const h = harness();
   h.state.home = { kind: "server", rev: 4 } as ReturnType<FileMenuDropdownPorts["place"]["home"]>;
   h.state.linkOff = true;
-  const mounted = __init(h.ports);
+  const mounted = startFileMenu(h.ports);
   const probe = (win as unknown as { __fileMenuTest: { cardView: () => { name: string; bits: { text: string }[] } } }).__fileMenuTest;
   try {
     assert.deepEqual(probe.cardView().bits.map((bit) => bit.text), ["Link turned off — not saving", "On the server · v4"]);
@@ -198,7 +198,7 @@ test("a recent file opens through the recent-files, handle and opening ports", a
   const h = harness();
   h.state.desktop = true;
   h.state.recent = [{ fileId: "f1", name: "Recent.splitpage", title: "Recent" }];
-  const mounted = __init(h.ports);
+  const mounted = startFileMenu(h.ports);
   try {
     mounted.toggleFileMenu(true);
     h.calls.length = 0;
@@ -225,7 +225,7 @@ test("a recent file whose read finishes after disposal is not opened", async () 
   h.state.recent = [{ fileId: "f1", name: "Recent.splitpage", title: "Recent" }];
   let release: () => void = () => {};
   const read = new Promise<void>((done) => { release = done; });
-  const mounted = __init({ ...h.ports, recentHandle: (entry: { readonly name: string }) => ({ getFile: async () => { await read; return new win.File(["file"], entry.name); } }) });
+  const mounted = startFileMenu({ ...h.ports, recentHandle: (entry: { readonly name: string }) => ({ getFile: async () => { await read; return new win.File(["file"], entry.name); } }) });
   mounted.toggleFileMenu(true);
   mounted.toggleSubmenu("recent", true);
   await settled();
@@ -240,7 +240,7 @@ test("a recent file whose read finishes after disposal is not opened", async () 
 test("disposal removes the menu's listeners and test probe and stops the controls", () => {
   page();
   const h = harness();
-  const mounted = __init(h.ports);
+  const mounted = startFileMenu(h.ports);
   mounted.dispose();
   mounted.dispose();
   assert.equal((win as unknown as { __fileMenuTest?: unknown }).__fileMenuTest, undefined);
@@ -251,7 +251,7 @@ test("disposal removes the menu's listeners and test probe and stops the control
   mounted.toggleFileMenu(true);
   assert.equal(mounted.fileMenuOpen(), false);
   assert.deepEqual(h.calls, []);
-  const next = __init(h.ports);
+  const next = startFileMenu(h.ports);
   try {
     win.document.getElementById("btn-file")?.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
     assert.equal(next.fileMenuOpen(), true);
@@ -276,7 +276,7 @@ test("the file menu's actions refuse while it is unmounted and reach the mounted
   try {
     assert.deepEqual(registry.list().map((definition) => definition.id), ["save", "save-as", "open", "close-file-menu", "new", "paste", "long-demo"]);
     for (const id of ["save", "save-as", "open", "new", "paste", "long-demo"]) assert.equal(registry.view(id, "menu")?.enabled, false, id);
-    owner = __init(h.ports);
+    owner = startFileMenu(h.ports);
     owner.toggleFileMenu(true);
     await registry.invoke("save", "menu");
     assert.equal(owner.fileMenuOpen(), false);

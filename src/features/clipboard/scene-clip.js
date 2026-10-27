@@ -392,7 +392,7 @@ export function insertScenes(clip, opts) {
   };
 }
 
-export function __init(given) {
+export function startSceneClip(given) {
   ports = given;
   liveCut = null;
   return { dispose: function () { liveCut = null; } };

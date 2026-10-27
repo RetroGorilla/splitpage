@@ -1,5 +1,5 @@
 import type { StampPorts, UndoPort } from "../application/session/ports.ts";
-import type { ReplayRunner } from "./session-bridge.ts";
+import type { SessionReplayRunner } from "./session-bridge.ts";
 import { absorbRemoteChange, adoptDocument, noteEdit, noteRemoteChange, routeUndoReplays } from "./undo-bridge.ts";
 
 export function createUndoAdapter(): UndoPort {
@@ -11,6 +11,6 @@ export function createUndoAdapter(): UndoPort {
   };
 }
 
-export function routeReplays(run: ReplayRunner, stamps: StampPorts, amend: ReplayRunner): () => void {
+export function routeReplays(run: SessionReplayRunner, stamps: StampPorts, amend: SessionReplayRunner): () => void {
   return routeUndoReplays(run, stamps, amend);
 }

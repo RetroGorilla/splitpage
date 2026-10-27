@@ -127,7 +127,7 @@ function onEditorBlur() {
   closeReadTimeEditor(true, true);
 }
 
-export function __init(given) {
+export function startReadTime(given) {
   ports = given;
   var offs = [];
   var disposed = false;

@@ -14,7 +14,7 @@ import type { TagCategoryId, TagName, TagStatusId } from "../document/tags.ts";
 import type { ValidatedDocument } from "../document/validated.ts";
 import { cuesInCell, editCues } from "../text/cues.ts";
 import { retag, setMark } from "../text/edits.ts";
-import type { CellRange } from "../text/edits.ts";
+import type { TextSpan } from "../text/edits.ts";
 import { toHtml } from "../text/html.ts";
 import { OBJ, namedTagId, tagIds, tagNameOf } from "../text/runs.ts";
 import type { Marks, Run } from "../text/runs.ts";
@@ -75,7 +75,7 @@ export type HealingPlan = { cues: CueSnapshot; count: number; retitle: CueRetitl
 
 export type QuickAddPlan = { remove: string[]; register: NewRegistryTag[]; added: number; removed: number };
 
-export type MediaTagWriter = (html: string, cell: readonly Run[], found: readonly CellRange[], cat: string, name: string) => string | null;
+export type MediaTagWriter = (html: string, cell: readonly Run[], found: readonly TextSpan[], cat: string, name: string) => string | null;
 
 export type TagWrite = { hits: number; html: FieldHtml };
 
@@ -425,9 +425,9 @@ function sameCmt(a: readonly string[] | undefined, b: readonly string[] | undefi
   return (a || []).join("\u0000") === (b || []).join("\u0000");
 }
 
-export function tagOccurrences(cell: readonly Run[] | null | undefined, phrase: unknown): CellRange[] {
+export function tagOccurrences(cell: readonly Run[] | null | undefined, phrase: unknown): TextSpan[] {
   const needle = foldCaseKeepLength(String(phrase == null ? "" : phrase));
-  const out: CellRange[] = [];
+  const out: TextSpan[] = [];
   if (!needle) return out;
   let text = "";
   const marks: (Marks | null)[] = [];
@@ -461,7 +461,7 @@ export function holdsMedia(html: FieldHtml): boolean {
 function writeTags(
   html: FieldHtml,
   cell: readonly Run[],
-  found: readonly CellRange[],
+  found: readonly TextSpan[],
   cat: string,
   name: unknown,
   writeMedia: MediaTagWriter
@@ -495,14 +495,14 @@ export function tagFieldOccurrences(
   const cell = decodeField(readers, html);
   let found = tagOccurrences(cell, phrase);
   if (countOnly) return { hits: found.length, html: html };
-  if (onlyOccurrence !== undefined) found = found[onlyOccurrence] ? [found[onlyOccurrence] as CellRange] : [];
+  if (onlyOccurrence !== undefined) found = found[onlyOccurrence] ? [found[onlyOccurrence] as TextSpan] : [];
   return writeTags(html, cell, found, cat, name, writeMedia);
 }
 
-function wholeWordHits(text: string, needle: string, matchCase: unknown): CellRange[] {
+function wholeWordHits(text: string, needle: string, matchCase: unknown): TextSpan[] {
   const hay = matchCase ? text : foldCaseKeepLength(text);
   const find = matchCase ? needle : foldCaseKeepLength(needle);
-  const out: CellRange[] = [];
+  const out: TextSpan[] = [];
   if (!find) return out;
   let at = hay.indexOf(find);
   while (at !== -1) {

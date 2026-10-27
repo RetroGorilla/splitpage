@@ -812,7 +812,7 @@ function buildSwatches() {
   });
 }
 
-export function __init(given) {
+export function startAnnotate(given) {
   ports = given;
   memory.color = { pen: ANNOTATION_COLORS[0], highlight: ANNOTATION_COLORS[1], text: ANNOTATION_COLORS[0] };
   var m = modal();

@@ -1,7 +1,8 @@
 import { createDocumentSession } from "../application/session/document-session.ts";
 import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView, Plan, ReloadedContent, Replay, SessionCounters, SessionListener, Stamp } from "../application/session/document-session.ts";
 import type { ChangeSet } from "../application/session/change-set.ts";
-import type { CapabilityPort, CellTextPorts, DocumentEntry, EditorPort, EffectPort, RecordsPlan, ReportPort, StampPorts, TimerPort, UndoPort } from "../application/session/ports.ts";
+import type { RecordsReconciler } from "../application/production/broll-records.ts";
+import type { CapabilityPort, CellTextPorts, DocumentEntry, EditorPort, EffectPort, ReportPort, StampPorts, TimerPort, UndoPort } from "../application/session/ports.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
 import type { LiveDocumentPort } from "../application/transitions/ports.ts";
 import { syncCommentAnchors } from "../core/text/anchors.ts";
@@ -9,13 +10,11 @@ import { systemClock } from "../adapters/identity/ids.ts";
 import { cellOf, scriptCellOf } from "./richtext.ts";
 import { documentGuardOn, documentView, unwrapped } from "./document-guard.ts";
 
-export type RecordsReconciler = (doc: ValidatedDocument, changes: ChangeSet) => RecordsPlan | null;
-
-export type ReplayRunner = (replay: Replay) => CommandOutcome;
+export type SessionReplayRunner = (replay: Replay) => CommandOutcome;
 
 export interface SessionUndoPorts {
   readonly adapter: UndoPort;
-  readonly route: (run: ReplayRunner, stamps: StampPorts, amend: ReplayRunner) => () => void;
+  readonly route: (run: SessionReplayRunner, stamps: StampPorts, amend: SessionReplayRunner) => () => void;
 }
 
 export interface SessionBridgePorts {

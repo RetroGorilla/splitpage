@@ -6,7 +6,7 @@ import { cellLength, projection } from "../../core/text/runs.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
-import type { Command, DeepReadonly, DocumentView, Plan, Refusal } from "../session/document-session.ts";
+import type { Command, DeepReadonly, DocumentView, Plan, CommandRefusal } from "../session/document-session.ts";
 import type { CellTextPorts } from "../session/ports.ts";
 
 export interface JoinPorts extends CellTextPorts {
@@ -131,7 +131,7 @@ export function joinScenesCommand(intoId: string, ports: JoinPorts): Command {
   return {
     name: "join-scenes",
     needs: "edit",
-    plan: function (doc): Plan | Refusal | null {
+    plan: function (doc): Plan | CommandRefusal | null {
       const at = doc.rows.findIndex(function (r) { return r.id === intoId; });
       const prev = doc.rows[at], cur = doc.rows[at + 1];
       if (!prev || !cur) return null;

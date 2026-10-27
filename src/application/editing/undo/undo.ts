@@ -1,10 +1,10 @@
-import type { Refusal, Replay, ReplayPlan } from "../../session/document-session.ts";
+import type { CommandRefusal, Replay, ReplayPlan } from "../../session/document-session.ts";
 import type { StampPorts } from "../../session/ports.ts";
 import { applySteps } from "../../../core/text/steps.ts";
 import type { Step } from "../../../core/text/steps.ts";
 import type { ValidatedDocument } from "../../../core/document/validated.ts";
 import { changedBetween, cosmetic as cosmeticFor, createUndoHistory, diffStates, planSteps, replayChanges, writePlanned } from "./history.ts";
-import type { CellMark, CellRuns, PreparedReplay, ReplayResult, StepResult, UndoEntry, UndoState } from "./history.ts";
+import type { CellMark, HtmlRunDecoder, PreparedReplay, ReplayResult, StepResult, UndoEntry, UndoState } from "./history.ts";
 
 export type UndoDirection = "undo" | "redo";
 
@@ -25,7 +25,7 @@ export type UndoResult = StepResult | { ok: false; reason: string };
 
 export interface UndoPorts {
   readonly held: () => ValidatedDocument | null;
-  readonly runs: CellRuns;
+  readonly runs: HtmlRunDecoder;
   readonly now: () => number;
   readonly cleared: (count: number) => void;
 }
@@ -183,7 +183,7 @@ export function createUndo(ports: UndoPorts): Undo {
   function replayTask(dir: UndoDirection, seen: { prepared: PreparedReplay | null; result: ReplayResult | null }): Replay {
     return {
       name: dir,
-      plan: function (doc): ReplayPlan | Refusal | null {
+      plan: function (doc): ReplayPlan | CommandRefusal | null {
         const state = asState(doc);
         const p = history.prepare(dir, state);
         seen.prepared = p;
@@ -244,7 +244,7 @@ export function createUndo(ports: UndoPorts): Undo {
   function foldTask(entry: UndoEntry | null | undefined, touches: (step: Step) => boolean, change: (draft: UndoState) => boolean): Replay {
     return {
       name: "fold",
-      plan: function (doc): ReplayPlan | Refusal | null {
+      plan: function (doc): ReplayPlan | CommandRefusal | null {
         const state = asState(doc);
         function hits(e: UndoEntry): boolean { return e.steps.some(touches); }
         const where = history.standing(entry, hits);

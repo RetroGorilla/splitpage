@@ -412,7 +412,7 @@ function wireMenu() {
   };
 }
 
-export function __init(given) {
+export function startFileMenu(given) {
   ports = given;
   var mounted = {};
   activeMount = mounted;

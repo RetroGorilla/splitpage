@@ -974,7 +974,7 @@ function lensDebug() {
   };
 }
 
-export function __init(given) {
+export function startRundown(given) {
   var strip = document.getElementById("rundown");
   var rowsEl = document.getElementById("rows");
   ports = given;

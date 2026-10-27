@@ -115,7 +115,7 @@ export function videoFirstFrame(file) {
   });
 }
 
-export function __init(next) {
+export function startSceneMedia(next) {
   ports = next;
   return {
     capturePastePlace: capturePastePlace,

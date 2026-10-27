@@ -1,5 +1,5 @@
 import { updateControls } from "./update.ts";
-import { __init as mountNewTab } from "../../features/newtab/newtab.js";
+import { startNewTab as mountNewTab } from "../../features/newtab/newtab.js";
 import type { NewTabMount, NewTabPorts } from "../../features/newtab/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runningOnDesktop } from "../../application/desktop-presence.ts";

@@ -11,7 +11,7 @@ import { saves as portSaves, ownership as portOwnership } from "./ports/saving.t
 import { deletion as portDeletion } from "./ports/production.ts";
 import { pictures as portPictures } from "./ports/pictures.ts";
 import { screen as portScreen } from "./ports/screen.ts";
-import { __init as mountCommentState } from "../../features/comments/comments.js";
+import { startComments as mountCommentState } from "../../features/comments/comments.js";
 import type { CommentStatePorts } from "../../features/comments/ports.ts";
 
 import { keepSnapshot } from "../../legacy/transition-bridge.ts";

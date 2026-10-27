@@ -366,7 +366,7 @@ function onPrefChanged(key) {
   if (settingsOpen()) renderSettings(key);
 }
 
-export function __init(given) {
+export function startSettings(given) {
   ports = given;
   var unhear = ports.elsewhere(onPrefChanged);
   var unsubscribe = ports.changes.onChange(function (change) {

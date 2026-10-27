@@ -1078,7 +1078,7 @@ function onTagMenuKeydown(e) {
   }
 }
 
-export function __init(nextPorts) {
+export function startTagPanels(nextPorts) {
   ports = nextPorts;
   tagEditPorts = {
     run: ports.edits.edit, read: ports.document.read, stamps: ports.edits.stamps,

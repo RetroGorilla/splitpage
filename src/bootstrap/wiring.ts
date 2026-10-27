@@ -65,7 +65,8 @@ import type { LegacyDraftPorts, LegacyRecoveryPorts } from "../legacy/recovery-b
 import { saveDestinations, startSaves } from "../legacy/save-bridge.ts";
 import type { LegacyAutoSavePorts, LegacySaveDestination, LegacySavePorts } from "../legacy/save-bridge.ts";
 import { liveDocumentPort, liveSession, startSessionBridge } from "../legacy/session-bridge.ts";
-import type { RecordsReconciler, SessionBridgePorts, SessionUndoPorts } from "../legacy/session-bridge.ts";
+import type { SessionBridgePorts, SessionUndoPorts } from "../legacy/session-bridge.ts";
+import type { RecordsReconciler } from "../application/production/broll-records.ts";
 import { captureOperation, documentSources, startTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import type { LegacyDocumentSource, LegacyTransitionPorts } from "../legacy/transition-bridge.ts";
 import { createUndoAdapter, routeReplays } from "../legacy/undo-adapter.ts";

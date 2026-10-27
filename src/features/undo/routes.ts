@@ -1,6 +1,6 @@
-export type UndoDirection = "undo" | "redo";
+import type { UndoDirection } from "../../application/editing/undo/undo.ts";
 
-export interface UndoHooks {
+export interface UndoRouteHooks {
   readonly commentsAreSent: () => boolean;
   readonly afterApply: (steps: readonly unknown[], dir: UndoDirection) => void;
   readonly onRefused: (reason: string | undefined, dir: UndoDirection) => void;
@@ -16,7 +16,7 @@ export interface UndoRoutePorts {
   readonly warn: (message: string) => void;
   readonly commentsAreSent: () => boolean;
   readonly afterReplay: (steps: readonly unknown[], dir: UndoDirection) => void;
-  readonly install: (hooks: UndoHooks) => () => void;
+  readonly install: (hooks: UndoRouteHooks) => () => void;
 }
 
 export interface UndoRoutesMount {

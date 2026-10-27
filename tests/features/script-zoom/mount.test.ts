@@ -53,7 +53,7 @@ function press(key: string): KeyboardEvent {
 
 test("the script zoom reads the view and runs its shortcuts only through its ports, and stops on dispose", () => {
   const { given, view, runner } = ports();
-  const owner = zoom.__init(given);
+  const owner = zoom.startScriptZoom(given);
   assert.equal(zoom.scriptScale(), 1.25);
   assert.equal(zoom.scriptViewActive(), true);
   view.prompter = true;
@@ -75,7 +75,7 @@ test("the script zoom reads the view and runs its shortcuts only through its por
 
 test("zoom follows named preference notices and reads changes elsewhere without storing them again", () => {
   const { given, preferences } = ports();
-  const owner = zoom.__init(given);
+  const owner = zoom.startScriptZoom(given);
   try {
     assert.equal(preferences.listenerCount(), 1);
     preferences.emit({ name: "rundownMin", value: "1", elsewhere: false });
@@ -109,7 +109,7 @@ test("zoom follows named preference notices and reads changes elsewhere without 
 
 test("zoom disposes its subscription, animation frames and readout before a fresh mount", () => {
   const first = ports();
-  const owner = zoom.__init(first.given);
+  const owner = zoom.startScriptZoom(first.given);
   zoom.setScriptScale(1.5, { now: true });
   zoom.stepScriptScale(1);
   assert.equal(frames.size, 2);
@@ -120,7 +120,7 @@ test("zoom disposes its subscription, animation frames and readout before a fres
   assert.equal(first.preferences.listenerCount(), 0);
   assert.equal(win.document.getElementById("script-zoom-readout"), null);
   const next = ports();
-  const mounted = zoom.__init(next.given);
+  const mounted = zoom.startScriptZoom(next.given);
   try {
     owner.dispose();
     assert.equal(next.preferences.listenerCount(), 1);
@@ -138,9 +138,9 @@ test("zoom action definitions refuse unmounted features and follow the current o
   const runner = fakeActions(registry);
   const view = fakeScreen();
   const preferences = fakePreferences();
-  const holder: { current: ReturnType<typeof zoom.__init> | null } = { current: null };
+  const holder: { current: ReturnType<typeof zoom.startScriptZoom> | null } = { current: null };
   const stop = registerAll(registry, scriptZoomActions(() => holder.current));
-  const mount = (): ReturnType<typeof zoom.__init> => zoom.__init({
+  const mount = (): ReturnType<typeof zoom.startScriptZoom> => zoom.startScriptZoom({
     screen: view.screen, actions: runner.actions, scale: preferences.preferences, changes: preferences.changes
   });
   try {

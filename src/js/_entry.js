@@ -1,7 +1,7 @@
 import { mountPageEntry } from "../bootstrap/wiring.ts";
 import { __init as init_02b_doc_id } from "./02b-doc-id.js";
-import { __init as init_02c_blobs } from "../adapters/storage/02c-blobs.js";
-import { __init as init_02d_gallery } from "../adapters/storage/02d-gallery.js";
+import { startBlobs as init_02c_blobs } from "../adapters/storage/02c-blobs.js";
+import { startGalleryStore as init_02d_gallery } from "../adapters/storage/02d-gallery.js";
 import { __init as init_03_sync } from "./03-sync.js";
 import { __init as init_03a_history_store } from "./03a-history-store.js";
 import { __init as init_05_render } from "./05-render.js";

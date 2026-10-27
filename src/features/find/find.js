@@ -451,7 +451,7 @@ export function leaveFindAtMatch() {
   sel.addRange(hit.range);
 }
 
-export function __init(given) {
+export function startFind(given) {
   ports = given;
   var disposed = false;
   return {

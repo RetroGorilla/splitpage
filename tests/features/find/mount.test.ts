@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mountFind } from "../../../src/features/find/mount.ts";
-import type { FindPorts } from "../../../src/features/find/mount.ts";
+import type { FindBarEvents } from "../../../src/features/find/mount.ts";
 import { jsdomWindow } from "../editing/jsdom.mjs";
 
 type Realm = Window & typeof globalThis;
@@ -24,7 +24,7 @@ function harness() {
   const state = { matchCase: false, bulk: false };
   const queryStates: string[] = [];
   const log = (name: string) => (): void => { calls.push(name); };
-  const ports: FindPorts = {
+  const ports: FindBarEvents = {
     closeFindBar: log("close"), stepFind: (direction) => { calls.push("step:" + direction); },
     replaceCurrent: log("replace"), replaceAll: log("replace-all"), toggleBulkTag: log("toggle"),
     runBulkTag: log("run"), closeBulkTag: () => { calls.push("close-bulk"); state.bulk = false; },

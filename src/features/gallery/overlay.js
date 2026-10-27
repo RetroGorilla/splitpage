@@ -645,7 +645,7 @@ function onZoomPointerUp(e) {
   zoomStage().classList.remove("is-dragging");
 }
 
-export function __init(given) {
+export function startGalleryOverlay(given) {
   ports = given;
   view = null;
   returnFocus = null;

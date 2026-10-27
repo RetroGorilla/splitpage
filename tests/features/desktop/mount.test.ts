@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { __init } from "../../../src/features/desktop/desktop.js";
+import { startDesktopView } from "../../../src/features/desktop/desktop.js";
 import { desktopActions } from "../../../src/features/desktop/actions.ts";
-import type { DesktopMount, DesktopPorts, DocumentOpening } from "../../../src/features/desktop/ports.ts";
+import type { DesktopMount, DesktopPorts, DesktopOpening } from "../../../src/features/desktop/ports.ts";
 import type { DesktopOpenedFile, DesktopReassign, DesktopRestoreNotice, DesktopServerDoc, DesktopServerRoute } from "../../../src/application/desktop/shell.ts";
 import { fakeActions, fakeNotices, fakeScreen } from "../fakes.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
@@ -17,7 +17,7 @@ realm.window = win;
 realm.document = win.document;
 
 function mount(ports: DesktopPorts): DesktopMount {
-  return __init(ports) as DesktopMount;
+  return startDesktopView(ports) as DesktopMount;
 }
 
 async function settled() {
@@ -35,7 +35,7 @@ function harness(start: { running?: boolean; intent?: string; doc?: boolean; hos
   } = {};
   const log: string[] = [];
   const routed: DesktopServerRoute[] = [];
-  const opened: DocumentOpening[] = [];
+  const opened: DesktopOpening[] = [];
   const state = { running: start.running ?? true, doc: start.doc ?? true, unsaved: false, menuTaken: false, reassigned: true };
   const shell = {
     launchIntent: { type: start.intent ?? "blank" },

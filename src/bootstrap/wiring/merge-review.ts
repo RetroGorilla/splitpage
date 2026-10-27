@@ -1,4 +1,4 @@
-import { __init as mountMergeReview } from "../../features/merge/local-merge.js";
+import { startLocalMerge as mountMergeReview } from "../../features/merge/local-merge.js";
 import type { MergeReviewControl, MergeReviewMount, MergeReviewPorts } from "../../features/merge/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { parseProjectFileState } from "../../adapters/formats/project-file.ts";

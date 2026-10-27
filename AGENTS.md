@@ -30,13 +30,13 @@ A feature never imports another feature. To reach one, it runs that feature's ac
 
 ## Finding your way for a feature change
 
-For feature `X`, read in this order and stop when you have enough:
+Start with [feature-map.md](docs/architecture/feature-map.md). It lists, for every feature folder, its files, its wiring, the shared ports that wiring uses, its actions and its tests. Then, for feature `X`, read in this order and stop when you have enough:
 
 1. `src/features/X/` (logic, `ports.ts`, `actions.ts`, `mount.ts`) and its tests (`src/features/X/*.test.ts`, `tests/features/X/`).
 2. `src/bootstrap/wiring/X.ts`: which real owner each port field comes from.
 3. The port module or owner it names, under `src/bootstrap/wiring/ports/` or `src/application/`.
 
-Changing logic inside a feature is normally one file. Giving a feature a new dependency means its `ports.ts`, its wiring file, its tests and the fake in `tests/features/fakes.ts`.
+A moved feature file starts through `start<Name>(ports)`, such as `startFind` in `find.js`. Changing logic inside a feature is normally one file. Giving a feature a new dependency means its `ports.ts`, its wiring file, its tests and the fake in `tests/features/fakes.ts`.
 
 ## Hard rules
 
@@ -48,9 +48,10 @@ These come from the maintainer. Each one has been broken by an agent before.
 4. **No compatibility re-exports.** When something moves, update every importer. Do not leave a file that re-exports the old name. The single exception is the named mount re-exports in `src/bootstrap/wiring.ts` that `_entry.js` uses.
 5. **Features take named ports.** Build ports from `src/bootstrap/wiring/ports/` and owner types narrowed with `Pick`; never copy a file's old import list into a port: [feature-ports.md, Rule 2](docs/architecture/feature-ports.md#rule-2-a-port-is-built-from-shared-ports-owner-types-and-the-features-own-needs).
 6. **Stay in scope.** No features nobody asked for. Side fixes only for data loss, a crash, or something that blocks the task.
-7. **Baselines only shrink.** `tools/dep-baseline.json` and `tools/comment-baseline.json` may lose entries (`--prune`), never gain them.
-8. **Read the invariants before touching saving, merging, history, undo or the document format.** [HANDOFF.md](HANDOFF.md) and [invariants.md](docs/architecture/invariants.md). Several tests exist only to hold them in place.
-9. **PR titles and bodies name no AI model or tool.**
+7. **One name per exported type.** Two modules may not export a type or interface with the same name. Import the existing one when it means the same thing, otherwise pick a name that says the difference. `tools/test-code-map.mjs` enforces this.
+8. **Baselines only shrink.** `tools/dep-baseline.json` and `tools/comment-baseline.json` may lose entries (`--prune`), never gain them.
+9. **Read the invariants before touching saving, merging, history, undo or the document format.** [HANDOFF.md](HANDOFF.md) and [invariants.md](docs/architecture/invariants.md). Several tests exist only to hold them in place.
+10. **PR titles and bodies name no AI model or tool.**
 
 ## Checking your work
 
@@ -62,7 +63,10 @@ npm run typecheck                         # about 30 s
 npm run check:deps                        # about 7 s
 npm run check:comments
 npm run lint                              # about 45 s
+node tools/code-map.mjs                   # feature map current, type names unique
 ```
+
+When you add, move or delete a file under `src/features/`, a wiring file or an action, run `node tools/code-map.mjs --write` and commit the regenerated `docs/architecture/feature-map.md`.
 
 Before you push, run the full gate once: `npm run verify` (lint, types, both gates, build, every unit test). The unit tests alone take about 10 minutes, so do not run the full suite after every edit.
 

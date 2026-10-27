@@ -486,7 +486,7 @@ function onDocMouseDown(e) {
   if (sel) clearSceneSelection();
 }
 
-export function __init(given) {
+export function startSceneSelect(given) {
   ports = given;
   track = null;
   sel = null;
