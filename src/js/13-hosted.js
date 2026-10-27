@@ -26,7 +26,7 @@ import { migrateRows } from "../legacy/document-ports.ts";
 import {
   copyDocHistorySafe,
   migrateDocument
-} from "./02b-doc-id.js";
+} from "../legacy/document-identity-bridge.ts";
 import {
   setBaseState
 } from "./03-sync.js";

@@ -1,7 +1,13 @@
+import "./_identity-started.mjs";
+import { documentIdentityOwner } from "../bootstrap/wiring/document-identity.ts";
 import "./_production-tags-started.mjs";
 import { installProjectFileServices, projectFileServicesStarted } from "../application/formats/project-file-services.ts";
 import { wireProjectFiles } from "../bootstrap/wiring/project-files.ts";
-import { adoptRestoredState, docIdEvents, initDocIdentityChannel, migrateDocument, reassignDocId, standaloneHtmlFor } from "../js/02b-doc-id.js";
+import { adoptRestoredState, migrateDocument } from "../bootstrap/startup/document-entry.js";
+import { standaloneHtmlFor } from "../adapters/page/standalone-html.js";
+const docIdEvents = (...args) => documentIdentityOwner().docIdEvents(...args);
+const initDocIdentityChannel = (...args) => documentIdentityOwner().initDocIdentityChannel(...args);
+const reassignDocId = (...args) => documentIdentityOwner().reassignDocId(...args);
 import { setBaseState } from "../js/03-sync.js";
 import { tagFieldOccurrences } from "../features/tags/production-tags.js";
 

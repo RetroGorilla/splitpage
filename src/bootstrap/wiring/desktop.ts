@@ -12,7 +12,7 @@ import { desktopActions as definitions } from "../../features/desktop/actions.ts
 import { startDesktopView as mountDesktop } from "../../features/desktop/desktop.js";
 import type { DesktopMount, DesktopPorts } from "../../features/desktop/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { reassignDocId } from "../../js/02b-doc-id.js";
+import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { pointTabAt } from "../../js/13-hosted.js";
 import { awaitHandedDocument, handDesktopTo, handedDocumentSettled, legacyDesktopDocumentPorts, notifyDesktopDocumentState, startDesktopDocumentState } from "../../legacy/desktop-bridge.ts";
 import { checkServer, serverStatus, setHome } from "../../legacy/location-bridge.ts";
@@ -54,7 +54,7 @@ function desktopPorts(): DesktopPorts {
     startup: portStartup,
     actions: portActions,
     flushDraft: flushDraftNow,
-    reassignDocId: (toId, message) => reassignDocId(toId, message),
+    reassignDocId: (toId, message) => documentIdentity.reassignDocId(toId, message),
     documentState: { notify: notifyDesktopDocumentState, settled: handedDocumentSettled, awaitHanded: awaitHandedDocument },
     menuCommands: { run: runMenuCommand }
   };

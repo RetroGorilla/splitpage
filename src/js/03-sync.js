@@ -16,7 +16,7 @@ import { fromHtml } from "../legacy/richtext.ts";
 import {
   adoptRestoredState,
   noteMergedDocId
-} from "./02b-doc-id.js";
+} from "../legacy/document-identity-bridge.ts";
 import {
   captureSnapshot,
   getHistorySnapshot,

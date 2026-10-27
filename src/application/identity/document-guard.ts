@@ -1,17 +1,5 @@
 export const DOCUMENT_GUARD_PARAM = "document-guard";
 
-export function documentGuardAsked(search: string): boolean {
-  return new URLSearchParams(search).get(DOCUMENT_GUARD_PARAM) === "1";
-}
-
-function askedAtStart(): boolean {
-  try {
-    return documentGuardAsked(location.search);
-  } catch {
-    return false;
-  }
-}
-
 export class DocumentWriteError extends TypeError {
   constructor(key: PropertyKey) {
     super("The document is read-only outside a session command: a write to " + String(key) + " was refused");
@@ -19,15 +7,16 @@ export class DocumentWriteError extends TypeError {
   }
 }
 
+export function createDocumentGuard(enabled: boolean, report: (error: unknown) => void) {
 let quiet = 0;
 
 function refuse(key: PropertyKey): never {
   const error = new DocumentWriteError(key);
-  if (!quiet) console.error(error);
+  if (!quiet) report(error);
   throw error;
 }
 
-export function quietly<T>(run: () => T): T {
+function quietly<T>(run: () => T): T {
   quiet++;
   try {
     return run();
@@ -61,7 +50,7 @@ const READ_ONLY: ProxyHandler<object> = {
   preventExtensions: function () { return refuse("its extensibility"); }
 };
 
-export function viewOf<T>(value: T): T {
+function viewOf<T>(value: T): T {
   if (!isObject(value) || raws.has(value) || typeof value === "function") return value;
   let view = views.get(value);
   if (!view) {
@@ -72,11 +61,11 @@ export function viewOf<T>(value: T): T {
   return view as T;
 }
 
-export function isDocumentView(value: unknown): boolean {
+function isDocumentView(value: unknown): boolean {
   return isObject(value) && raws.has(value);
 }
 
-export function rawOf<T>(value: T): T {
+function rawOf<T>(value: T): T {
   if (!isObject(value)) return value;
   const raw = raws.get(value);
   return (raw ?? value) as T;
@@ -105,8 +94,23 @@ function same<T>(value: T): T {
   return value;
 }
 
-export const documentGuardOn: boolean = askedAtStart();
 
-export const documentView: <T>(doc: T) => T = documentGuardOn ? viewOf : same;
+  const documentGuardOn = enabled;
+  return { documentGuardOn, documentView: documentGuardOn ? viewOf : same, unwrapped: documentGuardOn ? unwrapAll : same, quietly, rawOf, isDocumentView };
+}
 
-export const unwrapped: <T>(value: T) => T = documentGuardOn ? unwrapAll : same;
+let started: ReturnType<typeof createDocumentGuard> | null = null;
+export let documentGuardOn = false;
+
+export function startDocumentGuard(enabled: boolean, report: (error: unknown) => void): () => void {
+  const mine = createDocumentGuard(enabled, report);
+  started = mine;
+  documentGuardOn = mine.documentGuardOn;
+  return () => { if (started === mine) { started = null; documentGuardOn = false; } };
+}
+
+export function documentView<T>(doc: T): T { return started ? started.documentView(doc) : doc; }
+export function unwrapped<T>(value: T): T { return started ? started.unwrapped(value) : value; }
+export function quietly<T>(run: () => T): T { return started ? started.quietly(run) : run(); }
+export function rawOf<T>(value: T): T { return started ? started.rawOf(value) : value; }
+export function isDocumentView(value: unknown): boolean { return started ? started.isDocumentView(value) : false; }

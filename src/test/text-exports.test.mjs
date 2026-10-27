@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { withPageHead } from "../js/02b-doc-id.js";
+import { withPageHead } from "../core/document/ids.ts";
 import { cellOf } from "../legacy/richtext.ts";
 import { toPlainText } from "../core/text/projections.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";

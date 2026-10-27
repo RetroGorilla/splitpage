@@ -7,7 +7,7 @@ import { productionReaders, withDocumentPorts } from "../../src/legacy/document-
 import { STATE_FIELDS } from "../../src/core/merge/state-fields.ts";
 import { migrateRows } from "../../src/legacy/document-ports.ts";
 import * as state from "../../src/legacy/document-ports.ts";
-import { loadInitialState, migrateDocument } from "../../src/js/02b-doc-id.js";
+import { loadInitialState, migrateDocument } from "../../src/bootstrap/startup/document-entry.js";
 import { dataUrlForSync, has, inlineStateImages, recordFor, setBackend } from "../../src/adapters/storage/02c-blobs.js";
 import { createHash } from "node:crypto";
 import { mergeStates } from "../../src/legacy/merge-bridge.ts";

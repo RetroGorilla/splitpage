@@ -1,3 +1,9 @@
+import { documentGuardAsked } from "../adapters/page/document-guard-query.ts";
+import { documentIdentityOwner, documentIdentityPort } from "./wiring/document-identity.ts";
+import { migrateDocument, adoptRestoredState } from "./startup/document-entry.js";
+import { standaloneHtmlFor } from "../adapters/page/standalone-html.js";
+import { stopDocumentIdentityOwner } from "./wiring/document-identity.ts";
+import { startDocumentGuard } from "../application/identity/document-guard.ts";
 import { stopHistoryOwner } from "./wiring/history.ts";
 export { mountRowsRenderFeature } from "./wiring/render.ts";
 export { mountProductionTagsFeature } from "./wiring/production-tags.ts";
@@ -374,15 +380,16 @@ function drain(disposers: (() => void)[]): unknown[] {
   return failures;
 }
 
-export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFiles" | "effects" | "saves" | "refresh" | "bulkTags"> & { readonly bulkTags: Pick<BulkTagPorts, "stamp">; readonly projectFiles: Omit<ProjectFileDeferredPorts, "tagOccurrences">; readonly fileSaving: FileSavingDeferredPorts }): Wiring {
+export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFiles" | "effects" | "saves" | "refresh" | "bulkTags" | "transitions"> & { readonly transitions: Omit<TransitionDeps, "identity">; readonly bulkTags: Pick<BulkTagPorts, "stamp">; readonly projectFiles: Pick<ProjectFileDeferredPorts, "replaceSyncBase">; readonly fileSaving: Pick<FileSavingDeferredPorts, "setBaseline"> }): Wiring {
   const tags = wireTagProduction();
-  const fileSaving = wireFileSaving(deps.fileSaving);
+  const fileSaving = wireFileSaving({ ...deps.fileSaving, copyHistory: (from, to) => documentIdentityOwner().copyDocHistorySafe(from, to), syncIdentity: () => documentIdentityOwner().syncDocIdentity() });
   return wireApp({
     ...deps,
+    transitions: { ...deps.transitions, identity: documentIdentityPort },
     effects: sessionEffects(),
     refresh: tags.refresh,
     bulkTags: { cell: tags.bulkCell, stamp: deps.bulkTags.stamp },
-    projectFiles: () => wireProjectFiles({ ...deps.projectFiles, tagOccurrences: tags.tagOccurrences }).services,
+    projectFiles: () => wireProjectFiles({ ...deps.projectFiles, prepareDocument: migrateDocument, restoreDocument: adoptRestoredState, changeDocumentId: (to, options) => documentIdentityOwner().reassignDocId(to, options), identityEvents: () => documentIdentityOwner().docIdEvents(), connectIdentity: (factory) => documentIdentityOwner().initDocIdentityChannel(factory), standaloneHtml: standaloneHtmlFor, tagOccurrences: tags.tagOccurrences }).services,
     saves: fileSaving.savePorts,
     sources: () => { const sources = [...deps.sources()]; sources.splice(1, 0, importDocumentSource()); return sources; },
     destinations: () => [fileSaving.destination(), ...deps.destinations()],
@@ -418,12 +425,14 @@ export function wireApp(deps: WiringDeps): Wiring {
   }, (stop) => stop);
   build("session", () => {
     const stopIndex = wireProductionIndex(deps.bulkTags);
+    const stopGuard = startDocumentGuard(documentGuardAsked(window.location.search), console.error);
     try {
       const stopSession = startSessionBridge(legacySessionPorts(deps));
       return () => {
-        try { stopSession(); } finally { stopIndex(); }
+        try { stopSession(); } finally { stopGuard(); stopIndex(); }
       };
     } catch (error) {
+      stopGuard();
       stopIndex();
       throw error;
     }
@@ -434,6 +443,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("document sources", () => registerSources(checkedSources(deps.sources())), (drop) => drop);
   build("merge", () => startMerge(checkedMerge(deps.merge())), (stop) => stop);
   build("recovery", () => startRecovery(checkedRecovery(deps.recovery())), (stop) => stop);
+  disposers.push(stopDocumentIdentityOwner);
   disposers.push(stopHistoryOwner);
   build("editor", () => startEditor(liveDocumentPort), (stop) => stop);
   build("production editing", () => wireProductionEditing(deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
@@ -465,3 +475,5 @@ export { mountPrompterRuntimeFeature } from "./wiring/prompter.ts";
 export { mountWriterRuntimeFeature } from "./wiring/writer.ts";
 
 export { mountHistoryOwner } from "./wiring/history.ts";
+
+export { mountDocumentIdentityOwner } from "./wiring/document-identity.ts";

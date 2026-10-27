@@ -12,7 +12,7 @@ import { loadLastFileHandle, rememberLastFileHandle } from "../adapters/files/la
 import {
   standaloneHtmlFor,
   syncDocIdentity
-} from "./02b-doc-id.js";
+} from "../legacy/document-identity-bridge.ts";
 import { stampRow } from "./03-sync.js";
 import { beginBusy, endBusy, withBusyBar } from "../features/notices/busy.js";
 import { resetProductionPanelState } from "../legacy/production-editing-bridge.ts";
