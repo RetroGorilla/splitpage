@@ -226,7 +226,8 @@ export function heldDocument(): ValidatedDocument | null {
 }
 
 export function currentDocument(): ValidatedDocument | null {
-  return documentView(heldDocument());
+  const doc = heldDocument();
+  return doc === null ? null : documentView(doc);
 }
 
 

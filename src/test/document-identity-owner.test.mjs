@@ -143,3 +143,26 @@ test("the numbered bridge refuses outside its hand-off lifetime", () => {
   assert.throws(bridgeSync, /not started yet/);
   stop();
 });
+
+for (const completion of ["failure result", "rejection"]) {
+  test("a stopped identity ignores a late history-copy " + completion + " after restart", async () => {
+    const f = fake();
+    const stop = f.owner.startIdentity(f.ports);
+    let resolveCopy, rejectCopy;
+    f.copy(() => new Promise((resolve, reject) => { resolveCopy = resolve; rejectCopy = reject; }));
+    assert.equal(f.owner.copyDocHistorySafe(A, B), undefined);
+    stop();
+    const stopNext = f.owner.startIdentity(f.ports);
+    f.log.length = 0;
+    if (completion === "failure result") resolveCopy({ ok: false });
+    else rejectCopy(new Error("late copy failure"));
+    await Promise.resolve();
+    assert.deepEqual(f.log, []);
+    assert.deepEqual(f.owner.docIdEvents(), []);
+    f.copy(() => Promise.resolve({ ok: false }));
+    assert.equal(f.owner.copyDocHistorySafe(A, B), undefined);
+    await Promise.resolve();
+    assert.equal(f.log.filter(([kind]) => kind === "toast").length, 1);
+    stopNext();
+  });
+}
