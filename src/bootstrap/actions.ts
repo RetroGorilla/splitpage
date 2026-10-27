@@ -1,3 +1,4 @@
+import { prompterActions } from "./wiring/prompter.ts";
 import { importActions } from "./wiring/imports.ts";
 import { commandMenuActions } from "./wiring/command-menu.ts";
 import { tagPanelActions } from "./wiring/production.ts";
@@ -47,7 +48,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     },
     () => {
       const views = viewActions();
-      return registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...views]);
+      return registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...views, ...prompterActions()]);
     },
     () => {
       const menu = helpMenuActions();

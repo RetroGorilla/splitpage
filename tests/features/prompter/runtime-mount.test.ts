@@ -1,0 +1,136 @@
+import { dom } from "../../../src/test/_dom.mjs";
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { startPrompter } from "../../../src/features/prompter/prompter.js";
+import { migrateRows } from "../../../src/core/migrate.ts";
+import { fakeMigration } from "../../core/migrate-ports.ts";
+import { fakePrompterPorts } from "../fakes.ts";
+
+const realm = globalThis as unknown as Record<string, unknown>;
+const win = dom.window;
+realm.location = win.location;
+realm.history = win.history;
+realm.requestAnimationFrame = () => 1;
+realm.cancelAnimationFrame = () => {};
+const page = readFileSync(new URL("../../../src/page.html", import.meta.url), "utf8");
+
+function harness() {
+  dom.reconfigure({ url: "https://splitpage.test/" });
+  win.document.documentElement.innerHTML = page;
+  const doc = migrateRows({ title: "Reading", rows: [{ id: "r1", audioText: "First scene." }, { id: "r2", audioText: "Second scene.", status: "shot" }] }, fakeMigration().ports);
+  return fakePrompterPorts(doc);
+}
+
+test("prompter runtime uses fake document, preferences, panels and tag container ports", () => {
+  const h = harness();
+  h.flags.prompterMirror = true;
+  const runtime = startPrompter(h.ports);
+  try {
+    assert.equal(runtime.mirror(), true);
+    runtime.openPrompter();
+    assert.equal(h.state.open, true);
+    assert.equal(document.getElementById("prompter")?.hidden, false);
+    assert.equal(document.querySelectorAll("#prompter-content .w").length, 4);
+    assert.equal(h.calls.findIndex(call => call[0] === "closeAll") < h.calls.findIndex(call => call[0] === "setOpen"), true);
+    runtime.setSkipShot(true);
+    runtime.buildPrompterContent();
+    assert.equal(document.querySelectorAll("#prompter-content .w").length, 2);
+    runtime.setPrompterFlip(true);
+    assert.equal(h.flags.prompterFlip, true);
+    assert.equal(document.getElementById("prompter-scroll")?.classList.contains("flip"), true);
+    const click = (): void => {};
+    const stop = runtime.wireTagEntityContainer("production-panel", click);
+    assert.deepEqual(h.calls.at(-1), ["installTagEntityContainer", "production-panel", click]);
+    stop();
+    assert.deepEqual(h.calls.at(-1), ["removeTagEntityContainer", "production-panel"]);
+    runtime.closePrompter();
+    assert.equal(h.state.open, false);
+    assert.equal(document.getElementById("prompter")?.hidden, true);
+  } finally {
+    runtime.dispose();
+  }
+});
+
+test("prompter runtime disposal stops playback and releases a wake lock that arrives late", async () => {
+  const h = harness();
+  const runtime = startPrompter(h.ports);
+  let finish: (value: { release: () => Promise<void> }) => void = () => {};
+  let released = 0;
+  const pending = new Promise<{ release: () => Promise<void> }>(resolve => { finish = resolve; });
+  const prior = Object.getOwnPropertyDescriptor(navigator, "wakeLock");
+  Object.defineProperty(navigator, "wakeLock", { configurable: true, value: { request: () => pending } });
+  try {
+    h.state.open = true;
+    runtime.setPrompterPlaying(true);
+    runtime.acquireWakeLock();
+    runtime.dispose();
+    assert.equal(h.state.playing, false);
+    assert.equal(h.state.voice, false);
+    finish({ release: async () => { released++; } });
+    await pending;
+    await Promise.resolve();
+    assert.equal(released, 1);
+    runtime.dispose();
+  } finally {
+    if (prior) Object.defineProperty(navigator, "wakeLock", prior);
+    else Reflect.deleteProperty(navigator, "wakeLock");
+  }
+});
+
+test("prompter launch keeps parse, transition arguments and opening order without awaiting the transition", async () => {
+  const h = harness();
+  const priorFetch = globalThis.fetch;
+  realm.fetch = async () => ({ ok: true, json: async () => ({ name: "Reading.splitpage", text: "script" }) });
+  let transitionStarted = false;
+  const runtime = startPrompter({ ...h.ports, opening: { open: (source: unknown) => { transitionStarted = true; h.calls.push(["open", source]); return new Promise(() => {}); } } });
+  try {
+    const hooks = win as unknown as { __prompterTest: { launchFromScript: (token: string) => Promise<boolean> } };
+    assert.equal(await hooks.__prompterTest.launchFromScript("token"), true);
+    assert.equal(transitionStarted, true);
+    const parsed = h.calls.find(call => call[0] === "parse");
+    const opened = h.calls.find(call => call[0] === "open");
+    assert.ok(parsed);
+    assert.ok(opened);
+    assert.deepEqual(opened[1], { kind: "file", file: parsed[1], handle: null, parsed: { state: h.reader.document.current(), kind: "splitpage", docIdEmbedded: true }, options: { skipSnapshot: true, silent: true } });
+    assert.equal(h.calls.indexOf(parsed) < h.calls.indexOf(opened), true);
+    assert.equal(h.calls.indexOf(opened) < h.calls.findIndex(call => call[0] === "close"), true);
+    assert.equal(h.state.open, true);
+    runtime.closePrompter();
+  } finally {
+    runtime.dispose();
+    globalThis.fetch = priorFetch;
+  }
+});
+
+test("prompter startup waits for readiness before fetching the desktop script", async () => {
+  const h = harness();
+  const token = "a".repeat(64);
+  dom.reconfigure({ url: "https://splitpage.test/?teleprompter=1#script=" + token });
+  let ready: () => void = () => {};
+  const pending = new Promise<void>(resolve => { ready = resolve; });
+  const priorFetch = globalThis.fetch;
+  let requested = "";
+  realm.fetch = async (url: string) => {
+    requested = url;
+    return { ok: true, json: async () => ({ name: "Reading.splitpage", text: "script" }) };
+  };
+  const runtime = startPrompter({ ...h.ports, startup: { ready: () => pending } });
+  try {
+    await Promise.resolve();
+    assert.equal(requested, "");
+    assert.equal(h.state.open, false);
+    assert.equal(h.calls.some(call => call[0] === "skipOnboarding"), true);
+    ready();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(requested, "prompter-script/" + token);
+    assert.equal(h.state.open, true);
+    runtime.closePrompter();
+  } finally {
+    ready();
+    runtime.dispose();
+    globalThis.fetch = priorFetch;
+    win.sessionStorage.clear();
+    dom.reconfigure({ url: "https://splitpage.test/" });
+  }
+});

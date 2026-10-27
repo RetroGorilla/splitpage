@@ -6,7 +6,6 @@ const REPO = fileURLToPath(new URL("../../", import.meta.url));
 export const CONFIGURATION = Object.freeze({
   "src/legacy/export-kit-bridge.ts": { functions: ["startExportKit"] },
   "src/bootstrap/wiring/export-kit.ts": { functions: ["wireExportKit"] },
-  "src/legacy/tag-entity-container.ts": { functions: ["installTagEntityContainerFactory"] },
   "src/legacy/session-bridge.ts": { functions: ["startSessionBridge", "onDocumentReplaced", "onSessionChange", "onRefresh", "onStamped"] },
   "src/legacy/undo-adapter.ts": { functions: ["routeReplays"] },
   "src/legacy/undo-bridge.ts": { functions: ["startUndo", "configureUndo", "routeUndoReplays"] },
@@ -43,6 +42,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/onboarding.ts": { functions: ["mountOnboardingFeature"] },
   "src/bootstrap/wiring/drafts.ts": { functions: ["mountDraftsFeature"] },
   "src/bootstrap/wiring/desktop.ts": { functions: ["mountDesktopFeature", "startDesktopShell", "routeServerOpen"] },
+  "src/bootstrap/wiring/prompter.ts": { functions: ["mountPrompterRuntimeFeature"] },
   "src/bootstrap/wiring/help.ts": { functions: ["mountHelpFeature"] },
   "src/bootstrap/wiring/command-menu.ts": { functions: ["mountCommandMenuFeature"] },
   "src/bootstrap/wiring/settings.ts": { functions: ["mountSettingsFeature"] },

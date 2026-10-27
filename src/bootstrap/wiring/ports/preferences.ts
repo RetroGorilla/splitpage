@@ -82,3 +82,11 @@ export const updatePreferences: Pick<Preferences, "desktopNoticeDismissed" | "di
   desktopNoticeDismissed: () => preferences().desktopNoticeDismissed(),
   dismissDesktopNotice: () => preferences().dismissDesktopNotice()
 };
+
+export const prompterPreferences: Pick<Preferences, "prompterFlag" | "setPrompterFlag" | "skipOnboardingForPrompter"> = {
+  prompterFlag: (name) => preferences().prompterFlag(name),
+  setPrompterFlag: (name, value) => preferences().setPrompterFlag(name, value),
+  skipOnboardingForPrompter: () => preferences().skipOnboardingForPrompter()
+};
+
+export const prompterView: Pick<ViewFlags, "hideShot"> = { hideShot: () => viewFlags().hideShot() };

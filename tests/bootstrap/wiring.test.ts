@@ -31,7 +31,7 @@ import { recoveryStarted } from "../../src/legacy/recovery-bridge.ts";
 import { mergeStarted } from "../../src/legacy/merge-bridge.ts";
 import type { LegacyMergePorts } from "../../src/legacy/merge-bridge.ts";
 import { requestSave, savesStarted, savesWaiting } from "../../src/legacy/save-bridge.ts";
-import { startupReady } from "../../src/legacy/startup-bridge.ts";
+import { startupReady } from "../../src/application/startup-signal.ts";
 import type { LegacySaveJob, LegacySavePorts } from "../../src/legacy/save-bridge.ts";
 import type { SaveOutcome, WriterResult } from "../../src/application/save/coordinator.ts";
 import {

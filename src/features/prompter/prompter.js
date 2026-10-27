@@ -1,35 +1,11 @@
-import { createTagEntityContainer } from "../legacy/tag-entity-container.ts";
-import {
-  prompterIsOpen,
-  prompterSkipsShot,
-  setPrompterOpen,
-  setPrompterPlayingFlag,
-  setVoiceFollowing,
-  voiceIsFollowing
-} from "../application/prompter-state.ts";
-import { serverHomeId } from "../legacy/location-bridge.ts";
-import { SpeechRecognitionCtor } from "../adapters/page/speech-recognition.js";
-import { sidePanels } from "../legacy/panels-bridge.ts";
-import { parseProjectFileState } from "../adapters/formats/project-file.ts";
-import { openDocument } from "../legacy/transition-bridge.ts";
-import { canOpenPrompterInBrowser } from "../adapters/desktop/desktop-port.ts";
-import { createDesktopRecognition, desktopVoiceAvailable, desktopVoiceKnown, loadDesktopVoice } from "../adapters/desktop/desktop-voice.js";
-import { openPrompterInBrowser } from "../legacy/desktop-bridge.ts";
-import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "../adapters/desktop/voice-relay.js";
-import { pad2, formatTimecode, rowSeconds } from "../core/production/timing.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
-import { withoutCues } from "../core/text/cues.ts";
-import { sliceCell } from "../core/text/edits.ts";
-import { toHtml } from "../core/text/html.ts";
-import { toPlainText } from "../core/text/projections.ts";
-import { projection } from "../core/text/runs.ts";
-import { cellOf } from "../legacy/richtext.ts";
-import { focusMemory } from "../legacy/editor-bridge.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
-import { startupReady } from "../legacy/startup-bridge.ts";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
+import { pad2, formatTimecode, rowSeconds } from "../../core/production/timing.ts";
+import { withoutCues } from "../../core/text/cues.ts";
+import { sliceCell } from "../../core/text/edits.ts";
+import { toHtml } from "../../core/text/html.ts";
+import { toPlainText } from "../../core/text/projections.ts";
+import { projection } from "../../core/text/runs.ts";
+
+var ports = null;
 
 export var prompterMirror;
 export var prompterFlip;
@@ -81,13 +57,13 @@ export function trimPrompterCell(cell) {
 var SENTENCE_END_RE = /[.!?]["'’”)\]]*$/;
 
 export function buildPrompterContent() {
-  var skippingShot = prompterSkipsShot() || viewFlags().hideShot();
-  var doc = currentDocument();
+  var skippingShot = ports.state.skipsShot() || ports.viewFlags.hideShot();
+  var doc = ports.document.current();
   var source = skippingShot
     ? doc.rows.filter(function (row) { return row.status !== "shot"; })
     : doc.rows;
   var sceneEntries = source.map(function (row) {
-    var cell = trimPrompterCell(withoutCues(cellOf(row.audioText)));
+    var cell = trimPrompterCell(withoutCues(ports.text.cellOf(row.audioText)));
     return { id: row.id, cell: cell, view: cell.length ? prompterSceneHtml(cell) : null };
   });
   var lines = sceneEntries.filter(function (e) { return e.view; });
@@ -141,7 +117,7 @@ export function buildPrompterContent() {
   sceneStartSec = [];
   var t = 0;
   source.forEach(function (row) {
-    var secs = rowSeconds(row, doc, productionReaders);
+    var secs = rowSeconds(row, doc, ports.text.productionReaders);
     sceneStartSec.push(t);
     sceneSeconds.push(secs);
     t += secs;
@@ -149,7 +125,7 @@ export function buildPrompterContent() {
   promptTotalSec = t;
   renderPrompterRundown();
   var skip = document.getElementById("pp-skip-shot");
-  if (skip) skip.setAttribute("aria-pressed", prompterSkipsShot() ? "true" : "false");
+  if (skip) skip.setAttribute("aria-pressed", ports.state.skipsShot() ? "true" : "false");
 }
 
 var sceneSeconds = [];
@@ -220,7 +196,7 @@ function setText(el, text) {
 }
 
 export function updatePrompterStatus() {
-  if (!prompterIsOpen()) return;
+  if (!ports.state.isOpen()) return;
   var scroller = document.getElementById("prompter-scroll");
   var scene = -1, elapsed = 0;
   if (promptWords.length && sceneRowIds.length) {
@@ -273,7 +249,7 @@ export function acquireWakeLock(owns) {
   if (!navigator.wakeLock || !navigator.wakeLock.request) return;
   var gen = ++wakeLockGen;
   navigator.wakeLock.request("screen").then(function (lock) {
-    if (gen !== wakeLockGen || !prompterIsOpen() || (owns && !owns())) { lock.release().catch(function () {}); return; }
+    if (gen !== wakeLockGen || !ports.state.isOpen() || (owns && !owns())) { lock.release().catch(function () {}); return; }
     prompterWakeLock = lock;
   }).catch(function () { });
 }
@@ -311,12 +287,12 @@ function setToggle(btn, on) {
 
 export function setPrompterMirror(on) {
   prompterMirror = on;
-  preferences().setPrompterFlag("prompterMirror", on);
+  ports.preferences.setPrompterFlag("prompterMirror", on);
   applyPrompterOrientation();
 }
 export function setPrompterFlip(on) {
   prompterFlip = on;
-  preferences().setPrompterFlag("prompterFlip", on);
+  ports.preferences.setPrompterFlag("prompterFlip", on);
   applyPrompterOrientation();
 }
 
@@ -379,7 +355,7 @@ export function stepScene(dir) {
 
 export function cueSceneForCurrentPosition() {
   if (!sceneRowIds.length) { promptSceneIndex = -1; promptSceneEndWordOffset = null; updateSceneReadout(); return; }
-  var lastRow = focusMemory().lastRow();
+  var lastRow = ports.focus.lastRow();
   var idx = lastRow ? sceneRowIds.indexOf(lastRow) : -1;
   if (idx === -1) idx = 0;
   var resolved = findNonEmptySceneIndex(idx, 1);
@@ -400,7 +376,7 @@ export function setPrompterSceneMode(on) {
   on = !!on;
   if (on === promptSceneMode) return;
   promptSceneMode = on;
-  preferences().setPrompterFlag("prompterSceneMode", on);
+  ports.preferences.setPrompterFlag("prompterSceneMode", on);
   updatePrompterSceneModeUI();
   if (on) cueSceneForCurrentPosition();
   else { promptSceneIndex = -1; promptSceneEndWordOffset = null; }
@@ -409,7 +385,7 @@ export function setPrompterSceneMode(on) {
 var prompterLeaveSeq = 0;
 
 function lockPageScrollWhenArrived(el) {
-  var lock = function () { if (prompterIsOpen()) document.body.classList.add("prompter-open"); };
+  var lock = function () { if (ports.state.isOpen()) document.body.classList.add("prompter-open"); };
   var arriving = el.getAnimations ? el.getAnimations().filter(function (a) {
     return a.effect && a.effect.target === el;
   }) : [];
@@ -418,14 +394,14 @@ function lockPageScrollWhenArrived(el) {
 }
 
 export function openPrompter() {
-  sidePanels().closeAll();
+  ports.panels.closeAll();
   buildPrompterContent();
   var el = document.getElementById("prompter");
   prompterLeaveSeq++;
   el.classList.remove("is-holding");
   el.inert = false;
   el.hidden = false;
-  setPrompterOpen(true);
+  ports.state.setOpen(true);
   lockPageScrollWhenArrived(el);
   document.getElementById("prompter-scroll").scrollTop = 0;
   setPrompterPlaying(false);
@@ -443,7 +419,7 @@ export function openPrompter() {
 export function closePrompter() {
   setPrompterPlaying(false);
   stopVoiceFollow();
-  setPrompterOpen(false);
+  ports.state.setOpen(false);
   releaseWakeLock();
   var el = document.getElementById("prompter");
   if (el.contains(document.activeElement)) document.activeElement.blur();
@@ -460,8 +436,8 @@ export function closePrompter() {
 }
 
 export function setPrompterPlaying(on) {
-  if (on && voiceIsFollowing()) stopVoiceFollow();
-  setPrompterPlayingFlag(on);
+  if (on && ports.state.voiceFollowing()) stopVoiceFollow();
+  ports.state.setPlaying(on);
   var btn = document.getElementById("pp-play");
   var icon = btn.querySelector("use");
   var label = btn.querySelector(".pp-sr");
@@ -556,7 +532,7 @@ function syncVoiceState() {
   var group = document.getElementById("pp-voice-state");
   var el = document.getElementById("pp-voice-status");
   if (!group || !el) return;
-  group.classList.toggle("is-live", !!voiceIsFollowing());
+  group.classList.toggle("is-live", !!ports.state.voiceFollowing());
   group.classList.toggle("has-msg", !!el.textContent);
 }
 
@@ -576,38 +552,38 @@ var VOICE_BROWSER_LABEL = "Open in browser to use Follow My Voice";
 var VOICE_DESKTOP_UNAVAILABLE = "Follow My Voice isn't available in this desktop app — it works in the browser version.";
 
 function desktopListens() {
-  return runningOnDesktop() && desktopVoiceAvailable();
+  return ports.desktop.running() && ports.voice.available();
 }
 
 function voiceIdleLabel() {
-  if (runningOnDesktop() && !desktopListens() && canOpenPrompterInBrowser()) return VOICE_BROWSER_LABEL;
+  if (ports.desktop.running() && !desktopListens() && ports.desktop.canOpen()) return VOICE_BROWSER_LABEL;
   return VOICE_IDLE_LABEL;
 }
 
 export function updateVoiceAvailability() {
   var btn = document.getElementById("pp-voice");
   if (!btn) return;
-  if (runningOnDesktop() && !desktopVoiceKnown()) {
+  if (ports.desktop.running() && !ports.voice.known()) {
     btn.disabled = true;
-    loadDesktopVoice().then(updateVoiceAvailability);
+    ports.voice.load().then(updateVoiceAvailability);
     return;
   }
-  if (!voiceIsFollowing()) setVoiceLabel(btn, voiceIdleLabel());
-  if (runningOnDesktop()) {
+  if (!ports.state.voiceFollowing()) setVoiceLabel(btn, voiceIdleLabel());
+  if (ports.desktop.running()) {
     if (desktopListens()) {
       btn.disabled = false;
-      if (!voiceIsFollowing() && !voiceStarting) setVoiceStatus("", "");
-    } else if (canOpenPrompterInBrowser()) {
+      if (!ports.state.voiceFollowing() && !voiceStarting) setVoiceStatus("", "");
+    } else if (ports.desktop.canOpen()) {
       btn.disabled = false;
       setVoiceStatus("Chrome or Edge can follow your voice — this opens the saved script there.", "");
     } else {
       btn.disabled = true;
       setVoiceStatus(VOICE_DESKTOP_UNAVAILABLE, "");
     }
-  } else if (hasVoiceRelay()) {
+  } else if (ports.voice.hasRelay()) {
     btn.disabled = false;
-    if (!voiceIsFollowing() && !voiceStarting) setVoiceStatus("", "");
-  } else if (!SpeechRecognitionCtor) {
+    if (!ports.state.voiceFollowing() && !voiceStarting) setVoiceStatus("", "");
+  } else if (!ports.voice.browserRecognition()) {
     btn.disabled = true;
     setVoiceStatus("Voice follow needs Chrome or Edge.", "");
   } else if (!window.isSecureContext) {
@@ -615,17 +591,17 @@ export function updateVoiceAvailability() {
     setVoiceStatus("Voice follow needs the app served over http:// — start it with start.bat.", "");
   } else {
     btn.disabled = false;
-    if (!voiceIsFollowing()) setVoiceStatus("", "");
+    if (!ports.state.voiceFollowing()) setVoiceStatus("", "");
   }
 }
 
 function updateVoiceButtonUI() {
   var btn = document.getElementById("pp-voice");
   if (!btn) return;
-  btn.classList.toggle("is-active", voiceIsFollowing());
-  setVoiceLabel(btn, voiceIsFollowing() ? "Stop Following" : voiceIdleLabel());
+  btn.classList.toggle("is-active", ports.state.voiceFollowing());
+  setVoiceLabel(btn, ports.state.voiceFollowing() ? "Stop Following" : voiceIdleLabel());
   var scroller = document.getElementById("prompter-scroll");
-  if (scroller) scroller.classList.toggle("is-following", !!voiceIsFollowing());
+  if (scroller) scroller.classList.toggle("is-following", !!ports.state.voiceFollowing());
   syncVoiceState();
 }
 
@@ -692,7 +668,7 @@ function onSpeechTranscript() {
 
   if (speakCursor >= speakNorms.length - 1) {
     setVoiceStatus("Reached the end", "listening");
-  } else if (voiceIsFollowing()) {
+  } else if (ports.state.voiceFollowing()) {
     setVoiceStatus(listeningStatus("Listening"), "listening");
   }
 }
@@ -724,19 +700,19 @@ var DESKTOP_VOICE_WARNINGS = {
 var CLEARABLE_VOICE_WARNINGS = ["no-signal", "too-quiet", "blocked-all", "blocked-desktop"];
 
 export async function startVoiceFollow() {
-  var desktop = runningOnDesktop();
-  if (desktop && !desktopVoiceKnown()) await loadDesktopVoice();
+  var desktop = ports.desktop.running();
+  if (desktop && !ports.voice.known()) await ports.voice.load();
   if (desktop && !desktopListens()) {
-    if (!canOpenPrompterInBrowser()) { setVoiceStatus(VOICE_DESKTOP_UNAVAILABLE, ""); return; }
+    if (!ports.desktop.canOpen()) { setVoiceStatus(VOICE_DESKTOP_UNAVAILABLE, ""); return; }
     setVoiceStatus("Opening in your browser…", "");
-    openPrompterInBrowser().then(function (result) {
+    ports.desktop.open().then(function (result) {
       if (result && result.message) setVoiceStatus(result.message, result.ok ? "" : "error");
     });
     return;
   }
-  var relayed = !desktop && hasVoiceRelay();
-  if (!desktop && !relayed && !SpeechRecognitionCtor) return;
-  if (voiceIsFollowing() || voiceStarting) return;
+  var relayed = !desktop && ports.voice.hasRelay();
+  if (!desktop && !relayed && !ports.voice.browserRecognition()) return;
+  if (ports.state.voiceFollowing() || voiceStarting) return;
   if (!speakNorms.length) {
     setVoiceStatus("Nothing to read yet.", "error");
     return;
@@ -774,9 +750,9 @@ export async function startVoiceFollow() {
   }
 
   try {
-    recognition = desktop ? createDesktopRecognition()
-      : relayed ? createRelayRecognition()
-      : new SpeechRecognitionCtor();
+    recognition = desktop ? ports.voice.createDesktop()
+      : relayed ? ports.voice.createRelay()
+      : new (ports.voice.browserRecognition())();
   } catch (e) {
     voiceStarting = false;
     releaseVoiceStream();
@@ -792,7 +768,7 @@ export async function startVoiceFollow() {
     recognition.onwarning = function (e) {
       if (e && e.warning === "clear") {
         var el = document.getElementById("pp-voice-status");
-        if (voiceIsFollowing() && el) {
+        if (ports.state.voiceFollowing() && el) {
           for (var i = 0; i < CLEARABLE_VOICE_WARNINGS.length; i++) {
             if (el.textContent === DESKTOP_VOICE_WARNINGS[CLEARABLE_VOICE_WARNINGS[i]]()) {
               setVoiceStatus(listeningStatus("Listening…"), "listening");
@@ -803,7 +779,7 @@ export async function startVoiceFollow() {
         return;
       }
       var warn = DESKTOP_VOICE_WARNINGS[e && e.warning];
-      if (warn && voiceIsFollowing()) setVoiceStatus(warn(), "error");
+      if (warn && ports.state.voiceFollowing()) setVoiceStatus(warn(), "error");
     };
     recognition.ondevice = function (e) {
       if (mySession !== voiceSession) return;
@@ -812,7 +788,7 @@ export async function startVoiceFollow() {
   }
   recognition.onstart = function () {
     voiceStarting = false;
-    setVoiceFollowing(true);
+    ports.state.setVoiceFollowing(true);
     updateVoiceButtonUI();
     setVoiceStatus(listeningStatus("Listening…"), "listening");
   };
@@ -835,22 +811,22 @@ export async function startVoiceFollow() {
       setVoiceStatus(desktop || relayed
         ? "Microphone blocked — let desktop apps use it in Settings › Privacy & security › Microphone, then try again."
         : "Microphone blocked — allow it for this site (the icon at the right of the address bar), then try again.", "error");
-      setVoiceFollowing(false);
+      ports.state.setVoiceFollowing(false);
     } else if (e.error === "no-recognizer") {
       setVoiceStatus("Windows has no speech recogniser installed. Add one in Settings › Time & language › Speech, or use Present in Browser.", "error");
-      setVoiceFollowing(false);
+      ports.state.setVoiceFollowing(false);
     } else if (e.error === "taken") {
       setVoiceStatus("Another tab is following your voice now.", "");
-      setVoiceFollowing(false);
+      ports.state.setVoiceFollowing(false);
     } else if (e.error === "helper-failed" || e.error === "unavailable") {
       setVoiceStatus("Windows speech recognition couldn't start. Present in Browser still works.", "error");
-      setVoiceFollowing(false);
+      ports.state.setVoiceFollowing(false);
     } else if (e.error === "relay-lost") {
       setVoiceStatus("Lost the Splitpage desktop app — open the teleprompter from it again to follow your voice.", "error");
-      setVoiceFollowing(false);
+      ports.state.setVoiceFollowing(false);
     } else if (e.error === "audio-capture") {
       setVoiceStatus("No microphone was found.", "error");
-      setVoiceFollowing(false);
+      ports.state.setVoiceFollowing(false);
     } else if (e.error === "network") {
       setVoiceStatus("Speech recognition needs an internet connection.", "error");
     } else {
@@ -859,24 +835,24 @@ export async function startVoiceFollow() {
     updateVoiceButtonUI();
   };
   recognition.onend = function () {
-    if (mySession !== voiceSession || !voiceIsFollowing()) {
+    if (mySession !== voiceSession || !ports.state.voiceFollowing()) {
       if (mySession === voiceSession) releaseVoiceStream();
       updateVoiceButtonUI();
       return;
     }
     voiceRestarts++;
     if (voiceRestarts > 40) {
-      setVoiceFollowing(false);
+      ports.state.setVoiceFollowing(false);
       releaseVoiceStream();
       updateVoiceButtonUI();
       setVoiceStatus("Voice follow kept dropping out — stopped.", "error");
       return;
     }
     setTimeout(function () {
-      if (mySession !== voiceSession || !voiceIsFollowing() || !recognition) return;
+      if (mySession !== voiceSession || !ports.state.voiceFollowing() || !recognition) return;
       try { recognition.start(); }
       catch (e) {
-        setVoiceFollowing(false);
+        ports.state.setVoiceFollowing(false);
         recognition = null;
         releaseVoiceStream();
         updateVoiceButtonUI();
@@ -893,9 +869,9 @@ export async function startVoiceFollow() {
 }
 
 export function stopVoiceFollow() {
-  var wasActive = voiceIsFollowing();
+  var wasActive = ports.state.voiceFollowing();
   voiceSession++;
-  setVoiceFollowing(false);
+  ports.state.setVoiceFollowing(false);
   voiceStarting = false;
   if (recognition) {
     try { recognition.onend = null; recognition.onresult = null; recognition.stop(); } catch (e) {}
@@ -911,14 +887,14 @@ var PROMPTER_TOKEN_RE = /^[0-9a-f]{64}$/;
 var HOSTED_LAUNCH_WAIT_MS = 5 * 60 * 1000;
 
 function readPrompterLaunch() {
-  if (runningOnDesktop()) return null;
+  if (ports.desktop.running()) return null;
   var wanted;
   try { wanted = new URLSearchParams(location.search).get("teleprompter") === "1"; } catch (e) { wanted = false; }
   var m = /(?:^#|&)script=([0-9a-f]{64})(?=&|$)/.exec(location.hash || "");
   var token = m ? m[1] : "";
   var v = /(?:^#|&)voice=(\d{1,5}-[0-9a-f]{64})(?=&|$)/.exec(location.hash || "");
-  if (wanted || token) setVoiceRelay(v ? v[1] : "");
-  else setVoiceRelay(null);
+  if (wanted || token) ports.voice.setRelay(v ? v[1] : "");
+  else ports.voice.setRelay(null);
   if (wanted || token) {
     try {
       var url = new URL(location.href);
@@ -942,7 +918,7 @@ function readPrompterLaunch() {
 function whenInitialStateReady() {
   return new Promise(function (resolve) {
     (function check() {
-      var ready = startupReady();
+      var ready = ports.startup.ready();
       if (ready) ready.then(resolve, resolve);
       else setTimeout(check, 50);
     })();
@@ -950,8 +926,8 @@ function whenInitialStateReady() {
 }
 
 function showPrompterForLaunch() {
-  sidePanels().close("newtab-page");
-  if (!prompterIsOpen()) openPrompter();
+  ports.panels.close("newtab-page");
+  if (!ports.state.isOpen()) openPrompter();
 }
 
 async function launchPrompterFromScript(token) {
@@ -962,32 +938,32 @@ async function launchPrompterFromScript(token) {
   } catch (e) { body = null; }
   if (!body || typeof body.name !== "string" || typeof body.text !== "string") {
     try { sessionStorage.removeItem(PROMPTER_LAUNCH_KEY); } catch (e) {}
-    showToast("This teleprompter link has expired — open it again from the Splitpage desktop app " +
+    ports.notices.show("This teleprompter link has expired — open it again from the Splitpage desktop app " +
               "(File ▸ Present in browser).", "warn", true);
     return false;
   }
   var file = new File([body.text], body.name, { type: "text/plain" });
-  var parsed = await parseProjectFileState(file);
+  var parsed = await ports.files.parse(file);
   if (!parsed || parsed.error) {
-    showToast("Could not read the script the desktop app sent.", "error", true);
+    ports.notices.show("Could not read the script the desktop app sent.", "error", true);
     return false;
   }
-  openDocument({ kind: "file", file: file, handle: null, parsed: parsed, options: { skipSnapshot: true, silent: true } });
+  ports.opening.open({ kind: "file", file: file, handle: null, parsed: parsed, options: { skipSnapshot: true, silent: true } });
   showPrompterForLaunch();
-  showToast("A copy from the desktop app, for reading — edit the script there; changes made here are not saved back.", "ok");
+  ports.notices.show("A copy from the desktop app, for reading — edit the script there; changes made here are not saved back.", "ok");
   return true;
 }
 
 function launchPrompterForServerDoc() {
   var deadline = Date.now() + HOSTED_LAUNCH_WAIT_MS;
   (function check() {
-    if (serverHomeId()) { showPrompterForLaunch(); return; }
+    if (ports.place.serverHomeId()) { showPrompterForLaunch(); return; }
     if (Date.now() < deadline) setTimeout(check, 250);
   })();
 }
 
 function startPrompterLaunch(launch) {
-  preferences().skipOnboardingForPrompter();
+  ports.preferences.skipOnboardingForPrompter();
   whenInitialStateReady().then(function () {
     if (launch.token) return launchPrompterFromScript(launch.token);
     launchPrompterForServerDoc();
@@ -995,15 +971,16 @@ function startPrompterLaunch(launch) {
 }
 
 export function wireTagEntityContainer(id, rootClick) {
-  return createTagEntityContainer(id, rootClick);
+  return ports.installTagEntityContainer(id, rootClick);
 }
 
-export function __init() {
-  prompterMirror = preferences().prompterFlag("prompterMirror");
+export function startPrompter(nextPorts) {
+  ports = nextPorts;
+  prompterMirror = ports.preferences.prompterFlag("prompterMirror");
 
-  prompterFlip = preferences().prompterFlag("prompterFlip");
+  prompterFlip = ports.preferences.prompterFlag("prompterFlip");
 
-  promptSceneMode = preferences().prompterFlag("prompterSceneMode");
+  promptSceneMode = ports.preferences.prompterFlag("prompterSceneMode");
 
   window.__prompterTest = {
     checkSceneBoundaryNow: function () {
@@ -1027,4 +1004,27 @@ export function __init() {
 
   var launch = readPrompterLaunch();
   if (launch) startPrompterLaunch(launch);
+
+  return {
+    openPrompter, closePrompter, stopVoiceFollow, startVoiceFollow,
+    setPrompterPlaying, setPrompterSpeed, applyPrompterSize, stepPrompterSpeed, stepPrompterSize,
+    updatePrompterStatus, buildPrompterContent, updateVoiceAvailability,
+    cueSceneForCurrentPosition, updateSceneReadout, setPrompterMirror, setPrompterFlip,
+    setPrompterSceneMode, stepScene, acquireWakeLock, wireTagEntityContainer,
+    disposeRuntime: disposePrompterView,
+    voiceActive: function () { return ports.state.voiceFollowing(); },
+    playing: function () { return ports.state.isPlaying(); },
+    isOpen: function () { return ports.state.isOpen(); },
+    skipShot: function () { return ports.state.skipsShot(); },
+    setSkipShot: function (value) { ports.state.setSkipShot(value); },
+    mirror: function () { return prompterMirror; },
+    flip: function () { return prompterFlip; },
+    sceneMode: function () { return promptSceneMode; },
+    dispose: function () {
+      if (ports !== nextPorts) return;
+      disposePrompterView();
+      delete window.__prompterTest;
+      ports = null;
+    }
+  };
 }

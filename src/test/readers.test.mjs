@@ -7,7 +7,7 @@ import { htmlToMarkdown, inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { tagsInField } from "../js/07-production-tags.js";
 import { htmlToRuns } from "../adapters/formats/html-runs.ts";
 import { htmlToPlainText } from "../legacy/plain-text.ts";
-import { prompterSceneHtml, trimPrompterCell } from "../js/20-teleprompter.js";
+import { prompterSceneHtml, trimPrompterCell } from "../features/prompter/prompter.js";
 import { STORED, tagSpan } from "./_stored-cells.mjs";
 
 test("plain text: the model reads every stored cell as htmlToPlainText does", () => {
