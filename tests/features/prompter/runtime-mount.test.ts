@@ -134,3 +134,63 @@ test("prompter startup waits for readiness before fetching the desktop script", 
     dom.reconfigure({ url: "https://splitpage.test/" });
   }
 });
+
+test("disposing the runtime invalidates pending startup and desktop voice discovery", async () => {
+  const h = harness();
+  dom.reconfigure({ url: "https://splitpage.test/?teleprompter=1" });
+  let finishStartup: () => void = () => {};
+  const startup = new Promise<void>(resolve => { finishStartup = resolve; });
+  let finishVoice: () => void = () => {};
+  const voice = new Promise<void>(resolve => { finishVoice = resolve; });
+  let serverReads = 0;
+  let recognitions = 0;
+  let desktop = false;
+  const runtime = startPrompter({
+    ...h.ports, startup: { ready: () => startup }, place: { serverHomeId: () => { serverReads++; return "server"; } },
+    desktop: { ...h.ports.desktop, running: () => desktop },
+    voice: { ...h.ports.voice, known: () => false, load: () => voice, createDesktop: () => { recognitions++; return { start() {}, stop() {} }; } }
+  });
+  try {
+    desktop = true;
+    runtime.updateVoiceAvailability();
+    const starting = runtime.startVoiceFollow();
+    runtime.dispose();
+    finishStartup();
+    finishVoice();
+    await starting;
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(serverReads, 0);
+    assert.equal(recognitions, 0);
+    assert.equal(h.state.open, false);
+  } finally {
+    finishStartup();
+    finishVoice();
+    runtime.dispose();
+    dom.reconfigure({ url: "https://splitpage.test/" });
+  }
+});
+
+test("a project parse completing after runtime disposal does not open a document", async () => {
+  const h = harness();
+  const priorFetch = globalThis.fetch;
+  realm.fetch = async () => ({ ok: true, json: async () => ({ name: "Reading.splitpage", text: "script" }) });
+  let finish: (parsed: unknown) => void = () => {};
+  const pending = new Promise(resolve => { finish = resolve; });
+  let parsed = false;
+  const runtime = startPrompter({ ...h.ports, files: { parse: () => { parsed = true; return pending; } } });
+  try {
+    const hooks = win as unknown as { __prompterTest: { launchFromScript: (token: string) => Promise<boolean> } };
+    const launching = hooks.__prompterTest.launchFromScript("token");
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(parsed, true);
+    runtime.dispose();
+    finish({ state: h.reader.document.current(), kind: "splitpage", docIdEmbedded: true });
+    assert.equal(await launching, false);
+    assert.equal(h.calls.some(call => call[0] === "open"), false);
+    assert.equal(h.state.open, false);
+  } finally {
+    finish(null);
+    runtime.dispose();
+    globalThis.fetch = priorFetch;
+  }
+});
