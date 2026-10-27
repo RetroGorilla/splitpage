@@ -21,19 +21,25 @@ import { runningOnDesktop } from "../../application/desktop-presence.ts";
 import { startSettings as mountSettings } from "../../features/settings/settings.js";
 import type { SettingsMount, SettingsPorts } from "../../features/settings/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { setHideShotScenes } from "../../legacy/hide-shot-bridge.ts";
+import { setHideShotScenes } from "./hide-shot.ts";
 import { personSwatchesHtml } from "../../js/03-sync.js";
 import { getSavedAuthorName } from "../../application/comment-author.js";
 import { DEFAULT_COLLAB_SERVER, collabServerView, normalizeCollabServer, readCollabServer, signOutCollab } from "../../js/13b-collaborate.js";
-import { applyWriterSize, readWriterSize } from "../../js/19-writer.js";
+import { connectWriter } from "./writer.ts";
 import { prompterControls } from "./prompter.ts";
 import { preferences } from "../../legacy/preferences-bridge.ts";
 import { setAutoSaveEnabled } from "../../legacy/save-bridge.ts";
+
+function inactiveWriterSize(): void {}
+function writerSizePreference(): number | null { return preferences().writerSize(); }
 
 const settings = owned<SettingsMount>();
 
 export function mountSettingsFeature(): SettingsMount {
   return settings.replace(() => {
+    const editor: { -readonly [K in keyof SettingsPorts["editor"]]: SettingsPorts["editor"][K] } = {
+      writerSize: writerSizePreference, setWriterSize: inactiveWriterSize, hideShot: setHideShotScenes, autoSave: setAutoSaveEnabled
+    };
     const ports: SettingsPorts = {
       actions: portActions,
       notices: portNotices,
@@ -71,7 +77,7 @@ export function mountSettingsFeature(): SettingsMount {
         theme: () => preferences().theme(),
         videoThumbs: () => preferences().videoThumbs(),
       },
-      editor: { writerSize: readWriterSize, setWriterSize: applyWriterSize, hideShot: setHideShotScenes, autoSave: setAutoSaveEnabled },
+      editor,
       identity: { name: () => getSavedAuthorName(preferences()), swatchesHtml: personSwatchesHtml },
       prompter: { mirror: (value) => { prompterControls()?.setPrompterMirror(value); }, flip: (value) => { prompterControls()?.setPrompterFlip(value); }, sceneMode: (value) => { prompterControls()?.setPrompterSceneMode(value); } },
       collaboration: {
@@ -81,10 +87,15 @@ export function mountSettingsFeature(): SettingsMount {
       desktop: { running: runningOnDesktop, renderNotice: () => { updateControls()?.renderDesktopAppNotice(); } }
     };
     const mounted: SettingsMount = mountSettings(ports);
+    const disconnect = connectWriter((control) => {
+      editor.writerSize = control?.readWriterSize ?? writerSizePreference;
+      editor.setWriterSize = control?.applyWriterSize ?? inactiveWriterSize;
+    });
     const uninstall = installSettingsControls(mounted);
     return {
       openSettings: mounted.openSettings,
       dispose: () => {
+        disconnect();
         uninstall();
         mounted.dispose();
       }
@@ -99,6 +110,7 @@ const appData = owned<AppDataMount>();
 
 export function mountAppDataFeature(): AppDataMount {
   return appData.replace(() => {
+    const writer: { -readonly [K in keyof AppDataPorts["writer"]]: AppDataPorts["writer"][K] } = { size: writerSizePreference, setSize: inactiveWriterSize };
     const ports: AppDataPorts = {
       notices: portNotices,
       fileDelivery,
@@ -108,12 +120,17 @@ export function mountAppDataFeature(): AppDataMount {
       bookmarks,
       commentSorting: { choose: setCommentSort },
       history: { exportAll: exportHistoryAll, importBundle: importHistoryBundle, normalizeSnapshots: normalizeLegacySnapshots },
-      writer: { size: readWriterSize, setSize: applyWriterSize },
+      writer,
       embeddedVersion: () => updateControls()?.readEmbeddedVersion() ?? null,
       bookmarkEditor: { newId: newBookmarkId, portOr: connectPortOr, save: saveBookmarks, render: renderConnect },
       useBlobBackend: setBlobBackend
     };
-    return mountAppData(ports);
+    const mounted = mountAppData(ports);
+    const disconnect = connectWriter((control) => {
+      writer.size = control?.readWriterSize ?? writerSizePreference;
+      writer.setSize = control?.applyWriterSize ?? inactiveWriterSize;
+    });
+    return { ...mounted, dispose: () => { disconnect(); mounted.dispose(); } };
   });
 }
 

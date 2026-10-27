@@ -17,7 +17,7 @@ import { mountFileSavingFeature } from "../bootstrap/wiring.ts";
 import { __init as init_18_local_files } from "./18-local-files.js";
 import { mountMergeReviewFeature } from "../bootstrap/wiring.ts";
 import { mountFileMenuDropdownFeature, mountCommandMenuFeature } from "../bootstrap/wiring.ts";
-import { __init as init_19_writer } from "./19-writer.js";
+import { mountWriterRuntimeFeature } from "../bootstrap/wiring.ts";
 import { mountPrompterRuntimeFeature } from "../bootstrap/wiring.ts";
 import { __init as init_20e_connect } from "./20e-connect.js";
 import { migrateRows } from "../legacy/document-ports.ts";
@@ -97,7 +97,7 @@ if (wiring) {
   mountFileMenuDropdownFeature();
   mountFileMenuExportFeature(wiring.captureExportDocument);
   mountCommandMenuFeature();
-  init_19_writer();
+  mountWriterRuntimeFeature();
   mountPrompterRuntimeFeature();
   mountUpdateFeature();
   mountOnboardingFeature();

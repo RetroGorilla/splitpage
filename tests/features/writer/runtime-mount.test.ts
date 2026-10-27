@@ -1,0 +1,71 @@
+import "../../../src/test/_dom.mjs";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { startWriter } from "../../../src/features/writer/writer.js";
+import { migrateRows } from "../../../src/core/migrate.ts";
+import { fakeMigration } from "../../core/migrate-ports.ts";
+import { fakeWriterPorts } from "../fakes.ts";
+
+function harness() {
+  document.documentElement.innerHTML = readFileSync(new URL("../../../src/page.html", import.meta.url), "utf8");
+  return fakeWriterPorts(migrateRows({ title: "Writer mount", rows: [] }, fakeMigration().ports));
+}
+
+test("writer runtime closes panels before opening, schedules its existing idle job, and clears modal and redo state on dispose", () => {
+  const h = harness();
+  const first = startWriter(h.ports);
+  first.openWriter();
+  assert.deepEqual(h.calls.slice(0, 2), [["closeAll"], ["setOpen", true]]);
+  assert.equal(document.getElementById("writer")?.hidden, false);
+  first.scheduleWriterStats();
+  assert.equal(h.calls.filter(call => call[0] === "schedule").length, 1);
+  assert.deepEqual(h.calls.find(call => call[0] === "schedule"), ["schedule", "writerStats"]);
+  assert.equal(first.writerUndoStep("undo"), true);
+  first.dispose();
+  assert.equal(h.state.open, false);
+  assert.equal(document.getElementById("writer")?.hidden, true);
+  assert.equal(document.getElementById("writer")?.inert, true);
+  assert.equal(h.calls.filter(call => call[0] === "cancelStats").length, 1);
+  const second = startWriter(h.ports);
+  try {
+    assert.equal(second.writerUndoStep("redo"), false);
+    second.openWriter();
+    first.dispose();
+    assert.equal(h.state.open, true);
+    second.dispose();
+    assert.equal(h.state.open, false);
+  } finally {
+    second.dispose();
+  }
+});
+
+test("writer capture guard is removed on dispose and remount refuses once before bubble listeners", () => {
+  const h = harness();
+  h.state.allowed = false;
+  const root = document.getElementById("writer") as HTMLElement;
+  const title = document.getElementById("writer-title") as HTMLInputElement;
+  let bubbled = 0;
+  root.addEventListener("keydown", () => { bubbled++; });
+  const key = () => {
+    const event = new window.KeyboardEvent("keydown", { key: "x", bubbles: true, cancelable: true });
+    title.dispatchEvent(event);
+    return event;
+  };
+  const first = startWriter(h.ports);
+  assert.equal(key().defaultPrevented, true);
+  assert.equal(bubbled, 0);
+  assert.equal(h.notices.shown.length, 1);
+  first.dispose();
+  assert.equal(key().defaultPrevented, false);
+  assert.equal(bubbled, 1);
+  const second = startWriter(h.ports);
+  try {
+    first.dispose();
+    assert.equal(key().defaultPrevented, true);
+    assert.equal(bubbled, 1);
+    assert.equal(h.notices.shown.length, 2);
+  } finally {
+    second.dispose();
+  }
+});

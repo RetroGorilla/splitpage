@@ -17,7 +17,7 @@ import { fileMenuActions, mountFileMenuDropdownFeature, stopFileMenuDropdownFeat
 import { thisDocumentActions } from "../../src/legacy/this-document-actions.ts";
 import { hideShotActions } from "../../src/bootstrap/wiring/hide-shot.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
-import { viewActions } from "../../src/legacy/view-actions.ts";
+import { writerActions } from "../../src/bootstrap/wiring/writer.ts";
 import { fileMenuExportActions, mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../src/bootstrap/wiring/file-menu-export.ts";
 
 
@@ -30,7 +30,7 @@ function loadingRegistry(): { registry: ActionRegistry; restore: () => void } {
   mountFileMenuDropdownFeature();
   mountFileMenuExportFeature(captureExportDocument);
   const file = fileMenuActions();
-  const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFileMenuDropdownFeature, registerAll(registry, [...file.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...file.slice(3, 4)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...viewActions(), ...prompterActions(() => ({ openPrompter() {} }), { screen })])];
+  const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFileMenuDropdownFeature, registerAll(registry, [...file.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...file.slice(3, 4)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...writerActions(), ...prompterActions(() => ({ openPrompter() {} }), { screen })])];
   const was: unknown = currentDocument();
   loadTestDocument(null);
   return {
