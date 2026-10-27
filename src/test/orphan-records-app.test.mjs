@@ -18,7 +18,7 @@ const { pasteIntoCell } = await import("../features/clipboard/cell-clipboard.js"
 const { closeImportModal, openImportModal } = (await import("../bootstrap/wiring/imports.ts")).importControls();
 const { undo, undoSizes, flushEdits } = await import("../legacy/undo-bridge.ts");
 const { liveSession } = await import("../legacy/session-bridge.ts");
-const writer = await import("../js/19-writer.js");
+const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 

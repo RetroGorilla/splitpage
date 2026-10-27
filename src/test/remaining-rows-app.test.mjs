@@ -13,8 +13,8 @@ const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts
 const { undo, undoSizes, flushEdits } = await import("../legacy/undo-bridge.ts");
 const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const { editorSelection } = await import("../legacy/editor-bridge.ts");
-const { setHideShotScenes } = await import("../legacy/hide-shot-bridge.ts");
-const writer = await import("../js/19-writer.js");
+const { setHideShotScenes } = await import("../bootstrap/wiring/hide-shot.ts");
+const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 

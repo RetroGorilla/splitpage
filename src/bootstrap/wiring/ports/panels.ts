@@ -1,5 +1,7 @@
 import { sidePanels } from "../../../legacy/panels-bridge.ts";
 
+export const writerPanels = sidePanels;
+
 export const panelControl = {
   registerPanel: (id: string, closed: () => void) => sidePanels().registerPanel(id, closed),
   sync: () => sidePanels().sync(),

@@ -12,7 +12,7 @@ import { normalizeCell } from "../core/text/runs.ts";
 import { BROLL_MARKER_RE, brollPropKey } from "../core/document/broll.ts";
 import { brollInCell, brollPropsInCell } from "../core/production/broll.ts";
 import { recordPastedBroll } from "../application/production/broll-records.ts";
-import { htmlToPlainText as brollPlainText } from "../legacy/plain-text.ts";
+import { htmlToPlainText as brollPlainText } from "../bootstrap/plain-text.ts";
 import { broll } from "./_broll-mounted.mjs";
 const { addBrollProp, renameBrollInScript } = broll;
 import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
