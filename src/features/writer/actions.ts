@@ -25,7 +25,9 @@ export function writerActions(owner: () => { readonly openWriter: (keepMark?: nu
       availability: (source) => {
         const screen = availableUnless(["loading", ...everyOverlayBut("writer")], ports.screen());
         const refused: Availability = { enabled: false, reason: source === "command-menu" ? VIEWING_ONLY_LISTED : VIEWING_ONLY };
-        return withButton("btn-write", screen.enabled && ports.review.reviewing() ? refused : screen);
+        const availability = screen.enabled && ports.review.reviewing() ? refused : screen;
+        const mounted = owner() ? availability : { ...availability, enabled: false };
+        return withButton("btn-write", mounted);
       },
       run: () => { owner()?.openWriter(); }
     }

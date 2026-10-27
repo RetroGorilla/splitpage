@@ -17,6 +17,16 @@ import { currentRowsRender } from "./render.ts";
 import { hideTagGhost, scheduleIdleRefresh } from "../../features/tags/production-tags.js";
 
 const writer = owned<ReturnType<typeof startWriter>>();
+const connections = new Set<(control: ReturnType<typeof startWriter> | null) => void>();
+
+export function connectWriter(controlChanged: (control: ReturnType<typeof startWriter> | null) => void): () => void {
+  connections.add(controlChanged);
+  controlChanged(writer.owner());
+  return () => {
+    if (!connections.delete(controlChanged)) return;
+    controlChanged(null);
+  };
+}
 
 export function mountWriterRuntimeFeature() {
   return writer.replace(() => {
@@ -35,8 +45,16 @@ export function mountWriterRuntimeFeature() {
       dismissTagGhost: hideTagGhost, scheduleStats: scheduleIdleRefresh,
       cancelStats: () => { refresh.cancel(["writerStats"]); }
     };
-    return startWriter(ports);
-  });
+    const mounted = startWriter(ports);
+    const control = { ...mounted, dispose: () => {
+      if (writer.owner() === control) writer.stop();
+      else mounted.dispose();
+    } };
+    return control;
+  }, (control) => [() => {
+    for (const connected of connections) connected(control);
+    return () => { for (const connected of connections) connected(null); };
+  }]);
 }
 
 export const stopWriterRuntimeFeature = writer.stop;
