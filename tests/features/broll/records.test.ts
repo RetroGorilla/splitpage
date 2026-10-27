@@ -7,7 +7,7 @@ import type { ValidatedDocument } from "../../../src/core/document/validated.ts"
 import type { BrollRecordsPorts } from "../../../src/features/broll/ports.ts";
 import { brollStatus, createBrollRecords } from "../../../src/features/broll/records.ts";
 import { productionReaders } from "../../../src/legacy/document-ports.ts";
-import { htmlToPlainText } from "../../../src/legacy/plain-text.ts";
+import { htmlToPlainText } from "../../../src/bootstrap/plain-text.ts";
 import { cellOf, inertBody, sanitizeHtml } from "../../../src/legacy/richtext.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeEdits } from "../fakes.ts";

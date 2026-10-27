@@ -6,7 +6,7 @@ import "./_rows-render-mounted.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { setHideShotScenes } from "../legacy/hide-shot-bridge.ts";
+import { setHideShotScenes } from "../bootstrap/wiring/hide-shot.ts";
 import { shotHiding } from "../bootstrap/wiring/shot-hiding.ts";
 import { paintRowTimes } from "../features/rows/render.js";
 import { syncAnchorResolvedClasses } from "../features/common/comment-anchors.js";

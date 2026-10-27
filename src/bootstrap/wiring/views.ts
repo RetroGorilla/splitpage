@@ -85,7 +85,7 @@ import {
 } from "../../js/18-local-files.js";
 import { currentMergeReview } from "./merge-review.ts";
 import { toggleFileMenu, toggleSubmenu } from "./file-menu-controls.ts";
-import { applyWriterSize, closeWriter, jumpFromWriterToRow } from "../../js/19-writer.js";
+import { applyWriterSize, closeWriter, jumpFromWriterToRow } from "../../features/writer/writer.js";
 import { prompterControls } from "./prompter.ts";
 import { routeServerOpen } from "./desktop.ts";
 import { finishMarkdownRowChoice } from "./project-files.ts";

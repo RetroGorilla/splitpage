@@ -7,7 +7,7 @@ import { hideTagGhost, tagGhost } from "../../features/tags/production-tags.js";
 import { clearProductionSelection, selectedKeys } from "../../legacy/production-editing-bridge.ts";
 import { renderProduction } from "../../features/tags/panels.js";
 import { closeCommentComposer } from "../../features/comments/comments.js";
-import { closeWriter } from "../../js/19-writer.js";
+import { closeWriter } from "../../features/writer/writer.js";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
 import { sidePanels } from "../../legacy/panels-bridge.ts";
 

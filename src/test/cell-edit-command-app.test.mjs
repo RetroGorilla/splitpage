@@ -15,7 +15,7 @@ const { toggleCellFormat, maybeCueShortcut } = await import("../features/rows/re
 const { undo, undoSizes, lastUndoEntry, flushEdits } = await import("../legacy/undo-bridge.ts");
 const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const { setMark } = await import("../core/text/edits.ts");
-const writer = await import("../js/19-writer.js");
+const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 

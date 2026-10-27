@@ -14,7 +14,7 @@ const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts
 const { render } = await import("../features/rows/render.js");
 const { cellEditing, undoGuard } = await import("../legacy/editor-bridge.ts");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../legacy/undo-bridge.ts");
-const writer = await import("../js/19-writer.js");
+const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 

@@ -5,7 +5,6 @@ import { hideShotActions as definitions } from "../../features/rows/actions.ts";
 import { createHideShot } from "../../features/rows/hide-shot.ts";
 import type { HideShotControls } from "../../features/rows/hide-shot.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { handHideShotTo } from "../../legacy/hide-shot-bridge.ts";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
 import { shotHiding } from "./shot-hiding.ts";
 
@@ -25,8 +24,7 @@ export function mountHideShotFeature(): HideShotMount {
       notices: portNotices,
       menuItem: () => document.getElementById("menu-hide-shot")
     });
-    handHideShotTo(controls);
-    return { ...controls, dispose: () => { handHideShotTo(null); } };
+    return { ...controls, dispose: () => {} };
   });
 }
 
@@ -47,3 +45,9 @@ export function hideShotActions(): ActionDefinition[] {
     screen: portScreen
   });
 }
+
+export function setHideShotScenes(on: boolean): void {
+  hideShot.owner()?.set(on);
+}
+
+export const currentHideShot = hideShot.owner;

@@ -11,7 +11,7 @@ import { toDocxRuns, toMarkdown, toPlainText } from "../core/text/projections.ts
 import { toHtml } from "../core/text/html.ts";
 import { htmlToMarkdown, inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { htmlToRuns } from "../adapters/formats/html-runs.ts";
-import { htmlToPlainText } from "../legacy/plain-text.ts";
+import { htmlToPlainText } from "../bootstrap/plain-text.ts";
 
 const T = (text, marks) => ({ text, marks: marks || {} });
 const B = (id, text, marks) => ({ atom: "broll", id, text: text || "B-roll:", marks: marks || {} });

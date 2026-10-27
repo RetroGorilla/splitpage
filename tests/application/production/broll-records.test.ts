@@ -7,7 +7,7 @@ import type { TagRecordsPlan } from "../../../src/core/production/index.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
 import { productionReaders } from "../../../src/legacy/document-ports.ts";
-import { htmlToPlainText } from "../../../src/legacy/plain-text.ts";
+import { htmlToPlainText } from "../../../src/bootstrap/plain-text.ts";
 import { cellOf } from "../../../src/legacy/richtext.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 

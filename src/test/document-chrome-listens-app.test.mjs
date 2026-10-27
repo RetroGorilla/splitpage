@@ -14,7 +14,7 @@ const { migrateRows } = await import("../legacy/document-ports.ts");
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const { titleCommand } = await import("../application/commands/title.ts");
 const { mountDocumentChromeFeature, stopDocumentChromeFeature } = await import("../bootstrap/wiring/document-chrome.ts");
-const writer = await import("../js/19-writer.js");
+const writer = await import("../features/writer/writer.js");
 
 const desktop = window.__desktopTest.makeFakeBackend();
 window.__desktopTest.setBackend(desktop);

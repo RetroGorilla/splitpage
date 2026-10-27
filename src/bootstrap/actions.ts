@@ -20,7 +20,7 @@ import { helpMenuActions } from "../legacy/help-actions.ts";
 import { nativeMenuRunner } from "../legacy/native-menu.ts";
 import { shareActions } from "../legacy/share-actions.ts";
 import { thisDocumentActions } from "../legacy/this-document-actions.ts";
-import { viewActions } from "../legacy/view-actions.ts";
+import { writerActions } from "../bootstrap/wiring/writer.ts";
 import { rowsActions } from "./wiring/editor.ts";
 import { rundownMinimizeActions, rundownSceneActions } from "./wiring/rundown.ts";
 import { scriptZoomActions } from "./wiring/script-zoom.ts";
@@ -48,7 +48,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
       return registerAll(registry, [...menu.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...menu.slice(3, 4)]);
     },
     () => {
-      const views = viewActions();
+      const views = writerActions();
       return registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...views, ...prompterActions()]);
     },
     () => {

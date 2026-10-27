@@ -10,7 +10,7 @@ import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/prod
 import { breakdownRows } from "../adapters/formats/export-projections.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
-import { htmlToPlainText } from "../legacy/plain-text.ts";
+import { htmlToPlainText } from "../bootstrap/plain-text.ts";
 import { buildDocx, docxToRows } from "../adapters/formats/docx.ts";
 import { buildPackingListPdf, buildPdf } from "../adapters/formats/pdf.ts";
 import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";

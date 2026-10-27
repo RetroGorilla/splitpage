@@ -8,7 +8,6 @@
     {"rule":"legacy-file","source":"src/js/13a-presence.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/13b-collaborate.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/18-local-files.js","target":"src/js"},
-    {"rule":"legacy-file","source":"src/js/19-writer.js","target":"src/js"},
     {"rule":"legacy-file","source":"src/js/20e-connect.js","target":"src/js"},
     {"rule":"loop-import","source":"src/js/02b-doc-id.js","target":"src/js/03a-history-store.js#copyHistory"},
     {"rule":"loop-import","source":"src/js/02b-doc-id.js","target":"src/js/03a-history-store.js#historyDocumentChanged"},

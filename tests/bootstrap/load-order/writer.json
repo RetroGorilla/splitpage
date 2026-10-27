@@ -1,7 +1,8 @@
 {
-  "legacyImports": [
-    "./19-writer.js"
+  "legacyImports": [],
+  "loadOnly": [
+    "src/features/writer/writer.js",
+    "src/bootstrap/wiring/writer.ts"
   ],
-  "loadOnly": [],
-  "expectedLoads": 1
+  "expectedLoads": 2
 }

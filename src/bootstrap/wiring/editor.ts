@@ -139,7 +139,7 @@ import {
   scheduleWriterStats,
   updateWriterFormatState,
   writerUndoStep
-} from "../../js/19-writer.js";
+} from "../../features/writer/writer.js";
 import { reviewBlocked, reviewMode, onServerDoc } from "../../legacy/location-bridge.ts";
 
 type RootInput = Pick<Event, "target">;
