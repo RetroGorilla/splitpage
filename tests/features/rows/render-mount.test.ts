@@ -67,12 +67,16 @@ test("render mounts without drawing and a disposed queued paint cannot reach the
     replacement = startRowsRender(second.ports);
   });
   assert.equal(second.tracks(), 0);
-  replacement.onPainted(painted);
+  const replacementOff = replacement.onPainted(painted);
+  oldOff();
   oldOff();
   mounted.dispose();
   assert.equal(replacement.renderFirstDraw(), true);
   assert.equal(second.tracks(), 1);
   assert.equal(paints, 2);
+  replacementOff();
+  replacement.renderFirstDraw();
+  assert.equal(paints, 2, "the replacement subscriber owns its own cleanup");
   replacement.dispose();
 });
 

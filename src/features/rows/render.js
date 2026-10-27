@@ -564,8 +564,11 @@ var paintedListeners = [];
 
 export function onPainted(listener) {
   var listeners = paintedListeners;
+  var removed = false;
   listeners.push(listener);
   return function () {
+    if (removed) return;
+    removed = true;
     var at = listeners.indexOf(listener);
     if (at !== -1) listeners.splice(at, 1);
   };
@@ -1295,7 +1298,6 @@ export function startRowsRender(ports) {
       staleFocus = null;
       document.body.classList.remove("is-stale-screen");
       markStaleParts(false);
-      paintedListeners = [];
       pendingMarks = null;
       partTemplate = null;
       paintBroke = false;
