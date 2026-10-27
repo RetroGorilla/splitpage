@@ -1,3 +1,5 @@
+import { prompterActions } from "../../src/features/prompter/actions.ts";
+import { screen } from "../../src/bootstrap/wiring/ports/screen.ts";
 import { captureExportDocument } from "../../src/legacy/export-kit-bridge.ts";
 import { startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
 import { tagPanelActions, mountTagPanelsFeature, stopTagPanelsFeature } from "../../src/bootstrap/wiring/production.ts";
@@ -28,7 +30,7 @@ function loadingRegistry(): { registry: ActionRegistry; restore: () => void } {
   mountFileMenuDropdownFeature();
   mountFileMenuExportFeature(captureExportDocument);
   const file = fileMenuActions();
-  const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFileMenuDropdownFeature, registerAll(registry, [...file.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...file.slice(3, 4)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...viewActions()])];
+  const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFileMenuDropdownFeature, registerAll(registry, [...file.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...file.slice(3, 4)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions()]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...viewActions(), ...prompterActions(() => ({ openPrompter() {} }), { screen })])];
   const was: unknown = currentDocument();
   loadTestDocument(null);
   return {
