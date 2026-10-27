@@ -113,7 +113,7 @@ Report global-state access across all production source paths, including migrate
 
 ### TypeScript and test execution
 
-New extracted source uses strict TypeScript with erasable-only syntax. Leave untouched JavaScript alone. Pin compatible TypeScript/parser tooling in the lockfile; extend lint and comment/dependency parsers to `.ts` files.
+New extracted source uses strict TypeScript with erasable-only syntax. Leave untouched JavaScript alone. A JavaScript file under `src/features/`, `src/application/` or `src/adapters/` that is about to change substantially is converted to TypeScript first, in its own PR with no behaviour change (Adam, 2026-10-27). Pin compatible TypeScript/parser tooling in the lockfile; extend lint and comment/dependency parsers to `.ts` files.
 
 Enable `strict`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `forceConsistentCasingInFileNames`, `erasableSyntaxOnly` and `verbatimModuleSyntax`. For directly executed Node tests, use a consistent Node-compatible module/import-extension configuration. Use explicit type imports and `.ts` source extensions where native execution requires them; do not depend on `tsconfig` path aliases working at runtime. Separate core/application environment declarations from DOM/native adapter declarations.
 
