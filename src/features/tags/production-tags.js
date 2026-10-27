@@ -139,10 +139,11 @@ export function runIdleRefresh(jobs) {
 var taggedListeners = [];
 
 export function onTagged(listener) {
-  taggedListeners.push(listener);
+  var listeners = taggedListeners;
+  listeners.push(listener);
   return function () {
-    var at = taggedListeners.indexOf(listener);
-    if (at !== -1) taggedListeners.splice(at, 1);
+    var at = listeners.indexOf(listener);
+    if (at !== -1) listeners.splice(at, 1);
   };
 }
 
@@ -537,7 +538,10 @@ export function openTagComposer(ctx) {
   document.getElementById("tag-all").checked = false;
   updateTagHint();
   document.getElementById("tag-modal").hidden = false;
-  var focusTimer = setTimeout(function () { composerFocusTimers.delete(focusTimer); nameInput.focus(); nameInput.select(); }, 0);
+  var focusTimer = setTimeout(function () {
+    if (!composerFocusTimers.delete(focusTimer)) return;
+    nameInput.focus(); nameInput.select();
+  }, 0);
   composerFocusTimers.add(focusTimer);
 }
 
@@ -593,6 +597,7 @@ export function applyTag() {
 }
 
 export function startProductionTags(ports) {
+  var cancelRefresh = ports.refresh.cancel;
   currentDocument = ports.document.current;
   readSession = ports.document.read;
   requestRefresh = ports.refresh.request;
@@ -625,14 +630,17 @@ export function startProductionTags(ports) {
   iconStyle.textContent = tagIconCss();
   document.head.appendChild(iconStyle);
 
+  var disposed = false;
   var cacheTest = window.__cacheTest = {
-    index: currentProductionIndex,
+    index: function () { return disposed ? null : currentProductionIndex(); },
     frozen: function () {
+      if (disposed) return [];
       var html = "Put the " + '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="kettle">kettle</span> on.';
       return [cellOf(html), productionReaders.tagsInField(html), productionReaders.cueNamesInField(html), currentProductionIndex()]
         .map(function (v) { return !!v && Object.isFrozen(v); });
     },
     writes: function () {
+      if (disposed) return [];
       var html = '<strong>Probe</strong> the <span class="tag-anchor" data-tag-cat="prop" data-tag-name="probe lamp">lamp</span>.';
       var cell = cellOf(html), tags = productionReaders.tagsInField(html);
       return [
@@ -647,22 +655,32 @@ export function startProductionTags(ports) {
     }
   };
 
-  var disposed = false;
   return {
     onTagged: function (listener) { return disposed ? function () {} : onTagged(listener); },
+    refresh: function (jobs) { if (!disposed) runIdleRefresh(jobs); },
     dispose: function () {
       if (disposed) return;
       disposed = true;
-      composerFocusTimers.forEach(clearTimeout);
-      composerFocusTimers.clear();
-      iconStyle.remove();
-      hideTagGhost();
-      hideUntaggedPrompt();
-      pendingTag = null;
-      taggedListeners = [];
-      untaggedList = [];
-      if (window.CSS && window.CSS.highlights) window.CSS.highlights.delete(UNTAGGED_HL);
-      if (window.__cacheTest === cacheTest) delete window.__cacheTest;
+      try {
+        cancelRefresh(["untagged", "production"]);
+      } finally {
+        composerFocusTimers.forEach(clearTimeout);
+        composerFocusTimers.clear();
+        iconStyle.remove();
+        hideTagGhost();
+        hideUntaggedPrompt();
+        if (document.getElementById("tag-modal")) closeTagComposer();
+        pendingTag = null;
+        taggedListeners = [];
+        untaggedList = [];
+        idleFlushes = 0;
+        if (window.CSS && window.CSS.highlights) window.CSS.highlights.delete(UNTAGGED_HL);
+        if (window.__cacheTest === cacheTest) delete window.__cacheTest;
+        currentDocument = readSession = requestRefresh = runDocumentEdit = sessionStamps = stampDocument = null;
+        cellOf = inertBody = sanitizeHtml = productionReaders = null;
+        productionIndex = cellEditing = focusMemory = breakUndoCoalescing = viewFlags = showToast = randomIds = null;
+        tagsInField = TAG_SHORTCUT_CHARS = cancelRefresh = null;
+      }
     }
   };
 }

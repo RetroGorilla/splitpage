@@ -29,7 +29,7 @@ export const stopProductionTagsFeature = production.stop;
 export function wireTagProduction() {
   handTagProductionTo(productionTags);
   return {
-    refresh: productionTags.runIdleRefresh,
+    refresh: (jobs: ReadonlySet<string>) => { production.owner()?.refresh(jobs); },
     bulkCell: productionTags.bulkTagCell,
     tagOccurrences: productionTags.tagFieldOccurrences as ProjectFileServices["tagFieldOccurrences"]
   };

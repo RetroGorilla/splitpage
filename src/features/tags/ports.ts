@@ -64,7 +64,7 @@ export interface TagPanelPorts {
 export interface ProductionTagPorts {
   readonly document: Pick<DocumentReader, "current" | "read">;
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
-  readonly refresh: { readonly request: DocumentSession["refresh"] };
+  readonly refresh: { readonly request: DocumentSession["refresh"]; readonly cancel: DocumentSession["cancelRefresh"] };
   readonly stamping: Pick<DocumentSession, "stamp">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "inertBody" | "sanitizeHtml" | "productionReaders">;
   readonly production: () => Pick<ProductionIndexOwner, "entries" | "current" | "recordsPlan" | "derived" | "resetDerived">;

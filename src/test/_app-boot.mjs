@@ -108,7 +108,7 @@ export async function appWiringDeps() {
     entry: migrateRows,
     effects: effects.sessionEffects(),
     editorName: getEditorName,
-    refresh: production.runIdleRefresh,
+    refresh: (await import("../bootstrap/wiring/production-tags.ts")).wireTagProduction().refresh,
     records: broll.derivedRecordsPlan,
     bulkTags: { cell: production.bulkTagCell, stamp: sync.stampRow },
     saves: fileSaving.savePorts,
