@@ -1,7 +1,8 @@
 {
-  "legacyImports": [
-    "./20-teleprompter.js"
+  "legacyImports": [],
+  "loadOnly": [
+    "src/features/prompter/prompter.js",
+    "src/bootstrap/wiring/prompter.ts"
   ],
-  "loadOnly": [],
-  "expectedLoads": 1
+  "expectedLoads": 2
 }

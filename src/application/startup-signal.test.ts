@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { StartupSignal } from "./startup-signal.ts";
 
-import { connectStartup, startupReady } from "../legacy/startup-bridge.ts";
+import { connectStartup, startupReady } from "../application/startup-signal.ts";
 
 test("the startup signal forwards the current ready result unchanged across connections", () => {
   const startup: StartupSignal = portStartup;

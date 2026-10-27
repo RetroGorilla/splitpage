@@ -26,7 +26,7 @@ import { personSwatchesHtml } from "../../js/03-sync.js";
 import { getSavedAuthorName } from "../../application/comment-author.js";
 import { DEFAULT_COLLAB_SERVER, collabServerView, normalizeCollabServer, readCollabServer, signOutCollab } from "../../js/13b-collaborate.js";
 import { applyWriterSize, readWriterSize } from "../../js/19-writer.js";
-import { setPrompterFlip, setPrompterMirror, setPrompterSceneMode } from "../../js/20-teleprompter.js";
+import { prompterControls } from "./prompter.ts";
 import { preferences } from "../../legacy/preferences-bridge.ts";
 import { setAutoSaveEnabled } from "../../legacy/save-bridge.ts";
 
@@ -73,7 +73,7 @@ export function mountSettingsFeature(): SettingsMount {
       },
       editor: { writerSize: readWriterSize, setWriterSize: applyWriterSize, hideShot: setHideShotScenes, autoSave: setAutoSaveEnabled },
       identity: { name: () => getSavedAuthorName(preferences()), swatchesHtml: personSwatchesHtml },
-      prompter: { mirror: setPrompterMirror, flip: setPrompterFlip, sceneMode: setPrompterSceneMode },
+      prompter: { mirror: (value) => { prompterControls()?.setPrompterMirror(value); }, flip: (value) => { prompterControls()?.setPrompterFlip(value); }, sceneMode: (value) => { prompterControls()?.setPrompterSceneMode(value); } },
       collaboration: {
         defaultServer: DEFAULT_COLLAB_SERVER, view: collabServerView, normalize: normalizeCollabServer,
         address: readCollabServer, signOut: signOutCollab

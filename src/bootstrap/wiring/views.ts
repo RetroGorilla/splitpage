@@ -86,30 +86,7 @@ import {
 import { currentMergeReview } from "./merge-review.ts";
 import { toggleFileMenu, toggleSubmenu } from "./file-menu-controls.ts";
 import { applyWriterSize, closeWriter, jumpFromWriterToRow } from "../../js/19-writer.js";
-import {
-  acquireWakeLock,
-  disposePrompterView,
-  applyPrompterSize,
-  buildPrompterContent,
-  closePrompter,
-  cueSceneForCurrentPosition,
-  promptSceneMode,
-  prompterFlip,
-  prompterMirror,
-  setPrompterFlip,
-  setPrompterMirror,
-  setPrompterPlaying,
-  setPrompterSceneMode,
-  setPrompterSpeed,
-  startVoiceFollow,
-  stepPrompterSize,
-  stepPrompterSpeed,
-  stepScene,
-  stopVoiceFollow,
-  updatePrompterStatus,
-  updateSceneReadout,
-  updateVoiceAvailability
-} from "../../js/20-teleprompter.js";
+import { prompterControls } from "./prompter.ts";
 import { routeServerOpen } from "./desktop.ts";
 import { finishMarkdownRowChoice } from "./project-files.ts";
 import { onRootClick, routeRootClick } from "./editor.ts";
@@ -182,7 +159,7 @@ export function mountPrompterVisibilityFeature(): ReturnType<typeof mountPrompte
     const ports: PrompterVisibilityPorts = {
       acquireWakeLock: function (active) {
         const ownsDocument = captureViewDocument();
-        acquireWakeLock(function () { return active() && ownsDocument(); });
+        prompterControls()?.acquireWakeLock(function () { return active() && ownsDocument(); });
       },
       isOpen: prompterIsOpen
     };
@@ -371,32 +348,29 @@ export function mountGdocFeature(): ReturnType<typeof mountGdoc> {
 export function mountPrompterFeature(): ReturnType<typeof mountPrompter> {
   return replaceViewMount("mountPrompter", function () {
     const ports: PrompterPorts = {
-      disposeRuntime: disposePrompterView,
-      closePrompter: closePrompter,
-      stopVoiceFollow: stopVoiceFollow,
-      startVoiceFollow: startVoiceFollow,
-      setPrompterPlaying: setPrompterPlaying,
-      setPrompterSpeed: setPrompterSpeed,
-      applyPrompterSize: applyPrompterSize,
-      stepPrompterSpeed: stepPrompterSpeed,
-      stepPrompterSize: stepPrompterSize,
-      updatePrompterStatus: updatePrompterStatus,
-      buildPrompterContent: buildPrompterContent,
-      updateVoiceAvailability: updateVoiceAvailability,
-      cueSceneForCurrentPosition: cueSceneForCurrentPosition,
-      updateSceneReadout: updateSceneReadout,
-      setPrompterMirror: setPrompterMirror,
-      setPrompterFlip: setPrompterFlip,
-      setPrompterSceneMode: setPrompterSceneMode,
-      stepScene: stepScene,
-      voiceActive: voiceIsFollowing,
-      playing: prompterIsPlaying,
-      isOpen: prompterIsOpen,
-      skipShot: prompterSkipsShot,
-      setSkipShot: setPrompterSkipShot,
-      mirror: function () { const mirror: boolean = prompterMirror; return mirror; },
-      flip: function () { const flip: boolean = prompterFlip; return flip; },
-      sceneMode: function () { const sceneMode: boolean = promptSceneMode; return sceneMode; }
+      disposeRuntime: () => { prompterControls()?.disposeRuntime(); },
+      closePrompter: () => { prompterControls()?.closePrompter(); },
+      stopVoiceFollow: () => { prompterControls()?.stopVoiceFollow(); },
+      startVoiceFollow: () => { prompterControls()?.startVoiceFollow(); },
+      applyPrompterSize: () => { prompterControls()?.applyPrompterSize(); },
+      updatePrompterStatus: () => { prompterControls()?.updatePrompterStatus(); },
+      buildPrompterContent: () => { prompterControls()?.buildPrompterContent(); },
+      updateVoiceAvailability: () => { prompterControls()?.updateVoiceAvailability(); },
+      cueSceneForCurrentPosition: () => { prompterControls()?.cueSceneForCurrentPosition(); },
+      updateSceneReadout: () => { prompterControls()?.updateSceneReadout(); },
+      setPrompterPlaying: (value) => { prompterControls()?.setPrompterPlaying(value); },
+      setPrompterSpeed: (value) => { prompterControls()?.setPrompterSpeed(value); },
+      stepPrompterSpeed: (value) => { prompterControls()?.stepPrompterSpeed(value); },
+      stepPrompterSize: (value) => { prompterControls()?.stepPrompterSize(value); },
+      setPrompterMirror: (value) => { prompterControls()?.setPrompterMirror(value); },
+      setPrompterFlip: (value) => { prompterControls()?.setPrompterFlip(value); },
+      setPrompterSceneMode: (value) => { prompterControls()?.setPrompterSceneMode(value); },
+      stepScene: (value) => { prompterControls()?.stepScene(value); },
+      voiceActive: voiceIsFollowing, playing: prompterIsPlaying, isOpen: prompterIsOpen,
+      skipShot: prompterSkipsShot, setSkipShot: setPrompterSkipShot,
+      mirror: () => prompterControls()?.mirror() ?? false,
+      flip: () => prompterControls()?.flip() ?? false,
+      sceneMode: () => prompterControls()?.sceneMode() ?? false
     };
     return mountPrompter({ window: window, ports: ports });
   });

@@ -1,7 +1,6 @@
 import type { ActionDefinition, Availability } from "../application/actions.ts";
 import { VIEWING_ONLY } from "../js/13-hosted.js";
 import { openWriter } from "../js/19-writer.js";
-import { openPrompter } from "../js/20-teleprompter.js";
 import { availableUnless, everyOverlayBut } from "../application/screen.ts";
 import { screenNow } from "./screen-state.ts";
 import { reviewMode } from "./location-bridge.ts";
@@ -31,15 +30,6 @@ export function viewActions(): ActionDefinition[] {
         return withButton("btn-write", screen.enabled && reviewMode() ? refused : screen);
       },
       run: () => { openWriter(); }
-    },
-    {
-      id: "present",
-      label: "Present",
-      group: "View",
-      icon: "i-play",
-      words: "teleprompter prompter autocue read play",
-      availability: () => withButton("btn-present", availableUnless(["loading", ...everyOverlayBut("prompter")], screenNow())),
-      run: () => { openPrompter(); }
     }
   ];
   return definitions;
