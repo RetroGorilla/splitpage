@@ -12,7 +12,7 @@ import { loadInitialState } from "../startup/document-entry.js";
 import { heldDocument } from "../../legacy/session-bridge.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
-import { toastLastEditor } from "../../js/03-sync.js";
+import { toastLastEditor } from "./history-panel.ts";
 import { reportMerge } from "../../legacy/merge-bridge.ts";
 import { historyOwner } from "./history.ts";
 import { currentRowsRender } from "./render.ts";

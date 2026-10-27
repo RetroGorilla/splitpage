@@ -1,4 +1,5 @@
+import "./_session-merge-started.mjs";
 import { mergeStarted, startMerge } from "../legacy/merge-bridge.ts";
-import { legacyMergePorts } from "../js/03-sync.js";
+import { sessionMergePorts } from "../bootstrap/wiring/session-merge.ts";
 
-if (!mergeStarted()) startMerge(legacyMergePorts());
+if (!mergeStarted()) startMerge(sessionMergePorts());

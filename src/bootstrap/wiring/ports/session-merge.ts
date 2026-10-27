@@ -1,0 +1,38 @@
+import type { SessionMergeOwnerPorts } from "../../../application/session/session-merge-ports.ts";
+import { heldDocument, holdMergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteServerUpdate } from "../../../legacy/session-bridge.ts";
+import { migrateRows, withDocumentPorts } from "../../../legacy/document-ports.ts";
+import { captureRestore, stillRestoring } from "../../../legacy/recovery-bridge.ts";
+import { autoSavePolicy, confirmBaseline, saveChanges } from "../../../legacy/save-bridge.ts";
+import { mergeUndo } from "../../../legacy/editor-bridge.ts";
+import { setHome } from "../../../legacy/location-bridge.ts";
+import { getEditorName } from "../../../legacy/preferences-bridge.ts";
+import { documentIdentityOwner } from "../document-identity.ts";
+import { adoptRestoredState } from "../../startup/document-entry.js";
+import { historyOwner } from "../history.ts";
+import { documentReader } from "./document.ts";
+import { text } from "./text.ts";
+import { ids, clock } from "./identity.ts";
+import { resetProductionPanel } from "./production.ts";
+
+export function sessionMergeOwnerPorts(onRestored: SessionMergeOwnerPorts["onRestored"]): SessionMergeOwnerPorts {
+  return {
+    document: documentReader,
+    session: { held: heldDocument, holdMergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteServerUpdate },
+    entry: { migrate: migrateRows, withPorts: withDocumentPorts },
+    text, ids, clock,
+    preferences: { editorName: getEditorName },
+    history: {
+      captureSnapshot: (...args) => historyOwner().captureSnapshot(...args),
+      getHistorySnapshot: (...args) => historyOwner().getHistorySnapshot(...args),
+      protectHistorySnapshot: (...args) => historyOwner().protectHistorySnapshot(...args)
+    },
+    identity: { adoptRestoredState, noteMergedDocId: (previous) => { documentIdentityOwner().noteMergedDocId(previous); } },
+    recovery: { capture: captureRestore, stillOwns: stillRestoring },
+    saving: { changes: saveChanges, confirmBaseline },
+    autoSave: { dueNow: () => { autoSavePolicy().dueNow(); } },
+    location: { setHome },
+    undo: { arm: (record) => { mergeUndo().arm(record); } },
+    production: { reset: resetProductionPanel },
+    onRestored
+  };
+}

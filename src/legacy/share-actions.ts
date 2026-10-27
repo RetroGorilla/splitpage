@@ -1,5 +1,4 @@
 import type { ActionDefinition, Availability } from "../application/actions.ts";
-import { promptForTarget } from "../js/03-sync.js";
 import { openDriveModal, openServerPicker, publishToServer, serverOpenItemState, serverPublishItemState } from "../js/13-hosted.js";
 import { collaborateBlockedReason, maybeAskGuestName, openCollaborate } from "../js/13b-collaborate.js";
 import { autoSavePolicy, savesStarted, toggleAutoSave } from "./save-bridge.ts";
@@ -9,7 +8,6 @@ import { greyedOut, itemAvailability, shownWhen } from "./menu-items.ts";
 import { OPENS_A_DIALOG, availableUnless, firstRefusal } from "../application/screen.ts";
 import type { Blocker } from "../application/screen.ts";
 import { screenNow } from "./screen-state.ts";
-import { reviewMode } from "./location-bridge.ts";
 
 const LOADED: readonly Blocker[] = ["loading"];
 
@@ -89,15 +87,6 @@ export function shareActions(): ActionDefinition[] {
       words: "publish upload server hosted",
       availability: (source) => loaded(itemAvailability(serverPublishItemState(), source), NO_DIALOG),
       run: async () => { await publishToServer(); }
-    },
-    {
-      id: "set-target",
-      label: "Set target length…",
-      group: "This document",
-      icon: "i-clock",
-      words: "target length goal duration aim runtime running time clock back timing over under minutes",
-      availability: () => loaded(reviewMode() ? { enabled: false, reason: "Viewing only — the writer sets the target" } : { enabled: true }),
-      run: () => { promptForTarget(); }
     }
   ];
   return definitions;

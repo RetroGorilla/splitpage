@@ -1,11 +1,15 @@
 {
-  "legacyImports": [
-    "./03-sync.js"
-  ],
+  "legacyImports": [],
   "loadOnly": [
     "src/features/merge/local-merge.js",
     "src/bootstrap/wiring/merge-review.ts",
-    "src/legacy/merge-offer-bridge.ts"
+    "src/legacy/merge-offer-bridge.ts",
+    "src/application/session/session-merge.js",
+    "src/bootstrap/wiring/session-merge.ts",
+    "src/legacy/session-merge-bridge.ts",
+    "src/features/history/panel.js",
+    "src/features/title/document-chrome.js",
+    "src/features/title/target-section.js"
   ],
-  "expectedLoads": 4
+  "expectedLoads": 9
 }

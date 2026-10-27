@@ -19,7 +19,8 @@ import { toggleFileMenu } from "./wiring/file-menu-controls.ts";
 import { helpMenuActions } from "../legacy/help-actions.ts";
 import { nativeMenuRunner } from "../legacy/native-menu.ts";
 import { shareActions } from "../legacy/share-actions.ts";
-import { thisDocumentActions } from "../legacy/this-document-actions.ts";
+import { historyActions } from "./wiring/history-panel.ts";
+import { targetActions } from "./wiring/title-chrome.ts";
 import { writerActions } from "../bootstrap/wiring/writer.ts";
 import { rowsActions } from "./wiring/editor.ts";
 import { rundownMinimizeActions, rundownSceneActions } from "./wiring/rundown.ts";
@@ -42,7 +43,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
   if (running) throw new Error("the actions are already started; stop them first");
   const steps: readonly (() => () => void)[] = [
     () => registry.presentRefusals(presentRefusal),
-    () => registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...thisDocumentActions(), ...findActions()]),
+    () => registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...historyActions(), ...findActions()]),
     () => {
       const menu = fileMenuActions();
       return registerAll(registry, [...menu.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...menu.slice(3, 4)]);
@@ -58,7 +59,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => {
       const share = shareActions();
       const file = fileMenuActions();
-      return registerAll(registry, [...share.slice(0, 2), ...file.slice(4, 5), ...share.slice(2, 3), ...file.slice(5, 6), ...importActions(), ...share.slice(3, 7), ...fileMenuExportActions().slice(1), ...share.slice(7), ...desktopActions()]);
+      return registerAll(registry, [...share.slice(0, 2), ...file.slice(4, 5), ...share.slice(2, 3), ...file.slice(5, 6), ...importActions(), ...share.slice(3, 7), ...fileMenuExportActions().slice(1), ...targetActions(), ...desktopActions()]);
     },
     () => registerAll(registry, scriptZoomActions()),
     () => {

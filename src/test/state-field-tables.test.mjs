@@ -5,7 +5,7 @@ import { STATE_FIELDS, missingStateFields } from "../core/merge/state-fields.ts"
 import { migrateRows } from "../legacy/document-ports.ts";
 import { changedBetween } from "../application/editing/undo/history.ts";
 import { STATE_FIELDS as CORE_FIELDS } from "../core/document/fields.ts";
-import * as sync from "../js/03-sync.js";
+import * as sync from "../bootstrap/wiring/session-merge.ts";
 import { LIST_MERGERS } from "../core/merge/lists.ts";
 
 function withProbe(field, run) {
