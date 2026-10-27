@@ -253,7 +253,7 @@ Two existing ports grow:
 | `screen` | P6 |
 | `panels-bridge` | P14 |
 | `tour-pause` | a hand-off ([Rule 5](#rule-5-features-reach-each-other-four-ways)) |
-| `document-guard` | goes with `02b` (Wave 4, Opus). P1 keeps the guard's read-only view |
+| `document-guard` | moved beside the application identity owner; P1 keeps the guard's read-only view ([identity](document-identity.md)) |
 | `tag-rewrites` (`retagMentions`, `retagRewrites`, used by `08`) | The retag planners move to `application/commands/`, taking P8 as an argument instead of importing the richtext bridge. That happens in their own Codex PR, before `08` moves, and `08` then runs them through P9 |
 | the action files (`*-actions.ts`, `native-menu`) | [Rule 6](#rule-6-features-own-their-action-definitions-bootstrap-owns-their-order) |
 

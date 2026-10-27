@@ -10,7 +10,7 @@ import { browserWriterId, browserWriterIsLive, holdBrowserWriterLock, releaseBro
 import { createPendingBanner } from "../../features/recovery/pending-banner.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { migrateRows } from "../../legacy/document-ports.ts";
-import { copyDocHistorySafe, syncDocIdentity } from "../../js/02b-doc-id.js";
+import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { notifyDesktopDocumentState } from "../../legacy/desktop-bridge.ts";
 import { documentLocation, onServerDoc } from "../../legacy/location-bridge.ts";
 import { applyMerge } from "../../legacy/merge-bridge.ts";
@@ -45,7 +45,7 @@ function draftsPorts(): DraftsPorts {
     saves: { unsaved: () => unsavedChanges(), editSeq: () => saveChanges() },
     notices: portNotices,
     entry: { migrate: (raw) => migrateRows(raw) },
-    identity: { copyHistory: (fromId, toId) => { copyDocHistorySafe(fromId, toId); }, sync: () => { syncDocIdentity(); } },
+    identity: { copyHistory: (fromId, toId) => { documentIdentity.copyDocHistorySafe(fromId, toId); }, sync: () => { documentIdentity.syncDocIdentity(); } },
     transitions: portTransitions,
     documents: { open: (opening) => openDocument(opening as Parameters<typeof openDocument>[0]) },
     resetProductionPanel: () => { resetProductionPanelState(); },

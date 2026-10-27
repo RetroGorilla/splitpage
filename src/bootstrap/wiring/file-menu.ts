@@ -18,7 +18,7 @@ import { screen } from "./ports/screen.ts";
 import { history, opening, transitions } from "./ports/transitions.ts";
 import { fileMenu } from "./file-menu-controls.ts";
 import { migrateRows } from "../../legacy/document-ports.ts";
-import { syncDocIdentity } from "../../js/02b-doc-id.js";
+import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { importControls } from "./imports.ts";
 import { applyReviewMode } from "../../js/13-hosted.js";
 import { openLocalFile } from "../../js/18-local-files.js";
@@ -46,7 +46,7 @@ export function mountFileMenuDropdownFeature(): FileMenuDropdownMount {
       resetProductionPanel,
       ids,
       prepareDocument: (raw) => migrateRows(raw),
-      syncIdentity: () => { syncDocIdentity(); },
+      syncIdentity: () => { documentIdentity.syncDocIdentity(); },
       applyReviewMode: () => { applyReviewMode(); },
       longDemo: LONG_DEMO
     };

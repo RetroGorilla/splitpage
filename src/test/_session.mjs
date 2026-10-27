@@ -1,3 +1,4 @@
+import { documentGuardStarted, startDocumentGuard } from "../application/identity/document-guard.ts";
 import "./_production-tags-started.mjs";
 import { wireProductionIndex } from "../bootstrap/wiring/production-index.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
@@ -14,14 +15,16 @@ export function startTestSession(deps) {
   if (sessionStarted()) throw new Error("startTestSession: a session is already started, so the dependencies passed would be ignored");
   if (!effectsStarted()) startPageEffects(window);
   if (!undoStarted()) startUndo(legacyUndoPorts());
+  const stopGuard = documentGuardStarted() ? () => {} : startDocumentGuard(false, console.error);
   const stopIndex = wireProductionIndex({ cell: bulkTagCell, stamp: stampRow });
   try {
     const stopSession = startSessionBridge(legacySessionPorts(Object.assign({ entry: migrateRows }, deps)));
     return () => {
-      try { stopSession(); } finally { stopIndex(); }
+      try { stopSession(); } finally { stopIndex(); stopGuard(); }
     };
   } catch (error) {
     stopIndex();
+    stopGuard();
     throw error;
   }
 }

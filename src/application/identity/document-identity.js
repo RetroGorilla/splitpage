@@ -1,68 +1,31 @@
-import { currentHome, documentLocation, onServerDoc } from "../legacy/location-bridge.ts";
-import { mintDocId, randomHexBytes } from "../adapters/identity/ids.ts";
-import { documentIdStamp } from "../application/commands/save-stamps.ts";
-import { currentDocument, heldDocument, stampDocument } from "../legacy/session-bridge.ts";
-import { documentGuardOn, documentView, quietly } from "../legacy/document-guard.ts";
-import { mergedDocId, sha256Hex, withPageHead } from "../core/document/ids.ts";
-import { cappedLongText, plainText } from "../core/document/text-policy.ts";
-import { migrateDocument as migrateDocumentWith } from "../core/migrate.ts";
-import { withDocumentPorts } from "../legacy/document-ports.ts";
-import { documentTransitions } from "../legacy/transition-bridge.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { neverWrittenOut } from "../application/recovery/pristine.ts";
-import { base64Encode } from "../core/document/media.ts";
-import { STATE_FIELDS } from "../core/merge/state-fields.ts";
-import { buildPublishHtml, defaultState } from "../adapters/page/page-shell.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
-import { inlineStateImages } from "../adapters/storage/02c-blobs.js";
-import { copyHistory, historyDocumentChanged } from "../legacy/history-bridge.ts";
-import {
-  decideDuplicateLoser,
-  docIdFromSha256Hex,
-  duplicateReplacementInput,
-  normalizeDocId
-} from "../../shared/doc-id-policy.js";
-import { cloneState } from "../core/document/clone.ts";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
-export { decideDuplicateLoser };
-export { mergedDocId, randomHexBytes, sha256Hex, withPageHead };
+import { documentIdStamp } from "../commands/save-stamps.ts";
+import { sha256Hex } from "../../core/document/ids.ts";
+import { cappedLongText, plainText } from "../../core/document/text-policy.ts";
+import { decideDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput, normalizeDocId } from "../../../shared/doc-id-policy.js";
 
-var PAGE_NONCE;
+function startIdentity(ports) {
+  var currentDocument = ports.session.currentDocument;
+  var stampDocument = ports.session.stampDocument;
+  var currentHome = ports.location.home;
+  var documentLocation = function () { return ports.location; };
+  var onServerDoc = ports.location.onServerDoc;
+  var showToast = ports.effects.show;
+  var copyHistory = ports.history.copyHistory;
+  var historyDocumentChanged = ports.history.historyDocumentChanged;
+  var runningOnDesktop = ports.desktop.running;
+  var mintDocId = ports.ids.docId;
+  var randomHexBytes = ports.ids.randomHexBytes;
 
-export function migrateDocument(raw, origin) {
-  return withDocumentPorts(STATE_FIELDS, function (ports) {
-    return migrateDocumentWith(raw, origin, ports);
-  });
-}
+var PAGE_NONCE = randomHexBytes(16);
 
-export async function loadInitialState(pristine) {
-  var raw = null;
-  if (!pristine) {
-    try { raw = JSON.parse(document.getElementById("state-data").textContent); } catch (e) { raw = null; }
-  }
-  var loaded = pristine || !raw || typeof raw !== "object" || neverWrittenOut(raw)
-    ? null
-    : migrateDocument(raw, { kind: "file" });
-  if (!loaded || neverWrittenOut(loaded)) {
-    documentLocation().markWrittenOut(false);
-    return migrateRows(defaultState());
-  }
-  documentLocation().markWrittenOut(true);
-  return loaded;
-}
-
-export function noteMergedDocId(prevId) {
+function noteMergedDocId(prevId) {
   prevId = normalizeDocId(prevId);
   if (!currentDocument() || !prevId || prevId === currentDocument().docId) return;
   copyDocHistorySafe(prevId, currentDocument().docId);
   syncDocIdentity();
 }
 
-export function adoptRestoredState(snap) {
-  return documentTransitions().restore({ from: { raw: cloneState(snap) } }).document;
-}
-
-export var documentIdentityPort = Object.freeze({
+var documentIdentityPort = Object.freeze({
   mint: mintDocId,
   writtenOut: function () { return documentLocation().writtenOut(); },
   markWrittenOut: function (writtenOut) { documentLocation().markWrittenOut(writtenOut); }
@@ -73,7 +36,7 @@ var lastIdentityKey = "";
 var docIdEventLog = [];
 var docIdCopyWarned = false;
 
-export function copyDocHistorySafe(from, to) {
+function copyDocHistorySafe(from, to) {
   from = normalizeDocId(from);
   to = normalizeDocId(to);
   if (!from || !to || from === to) return;
@@ -81,7 +44,7 @@ export function copyDocHistorySafe(from, to) {
   if (docIdEventLog.length > 200) docIdEventLog.shift();
   if (typeof copyHistory !== "function") return;
   function warn() {
-    if (docIdCopyWarned) return;
+    if (!active || docIdCopyWarned) return;
     docIdCopyWarned = true;
     try {
       showToast("Could not copy this document's version history to its new identity. " +
@@ -105,19 +68,19 @@ function docHomeKey() {
   return "none:" + PAGE_NONCE;
 }
 
-export function syncDocIdentity() {
+function syncDocIdentity() {
   if (!currentDocument()) return;
   var key = normalizeDocId(currentDocument().docId) + "|" + docHomeKey();
   if (key === lastIdentityKey) return;
   lastIdentityKey = key;
-  identityAdoptedAt = Date.now();
+  identityAdoptedAt = ports.now();
   if (typeof historyDocumentChanged === "function") {
-    try { historyDocumentChanged(); } catch (e) { if (window.console) console.error(e); }
+    try { historyDocumentChanged(); } catch (e) { ports.logger.error(e); }
   }
   if (!runningOnDesktop()) announceDocIdentity();
 }
 
-export function reassignDocId(toId, opts) {
+function reassignDocId(toId, opts) {
   opts = opts || {};
   toId = normalizeDocId(toId);
   var fromId = normalizeDocId(opts.fromId);
@@ -136,16 +99,16 @@ export function reassignDocId(toId, opts) {
 var DOC_ID_CHANNEL_NAME = "splitpage-doc-ids";
 var docIdChannel = null;
 
-export function initDocIdentityChannel(factory) {
+function initDocIdentityChannel(factory) {
   if (runningOnDesktop()) return null;
   if (docIdChannel) {
     try { if (typeof docIdChannel.close === "function") docIdChannel.close(); } catch (e) {}
     docIdChannel = null;
   }
-  var ch = null;
+  var ch;
   try {
     if (typeof factory === "function") ch = factory(DOC_ID_CHANNEL_NAME);
-    else if (typeof BroadcastChannel === "function") ch = new BroadcastChannel(DOC_ID_CHANNEL_NAME);
+    else ch = ports.channel(DOC_ID_CHANNEL_NAME);
   } catch (e) { ch = null; }
   if (!ch) return null;
   ch.onmessage = function (ev) {
@@ -199,36 +162,59 @@ function onDocIdentityMessage(msg) {
   }
 }
 
-export function docIdEvents() {
+function docIdEvents() {
   return docIdEventLog.slice();
 }
 
-export function standaloneHtmlFor(doc, head, assets) {
-  var copy = migrateRows(cloneState(doc.document));
-  inlineStateImages(copy, null, assets ? function (sha) {
-    var held = assets.picture(sha);
-    return held && held.mime ? "data:" + held.mime + ";base64," + base64Encode(held.bytes) : null;
-  } : null);
-  delete copy.docId;
-  var html = buildPublishHtml(JSON.stringify(copy));
-  return head ? withPageHead(html, head) : html;
+  var active = true;
+  function guarded(fn) {
+    return function (...args) {
+      if (!active) throw new Error("The document identity is not started yet");
+      return fn(...args);
+    };
+  }
+  var api = { noteMergedDocId, copyDocHistorySafe, syncDocIdentity, reassignDocId, initDocIdentityChannel, docIdEvents };
+  Object.keys(api).forEach(function (key) { api[key] = guarded(api[key]); });
+  api.documentIdentityPort = Object.freeze(documentIdentityPort);
+  api.dispose = function () {
+    if (!active) return;
+    active = false;
+    if (docIdChannel) {
+      docIdChannel.onmessage = null;
+      try { if (typeof docIdChannel.close === "function") docIdChannel.close(); } catch (e) {}
+      docIdChannel = null;
+    }
+  };
+  return api;
 }
 
-export function __init() {
-  PAGE_NONCE = randomHexBytes(16);
-  window.__documentGuardTest = {
-    on: function () { return documentGuardOn; },
-    viewed: function () { var doc = heldDocument(); return doc !== null && documentView(doc) !== doc; },
-    writes: function () {
-      var view = currentDocument();
-      return [
-        function () { Reflect.set(view, "title", view.title); },
-        function () { Reflect.set(view.rows, "length", view.rows.length); },
-        function () { Reflect.deleteProperty(view, "documentGuardProbe"); },
-        function () { Reflect.defineProperty(view, "title", { value: view.title }); }
-      ].map(function (write) {
-        try { quietly(write); return false; } catch (e) { return e instanceof TypeError; }
-      });
-    }
+export function createDocumentIdentityOwner() {
+  var started = null;
+  function running() {
+    if (!started) throw new Error("The document identity is not started yet");
+    return started;
+  }
+  return {
+    startIdentity: function (ports) {
+      if (started) throw new Error("The document identity is already started; stop it first");
+      var mine = startIdentity(ports);
+      started = mine;
+      return function () {
+        if (started !== mine) return;
+        started = null;
+        mine.dispose();
+      };
+    },
+    documentIdentityPort: Object.freeze({
+      mint: function () { return running().documentIdentityPort.mint(); },
+      writtenOut: function () { return running().documentIdentityPort.writtenOut(); },
+      markWrittenOut: function (value) { return running().documentIdentityPort.markWrittenOut(value); }
+    }),
+    noteMergedDocId: function (...args) { return running().noteMergedDocId(...args); },
+    copyDocHistorySafe: function (...args) { return running().copyDocHistorySafe(...args); },
+    syncDocIdentity: function (...args) { return running().syncDocIdentity(...args); },
+    reassignDocId: function (...args) { return running().reassignDocId(...args); },
+    initDocIdentityChannel: function (...args) { return running().initDocIdentityChannel(...args); },
+    docIdEvents: function (...args) { return running().docIdEvents(...args); }
   };
 }

@@ -2,8 +2,8 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { sha256Hex } from "../js/02b-doc-id.js";
-import * as docId from "../js/02b-doc-id.js";
+import { sha256Hex } from "../core/document/ids.ts";
+import * as docId from "../application/identity/document-identity.js";
 import { sha256Bytes as coreSha256Bytes, sha256Hex as coreSha256Hex, utf8Bytes, sha256Bytes } from "../core/document/ids.ts";
 
 const oracle = (s) => createHash("sha256").update(Buffer.from(s, "utf8")).digest("hex");
@@ -136,7 +136,7 @@ test("core's sha256Bytes over raw bytes equals node:crypto", () => {
   }
 });
 
-test("02b-doc-id.js retains core's sha256Hex and no longer re-exports sha256Bytes", () => {
+test("document-identity.js uses core's sha256Hex and does not re-export sha256Bytes", () => {
   assert.equal(sha256Hex, coreSha256Hex);
   assert.equal("sha256Bytes" in docId, false);
 });

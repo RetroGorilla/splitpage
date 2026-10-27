@@ -91,7 +91,7 @@ export function closeApp() {
 export async function appWiringDeps() {
   const [{ migrateRows }, docId, sync, production, broll, effects, exporting, drafts, hosted, files, imports, formats] = await Promise.all([
     import("../legacy/document-ports.ts"),
-    import("../js/02b-doc-id.js"),
+    import("../bootstrap/wiring/document-identity.ts"),
     import("../js/03-sync.js"),
     import("../features/tags/production-tags.js"),
     import("../bootstrap/wiring/broll.ts"),
@@ -103,7 +103,9 @@ export async function appWiringDeps() {
     import("../bootstrap/wiring/imports.ts"),
     import("../bootstrap/wiring/project-files.ts")
   ]);
-  const fileSaving = exporting.wireFileSaving({ copyHistory: docId.copyDocHistorySafe, syncIdentity: docId.syncDocIdentity, setBaseline: sync.setBaseState });
+  const entry = await import("../bootstrap/startup/document-entry.js");
+  const html = await import("../adapters/page/standalone-html.js");
+  const fileSaving = exporting.wireFileSaving({ copyHistory: (...args) => docId.documentIdentityOwner().copyDocHistorySafe(...args), syncIdentity: (...args) => docId.documentIdentityOwner().syncDocIdentity(...args), setBaseline: sync.setBaseState });
   return {
     entry: migrateRows,
     effects: effects.sessionEffects(),
@@ -118,12 +120,12 @@ export async function appWiringDeps() {
     merge: sync.legacyMergePorts,
     recovery: drafts.draftRecoveryPorts,
     projectFiles: () => formats.wireProjectFiles({
-      prepareDocument: docId.migrateDocument,
-      restoreDocument: docId.adoptRestoredState,
-      changeDocumentId: docId.reassignDocId,
-      identityEvents: docId.docIdEvents,
-      connectIdentity: docId.initDocIdentityChannel,
-      standaloneHtml: docId.standaloneHtmlFor,
+      prepareDocument: entry.migrateDocument,
+      restoreDocument: entry.adoptRestoredState,
+      changeDocumentId: (...args) => docId.documentIdentityOwner().reassignDocId(...args),
+      identityEvents: (...args) => docId.documentIdentityOwner().docIdEvents(...args),
+      connectIdentity: (...args) => docId.documentIdentityOwner().initDocIdentityChannel(...args),
+      standaloneHtml: html.standaloneHtmlFor,
       replaceSyncBase: sync.setBaseState,
       tagOccurrences: production.tagFieldOccurrences
     }).services,
@@ -136,6 +138,7 @@ export async function rewireApp(overrides) {
   const wiring = wireApp(Object.assign(await appWiringDeps(), overrides));
   const { mountHistoryOwner } = await import("../bootstrap/wiring/history.ts");
   mountHistoryOwner();
+  (await import("../bootstrap/wiring/document-identity.ts")).mountDocumentIdentityOwner();
   return wiring;
 }
 

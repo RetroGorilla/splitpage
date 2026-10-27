@@ -1,3 +1,5 @@
+import "./_identity-started.mjs";
+import { documentIdentityOwner } from "../bootstrap/wiring/document-identity.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { setHome, onServerDoc } from "../legacy/location-bridge.ts";
@@ -7,7 +9,8 @@ test("autoSaveTarget answers server, file or null off the home", async () => {
   await import("./_dom.mjs");
   const { autoSaveTarget, saveDestinations, startSaves } = await import("../legacy/save-bridge.ts");
   const { wireFileSaving } = await import("../bootstrap/wiring/file-saving.ts");
-  const { copyDocHistorySafe, syncDocIdentity } = await import("../js/02b-doc-id.js");
+  const copyDocHistorySafe = (...args) => documentIdentityOwner().copyDocHistorySafe(...args);
+  const syncDocIdentity = (...args) => documentIdentityOwner().syncDocIdentity(...args);
   const { setBaseState } = await import("../js/03-sync.js");
   const { serverSaveDestination } = await import("../js/13-hosted.js");
   const fileSaving = wireFileSaving({ copyHistory: copyDocHistorySafe, syncIdentity: syncDocIdentity, setBaseline: setBaseState });

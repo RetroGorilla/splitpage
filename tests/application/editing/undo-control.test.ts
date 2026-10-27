@@ -1,3 +1,4 @@
+import { startDocumentGuard } from "../../../src/application/identity/document-guard.ts";
 import "../../../src/test/_dom.mjs";
 import { undoControl as portUndo } from "../../../src/bootstrap/wiring/ports/editing.ts";
 import { test } from "node:test";
@@ -23,6 +24,7 @@ import { createUndoAdapter, routeReplays } from "../../../src/legacy/undo-adapte
 const control: UndoControl = portUndo;
 
 function open(t: TestContext) {
+  t.after(startDocumentGuard(false, () => {}));
   t.after(startUndo(legacyUndoPorts()));
   const stop = startSessionBridge({
     entry: (raw) => migrateRows(raw),
