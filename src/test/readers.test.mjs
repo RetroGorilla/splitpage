@@ -8,7 +8,7 @@ import { htmlToMarkdown, inertBody, sanitizeHtml } from "../legacy/richtext.ts";
 import { tagsInField } from "../features/tags/production-tags.js";
 
 import { htmlToRuns } from "../adapters/formats/html-runs.ts";
-import { htmlToPlainText } from "../legacy/plain-text.ts";
+import { htmlToPlainText } from "../bootstrap/plain-text.ts";
 import { prompterSceneHtml, trimPrompterCell } from "../features/prompter/prompter.js";
 import { STORED, tagSpan } from "./_stored-cells.mjs";
 

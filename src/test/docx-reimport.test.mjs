@@ -10,7 +10,7 @@ import { intern } from "../adapters/storage/02c-blobs.js";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { strBytes } from "../adapters/formats/bytes.ts";
 import { zipRead, zipWrite } from "../adapters/formats/zip.ts";
-import { htmlToPlainText } from "../legacy/plain-text.ts";
+import { htmlToPlainText } from "../bootstrap/plain-text.ts";
 import { buildDocx, buildNarrationDocx, docxToRows } from "../adapters/formats/docx.ts";
 import { loadTestDocument } from "./_document.mjs";
 

@@ -1,0 +1,65 @@
+import { startWriter } from "../../features/writer/writer.js";
+import { writerActions as definitions } from "../../features/writer/actions.ts";
+import type { WriterFeaturePorts } from "../../features/writer/ports.ts";
+import { owned } from "../../features/routing/owned.ts";
+import { documentReader, refresh } from "./ports/document.ts";
+import { edits, writerEditing, writerUndo } from "./ports/editing.ts";
+import { text } from "./ports/text.ts";
+import { writerPanels } from "./ports/panels.ts";
+import { writerPreferences, writerView } from "./ports/preferences.ts";
+import { notices } from "./ports/effects.ts";
+import { actions } from "./ports/actions.ts";
+import { screen } from "./ports/screen.ts";
+import { review } from "./ports/location.ts";
+import { splitRowFieldCore } from "./rows.ts";
+import { currentHideShot } from "./hide-shot.ts";
+import { currentRowsRender } from "./render.ts";
+import { hideTagGhost, scheduleIdleRefresh } from "../../features/tags/production-tags.js";
+
+const writer = owned<ReturnType<typeof startWriter>>();
+const connections = new Set<(control: ReturnType<typeof startWriter> | null) => void>();
+
+export function connectWriter(controlChanged: (control: ReturnType<typeof startWriter> | null) => void): () => void {
+  connections.add(controlChanged);
+  controlChanged(writer.owner());
+  return () => {
+    if (!connections.delete(controlChanged)) return;
+    controlChanged(null);
+  };
+}
+
+export function mountWriterRuntimeFeature() {
+  return writer.replace(() => {
+    const render = currentRowsRender();
+    if (!render) throw new Error("Writer needs the row renderer to be mounted");
+    const ports: WriterFeaturePorts = {
+      document: documentReader, edits, text, editing: writerEditing, undo: writerUndo,
+      rows: { splitField: splitRowFieldCore },
+      hiding: { renderGroups: (rows, render) => currentHideShot()?.renderGroups(rows, render) ?? "" },
+      panels: writerPanels, preferences: writerPreferences, view: writerView, notices, actions,
+      formatting: {
+        state: render.cellFormatState,
+        direction: render.toggleCellDirection,
+        toggle: render.toggleCellFormat
+      },
+      dismissTagGhost: hideTagGhost, scheduleStats: scheduleIdleRefresh,
+      cancelStats: () => { refresh.cancel(["writerStats"]); }
+    };
+    const mounted = startWriter(ports);
+    const control = { ...mounted, dispose: () => {
+      if (writer.owner() === control) writer.stop();
+      else mounted.dispose();
+    } };
+    return control;
+  }, (control) => [() => {
+    for (const connected of connections) connected(control);
+    return () => { for (const connected of connections) connected(null); };
+  }]);
+}
+
+export const stopWriterRuntimeFeature = writer.stop;
+export const writerControls = writer.owner;
+
+export function writerActions() {
+  return definitions(writer.owner, { screen, review });
+}

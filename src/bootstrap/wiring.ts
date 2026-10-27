@@ -459,3 +459,5 @@ export { mountScriptPlaceFeature } from "./wiring/side-panels.ts";
 export { mountUpdateFeature } from "./wiring/update.ts";
 
 export { mountPrompterRuntimeFeature } from "./wiring/prompter.ts";
+
+export { mountWriterRuntimeFeature } from "./wiring/writer.ts";

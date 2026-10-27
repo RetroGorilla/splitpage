@@ -1,33 +1,17 @@
-import { editableCellHtml } from "../features/common/editable-cell.js";
-import { formatDuration, pad2, totalSeconds } from "../core/production/timing.ts";
-import { renderRowGroups } from "../legacy/hide-shot-bridge.ts";
-import { rowIndexOf } from "../core/document/rows.ts";
-import { sidePanels } from "../legacy/panels-bridge.ts";
-import { ensureTrailingCaretSpot } from "../features/common/dom.ts";
-import { sanitizeHtml, storedHtmlFromDom } from "../legacy/richtext.ts";
-import { cssAttr } from "../features/common/dom.ts";
-import {
-  cellFormatState,
-  toggleCellDirection,
-  toggleCellFormat
-} from "../legacy/row-formatting.ts";
-import { splitRowFieldCore } from "../legacy/rows-bridge.ts";
-import { hideTagGhost, scheduleIdleRefresh } from "../legacy/tag-production.ts";
-import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "../legacy/undo-bridge.ts";
-import { bothScenesHaveVisual, joinScenesCommand } from "../application/commands/split-join.ts";
-import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../application/preferences/preferences.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
-import { htmlToPlainText } from "../legacy/plain-text.ts";
-import { VIEWING_ONLY } from "../application/collaboration/review.ts";
-import { currentDocument, editAllowed, readSession, runCommand, sessionTextPorts } from "../legacy/session-bridge.ts";
-import { appActions } from "../legacy/app-actions.ts";
-import { cellEditing, editorSelection, focusMemory, paintGuard } from "../legacy/editor-bridge.ts";
-import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
-import { showToast } from "../legacy/effects-bridge.ts";
-import { placeEditorSelection, rememberCellSelection } from "../features/common/cell-selection.ts";
-import { placeCaretAtTextOffset } from "../features/common/caret.ts";
-import { gallerySize } from "../core/document/gallery.ts";
-import { escapeHtml, truncateForPreview } from "../core/document/text-policy.ts";
+import { editableCellHtml } from "../common/editable-cell.js";
+import { formatDuration, pad2, totalSeconds } from "../../core/production/timing.ts";
+import { rowIndexOf } from "../../core/document/rows.ts";
+import { ensureTrailingCaretSpot, cssAttr } from "../common/dom.ts";
+import { bothScenesHaveVisual, joinScenesCommand } from "../../application/commands/split-join.ts";
+import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../../application/preferences/preferences.ts";
+import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
+import { placeEditorSelection, rememberCellSelection } from "../common/cell-selection.ts";
+import { placeCaretAtTextOffset } from "../common/caret.ts";
+import { gallerySize } from "../../core/document/gallery.ts";
+import { escapeHtml, truncateForPreview } from "../../core/document/text-policy.ts";
+
+var currentDocument, readSession, editAllowed, runCommand, sessionTextPorts, sanitizeHtml, storedHtmlFromDom, productionReaders, htmlToPlainText, cellEditing, editorSelection, focusMemory, paintGuard, breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial, splitRowFieldCore, renderRowGroups, sidePanels, preferences, viewFlags, showToast, appActions, cellFormatState, toggleCellDirection, toggleCellFormat, hideTagGhost, scheduleIdleRefresh;
+var activeWriter = null;
 
 var writerGutterMode = "visuals";
 var writerUndoMark = 0;
@@ -372,7 +356,90 @@ function guardWriterEdit(e) {
   }
 }
 
-export function __init() {
+export function startWriter(given) {
+  currentDocument = given.document.current;
+  readSession = given.document.read;
+  editAllowed = given.edits.allowed;
+  runCommand = given.edits.run;
+  sessionTextPorts = given.edits.text;
+  sanitizeHtml = given.text.sanitizeHtml;
+  storedHtmlFromDom = given.text.storedHtmlFromDom;
+  productionReaders = given.text.productionReaders;
+  htmlToPlainText = given.text.htmlToPlainText;
+  cellEditing = given.editing.cells;
+  editorSelection = given.editing.selection;
+  focusMemory = given.editing.focus;
+  paintGuard = given.editing.paint;
+  breakUndoCoalescing = given.undo.breakCoalescing;
+  lastUndoEntry = given.undo.last;
+  nextRedoEntry = given.undo.nextRedo;
+  undoLifetime = given.undo.lifetime;
+  undoMark = given.undo.mark;
+  undoSerial = given.undo.serial;
+  splitRowFieldCore = given.rows.splitField;
+  renderRowGroups = given.hiding.renderGroups;
+  sidePanels = given.panels;
+  preferences = given.preferences;
+  viewFlags = given.view;
+  showToast = given.notices.show;
+  appActions = given.actions;
+  cellFormatState = given.formatting.state;
+  toggleCellDirection = given.formatting.direction;
+  toggleCellFormat = given.formatting.toggle;
+  hideTagGhost = given.dismissTagGhost;
+  scheduleIdleRefresh = given.scheduleStats;
+  var mine = {};
+  activeWriter = mine;
+  var disposed = false;
   var root = document.getElementById("writer");
   GUARDED_EVENTS.forEach(function (type) { root.addEventListener(type, guardWriterEdit, true); });
+  return {
+    renderWriter, drawWriter, paintWriterDraw, updateWriterStats, scheduleWriterStats,
+    onWriterKeydown, onWriterFormat, updateWriterFormatState, readWriterSize, applyWriterSize,
+    cycleWriterGutter, openWriter, closeWriter, writerUndoStep, jumpFromWriterToRow,
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      if (activeWriter !== mine) return;
+      activeWriter = null;
+      GUARDED_EVENTS.forEach(function (type) { root.removeEventListener(type, guardWriterEdit, true); });
+      closeWriter();
+      given.cancelStats();
+      writerGutterMode = "visuals";
+      writerUndoMark = 0;
+      reopenOnRedo = null;
+      lastRefusalAt = 0;
+      currentDocument = null;
+      readSession = null;
+      editAllowed = null;
+      runCommand = null;
+      sessionTextPorts = null;
+      sanitizeHtml = null;
+      storedHtmlFromDom = null;
+      productionReaders = null;
+      htmlToPlainText = null;
+      cellEditing = null;
+      editorSelection = null;
+      focusMemory = null;
+      paintGuard = null;
+      breakUndoCoalescing = null;
+      lastUndoEntry = null;
+      nextRedoEntry = null;
+      undoLifetime = null;
+      undoMark = null;
+      undoSerial = null;
+      splitRowFieldCore = null;
+      renderRowGroups = null;
+      sidePanels = null;
+      preferences = null;
+      viewFlags = null;
+      showToast = null;
+      appActions = null;
+      cellFormatState = null;
+      toggleCellDirection = null;
+      toggleCellFormat = null;
+      hideTagGhost = null;
+      scheduleIdleRefresh = null;
+    }
+  };
 }

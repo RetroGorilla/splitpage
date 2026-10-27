@@ -26,8 +26,8 @@ const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 test("consumers import richtext functions directly from their owners", () => {
   const imports = [
+    ["src/bootstrap/plain-text.ts", 'import { inertBody } from "../legacy/richtext.ts";'],
     ["src/bootstrap/wiring/ports/text.ts", 'import { buildVideoCardEl } from "../../../legacy/richtext.ts";'],
-    ["src/js/19-writer.js", 'import { sanitizeHtml, storedHtmlFromDom } from "../legacy/richtext.ts";'],
     ["src/features/tags/production-tags.js", 'import { cappedText, codePointPrefix, escapeHtml, safeId as safeIdFrom } from "../../core/document/text-policy.ts";'],
     ["src/js/13-hosted.js", 'import { inertBody } from "../legacy/richtext.ts";'],
     ["src/bootstrap/wiring/ports/text.ts", 'import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../../legacy/richtext.ts";'],

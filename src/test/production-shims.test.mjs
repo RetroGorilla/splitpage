@@ -21,7 +21,7 @@ import { deriveProductionIndex } from "../core/production/tags.ts";
 import { broll } from "./_broll-mounted.mjs";
 const { brollEntries, updateBrollBadge } = broll;
 import "./_broll-mounted.mjs";
-import { htmlToPlainText } from "../legacy/plain-text.ts";
+import { htmlToPlainText } from "../bootstrap/plain-text.ts";
 import { planBrollRecords } from "../core/production/broll.ts";
 import { seededHealRounds } from "./_heal-rounds.mjs";
 import { loadTestDocument } from "./_document.mjs";

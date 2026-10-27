@@ -15,13 +15,13 @@ const { paintingScreen, renderAbsorbed, renderRow } = await import("../features/
 const { paintGuard } = await import("../legacy/editor-bridge.ts");
 const whilePainting = (paint) => paintGuard().whilePainting(paint);
 const afterThisPaint = (work) => paintGuard().afterThisPaint(work);
-const { setHideShotScenes } = await import("../legacy/hide-shot-bridge.ts");
+const { setHideShotScenes } = await import("../bootstrap/wiring/hide-shot.ts");
 const { runBrollRefresh, closeBrollPage, openBrollPage, openBrollPanel } = await import("../features/broll/panel.js");
 const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { flushEdits, undoSizes } = await import("../legacy/undo-bridge.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { liveSession } = await import("../legacy/session-bridge.ts");
-const writer = await import("../js/19-writer.js");
+const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 

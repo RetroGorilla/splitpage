@@ -7,15 +7,17 @@ import { hideTagGhost, tagGhost } from "../../features/tags/production-tags.js";
 import { clearProductionSelection, selectedKeys } from "../../legacy/production-editing-bridge.ts";
 import { renderProduction } from "../../features/tags/panels.js";
 import { closeCommentComposer } from "../../features/comments/comments.js";
-import { closeWriter } from "../../js/19-writer.js";
+import { connectWriter } from "./writer.ts";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
 import { sidePanels } from "../../legacy/panels-bridge.ts";
+
+function inactiveWriterOverlay(): void {}
 
 const overlay = owned<ReturnType<typeof mountOverlay>>();
 
 export function mountOverlayFeature(): ReturnType<typeof mountOverlay> {
   return overlay.replace(function () {
-    const ports: OverlayPorts = {
+    const ports: { -readonly [K in keyof OverlayPorts]: OverlayPorts[K] } = {
       closeRowMenus: closeRowMenus,
       selectedKeys: selectedKeys,
       clearProductionSelection: clearProductionSelection,
@@ -26,10 +28,12 @@ export function mountOverlayFeature(): ReturnType<typeof mountOverlay> {
       paintingScreen: paintingScreen,
       hasTagGhost: function () { return !!tagGhost; },
       hideTagGhost: hideTagGhost,
-      closeWriter: closeWriter,
+      closeWriter: inactiveWriterOverlay,
       focus: function (target) { target.focus(); }
     };
-    return mountOverlay({ window: window, ports: ports });
+    const mounted = mountOverlay({ window: window, ports: ports });
+    const disconnect = connectWriter((control) => { ports.closeWriter = control?.closeWriter ?? inactiveWriterOverlay; });
+    return { ...mounted, dispose: () => { disconnect(); mounted.dispose(); } };
   });
 }
 

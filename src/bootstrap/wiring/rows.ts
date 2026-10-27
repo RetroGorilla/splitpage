@@ -13,7 +13,6 @@ import { startSceneRows as mountScenes } from "../../features/rows/scenes.js";
 import { randomIds } from "../../adapters/identity/ids.ts";
 import { cellEditing, rowDrag } from "../../legacy/editor-bridge.ts";
 import { deleteConfirmation } from "../../legacy/production-editing-bridge.ts";
-import { handScenesTo } from "../../legacy/rows-bridge.ts";
 
 const scenes = owned<Scenes>();
 const media = owned<SceneMedia>();
@@ -38,7 +37,7 @@ export function mountScenesFeature(): Scenes {
       }
     };
     return mountScenes(ports);
-  }, (owner) => [() => { handScenesTo(owner); return () => { handScenesTo(null); }; }]);
+  });
 }
 
 export const stopScenesFeature = scenes.stop;
@@ -126,4 +125,8 @@ export function removeImage(rowId: string, slot?: number): void {
 
 export function removeImageLink(rowId: string, slot: number, key: string): void {
   media.owner()?.removeLink(rowId, slot, key);
+}
+
+export function splitRowFieldCore(cell: Element) {
+  return scenes.owner()?.splitField(cell) ?? null;
 }

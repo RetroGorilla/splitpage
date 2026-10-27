@@ -17,7 +17,7 @@ const { foldIntoEdit, undo, redo, undoSizes, lastUndoEntry, flushEdits } = await
 const { thumbnailsAfterPaste } = await import("../bootstrap/wiring/gallery.ts");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { addGalleryVideo, setVideoThumbnail, videoLinkKey } = await import("../core/document/gallery.ts");
-const writer = await import("../js/19-writer.js");
+const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 

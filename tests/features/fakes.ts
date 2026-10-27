@@ -21,6 +21,47 @@ import type { NoticeKind, NoticePort } from "../../src/application/effects/ports
 import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
 import type { TextServices } from "../../src/application/text/services.ts";
 import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts";
+import type { WriterFeaturePorts } from "../../src/features/writer/ports.ts";
+import { createPaintGuard } from "../../src/application/editing/paint-guard.ts";
+import { createEditorSelection } from "../../src/application/editing/selection.ts";
+
+export function fakeWriterPorts(initial: DocumentView) {
+  const reader = fakeDocument(initial);
+  const notices = fakeNotices();
+  const editing = fakeEdits();
+  const selection = createEditorSelection<Element, Range, Element>({ epoch: () => 0, order: () => [], keys: () => [] });
+  const paint = createPaintGuard();
+  const calls: unknown[][] = [];
+  const state = { open: false, allowed: true, size: null as number | null, lifetime: 1, serial: 0 };
+  let paragraph: Element | null = null;
+  const ports: WriterFeaturePorts = {
+    document: reader.document,
+    edits: { allowed: () => state.allowed, run: editing.edits.run, text: { ...editing.edits.stamps, cells: () => [] } },
+    text: {
+      ...fakeTextServices(document).text,
+      htmlToPlainText: (html) => String(html ?? ""),
+      productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0 }
+    },
+    editing: {
+      cells: () => ({ sync: (cell) => { calls.push(["sync", cell]); } }),
+      selection: () => selection, paint: () => paint,
+      focus: () => ({ writerParagraph: () => paragraph, focusedParagraph: (cell) => { paragraph = cell; } })
+    },
+    undo: { breakCoalescing: () => {}, last: () => null, nextRedo: () => null, mark: () => 0, lifetime: () => state.lifetime, serial: () => state.serial },
+    rows: { splitField: () => null },
+    hiding: { renderGroups: (rows, render) => rows.map(render).join("") },
+    panels: () => ({ closeAll: () => { calls.push(["closeAll"]); } }),
+    preferences: () => ({ writerSize: () => state.size, setWriterSize: (size) => { state.size = size; } }),
+    view: () => ({ writerOpen: () => state.open, findOpen: () => false, setWriterOpen: (open) => { state.open = open; calls.push(["setOpen", open]); } }),
+    notices: notices.notices,
+    actions: { invoke: (id) => ({ kind: "unknown", id }) },
+    formatting: { state: () => null, direction: () => null, toggle: () => null },
+    dismissTagGhost: () => { calls.push(["hideGhost"]); },
+    scheduleStats: (job) => { calls.push(["schedule", job]); },
+    cancelStats: () => { calls.push(["cancelStats"]); }
+  };
+  return { ports, reader, notices, calls, state };
+}
 
 export function fakePrompterPorts(initial: DocumentView | null = null) {
   const reader = fakeDocument(initial);

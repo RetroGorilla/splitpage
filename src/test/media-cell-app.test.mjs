@@ -17,7 +17,7 @@ const { liveSession } = await import("../legacy/session-bridge.ts");
 const { sanitizeHtml } = await import("../legacy/richtext.ts");
 const cellText = await import("../application/commands/cell-text.ts");
 const splitJoin = await import("../application/commands/split-join.ts");
-const writer = await import("../js/19-writer.js");
+const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 

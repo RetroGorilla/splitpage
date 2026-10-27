@@ -93,3 +93,6 @@ export const prompterView: Pick<ViewFlags, "hideShot"> = { hideShot: () => viewF
 
 export const tagView: () => Pick<ViewFlags, "writerOpen"> = viewFlags;
 export const renderPreferences: () => Pick<Preferences, "clock"> = preferences;
+
+export const writerPreferences: () => Pick<Preferences, "writerSize" | "setWriterSize"> = preferences;
+export const writerView: () => Pick<ViewFlags, "writerOpen" | "setWriterOpen" | "findOpen"> = viewFlags;

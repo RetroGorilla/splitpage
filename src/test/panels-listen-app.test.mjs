@@ -24,7 +24,7 @@ const { openProductionPanel } = await import("../features/tags/panels.js");
 const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const { mountPanelListenersFeature, stopPanelListenersFeature } = await import("../bootstrap/wiring/panels.ts");
-const writer = await import("../js/19-writer.js");
+const writer = await import("../features/writer/writer.js");
 
 after(closeApp);
 

@@ -1,6 +1,6 @@
-import type { SceneFields } from "../../../legacy/rows-bridge.ts";
-import { focusRowField } from "../../../legacy/rows-bridge.ts";
+import type { Scenes } from "../../../features/rows/ports.ts";
+import { focusRowField } from "../rows.ts";
 
-export const rows: Pick<SceneFields, "focusField"> = {
+export const rows: Pick<Scenes, "focusField"> = {
   focusField: focusRowField
 };

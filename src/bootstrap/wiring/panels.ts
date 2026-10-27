@@ -18,7 +18,7 @@ import { scheduleBrollRefresh, updateBrollBadge } from "./broll.ts";
 import { captureReplyDrafts, commentsChanged, renderComments } from "../../features/comments/comments.js";
 import { onPresencePaint, paintPresence } from "../../js/13a-presence.js";
 import { presence } from "../../legacy/presence-bridge.ts";
-import { drawWriter, paintWriterDraw, updateWriterStats } from "../../js/19-writer.js";
+import { writerControls } from "./writer.ts";
 
 let stopPanels: (() => void) | null = null;
 
@@ -53,7 +53,8 @@ export function mountPanelListenersFeature(): void {
     onPainted((kind: string) => {
       if (kind === "rows") syncAnchorResolvedClasses(currentDocument(), document);
       else if (kind === "screen") {
-        if (viewFlags().writerOpen()) paintWriterDraw(drawWriter());
+        const writer = writerControls();
+        if (viewFlags().writerOpen() && writer) writer.paintWriterDraw(writer.drawWriter());
         updateScriptStats();
         updateTagBadges();
         scheduleBrollRefresh();
@@ -89,7 +90,7 @@ export function mountPanelListenersFeature(): void {
         else updateTagBadges();
         updateScriptStats();
       }
-      if (jobs.has("writerStats")) updateWriterStats();
+      if (jobs.has("writerStats")) writerControls()?.updateWriterStats();
       if (jobs.has("broll")) runBrollRefresh();
     }),
     onHistoryChange(renderHistoryPanel),

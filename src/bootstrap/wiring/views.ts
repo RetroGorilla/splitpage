@@ -7,7 +7,7 @@ import type { AppearancePorts } from "../../features/settings/appearance.ts";
 import type { HistoryPorts } from "../../features/history/mount.ts";
 import type { SaveRecoveryPorts, ConflictsPorts, SavePorts, FileMenuPorts } from "../../features/file-menu/mount.ts";
 import type { ImportsPorts, GdocPorts } from "../../features/imports/mount.ts";
-import type { WriterOpenPorts, WriterNavigationPorts, WriterClosePorts } from "../../features/writer/mount.ts";
+import type { WriterOpenPorts, WriterNavigationPorts } from "../../features/writer/mount.ts";
 import type { HistoryGalleryPorts } from "../../features/gallery/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runFromButton, saveFromButton } from "../../legacy/app-actions.ts";
@@ -85,11 +85,13 @@ import {
 } from "../../js/18-local-files.js";
 import { currentMergeReview } from "./merge-review.ts";
 import { toggleFileMenu, toggleSubmenu } from "./file-menu-controls.ts";
-import { applyWriterSize, closeWriter, jumpFromWriterToRow } from "../../js/19-writer.js";
+import { connectWriter } from "./writer.ts";
 import { prompterControls } from "./prompter.ts";
 import { routeServerOpen } from "./desktop.ts";
 import { finishMarkdownRowChoice } from "./project-files.ts";
 import { onRootClick, routeRootClick } from "./editor.ts";
+
+function inactiveWriterNavigation(): void {}
 
 const viewMounts = new Map<string, Pick<Owned<Disposable>, "stop">>();
 
@@ -387,22 +389,29 @@ export function mountWriterOpenFeature(): ReturnType<typeof mountWriterOpen> {
 
 export function mountWriterNavigationFeature(): ReturnType<typeof mountWriterNavigation> {
   return replaceViewMount("mountWriterNavigation", function () {
-    const ports: WriterNavigationPorts = {
-      jumpFromWriterToRow: jumpFromWriterToRow,
+    const ports: { -readonly [K in keyof WriterNavigationPorts]: WriterNavigationPorts[K] } = {
+      jumpFromWriterToRow: inactiveWriterNavigation,
       expandHiddenShotStrip: expandHiddenShotStrip,
       saveFromButton: saveFromButton,
-      applyWriterSize: applyWriterSize
+      applyWriterSize: inactiveWriterNavigation
     };
-    return mountWriterNavigation({ window: window, ports: ports });
+    const mounted = mountWriterNavigation({ window: window, ports: ports });
+    const disconnect = connectWriter((control) => {
+      ports.jumpFromWriterToRow = control?.jumpFromWriterToRow ?? inactiveWriterNavigation;
+      ports.applyWriterSize = control?.applyWriterSize ?? inactiveWriterNavigation;
+    });
+    return { dispose: () => { disconnect(); mounted.dispose(); } };
   });
 }
 
 export function mountWriterCloseFeature(): ReturnType<typeof mountWriterClose> {
   return replaceViewMount("mountWriterClose", function () {
-    const ports: WriterClosePorts = {
-      closeWriter: closeWriter
+    const ports = {
+      closeWriter: inactiveWriterNavigation
     };
-    return mountWriterClose({ window: window, ports: ports });
+    const mounted = mountWriterClose({ window: window, ports: ports });
+    const disconnect = connectWriter((control) => { ports.closeWriter = control?.closeWriter ?? inactiveWriterNavigation; });
+    return { dispose: () => { disconnect(); mounted.dispose(); } };
   });
 }
 
