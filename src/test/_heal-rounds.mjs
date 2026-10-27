@@ -1,8 +1,10 @@
+import "./_production-tags-started.mjs";
 import { productionReaders } from "../legacy/document-ports.ts";
 import assert from "node:assert/strict";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { healTagRegistry, productionIndexStats } from "../js/07-production-tags.js";
-import { productionIndex } from "../legacy/production-index-bridge.ts";
+import { healTagRegistry, productionIndexStats } from "../features/tags/production-tags.js";
+
+import { productionIndex } from "../application/production/index-owner.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { deriveProductionIndex } from "../core/production/tags.ts";
 import { loadTestDocument } from "./_document.mjs";

@@ -1,3 +1,4 @@
+import "./_production-tags-started.mjs";
 import { mintTagId } from "../core/document/tags.ts";
 import { DEFAULT_WPM } from "../core/document/timing.ts";
 import "./_dom.mjs";
@@ -12,7 +13,9 @@ import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
 import { refsIn } from "../../shared/blob-policy.js";
 import { dataUrlForSync } from "../adapters/storage/02c-blobs.js";
-import { __init as initTags, collectTagsFromRows } from "../js/07-production-tags.js";
+import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
+import { collectTagsFromRows } from "../features/tags/production-tags.js";
+
 
 initTags();
 

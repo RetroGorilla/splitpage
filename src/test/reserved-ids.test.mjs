@@ -8,7 +8,7 @@ import { migrateDocument } from "../js/02b-doc-id.js";
 import { mergeBrollShots, mergePeople, mergeProductionTags } from "../js/03-sync.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
-import { __init as initTags } from "../js/07-production-tags.js";
+import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { PROTOTYPE_IDS } from "../core/document/id-map.ts";
 import { mergeCase, renameIds, seededRandom, settleMerge, unrenameIds } from "./merge-corpus.mjs";
 

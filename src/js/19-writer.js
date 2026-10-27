@@ -12,7 +12,7 @@ import {
   toggleCellFormat
 } from "./05-render.js";
 import { splitRowFieldCore } from "../legacy/rows-bridge.ts";
-import { hideTagGhost, scheduleIdleRefresh } from "./07-production-tags.js";
+import { hideTagGhost, scheduleIdleRefresh } from "../legacy/tag-production.ts";
 import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "../legacy/undo-bridge.ts";
 import { bothScenesHaveVisual, joinScenesCommand } from "../application/commands/split-join.ts";
 import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../application/preferences/preferences.ts";

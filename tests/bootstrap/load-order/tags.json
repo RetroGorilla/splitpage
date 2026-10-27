@@ -1,14 +1,13 @@
 {
-  "legacyImports": [
-    "./07-production-tags.js"
-  ],
+  "legacyImports": [],
   "loadOnly": [
     "src/bootstrap/wiring/production.ts",
     "src/bootstrap/wiring/production-editing.ts",
     "src/features/tags/panels.js",
     "src/features/tags/plain-tags.js",
     "src/bootstrap/wiring/plain-tags.ts",
-    "src/legacy/plain-tag-bridge.ts"
+    "src/features/tags/production-tags.js",
+    "src/bootstrap/wiring/production-tags.ts"
   ],
   "expectedLoads": 7
 }

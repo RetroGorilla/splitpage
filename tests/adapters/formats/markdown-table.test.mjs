@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../../../src/legacy/session-bridge.ts";
 import { migrateRows } from "../../../src/legacy/document-ports.ts";
-import { __init as initTags } from "../../../src/js/07-production-tags.js";
+import { mountProductionTagsFeature as initTags } from "../../../src/bootstrap/wiring/production-tags.ts";
 import { detectTwoColumnFormat, parseImportRows } from "../../../src/adapters/formats/import-text.js";
 import { parseMarkdownTable } from "../../../src/adapters/formats/markdown-table.ts";
 import { cellOf } from "../../../src/legacy/richtext.ts";

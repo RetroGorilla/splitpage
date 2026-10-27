@@ -1,3 +1,4 @@
+import "./_production-tags-started.mjs";
 import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import "./_export-services-started.mjs";
@@ -7,7 +8,8 @@ import assert from "node:assert/strict";
 import { STATE_FIELDS, missingStateFields } from "../core/merge/state-fields.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
-import { collectTagsFromRows } from "../js/07-production-tags.js";
+import { collectTagsFromRows } from "../features/tags/production-tags.js";
+
 import { brollInCell } from "../core/production/broll.ts";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
 import { STARTERS, starterById } from "../starters/index.ts";

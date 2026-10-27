@@ -4,7 +4,6 @@ import { owned } from "../../features/routing/owned.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { cells as portCells } from "./ports/editing.ts";
 import { text as portText } from "./ports/text.ts";
-import { handPlainTagTo } from "../../legacy/plain-tag-bridge.ts";
 
 const plainTags = owned<PlainTagMount>();
 
@@ -12,12 +11,7 @@ export function mountPlainTagsFeature(): PlainTagMount {
   return plainTags.replace(() => {
     const ports: PlainTagPorts = { document: portDocument, cells: portCells, text: portText };
     return mountPlainTags(ports);
-  }, (owner) => [
-    () => {
-      handPlainTagTo(owner.isOpen);
-      return () => { handPlainTagTo(null); };
-    }
-  ]);
+  });
 }
 
 export const stopPlainTagsFeature = plainTags.stop;

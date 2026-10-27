@@ -90,3 +90,5 @@ export const prompterPreferences: Pick<Preferences, "prompterFlag" | "setPrompte
 };
 
 export const prompterView: Pick<ViewFlags, "hideShot"> = { hideShot: () => viewFlags().hideShot() };
+
+export const tagView: () => Pick<ViewFlags, "writerOpen"> = viewFlags;

@@ -1,3 +1,5 @@
+export { mountProductionTagsFeature } from "./wiring/production-tags.ts";
+import { wireTagProduction } from "./wiring/production-tags.ts";
 export { mountImportDialogFeature } from "./wiring/imports.ts";
 import { importDocumentSource } from "./wiring/imports.ts";
 export { mountPageEntry } from "./startup/page-entry.ts";
@@ -370,12 +372,15 @@ function drain(disposers: (() => void)[]): unknown[] {
   return failures;
 }
 
-export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFiles" | "effects" | "saves"> & { readonly projectFiles: ProjectFileDeferredPorts; readonly fileSaving: FileSavingDeferredPorts }): Wiring {
+export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFiles" | "effects" | "saves" | "refresh" | "bulkTags"> & { readonly bulkTags: Pick<BulkTagPorts, "stamp">; readonly projectFiles: Omit<ProjectFileDeferredPorts, "tagOccurrences">; readonly fileSaving: FileSavingDeferredPorts }): Wiring {
+  const tags = wireTagProduction();
   const fileSaving = wireFileSaving(deps.fileSaving);
   return wireApp({
     ...deps,
     effects: sessionEffects(),
-    projectFiles: () => wireProjectFiles(deps.projectFiles).services,
+    refresh: tags.refresh,
+    bulkTags: { cell: tags.bulkCell, stamp: deps.bulkTags.stamp },
+    projectFiles: () => wireProjectFiles({ ...deps.projectFiles, tagOccurrences: tags.tagOccurrences }).services,
     saves: fileSaving.savePorts,
     sources: () => { const sources = [...deps.sources()]; sources.splice(1, 0, importDocumentSource()); return sources; },
     destinations: () => [fileSaving.destination(), ...deps.destinations()],

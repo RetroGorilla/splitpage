@@ -19,12 +19,7 @@ import { appendDraftMedia, draftModel, editDraft } from "../features/editing/dra
 import { isDraftBox, isScriptCell } from "../features/editing/cell-page.ts";
 import { trackDocument } from "../legacy/undo-bridge.ts";
 import { rowMotionKey, withRowMotion } from "../features/rows/row-motion.js";
-import {
-  productionIndexStats,
-  resetProductionIndexStats,
-  scheduleUntaggedScan,
-  tagFieldOccurrences
-} from "./07-production-tags.js";
+import { productionIndexStats, resetProductionIndexStats, scheduleUntaggedScan, tagFieldOccurrences } from "../legacy/tag-production.ts";
 import { formatTimestamp } from "../features/common/comment-time.js";
 import { appActions } from "../legacy/app-actions.ts";
 import { presence } from "../legacy/presence-bridge.ts";

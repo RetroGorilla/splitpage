@@ -108,7 +108,7 @@ import {
   untaggedSuggestion,
   updateTagGhost,
   updateUntaggedPrompt
-} from "../../js/07-production-tags.js";
+} from "../../features/tags/production-tags.js";
 import { currentPlainTags } from "./plain-tags.ts";
 import { renderProduction } from "../../features/tags/panels.js";
 import { anchorBrollInLeftCell, maybeCaptureBroll, scheduleBrollRefresh } from "./broll.ts";

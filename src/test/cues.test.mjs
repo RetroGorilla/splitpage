@@ -1,3 +1,4 @@
+import "./_production-tags-started.mjs";
 import "./_dom.mjs";
 import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import "./_export-services-started.mjs";
@@ -18,7 +19,9 @@ import { fromHtml } from "../legacy/richtext.ts";
 import { mergeCells } from "../core/merge/cells.ts";
 import { spokenText, toDocxRuns, toMarkdown, toPlainText } from "../core/text/projections.ts";
 import { toHtml } from "../core/text/html.ts";
-import { __init as initTags, healTagRegistry, tagsInField } from "../js/07-production-tags.js";
+import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
+import { healTagRegistry, tagsInField } from "../features/tags/production-tags.js";
+
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../legacy/session-bridge.ts";
 import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions } from "../application/commands/tag-rewrites.ts";
@@ -26,7 +29,7 @@ import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions
 const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 const retagMentions = (doc, tags) => countRetagMentions(retagText, doc, tags);
-import { productionIndex } from "../legacy/production-index-bridge.ts";
+import { productionIndex } from "../application/production/index-owner.ts";
 import { zipRead } from "../adapters/formats/zip.ts";
 import { audioDirectionsHtml, buildDocx, buildNarrationText } from "../adapters/formats/docx.ts";
 import { prompterSceneHtml, trimPrompterCell } from "../features/prompter/prompter.js";

@@ -1,3 +1,4 @@
+import "./_production-tags-started.mjs";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import { mintTagId } from "../core/document/tags.ts";
@@ -5,7 +6,8 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { healTagRegistry, productionIndexStats, registerProductionTag } from "../js/07-production-tags.js";
+import { healTagRegistry, productionIndexStats, registerProductionTag } from "../features/tags/production-tags.js";
+
 import { renameTag, newBrollRecord } from "../application/commands/production-actions.ts";
 import { retagRewrites as planRetagRewrites } from "../application/commands/tag-rewrites.ts";
 
@@ -13,7 +15,7 @@ const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
 import { sessionStamps } from "../legacy/session-bridge.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
-import { productionIndex } from "../legacy/production-index-bridge.ts";
+import { productionIndex } from "../application/production/index-owner.ts";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { deriveProductionIndex } from "../core/production/tags.ts";
 import { broll } from "./_broll-mounted.mjs";

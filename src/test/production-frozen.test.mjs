@@ -5,8 +5,8 @@ import assert from "node:assert/strict";
 globalThis.location = new URL("https://splitpage.test/index.html?freeze-caches=1");
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { healTagRegistry, productionIndexStats, resetProductionIndexStats } = await import("../js/07-production-tags.js");
-const { productionIndex } = await import("../legacy/production-index-bridge.ts");
+const { healTagRegistry, productionIndexStats, resetProductionIndexStats } = await import("../features/tags/production-tags.js");
+const { productionIndex } = await import("../application/production/index-owner.ts");
 const { currentDocument } = await import("../legacy/session-bridge.ts");
 const { mintTagId } = await import("../core/document/tags.ts");
 const { productionReaders } = await import("../legacy/document-ports.ts");

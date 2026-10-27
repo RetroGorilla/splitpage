@@ -11,7 +11,7 @@ await bootApp();
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { maybeAutoTagShortcut } = await import("../js/07-production-tags.js");
+const { maybeAutoTagShortcut } = await import("../features/tags/production-tags.js");
 const { maybeOpenPlainTag, closePlainTag, cancelPlainTag } = await import("../features/tags/plain-tags.js");
 const { maybeCaptureBroll } = await import("../bootstrap/wiring/broll.ts");
 const { pasteIntoCell } = await import("../features/clipboard/cell-clipboard.js");

@@ -1,3 +1,4 @@
+import "./_production-tags-started.mjs";
 import { TAG_CATEGORIES } from "../core/production/looks.ts";
 import { hasSetLength } from "../core/document/timing.ts";
 import "./_dom.mjs";
@@ -11,7 +12,9 @@ import { productionReaders } from "../legacy/document-ports.ts";
 import { STATE_FIELDS, missingStateFields } from "../core/merge/state-fields.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { cellOf } from "../legacy/richtext.ts";
-import { collectTagsFromRows, __init as initTags } from "../js/07-production-tags.js";
+import { collectTagsFromRows } from "../features/tags/production-tags.js";
+
+import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { brollInCell } from "../core/production/broll.ts";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
 import { LONG_DEMO, STARTERS, starterById } from "../starters/index.ts";
