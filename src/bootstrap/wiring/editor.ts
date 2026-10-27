@@ -1,3 +1,4 @@
+import type { UndoRoutePorts } from "../../features/undo/routes.ts";
 import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.js";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { rowActions } from "../../features/rows/actions.ts";
@@ -132,15 +133,13 @@ import {
   undo
 } from "../../legacy/undo-bridge.ts";
 import { runExport } from "../../js/18-local-files.js";
-import {
-  cycleWriterGutter,
-  onWriterFormat,
-  onWriterKeydown,
-  scheduleWriterStats,
-  updateWriterFormatState,
-  writerUndoStep
-} from "../../features/writer/writer.js";
+import { connectWriter } from "./writer.ts";
 import { reviewBlocked, reviewMode, onServerDoc } from "../../legacy/location-bridge.ts";
+
+function inactiveWriter(): void {}
+function skipWriterUndo(): boolean { return false; }
+let scheduleWriterStats: () => void = inactiveWriter;
+let updateWriterFormatState: () => void = inactiveWriter;
 
 type RootInput = Pick<Event, "target">;
 
@@ -321,7 +320,14 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
       refused: function (reason) { if (reason === REVIEW_ONLY) showToast(VIEWING_ONLY, "warn"); }
     });
     return { dispose: installCellEditing(editing) };
-  });
+  }, () => [() => connectWriter((control) => {
+    scheduleWriterStats = control?.scheduleWriterStats ?? inactiveWriter;
+    updateWriterFormatState = control?.updateWriterFormatState ?? inactiveWriter;
+    undoRoutePorts.writerStep = control?.writerUndoStep ?? skipWriterUndo;
+    writerRoutePorts.editKeydown = control?.onWriterKeydown ?? inactiveWriter;
+    writerRoutePorts.format = control?.onWriterFormat ?? inactiveWriter;
+    writerRoutePorts.gutter = control?.cycleWriterGutter ?? inactiveWriter;
+  })]);
 }
 
 export const stopCellEditingFeature = cellEditingMount.stop;
@@ -332,23 +338,25 @@ function editorRoots(): Element[] {
 
 const undoRoutes = owned<ReturnType<typeof mountUndoRoutes>>();
 
+const undoRoutePorts: { -readonly [K in keyof UndoRoutePorts]: UndoRoutePorts[K] } = {
+  replay: function (dir) { if (dir === "redo") redo(); else undo(); },
+  writerStep: skipWriterUndo,
+  stale: screenIsStale,
+  reviewOnly: reviewMode,
+  scriptCell: isScriptCell,
+  latest: lastUndoEntry,
+  warn: function (message) { showToast(message, "warn"); },
+  commentsAreSent: onServerDoc,
+  afterReplay: afterUndoApplied,
+  install: configureUndo
+};
+
 export function mountUndoFeature(): ReturnType<typeof mountUndoRoutes> {
   return undoRoutes.replace(function () {
     return mountUndoRoutes({
       window: window,
       roots: editorRoots(),
-      ports: {
-        replay: function (dir) { if (dir === "redo") redo(); else undo(); },
-        writerStep: writerUndoStep,
-        stale: screenIsStale,
-        reviewOnly: reviewMode,
-        scriptCell: isScriptCell,
-        latest: lastUndoEntry,
-        warn: function (message) { showToast(message, "warn"); },
-        commentsAreSent: onServerDoc,
-        afterReplay: afterUndoApplied,
-        install: configureUndo
-      }
+      ports: undoRoutePorts
     });
   });
 }
@@ -568,12 +576,12 @@ export const stopTitlesFeature = titleRoutes.stop;
 
 const writerRoutes = owned<ReturnType<typeof mountWriterRoutes>>();
 
-const writerRoutePorts: WriterRoutePorts = {
+const writerRoutePorts: { -readonly [K in keyof WriterRoutePorts]: WriterRoutePorts[K] } = {
   input: onRootInput,
   keydown: function (e) { onRootKeydown(e as KeyboardEvent); },
-  editKeydown: onWriterKeydown,
-  format: onWriterFormat,
-  gutter: cycleWriterGutter,
+  editKeydown: inactiveWriter,
+  format: inactiveWriter,
+  gutter: inactiveWriter,
   exportNarration: function () { runExport("export-narration-docx"); }
 };
 
