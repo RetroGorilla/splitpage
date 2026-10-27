@@ -3,7 +3,7 @@ import type { DesktopDocumentListeners, DesktopDocumentState, DesktopDocumentSta
 import type { DesktopHandOff, PrompterElsewhere } from "../application/desktop/shell.ts";
 import { runningOnDesktop } from "../application/desktop-presence.ts";
 import { desktopPort } from "../adapters/desktop/desktop-port.ts";
-import { isPristineSeedDocument } from "../js/03a-history-store.js";
+import type { HistoryOwner } from "../application/recovery/history-ports.ts";
 import { draftResume, recoveryStarted } from "./recovery-bridge.ts";
 import { unsavedChanges } from "./save-bridge.ts";
 import { currentDocument } from "./session-bridge.ts";
@@ -12,7 +12,7 @@ import { currentHome, homeConn, serverHomeId } from "./location-bridge.ts";
 let started: DesktopDocumentStateOwner | null = null;
 let handOff: DesktopHandOff | null = null;
 
-export function legacyDesktopDocumentPorts(): DesktopDocumentStatePorts {
+export function legacyDesktopDocumentPorts(history: Pick<HistoryOwner, "isPristineSeedDocument">): DesktopDocumentStatePorts {
   return Object.freeze({
     facts: Object.freeze({
       running: runningOnDesktop,
@@ -20,7 +20,7 @@ export function legacyDesktopDocumentPorts(): DesktopDocumentStatePorts {
       restoring: function () { return recoveryStarted() && draftResume().restorePending(); },
       connection: function () { return homeConn(); },
       unsaved: function () { return unsavedChanges(); },
-      pristine: function () { return typeof isPristineSeedDocument === "function" && isPristineSeedDocument(); },
+      pristine: function () { return history.isPristineSeedDocument(); },
       fileId: function (): string | null {
         const home = currentHome();
         const handle = home.handle as { readonly _desktopId?: string } | null | undefined;

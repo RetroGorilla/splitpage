@@ -5,7 +5,8 @@ import assert from "node:assert/strict";
 await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { listDocHistory } = await import("../js/03a-history-store.js");
+import { historyOwner } from "../bootstrap/wiring/history.ts";
+const listDocHistory = (...args) => historyOwner().listDocHistory(...args);
 const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");

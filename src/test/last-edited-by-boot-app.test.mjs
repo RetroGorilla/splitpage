@@ -23,7 +23,9 @@ const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { openSettings } = await import("../features/settings/settings.js");
 const { render } = await import("../features/rows/render.js");
 const { toastLastEditor } = await import("../js/03-sync.js");
-const { captureSnapshot, getHistorySnapshot } = await import("../js/03a-history-store.js");
+import { historyOwner } from "../bootstrap/wiring/history.ts";
+const captureSnapshot = (...args) => historyOwner().captureSnapshot(...args);
+const getHistorySnapshot = (...args) => historyOwner().getHistorySnapshot(...args);
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);

@@ -15,7 +15,7 @@ import { STATE_FIELDS } from "../core/merge/state-fields.ts";
 import { buildPublishHtml, defaultState } from "../adapters/page/page-shell.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { inlineStateImages } from "../adapters/storage/02c-blobs.js";
-import { copyHistory, historyDocumentChanged } from "./03a-history-store.js";
+import { copyHistory, historyDocumentChanged } from "../legacy/history-bridge.ts";
 import {
   decideDuplicateLoser,
   docIdFromSha256Hex,

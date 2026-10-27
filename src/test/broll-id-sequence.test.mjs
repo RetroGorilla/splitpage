@@ -16,7 +16,7 @@ import { newBrollRecord } from "../application/commands/production-actions.ts";
 import { runDocumentEdit, currentDocument } from "../legacy/session-bridge.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { WHOLE_DOCUMENT } from "../application/session/change-set.ts";
-import { __init as initHistory } from "../js/03a-history-store.js";
+import { startTestHistory as initHistory } from "./_history-started.mjs";
 import { freezeClockAndRandom } from "./golden-helpers.mjs";
 import { loadTestDocument } from "./_document.mjs";
 

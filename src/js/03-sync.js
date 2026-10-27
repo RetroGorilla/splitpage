@@ -22,7 +22,7 @@ import {
   getHistorySnapshot,
   listDocHistory,
   protectHistorySnapshot
-} from "./03a-history-store.js";
+} from "../legacy/history-bridge.ts";
 import { sidePanels } from "../legacy/panels-bridge.ts";
 import { safeId } from "../adapters/identity/safe-id.ts";
 import { targetSectionHtml, wireTargetSection } from "../legacy/target-section.ts";

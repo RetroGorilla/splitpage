@@ -8,7 +8,8 @@ await bootApp();
 after(closeApp);
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { listDocHistory } = await import("../js/03a-history-store.js");
+import { historyOwner } from "../bootstrap/wiring/history.ts";
+const listDocHistory = (...args) => historyOwner().listDocHistory(...args);
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits, redo, undo } = await import("../legacy/undo-bridge.ts");
 const { closeImportModal, openImportModal } = (await import("../bootstrap/wiring/imports.ts")).importControls();

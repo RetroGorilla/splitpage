@@ -1,4 +1,4 @@
-import { seedCheckMatches } from "../application/preferences/seed-check.ts";
+import { seedCheckMatches } from "../../application/preferences/seed-check.ts";
 
 export function seedCheckPasses(): boolean {
   const meta = document.querySelector('meta[name="splitpage-seed-check"]');
