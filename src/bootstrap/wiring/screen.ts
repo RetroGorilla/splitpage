@@ -1,9 +1,9 @@
 import { onRefresh, onSessionChange, onStamped } from "../../legacy/session-bridge.ts";
 import { documentLocation } from "../../legacy/location-bridge.ts";
 import { onPreferenceChange, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
-import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
+import { shotHiding } from "./shot-hiding.ts";
 import { presence } from "../../legacy/presence-bridge.ts";
-import { screenListeners } from "../../js/05-render.js";
+import { screenListeners } from "../../features/rows/render.js";
 
 let stopScreen: (() => void) | null = null;
 

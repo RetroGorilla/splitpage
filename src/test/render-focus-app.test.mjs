@@ -11,7 +11,7 @@ await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { applyMerge } = await import("../legacy/merge-bridge.ts");
-const { paintingScreen, renderAbsorbed, renderRow } = await import("../js/05-render.js");
+const { paintingScreen, renderAbsorbed, renderRow } = await import("../features/rows/render.js");
 const { paintGuard } = await import("../legacy/editor-bridge.ts");
 const whilePainting = (paint) => paintGuard().whilePainting(paint);
 const afterThisPaint = (work) => paintGuard().afterThisPaint(work);

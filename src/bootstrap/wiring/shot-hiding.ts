@@ -1,12 +1,12 @@
-import { createShotHiding } from "../application/shot-hiding.ts";
-import type { ShotHiding, ShotHidingPorts } from "../application/shot-hiding.ts";
-import type { TimerPort } from "../application/session/ports.ts";
-import { preferences, viewFlags } from "./preferences-bridge.ts";
-import { currentDocument } from "./session-bridge.ts";
+import { createShotHiding } from "../../application/shot-hiding.ts";
+import type { ShotHiding, ShotHidingPorts } from "../../application/shot-hiding.ts";
+import type { TimerPort } from "../../application/session/ports.ts";
+import { preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
+import { currentDocument } from "../../legacy/session-bridge.ts";
 
 let started: ShotHiding | null = null;
 
-export function legacyShotHidingPorts(timers: Pick<TimerPort, "start" | "stop">): ShotHidingPorts {
+export function shotHidingPorts(timers: Pick<TimerPort, "start" | "stop">): ShotHidingPorts {
   return Object.freeze({
     flags: Object.freeze({
       hideShot: function () { return viewFlags().hideShot(); },

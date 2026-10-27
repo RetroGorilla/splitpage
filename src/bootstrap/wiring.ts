@@ -1,3 +1,4 @@
+export { mountRowsRenderFeature } from "./wiring/render.ts";
 export { mountProductionTagsFeature } from "./wiring/production-tags.ts";
 import { wireTagProduction } from "./wiring/production-tags.ts";
 export { mountImportDialogFeature } from "./wiring/imports.ts";
@@ -58,7 +59,7 @@ import { installExportFormats } from "../legacy/export-formats.ts";
 import { startEditor } from "../legacy/editor-bridge.ts";
 import { startLocation } from "../legacy/location-bridge.ts";
 import { getEditorName, startPreferences } from "../legacy/preferences-bridge.ts";
-import { legacyShotHidingPorts, startShotHiding } from "../legacy/shot-hiding-bridge.ts";
+import { shotHidingPorts, startShotHiding } from "./wiring/shot-hiding.ts";
 import { legacyPresencePorts, startPresence } from "../legacy/presence-bridge.ts";
 import { startMerge } from "../legacy/merge-bridge.ts";
 import type { LegacyMergePorts } from "../legacy/merge-bridge.ts";
@@ -435,7 +436,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("editor", () => startEditor(liveDocumentPort), (stop) => stop);
   build("production editing", () => wireProductionEditing(deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
   build("preferences", () => startPreferences(), (stop) => stop);
-  build("shot hiding", () => startShotHiding(legacyShotHidingPorts(deps.timers ?? SYSTEM_TIMERS)), (stop) => stop);
+  build("shot hiding", () => startShotHiding(shotHidingPorts(deps.timers ?? SYSTEM_TIMERS)), (stop) => stop);
   build("presence", () => startPresence(legacyPresencePorts()), (stop) => stop);
   const capture = build("export capture", () => wireExportKit(deps.entry), (built) => built.stop);
   let disposed = false;

@@ -38,7 +38,7 @@ import { fromHtml } from "../../legacy/richtext.ts";
 import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 import { cycleRowStatus } from "./scene-status.ts";
 import { expandHiddenShotStrip } from "./hide-shot.ts";
-import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
+import { shotHiding } from "./shot-hiding.ts";
 import { restoreMergeSnapshot } from "../../js/03-sync.js";
 import { installMergeBanner } from "../../legacy/merge-bridge.ts";
 import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";
@@ -57,14 +57,14 @@ import {
   maybeCueShortcut,
   maybeDirectionShortcut,
   noteFieldPainted,
-  paintingScreen,
+  paintingScreen as renderPaintingScreen,
   screenIsStale,
   syncPageTitle,
   toggleCellFormat,
   typeAtDirectionEdge,
   typePendingMarks,
   updateToolbarState
-} from "../../js/05-render.js";
+} from "../../features/rows/render.js";
 import { copyFromCell, hasMediaFiles, pasteIntoCell, readClipboardFiles } from "../../features/clipboard/cell-clipboard.js";
 import { pasteScenesAt } from "../../features/clipboard/scene-select.js";
 import { thumbnailsAfterPaste } from "./gallery.ts";
@@ -143,6 +143,8 @@ import {
 import { reviewBlocked, reviewMode, onServerDoc } from "../../legacy/location-bridge.ts";
 
 type RootInput = Pick<Event, "target">;
+
+const paintingScreen: () => boolean = renderPaintingScreen;
 
 interface UndoCellStep {
   readonly op: string;

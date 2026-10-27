@@ -6,7 +6,7 @@ import { onHistoryChange } from "../../js/03a-history-store.js";
 import { renderHistory } from "../../js/03-sync.js";
 import { currentProductionTags } from "./production-tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
-import { onPainted } from "../../js/05-render.js";
+import { onPainted } from "../../features/rows/render.js";
 import { refreshGalleryOverlay } from "../../features/gallery/overlay.js";
 import { renderRundown, setRundownExtraSeconds } from "../../features/rundown/rundown.js";
 import { paintRundownPresence } from "../../features/rundown/presence.js";

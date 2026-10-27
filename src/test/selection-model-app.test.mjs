@@ -10,7 +10,7 @@ await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { applyMerge } = await import("../legacy/merge-bridge.ts");
-const { renderAbsorbed, renderRow } = await import("../js/05-render.js");
+const { renderAbsorbed, renderRow } = await import("../features/rows/render.js");
 const { posToDom } = await import("../features/common/cell-dom.ts");
 const { domToPos } = await import("../features/common/cell-dom.ts");
 const { flushEdits, undoSizes } = await import("../legacy/undo-bridge.ts");

@@ -4,6 +4,10 @@ import { cacheSeal } from "../../../legacy/cache-freeze.ts";
 import { productionReaders } from "../../../legacy/document-ports.ts";
 import { htmlToPlainText } from "../../../legacy/plain-text.ts";
 import { cellOf, fromHtml, htmlToMarkdown, inertBody, sanitizeHtml, storedHtmlFromDom } from "../../../legacy/richtext.ts";
+import { buildVideoCardEl } from "../../../legacy/richtext.ts";
+import { videoHostLabel } from "../../../adapters/formats/video-host.ts";
+
+export const video = { card: buildVideoCardEl, hostLabel: videoHostLabel };
 
 export const text: TextServices<HTMLElement> = {
   cellOf, inertBody, fromHtml, sanitizeHtml, storedHtmlFromDom, htmlToMarkdown, htmlToPlainText, productionReaders, cacheSeal,

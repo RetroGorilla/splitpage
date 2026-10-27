@@ -13,7 +13,7 @@ await bootApp();
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
-const { renderAbsorbed } = await import("../js/05-render.js");
+const { renderAbsorbed } = await import("../features/rows/render.js");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits, lastUndoEntry, undoSizes } = await import("../legacy/undo-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
