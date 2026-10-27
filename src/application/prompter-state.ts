@@ -11,3 +11,14 @@ export const prompterSkipsShot = (): boolean => skipShot;
 export const setPrompterSkipShot = (value: boolean): void => { skipShot = value; };
 export const voiceIsFollowing = (): boolean => voiceFollowing;
 export const setVoiceFollowing = (value: boolean): void => { voiceFollowing = value; };
+
+export interface PrompterState {
+  readonly isOpen: typeof prompterIsOpen;
+  readonly isPlaying: typeof prompterIsPlaying;
+  readonly skipsShot: typeof prompterSkipsShot;
+  readonly voiceFollowing: typeof voiceIsFollowing;
+  readonly setOpen: typeof setPrompterOpen;
+  readonly setPlaying: typeof setPrompterPlayingFlag;
+  readonly setSkipShot: typeof setPrompterSkipShot;
+  readonly setVoiceFollowing: typeof setVoiceFollowing;
+}

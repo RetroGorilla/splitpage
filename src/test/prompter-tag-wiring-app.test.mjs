@@ -2,16 +2,16 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { createTagEntityContainer } from "../legacy/tag-entity-container.ts";
+import { createTagEntityContainer } from "../bootstrap/wiring/production.ts";
 
 assert.throws(() => createTagEntityContainer("production-panel", () => {}), /not installed yet/);
 await bootApp();
-const { wireTagEntityContainer, openPrompter, closePrompter } = await import("../js/20-teleprompter.js");
+const { wireTagEntityContainer, openPrompter, closePrompter } = await import("../features/prompter/prompter.js");
 after(closeApp);
 
 test("tag container wiring is installed before the prompter can open and mounts per call", () => {
   const entry = readFileSync(new URL("../js/_entry.js", import.meta.url), "utf8");
-  assert.ok(entry.indexOf("  mountTagPanelsFeature();") < entry.indexOf("  init_20_teleprompter();"));
+  assert.ok(entry.indexOf("  mountTagPanelsFeature();") < entry.indexOf("  mountPrompterRuntimeFeature();"));
   assert.equal(document.getElementById("prompter").hidden, true);
   const first = document.createElement("div");
   const second = document.createElement("div");

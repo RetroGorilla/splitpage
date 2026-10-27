@@ -3,7 +3,7 @@ import { getEditorName } from "../legacy/preferences-bridge.ts";
 import "fake-indexeddb/auto";
 import { readFileSync } from "node:fs";
 import { checksumText } from "../../shared/text.js";
-import { startupReady } from "../legacy/startup-bridge.ts";
+import { startupReady } from "../application/startup-signal.ts";
 import { currentDocument, onDocumentReplaced } from "../legacy/session-bridge.ts";
 
 export const seen = [];

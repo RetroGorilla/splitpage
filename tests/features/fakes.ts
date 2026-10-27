@@ -20,6 +20,48 @@ import type { UndoControl } from "../../src/application/editing/undo-control.ts"
 import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
 import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
 import type { TextServices } from "../../src/application/text/services.ts";
+import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts";
+
+export function fakePrompterPorts(initial: DocumentView | null = null) {
+  const reader = fakeDocument(initial);
+  const notices = fakeNotices();
+  const calls: unknown[][] = [];
+  const state = { open: false, playing: false, skipShot: false, voice: false };
+  const flags = { prompterMirror: false, prompterFlip: false, prompterSceneMode: false };
+  const cellOf: TextServices["cellOf"] = (html) => [{ text: String(html ?? ""), marks: {} }];
+  const ports: PrompterFeaturePorts = {
+    document: reader.document,
+    text: { cellOf, productionReaders: {
+      wordCount: (html) => String(html ?? "").trim().split(/\s+/).filter(Boolean).length
+    } },
+    opening: { open: async (opening) => { calls.push(["open", opening]); } },
+    startup: { ready: () => null },
+    desktop: { running: () => false, canOpen: () => false, open: async () => null },
+    voice: {
+      available: () => false, known: () => true, load: async () => null,
+      createDesktop: () => ({ start() {}, stop() {} }), createRelay: () => ({ start() {}, stop() {} }),
+      hasRelay: () => false, setRelay: (value) => { calls.push(["relay", value]); return false; },
+      browserRecognition: () => null
+    },
+    place: { serverHomeId: () => null },
+    panels: { close: (id) => { calls.push(["close", id]); }, closeAll: () => { calls.push(["closeAll"]); } },
+    preferences: {
+      prompterFlag: (name) => flags[name],
+      setPrompterFlag: (name, value) => { flags[name] = value; calls.push([name, value]); },
+      skipOnboardingForPrompter: () => { calls.push(["skipOnboarding"]); }
+    },
+    viewFlags: { hideShot: () => false }, notices: notices.notices, focus: { lastRow: () => null },
+    state: {
+      isOpen: () => state.open, isPlaying: () => state.playing, skipsShot: () => state.skipShot,
+      voiceFollowing: () => state.voice, setOpen: (value) => { state.open = value; calls.push(["setOpen", value]); },
+      setPlaying: (value) => { state.playing = value; calls.push(["setPlaying", value]); },
+      setSkipShot: (value) => { state.skipShot = value; }, setVoiceFollowing: (value) => { state.voice = value; }
+    },
+    files: { parse: async (file) => { calls.push(["parse", file]); return { state: initial, kind: "splitpage", docIdEmbedded: true }; } },
+    installTagEntityContainer: (id, rootClick) => { calls.push(["installTagEntityContainer", id, rootClick]); return () => { calls.push(["removeTagEntityContainer", id]); }; }
+  };
+  return { ports, reader, notices, calls, state, flags };
+}
 
 export function fakeTextServices(document: Document) {
   const calls: { method: string; html: unknown }[] = [];

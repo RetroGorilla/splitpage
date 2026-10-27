@@ -59,7 +59,6 @@ import {
 } from "../../features/tags/panels.js";
 import { queueAutoSave } from "../../legacy/save-bridge.ts";
 import { exportAs, runExport } from "../../js/18-local-files.js";
-import { createTagEntityContainer, installTagEntityContainerFactory } from "../../legacy/tag-entity-container.ts";
 import { saves as portSaves } from "./ports/saving.ts";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";
 import { productionGroupBy, setGearGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey } from "../../application/tag-panel-state.ts";
@@ -181,4 +180,18 @@ export const stopTagsFeature = tags.stop;
 
 export function mountBrollEventsFeature(): ReturnType<typeof mountBrollPanelFeature> {
   return mountBrollPanelFeature({ exportAs: exportAs });
+}
+
+type TagEntityContainerFactory = (id: string, rootClick: (event: MouseEvent) => void) => () => void;
+
+let factory: TagEntityContainerFactory | null = null;
+
+function installTagEntityContainerFactory(next: TagEntityContainerFactory): () => void {
+  factory = next;
+  return () => { if (factory === next) factory = null; };
+}
+
+export function createTagEntityContainer(id: string, rootClick: (event: MouseEvent) => void): () => void {
+  if (!factory) throw new Error("The tag entity container factory is not installed yet");
+  return factory(id, rootClick);
 }

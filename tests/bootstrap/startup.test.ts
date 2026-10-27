@@ -444,7 +444,7 @@ test("the ready signal is null until the document opens, then the open's own pro
 });
 
 test("the startup bridge answers the connected startup's ready signal, and nothing before it connects or after it disconnects", async () => {
-  const { connectStartup, startupReady } = await import("../../src/legacy/startup-bridge.ts");
+  const { connectStartup, startupReady } = await import("../../src/application/startup-signal.ts");
   assert.equal(startupReady(), null);
   const startup = beginStartup(rig().ports);
   const disconnect = connectStartup(startup);
