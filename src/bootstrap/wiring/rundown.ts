@@ -16,7 +16,6 @@ import { startTarget as mountTarget } from "../../features/rundown/target.js";
 import { cellEditing, rowDrag } from "../../legacy/editor-bridge.ts";
 import { preferences } from "../../legacy/preferences-bridge.ts";
 import { presence as presenceOwner } from "../../legacy/presence-bridge.ts";
-import { handTargetSectionTo } from "../../legacy/target-section.ts";
 
 const rundown = owned<ReturnType<typeof mountRundown>>();
 
@@ -64,7 +63,6 @@ export function mountTargetFeature(): TargetMount {
       notices: portNotices
     };
     const mounted: TargetMount = mountTarget(ports);
-    handTargetSectionTo(mounted.section);
     return mounted;
   });
 }

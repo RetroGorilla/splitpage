@@ -34,11 +34,8 @@ import {
 import { captureOperation, openDocument, stillOwns } from "../../legacy/transition-bridge.ts";
 import { importHome } from "../../legacy/location-bridge.ts";
 import { expandHiddenShotStrip } from "./hide-shot.ts";
-import {
-  promptForName,
-  promptForWpm,
-  restoreSnapshotFromCard
-} from "../../js/03-sync.js";
+import { promptForName, promptForWpm } from "./title-chrome.ts";
+import { restoreSnapshotFromCard } from "./history-panel.ts";
 import { openGalleryOverlay } from "../../features/gallery/overlay.js";
 import { importControls } from "./imports.ts";
 import { updateSaveStatus } from "./save-status.ts";

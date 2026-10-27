@@ -9,7 +9,7 @@ const FULL = "abcdefghij".repeat(3);
 await bootApp(JSON.stringify({ schema: 2, title: "Mine", rows: [], rev: 5 }));
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { promptForName } = await import("../js/03-sync.js");
+const { promptForName } = await import("../bootstrap/wiring/title-chrome.ts");
 const { toggleReplyComposer } = await import("../features/comments/comments.js");
 const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { openSettings } = await import("../features/settings/settings.js");

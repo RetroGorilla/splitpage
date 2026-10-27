@@ -2,7 +2,7 @@ import { mountPageEntry } from "../bootstrap/wiring.ts";
 import { mountDocumentIdentityOwner } from "../bootstrap/wiring.ts";
 import { startBlobs as init_02c_blobs } from "../adapters/storage/02c-blobs.js";
 import { startGalleryStore as init_02d_gallery } from "../adapters/storage/02d-gallery.js";
-import { __init as init_03_sync } from "./03-sync.js";
+import { mountSessionMergeOwner } from "../bootstrap/wiring.ts";
 import { mountHistoryOwner } from "../bootstrap/wiring.ts";
 import { mountRowsRenderFeature } from "../bootstrap/wiring.ts";
 import { mountProductionTagsFeature } from "../bootstrap/wiring.ts";
@@ -21,7 +21,6 @@ import { mountWriterRuntimeFeature } from "../bootstrap/wiring.ts";
 import { mountPrompterRuntimeFeature } from "../bootstrap/wiring.ts";
 import { __init as init_20e_connect } from "./20e-connect.js";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { documentDestinationPort, documentHistoryPort, legacyMergePorts, stampRow, setBaseState } from "./03-sync.js";
 import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { mountProjectFiles } from "../bootstrap/wiring.ts";
@@ -33,16 +32,9 @@ try {
   wiring = wireLegacyApp({
     entry: migrateRows,
     records: derivedRecordsPlan,
-    bulkTags: { stamp: stampRow },
-    fileSaving: { setBaseline: setBaseState },
     destinations: function () { return [importSaveDestination(), serverSaveDestination()]; },
-    transitions: { destination: documentDestinationPort, history: documentHistoryPort },
     sources: function () { return [projectFileSource(), serverDocumentSource()]; },
-    merge: legacyMergePorts,
     recovery: draftRecoveryPorts,
-    projectFiles: {
-      replaceSyncBase: setBaseState,
-    },
     keyTarget: window
   });
 } catch (error) {
@@ -55,7 +47,7 @@ if (wiring) {
   mountDocumentIdentityOwner();
   init_02c_blobs();
   init_02d_gallery();
-  init_03_sync();
+  var sessionMerge = mountSessionMergeOwner();
   mountHistoryOwner();
   mountScriptPlaceFeature();
   mountRowsRenderFeature();
@@ -79,7 +71,7 @@ if (wiring) {
   mountBrollPanelStateFeature();
   mountFindFeature();
   mountCommentsLogicFeature();
-  mountImportDialogFeature({ stampRow });
+  mountImportDialogFeature({ stampRow: sessionMerge.stampRow });
   mountSaveStatusFeature();
   mountHostedFeature();
   init_13a_presence();

@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { migrateDocument } from "../bootstrap/startup/document-entry.js";
-import { mergeBrollShots, mergePeople, mergeProductionTags } from "../js/03-sync.js";
+import { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";

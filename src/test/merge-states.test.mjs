@@ -5,7 +5,7 @@ import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { textMergeContext } from "../js/03-sync.js";
+import { textMergeContext } from "../bootstrap/wiring/session-merge.ts";
 import { stashLocalWork } from "../legacy/recovery-bridge.ts";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";

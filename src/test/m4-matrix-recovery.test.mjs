@@ -26,7 +26,7 @@ await bootApp();
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
-const { restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../legacy/undo-bridge.ts");

@@ -15,7 +15,7 @@ const { confirmSavedNow, saveDoc, saveToServer } = await import("../legacy/save-
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const hosted = await import("../js/13-hosted.js");
 const homeModule = await import("../legacy/location-bridge.ts");
-const { restoreSnapshotFromCard } = await import("../js/03-sync.js");
+const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
 
