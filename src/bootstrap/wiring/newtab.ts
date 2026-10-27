@@ -18,7 +18,7 @@ import { draftResume, seedCheck, startup } from "./ports/startup.ts";
 import { text } from "./ports/text.ts";
 import { opening, transitions } from "./ports/transitions.ts";
 import { migrateRows } from "../../legacy/document-ports.ts";
-import { syncDocIdentity } from "../../js/02b-doc-id.js";
+import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { importControls } from "./imports.ts";
 import { openLocalFile } from "../../js/18-local-files.js";
 import { STARTERS, starterById } from "../../starters/index.ts";
@@ -47,7 +47,7 @@ export function mountNewTabFeature(): NewTabMount {
       resetProductionPanel,
       ids,
       prepareDocument: (raw) => migrateRows(raw),
-      syncIdentity: () => { syncDocIdentity(); },
+      syncIdentity: () => { documentIdentity.syncDocIdentity(); },
       importText: (options) => { importControls()?.openImportModal(options); },
       openFile: () => openLocalFile(),
       desktopDownload: { url: () => updateControls()?.desktopAppUrl() ?? "", offered: () => updateControls()?.desktopAppOffered() ?? false },

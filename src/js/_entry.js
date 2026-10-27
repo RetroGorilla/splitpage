@@ -1,5 +1,5 @@
 import { mountPageEntry } from "../bootstrap/wiring.ts";
-import { __init as init_02b_doc_id } from "./02b-doc-id.js";
+import { mountDocumentIdentityOwner } from "../bootstrap/wiring.ts";
 import { startBlobs as init_02c_blobs } from "../adapters/storage/02c-blobs.js";
 import { startGalleryStore as init_02d_gallery } from "../adapters/storage/02d-gallery.js";
 import { __init as init_03_sync } from "./03-sync.js";
@@ -21,7 +21,6 @@ import { mountWriterRuntimeFeature } from "../bootstrap/wiring.ts";
 import { mountPrompterRuntimeFeature } from "../bootstrap/wiring.ts";
 import { __init as init_20e_connect } from "./20e-connect.js";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { documentIdentityPort, adoptRestoredState, copyDocHistorySafe, docIdEvents, initDocIdentityChannel, migrateDocument, reassignDocId, standaloneHtmlFor, syncDocIdentity } from "./02b-doc-id.js";
 import { documentDestinationPort, documentHistoryPort, legacyMergePorts, stampRow, setBaseState } from "./03-sync.js";
 import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
 import { importSaveDestination, projectFileSource } from "./18-local-files.js";
@@ -35,19 +34,13 @@ try {
     entry: migrateRows,
     records: derivedRecordsPlan,
     bulkTags: { stamp: stampRow },
-    fileSaving: { copyHistory: copyDocHistorySafe, syncIdentity: syncDocIdentity, setBaseline: setBaseState },
+    fileSaving: { setBaseline: setBaseState },
     destinations: function () { return [importSaveDestination(), serverSaveDestination()]; },
-    transitions: { destination: documentDestinationPort, identity: documentIdentityPort, history: documentHistoryPort },
+    transitions: { destination: documentDestinationPort, history: documentHistoryPort },
     sources: function () { return [projectFileSource(), serverDocumentSource()]; },
     merge: legacyMergePorts,
     recovery: draftRecoveryPorts,
     projectFiles: {
-      prepareDocument: migrateDocument,
-      restoreDocument: adoptRestoredState,
-      changeDocumentId: reassignDocId,
-      identityEvents: docIdEvents,
-      connectIdentity: initDocIdentityChannel,
-      standaloneHtml: standaloneHtmlFor,
       replaceSyncBase: setBaseState,
     },
     keyTarget: window
@@ -59,7 +52,7 @@ if (wiring) {
   mountPageEntry();
   mountSceneStatusFeature();
   mountHideShotFeature();
-  init_02b_doc_id();
+  mountDocumentIdentityOwner();
   init_02c_blobs();
   init_02d_gallery();
   init_03_sync();
@@ -87,7 +80,7 @@ if (wiring) {
   mountFindFeature();
   mountCommentsLogicFeature();
   mountImportDialogFeature({ stampRow });
-  mountSaveStatusFeature({ sync: syncDocIdentity });
+  mountSaveStatusFeature();
   mountHostedFeature();
   init_13a_presence();
   init_13b_collaborate();

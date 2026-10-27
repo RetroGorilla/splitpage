@@ -1,3 +1,5 @@
+import "./_identity-started.mjs";
+import { documentIdentityOwner } from "../bootstrap/wiring/document-identity.ts";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
@@ -9,7 +11,9 @@ await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
-const { initDocIdentityChannel, reassignDocId, syncDocIdentity } = await import("../js/02b-doc-id.js");
+const initDocIdentityChannel = (...args) => documentIdentityOwner().initDocIdentityChannel(...args);
+const reassignDocId = (...args) => documentIdentityOwner().reassignDocId(...args);
+const syncDocIdentity = (...args) => documentIdentityOwner().syncDocIdentity(...args);
 const { videoLinkLabel } = await import("../core/document/gallery.ts");
 const { render } = await import("../features/rows/render.js");
 const { renderRundown } = await import("../features/rundown/rundown.js");

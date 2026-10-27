@@ -4,7 +4,7 @@ import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { migrateDocument } from "../js/02b-doc-id.js";
+import { migrateDocument } from "../bootstrap/startup/document-entry.js";
 import { mergeBrollShots, mergePeople, mergeProductionTags } from "../js/03-sync.js";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";

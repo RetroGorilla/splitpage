@@ -1,3 +1,4 @@
+import { documentIdentityOwner } from "./document-identity.ts";
 import type { Startup, StartupPorts } from "../startup.ts";
 import type { StashResult } from "../startup/initial-document.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
@@ -6,7 +7,8 @@ import { connectStartup } from "../../application/startup-signal.ts";
 import { documentTransitions } from "../../legacy/transition-bridge.ts";
 import { suppressUnloadWarning } from "../startup/page-entry.ts";
 import { updateHideShotMenu } from "./hide-shot.ts";
-import { initDocIdentityChannel, loadInitialState, syncDocIdentity } from "../../js/02b-doc-id.js";
+import { documentIdentity } from "./ports/document-identity-controls.ts";
+import { loadInitialState } from "../startup/document-entry.js";
 import { heldDocument } from "../../legacy/session-bridge.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
@@ -56,8 +58,8 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
       reportRecovery: function (report) { reportMerge(report, { kind: "recovery" }); },
       toastLastEditor: toastLastEditor,
       resumeLastProject: tryResumeLastProject,
-      syncIdentity: syncDocIdentity,
-      openIdentityChannel: function () { initDocIdentityChannel(); },
+      syncIdentity: documentIdentity.syncDocIdentity,
+      openIdentityChannel: function () { documentIdentityOwner().initDocIdentityChannel(); },
       notifyDesktop: notifyDesktopDocumentState,
       startHistoryMigration: () => { void historyOwner().startHistoryMigration(); }
     },

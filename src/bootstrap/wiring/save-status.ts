@@ -1,3 +1,4 @@
+import { documentIdentity } from "./ports/document-identity-controls.ts";
 import type { Refusal } from "../../application/actions.ts";
 import { mountSaveStatus } from "../../features/title/save-status.js";
 import { showRefusal as showRefusalNotice } from "../../features/title/refusal.ts";
@@ -11,7 +12,7 @@ import { draftChanges } from "./ports/startup.ts";
 
 const saveStatus = owned<SaveStatusMount>();
 
-export function mountSaveStatusFeature(identity: DocumentIdentitySync): SaveStatusMount {
+export function mountSaveStatusFeature(identity: DocumentIdentitySync = { sync: () => documentIdentity.syncDocIdentity() }): SaveStatusMount {
   return saveStatus.replace(() => mountSaveStatus({
     saves,
     autoSave: autoSaves,

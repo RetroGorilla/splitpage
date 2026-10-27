@@ -8,7 +8,7 @@ import type { LiveDocumentPort } from "../application/transitions/ports.ts";
 import { syncCommentAnchors } from "../core/text/anchors.ts";
 import { systemClock } from "../adapters/identity/ids.ts";
 import { cellOf, scriptCellOf } from "./richtext.ts";
-import { documentGuardOn, documentView, unwrapped } from "./document-guard.ts";
+import { documentGuardOn, documentView, unwrapped } from "../application/identity/document-guard.ts";
 
 export type SessionReplayRunner = (replay: Replay) => CommandOutcome;
 
@@ -225,11 +225,10 @@ export function heldDocument(): ValidatedDocument | null {
   return started ? started.current.held() : null;
 }
 
-function viewedDocument(): ValidatedDocument | null {
+export function currentDocument(): ValidatedDocument | null {
   return documentView(heldDocument());
 }
 
-export const currentDocument: () => ValidatedDocument | null = documentGuardOn ? viewedDocument : heldDocument;
 
 export const liveDocumentPort: LiveDocumentPort = Object.freeze({
   current: currentDocument,

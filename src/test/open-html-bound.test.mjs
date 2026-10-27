@@ -7,7 +7,7 @@ await bootApp();
 
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");
 const { buildPublishHtml } = await import("../adapters/page/page-shell.ts");
-const { migrateDocument } = await import("../js/02b-doc-id.js");
+const { migrateDocument } = await import("../bootstrap/startup/document-entry.js");
 
 after(closeApp);
 
