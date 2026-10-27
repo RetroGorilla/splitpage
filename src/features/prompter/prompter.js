@@ -773,6 +773,7 @@ export async function startVoiceFollow() {
   if (desktop || relayed) {
     setVoiceStatus(relayed ? "Starting speech recognition in the Splitpage desktop app…" : "Starting Windows speech recognition…", "");
     recognition.onwarning = function (e) {
+      if (ports !== owner || mySession !== voiceSession) return;
       if (e && e.warning === "clear") {
         var el = document.getElementById("pp-voice-status");
         if (ports.state.voiceFollowing() && el) {
@@ -789,17 +790,19 @@ export async function startVoiceFollow() {
       if (warn && ports.state.voiceFollowing()) setVoiceStatus(warn(), "error");
     };
     recognition.ondevice = function (e) {
-      if (mySession !== voiceSession) return;
+      if (ports !== owner || mySession !== voiceSession) return;
       voiceMicName = (e && typeof e.name === "string") ? e.name : "";
     };
   }
   recognition.onstart = function () {
+    if (ports !== owner || mySession !== voiceSession) return;
     voiceStarting = false;
     ports.state.setVoiceFollowing(true);
     updateVoiceButtonUI();
     setVoiceStatus(listeningStatus("Listening…"), "listening");
   };
   recognition.onresult = function (e) {
+    if (ports !== owner || mySession !== voiceSession) return;
     var finalChunk = "", interimChunk = "";
     for (var i = e.resultIndex; i < e.results.length; i++) {
       var r = e.results[i];
@@ -812,6 +815,7 @@ export async function startVoiceFollow() {
     onSpeechTranscript();
   };
   recognition.onerror = function (e) {
+    if (ports !== owner || mySession !== voiceSession) return;
     voiceStarting = false;
     if (e.error === "no-speech" || e.error === "aborted") return;
     if (e.error === "not-allowed" || e.error === "service-not-allowed") {
@@ -842,6 +846,7 @@ export async function startVoiceFollow() {
     updateVoiceButtonUI();
   };
   recognition.onend = function () {
+    if (ports !== owner || mySession !== voiceSession) return;
     if (mySession !== voiceSession || !ports.state.voiceFollowing()) {
       if (mySession === voiceSession) releaseVoiceStream();
       updateVoiceButtonUI();
@@ -881,7 +886,15 @@ export function stopVoiceFollow() {
   ports.state.setVoiceFollowing(false);
   voiceStarting = false;
   if (recognition) {
-    try { recognition.onend = null; recognition.onresult = null; recognition.stop(); } catch (e) {}
+    try {
+      recognition.onend = null;
+      recognition.onresult = null;
+      recognition.onstart = null;
+      recognition.onerror = null;
+      recognition.onwarning = null;
+      recognition.ondevice = null;
+      recognition.stop();
+    } catch (e) {}
     recognition = null;
   }
   releaseVoiceStream();

@@ -194,3 +194,76 @@ test("a project parse completing after runtime disposal does not open a document
     globalThis.fetch = priorFetch;
   }
 });
+
+for (const source of ["browser", "desktop", "relay"] as const) {
+  for (const remount of [false, true]) {
+    test(source + " speech callbacks cannot outlive disposal" + (remount ? " and remount" : ""), async () => {
+      const h = harness();
+      const instances: FakeRecognition[] = [];
+      class FakeRecognition {
+        continuous = false;
+        interimResults = false;
+        lang = "";
+        onstart: (() => void) | null = null;
+        onresult: ((event: { resultIndex: number; results: unknown[] }) => void) | null = null;
+        onerror: ((event: { error: string }) => void) | null = null;
+        onend: (() => void) | null = null;
+        onwarning: ((event: { warning: string }) => void) | null = null;
+        ondevice: ((event: { name: string }) => void) | null = null;
+        stopped = 0;
+        constructor() { instances.push(this); }
+        start() {}
+        stop() { this.stopped++; }
+      }
+      const mediaDevices = Object.getOwnPropertyDescriptor(navigator, "mediaDevices");
+      Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: undefined });
+      const runtime = startPrompter({
+        ...h.ports,
+        desktop: { ...h.ports.desktop, running: () => source === "desktop" },
+        voice: {
+          ...h.ports.voice, available: () => true, hasRelay: () => source === "relay",
+          createDesktop: () => new FakeRecognition(), createRelay: () => new FakeRecognition(),
+          browserRecognition: () => FakeRecognition
+        }
+      });
+      let replacement: ReturnType<typeof startPrompter> | null = null;
+      try {
+        runtime.buildPrompterContent();
+        await runtime.startVoiceFollow();
+        assert.equal(instances.length, 1);
+        const recognition = instances[0];
+        assert.ok(recognition);
+        recognition.onstart?.();
+        assert.equal(h.state.voice, true);
+        const { onstart, onresult, onerror, onend, onwarning, ondevice } = recognition;
+        const callbacks = [
+          () => onstart?.(),
+          () => onresult?.({ resultIndex: 0, results: [] }),
+          () => onerror?.({ error: "not-allowed" }),
+          () => onend?.(),
+          () => onwarning?.({ warning: "clear" }),
+          () => ondevice?.({ name: "Old microphone" })
+        ];
+        runtime.dispose();
+        assert.equal(recognition.stopped, 1);
+        for (const handler of ["onstart", "onresult", "onerror", "onend", "onwarning", "ondevice"] as const) {
+          assert.equal(recognition[handler], null, handler + " is detached");
+        }
+        const next = remount ? harness() : h;
+        if (remount) replacement = startPrompter(next.ports);
+        const calls = [...next.calls];
+        const status = document.getElementById("pp-voice-status")?.textContent;
+        for (const callback of callbacks) assert.doesNotThrow(callback);
+        assert.equal(h.state.voice, false);
+        assert.equal(next.state.voice, false);
+        assert.deepEqual(next.calls, calls);
+        assert.equal(document.getElementById("pp-voice-status")?.textContent, status);
+      } finally {
+        runtime.dispose();
+        replacement?.dispose();
+        if (mediaDevices) Object.defineProperty(navigator, "mediaDevices", mediaDevices);
+        else Reflect.deleteProperty(navigator, "mediaDevices");
+      }
+    });
+  }
+}
