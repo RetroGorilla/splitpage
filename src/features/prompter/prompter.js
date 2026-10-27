@@ -705,14 +705,21 @@ var CLEARABLE_VOICE_WARNINGS = ["no-signal", "too-quiet", "blocked-all", "blocke
 
 export async function startVoiceFollow() {
   var owner = ports;
+  var requestedSession = voiceSession;
   var desktop = ports.desktop.running();
-  if (desktop && !ports.voice.known()) await ports.voice.load();
-  if (ports !== owner) return;
+  if (desktop && !ports.voice.known()) {
+    try { await ports.voice.load(); }
+    catch (error) {
+      if (ports !== owner || requestedSession !== voiceSession) return;
+      throw error;
+    }
+  }
+  if (ports !== owner || requestedSession !== voiceSession) return;
   if (desktop && !desktopListens()) {
     if (!ports.desktop.canOpen()) { setVoiceStatus(VOICE_DESKTOP_UNAVAILABLE, ""); return; }
     setVoiceStatus("Opening in your browser…", "");
     ports.desktop.open().then(function (result) {
-      if (ports !== owner) return;
+      if (ports !== owner || requestedSession !== voiceSession) return;
       if (result && result.message) setVoiceStatus(result.message, result.ok ? "" : "error");
     });
     return;
@@ -737,9 +744,11 @@ export async function startVoiceFollow() {
 
   if (!desktop && !relayed && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
     setVoiceStatus("Asking for the microphone…", "");
+    var receivedStream;
     try {
-      voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      receivedStream = await navigator.mediaDevices.getUserMedia({ audio: true });
     } catch (err) {
+      if (ports !== owner || mySession !== voiceSession) return;
       voiceStarting = false;
       var name = err && err.name;
       setVoiceStatus(
@@ -749,7 +758,11 @@ export async function startVoiceFollow() {
         "error");
       return;
     }
-    if (mySession !== voiceSession) { releaseVoiceStream(); voiceStarting = false; return; }
+    if (ports !== owner || mySession !== voiceSession) {
+      try { receivedStream.getTracks().forEach(function (track) { track.stop(); }); } catch (e) {}
+      return;
+    }
+    voiceStream = receivedStream;
     try {
       var track = voiceStream.getAudioTracks()[0];
       voiceMicName = (track && track.label) || "";
@@ -861,7 +874,7 @@ export async function startVoiceFollow() {
       return;
     }
     setTimeout(function () {
-      if (mySession !== voiceSession || !ports.state.voiceFollowing() || !recognition) return;
+      if (ports !== owner || mySession !== voiceSession || !ports.state.voiceFollowing() || !recognition) return;
       try { recognition.start(); }
       catch (e) {
         ports.state.setVoiceFollowing(false);
@@ -967,7 +980,12 @@ async function launchPrompterFromScript(token) {
     return false;
   }
   var file = new File([body.text], body.name, { type: "text/plain" });
-  var parsed = await ports.files.parse(file);
+  var parsed;
+  try { parsed = await ports.files.parse(file); }
+  catch (error) {
+    if (ports !== owner) return false;
+    throw error;
+  }
   if (ports !== owner) return false;
   if (!parsed || parsed.error) {
     ports.notices.show("Could not read the script the desktop app sent.", "error", true);
