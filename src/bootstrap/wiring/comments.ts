@@ -16,7 +16,7 @@ import type { CommentStatePorts } from "../../features/comments/ports.ts";
 
 import { keepSnapshot } from "../../legacy/transition-bridge.ts";
 import { presence } from "../../legacy/presence-bridge.ts";
-import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
+import { shotHiding } from "./shot-hiding.ts";
 import { onCommentsSent } from "../../js/13-hosted.js";
 import { resetDraftHistory } from "../../features/editing/draft-edit.js";
 import type { CommentsPorts } from "../../features/comments/mount.ts";
@@ -25,7 +25,7 @@ import { runFromButton } from "../../legacy/app-actions.ts";
 import { mountComments } from "../../features/comments/mount.ts";
 import { internDataUrl, persist } from "../../adapters/storage/02c-blobs.js";
 import { storedImageHtml } from "../../core/document/text-policy.ts";
-import { typePendingMarks } from "../../js/05-render.js";
+import { typePendingMarks } from "../../features/rows/render.js";
 import {
   appendDraftMedia,
   draftRedo,

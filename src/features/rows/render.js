@@ -1,36 +1,22 @@
-import { editableCellHtml } from "../features/common/editable-cell.js";
-import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
-import { disarmDeleteButton } from "../features/rows/delete-button.ts";
-import { hasSetLength } from "../core/document/timing.ts";
-import { ROW_STATUSES, rowStatus } from "../core/production/looks.ts";
-import { hiddenShotStripHtml } from "../features/rows/hide-shot.ts";
-import { shotHiding } from "../legacy/shot-hiding-bridge.ts";
-import { blobImgHtml } from "../adapters/storage/02c-blobs.js";
-import { rowSlots, videoLinkKey } from "../adapters/storage/02d-gallery.js";
-import { videoLinkLabel } from "../core/document/gallery.ts";
-import { rowIndexOf } from "../core/document/rows.ts";
-import { currentDocument, editAllowed, readSession } from "../legacy/session-bridge.ts";
-import { buildVideoCardEl, sanitizeHtml, storedHtmlFromDom } from "../legacy/richtext.ts";
-import { ensureTrailingCaretSpot } from "../features/common/dom.ts";
-import { safeHref } from "../core/document/text-policy.ts";
-import { cssAttr } from "../features/common/dom.ts";
-import { slotPoster } from "../features/common/gallery.ts";
-import { appendDraftMedia, draftModel, editDraft } from "../features/editing/draft-edit.js";
-import { isDraftBox, isScriptCell } from "../features/editing/cell-page.ts";
-import { trackDocument } from "../legacy/undo-bridge.ts";
-import { rowMotionKey, withRowMotion } from "../features/rows/row-motion.js";
-import { productionIndexStats, resetProductionIndexStats, scheduleUntaggedScan, tagFieldOccurrences } from "../legacy/tag-production.ts";
-import { formatTimestamp } from "../features/common/comment-time.js";
-import { appActions } from "../legacy/app-actions.ts";
-import { presence } from "../legacy/presence-bridge.ts";
-import { videoHostLabel } from "../adapters/formats/video-host.ts";
-import { makeId } from "../adapters/identity/ids.ts";
-import { idMap } from "../core/document/id-map.ts";
-import { escapeHtml } from "../core/document/text-policy.ts";
-import { estimatedSeconds, pad2, formatDuration, formatTimecode, rowSeconds } from "../core/production/timing.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
-import { cueShortcut } from "../core/text/cues.ts";
-import { directionRangeAt, directionShortcut, directionToggleRange, toggleDirection } from "../core/text/directions.ts";
+import { rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
+import { editableCellHtml } from "../common/editable-cell.js";
+import { disarmDeleteButton } from "./delete-button.ts";
+import { hasSetLength } from "../../core/document/timing.ts";
+import { ROW_STATUSES, rowStatus } from "../../core/production/looks.ts";
+import { hiddenShotStripHtml } from "./hide-shot.ts";
+import { videoLinkLabel } from "../../core/document/gallery.ts";
+import { rowIndexOf } from "../../core/document/rows.ts";
+import { ensureTrailingCaretSpot } from "../common/dom.ts";
+import { safeHref } from "../../core/document/text-policy.ts";
+import { cssAttr } from "../common/dom.ts";
+import { slotPoster } from "../common/gallery.ts";
+import { rowMotionKey, withRowMotion } from "./row-motion.js";
+import { formatTimestamp } from "../common/comment-time.js";
+import { idMap } from "../../core/document/id-map.ts";
+import { escapeHtml } from "../../core/document/text-policy.ts";
+import { estimatedSeconds, pad2, formatDuration, formatTimecode, rowSeconds } from "../../core/production/timing.ts";
+import { cueShortcut } from "../../core/text/cues.ts";
+import { directionRangeAt, directionShortcut, directionToggleRange, toggleDirection } from "../../core/text/directions.ts";
 import {
   breakLine,
   clamp,
@@ -40,17 +26,14 @@ import {
   setMark,
   toggleMark,
   typingMarks
-} from "../core/text/edits.ts";
-import { cellLength, projection } from "../core/text/runs.ts";
-import { fromHtml } from "../legacy/richtext.ts";
-import { cellEditing, editorSelection, paintGuard, undoGuard } from "../legacy/editor-bridge.ts";
-import { showActionToast, showToast } from "../legacy/effects-bridge.ts";
-import { preferences, viewFlags } from "../legacy/preferences-bridge.ts";
-import { cellSelection, placeEditorSelection, rememberCellSelection } from "../features/common/cell-selection.ts";
-import { setTagAddingPerson } from "../application/tag-panel-state.ts";
-import { formatVideoLength } from "../../shared/text.js";
-import { reviewMode } from "../legacy/location-bridge.ts";
+} from "../../core/text/edits.ts";
+import { cellLength, projection } from "../../core/text/runs.ts";
+import { cellSelection, placeEditorSelection, rememberCellSelection } from "../common/cell-selection.ts";
+import { formatVideoLength } from "../../../shared/text.js";
 
+
+var currentDocument, readSession, editAllowed, sanitizeHtml, storedHtmlFromDom, fromHtml, productionReaders, buildVideoCardEl, videoHostLabel, cellEditing, editorSelection, paintGuard, undoGuard, appendDraftMedia, draftModel, editDraft, isDraftBox, isScriptCell, trackDocument, shotHiding, blobImgHtml, presence, reviewMode, preferences, viewFlags, showToast, showActionToast, appActions, deleteConfirmation, setTagAddingPerson, makeId, productionIndexStats, resetProductionIndexStats, scheduleUntaggedScan, tagFieldOccurrences;
+var activeRender = null;
 
 var FIELD_PLACEHOLDERS = {
   visualText: "Describe what is on screen…",
@@ -580,10 +563,14 @@ export function render() {
 var paintedListeners = [];
 
 export function onPainted(listener) {
-  paintedListeners.push(listener);
+  var listeners = paintedListeners;
+  var removed = false;
+  listeners.push(listener);
   return function () {
-    var at = paintedListeners.indexOf(listener);
-    if (at !== -1) paintedListeners.splice(at, 1);
+    if (removed) return;
+    removed = true;
+    var at = listeners.indexOf(listener);
+    if (at !== -1) listeners.splice(at, 1);
   };
 }
 
@@ -638,7 +625,8 @@ var STALE_EVENTS = ["keydown", "beforeinput", "input", "paste", "cut", "drop", "
 
 function offerRedraw(failed) {
   if (redrawToast && redrawToast.isConnected && !redrawToast.classList.contains("is-leaving")) return;
-  redrawToast = showActionToast(failed, "error", "Redraw", function () { absorbRender(failed); }, true);
+  var lifetime = activeRender;
+  redrawToast = showActionToast(failed, "error", "Redraw", function () { if (activeRender === lifetime) absorbRender(failed); }, true);
   redrawToast.removeEventListener("click", redrawToast.dismiss);
   redrawToast.removeAttribute("title");
   redrawToast.classList.add("is-held");
@@ -769,7 +757,10 @@ function paintSessionChange(change) {
   var c = change.changes;
   if (paintGuard().shown()) {
     var left = rowsTouched(c.cells, ON_SCREEN_ALREADY);
-    if (left.length) paintGuard().afterShown(function () { paintRows(left); });
+    if (left.length) {
+      var lifetime = activeRender;
+      paintGuard().afterShown(function () { if (activeRender === lifetime) paintRows(left); });
+    }
     return;
   }
   if (change.kind === "replay") { undoGuard().whileApplying(render); return; }
@@ -1207,15 +1198,55 @@ export function cancelVideo(wrap) {
   wrap.querySelector(".video-popover").hidden = true;
 }
 
-export function __init() {
-  window.__renderTest = {
+export function startRowsRender(ports) {
+  currentDocument = ports.document.current;
+  readSession = ports.document.read;
+  editAllowed = ports.edits.allowed;
+  sanitizeHtml = ports.text.sanitizeHtml;
+  storedHtmlFromDom = ports.text.storedHtmlFromDom;
+  fromHtml = ports.text.fromHtml;
+  productionReaders = ports.text.productionReaders;
+  buildVideoCardEl = ports.video.card;
+  videoHostLabel = ports.video.hostLabel;
+  cellEditing = ports.editing.cells;
+  editorSelection = ports.editing.selection;
+  paintGuard = ports.editing.paint;
+  undoGuard = ports.editing.undo;
+  appendDraftMedia = ports.draft.appendMedia;
+  draftModel = ports.draft.model;
+  editDraft = ports.draft.edit;
+  isDraftBox = ports.draft.isDraft;
+  isScriptCell = ports.draft.isScript;
+  trackDocument = ports.undo.track;
+  shotHiding = ports.hiding;
+  blobImgHtml = ports.pictures.imgHtml;
+  presence = ports.presence;
+  reviewMode = ports.review.reviewing;
+  preferences = ports.preferences;
+  viewFlags = ports.view;
+  showToast = ports.notices.show;
+  showActionToast = ports.notices.showAction;
+  appActions = ports.actions;
+  deleteConfirmation = ports.deletes;
+  setTagAddingPerson = ports.tagPanel.setTagAddingPerson;
+  makeId = ports.ids.id;
+  productionIndexStats = ports.production.stats;
+  resetProductionIndexStats = ports.production.resetStats;
+  scheduleUntaggedScan = ports.production.scan;
+  tagFieldOccurrences = ports.production.occurrences;
+  var disposed = false;
+  var mine = {};
+  activeRender = mine;
+  var renderTest = window.__renderTest = {
     render: render,
     counts: function () {
+      if (disposed) return null;
       var p = productionIndexStats();
       return { render: renderCalls, rowsPainted: rowsPainted, cellsPainted: cellsPainted,
                productionDerived: p.derived, idleFlushes: p.flushes };
     },
     reset: function () {
+      if (disposed) return;
       renderCalls = 0;
       rowsPainted = 0;
       cellsPainted = 0;
@@ -1223,4 +1254,91 @@ export function __init() {
     }
   };
   STALE_EVENTS.forEach(function (type) { window.addEventListener(type, refuseOnStaleScreen, true); });
+  return {
+    paintRowTimes: paintRowTimes,
+    gallerySlotPictureHtml: gallerySlotPictureHtml,
+    galleryBadgeHtml: galleryBadgeHtml,
+    galleryVideoLinks: galleryVideoLinks,
+    renderRow: renderRow,
+    noteFieldPainted: noteFieldPainted,
+    syncPageTitle: syncPageTitle,
+    render: render,
+    onPainted: onPainted,
+    paintingScreen: paintingScreen,
+    screenIsStale: screenIsStale,
+    renderAbsorbed: renderAbsorbed,
+    renderFirstDraw: renderFirstDraw,
+    screenListeners: screenListeners,
+    forgetStalePendingMarks: forgetStalePendingMarks,
+    typePendingMarks: typePendingMarks,
+    toggleCellFormat: toggleCellFormat,
+    isDirectionCell: isDirectionCell,
+    toggleCellDirection: toggleCellDirection,
+    maybeDirectionShortcut: maybeDirectionShortcut,
+    maybeCueShortcut: maybeCueShortcut,
+    typeAtDirectionEdge: typeAtDirectionEdge,
+    cellFormatState: cellFormatState,
+    insertLineBreak: insertLineBreak,
+    updateToolbarState: updateToolbarState,
+    handleToolbarCmd: handleToolbarCmd,
+    confirmLink: confirmLink,
+    cancelLink: cancelLink,
+    confirmVideo: confirmVideo,
+    cancelVideo: cancelVideo,
+    dispose: function () {
+      if (disposed) return;
+      disposed = true;
+      renderTest.render = function () {};
+      if (activeRender !== mine) return;
+      activeRender = null;
+      STALE_EVENTS.forEach(function (type) { window.removeEventListener(type, refuseOnStaleScreen, true); });
+      if (redrawToast) redrawToast.dismiss();
+      redrawToast = null;
+      screenStale = false;
+      staleFocus = null;
+      document.body.classList.remove("is-stale-screen");
+      markStaleParts(false);
+      pendingMarks = null;
+      partTemplate = null;
+      paintBroke = false;
+      screen = { drawn: false, review: false, edit: true };
+      renderCalls = rowsPainted = cellsPainted = 0;
+      if (window.__renderTest === renderTest) delete window.__renderTest;
+      currentDocument = null;
+      readSession = null;
+      editAllowed = null;
+      sanitizeHtml = null;
+      storedHtmlFromDom = null;
+      fromHtml = null;
+      productionReaders = null;
+      buildVideoCardEl = null;
+      videoHostLabel = null;
+      cellEditing = null;
+      editorSelection = null;
+      paintGuard = null;
+      undoGuard = null;
+      appendDraftMedia = null;
+      draftModel = null;
+      editDraft = null;
+      isDraftBox = null;
+      isScriptCell = null;
+      trackDocument = null;
+      shotHiding = null;
+      blobImgHtml = null;
+      presence = null;
+      reviewMode = null;
+      preferences = null;
+      viewFlags = null;
+      showToast = null;
+      showActionToast = null;
+      appActions = null;
+      deleteConfirmation = null;
+      setTagAddingPerson = null;
+      makeId = null;
+      productionIndexStats = null;
+      resetProductionIndexStats = null;
+      scheduleUntaggedScan = null;
+      tagFieldOccurrences = null;
+    }
+  };
 }

@@ -11,7 +11,7 @@ await bootApp();
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { render } = await import("../js/05-render.js");
+const { render } = await import("../features/rows/render.js");
 const { cellEditing, undoGuard } = await import("../legacy/editor-bridge.ts");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../legacy/undo-bridge.ts");
 const writer = await import("../js/19-writer.js");

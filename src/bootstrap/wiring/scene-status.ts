@@ -8,7 +8,7 @@ import type { SceneStatus } from "../../features/rows/scene-status.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
 import { REVIEW_ONLY } from "../../legacy/session-bridge.ts";
-import { shotHiding } from "../../legacy/shot-hiding-bridge.ts";
+import { shotHiding } from "./shot-hiding.ts";
 
 type SceneStatusMount = SceneStatus & { readonly dispose: () => void };
 

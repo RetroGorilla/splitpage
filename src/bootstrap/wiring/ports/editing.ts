@@ -7,6 +7,14 @@ import { breakUndoCoalescing, flushEdits, lastUndoEntry, redo, undo } from "../.
 import type { CellEditing } from "../../../application/editing/cell-editing.ts";
 import { cellEditing, editorSelection, focusMemory } from "../../../legacy/editor-bridge.ts";
 import { editAllowed, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../../../legacy/session-bridge.ts";
+import { paintGuard, undoGuard } from "../../../legacy/editor-bridge.ts";
+import { trackDocument } from "../../../legacy/undo-bridge.ts";
+import { appendDraftMedia, draftModel, editDraft } from "../../../features/editing/draft-edit.js";
+import { isDraftBox, isScriptCell } from "../../../features/editing/cell-page.ts";
+
+export const renderEditing = { cells: cellEditing, selection: editorSelection, paint: paintGuard, undo: undoGuard };
+export const renderDraft = { appendMedia: appendDraftMedia, model: draftModel, edit: editDraft, isDraft: isDraftBox, isScript: isScriptCell };
+export const renderUndo = { track: trackDocument };
 
 export const edits: DocumentEdits = {
   run: runCommand,
