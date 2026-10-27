@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import { readFileSync } from "node:fs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { startupReady } from "../legacy/startup-bridge.ts";
+import { startupReady } from "../application/startup-signal.ts";
 
 const live = new Map();
 const proto = window.EventTarget.prototype;

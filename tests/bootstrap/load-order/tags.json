@@ -6,10 +6,9 @@
     "src/bootstrap/wiring/production.ts",
     "src/bootstrap/wiring/production-editing.ts",
     "src/features/tags/panels.js",
-    "src/legacy/tag-entity-container.ts",
     "src/features/tags/plain-tags.js",
     "src/bootstrap/wiring/plain-tags.ts",
     "src/legacy/plain-tag-bridge.ts"
   ],
-  "expectedLoads": 8
+  "expectedLoads": 7
 }

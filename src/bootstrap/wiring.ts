@@ -451,3 +451,5 @@ export { mountNewTabFeature } from "./wiring/newtab.ts";
 export { mountScriptPlaceFeature } from "./wiring/side-panels.ts";
 
 export { mountUpdateFeature } from "./wiring/update.ts";
+
+export { mountPrompterRuntimeFeature } from "./wiring/prompter.ts";

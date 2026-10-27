@@ -1,3 +1,8 @@
+import type { PrompterDesktop, PrompterVoice } from "../../../application/prompter-services.ts";
+import { openPrompterInBrowser } from "../../../legacy/desktop-bridge.ts";
+import { createDesktopRecognition, desktopVoiceAvailable, desktopVoiceKnown, loadDesktopVoice } from "../../../adapters/desktop/desktop-voice.js";
+import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "../../../adapters/desktop/voice-relay.js";
+import { SpeechRecognitionCtor } from "../../../adapters/page/speech-recognition.js";
 import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../../../application/desktop-presence.ts";
 import type { ExternalLinks, LaunchFacts } from "../../../application/desktop-presence.ts";
@@ -36,4 +41,24 @@ export const launch: LaunchFacts = {
 export const importDesktop = {
   running: runningOnDesktop,
   openExternal: (url: string) => { const desktop = desktopPort(); if (desktop) return desktop.openExternal(url); }
+};
+
+export const prompterDesktop: PrompterDesktop = {
+  running: runningOnDesktop,
+  canOpen: () => canOpenPrompterInBrowser(),
+  open: () => openPrompterInBrowser()
+};
+
+export const prompterVoice: PrompterVoice = {
+  available: desktopVoiceAvailable,
+  known: desktopVoiceKnown,
+  load: loadDesktopVoice,
+  createDesktop: createDesktopRecognition,
+  createRelay: createRelayRecognition,
+  hasRelay: hasVoiceRelay,
+  setRelay: setVoiceRelay,
+  browserRecognition: () => {
+    const constructor: ReturnType<PrompterVoice["browserRecognition"]> = SpeechRecognitionCtor;
+    return constructor;
+  }
 };

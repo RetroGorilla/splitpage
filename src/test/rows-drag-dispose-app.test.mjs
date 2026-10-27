@@ -1,7 +1,7 @@
 import "./_dom.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { startupReady } from "../legacy/startup-bridge.ts";
+import { startupReady } from "../application/startup-signal.ts";
 
 const frames = new Map();
 let nextFrame = 1;

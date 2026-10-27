@@ -2,7 +2,7 @@ import type { Startup, StartupPorts } from "../startup.ts";
 import type { StashResult } from "../startup/initial-document.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { MergedStates } from "../../core/merge-states.ts";
-import { connectStartup } from "../../legacy/startup-bridge.ts";
+import { connectStartup } from "../../application/startup-signal.ts";
 import { documentTransitions } from "../../legacy/transition-bridge.ts";
 import { suppressUnloadWarning } from "../startup/page-entry.ts";
 import { updateHideShotMenu } from "./hide-shot.ts";

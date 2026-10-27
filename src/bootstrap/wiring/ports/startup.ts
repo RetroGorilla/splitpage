@@ -4,7 +4,7 @@ import type { SeedCheck } from "../../../application/preferences/seed-check.ts";
 import { draftResume as currentDraftResume, noteDraftChange } from "../../../legacy/recovery-bridge.ts";
 import { seedCheckPasses } from "../../../legacy/seed-check.ts";
 import type { StartupSignal } from "../../../application/startup-signal.ts";
-import { startupReady } from "../../../legacy/startup-bridge.ts";
+import { startupReady } from "../../../application/startup-signal.ts";
 
 export const startup: StartupSignal = {
   ready: () => startupReady()
