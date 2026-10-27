@@ -4,7 +4,7 @@ import { setCommentSort } from "../../application/comment-sort.ts";
 import { appDataActions as appDataDefinitions } from "../../features/settings/actions.ts";
 import { mountAppData } from "../../features/settings/app-data.js";
 import type { AppDataMount, AppDataPorts } from "../../features/settings/ports.ts";
-import { exportHistoryAll, importHistoryBundle, normalizeLegacySnapshots } from "../../js/03a-history-store.js";
+import { historyOwner } from "./history.ts";
 import { connectPortOr, newBookmarkId, renderConnect, saveBookmarks } from "../../js/20e-connect.js";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { setBackend as setBlobBackend } from "../../adapters/storage/02c-blobs.js";
@@ -119,7 +119,7 @@ export function mountAppDataFeature(): AppDataMount {
       launchFacts: launch,
       bookmarks,
       commentSorting: { choose: setCommentSort },
-      history: { exportAll: exportHistoryAll, importBundle: importHistoryBundle, normalizeSnapshots: normalizeLegacySnapshots },
+      history: { exportAll: () => historyOwner().exportHistoryAll(), importBundle: (bundle) => historyOwner().importHistoryBundle(bundle), normalizeSnapshots: (raw) => historyOwner().normalizeLegacySnapshots(raw) },
       writer,
       embeddedVersion: () => updateControls()?.readEmbeddedVersion() ?? null,
       bookmarkEditor: { newId: newBookmarkId, portOr: connectPortOr, save: saveBookmarks, render: renderConnect },

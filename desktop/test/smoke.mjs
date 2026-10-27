@@ -2564,6 +2564,64 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
   }
 }
 
+async function caseHistoryEditorRestoreRelaunch(target, fixturesDir) {
+  const tag = target.name + " history: editor save, panel restore, quit and relaunch";
+  const fixture = writeFixture(fixturesDir, "history-editor.splitpage", "History editor", [["Visual", "Original narration"]]);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-history-editor-"));
+  const edited = "Saved narration — durable history";
+  let app = null;
+  async function editNarration(cdp, text) {
+    await evalPage(cdp, "(function(){var el=document.querySelector('#rows .row .audio-cell .cell-editable');el.focus();el.innerHTML='<p>'+" + JSON.stringify(text) + "+'</p>';el.dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertText'}));el.blur();return true;})()");
+    await poll(cdp, "window.__splitpageFormats.state().rows[0].audioText.includes(" + JSON.stringify(text) + ")", 10000);
+  }
+  async function openHistory(cdp) {
+    await evalPage(cdp, "document.getElementById('btn-file').click(); document.querySelector('#file-menu [data-file-action=history]').click(); true");
+    return poll(cdp, "!document.getElementById('history-panel').hidden && document.querySelectorAll('#history-list [data-action=restore-snapshot]').length > 0", 10000);
+  }
+  async function restore(cdp, id) {
+    await evalPage(cdp, "document.querySelector('#history-list [data-action=restore-snapshot][data-id=\"" + id + "\"]').click(); true");
+    return poll(cdp, "document.getElementById('history-panel').hidden && window.__splitpageFormats.state().rows[0].audioText.includes(" + JSON.stringify(edited) + ")", 15000);
+  }
+  try {
+    app = await launchApp(target, { label: "history-editor-first", fixtures: [fixture], userDataDir, dialogs: ["confirm"] });
+    await waitForRows(app.cdp, 20000);
+    await poll(app.cdp, "window.__splitpageFormats.state().title === 'History editor'", 10000);
+    await editNarration(app.cdp, edited);
+    await evalPage(app.cdp, "window.__splitpageFormats.save()");
+    const saved = await pollNode(async () => {
+      const state = JSON.parse(fs.readFileSync(fixture, "utf8"));
+      return state.rows[0].audioText.includes(edited) ? state : null;
+    }, 10000);
+    const docId = saved.docId;
+    record(tag + ": an edit through the cell input and Save reaches the real .splitpage file", !!docId && saved.rows[0].audioText.includes(edited));
+    await evalPage(app.cdp, "(async function(){var next=JSON.parse(JSON.stringify(window.__splitpageFormats.state()));next.rows[0].audioText='<p>Replacement narration</p>';await window.__splitpageFormats.openFile(new File(['Temporary narration'],'replacement.txt'));await window.__splitpageFormats.openFile(new File([JSON.stringify(next)],'return.splitpage'));await window.__historyTest.idle();return true;})()");
+    const listed = await historyCall(app.cdp, "historyList", [docId]);
+    const snapshot = listed.entries.find((entry) => entry.label.includes("Before opening replacement.txt"));
+    const snapshotId = snapshot && snapshot.id;
+    record(tag + ": the renderer's pre-replacement snapshot is stored by the desktop backend", !!snapshotId && historyBucketOnDisk(userDataDir, docId).snapshots.some((entry) => entry.id === snapshotId), JSON.stringify(listed));
+    record(tag + ": Version history lists the newly saved snapshot", await openHistory(app.cdp));
+    record(tag + ": restoring its card gives back the saved narration", await restore(app.cdp, snapshotId));
+    await evalPage(app.cdp, "window.__historyTest.idle()");
+    await teardown(app, tag + " (first quit)", { expectExitCode: 0 });
+    app = null;
+    app = await launchApp(target, { label: "history-editor-reopen", fixtures: [fixture], userDataDir });
+    await waitForRows(app.cdp, 20000);
+    record(tag + ": reopening the disk fixture after quitting keeps its saved narration", await poll(app.cdp, "window.__splitpageFormats.state().rows[0].audioText.includes(" + JSON.stringify(edited) + ")", 10000));
+    const again = await historyCall(app.cdp, "historyList", [docId]);
+    record(tag + ": the same snapshot survives process exit on disk", again.entries.some((entry) => entry.id === snapshotId), JSON.stringify(again));
+    await editNarration(app.cdp, "Later narration after relaunch");
+    await evalPage(app.cdp, "window.__splitpageFormats.save()");
+    await openHistory(app.cdp);
+    record(tag + ": the persisted snapshot is still usable through its restore card", await restore(app.cdp, snapshotId));
+    await evalPage(app.cdp, "window.__splitpageFormats.save()");
+    record(tag + ": saving that restored version writes the expected narration to the original file", JSON.parse(fs.readFileSync(fixture, "utf8")).rows[0].audioText.includes(edited));
+    await evalPage(app.cdp, "window.__historyTest.idle()");
+  } finally {
+    if (app) await teardown(app, tag + " (final quit)", { expectExitCode: 0 });
+    rmrf(userDataDir);
+  }
+}
+
 async function caseHistoryRoundTripAndRelaunch(target) {
   const tag = target.name + " history: put/list/get/copy/touch/Older put/usage + relaunch";
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
@@ -6321,6 +6379,7 @@ async function runTargetSuite(target, groupFilter) {
     ["recents: recorded/listed/removed/cleared, capped and path-free", () => caseRecentDocuments(target, fixturesDir)],
     ["save-in-place birthtime vs the duplicate rule", () => caseAtomicSaveKeepsBirthtime(target, fixturesDir)],
     ["duplicate document id across tabs (DOC-CLAIMS)", () => caseDuplicateDocIdAcrossTabs(target, fixturesDir)],
+    ["history: editor save, panel restore, quit and relaunch", () => caseHistoryEditorRestoreRelaunch(target, fixturesDir)],
     ["history: round trip (put/list/get/copy/touch/Older put/usage) + relaunch", () => caseHistoryRoundTripAndRelaunch(target)],
     ["history: id validation", () => caseHistoryIdValidation(target)],
     ["history: exit-after-body fault, relaunch shows the prior generation", () => caseHistoryKillAfterBody(target)],

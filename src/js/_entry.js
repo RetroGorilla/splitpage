@@ -3,7 +3,7 @@ import { __init as init_02b_doc_id } from "./02b-doc-id.js";
 import { startBlobs as init_02c_blobs } from "../adapters/storage/02c-blobs.js";
 import { startGalleryStore as init_02d_gallery } from "../adapters/storage/02d-gallery.js";
 import { __init as init_03_sync } from "./03-sync.js";
-import { __init as init_03a_history_store } from "./03a-history-store.js";
+import { mountHistoryOwner } from "../bootstrap/wiring.ts";
 import { mountRowsRenderFeature } from "../bootstrap/wiring.ts";
 import { mountProductionTagsFeature } from "../bootstrap/wiring.ts";
 import { mountPlainTagsFeature } from "../bootstrap/wiring.ts";
@@ -63,7 +63,7 @@ if (wiring) {
   init_02c_blobs();
   init_02d_gallery();
   init_03_sync();
-  init_03a_history_store();
+  mountHistoryOwner();
   mountScriptPlaceFeature();
   mountRowsRenderFeature();
   mountDraftEditFeature();
