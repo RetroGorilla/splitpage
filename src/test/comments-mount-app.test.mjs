@@ -11,7 +11,7 @@ await bootApp();
 const { commentSortMode } = await import("../application/comment-sort.ts");
 const { mountCommentsFeature } = await import("../bootstrap/wiring/comments.ts");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
-const { render } = await import("../js/05-render.js");
+const { render } = await import("../features/rows/render.js");
 const { documentLocation } = await import("../legacy/location-bridge.ts");
 const { openCommentComposer, openCommentsPanel, closeCommentComposer } = await import("../features/comments/comments.js");
 after(closeApp);

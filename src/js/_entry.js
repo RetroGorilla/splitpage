@@ -4,7 +4,7 @@ import { startBlobs as init_02c_blobs } from "../adapters/storage/02c-blobs.js";
 import { startGalleryStore as init_02d_gallery } from "../adapters/storage/02d-gallery.js";
 import { __init as init_03_sync } from "./03-sync.js";
 import { __init as init_03a_history_store } from "./03a-history-store.js";
-import { __init as init_05_render } from "./05-render.js";
+import { mountRowsRenderFeature } from "../bootstrap/wiring.ts";
 import { mountProductionTagsFeature } from "../bootstrap/wiring.ts";
 import { mountPlainTagsFeature } from "../bootstrap/wiring.ts";
 import { mountScriptPlaceFeature, mountFindFeature, mountTagPanelsFeature } from "../bootstrap/wiring.ts";
@@ -65,7 +65,7 @@ if (wiring) {
   init_03_sync();
   init_03a_history_store();
   mountScriptPlaceFeature();
-  init_05_render();
+  mountRowsRenderFeature();
   mountDraftEditFeature();
   mountGalleryOverlayFeature();
   mountRundownFeature();

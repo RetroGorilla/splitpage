@@ -22,7 +22,7 @@ import { exportFormats, installExportFormats } from "../../src/legacy/export-for
 import { editorStarted, startEditor } from "../../src/legacy/editor-bridge.ts";
 import { locationStarted, startLocation } from "../../src/legacy/location-bridge.ts";
 import { preferencesStarted, startPreferences } from "../../src/legacy/preferences-bridge.ts";
-import { legacyShotHidingPorts, shotHidingStarted, startShotHiding } from "../../src/legacy/shot-hiding-bridge.ts";
+import { shotHidingPorts, shotHidingStarted, startShotHiding } from "../../src/bootstrap/wiring/shot-hiding.ts";
 import { legacyPresencePorts, presenceStarted, startPresence } from "../../src/legacy/presence-bridge.ts";
 import { legacyUndoPorts, startUndo, undoStarted } from "../../src/legacy/undo-bridge.ts";
 import { effectsStarted, startEffects } from "../../src/legacy/effects-bridge.ts";
@@ -579,7 +579,7 @@ test("failed partial startup: a step that throws undoes every step before it, in
     editor: (f) => ({ deps: f.deps, cleanup: startEditor(liveDocumentPort), cause: false }),
     "production editing": (f) => ({ deps: f.deps, cleanup: startProductionEditing(must(f.deps.timers)), cause: false }),
     preferences: (f) => ({ deps: f.deps, cleanup: startPreferences(), cause: false }),
-    "shot hiding": (f) => ({ deps: f.deps, cleanup: startShotHiding(legacyShotHidingPorts(must(f.deps.timers))), cause: false }),
+    "shot hiding": (f) => ({ deps: f.deps, cleanup: startShotHiding(shotHidingPorts(must(f.deps.timers))), cause: false }),
     presence: (f) => ({ deps: f.deps, cleanup: startPresence(legacyPresencePorts()), cause: false }),
     "export capture": (f) => ({ deps: f.deps, cleanup: wireExportKit(f.deps.entry).stop, cause: false })
   };

@@ -10,7 +10,7 @@ import {
   cellFormatState,
   toggleCellDirection,
   toggleCellFormat
-} from "./05-render.js";
+} from "../legacy/row-formatting.ts";
 import { splitRowFieldCore } from "../legacy/rows-bridge.ts";
 import { hideTagGhost, scheduleIdleRefresh } from "../legacy/tag-production.ts";
 import { breakUndoCoalescing, lastUndoEntry, nextRedoEntry, undoLifetime, undoMark, undoSerial } from "../legacy/undo-bridge.ts";
