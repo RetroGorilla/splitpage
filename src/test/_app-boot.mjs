@@ -92,7 +92,7 @@ export async function appWiringDeps() {
   const [{ migrateRows }, docId, sync, production, broll, effects, exporting, drafts, hosted, files, imports, formats] = await Promise.all([
     import("../legacy/document-ports.ts"),
     import("../bootstrap/wiring/document-identity.ts"),
-    import("../js/03-sync.js"),
+    import("../bootstrap/wiring/session-merge.ts"),
     import("../features/tags/production-tags.js"),
     import("../bootstrap/wiring/broll.ts"),
     import("../bootstrap/wiring/session-effects.ts"),
@@ -117,7 +117,7 @@ export async function appWiringDeps() {
     destinations: () => [fileSaving.destination(), files.importSaveDestination(), hosted.serverSaveDestination()],
     transitions: { destination: sync.documentDestinationPort, identity: docId.documentIdentityPort, history: sync.documentHistoryPort },
     sources: () => [files.projectFileSource(), imports.importDocumentSource(), hosted.serverDocumentSource()],
-    merge: sync.legacyMergePorts,
+    merge: sync.sessionMergePorts,
     recovery: drafts.draftRecoveryPorts,
     projectFiles: () => formats.wireProjectFiles({
       prepareDocument: entry.migrateDocument,
@@ -138,6 +138,7 @@ export async function rewireApp(overrides) {
   const wiring = wireApp(Object.assign(await appWiringDeps(), overrides));
   const { mountHistoryOwner } = await import("../bootstrap/wiring/history.ts");
   mountHistoryOwner();
+  (await import("../bootstrap/wiring/session-merge.ts")).mountSessionMergeOwner();
   (await import("../bootstrap/wiring/document-identity.ts")).mountDocumentIdentityOwner();
   return wiring;
 }

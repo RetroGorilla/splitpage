@@ -2,7 +2,7 @@ import { startLocalMerge as mountMergeReview } from "../../features/merge/local-
 import type { MergeReviewControl, MergeReviewMount, MergeReviewPorts } from "../../features/merge/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { parseProjectFileState } from "../../adapters/formats/project-file.ts";
-import { textMergeContext } from "../../js/03-sync.js";
+import { textMergeContext } from "./session-merge.ts";
 import { migrateRows } from "../../legacy/document-ports.ts";
 import { handMergeOfferTo } from "../../legacy/merge-offer-bridge.ts";
 import { applyStashedWork } from "../../legacy/recovery-bridge.ts";

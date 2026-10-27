@@ -3,7 +3,7 @@ import { currentDocument, onRefresh, onSessionChange } from "../../legacy/sessio
 import { onPreferenceChange, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { onScriptStats, statsFollowChange, updateScriptStats } from "./scene-status.ts";
 import { historyOwner } from "./history.ts";
-import { renderHistory } from "../../js/03-sync.js";
+import { renderHistory } from "./history-panel.ts";
 import { currentProductionTags } from "./production-tags.ts";
 import { currentPlainTags } from "./plain-tags.ts";
 import { onPainted } from "../../features/rows/render.js";

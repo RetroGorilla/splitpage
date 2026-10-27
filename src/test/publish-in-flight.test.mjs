@@ -11,7 +11,7 @@ import { documentLocation, serverStatus } from "../legacy/location-bridge.ts";
 const homeMod = await import("../legacy/location-bridge.ts");
 const { setHome } = homeMod;
 const { publishToServer, publishAndCopyShareLink, serverSaveDestination } = await import("../js/13-hosted.js");
-const { setBaseState } = await import("../js/03-sync.js");
+const { setBaseState } = await import("../bootstrap/wiring/session-merge.ts");
 const { noteSessionEdit, currentDocument } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { wireFileSaving } = await import("../bootstrap/wiring/file-saving.ts");
@@ -23,7 +23,7 @@ const { documentTransitions, startTransitions } = await import("../legacy/transi
 const { NO_DESTINATION } = await import("../application/transitions/ports.ts");
 const documentIdentityPort = { mint: (...args) => documentIdentityOwner().documentIdentityPort.mint(...args), writtenOut: (...args) => documentIdentityOwner().documentIdentityPort.writtenOut(...args), markWrittenOut: (...args) => documentIdentityOwner().documentIdentityPort.markWrittenOut(...args) };
 const { liveDocumentPort, mergeBase } = await import("../legacy/session-bridge.ts");
-const { documentDestinationPort } = await import("../js/03-sync.js");
+const { documentDestinationPort } = await import("../bootstrap/wiring/session-merge.ts");
 const { startTestSession } = await import("./_session.mjs");
 const { appSessionDeps } = await import("./_app-session.mjs");
 const { loadTestDocument } = await import("./_document.mjs");

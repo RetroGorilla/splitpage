@@ -3,7 +3,7 @@ import { authorityOf, isOwner } from "../application/collaboration/authority.ts"
 import { runIsStale } from "../application/collaboration/workflow.ts";
 import { currentConn, currentHome, documentLocation, reviewMode, serverHomeId, serverStatus, onServerDoc } from "../legacy/location-bridge.ts";
 import { normalizeServerUrl } from "../../shared/server-links.js";
-import { personSwatchesHtml } from "./03-sync.js";
+import { personSwatchesHtml } from "../legacy/session-merge-bridge.ts";
 import { getSavedAuthorName } from "../application/comment-author.js";
 import { apiFetch, applyHealth, applyReviewMode, clearServerToken, finishServerDetect, isLinkGuest, pointTabAt, publishToServer, rememberTokenForServer, rememberedTokenForServer, serverDocShareUrl, setServerToken, shareAccessNote } from "./13-hosted.js";
 import { escapeHtml } from "../core/document/text-policy.ts";

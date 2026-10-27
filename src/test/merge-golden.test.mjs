@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { SCHEMA_VERSION } from "../core/document/fields.ts";
 import { STATE_FIELDS } from "../core/merge/state-fields.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { mergeBrollShots, mergePeople, mergeProductionTags } from "../js/03-sync.js";
+import { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
 
