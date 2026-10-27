@@ -14,7 +14,6 @@ import { renderPresence } from "./ports/presence.ts";
 import { renderDeletes, renderProduction, tagPanelState } from "./ports/production.ts";
 import { ids } from "./ports/identity.ts";
 import { shotHiding } from "./shot-hiding.ts";
-import { stopScreenFeature } from "./screen.ts";
 
 const render = owned<ReturnType<typeof startRowsRender>>();
 
@@ -27,7 +26,7 @@ export function mountRowsRenderFeature() {
       deletes: renderDeletes, tagPanel: tagPanelState, ids, production: renderProduction
     };
     return startRowsRender(ports);
-  }, (owner) => [() => { handRowFormattingTo(owner); return () => { stopScreenFeature(); handRowFormattingTo(null); }; }]);
+  }, (owner) => [() => { handRowFormattingTo(owner); return () => { handRowFormattingTo(null); }; }]);
 }
 
 export const stopRowsRenderFeature = render.stop;
