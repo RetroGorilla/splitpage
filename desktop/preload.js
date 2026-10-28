@@ -24,7 +24,6 @@ if (location.origin === "splitpage://app") {
 
   let openFileCallback = null;
   let menuCommandCallback = null;
-  let openServerDocCallback = null;
   let restoreNoticeCallback = null;
   let reassignDocIdCallback = null;
   let draftFlushCallback = null;
@@ -36,9 +35,6 @@ if (location.origin === "splitpage://app") {
   });
   receive("splitpage:menu-command", (_event, command) => {
     if (menuCommandCallback) menuCommandCallback(command);
-  });
-  receive("splitpage:open-server-doc", (_event, payload) => {
-    if (openServerDocCallback) openServerDocCallback(payload);
   });
   receive("splitpage:restore-notice", (_event, payload) => {
     if (restoreNoticeCallback) restoreNoticeCallback(payload);
@@ -80,17 +76,6 @@ if (location.origin === "splitpage://app") {
   const launchIntent = boot.launchIntent && typeof boot.launchIntent === "object"
     ? { type: String(boot.launchIntent.type || "blank") }
     : { type: "blank" };
-  const bootConn = boot.connection && typeof boot.connection === "object" ? boot.connection : null;
-  const bootTunnel = bootConn && bootConn.tunnel && typeof bootConn.tunnel === "object" ? bootConn.tunnel : null;
-  const connection = bootConn ? Object.freeze({
-    serverUrl: typeof bootConn.serverUrl === "string" ? bootConn.serverUrl : "",
-    token: typeof bootConn.token === "string" ? bootConn.token : "",
-    tunnel: bootTunnel ? Object.freeze({
-      userHost: String(bootTunnel.userHost || ""),
-      remotePort: Number(bootTunnel.remotePort),
-      localPort: Number(bootTunnel.localPort)
-    }) : null
-  }) : null;
   const hadPriorSession = boot.hadPriorSession === true;
   const firstTabOfLaunch = boot.firstTabOfLaunch === true;
   const hasDraftToRestore = boot.hasDraftToRestore === true;
@@ -105,7 +90,6 @@ if (location.origin === "splitpage://app") {
     tabId,
     windowId,
     launchIntent,
-    connection,
     hadPriorSession,
     firstTabOfLaunch,
     hasDraftToRestore,
@@ -144,10 +128,6 @@ if (location.origin === "splitpage://app") {
 
     clearRecents() {
       return invoke("splitpage:recents-clear");
-    },
-
-    onOpenServerDoc(cb) {
-      openServerDocCallback = cb;
     },
 
     onRestoreNotice(cb) {
@@ -308,30 +288,6 @@ if (location.origin === "splitpage://app") {
 
     onVoiceEvent(cb) {
       voiceEventCallback = cb;
-    },
-
-    driveStatus() {
-      return invoke("splitpage:drive-status");
-    },
-
-    driveSignIn() {
-      return invoke("splitpage:drive-sign-in");
-    },
-
-    driveSignOut() {
-      return invoke("splitpage:drive-sign-out");
-    },
-
-    driveList(folderId) {
-      return invoke("splitpage:drive-list", folderId);
-    },
-
-    driveDownload(fileId) {
-      return invoke("splitpage:drive-download", fileId);
-    },
-
-    driveUpload(request) {
-      return invoke("splitpage:drive-upload", request);
     }
   };
 

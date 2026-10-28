@@ -351,25 +351,6 @@ test("sharing again, or revoking, ends the old relay; a wrong or old token is 40
   } finally { share.closeAll(); }
 });
 
-test("a relay-only share serves no script, and lets the document server's origin read it", async () => {
-  const ref = {};
-  const voice = makeVoice(() => ref.share);
-  const share = ref.share = makeShare({ voice, corsOrigins: () => ["http://127.0.0.1:8791"] });
-  try {
-    const param = await share.publishVoice("tab9");
-    const v = parseVoice("#" + param);
-    assert.ok(v, param);
-    const s = await openStream(v.port, "/prompter-voice/" + v.token, { origin: "http://127.0.0.1:8791" });
-    assert.equal(s.headers["access-control-allow-origin"], "http://127.0.0.1:8791");
-    s.close();
-    const other = await openStream(v.port, "/prompter-voice/" + v.token, { origin: "http://evil.example" });
-    assert.equal(other.headers["access-control-allow-origin"], undefined);
-    other.close();
-    const forged = await request(v.port, "/prompter-voice/" + v.token, { headers: { host: "rebind.example:" + v.port } });
-    assert.equal(forged.status, 403);
-  } finally { share.closeAll(); }
-});
-
 test("a relay in use outlives the share's TTL; an idle one does not", async () => {
   const ref = {};
   const voice = makeVoice(() => ref.share);

@@ -49,7 +49,6 @@ function createPrompterShare(options) {
   const ttlMs = opts.ttlMs || SHARE_TTL_MS;
   const now = typeof opts.now === "function" ? opts.now : Date.now;
   const voice = opts.voice && typeof opts.voice.start === "function" ? opts.voice : null;
-  const corsOrigins = typeof opts.corsOrigins === "function" ? opts.corsOrigins : () => [];
 
   const staticTable = {};
   for (const [route, entry] of Object.entries(opts.staticAllowlist || {})) {
@@ -108,11 +107,6 @@ function createPrompterShare(options) {
       "referrer-policy": "no-referrer",
       "cache-control": "no-store"
     };
-    const origin = req.headers.origin;
-    if (typeof origin === "string" && corsOrigins().includes(origin)) {
-      headers["access-control-allow-origin"] = origin;
-      headers.vary = "Origin";
-    }
     res.writeHead(200, headers);
     if (req.method === "HEAD") { res.end(); return; }
     const { ownerId, share } = found;
@@ -309,18 +303,6 @@ function createPrompterShare(options) {
     return `http://${host}:${listening}/?teleprompter=1#script=${token}` + (relay ? "&" + relay : "");
   }
 
-  async function publishVoice(ownerId) {
-    if (typeof ownerId !== "string" || !ownerId) throw new Error("prompter-share: no owner");
-    if (!voice) throw new Error("prompter-share: no voice relay");
-    const listening = await ensureServer();
-    const share = {
-      token: null, voiceToken: crypto.randomBytes(32).toString("hex"),
-      name: "", text: null, expiresAt: now() + ttlMs, timer: null, streams: new Set()
-    };
-    replaceShare(ownerId, share);
-    return voiceParam(listening, share);
-  }
-
   function closeAll() {
     for (const ownerId of [...shares.keys()]) {
       const share = shares.get(ownerId);
@@ -333,7 +315,6 @@ function createPrompterShare(options) {
 
   return {
     publish,
-    publishVoice,
     pushVoice,
     revoke: dropShare,
     closeAll,

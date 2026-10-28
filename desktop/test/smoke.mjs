@@ -8,12 +8,17 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createDialogHelpers, modalShownExpr } from "./smoke-dialogs.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DESKTOP_DIR = path.resolve(__dirname, "..");
 
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+function modalShownExpr(id) {
+  return "(function(){ var m = document.getElementById(" + JSON.stringify(id) + "); if (!m || m.hidden) return false;" +
+    " var open = document.querySelectorAll('.modal-backdrop:not([hidden])');" +
+    " return open.length > 0 && open[open.length - 1] === m; })()";
+}
 
 function parseCliArgs(argv) {
   const out = { exe: null, onlyTarget: null, onlyGroup: null };
@@ -377,24 +382,6 @@ function crashRenderer(cdp) {
   return fireEval(cdp, "window.splitpageDesktop.__testCrashRenderer()", { awaitPromise: false });
 }
 
-function dirContainsText(dir, needle) {
-  let found = null;
-  (function walk(d) {
-    if (found) return;
-    let entries;
-    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { return; }
-    for (const ent of entries) {
-      if (found) return;
-      const p = path.join(d, ent.name);
-      if (ent.isDirectory()) { walk(p); continue; }
-      let text;
-      try { text = fs.readFileSync(p, "utf8"); } catch { continue; }
-      if (text.indexOf(needle) !== -1) { found = p; return; }
-    }
-  })(dir);
-  return found;
-}
-
 function newHexId() { return crypto.randomBytes(16).toString("hex"); }
 
 function writeDesktopStateFile(userDataDir, state) {
@@ -604,7 +591,6 @@ async function spawnAttempt(target, opts, userDataDir, port) {
   }
 
   const flags = [...platformFlagsFor(target), `--remote-debugging-port=${port}`, ...(opts.flags || [])];
-  if (opts.dataDir) flags.push("--data", opts.dataDir);
   const fixtures = opts.fixtures || [];
 
   const args = target.kind === "dev"
@@ -1142,97 +1128,6 @@ async function caseSessionRestore(target, fixturesDir) {
   }
 }
 
-async function caseLibraryMode(target) {
-  const tag = target.name + " --library";
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
-  let app = null;
-  try {
-    app = await launchApp(target, { label: "library", flags: ["--library"], dataDir });
-    await waitForRows(app.cdp, 20000);
-
-    const healthStatus = await poll(app.cdp, "fetch('/api/health').then(function(r){return r.status;})", 15000);
-    record(tag + ": fetch('/api/health') is 200 in --library mode", healthStatus === 200, "status=" + healthStatus);
-    const health = await evalPage(app.cdp, "fetch('/api/health').then(function(r){return r.json();})");
-    record(tag + ": /api/health reports mode 'server'", !!health && health.mode === "server", JSON.stringify(health));
-
-    const docTitle = "Library Doc — 🎬";
-    const created = await evalPage(app.cdp,
-      `fetch('/api/docs', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ state: { title: ${JSON.stringify(docTitle)}, rows: [] } }) }).then(function(r){ return r.json(); })`);
-    record(tag + ": POST /api/docs creates a doc", !!created && !!created.id, JSON.stringify(created));
-
-    if (created && created.id) {
-      const readBack = await evalPage(app.cdp, `fetch('/api/docs/${created.id}').then(function(r){return r.json();})`);
-      record(tag + ": GET /api/docs/:id round-trips the same title", !!readBack && readBack.state && readBack.state.title === docTitle, JSON.stringify(readBack));
-    }
-
-    const info = await evalPage(app.cdp, "window.splitpageDesktop.getSessionInfo()");
-    record(tag + ": getSessionInfo() reports library:true", !!info && info.library === true, JSON.stringify(info));
-
-    const docServerPort = info && info.port;
-    const closedUserDataDir = app.userDataDir;
-    await teardown(app, tag);
-    app = null;
-    rmrf(closedUserDataDir);
-
-    if (docServerPort) {
-      const closed = await portClosed(docServerPort, "127.0.0.1");
-      record(tag + ": document server port closed after quit", closed === true, "port=" + docServerPort);
-    } else {
-      record(tag + ": document server port closed after quit", false, "no port was ever reported by getSessionInfo()");
-    }
-  } finally {
-    if (app) {
-      await teardown(app, tag);
-      rmrf(app.userDataDir);
-    }
-    rmrf(dataDir);
-  }
-}
-
-async function caseHostMode(target) {
-  const tag = target.name + " --host --pin";
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
-  let app = null;
-  try {
-    app = await launchApp(target, { label: "host", flags: ["--host", "--pin", "4821"], dataDir, dialogs: ["confirm"] });
-    await waitForRows(app.cdp, 20000);
-
-    const info = await poll(app.cdp, "window.splitpageDesktop.getSessionInfo().then(function(i){ return (i && i.hosting) ? i : null; })", 20000);
-    record(tag + ": getSessionInfo() reports hosting:true", !!info && info.hosting === true, JSON.stringify(info));
-    record(tag + ": getSessionInfo() reports pin '4821'", !!info && info.pin === "4821", JSON.stringify(info));
-    record(tag + ": getSessionInfo() reports a lanUrls array", !!info && Array.isArray(info.lanUrls), JSON.stringify(info && info.lanUrls));
-
-    const shareVisible = await poll(app.cdp, "(function(){ var el = document.getElementById('desktop-share-info'); return el && el.hidden === false; })()", 10000);
-    record(tag + ": the desktop share-info UI is visible while hosting", !!shareVisible);
-
-    const lanUrl = info && Array.isArray(info.lanUrls) && info.lanUrls[0];
-    if (lanUrl) {
-      const viaLan = await fetchJson(lanUrl + "api/health").then(() => true, () => false);
-      record(tag + ": a test run's server is not reachable on the LAN address (no firewall prompt)", viaLan === false, lanUrl);
-    }
-
-    const port = info && info.port;
-    if (port) {
-      const noToken = await fetchJson(`http://127.0.0.1:${port}/api/docs`);
-      record(tag + ": GET /api/docs with no token is 401", noToken.status === 401, "status=" + noToken.status + " body=" + JSON.stringify(noToken.body));
-
-      const joined = await fetchJson(`http://127.0.0.1:${port}/api/join`, {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pin: "4821" })
-      });
-      record(tag + ": POST /api/join with the correct PIN returns a token", joined.status === 200 && !!joined.body && !!joined.body.token, JSON.stringify(joined.body));
-    } else {
-      record(tag + ": GET /api/docs with no token is 401", false, "no port reported by getSessionInfo()");
-      record(tag + ": POST /api/join with the correct PIN returns a token", false, "no port reported by getSessionInfo()");
-    }
-  } finally {
-    if (app) {
-      await teardown(app, tag);
-      rmrf(app.userDataDir);
-    }
-    rmrf(dataDir);
-  }
-}
-
 async function startTinyUpdateServer() {
   const server = http.createServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
@@ -1569,54 +1464,6 @@ async function caseCloseFromPageIsUnguarded(target) {
   }
 }
 
-async function caseQuitCancelKeepsServer(target) {
-  const tag = target.name + " --library quit cancelled keeps the document server";
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
-  let app = null;
-  try {
-    app = await launchApp(target, { label: "quit-cancel-server", flags: ["--library"], dataDir, dialogs: ["cancel", "confirm"] });
-    const cdp = app.cdp;
-    await waitForRows(cdp, 20000);
-
-    const before = await poll(cdp, "fetch('/api/health').then(function(r){return r.status;})", 15000);
-    record(tag + ": /api/health is 200 before quitting", before === 200, "status=" + before);
-    const info = await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
-    const port = info && info.port;
-
-    await evalPage(cdp, "window.__desktopTest.markDirtyForTest(); true", { awaitPromise: false });
-    await poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!(b && b.textContent && b.textContent.indexOf('\\u2022') !== -1); })()", 10000);
-    await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
-
-    const seenBeforeQuit = await dialogsSeen(cdp);
-    await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
-    await waitForDialogAnswered(cdp, seenBeforeQuit);
-    record(tag + ": 'Stay' keeps the app running", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
-
-    const viaProxy = await evalPage(cdp, "fetch('/api/health').then(function(r){return r.status;}).catch(function(){return 0;})");
-    record(tag + ": /api/health through the app is still 200 after the cancelled quit", viaProxy === 200, "status=" + viaProxy);
-    const direct = port
-      ? await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(4000) }).then((r) => r.status).catch(() => 0)
-      : 0;
-    record(tag + ": the document server itself still answers on its port", direct === 200, "port=" + port + " status=" + direct);
-
-    await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
-    const exited = await waitForExit(app.proc, 30000);
-    record(tag + ": 'confirm' quits for real with exit code 0", exited === true && app.proc.exitCode === 0, "exitCode=" + app.proc.exitCode);
-    if (port) {
-      const closed = await portClosed(port, "127.0.0.1");
-      record(tag + ": document server port closed after the real quit", closed === true, "port=" + port);
-    } else {
-      record(tag + ": document server port closed after the real quit", false, "no port was ever reported by getSessionInfo()");
-    }
-  } finally {
-    if (app) {
-      await teardown(app, tag);
-      rmrf(app.userDataDir);
-    }
-    rmrf(dataDir);
-  }
-}
-
 async function caseQuitAuthorityNoGesture(target) {
   const tag = target.name + " quit authority (no user gesture anywhere)";
   let app = null;
@@ -1673,40 +1520,6 @@ async function caseSecondInstanceRelativePath(target, fixturesDir) {
     if (secondProc && secondProc.exitCode === null) killPid(secondProc.pid);
     if (first) await teardown(first, tag);
     rmrf(userDataDir);
-  }
-}
-
-async function caseHostModeAutoPin(target) {
-  const tag = target.name + " --host --pin (no value, auto-generated)";
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
-  let app = null;
-  try {
-    app = await launchApp(target, { label: "host-auto-pin", flags: ["--host", "--pin"], dataDir, dialogs: ["confirm"] });
-    await waitForRows(app.cdp, 20000);
-    const info = await poll(app.cdp, "window.splitpageDesktop.getSessionInfo().then(function(i){ return (i && i.hosting) ? i : null; })", 20000);
-    record(tag + ": a bare '--pin' auto-generates a 6-digit PIN instead of leaving JOIN_PIN empty",
-      !!info && /^\d{6}$/.test(info.pin || ""), JSON.stringify(info));
-  } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
-    rmrf(dataDir);
-  }
-}
-
-async function caseHostModeNoPinWarning(target) {
-  const tag = target.name + " --host with no --pin at all shows an explicit warning";
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
-  let app = null;
-  try {
-    app = await launchApp(target, { label: "host-no-pin", flags: ["--host"], dataDir, dialogs: ["confirm"] });
-    await waitForRows(app.cdp, 20000);
-    await poll(app.cdp, "(function(){ var el = document.getElementById('desktop-share-info'); return el && el.hidden === false; })()", 15000);
-    const warningText = await evalPage(app.cdp,
-      "(function(){ var el = document.querySelector('.connect-share-nopin'); return el ? el.textContent : null; })()");
-    record(tag + ": the share-info panel explicitly warns when the session truly has no PIN",
-      typeof warningText === "string" && /no pin/i.test(warningText), String(warningText));
-  } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
-    rmrf(dataDir);
   }
 }
 
@@ -1985,38 +1798,6 @@ async function caseQuitTwoWindowsDirty(target) {
   }
 }
 
-async function caseHostQuitStopSharingOnce(target) {
-  const tag = target.name + " --host: stop-sharing prompt fires once at quit, not at a non-last close";
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
-  let app = null;
-  let cdp2 = null;
-  try {
-    app = await launchApp(target, { label: "host-quit-once", flags: ["--host", "--pin", "3344"], dataDir, dialogs: ["confirm"] });
-    await waitForRows(app.cdp, 20000);
-    await poll(app.cdp, "window.splitpageDesktop.getSessionInfo().then(function(i){ return (i && i.hosting) ? i : null; })", 20000);
-
-    const tab2Id = await shell(app.cdp, "createTab", {});
-    cdp2 = await connectTab(app, tab2Id);
-    await waitForRows(cdp2, 20000);
-    await shell(app.cdp, "moveTabToWindow", { tabId: tab2Id, windowId: null });
-
-    await fireEval(cdp2, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
-    const afterClose = await pollShellState(app.cdp, (l) => (l.windows.length === 1 ? l : null), 15000).catch(() => null);
-    record(tag + ": closing a non-last window with nothing unsaved asks nothing and just closes",
-      !!afterClose, afterClose ? "" : "window2 did not close cleanly");
-    record(tag + ": the app is still running after the non-last close", app.proc.exitCode === null, "exitCode=" + app.proc.exitCode);
-
-    await fireEval(app.cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
-    const exited = await waitForExit(app.proc, 30000);
-    record(tag + ": quitting the last window asks the stop-sharing prompt once, then exits cleanly",
-      exited === true && app.proc.exitCode === 0, "exited=" + exited + " exitCode=" + app.proc.exitCode);
-  } finally {
-    if (cdp2) { try { cdp2.close(); } catch {} }
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
-    rmrf(dataDir);
-  }
-}
-
 async function caseTearOffPreservesState(target) {
   const tag = target.name + " tear-off preserves live tab state (no reload)";
   let app = null;
@@ -2123,6 +1904,71 @@ async function caseRestoreAtLaunch(target, fixturesDir) {
       !!bothTitles, JSON.stringify(bothTitles));
   } finally {
     if (cdp2) { try { cdp2.close(); } catch {} }
+    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    rmrf(userDataDir);
+  }
+}
+
+async function caseRestoreStoredServerTabs(target, fixturesDir) {
+  const tag = target.name + " restore at launch: a stored server tab is dropped, the other tabs are kept";
+  const fixtureA = writeFixture(fixturesDir, "case-stored-server-a.splitpage", "Stored Server Keep A", [["a", "b"]]);
+  const fixtureB = writeFixture(fixturesDir, "case-stored-server-b.splitpage", "Stored Server Keep B", [["g", "h"]]);
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const win1Id = newHexId(), win2Id = newHexId();
+  const tabA = newHexId(), tabServer1 = newHexId(), tabB = newHexId(), tabServer2 = newHexId();
+  const serverSource = (id) => ({
+    kind: "server", serverDocId: id, serverUrl: "https://docs.example.com/",
+    tunnel: { userHost: "me@studio.example.com", remotePort: 8791, localPort: 8791 }, token: "f".repeat(64), role: "edit"
+  });
+  writeDesktopStateFile(userDataDir, {
+    version: 2,
+    windows: [
+      {
+        windowId: win1Id, bounds: null, maximized: false, activeTabId: tabB,
+        tabs: [
+          { tabId: tabA, source: { kind: "file", absPath: fixtureA }, lastKnownTitle: "Stored Server Keep A" },
+          { tabId: tabServer1, source: serverSource("doc-one"), lastKnownTitle: "On the server" },
+          { tabId: tabB, source: { kind: "file", absPath: fixtureB }, lastKnownTitle: "Stored Server Keep B" }
+        ]
+      },
+      {
+        windowId: win2Id, bounds: null, maximized: false, activeTabId: tabServer2,
+        tabs: [{ tabId: tabServer2, source: serverSource("doc-two"), lastKnownTitle: "Also on the server" }]
+      }
+    ]
+  });
+
+  let app = null;
+  let cdpB = null;
+  try {
+    app = await launchApp(target, { label: "restore-stored-server", userDataDir });
+    cdpB = await connectTab(app, tabB);
+    const settled = await pollNode(async () => {
+      const l = await shell(cdpB, "listTargets", {});
+      const w = l.windows.find((x) => x.windowId === win1Id);
+      const a = w && w.tabs.find((x) => x.tabId === tabA);
+      const b = w && w.tabs.find((x) => x.tabId === tabB);
+      return a && b && a.title === "Stored Server Keep A" && b.title === "Stored Server Keep B" ? l : null;
+    }, 20000).catch(() => null);
+    record(tag + ": the file tabs beside the server tab load their documents", !!settled);
+    const listing = settled || await shell(cdpB, "listTargets", {});
+    const w1 = listing.windows.find((w) => w.windowId === win1Id);
+    record(tag + ": window 1 keeps both file tabs in order and drops the server tab",
+      !!w1 && w1.tabs.length === 2 && w1.tabs[0].tabId === tabA && w1.tabs[1].tabId === tabB, JSON.stringify(w1));
+    record(tag + ": the active file tab is still active", !!w1 && w1.activeTabId === tabB, JSON.stringify(w1 && w1.activeTabId));
+    const w2 = listing.windows.find((w) => w.windowId === win2Id);
+    record(tag + ": a window that held only a server tab comes back with one blank tab",
+      !!w2 && w2.tabs.length === 1 && w2.tabs[0].path === null, JSON.stringify(w2));
+    record(tag + ": no restored tab carries a server binding",
+      listing.windows.every((w) => w.tabs.every((t) => !("serverDocId" in t) && !("isServerDoc" in t))), JSON.stringify(listing));
+    const saved = await pollNode(async () => {
+      const s = readDesktopStateFile(userDataDir);
+      return s && !JSON.stringify(s).includes("doc-one") ? s : null;
+    }, 15000).catch(() => null);
+    record(tag + ": the rewritten desktop-state.json holds no server source, URL or token",
+      !!saved && !/"kind":"server"|docs\.example\.com|doc-two|"token"|"tunnel"|f{64}/.test(JSON.stringify(saved)), JSON.stringify(saved));
+  } finally {
+    if (cdpB) { try { cdpB.close(); } catch {} }
     if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
@@ -2317,7 +2163,7 @@ async function caseV1MigrationAndCorruptJson(target, fixturesDir) {
     const listing = await shell(appB.cdp, "listTargets", {});
     record(tagB + ": one window, one blank tab, exactly like a fresh install",
       listing.windows.length === 1 && listing.windows[0].tabs.length === 1 &&
-      listing.windows[0].tabs[0].path === null && !listing.windows[0].tabs[0].isServerDoc,
+      listing.windows[0].tabs[0].path === null,
       JSON.stringify(listing.windows));
   } finally {
     if (appB) { await teardown(appB, tagB); rmrf(appB.userDataDir); }
@@ -4697,73 +4543,6 @@ async function caseTabOpenedDuringCloseCheck(target, fixturesDir, how) {
   }
 }
 
-async function caseHostTabTornOffDuringLastWindowClose(target, fixturesDir) {
-  const tag = target.name + " close check: under --host, a tab torn off during the last window's close keeps the stop-sharing prompt for the window left (#531)";
-  const stamp = Date.now();
-  const marker = "MARKER-531-HOST-A-" + stamp;
-  const aPath = writeFixture(fixturesDir, "case-531-host-a-" + stamp + ".splitpage", "Host Close A", [[marker, "a"]]);
-  const movedDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-moved-"));
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
-  let app = null;
-  let held = {};
-  let cdpB = null;
-  try {
-    app = await launchApp(target, {
-      label: "host-torn-off-during-close", userDataDir, dataDir, fixtures: [aPath], flags: ["--host", "--pin", "3344"],
-      dialogs: ["confirm", "confirm", "cancel", "confirm"],
-      env: { SPLITPAGE_TEST_DRAFT_WRITE_DELAY_MS: "1000" }
-    });
-    await waitForRows(app.cdp, 20000);
-    await poll(app.cdp, "window.splitpageDesktop.getSessionInfo().then(function(i){ return (i && i.hosting) ? i : null; })", 20000);
-    held = await tabsHolding(app, [marker], 20000);
-    record(tag + ": the file opens in a tab", !!held[marker], JSON.stringify(Object.keys(held)));
-    if (!held[marker]) return;
-    const cdpA = held[marker].cdp;
-    const tabAId = held[marker].id;
-    const tabBId = await shell(cdpA, "createTab", {});
-    cdpB = await connectTab(app, tabBId);
-    await waitForRows(cdpB, 20000);
-    fs.renameSync(aPath, path.join(movedDir, path.basename(aPath)));
-
-    const seen0 = await dialogsSeen(cdpB);
-    await fireEval(cdpA, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
-    const asked = await dialogsPast(cdpB, seen0 + 1, 10000);
-    const w2 = asked ? await shell(cdpB, "moveTabToWindow", { tabId: tabBId, windowId: null }) : null;
-    record(tag + ": the close asks to stop sharing and about tab A, both answered 'close', and tab B is torn off while A's copy is written",
-      !!asked && !!w2, "asked=" + asked + " w2=" + w2);
-    const left = await pollShellState(cdpB, (l) => l.windows.length === 1 && !tabListed(l, tabAId), 15000).catch(() => null);
-    record(tag + ": the first window closes and the app keeps running with tab B", !!left && tabListed(left, tabBId) && app.proc.exitCode === null,
-      "exitCode=" + app.proc.exitCode + " " + JSON.stringify(left));
-    record(tag + ": exactly one unsaved-changes question, about tab A", JSON.stringify(questionsAsked(app)) === JSON.stringify([[tabAId]]), JSON.stringify(questionsAsked(app)));
-
-    await fireEval(cdpB, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
-    const askedAgain = await dialogsPast(cdpB, seen0 + 2, 10000);
-    await sleep(800);
-    const still = await shell(cdpB, "listTargets", {}).catch(() => null);
-    record(tag + ": closing the window left asks to stop sharing again, and 'cancel' keeps it open",
-      !!askedAgain && app.proc.exitCode === null && tabListed(still, tabBId),
-      "dialogs seen=" + (await dialogsSeen(cdpB).catch(() => "?")) + ", before=" + seen0 + " exitCode=" + app.proc.exitCode);
-
-    await fireEval(cdpB, "window.splitpageDesktop.__testRequestClose()", { awaitPromise: false });
-    const exited = await waitForExit(app.proc, 30000);
-    record(tag + ": 'stop sharing and close' then closes it and quits with no further prompt", exited === true && app.proc.exitCode === 0,
-      "exited=" + exited + " exitCode=" + app.proc.exitCode + " (a fifth prompt is answered Cancel and keeps the app running)");
-    try { cdpB.close(); } catch {}
-    cdpB = null;
-    closeHeld(held);
-    held = {};
-    app = null;
-  } finally {
-    if (cdpB) { try { cdpB.close(); } catch {} }
-    closeHeld(held);
-    if (app) { await teardown(app, tag, { expectForceKill: ENDS_FILE_GONE }); rmrf(app.userDataDir); }
-    rmrf(userDataDir);
-    rmrf(dataDir);
-    rmrf(movedDir);
-  }
-}
-
 function questionsAsked(app) {
   const out = [];
   const re = /\[splitpage\] test question \([^)]*\): (\[[^\n]*\])/g;
@@ -5042,167 +4821,6 @@ async function caseDraftForgedFileId(target) {
     record(tag + ": the copy is dirty", !!dirtyAfter);
   } finally {
     if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
-    rmrf(userDataDir);
-  }
-}
-
-async function caseDraftNoSecrets(target) {
-  const tag = target.name + " draft: no PIN, token or launch URL ever reaches disk";
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
-  const pin = "482915";
-  let app = null;
-  try {
-    app = await launchApp(target, { label: "draft-no-secrets", flags: ["--host", "--pin", pin], dataDir, dialogs: ["confirm"] });
-    await waitForRows(app.cdp, 20000);
-    const cdp = app.cdp;
-
-    const info = await poll(cdp, "window.splitpageDesktop.getSessionInfo().then(function(i){ return (i && i.hosting) ? i : null; })", 20000);
-    const port = info && info.port;
-    record(tag + ": setup — hosting with a known port", !!port, JSON.stringify(info));
-
-    let token = null;
-    if (port) {
-      const joined = await fetchJson(`http://127.0.0.1:${port}/api/join`, {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pin })
-      });
-      token = joined.body && joined.body.token;
-      record(tag + ": setup — a real join token was minted", !!token, JSON.stringify(joined.body));
-    }
-
-    await addMarkerRow(cdp, "MARKER-NOSECRETS");
-    const write = await flushDraft(cdp);
-    record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
-
-    const draftsRoot = path.join(app.userDataDir, "drafts");
-    const pinHit = dirContainsText(draftsRoot, pin);
-    record(tag + ": no file under drafts/ contains the PIN", !pinHit, String(pinHit));
-    const tokenHit = token ? dirContainsText(draftsRoot, token) : null;
-    record(tag + ": no file under drafts/ contains the server join token", !tokenHit, String(tokenHit));
-    const launchHit = dirContainsText(draftsRoot, "launch=");
-    record(tag + ": no file under drafts/ contains 'launch='", !launchHit, String(launchHit));
-
-    const dirs = readDraftDirs(app.userDataDir);
-    const anyTab = Object.keys(dirs)[0];
-    const header = anyTab && dirs[anyTab].current && dirs[anyTab].current.header;
-    const base = header && header.origin && header.origin.server && header.origin.server.base;
-    record(tag + ": header server.base (when present) carries no userinfo ('@')",
-      base === undefined || base === null || String(base).indexOf("@") === -1, JSON.stringify(base));
-  } finally {
-    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
-    rmrf(dataDir);
-  }
-}
-
-async function caseDraftServerDocMerges(target) {
-  const tag = target.name + " draft: server document reachable at relaunch -> merged (no autosave)";
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
-  const myMarker = "MARKER-SERVER-MINE-" + Date.now();
-  const theirMarker = "MARKER-SERVER-THEIRS-" + Date.now();
-  let app = null;
-  try {
-    app = await launchApp(target, { label: "draft-server-merge-a", flags: ["--library"], dataDir, userDataDir });
-    await waitForRows(app.cdp, 20000);
-    const cdp = app.cdp;
-
-    const created = await evalPage(cdp,
-      "fetch('/api/docs', { method:'POST', headers:{'content-type':'application/json'}, " +
-      "body: JSON.stringify({ state: { title: 'Server Merge Doc', rows: [] } }) }).then(function(r){ return r.json(); })");
-    record(tag + ": setup — a server document is created", !!created && !!created.id, JSON.stringify(created));
-    if (!created || !created.id) return;
-
-    const routed = await evalPage(cdp, "window.splitpageDesktop.routeOpen({ kind: 'server', serverDocId: " + JSON.stringify(created.id) + " })");
-    record(tag + ": setup — the tab is routed to the server document", !!routed, JSON.stringify(routed));
-    const opened = await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Server Merge Doc"), 15000).catch(() => false);
-    record(tag + ": setup — the tab shows the server document", !!opened);
-
-    await addMarkerRow(cdp, myMarker);
-    const write = await flushDraft(cdp);
-    record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
-
-    const info = await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
-    const port = info && info.port;
-    const serverRevAfterExternalEdit = created.rev + 1;
-    const putRes = port ? await fetchJson(`http://127.0.0.1:${port}/api/docs/${created.id}`, {
-      method: "PUT", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ baseRev: created.rev, state: { title: "Server Merge Doc", rows: [{ id: "x1", visualText: theirMarker, audioText: "", status: "todo" }] } })
-    }) : null;
-    record(tag + ": setup — another client saves a different version",
-      !!putRes && putRes.status === 200 && putRes.body && putRes.body.rev === serverRevAfterExternalEdit, JSON.stringify(putRes && putRes.body));
-
-    await crashApp(app);
-    app = null;
-
-    app = await launchApp(target, { label: "draft-server-merge-b", flags: ["--library"], dataDir, userDataDir });
-    await waitForRows(app.cdp, 20000);
-    const cdp2 = app.cdp;
-
-    const gotMine = await waitForMarker(cdp2, myMarker, 25000);
-    record(tag + ": the recovered edit survives the merge", !!gotMine);
-    const gotTheirs = await markerPresent(cdp2, theirMarker);
-    record(tag + ": the other client's edit survives the merge too", !!gotTheirs);
-    const toast = await toastContaining(cdp2, "merged back in", 15000);
-    record(tag + ": a toast says the recovered changes were merged back in", !!toast, String(toast));
-
-    await sleep(800);
-    const info2 = await evalPage(cdp2, "window.splitpageDesktop.getSessionInfo()");
-    const readBack = info2 && info2.port ? await fetchJson(`http://127.0.0.1:${info2.port}/api/docs/${created.id}`) : null;
-    record(tag + ": the merge does NOT autosave (invariant #41 / overrides §1) — the server rev is unchanged by the restore",
-      !!readBack && readBack.status === 200 && readBack.body.rev === serverRevAfterExternalEdit, JSON.stringify(readBack && readBack.body));
-    const dirtyAfter = await isDirty(cdp2);
-    record(tag + ": the merged tab stays dirty (btn-save is-dirty)", !!dirtyAfter);
-  } finally {
-    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
-    rmrf(dataDir);
-    rmrf(userDataDir);
-  }
-}
-
-async function caseDraftServerGone(target) {
-  const tag = target.name + " draft: server document deleted while down -> unsaved copy";
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
-  const marker = "MARKER-SERVERGONE-" + Date.now();
-  let app = null;
-  try {
-    app = await launchApp(target, { label: "draft-server-gone-a", flags: ["--library"], dataDir, userDataDir });
-    await waitForRows(app.cdp, 20000);
-    const cdp = app.cdp;
-
-    const created = await evalPage(cdp,
-      "fetch('/api/docs', { method:'POST', headers:{'content-type':'application/json'}, " +
-      "body: JSON.stringify({ state: { title: 'Server Gone Doc', rows: [] } }) }).then(function(r){ return r.json(); })");
-    record(tag + ": setup — a server document is created", !!created && !!created.id, JSON.stringify(created));
-    if (!created || !created.id) return;
-
-    await evalPage(cdp, "window.splitpageDesktop.routeOpen({ kind: 'server', serverDocId: " + JSON.stringify(created.id) + " })");
-    await poll(cdp, "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify("Server Gone Doc"), 15000).catch(() => false);
-
-    await addMarkerRow(cdp, marker);
-    const write = await flushDraft(cdp);
-    record(tag + ": the flushed write lands", !!write && write.ok === true, JSON.stringify(write));
-
-    const info = await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
-    const port = info && info.port;
-    const del = port ? await fetchJson(`http://127.0.0.1:${port}/api/docs/${created.id}`, { method: "DELETE" }) : null;
-    record(tag + ": setup — the document is deleted from the server", !!del && del.status === 200, JSON.stringify(del));
-
-    await crashApp(app);
-    app = null;
-
-    app = await launchApp(target, { label: "draft-server-gone-b", flags: ["--library"], dataDir, userDataDir });
-    await waitForRows(app.cdp, 20000);
-    const cdp2 = app.cdp;
-
-    const gotMarker = await waitForMarker(cdp2, marker, 25000);
-    record(tag + ": the recovered work is opened as an unsaved copy", !!gotMarker);
-    const dirtyAfter = await isDirty(cdp2);
-    record(tag + ": the copy is dirty", !!dirtyAfter);
-    const toast = await toastContaining(cdp2, "no longer on the server", 15000);
-    record(tag + ": a toast says the document is no longer on the server", !!toast, String(toast));
-  } finally {
-    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
-    rmrf(dataDir);
     rmrf(userDataDir);
   }
 }
@@ -5657,674 +5275,6 @@ async function caseTeleprompterPresentInChromium(target, fixturesDir) {
   }
 }
 
-async function caseTeleprompterOpenInBrowserServer(target) {
-  const tag = target.name + " teleprompter: open in browser (--library server document)";
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-data-"));
-  const marker = "PROMPTER-SERVER-" + Date.now();
-  let app = null;
-  try {
-    app = await launchApp(target, { label: "prompter-server", flags: ["--library"], dataDir });
-    const cdp = app.cdp;
-    await waitForRows(cdp, 20000);
-    await poll(cdp, "fetch('/api/health').then(function(r){return r.status;})", 15000);
-    const created = await evalPage(cdp,
-      "fetch('/api/docs', { method:'POST', headers:{'content-type':'application/json'}, " +
-      "body: JSON.stringify({ state: { title: 'Prompter Server Doc', rows: [] } }) }).then(function(r){ return r.json(); })");
-    record(tag + ": setup — a server document is created", !!created && !!created.id, JSON.stringify(created));
-    if (!created || !created.id) return;
-    await evalPage(cdp, "window.splitpageDesktop.routeOpen({ kind: 'server', serverDocId: " + JSON.stringify(created.id) + " })");
-    const opened = await poll(cdp, "(window.__splitpageFormats.state()||{}).title === 'Prompter Server Doc'", 15000).catch(() => false);
-    record(tag + ": setup — the tab shows the server document", !!opened);
-
-    await addMarkerRow(cdp, marker);
-    await evalPage(cdp, "window.__desktopTest.runMenuCommand('prompter-open-in-browser')", { awaitPromise: false });
-    const opens = await waitForExternalOpens(cdp, 1);
-    const info = await evalPage(cdp, "window.splitpageDesktop.getSessionInfo()");
-    const expected = `http://127.0.0.1:${info && info.port}/?doc=${created.id}&teleprompter=1`;
-    record(tag + ": the URL is this app's own document server, ?doc=<id>&teleprompter=1", !!opens && opens[0] === expected,
-      JSON.stringify(opens) + " expected " + expected);
-    const doc = info && info.port ? await fetchJson(`http://127.0.0.1:${info.port}/api/docs/${created.id}`) : null;
-    const rows = doc && doc.body && doc.body.state && doc.body.state.rows || [];
-    record(tag + ": the unsaved edit was saved to the server before the browser was asked",
-      rows.some((r) => String(r.visualText || "").indexOf(marker) !== -1), "rows=" + rows.length);
-    const status = await shell(cdp, "prompterShareStatus", {});
-    record(tag + ": a server document needs no loopback share at all", !!status && status.listening === false && status.shares.length === 0, JSON.stringify(status));
-  } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
-    rmrf(dataDir);
-  }
-}
-
-function driveEnv(fake, extra) {
-  return Object.assign({
-    SPLITPAGE_TEST_GOOGLE_BASE: fake.base,
-    SPLITPAGE_GOOGLE_CLIENT_ID: fake.clientId,
-    SPLITPAGE_GOOGLE_CLIENT_SECRET: fake.clientSecret
-  }, extra || {});
-}
-
-async function driveCall(cdp, expr) {
-  return evalPage(cdp, "(" + expr + ").then(function (r) { if (r && r.bytes) { r.bytesIsView = ArrayBuffer.isView(r.bytes); " +
-    "r.text = new TextDecoder().decode(r.bytes); delete r.bytes; } return r; }, function (e) { return { rejected: String(e && e.message || e) }; })");
-}
-
-async function driveSignInThroughFake(cdp, fake, override) {
-  const before = (await externalOpens(cdp)).length;
-  await evalPage(cdp, "window.__driveSignIn = null; window.splitpageDesktop.driveSignIn().then(function (r) { window.__driveSignIn = r; }, " +
-    "function (e) { window.__driveSignIn = { ok: false, code: 'REJECTED', message: String(e) }; }); true");
-  const opens = await waitForExternalOpens(cdp, before + 1, 15000);
-  const authUrl = opens ? opens[opens.length - 1] : null;
-  if (!authUrl) return { authUrl: null, callback: null, result: null };
-  let back;
-  try { back = fake.approve(authUrl, override); } catch (e) { return { authUrl, callback: { status: null, text: String(e.message) }, result: null }; }
-  const callback = await fetch(back).then(async (r) => ({ status: r.status, text: await r.text() }))
-    .catch((e) => ({ status: null, text: String(e) }));
-  const result = await poll(cdp, "window.__driveSignIn", 15000).catch(() => null);
-  return { authUrl, back, callback, result };
-}
-
-function driveSecretOnDisk(dir, secrets) {
-  for (const s of secrets) {
-    const f = dirContainsText(dir, s);
-    if (f) return s.slice(0, 16) + "… in " + f;
-  }
-  return null;
-}
-
-async function driveSecretsInPage(cdp, secrets) {
-  const blob = await evalPage(cdp, "JSON.stringify({ ls: Object.assign({}, localStorage), ss: Object.assign({}, sessionStorage), " +
-    "html: document.documentElement.outerHTML, keys: Object.keys(window.splitpageDesktop) })");
-  return secrets.filter((s) => String(blob).indexOf(s) !== -1).map((s) => s.slice(0, 16) + "…");
-}
-
-async function caseGoogleDriveNotConfigured(target) {
-  const tag = target.name + " google drive: not configured";
-  const { startFakeGoogle } = await import("./fake-google.mjs");
-  const fake = await startFakeGoogle();
-  let app = null;
-  try {
-    app = await launchApp(target, { label: "drive-unconfigured",
-      env: { SPLITPAGE_TEST_GOOGLE_BASE: fake.base, SPLITPAGE_GOOGLE_CLIENT_ID: "", SPLITPAGE_GOOGLE_CLIENT_SECRET: "" } });
-    const cdp = app.cdp;
-    await waitForRows(cdp, 20000);
-    const entry = await evalPage(cdp, "!document.getElementById('menu-drive-open').hidden");
-    record(tag + ": File ▸ Google Drive files… is offered on desktop", entry === true);
-    const st = await driveCall(cdp, "window.splitpageDesktop.driveStatus()");
-    const expectedPath = path.join(app.userDataDir, "google-oauth-client.json");
-    record(tag + ": status says not configured, and names the exact file and the env vars",
-      !!st && st.ok === true && st.configured === false && st.signedIn === false && st.clientFilePath === expectedPath &&
-      JSON.stringify(st.envVars) === JSON.stringify(["SPLITPAGE_GOOGLE_CLIENT_ID", "SPLITPAGE_GOOGLE_CLIENT_SECRET"]), JSON.stringify(st));
-    const si = await driveCall(cdp, "window.splitpageDesktop.driveSignIn()");
-    record(tag + ": sign-in answers NOT_CONFIGURED", !!si && si.ok === false && si.code === "NOT_CONFIGURED", JSON.stringify(si));
-    record(tag + ": ... and nothing was opened in the browser", (await externalOpens(cdp)).length === 0);
-    const list = await driveCall(cdp, "window.splitpageDesktop.driveList('root')");
-    record(tag + ": a Drive call before any sign-in answers SIGNED_OUT", !!list && list.ok === false && list.code === "SIGNED_OUT", JSON.stringify(list));
-
-    fs.writeFileSync(expectedPath, JSON.stringify({ installed: { client_id: fake.clientId, client_secret: fake.clientSecret,
-      redirect_uris: ["http://localhost"] } }));
-    const st2 = await driveCall(cdp, "window.splitpageDesktop.driveStatus()");
-    record(tag + ": dropping Google's client JSON at that path configures it", !!st2 && st2.configured === true && st2.signedIn === false, JSON.stringify(st2));
-  } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
-    await fake.close();
-  }
-}
-
-async function caseGoogleDriveRoundTrip(target) {
-  const tag = target.name + " google drive: round trip";
-  const { startFakeGoogle } = await import("./fake-google.mjs");
-  const fake = await startFakeGoogle();
-  const env = driveEnv(fake, { SPLITPAGE_TEST_DRIVE_BASIC_TEXT: "1" });
-  let app = null;
-  const answers = [];
-  try {
-    app = await launchApp(target, { label: "drive-round-trip", env });
-    let cdp = app.cdp;
-    await waitForRows(cdp, 20000);
-    const userDataDir = app.userDataDir;
-    const tokenFile = path.join(userDataDir, "google-drive-token.bin");
-
-    const info = await shell(cdp, "driveInfo", {});
-    record(tag + ": main points Google's endpoints at the fake (test mode only)", !!info && info.tokenEndpoint === fake.base + "/token", JSON.stringify(info));
-
-    const surface = await evalPage(cdp, "(function () { var d = window.splitpageDesktop; var keys = Object.keys(d); " +
-      "return { drive: keys.filter(function (k) { return /drive/i.test(k); }).sort(), " +
-      "suspicious: keys.filter(function (k) { return /token|oauth|secret|credential|google/i.test(k); }) }; })()");
-    record(tag + ": the bridge has exactly the six drive calls",
-      !!surface && JSON.stringify(surface.drive) === JSON.stringify(["driveDownload", "driveList", "driveSignIn", "driveSignOut", "driveStatus", "driveUpload"]),
-      JSON.stringify(surface));
-    record(tag + ": no bridge member is named for a token or a credential", !!surface && surface.suspicious.length === 0, JSON.stringify(surface && surface.suspicious));
-
-    const signIn = await driveSignInThroughFake(cdp, fake);
-    const auth = signIn.authUrl ? new URL(signIn.authUrl) : null;
-    const p = auth ? auth.searchParams : new URLSearchParams();
-    record(tag + ": the consent URL goes to the (fake) Google auth endpoint with PKCE S256, a state, offline access",
-      !!auth && auth.origin + auth.pathname === fake.base + "/o/oauth2/v2/auth" && p.get("code_challenge_method") === "S256" &&
-      /^[A-Za-z0-9_-]{43}$/.test(p.get("code_challenge") || "") && (p.get("state") || "").length >= 32 && p.get("access_type") === "offline" &&
-      p.get("client_id") === fake.clientId && p.get("scope") === "https://www.googleapis.com/auth/drive", signIn.authUrl || "no URL");
-    record(tag + ": the redirect is a loopback listener on an OS-picked port", /^http:\/\/127\.0\.0\.1:\d+$/.test(p.get("redirect_uri") || ""), p.get("redirect_uri"));
-    record(tag + ": the callback page tells the person to return to the app",
-      !!signIn.callback && signIn.callback.status === 200 && /return to Splitpage/.test(signIn.callback.text), JSON.stringify(signIn.callback).slice(0, 300));
-    const r = signIn.result;
-    answers.push(r);
-    record(tag + ": sign-in succeeds and says who", !!r && r.ok === true && r.signedIn === true && r.email === "writer@example.com", JSON.stringify(r));
-    record(tag + ": the sign-in is stored (safeStorage)", !!r && r.persisted === true && fs.existsSync(tokenFile), JSON.stringify({ persisted: r && r.persisted, file: fs.existsSync(tokenFile) }));
-    const closed = await fetch((p.get("redirect_uri") || "http://127.0.0.1:1") + "/?code=x&state=" + p.get("state")).then(() => false).catch(() => true);
-    record(tag + ": the loopback listener is gone after its one callback", closed);
-    record(tag + ": main exchanged the code with the verifier (the fake checks it)", fake.log.includes("POST /token"), JSON.stringify(fake.log));
-
-    const root = await driveCall(cdp, "window.splitpageDesktop.driveList('root')");
-    answers.push(root);
-    record(tag + ": list My Drive", !!root && root.ok === true && root.files.map((f) => f.name).join(",") === "Scripts", JSON.stringify(root));
-    const scripts = await driveCall(cdp, "window.splitpageDesktop.driveList('scriptsFolder01')");
-    answers.push(scripts);
-    record(tag + ": list a folder", !!scripts && scripts.ok === true && scripts.folder.name === "Scripts" &&
-      scripts.files.map((f) => f.name).join(",") === "Budget,Notes,Pilot.fountain", JSON.stringify(scripts));
-    const dl = await driveCall(cdp, "window.splitpageDesktop.driveDownload('pilotFile01')");
-    answers.push(dl);
-    record(tag + ": download hands the page the file's bytes", !!dl && dl.ok === true && dl.bytesIsView === true &&
-      dl.text === fake.files.get("pilotFile01").data.toString("utf8") && dl.file.name === "Pilot.fountain", JSON.stringify(dl).slice(0, 300));
-    const up = await driveCall(cdp, "window.splitpageDesktop.driveUpload({ parentId: 'scriptsFolder01', name: 'Smoke — 🎬.splitpage', " +
-      "bytes: new TextEncoder().encode('{\"rows\":[]}'), mimeType: 'application/json' })");
-    answers.push(up);
-    const created = up && up.file && fake.files.get(up.file.id);
-    record(tag + ": upload makes a new file in that folder", !!up && up.ok === true && !!created && created.name === "Smoke — 🎬.splitpage" &&
-      created.parents[0] === "scriptsFolder01" && created.data.toString("utf8") === "{\"rows\":[]}", JSON.stringify(up));
-    const upd = up && up.file ? await driveCall(cdp, "window.splitpageDesktop.driveUpload({ fileId: " + JSON.stringify(up.file.id) +
-      ", bytes: new TextEncoder().encode('{\"rows\":[1]}') })") : null;
-    answers.push(upd);
-    record(tag + ": upload with a fileId replaces that file's content", !!upd && upd.ok === true && !!created &&
-      created.data.toString("utf8") === "{\"rows\":[1]}" && created.name === "Smoke — 🎬.splitpage", JSON.stringify(upd));
-
-    const requestsBefore = fake.log.length;
-    const refusals = {
-      urlAsFolder: await driveCall(cdp, "window.splitpageDesktop.driveList('https://www.googleapis.com/drive/v3/files')"),
-      pathAsFile: await driveCall(cdp, "window.splitpageDesktop.driveDownload('../google-drive-token.bin')"),
-      nameWithNewline: await driveCall(cdp, "window.splitpageDesktop.driveUpload({ parentId: 'root', name: 'a\\nb', bytes: 'x' })"),
-      notBytes: await driveCall(cdp, "window.splitpageDesktop.driveUpload({ parentId: 'root', name: 'a', bytes: { length: 3 } })"),
-      tooLarge: await driveCall(cdp, "window.splitpageDesktop.driveUpload({ parentId: 'root', name: 'big', bytes: new Uint8Array(64 * 1024 * 1024 + 1) })")
-    };
-    record(tag + ": a URL, a path, a bad name or non-bytes are refused as BAD_ARGS, oversize as TOO_LARGE",
-      refusals.urlAsFolder.code === "BAD_ARGS" && refusals.pathAsFile.code === "BAD_ARGS" && refusals.nameWithNewline.code === "BAD_ARGS" &&
-      refusals.notBytes.code === "BAD_ARGS" && refusals.tooLarge.code === "TOO_LARGE", JSON.stringify(refusals));
-    record(tag + ": none of the refused calls reached Google", fake.log.length === requestsBefore, JSON.stringify(fake.log.slice(requestsBefore)));
-
-    const secrets = fake.secrets();
-    record(tag + ": setup — the fake issued a refresh and an access token", secrets.some((s) => s.startsWith("1//")) && secrets.some((s) => s.startsWith("ya29.")));
-    const inAnswers = secrets.filter((s) => JSON.stringify(answers).indexOf(s) !== -1);
-    record(tag + ": no bridge answer carried a token", inAnswers.length === 0, inAnswers.join(","));
-    const inPage = await driveSecretsInPage(cdp, secrets);
-    record(tag + ": no token anywhere the page can see (storage, document, bridge)", inPage.length === 0, inPage.join(","));
-    const onDisk = driveSecretOnDisk(userDataDir, secrets);
-    record(tag + ": no token in plain text in any file under the profile (the blob is encrypted)", !onDisk, onDisk || "");
-    const mentionsGoogle = dirContainsText(userDataDir, fake.base);
-    record(tag + ": nothing under the profile (desktop-state.json, drafts, history) even names the Google endpoint", !mentionsGoogle, String(mentionsGoogle || ""));
-
-    await teardown(app, tag + " (first launch)");
-    app = await launchApp(target, { label: "drive-relaunch", env, userDataDir });
-    cdp = app.cdp;
-    await waitForRows(cdp, 20000);
-    const st = await driveCall(cdp, "window.splitpageDesktop.driveStatus()");
-    record(tag + ": after a relaunch, still signed in from the stored token", !!st && st.signedIn === true && st.persisted === true &&
-      st.email === "writer@example.com", JSON.stringify(st));
-    const tokenCallsBefore = fake.log.filter((l) => l === "POST /token").length;
-    const again = await driveCall(cdp, "window.splitpageDesktop.driveList('scriptsFolder01')");
-    record(tag + ": ... and Drive works, through a refresh-token exchange", !!again && again.ok === true &&
-      fake.log.filter((l) => l === "POST /token").length === tokenCallsBefore + 1, JSON.stringify(again && again.code));
-
-    const refreshToken = fake.secrets().find((s) => s.startsWith("1//"));
-    const out = await driveCall(cdp, "window.splitpageDesktop.driveSignOut()");
-    record(tag + ": sign-out answers signed out", !!out && out.ok === true && out.status && out.status.signedIn === false, JSON.stringify(out));
-    record(tag + ": sign-out deletes the stored token", !fs.existsSync(tokenFile));
-    record(tag + ": sign-out revokes it with Google", fake.isRevoked(refreshToken));
-    const after = await driveCall(cdp, "window.splitpageDesktop.driveList('root')");
-    record(tag + ": after sign-out Drive calls answer SIGNED_OUT", !!after && after.ok === false && after.code === "SIGNED_OUT", JSON.stringify(after));
-    const leftOnDisk = driveSecretOnDisk(userDataDir, fake.secrets());
-    record(tag + ": no token anywhere under the profile after sign-out", !leftOnDisk, leftOnDisk || "");
-  } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
-    await fake.close();
-  }
-}
-
-async function caseGoogleDriveBadState(target) {
-  const tag = target.name + " google drive: bad state refused";
-  const { startFakeGoogle } = await import("./fake-google.mjs");
-  const fake = await startFakeGoogle();
-  let app = null;
-  try {
-    app = await launchApp(target, { label: "drive-bad-state", env: driveEnv(fake) });
-    const cdp = app.cdp;
-    await waitForRows(cdp, 20000);
-    const tokenFile = path.join(app.userDataDir, "google-drive-token.bin");
-
-    const forged = await driveSignInThroughFake(cdp, fake, { state: "forged-by-another-page" });
-    record(tag + ": a callback with the wrong state is refused with a page saying so",
-      !!forged.callback && forged.callback.status === 400 && /refused/.test(forged.callback.text), JSON.stringify(forged.callback).slice(0, 300));
-    record(tag + ": sign-in answers STATE_MISMATCH", !!forged.result && forged.result.ok === false && forged.result.code === "STATE_MISMATCH", JSON.stringify(forged.result));
-    record(tag + ": the code was never exchanged", !fake.log.includes("POST /token"), JSON.stringify(fake.log));
-    const redirect = forged.authUrl ? new URL(forged.authUrl).searchParams.get("redirect_uri") : "http://127.0.0.1:1";
-    const closed = await fetch(redirect + "/").then(() => false).catch(() => true);
-    record(tag + ": the listener closed after that one callback", closed);
-    const st = await driveCall(cdp, "window.splitpageDesktop.driveStatus()");
-    record(tag + ": still signed out, nothing stored", !!st && st.signedIn === false && !fs.existsSync(tokenFile), JSON.stringify(st));
-
-    const denied = await driveSignInThroughFake(cdp, fake, { error: "access_denied" });
-    record(tag + ": consent refused in the browser answers DENIED", !!denied.result && denied.result.code === "DENIED", JSON.stringify(denied.result));
-
-    const info = await shell(cdp, "driveInfo", {});
-    const good = await driveSignInThroughFake(cdp, fake);
-    const sessionOnly = !info.encryptionAvailable || info.backend === "basic_text";
-    record(tag + ": a fresh sign-in after the refusal works", !!good.result && good.result.ok === true, JSON.stringify(good.result));
-    record(tag + ": storage follows the backend (" + info.backend + "): " + (sessionOnly ? "session only, nothing written" : "stored"),
-      !!good.result && (sessionOnly
-        ? good.result.persisted === false && good.result.canPersist === false && !fs.existsSync(tokenFile)
-        : good.result.persisted === true && fs.existsSync(tokenFile)), JSON.stringify({ result: good.result, file: fs.existsSync(tokenFile) }));
-    const list = await driveCall(cdp, "window.splitpageDesktop.driveList('root')");
-    record(tag + ": ... and Drive works", !!list && list.ok === true, JSON.stringify(list && list.code));
-    const onDisk = driveSecretOnDisk(app.userDataDir, fake.secrets());
-    record(tag + ": no token in plain text under the profile", !onDisk, onDisk || "");
-  } finally {
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
-    await fake.close();
-  }
-}
-
-const SERVER_JS = path.join(DESKTOP_DIR, "..", "server", "server.js");
-
-async function startDocServer(pin, opts) {
-  const o = opts || {};
-  const port = o.port || await freePort();
-  const dataDir = o.dataDir || fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-srv-"));
-  const env = {
-    ...process.env, PORT: String(port), HOST: "127.0.0.1", DATA_DIR: dataDir,
-    ALLOW_ORIGINS: "splitpage://app"
-  };
-  if (pin) env.JOIN_PIN = pin;
-  delete env.READ_ONLY; delete env.NO_API; delete env.REVIEW_PIN; delete env.LAUNCH_TOKEN;
-  const proc = spawn(process.execPath, [SERVER_JS], { env, stdio: ["ignore", "pipe", "pipe"] });
-  let err = "";
-  proc.stderr.on("data", (d) => { err += d; });
-  const url = `http://127.0.0.1:${port}/`;
-  const up = await pollNode(async () => {
-    const r = await fetchJson(url + "api/health", {}, 2000);
-    return r.ok;
-  }, 15000).catch(() => false);
-  if (!up) { killPid(proc.pid); throw new Error("document server never came up on " + port + ": " + err); }
-  return {
-    url, port, pin, dataDir, proc,
-    async stop() {
-      killPid(proc.pid);
-      await waitForExit(proc, 5000);
-    },
-    cleanup() { rmrf(dataDir); }
-  };
-}
-
-async function joinDocServer(srv) {
-  const r = await fetchJson(srv.url + "api/join", {
-    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pin: srv.pin })
-  });
-  return r.body && r.body.token;
-}
-
-async function createServerDoc(srv, token, title) {
-  const r = await fetchJson(srv.url + "api/docs", {
-    method: "POST", headers: { "content-type": "application/json", "x-splitpage-token": token },
-    body: JSON.stringify({ state: { title, rows: [] } })
-  });
-  return r.body && r.body.id ? r.body : null;
-}
-
-async function readServerDoc(srv, token, id) {
-  const r = await fetchJson(srv.url + "api/docs/" + encodeURIComponent(id), { headers: { "x-splitpage-token": token } });
-  return r.status === 200 ? r.body : null;
-}
-
-function serverDocHas(doc, marker) {
-  const rows = (doc && doc.state && doc.state.rows) || [];
-  return rows.some((r) => String(r.visualText || "").indexOf(marker) !== -1);
-}
-
-async function presenceOthers(srv, token, docId) {
-  const r = await fetchJson(srv.url + "api/presence", {
-    method: "POST", headers: { "content-type": "application/json", "x-splitpage-token": token },
-    body: JSON.stringify({ docId, id: "smoke-observer", name: "Observer", rowId: "", field: "", gone: false })
-  });
-  return r.body && Array.isArray(r.body.here) ? r.body.here : null;
-}
-
-const connOf = (cdp) => evalPage(cdp, "window.__hostedTest.conn()");
-
-const { connectTabViaDialog, openViaPicker, submitPin } = createDialogHelpers({ evalPage, poll });
-
-async function saveTabNow(cdp) {
-  await evalPage(cdp, "(function(){ document.getElementById('btn-save').click(); return true; })()", { awaitPromise: false });
-  return poll(cdp, "(function(){ var b = document.getElementById('btn-save'); return !!b && b.textContent.indexOf('\\u2022') === -1 && !b.disabled; })()", 15000)
-    .catch(() => false);
-}
-
-const titleExpr = (t) => "(window.__splitpageFormats.state()||{}).title === " + JSON.stringify(t);
-
-function tabRow(listing, tabId) {
-  for (const w of listing.windows) for (const t of w.tabs) if (t.tabId === tabId) return t;
-  return null;
-}
-
-async function caseTwoServersSideBySide(target) {
-  const tag = target.name + " per-tab connections: two servers side by side";
-  let srvX = null, srvY = null, app = null, cdp2 = null;
-  try {
-    srvX = await startDocServer("111111");
-    srvY = await startDocServer("222222");
-    const tokX = await joinDocServer(srvX);
-    const tokY = await joinDocServer(srvY);
-    const twin = await createServerDoc(srvX, tokX, "Twin On X");
-    record(tag + ": setup — a document on server X", !!twin, JSON.stringify(twin));
-    if (!twin) return;
-    const text = fs.readFileSync(path.join(srvX.dataDir, twin.id + ".json"), "utf8").split("Twin On X").join("Twin On Y");
-    fs.writeFileSync(path.join(srvY.dataDir, twin.id + ".json"), text, "utf8");
-    const onY = await readServerDoc(srvY, tokY, twin.id);
-    record(tag + ": setup — server Y holds the SAME id with its own script",
-      !!onY && onY.state && onY.state.title === "Twin On Y", JSON.stringify(onY && onY.state && onY.state.title));
-
-    app = await launchApp(target, { label: "two-servers" });
-    const cdp1 = app.cdp;
-    await waitForRows(cdp1, 20000);
-    const tab1Id = await tabIdOfTarget(cdp1);
-
-    record(tag + ": tab 1 joins server X through the Servers dialog", await connectTabViaDialog(cdp1, srvX));
-    record(tag + ": tab 1 opens X's document from the picker", await openViaPicker(cdp1, twin.id));
-    record(tag + ": tab 1 shows X's script", !!(await poll(cdp1, titleExpr("Twin On X"), 15000).catch(() => false)));
-
-    const tab2Id = await shell(cdp1, "createTab", {});
-    cdp2 = await connectTab(app, tab2Id);
-    await waitForRows(cdp2, 20000);
-    const fresh2 = await connOf(cdp2);
-    record(tag + ": a new tab does not inherit tab 1's token", !!fresh2 && fresh2.hasToken === false, JSON.stringify(fresh2));
-
-    record(tag + ": tab 2 asks for server X's PIN, the server it inherited without a token",
-      !!(await poll(cdp2, "!document.getElementById('pin-modal').hidden", 15000).catch(() => false)));
-    record(tag + ": tab 2 joins server Y through the Servers dialog, opened over that PIN prompt", await connectTabViaDialog(cdp2, srvY));
-    record(tag + ": tab 2's PIN prompt for X closed once it joined Y", await evalPage(cdp2, "document.getElementById('pin-modal').hidden"));
-    record(tag + ": tab 2 opens Y's document — the same id — from the picker", await openViaPicker(cdp2, twin.id));
-    record(tag + ": tab 2 shows Y's script, not a switch to tab 1",
-      !!(await poll(cdp2, titleExpr("Twin On Y"), 15000).catch(() => false)));
-
-    const listing = await shell(cdp1, "listTargets", {});
-    const all = listing.windows.reduce((n, w) => n + w.tabs.length, 0);
-    const r1 = tabRow(listing, tab1Id), r2 = tabRow(listing, tab2Id);
-    record(tag + ": still exactly two tabs — the same id on another server is another document", all === 2, "tabs=" + all);
-    record(tag + ": main's source for tab 1 names server X and the document",
-      !!r1 && r1.isServerDoc && r1.serverUrl === srvX.url && r1.serverDocId === twin.id, JSON.stringify(r1));
-    record(tag + ": main's source for tab 2 names server Y and the same id",
-      !!r2 && r2.isServerDoc && r2.serverUrl === srvY.url && r2.serverDocId === twin.id, JSON.stringify(r2));
-    record(tag + ": tab 1 is still on X after tab 2 picked Y", (await connOf(cdp1)).serverUrl === srvX.url);
-    record(tag + ": main keeps no token for a tab that routed its own document", !!r1 && !!r2 && !r1.hasToken && !r2.hasToken, JSON.stringify([r1 && r1.hasToken, r2 && r2.hasToken]));
-    record(tag + ": each tab's review-role chip follows its own server (both editors here)",
-      r1 && r1.role === "edit" && r2 && r2.role === "edit", JSON.stringify([r1 && r1.role, r2 && r2.role]));
-
-    const beatNow = "(function(){ Object.defineProperty(document, 'hidden', { configurable: true, get: function(){ return false; } }); " +
-      "window.__presenceTest.beat(); return true; })()";
-    await evalPage(cdp1, beatNow);
-    await evalPage(cdp2, beatNow);
-    const hereX = await pollNode(async () => { const h = await presenceOthers(srvX, tokX, twin.id); return h && h.length ? h : null; }, 15000).catch(() => null);
-    const hereY = await pollNode(async () => { const h = await presenceOthers(srvY, tokY, twin.id); return h && h.length ? h : null; }, 15000).catch(() => null);
-    await sleep(2500);
-    const settledX = await presenceOthers(srvX, tokX, twin.id);
-    const settledY = await presenceOthers(srvY, tokY, twin.id);
-    const beatX = await evalPage(cdp1, "JSON.stringify({wanted: window.__presenceTest.wanted(), sends: window.__presenceTest.sends(), hidden: document.hidden})");
-    const beatY = await evalPage(cdp2, "JSON.stringify({wanted: window.__presenceTest.wanted(), sends: window.__presenceTest.sends(), hidden: document.hidden})");
-    record(tag + ": server X hears exactly one tab (tab 1)", !!hereX && settledX && settledX.length === 1, JSON.stringify(settledX) + " tab1=" + beatX);
-    record(tag + ": server Y hears exactly one tab (tab 2)", !!hereY && settledY && settledY.length === 1, JSON.stringify(settledY) + " tab2=" + beatY);
-
-    const m1 = "ON-X-" + Date.now(), m2 = "ON-Y-" + Date.now();
-    await addMarkerRow(cdp1, m1);
-    record(tag + ": tab 1 saves", !!(await saveTabNow(cdp1)));
-    await addMarkerRow(cdp2, m2);
-    record(tag + ": tab 2 saves", !!(await saveTabNow(cdp2)));
-    const docX = await readServerDoc(srvX, tokX, twin.id), docY = await readServerDoc(srvY, tokY, twin.id);
-    record(tag + ": tab 1's edit is on server X and not on Y", serverDocHas(docX, m1) && !serverDocHas(docY, m1));
-    record(tag + ": tab 2's edit is on server Y and not on X", serverDocHas(docY, m2) && !serverDocHas(docX, m2));
-
-    const tokenFree = !JSON.stringify(await shell(cdp2, "listTargets", {})).includes(tokX);
-    record(tag + ": the test shell's listing never carries a token", tokenFree);
-    await crashRenderer(cdp1);
-    try { cdp1.close(); } catch {}
-    const back = await pollNode(async () => {
-      const c = await connectTab(app, tab1Id);
-      try {
-        const ok = await evalPage(c, titleExpr("Twin On X"));
-        const cn = ok ? await connOf(c) : null;
-        return ok ? { cn } : null;
-      } finally { c.close(); }
-    }, 30000).catch(() => null);
-    record(tag + ": a crashed tab reloads onto ITS server (X), not the last one picked (Y), with its document",
-      !!back && back.cn.serverUrl === srvX.url, JSON.stringify(back));
-
-    await shell(cdp2, "closeTab", { tabId: tab1Id });
-    await pollShellState(cdp2, (l) => !tabRow(l, tab1Id), 15000).catch(() => null);
-    const goneX = await pollNode(async () => { const h = await presenceOthers(srvX, tokX, twin.id); return h && h.length === 0 ? true : null; }, 25000).catch(() => false);
-    record(tag + ": closing tab 1 takes it off server X's presence", !!goneX);
-    const c2 = await connOf(cdp2);
-    record(tag + ": tab 2 is still on server Y with its token after tab 1 closed",
-      c2.serverUrl === srvY.url && c2.hasToken === true, JSON.stringify(c2));
-    const m3 = "STILL-Y-" + Date.now();
-    await addMarkerRow(cdp2, m3);
-    record(tag + ": tab 2 still saves", !!(await saveTabNow(cdp2)));
-    const docY2 = await readServerDoc(srvY, tokY, twin.id);
-    record(tag + ": tab 2's save after tab 1 closed reached server Y", serverDocHas(docY2, m3), "rev=" + (docY2 && docY2.rev));
-    const stillY = await presenceOthers(srvY, tokY, twin.id);
-    record(tag + ": server Y still hears tab 2", !!stillY && stillY.length === 1, JSON.stringify(stillY));
-  } finally {
-    if (cdp2) { try { cdp2.close(); } catch {} }
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
-    for (const s of [srvX, srvY]) if (s) { await s.stop(); s.cleanup(); }
-  }
-}
-
-async function caseServerTabBesideFileTab(target, fixturesDir) {
-  const tag = target.name + " per-tab connections: a server tab beside a file tab";
-  const fixture = writeFixture(fixturesDir, "case-conn-file.splitpage", "Local File Doc", [["local a", "local b"]]);
-  let srv = null, app = null, cdp2 = null;
-  try {
-    srv = await startDocServer("333333");
-    const tok = await joinDocServer(srv);
-    const doc = await createServerDoc(srv, tok, "Hosted Beside");
-    record(tag + ": setup — a document on the server", !!doc);
-    if (!doc) return;
-
-    app = await launchApp(target, { label: "file-beside-server", fixtures: [fixture] });
-    const cdp1 = app.cdp;
-    await waitForRows(cdp1, 20000);
-    record(tag + ": tab 1 opens the local file", !!(await poll(cdp1, titleExpr("Local File Doc"), 20000).catch(() => false)));
-    const tab1Id = await tabIdOfTarget(cdp1);
-    const c1 = await connOf(cdp1);
-    record(tag + ": a file tab starts on no remote server", c1.serverUrl === "" && !c1.hasToken, JSON.stringify(c1));
-
-    record(tag + ": the file tab joins the server", await connectTabViaDialog(cdp1, srv));
-    record(tag + ": joining leaves the file tab on its file", !!(await evalPage(cdp1, titleExpr("Local File Doc"))));
-    await openViaPicker(cdp1, doc.id);
-    const newId = await pollNode(async () => {
-      const l = await shell(cdp1, "listTargets", {});
-      for (const w of l.windows) for (const t of w.tabs) if (t.tabId !== tab1Id && t.isServerDoc) return t.tabId;
-      return null;
-    }, 20000).catch(() => null);
-    record(tag + ": the server document opens in a NEW tab", !!newId);
-    if (!newId) return;
-    cdp2 = await connectTab(app, newId);
-    const shown = await poll(cdp2, titleExpr("Hosted Beside"), 20000).catch(() => false);
-    record(tag + ": the new tab shows the server document", !!shown);
-    const pinUp = await evalPage(cdp2, "!document.getElementById('pin-modal').hidden");
-    record(tag + ": the new tab was handed the token — no PIN asked a second time", pinUp === false);
-    const c2 = await connOf(cdp2);
-    record(tag + ": the new tab booted on the file tab's server", c2.serverUrl === srv.url && c2.hasToken, JSON.stringify(c2));
-
-    const listing = await shell(cdp1, "listTargets", {});
-    const r1 = tabRow(listing, tab1Id), r2 = tabRow(listing, newId);
-    record(tag + ": main's source for tab 1 is still the file", !!r1 && !r1.isServerDoc && r1.path === fixture, JSON.stringify(r1));
-    record(tag + ": main's source for the new tab names the server",
-      !!r2 && r2.isServerDoc && r2.serverUrl === srv.url && r2.serverDocId === doc.id, JSON.stringify(r2));
-    record(tag + ": main dropped the token once it had handed it to the new page", !!r2 && r2.hasToken === false, JSON.stringify(r2));
-
-    const mFile = "FILE-" + Date.now(), mSrv = "SRV-" + Date.now();
-    await addMarkerRow(cdp1, mFile);
-    record(tag + ": the file tab saves", !!(await saveTabNow(cdp1)));
-    await addMarkerRow(cdp2, mSrv);
-    record(tag + ": the server tab saves", !!(await saveTabNow(cdp2)));
-    const onDisk = fs.readFileSync(fixture, "utf8");
-    const onSrv = await readServerDoc(srv, tok, doc.id);
-    record(tag + ": the file tab's edit is in the file and not on the server", onDisk.includes(mFile) && !serverDocHas(onSrv, mFile));
-    record(tag + ": the server tab's edit is on the server and not in the file", serverDocHas(onSrv, mSrv) && !onDisk.includes(mSrv));
-
-    const state = await pollNode(async () => {
-      const st = readDesktopStateFile(app.userDataDir);
-      const tabsOnDisk = st ? st.windows.reduce((a, w) => a.concat(w.tabs), []) : [];
-      return tabsOnDisk.find((t) => t.tabId === newId && t.source.kind === "server") ? { st, tabsOnDisk } : null;
-    }, 15000).catch(() => null);
-    const persisted = state && state.tabsOnDisk.find((t) => t.tabId === newId);
-    record(tag + ": desktop-state.json records the server tab's server and id",
-      !!persisted && persisted.source.serverUrl === srv.url && persisted.source.serverDocId === doc.id,
-      JSON.stringify(persisted));
-    record(tag + ": desktop-state.json's server source is exactly {kind, serverDocId, serverUrl, tunnel}",
-      !!persisted && Object.keys(persisted.source).sort().join(",") === "kind,serverDocId,serverUrl,tunnel",
-      JSON.stringify(persisted && persisted.source));
-    const raw = fs.readFileSync(path.join(app.userDataDir, "desktop-state.json"), "utf8");
-    record(tag + ": neither the token nor the PIN is anywhere in desktop-state.json (invariant #29)",
-      !raw.includes(tok) && !raw.includes(srv.pin));
-  } finally {
-    if (cdp2) { try { cdp2.close(); } catch {} }
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
-    if (srv) { await srv.stop(); srv.cleanup(); }
-  }
-}
-
-async function caseRestoreServerTabs(target) {
-  const tag = target.name + " per-tab connections: session restore of server tabs";
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
-  let srvX = null, srvY = null, app = null, cdpY = null, cdpX = null;
-  try {
-    srvX = await startDocServer("444444");
-    srvY = await startDocServer("555555");
-    const tokX = await joinDocServer(srvX), tokY = await joinDocServer(srvY);
-    const dX = await createServerDoc(srvX, tokX, "Restore On X");
-    const dY = await createServerDoc(srvY, tokY, "Restore On Y");
-    record(tag + ": setup — one document on each server", !!dX && !!dY);
-    if (!dX || !dY) return;
-    const ssh = { userHost: "me@studio.example.com", remotePort: 8791, localPort: srvY.port };
-
-    app = await launchApp(target, { label: "restore-servers-a", userDataDir });
-    const cdp1 = app.cdp;
-    await waitForRows(cdp1, 20000);
-    const tabXId = await tabIdOfTarget(cdp1);
-    record(tag + ": tab X joins X and asks to be remembered", await connectTabViaDialog(cdp1, srvX, { remember: true }));
-    await openViaPicker(cdp1, dX.id);
-    record(tag + ": tab X opens X's document", !!(await poll(cdp1, titleExpr("Restore On X"), 15000).catch(() => false)));
-    const tabYId = await shell(cdp1, "createTab", {});
-    const cdp2 = await connectTab(app, tabYId);
-    await waitForRows(cdp2, 20000);
-    record(tag + ": tab Y joins Y through an SSH bookmark, not remembered",
-      await connectTabViaDialog(cdp2, srvY, { remember: false, ssh }));
-    const cy = await connOf(cdp2);
-    record(tag + ": tab Y's connection carries the tunnel's host and ports", !!cy.tunnel && cy.tunnel.userHost === ssh.userHost && cy.tunnel.localPort === ssh.localPort, JSON.stringify(cy));
-    await openViaPicker(cdp2, dY.id);
-    record(tag + ": tab Y opens Y's document", !!(await poll(cdp2, titleExpr("Restore On Y"), 15000).catch(() => false)));
-    try { cdp2.close(); } catch {}
-
-    const st = await pollNode(async () => {
-      const s = readDesktopStateFile(userDataDir);
-      const all = s ? s.windows.reduce((a, w) => a.concat(w.tabs), []) : [];
-      const x = all.find((t) => t.tabId === tabXId), y = all.find((t) => t.tabId === tabYId);
-      return x && y && x.source.kind === "server" && y.source.kind === "server" ? { s, x, y } : null;
-    }, 15000).catch(() => null);
-    record(tag + ": both server tabs are in desktop-state.json with their servers",
-      !!st && st.x.source.serverUrl === srvX.url && st.y.source.serverUrl === srvY.url, JSON.stringify(st && [st.x.source, st.y.source]));
-    record(tag + ": the tunnel's host and ports are persisted with tab Y (never a credential)",
-      !!st && !!st.y.source.tunnel && st.y.source.tunnel.userHost === ssh.userHost &&
-      Object.keys(st.y.source.tunnel).sort().join(",") === "localPort,remotePort,userHost", JSON.stringify(st && st.y.source.tunnel));
-    await teardown(app, tag + " (first launch)");
-    app = null;
-
-    const raw1 = fs.readFileSync(path.join(userDataDir, "desktop-state.json"), "utf8");
-    record(tag + ": no token and no PIN in desktop-state.json after the quit (invariant #29)",
-      ![tokX, tokY, srvX.pin, srvY.pin].some((s) => raw1.includes(s)));
-    const draftsHit = dirContainsText(path.join(userDataDir, "drafts"), tokY) || dirContainsText(path.join(userDataDir, "drafts"), tokX);
-    record(tag + ": no token anywhere under drafts/", !draftsHit, String(draftsHit));
-
-    const planted = JSON.parse(raw1);
-    const PLANT = "f".repeat(64);
-    for (const w of planted.windows) for (const t of w.tabs) {
-      if (t.source.kind === "server") { t.source.token = PLANT; t.source.role = "edit"; }
-    }
-    const badTabId = newHexId();
-    planted.windows[0].tabs.push({ tabId: badTabId, source: { kind: "server", serverDocId: dX.id, serverUrl: "javascript:alert(1)//" }, lastKnownTitle: "Bad" });
-    writeDesktopStateFile(userDataDir, planted);
-
-    app = await launchApp(target, { label: "restore-servers-b", userDataDir });
-    cdpX = await connectTab(app, tabXId);
-    const xBack = await poll(cdpX, titleExpr("Restore On X"), 25000).catch(() => false);
-    const xPin = await evalPage(cdpX, "!document.getElementById('pin-modal').hidden");
-    record(tag + ": the remembered server's tab reconnects silently and reopens its document", !!xBack && xPin === false,
-      "pinUp=" + xPin);
-    const cx = await connOf(cdpX);
-    record(tag + ": the restored X tab is on X", cx.serverUrl === srvX.url, JSON.stringify(cx));
-
-    cdpY = await connectTab(app, tabYId);
-    const pinAsked = await poll(cdpY, "!document.getElementById('pin-modal').hidden && document.getElementById('pin-reason').textContent", 25000).catch(() => null);
-    record(tag + ": the not-remembered server's tab asks for ITS PIN, naming its server",
-      !!pinAsked && String(pinAsked).indexOf("127.0.0.1:" + srvY.port) !== -1, String(pinAsked));
-    const cY = await connOf(cdpY);
-    record(tag + ": the restored Y tab is on Y, with the tunnel it rode", cY.serverUrl === srvY.url && !!cY.tunnel && cY.tunnel.userHost === ssh.userHost, JSON.stringify(cY));
-    const listing = await shell(cdpX, "listTargets", {});
-    const rX = tabRow(listing, tabXId), rY = tabRow(listing, tabYId);
-    record(tag + ": a token planted in desktop-state.json is not believed", !!rX && !!rY && rX.hasToken === false && rY.hasToken === false,
-      JSON.stringify([rX, rY]));
-    record(tag + ": a server tab whose address is not http(s) is not restored", !tabRow(listing, badTabId));
-
-    await submitPin(cdpY, srvY.pin);
-    record(tag + ": after the PIN, the Y tab reopens Y's document", !!(await poll(cdpY, titleExpr("Restore On Y"), 20000).catch(() => false)));
-    const after = readDesktopStateFile(userDataDir);
-    record(tag + ": the rewritten desktop-state.json holds no planted token", !!after && !JSON.stringify(after).includes(PLANT));
-
-    await srvY.stop();
-    await crashRenderer(cdpY);
-    try { cdpY.close(); } catch {}
-    cdpY = null;
-    const hint = await pollNode(async () => {
-      const c = await connectTab(app, tabYId);
-      try {
-        return await evalPage(c, "(function(){ var t=document.querySelectorAll('.toast'); for (var i=0;i<t.length;i++){ if (t[i].textContent.indexOf('SSH tunnel')!==-1) return t[i].textContent; } return null; })()");
-      } finally { c.close(); }
-    }, 30000).catch(() => null);
-    record(tag + ": a tunnelled server that is down names the ssh command to start",
-      !!hint && hint.indexOf("ssh -N -L " + ssh.localPort + ":localhost:" + ssh.remotePort + " " + ssh.userHost) !== -1, String(hint));
-
-    await srvX.stop();
-    srvX = await startDocServer(srvX.pin, { port: srvX.port, dataDir: srvX.dataDir });
-    await crashRenderer(cdpX);
-    try { cdpX.close(); } catch {}
-    cdpX = null;
-    const stale = await pollNode(async () => {
-      const c = await connectTab(app, tabXId);
-      const up = await evalPage(c, "!document.getElementById('pin-modal').hidden").catch(() => false);
-      if (!up) { c.close(); return null; }
-      return c;
-    }, 30000).catch(() => null);
-    record(tag + ": a remembered token the restarted server no longer takes brings the PIN back", !!stale);
-    if (stale) {
-      cdpX = stale;
-      await submitPin(cdpX, srvX.pin);
-      record(tag + ": after the new PIN the X tab reopens its document",
-        !!(await poll(cdpX, titleExpr("Restore On X"), 20000).catch(() => false)));
-    }
-  } finally {
-    for (const c of [cdpX, cdpY]) if (c) { try { c.close(); } catch {} }
-    if (app) { await teardown(app, tag); }
-    for (const s of [srvX, srvY]) if (s) { await s.stop(); s.cleanup(); }
-    rmrf(userDataDir);
-  }
-}
-
 async function caseWindowCloseCanary() {
   const tag = "src/js window.close() canary";
   const srcDir = path.join(DESKTOP_DIR, "..", "src", "js");
@@ -6352,10 +5302,6 @@ async function runTargetSuite(target, groupFilter) {
     ["second instance", () => caseSecondInstance(target, fixturesDir)],
     ["second instance (relative path)", () => caseSecondInstanceRelativePath(target, fixturesDir)],
     ["session restore", () => caseSessionRestore(target, fixturesDir)],
-    ["--library", () => caseLibraryMode(target)],
-    ["--host --pin", () => caseHostMode(target)],
-    ["--host --pin (auto-generated)", () => caseHostModeAutoPin(target)],
-    ["--host with no --pin (warning)", () => caseHostModeNoPinWarning(target)],
     ["update status", () => caseUpdateStatus(target)],
     ["update download", () => caseUpdateDownload(target)],
     ["update without a checksum", () => caseUpdateNoChecksum(target)],
@@ -6363,7 +5309,6 @@ async function runTargetSuite(target, groupFilter) {
     ["close authority (no user gesture)", () => caseCloseAuthorityNoGesture(target)],
     ["page-initiated window.close() (documented)", () => caseCloseFromPageIsUnguarded(target)],
     ["quit authority (no user gesture)", () => caseQuitAuthorityNoGesture(target)],
-    ["--library quit cancelled keeps the server", () => caseQuitCancelKeepsServer(target)],
     ["clean close (regression)", () => caseCleanClose(target)],
     ["tabstrip origin", () => caseTabstripOrigin(target)],
     ["Ctrl+T new tab (__testShell createTab)", () => caseCtrlTNewTab(target)],
@@ -6372,11 +5317,11 @@ async function runTargetSuite(target, groupFilter) {
     ["close-tab: last tab closes window, last window quits", () => caseLastTabClosesWindowLastWindowQuits(target)],
     ["window close: 2 dirty tabs + another window (one dialog)", () => caseWindowCloseTwoDirtyTabs(target)],
     ["quit: dirty tabs in two windows (one answer per attempt)", () => caseQuitTwoWindowsDirty(target)],
-    ["--host + quit: stop-sharing prompt fires once", () => caseHostQuitStopSharingOnce(target)],
     ["tear-off preserves live tab state", () => caseTearOffPreservesState(target)],
     ["restore at launch: two windows, missing file skipped", () => caseRestoreAtLaunch(target, fixturesDir)],
     ["v1->v2 migration; corrupt JSON boots fresh", () => caseV1MigrationAndCorruptJson(target, fixturesDir)],
-    ["recents: recorded/listed/removed/cleared, capped and path-free", () => caseRecentDocuments(target, fixturesDir)],
+    ["restore at launch: a stored server tab is dropped, the other tabs are kept", () => caseRestoreStoredServerTabs(target, fixturesDir)],
+    ["recents: recorded/listed/removed/cleared, capped and path-free",() => caseRecentDocuments(target, fixturesDir)],
     ["save-in-place birthtime vs the duplicate rule", () => caseAtomicSaveKeepsBirthtime(target, fixturesDir)],
     ["duplicate document id across tabs (DOC-CLAIMS)", () => caseDuplicateDocIdAcrossTabs(target, fixturesDir)],
     ["history: editor save, panel restore, quit and relaunch", () => caseHistoryEditorRestoreRelaunch(target, fixturesDir)],
@@ -6420,30 +5365,19 @@ async function runTargetSuite(target, groupFilter) {
     ["close check: a tab opened during a window close's check is asked about (#509)", () => caseTabOpenedDuringCloseCheck(target, fixturesDir, "window close")],
     ["close check: a tab opened during a quit's check is asked about (#509)", () => caseTabOpenedDuringCloseCheck(target, fixturesDir, "quit")],
     ["close check: tabs moved out during a window close's check stay as they were, and the saved layout follows them (#509, #531)", () => caseTabsMovedOutDuringWindowClose(target, fixturesDir)],
-    ["close check: under --host, a tab torn off during the last window's close keeps the stop-sharing prompt (#531)", () => caseHostTabTornOffDuringLastWindowClose(target, fixturesDir)],
     ["close check: a tab edited during a window close's copy wait is asked about again (#532)", () => caseTabEditedDuringCloseCheck(target, fixturesDir, "window close")],
     ["close check: a tab edited during a quit's copy wait is asked about again (#532)", () => caseTabEditedDuringCloseCheck(target, fixturesDir, "quit")],
     ["draft: power-cut mid-write keeps the first generation", () => caseDraftCrashMidWrite(target)],
     ["draft: both generations corrupt -> quarantined, seed boot", () => caseDraftCorrupt(target)],
     ["draft: ENOSPC pauses writes, one sticky toast, then resumes", () => caseDraftDiskFull(target)],
     ["draft: forged fileId opens as an untitled copy", () => caseDraftForgedFileId(target)],
-    ["draft: no PIN, token or launch URL ever reaches disk", () => caseDraftNoSecrets(target)],
-    ["draft: server document reachable at relaunch -> merged", () => caseDraftServerDocMerges(target)],
-    ["draft: server document deleted while down -> unsaved copy", () => caseDraftServerGone(target)],
     ["draft: renderer crash of a clean tab (J-1)", () => caseRendererCrashRestores(target)],
     ["draft: clean tabs write nothing, even after idle", () => caseCleanTabsWriteNothing(target)],
     ["draft: a torn-off dirty tab crashes and restores exactly once", () => caseTornOffDirtyTabCrashRestoresOnce(target)],
     ["teleprompter: open in browser (file, save-first, share lifetime)", () => caseTeleprompterOpenInBrowserFile(target, fixturesDir)],
-    ["teleprompter: open in browser (--library server document)", () => caseTeleprompterOpenInBrowserServer(target)],
     ["teleprompter: Follow My Voice on desktop (fake listener)", () => caseTeleprompterVoiceDesktop(target, fixturesDir)],
     ["teleprompter: voice relay to Present in Browser (fake listener)", () => caseTeleprompterVoiceRelay(target, fixturesDir)],
     ["teleprompter: present in chromium (Use Chromium Speech Recognition)", () => caseTeleprompterPresentInChromium(target, fixturesDir)],
-    ["google drive: not configured (says where the client goes)", () => caseGoogleDriveNotConfigured(target)],
-    ["google drive: sign-in, list/download/upload, relaunch, sign-out (fake Google)", () => caseGoogleDriveRoundTrip(target)],
-    ["google drive: bad state refused, storage follows the backend", () => caseGoogleDriveBadState(target)],
-    ["per-tab connections: two servers side by side, close one", () => caseTwoServersSideBySide(target)],
-    ["per-tab connections: a server tab beside a file tab", () => caseServerTabBesideFileTab(target, fixturesDir)],
-    ["per-tab connections: session restore of server tabs", () => caseRestoreServerTabs(target)],
     ["window.close() canary (src/js grep)", () => caseWindowCloseCanary()]
   ];
   try {
