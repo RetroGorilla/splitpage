@@ -29,7 +29,7 @@ import { wireExportKit } from "./wiring/export-kit.ts";
 export { mountReadTimeFeature } from "./wiring/read-time.ts";
 export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
 export { mountDraftEditFeature } from "./wiring/draft-edit.ts";
-export { mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature } from "./wiring/rundown.ts";
+export { mountRundownFeature, mountTargetFeature } from "./wiring/rundown.ts";
 export { mountHelpFeature } from "./wiring/help.ts";
 export { derivedRecordsPlan, mountBrollFeature, mountBrollPanelStateFeature } from "./wiring/broll.ts";
 export { mountFindFeature } from "./wiring/find.ts";
@@ -42,7 +42,6 @@ export { mountHideShotFeature } from "./wiring/hide-shot.ts";
 export { mountFileMenuExportFeature } from "./wiring/file-menu-export.ts";
 export { mountFileMenuDropdownFeature } from "./wiring/file-menu.ts";
 export { mountSaveStatusFeature } from "./wiring/save-status.ts";
-export { mountHostedFeature } from "./wiring/hosted.ts";
 export { mountLocalFilesFeature } from "./wiring/local-files.ts";
 import { importSaveDestination, projectFileSource, stopLocalFilesFeature } from "./wiring/local-files.ts";
 export { mountFileSavingFeature } from "./wiring/file-saving.ts";
@@ -69,7 +68,6 @@ import { startEditor } from "../legacy/editor-bridge.ts";
 import { startLocation } from "../legacy/location-bridge.ts";
 import { getEditorName, startPreferences } from "../legacy/preferences-bridge.ts";
 import { shotHidingPorts, startShotHiding } from "./wiring/shot-hiding.ts";
-import { legacyPresencePorts, startPresence } from "../legacy/presence-bridge.ts";
 import { startMerge } from "../legacy/merge-bridge.ts";
 import type { LegacyMergePorts } from "../legacy/merge-bridge.ts";
 import { startRecovery } from "../legacy/recovery-bridge.ts";
@@ -145,7 +143,6 @@ export const WIRING_STEPS = Object.freeze([
   "production editing",
   "preferences",
   "shot hiding",
-  "presence",
   "export capture"
 ] as const);
 
@@ -203,7 +200,7 @@ const ACTION_REGISTRY_METHODS: readonly (keyof ActionRegistry)[] = ["register", 
 
 const RECOVERY_METHODS: readonly (keyof LegacyRecoveryPorts)[] = ["now", "desktop", "sessionStorage", "localStorage", "internImage", "merge"];
 
-const DRAFT_METHODS: readonly (keyof LegacyDraftPorts)[] = ["flush", "armServer", "offerAfterLinkOff", "noteChange"];
+const DRAFT_METHODS: readonly (keyof LegacyDraftPorts)[] = ["flush", "noteChange"];
 
 const MERGE_METHODS: readonly (keyof LegacyMergePorts)[] = ["states", "entry", "isDocument", "snapshot", "current", "adopt", "documentId", "noteHistoryFrom", "armUndo", "setBase", "capture", "stillOwns"];
 
@@ -382,7 +379,7 @@ function drain(disposers: (() => void)[]): unknown[] {
   return failures;
 }
 
-export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFiles" | "effects" | "saves" | "refresh" | "bulkTags" | "transitions" | "merge">): Wiring {
+export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFiles" | "effects" | "saves" | "refresh" | "bulkTags" | "transitions" | "merge" | "destinations" | "sources">): Wiring {
   const tags = wireTagProduction();
   const fileSaving = wireFileSaving({ setBaseline: setBaseState, copyHistory: (from, to) => documentIdentityOwner().copyDocHistorySafe(from, to), syncIdentity: () => documentIdentityOwner().syncDocIdentity() });
   return wireApp({
@@ -394,8 +391,8 @@ export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFile
     bulkTags: { cell: tags.bulkCell, stamp: stampRow },
     projectFiles: () => wireProjectFiles({ replaceSyncBase: setBaseState, prepareDocument: migrateDocument, restoreDocument: adoptRestoredState, changeDocumentId: (to, options) => documentIdentityOwner().reassignDocId(to, options), identityEvents: () => documentIdentityOwner().docIdEvents(), connectIdentity: (factory) => documentIdentityOwner().initDocIdentityChannel(factory), standaloneHtml: standaloneHtmlFor, tagOccurrences: tags.tagOccurrences }).services,
     saves: fileSaving.savePorts,
-    sources: () => { const sources = [projectFileSource(), ...deps.sources()]; sources.splice(1, 0, importDocumentSource()); return sources; },
-    destinations: () => [fileSaving.destination(), importSaveDestination(), ...deps.destinations()],
+    sources: () => [projectFileSource(), importDocumentSource()],
+    destinations: () => [fileSaving.destination(), importSaveDestination()],
     editorName: getEditorName
   });
 }
@@ -454,7 +451,6 @@ export function wireApp(deps: WiringDeps): Wiring {
   build("production editing", () => wireProductionEditing(deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
   build("preferences", () => startPreferences(), (stop) => stop);
   build("shot hiding", () => startShotHiding(shotHidingPorts(deps.timers ?? SYSTEM_TIMERS)), (stop) => stop);
-  build("presence", () => startPresence(legacyPresencePorts()), (stop) => stop);
   const capture = build("export capture", () => wireExportKit(deps.entry), (built) => built.stop);
   let disposed = false;
   const dispose = (): void => {

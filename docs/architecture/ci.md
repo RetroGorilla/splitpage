@@ -96,24 +96,21 @@ one pull request per area rather than a stream.
 
 ## `Dockerfile` and `Dockerfile.prebuilt`
 
-`Dockerfile` builds the app and the document server into one small image in
+`Dockerfile` builds the app and the static server into one small image in
 two stages; `Dockerfile.prebuilt` is its second stage alone, over the built
 files in the `splitpage-app` artifact.
 
 | Where | Why |
 | --- | --- |
-| `USER node` | The server runs as the image's built-in non-root user. When the container cannot write to an unRAID share, pass `--user` with the share's uid and gid rather than running as root (DEPLOY.md §5; `deploy.sh` and CI use `99:100`). |
-| `COPY … ./public/` | The files the browser downloads live in their own directory, so `STATIC_DIR` can never expose the server source or the data volume. |
+| `USER node` | The server runs as the image's built-in non-root user. |
+| `COPY … ./public/` | The files the browser downloads live in their own directory, so `STATIC_DIR` can never expose the server source. |
 | `COPY server/ ./server/` | `server.js` is CommonJS and `server/package.json` says so; a `"type": "module"` anywhere above it would otherwise stop it running, so the folder is copied whole. |
-| `RUN mkdir -p /data && chown node:node /data` | The path exists even when no volume is mounted, so a quick `docker run` with no `-v` still works for a smoke test. |
-| `HEALTHCHECK … CMD node -e …` | A plain request to `/api/health` made with `node` itself, so the image needs no `curl` or `wget`. |
+| `HEALTHCHECK … CMD node -e …` | A plain request to `/` made with `node` itself, so the image needs no `curl` or `wget`. |
 
 ## `docker-compose.yml`
 
-The compose file is the unRAID setup for `docker compose` (DEPLOY.md §8).
+The compose file runs the same container as `deploy.sh` (DEPLOY.md §1).
 
 | Where | Why |
 | --- | --- |
-| `ports: "8791:8791"` | Bound to the LAN so the Cloudflare tunnel (and you) can reach it. The tunnel connects outbound, so the port never needs forwarding. |
-| `volumes: ./data:/data` | Every document lives there as one `.json` file. Back it up by copying the folder; there is no database and no index to rebuild. |
-| `user: "99:100"` | An unRAID share is usually owned by `nobody:users` (`99:100`). If the container logs `EACCES` on startup, this is the line to change (DEPLOY.md §5). |
+| `ports: "8791:8791"` | Publishes the server's port on the host. |

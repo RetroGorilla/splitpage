@@ -33,7 +33,7 @@ function harness() {
   doc.body.append(anchor);
   const calls: string[] = [];
   const log = (name: string) => (...args: unknown[]): void => { const values = args.filter((v) => !(v instanceof win.Event)); calls.push(name + (values.length ? ":" + values.map(String).join(",") : "")); };
-  const state = { epoch: 0, review: false, selected: [] as string[], touch: false, armed: false, adding: null as string | null, expanded: null as string | null, group: "cat" };
+  const state = { epoch: 0, selected: [] as string[], touch: false, armed: false, adding: null as string | null, expanded: null as string | null, group: "cat" };
   const pending = new Map<number, { ms: number; fn: () => void }>();
   const held: (() => void)[] = [];
   const cleared: number[] = [];
@@ -43,8 +43,8 @@ function harness() {
   const tick = (): void => { const jobs = [...pending.values()]; pending.clear(); jobs.forEach(({ fn }) => fn()); };
   let routes: TagsRoutes;
   const ports: TagsPorts = {
-    rootClick: (e) => { calls.push("root"); if (!state.review) { routes.jumpClick(e); routes.click(e); } },
-    reviewMode: () => state.review, reviewBlocked: log("refuse"), renderProduction: log("render"),
+    rootClick: (e) => { calls.push("root"); routes.jumpClick(e); routes.click(e); },
+    renderProduction: log("render"),
     saveTagRename: log("rename-save"), addPersonForTag: log("person-save"),
     setRenaming: log("renaming"), setAddingPerson: (v) => { state.adding = v; log("adding")(v); },
     setTagOwner: log("owner"), setTagNotes: log("notes"), queueAutoSave: log("autosave"),
@@ -193,20 +193,13 @@ for (const work of ["card", "touch"] as const) {
   }
 }
 
-test("tags: delegation precedes backdrop, review Enter refuses, input Escape excludes selection clearing, captured scroll refreshes", () => {
+test("tags: delegation precedes backdrop, input Escape excludes selection clearing, captured scroll refreshes", () => {
   const h = harness();
   const owner = h.mount();
   h.fire(h.el("tag-modal"), "click");
   assert.deepEqual(h.calls, ["root", "close-composer"]);
   h.calls.length = 0;
   h.el("production-panel").insertAdjacentHTML("beforeend", '<input class="tag-rename-input" data-key="prop:Hat"><input id="bulk-person-input">');
-  h.state.review = true;
-  h.fire(h.el("production-panel").querySelector("input") as Element, "keydown", { key: "Enter" });
-  assert.deepEqual(h.calls, ["refuse", "render"]);
-  h.calls.length = 0;
-  h.fire(h.el("bulk-person-input"), "keydown", { key: "Enter" });
-  assert.deepEqual(h.calls, ["refuse", "render"]);
-  h.state.review = false;
   h.state.selected = ["prop:Hat"];
   h.calls.length = 0;
   h.fire(h.el("production-panel").querySelector("input") as Element, "keydown", { key: "Escape" });

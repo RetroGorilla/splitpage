@@ -418,8 +418,8 @@ In this order (Adam, 2026-10-07):
 
 From the external review of milestone 5's plan (Codex, 2026-10-14). Neither is a prerequisite of milestone 5 or 6.
 
-- **One owner for save completion.** Consolidate completion decisions and projection updates behind one application owner, preserving destination-specific acknowledgment and hosted restore behaviour. Today `confirmWrite` in `14-export.js` and the coordinator acknowledge the same save in separate steps ([saving.md](architecture/saving.md) section 8). The work crosses file saves, hosted saves, publication and adoption, so it is its own 4.x piece; a concrete regression can bring a focused fix forward.
-- **Remaining recovery extraction.** Move the remaining orchestration and restore decisions out of `20g-drafts.js`, reusing milestone 4's capture scheduler, draft writer, restore policy and store adapters. It does not recreate those owners.
+- **One owner for save completion.** Consolidate completion decisions and projection updates behind one application owner, preserving destination-specific acknowledgment. Today `confirmWrite` in `14-export.js` and the coordinator acknowledge the same save in separate steps ([saving.md](architecture/saving.md) section 8). The work crosses file saves, import writeback and adoption, so it is its own 4.x piece; a concrete regression can bring a focused fix forward.
+- **Remaining recovery extraction.** Move the remaining orchestration and restore decisions out of `20g-drafts.js`, reusing milestone 4's capture scheduler, draft writer and store adapters. It does not recreate those owners.
 
 ### Server services
 

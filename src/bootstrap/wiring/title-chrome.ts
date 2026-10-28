@@ -4,8 +4,7 @@ import { targetActions as definitions } from "../../features/title/actions.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { documentReader } from "./ports/document.ts";
 import { edits } from "./ports/editing.ts";
-import { review } from "./ports/location.ts";
-import { presence } from "./ports/presence.ts";
+import { personColors } from "./ports/person-colors.ts";
 import { notices } from "./ports/effects.ts";
 import { chromePreferences } from "./ports/preferences.ts";
 import { screen } from "./ports/screen.ts";
@@ -19,14 +18,14 @@ export function titleChromeControls(): DocumentChromeControl {
 export function mountTitleChromeFeature(): DocumentChromeControl {
   return chrome.replace(() => {
     const ports: DocumentChromePorts = {
-      document: documentReader, edits, review, presence, notices,
+      document: documentReader, edits, personColors, notices,
       preferences: chromePreferences
     };
     return startDocumentChrome(ports);
   });
 }
 export const stopTitleChromeFeature = chrome.stop;
-export const targetActions = () => definitions(titleChromeControls, screen, review);
+export const targetActions = () => definitions(titleChromeControls, screen);
 export const personSwatchesHtml: DocumentChromeControl["personSwatchesHtml"] = (...args) => titleChromeControls().personSwatchesHtml(...args);
 export const promptForName = () => { titleChromeControls().promptForName(); };
 export const promptForWpm = () => { titleChromeControls().promptForWpm(); };

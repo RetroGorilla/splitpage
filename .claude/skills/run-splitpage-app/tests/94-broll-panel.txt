@@ -33,7 +33,7 @@ eval (function(){ window.rec = function(id){ return F.state().brollShots.filter(
 jsclick #btn-broll
 wait document.querySelectorAll('#broll-list .broll-row').length === 8
 sleep 400
-expect window.__hostedTest.dirty() === false
+expect document.getElementById('btn-save').classList.contains('is-dirty') === false
 eval (function(){ U.flush(); window.__u0 = U.sizes().undo; return window.__u0; })()
 
 expect Array.prototype.map.call(document.querySelectorAll('#broll-controls .broll-chip'), function(c){ return c.textContent.replace(/\s+/g, ' ').trim(); }).join('|') === 'All 8|To shoot 5|Flagged 1|Shot 3'
@@ -52,7 +52,7 @@ expect JSON.parse(localStorage.getItem('splitpage-broll-view')).group === 'locat
 
 # not an edit: the document is as clean as it was, and the stack as deep
 eval U.flush()
-expect window.__hostedTest.dirty() === false
+expect document.getElementById('btn-save').classList.contains('is-dirty') === false
 expect U.sizes().undo === window.__u0
 expect window.__brollTest.view().filter === 'unshot'
 
@@ -67,7 +67,7 @@ wait document.querySelectorAll('#broll-list .broll-row').length === 5
 sleep 400
 expect document.querySelector('#broll-controls .broll-chip.is-active').getAttribute('data-filter') === 'unshot'
 expect heads() === 'Fish market|Harbour|No location'
-expect window.__hostedTest.dirty() === false
+expect document.getElementById('btn-save').classList.contains('is-dirty') === false
 
 # back to everything, by scene, for the rest
 click #broll-controls .broll-chip[data-filter="all"]
@@ -120,7 +120,7 @@ wait rec('bs4').status === 'shot'
 expect row('bs4').querySelector('.broll-check').getAttribute('aria-checked') === 'true'
 expect row('bs4').classList.contains('is-shot')
 expect document.querySelector('#broll-summary .broll-summary-line').textContent === '4 of 8 shot'
-expect window.__hostedTest.dirty() === true
+expect document.getElementById('btn-save').classList.contains('is-dirty') === true
 eval U.flush()
 expect U.sizes().undo === window.__u0 + 1
 key ctrl KeyZ

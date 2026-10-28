@@ -20,7 +20,7 @@ function harness(storageDisabled = false) {
       stamps: { clock: { nowIso: () => "2026-10-26T12:00:00.000Z" }, editor: { name: () => "Adam" } },
       run: (command) => {
         calls.push(command.name);
-        if (reject) return { kind: "rejected", reason: "review" };
+        if (reject) return { kind: "rejected", reason: "refused" };
         const plan = command.plan(doc);
         plan.apply(doc);
         return { kind: "applied", generation: 1, changes: plan.changes };
@@ -39,7 +39,6 @@ function harness(storageDisabled = false) {
       declineBroll: () => calls.push("decline")
     },
     desktop: { running: () => true, openExternal: (url) => calls.push(url) },
-    reviewOnly: "review",
     noteEdit: () => calls.push("noteEdit"),
     stampRow: (row) => { row.updatedBy = "Adam"; calls.push("stamp"); }
   };
@@ -75,7 +74,7 @@ test("stale ownership refuses confirmation before history and edits", () => {
   } finally { h.controls.dispose(); h.realm.close(); }
 });
 
-test("review refusal neither snapshots nor changes rows", () => {
+test("a refused import neither snapshots nor changes rows", () => {
   const h = harness();
   try {
     h.controls.openImportModal();
@@ -84,9 +83,7 @@ test("review refusal neither snapshots nor changes rows", () => {
     h.deny();
     h.controls.confirmImport();
     assert.deepEqual(h.doc.rows.map((row) => row.audioText), ["Original"]);
-    assert.equal(h.calls[0], "import-replace-rows");
-    assert.match(h.calls[1], /Viewing only/);
-    assert.equal(h.calls.length, 2);
+    assert.deepEqual(h.calls, ["import-replace-rows"]);
   } finally { h.controls.dispose(); h.realm.close(); }
 });
 

@@ -3,26 +3,24 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import type { TargetPorts } from "../../../src/features/rundown/ports.ts";
-import { startTarget as mountOverlay, paintTargetOverlay, setTargetLength } from "../../../src/features/rundown/target.js";
+import { startTarget as mountOverlay, paintTargetOverlay } from "../../../src/features/rundown/target.js";
 import { startTargetSection as mountTarget } from "../../../src/features/title/target-section.js";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices, fakeReview } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices } from "../fakes.ts";
 
 function setup(targetSeconds: number | null = null) {
   document.body.innerHTML = '<div id="rundown-overlay"></div><div id="popover"></div>';
   const doc = migrateRows({ title: "Target", targetSeconds, rows: [{ id: "r1", visualText: "", audioText: "" }] }, fakeMigration().ports);
   const edits = fakeEdits();
-  const review = fakeReview();
   const notices = fakeNotices();
   const ports: TargetPorts = {
     document: fakeDocument(doc).document,
     edits: edits.edits,
-    review: review.review,
     notices: notices.notices
   };
   const overlay = mountOverlay(ports);
   const section = mountTarget(ports);
-  return { edits, review, notices, owner: { ...section, dispose: () => { section.dispose(); overlay.dispose(); } } };
+  return { edits, notices, owner: { ...section, dispose: () => { section.dispose(); overlay.dispose(); } } };
 }
 
 function popover(html: string): HTMLElement {
@@ -53,17 +51,6 @@ test("target: an unreadable length shows an error notice and runs nothing", () =
   (wrap.querySelector("#target-save") as HTMLElement).click();
   assert.equal(input.getAttribute("aria-invalid"), "true");
   assert.deepEqual(notices.shown.map((n) => n.kind), ["error"]);
-  assert.deepEqual(edits.ran, []);
-  owner.dispose();
-});
-
-test("target: in review the section is disabled and setting the target is refused", () => {
-  const { edits, review, owner } = setup(60);
-  review.setReviewing(true);
-  const wrap = popover(owner.section.html());
-  assert.ok((wrap.querySelector("#target-input") as HTMLInputElement).disabled);
-  assert.match(wrap.textContent ?? "", /Viewing only/);
-  assert.equal(setTargetLength(30), false);
   assert.deepEqual(edits.ran, []);
   owner.dispose();
 });

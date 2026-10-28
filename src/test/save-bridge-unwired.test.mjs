@@ -104,8 +104,6 @@ test("the legacy join rule: plain saves fold, a manual save absorbs an automatic
   assert.equal(j("autosave", "auto"), "auto");
   assert.equal(j("auto", "save"), "save");
   assert.equal(j("save", "autosave"), "save");
-  assert.equal(j("server", "save"), "save");
-  assert.equal(j("save", "server"), "save");
   assert.equal(j("saveAs", "save"), null);
   assert.equal(j("save", "force"), null);
 });
@@ -163,8 +161,8 @@ test("autosave asks the destination that would take it: its target gates the wri
     bridge.noteSaveChange();
     assert.deepEqual(await bridge.requestSave({ kind: "autosave" }), { kind: "refused", reason: "Autosave is off, paused, has nowhere to write or nothing to write" });
     drop();
-    bridge.saveDestinations().register(probe(log, "server"));
-    assert.equal(bridge.autoSaveTarget(), "server");
+    bridge.saveDestinations().register(probe(log, "file"));
+    assert.equal(bridge.autoSaveTarget(), "file");
     assert.deepEqual(await bridge.requestSave({ kind: "autosave" }), { kind: "saved", acknowledged: true });
     bridge.confirmSavedNow();
     assert.equal((await bridge.requestSave({ kind: "autosave" })).kind, "refused", "nothing unsaved");
@@ -179,10 +177,10 @@ test("scheduleAutoSave arms the policy for the destination's target, and a due a
   const armed = [];
   const stop = bridge.startSaves(ports(log), { start: (run, ms) => { armed.push({ run, ms }); return armed.length; }, stop: () => {} });
   try {
-    bridge.saveDestinations().register(probe(log, "server"));
+    bridge.saveDestinations().register(probe(log, "file"));
     bridge.noteSaveChange();
     bridge.scheduleAutoSave();
-    assert.deepEqual(armed.map((t) => t.ms), [5000, 15000], "the server target waits the hosted idle time");
+    assert.deepEqual(armed.map((t) => t.ms), [2000, 15000], "the file target waits the idle time");
     armed[0].run();
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.deepEqual(log.filter((l) => l.startsWith("write:")), ["write:autosave"]);
@@ -191,7 +189,7 @@ test("scheduleAutoSave arms the policy for the destination's target, and a due a
   }
 });
 
-test("saveDoc resumes a halted autosave unless it is automatic, and saveToServer answers whether the server save was sent", async () => {
+test("saveDoc resumes a halted autosave unless it is automatic", async () => {
   const log = [];
   const stop = bridge.startSaves(ports(log), timers(log));
   try {
@@ -201,8 +199,7 @@ test("saveDoc resumes a halted autosave unless it is automatic, and saveToServer
     assert.equal(bridge.autoSavePolicy().halted(), "Paused", "an automatic save leaves the halt");
     await bridge.saveDoc({ saveAs: true });
     assert.equal(bridge.autoSavePolicy().halted(), "", "a manual save resumes autosave");
-    assert.equal(await bridge.saveToServer(), true);
-    assert.deepEqual(log.filter((l) => l.startsWith("write:")), ["write:auto", "write:saveAs", "write:server"]);
+    assert.deepEqual(log.filter((l) => l.startsWith("write:")), ["write:auto", "write:saveAs"]);
   } finally {
     stop();
   }

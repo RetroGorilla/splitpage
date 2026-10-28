@@ -1,7 +1,6 @@
 export interface ClipboardRoutePorts<Owner, Place, Extra> {
   readonly scriptCell: (el: Element) => boolean;
-  readonly reviewOnly: () => boolean;
-  readonly copy: (e: ClipboardEvent, cell: Element, cut: boolean, readOnly: boolean) => boolean;
+  readonly copy: (e: ClipboardEvent, cell: Element, cut: boolean) => boolean;
   readonly afterCut: (cell: Element) => void;
   readonly pasteScenes: (data: DataTransfer | null, cell: Element) => boolean;
   readonly pasteDraft: (cell: Element, html: string, text: string) => void;
@@ -47,8 +46,7 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
     if (!open) return;
     const cell = cellAround(e);
     if (!cell || !ports.scriptCell(cell)) return;
-    const readOnly = ports.reviewOnly();
-    if (!ports.copy(e, cell, cut, readOnly) || !cut || readOnly) return;
+    if (!ports.copy(e, cell, cut) || !cut) return;
     const active = realm.document.activeElement;
     const fresh = active && active.closest ? active.closest(".cell-editable") : null;
     ports.afterCut(fresh || cell);
@@ -85,7 +83,7 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
       return;
     }
     if (ports.pasteScenes(data, cell)) return;
-    if (ports.reviewOnly() || !data) return;
+    if (!data) return;
     insert(cell, data.getData("text/html"), data.getData("text/plain"), data.files);
   }
 

@@ -11,7 +11,7 @@ export function startHistoryPanel(ports) {
   var restoreSnapshot = ports.merge.restoreMergeSnapshot;
   var sidePanels = function () { return ports.panels; };
   var preferences = function () { return ports.preferences; };
-  var presence = function () { return ports.presence; };
+  var personColors = ports.personColors;
   var getEditorName = ports.preferences.editorName;
   var showToast = ports.effects.show;
   var safeId = function (id, prefix) { return safeIdFrom(id, prefix, ports.ids); };
@@ -168,7 +168,7 @@ function historyInitials(name) {
 function historyPersonHtml(name) {
   name = String(name || "").trim();
   if (!name) return '<span class="history-none">—</span>';
-  return '<span class="person-avatar" style="--size: 20px; --presence: ' + escapeHtml(presence().personColor(name)) + '" aria-hidden="true">' +
+  return '<span class="person-avatar" style="--size: 20px; --presence: ' + escapeHtml(personColors.personColor(name)) + '" aria-hidden="true">' +
       escapeHtml(historyInitials(name)) + '</span>' +
     '<span class="history-person">' + escapeHtml(name) + '</span>';
 }

@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
+import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -351,22 +353,30 @@ test("sharing again, or revoking, ends the old relay; a wrong or old token is 40
   } finally { share.closeAll(); }
 });
 
-test("a relay-only share serves no script, and lets the document server's origin read it", async () => {
-  const ref = {};
-  const voice = makeVoice(() => ref.share);
-  const share = ref.share = makeShare({ voice, corsOrigins: () => ["http://127.0.0.1:8791"] });
+function lanAddresses() {
+  const out = [];
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const addr of list || []) if (addr.family === "IPv4" && !addr.internal) out.push(addr.address);
+  }
+  return out;
+}
+
+function connects(host, port) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host, port });
+    socket.once("connect", () => { socket.destroy(); resolve(true); });
+    socket.once("error", () => resolve(false));
+    socket.setTimeout(2000, () => { socket.destroy(); resolve(false); });
+  });
+}
+
+test("the teleprompter share listens on loopback only", async () => {
+  const share = createPrompterShare({ staticAllowlist: {}, preferredPort: 0 });
   try {
-    const param = await share.publishVoice("tab9");
-    const v = parseVoice("#" + param);
-    assert.ok(v, param);
-    const s = await openStream(v.port, "/prompter-voice/" + v.token, { origin: "http://127.0.0.1:8791" });
-    assert.equal(s.headers["access-control-allow-origin"], "http://127.0.0.1:8791");
-    s.close();
-    const other = await openStream(v.port, "/prompter-voice/" + v.token, { origin: "http://evil.example" });
-    assert.equal(other.headers["access-control-allow-origin"], undefined);
-    other.close();
-    const forged = await request(v.port, "/prompter-voice/" + v.token, { headers: { host: "rebind.example:" + v.port } });
-    assert.equal(forged.status, 403);
+    const url = new URL(await share.publish("tab1", "script.md", "x"));
+    const port = Number(url.port);
+    assert.equal(await connects("127.0.0.1", port), true);
+    for (const addr of lanAddresses()) assert.equal(await connects(addr, port), false, addr + " must not reach the share");
   } finally { share.closeAll(); }
 });
 

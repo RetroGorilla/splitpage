@@ -13,8 +13,7 @@ mechanical rules; the rest is judgement.
   stored data, `Untitled Script`.
 - **"Could not", not "Couldn't".** Full words in messages, with a curly
   apostrophe where one is needed.
-- **Failures say what to check,** not what the browser threw. Use
-  `plainReason(err)` (`src/js/13-hosted.js`) after the dash: "Could not open
-  that folder — the connection failed — check that you are online".
+- **Failures say what to check,** not what the browser threw, after the
+  dash.
 - **No internal names or issue numbers** in text a person reads. Comments
   in code may have them; the build strips the shell's HTML comments.

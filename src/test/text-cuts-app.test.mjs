@@ -24,7 +24,6 @@ const { setTagNotes } = await import("../features/tags/panels.js");
 const { openBrollPanel } = await import("../features/broll/panel.js");
 const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { closeExportDialog, openExportDialog } = await import("../bootstrap/wiring/file-menu-export-controls.ts");
-const { presenceInitials } = await import("../js/13a-presence.js");
 const { buildMarkdownProject, parseMarkdownProject, applyMarkdownProject } = await import("../adapters/formats/project-file.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
@@ -137,25 +136,14 @@ test("08d a shot's note and its reference are cut at 2000 by code point (#434)",
   sidePanels().close("broll-panel");
 });
 
-test("20h imported server names, hosts and onboarding values are cut by code point (#434)", async () => {
+test("20h imported onboarding values are cut by code point (#434)", async () => {
   load();
-  localStorage.removeItem("splitpage-server-bookmarks");
   localStorage.removeItem("splitpage-onboarding");
   const bundle = {
     format: "splitpage-app-data", version: 1, exportedAt: new Date().toISOString(), appVersion: "", history: { docs: [], older: [] },
-    bookmarks: [
-      { id: "s1", name: " " + x(199) + GRIN + "y", url: "http://a.example/", ssh: { userHost: x(299) + GRIN + "y", remotePort: 8791, localPort: 8791 } },
-      { id: "s2", name: "\uD83D", url: "http://b.example/", ssh: { userHost: " \uD83D ", remotePort: 8791, localPort: 8791 } }
-    ],
     prefs: { onboarding: { note: x(199) + GRIN + "y", half: "a\uD83D" } }
   };
   await window.__appDataTest.importText(JSON.stringify(bundle));
-  const marks = JSON.parse(localStorage.getItem("splitpage-server-bookmarks"));
-  const a = marks.filter((b) => b.id === "s1")[0], b = marks.filter((m) => m.id === "s2")[0];
-  assert.equal(a.name, x(199) + GRIN);
-  assert.equal(a.ssh.userHost, x(299) + GRIN);
-  assert.equal(b.name, "b.example");
-  assert.equal(b.ssh, undefined);
   const onboarding = JSON.parse(localStorage.getItem("splitpage-onboarding"));
   assert.equal(onboarding.note, x(199) + GRIN);
   assert.equal(onboarding.half, "a");
@@ -169,13 +157,6 @@ test("02d a video link's label never ends in half an emoji (#434)", () => {
 test("11 the import preview never ends in half an emoji (#434)", () => {
   assert.equal(truncateForPreview(x(33) + GRIN + "a", 34), x(33) + "…");
   assert.equal(truncateForPreview(x(32) + GRIN + "a", 34), x(32) + GRIN + "…");
-});
-
-test("13a presence initials take whole characters (#434)", () => {
-  assert.equal(presenceInitials(GRIN + "abc"), GRIN + "A");
-  assert.equal(presenceInitials("a" + GRIN), "A" + GRIN);
-  assert.equal(presenceInitials(GRIN + "x " + GRIN + "y"), GRIN + GRIN);
-  assert.equal(presenceInitials("ann lee"), "AL");
 });
 
 test("18c the export preview never cuts a name or a scene in half an emoji (#434)", () => {

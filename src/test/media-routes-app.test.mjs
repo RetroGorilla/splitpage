@@ -72,8 +72,7 @@ function fixture() {
 }
 
 let opened = 0;
-async function open(role) {
-  window.__hostedTest.setSession({ role: role || "edit", docId: null });
+async function open() {
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "media-routes-" + (++opened) + ".splitpage", { lastModified: opened });
   await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
@@ -237,20 +236,5 @@ test("a click on a video link opens it and edits nothing", async () => {
     window.open = realOpen;
   }
   assert.deepEqual(opens, [VIDEO]);
-  assert.equal(saveChanges(), seq);
-});
-
-test("when the session refuses edits, a gallery change writes nothing", async () => {
-  await open();
-  const { removeImage } = await import("../bootstrap/wiring/rows.ts");
-  const before = JSON.stringify(row("r2"));
-  const seq = saveChanges();
-  window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
-  try {
-    removeImage("r2", 0);
-  } finally {
-    window.__hostedTest.setSession({ role: "edit", docId: null });
-  }
-  assert.equal(JSON.stringify(row("r2")), before);
   assert.equal(saveChanges(), seq);
 });

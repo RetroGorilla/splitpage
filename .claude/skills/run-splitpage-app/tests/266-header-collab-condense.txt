@@ -3,59 +3,17 @@ viewport 1920 900
 goto /index.html
 wait document.querySelectorAll('#rows .row').length > 0
 
-expect document.getElementById('btn-collab').parentElement.classList.contains('toolbar')
-expect document.getElementById('btn-collab').nextElementSibling.id == btn-write
-expect document.getElementById('btn-collab').previousElementSibling.classList.contains('btn-group')
-expect document.querySelector('#btn-collab .btn-label').textContent == Collab
-expect document.querySelector('#btn-collab use').getAttribute('href') == #i-people
-expect document.getElementById('btn-collab').getAttribute('aria-label') == Collaborate — invite people to this script
-expect document.getElementById('btn-collab').title == Collaborate — invite people to this script
-expect document.getElementById('btn-collab').getAttribute('aria-disabled') === null
-expect document.getElementById('btn-collab').classList.contains('btn-mode')
-expect getComputedStyle(document.getElementById('btn-collab')).backgroundColor === getComputedStyle(document.getElementById('btn-write')).backgroundColor
-expect getComputedStyle(document.getElementById('btn-collab')).borderTopColor === getComputedStyle(document.getElementById('btn-write')).borderTopColor
 expect document.querySelectorAll('.toolbar .btn-accent').length === 1 && document.querySelector('.toolbar .btn-accent').id === 'btn-present'
-expect document.querySelector('#btn-collab .btn-label').getBoundingClientRect().width > 30
 
 eval document.getElementById('btn-comments').focus()
-key Tab
-expect document.activeElement.id == btn-collab
 key Tab
 expect document.activeElement.id == btn-write
-
-click #btn-collab
-wait window.__collabTest.isOpen()
-expect document.getElementById('collab-title').textContent == Collaborate
-eval window.__collabTest.close()
-expect !window.__collabTest.isOpen()
-eval document.getElementById('btn-collab').focus()
-key Enter
-wait window.__collabTest.isOpen()
-eval window.__collabTest.close()
-expect !window.__collabTest.isOpen()
-expect document.activeElement.id == btn-collab
-
-eval window.__hostedTest.setSession({role:'edit', scope:'shared-doc', docId:'shared-doc'})
-expect document.getElementById('btn-collab').getAttribute('aria-disabled') == true
-expect document.getElementById('btn-collab').disabled === false
-expect document.getElementById('btn-collab').title == Only the script's owner can invite people.
-expect getComputedStyle(document.getElementById('btn-collab')).opacity === '0.5'
-eval document.getElementById('btn-comments').focus()
-key Tab
-expect document.activeElement.id == btn-collab
-click #btn-collab
-sleep 300
-expect !window.__collabTest.isOpen()
-wait document.getElementById('toast-host').textContent.indexOf("Only the script's owner can invite people.") !== -1
-eval window.__hostedTest.setSession({role:'review', docId:'shared-doc'})
-expect document.getElementById('btn-collab').getAttribute('aria-disabled') == true
-expect document.getElementById('btn-collab').title == Only the script's owner can invite people.
 
 eval (function(){ var f=document.createElement('iframe'); f.id='hf'; f.style.cssText='position:fixed;left:0;top:0;width:1440px;height:800px;border:0;z-index:99999;background:#fff'; f.src='/index.html'; document.body.appendChild(f); return true; })()
 wait document.getElementById('hf').contentDocument && document.getElementById('hf').contentDocument.querySelectorAll('#rows .row').length > 0
 sleep 800
 
-eval (function(){ var W=window; W.__d=function(){return document.getElementById('hf').contentDocument;}; W.__w=function(){return document.getElementById('hf').contentWindow;}; W.__frames=function(n){ return new Promise(function(res){ var w=W.__w(); var k=function(){ if(--n<=0) res(true); else w.requestAnimationFrame(k); }; w.requestAnimationFrame(k); }); }; W.__at=async function(w){ document.getElementById('hf').style.width=w+'px'; W.__d().body.getBoundingClientRect(); await W.__frames(3); return true; }; W.__still=function(on){ var s=W.__d().documentElement.style; ['--dur-press','--dur-fast','--dur-enter','--dur-exit','--dur-move'].forEach(function(t){ if(on) s.setProperty(t,'0.01ms'); else s.removeProperty(t); }); return true; }; W.__sel={file:'#btn-file',rule:'.topbar-rule',title:'#doc-title',save:'.save-state',presence:'#presence-bar',search:'#btn-command',production:'#btn-production',gear:'#btn-gear',broll:'#btn-broll',comments:'#btn-comments',collab:'#btn-collab',write:'#btn-write',present:'#btn-present'}; W.__boxes=function(){ var d=W.__d(); var out=[]; Object.keys(W.__sel).forEach(function(k){ var e=d.querySelector(W.__sel[k]); if(e){ var r=e.getBoundingClientRect(); if(r.width>0) out.push({k:k,l:r.left,r:r.right,t:r.top,b:r.bottom}); } }); Array.prototype.forEach.call(d.querySelectorAll('.doc-meta > *'), function(e,i){ var r=e.getBoundingClientRect(); if(!e.hidden && r.width>0) out.push({k:'fact'+i+(e.id?'#'+e.id:''),l:r.left,r:r.right,t:r.top,b:r.bottom}); }); return out; }; W.__lab=function(id){ return W.__d().querySelector('#'+id+' .btn-label').getBoundingClientRect().width; }; W.__check=function(w){ var d=W.__d(); var vw=d.documentElement.clientWidth; var bs=W.__boxes(); var bad=[]; bs.forEach(function(a,i){ if(a.l<-0.5||a.r>vw+0.5) bad.push(a.k+' outside '+Math.round(a.l)+'-'+Math.round(a.r)); for(var j=i+1;j<bs.length;j++){ var b=bs[j]; var o=Math.min(a.r,b.r)-Math.max(a.l,b.l); var v=Math.min(a.b,b.b)-Math.max(a.t,b.t); if(o>0.5&&v>0.5) bad.push(a.k+'/'+b.k+' by '+Math.round(o)); } }); ['file','title','save','search','production','gear','broll','comments','collab','write','present'].forEach(function(k){ if(!bs.some(function(b){return b.k===k;})) bad.push(k+' missing'); }); if(!bs.some(function(b){return b.k.indexOf('#identity-chip')>0;})) bad.push('your name missing'); var left=d.querySelector('.topbar-left'); if(left.scrollWidth>left.clientWidth+1) bad.push('left half overflows by '+(left.scrollWidth-left.clientWidth)); var tb=d.querySelector('.toolbar').getBoundingClientRect(); if(tb.right>vw+0.5) bad.push('toolbar past the edge'); var pl=W.__lab('btn-production'), cl=W.__lab('btn-collab'), wl=W.__lab('btn-write'); if(w<1300 && pl>0.5) bad.push('Production label open '+pl.toFixed(1)); if(w>=1300 && pl<40) bad.push('Production label closed '+pl.toFixed(1)); if(w<1000 && (cl>0.5||wl>0.5)) bad.push('Collab/Write label open'); if(w>=1000 && (cl<20||wl<20)) bad.push('Collab/Write label closed'); var cb=d.getElementById('comments-badge').getBoundingClientRect(); var cr=d.getElementById('btn-comments').getBoundingClientRect(); if(cb.width<5||cb.left<cr.left-0.5||cb.right>cr.right+0.5) bad.push('comments count not shown'); return bad.length? w+': '+bad.join(', ') : ''; }; W.__sweep=async function(ws){ var bad=[]; for(var i=0;i<ws.length;i++){ await W.__at(ws[i]); var c=W.__check(ws[i]); if(c) bad.push(c); } W.__bad=bad.join('; '); return W.__bad || 'ok'; }; W.__title=function(t){ var i=W.__d().getElementById('doc-title'); i.value=t; i.dispatchEvent(new Event('input',{bubbles:true})); i.blur(); return true; }; return true; })()
+eval (function(){ var W=window; W.__d=function(){return document.getElementById('hf').contentDocument;}; W.__w=function(){return document.getElementById('hf').contentWindow;}; W.__frames=function(n){ return new Promise(function(res){ var w=W.__w(); var k=function(){ if(--n<=0) res(true); else w.requestAnimationFrame(k); }; w.requestAnimationFrame(k); }); }; W.__at=async function(w){ document.getElementById('hf').style.width=w+'px'; W.__d().body.getBoundingClientRect(); await W.__frames(3); return true; }; W.__still=function(on){ var s=W.__d().documentElement.style; ['--dur-press','--dur-fast','--dur-enter','--dur-exit','--dur-move'].forEach(function(t){ if(on) s.setProperty(t,'0.01ms'); else s.removeProperty(t); }); return true; }; W.__sel={file:'#btn-file',rule:'.topbar-rule',title:'#doc-title',save:'.save-state',search:'#btn-command',production:'#btn-production',gear:'#btn-gear',broll:'#btn-broll',comments:'#btn-comments',write:'#btn-write',present:'#btn-present'}; W.__boxes=function(){ var d=W.__d(); var out=[]; Object.keys(W.__sel).forEach(function(k){ var e=d.querySelector(W.__sel[k]); if(e){ var r=e.getBoundingClientRect(); if(r.width>0) out.push({k:k,l:r.left,r:r.right,t:r.top,b:r.bottom}); } }); Array.prototype.forEach.call(d.querySelectorAll('.doc-meta > *'), function(e,i){ var r=e.getBoundingClientRect(); if(!e.hidden && r.width>0) out.push({k:'fact'+i+(e.id?'#'+e.id:''),l:r.left,r:r.right,t:r.top,b:r.bottom}); }); return out; }; W.__lab=function(id){ return W.__d().querySelector('#'+id+' .btn-label').getBoundingClientRect().width; }; W.__check=function(w){ var d=W.__d(); var vw=d.documentElement.clientWidth; var bs=W.__boxes(); var bad=[]; bs.forEach(function(a,i){ if(a.l<-0.5||a.r>vw+0.5) bad.push(a.k+' outside '+Math.round(a.l)+'-'+Math.round(a.r)); for(var j=i+1;j<bs.length;j++){ var b=bs[j]; var o=Math.min(a.r,b.r)-Math.max(a.l,b.l); var v=Math.min(a.b,b.b)-Math.max(a.t,b.t); if(o>0.5&&v>0.5) bad.push(a.k+'/'+b.k+' by '+Math.round(o)); } }); ['file','title','save','search','production','gear','broll','comments','write','present'].forEach(function(k){ if(!bs.some(function(b){return b.k===k;})) bad.push(k+' missing'); }); if(!bs.some(function(b){return b.k.indexOf('#identity-chip')>0;})) bad.push('your name missing'); var left=d.querySelector('.topbar-left'); if(left.scrollWidth>left.clientWidth+1) bad.push('left half overflows by '+(left.scrollWidth-left.clientWidth)); var tb=d.querySelector('.toolbar').getBoundingClientRect(); if(tb.right>vw+0.5) bad.push('toolbar past the edge'); var pl=W.__lab('btn-production'), wl=W.__lab('btn-write'); if(w<1300 && pl>0.5) bad.push('Production label open '+pl.toFixed(1)); if(w>=1300 && pl<40) bad.push('Production label closed '+pl.toFixed(1)); if(w<1000 && wl>0.5) bad.push('Write label open'); if(w>=1000 && wl<20) bad.push('Write label closed'); var cb=d.getElementById('comments-badge').getBoundingClientRect(); var cr=d.getElementById('btn-comments').getBoundingClientRect(); if(cb.width<5||cb.left<cr.left-0.5||cb.right>cr.right+0.5) bad.push('comments count not shown'); return bad.length? w+': '+bad.join(', ') : ''; }; W.__sweep=async function(ws){ var bad=[]; for(var i=0;i<ws.length;i++){ await W.__at(ws[i]); var c=W.__check(ws[i]); if(c) bad.push(c); } W.__bad=bad.join('; '); return W.__bad || 'ok'; }; W.__title=function(t){ var i=W.__d().getElementById('doc-title'); i.value=t; i.dispatchEvent(new Event('input',{bubbles:true})); i.blur(); return true; }; return true; })()
 expect true
 
 eval (function(){ var w=window.__w(); var rows=[]; for(var i=0;i<24;i++) rows.push({id:'r'+i, visualText:(i%3===0?'B-roll: shot '+i+'<br>':'')+'Visual '+i+' [tripod] {gaffer}', audioText:'Scene '+i+' says a few words here.', status:'todo'}); var cm=[]; for(var c=0;c<12;c++) cm.push({id:'c'+c, rowId:'r'+c, field:'audioText', anchorId:'c'+c, quotedText:'Scene', author:'Ann', body:'Note '+c, createdAt:'2026-09-01T10:00:00Z', kind:'anchor', replies:[]}); w.__splitpageFormats.openFile(new w.File([JSON.stringify({schema:2,title:'Pilot',rows:rows,comments:cm})],'labels.splitpage')); var d=window.__d().getElementById('desktop-app-bar-dismiss'); if(d) d.click(); return true; })()
@@ -79,7 +37,6 @@ eval window.__title('Pilot')
 eval window.__at(900)
 expect window.__d().getElementById('btn-production').textContent.indexOf('Production') === 0
 expect window.__d().getElementById('btn-comments').textContent.indexOf('Comments') === 0
-expect window.__d().getElementById('btn-collab').getAttribute('aria-label') == Collaborate — invite people to this script
 expect window.__d().getElementById('btn-write').textContent == Write
 
 eval window.__still(false)
@@ -95,7 +52,6 @@ expect parseFloat(window.__seq[window.__seq.length-1]) > 60
 expect window.__overlap === 0
 eval (async function(){ var p=window.__rec(6); document.getElementById('hf').style.width='900px'; var s=await p; window.__jump=s.map(function(f){ return f.lab.toFixed(1)+'/'+f.ov; }); return window.__jump.join(' '); })()
 expect window.__jump.every(function(x){ return x === '0.0/0'; })
-expect window.__lab('btn-collab') === 0
 
 eval window.__at(1100)
 sleep 400
@@ -154,20 +110,10 @@ sleep 500
 
 eval window.__at(990)
 sleep 400
-expect window.__lab('btn-collab') === 0
-expect Math.round(window.__d().getElementById('btn-collab').getBoundingClientRect().width) == 32
 expect Math.round(window.__d().getElementById('btn-write').getBoundingClientRect().width) == 32
-eval window.__watch('collab', 40)
-mouse hover window.__pt('btn-collab')
-sleep 800
-expect window.__lab('btn-collab') > 30
-expect window.__moved.length === 0
-expect (function(){ var d=window.__d(); var r=d.getElementById('btn-collab').getBoundingClientRect(); var s=d.getElementById('btn-command').getBoundingClientRect(); var w=d.getElementById('btn-write').getBoundingClientRect(); var g=window.__group(); return r.left>=g.left-0.5 && r.left>=s.right && r.right<=w.left; })()
-shot 266-hover-collab-990
 mouse hover window.__pt('btn-write')
 sleep 600
 expect window.__lab('btn-write') === 0
-expect window.__lab('btn-collab') === 0
 mouse hover ({x: 600, y: 500})
 sleep 400
 
@@ -194,12 +140,12 @@ eval window.__d().documentElement.removeAttribute('data-theme')
 eval (function(){ document.getElementById('hf').style.height='56px'; return true; })()
 eval window.__at(1920)
 sleep 400
-mouse hover window.__pt('btn-collab')
+mouse hover window.__pt('btn-write')
 sleep 700
 shot 266-header-1920-light
 eval window.__at(1280)
 sleep 400
-mouse hover window.__pt('btn-collab')
+mouse hover window.__pt('btn-write')
 sleep 700
 shot 266-header-1280-light
 eval window.__at(1000)
@@ -209,14 +155,14 @@ sleep 700
 shot 266-header-1000-light
 eval window.__at(800)
 sleep 400
-mouse hover window.__pt('btn-collab')
+mouse hover window.__pt('btn-write')
 sleep 700
 shot 266-header-800-light
 eval window.__d().documentElement.setAttribute('data-theme','dark')
 mouse hover ({x: 600, y: 500})
 eval window.__at(1920)
 sleep 400
-mouse hover window.__pt('btn-collab')
+mouse hover window.__pt('btn-write')
 sleep 700
 shot 266-header-1920-dark
 eval window.__at(1280)
@@ -231,7 +177,7 @@ sleep 700
 shot 266-header-1000-dark
 eval window.__at(800)
 sleep 400
-mouse hover window.__pt('btn-collab')
+mouse hover window.__pt('btn-write')
 sleep 700
 shot 266-header-800-dark
 mouse hover ({x: 600, y: 500})
@@ -240,7 +186,7 @@ eval (function(){ document.getElementById('hf').style.height='800px'; return tru
 
 eval window.__at(390)
 sleep 300
-expect ['.btn-group','#btn-collab','#btn-write'].every(function(q){ return window.__d().querySelector(q).getBoundingClientRect().width === 0; })
+expect ['.btn-group','#btn-write'].every(function(q){ return window.__d().querySelector(q).getBoundingClientRect().width === 0; })
 expect Array.prototype.map.call(window.__d().querySelectorAll('#phone-bar .phone-tab-label'), function(l){ return l.textContent; }).join(',') == Script,Write,Production,Gear,B-roll,Comments
 expect window.__w().getComputedStyle(window.__d().getElementById('phone-bar')).display !== 'none'
 expect Array.prototype.every.call(window.__d().querySelectorAll('#phone-bar .phone-tab'), function(t){ return t.getBoundingClientRect().width > 40; })

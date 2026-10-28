@@ -16,7 +16,7 @@ function harness() {
     '<div id="export-modal" hidden><div id="export-formats"></div><div id="export-options"></div>' +
     '<div id="export-preview"></div><div id="export-summary"></div><div id="export-filename"></div>' +
     '<div id="export-why"></div><button id="export-close"></button><button id="export-cancel"></button>' +
-    '<button id="export-go"></button><button id="export-share-link"></button></div>';
+    '<button id="export-go"></button></div>';
   localStorage.clear();
   const source = migrateRows({ schema: 5, title: "Test", rows: [] }, fakeMigration().ports);
   const captured = buildExportDocument(source, "2026-10-23T12:00:00.000Z", { production: [], commentNumbers: {}, broll: [] });
@@ -30,7 +30,6 @@ function harness() {
   const formatListeners = new Set<() => void>();
   const exported: string[] = [];
   const effects: string[][] = [];
-  let shares = 0;
   const ports: FileMenuExportPorts = {
     document: { current: () => current },
     text: { cellOf: () => [] },
@@ -56,11 +55,10 @@ function harness() {
     },
     fileName: () => "test.pdf",
     exportAction: (action) => { exported.push(action); return true; },
-    share: () => { shares++; },
     onMenuRefresh: (listener) => { menuListeners.add(listener); return () => { menuListeners.delete(listener); }; }
   };
   return { ports, registry, menuListeners, formatListeners, exported, effects, notices,
-    loading: () => { current = null; }, shares: () => shares };
+    loading: () => { current = null; } };
 }
 
 test("the dialog runs with shared port fakes and releases its listeners and subscriptions on remount", () => {
@@ -87,16 +85,11 @@ test("the dialog runs with shared port fakes and releases its listeners and subs
     dialog.openExportDialog();
     element("export-go").click();
     assert.deepEqual(h.exported, ["export-pdf"]);
-    dialog.openExportDialog();
-    element("export-share-link").click();
-    assert.equal(h.shares(), 1);
     dialog.dispose();
     dialog.dispose();
     assert.equal(h.menuListeners.size, 0);
     assert.equal(h.formatListeners.size, 0);
-    element("export-share-link").click();
-    assert.equal(h.shares(), 1);
-    dialog = mountExportDialog(h.ports);
+    dialog =mountExportDialog(h.ports);
     dialog.openExportDialog();
     element("export-go").click();
     assert.deepEqual(h.exported, ["export-pdf", "export-pdf"]);

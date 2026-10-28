@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createSessionEffects } from "../../src/application/save/session-effects.ts";
 import type { SessionEffectPorts } from "../../src/application/save/session-effects.ts";
-import type { Connection, Home, HomeFields } from "../../src/application/location/document-location.ts";
+import type { Home, HomeFields } from "../../src/application/location/document-location.ts";
 import { changeSet } from "../../src/application/session/change-set.ts";
 import type { SessionChange, TransactionKind } from "../../src/application/session/change-set.ts";
 import type { DocumentView } from "../../src/application/session/document-session.ts";
@@ -13,8 +13,6 @@ import { rawScript } from "./session-fakes.ts";
 
 interface Given {
   home?: Home;
-  conn?: Connection | null;
-  reviewing?: boolean;
   author?: string;
   color?: string;
 }
@@ -23,8 +21,6 @@ function fakes(given: Given = {}) {
   const log: unknown[][] = [];
   const state = {
     home: given.home ?? ({ kind: "none" } as Home),
-    conn: given.conn ?? null,
-    reviewing: !!given.reviewing,
     author: given.author ?? "",
     color: given.color ?? ""
   };
@@ -37,10 +33,8 @@ function fakes(given: Given = {}) {
     drafts: { noteChange: () => { log.push(["noteDraftChange"]); } },
     location: {
       home: () => { log.push(["home"]); return state.home; },
-      amendHome: (record: Home, fields: HomeFields) => { log.push(["amendHome", record, fields]); return record; },
-      homeConn: () => { log.push(["homeConn"]); return state.conn; }
+      amendHome: (record: Home, fields: HomeFields) => { log.push(["amendHome", record, fields]); return record; }
     },
-    review: { reviewing: () => { log.push(["reviewing"]); return state.reviewing; } },
     preferences: {
       commentAuthor: () => { log.push(["commentAuthor"]); return state.author; },
       myColor: () => { log.push(["myColor"]); return state.color; }
@@ -51,10 +45,6 @@ function fakes(given: Given = {}) {
 
 function change(kind: TransactionKind, saveNow = false): SessionChange {
   return { kind, epoch: 1, generation: 2, changes: changeSet({ saveNow }) };
-}
-
-function connection(role: Connection["role"], token = "t"): Connection {
-  return { serverUrl: "https://splitpage.test", token, role, scope: "", tunnel: null };
 }
 
 test("the effects are the five the session takes, in their old order", () => {
@@ -99,16 +89,11 @@ test("save asks for an autosave now after a recovery that wants one, without sch
   assert.deepEqual(log, [["home"], ["dueNow"]]);
 });
 
-test("edit reads the home connection and refuses a reviewer only", () => {
-  for (const [conn, expected] of [
-    [null, { allowed: true }],
-    [connection(""), { allowed: true }],
-    [connection("edit"), { allowed: true }],
-    [connection("review"), { allowed: false, reason: "review" }]
-  ] as const) {
-    const { log, effects } = fakes({ conn });
-    assert.deepEqual(effects.edit(), expected);
-    assert.deepEqual(log, [["homeConn"]]);
+test("edit is always allowed and reads nothing", () => {
+  for (const home of [{ kind: "none" }, { kind: "file" }, { kind: "import", name: "notes.md" }] as Home[]) {
+    const { log, effects } = fakes({ home });
+    assert.deepEqual(effects.edit(), { allowed: true });
+    assert.deepEqual(log, []);
   }
 });
 
@@ -123,19 +108,16 @@ test("attribute writes the editor's colour as a personColors plan", () => {
   assert.ok(plan);
   assert.deepEqual(plan.changes.docFields, ["personColors"]);
   assert.equal(plan.changes.whole, false);
-  assert.deepEqual(log, [["reviewing"], ["commentAuthor"], ["myColor"]]);
+  assert.deepEqual(log, [["commentAuthor"], ["myColor"]]);
   const live = view({ Grace: "#F9B64F" });
   plan.apply(live);
   assert.deepEqual(live.personColors, { Grace: "#F9B64F", Ada: "#80BDFB" });
 });
 
-test("attribute plans nothing without a document, while reviewing, without a name, or when the colour is already set", () => {
+test("attribute plans nothing without a document, without a name, or when the colour is already set", () => {
   const none = fakes({ author: "Ada", color: "#80BDFB" });
   assert.equal(Reflect.apply(none.effects.attribute, undefined, [null]), null);
   assert.deepEqual(none.log, []);
-  const reviewing = fakes({ author: "Ada", color: "#80BDFB", reviewing: true });
-  assert.equal(reviewing.effects.attribute(view()), null);
-  assert.deepEqual(reviewing.log, [["reviewing"]]);
   const nameless = fakes({ author: "   ", color: "#80BDFB" });
   assert.equal(nameless.effects.attribute(view()), null);
   const same = fakes({ author: "Ada", color: "#80BDFB" });

@@ -217,7 +217,7 @@ function outsideSelection(cellEl) {
   return sliceCell(cell, 0, Math.min(sel.from, len)).concat(sliceCell(cell, Math.min(sel.to, len), len));
 }
 
-export function copyFromCell(e, cellEl, cut, readOnly) {
+export function copyFromCell(e, cellEl, cut) {
   var cd = e.clipboardData;
   var field = cellEl.getAttribute("data-field");
   if (!cd || !holdsDocument() || !isTextField(field) || ports.document.read(function (doc) { return rowIndexOf(doc, cellEl.getAttribute("data-id")); }) === -1) return false;
@@ -225,7 +225,7 @@ export function copyFromCell(e, cellEl, cut, readOnly) {
   if (/<img|video-embed-card/.test(html)) return false;
   var sel = ports.selection(cellEl);
   if (!sel || sel.from === sel.to) return false;
-  var moving = cut && !readOnly;
+  var moving = cut;
   var nonce = moving ? ports.nonce() : null;
   var out = clipboardOfCell(sliceCell(ports.text.fromHtml(html), sel.from, sel.to), { keepComments: moving, nonce: nonce });
   cd.setData("text/html", out.html);

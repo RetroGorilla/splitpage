@@ -1,4 +1,3 @@
-import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { BrollSeedPlace } from "../../application/commands/clipboard.ts";
 import type { CellEditing, CellRange } from "../../application/editing/cell-editing.ts";
 import type { PaintGuard } from "../../application/editing/paint-guard.ts";
@@ -6,7 +5,6 @@ import type { RowDrag } from "../../application/editing/row-drag.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
-import type { SaveState } from "../../application/save/save-state.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DeepReadonly } from "../../application/session/document-session.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
@@ -49,11 +47,8 @@ export interface SceneClipPorts {
 export interface SceneSelectPorts {
   readonly document: Pick<DocumentReader, "current">;
   readonly edits: Pick<DocumentEdits, "run">;
-  readonly reviewRefusal: string;
   readonly undo: Pick<UndoControl, "breakCoalescing" | "flush" | "last" | "undo">;
-  readonly saves: Pick<SaveState, "dueNow">;
   readonly pictures: Pick<PictureStore, "ensureBytes">;
-  readonly review: Pick<ReviewFacts, "reviewing">;
   readonly notices: Pick<NoticePort, "show" | "showAction">;
   readonly cells: Pick<CellEditing<Element>, "sync">;
   readonly rowDrag: Pick<RowDrag, "dragging">;
@@ -61,7 +56,6 @@ export interface SceneSelectPorts {
   readonly rows: { readonly closeMenus: () => void };
   readonly production: { readonly scheduleRefresh: () => void };
   readonly stampRow: (row: object) => void;
-  readonly onServer: () => boolean;
   readonly writerOpen: () => boolean;
   readonly startNewScript: () => boolean;
   readonly nonce: () => string;

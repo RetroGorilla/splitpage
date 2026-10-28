@@ -3,8 +3,6 @@ import type { DocumentIdentityOwner, DocumentIdentityPorts } from "../../applica
 import type { IdentityPort } from "../../application/transitions/ports.ts";
 import { documentGuardOn, documentView, quietly } from "../../application/identity/document-guard.ts";
 import { heldDocument, currentDocument } from "../../legacy/session-bridge.ts";
-import { handDocumentIdentityTo } from "../../legacy/document-identity-bridge.ts";
-import { migrateDocument, adoptRestoredState } from "../startup/document-entry.js";
 import { startStandaloneHtml } from "../../adapters/page/standalone-html.js";
 import { migrateRows } from "../../legacy/document-ports.ts";
 import { documentIdentityPorts } from "./ports/document-identity.ts";
@@ -27,7 +25,6 @@ export function mountDocumentIdentityOwner(ports: DocumentIdentityPorts = docume
   stopDocumentIdentityOwner();
   const mine: DocumentIdentityOwner = createDocumentIdentityOwner();
   const dispose = mine.startIdentity(ports);
-  const disconnect = handDocumentIdentityTo(mine, { migrateDocument, adoptRestoredState });
   const stopHtml = startStandaloneHtml(migrateRows);
   const hooks = {
     on: function () { return documentGuardOn; },
@@ -48,7 +45,6 @@ export function mountDocumentIdentityOwner(ports: DocumentIdentityPorts = docume
   Object.assign(window, { __documentGuardTest: hooks });
   started = mine;
   stop = () => {
-    disconnect();
     started = null;
     dispose();
     stopHtml();

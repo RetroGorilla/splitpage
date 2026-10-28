@@ -8,7 +8,6 @@ function startIdentity(ports) {
   var stampDocument = ports.session.stampDocument;
   var currentHome = ports.location.home;
   var documentLocation = function () { return ports.location; };
-  var onServerDoc = ports.location.onServerDoc;
   var showToast = ports.effects.show;
   var copyHistory = ports.history.copyHistory;
   var historyDocumentChanged = ports.history.historyDocumentChanged;
@@ -61,7 +60,6 @@ function copyDocHistorySafe(from, to) {
 
 function docHomeKey() {
   var home = currentHome();
-  if (home.kind === "server") return "server:" + home.id;
   if (home.kind === "file") {
     return "file:" + ((home.handle && home.handle.name) || home.name || "");
   }
@@ -85,7 +83,6 @@ function reassignDocId(toId, opts) {
   toId = normalizeDocId(toId);
   var fromId = normalizeDocId(opts.fromId);
   if (!toId || !fromId || toId === fromId || !currentDocument() || currentDocument().docId !== fromId) return false;
-  if (onServerDoc()) return false;
   stampDocument(documentIdStamp(fromId, toId));
   documentLocation().markWrittenOut(false);
   copyDocHistorySafe(fromId, toId);

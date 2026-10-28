@@ -4,7 +4,7 @@ import { prompterActions } from "./wiring/prompter.ts";
 import { importActions } from "./wiring/imports.ts";
 import { commandMenuActions } from "./wiring/command-menu.ts";
 import { tagPanelActions } from "./wiring/production.ts";
-import { appDataActions } from "./wiring/settings.ts";
+import { appDataActions, settingsActions } from "./wiring/settings.ts";
 import { brollPanelActions } from "./wiring/broll.ts";
 import { onboardingActions } from "./wiring/onboarding.ts";
 import { commentsPanelActions, commentsHelpActions, commentsOpenActions } from "./wiring/comments.ts";
@@ -15,11 +15,9 @@ import { showRefusal } from "./wiring/save-status.ts";
 import { runMenuCommandsWith } from "../application/desktop/menu-commands.ts";
 import { editorOpenActions } from "../legacy/editor-open-actions.ts";
 import { videoFiles } from "./wiring/video-files.ts";
-import { fileMenuActions } from "./wiring/file-menu.ts";
+import { autosaveActions, fileMenuActions } from "./wiring/file-menu.ts";
 import { toggleFileMenu } from "./wiring/file-menu-controls.ts";
-import { helpMenuActions } from "../legacy/help-actions.ts";
 import { nativeMenuRunner } from "./native-menu.ts";
-import { shareActions } from "../legacy/share-actions.ts";
 import { historyActions } from "./wiring/history-panel.ts";
 import { targetActions } from "./wiring/title-chrome.ts";
 import { writerActions } from "../bootstrap/wiring/writer.ts";
@@ -54,13 +52,11 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
       return registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...views, ...prompterActions()]);
     },
     () => {
-      const menu = helpMenuActions();
-      return registerAll(registry, [...menu, ...helpActions(), ...fileMenuActions().slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions(), ...appDataActions()]);
+      return registerAll(registry, [...settingsActions(), ...helpActions(), ...fileMenuActions().slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions(), ...appDataActions()]);
     },
     () => {
-      const share = shareActions();
       const file = fileMenuActions();
-      return registerAll(registry, [...fileWritebackActions(), ...share.slice(0, 1), ...file.slice(4, 5), ...share.slice(1, 2), ...file.slice(5, 6), ...importActions(), ...share.slice(2, 6), ...fileMenuExportActions().slice(1), ...targetActions(), ...desktopActions()]);
+      return registerAll(registry, [...fileWritebackActions(), ...autosaveActions(), ...file.slice(4, 6), ...importActions(), ...fileMenuExportActions().slice(1), ...targetActions(), ...desktopActions()]);
     },
     () => registerAll(registry, scriptZoomActions()),
     () => {

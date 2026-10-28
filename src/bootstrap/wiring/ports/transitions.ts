@@ -12,6 +12,5 @@ export const transitions: Transitions<DocumentDestination> = {
   startNew: (arrival) => documentTransitions().startNew(arrival),
   restore: (restoration) => documentTransitions().restore(restoration),
   recover: (recovery) => documentTransitions().recover(recovery),
-  publish: (ctx, publication) => documentTransitions().publish(ctx, publication),
   copyId: () => documentTransitions().copyId()
 };

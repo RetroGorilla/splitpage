@@ -11,8 +11,7 @@
 # Escape (a dragend with no drop), a drop over a block and a drop in place
 # changing nothing; a drop in the gap after the last block moving scene 2
 # there as ONE undo step, the script scrolling to it and lighting it, the
-# caret and the playhead on it; Ctrl+Z putting it back; and no drop at all in
-# a review session.
+# caret and the playhead on it; and Ctrl+Z putting it back.
 
 open
 viewport 1200 700
@@ -123,18 +122,5 @@ expect !document.querySelector('#rundown .rundown-playhead').hidden
 eval document.activeElement.blur()
 key ctrl KeyZ
 wait order() === 's1,s2,s3,s4,s5,s6,s7,s8'
-
-# --- a review session takes no drop -----------------------------------------------
-eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
-eval (function(){ window.__dt = __mkDT(); return true; })()
-# no grip to pick a scene up by in review; force the drag state the way a stale
-# grip would, and the strip still refuses it
-expect (function(){ var row = document.querySelector('#rows .row[data-id="s3"]'); row.setAttribute('draggable', 'true'); row.dispatchEvent(__mkDrag('dragstart', 50, 300, __dt)); window.__dragRow = row; return true; })()
-expect over(afterLast()) === false
-sleep 200
-expect marker().hidden
-eval dropAt(afterLast())
-eval endDrag()
-expect order() == s1,s2,s3,s4,s5,s6,s7,s8
 
 quit

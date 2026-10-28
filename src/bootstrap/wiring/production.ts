@@ -9,10 +9,9 @@ import { edits as portEdits, productionSelection as portSelection, undoControl a
 import { text as portText } from "./ports/text.ts";
 import { production as portProduction, deletion as portDeletion, tagPanelState as portView } from "./ports/production.ts";
 import { panelControl as portPanels } from "./ports/panels.ts";
-import { presence as portPresence } from "./ports/presence.ts";
+import { personColors as portPersonColors } from "./ports/person-colors.ts";
 import { shotHiding as portShotHiding } from "./ports/shot-hiding.ts";
 import { notices as portNotices } from "./ports/effects.ts";
-import { review as portReview } from "./ports/location.ts";
 import { ids as portIds } from "./ports/identity.ts";
 import { screen as portScreen } from "./ports/screen.ts";
 import { bulkDeleteArmed, clearProductionSelection, disarmBulkDelete, productionSelection, selectedKeys } from "../../legacy/production-editing-bridge.ts";
@@ -62,7 +61,6 @@ import { localFileMenuControls } from "./local-files.ts";
 import { saves as portSaves } from "./ports/saving.ts";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";
 import { productionGroupBy, setGearGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey } from "../../application/tag-panel-state.ts";
-import { reviewBlocked, reviewMode } from "../../legacy/location-bridge.ts";
 
 const tags = owned<ReturnType<typeof mountTags>>();
 
@@ -73,8 +71,8 @@ export function mountTagPanelsFeature(): TagPanelMount {
     const ports: TagPanelPorts = {
       view: portView, document: portDocument, edits: portEdits, text: portText,
       production: portProduction, deletion: portDeletion, selection: portSelection,
-      panels: portPanels, presence: portPresence, shotHiding: portShotHiding,
-      notices: portNotices, review: portReview, undo: portUndo, ids: portIds
+      panels: portPanels, personColors: portPersonColors, shotHiding: portShotHiding,
+      notices: portNotices, undo: portUndo, ids: portIds
     };
     return mountPanelState(ports);
   }, (owner) => [
@@ -84,8 +82,6 @@ export function mountTagPanelsFeature(): TagPanelMount {
       id: id,
       ports: {
         rootClick: rootClick,
-        reviewMode: portReview.reviewing,
-        reviewBlocked: portReview.refuseInReview,
         renderProduction: tagPanelCommands.renderProduction,
         saveTagRename: (key) => tagPanelCommands.saveTagRename(key as string),
         addPersonForTag: (key) => tagPanelCommands.addPersonForTag(key as string),
@@ -127,11 +123,9 @@ export function mountTagsFeature(): ReturnType<typeof mountTags> {
       applyGearQuickAdd: applyGearQuickAdd,
       closePlainTag: function () { currentPlainTags()?.close(); },
       refreshPlainTag: function () { currentPlainTags()?.refresh(); },
-      reviewBlocked: reviewBlocked,
       queueAutoSave: queueAutoSave,
       selectedKeys: selectedKeys,
       plainTagOpen: function () { return currentPlainTags()?.isOpen() ?? false; },
-      reviewMode: reviewMode,
       addPersonForTag: addPersonForTag,
       saveTagRename: saveTagRename,
       tagAllMentions: tagAllMentions,

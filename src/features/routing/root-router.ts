@@ -6,12 +6,11 @@ export interface RootRouter<Slot extends string, E> {
   readonly routed: () => readonly Slot[];
 }
 
-export function createRootRouter<Slot extends string, E>(order: readonly Slot[], gate?: (event: E) => boolean): RootRouter<Slot, E> {
+export function createRootRouter<Slot extends string, E>(order: readonly Slot[]): RootRouter<Slot, E> {
   if (new Set(order).size !== order.length) throw new Error("a root route slot is listed twice");
   const handlers = new Map<Slot, RootRoute<E>>();
   return {
     handle: (event) => {
-      if (gate && gate(event)) return;
       for (const slot of order) {
         const handler = handlers.get(slot);
         if (handler && handler(event)) return;

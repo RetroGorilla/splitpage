@@ -47,7 +47,7 @@ lint, types and the other checks run in a separate job.
 | A pure rule in one feature or core policy | Its unit tests (`npm test -- --only <folder>`), `npm run typecheck`, `npm run lint`, `npm run check:deps`, `npm run check:comments` |
 | A feature's controller, view or bindings | The feature's tests, and the browser suites for its real input, focus and selection |
 | A public application contract (session, commands, actions, ports) | Its contract tests and the tests of every caller |
-| Saving, recovery, permissions or session transitions | The race tests, and the persistence and permission suites for that path (for example `28-autosave.txt`, `19-save-conflict.txt`, `249-save-as-hosted.txt`, `265-browser-drafts.txt`, the collaboration suites `26[0-4]-collaborate-*.txt`) |
+| Saving, recovery, permissions or session transitions | The race tests, and the persistence and permission suites for that path (for example `28-autosave.txt`, `19-save-conflict.txt`) |
 | Serialization, merge, undo or text operations | The fixtures and contract tests (`formats`, `merge-states`, `draft-edit` and their kin), and the editing and export suite families |
 | A script-cell command (`cell-text.ts`, `split-join.ts`, `clipboard.ts`), or the code that runs them (the cell-editing owner `src/application/editing/cell-editing.ts`, `splitRowFieldCore`, `mergeWriterRows`, `pasteIntoCell`, `copyFromCell`) | The command's application test (`tests/application/`, every command test through `runConfined`; the owner's is `tests/application/editing/cell-editing.test.ts`) and its booted-app test (`src/test/cell-text-app`, `split-join-app`, `cut-paste-app`, `text-editing-app`), then the text-command suite set of [milestone-3.md](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestone-3.md#the-text-command-suite-set), run plain and with `SPLITPAGE_FREEZE_CACHES=1`. A change to 12a's grouping also runs `src/test/undo.test.mjs`. Add 186 when the change reaches picture-or-video paste or its dirty marking |
 | The rich-text sanitiser (`src/adapters/richtext/sanitize.ts`) | `tests/adapters/richtext/*.test.ts`, then browser suites 01, 69, 77, 80, 81, 86, 92, 155 and both 280 suites (the set #413 ran) |
@@ -636,8 +636,7 @@ root `Dockerfile` from the checkout and starts it the way `deploy.sh` does.
 Job `prebuilt` runs `npm ci` and `node build.mjs`, copies the files of the
 `splitpage-app` artifact into an empty folder (`tools/artifact-files.mjs`,
 which reads the list from `ci.yml`), builds `Dockerfile.prebuilt`
-there, starts it and checks `/api/health`'s version, `/` and `/sw.js` against
-`VERSION` and its HEALTHCHECK. `.github/workflows/release.yml` builds the
+there, starts it and checks that `/` and `/sw.js` answer, and its HEALTHCHECK. `.github/workflows/release.yml` builds the
 Windows installers from a tag. [ci.md](ci.md) explains the settings in these
 files that the files themselves cannot.
 

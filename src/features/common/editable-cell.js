@@ -31,7 +31,6 @@ var DIRECTION_BUTTON_HTML = '<button type="button" data-cmd="direction" title="'
 var CELL_TOOLBARS = {
   script: { label: "Text formatting", buttons: SCRIPT_TOOLBAR_BUTTONS },
   scriptAudio: { label: "Text formatting", buttons: SCRIPT_TOOLBAR_BUTTONS + DIRECTION_BUTTON_HTML },
-  review: { label: "Text formatting", buttons: COMMENT_BUTTON_HTML },
   reply: {
     label: "Reply formatting",
     buttons:

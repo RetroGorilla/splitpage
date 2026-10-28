@@ -5,7 +5,6 @@ import { rowActions } from "../../features/rows/actions.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { ROOT_CLICK_ORDER, ROOT_MOUSEDOWN_ORDER, createRootRouter } from "../../features/routing/root-router.ts";
 import type { RootClickSlot, RootMouseDownSlot, RootRoute } from "../../features/routing/root-router.ts";
-import { createReviewClickGate } from "../../features/review/click-gate.ts";
 import { createCellEditing } from "../../application/editing/cell-editing.ts";
 import { caretTextOffset, placeCaretAtTextOffset } from "../../features/common/caret.ts";
 import { createCellPage, isDraftBox, isScriptCell } from "../../features/editing/cell-page.ts";
@@ -34,9 +33,8 @@ import type { WriterRoutePorts } from "../../features/writer/routes.ts";
 import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
 import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
 import { cellEditing, focusMemory, installCellEditing, installPicturePicker, mergeUndo, paintGuard, rowDrag, undoGuard } from "../../legacy/editor-bridge.ts";
-import { REVIEW_ONLY, currentDocument, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "../../legacy/session-bridge.ts";
+import { currentDocument, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "../../legacy/session-bridge.ts";
 import { fromHtml } from "../../legacy/richtext.ts";
-import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 import { cycleRowStatus } from "./scene-status.ts";
 import { expandHiddenShotStrip } from "./hide-shot.ts";
 import { shotHiding } from "./shot-hiding.ts";
@@ -134,7 +132,6 @@ import {
 } from "../../legacy/undo-bridge.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { connectWriter } from "./writer.ts";
-import { reviewBlocked, reviewMode, onServerDoc } from "../../legacy/location-bridge.ts";
 
 function inactiveWriter(): void {}
 function skipWriterUndo(): boolean { return false; }
@@ -186,12 +183,7 @@ function shownUntaggedSuggestion(): CellSuggestion | null {
 
 const liveDocument: LiveDocumentPort = liveDocumentPort;
 
-const reviewClickGate = createReviewClickGate({
-  reviewMode: function () { return reviewMode(); },
-  refuse: function () { reviewBlocked(); }
-});
-
-const rootClicks = createRootRouter<RootClickSlot, MouseEvent>(ROOT_CLICK_ORDER, function (e) { return reviewClickGate(e.target as Element); });
+const rootClicks = createRootRouter<RootClickSlot, MouseEvent>(ROOT_CLICK_ORDER);
 
 const rootMouseDowns = createRootRouter<RootMouseDownSlot, MouseEvent>(ROOT_MOUSEDOWN_ORDER);
 
@@ -316,8 +308,7 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
       stale: screenIsStale,
       painted: noteFieldPainted,
       shown: function <T>(edit: () => T): T { return paintGuard().whileShown(edit); },
-      announce: announceGalleryEdit,
-      refused: function (reason) { if (reason === REVIEW_ONLY) showToast(VIEWING_ONLY, "warn"); }
+      announce: announceGalleryEdit
     });
     return { dispose: installCellEditing(editing) };
   }, () => [() => connectWriter((control) => {
@@ -342,11 +333,9 @@ const undoRoutePorts: { -readonly [K in keyof UndoRoutePorts]: UndoRoutePorts[K]
   replay: function (dir) { if (dir === "redo") redo(); else undo(); },
   writerStep: skipWriterUndo,
   stale: screenIsStale,
-  reviewOnly: reviewMode,
   scriptCell: isScriptCell,
   latest: lastUndoEntry,
   warn: function (message) { showToast(message, "warn"); },
-  commentsAreSent: onServerDoc,
   afterReplay: afterUndoApplied,
   install: configureUndo
 };
@@ -464,7 +453,6 @@ const rowsEditorPorts: RowsEditorPorts = {
   rowDragOver: function (e) { const routes = rowRoutes.owner(); return !!routes && routes.dragOver(e); },
   rowDrop: function (e) { const routes = rowRoutes.owner(); return !!routes && routes.drop(e); },
   scriptCell: isScriptCell,
-  reviewOnly: reviewMode,
   hasMedia: hasMediaFiles,
   insert: insertIntoScriptCell,
   notMedia: function () { showToast("Only pictures and video files go in a scene's Image section.", "warn"); }
@@ -648,7 +636,6 @@ const clipboardRoutes = owned<ReturnType<typeof mountClipboardRoutes>>();
 
 const clipboardRoutePorts = {
   scriptCell: isScriptCell,
-  reviewOnly: reviewMode,
   copy: copyFromCell,
   afterCut: afterScriptCellChange,
   pasteScenes: pasteScenesAt,
@@ -747,7 +734,6 @@ export function onRootKeydown(e: KeyboardEvent): void {
   const target = e.target as Element | null;
   const cellEl = target && target.classList && target.classList.contains("cell-editable") ? target : null;
   if (!cellEl) return;
-  if (reviewMode() && isScriptCell(cellEl)) return;
   if (!isScriptCell(cellEl) && onDraftUndoKey(e, cellEl)) return;
   const undoOwner = undoRoutes.owner();
   if (undoOwner && undoOwner.key(e)) return;

@@ -7,7 +7,7 @@ import type { Transitions } from "../application/transitions/transitions.ts";
 import type { DestinationPort, DocumentDestination, HistoryPort, IdentityPort, LiveDocumentPort } from "../application/transitions/ports.ts";
 import type { ValidatedDocument } from "../core/document/validated.ts";
 import { migrateRows } from "./document-ports.ts";
-import { currentConn, currentHome, documentLocation } from "./location-bridge.ts";
+import { currentHome } from "./location-bridge.ts";
 import { confirmedGeneration } from "./save-bridge.ts";
 import { liveSession } from "./session-bridge.ts";
 
@@ -55,17 +55,7 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
     },
     destination: {
       identity: function (): unknown { return currentHome(); },
-      generation: confirmedGeneration,
-      revision: function () {
-        const rev: unknown = documentLocation().serverHomeRev();
-        return typeof rev === "number" ? rev : null;
-      }
-    },
-    connection: {
-      current: function (): unknown {
-        const instance: unknown = currentConn();
-        return instance;
-      }
+      generation: confirmedGeneration
     }
   });
   const transitions = createTransitions<DocumentDestination>({
@@ -73,8 +63,7 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
     live: ports.live,
     destination: ports.destination,
     identity: ports.identity,
-    history: ports.history,
-    ownership: operations
+    history: ports.history
   });
   const mine: Started = Object.freeze({
     transitions: transitions,

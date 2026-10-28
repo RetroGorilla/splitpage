@@ -9,7 +9,7 @@
 # total) + 10s and draws a dashed line at the target, "Target 2:00", and
 # hatching over the gap (or over the blocks past the target). One undo
 # step; saved in the file; the overlay fades under the hover lens and comes
-# back to scale; the thin bar keeps a tick; read-only in a review session.
+# back to scale; the thin bar keeps a tick.
 # The value, the merge and the formats are src/test/target-length.test.mjs.
 #
 # Every `eval` is one physical line (the driver splits on newlines).
@@ -286,34 +286,3 @@ wait document.getElementById('wpm-editor')
 shot 140-popover-dark
 key Escape
 eval document.documentElement.removeAttribute('data-theme')
-
-# --- a review session sees it and cannot change it ------------------------------
-eval document.activeElement.blur()
-eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
-sleep 400
-expect window.__hostedTest.reviewMode() === true
-expect document.querySelector('#runtime-slot .rd-length-delta').textContent == 0:25 left
-expect ov('.rd-target-line') !== null
-click #runtime-chip
-wait document.getElementById('wpm-editor')
-expect document.getElementById('target-input').disabled === true
-expect document.getElementById('target-input').value == 2:00
-expect document.querySelectorAll('#wpm-editor .target-preset:disabled').length === 6
-expect document.getElementById('target-clear').disabled === true
-expect document.querySelector('#wpm-editor .target-note') !== null
-# and the reading speed above it: shown, not changeable
-expect document.getElementById('wpm-input').disabled === true
-expect document.getElementById('wpm-save').disabled === true
-eval window.__wpmBefore = F.state().wordsPerMinute
-jsclick #wpm-save
-sleep 150
-expect F.state().wordsPerMinute === window.__wpmBefore
-expect document.getElementById('wpm-editor') !== null
-jsclick #wpm-editor .target-preset[data-target-seconds="30"]
-sleep 200
-expect F.state().targetSeconds === 120
-key Escape
-expect T.set(30) === false
-expect F.state().targetSeconds === 120
-expect window.__commandTest.results('target')[0].items[0].id == set-target
-expect window.__commandTest.results('target')[0].items[0].disabled === true

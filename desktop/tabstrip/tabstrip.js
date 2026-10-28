@@ -22,14 +22,6 @@
   });
   stripEl.appendChild(newTabBtn);
 
-  var SERVER_ICON_SVG =
-    '<svg viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-    '<rect x="1.5" y="2.5" width="13" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"></rect>' +
-    '<rect x="1.5" y="9.5" width="13" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.2"></rect>' +
-    '<circle cx="4" cy="4.5" r="0.75" fill="currentColor"></circle>' +
-    '<circle cx="4" cy="11.5" r="0.75" fill="currentColor"></circle>' +
-    "</svg>";
-
   var draggedTabId = null;
 
   function windowId() {
@@ -55,13 +47,6 @@
       : (tab.fullPathForTooltip || tab.title);
     el.dataset.tabId = tab.tabId;
     el.draggable = true;
-
-    if (tab.isServerDoc) {
-      var icon = document.createElement("span");
-      icon.className = "tab__icon";
-      icon.innerHTML = SERVER_ICON_SVG;
-      el.appendChild(icon);
-    }
 
     var titleEl = document.createElement("span");
     titleEl.className = "tab__title";

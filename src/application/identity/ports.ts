@@ -15,7 +15,7 @@ export interface IdentityChannel {
 
 export interface DocumentIdentityPorts {
   readonly session: { readonly currentDocument: DocumentReader["current"]; readonly stampDocument: LiveDocumentPort["stamp"] };
-  readonly location: Pick<DocumentLocation, "home" | "writtenOut" | "markWrittenOut"> & { readonly onServerDoc: () => boolean };
+  readonly location: Pick<DocumentLocation, "home" | "writtenOut" | "markWrittenOut">;
   readonly history: Pick<HistoryOwner, "copyHistory" | "historyDocumentChanged">;
   readonly effects: Pick<NoticePort, "show">;
   readonly desktop: { readonly running: () => boolean };

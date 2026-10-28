@@ -10,7 +10,6 @@ export function makeFakeDesktopBackend(opts) {
   var nextId = 1;
   var openHandler = null;
   var menuHandler = null;
-  var openServerDocHandler = null;
   var restoreNoticeHandler = null;
   var reassignDocIdHandler = null;
   function newId() { return "fake" + (nextId++); }
@@ -83,7 +82,6 @@ export function makeFakeDesktopBackend(opts) {
       return fileId;
     },
     onOpenFile: function (cb) { openHandler = cb; },
-    onOpenServerDoc: function (cb) { openServerDocHandler = cb; },
     onRestoreNotice: function (cb) { restoreNoticeHandler = cb; },
     onReassignDocId: function (cb) { reassignDocIdHandler = cb; },
     onMenuCommand: function (cb) { menuHandler = cb; },
@@ -174,12 +172,10 @@ export function makeFakeDesktopBackend(opts) {
       if (openHandler && f) openHandler({ id: id, name: f.name, lastModified: f.lastModified, size: f.bytes.length, bytes: f.bytes });
     },
     _fireMenuCommand: function (cmd) { if (menuHandler) menuHandler(cmd); },
-    _fireOpenServerDoc: function (payload) { if (openServerDocHandler) openServerDocHandler(payload); },
     _fireRestoreNotice: function (notice) { if (restoreNoticeHandler) restoreNoticeHandler(notice); },
     _fireReassignDocId: function (msg) { if (reassignDocIdHandler) reassignDocIdHandler(msg); }
   };
   if (opts && opts.history) addFakeDesktopHistory(backend);
-  if (opts && opts.drive) addFakeDesktopDrive(backend);
   if (opts && opts.blobs) addFakeDesktopBlobs(backend, opts);
   if (opts && opts.voice) addFakeDesktopVoice(backend);
   return backend;
@@ -268,106 +264,6 @@ function addFakeDesktopBlobs(backend, opts) {
   backend._blobs = store;
   backend._blobCalls = calls;
   backend._blobFailNext = null;
-}
-
-function addFakeDesktopDrive(backend) {
-  var ID_RE = /^[A-Za-z0-9_-]{1,200}$/;
-  var FOLDER = "application/vnd.google-apps.folder";
-  var nextFile = 1;
-  var drive = {
-    configured: true,
-    signedIn: false,
-    persisted: true,
-    email: "writer@example.com",
-    signInAnswer: null,
-    failNext: null,
-    files: {
-      root: { id: "root", name: "My Drive", mimeType: FOLDER, parent: null },
-      scriptsFolder01: { id: "scriptsFolder01", name: "Scripts", mimeType: FOLDER, parent: "root" },
-      pilotFile01: { id: "pilotFile01", name: "Pilot.fountain", mimeType: "text/plain", parent: "scriptsFolder01", text: "INT. KITCHEN - DAY\n" },
-      gdoc01: { id: "gdoc01", name: "Notes", mimeType: "application/vnd.google-apps.document", parent: "scriptsFolder01", text: "Notes as text.\n" },
-      sheet01: { id: "sheet01", name: "Budget", mimeType: "application/vnd.google-apps.spreadsheet", parent: "scriptsFolder01" }
-    }
-  };
-  var calls = [];
-  function status() {
-    return {
-      ok: true, configured: drive.configured, signedIn: drive.configured && drive.signedIn,
-      persisted: drive.signedIn && drive.persisted, canPersist: drive.persisted, signingIn: false,
-      email: drive.signedIn ? drive.email : "", name: "",
-      clientFilePath: "/fake/userData/google-oauth-client.json",
-      envVars: ["SPLITPAGE_GOOGLE_CLIENT_ID", "SPLITPAGE_GOOGLE_CLIENT_SECRET"]
-    };
-  }
-  function entry(f) {
-    return { id: f.id, name: f.name, mimeType: f.mimeType, size: f.text != null ? strBytes(f.text).length : null, modifiedTime: "2026-09-01T10:00:00.000Z" };
-  }
-  function gate() {
-    if (drive.failNext) { var f = drive.failNext; drive.failNext = null; if (f.code === "SIGNED_OUT") drive.signedIn = false; return { ok: false, code: f.code }; }
-    if (!drive.signedIn) return { ok: false, code: "SIGNED_OUT" };
-    return null;
-  }
-  function bytesOf(v) {
-    if (typeof v === "string") return strBytes(v);
-    if (v instanceof Uint8Array) return v;
-    if (v instanceof ArrayBuffer) return new Uint8Array(v);
-    return null;
-  }
-  backend.driveStatus = function () { calls.push({ op: "status", args: [].slice.call(arguments) }); return Promise.resolve(status()); };
-  backend.driveSignIn = function () {
-    calls.push({ op: "signIn", args: [].slice.call(arguments) });
-    if (!drive.configured) return Promise.resolve({ ok: false, code: "NOT_CONFIGURED" });
-    if (drive.signInAnswer) { var a = drive.signInAnswer; drive.signInAnswer = null; return Promise.resolve(a); }
-    drive.signedIn = true;
-    return Promise.resolve(status());
-  };
-  backend.driveSignOut = function () {
-    calls.push({ op: "signOut", args: [].slice.call(arguments) });
-    drive.signedIn = false;
-    return Promise.resolve({ ok: true, status: status() });
-  };
-  backend.driveList = function (folderId) {
-    calls.push({ op: "list", args: [].slice.call(arguments) });
-    var g = gate(); if (g) return Promise.resolve(g);
-    if (typeof folderId !== "string" || !ID_RE.test(folderId)) return Promise.resolve({ ok: false, code: "BAD_ARGS" });
-    var folder = drive.files[folderId];
-    if (!folder) return Promise.resolve({ ok: false, code: "NOT_FOUND" });
-    if (folder.mimeType !== FOLDER) return Promise.resolve({ ok: false, code: "NOT_A_FOLDER" });
-    var kids = Object.keys(drive.files).map(function (k) { return drive.files[k]; })
-      .filter(function (f) { return f.parent === folderId; })
-      .sort(function (a, b) { return ((b.mimeType === FOLDER) - (a.mimeType === FOLDER)) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
-    return Promise.resolve({ ok: true, folder: entry(folder), files: kids.map(entry) });
-  };
-  backend.driveDownload = function (fileId) {
-    calls.push({ op: "download", args: [].slice.call(arguments) });
-    var g = gate(); if (g) return Promise.resolve(g);
-    if (typeof fileId !== "string" || !ID_RE.test(fileId)) return Promise.resolve({ ok: false, code: "BAD_ARGS" });
-    var f = drive.files[fileId];
-    if (!f) return Promise.resolve({ ok: false, code: "NOT_FOUND" });
-    if (f.mimeType === FOLDER) return Promise.resolve({ ok: false, code: "IS_A_FOLDER" });
-    if (f.text == null) return Promise.resolve({ ok: false, code: "UNSUPPORTED" });
-    return Promise.resolve({ ok: true, file: entry(f), bytes: strBytes(f.text) });
-  };
-  backend.driveUpload = function (req) {
-    calls.push({ op: "upload", args: [].slice.call(arguments) });
-    var g = gate(); if (g) return Promise.resolve(g);
-    var bytes = req && bytesOf(req.bytes);
-    if (!req || !bytes) return Promise.resolve({ ok: false, code: "BAD_ARGS" });
-    var text = new TextDecoder().decode(bytes);
-    if (req.fileId !== undefined) {
-      var f = drive.files[req.fileId];
-      if (!f) return Promise.resolve({ ok: false, code: "NOT_FOUND" });
-      f.text = text;
-      f.revisions = (f.revisions || 1) + 1;
-      return Promise.resolve({ ok: true, file: entry(f) });
-    }
-    if (!ID_RE.test(String(req.parentId)) || typeof req.name !== "string" || !req.name) return Promise.resolve({ ok: false, code: "BAD_ARGS" });
-    var id = "upload" + (nextFile++);
-    drive.files[id] = { id: id, name: req.name, mimeType: req.mimeType || "application/octet-stream", parent: req.parentId, text: text };
-    return Promise.resolve({ ok: true, file: entry(drive.files[id]) });
-  };
-  backend._drive = drive;
-  backend._driveCalls = calls;
 }
 
 function addFakeDesktopHistory(backend) {

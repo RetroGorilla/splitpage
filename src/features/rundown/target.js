@@ -60,7 +60,7 @@ export function paintTargetOverlay() {
 }
 
 export function setTargetLength(seconds) {
-  if (!ports.document.current() || ports.review.reviewing()) return false;
+  if (!ports.document.current()) return false;
   return !!ports.edits.edit(targetLengthCommand(seconds));
 }
 

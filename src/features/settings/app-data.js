@@ -1,9 +1,5 @@
-import { normalizeServerUrl } from "../../../shared/server-links.js";
-import { shortHost } from "../common/server-address.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
-import { cappedName } from "../../core/document/text-policy.ts";
 import { settingsAppData } from "../../application/preferences/preferences.ts";
-import { SERVER_BOOKMARKS_KEY } from "../../application/location/server-status.ts";
 
 export function mountAppData(ports) {
 
@@ -55,13 +51,6 @@ async function buildAppDataBundle() {
     bundle.history = null;
     bundle.blobs = {};
     bundle.missingBlobs = [];
-  }
-
-  try {
-    bundle.bookmarks = appDataReadJson(SERVER_BOOKMARKS_KEY, []);
-    if (!Array.isArray(bundle.bookmarks)) bundle.bookmarks = [];
-  } catch (e) {
-    bundle.bookmarks = [];
   }
 
   try {
@@ -233,54 +222,8 @@ function parseAppDataBundle(text) {
     snapshots: Array.isArray(raw.snapshots) ? raw.snapshots : null,
     history: appDataNormalizeHistory(raw.history),
     blobs: appDataNormalizeBlobs(raw.blobs),
-    bookmarks: (Array.isArray(raw.bookmarks) ? raw.bookmarks : []).filter(function (b) {
-      return appDataIsPlainObject(b) && typeof b.url === "string";
-    }),
     prefs: appDataNormalizePrefs(raw.prefs)
   };
-}
-
-function appDataMergeBookmarks(list) {
-  var out = { added: 0, skipped: 0, failed: 0 };
-  if (!list || !list.length) return out;
-  ports.bookmarks.loadBookmarks();
-  var byUrl = {}, ids = {};
-  ports.bookmarks.bookmarks().forEach(function (b) {
-    var u = normalizeServerUrl(b.url);
-    if (u) byUrl[u] = true;
-    if (typeof b.id === "string") ids[b.id] = true;
-  });
-  var fresh = [];
-  list.forEach(function (b) {
-    var url = normalizeServerUrl(b.url);
-    if (!url) { out.failed++; return; }
-    if (byUrl[url]) { out.skipped++; return; }
-    var id = (typeof b.id === "string" && /^[A-Za-z0-9_-]{1,64}$/.test(b.id)) ? b.id : "";
-    while (!id || ids[id]) id = ports.bookmarkEditor.newId();
-    var name = (typeof b.name === "string" && cappedName(b.name, 200)) || shortHost(url);
-    var bookmark = { id: id, name: name, url: url };
-    var userHost = appDataIsPlainObject(b.ssh) && typeof b.ssh.userHost === "string" ? cappedName(b.ssh.userHost, 300) : "";
-    if (userHost) {
-      bookmark.ssh = {
-        userHost: userHost,
-        remotePort: ports.bookmarkEditor.portOr(b.ssh.remotePort, 8791),
-        localPort: ports.bookmarkEditor.portOr(b.ssh.localPort, 8791)
-      };
-    }
-    byUrl[url] = true;
-    ids[id] = true;
-    fresh.push(bookmark);
-    out.added++;
-  });
-  if (fresh.length) {
-    ports.bookmarks.addBookmarks(fresh);
-    ports.bookmarkEditor.save();
-    try {
-      var modal = document.getElementById("connect-modal");
-      if (modal && !modal.hidden) ports.bookmarkEditor.render();
-    } catch (e) { }
-  }
-  return out;
 }
 
 function appDataExtraPrefs() {
@@ -314,7 +257,7 @@ async function importAppData(text) {
     return refused;
   }
 
-  var summary = { ok: true, history: null, blobs: null, bookmarks: null, prefs: [], legacy: null, toast: "", warning: null };
+  var summary = { ok: true, history: null, blobs: null, prefs: [], legacy: null, toast: "", warning: null };
 
   var legacy = [];
   if (bundle.snapshots) {
@@ -324,13 +267,6 @@ async function importAppData(text) {
   var hist = bundle.history || { docs: [], older: [] };
   summary.history = await ports.history.importBundle({ docs: hist.docs, older: hist.older.concat(legacy), blobs: bundle.blobs });
   summary.blobs = summary.history.blobs;
-
-  try {
-    summary.bookmarks = appDataMergeBookmarks(bundle.bookmarks);
-  } catch (e) {
-    if (window.console) console.error(e);
-    summary.bookmarks = { added: 0, skipped: 0, failed: bundle.bookmarks.length };
-  }
 
   try {
     summary.prefs = appDataMergePrefs(bundle.prefs);
@@ -344,25 +280,23 @@ async function importAppData(text) {
   var badImages = imgs.refused.length + imgs.failed.length;
   var snapshots = h.added + h.older;
   summary.toast = "Imported " + appDataPlural(snapshots, "version-history snapshot", "version-history snapshots") +
-    " across " + appDataPlural(h.docs, "document", "documents") + ", " +
-    appDataPlural(summary.bookmarks.added, "server", "servers") + " and your preferences.";
+    " across " + appDataPlural(h.docs, "document", "documents") + " and your preferences.";
   ports.notices.show(summary.toast, "ok");
 
-  if (h.skipped || h.failed || h.code || badImages || summary.bookmarks.skipped || summary.bookmarks.failed) {
+  if (h.skipped || h.failed || h.code || badImages) {
     if (window.console) {
       console.warn("Import app data: not everything was imported.", {
-        history: h, bookmarks: summary.bookmarks, prefsWritten: summary.prefs
+        history: h, prefsWritten: summary.prefs
       });
     }
   }
-  if (h.failed || h.code || summary.bookmarks.failed) {
+  if (h.failed || h.code) {
     if (h.code === "quota") {
       summary.warning = "Import stopped — storage is full. " +
         appDataPlural(h.failed, "snapshot was", "snapshots were") + " not imported.";
     } else {
       summary.warning = "Some app data could not be imported: " +
-        appDataPlural(h.failed, "snapshot", "snapshots") + ", " +
-        appDataPlural(summary.bookmarks.failed, "server", "servers") + ". Details are in the console.";
+        appDataPlural(h.failed, "snapshot", "snapshots") + ". Details are in the console.";
     }
     ports.notices.show(summary.warning, "warn", true);
   }

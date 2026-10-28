@@ -17,7 +17,6 @@ export interface ImportDialogPorts {
   readonly notices: Pick<NoticePort, "show">;
   readonly formats: ImportFormats;
   readonly desktop: { readonly running: () => boolean; readonly openExternal: (url: string) => unknown };
-  readonly reviewOnly: string;
   readonly noteEdit: () => void;
   readonly stampRow: (row: DocumentRow) => void;
 }

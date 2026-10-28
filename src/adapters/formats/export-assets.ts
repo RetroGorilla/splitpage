@@ -1,5 +1,5 @@
 import type { ExportDocument } from "../../core/document/export-document.ts";
-import type { ExportAssetRequest, ExportAssets, ExportAssetPorts, ExportAssetSource } from "../../application/export/assets.ts";
+import type { ExportAssetRequest, ExportAssets, ExportAssetPorts } from "../../application/export/assets.ts";
 import type { ImageRef } from "../../core/document/ports.ts";
 import { bytesForSync, dataUrlPicture, ensureBytes, recordFor } from "../storage/02c-blobs.js";
 import { exportAssetRequest, heldExportAssets } from "../../application/export/assets.ts";
@@ -7,7 +7,7 @@ import { rowImage } from "../../core/document/media.ts";
 import { refsIn, sniffImageMime } from "../../../shared/blob-policy.js";
 
 export const assetPorts: ExportAssetPorts = {
-  load: function (shas, source) { return ensureBytes(shas, { source: source }); },
+  load: function (shas) { return ensureBytes(shas); },
   bytes: bytesForSync,
   mime: function (sha, bytes) {
     const rec = recordFor(sha);
@@ -15,12 +15,12 @@ export const assetPorts: ExportAssetPorts = {
   }
 };
 
-export function exportAssetsRequest(doc: ExportDocument, source?: ExportAssetSource | null): ExportAssetRequest {
-  return exportAssetRequest(refsIn(doc.document), source || null);
+export function exportAssetsRequest(doc: ExportDocument): ExportAssetRequest {
+  return exportAssetRequest(refsIn(doc.document));
 }
 
 export function exportAssetsNow(doc: ExportDocument): ExportAssets {
-  return heldExportAssets(exportAssetsRequest(doc, null), assetPorts);
+  return heldExportAssets(exportAssetsRequest(doc), assetPorts);
 }
 
 export function capturedPicture(assets: ExportAssets | null | undefined, ref: ImageRef | null | undefined) {

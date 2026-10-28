@@ -1,5 +1,5 @@
 import type { HistoryDesktopPort } from "../../application/recovery/history-ports.ts";
-import { runningOnDesktop, setRunningOnDesktop } from "../../application/desktop-presence.ts";
+import { setRunningOnDesktop } from "../../application/desktop-presence.ts";
 import type { DesktopDocumentState } from "../../application/desktop/document-state.ts";
 
 export type Listener<T> = (value: T) => void;
@@ -17,29 +17,13 @@ export interface DesktopFileEntry {
   readonly lastModified?: number;
 }
 
-export interface DesktopTunnel {
-  readonly userHost: string;
-  readonly remotePort: number;
-  readonly localPort: number;
-}
-
-export interface DesktopConnection {
-  readonly serverUrl: string;
-  readonly token: string;
-  readonly tunnel: DesktopTunnel | null;
-}
-
 export interface DesktopLaunchIntent {
   readonly type: string;
 }
 
 export interface DesktopRouteRequest {
-  readonly kind: "file" | "server";
-  readonly fileId?: string;
-  readonly serverDocId?: string;
-  readonly serverUrl?: string;
-  readonly token?: string;
-  readonly tunnel?: unknown;
+  readonly kind: "file";
+  readonly fileId: string;
 }
 
 
@@ -60,7 +44,6 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly tabId: string | null;
   readonly windowId: string | null;
   readonly launchIntent: DesktopLaunchIntent;
-  readonly connection: DesktopConnection | null;
   readonly hadPriorSession: boolean;
   readonly firstTabOfLaunch: boolean;
   readonly hasDraftToRestore: boolean;
@@ -75,7 +58,6 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly removeRecent: (fileId: string) => Promise<readonly unknown[]>;
   readonly clearRecents: () => Promise<readonly unknown[]>;
 
-  readonly onOpenServerDoc: (cb: Listener<{ readonly serverDocId?: string; readonly [key: string]: unknown }>) => void;
   readonly onRestoreNotice: (cb: Listener<{ readonly skipped?: readonly { readonly name?: string; readonly reason?: string }[] }>) => void;
   readonly onReassignDocId: (cb: Listener<{ readonly toId: string; readonly [key: string]: unknown } | null>) => void;
   readonly onOpenFile: (cb: Listener<DesktopFileEntry>) => void;
@@ -114,23 +96,16 @@ export interface DesktopPort extends HistoryDesktopPort {
   readonly voiceStart: () => Promise<DesktopResult | null>;
   readonly voiceStop: () => Promise<DesktopResult | null>;
   readonly onVoiceEvent: (cb: Listener<unknown>) => void;
-
-  readonly driveStatus: () => Promise<DesktopResult | null>;
-  readonly driveSignIn: () => Promise<DesktopResult | null>;
-  readonly driveSignOut: () => Promise<DesktopResult | null>;
-  readonly driveList: (folderId: string) => Promise<DesktopResult | null>;
-  readonly driveDownload: (fileId: string) => Promise<DesktopResult | null>;
-  readonly driveUpload: (request: unknown) => Promise<DesktopResult | null>;
 }
 
 export type DesktopMember = keyof DesktopPort;
 
 export const DESKTOP_PORT_MEMBERS = [
-  "isDesktop", "platform", "appVersion", "tabId", "windowId", "launchIntent", "connection",
+  "isDesktop", "platform", "appVersion", "tabId", "windowId", "launchIntent",
   "hadPriorSession", "firstTabOfLaunch", "hasDraftToRestore",
   "openFileDialog", "saveFileDialog", "readFile", "writeFile", "statFile", "routeOpen",
   "listRecents", "removeRecent", "clearRecents",
-  "onOpenServerDoc", "onRestoreNotice", "onReassignDocId", "onOpenFile", "onMenuCommand", "setDocumentState",
+  "onRestoreNotice", "onReassignDocId", "onOpenFile", "onMenuCommand", "setDocumentState",
   "writeDraft", "discardDraft", "takeDraft", "draftRestoreDone", "onDraftFlush",
   "historyPut", "historyList", "historyGet", "historyCopy", "historyTouch", "historyListDocs",
   "blobPut", "blobGet", "blobMissing",
@@ -138,8 +113,7 @@ export const DESKTOP_PORT_MEMBERS = [
   "grantVideoFile", "openVideoFile", "videoThumbnail",
   "getUpdateStatus", "checkForUpdate", "downloadUpdate", "installUpdate", "onUpdateStatus",
   "openPrompterInBrowser", "openPrompterInChromium",
-  "voiceStatus", "voiceStart", "voiceStop", "onVoiceEvent",
-  "driveStatus", "driveSignIn", "driveSignOut", "driveList", "driveDownload", "driveUpload"
+  "voiceStatus", "voiceStart", "voiceStop", "onVoiceEvent"
 ] as const satisfies readonly DesktopMember[];
 
 export const UNUSED_DESKTOP_MEMBERS = [
@@ -172,10 +146,6 @@ export function canOpenPrompterInChromium(): boolean {
   return current !== null && typeof current.openPrompterInChromium === "function";
 }
 
-export function driveOpenShown(): boolean {
-  return !runningOnDesktop() || typeof (current as DesktopPort).driveStatus === "function";
-}
-
 export function useDesktopForTest(fake: Partial<DesktopPort> | null | undefined): void {
   use(fake as DesktopPort | null | undefined);
 }
@@ -183,23 +153,3 @@ export function useDesktopForTest(fake: Partial<DesktopPort> | null | undefined)
 export function restoreDesktop(): void {
   use(attached);
 }
-
-export type DriveAnswer = DesktopResult & { readonly ok: boolean };
-
-async function driveCall(run: (port: DesktopPort) => Promise<DesktopResult | null>): Promise<DriveAnswer> {
-  try {
-    const res = await run(current as DesktopPort);
-    return (res || { ok: false, code: "FAILED" }) as DriveAnswer;
-  } catch {
-    return { ok: false, code: "FAILED" };
-  }
-}
-
-export const desktopDrive = Object.freeze({
-  status: (): Promise<DriveAnswer> => driveCall((p) => p.driveStatus()),
-  signIn: (): Promise<DriveAnswer> => driveCall((p) => p.driveSignIn()),
-  signOut: (): Promise<DriveAnswer> => driveCall((p) => p.driveSignOut()),
-  list: (folderId: string): Promise<DriveAnswer> => driveCall((p) => p.driveList(folderId)),
-  download: (fileId: string): Promise<DriveAnswer> => driveCall((p) => p.driveDownload(fileId)),
-  upload: (request: unknown): Promise<DriveAnswer> => driveCall((p) => p.driveUpload(request))
-});

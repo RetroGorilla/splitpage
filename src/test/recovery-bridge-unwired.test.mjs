@@ -46,10 +46,9 @@ test("the resume, the conflict stash and the legacy snapshots use the storage th
   const interned = [];
   let stop = bridge.startRecovery(ports({ sessionStorage: () => memory, localStorage: () => memory, internImage: (url) => { interned.push(url); } }));
   try {
-    assert.equal(bridge.draftResume().serverResume(), null);
     assert.equal(bridge.draftResume().restorePending(), false);
     bridge.draftResume().setRestorePending(true);
-    bridge.draftResume().armServerResume({ id: "doc-a", rev: 1, base: null, mine: null, at: 0, onDone: () => {} });
+    assert.equal(bridge.draftResume().restorePending(), true);
     assert.equal(bridge.conflictStash().save({ mine: { rows: [] }, blobs: { ["c".repeat(64)]: "data:image/png;base64,AA" } }), true);
     assert.ok(items.has("splitpage-conflict-stash"));
     bridge.conflictStash().accept(bridge.conflictStash().read(), null);
@@ -61,8 +60,7 @@ test("the resume, the conflict stash and the legacy snapshots use the storage th
   }
   stop = bridge.startRecovery(ports({ sessionStorage: () => memory, localStorage: () => memory }));
   try {
-    assert.equal(bridge.draftResume().serverResume(), null, "a new start holds no server resume");
-    assert.equal(bridge.draftResume().restorePending(), false);
+    assert.equal(bridge.draftResume().restorePending(), false, "a new start holds no pending restore");
     assert.ok(bridge.conflictStash().read(), "the stash lives in storage, not in the bridge");
   } finally {
     stop();

@@ -120,10 +120,6 @@ jobs:
         if: needs.changes.outputs.app == 'true'
         run: node tools/run-suites.mjs "$RUNNER_TEMP/suites" '^(01-core|52-csp)\.txt$' --lanes 2 --port-base "$PORT_BASE"
 
-      - name: Browser suite 265 (drafts kept in IndexedDB and restored, persistence)
-        if: needs.changes.outputs.app == 'true'
-        run: node tools/run-suites.mjs "$RUNNER_TEMP/suites/persistence" '^265-browser-drafts\.txt$' --lanes 1 --port-base "$PORT_BASE"
-
       - name: Upload the suite logs
         if: failure()
         uses: actions/upload-artifact@v7
