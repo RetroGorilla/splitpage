@@ -5,7 +5,7 @@ import { createActionRegistry, registerAll } from "../../src/application/actions
 import { mountOnboardingFeature, stopOnboardingFeature, onboardingActions } from "../../src/bootstrap/wiring/onboarding.ts";
 import { startPreferences, preferences } from "../../src/legacy/preferences-bridge.ts";
 import { startSidePanels } from "../../src/legacy/panels-bridge.ts";
-import { noteFileMenuChoice, mountLocalFilesFeature, stopLocalFilesFeature } from "../../src/bootstrap/wiring/local-files.ts";
+import { localFileMenuControls, mountLocalFilesFeature, stopLocalFilesFeature } from "../../src/bootstrap/wiring/local-files.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
 
 test("wired onboarding replaces its mount, closes on file choices and disables setup after stopping", () => {
@@ -33,7 +33,7 @@ test("wired onboarding replaces its mount, closes on file choices and disables s
     assert.equal(modal.hidden, true);
     second.openOnboarding();
     assert.equal(modal.hidden, false);
-    noteFileMenuChoice("save");
+    localFileMenuControls().noteFileMenuChoice("save");
     assert.equal(modal.hidden, true);
     assert.equal(closed, 2);
     stopOnboardingFeature();

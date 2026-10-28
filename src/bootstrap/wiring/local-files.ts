@@ -8,7 +8,6 @@ import { startLocalFileMenu } from "../../features/file-menu/local-files.js";
 import type { LocalFileMenuControls } from "../../features/file-menu/local-files-ports.ts";
 import { fileWritebackActions as definitions } from "../../features/file-menu/actions.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
-import type { ResumeHandle } from "../../features/file-menu/mount.ts";
 import { localFilesOwnerPorts, importSavingPorts, localFileMenuPorts } from "./ports/local-files.ts";
 import { screen } from "./ports/screen.ts";
 
@@ -66,27 +65,3 @@ export function importSaveDestination(): SaveDestination<ImportSaveRequest> {
 }
 
 export function fileWritebackActions(): ActionDefinition[] { return definitions(() => saving, screen); }
-
-export const openLocalFile: LocalFilesOwner["openLocalFile"] = (...args) => localFilesOwner().openLocalFile(...args);
-export const tryResumeLastProject: LocalFilesOwner["tryResumeLastProject"] = (...args) => localFilesOwner().tryResumeLastProject(...args);
-export const resumeFromHandle: LocalFilesOwner["resumeFromHandle"] = (...args) => localFilesOwner().resumeFromHandle(...args);
-export const reloadFileFromDisk: LocalFilesOwner["reloadFileFromDisk"] = (...args) => localFilesOwner().reloadFileFromDisk(...args);
-export const reloadProjectFromDisk: LocalFilesOwner["reloadProjectFromDisk"] = (...args) => localFilesOwner().reloadProjectFromDisk(...args);
-export const saveBackToFile: ImportSavingOwner["saveBackToFile"] = (...args) => importSavingOwner().saveBackToFile(...args);
-export const saveBackItemState: ImportSavingOwner["saveBackItemState"] = (...args) => importSavingOwner().saveBackItemState(...args);
-export const buildFileData: LocalFileMenuControls["buildFileData"] = (...args) => localFileMenuControls().buildFileData(...args);
-export const exportAs: LocalFileMenuControls["exportAs"] = (...args) => localFileMenuControls().exportAs(...args);
-export const exportFileName: LocalFileMenuControls["exportFileName"] = (...args) => localFileMenuControls().exportFileName(...args);
-export const exportBaseName: LocalFileMenuControls["exportBaseName"] = (...args) => localFileMenuControls().exportBaseName(...args);
-export const exportRequest: LocalFileMenuControls["exportRequest"] = (...args) => localFileMenuControls().exportRequest(...args);
-export const runExport: LocalFileMenuControls["runExport"] = (...args) => localFileMenuControls().runExport(...args);
-export const runExportAction: LocalFileMenuControls["runExportAction"] = (...args) => localFileMenuControls().runExportAction(...args);
-export const handleFileMenuAction: LocalFileMenuControls["handleFileMenuAction"] = (...args) => localFileMenuControls().handleFileMenuAction(...args);
-export const onFileMenuChoice: LocalFileMenuControls["onFileMenuChoice"] = (...args) => localFileMenuControls().onFileMenuChoice(...args);
-export const noteFileMenuChoice: LocalFileMenuControls["noteFileMenuChoice"] = (...args) => localFileMenuControls().noteFileMenuChoice(...args);
-export const hideResumeBanner: LocalFileMenuControls["hideResumeBanner"] = (...args) => localFileMenuControls().hideResumeBanner(...args);
-export const updateFileChip: LocalFileMenuControls["updateFileChip"] = (...args) => localFileMenuControls().updateFileChip(...args);
-export const mirrorFileChipToWriter: LocalFileMenuControls["mirrorFileChipToWriter"] = (...args) => localFileMenuControls().mirrorFileChipToWriter(...args);
-export const fileChipListeners: LocalFileMenuControls["fileChipListeners"] = (...args) => localFileMenuControls().fileChipListeners(...args);
-export const showFileConflictView: LocalFileMenuControls["showFileConflictView"] = (...args) => localFileMenuControls().showFileConflictView(...args);
-export const pendingHandle = (): ResumeHandle | null => localFileMenuControls().pendingHandle() as ResumeHandle | null;

@@ -20,7 +20,7 @@ import { opening, transitions } from "./ports/transitions.ts";
 import { migrateRows } from "../../legacy/document-ports.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { importControls } from "./imports.ts";
-import { openLocalFile } from "./local-files.ts";
+import { localFilesOwner } from "./local-files.ts";
 import { STARTERS, starterById } from "../../starters/index.ts";
 
 const newTab = owned<NewTabMount>();
@@ -49,7 +49,7 @@ export function mountNewTabFeature(): NewTabMount {
       prepareDocument: (raw) => migrateRows(raw),
       syncIdentity: () => { documentIdentity.syncDocIdentity(); },
       importText: (options) => { importControls()?.openImportModal(options); },
-      openFile: () => openLocalFile(),
+      openFile: () => localFilesOwner().openLocalFile(),
       desktopDownload: { url: () => updateControls()?.desktopAppUrl() ?? "", offered: () => updateControls()?.desktopAppOffered() ?? false },
       starters: STARTERS,
       findStarter: (id) => starterById(id),

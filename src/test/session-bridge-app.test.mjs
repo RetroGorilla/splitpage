@@ -18,7 +18,7 @@ const { applyMerge } = await import("../legacy/merge-bridge.ts");
 const { scheduleIdleRefresh, productionIndexStats } = await import("../features/tags/production-tags.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { flushEdits, lastUndoEntry, undoSizes } = await import("../legacy/undo-bridge.ts");
-const { reloadFileFromDisk } = await import("../bootstrap/wiring/local-files.ts");
+const { localFilesOwner } = await import("../bootstrap/wiring/local-files.ts");
 const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
@@ -154,7 +154,7 @@ test("a reload in place is its own kind: same epoch, no generation, saveChanges(
   const epoch = session.epoch(), gen = session.generation(), seq = saveChanges();
   listen();
   disk = new File(["Wide\tOne, again.\nClose\tTwo."], "reload.txt", { lastModified: 2 });
-  await reloadFileFromDisk();
+  await localFilesOwner().reloadFileFromDisk();
   assert.equal(currentDocument(), doc, "reloaded in place");
   assert.match(currentDocument().rows[0].audioText, /again/);
   assert.deepEqual(heard, ["reload"]);
