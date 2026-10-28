@@ -27,7 +27,7 @@ import { documentReader } from "./document.ts";
 import { notices, menuItems } from "./effects.ts";
 import { exports as formats, fileDelivery } from "./files.ts";
 import { place } from "./location.ts";
-import { confirmation, saves, fileConflicts, autoSaves } from "./saving.ts";
+import { confirmation, saves, fileConflicts } from "./saving.ts";
 import { transitions, history } from "./transitions.ts";
 import { panelControl } from "./panels.ts";
 import { preferenceValues } from "./preferences.ts";
@@ -90,8 +90,6 @@ export function localFileMenuPorts(writeback: ImportSavingOwner): LocalFileMenuP
     document: documentReader,
     preferences: preferenceValues,
     place,
-    saves,
-    autoSaves,
     writeback,
     exports: { captureExportDocument, loadExportAssets },
     formats,

@@ -15,7 +15,6 @@ test("local file menu mounts with named fakes, paints the chip, announces choice
   const ports: LocalFileMenuPorts = {
     document: fakeDocument(null).document,
     preferences: { clock: () => "24h" }, place: location,
-    saves: { unsaved: () => true }, autoSaves: { policy: () => { throw new Error("unused"); } },
     writeback: { saveBackItemState: () => ({ hidden: false, disabled: false, reason: "", label: "Save to draft.txt" }) },
     exports: { captureExportDocument: () => { throw new Error("unused"); }, loadExportAssets: async () => { throw new Error("unused"); } },
     formats: createExportRegistry(),

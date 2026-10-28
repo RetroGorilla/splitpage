@@ -225,4 +225,3 @@ img[data-blob][data-blob-state="missing"] { min-height: 48px; border: 1px dashed
     scroll-padding: 108px 0 calc(72px + env(safe-area-inset-bottom));
   }
 }
-@keyframes collab-dot { 0%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
