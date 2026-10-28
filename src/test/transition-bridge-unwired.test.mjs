@@ -69,7 +69,7 @@ test("a replacement through the API disposes the old document's session: its arm
   }
 });
 
-test("captureOperation and stillOwns follow the live session, document, destination and connection", async () => {
+test("captureOperation and stillOwns follow the live session, document and destination", async () => {
   const stop = startWith([]);
   const loc = await import("../legacy/location-bridge.ts");
   const saves = await import("../legacy/save-bridge.ts");
@@ -88,14 +88,13 @@ test("captureOperation and stillOwns follow the live session, document, destinat
     assert.equal(ctx.docId, currentDocument().docId);
     assert.equal(ctx.destination, loc.currentHome());
     assert.equal(ctx.destinationGeneration, saves.confirmedGeneration(), "the destination's confirmed generation is captured");
-    assert.equal(ctx.connection, loc.currentConn());
     assert.equal(bridge.stillOwns(ctx), true);
-    loc.documentLocation().updateConnection({ token: "another" });
-    assert.equal(bridge.stillOwns(ctx), false, "a token change is another connection");
+    loc.setHome("import", { name: "owned.txt", format: "txt" });
+    assert.equal(bridge.stillOwns(ctx), false, "another destination no longer owns it");
+    loc.setHome("none");
     const again = bridge.captureOperation();
     bridge.documentTransitions().open({ from: { document: script("Owned") }, reason: "reopened" });
     assert.equal(bridge.stillOwns(again), false, "a same-id reopen is another epoch");
-    loc.documentLocation().updateConnection({ token: "" });
   } finally {
     stopSaves();
     stop();
