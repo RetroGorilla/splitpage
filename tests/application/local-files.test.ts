@@ -54,6 +54,68 @@ function harness() {
   return { owner, ports, log, file, state, doc, location };
 }
 
+function deferred<T>() {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+for (const stage of ["parse", "last handle", "permission", "read", "dialog", "route", "picker", "text", "docx", "reload import", "reload project"]) {
+  test("opening stopped during " + stage + " cannot affect a replacement owner", async () => {
+    const h = harness();
+    const replacement = harness();
+    const entered = deferred<undefined>();
+    const gate = deferred<unknown>();
+    const hold = () => { entered.resolve(undefined); return gate.promise; };
+    let ports = h.ports;
+    let finish: unknown = h.file;
+    let open = () => h.owner.resumeFromHandle({});
+    if (stage === "parse") {
+      ports = { ...ports, imports: { ...ports.imports, parseProjectFileState: hold } };
+      finish = { state: h.doc, kind: "splitpage" };
+      open = async () => { await h.owner.projectFileSource().open({ kind: "file", file: h.file, handle: {} }); };
+    } else if (stage === "last handle" || stage === "permission") {
+      ports = stage === "last handle"
+        ? { ...ports, lastFile: { ...ports.lastFile, load: hold } }
+        : { ...ports, files: { ...ports.files, permission: async () => String(await hold()) } };
+      finish = stage === "permission" ? "prompt" : {};
+      open = () => h.owner.tryResumeLastProject();
+    } else if (stage === "dialog" || stage === "route") {
+      ports = { ...ports, desktop: { running: () => true, openFileDialog: stage === "dialog" ? hold : async () => ({ id: 1 }), routeOpen: stage === "route" ? hold : async () => ({ where: "this-tab" }) } };
+      finish = stage === "dialog" ? { id: 1 } : { where: "this-tab" };
+      open = () => h.owner.openLocalFile();
+    } else if (stage === "picker") {
+      ports = { ...ports, files: { ...ports.files, openPicker: async () => { await hold(); return []; } } };
+      open = () => h.owner.openLocalFile();
+    } else if (stage === "text" || stage === "docx") {
+      const file = { ...h.file, name: "import." + (stage === "text" ? "txt" : "docx") };
+      ports = { ...ports, imports: { ...ports.imports, parseProjectFileState: async () => null, docxToRows: stage === "docx" ? hold : ports.imports.docxToRows }, files: { ...ports.files, text: async () => String(await hold()) } };
+      finish = stage === "text" ? "late import" : { title: "late", rows: [] };
+      open = async () => { await h.owner.projectFileSource().open({ kind: "file", file }); };
+    } else {
+      ports = { ...ports, files: { ...ports.files, read: async () => { await hold(); return h.file; } } };
+      if (stage === "reload import") {
+        h.location.setHome("import", { name: "import.txt", handle: {}, format: "txt" });
+        open = () => h.owner.reloadFileFromDisk();
+      } else if (stage === "reload project") {
+        h.location.setHome("file", { name: h.file.name, handle: {}, format: "splitpage" });
+        open = () => h.owner.reloadProjectFromDisk();
+      }
+    }
+    const stop = h.owner.startLocalFiles(ports);
+    const pending = open();
+    await entered.promise;
+    stop();
+    const stopReplacement = h.owner.startLocalFiles(replacement.ports);
+    const before = [...h.log];
+    gate.resolve(finish);
+    await pending;
+    assert.deepEqual(h.log, before);
+    assert.deepEqual(replacement.log, []);
+    stopReplacement();
+  });
+}
+
 test("local files refuse before startup and after teardown, including retained sources", async () => {
   const h = harness();
   assert.throws(() => h.owner.openLocalFile(), /not started yet/);

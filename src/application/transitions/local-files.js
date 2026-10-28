@@ -3,6 +3,9 @@ import { cloneState } from "../../core/document/clone.ts";
 import { fileKindFromName } from "../../../shared/file-names.js";
 
 function startLocalFiles(ports) {
+  var active = true;
+  var busyReads = new Set();
+  function finishRead(token) { if (busyReads.delete(token)) endBusy(token); }
   var currentDocument = ports.document.current;
   var { noteAbsorbedDirty, noteReload } = ports.session;
   var documentTransitions = function () { return ports.transitions; };
@@ -40,6 +43,7 @@ function projectFileSource() {
 async function openProjectFile(file, handle, opts) {
   opts = opts || {};
   var parsed = await parseProjectFileState(file);
+  if (!active) return false;
   if (!parsed) return loadFileIntoEditor(file, handle);
   if (parsed.error === "unreadable") {
     showToast("Could not read " + file.name + ".", "error");
@@ -53,6 +57,7 @@ async function openProjectFile(file, handle, opts) {
 }
 
 function adoptProjectState(newState, file, handle, kind, opts) {
+  if (!active) return false;
   opts = opts || {};
   sidePanels().close("newtab-page");
 
@@ -66,22 +71,25 @@ function adoptProjectState(newState, file, handle, kind, opts) {
     writtenOut: true
   });
 
+  if (!active) return false;
   confirmSavedNow();
+  if (!active) return false;
   var commentNote = currentDocument().comments.length
     ? ", " + currentDocument().comments.length + " comment" + (currentDocument().comments.length === 1 ? "" : "s") : "";
   if (!opts.silent) showToast((opts.resumed ? "Resumed " : "Opened ") + (currentDocument().title || file.name) + " — " +
     currentDocument().rows.length + " row" + (currentDocument().rows.length === 1 ? "" : "s") + commentNote, "ok");
 
-  if (handle) rememberLastFileHandle(handle);
+  if (active && handle) rememberLastFileHandle(handle);
   return true;
 }
 
 async function tryResumeLastProject() {
   var handle = await loadLastFileHandle();
-  if (!handle) return;
+  if (!active || !handle) return;
   var perm;
   try {
     perm = await ports.files.permission(handle, { mode: "readwrite" });
+    if (!active) return;
   } catch (e) {
     return;
   }
@@ -95,12 +103,14 @@ async function tryResumeLastProject() {
 async function resumeFromHandle(handle) {
   try {
     var file = await ports.files.read(handle);
+    if (!active) return;
     await openProjectFile(file, handle, { skipSnapshot: !unsavedChanges(), resumed: true });
   } catch (e) {
   }
 }
 
 async function loadFileIntoEditor(file, handle, opts) {
+  if (!active) return;
   opts = opts || {};
   var kind = fileKindFromName(file.name);
   if (kind === "splitpage" || kind === "html") kind = null;
@@ -108,9 +118,11 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   var newRows, newTitle = null;
   var readBusy = beginBusy("Reading " + file.name + "…");
+  busyReads.add(readBusy);
   try {
     if (kind === "docx") {
       var parsed = await docxToRows(file);
+      if (!active) return;
       newTitle = parsed.title;
       newRows = parsed.rows;
       if (!newRows.length && parsed.looseText) {
@@ -118,24 +130,29 @@ async function loadFileIntoEditor(file, handle, opts) {
         newRows = normalizeImportedRows(parseImportRows(parsed.looseText, looseMode), sanitizeHtml);
       }
     } else if (kind === "csv") {
-      newRows = csvToRows(await ports.files.text(file));
+      var csvText = await ports.files.text(file);
+      if (!active) return;
+      newRows = csvToRows(csvText);
     } else {
       var text = await ports.files.text(file);
+      if (!active) return;
       var mode = detectTwoColumnFormat(text) ? "twocolumn" : "paragraph";
       newRows = normalizeImportedRows(parseImportRows(text, mode), sanitizeHtml);
       var firstHeading = /^#\s+(.+)$/m.exec(text);
       if (firstHeading) newTitle = firstHeading[1].trim();
     }
   } catch (err) {
+    if (!active) return;
     var msg = "Could not read that file.";
     if (err && err.message === "no-decompression-stream") msg = "This browser can't unzip .docx files — try Chrome or Edge.";
     else if (err && (err.message === "not-a-zip" || err.message === "no-document-xml")) msg = "That doesn't look like a Word document.";
     showToast(msg, "error");
     return;
   } finally {
-    endBusy(readBusy);
+    finishRead(readBusy);
   }
 
+  if (!active) return;
   if (!newRows || !newRows.length) { showToast("No scenes found in that file.", "warn"); return; }
 
 
@@ -166,9 +183,11 @@ async function loadFileIntoEditor(file, handle, opts) {
       writtenOut: false
     });
   }
+  if (!active) return;
   var imported = importHome();
 
   noteAbsorbedDirty(opts.reload ? "reload" : "adopt");
+  if (!active) return;
   amendHome(imported, { dirty: false });
   sidePanels().close("newtab-page");
   if (typeof syncDocIdentity === "function") syncDocIdentity();
@@ -181,11 +200,12 @@ async function loadFileIntoEditor(file, handle, opts) {
 async function openLocalFile() {
   if (runningOnDesktop()) {
     var entry = await desktopPort().openFileDialog();
-    if (!entry) return;
+    if (!active || !entry) return;
     var r = await desktopPort().routeOpen({ kind: "file", fileId: entry.id });
-    if (!r || r.where !== "this-tab") return;
+    if (!active || !r || r.where !== "this-tab") return;
     var desktopHandle = makeDesktopHandle(entry);
     var desktopFile = await ports.files.read(desktopHandle);
+    if (!active) return;
     await openProjectFile(desktopFile, desktopHandle);
     return;
   }
@@ -205,14 +225,18 @@ async function openLocalFile() {
           }
         }]
       });
+      if (!active) return;
       var handle = handles[0];
-      await openProjectFile(await ports.files.read(handle), handle);
+      var pickedFile = await ports.files.read(handle);
+      if (!active) return;
+      await openProjectFile(pickedFile, handle);
       return;
     } catch (err) {
+      if (!active) return;
       if (err && err.name === "AbortError") return;
     }
   }
-  ports.chooseFallback();
+  if (active) ports.chooseFallback();
 }
 
 async function reloadFileFromDisk() {
@@ -221,9 +245,11 @@ async function reloadFileFromDisk() {
   if (!imported || !imported.handle) return;
   try {
     keepSnapshot("Before reloading " + imported.name + " from disk");
-    await loadFileIntoEditor(await ports.files.read(imported.handle), imported.handle, { reload: true });
+    var importedFile = await ports.files.read(imported.handle);
+    if (!active) return;
+    await loadFileIntoEditor(importedFile, imported.handle, { reload: true });
   } catch (e) {
-    showToast("Could not re-read that file.", "error");
+    if (active) showToast("Could not re-read that file.", "error");
   }
 }
 
@@ -232,14 +258,16 @@ async function reloadProjectFromDisk() {
   var file = fileHome();
   if (!file || !file.handle) return;
   try {
-    await openProjectFile(await ports.files.read(file.handle), file.handle);
+    var projectFile = await ports.files.read(file.handle);
+    if (!active) return;
+    await openProjectFile(projectFile, file.handle);
   } catch (e) {
-    showToast("Could not re-read that file.", "error");
+    if (active) showToast("Could not re-read that file.", "error");
   }
 }
 
 
-  return { projectFileSource, tryResumeLastProject, resumeFromHandle, openLocalFile, reloadFileFromDisk, reloadProjectFromDisk, dispose: function () {} };
+  return { projectFileSource, tryResumeLastProject, resumeFromHandle, openLocalFile, reloadFileFromDisk, reloadProjectFromDisk, dispose: function () { active = false; busyReads.forEach(endBusy); busyReads.clear(); } };
 }
 
 export function createLocalFilesOwner() {
