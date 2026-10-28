@@ -58,7 +58,6 @@
 @media (max-width: 760px) {
   .doc-meta::before, .doc-meta > :not([hidden]) ~ :not([hidden])::before { content: "·"; margin: 0 var(--space-6); color: var(--text-faint); }
   .row-head { grid-row: 1; grid-column: 1; align-self: baseline; margin-top: var(--space-12); padding-left: var(--space-16); gap: var(--space-10); cursor: default; }
-  .gutter > .presence-mark { grid-row: 1; grid-column: 3; justify-self: start; align-self: center; margin-left: var(--space-10); }
   .phone-bar {
     display: flex;
     position: fixed;

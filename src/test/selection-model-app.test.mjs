@@ -44,7 +44,6 @@ function fixture(title) {
 
 function fresh(title) {
   if (viewFlags().writerOpen()) writer.closeWriter();
-  window.__hostedTest.setSession({ role: "edit", docId: null });
   clock += 10_000;
   loadTestDocument(migrateRows(fixture(title)));
   flushEdits();

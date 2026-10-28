@@ -7,7 +7,6 @@ import type { Blocker, ScreenState } from "../../src/application/screen.ts";
 import type { DocumentDestination } from "../../src/application/transitions/ports.ts";
 import type { Arrived, Incoming, Transitions } from "../../src/application/transitions/transitions.ts";
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
-import type { ReviewFacts } from "../../src/application/collaboration/review.ts";
 import type { PictureStore } from "../../src/application/media/picture-store.ts";
 import type { Operations } from "../../src/application/session/operation.ts";
 import type { OperationContext } from "../../src/application/session/operation.ts";
@@ -307,24 +306,6 @@ export function fakeDocument(initial: DocumentView | null = null) {
       for (const listener of [...refreshes.listeners]) listener(new Set(jobs));
     },
     listenerCount: (): number => changes.listeners.size + replaced.listeners.size + refreshes.listeners.size
-  };
-}
-
-export function fakeReview(initial = false) {
-  let reviewing = initial;
-  let refusals = 0;
-  const review: ReviewFacts = {
-    reviewing: () => reviewing,
-    refuseInReview: () => {
-      if (!reviewing) return false;
-      refusals++;
-      return true;
-    }
-  };
-  return {
-    review,
-    setReviewing: (on: boolean): void => { reviewing = on; },
-    refusals: (): number => refusals
   };
 }
 

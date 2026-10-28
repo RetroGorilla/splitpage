@@ -814,7 +814,7 @@ function dragIndex() {
 }
 
 function dropAllowed() {
-  return !!ports.rowDrag.dragging() && !minimized && !ports.review.reviewing() && base.n > 0 && !!base.X && !!ports.document.current();
+  return !!ports.rowDrag.dragging() && !minimized && base.n > 0 && !!base.X && !!ports.document.current();
 }
 
 function ensureDropEls(track) {

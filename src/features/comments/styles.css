@@ -97,8 +97,6 @@
   .btn-outline .comment-resolve-tick { color: var(--ok); }
   .comment-assign { min-height: 32px; min-width: 0; max-width: 100%; }
   .comment-assign > select { min-height: 30px; max-width: 100%; padding-left: 34px; }
-  .comment-assign > select:disabled { color: var(--text-dim); cursor: default; }
-  .comment-assign:has(> select:disabled) { border-color: var(--border); }
   .comment-assign-icon {
     position: absolute; left: 10px; top: 50%;
     width: 16px; height: 16px; margin-top: -8px;

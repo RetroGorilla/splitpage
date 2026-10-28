@@ -98,10 +98,7 @@ export function fileMenuActions(current: () => FileMenuControls | null, ports: F
       group: "File",
       icon: "i-clipboard",
       words: "import revised draft text",
-      availability: (source) => {
-        const owner = current();
-        return owner ? loaded(itemAvailability(owner.pasteItemState(), source), OPENS_ONE) : UNMOUNTED;
-      },
+      availability: () => current() ? loaded({ enabled: true }, OPENS_ONE) : UNMOUNTED,
       run: () => { ports.openImport(); }
     },
     {

@@ -1,5 +1,4 @@
 import type { ActionRegistry } from "../../application/actions.ts";
-import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
 import type { FocusMemory } from "../../application/editing/focus-memory.ts";
 import type { PaintGuard } from "../../application/editing/paint-guard.ts";
@@ -45,5 +44,4 @@ export interface WriterFeaturePorts {
 
 export interface WriterActionPorts {
   readonly screen: () => ScreenState;
-  readonly review: Pick<ReviewFacts, "reviewing">;
 }

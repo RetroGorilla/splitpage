@@ -9,15 +9,12 @@ import { currentPlainTags } from "./plain-tags.ts";
 import { onPainted } from "../../features/rows/render.js";
 import { refreshGalleryOverlay } from "../../features/gallery/overlay.js";
 import { renderRundown, setRundownExtraSeconds } from "../../features/rundown/rundown.js";
-import { paintRundownPresence } from "../../features/rundown/presence.js";
 import { paintTargetOverlay } from "../../features/rundown/target.js";
 import { refreshAnnotator } from "../../features/gallery/annotate.js";
 import { productionPanelsOpen, renderProduction, updateGearCount, updateProductionCount } from "../../features/tags/panels.js";
 import { runBrollRefresh } from "../../features/broll/panel.js";
 import { scheduleBrollRefresh, updateBrollBadge } from "./broll.ts";
 import { captureReplyDrafts, commentsChanged, renderComments } from "../../features/comments/comments.js";
-import { onPresencePaint, paintPresence } from "../../js/13a-presence.js";
-import { presence } from "../../legacy/presence-bridge.ts";
 import { writerControls } from "./writer.ts";
 
 let stopPanels: (() => void) | null = null;
@@ -61,13 +58,11 @@ export function mountPanelListenersFeature(): void {
         renderProduction();
         captureReplyDrafts();
         renderComments();
-        paintPresence();
         refreshGalleryOverlay();
       } else if (kind === "tags") {
         updateTagBadges();
         renderProduction();
       } else if (kind === "row") {
-        paintPresence();
         refreshGalleryOverlay();
       }
     }),
@@ -78,8 +73,6 @@ export function mountPanelListenersFeature(): void {
       renderRundown();
       paintTargetOverlay();
     }),
-    presence().onChange(paintPresence),
-    onPresencePaint(() => { paintRundownPresence(); }),
     onSessionChange(commentsChanged),
     onSessionChange(statsFollowChange),
     onSessionChange(refreshAnnotator),
