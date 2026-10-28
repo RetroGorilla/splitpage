@@ -81,12 +81,6 @@ function savedWord(at) {
 
 function fileCardView() {
   if (!ports.document.current()) return { name: "Loading…", bits: [] };
-  if (ports.place.home().kind === "server") {
-    var srv = ports.place.sessionExpired() ? { text: "Signed out — reload to sign in", unsaved: true }
-      : ports.place.linkTurnedOff() ? { text: "Link turned off — not saving", unsaved: true }
-      : savedWord(null);
-    return { name: ports.document.current().title || "Untitled Script", bits: [srv, { text: "On the server · v" + ports.place.home().rev }] };
-  }
   if (ports.place.home().kind === "file") {
     return {
       name: ports.place.home().name || (ports.place.home().handle && ports.place.home().handle.name) || "Untitled",
@@ -120,11 +114,6 @@ function recentsSupported() {
   return !!(ports.desktop() && ports.recents.available());
 }
 
-function pasteItemState() {
-  var viewing = ports.review.reviewing();
-  return { hidden: false, disabled: viewing, reason: viewing ? "Viewing only — you can comment, but not change the script" : "" };
-}
-
 function refreshFileMenu() {
   var presentBrowser = el("menu-present-browser");
   if (presentBrowser) presentBrowser.hidden = !ports.canOpenPrompter.browser();
@@ -132,13 +121,6 @@ function refreshFileMenu() {
   if (presentChromium) presentChromium.hidden = !ports.canOpenPrompter.chromium();
   var recent = el("menu-recent");
   if (recent) recent.hidden = !recentsSupported();
-
-  var paste = document.querySelector('#file-menu [data-file-action="paste"]');
-  if (paste) {
-    var pasteState = pasteItemState();
-    paste.disabled = pasteState.disabled;
-    ports.menuItems.setReason(paste, pasteState.reason);
-  }
 
   refreshFileCard();
   renderKeyChips(el("file-menu"));
@@ -325,7 +307,6 @@ function replaceWithNewDocument(next, reason, keepLabel) {
   ports.resetProductionPanel();
   ports.transitions.startNew({ from: { document: next }, reason: reason, destination: NO_DESTINATION });
   ports.saving.confirmSavedNow();
-  ports.applyReviewMode();
   if (typeof ports.syncIdentity === "function") ports.syncIdentity();
   ports.panels.close("newtab-page");
   return kept;
@@ -429,7 +410,6 @@ export function startFileMenu(given) {
     refreshFileMenu: live(refreshFileMenu),
     refreshOpenFileMenu: live(refreshOpenFileMenu),
     onFileMenuRefresh: onFileMenuRefresh,
-    pasteItemState: function () { return pasteItemState(); },
     startNewScript: function () { return disposed ? false : startNewScript(); },
     openLongDemo: function () { return disposed ? false : openLongDemo(); },
     dispose: function () {

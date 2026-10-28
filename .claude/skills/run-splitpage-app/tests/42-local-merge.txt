@@ -3,8 +3,8 @@
 # The guard that raises #file-conflict-modal (checkFileConflict,
 # 18-local-files.js) offered four outcomes, all of which mean picking one
 # version whole. This drives the fifth: a review pane listing every field the
-# two versions disagree about, side by side, and only then the same
-# three-way mergeStates() the hosted save runs (18a-local-merge.js).
+# two versions disagree about, side by side, and only then the three-way
+# mergeStates() (18a-local-merge.js).
 #
 # Same fake FileSystemFileHandle-shaped object 19-save-conflict.txt and
 # 28-autosave.txt use — no file picker can run headless — plus, at the end,
@@ -102,8 +102,8 @@ expect document.getElementById('merge-review-detail').textContent.indexOf('no ea
 expect document.querySelectorAll('#merge-review-list .merge-entry[data-outcome="conflict"]').length > 0
 click #merge-review-confirm
 wait document.getElementById('merge-review-modal').hidden
-# an overlapping edit survives as a conflict comment, exactly as on the
-# hosted path — and the banner offers Review conflicts for it
+# an overlapping edit survives as a conflict comment — and the banner
+# offers Review conflicts for it
 wait F.state().comments.filter(function(c){return c.kind === 'conflict';}).length > 0
 expect document.getElementById('merge-banner').hidden == false
 expect document.getElementById('merge-review').hidden == false

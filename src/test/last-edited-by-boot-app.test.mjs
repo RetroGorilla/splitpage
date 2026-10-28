@@ -19,7 +19,6 @@ const { openCommentComposer, postComment, postReply, toggleReplyComposer } = awa
 import { getSavedAuthorName as getSavedAuthorNameWith } from "../application/comment-author.js";
 import { getEditorName, preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
 function getSavedAuthorName() { return getSavedAuthorNameWith(commentPreferences()); }
-const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { openSettings } = await import("../features/settings/settings.js");
 const { render } = await import("../features/rows/render.js");
 const { toastLastEditor } = await import("../bootstrap/wiring/history-panel.ts");
@@ -152,16 +151,6 @@ test("the Settings name field takes 30 characters and saves them", () => {
   field.value = NAME_33;
   field.dispatchEvent(new window.Event("change", { bubbles: true }));
   assert.equal(localStorage.getItem(NAME_KEY), NAME_33.slice(0, 30).trimEnd());
-});
-
-test("the guest name field takes 30 characters and saves them", () => {
-  localStorage.removeItem(NAME_KEY);
-  sessionStorage.clear();
-  assert.ok(maybeAskGuestName());
-  const field = document.getElementById("guest-name");
-  assert.equal(typeInto(field, "x".repeat(29) + GRIN + "tail"), NAME_30_EMOJI);
-  document.querySelector('#guest-modal [data-guest-action="save"]').click();
-  assert.equal(localStorage.getItem(NAME_KEY), NAME_30_EMOJI);
 });
 
 test("history captures the current cleaned editor name and the exact Anonymous fallback", async () => {

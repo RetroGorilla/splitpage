@@ -81,7 +81,6 @@ function paint() {
   if (!shown.length) { view.videos = false; shown = shownSlots(slots); }
   if (shown.indexOf(view.sel) === -1) view.sel = shown[Math.min(shown.length - 1, Math.max(0, view.sel))] || 0;
   if (view.sel >= slots.length) view.sel = slots.length - 1;
-  var review = ports.review.reviewing();
   var n = slots.length;
   var pictures = slots.filter(function (s) { return (s.ref || s.dataUrl) && !slotPoster(s); }).length;
   var videos = 0;
@@ -153,20 +152,19 @@ function paint() {
           escapeHtml(videoLinkKey(l)) + '" title="' + escapeHtml(l.href || l.name) + '">' + escapeHtml(videoLinkLabel(l)) + '</button></div>';
       }).join("")
     : '<div class="scene-gallery-line is-name">' + escapeHtml(slot.name || (poster ? "" : "Picture " + (sel + 1))) + '</div>';
-  var retry = !review && poster && !still && embeddableVideo(poster) && ports.video.thumbnailsAllowed()
+  var retry = poster && !still && embeddableVideo(poster) && ports.video.thumbnailsAllowed()
     ? '<button type="button" class="btn-outline" data-gact="retry-thumb" data-key="' + escapeHtml(videoLinkKey(poster)) + '"' +
       (view.fetching === videoLinkKey(poster) ? ' disabled aria-busy="true"' : '') + '>Retry thumbnail</button>'
     : '';
-  var annotate = review || poster || !slot.ref ? '' :
+  var annotate = poster || !slot.ref ? '' :
     '<button type="button" class="btn-outline" data-gact="annotate">' + PEN_ICON +
       (slot.annotation ? 'Edit annotations' : 'Annotate') + '</button>' +
     (slot.annotation ? '<button type="button" class="btn-outline" data-gact="unannotate" title="Go back to the picture as it was">Remove annotations</button>' : '');
   var buttons =
     (openLink ? openButtonHtml(openLink) : '') + retry + annotate +
-    (review ? '' :
-      '<button type="button" class="btn-outline" data-gact="cover"' + (sel === 0 ? ' disabled' : '') + '>' + COVER_ICON + 'Make cover</button>' +
-      '<button type="button" class="scene-gallery-remove" data-gact="remove">Remove</button>');
-  var hint = review || shown.length < 2 ? '' :
+    '<button type="button" class="btn-outline" data-gact="cover"' + (sel === 0 ? ' disabled' : '') + '>' + COVER_ICON + 'Make cover</button>' +
+    '<button type="button" class="scene-gallery-remove" data-gact="remove">Remove</button>';
+  var hint = shown.length < 2 ? '' :
     '<p class="scene-gallery-hint"><svg aria-hidden="true"><use href="#i-grip"/></svg>Drag to reorder</p>';
   var actions = hint || buttons
     ? '<div class="scene-gallery-actions">' + hint + '<div class="scene-gallery-buttons">' + buttons + '</div></div>'
@@ -177,7 +175,7 @@ function paint() {
     var s = slots[i];
     var p = slotPoster(s);
     grid += '<li><button type="button" class="scene-gallery-grid-tile' + (i === sel ? ' is-selected' : '') + (p ? ' is-video' : '') +
-      '" data-gact="pick" data-slot="' + i + '"' + (review ? '' : ' draggable="true"') +
+      '" data-gact="pick" data-slot="' + i + '" draggable="true"' +
       ' aria-label="' + escapeHtml((p ? "Video " : "Picture ") + (i + 1) + (p ? ": " + videoLinkLabel(p) : s.name ? ": " + s.name : "")) + '"' +
       (i === sel ? ' aria-current="true"' : '') + '>' +
       ports.render.slotPictureHtml(s) + (p ? ports.render.badgeHtml(false) : '') + '<span class="scene-gallery-num">' + (i + 1) + '</span></button></li>';
@@ -186,7 +184,7 @@ function paint() {
         '<span class="scene-gallery-divider-count">+' + (n - 3) + '</span></li>';
     }
   });
-  if (!review && !view.videos) {
+  if (!view.videos) {
     grid += '<li><button type="button" class="scene-gallery-grid-tile is-add" data-gact="add" aria-label="Add a picture">' +
       '<svg aria-hidden="true"><use href="#i-plus"/></svg></button></li>';
   }
@@ -284,7 +282,7 @@ function retryThumbnail() {
   var rowId = view.rowId;
   var slot = rowSlots(rowOf(rowId).row)[view.sel];
   var poster = slot && slotPoster(slot);
-  if (!poster || !poster.href || ports.review.reviewing()) return;
+  if (!poster || !poster.href) return;
   var key = videoLinkKey(poster);
   var ctx = ports.ownership.capture();
   view.fetching = key;
@@ -336,7 +334,7 @@ function step(by) {
 }
 
 function moveTo(from, to) {
-  if (ports.review.reviewing() || from === to) return;
+  if (from === to) return;
   var rowId = view.rowId;
   if (ports.cells.editGallery(rowId, "Moved to " + (to + 1), function (row) { return moveGallerySlot(row, from, to); })) {
     view.sel = to;
@@ -345,7 +343,7 @@ function moveTo(from, to) {
 }
 
 function makeCover() {
-  if (ports.review.reviewing() || !view.sel) return;
+  if (!view.sel) return;
   var from = view.sel;
   var rowId = view.rowId;
   if (ports.cells.editGallery(rowId, "Made the cover", function (row) { return moveGallerySlot(row, from, 0); })) {
@@ -355,7 +353,6 @@ function makeCover() {
 }
 
 function removeSelected() {
-  if (ports.review.reviewing()) return;
   var at = view.sel;
   var rowId = view.rowId;
   var slot = rowSlots(rowOf(rowId).row)[at];
@@ -368,7 +365,6 @@ function removeSelected() {
 }
 
 function removeAnnotations() {
-  if (ports.review.reviewing()) return;
   var at = view.sel;
   var slot = rowSlots(rowOf(view.rowId).row)[at];
   if (!slot || !slot.annotation) return;
@@ -425,7 +421,7 @@ function onKeydown(e) {
     }
     return;
   }
-  if ((e.key === "Delete" || e.key === "Backspace") && !ports.review.reviewing()) {
+  if (e.key === "Delete" || e.key === "Backspace") {
     e.preventDefault();
     removeSelected();
   }
@@ -433,7 +429,7 @@ function onKeydown(e) {
 
 function onDragStart(e) {
   var tile = e.target.closest && e.target.closest('.scene-gallery-grid-tile[data-gact="pick"]');
-  if (!tile || !view || ports.review.reviewing()) return;
+  if (!tile || !view) return;
   dragFrom = Number(tile.getAttribute("data-slot"));
   try { e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", ""); } catch (err) {}
 }

@@ -6,9 +6,8 @@ import { ids as portIds } from "./ports/identity.ts";
 import { flags as portFlags, brollView as portBrollView } from "./ports/preferences.ts";
 import { panelControl as portPanels } from "./ports/panels.ts";
 import { shotHiding as portShotHiding } from "./ports/shot-hiding.ts";
-import { presence as portPresence } from "./ports/presence.ts";
+import { personColors as portPersonColors } from "./ports/person-colors.ts";
 import { rows as portRows } from "./ports/rows.ts";
-import { review as portReview } from "./ports/location.ts";
 import { actions as portActions } from "./ports/actions.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { undoControl as portUndo } from "./ports/editing.ts";
@@ -97,9 +96,8 @@ export function mountBrollPanelStateFeature(): BrollPanelState {
       shotHiding: portShotHiding,
       panels: portPanels,
       flags: portFlags,
-      presence: portPresence,
+      personColors: portPersonColors,
       undo: portUndo,
-      review: portReview,
       actions: portActions,
       notices: portNotices,
       rows: portRows,

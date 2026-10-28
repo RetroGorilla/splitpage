@@ -16,7 +16,6 @@ export type ReplayOutcome =
 export type ReplayRunner = (replay: Replay) => ReplayOutcome;
 
 export interface UndoHooks {
-  readonly commentsAreSent?: () => boolean;
   readonly afterApply?: (steps: readonly Step[], dir: UndoDirection) => void;
   readonly onRefused?: (reason: string, dir: UndoDirection) => void;
 }
@@ -73,18 +72,15 @@ export function createUndo(ports: UndoPorts): Undo {
   let tracked: UndoState | null = null;
   let flushQueued = false;
   let applying = false;
-  let commentsAreSent = function (): boolean { return false; };
   const hooks: { afterApply: UndoHooks["afterApply"] | null; onRefused: UndoHooks["onRefused"] | null } = { afterApply: null, onRefused: null };
   const UNROUTED: Replays = Object.freeze({ run: replayUnwired, amend: replayUnwired, stamps: null });
   let replays: Replays = UNROUTED;
 
   function configure(opts: UndoHooks): () => void {
-    const was = { commentsAreSent: commentsAreSent, afterApply: hooks.afterApply, onRefused: hooks.onRefused };
-    if (opts.commentsAreSent) commentsAreSent = opts.commentsAreSent;
+    const was = { afterApply: hooks.afterApply, onRefused: hooks.onRefused };
     if (opts.afterApply) hooks.afterApply = opts.afterApply;
     if (opts.onRefused) hooks.onRefused = opts.onRefused;
     return function () {
-      if (opts.commentsAreSent && commentsAreSent === opts.commentsAreSent) commentsAreSent = was.commentsAreSent;
       if (opts.afterApply && hooks.afterApply === opts.afterApply) hooks.afterApply = was.afterApply;
       if (opts.onRefused && hooks.onRefused === opts.onRefused) hooks.onRefused = was.onRefused;
     };
@@ -137,12 +133,9 @@ export function createUndo(ports: UndoPorts): Undo {
     if (applying) return;
     const live = held();
     if (!live || live !== tracked || !base) { restart(live); return; }
-    const skip: Record<string, boolean> = {};
-    if (commentsAreSent()) skip["comments"] = true;
     const steps = diffStates(base, live);
-    const sent = skip["comments"] && steps.some(function (s) { return s.op === "docField" && s.key === "comments"; });
     const content = steps.filter(function (s) { return !cosmetic(s); });
-    if (reported && !sent && content.length) history.record(content, ports.now());
+    if (reported && content.length) history.record(content, ports.now());
     try { base = applySteps(base, steps); } catch (e) { base = clone(live); }
   }
 

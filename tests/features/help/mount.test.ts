@@ -40,7 +40,7 @@ function setup() {
   const panels = fakeSidePanels();
   const view = fakeScreen();
   const given: HelpPorts = {
-    document: reader.document, actions: runner.actions, notices: notices.notices,
+    document: reader.document, notices: notices.notices,
     preferences: preferences.preferences, viewFlags, sidePanels: panels.sidePanels
   };
   const holder: { current: ReturnType<typeof help.startHelp> | null } = { current: null };
@@ -78,57 +78,19 @@ test("help actions refuse before mount and over dialogs, and the tour reads its 
   }
 });
 
-test("the returned tour pauses and resumes at the same step through actions, including a tour suspended for help", () => {
-  const h = setup();
-  try {
-    h.loaded();
-    const owner = h.mount();
-    h.registry.invoke("tour", "menu");
-    click("tour-next");
-    h.registry.invoke("help", "menu");
-    assert.equal(h.viewFlags.tourOpen(), false);
-    owner.tour.interrupt();
-    click("help-close");
-    assert.equal(h.viewFlags.tourOpen(), false);
-    owner.tour.offerResume();
-    const offer = h.notices.shown.at(-1);
-    assert.ok(offer);
-    assert.equal(offer.message, "The tour was paused.");
-    assert.equal(offer.label, "Resume tour");
-    assert.equal(offer.sticky, true);
-    assert.ok(offer.action);
-    offer.action();
-    assert.equal(h.viewFlags.tourOpen(), true);
-    assert.equal(win.document.getElementById("tour-step")?.textContent, "Step 2 of 5");
-    assert.deepEqual(h.runner.calls.at(-1), { id: "tour", source: "button" });
-    assert.equal(h.preferences.finished(), 0);
-  } finally {
-    h.dispose();
-  }
-});
-
-test("disposal removes listeners and notices, clears tour state, and permits a fresh mount", () => {
+test("disposal removes listeners, clears tour state, and permits a fresh mount", () => {
   const h = setup();
   try {
     h.loaded();
     const first = h.mount();
     h.registry.invoke("tour", "menu");
-    first.tour.interrupt();
-    first.tour.offerResume();
-    const offer = h.notices.shown.at(-1);
-    assert.ok(offer);
-    assert.equal(offer.notice.listenerCount(), 1);
     first.dispose();
     first.dispose();
-    assert.equal(offer.notice.isConnected, false);
-    assert.equal(offer.notice.listenerCount(), 0);
     assert.equal(h.viewFlags.tourOpen(), false);
     assert.equal(win.document.getElementById("tagging-help-fullguide"), null);
     click("tour-skip");
     assert.equal(h.preferences.finished(), 0);
     const next = h.mount();
-    first.tour.interrupt();
-    first.tour.offerResume();
     h.registry.invoke("tour", "menu");
     click("tour-next");
     assert.equal(win.document.getElementById("tour-step")?.textContent, "Step 2 of 5");

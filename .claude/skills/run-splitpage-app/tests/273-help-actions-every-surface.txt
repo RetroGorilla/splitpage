@@ -1,5 +1,5 @@
 # The Help group from the File menu and the command menu (4.0 milestone 1):
-# Settings, Servers, Help, Tour, Set up, About and the tagging reference open
+# Settings, Help, Tour, Set up, About and the tagging reference open
 # the same thing from either surface and close the File menu. Written before
 # they moved onto the action registry, and kept unchanged after.
 
@@ -23,23 +23,6 @@ eval __run('settings')
 wait __shown('settings-modal')
 key Escape
 wait !__shown('settings-modal')
-
-# --- Servers -----------------------------------------------------------------
-click #btn-file
-sleep 200
-jsclick #file-menu [data-file-action="servers"]
-wait __shown('connect-modal')
-expect document.getElementById('file-menu').hidden
-key Escape
-wait !__shown('connect-modal')
-key ctrl KeyK
-sleep 200
-type servers
-sleep 200
-eval __run('servers')
-wait __shown('connect-modal')
-key Escape
-wait !__shown('connect-modal')
 
 # --- Help --------------------------------------------------------------------
 click #btn-file

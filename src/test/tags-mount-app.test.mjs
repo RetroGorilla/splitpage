@@ -6,7 +6,6 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
-const { tagRenamingKey } = await import("../application/tag-panel-state.ts");
 const { mountTagsFeature } = await import("../bootstrap/wiring/production.ts");
 const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../features/rows/render.js");
@@ -96,22 +95,3 @@ for (const work of ["card", "touch"]) {
     });
   }
 }
-
-test("tags app: the shared review gate still precedes moved click branches after remount", () => {
-  open();
-  const owner = mountTagsFeature();
-  const button = document.createElement("button");
-  button.dataset.action = "tag-rename";
-  button.dataset.key = tagKey("prop", "Hat");
-  document.getElementById("production-panel").append(button);
-  const prior = tagRenamingKey();
-  window.__hostedTest.setSession({ role: "review", docId: "daaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" });
-  try {
-    fire(button, "click");
-    assert.equal(tagRenamingKey(), prior);
-  } finally {
-    window.__hostedTest.setSession({ role: "edit", docId: null });
-    owner.dispose();
-    button.remove();
-  }
-});

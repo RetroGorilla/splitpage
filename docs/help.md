@@ -7,10 +7,7 @@ the script.
 
 Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 `.splitpage` files. Splitpage runs in a browser or as a
-[desktop app](#desktop-app) for Windows. To work with other people,
-[collaborate](#collaborating): one click gives you a link to send, and
-whoever opens it works on the same script, with nothing to install. On your
-own network you can also [host a shared session](#hosting-a-shared-session).
+[desktop app](#desktop-app) for Windows.
 
 ## What's new in the 4.0 beta
 
@@ -126,7 +123,7 @@ own network you can also [host a shared session](#hosting-a-shared-session).
 - **Collaborate.** **Collab** in the header (or **File ▸ Collaborate…**)
   puts the script on your server and gives you two links to send: one to
   edit, one to comment. A link opens that one script, needs no account, and
-  can be renewed or turned off. See [Collaborating](#collaborating).
+  can be renewed or turned off.
 - **Unsaved changes to a server script survive a closed tab.** The browser
   keeps them as you type and merges them back in the next time you open
   the script, with **Undo merge**.
@@ -220,7 +217,6 @@ shows it too, on a fresh copy nothing has been opened in.
 - **Open a file**, or drop a `.md`, `.splitpage`, `.docx`, `.txt` or `.csv`
   file anywhere on the page. The drop zone's links paste a script or import a
   Google Doc link.
-- **Join a shared session** opens the Servers dialog.
 - **Recent** (desktop app): the last 20 documents you had open. Click one to
   reopen it; **×** takes it off the list, **Clear recent** empties it.
   **Continue** at the top reopens the most recent.
@@ -280,10 +276,9 @@ Each scene is a row: **Visual** on the left, **Audio** on the right.
   dragged scene on it to move the scene. **File ▸ Minimise the rundown**
   shrinks it to a line; click the line to bring it back.
 - **The header's buttons**: **Production**, **Gear**, **B-roll** and
-  **Comments** open their panels; **Collab** invites people to the script
-  (see [Collaborating](#collaborating)); **Write** and **Present** are the
+  **Comments** open their panels; **Write** and **Present** are the
   two other ways to see it. In a narrower window the panel buttons shrink to
-  their icons and counts, and Collab and Write to their icons. Point at one,
+  their icons and counts, and Write to its icon. Point at one,
   or <kbd>Tab</kbd> to it, and its name slides out over its neighbours.
 - **Scene status**: click the lamp in the scene's gutter to cycle **To do →
   Ready → Shot**.
@@ -344,7 +339,6 @@ count.
   their comments, status, b-roll, breakdown details and pictures (up to
   16 MB of pictures per copy). One <kbd>Ctrl</kbd>+<kbd>Z</kbd> undoes it.
 - **Into Word or Google Docs** they paste as a two-column table.
-- A review copy can select and copy only.
 
 ### The writer
 
@@ -605,7 +599,7 @@ The **Save** button shows where things stand:
   after every change.
 - **Saving…** or **Unsaved changes**.
 - **Not saving** when something is in the way: the file changed on disk, a
-  write failed, or a sign-in lapsed.
+  write failed.
 
 Hover it for where and when ("Last saved to script.md at 2:52 PM") or what
 to do. The writer shows the same status.
@@ -624,14 +618,10 @@ yours is kept as an **Unmerged edit** comment.
 
 ### Sending it to someone
 
-- **Nothing installed?** **File ▸ Export… ▸ SplitShare** writes one `.html`
-  file with the script and the whole app in it. It opens in any browser, on
-  any device, with nothing to install, and they can read, edit and present
-  it. It's a copy: their edits stay in their file.
-- **Want their edits back?** **File ▸ Collaborate…** stores the script on
-  your collaboration server and gives you two links: one to edit it, one to
-  comment on it. Everyone who opens a link works on the same script, in
-  their browser, phone included. See [Collaborating](#collaborating).
+**File ▸ Export… ▸ SplitShare** writes one `.html` file with the script and
+the whole app in it. It opens in any browser, on any device, with nothing to
+install, and they can read, edit and present it. It's a copy: their edits
+stay in their file.
 
 ## Reopening a saved project
 
@@ -710,9 +700,7 @@ saved · Markdown*; hover for the time), the **Autosave** switch and **Save a
 copy…**. Below:
 
 - **New & open**: New script, Open…, Open recent (desktop app), and Import
-  (Paste a script, Google Doc link, Google Drive).
-- **Share**: Collaborate…, and Servers… (with a server connected, Put this
-  script on the server too).
+  (Paste a script, Google Doc link).
 - **Export**: Export…, and Export again.
 - **This document**: Version history, Find & replace, Hide shot scenes,
   Minimise the rundown, and in the desktop app Present in browser and Use
@@ -760,13 +748,11 @@ change the script.
 - **Editor**: Hide shot scenes, Autosave, Fetch video thumbnails, the reading
   speed for new scripts, the writer's text size and script zoom.
 - **Present**: the teleprompter's Mirror, Flip and One scene at a time.
-- **You**: your name and colour, as collaborators see them. Clicking your
-  name in the header opens these too.
-- **Collaboration**: the server Collaborate stores scripts on, whether this
-  device is signed in there, and **Sign out**.
+- **You**: your name and colour, which sign your edits and comments.
+  Clicking your name in the header opens these too.
 - **Help & tips**: bring back the tagging reference, the tour and the
   desktop-app notice.
-- **Data**: Export app data, Servers and Google Drive.
+- **Data**: Export app data.
 
 ## On a phone
 
@@ -820,192 +806,10 @@ Your tabs come back next time you launch Splitpage.
 
 ### Moving between the browser app and the desktop app
 
-**File ▸ Export app data…** saves your version history, saved servers and
+**File ▸ Export app data…** saves your version history and
 preferences as a `.json` file. In the desktop app, **File ▸ Import app
 data…** merges one in; nothing is overwritten. Scripts themselves aren't
-included (they're your files), and neither are sign-ins, PINs or API keys.
-
-## Collaborating
-
-**Collab** in the header, beside Write and Present (or **File ▸
-Collaborate…**, or <kbd>Ctrl</kbd>+<kbd>K</kbd>, *collaborate*) shares the
-script you have open. You get two links to send:
-
-- **Can edit**: whoever opens it can change the script, comment and resolve
-  comments.
-- **Can comment**: whoever opens it can read the script, present it, export
-  it and leave comments, but not change it.
-
-A link opens that one script and nothing else on the server. The people you
-send it to need no account, no code and nothing installed: the link opens
-Splitpage in their browser, on a phone too.
-
-**The first time**, on a script that's only on your computer:
-
-1. Collaborate asks for your server's **owner key** (the long code the
-   server was set up with, its join PIN). It's asked once per device and
-   remembered there; untick **Remember on this device** on a computer that
-   isn't yours.
-2. It tells you what happens next: the script is stored on the server, and
-   everyone edits that copy. **Save a copy…** still gives you a file any
-   time.
-3. **Collaborate** stores it and shows the two links. **Copy** puts one on
-   the clipboard.
-
-On a script that's already on the server, Collaborate goes straight to its
-links.
-
-**Managing the links.** Each link has **New link**, which makes a fresh
-one and stops the old one working, and **Turn off**, which stops it
-altogether. Both ask you to press again to confirm, because whoever is using
-the old link loses it. A link that's off stays off until you press **Make a
-link**. On a shared session hosted from the desktop app, the links stop
-working when the session ends, and the dialog says so.
-
-**Which server.** Collaborate uses the server in **Settings ▸
-Collaboration** (built in: `https://script.bigmanonline.uk/`). If it can't
-be reached, the dialog says so, with **Change the address…**. A script
-already on a server stays with that server, and in the browser app opened
-from a server, Collaborate uses that server. **Settings ▸ Collaboration ▸
-Sign out** makes this device ask for the owner key again.
-
-**What the people you invite see.** The script opens straight away. The
-first time, a small box asks their name and colour (the same ones as
-**Settings ▸ You**); **Skip** is fine. Their changes save as yours do, and
-they show up in the header and on the rundown. Their browser remembers the
-link, so a reload, a new tab or coming back next week gets them back in.
-Things that aren't theirs to do say so in the File menu: *Your link opens
-this one script* and *Only the script's owner can invite people* (which
-is also what the dimmed **Collab** button says when they point at it).
-
-If you turn their link off, they see **The owner turned off this link**.
-Nothing more is saved to the server, their changes stay on their screen,
-and **Save a copy…** still works.
-
-**If the connection drops, or the tab closes.** Changes that haven't reached
-the server yet are kept in the browser as they type, for any script on a
-server (yours or one you were invited to). The next time that browser opens
-the script (a reload, the link again, a new tab), the kept changes are merged
-into whatever the server has now, both sides' edits kept, with **Undo merge**
-if it's not what they wanted. Nothing is saved until they press Save. If the
-link has been turned off by then, the changes open as an unsaved copy
-instead, to keep with **Save a copy…**. Saving removes the kept copy; one
-left unsaved is forgotten after 30 days. A private window may not keep
-anything.
-
-## Hosting a shared session
-
-Let people on your network open and edit the same scripts. In the desktop
-app, pick **Splitpage (shared session)** from the Start Menu. From a portable
-copy, run:
-
-```
-node start.mjs --host --pin
-```
-
-The launcher shows the addresses to give people and a six-digit **join PIN**
-they type in once. Edits to different scenes merge; if two people change the
-same words, one version stays in the script and the other becomes a comment.
-
-> Without `--pin`, anyone who can reach the address can read and edit. The
-> PIN keeps out other people on the same wifi, but it isn't encryption:
-> don't open a shared session to the internet.
-
-| Launcher option | Does |
-| --- | --- |
-| `--pin 4821` | Use your own PIN |
-| `--review-pin` | Add a comment-only address and code |
-| `--allow-origin <address>` | Let another copy of Splitpage connect |
-| `--port 9000` | Use another port (default 8791) |
-
-Restarting the session cancels every code and link you handed out.
-
-### Letting someone comment without editing
-
-A reviewer can read the script, use the teleprompter and exports, and add
-comments, but not change anything. The server enforces it.
-
-- **One script**: open it from the server, then **File ▸ Collaborate…** and
-  send the **Can comment** link. It opens only that script, and you can
-  replace it or turn it off there. (A session from an older copy of
-  Splitpage has **Copy review link** in **File ▸ Servers…** instead.)
-- **The whole session**: start it with `--review-pin`. The launcher shows a
-  second address and code that open every script for review.
-
-### Seeing who else is here
-
-In a shared session, coloured initials in the header show who else has the
-document open, and a dot marks the scene each of them is in. Hover to see
-names. Anyone without a name shows as **Guest**.
-
-Each person also shows as a dot in their colour on the rundown, on the
-scene they're working in. Hover it for their name; click it to go there.
-The dot becomes an empty ring when they haven't moved or typed for about a
-minute.
-
-### Working on a server
-
-On a server, two things appear in the File menu:
-
-- **Put this script on the server** publishes the one you have open. Save
-  then saves there.
-- **Open from the server…** lists every published script.
-
-**Collaborate…** gives you links to the script you have open (see
-[Collaborating](#collaborating)). Someone who came in on a link sees these
-items greyed, with *Your link opens this one script*.
-
-If someone saved while you were typing, their version and yours are merged.
-Where you both changed the same words, theirs stays and yours is kept as an
-**Unmerged edit** comment. If your sign-in lapses or the page is out of date
-for the server, Splitpage keeps your unsaved edits and asks you to reload.
-
-## Connecting to a server
-
-**File ▸ Servers…** connects this tab to a different server: someone else's
-shared session, or your own machine from a laptop. You don't need it to
-[collaborate](#collaborating) — Collaborate has its server built in.
-
-- **Add a server**: a name, the address you were given, and the join PIN if
-  there is one. The **PIN** button takes a server's long owner key as well
-  as a six-digit PIN.
-- **Use this server** switches to it; **Back to this copy** switches back.
-- The host must allow your copy in with `--allow-origin` and your copy's
-  address. A copy opened straight from disk can't connect: serve it first
-  (see [Running it](#running-it)).
-
-**Over SSH**: for a machine that isn't on your network, tick **Reach it over
-SSH** when adding the server. Splitpage writes the `ssh` command for you,
-with **Copy** and **Save a .cmd**. From a portable copy,
-`node start.mjs --tunnel me@studio.example.com` opens the tunnel and the app.
-
-## Google Drive files
-
-**File ▸ Import ▸ Google Drive…** opens a small file manager for Google
-Drive: browse, download and upload files.
-
-- **Browser app**: works with a publicly shared folder. The first time, the
-  panel walks you through making an API key (to browse) and an OAuth Client
-  ID (to change anything) in the Google Cloud Console. Signing in needs the
-  page served (see [Running it](#running-it)), not opened from disk.
-- **Desktop app**: sign in with Google in your browser once, then browse
-  your whole Drive. Uploading a file with the same name as one in the folder
-  replaces it. Rename, delete and new folder are browser-only. **Sign out**
-  in the panel forgets the sign-in.
-
-**Setting up the desktop app's Google sign-in** (once per computer):
-
-1. In the [Google Cloud Console](https://console.cloud.google.com/apis/library/drive.googleapis.com),
-   pick or create a project and enable the **Google Drive API**.
-
-2. Under **APIs & Services ▸ OAuth consent screen**, add the `…/auth/drive`
-   scope, and add every Google account that will sign in as a test user.
-
-3. Under **APIs & Services ▸ Credentials**, create an **OAuth client ID** of
-   type **Desktop app** and download its JSON file.
-
-4. Save it as `google-oauth-client.json` in the folder the Google Drive panel
-   shows (on Windows, `%APPDATA%\Splitpage`). Then open the panel again.
+included (they're your files).
 
 ## Installing and updating
 

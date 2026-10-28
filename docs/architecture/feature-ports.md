@@ -138,7 +138,7 @@ A feature never imports another feature, and nothing outside its own folder, the
 | It needs to | Way | Examples |
 | --- | --- | --- |
 | Make another feature do something | Run that feature's action by id through `actions.invoke(id, source, input)` (the `input` argument arrives with L3g), or use the side-panels port for panels | `go-to-scene`, `annotate-picture` (L3g); `sidePanels.open("comments-panel")` (L3f); the new `reveal-row` |
-| Know some state | Read the state's owner through a port. If only a feature holds the state today, it moves to an owner first, as L3b did for area state | rundown minimised: `preferences.rundownMin()`; a person's colour: the presence owner; find open: `viewFlags.findOpen()` |
+| Know some state | Read the state's owner through a port. If only a feature holds the state today, it moves to an owner first, as L3b did for area state | rundown minimised: `preferences.rundownMin()`; a person's colour: the person-colours port; find open: `viewFlags.findOpen()` |
 | React when something happens elsewhere | Subscribe to the owner's announcement, or, when one feature produces the event, give it an output callback (`onPainted`) that the wiring connects to the other feature | the session's change announcements; the render's paint announcements from L3e PR 4 (#714), which the wiring passes on to the panels |
 | Use the same markup | A stateless helper in `src/features/common/` | `cssAttr`; the stateless parts of `editableCellHtml` and `slotPoster` |
 
@@ -156,10 +156,10 @@ A quick test: if feature B is about to call `a.something()`, then A does somethi
 
 **Hand-off bridges.** A few bridges wrap no owner. One numbered file hands its functions in, and other files call them:
 
-- `legacy/tour-pause.ts`: `20c-help` hands in the tour's interrupt and resume, and `20e-connect` calls them around its dialog.
-- `handServerCheckTo` in the location bridge: `13-hosted` hands in its server check, and `20e-connect` and `20f-desktop` call it through `checkServer()`.
+- `legacy/tour-pause.ts`: `20c-help` handed in the tour's interrupt and resume, and `20e-connect` called them around its dialog.
+- `handServerCheckTo` in the location bridge: `13-hosted` handed in its server check, and `20e-connect` and `20f-desktop` called it through `checkServer()`.
 
-These are connections between two areas, not shared ports. When the file that hands its functions in moves, its mount returns them as a small control object, typed in its own `ports.ts`, and its wiring hands that object to the bridge. The numbered callers keep working unchanged. When the last caller moves, its call becomes one of the four ways above, usually an output callback the wiring connects, and the hand-off goes (for `tour-pause.ts`, the whole file). Its entries in `src/test/_load-order-hooks.mjs` and the area's `tests/bootstrap/load-order/<area>.json` manifest go with it.
+Both went with the server and collaboration features, so no hand-off bridge is left. These were connections between two areas, not shared ports. When the file that hands its functions in moves, its mount returns them as a small control object, typed in its own `ports.ts`, and its wiring hands that object to the bridge. The numbered callers keep working unchanged. When the last caller moves, its call becomes one of the four ways above, usually an output callback the wiring connects, and the hand-off goes (for `tour-pause.ts`, the whole file). Its entries in `src/test/_load-order-hooks.mjs` and the area's `tests/bootstrap/load-order/<area>.json` manifest go with it.
 
 ### Rule 6. Features own their action definitions; bootstrap owns their order
 

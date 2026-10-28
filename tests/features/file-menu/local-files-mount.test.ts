@@ -6,7 +6,6 @@ import type { LocalFileMenuPorts } from "../../../src/features/file-menu/local-f
 import { createActionRegistry } from "../../../src/application/actions.ts";
 import { createExportRegistry } from "../../../src/application/export/registry.ts";
 import { createDocumentLocation } from "../../../src/application/location/document-location.ts";
-import { createServerStatus } from "../../../src/application/location/server-status.ts";
 import { fakeDocument, fakeNotices } from "../fakes.ts";
 
 test("local file menu mounts with named fakes, paints the chip, announces choices and manages resume", () => {
@@ -15,13 +14,11 @@ test("local file menu mounts with named fakes, paints the chip, announces choice
   location.setHome("import", { name: "draft.txt", dirty: true });
   const ports: LocalFileMenuPorts = {
     document: fakeDocument(null).document,
-    preferences: { clock: () => "24h" }, onServerDoc: () => false,
-    server: createServerStatus({ storage: () => null }), place: location,
-    saves: { unsaved: () => true }, autoSaves: { policy: () => { throw new Error("unused"); } },
+    preferences: { clock: () => "24h" }, place: location,
     writeback: { saveBackItemState: () => ({ hidden: false, disabled: false, reason: "", label: "Save to draft.txt" }) },
     exports: { captureExportDocument: () => { throw new Error("unused"); }, loadExportAssets: async () => { throw new Error("unused"); } },
-    formats: createExportRegistry(), assetSource: () => null,
-    assets: { request: () => ({ shas: [], source: null }) }, standaloneHtml: () => "",
+    formats: createExportRegistry(),
+    assets: { request: () => ({ shas: [] }) }, standaloneHtml: () => "",
     imagesLeftOut: () => {}, brollView: { printView: () => ({ filter: "all", group: "scene" }) },
     notices: { ...fakeNotices().notices, busy: { withBar: async (_label, work) => work() } },
     delivery: { deliver: async () => true }, menuItems: { setLabel: (item, label) => { if (item) item.textContent = label; } },

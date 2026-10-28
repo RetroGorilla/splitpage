@@ -27,7 +27,6 @@ export interface BlobStoreHost {
   objectUrl: (bytes: Uint8Array, mime: string) => string;
   revokeObjectUrl: (url: string) => void;
   later: (run: () => void) => void;
-  now: () => number;
   warn: (...args: unknown[]) => void;
 }
 
@@ -35,10 +34,6 @@ export interface BlobBackendInfo {
   name: string;
   persistent: boolean;
 }
-
-export type RemoteBlobSource = (sha: string) => Uint8Array | ArrayBuffer | null | undefined | Promise<Uint8Array | ArrayBuffer | null | undefined>;
-
-export type EnsureBytesOptions = { remote?: boolean; source?: RemoteBlobSource | null };
 
 export interface BlobStore {
   intern: (bytes: unknown) => ImageRef | null;
@@ -53,14 +48,10 @@ export interface BlobStore {
   isDurable: (sha: unknown) => boolean;
   queuePersist: (shas: unknown) => void;
   persist: (shas: unknown) => Promise<string[]>;
-  ensureBytes: (shas: unknown, opts?: EnsureBytesOptions) => Promise<string[]>;
+  ensureBytes: (shas: unknown) => Promise<string[]>;
   setBackend: (backend: BlobBackend | null | undefined) => void;
   backendInfo: () => BlobBackendInfo | null;
   resolveBackend: () => Promise<BlobBackend>;
-  setRemoteSource: (source: unknown) => void;
-  forgetRemoteMisses: () => void;
-  remoteMisses: () => string[];
-  ageRemoteMisses: () => void;
   forgetMemory: () => void;
 }
 
@@ -69,8 +60,6 @@ interface Entry {
   bytes: Uint8Array;
   url: string | null;
 }
-
-const REMOTE_MISS_MS = 5 * 60 * 1000;
 
 function freshRecord(rec: ImageRef): ImageRef {
   return { sha256: rec.sha256, width: rec.width, height: rec.height, mime: rec.mime };
@@ -93,10 +82,6 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
   let durable: Record<string, boolean> = Object.create(null);
   let persisting: Map<string, Promise<boolean>> = new Map();
   let loading: Map<string, Promise<void>> = new Map();
-
-  let remote: RemoteBlobSource | null = null;
-  let fetching: Map<string, Promise<void>> = new Map();
-  let remoteMissAt: Map<string, number> = new Map();
 
   let backend: BlobBackend | null = null;
   let backendPromise: Promise<BlobBackend> | null = null;
@@ -232,64 +217,14 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
     return p;
   }
 
-  function ensureBytes(shas: unknown, opts?: EnsureBytesOptions): Promise<string[]> {
+  function ensureBytes(shas: unknown): Promise<string[]> {
     const list = uniqueStrings(shas);
     const need = list.filter(function (sha) { return isSha256Hex(sha) && !entries[sha]; });
     const report = function (): string[] { return list.filter(function (sha) { return !has(sha); }); };
     if (!need.length) return Promise.resolve(report());
-    const useRemote = !(opts && opts.remote === false);
-    const fixed = !!opts && "source" in opts;
-    const source = fixed ? (typeof opts.source === "function" ? opts.source : null) : remote;
     return resolveBackend().then(function (b) {
       return Promise.all(need.map(function (sha) { return loadBlob(b, sha); }));
-    }).then(function () {
-      if (!useRemote || !source) return null;
-      const absent = need.filter(function (sha) { return !entries[sha]; });
-      return Promise.all(absent.map(function (sha) { return fixed ? fetchFrom(source, sha) : fetchRemoteBlob(sha); }));
     }).then(report, report);
-  }
-
-  function setRemoteSource(source: unknown): void {
-    remote = typeof source === "function" ? source as RemoteBlobSource : null;
-    fetching = new Map();
-    remoteMissAt = new Map();
-  }
-
-  function forgetRemoteMisses(): void {
-    remoteMissAt = new Map();
-  }
-
-  function remoteMissFresh(sha: string): boolean {
-    const at = remoteMissAt.get(sha);
-    if (!at) return false;
-    if (host.now() - at < REMOTE_MISS_MS) return true;
-    remoteMissAt.delete(sha);
-    return false;
-  }
-
-  function fetchRemoteBlob(sha: string): Promise<void> {
-    const inFlight = fetching.get(sha);
-    if (inFlight) return inFlight;
-    if (remoteMissFresh(sha)) return Promise.resolve();
-    const source = remote;
-    const p: Promise<void> = Promise.resolve().then(function () { return source ? source(sha) : null; }).then(function (bytes) {
-      if (entries[sha]) return;
-      if (!bytes) { if (source && source === remote) remoteMissAt.set(sha, host.now()); return; }
-      const rec = intern(bytes);
-      if (rec && rec.sha256 !== sha) host.warn("Image store: the server's blob " + sha + " failed its hash check");
-    }).then(null, noop).then(function () {
-      if (fetching.get(sha) === p) fetching.delete(sha);
-    });
-    fetching.set(sha, p);
-    return p;
-  }
-
-  function fetchFrom(source: RemoteBlobSource, sha: string): Promise<void> {
-    return Promise.resolve().then(function () { return source(sha); }).then(function (bytes) {
-      if (entries[sha] || !bytes) return;
-      const rec = intern(bytes);
-      if (rec && rec.sha256 !== sha) host.warn("Image store: the server's blob " + sha + " failed its hash check");
-    }).then(null, noop);
   }
 
   function loadBlob(from: BlobBackend, sha: string): Promise<void> {
@@ -363,12 +298,6 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
     setBackend: setBackend,
     backendInfo: backendInfo,
     resolveBackend: resolveBackend,
-    setRemoteSource: setRemoteSource,
-    forgetRemoteMisses: forgetRemoteMisses,
-    remoteMisses: function () { return Array.from(remoteMissAt.keys()); },
-    ageRemoteMisses: function () {
-      remoteMissAt.forEach(function (at, sha) { remoteMissAt.set(sha, at - REMOTE_MISS_MS); });
-    },
     forgetMemory: function () {
       revokeUrls();
       entries = Object.create(null);

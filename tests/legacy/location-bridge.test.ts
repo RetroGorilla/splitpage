@@ -1,97 +1,76 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { EffectPorts, Notice } from "../../src/application/effects/ports.ts";
-import { startEffects } from "../../src/legacy/effects-bridge.ts";
 import {
-  checkServer,
-  currentConn,
+  amendHome,
   currentHome,
   documentLocation,
-  handServerCheckTo,
+  fileHome,
+  importHome,
   locationStarted,
-  reviewBlocked,
-  reviewMode,
-  serverStatus,
   setHome,
-  startLocation,
-  stillOnServer
+  startLocation
 } from "../../src/legacy/location-bridge.ts";
-import { VIEWING_ONLY } from "../../src/application/collaboration/review.ts";
 
-function noticeRecorder(): { shown: unknown[][]; ports: EffectPorts<Element> } {
-  const shown: unknown[][] = [];
-  const notice: Notice = { isConnected: true, dismiss: () => {}, removeEventListener: () => {} };
-  return {
-    shown,
-    ports: {
-      notices: {
-        show: (...args) => { shown.push(args); return notice; },
-        showAction: () => notice
-      },
-      menuItems: { setLabel: () => {}, setReason: () => {} },
-      clipboard: { copyText: () => Promise.resolve(true) }
-    }
-  };
-}
-
-test("before the location is started, reading or changing it throws, and nothing counts as still on a server", () => {
+test("before the location is started, reading or changing it throws", () => {
   assert.equal(locationStarted(), false);
+  assert.throws(() => documentLocation(), /not started yet/);
   assert.throws(() => currentHome(), /not started yet/);
-  assert.throws(() => currentConn(), /not started yet/);
   assert.throws(() => setHome("none"), /not started yet/);
-  assert.throws(() => serverStatus(), /not started yet/);
-  assert.throws(() => reviewMode(), /not started yet/);
-  assert.equal(stillOnServer({}), false);
+  assert.throws(() => amendHome({ kind: "none" }, {}), /not started yet/);
+  assert.throws(() => fileHome(), /not started yet/);
+  assert.throws(() => importHome(), /not started yet/);
+});
+
+test("the bridge reads and changes the one running location", () => {
+  const stop = startLocation();
+  try {
+    assert.equal(locationStarted(), true);
+    const location = documentLocation();
+    assert.equal(currentHome(), location.home());
+    assert.deepEqual(currentHome(), { kind: "none" });
+    assert.equal(fileHome(), null);
+    assert.equal(importHome(), null);
+
+    const file = setHome("file", { format: "md", name: "a.md" });
+    assert.equal(location.home(), file);
+    assert.equal(currentHome(), file);
+    assert.equal(fileHome(), file);
+    assert.equal(importHome(), null);
+    assert.equal(amendHome(file, { lastModified: 3 }), file);
+    assert.equal(file["lastModified"], 3);
+    assert.throws(() => amendHome(file, { name: "b.md" }), /set when the home is made/);
+
+    const imported = setHome("import", { name: "notes.docx", format: "docx" });
+    assert.equal(importHome(), imported);
+    assert.equal(fileHome(), null);
+    assert.throws(() => setHome("server", { id: "doc-1" }), /unknown kind "server"/);
+    assert.equal(currentHome(), imported, "a refused setHome leaves the home where it was");
+  } finally {
+    setHome("none");
+    stop();
+  }
 });
 
 test("the location outlives a stop and restart, as the document it describes does", () => {
-  const stop = startLocation({ storage: () => null });
-  assert.throws(() => startLocation({ storage: () => null }), /already started/);
-  const connection = documentLocation().setConnection({ serverUrl: "http://a:1/" });
-  const home = setHome("server", { id: "doc-1", rev: 2 });
-  serverStatus().recordMode({ available: true });
+  const stop = startLocation();
+  assert.throws(() => startLocation(), /already started/);
+  const location = documentLocation();
+  const home = setHome("file", { format: "md", name: "a.md" });
+  location.markWrittenOut(true);
   stop();
   assert.equal(locationStarted(), false);
   assert.throws(() => currentHome(), /not started yet/);
-  assert.equal(stillOnServer(connection), false, "a server check that outlives the location is not on any server");
-  const again = startLocation({ storage: () => null });
+  stop();
+  assert.equal(locationStarted(), false, "a second stop does nothing");
+  const again = startLocation();
   try {
+    assert.equal(documentLocation(), location);
     assert.equal(currentHome(), home);
-    assert.equal(currentConn(), connection);
-    assert.equal(stillOnServer(connection), true);
-    assert.equal(serverStatus().mode().available, true);
+    assert.equal(fileHome(), home);
+    assert.equal(documentLocation().writtenOut(), true);
   } finally {
     setHome("none");
-    documentLocation().setConnection({});
-    serverStatus().forgetMode();
+    documentLocation().markWrittenOut(false);
     again();
   }
-});
-
-test("reviewBlocked tells a reviewer through the notices and says nothing to an editor", () => {
-  const stopLocation = startLocation({ storage: () => null });
-  const recorder = noticeRecorder();
-  const stopEffects = startEffects(recorder.ports);
-  try {
-    assert.equal(reviewBlocked(), false);
-    assert.deepEqual(recorder.shown, []);
-    documentLocation().setConnection({ serverUrl: "http://a:1/", token: "t", role: "review", scope: "doc-1" });
-    setHome("server", { id: "doc-1" });
-    assert.equal(reviewMode(), true);
-    assert.equal(reviewBlocked(), true);
-    assert.deepEqual(recorder.shown, [[VIEWING_ONLY, "warn", undefined]]);
-  } finally {
-    setHome("none");
-    documentLocation().setConnection({});
-    stopEffects();
-    stopLocation();
-  }
-});
-
-test("checking the server runs the check handed to the bridge", async () => {
-  assert.throws(() => checkServer(), /Nothing checks the server yet/);
-  let runs = 0;
-  handServerCheckTo(async () => { runs++; });
-  await checkServer();
-  assert.equal(runs, 1);
 });

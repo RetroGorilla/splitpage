@@ -6,7 +6,7 @@ import { autoSaveMay, autoSaveWhere } from "../../src/application/save/autosave.
 
 const IDLE: SaveStatusInput = Object.freeze({
   busy: false, dirty: false, halted: "", autoSaveOn: true, target: "file", where: "a.md",
-  homeKind: "file", onServer: false, signedOut: false, linkOff: false
+  homeKind: "file"
 });
 
 function at(change: Partial<SaveStatusInput>): SaveStatusInput {
@@ -21,8 +21,6 @@ test("INV-20: the Save buttons render one view: busy wins, then dirty, and only 
 });
 
 test("the status line for each state, in today's words", () => {
-  assert.equal(saveStatus(at({ onServer: true, signedOut: true, busy: true })).line?.text, "Not saving");
-  assert.equal(saveStatus(at({ onServer: true, linkOff: true })).line?.cls, "warn");
   assert.deepEqual({ ...saveStatus(at({ busy: true })).line }, { text: "Saving…", cls: "busy", title: "Writing your changes to a.md." });
   assert.deepEqual({ ...saveStatus(at({ halted: "Autosave is paused" })).line }, { text: "Not saving", cls: "warn", title: "Autosave is paused" });
   assert.deepEqual({ ...saveStatus(IDLE).line }, { text: "Saved", cls: "ok", title: "", where: "a.md" });
@@ -32,20 +30,17 @@ test("the status line for each state, in today's words", () => {
   assert.match(saveStatus(at({ dirty: true, target: null })).line?.title || "", /choose where this script is kept/);
 });
 
-test("INV-51 where: autosave writes only to a picked handle or the server, never an .html file, and nowhere once signed out or the link is off", () => {
+test("INV-51 where: autosave writes only to a picked handle, never an .html file", () => {
   const file = { handle: {}, format: "md" };
-  assert.equal(autoSaveWhere({ onServer: false, signedOut: false, linkOff: false, file: file }), "file");
-  assert.equal(autoSaveWhere({ onServer: false, signedOut: false, linkOff: false, file: { handle: null, format: "md" } }), null);
-  assert.equal(autoSaveWhere({ onServer: false, signedOut: false, linkOff: false, file: { handle: {}, format: "html" } }), null);
-  assert.equal(autoSaveWhere({ onServer: false, signedOut: false, linkOff: false, file: null }), null);
-  assert.equal(autoSaveWhere({ onServer: true, signedOut: false, linkOff: false, file: null }), "server");
-  assert.equal(autoSaveWhere({ onServer: true, signedOut: false, linkOff: true, file: null }), null);
-  assert.equal(autoSaveWhere({ onServer: false, signedOut: true, linkOff: false, file: file }), null);
+  assert.equal(autoSaveWhere({ file: file }), "file");
+  assert.equal(autoSaveWhere({ file: { handle: null, format: "md" } }), null);
+  assert.equal(autoSaveWhere({ file: { handle: {}, format: "html" } }), null);
+  assert.equal(autoSaveWhere({ file: null }), null);
 });
 
 test("INV-51 when: only while on, never while halted, never without a target", () => {
   assert.equal(autoSaveMay({ on: true, halted: "", target: "file" }), true);
   assert.equal(autoSaveMay({ on: false, halted: "", target: "file" }), false);
-  assert.equal(autoSaveMay({ on: true, halted: "Autosave is paused", target: "server" }), false);
+  assert.equal(autoSaveMay({ on: true, halted: "Autosave is paused", target: "file" }), false);
   assert.equal(autoSaveMay({ on: true, halted: "", target: null }), false);
 });

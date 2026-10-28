@@ -35,19 +35,6 @@ var selection = Object.create(null);
 var selectionAnchor = null;
 var bulkInput = null;
 
-var BROLL_REVIEW_SAFE_ACTIONS = {
-  "broll-expand": 1, "broll-jump": 1, "broll-filter": 1, "broll-group-menu": 1, "broll-group": 1,
-  "broll-bulk-clear": 1, "broll-open-page": 1, "broll-page-close": 1, "broll-page-jump": 1,
-  "broll-page-csv": 1, "broll-page-print": 1
-};
-
-function dropEditingForReview() {
-  if (!ports.review.reviewing()) return;
-  renamingId = null; addingPersonFor = null; editingLocFor = null; editingRefFor = null;
-  menuFor = null;
-  clearSelection();
-}
-
 var ICONS = {
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
@@ -94,7 +81,7 @@ function initials(name) {
 
 function avatarHtml(person) {
   return '<span class="person-avatar broll-avatar" aria-hidden="true" style="--presence:' +
-    escapeHtml(ports.presence.personColor(person.name)) + '">' + escapeHtml(initials(person.name)) + '</span>';
+    escapeHtml(ports.personColors.personColor(person.name)) + '">' + escapeHtml(initials(person.name)) + '</span>';
 }
 
 function plural(n, one, many) {
@@ -108,7 +95,7 @@ function sceneStarts() {
   return out;
 }
 
-function propChipHtml(e, p, removable) {
+function propChipHtml(e, p) {
   var st = tagStatus(p.status);
   return '<span class="broll-prop-chip' + (p.tracked ? '' : ' is-untracked') + '" title="' +
       escapeHtml(p.auto
@@ -117,7 +104,7 @@ function propChipHtml(e, p, removable) {
       (st ? itemLampHtml(st, "", true) : '') +
       '<span class="broll-prop-name">' + escapeHtml(p.name) + '</span>' +
       (st ? '<span class="broll-prop-st">' + escapeHtml(st.label) + '</span>' : '') +
-      (removable && p.ref
+      (p.ref
         ? '<button type="button" class="broll-prop-remove" data-action="broll-prop-remove" data-id="' +
             escapeHtml(e.id) + '" data-ref="' + escapeHtml(p.ref) + '" aria-label="' +
             escapeHtml("Take " + p.name + " off this shot") + '">' + icon("close") + '</button>'
@@ -172,14 +159,12 @@ function propListTitle(e) {
   }).join(", ");
 }
 
-function propsEditHtml(e, readOnly) {
+function propsEditHtml(e) {
   var id = escapeHtml(e.id);
-  if (readOnly && !e.props.length) return '<span class="broll-muted">None</span>';
   return '<div class="broll-props">' +
-      e.props.map(function (p) { return propChipHtml(e, p, !readOnly); }).join("") +
-      (readOnly ? '' :
-        '<input type="text" class="broll-prop-input ev-field" data-id="' + id + '" list="broll-prop-options" ' +
-          'maxlength="80" placeholder="Add prop" aria-label="Add a prop this shot needs">') +
+      e.props.map(function (p) { return propChipHtml(e, p); }).join("") +
+      '<input type="text" class="broll-prop-input ev-field" data-id="' + id + '" list="broll-prop-options" ' +
+        'maxlength="80" placeholder="Add prop" aria-label="Add a prop this shot needs">' +
     '</div>';
 }
 
@@ -330,11 +315,10 @@ function rowStateIconsHtml(e) {
 
 function checkHtml(e) {
   var shot = e.status === "shot";
-  var ro = ports.review.reviewing();
   return '<button type="button" class="broll-check" role="checkbox" aria-checked="' + (shot ? 'true' : 'false') +
-    '"' + (ro ? ' disabled' : '') + ' data-action="broll-status-toggle" data-id="' + escapeHtml(e.id) + '" aria-label="' +
+    '" data-action="broll-status-toggle" data-id="' + escapeHtml(e.id) + '" aria-label="' +
     escapeHtml("Shot: " + (e.name || "Untitled shot")) + '" title="' +
-    (ro ? (shot ? 'Shot' : 'To shoot') : shot ? 'Shot — click to mark To shoot' : 'To shoot — click to mark Shot') +
+    (shot ? 'Shot — click to mark To shoot' : 'To shoot — click to mark Shot') +
     '"><span class="broll-check-box">' + icon("check") + '</span></button>';
 }
 
@@ -374,22 +358,20 @@ function statusLampHtml(status) {
     (status === "shot" ? icon("check") : '') + '</span>';
 }
 
-function statusFieldHtml(e, ro) {
+function statusFieldHtml(e) {
   var id = escapeHtml(e.id);
   var cur = SHOT_STATUSES.filter(function (s) { return s.id === e.status; })[0] || SHOT_STATUSES[0];
   var next = SHOT_STATUSES.filter(function (s) { return s.id !== cur.id; })[0];
-  var says = "Status: " + cur.label + (ro ? "" : ". Click to mark " + next.label.toLowerCase());
+  var says = "Status: " + cur.label + ". Click to mark " + next.label.toLowerCase();
   return '<span class="ev-field broll-status-field">' +
       '<button type="button" class="broll-status-btn" data-action="broll-status-toggle" data-id="' + id + '" data-status="' +
-        cur.id + '" aria-label="' + escapeHtml(says) + '" title="' + escapeHtml(says) + '"' + (ro ? ' disabled' : '') + '>' +
+        cur.id + '" aria-label="' + escapeHtml(says) + '" title="' + escapeHtml(says) + '">' +
         statusLampHtml(cur.id) + escapeHtml(cur.label) + '</button>' +
     '</span>';
 }
 
 function cardHtml(e, starts) {
   var id = escapeHtml(e.id);
-  var ro = ports.review.reviewing();
-  var off = ro ? ' disabled' : '';
   var renaming = renamingId === e.id;
 
   var when = startOf(e, starts);
@@ -400,10 +382,7 @@ function cardHtml(e, starts) {
       ? '<span class="broll-muted">No longer in the script — its line was deleted.</span>'
       : '<span class="broll-muted">Added here</span>';
 
-  var location = ro
-    ? '<span class="broll-static">' +
-        (e.location ? escapeHtml(e.location) : '<span class="broll-muted">No location</span>') + '</span>'
-    : editingLocFor === e.id
+  var location = editingLocFor === e.id
     ? '<input type="text" class="broll-loc-input ev-field" data-id="' + id + '" list="broll-loc-options" maxlength="80" ' +
         'placeholder="Where it gets shot" aria-label="Location" value="' + escapeHtml(e.location) + '">'
     : '<span class="ev-field broll-loc-field"><button type="button" class="broll-picker" data-action="broll-loc-edit" data-id="' + id +
@@ -414,18 +393,17 @@ function cardHtml(e, starts) {
   var who = personById(e.owner);
   var assigned = '<div class="broll-owner-row">' +
       '<span class="ev-field broll-owner-field">' + (who ? avatarHtml(who) : '') +
-        '<select class="broll-owner-select' + (who ? '' : ' is-empty') + '" data-id="' + id + '" aria-label="Assigned to"' + off + '>' +
+        '<select class="broll-owner-select' + (who ? '' : ' is-empty') + '" data-id="' + id + '" aria-label="Assigned to">' +
           '<option value=""' + (e.owner ? '' : ' selected') + '>Unassigned</option>' +
           (ports.document.current()?.people || []).map(function (p) {
             return '<option value="' + escapeHtml(p.id) + '"' + (p.id === e.owner ? ' selected' : '') + '>' +
               escapeHtml(p.name) + '</option>';
           }).join("") +
         '</select>' +
-        (ro ? '' : chevronHtml()) +
+        chevronHtml() +
       '</span>' +
-      (ro ? '' :
-        '<button type="button" class="broll-person-btn btn-outline is-small" data-action="broll-person-new" data-id="' + id +
-          '" title="Add someone to the crew list">' + icon("plus") + 'Add person</button>') +
+      '<button type="button" class="broll-person-btn btn-outline is-small" data-action="broll-person-new" data-id="' + id +
+        '" title="Add someone to the crew list">' + icon("plus") + 'Add person</button>' +
     '</div>' +
     (addingPersonFor === e.id
       ? '<div class="broll-owner-row">' +
@@ -442,31 +420,28 @@ function cardHtml(e, starts) {
         (e.audioRef
           ? '<blockquote class="broll-quote">' + escapeHtml(e.audioRef) + '</blockquote>'
           : '<span class="broll-muted">No line yet</span>') +
-        (ro ? '' :
-          '<button type="button" class="broll-icon-btn" data-action="broll-ref-edit" data-id="' + id +
-            '" aria-label="Edit the line this cuts against" title="Edit">' + brollIcon("pencil", 16) + '</button>') +
+        '<button type="button" class="broll-icon-btn" data-action="broll-ref-edit" data-id="' + id +
+          '" aria-label="Edit the line this cuts against" title="Edit">' + brollIcon("pencil", 16) + '</button>' +
       '</div>';
 
   var foot = '<div class="broll-card-foot">' +
-      '<button type="button" class="broll-flag-btn btn-outline is-small' + (e.reshoot ? ' is-active' : '') + '"' + off +
+      '<button type="button" class="broll-flag-btn btn-outline is-small' + (e.reshoot ? ' is-active' : '') + '"' +
         ' data-action="broll-reshoot-toggle" data-id="' + id + '" aria-pressed="' + (e.reshoot ? 'true' : 'false') + '" title="' +
-        (ro ? (e.reshoot ? 'Flagged' : 'Not flagged')
-            : e.reshoot ? 'Flagged — click to clear' : 'Flag it: a reshoot, or anything else worth a second look') + '">' +
+        (e.reshoot ? 'Flagged — click to clear' : 'Flag it: a reshoot, or anything else worth a second look') + '">' +
         icon("flag") + (e.reshoot ? 'Flagged' : 'Flag for reshoot') + '</button>' +
-      (ro ? '' :
-        '<div class="broll-more-wrap">' +
-          '<button type="button" class="broll-more-btn btn-outline is-small is-icon" data-action="broll-menu" data-id="' + id +
-            '" aria-haspopup="menu" aria-expanded="' + (menuFor === e.id ? 'true' : 'false') +
-            '" aria-label="More actions for this shot" title="More">' + icon("more") + '</button>' +
-          (menuFor === e.id
-            ? '<div class="broll-menu broll-more-menu" role="menu">' +
-                (e.rowId ? '<button type="button" role="menuitem" class="broll-menu-item" data-action="broll-rename" data-id="' + id +
-                  '">Rename in script</button>' : '') +
-                '<button type="button" role="menuitem" class="broll-menu-item danger" data-action="broll-delete" data-id="' + id +
-                  '">Delete from list</button>' +
-              '</div>'
-            : '') +
-        '</div>') +
+      '<div class="broll-more-wrap">' +
+        '<button type="button" class="broll-more-btn btn-outline is-small is-icon" data-action="broll-menu" data-id="' + id +
+          '" aria-haspopup="menu" aria-expanded="' + (menuFor === e.id ? 'true' : 'false') +
+          '" aria-label="More actions for this shot" title="More">' + icon("more") + '</button>' +
+        (menuFor === e.id
+          ? '<div class="broll-menu broll-more-menu" role="menu">' +
+              (e.rowId ? '<button type="button" role="menuitem" class="broll-menu-item" data-action="broll-rename" data-id="' + id +
+                '">Rename in script</button>' : '') +
+              '<button type="button" role="menuitem" class="broll-menu-item danger" data-action="broll-delete" data-id="' + id +
+                '">Delete from list</button>' +
+            '</div>'
+          : '') +
+      '</div>' +
     '</div>';
 
   return '<div class="broll-card" data-id="' + id + '">' +
@@ -479,14 +454,14 @@ function cardHtml(e, starts) {
           '</div>'
         : e.desc ? '<div class="broll-card-desc">' + escapeHtml(e.desc) + '</div>' : '') +
       '<dl class="broll-fields">' +
-        field("Status", statusFieldHtml(e, ro)) +
+        field("Status", statusFieldHtml(e)) +
         field("Scene", scene) +
         field("Location", location) +
         field("Assigned", assigned) +
-        field("Props", propsEditHtml(e, ro)) +
+        field("Props", propsEditHtml(e)) +
         field("Cuts against", cuts) +
         field("Note", '<textarea class="broll-notes-input ev-field" data-id="' + id + '" rows="1" aria-label="Note" ' +
-          (ro ? 'readonly placeholder="No note">' : 'placeholder="Add a note…">') + '\n' + escapeHtml(e.notes) + '</textarea>') +
+          'placeholder="Add a note…">\n' + escapeHtml(e.notes) + '</textarea>') +
       '</dl>' +
       foot +
     '</div>';
@@ -497,7 +472,6 @@ function selectedIds(entries) {
 }
 
 function bulkBarHtml(entries) {
-  if (ports.review.reviewing()) return "";
   var chosen = entries.filter(function (e) { return selection[e.id]; });
   if (!chosen.length) return "";
   var allShot = chosen.every(function (e) { return e.status === "shot"; });
@@ -590,7 +564,7 @@ function keepingFocus(container, draw) {
   if (active && container.contains(active)) {
     var typed = active.tagName === "TEXTAREA" || (active.tagName === "INPUT" && active.type === "text");
     var ownValue = recordField(active) ? typedSinceDrawn(active) : typed;
-    if (ownValue && !ports.review.reviewing()) {
+    if (ownValue) {
       var change = typedChange(active);
       if (change) writeRecord(active.getAttribute("data-id"), change);
     }
@@ -631,7 +605,6 @@ export function renderBroll() {
   ports.records.updateBrollBadge();
   var panel = document.getElementById("broll-panel");
   if (!panel || panel.hidden || !ports.document.current()) return;
-  dropEditingForReview();
   var summary = document.getElementById("broll-summary");
   var controls = document.getElementById("broll-controls");
   var listEl = document.getElementById("broll-list");
@@ -799,7 +772,6 @@ function shownOrder(container) {
 }
 
 function addBrollFromPanel() {
-  if (ports.review.refuseInReview()) return;
   var input = document.getElementById("broll-add-input");
   if (!input) return;
   var name = cappedText(input.value, BROLL_NAME_MAX);
@@ -866,10 +838,6 @@ function onBrollClick(e, root, exportAs) {
   var action = btn.getAttribute("data-action");
   var id = btn.getAttribute("data-id");
 
-  if (ports.review.reviewing() && !BROLL_REVIEW_SAFE_ACTIONS[action]) {
-    ports.review.refuseInReview();
-    return;
-  }
   if (action !== "broll-group-menu" && action !== "broll-group") groupMenuOpen = false;
   if (action !== "broll-menu" && action !== "broll-rename" && action !== "broll-delete") menuFor = null;
 
@@ -880,7 +848,7 @@ function onBrollClick(e, root, exportAs) {
     var again = fromField && root.querySelector('.broll-status-btn[data-id="' + cssAttr(id) + '"]');
     if (again) again.focus();
   } else if (action === "broll-expand") {
-    if ((e.shiftKey || e.ctrlKey || e.metaKey) && !ports.review.reviewing()) {
+    if (e.shiftKey || e.ctrlKey || e.metaKey) {
       e.preventDefault();
       selectWithModifier(e, id, shownOrder(root));
       renderBrollViews();
@@ -986,13 +954,6 @@ function onBrollClick(e, root, exportAs) {
 
 function onBrollChange(e) {
   var t = e.target;
-  if (ports.review.reviewing()) {
-    if (t.classList.contains("broll-owner-select") || t.id === "broll-bulk-owner" || t.id === "broll-bulk-location") {
-      ports.review.refuseInReview();
-      renderBrollViews();
-    }
-    return;
-  }
   if (t.classList.contains("broll-owner-select")) {
     updateRecord(t.getAttribute("data-id"), { owner: personById(t.value) ? t.value : "" });
   } else if (t.id === "broll-bulk-owner") {
@@ -1010,7 +971,7 @@ function focusBulkInput() {
 }
 
 function onBrollFocusOut(e) {
-  if (ports.review.reviewing() || drawingPanel) return;
+  if (drawingPanel) return;
   var el = e.target;
   var field = recordField(el);
   if (!field || !brollRecord(el.getAttribute("data-id"))) return;
@@ -1053,10 +1014,6 @@ function onBrollKeydown(e, root) {
     return;
   }
   if (e.key !== "Enter") return;
-  if (ports.review.reviewing()) {
-    if (t.tagName === "INPUT" && !t.readOnly) { e.preventDefault(); ports.review.refuseInReview(); }
-    return;
-  }
   if (t.id === "broll-add-input") { e.preventDefault(); addBrollFromPanel(); }
   else if (t.classList.contains("broll-prop-input")) { e.preventDefault(); commitPropInput(t); }
   else if (t.classList.contains("broll-loc-input")) { e.preventDefault(); commitLocation(t); }
@@ -1075,7 +1032,6 @@ function onBrollKeydown(e, root) {
 }
 
 function onBrollInput(e) {
-  if (ports.review.reviewing()) return;
   var box = e.target;
   if (box.tagName === "TEXTAREA" && box.classList.contains("ev-field")) fitTextarea(box);
   if (box.classList && box.classList.contains("broll-prop-input") &&
@@ -1216,7 +1172,6 @@ function pageGroupHeadHtml(g) {
 
 function pageRowHtml(e) {
   var id = escapeHtml(e.id);
-  var ro = ports.review.reviewing();
   var props = e.props.map(function (p) { return p.name; }).join(", ");
   return '<tr class="broll-page-row' + (e.status === "shot" ? ' is-shot' : '') + (e.reshoot ? ' is-flagged' : '') +
       '" data-id="' + id + '">' +
@@ -1232,7 +1187,7 @@ function pageRowHtml(e) {
     '<td class="broll-page-c-cuts" data-label="Cuts against">' +
       (e.audioRef ? '<span class="broll-page-ellipsis broll-page-cuts" title="' + escapeHtml(e.audioRef) + '">' + escapeHtml(e.audioRef) + '</span>' : '<span class="broll-muted">—</span>') + '</td>' +
     '<td class="broll-page-c-owner" data-label="Assigned">' +
-      '<select class="broll-owner-select broll-page-owner" data-id="' + id + '" aria-label="' + escapeHtml("Assigned to, " + (e.name || "Untitled shot")) + '"' + (ro ? ' disabled' : '') + '>' +
+      '<select class="broll-owner-select broll-page-owner" data-id="' + id + '" aria-label="' + escapeHtml("Assigned to, " + (e.name || "Untitled shot")) + '">' +
         '<option value=""' + (e.owner ? '' : ' selected') + '>Unassigned</option>' +
         (ports.document.current()?.people || []).map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '"' + (p.id === e.owner ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
@@ -1241,15 +1196,13 @@ function pageRowHtml(e) {
     '<td class="broll-page-c-note" data-label="Note">' +
       (e.reshoot ? '<span class="broll-flag-ico" title="Flagged" aria-label="Flagged">' + brollIcon("flag", 14) + '</span>' : '') +
       '<textarea class="broll-notes-input broll-page-note" data-id="' + id + '" rows="1" maxlength="2000" ' +
-        (ro ? 'readonly ' : 'placeholder="Add a note" ') +
-        'aria-label="' + escapeHtml("Note, " + (e.name || "Untitled shot")) + '">\n' + escapeHtml(e.notes) + '</textarea></td>' +
+        'placeholder="Add a note" aria-label="' + escapeHtml("Note, " + (e.name || "Untitled shot")) + '">\n' + escapeHtml(e.notes) + '</textarea></td>' +
   '</tr>';
 }
 
 export function renderBrollPage() {
   var page = brollPageEl();
   if (!page || page.hidden || !ports.document.current()) return;
-  dropEditingForReview();
   keepingFocus(page, function () {
     var entries = ports.records.brollEntries();
     var shown = entries.filter(function (e) { return matchesFilter(e, ports.view.current().filter); });

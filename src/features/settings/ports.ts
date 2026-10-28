@@ -1,7 +1,6 @@
 import type { CommentSorting } from "../../application/comment-sort.ts";
 import type { LaunchFacts } from "../../application/desktop-presence.ts";
 import type { FileDelivery } from "../../application/files/file-delivery.ts";
-import type { ServerStatus } from "../../application/location/server-status.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { PreferenceChanges, PreferenceName, Preferences } from "../../application/preferences/preferences.ts";
@@ -25,7 +24,7 @@ export interface SettingsPorts {
     "theme" | "setTheme" | "clock" | "setClock" | "scriptScale" | "setScriptScale" |
     "rundownMin" | "setRundownMin" | "tagIcons" | "setTagIcons" | "hideShot" |
     "autosave" | "videoThumbs" | "setVideoThumbs" | "defaultWpm" | "setDefaultWpm" |
-    "prompterFlag" | "setMyColor" | "commentAuthor" | "setCommentAuthor" | "setCollabServer" |
+    "prompterFlag" | "setMyColor" | "commentAuthor" | "setCommentAuthor" |
     "announceTaggingHelp" | "resetTour" | "resetDesktopNotice">;
   readonly editor: {
     readonly writerSize: () => number | null;
@@ -41,13 +40,6 @@ export interface SettingsPorts {
     readonly mirror: (on: boolean) => void;
     readonly flip: (on: boolean) => void;
     readonly sceneMode: (on: boolean) => void;
-  };
-  readonly collaboration: {
-    readonly defaultServer: string;
-    readonly view: () => { servedHere: boolean; label: string; signedIn: boolean; isDefault: boolean };
-    readonly normalize: (address: string) => string | null;
-    readonly address: () => string;
-    readonly signOut: () => void;
   };
   readonly desktop: {
     readonly running: () => boolean;
@@ -89,7 +81,6 @@ export interface AppDataPorts {
   readonly preferences: Pick<Preferences, "appDataExport" | "appDataImport" | "commentsSort">;
   readonly desktop: () => boolean;
   readonly launchFacts: Pick<LaunchFacts, "appVersion">;
-  readonly bookmarks: Pick<ServerStatus, "loadBookmarks" | "bookmarks" | "addBookmarks">;
   readonly commentSorting: Pick<CommentSorting, "choose">;
   readonly history: {
     readonly exportAll: () => Promise<AppDataHistoryExport>;
@@ -101,12 +92,6 @@ export interface AppDataPorts {
     readonly setSize: (size: number | null, persist: boolean) => void;
   };
   readonly embeddedVersion: () => string | null;
-  readonly bookmarkEditor: {
-    readonly newId: () => string;
-    readonly portOr: (value: unknown, fallback: number) => number;
-    readonly save: () => void;
-    readonly render: () => void;
-  };
   readonly useBlobBackend: (backend: {
     readonly name?: string;
     readonly persistent?: boolean;

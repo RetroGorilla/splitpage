@@ -20,19 +20,17 @@ import type { ActionRegistry, ActionSource } from "../../src/application/actions
 import { currentDocument } from "../../src/legacy/session-bridge.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
 import { prompterIsOpen, setPrompterOpen } from "../../src/application/prompter-state.ts";
-import { fileMenuActions, mountFileMenuDropdownFeature, stopFileMenuDropdownFeature } from "../../src/bootstrap/wiring/file-menu.ts";
-import { helpMenuActions } from "../../src/legacy/help-actions.ts";
+import { autosaveActions, fileMenuActions, mountFileMenuDropdownFeature, stopFileMenuDropdownFeature } from "../../src/bootstrap/wiring/file-menu.ts";
+import { settingsActions } from "../../src/bootstrap/wiring/settings.ts";
 import { helpActions, mountHelpFeature, stopHelpFeature } from "../../src/bootstrap/wiring/help.ts";
 import { updateActions } from "../../src/bootstrap/wiring/update.ts";
 import { availableUnless, EVERY_OVERLAY, everyOverlayBut, inFront, OPENS_A_DIALOG } from "../../src/application/screen.ts";
 import type { Blocker, ScreenState } from "../../src/application/screen.ts";
 import { targetActions } from "../../src/bootstrap/wiring/title-chrome.ts";
-import { shareActions } from "../../src/legacy/share-actions.ts";
 import { historyActions } from "../../src/bootstrap/wiring/history-panel.ts";
 import { hideShotActions } from "../../src/bootstrap/wiring/hide-shot.ts";
 import { mountRundownFeature, rundownMinimizeActions, stopRundownFeature } from "../../src/bootstrap/wiring/rundown.ts";
 import { writerActions } from "../../src/features/writer/actions.ts";
-import { review } from "../../src/bootstrap/wiring/ports/location.ts";
 import { viewFlags } from "../../src/legacy/preferences-bridge.ts";
 import { findActions, mountFindFeature, stopFindFeature } from "../../src/bootstrap/wiring/find.ts";
 import { fileMenuExportActions, mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../src/bootstrap/wiring/file-menu-export.ts";
@@ -101,9 +99,8 @@ function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
   mountFileMenuExportFeature(captureExportDocument);
   mountFindFeature();
   const file = fileMenuActions();
-  const share = [...fileWritebackActions(), ...shareActions(), ...targetActions()];
-  const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFileMenuDropdownFeature, stopFindFeature, registerAll(registry, [...file.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...file.slice(3, 4)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...historyActions(), ...findActions()]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...writerActions(() => ({ openWriter() {} }), { screen, review }), ...prompterActions(() => ({ openPrompter() {} }), { screen })]),
-    registerAll(registry, [...share.slice(0, 2), ...file.slice(4, 5), ...share.slice(2, 3), ...file.slice(5, 6), ...importActions(), ...share.slice(3, 7), ...fileMenuExportActions().slice(1), ...share.slice(7), ...desktopActions()]), stopDesktopFeature, stopCommandMenuFeature, stopHelpFeature, stopOnboardingFeature, stopLocalFilesFeature];
+  const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFileMenuDropdownFeature, stopFindFeature, registerAll(registry, [...file.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...file.slice(3, 4)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...historyActions(), ...findActions()]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...writerActions(() => ({ openWriter() {} }), { screen }), ...prompterActions(() => ({ openPrompter() {} }), { screen })]),
+    registerAll(registry, [...fileWritebackActions(), ...autosaveActions(), ...file.slice(4, 6), ...importActions(), ...fileMenuExportActions().slice(1), ...targetActions(), ...desktopActions()]), stopDesktopFeature, stopCommandMenuFeature, stopHelpFeature, stopOnboardingFeature, stopLocalFilesFeature];
   const was = { state: currentDocument() as unknown, prompterOpen: prompterIsOpen() };
   loadTestDocument({ rows: [] });
   setPrompterOpen(false);
@@ -131,7 +128,7 @@ function refusal(registry: ActionRegistry, id: string, source: ActionSource = "n
   return view.enabled ? null : view.reason;
 }
 
-const NO_DIALOG_COMMANDS = ["server-publish", "save-back", "prompter-open-in-browser", "prompter-open-in-chromium"];
+const NO_DIALOG_COMMANDS = ["save-back", "prompter-open-in-browser", "prompter-open-in-chromium"];
 
 const PAGE_COMMANDS =["open", "export", "command-menu", "find", "history", "panel-production", "panel-gear", "panel-comments"];
 
@@ -175,13 +172,11 @@ test("a dialog over Present is named first, and the commands that only acted beh
   }
 });
 
-const DIALOG_OPENERS = ["about", "settings", "servers", "setup", "tagging-help", "collaborate", "paste", "gdoc-import",
-  "drive-open", "server-open"];
+const DIALOG_OPENERS = ["about", "settings", "setup", "tagging-help", "paste", "gdoc-import"];
 
 test("a command that opens a dialog, Help among them, is refused over a dialog but opens over Present", () => {
   const { registry, restore } = loadedRegistry();
-  const menu = helpMenuActions();
-  const help = registerAll(registry, [...menu, ...helpActions(), ...fileMenuActions().slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions()]);
+  const help = registerAll(registry, [...settingsActions(), ...helpActions(), ...fileMenuActions().slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions()]);
   try {
     for (const id of [...DIALOG_OPENERS, "help"]) assert.equal(refusal(registry, id, "menu"), null, id);
     document.body.innerHTML = '<div class="modal-backdrop"></div>';
@@ -197,8 +192,7 @@ test("a command that opens a dialog, Help among them, is refused over a dialog b
 
 test("the tour is refused over a dialog and starts over Present and the shot list", () => {
   const { registry, restore } = loadedRegistry();
-  const menu = helpMenuActions();
-  const help = registerAll(registry, [...menu, ...helpActions(), ...fileMenuActions().slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions()]);
+  const help = registerAll(registry, [...settingsActions(), ...helpActions(), ...fileMenuActions().slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions()]);
   try {
     assert.equal(refusal(registry, "tour", "menu"), null);
     document.body.innerHTML = '<div class="modal-backdrop"></div>';

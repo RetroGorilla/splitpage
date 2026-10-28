@@ -32,7 +32,7 @@ function setup() {
       close: () => { (document.getElementById("history-panel") as HTMLElement).hidden = true; }
     },
     effects: notices.notices, preferences: { clock: () => "24", editorName: () => "Ann" },
-    presence: { personColor: () => "#123456" }, ids: migration.ids
+    personColors: { personColor: () => "#123456" }, ids: migration.ids
   };
   const owner: HistoryPanelControl = startHistoryPanel(ports);
   return { owner, reader, notices, requests, listing, answer: (value: SnapshotRestoreResult) => { answer = value; }, load: (value: typeof load) => { load = value; } };

@@ -49,7 +49,7 @@ function counted(target: EventTarget) {
 }
 
 function harness(p: ReturnType<typeof page>) {
-  const state = { dragging: false, review: false, rowOver: false, rowDrop: false };
+  const state = { dragging: false, rowOver: false, rowDrop: false };
   const calls: string[] = [];
   const name = (el: EventTarget | null): string => (el && "id" in el ? (el as Element).id : "?");
   const mount = (): RowsEditor => mountRowsEditor({
@@ -65,7 +65,6 @@ function harness(p: ReturnType<typeof page>) {
       rowDragOver: () => { calls.push("rowOver"); return state.rowOver; },
       rowDrop: () => { calls.push("rowDrop"); return state.rowDrop; },
       scriptCell: (cell) => cell.classList.contains("script"),
-      reviewOnly: () => state.review,
       hasMedia: (files) => !!files && Array.prototype.some.call(files, (f: File) => /^(image|video)\//.test(f.type)),
       insert: (cell, html, text, files) => { calls.push("insert:" + cell.id + ":" + html + ":" + text + ":" + (files ? files.length : 0)); },
       notMedia: () => { calls.push("notMedia"); }
@@ -130,7 +129,7 @@ test("rows editor: while a scene drags, a file drag is not a media drop; the sce
   editor.dispose();
 });
 
-test("rows editor: a media file dropped on the Image section goes into the scene's Visual cell; a review copy takes nothing", () => {
+test("rows editor: a media file dropped on the Image section goes into the scene's Visual cell", () => {
   const p = page();
   const h = harness(p);
   const editor = h.mount();
@@ -139,10 +138,6 @@ test("rows editor: a media file dropped on the Image section goes into the scene
   p.byId("media-inner").dispatchEvent(drop);
   assert.ok(drop.defaultPrevented);
   assert.ok(!p.byId("visual").classList.contains("drag-over"));
-  h.state.review = true;
-  const refused = dragEvent(p.win, "drop", { types: ["Files"], files: [picture(p.win)] });
-  p.byId("media").dispatchEvent(refused);
-  assert.ok(refused.defaultPrevented);
   assert.deepEqual(h.calls, ["insert:vcell:::1"]);
   editor.dispose();
 });
@@ -160,7 +155,7 @@ test("rows editor: a file that is not a picture or video dropped on the Image se
   editor.dispose();
 });
 
-test("rows editor: a drop on a script cell inserts there after the scene move declines; review and empty drops do nothing", () => {
+test("rows editor: a drop on a script cell inserts there after the scene move declines; empty drops do nothing", () => {
   const p = page();
   const h = harness(p);
   const editor = h.mount();
@@ -171,14 +166,11 @@ test("rows editor: a drop on a script cell inserts there after the scene move de
   const empty = dragEvent(p.win, "drop", { types: [] });
   p.byId("acell").dispatchEvent(empty);
   assert.ok(empty.defaultPrevented, "an empty drop on a cell is still taken");
-  h.state.review = true;
-  p.byId("acell").dispatchEvent(dragEvent(p.win, "drop", { types: ["text/plain"], text: "no" }));
-  h.state.review = false;
   p.byId("draft").dispatchEvent(dragEvent(p.win, "drop", { types: ["text/plain"], text: "draft" }));
   assert.equal(p.doc.activeElement, p.byId("draft"), "an editable that is not a script cell takes the focus, and nothing more");
   h.state.rowDrop = true;
   p.byId("acell").dispatchEvent(dragEvent(p.win, "drop", { types: ["text/plain"], text: "moved" }));
-  assert.deepEqual(h.calls, ["rowDrop", "insert:acell:<b>hi</b>:hi:0", "rowDrop", "rowDrop", "rowDrop", "rowDrop"]);
+  assert.deepEqual(h.calls, ["rowDrop", "insert:acell:<b>hi</b>:hi:0", "rowDrop", "rowDrop", "rowDrop"]);
   editor.dispose();
 });
 

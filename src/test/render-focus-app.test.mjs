@@ -53,7 +53,6 @@ function fixture(title) {
 
 function fresh(title, build = fixture) {
   if (viewFlags().writerOpen()) writer.closeWriter();
-  window.__hostedTest.setSession({ role: "edit", docId: null });
   clock += 10_000;
   loadTestDocument(migrateRows(build(title)));
   flushEdits();
@@ -154,7 +153,7 @@ const NO_EDIT = { edits: 0, seq: 0, generation: 0, undo: 0 };
 const noEdit = (got) => ({ edits: got.edits, seq: got.seq, generation: got.generation, undo: got.undo });
 
 function merge(theirs) {
-  return applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false });
+  return applyMerge({ theirs: theirs, source: "stash", unchanged: true, report: false });
 }
 
 test("an update drawn while a Writer paragraph has focus keeps the incoming text, makes no edit and leaves the caret where it was in the Writer (#477)", () => {

@@ -9,7 +9,6 @@
     "src/legacy/document-ports.ts",
     "src/application/identity/document-identity.js",
     "src/application/identity/document-guard.ts",
-    "src/legacy/document-identity-bridge.ts",
     "src/bootstrap/startup/document-entry.js",
     "src/adapters/page/standalone-html.js",
     "src/bootstrap/wiring/document-identity.ts",
@@ -17,5 +16,5 @@
     "src/adapters/page/document-guard-query.ts",
     "src/bootstrap/wiring/ports/document-identity-controls.ts"
   ],
-  "expectedLoads": 15
+  "expectedLoads": 14
 }

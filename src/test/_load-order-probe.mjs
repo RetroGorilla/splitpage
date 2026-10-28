@@ -53,7 +53,6 @@ const exports = await import("../bootstrap/wiring/export-registry.ts");
 const exportServices = await import("../application/export/services.ts");
 const projectFileServices = await import("../application/formats/project-file-services.ts");
 const shotHiding = await import("../bootstrap/wiring/shot-hiding.ts");
-const presence = await import("../legacy/presence-bridge.ts");
 const undo = await import("../legacy/undo-bridge.ts");
 const exportKit = await import("../bootstrap/wiring/export-capture.ts");
 const owners = {
@@ -72,7 +71,6 @@ const owners = {
   exportServices: exportServices.exportServicesStarted(),
   projectFileServices: projectFileServices.projectFileServicesStarted(),
   shotHiding: shotHiding.shotHidingStarted(),
-  presence: presence.presenceStarted(),
   undo: undo.undoStarted(),
   exportCapture: exportKit.exportKitStarted()
 };

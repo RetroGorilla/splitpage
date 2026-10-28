@@ -3,7 +3,6 @@ import { after } from "node:test";
 import assert from "node:assert/strict";
 import {
   createHeldDesktop,
-  createHeldFetch,
   createHeldFileHandle,
   firstWriteBeforeAdoption,
   mockClock,
@@ -11,7 +10,7 @@ import {
 } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
-import { documentLocation, serverStatus } from "../legacy/location-bridge.ts";
+import { documentLocation } from "../legacy/location-bridge.ts";
 
 const { currentDocument, liveSession, mergeBase, onDocumentReplaced, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../legacy/session-bridge.ts");
 
@@ -50,7 +49,6 @@ bootTrace.stop();
 
 const { LONG_DEMO } = await import("../starters/index.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { adoptRestoredState, migrateDocument } = await import("../bootstrap/startup/document-entry.js");
 const { standaloneHtmlFor } = await import("../adapters/page/standalone-html.js");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
@@ -70,11 +68,9 @@ function saveAuthorName(name) { saveAuthorNameWith(commentPreferences(), name); 
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");
-const { finishServerDetect, publishToServer } = await import("../js/13-hosted.js");
-const { SERVER_RESUME_KEY } = await import("../application/location/server-status.ts");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { setHome } = homeModule;
-const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
+const { applyTakenDraft, draftTaker } = await import("../bootstrap/wiring/drafts.ts");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 const { makeDesktopHandle } = await import("../adapters/desktop/desktop-handle.ts");
@@ -264,17 +260,6 @@ rightToday("E2c", "a throw in a session listener after a commit gives a distinct
   return off;
 }, "listener failed"));
 
-function serverFetch(answerFor) {
-  const held = createHeldFetch({
-    connection: () => "tab",
-    answer: (r) => {
-      const found = answerFor(r);
-      return found || { status: 200, body: {} };
-    }
-  });
-  return held;
-}
-
 rightToday("T2a", "a new document opens its epoch at the transition, not at the next render", async () => {
   useDocument(script("Before new"));
   const epoch = session.epoch();
@@ -306,232 +291,28 @@ rightToday("T2b", "an opened file opens its epoch at the transition, not at the 
   assertAdoptedAtOnce(events, epoch);
 });
 
-rightToday("T2c-open", "a server document opens its epoch at the transition, not at the next render", async () => {
-  useDocument(script("Before server"));
-  const served = script("From the server", { docId: "d" + "6".repeat(32) });
-  const held = serverFetch((r) => (r.method === "GET" && r.url.includes("api/docs/server-b") ? { status: 200, body: { id: "server-b", rev: 3, state: served } } : null));
-  const uninstall = held.install();
-  try {
-    const epoch = session.epoch();
-    const events = await traced(async () => { assert.equal(await openDocument({ kind: "server", id: "server-b" }), true); });
-    assertAdoptedAtOnce(events, epoch);
-  } finally {
-    uninstall();
-  }
-});
-
-rightToday("T2c-resume", "a resumed server draft opens its epoch at the transition, not at the next render", async () => {
-  useDocument(script("Before resume"));
+rightToday("T2c-copy", "a left-over browser draft of a server document opens as an unsaved copy whose epoch opens at the transition, not at the next render", async () => {
+  useDocument(script("Before the copy"));
   const docId = "d" + "c".repeat(32);
   const base = script("Server draft", { docId: docId });
   const mine = cloneState(base);
   mine.rows[0].audioText = "Unsaved in the browser.";
-  const theirs = cloneState(base);
-  theirs.rows[1].audioText = "Changed on the server.";
   const store = openDraftStore({ indexedDB: window.indexedDB });
   const key = browserDraftKey(draftBaseOf("", location.href), "server-r");
   assert.deepEqual(await store.put({
     key: key, base: draftBaseOf("", location.href), docId: "server-r", rev: 2, title: "Server draft", writerId: "another-tab",
     editSeq: 1, schema: 5, docIdWrittenOut: true, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(base)
   }), { ok: true, evicted: 0 });
-  const held = serverFetch((r) => (r.method === "GET" && r.url.includes("api/docs/server-r") ? { status: 200, body: { id: "server-r", rev: 3, state: theirs } } : null));
-  const uninstall = held.install();
-  const available = serverStatus().mode().available;
-  serverStatus().recordMode({ available: true });
   try {
+    const taken = await draftTaker()();
+    assert.equal(taken.browserKey, key, "setup: the left-over draft is offered");
     const epoch = session.epoch();
-    const events = await traced(async () => { assert.equal(await openDocument({ kind: "server", id: "server-r" }), true); });
-    assert.equal(currentDocument().rows[0].audioText, "Unsaved in the browser.", "the draft was resumed");
-    assert.equal(currentDocument().rows[1].audioText, "Changed on the server.");
+    const events = await traced(async () => { assert.equal(await applyTakenDraft(taken), "untitled-copy"); });
+    assert.equal(currentDocument().rows[0].audioText, "Unsaved in the browser.", "the draft's work is open");
+    assert.equal(homeModule.currentHome().kind, "none", "as an unsaved copy");
     assertAdoptedAtOnce(events, epoch);
   } finally {
-    serverStatus().recordMode({ available: available });
-    uninstall();
-    await store.remove(key, "another-tab");
-    setHome("none");
-  }
-});
-
-rightToday("T2c-resume-switch", "a late server resume leaves a document opened during its fetch in place", async (t) => {
-  mockClock(t);
-  useDocument(script("Before late resume"));
-  const base = script("Late server draft", { docId: "d" + "e".repeat(32) });
-  const mine = cloneState(base);
-  mine.rows[0].audioText = "Recovered browser edits.";
-  const store = openDraftStore({ indexedDB: window.indexedDB });
-  const key = browserDraftKey(draftBaseOf("", location.href), "server-late-resume");
-  assert.deepEqual(await store.put({
-    key: key, base: draftBaseOf("", location.href), docId: "server-late-resume", rev: 2, title: base.title, writerId: "another-tab",
-    editSeq: 1, schema: 5, docIdWrittenOut: true, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(base)
-  }), { ok: true, evicted: 0 });
-  const held = serverFetch((r) => (r.method === "GET" && r.url.includes("api/docs/server-late-resume")
-    ? { status: 200, body: { id: "server-late-resume", rev: 3, state: base } } : null));
-  held.holdWhen((r) => r.method === "GET" && r.url.includes("api/docs/server-late-resume"));
-  const uninstall = held.install();
-  const available = serverStatus().mode().available;
-  serverStatus().recordMode({ available: true });
-  let resuming;
-  try {
-    resuming = openDocument({ kind: "server", id: "server-late-resume" });
-    await held.gates.arrived("fetch");
-    assert.equal(draftResume().serverResume().id, "server-late-resume", "setup: the held fetch belongs to a server draft resume");
-    const connection = homeModule.currentConn();
-    const replacement = script("Opened during resume", { docId: "d" + "f".repeat(32) });
-    const file = splitpageFile(replacement, "opened-during-resume.splitpage");
-    const target = createHeldFileHandle({ name: file.name });
-    await openDocument({ kind: "file", file: file, handle: target.handle, options: { skipSnapshot: true, silent: true } });
-    assert.equal(currentDocument().title, replacement.title, "setup: the replacement document opened while the resume fetch was held");
-    assert.equal(homeModule.currentConn(), connection, "setup: opening the file kept the same connection");
-    const opened = JSON.stringify(currentDocument());
-    const baseline = JSON.stringify(mergeBase());
-    const destination = homeModule.currentHome();
-    const epoch = session.epoch();
-    held.gates.release("fetch");
-    await resuming;
-    assert.equal(currentDocument().title, replacement.title, "late server resume must leave the newly opened document in place");
-    assert.equal(JSON.stringify(currentDocument()), opened, "the opened document's contents and identity are unchanged");
-    assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
-    assert.equal(JSON.stringify(mergeBase()), baseline, "the opened document's baseline is unchanged");
-    assert.equal(unsavedChanges(), false, "the opened document stays clean");
-    assert.equal(homeModule.currentHome(), destination, "the opened document keeps its file destination");
-    assert.equal(target.commits.length, 0, "the resume writes nothing to the opened file");
-    assert.deepEqual(held.requests.map((r) => r.method), ["GET"], "the resume sends no server write");
-  } finally {
-    held.gates.releaseAll("fetch");
-    if (resuming) await resuming;
-    serverStatus().recordMode({ available: available });
-    uninstall();
-    await store.remove(key, "another-tab");
-    setHome("none");
-  }
-});
-
-rightToday("T2c-reopen", "a server document reopened after a sign-in opens its epoch at the transition, not at the next render", async () => {
-  useDocument(script("Before reopen"));
-  const served = script("Reopened from the server", { docId: "d" + "d".repeat(32) });
-  const held = serverFetch((r) => {
-    if (r.method !== "GET") return null;
-    if (r.url.includes("api/docs/server-r2")) return { status: 200, body: { id: "server-r2", rev: 4, state: served } };
-    return { status: 200, body: { role: "edit", scope: "" } };
-  });
-  const uninstall = held.install();
-  sessionStorage.setItem(SERVER_RESUME_KEY, JSON.stringify({ id: "server-r2", rev: 0 }));
-  try {
-    const epoch = session.epoch();
-    const events = await traced(async () => {
-      await finishServerDetect();
-      for (let turn = 0; turn < 200 && currentDocument().title !== "Reopened from the server"; turn++) await new Promise((resolve) => setImmediate(resolve));
-    });
-    assert.equal(currentDocument().title, "Reopened from the server", "the document was reopened");
-    assertAdoptedAtOnce(events, epoch);
-  } finally {
-    uninstall();
-    sessionStorage.removeItem(SERVER_RESUME_KEY);
-    setHome("none");
-  }
-});
-
-rightToday("T2c-reopen-switch", "a late sign-in resume leaves a document opened during its fetch in place and keeps the stash", async (t) => {
-  mockClock(t);
-  useDocument(script("Before sign-in resume"));
-  const served = script("Late signed-in server copy", { docId: "d" + "c".repeat(32) });
-  const mine = cloneState(served);
-  mine.rows[0].audioText = "Typed before signing in.";
-  const stash = JSON.stringify({ at: new Date().toISOString(), by: "", base: served, mine: mine });
-  const held = serverFetch((r) => {
-    if (r.method !== "GET") return null;
-    if (r.url.includes("api/docs/server-r3")) return { status: 200, body: { id: "server-r3", rev: 5, state: served } };
-    return { status: 200, body: { role: "edit", scope: "" } };
-  });
-  held.holdWhen((r) => r.method === "GET" && r.url.includes("api/docs/server-r3"));
-  const uninstall = held.install();
-  sessionStorage.setItem(SERVER_RESUME_KEY, JSON.stringify({ id: "server-r3", rev: 4 }));
-  sessionStorage.setItem("splitpage-conflict-stash", stash);
-  try {
-    const detecting = finishServerDetect();
-    await held.gates.arrived("fetch");
-    const connection = homeModule.currentConn();
-    const replacement = script("Opened during sign-in resume", { docId: "d" + "b".repeat(32) });
-    const file = splitpageFile(replacement, "opened-during-sign-in.splitpage");
-    const target = createHeldFileHandle({ name: file.name });
-    await openDocument({ kind: "file", file: file, handle: target.handle, options: { skipSnapshot: true, silent: true } });
-    assert.equal(currentDocument().title, replacement.title, "setup: the replacement document opened while the resume fetch was held");
-    assert.equal(homeModule.currentConn(), connection, "setup: opening the file kept the same connection");
-    const opened = JSON.stringify(currentDocument());
-    const baseline = JSON.stringify(mergeBase());
-    const destination = homeModule.currentHome();
-    const epoch = session.epoch();
-    held.gates.release("fetch");
-    await detecting;
-    for (let turn = 0; turn < 50; turn++) await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(currentDocument().title, replacement.title, "late sign-in resume must leave the newly opened document in place");
-    assert.equal(JSON.stringify(currentDocument()), opened, "the opened document's contents and identity are unchanged");
-    assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
-    assert.equal(JSON.stringify(mergeBase()), baseline, "the opened document's baseline is unchanged");
-    assert.equal(unsavedChanges(), false, "the opened document stays clean");
-    assert.equal(homeModule.currentHome(), destination, "the opened document keeps its file destination");
-    assert.equal(target.commits.length, 0, "the resume writes nothing to the opened file");
-    assert.equal(held.requests.filter((r) => r.method !== "GET").length, 0, "the resume sends no server write");
-    assert.equal(sessionStorage.getItem("splitpage-conflict-stash"), stash, "the edits typed before signing in are kept");
-  } finally {
-    held.gates.releaseAll("fetch");
-    uninstall();
-    sessionStorage.removeItem(SERVER_RESUME_KEY);
-    sessionStorage.removeItem("splitpage-conflict-stash");
-    setHome("none");
-  }
-});
-
-rightToday("T2c-reopen-stale", "a sign-in resume dropped for a newly opened document does not come back over it at a later sign-in", async (t) => {
-  mockClock(t);
-  useDocument(script("Before stale sign-in resume"));
-  const served = script("Stale signed-in server copy", { docId: "d" + "a".repeat(32) });
-  const mine = cloneState(served);
-  mine.rows[0].audioText = "Typed before the dropped sign-in.";
-  const stash = JSON.stringify({ at: new Date().toISOString(), by: "", base: served, mine: mine });
-  const pending = JSON.stringify({ id: "server-r4", rev: 4 });
-  const held = serverFetch((r) => {
-    if (r.method !== "GET") return null;
-    if (r.url.includes("api/docs/server-r4")) return { status: 200, body: { id: "server-r4", rev: 5, state: served } };
-    return { status: 200, body: { role: "edit", scope: "" } };
-  });
-  held.holdWhen((r) => r.method === "GET" && r.url.includes("api/docs/server-r4"));
-  const uninstall = held.install();
-  sessionStorage.setItem(SERVER_RESUME_KEY, pending);
-  sessionStorage.setItem("splitpage-conflict-stash", stash);
-  try {
-    const detecting = finishServerDetect();
-    await held.gates.arrived("fetch");
-    const replacement = script("Opened during the dropped sign-in resume", { docId: "d" + "9".repeat(32) });
-    const file = splitpageFile(replacement, "opened-during-dropped-sign-in.splitpage");
-    const target = createHeldFileHandle({ name: file.name });
-    await openDocument({ kind: "file", file: file, handle: target.handle, options: { skipSnapshot: true, silent: true } });
-    held.gates.release("fetch");
-    await detecting;
-    for (let turn = 0; turn < 50; turn++) await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(currentDocument().title, replacement.title, "setup: the first resume was dropped for the newly opened document");
-    assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending, "setup: the dropped resume kept its key");
-    const opened = JSON.stringify(currentDocument());
-    const baseline = JSON.stringify(mergeBase());
-    const destination = homeModule.currentHome();
-    const epoch = session.epoch();
-    await finishServerDetect();
-    for (let turn = 0; turn < 50; turn++) await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(currentDocument().title, replacement.title, "a later sign-in must not resume the server document over the opened one");
-    assert.equal(JSON.stringify(currentDocument()), opened, "the opened document's contents and identity are unchanged");
-    assert.equal(session.epoch(), epoch, "the opened document's session is unchanged");
-    assert.equal(JSON.stringify(mergeBase()), baseline, "the opened document's baseline is unchanged");
-    assert.equal(unsavedChanges(), false, "the opened document stays clean");
-    assert.equal(homeModule.currentHome(), destination, "the opened document keeps its file destination");
-    assert.equal(target.commits.length, 0, "nothing is written to the opened file");
-    assert.equal(held.requests.filter((r) => r.method !== "GET").length, 0, "no server write is sent");
-    assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending, "the key stays for the next page load");
-    assert.equal(sessionStorage.getItem("splitpage-conflict-stash"), stash, "the edits typed before signing in are kept");
-  } finally {
-    held.gates.releaseAll("fetch");
-    uninstall();
-    sessionStorage.removeItem(SERVER_RESUME_KEY);
-    sessionStorage.removeItem("splitpage-conflict-stash");
+    await store.remove(key);
     setHome("none");
   }
 });
@@ -567,7 +348,7 @@ function withHeldDesktop() {
   return { fake: fake, held: held, restore: () => window.__desktopTest.restoreBackend() };
 }
 
-rightToday("T1", "Save As, publish and detached recovery fork the id; open, restore and a same-id reopen keep it", async () => {
+rightToday("T1", "Save As and detached recovery fork the id; open, restore and a same-id reopen keep it", async () => {
   const idOf = (letter) => "d" + letter.repeat(32);
 
   useDocument(script("Fork by Save As", { docId: idOf("1") }));
@@ -584,20 +365,6 @@ rightToday("T1", "Save As, publish and detached recovery fork the id; open, rest
   assert.match(currentDocument().docId, /^d[0-9a-f]{32}$/);
   assert.equal(target.commits.length, 1, "the copy was written once");
   assert.ok(target.text().includes(currentDocument().docId) && !target.text().includes(idOf("1")), "the file carries the new id, not the old one");
-
-  useDocument(script("Fork by publish", { docId: idOf("2") }));
-  documentLocation().markWrittenOut(true);
-  serverStatus().recordMode({ available: true, readOnly: false });
-  const held = serverFetch((r) => (r.method === "POST" && r.url.endsWith("api/docs") ? { status: 200, body: { id: "srv-1", rev: 1 } } : null));
-  const uninstall = held.install();
-  try {
-    assert.equal(await publishToServer(), true);
-  } finally {
-    uninstall();
-    setHome("none");
-  }
-  assert.notEqual(currentDocument().docId, idOf("2"), "publishing gave the copy a new id");
-  assert.equal(held.matching("POST", "api/docs")[0].body.state.docId, currentDocument().docId, "the server was sent the new id");
 
   useDocument(script("Detached", { docId: idOf("3") }));
   const draft = script("Recovered", { docId: idOf("4") });

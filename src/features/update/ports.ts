@@ -1,5 +1,4 @@
 import type { ExternalLinks } from "../../application/desktop-presence.ts";
-import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { Preferences } from "../../application/preferences/preferences.ts";
 import type { ScreenState } from "../../application/screen.ts";
 
@@ -44,7 +43,6 @@ export interface UpdatePorts {
 
 export interface UpdateFeaturePorts extends UpdatePorts {
   readonly preferences: Pick<Preferences, "desktopNoticeDismissed" | "dismissDesktopNotice">;
-  readonly place: Pick<DocumentPlace, "arrivingOnLink">;
   readonly externalLinks: ExternalLinks;
   readonly desktop: () => boolean;
 }

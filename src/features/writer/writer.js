@@ -4,7 +4,6 @@ import { rowIndexOf } from "../../core/document/rows.ts";
 import { ensureTrailingCaretSpot, cssAttr } from "../common/dom.ts";
 import { bothScenesHaveVisual, joinScenesCommand } from "../../application/commands/split-join.ts";
 import { WRITER_SIZE_MAX, WRITER_SIZE_MIN } from "../../application/preferences/preferences.ts";
-import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 import { placeEditorSelection, rememberCellSelection } from "../common/cell-selection.ts";
 import { placeCaretAtTextOffset } from "../common/caret.ts";
 import { gallerySize } from "../../core/document/gallery.ts";
@@ -317,6 +316,7 @@ export function jumpFromWriterToRow(rowId) {
   target.classList.add("just-merged");
 }
 
+var VIEWING_ONLY = "Viewing only — you can comment on this script, but not change it.";
 var REFUSAL_BURST_MS = 2000;
 var EDIT_CHORDS = ["z", "y", "b", "i", "u"];
 var GUARDED_EVENTS = ["keydown", "beforeinput", "input", "paste", "cut", "click"];

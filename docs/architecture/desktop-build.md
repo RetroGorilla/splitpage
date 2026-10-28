@@ -16,8 +16,6 @@ Everything listed here goes inside the asar.
 | `main.js`, `preload.js`, `tabstrip-preload.js`, `drafts.js` | `main.js` requires `./drafts` at load and loads both preloads by path. If one is missing from the asar, the packaged app crashes on startup. |
 | `ipc-channels.js` | The IPC channel table. `main.js` requires it at startup, and both preloads read it over `splitpage:ipc-table-sync`, so a packaged build without it has no bridge at all. |
 | `prompter-share.js` | The teleprompter's loopback listener (#86). |
-| `google-drive.js` | Google Drive through a loopback OAuth redirect (#10). |
-| `bind-host.js` | Which address the document server listens on: every interface under `--host`, loopback otherwise and always in a test run, so test runs cause no firewall prompts. |
 | `close-keep.js` | The close-time checks for a tab whose file is gone: a file check with a one-second limit, so an unreachable drive can't freeze a close (#497), and whether a kept copy really reached the draft folder (#496). It also runs the close check's question rounds (`runCloseCheck`, with main's tabs and helpers passed in) and decides what closing a window that is the last one at "close" settles (`lastWindowClose`, #531). |
 | `quit-watchdog.js` | The update restart's 3 s quit timer, which waits while the quit is still asking the user and starts again once they answer. |
 | `blob-store.js` | The content-addressed folder where images live (#82). |

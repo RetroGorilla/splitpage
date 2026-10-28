@@ -195,59 +195,6 @@ test("a new script from selected scenes takes its title in the same transaction 
   assert.equal(currentDocument().rows[0].audioText, "");
 });
 
-test("on a server document the pasted comments land in a second transaction, as before, and the paste is still one undo entry", async () => {
-  await open();
-  const cd = copiedScenes(["r1"]);
-  window.__hostedTest.setSession({ role: "edit", docId: "scene-clip-server" });
-  try {
-    const was = counters();
-    const w = watch();
-    try {
-      pasteScenesAt(cd, cellOf("r3", "audioText"));
-    } finally {
-      w.stop();
-    }
-    const edits = w.seen.filter((c) => c.kind === "edit");
-    assert.equal(edits.length, 2);
-    assert.equal(edits[0].changes.whole, false);
-    assert.equal(edits[0].changes.saveNow, false, "the save waits for the comments' step");
-    assert.deepEqual(edits[1].changes.docFields, ["comments"]);
-    assert.equal(edits[1].changes.saveNow, true);
-    assert.equal(currentDocument().comments.length, 2);
-    assert.deepEqual(undoSizes(), { undo: was.sizes.undo + 1, redo: 0 });
-    undo();
-    assert.deepEqual(ids(), ["r1", "r2", "r3"]);
-    assert.equal(currentDocument().comments.length, 2, "a server document's comments are sent: undo leaves them, as before");
-  } finally {
-    window.__hostedTest.setSession({ role: "edit", docId: null });
-  }
-});
-
-test("in review mode a scene paste, cut and delete are refused: nothing published, the document as it was", async () => {
-  await open();
-  const cd = copiedScenes(["r1"]);
-  window.__hostedTest.setSession({ role: "review", docId: "scene-clip-review" });
-  try {
-    const before = JSON.stringify(currentDocument());
-    const was = counters();
-    const w = watch();
-    try {
-      assert.equal(pasteScenesAt(cd, cellOf("r3", "audioText")), true);
-      window.__sceneSelectTest.select("r1", "r1");
-      cutEvent(clipboardWith({}));
-      window.__sceneSelectTest.select("r1", "r1");
-      deleteSelectedScenes();
-    } finally {
-      w.stop();
-    }
-    assert.equal(JSON.stringify(currentDocument()), before);
-    assert.equal(liveSession().generation(), was.generation);
-    assert.deepEqual(w.seen, []);
-  } finally {
-    window.__hostedTest.setSession({ role: "edit", docId: null });
-  }
-});
-
 test("a scene paste that fails part way is thrown and leaves the document, the edit count and undo as they were", async () => {
   await open();
   const cd = copiedScenes(["r1", "r2"]);

@@ -1,7 +1,6 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
@@ -97,7 +96,7 @@ test("a merge right after a document was swapped in, with no flush between, leav
   loadTestDocument(cloneState(base));
   const theirs = cloneState(base);
   theirs.rows[1].audioText = "Theirs.";
-  applyMerge({ base: base, mine: cloneState(base), theirs: theirs, source: "server-conflict", report: false });
+  applyMerge({ base: base, mine: cloneState(base), theirs: theirs, source: "stash", report: false });
   assert.deepEqual(heard, ["adopt", "server"], "the session adopts the swapped-in document as it is handed over, then the merge lands");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
@@ -121,7 +120,7 @@ test("a server update over undo entries forgets the ones on a field their side c
   const theirs = cloneState(currentDocument());
   theirs.rows[1].visualText = "Their close.";
   listen();
-  applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false });
+  applyMerge({ theirs: theirs, source: "stash", unchanged: true, report: false });
   assert.deepEqual(heard, ["server"]);
   assert.equal(session.epoch(), epoch);
   assert.equal(held(), currentDocument());
@@ -139,7 +138,7 @@ test("a reported merge marks the document dirty and advances saveChanges() as be
   mine.rows[0].audioText = "Mine.";
   const gen = session.generation(), seq = saveChanges();
   listen();
-  applyMerge({ base: base, mine: mine, theirs: theirs, source: "server-conflict" });
+  applyMerge({ base: base, mine: mine, theirs: theirs, source: "stash" });
   assert.deepEqual(heard, ["server"]);
   assert.equal(session.generation(), gen);
   assert.equal(saveChanges(), seq + 1);
@@ -180,30 +179,6 @@ test("a reload into a document swapped in with no flush lands in the document th
   assert.deepEqual(doc.rows.map((row) => [row.audioText, row.status]), [["Reloaded.", "todo"]]);
   assert.deepEqual(heard, ["adopt", "reload"], "the session adopts the swapped-in document as it is handed over, then the reload lands in it");
   assert.equal(JSON.stringify(before), beforeText, "the document held before is not written into");
-});
-
-test("E4: resumeServerDoc's merge is a recovery: a new epoch, the undo stack kept, no generation, no undo entry", () => {
-  const source = readFileSync(new URL("../js/13-hosted.js", import.meta.url), "utf8");
-  const body = source.slice(source.indexOf("async function resumeServerDoc"), source.indexOf("\n}\n", source.indexOf("async function resumeServerDoc")));
-  assert.equal(body.split('source: "server-resume"').length - 1, 2, "both of resumeServerDoc's merges name the server-resume source");
-  const base = script("Resume");
-  loadTestDocument(cloneState(base));
-  flushEdits();
-  currentDocument().rows[0].audioText = "Typed while reopening.";
-  noteSessionEdit();
-  flushEdits();
-  const theirs = cloneState(base);
-  theirs.rows[1].audioText = "Server.";
-  const epoch = session.epoch(), gen = session.generation(), seq = saveChanges();
-  listen();
-  applyMerge({ base: base, mine: currentDocument(), theirs: theirs, source: "server-resume", newBase: cloneState(theirs), noAutoSave: true });
-  assert.deepEqual(heard, ["recovery"]);
-  assert.equal(session.epoch(), epoch + 1);
-  assert.equal(session.generation(), gen);
-  assert.equal(saveChanges(), seq + 1);
-  assert.equal(held(), currentDocument());
-  flushEdits();
-  assert.equal(undoSizes().undo, 1, "12a's stack is kept through the merge, as before");
 });
 
 test("E4: a file draft restored onto a changed file is a recovery merge; an untitled draft is an adoption; neither adds a generation", async () => {

@@ -7,7 +7,7 @@ import type { CellClipboardPorts, SceneClipPorts, SceneSelectPorts } from "../..
 import { startSceneClip as mountSceneClip, parseScenePayload } from "../../../src/features/clipboard/scene-clip.js";
 import { startSceneSelect as mountSceneSelect, selectScenes } from "../../../src/features/clipboard/scene-select.js";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices, fakePictures, fakeReview, fakeSaveState } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices, fakePictures } from "../fakes.ts";
 
 function scriptDoc() {
   return migrateRows({ title: "Scenes", rows: [
@@ -21,21 +21,17 @@ function sceneSelect() {
   document.body.innerHTML = '<div id="rows"></div>';
   const edits = fakeEdits();
   const notices = fakeNotices();
-  const review = fakeReview();
   const calls: string[] = [];
   const ports: SceneSelectPorts = {
     document: fakeDocument(scriptDoc()).document,
     edits: edits.edits,
-    reviewRefusal: "review",
     undo: {
       breakCoalescing: () => { calls.push("break"); },
       flush: () => { calls.push("flush"); },
       last: () => null,
       undo: () => { calls.push("undo"); }
     },
-    saves: fakeSaveState().saves,
     pictures: fakePictures().pictures,
-    review: review.review,
     notices: notices.notices,
     cells: { sync: () => {} },
     rowDrag: { dragging: () => null },
@@ -43,12 +39,11 @@ function sceneSelect() {
     rows: { closeMenus: () => {} },
     production: { scheduleRefresh: () => { calls.push("refresh"); } },
     stampRow: () => {},
-    onServer: () => false,
     writerOpen: () => false,
     startNewScript: () => false,
     nonce: () => "n1"
   };
-  return { owner: mountSceneSelect(ports), edits, notices, review, calls };
+  return { owner: mountSceneSelect(ports), edits, notices, calls };
 }
 
 function press(key: string): void {
@@ -62,16 +57,6 @@ test("scene selection: Delete removes the selected scenes through the edits port
   assert.equal(edits.ran.length, 1);
   assert.deepEqual(calls, ["break", "flush", "break"]);
   assert.deepEqual(notices.shown.map((n) => n.message), ["2 scenes deleted."]);
-  owner.dispose();
-});
-
-test("scene selection: a review copy refuses the delete and runs nothing", () => {
-  const { owner, edits, notices, review } = sceneSelect();
-  review.setReviewing(true);
-  selectScenes("r2");
-  press("Delete");
-  assert.equal(edits.ran.length, 0);
-  assert.deepEqual(notices.shown.map((n) => n.message), ["This is a review copy — scenes can be copied from it, not deleted."]);
   owner.dispose();
 });
 

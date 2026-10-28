@@ -339,10 +339,6 @@ export function rundownLayout() {
   };
 }
 
-export function rundownEdge() {
-  return base.W;
-}
-
 var CHECK_SVG = '<svg class="rd-check" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 var snippetOf = null;
@@ -814,7 +810,7 @@ function dragIndex() {
 }
 
 function dropAllowed() {
-  return !!ports.rowDrag.dragging() && !minimized && !ports.review.reviewing() && base.n > 0 && !!base.X && !!ports.document.current();
+  return !!ports.rowDrag.dragging() && !minimized && base.n > 0 && !!base.X && !!ports.document.current();
 }
 
 function ensureDropEls(track) {

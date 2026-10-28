@@ -166,7 +166,7 @@ eval (function(){ window.__canon = function (o) { return JSON.stringify(o, funct
 
 # --- To-camera video --------------------------------------------------------
 # picked.md is open (and dirty, as a foreign file is) under the page
-expect window.__hostedTest.home().kind !== 'none'
+expect window.__splitpageFormats.docFile().kind !== null || !document.getElementById('file-chip').hidden
 click [data-starter="to-camera"]
 wait document.getElementById('newtab-page').hidden == true
 expect document.querySelectorAll('#rows .row').length == 6
@@ -174,7 +174,7 @@ expect document.getElementById('doc-title').value == Three Lights for Under $200
 # a new document: a fresh id, no file home, nothing to save
 expect /^d[0-9a-f]{32}$/.test(window.__splitpageFormats.state().docId) == true
 expect window.__ids.indexOf(window.__splitpageFormats.state().docId) === -1
-expect window.__hostedTest.home().kind == none
+expect window.__splitpageFormats.docFile().kind === null && document.getElementById('file-chip').hidden
 expect window.__splitpageFormats.docFile().name === null
 expect document.getElementById('file-chip').hidden == true
 expect document.getElementById('btn-save').classList.contains('is-dirty') == false
@@ -210,7 +210,7 @@ wait document.getElementById('newtab-page').hidden == true
 expect document.querySelectorAll('#rows .row').length == 6
 expect document.getElementById('doc-title').value == Meet the Baker — Crumb & Co.
 expect window.__ids.indexOf(window.__splitpageFormats.state().docId) === -1
-expect window.__hostedTest.home().kind == none
+expect window.__splitpageFormats.docFile().kind === null && document.getElementById('file-chip').hidden
 expect document.getElementById('btn-save').classList.contains('is-dirty') == false
 # questions on the right, cutaways on the left
 expect document.querySelectorAll('#rows .audio-cell .cell-editable')[1].textContent.indexOf('Q1.') === 0
@@ -227,7 +227,7 @@ wait document.getElementById('newtab-page').hidden == true
 expect document.querySelectorAll('#rows .row').length == 6
 expect document.getElementById('doc-title').value == Keepwarm Travel Mug — 30s
 expect window.__ids.indexOf(window.__splitpageFormats.state().docId) === -1
-expect window.__hostedTest.home().kind == none
+expect window.__splitpageFormats.docFile().kind === null && document.getElementById('file-chip').hidden
 expect document.getElementById('btn-save').classList.contains('is-dirty') == false
 # six timed beats, the last one the packshot
 expect document.querySelectorAll('#rows .visual-cell .cell-editable')[0].textContent.indexOf('0:00–0:05') === 0
@@ -267,7 +267,7 @@ expect window.__splitpageFormats.state().productionTags.length == 0
 expect window.__splitpageFormats.state().brollShots.length == 0
 expect document.getElementById('doc-title').value == Untitled Script
 expect window.__ids.indexOf(window.__splitpageFormats.state().docId) === -1
-expect window.__hostedTest.home().kind == none
+expect window.__splitpageFormats.docFile().kind === null && document.getElementById('file-chip').hidden
 # ...and File ▸ Paste a script… is the ordinary import again, into this one
 jsclick #file-menu [data-file-action="paste"]
 wait document.getElementById('import-modal').hidden == false
@@ -302,15 +302,5 @@ expect document.getElementById('newtab-page').hidden == true
 wait document.getElementById('tour-overlay').hidden == false
 jsclick #tour-skip
 expect document.getElementById('tour-overlay').hidden == true
-# "Join a shared session" is the Servers dialog, over the page
-eval window.__newTab.open()
-click [data-newtab-action="join"]
-wait document.getElementById('connect-modal').hidden == false
-expect document.getElementById('newtab-page').hidden == false
-key Escape
-expect document.getElementById('connect-modal').hidden == true
-expect document.getElementById('newtab-page').hidden == false
-key Escape
-expect document.getElementById('newtab-page').hidden == true
 
 quit

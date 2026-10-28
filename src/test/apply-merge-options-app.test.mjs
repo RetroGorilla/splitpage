@@ -73,7 +73,7 @@ test("characterization: an adopted merge redraws, shows the banner, marks the do
   const s = sides(id);
   const baseBefore = mergeBase();
 
-  const out = applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "server-conflict" });
+  const out = applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "stash" });
   assert.equal(out.state, currentDocument());
   assert.equal(currentDocument().rows[0].audioText, "mine");
   assert.equal(currentDocument().rows[1].audioText, "theirs");
@@ -93,7 +93,7 @@ test("characterization: `report: false` merges silently: no banner, no unsaved m
   start(id);
   const s = sides(id);
 
-  const out = applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "server-conflict", report: false, noAutoSave: true });
+  const out = applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "stash", report: false, noAutoSave: true });
   assert.ok(out.result);
   assert.equal(currentDocument().rows[1].audioText, "theirs");
   assert.equal(window.__renderTest.counts().render, 1);
@@ -138,7 +138,7 @@ test("characterization: `noAutoSave` halts autosave with its reason and still ma
   start(id);
   const s = sides(id);
 
-  applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "server-resume", noAutoSave: true });
+  applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "stash", recovery: true, noAutoSave: true });
   assert.equal(banner().hidden, false);
   assert.ok(unsavedChanges());
   assert.equal(autoSavePolicy().halted(),
@@ -168,7 +168,7 @@ test("characterization: a conflict warns on the banner, offers Review conflicts 
   const theirs = mk(id);
   theirs.rows[0].audioText = "they said that";
 
-  const out = applyMerge({ base: mk(id), mine: mine, theirs: theirs, source: "server-conflict", undoPoint: cloneState(mine) });
+  const out = applyMerge({ base: mk(id), mine: mine, theirs: theirs, source: "stash", undoPoint: cloneState(mine) });
   assert.equal(out.result.conflicts.length, 1);
   assert.equal(banner().hidden, false);
   assert.ok(banner().classList.contains("notice-warn"));
@@ -184,9 +184,9 @@ test("characterization: `newBase` sets the baseline through setBaseState with th
   const s = sides(id);
   const given = cloneState(s.theirs);
 
-  applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "server-resume", newBase: given, report: false });
+  applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "stash", recovery: true, newBase: given, report: false });
   assert.equal(mergeBase(), given);
-  assert.equal(baseStateReason(), "merge: server-resume");
+  assert.equal(baseStateReason(), "merge: stash");
 
   start(id);
   let asked = 0;
@@ -209,7 +209,7 @@ test("characterization: `toast` speaks after adoption, a function seeing the ado
   s.theirs.title = "Their title";
 
   applyMerge({
-    base: s.base, mine: s.mine, theirs: s.theirs, source: "server-resume", report: false,
+    base: s.base, mine: s.mine, theirs: s.theirs, source: "stash", recovery: true, report: false,
     toast: { text: function () { return "Now " + currentDocument().title; }, tone: "warn", sticky: true }
   });
   assert.deepEqual(toasts(), [{ text: "Now Their title", warn: true, ok: false, sticky: true }]);
@@ -227,16 +227,15 @@ test("characterization: `alreadySaved` shows the banner without marking unsaved;
   const id = freshId();
   start(id);
   const s = sides(id);
-  const merged = applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "server-conflict", undoPoint: cloneState(s.mine), report: false });
+  const merged = applyMerge({ base: s.base, mine: s.mine, theirs: s.theirs, source: "stash", undoPoint: cloneState(s.mine), report: false });
   assert.ok(mergeUndo().last());
   const defaultTitle = undoBtn().title;
 
-  reportMerge(merged.result, { alreadySaved: true, undo: "saved" });
+  reportMerge(merged.result, { alreadySaved: true, undo: true });
   assert.equal(banner().hidden, false);
   assert.ok(!unsavedChanges(), "already on its destination");
   assert.equal(undoBtn().hidden, false);
-  assert.match(summary(), /Undo merge puts your version back here; the next save replaces the merged copy on the server\.$/);
-  assert.notEqual(undoBtn().title, defaultTitle);
+  assert.equal(undoBtn().title, defaultTitle);
 
   reportMerge(merged.result, { alreadySaved: true, undo: false });
   assert.equal(undoBtn().hidden, true, "a pull offers no Undo merge even with one armed");
@@ -263,7 +262,7 @@ test("characterization: the banner's ×, Review conflicts and Undo merge", async
   mine.rows[0].audioText = "mine said this";
   const theirs = mk(id);
   theirs.rows[0].audioText = "they said that";
-  const out = applyMerge({ base: mk(id), mine: mine, theirs: theirs, source: "server-conflict", undoPoint: cloneState(mine) });
+  const out = applyMerge({ base: mk(id), mine: mine, theirs: theirs, source: "stash", undoPoint: cloneState(mine) });
   assert.equal(banner().hidden, false);
   await out.snapshot.done;
 
@@ -276,7 +275,7 @@ test("characterization: the banner's ×, Review conflicts and Undo merge", async
   assert.equal(document.getElementById("comments-panel").hidden, false, "and opens the comments panel");
 
   undoBtn().click();
-  assert.equal(undoBtn().textContent, "Drop their changes?", "the first click arms");
+  assert.equal(undoBtn().textContent, "Discard my edits?", "the first click arms");
   assert.ok(undoBtn().classList.contains("armed"));
   undoBtn().click();
   assert.equal(undoBtn().textContent, "Undo merge");

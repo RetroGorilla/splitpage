@@ -1,19 +1,17 @@
 import { updateControls } from "./update.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { setCommentSort } from "../../application/comment-sort.ts";
-import { appDataActions as appDataDefinitions } from "../../features/settings/actions.ts";
+import { appDataActions as appDataDefinitions, settingsActions as settingsDefinitions } from "../../features/settings/actions.ts";
 import { mountAppData } from "../../features/settings/app-data.js";
 import type { AppDataMount, AppDataPorts } from "../../features/settings/ports.ts";
 import { historyOwner } from "./history.ts";
-import { connectPortOr, newBookmarkId, renderConnect, saveBookmarks } from "../../js/20e-connect.js";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { setBackend as setBlobBackend } from "../../adapters/storage/02c-blobs.js";
 import { appDataPreferences } from "./ports/preferences.ts";
-import { bookmarks } from "./ports/location.ts";
 import { fileDelivery } from "./ports/files.ts";
 import { launch } from "./ports/desktop.ts";
 import { screen } from "./ports/screen.ts";
-import { installSettingsControls } from "../../application/settings-actions.ts";
+import { installSettingsControls, openSettings } from "../../application/settings-actions.ts";
 import { actions as portActions } from "./ports/actions.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { changes as portChanges } from "./ports/preferences.ts";
@@ -24,7 +22,6 @@ import { owned } from "../../features/routing/owned.ts";
 import { setHideShotScenes } from "./hide-shot.ts";
 import { personSwatchesHtml } from "./title-chrome.ts";
 import { getSavedAuthorName } from "../../application/comment-author.js";
-import { DEFAULT_COLLAB_SERVER, collabServerView, normalizeCollabServer, readCollabServer, signOutCollab } from "../../js/13b-collaborate.js";
 import { connectWriter } from "./writer.ts";
 import { prompterControls } from "./prompter.ts";
 import { preferences } from "../../legacy/preferences-bridge.ts";
@@ -64,7 +61,6 @@ export function mountSettingsFeature(): SettingsMount {
         rundownMin: () => preferences().rundownMin(),
         scriptScale: () => preferences().scriptScale(),
         setClock: (value) => preferences().setClock(value),
-        setCollabServer: (value) => preferences().setCollabServer(value),
         setCommentAuthor: (value) => preferences().setCommentAuthor(value),
         setDefaultWpm: (value) => preferences().setDefaultWpm(value),
         setMyColor: (value) => preferences().setMyColor(value),
@@ -80,10 +76,6 @@ export function mountSettingsFeature(): SettingsMount {
       editor,
       identity: { name: () => getSavedAuthorName(preferences()), swatchesHtml: personSwatchesHtml },
       prompter: { mirror: (value) => { prompterControls()?.setPrompterMirror(value); }, flip: (value) => { prompterControls()?.setPrompterFlip(value); }, sceneMode: (value) => { prompterControls()?.setPrompterSceneMode(value); } },
-      collaboration: {
-        defaultServer: DEFAULT_COLLAB_SERVER, view: collabServerView, normalize: normalizeCollabServer,
-        address: readCollabServer, signOut: signOutCollab
-      },
       desktop: { running: runningOnDesktop, renderNotice: () => { updateControls()?.renderDesktopAppNotice(); } }
     };
     const mounted: SettingsMount = mountSettings(ports);
@@ -105,6 +97,10 @@ export function mountSettingsFeature(): SettingsMount {
 
 export const stopSettingsFeature = settings.stop;
 
+export function settingsActions(): ActionDefinition[] {
+  return settingsDefinitions(() => ({ openSettings }), { screen });
+}
+
 
 const appData = owned<AppDataMount>();
 
@@ -117,12 +113,10 @@ export function mountAppDataFeature(): AppDataMount {
       preferences: appDataPreferences,
       desktop: runningOnDesktop,
       launchFacts: launch,
-      bookmarks,
       commentSorting: { choose: setCommentSort },
       history: { exportAll: () => historyOwner().exportHistoryAll(), importBundle: (bundle) => historyOwner().importHistoryBundle(bundle), normalizeSnapshots: (raw) => historyOwner().normalizeLegacySnapshots(raw) },
       writer,
       embeddedVersion: () => updateControls()?.readEmbeddedVersion() ?? null,
-      bookmarkEditor: { newId: newBookmarkId, portOr: connectPortOr, save: saveBookmarks, render: renderConnect },
       useBlobBackend: setBlobBackend
     };
     const mounted = mountAppData(ports);

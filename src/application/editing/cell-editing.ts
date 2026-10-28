@@ -53,7 +53,6 @@ export interface CellEditingPorts<E> {
   readonly painted: (cell: E, field: string, row: ShownRow) => void;
   readonly shown: <T>(edit: () => T) => T;
   readonly announce: (message: string, before: unknown) => void;
-  readonly refused: (reason: string) => void;
 }
 
 export interface OpenCell {
@@ -164,9 +163,7 @@ export function createCellEditing<E>(ports: CellEditingPorts<E>): CellEditing<E>
   }
 
   function moveRow(rowId: string, targetId: string, after: boolean): void {
-    const outcome = ports.run(moveSceneCommand(rowId, targetId, !!after));
-    if (outcome.kind === "rejected") ports.refused(outcome.reason);
-    took(outcome);
+    took(ports.run(moveSceneCommand(rowId, targetId, !!after)));
   }
 
   return { open, close, edit, sync, editGallery, moveRow };

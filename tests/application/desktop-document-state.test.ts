@@ -1,24 +1,22 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createDesktopDocumentState } from "../../src/application/desktop/document-state.ts";
-import type { DesktopDocumentConnection, DesktopDocumentState } from "../../src/application/desktop/document-state.ts";
+import type { DesktopDocumentState } from "../../src/application/desktop/document-state.ts";
 import { runMenuCommand, runMenuCommandsWith } from "../../src/application/desktop/menu-commands.ts";
 
 interface World {
   running: boolean;
   doc: { title?: string; docId?: string | null } | null;
   restoring: boolean;
-  connection: DesktopDocumentConnection | null;
   unsaved: boolean;
   pristine: boolean;
   fileId: string | null;
-  serverKey: string | null;
 }
 
 function harness(start: Partial<World> = {}) {
   const world: World = {
-    running: true, doc: { title: "Pilot", docId: "doc-1" }, restoring: false, connection: null,
-    unsaved: false, pristine: false, fileId: null, serverKey: null, ...start
+    running: true, doc: { title: "Pilot", docId: "doc-1" }, restoring: false,
+    unsaved: false, pristine: false, fileId: null, ...start
   };
   const sent: DesktopDocumentState[] = [];
   const owner = createDesktopDocumentState({
@@ -26,11 +24,9 @@ function harness(start: Partial<World> = {}) {
       running: () => world.running,
       document: () => world.doc,
       restoring: () => world.restoring,
-      connection: () => world.connection,
       unsaved: () => world.unsaved,
       pristine: () => world.pristine,
-      fileId: () => world.fileId,
-      serverKey: () => world.serverKey
+      fileId: () => world.fileId
     },
     publish: (state) => { sent.push(state); }
   });
@@ -41,8 +37,7 @@ test("notify publishes the document's state, with defaults for a missing title a
   const h = harness({ doc: { title: "", docId: null } });
   h.owner.notify();
   assert.deepEqual(h.sent, [{
-    title: "Untitled Script", dirty: false, pristine: false, docId: null, fileId: null,
-    serverKey: null, serverUrl: null, tunnel: null, role: null
+    title: "Untitled Script", dirty: false, pristine: false, docId: null, fileId: null, serverKey: null
   }]);
 });
 
@@ -53,13 +48,12 @@ test("restoring a draft reads as dirty and never pristine", () => {
   assert.equal(h.sent[0]?.pristine, false);
 });
 
-test("the connection, file and server key are reported as read", () => {
-  const h = harness({ connection: { serverUrl: "http://team.test/", tunnel: null, role: "review" }, fileId: "file-2", serverKey: "key" });
+test("the file is reported as read, and the server key is always null", () => {
+  const h = harness({ fileId: "file-2", unsaved: true });
   h.owner.notify();
-  assert.equal(h.sent[0]?.serverUrl, "http://team.test/");
-  assert.equal(h.sent[0]?.role, "review");
   assert.equal(h.sent[0]?.fileId, "file-2");
-  assert.equal(h.sent[0]?.serverKey, "key");
+  assert.equal(h.sent[0]?.dirty, true);
+  assert.equal(h.sent[0]?.serverKey, null);
 });
 
 test("nothing is published off the desktop or without a document", () => {
@@ -81,10 +75,10 @@ test("a handed document holds the state back until it settles, and settling twic
   assert.equal(h.sent.length, 1);
   h.owner.awaitHanded("open-server");
   h.owner.notify();
-  assert.equal(h.sent.length, 1);
+  assert.equal(h.sent.length, 2, "only an opened file is waited for");
   h.owner.awaitHanded("blank");
   h.owner.notify();
-  assert.equal(h.sent.length, 2);
+  assert.equal(h.sent.length, 3);
 });
 
 test("listeners publish only changes, except a save change, which always publishes", () => {
