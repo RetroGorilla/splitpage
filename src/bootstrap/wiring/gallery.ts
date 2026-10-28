@@ -16,7 +16,7 @@ import { videoHostLabel } from "../../adapters/formats/video-host.ts";
 import { galleryBadgeHtml, gallerySlotPictureHtml } from "../../features/rows/render.js";
 import { videoFiles } from "./video-files.ts";
 import { undoOwner } from "./undo.ts";
-import { cellEditing, pickPictureFor } from "../../legacy/editor-bridge.ts";
+import { cellEditing, pickPictureFor } from "./editor-owners.ts";
 import { preferences } from "../../legacy/preferences-bridge.ts";
 import { desktopVideo } from "./desktop-video.ts";
 

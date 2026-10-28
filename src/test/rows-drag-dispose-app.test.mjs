@@ -24,7 +24,7 @@ function runFrames(n) {
 }
 
 const { bootApp, closeApp, rewireApp } = await import("./_app-boot.mjs");
-const { rowDrag } = await import("../legacy/editor-bridge.ts");
+const { rowDrag } = await import("../bootstrap/wiring/editor-owners.ts");
 await bootApp();
 const app = await import("../bootstrap/app.ts");
 

@@ -32,7 +32,7 @@ import { mountWriterRoutes } from "../../features/writer/routes.ts";
 import type { WriterRoutePorts } from "../../features/writer/routes.ts";
 import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
 import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
-import { cellEditing, focusMemory, installCellEditing, installPicturePicker, mergeUndo, paintGuard, rowDrag, undoGuard } from "../../legacy/editor-bridge.ts";
+import { cellEditing, focusMemory, installCellEditing, installPicturePicker, mergeUndo, paintGuard, rowDrag, undoGuard } from "./editor-owners.ts";
 import { currentDocument, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "../../legacy/session-bridge.ts";
 import { fromHtml } from "../../legacy/richtext.ts";
 import { cycleRowStatus } from "./scene-status.ts";
