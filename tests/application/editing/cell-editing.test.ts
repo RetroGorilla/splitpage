@@ -24,7 +24,6 @@ interface Rig {
   calls: string[];
   painted: { cell: Cell; field: string; row: ShownRow }[];
   announced: { message: string; before: unknown }[];
-  refused: string[];
   shownRuns: string[];
   set: (flags: { stale?: boolean; applying?: boolean }) => void;
 }
@@ -62,7 +61,6 @@ function rig(opts: { failing?: boolean } = {}): Rig {
   const calls: string[] = [];
   const painted: Rig["painted"] = [];
   const announced: Rig["announced"] = [];
-  const refused: string[] = [];
   const shownRuns: string[] = [];
   let showing = 0;
   const flags = { stale: false, applying: false };
@@ -102,8 +100,7 @@ function rig(opts: { failing?: boolean } = {}): Rig {
         showing--;
       }
     },
-    announce: function (message, before) { announced.push({ message: message, before: before }); },
-    refused: function (reason) { refused.push(reason); }
+    announce: function (message, before) { announced.push({ message: message, before: before }); }
   });
   return {
     h: h,
@@ -111,7 +108,6 @@ function rig(opts: { failing?: boolean } = {}): Rig {
     calls: calls,
     painted: painted,
     announced: announced,
-    refused: refused,
     shownRuns: shownRuns,
     set: function (next) { Object.assign(flags, next); }
   };
@@ -227,7 +223,7 @@ test("an edit that keeps the text runs no command but still closes the cell", ()
   assert.equal(r.h.session.generation(), 0);
 });
 
-test("an edit refused in review mode returns nothing and does not touch the cell", () => {
+test("an edit the session refuses returns nothing and does not touch the cell", () => {
   const r = rig();
   r.h.deny("review");
   const c = cell("r1", "audioText", "Every morning.");
@@ -266,7 +262,7 @@ test("a gallery edit for a missing scene, or one that changes nothing, does not 
   assert.deepEqual(r.announced, []);
 });
 
-test("moving a row runs the move the page does not show yet; a review refusal is reported", () => {
+test("moving a row runs the move the page does not show yet; a refused move still runs once", () => {
   const r = rig();
   r.editing.moveRow("r1", "r3", true);
   assert.deepEqual(r.h.session.read(function (doc) { return doc ? doc.rows.map(function (x) { return x.id; }) : []; }), ["r2", "r3", "r1"]);
@@ -275,7 +271,6 @@ test("moving a row runs the move the page does not show yet; a review refusal is
   r.calls.length = 0;
   r.h.deny("review");
   r.editing.moveRow("r1", "r2", false);
-  assert.deepEqual(r.refused, ["review"]);
   assert.deepEqual(r.calls, ["run:move-scene"]);
   r.h.deny(null);
   r.calls.length = 0;

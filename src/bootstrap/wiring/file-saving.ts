@@ -8,7 +8,7 @@ import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "../
 import { owned } from "../../features/routing/owned.ts";
 import { warnImagesLeftOut } from "../../legacy/effects-bridge.ts";
 import { captureExportDocument } from "./export-capture.ts";
-import { amendHome, currentHome, documentLocation, fileHome, serverStatus, setHome } from "../../legacy/location-bridge.ts";
+import { amendHome, currentHome, documentLocation, fileHome, setHome } from "../../legacy/location-bridge.ts";
 import { getEditorName, preferences } from "../../legacy/preferences-bridge.ts";
 import { autoSavePolicy, confirmSavedNow, flushAutoSave, haltAutoSave, resumeAutoSave, saveChanges } from "../../legacy/save-bridge.ts";
 import { stampDocument } from "../../legacy/session-bridge.ts";
@@ -33,12 +33,7 @@ function fileSavingPorts(deferred: FileSavingDeferredPorts): FileSavingPorts {
       amendHome: (record, fields) => amendHome(record, fields),
       restoreHome: (record) => documentLocation().restoreHome(record),
       writtenOut: () => documentLocation().writtenOut(),
-      markWrittenOut: (writtenOut) => { documentLocation().markWrittenOut(writtenOut); },
-      serverOf: (c) => documentLocation().serverOf(c)
-    },
-    server: {
-      sessionExpired: () => serverStatus().sessionExpired(),
-      linkTurnedOff: () => serverStatus().linkTurnedOff()
+      markWrittenOut: (writtenOut) => { documentLocation().markWrittenOut(writtenOut); }
     },
     lastFile: { remember: (handle) => rememberLastFileHandle(handle) },
     pictures,

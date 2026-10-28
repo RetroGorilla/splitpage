@@ -292,15 +292,6 @@
   .broll-flag-btn.is-active { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 55%, var(--border-strong)); }
   .broll-more-menu { top: auto; bottom: calc(100% + 4px); }
 
-  .broll-card .ev-field:has(> :disabled) { border-color: transparent; }
-  .broll-card .ev-field > button:disabled { padding-left: 0; cursor: default; }
-  .broll-owner-field:has(> select:disabled) > .broll-avatar { margin-left: 0; }
-  .broll-owner-field > .broll-avatar + select:disabled { padding-left: var(--space-6); }
-  .broll-flag-btn:disabled { opacity: 1; cursor: default; }
-  .broll-flag-btn:disabled:hover { background: transparent; }
-  .broll-flag-btn.is-active:disabled:hover { border-color: color-mix(in srgb, var(--danger) 55%, var(--border-strong)); }
-  textarea.broll-notes-input.ev-field[readonly] { border-color: transparent; padding-left: 0; }
-
   .broll-bulk { flex: none; padding: var(--space-10) var(--space-12) var(--space-10) var(--space-20); background: var(--surface-2); color: var(--text); border-top: 1px solid var(--border); }
   .broll-bulk-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-6); }
   .broll-bulk-row + .broll-bulk-row { margin-top: var(--space-8); }
@@ -334,7 +325,6 @@
   #broll-add-input::placeholder { color: var(--text-faint); opacity: 1; }
   #broll-add-input:hover { border-bottom-color: var(--text-faint); }
   #broll-add-input:focus { outline: none; border-bottom-color: var(--focus-ring); box-shadow: 0 1px 0 var(--focus-ring); }
-  body.is-review .broll-add { display: none; }
 
   @media (max-width: 760px) {
     #broll-add-input, #broll-bulk-input, .broll-bulk-select,
@@ -442,18 +432,6 @@
   .broll-page-row:hover .broll-page-note::placeholder, .broll-page-note:focus::placeholder { color: var(--text-faint); }
   .broll-page-note:hover { border-color: var(--border); }
   .broll-page-note:focus { outline: none; border-color: var(--visual); background: var(--bg); }
-
-  .broll-check:disabled, .broll-flag-btn:disabled { cursor: default; }
-  .broll-check:disabled:not([aria-checked="true"]):hover .broll-check-box { border-color: var(--text-faint); }
-  .broll-owner-select:disabled {
-    cursor: default; opacity: 1; color: var(--text);
-    appearance: none; -webkit-appearance: none; background: transparent; border-color: transparent; padding-left: 0;
-  }
-  .broll-page-owner:disabled { padding-left: var(--space-4); }
-  .broll-page-owner:disabled:hover { border-color: transparent; background: transparent; }
-  .broll-notes-input[readonly] { resize: none; }
-  .broll-page-note[readonly]:hover { border-color: transparent; }
-  .broll-static { display: inline-flex; align-items: center; gap: var(--space-6); color: var(--text); }
 
   @media (max-width: 760px) {
     .broll-page-inner { padding: var(--space-10) var(--space-16) 40px; }

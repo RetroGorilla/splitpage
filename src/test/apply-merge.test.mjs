@@ -162,9 +162,7 @@ test("nothing differed: no merge, no snapshot, no rev bump", () => {
 });
 
 for (const [source, label] of [
-  ["stash", "Before merging your unsaved changes"],
-  ["server-resume", "Before merging your recovered changes"],
-  ["server-conflict", "Before merging in someone else's changes"]
+  ["stash", "Before merging your unsaved changes"]
 ]) {
   test("source '" + source + "' files its undo point as “" + label + "”", async () => {
     reset();
@@ -197,19 +195,19 @@ test("keepLabel files the recovered version alongside the undo point", async () 
 
   const out = applyMerge({
     base: mk(id), mine: mine, theirs: theirs,
-    source: "server-resume", mergeOnly: true,
+    source: "stash", mergeOnly: true,
     undoPoint: cloneState(theirs),
     keepLabel: "Your unsaved changes, recovered"
   });
   await out.snapshot.done;
   const listed = await listDocHistory(id);
   const labels = listed.entries.map(function (e) { return e.label; }).sort();
-  assert.deepEqual(labels, ["Before merging your recovered changes", "Your unsaved changes, recovered"]);
+  assert.deepEqual(labels, ["Before merging your unsaved changes", "Your unsaved changes, recovered"]);
   const recovered = listed.entries.filter(function (e) { return e.label === "Your unsaved changes, recovered"; })[0];
   assert.equal(recovered.title, "recovered");
 });
 
-test("server-conflict arms Undo merge at MINE, the version being saved (#97)", async () => {
+test("an undo point at MINE arms Undo merge at mine, not the merged document (#97)", async () => {
   reset();
   const id = freshId();
   const mine = mk(id);
@@ -219,11 +217,11 @@ test("server-conflict arms Undo merge at MINE, the version being saved (#97)", a
 
   const out = applyMerge({
     base: mk(id), mine: mine, theirs: theirs,
-    source: "server-conflict", mergeOnly: true,
+    source: "stash", mergeOnly: true,
     undoPoint: cloneState(mine)
   });
   assert.ok(out.snapshot);
-  assert.deepEqual(mergeUndo().last(), { id: out.snapshot.id, docId: id, source: "server-conflict" });
+  assert.deepEqual(mergeUndo().last(), { id: out.snapshot.id, docId: id, source: "stash" });
   assert.equal(out.state.rows[1].audioText, "theirs", "the merge took theirs");
 
   await out.snapshot.done;
@@ -257,7 +255,7 @@ test("no undo point asked for leaves Undo merge alone", () => {
   const mine = mk(id);
   mine.rows[0].audioText = "mine";
 
-  applyMerge({ base: mk(id), mine: mine, theirs: mk(id), source: "server-resume", mergeOnly: true });
+  applyMerge({ base: mk(id), mine: mine, theirs: mk(id), source: "stash", mergeOnly: true });
   assert.deepEqual(mergeUndo().last(), { id: "s-earlier", docId: "d-earlier" });
 });
 

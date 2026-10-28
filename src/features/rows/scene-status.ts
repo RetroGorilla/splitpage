@@ -1,7 +1,6 @@
 import type { CommandOutcome } from "../../application/session/document-session.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
-import type { NoticePort } from "../../application/effects/ports.ts";
 import type { ShotHiding } from "../../application/shot-hiding.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { SessionChange } from "../../application/session/change-set.ts";
@@ -12,9 +11,7 @@ import { formatDuration, rowSeconds, targetClock, totalSeconds } from "../../cor
 export interface SceneStatusPorts {
   readonly document: Pick<DocumentReader, "current" | "read">;
   readonly edits: Pick<DocumentEdits, "run" | "stamps">;
-  readonly reviewRefusal: string;
   readonly text: Pick<TextServices, "productionReaders">;
-  readonly notices: Pick<NoticePort, "show">;
   readonly hideShot: () => boolean;
   readonly shots: Pick<ShotHiding, "armGrace" | "clearGrace">;
   readonly element: (id: string) => HTMLElement | null;
@@ -28,7 +25,6 @@ export interface SceneStatus {
 }
 
 const LENGTH_TITLE = "The script's read time, from the Audio column — click to set your reading speed or a target length";
-const STATUS_REVIEW_REFUSAL = "This is a review copy — comment on a scene instead of changing its status.";
 
 function paintLength(el: HTMLElement | null, totalHtml: string, slotHtml: string, title: string): void {
   if (!el) return;
@@ -100,7 +96,6 @@ export function createSceneStatus(ports: SceneStatusPorts): SceneStatus {
       const before = ports.document.read(sceneStatus(rowId));
       const outcome: CommandOutcome = ports.edits.run(sceneStatusCommand(rowId, ports.edits.stamps));
       if (outcome.kind === "failed") throw outcome.error;
-      if (outcome.kind === "rejected" && outcome.reason === ports.reviewRefusal) ports.notices.show(STATUS_REVIEW_REFUSAL, "warn");
       if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
       if (ports.hideShot()) {
         const grace = shotGrace(before, ports.document.read(sceneStatus(rowId)));

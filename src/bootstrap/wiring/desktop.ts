@@ -2,7 +2,7 @@ import { historyOwner } from "./history.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { runMenuCommand } from "../../application/desktop/menu-commands.ts";
 import { runningOnDesktop } from "../../application/desktop-presence.ts";
-import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort, driveOpenShown, restoreDesktop, useDesktopForTest } from "../../adapters/desktop/desktop-port.ts";
+import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort, restoreDesktop, useDesktopForTest } from "../../adapters/desktop/desktop-port.ts";
 import type { DesktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
 import { makeDesktopBlobBackend, wireDesktopBlobs } from "../../adapters/desktop/desktop-blobs.js";
@@ -13,14 +13,11 @@ import { startDesktopView as mountDesktop } from "../../features/desktop/desktop
 import type { DesktopMount, DesktopPorts } from "../../features/desktop/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
-import { pointTabAt } from "../../js/13-hosted.js";
 import { awaitHandedDocument, handDesktopTo, handedDocumentSettled, legacyDesktopDocumentPorts, notifyDesktopDocumentState, startDesktopDocumentState } from "../../legacy/desktop-bridge.ts";
-import { checkServer, serverStatus, setHome } from "../../legacy/location-bridge.ts";
 import { flushDraftNow } from "../../legacy/recovery-bridge.ts";
 import { saveDoc } from "../../legacy/save-bridge.ts";
 import { noteSessionEdit } from "../../legacy/session-bridge.ts";
 import { openDocument } from "../../legacy/transition-bridge.ts";
-import { actions as portActions } from "./ports/actions.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { place as portPlace } from "./ports/location.ts";
@@ -37,22 +34,14 @@ function desktopPorts(): DesktopPorts {
     running: runningOnDesktop,
     shell: desktopPort,
     canOpenPrompter: canOpenPrompter,
-    driveOpenShown: driveOpenShown,
     makeHandle: (entry) => makeDesktopHandle(entry as Parameters<typeof makeDesktopHandle>[0]),
     wireBlobs: () => { wireDesktopBlobs(desktopPort()); },
     document: portDocument,
     place: portPlace,
-    server: {
-      setHome: (kind) => { setHome(kind); },
-      forgetMode: () => { serverStatus().forgetMode(); },
-      check: () => { void checkServer(); },
-      pointTabAt: (url, options) => { pointTabAt(url, options); }
-    },
     notices: portNotices,
     documents: { open: (opening) => openDocument(opening) },
     saves: { unsaved: portSaves.unsaved, save: () => saveDoc() },
     startup: portStartup,
-    actions: portActions,
     flushDraft: flushDraftNow,
     reassignDocId: (toId, message) => documentIdentity.reassignDocId(toId, message),
     documentState: { notify: notifyDesktopDocumentState, settled: handedDocumentSettled, awaitHanded: awaitHandedDocument },
@@ -91,7 +80,7 @@ export function mountDesktopFeature(): DesktopMount {
     try {
       if (runningOnDesktop()) wireDesktopBlobs(desktopPort());
       mounted = mountDesktop(desktopPorts());
-      handDesktopTo({ renderShareInfo: mounted.renderShareInfo, openPrompterInBrowser: mounted.openPrompterInBrowser });
+      handDesktopTo({ openPrompterInBrowser: mounted.openPrompterInBrowser });
       installTestHooks(mounted);
     } catch (error) {
       handDesktopTo(null);
@@ -113,11 +102,6 @@ export const stopDesktopFeature = desktop.stop;
 
 export function startDesktopShell(): void {
   desktop.owner()?.initDesktop();
-}
-
-export function routeServerOpen(id: string | null): Promise<boolean> | null {
-  const mounted = desktop.owner();
-  return mounted ? mounted.routeServerOpen(id) : null;
 }
 
 export function desktopActions(): ActionDefinition[] {

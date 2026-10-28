@@ -37,7 +37,6 @@
   --pv-sheet-head: #E4E2DC;
   --pv-danger: #C4302A;
   --media-ground: #0F0E0C;
-  --rundown-avatar-border: rgba(15, 14, 12, 0.32);
   --switch-shadow: rgba(0, 0, 0, 0.25);
   --topbar-shadow: rgba(0, 0, 0, 0.06);
 
@@ -226,4 +225,3 @@ img[data-blob][data-blob-state="missing"] { min-height: 48px; border: 1px dashed
     scroll-padding: 108px 0 calc(72px + env(safe-area-inset-bottom));
   }
 }
-@keyframes collab-dot { 0%, 100% { opacity: 0.25; } 40% { opacity: 1; } }

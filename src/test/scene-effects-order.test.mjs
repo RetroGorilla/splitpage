@@ -15,7 +15,6 @@ const { loadTestDocument } = await import("./_document.mjs");
 
 const STATS = ["setRundownExtraSeconds", "renderRundown", "paintTargetOverlay"];
 
-const reviewing = { on: false };
 const published = [];
 const wired = stubs.wireSession({
   dirty: function () {
@@ -23,8 +22,7 @@ const wired = stubs.wireSession({
     stubs.dirtied.push(JSON.parse(JSON.stringify(currentDocument().rows)));
   },
   draft: function () { stubs.calls.push("draft"); },
-  save: function (change) { stubs.calls.push(change.changes.saveNow ? "save now" : "save"); },
-  edit: function () { return reviewing.on ? { allowed: false, reason: bridge.REVIEW_ONLY } : { allowed: true }; }
+  save: function (change) { stubs.calls.push(change.changes.saveNow ? "save now" : "save"); }
 });
 bridge.liveSession().subscribe(function (change) { published.push(change); });
 onScriptStats(function (targetSeconds) { stubs.setRundownExtraSeconds(targetSeconds); stubs.renderRundown(); stubs.paintTargetOverlay(); });
@@ -36,8 +34,6 @@ function lengthDoc(rows) {
   published.length = 0;
   return currentDocument();
 }
-
-const STATUS_REFUSAL = "This is a review copy — comment on a scene instead of changing its status.";
 
 test("the stubs stand in for every module the two commands reach", () => {
   stubs.resetFanout();
@@ -102,20 +98,7 @@ test("a status click on a scene that is gone does nothing", () => {
   assert.deepEqual(published, []);
 });
 
-test("in review mode a status click only warns, with hidden shot scenes too; no document does nothing", () => {
-  stubs.resetFanout({ hideShot: true });
-  const before = JSON.stringify(lengthDoc([{ id: "r1", status: "ready" }]));
-  reviewing.on = true;
-  try {
-    cycleRowStatus("r1");
-    cycleRowStatus("gone");
-  } finally {
-    reviewing.on = false;
-  }
-  assert.deepEqual(stubs.calls, ["showToast:" + STATUS_REFUSAL, "showToast:" + STATUS_REFUSAL]);
-  assert.equal(JSON.stringify(currentDocument()), before);
-  assert.deepEqual(published, []);
-
+test("a status click with no document does nothing", () => {
   stubs.resetFanout();
   loadTestDocument(null);
   cycleRowStatus("r1");
@@ -182,20 +165,12 @@ test("a scene length: the command sets and stamps the row, one effect pass with 
   assert.deepEqual(published[0].changes.derive, ["production", "broll"], "production and b-roll refresh through the scheduler");
 });
 
-test("a scene length that changes nothing or a missing scene has no effect; review mode only warns; no document does nothing", () => {
+test("a scene length that changes nothing or a missing scene has no effect; no document does nothing", () => {
   stubs.resetFanout();
   const before = JSON.stringify(lengthDoc([{ id: "r1", status: "todo", lengthSeconds: 90 }]));
   assert.equal(setSceneLength("r1", 90), false);
   assert.equal(setSceneLength("gone", 30), false);
   assert.deepEqual(stubs.calls, []);
-
-  reviewing.on = true;
-  try {
-    assert.equal(setSceneLength("r1", 30), false);
-  } finally {
-    reviewing.on = false;
-  }
-  assert.deepEqual(stubs.calls, ["showToast:This is a review copy — comment on a scene instead of changing its length."]);
   assert.equal(JSON.stringify(currentDocument()), before);
   assert.deepEqual(published, []);
 

@@ -10,11 +10,13 @@ import type { Command } from "../../../src/application/session/document-session.
 
 import { migrateRows } from "../../../src/core/migrate.ts";
 import {
-  REVIEW_ONLY, editAllowed, liveSession, onSessionChange, readSession, runCommand, runDocumentEdit,
+  editAllowed, liveSession, onSessionChange, readSession, runCommand, runDocumentEdit,
   sessionStamps, sessionTextPorts, startSessionBridge
 } from "../../../src/legacy/session-bridge.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeClock } from "../session-fakes.ts";
+
+const REFUSED = "refused";
 
 function start(editor: string, record: () => void = () => {}) {
   const migration = fakeMigration();
@@ -111,16 +113,15 @@ test("document edits preserve outcomes, one undo record per edit and listener or
   }
 });
 
-test("document edits preserve the exact review refusal and commands needing no edit permission", () => {
+test("document edits preserve the exact refusal and commands needing no edit permission", () => {
   const edits: DocumentEdits = portEdits;
-  const h = start("Reviewer");
+  const h = start("Reader");
   try {
     liveSession().adopt({ title: "Initial", rows: [] });
-    h.deny(REVIEW_ONLY);
-    assert.equal(REVIEW_ONLY, "review");
+    h.deny(REFUSED);
     assert.equal(edits.allowed(), false);
-    const refused: Command = { name: "refused", needs: "edit", plan: () => assert.fail("review must refuse before planning") };
-    assert.deepEqual(edits.run(refused), { kind: "rejected", reason: REVIEW_ONLY });
+    const refused: Command = { name: "refused", needs: "edit", plan: () => assert.fail("a refusal must come before planning") };
+    assert.deepEqual(edits.run(refused), { kind: "rejected", reason: REFUSED });
     assert.equal(edits.edit(refused), false);
     assert.equal(readSession((doc) => doc?.title), "Initial");
     assert.deepEqual(h.recorded, []);
@@ -199,13 +200,13 @@ test("the same document edits port follows restarted sessions and their editor a
   const second = start("Second");
   try {
     liveSession().adopt({ title: "Second document", rows: [] });
-    second.deny(REVIEW_ONLY);
+    second.deny(REFUSED);
     assert.equal(portEdits, edits);
     assert.equal(edits.stamps.editor.name(), "Second");
     assert.equal(edits.text.editor.name(), "Second");
     assert.equal(edits.allowed(), false);
     const command = titleCommand("Second edit");
-    assert.deepEqual(edits.run(command), { kind: "rejected", reason: REVIEW_ONLY });
+    assert.deepEqual(edits.run(command), { kind: "rejected", reason: REFUSED });
     second.deny(null);
     assert.equal(edits.allowed(), true);
     assert.equal(edits.edit(command), true);

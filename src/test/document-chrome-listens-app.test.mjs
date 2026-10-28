@@ -7,7 +7,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { adoptReplacement, noteServerUpdate, runCommand } = await import("../legacy/session-bridge.ts");
-const { documentLocation, setHome, amendHome, currentHome, serverStatus } = await import("../legacy/location-bridge.ts");
+const { documentLocation, setHome, amendHome, currentHome } = await import("../legacy/location-bridge.ts");
 const { preferences, viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { autoSavePolicy, confirmSavedNow, noteSaveChange, onSaveChange } = await import("../legacy/save-bridge.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
@@ -40,15 +40,13 @@ function open(kind = "import") {
   if (viewFlags().writerOpen()) writer.closeWriter();
   flushEdits();
   setHome("none");
-  documentLocation().setConnection({ serverUrl: "http://localhost:7777/", token: "token", role: "edit" });
   preferences().setCommentAuthor("Rae");
   preferences().setMyColor(null);
   autoSavePolicy().setEnabled(false);
   autoSavePolicy().resume();
   adoptReplacement(script("Listening"));
   confirmSavedNow();
-  if (kind === "server") setHome("server", { id: "listening", rev: 3 });
-  else if (kind === "import") setHome("import", { name: "listening.txt", dirty: false });
+  if (kind === "import") setHome("import", { name: "listening.txt", dirty: false });
   else if (kind === "file") setHome("file", { format: "splitpage", name: "listening.splitpage", handle: { _desktopId: "file-1" } });
   documentLocation().markWrittenOut(true);
   flushEdits();
@@ -97,7 +95,7 @@ test("a session arrival refreshes both file chips, identity and desktop state be
   assert.equal(desktop._lastDocState.title, "Replacement");
 });
 
-test("location and connection owners refresh the file chips and desktop state synchronously", () => {
+test("the location owner refreshes the file chips and desktop state synchronously", () => {
   open();
   amendHome(currentHome(), { dirty: true });
   assert.match(stateText(), /unsaved changes/);
@@ -105,25 +103,17 @@ test("location and connection owners refresh the file chips and desktop state sy
   setHome("file", { format: "splitpage", handle: { _desktopId: "file-2" } });
   assert.equal(el("file-chip").hidden, true);
   assert.equal(desktop._lastDocState.fileId, "file-2");
-  setHome("server", { id: "owner-change", rev: 4 });
-  assert.match(stateText(), /v4/);
-  assert.equal(desktop._lastDocState.serverKey, "owner-change");
-  documentLocation().updateConnection({ role: "review", token: "review-token" });
-  assert.equal(desktop._lastDocState.role, "review");
   assertMirror();
 });
 
 test("save coordinator status and autosave policy refresh the chips and desktop state synchronously", () => {
-  open("server");
+  open();
   noteSaveChange();
-  assert.match(stateText(), /saving/);
   assert.equal(desktop._lastDocState.dirty, true);
   assertMirror();
   autoSavePolicy().halt("Paused");
-  assert.match(stateText(), /not saved yet/);
   assertMirror();
   confirmSavedNow();
-  assert.match(stateText(), /v3/);
   assert.equal(desktop._lastDocState.dirty, false);
   assertMirror();
 });
@@ -147,7 +137,7 @@ test("opening the writer refreshes its file-chip mirror through the view owner",
 });
 
 for (const surface of ["rows", "writer"]) {
-  for (const kind of ["import", "server", "file"]) {
+  for (const kind of ["import", "file"]) {
     test("typing in " + surface + " for a " + kind + " document keeps each display's synchronous refresh count per key", (t) => {
       open(kind);
       if (surface === "writer") writer.openWriter();
@@ -192,7 +182,7 @@ test("stopping and remounting the listeners releases subscriptions and registers
 });
 
 test("a failing save-status listener is reported later and does not stop the save or the chrome", (t) => {
-  open("server");
+  open();
   stopDocumentChromeFeature();
   const failure = new Error("listener failed");
   t.after(onSaveChange(() => { throw failure; }));
@@ -200,9 +190,8 @@ test("a failing save-status listener is reported later and does not stop the sav
   const queued = [];
   t.mock.method(globalThis, "queueMicrotask", (job) => { queued.push(job); });
   noteSaveChange();
-  assert.match(stateText(), /saving/);
+  assert.equal(desktop._lastDocState.dirty, true);
   confirmSavedNow();
-  assert.match(stateText(), /v3/);
   assert.equal(desktop._lastDocState.dirty, false);
   t.mock.restoreAll();
   const reported = [];
@@ -210,16 +199,4 @@ test("a failing save-status listener is reported later and does not stop the sav
     try { job(); } catch (error) { reported.push(error); }
   }
   assert.deepEqual(reported, [failure, failure]);
-});
-
-test("server status announcements refresh the readonly banner, link status and expired-session status", () => {
-  open("server");
-  serverStatus().recordMode({ readOnly: true });
-  assert.equal(el("readonly-banner").hidden, false);
-  serverStatus().turnLinkOff();
-  assert.match(stateText(), /link turned off/);
-  assertMirror();
-  serverStatus().expireSession();
-  assert.match(stateText(), /signed out/);
-  assertMirror();
 });

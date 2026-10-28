@@ -1,4 +1,3 @@
-import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { MenuItemPort, NoticePort } from "../../application/effects/ports.ts";
 import type { ExportCardDecl, ExportChoice, ExportRegistry, FileNameOptions } from "../../application/export/registry.ts";
 import type { RecentFileData, RecentFiles } from "../../application/files/recent-files.ts";
@@ -57,7 +56,6 @@ export interface FileMenuExportPorts {
   readonly preview: ExportPreviewPort;
   readonly fileName: (format: string, options: FileNameOptions) => string;
   readonly exportAction: (action: string) => boolean;
-  readonly share: () => void;
   readonly onMenuRefresh: (listener: () => void) => () => void;
 }
 
@@ -112,7 +110,6 @@ export interface FileMenuControls {
   readonly refreshFileMenu: () => void;
   readonly refreshOpenFileMenu: () => void;
   readonly onFileMenuRefresh: (listener: () => void) => () => void;
-  readonly pasteItemState: () => MenuItemState;
   readonly startNewScript: () => boolean;
   readonly openLongDemo: () => boolean;
 }
@@ -123,8 +120,7 @@ export interface FileMenuDropdownMount extends FileMenuControls {
 
 export interface FileMenuDropdownPorts {
   readonly document: Pick<DocumentReader, "current">;
-  readonly place: Pick<DocumentPlace, "home" | "sessionExpired" | "linkTurnedOff">;
-  readonly review: Pick<ReviewFacts, "reviewing">;
+  readonly place: Pick<DocumentPlace, "home">;
   readonly desktop: () => boolean;
   readonly recents: Pick<RecentFiles, "available" | "list" | "routeOpen" | "read">;
   readonly recentHandle: (entry: RecentFileData) => { readonly getFile: () => Promise<File> };
@@ -133,7 +129,6 @@ export interface FileMenuDropdownPorts {
   readonly transitions: Pick<Transitions<DocumentDestination>, "startNew">;
   readonly history: HistoryPort;
   readonly notices: Pick<NoticePort, "show">;
-  readonly menuItems: Pick<MenuItemPort<Element>, "setReason">;
   readonly saves: Pick<SaveState, "busy" | "unsaved">;
   readonly saving: SaveConfirmation;
   readonly preferences: Pick<Preferences, "defaultWpm" | "clock">;
@@ -142,7 +137,6 @@ export interface FileMenuDropdownPorts {
   readonly ids: Pick<IdSource, "id">;
   readonly prepareDocument: (raw: unknown) => ValidatedDocument;
   readonly syncIdentity: () => void;
-  readonly applyReviewMode: () => void;
   readonly longDemo: { readonly state: { readonly title: string; readonly rows: readonly unknown[] } };
 }
 
@@ -153,4 +147,9 @@ export interface FileMenuActionPorts {
   readonly save: (options?: { saveAs?: boolean }) => Promise<void>;
   readonly openFile: () => Promise<unknown>;
   readonly openImport: () => void;
+}
+
+export interface AutosaveActionPorts {
+  readonly screen: () => ScreenState;
+  readonly autosave: { readonly on: () => boolean; readonly toggle: () => void };
 }

@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { createLocalWorkStash, createStashedWork } from "../../src/application/recovery/stashed-work.ts";
 import type { StashMerged } from "../../src/application/recovery/stashed-work.ts";
 import type { ConflictStash, StashedWork } from "../../src/application/recovery/conflict-stash.ts";
-import { SERVER_RESUME_KEY } from "../../src/application/location/server-status.ts";
 
 interface Doc {
   docId: string;
@@ -23,7 +22,7 @@ interface World {
   readonly apply: ReturnType<typeof createStashedWork<Doc, string>>;
 }
 
-function world(stashed: StashedWork | null, options: { resume?: string | null; storageThrows?: boolean; merged?: (request: Readonly<Record<string, unknown>>) => StashMerged<Doc, string> | Promise<StashMerged<Doc, string>> } = {}): World {
+function world(stashed: StashedWork | null, options: { merged?: (request: Readonly<Record<string, unknown>>) => StashMerged<Doc, string> | Promise<StashMerged<Doc, string>> } = {}): World {
   const calls: string[] = [];
   const merges: Readonly<Record<string, unknown>>[] = [];
   const stash: ConflictStash = {
@@ -35,10 +34,6 @@ function world(stashed: StashedWork | null, options: { resume?: string | null; s
   };
   const apply = createStashedWork<Doc, string>({
     stash: stash,
-    sessionStorage: () => {
-      if (options.storageThrows) throw new Error("storage is off");
-      return { getItem: (key) => (key === SERVER_RESUME_KEY ? options.resume ?? null : null), setItem: () => {}, removeItem: () => {} };
-    },
     markWrittenOut: () => { calls.push("markWrittenOut"); },
     copy: (d) => ({ ...d, title: d.title + " (copy)" }),
     merge: (request) => {
@@ -78,20 +73,6 @@ test("a stash whose id is not a document id leaves the loaded id alone", () => {
   w.apply(loaded, null);
   assert.equal(loaded.docId, "d" + "1".repeat(32));
   assert.deepEqual(w.calls, ["read", "dropReloadGuard", "accept", "clear", "merge"]);
-});
-
-test("a server resume in progress leaves the stash for the resume and merges nothing", () => {
-  const w = world({ mine: doc("Mine", MINE_ID) }, { resume: "1" });
-  const loaded = doc("Loaded");
-  assert.deepEqual(w.apply(loaded, null), { state: loaded, report: null, snapshot: null });
-  assert.deepEqual(w.calls, ["read", "dropReloadGuard", "accept"]);
-  assert.equal(loaded.docId, "d" + "1".repeat(32));
-});
-
-test("storage that throws counts as no resume in progress", () => {
-  const w = world({ mine: doc("Mine", MINE_ID) }, { storageThrows: true });
-  w.apply(doc("Loaded"), null);
-  assert.deepEqual(w.calls, ["read", "dropReloadGuard", "accept", "markWrittenOut", "clear", "merge"]);
 });
 
 test("an override is merged as given: the stash is not read, cleared or guarded, the id is kept, and the apply options win", () => {

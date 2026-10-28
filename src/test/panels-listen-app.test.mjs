@@ -66,7 +66,7 @@ test("a comment added through the session updates the comments count and list wi
   assert.equal(el("comments-badge").hidden, true);
 });
 
-test("an opened document paints the comments count, the stats chips and the presence bar once", () => {
+test("an opened document paints the comments count and the stats chips once", () => {
   open();
   adoptReplacement(migrateRows({ title: "Arrived", comments: [comment("c2")], rows: [{ id: "a1", visualText: "", audioText: "Here it is.", status: "todo" }] }));
   assert.equal(el("comments-badge").hidden, false);

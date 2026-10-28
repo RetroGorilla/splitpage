@@ -2,7 +2,6 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { TextServices } from "../../application/text/services.ts";
 import type { DocumentOpening } from "../../application/transitions/sources.ts";
 import type { StartupSignal } from "../../application/startup-signal.ts";
-import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { SidePanels } from "../../application/side-panels.ts";
 import type { Preferences } from "../../application/preferences/preferences.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
@@ -22,7 +21,6 @@ export interface PrompterFeaturePorts {
   readonly startup: StartupSignal;
   readonly desktop: PrompterDesktop;
   readonly voice: PrompterVoice;
-  readonly place: Pick<DocumentPlace, "serverHomeId">;
   readonly panels: Pick<SidePanels, "close" | "closeAll">;
   readonly preferences: Pick<Preferences, "prompterFlag" | "setPrompterFlag" | "skipOnboardingForPrompter">;
   readonly viewFlags: Pick<ViewFlags, "hideShot">;

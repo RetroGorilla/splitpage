@@ -15,7 +15,7 @@ export function appDataActions(current: () => AppDataMount | null, ports: AppDat
       label: "Export app data…",
       group: "Help",
       icon: "i-box",
-      words: "backup move desktop app data history bookmarks",
+      words: "backup move desktop app data history",
       availability: () => current() ? availableUnless(["loading"], ports.screen()) : { enabled: false },
       run: () => current()?.exportAppData()
     },
@@ -24,7 +24,7 @@ export function appDataActions(current: () => AppDataMount | null, ports: AppDat
       label: "Import app data…",
       group: "Help",
       icon: "i-box",
-      words: "restore move desktop app data history bookmarks",
+      words: "restore move desktop app data history",
       availability: () => {
         if (!current()) return { enabled: false };
         const screen = availableUnless(["loading"], ports.screen());

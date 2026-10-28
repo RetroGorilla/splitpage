@@ -22,10 +22,6 @@ eval __run('settings')
 wait __shown('settings-modal')
 key Escape
 wait __dialogs() === ''
-eval __run('servers')
-wait __shown('connect-modal')
-key Escape
-wait __dialogs() === ''
 eval __run('paste')
 wait __shown('import-modal')
 jsclick #import-modal .modal-close
@@ -61,27 +57,11 @@ eval __run('settings')
 sleep 300
 expect __dialogs() === ''
 expect __toasts() === 'Finish or skip the tour first.'
-eval __run('servers')
-sleep 300
-expect __dialogs() === ''
-expect __toasts() === 'Finish or skip the tour first.'
-eval __run('collaborate')
-sleep 300
-expect __dialogs() === ''
-expect __toasts() === 'Finish or skip the tour first.'
 eval __run('paste')
 sleep 300
 expect __dialogs() === ''
 expect __toasts() === 'Finish or skip the tour first.'
 eval __run('gdoc-import')
-sleep 300
-expect __dialogs() === ''
-expect __toasts() === 'Finish or skip the tour first.'
-eval __run('drive-open')
-sleep 300
-expect __dialogs() === ''
-expect __toasts() === 'Finish or skip the tour first.'
-eval __run('server-open')
 sleep 300
 expect __dialogs() === ''
 expect __toasts() === 'Finish or skip the tour first.'
@@ -113,27 +93,11 @@ eval __run('settings')
 sleep 300
 expect __dialogs() === 'about-modal'
 expect __toasts() === 'Close the open dialog first.'
-eval __run('servers')
-sleep 300
-expect __dialogs() === 'about-modal'
-expect __toasts() === 'Close the open dialog first.'
-eval __run('collaborate')
-sleep 300
-expect __dialogs() === 'about-modal'
-expect __toasts() === 'Close the open dialog first.'
 eval __run('paste')
 sleep 300
 expect __dialogs() === 'about-modal'
 expect __toasts() === 'Close the open dialog first.'
 eval __run('gdoc-import')
-sleep 300
-expect __dialogs() === 'about-modal'
-expect __toasts() === 'Close the open dialog first.'
-eval __run('drive-open')
-sleep 300
-expect __dialogs() === 'about-modal'
-expect __toasts() === 'Close the open dialog first.'
-eval __run('server-open')
 sleep 300
 expect __dialogs() === 'about-modal'
 expect __toasts() === 'Close the open dialog first.'

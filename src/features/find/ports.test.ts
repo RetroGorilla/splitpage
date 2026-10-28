@@ -5,9 +5,9 @@ import { fakeDocument, fakeNotices } from "../../../tests/features/fakes.ts";
 import { fakeMigration } from "../../../tests/core/migrate-ports.ts";
 import { migrateRows } from "../../core/migrate.ts";
 import type { FindPorts } from "./ports.ts";
-import { startFind, findQueryChanged, replaceCurrent } from "./find.js";
+import { startFind, findQueryChanged } from "./find.js";
 
-test("find uses owner ports to reveal matches and refuses edits in review", () => {
+test("find uses owner ports to reveal matches", () => {
   const win = jsdomWindow() as unknown as Window & typeof globalThis;
   const realm = globalThis as unknown as Record<string, unknown>;
   realm.window = win;
@@ -18,17 +18,15 @@ test("find uses owner ports to reveal matches and refuses edits in review", () =
   const reader = fakeDocument(doc);
   const revealed: string[] = [];
   let open = false;
-  let edits = 0;
   const ports: FindPorts = {
     document: reader.document,
-    edits: { edit: () => { edits++; return true; }, stamps: { clock: { nowIso: () => "2026-10-23T00:00:00.000Z" }, editor: { name: () => "Test" } } },
+    edits: { edit: () => true, stamps: { clock: { nowIso: () => "2026-10-23T00:00:00.000Z" }, editor: { name: () => "Test" } } },
     text: {
       cellOf: (html) => [{ text: String(html || ""), marks: {} }],
       inertBody: () => win.document.body,
       sanitizeHtml: (html) => String(html)
     },
     shotHiding: () => ({ reveal: (id) => { revealed.push(id); } }),
-    review: { refuseInReview: () => true },
     undo: { breakCoalescing: () => {} },
     notices: fakeNotices().notices,
     flags: { setFindOpen: (value) => { open = value; } }
@@ -38,8 +36,6 @@ test("find uses owner ports to reveal matches and refuses edits in review", () =
   assert.equal(open, true);
   assert.deepEqual(revealed, [doc.rows[0]?.id]);
   assert.equal(win.document.getElementById("find-count")?.textContent, "1 of 1");
-  replaceCurrent();
-  assert.equal(edits, 0);
   mounted.dispose();
   mounted.dispose();
   assert.equal(open, false);

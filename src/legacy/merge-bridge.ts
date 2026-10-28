@@ -11,7 +11,7 @@ import { noteAbsorbedDirty } from "./session-bridge.ts";
 export type LegacyMergePorts = Omit<DocumentMergePorts<OperationContext>, "view">;
 
 export interface MergeBannerView {
-  readonly show: (result: MergedStates, opts: { readonly undo?: boolean | "saved" }) => unknown;
+  readonly show: (result: MergedStates, opts: { readonly undo?: boolean }) => unknown;
 }
 
 const PAUSED = "Autosave is paused — changes recovered for you are on screen but not in your file yet. " +

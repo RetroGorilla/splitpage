@@ -44,7 +44,6 @@ function fixture(title) {
 
 function fresh(title) {
   if (viewFlags().writerOpen()) writer.closeWriter();
-  window.__hostedTest.setSession({ role: "edit", docId: null });
   clock += 10_000;
   loadTestDocument(migrateRows(fixture(title)));
   flushEdits();
@@ -72,7 +71,7 @@ function selectionIn(el) {
 }
 
 function merge(theirs) {
-  return applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false });
+  return applyMerge({ theirs: theirs, source: "stash", unchanged: true, report: false });
 }
 
 function observe(run) {

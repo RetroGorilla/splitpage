@@ -256,6 +256,6 @@ expect __same()
 sleep 500
 expect __same()
 expect A.pending() === false
-expect window.__hostedTest.dirty() === false
+expect document.getElementById('btn-save').classList.contains('is-dirty') === false
 
 quit

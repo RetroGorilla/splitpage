@@ -14,18 +14,6 @@ test("routes run in the declared order and stop at the first that handles the ev
   assert.deepEqual(router.routed(), ["a", "b", "c"]);
 });
 
-test("the gate runs first and a refused event reaches no route", () => {
-  let refuse = true;
-  let routed = 0;
-  const router = createRootRouter(["a"] as const, () => refuse);
-  router.route("a", () => { routed++; return true; });
-  router.handle({});
-  assert.equal(routed, 0);
-  refuse = false;
-  router.handle({});
-  assert.equal(routed, 1);
-});
-
 test("a slot takes one handler; unrouting frees it, and a stale unroute does not remove its successor", () => {
   const router = createRootRouter(["a"] as const);
   const first = (): boolean => true;

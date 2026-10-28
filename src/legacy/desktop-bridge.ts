@@ -7,7 +7,7 @@ import type { HistoryOwner } from "../application/recovery/history-ports.ts";
 import { draftResume, recoveryStarted } from "./recovery-bridge.ts";
 import { unsavedChanges } from "./save-bridge.ts";
 import { currentDocument } from "./session-bridge.ts";
-import { currentHome, homeConn, serverHomeId } from "./location-bridge.ts";
+import { currentHome } from "./location-bridge.ts";
 
 let started: DesktopDocumentStateOwner | null = null;
 let handOff: DesktopHandOff | null = null;
@@ -18,15 +18,13 @@ export function legacyDesktopDocumentPorts(history: Pick<HistoryOwner, "isPristi
       running: runningOnDesktop,
       document: function () { return currentDocument(); },
       restoring: function () { return recoveryStarted() && draftResume().restorePending(); },
-      connection: function () { return homeConn(); },
       unsaved: function () { return unsavedChanges(); },
       pristine: function () { return history.isPristineSeedDocument(); },
       fileId: function (): string | null {
         const home = currentHome();
         const handle = home.handle as { readonly _desktopId?: string } | null | undefined;
         return (home.kind === "file" && handle && handle._desktopId) || null;
-      },
-      serverKey: function () { return serverHomeId(); }
+      }
     }),
     publish: function (state: DesktopDocumentState) { desktopPort()?.setDocumentState(state); }
   });
@@ -65,10 +63,6 @@ export function desktopDocumentListeners(): DesktopDocumentListeners {
 
 export function handDesktopTo(next: DesktopHandOff | null): void {
   handOff = next;
-}
-
-export function renderDesktopShareInfo(): Promise<void> {
-  return handOff ? handOff.renderShareInfo() : Promise.resolve();
 }
 
 export function openPrompterInBrowser(): Promise<PrompterElsewhere> {

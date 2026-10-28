@@ -1,8 +1,6 @@
 import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { REVIEW_REFUSAL_REASON } from "../../../src/application/collaboration/authority.ts";
-import { VIEWING_ONLY } from "../../../src/application/collaboration/review.ts";
 import { changeSet } from "../../../src/application/session/change-set.ts";
 import type { DeleteArea } from "../../../src/application/editing/delete-confirm.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
@@ -59,13 +57,13 @@ function setup() {
   return { edits, notices, calls, owner: mountScenes(ports) };
 }
 
-test("scenes: adding a scene runs the add command with a fresh id, and a refused add warns that the copy is view only", () => {
+test("scenes: adding a scene runs the add command with a fresh id, and a refused add adds nothing", () => {
   const { edits, notices, owner } = setup();
   assert.equal(owner.addRow("r1"), "rnew1");
   assert.deepEqual(edits.ran.map((c) => c.name), ["add-scene"]);
-  edits.answer({ kind: "rejected", reason: REVIEW_REFUSAL_REASON });
+  edits.answer({ kind: "rejected", reason: "refused" });
   assert.equal(owner.addRow("r1"), null);
-  assert.deepEqual(notices.shown.map(({ message, kind }) => ({ message, kind })), [{ message: VIEWING_ONLY, kind: "warn" }]);
+  assert.deepEqual(notices.shown, []);
   owner.dispose();
 });
 

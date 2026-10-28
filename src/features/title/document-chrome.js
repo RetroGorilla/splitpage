@@ -10,8 +10,7 @@ export function startDocumentChrome(ports) {
   var active = true;
   var currentDocument = ports.document.current;
   var preferences = function () { return ports.preferences; };
-  var presence = function () { return ports.presence; };
-  var reviewMode = ports.review.reviewing;
+  var personColors = ports.personColors;
   var runDocumentEdit = ports.edits.edit;
   var targetSection = ports;
 function updateIdentityChip() {
@@ -22,7 +21,7 @@ function updateIdentityChip() {
   var dot = chip.querySelector(".identity-dot");
   if (dot) {
     dot.setAttribute("aria-hidden", "true");
-    if (name) dot.style.setProperty("--person", presence().personColor(name));
+    if (name) dot.style.setProperty("--person", personColors.personColor(name));
     else dot.style.removeProperty("--person");
   }
 }
@@ -35,8 +34,7 @@ function identityChipListeners() {
     preference: function (change) {
       var name = preferences().nameOf(change.key);
       if (name === "commentAuthor" || name === "personColor") updateIdentityChip();
-    },
-    colours: updateIdentityChip
+    }
   };
 }
 
@@ -110,7 +108,7 @@ function openAnchorPopover(host, id, label, html) {
 }
 
 function personSwatchesHtml(name, radioName, legendClass) {
-  var current = preferences().myColor() || presence().personColor(name || "");
+  var current = preferences().myColor() || personColors.personColor(name || "");
   return '<fieldset class="swatch-group" role="radiogroup" aria-label="Your colour">' +
     '<legend class="' + (legendClass || "anchor-popover-label") + '">Your colour</legend>' +
     '<div class="swatch-row">' +
@@ -167,27 +165,24 @@ function promptForTarget() {
 
 function openClockPopover(focusOn) {
   if (!currentDocument()) return;
-  var viewing = reviewMode();
-  var off = viewing ? " disabled" : "";
   var host = lengthHost();
   var wrap = openAnchorPopover(host, "wpm-editor", "Reading speed and target length",
     '<label class="anchor-popover-label" for="wpm-input">Reading speed</label>' +
     '<div class="anchor-popover-row">' +
       '<input type="number" id="wpm-input" min="60" max="400" step="5" value="' +
-        escapeHtml(String(currentDocument().wordsPerMinute || DEFAULT_WPM)) + '" aria-label="Words per minute"' + off + '>' +
+        escapeHtml(String(currentDocument().wordsPerMinute || DEFAULT_WPM)) + '" aria-label="Words per minute">' +
       '<span class="anchor-popover-unit">words a minute</span>' +
-      '<button type="button" id="wpm-save" class="btn-outline"' + off + '>Set</button>' +
+      '<button type="button" id="wpm-save" class="btn-outline">Set</button>' +
     '</div>' +
     targetSectionHtml(targetSection));
   if (!wrap) return;
   wireTargetSection(targetSection, wrap, closeAnchorPopover);
   var targetInput = document.getElementById("target-input");
   var input = document.getElementById("wpm-input");
-  var first = focusOn === "target" && targetInput && !targetInput.disabled ? targetInput : input;
-  if (viewing) { wrap.setAttribute("tabindex", "-1"); wrap.focus(); }
-  else { first.focus(); first.select(); }
+  var first = focusOn === "target" && targetInput ? targetInput : input;
+  first.focus();
+  first.select();
   function commit() {
-    if (reviewMode()) { closeAnchorPopover(); return; }
     runDocumentEdit(wordsPerMinuteCommand(Number(input.value)));
     closeAnchorPopover();
   }

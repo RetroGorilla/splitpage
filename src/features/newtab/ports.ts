@@ -31,7 +31,7 @@ export interface StarterChoice {
 
 export interface NewTabPorts {
   readonly document: Pick<DocumentReader, "current">;
-  readonly place: Pick<DocumentPlace, "home" | "arrivingOnLink">;
+  readonly place: Pick<DocumentPlace, "home">;
   readonly desktop: () => boolean;
   readonly recents: RecentFiles;
   readonly launch: Pick<LaunchFacts, "launchIntent" | "hasDraftToRestore">;
