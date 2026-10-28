@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createActionRegistry, registerAll } from "../../../src/application/actions.ts";
 import { createEditorSelection } from "../../../src/application/editing/selection.ts";
-import { startCommandMenu } from "../../../src/features/command-menu/command-menu.js";
+import { startCommandMenu } from "../../../src/features/command-menu/command-menu.ts";
 import { commandMenuActions } from "../../../src/features/command-menu/actions.ts";
 import type { CommandMenuPorts } from "../../../src/features/command-menu/ports.ts";
 

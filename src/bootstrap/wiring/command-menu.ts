@@ -1,6 +1,6 @@
 import type { ActionDefinition } from "../../application/actions.ts";
 import { commandMenuActions as definitions } from "../../features/command-menu/actions.ts";
-import { startCommandMenu as mountCommandMenu } from "../../features/command-menu/command-menu.js";
+import { startCommandMenu as mountCommandMenu } from "../../features/command-menu/command-menu.ts";
 import type { CommandMenuMount, CommandMenuPorts } from "../../features/command-menu/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { actions } from "./ports/actions.ts";
