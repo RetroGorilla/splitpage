@@ -82,14 +82,6 @@ for (const filename of ["listen.ps1"]) {
   console.log(`  voice/${filename} (${data.length} bytes)`);
 }
 
-const serverDir = resolve(STAGE_DIR, "server");
-await fs.mkdir(serverDir, { recursive: true });
-for (const filename of ["server.js", "comments.js", "text.js", "html-tokens.js", "blobs.js", "links.js", "package.json"]) {
-  const data = await fs.readFile(resolve(REPO_ROOT, "server", filename));
-  await fs.writeFile(resolve(serverDir, filename), data);
-  console.log(`  server/${filename} (${data.length} bytes)`);
-}
-
 const sharedDir = resolve(STAGE_DIR, "shared");
 await fs.mkdir(sharedDir, { recursive: true });
 for (const filename of ["package.json", "history-policy.js", "doc-id-policy.js", "blob-policy.js", "history-store.js", "video-embed.js"]) {

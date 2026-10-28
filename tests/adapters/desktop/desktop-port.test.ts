@@ -34,7 +34,6 @@ const BOOT = {
   tabId: "tab-1",
   windowId: "win-1",
   launchIntent: { type: "open-file" },
-  connection: { serverUrl: "http://studio.local:8080", token: "tok", tunnel: null },
   hadPriorSession: true,
   firstTabOfLaunch: true,
   hasDraftToRestore: true
@@ -99,7 +98,6 @@ test("the port's values come from the tab's boot answer", () => {
   assert.equal(b.tabId, "tab-1");
   assert.equal(b.windowId, "win-1");
   assert.deepEqual({ ...b.launchIntent }, { type: "open-file" });
-  assert.deepEqual({ ...b.connection }, { serverUrl: "http://studio.local:8080", token: "tok", tunnel: null });
   assert.equal(b.hadPriorSession, true);
   assert.equal(b.firstTabOfLaunch, true);
   assert.equal(b.hasDraftToRestore, true);
@@ -150,17 +148,10 @@ const CALLS: Partial<Record<DesktopMember, Call>> = {
   openPrompterInChromium: { args: [], direction: "invoke", channel: "splitpage:prompter-open-in-chromium" },
   voiceStatus: { args: [], direction: "invoke", channel: "splitpage:voice-status" },
   voiceStart: { args: [], direction: "invoke", channel: "splitpage:voice-start" },
-  voiceStop: { args: [], direction: "invoke", channel: "splitpage:voice-stop" },
-  driveStatus: { args: [], direction: "invoke", channel: "splitpage:drive-status" },
-  driveSignIn: { args: [], direction: "invoke", channel: "splitpage:drive-sign-in" },
-  driveSignOut: { args: [], direction: "invoke", channel: "splitpage:drive-sign-out" },
-  driveList: { args: ["folder-1"], direction: "invoke", channel: "splitpage:drive-list" },
-  driveDownload: { args: ["file-1"], direction: "invoke", channel: "splitpage:drive-download" },
-  driveUpload: { args: [{ name: "a.splitpage" }], direction: "invoke", channel: "splitpage:drive-upload" }
+  voiceStop: { args: [], direction: "invoke", channel: "splitpage:voice-stop" }
 };
 
 const LISTENERS: Partial<Record<DesktopMember, { readonly channel: string; readonly payload: readonly unknown[]; readonly heard: unknown }>> = {
-  onOpenServerDoc: { channel: "splitpage:open-server-doc", payload: [{ serverDocId: "s1" }], heard: { serverDocId: "s1" } },
   onRestoreNotice: { channel: "splitpage:restore-notice", payload: [{ skipped: [] }], heard: { skipped: [] } },
   onReassignDocId: { channel: "splitpage:reassign-doc-id", payload: [{ toId: "d2" }], heard: { toId: "d2" } },
   onOpenFile: { channel: "splitpage:open-file", payload: [{ id: "f1", name: "a.splitpage" }], heard: { id: "f1", name: "a.splitpage" } },
@@ -171,7 +162,7 @@ const LISTENERS: Partial<Record<DesktopMember, { readonly channel: string; reado
 };
 
 const VALUES: readonly DesktopMember[] = [
-  "isDesktop", "platform", "appVersion", "tabId", "windowId", "launchIntent", "connection",
+  "isDesktop", "platform", "appVersion", "tabId", "windowId", "launchIntent",
   "hadPriorSession", "firstTabOfLaunch", "hasDraftToRestore"
 ];
 
