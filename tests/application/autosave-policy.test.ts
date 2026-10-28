@@ -68,24 +68,21 @@ test("the start-up preference decides whether autosave is on, and nothing is arm
   assert.deepEqual(off.changes, []);
 });
 
-test("timing: a hosted document waits longer than a local file, both under the max, and anything not the server gets the local idle", () => {
+test("timing: a local file waits the idle, under the max", () => {
   const p = bench().policy;
-  assert.deepEqual({ ...p.timing }, { idle: 2000, hostedIdle: 5000, max: 15000 });
-  assert.ok(p.idleFor("server") > p.idleFor("file"));
-  assert.equal(p.idleFor("file"), 2000);
-  assert.equal(p.idleFor(null), p.timing.idle);
-  assert.ok(p.timing.hostedIdle < p.timing.max);
+  assert.deepEqual({ ...p.timing }, { idle: 2000, max: 15000 });
+  assert.equal(p.idleFor(), 2000);
   assert.ok(p.timing.idle < p.timing.max);
   assert.ok(Object.isFrozen(DEFAULT_AUTOSAVE_TIMING));
 });
 
 test("timing: the policy's timing stays live, which the browser suite relies on, and each policy has its own", () => {
   const b = bench();
-  b.policy.timing.hostedIdle = 7;
-  assert.equal(b.policy.idleFor("server"), 7);
-  b.policy.schedule("server");
+  b.policy.timing.idle = 7;
+  assert.equal(b.policy.idleFor(), 7);
+  b.policy.schedule("file");
   assert.deepEqual(live(b), [7, 15000]);
-  assert.equal(bench().policy.idleFor("server"), 5000, "a new policy starts from the defaults");
+  assert.equal(bench().policy.idleFor(), 2000, "a new policy starts from the defaults");
 });
 
 test("schedule arms the idle and max timers once each; another schedule re-arms only the idle", () => {
@@ -106,7 +103,7 @@ test("schedule does nothing when autosave is off, halted, or has nowhere to writ
   off.policy.schedule("file");
   const halted = bench();
   halted.policy.halt("Paused.");
-  halted.policy.schedule("server");
+  halted.policy.schedule("file");
   const nowhere = bench();
   nowhere.policy.schedule(null);
   for (const b of [off, halted, nowhere]) {
@@ -134,7 +131,7 @@ test("either timer firing clears both and calls due once", () => {
 
 test("clear stops both timers without calling due", () => {
   const b = bench();
-  b.policy.schedule("server");
+  b.policy.schedule("file");
   b.policy.clear();
   assert.deepEqual(live(b), []);
   assert.equal(b.policy.pending(), false);

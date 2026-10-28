@@ -23,7 +23,6 @@ interface World {
   epoch: () => number;
   capture: () => OperationContext;
   setDestination: (d: Destination) => void;
-  setConnection: (c: object) => void;
 }
 
 const FILE: Destination = Object.freeze({ name: "file" });
@@ -43,13 +42,11 @@ function world(opened?: { doc: ValidatedDocument; writtenOut: boolean; destinati
   let destination: Destination = opened ? opened.destination : NOWHERE;
   let baseline: string | null = opened ? JSON.stringify(opened.doc) : null;
   let writtenOut = opened ? opened.writtenOut : false;
-  let connection: object = {};
   let minted = 0;
   const operations = createOperations({
     session: { epoch: function () { return epoch; }, generation: function () { return 0; } },
     document: { id: function () { return held ? held.docId : null; } },
-    destination: { identity: function () { return destination; }, generation: function () { return 0; }, revision: function () { return null; } },
-    connection: { current: function () { return connection; } }
+    destination: { identity: function () { return destination; }, generation: function () { return 0; } }
   });
   const transitions = createTransitions<Destination>({
     entry: function (raw) { log.push("entry"); return migrateRows(raw, migration.ports); },
@@ -95,8 +92,7 @@ function world(opened?: { doc: ValidatedDocument; writtenOut: boolean; destinati
     writtenOut: function () { return writtenOut; },
     epoch: function () { return epoch; },
     capture: operations.capture,
-    setDestination: function (d) { destination = d; },
-    setConnection: function (c) { connection = c; }
+    setDestination: function (d) { destination = d; }
   };
 }
 
@@ -213,12 +209,11 @@ test("publish of a document never written out keeps its id", () => {
   assert.equal(w.live()?.docId, idOf("1"));
 });
 
-test("#247: a publish that lands after the document was replaced, reopened, moved or reconnected changes nothing", () => {
+test("#247: a publish that lands after the document was replaced, reopened or moved changes nothing", () => {
   const cases: [string, (w: World) => void][] = [
     ["replaced", function (w) { w.transitions.startNew({ from: { document: scriptWith("Other", idOf("8")) }, reason: "new" }); }],
     ["reopened with the same id", function (w) { w.transitions.open({ from: { document: scriptWith("Open", idOf("1")) }, reason: "reopened" }); }],
-    ["given another destination", function (w) { w.setDestination(FILE); }],
-    ["on another connection instance", function (w) { w.setConnection({}); }]
+    ["given another destination", function (w) { w.setDestination(FILE); }]
   ];
   for (const [name, change] of cases) {
     const w = opened(true, NOWHERE);

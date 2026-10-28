@@ -236,7 +236,7 @@ function fakes(): Fakes {
       return {
         indexedDB: null, limits: { maxAgeMs: 1, maxCount: 1, maxBytes: 1 }, now: () => 0, writerId: "w", desktop: () => null,
         sessionStorage: () => null, localStorage: () => null, internImage: () => {}, merge: (request) => ({ state: migrateRows(request["theirs"]) }),
-        drafts: { flush: () => Promise.resolve({ ok: true }), armServer: () => Promise.resolve(false), offerAfterLinkOff: () => Promise.resolve(false), noteChange: () => {} }
+        drafts: { flush: () => Promise.resolve({ ok: true }), noteChange: () => {} }
       };
     },
     projectFiles: () => {
@@ -517,7 +517,7 @@ test("failed partial startup: an actions, exporters, merge or recovery factory t
     ]),
     ["recovery nothing", (f) => ({ ...f.deps, recovery: () => undefined }), "recovery", "the recovery dependency returned no recovery ports"],
     ["recovery drafts nothing", (f) => ({ ...f.deps, recovery: () => without(f.deps.recovery(), "drafts") }), "recovery", "the recovery dependency returned no draft ports"],
-    ...(["flush", "armServer", "offerAfterLinkOff", "noteChange"] as const).map((method): Spoilt => [
+    ...(["flush", "noteChange"] as const).map((method): Spoilt => [
       "recovery drafts " + method, (f) => ({ ...f.deps, recovery: () => ({ ...f.deps.recovery(), drafts: without(f.deps.recovery().drafts, method) }) }), "recovery", "the recovery dependency's draft ports have no " + method + " function"
     ]),
     ...recoveryMethods.flatMap((method): Spoilt[] => [
@@ -1054,8 +1054,8 @@ async function bootFresh(arrival: string): Promise<OnboardingReport> {
   return JSON.parse(stdout.trim().split("\n").pop() ?? "") as OnboardingReport;
 }
 
-test("INV-30: through the shim's real wiring, initializers and startup, the wizard opens over a pristine copy and stays shut when a document arrives by file, link or restore", { timeout: 120_000 }, async () => {
-  const arrivals = ["pristine", "file", "link", "desktop pristine", "restore"];
+test("INV-30: through the shim's real wiring, initializers and startup, the wizard opens over a pristine copy and stays shut when a document arrives by file or restore", { timeout: 120_000 }, async () => {
+  const arrivals = ["pristine", "file", "desktop pristine", "restore"];
   const reports = await Promise.all(arrivals.map(bootFresh));
   for (const report of reports) {
     assert.equal(report.error, null, report.arrival + ": the app booted");
@@ -1065,7 +1065,6 @@ test("INV-30: through the shim's real wiring, initializers and startup, the wiza
   assert.deepEqual(reports.map((r) => [r.arrival, r.desktop, r.opened]), [
     ["pristine", false, true],
     ["file", false, false],
-    ["link", false, false],
     ["desktop pristine", true, true],
     ["restore", true, false]
   ], "the pristine copies are the positive controls: the same boot path opens the wizard when nothing arrives");

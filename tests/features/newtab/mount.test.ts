@@ -15,7 +15,7 @@ realm.document = win.document;
 
 function page() {
   win.document.body.innerHTML = '<div id="newtab-page" hidden><div id="newtab-cards">' +
-    ['new', 'paste', 'open', 'join', 'gdoc', 'dismiss'].map((action) => '<button data-newtab-action="' + action + '">' + action + '</button>').join('') +
+    ['new', 'paste', 'open', 'gdoc', 'dismiss'].map((action) => '<button data-newtab-action="' + action + '">' + action + '</button>').join('') +
     '</div><div id="newtab-drop"></div><div class="newtab-main"></div><div id="newtab-recents"><div id="newtab-recents-list"></div>' +
     '<button id="newtab-recents-clear" data-newtab-action="clear-recents"></button></div><div id="newtab-continue">' +
     '<button id="newtab-continue-btn"><span id="newtab-continue-title"></span><span id="newtab-continue-when"></span></button></div></div>';
@@ -34,14 +34,14 @@ async function settled() {
 function harness() {
   const calls: unknown[][] = [];
   const arrivals: Parameters<NewTabPorts["transitions"]["startNew"]>[0][] = [];
-  const state = { home: { kind: "none" } as ReturnType<NewTabPorts["place"]["home"]>, desktop: false, seed: true, link: false, pending: false, draft: false, intent: { type: "blank" }, last: null as unknown };
+  const state = { home: { kind: "none" } as ReturnType<NewTabPorts["place"]["home"]>, desktop: false, seed: true, pending: false, draft: false, intent: { type: "blank" }, last: null as unknown };
   const actions = fakeActions();
   const notices = fakeNotices();
   let pasted: Parameters<NewTabPorts["importText"]>[0] | null = null;
   const starter = { id: "sample", name: "Sample", desc: "A starter", state: { title: "Starter", rows: [{ id: "s", audioText: "Hello" }] } };
   const ports: NewTabPorts = {
     document: { current: () => null },
-    place: { home: () => state.home, arrivingOnLink: () => state.link },
+    place: { home: () => state.home },
     desktop: () => state.desktop,
     recents: { available: () => true, canRemove: () => true, canClear: () => true, list: async () => [], remove: async () => [], clear: async () => [], read: async (id) => ({ id, name: "Recent.splitpage" }), routeOpen: async () => ({ where: "this-tab" }) },
     launch: { launchIntent: () => state.intent, hasDraftToRestore: () => state.draft },
@@ -119,7 +119,7 @@ test("paste scans its migrated document before adoption and dropped files keep t
 test("auto-show observes location, seed, last file, desktop launch and draft facts", async () => {
   const cases: [string, (h: ReturnType<typeof harness>) => void, boolean][] = [
     ["blank", () => {}, false], ["seed", (h) => { h.state.seed = false; }, true],
-    ["link", (h) => { h.state.link = true; }, true], ["file", (h) => { h.state.home = { kind: "file" }; }, true],
+    ["file", (h) => { h.state.home = { kind: "file" }; }, true],
     ["last file", (h) => { h.state.last = {}; }, true], ["desktop", (h) => { h.state.desktop = true; }, false],
     ["pending restore", (h) => { h.state.desktop = true; h.state.pending = true; }, true],
     ["draft", (h) => { h.state.desktop = true; h.state.draft = true; }, true],
@@ -149,8 +149,8 @@ test("disposal removes handlers, closes the page and permits remounting without 
   try {
     await settled();
     first.dispose();
-    click("join");
-    assert.deepEqual(h.actions.calls, [{ id: "servers", source: "button" }]);
+    click("gdoc");
+    assert.deepEqual(h.actions.calls, [{ id: "show-gdoc-import", source: "button" }]);
     win.document.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     assert.equal(win.document.getElementById("newtab-page")?.hidden, true);
   } finally { next.dispose(); }

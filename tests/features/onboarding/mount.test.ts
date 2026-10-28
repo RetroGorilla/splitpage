@@ -13,14 +13,14 @@ function page() {
   win.document.body.innerHTML = '<button id="outside">Outside</button><div id="onboarding-modal" hidden>' +
     '<button class="modal-close" data-onboard-action="skip">Skip</button>' +
     '<button data-onboard-action="back">Back</button><button data-onboard-action="next">Next</button>' +
-    '<button data-onboard-action="host-save">Save</button>' +
     '<button data-onboard-action="finish-tour">Tour</button><button data-onboard-action="open-help">Help</button>' +
-    '<div id="onboard-install-body"></div><div id="onboard-host-panel" hidden></div>' +
-    '<div id="onboard-join-panel" hidden><button data-onboard-action="join-submit">Join</button><input id="onboard-join-name" value="Team">' +
-    '<input id="onboard-join-url" value=" http://team.test/ "><input id="onboard-join-pin" value=" 1234 ">' +
-    '<input type="checkbox" id="onboard-join-remember" checked></div><p id="onboard-join-error" hidden></p>' +
+    '<div id="onboard-install-body"></div>' +
     '<section class="onboard-step" data-onboard-step="1"></section><section class="onboard-step" data-onboard-step="2" hidden></section>' +
-    '<section class="onboard-step" data-onboard-step="3" hidden></section><section class="onboard-step" data-onboard-step="4" hidden></section></div>';
+    '<section class="onboard-step" data-onboard-step="3" hidden></section></div>';
+}
+
+function stepShown(n: number): boolean {
+  return win.document.querySelector('[data-onboard-step="' + n + '"]')?.hasAttribute("hidden") === false;
 }
 
 function modal() {
@@ -41,7 +41,7 @@ async function settled() {
   await Promise.resolve();
 }
 
-test("onboarding mounts with ports, saves the host command, joins, records completion and starts the tour", async () => {
+test("onboarding mounts with ports, walks its three steps, records completion and starts the tour", async () => {
   page();
   const h = fakeOnboardingPorts();
   const mounted = startOnboarding(h.ports);
@@ -49,22 +49,13 @@ test("onboarding mounts with ports, saves the host command, joins, records compl
     await settled();
     assert.equal(modal().hidden, false);
     assert.equal(h.panels.closed(), 1);
+    assert.equal(stepShown(1), true);
     click("next");
-    await settled();
-    assert.equal(h.launcherCalls(), 1);
-    assert.equal(win.document.getElementById("onboard-install-body")?.textContent?.includes("C:/Splitpage"), true);
-    click("host-save");
-    assert.deepEqual(h.delivered, [["splitpage-host.cmd", [
-      "@echo off", "title Splitpage - host for others", "echo Starting a shared session...",
-      "echo Share the address and the PIN it prints with whoever is joining.",
-      "echo This is plain HTTP - fine on your own network, not over the internet.",
-      "echo Close this window to stop hosting.", "echo.", "start.bat --host --pin", "pause", ""
-    ].join("\r\n"), { savedMsg: "Saved the host command." }]]);
-    click("join-submit");
-    await settled();
-    assert.deepEqual(h.joined, [["Team", "http://team.test/", { pin: "1234", remember: true }]]);
-    assert.deepEqual(h.notices.shown.map(({ message, kind }) => [message, kind]), [["Joined Team.", "ok"]]);
-    assert.equal(win.document.querySelector('[data-onboard-step="4"]')?.hasAttribute("hidden"), false);
+    assert.equal(stepShown(2), true);
+    assert.match(win.document.getElementById("onboard-install-body")?.textContent ?? "", /runs wherever its folder is/);
+    click("next");
+    assert.equal(stepShown(3), true);
+    assert.equal(win.document.querySelector('[data-onboard-action="next"]')?.textContent, "Finish");
     click("finish-tour");
     assert.deepEqual(h.recorded, [false]);
     assert.equal(modal().hidden, true);
@@ -74,14 +65,35 @@ test("onboarding mounts with ports, saves the host command, joins, records compl
   }
 });
 
-test("automatic onboarding respects the seed, saved file, link, document home and desktop launch facts", async () => {
+test("on the desktop the install step says this is the installed app, and the last step finishes without a tour", async () => {
+  page();
+  const h = fakeOnboardingPorts();
+  h.state.desktop = true;
+  const mounted = startOnboarding(h.ports);
+  try {
+    await settled();
+    assert.equal(modal().hidden, false);
+    click("next");
+    assert.match(win.document.getElementById("onboard-install-body")?.textContent ?? "", /already installed as a desktop app/);
+    click("back");
+    assert.equal(stepShown(1), true);
+    click("next");
+    click("next");
+    click("next");
+    assert.deepEqual(h.recorded, [false]);
+    assert.equal(modal().hidden, true);
+    assert.deepEqual(h.actions.calls, []);
+  } finally {
+    mounted.dispose();
+  }
+});
+
+test("automatic onboarding respects the seed, saved file, document home and desktop launch facts", async () => {
   const cases: [string, (h: ReturnType<typeof fakeOnboardingPorts>) => void, boolean][] = [
     ["pristine", () => {}, false],
     ["changed seed", (h) => { h.state.seed = false; }, true],
     ["last file", (h) => { h.state.last = { name: "script" }; }, true],
-    ["link", (h) => { h.state.link = true; }, true],
     ["file home", (h) => { h.state.home = { kind: "file" }; }, true],
-    ["server home", (h) => { h.state.home = { kind: "server", id: "doc" }; }, true],
     ["desktop pristine", (h) => { h.state.desktop = true; }, false],
     ["restore pending", (h) => { h.state.desktop = true; h.state.pending = true; }, true],
     ["later tab", (h) => { h.state.desktop = true; h.state.firstTab = false; }, true],
@@ -148,57 +160,3 @@ test("a disposed mount cannot auto-open after a last-file read completes", async
   assert.equal(h.choices.size, 0);
 });
 
-test("a join from a disposed mount cannot update a remounted wizard", async () => {
-  for (const result of [{ ok: true, bookmark: { name: "Old team" } }, { ok: false, error: "offline" }]) {
-    page();
-    const original = fakeOnboardingPorts();
-    let resolve: (value: typeof result) => void = () => {};
-    const first = startOnboarding({ ...original.ports, addServerBookmark: () => new Promise((done) => { resolve = done; }) });
-    await settled();
-    click("join-submit");
-    const button = win.document.querySelector<HTMLButtonElement>('[data-onboard-action="join-submit"]');
-    assert.ok(button);
-    assert.equal(button.disabled, true);
-    first.dispose();
-    assert.equal(button.disabled, false);
-    assert.equal(button.textContent, "Join");
-    const replacement = fakeOnboardingPorts();
-    const second = startOnboarding(replacement.ports);
-    try {
-      await settled();
-      resolve(result);
-      await settled();
-      assert.deepEqual(replacement.notices.shown, []);
-      assert.equal(win.document.querySelector('[data-onboard-step="1"]')?.hasAttribute("hidden"), false);
-      assert.equal(win.document.getElementById("onboard-join-error")?.textContent, "");
-    } finally {
-      second.dispose();
-    }
-  }
-});
-
-test("a clipboard copy from a disposed mount cannot notify a replacement", async () => {
-  page();
-  const descriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
-  let resolve: () => void = () => {};
-  const copying = new Promise<void>((done) => { resolve = done; });
-  Object.defineProperty(globalThis, "navigator", { configurable: true, value: { clipboard: { writeText: () => copying } } });
-  const button = win.document.createElement("button");
-  button.setAttribute("data-onboard-action", "host-copy");
-  modal().appendChild(button);
-  const first = startOnboarding(fakeOnboardingPorts().ports);
-  await settled();
-  click("host-copy");
-  first.dispose();
-  const replacement = fakeOnboardingPorts();
-  const second = startOnboarding(replacement.ports);
-  try {
-    resolve();
-    await settled();
-    assert.deepEqual(replacement.notices.shown, []);
-  } finally {
-    second.dispose();
-    if (descriptor) Object.defineProperty(globalThis, "navigator", descriptor);
-    else Reflect.deleteProperty(globalThis, "navigator");
-  }
-});

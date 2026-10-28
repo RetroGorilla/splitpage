@@ -7,7 +7,6 @@ import { createActionRegistry } from "../../../src/application/actions.ts";
 import { createExportRegistry } from "../../../src/application/export/registry.ts";
 import type { ExportAssets } from "../../../src/application/export/assets.ts";
 import { createDocumentLocation } from "../../../src/application/location/document-location.ts";
-import { createServerStatus } from "../../../src/application/location/server-status.ts";
 import { buildExportDocument } from "../../../src/core/document/export-document.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
@@ -33,12 +32,11 @@ function harness(label: string) {
   formats.register({ id: "txt", action: "export-txt", name: "Text", menuLabel: "Text", card: "script", fileName: (base) => label + ":" + base + ".txt", build: async (request) => { builds.push(request); return { data: label, diagnostics: { imagesLeftOut: 1 } }; } });
   const notices = fakeNotices();
   const ports: LocalFileMenuPorts = {
-    document: fakeDocument(doc).document, preferences: { clock: () => "24h" }, onServerDoc: () => false,
-    server: createServerStatus({ storage: () => null }), place: createDocumentLocation(),
+    document: fakeDocument(doc).document, preferences: { clock: () => "24h" }, place: createDocumentLocation(),
     saves: { unsaved: () => false }, autoSaves: { policy: () => { throw new Error("unused"); } },
     writeback: { saveBackItemState: () => ({ hidden: false, disabled: true, reason: "", label: "Save to file" }) },
     exports: { captureExportDocument: () => captured, loadExportAssets: async () => assets }, formats,
-    assetSource: () => null, assets: { request: () => ({ shas: [], source: null }) }, standaloneHtml: () => "",
+    assets: { request: () => ({ shas: [] }) }, standaloneHtml: () => "",
     imagesLeftOut: (...args) => { warnings.push(args); }, brollView: { printView: () => ({ filter: "all", group: "scene" }) },
     notices: { ...notices.notices, busy: { withBar: async (_label, work) => work() } },
     delivery: { deliver: async (...args) => { deliveries.push(args); return true; } },

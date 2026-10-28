@@ -5,10 +5,9 @@
     "src/bootstrap/wiring/merge-review.ts",
     "src/application/session/session-merge.js",
     "src/bootstrap/wiring/session-merge.ts",
-    "src/legacy/session-merge-bridge.ts",
     "src/features/history/panel.js",
     "src/features/title/document-chrome.js",
     "src/features/title/target-section.js"
   ],
-  "expectedLoads": 8
+  "expectedLoads": 7
 }

@@ -29,9 +29,7 @@ function mounted(given: Given = {}) {
     home: given.home ?? ({ kind: "file", handle: { name: "pilot.splitpage" } } as Home),
     target: given.target === undefined ? ("file" as AutoSaveTarget) : given.target,
     halted: "",
-    autoSaveOn: true,
-    expired: false,
-    linkOff: false
+    autoSaveOn: true
   };
   const ports: SaveStatusPorts = {
     saves: save.saves,
@@ -40,9 +38,7 @@ function mounted(given: Given = {}) {
       target: () => { log.push("target"); return state.target; }
     },
     place: {
-      home: () => state.home,
-      sessionExpired: () => state.expired,
-      linkTurnedOff: () => state.linkOff
+      home: () => state.home
     },
     preferences: {
       clock: () => "24",
@@ -126,27 +122,19 @@ test("a finished save shows when it was saved, and a clean confirmation forgets 
   }
 });
 
-test("the line follows location, server status and clock changes, and ignores the others", () => {
-  const { mount, log, state } = mounted({ home: { kind: "server" }, target: "server" });
+test("the line follows home and clock changes, and ignores the others", () => {
+  const { mount, log, state } = mounted({ home: { kind: "none" }, target: null });
   try {
     const listeners = mount.listeners();
     listeners.location("writtenOut");
-    listeners.status("mode");
-    listeners.status("bookmarks");
     listeners.preference({ key: "splitpage-theme", value: "dark" });
     assert.deepEqual(log, []);
-    state.linkOff = true;
-    listeners.status("link");
-    assert.equal(byId("save-status").textContent, "Not saving");
-    assert.equal(byId("save-status").className, "save-status is-warn");
-    state.linkOff = false;
-    state.expired = true;
-    listeners.status("session");
-    assert.match(byId("save-status").title, /sign-in to the server has lapsed/);
+    state.home = { kind: "file", handle: { name: "pilot.splitpage" } } as Home;
+    state.target = "file";
     listeners.location("home");
-    listeners.location("connection");
+    assert.equal(byId("save-status").textContent, "Saved");
     listeners.preference({ key: "splitpage-clock", value: "12" });
-    assert.deepEqual(log, ["target", "target", "target", "target", "target"]);
+    assert.deepEqual(log, ["target", "target"]);
   } finally {
     mount.dispose();
   }
