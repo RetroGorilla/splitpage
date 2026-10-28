@@ -13,8 +13,6 @@ files:
   - drafts.js
   - ipc-channels.js
   - prompter-share.js
-  - google-drive.js
-  - bind-host.js
   - close-keep.js
   - quit-watchdog.js
   - blob-store.js

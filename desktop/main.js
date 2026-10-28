@@ -2,19 +2,15 @@
 
 const {
   app, BrowserWindow, WebContentsView, Menu, protocol, net, ipcMain, dialog, shell,
-  utilityProcess, session, nativeTheme, screen, safeStorage
+  session, nativeTheme, screen
 } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const crypto = require("node:crypto");
-const os = require("node:os");
-const net_ = require("node:net");
 const { spawn } = require("node:child_process");
 const { createDraftStore, restoreDoneAction, writeFileDurableSync, MAX_BODY_BYTES } = require("./drafts");
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
-const { createGoogleDrive } = require("./google-drive");
-const { documentServerHost } = require("./bind-host");
 const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
 const { createQuitWatchdog } = require("./quit-watchdog");
 const { createVoiceHelper } = require("./voice-helper");
@@ -111,22 +107,6 @@ const STATIC_ALLOWLIST = {
 
 const rawArgv = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2);
 
-function argHas(list, flag) { return list.includes(flag); }
-function argValueOf(list, flag, fallback) {
-  const i = list.indexOf(flag);
-  if (i === -1 || i === list.length - 1) return fallback;
-  const value = list[i + 1];
-  if (typeof value === "string" && value.startsWith("-")) return fallback;
-  return value;
-}
-function argValuesOf(list, flag) {
-  const out = [];
-  for (let i = 0; i < list.length - 1; i++) {
-    if (list[i] === flag && list[i + 1] && !list[i + 1].startsWith("--")) out.push(list[i + 1].trim());
-  }
-  return out;
-}
-
 const OPENABLE_EXTENSIONS = [".splitpage", ".md", ".html", ".htm", ".docx", ".txt", ".csv"];
 function filesToOpenFrom(list, baseDir) {
   const out = [];
@@ -142,34 +122,6 @@ function filesToOpenFrom(list, baseDir) {
   return out;
 }
 
-const HOSTING = argHas(rawArgv, "--host");
-const LIBRARY = HOSTING || argHas(rawArgv, "--library");
-const WANTED_PORT = Number(argValueOf(rawArgv, "--port", 8791));
-const DEFAULT_DATA_DIR = process.platform === "win32"
-  ? path.join(process.env.LOCALAPPDATA || app.getPath("userData"), "Splitpage", "data")
-  : path.join(app.getPath("userData"), "data");
-const DATA_DIR = argValueOf(rawArgv, "--data", DEFAULT_DATA_DIR);
-const ALLOW_ORIGINS = argValuesOf(rawArgv, "--allow-origin").filter(Boolean);
-
-let JOIN_PIN = "";
-if (argHas(rawArgv, "--pin")) {
-  const given = argValueOf(rawArgv, "--pin", "");
-  JOIN_PIN = (given && !given.startsWith("--")) ? given.trim() : String(crypto.randomInt(0, 1000000)).padStart(6, "0");
-}
-
-let REVIEW_PIN = "";
-if (argHas(rawArgv, "--review-pin") || argHas(rawArgv, "--share-readonly")) {
-  const given = argValueOf(rawArgv, "--review-pin", "");
-  REVIEW_PIN = (given && !given.startsWith("--")) ? given.trim() : String(crypto.randomInt(0, 1000000)).padStart(6, "0");
-  if (!JOIN_PIN) JOIN_PIN = String(crypto.randomInt(0, 1000000)).padStart(6, "0");
-  if (REVIEW_PIN === JOIN_PIN) REVIEW_PIN = "";
-}
-const REVIEW_KEY = REVIEW_PIN ? crypto.randomBytes(16).toString("hex") : "";
-
-const TUNNEL_TARGET = argHas(rawArgv, "--tunnel") ? argValueOf(rawArgv, "--tunnel", "") : null;
-const TUNNEL_REMOTE_PORT = Number(argValueOf(rawArgv, "--remote-port", 8791));
-const TUNNEL_LOCAL_PORT = Number(argValueOf(rawArgv, "--local-port", String(TUNNEL_REMOTE_PORT)));
-
 const argvFilesToOpen = filesToOpenFrom(rawArgv, process.cwd());
 
 const gotLock = app.requestSingleInstanceLock();
@@ -177,17 +129,9 @@ if (!gotLock) {
   app.quit();
 } else {
 
-let documentServerChild = null;
-let documentServerPort = null;
-let tunnelChild = null;
-let tunnelLocalUrl = null;
-let tunnelWindow = null;
-
 if (TEST_MODE) {
   process.on("uncaughtException", (err) => {
     console.error("[splitpage-test] uncaught main-process error: " + ((err && err.stack) || err));
-    killDocumentServer();
-    killTunnel();
     app.exit(70);
   });
   process.on("unhandledRejection", (err) => {
@@ -226,7 +170,6 @@ const windowsById = new Map();
 
 const webContentsIdToTabId = new Map();
 const pathToTabId = new Map();
-const serverDocIdToTabId = new Map();
 
 function pathKey(absPath) {
   const resolved = path.resolve(absPath);
@@ -237,7 +180,6 @@ let lastFocusedWindowId = null;
 let quitConfirmed = false;
 let quitKeepingDrafts = false;
 const sessionEndKeep = { holder: "session-end" };
-let hostingConfirmed = false;
 let sessionWritesFrozen = false;
 let sessionEnding = false;
 let firstTabCreated = false;
@@ -256,10 +198,6 @@ let docClaimSeq = 0;
 const docClaimCleanupRegistered = new WeakSet();
 
 function homeKeyForClaim(tab) {
-  if (tab.serverKey) {
-    const url = tab.source.kind === "server" && tab.source.serverUrl ? "@" + tab.source.serverUrl : "";
-    return "server:" + String(tab.serverKey).slice(0, 200) + url;
-  }
   const absPath = tab.fileId ? fileRegistry.get(tab.fileId) : null;
   if (absPath) return "file:" + pathKey(absPath);
   return null;
@@ -353,8 +291,6 @@ function draftTestHooksFromEnv() {
   if (!TEST_MODE) return null;
   const hooks = {
     onKill() {
-      killDocumentServer();
-      killTunnel();
       process.kill(process.pid, "SIGKILL");
     }
   };
@@ -418,7 +354,7 @@ function keepDraftsOfGoneFiles(goneTabs, holder) {
   })).then((unkept) => unkept.filter(Boolean));
 }
 
-const DRAFT_ORIGIN_KINDS = new Set(["untitled", "file", "server", "import"]);
+const DRAFT_ORIGIN_KINDS = new Set(["untitled", "file", "import"]);
 const DRAFT_FILE_KINDS = new Set(["md", "html", "splitpage"]);
 const DRAFT_NAME_MAX = 300;
 
@@ -432,19 +368,6 @@ function draftScalarString(v, max) {
 
 function draftFiniteNumber(v) {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
-}
-
-function draftServerOrigin(server) {
-  if (!server || typeof server !== "object") return null;
-  let base = null;
-  try {
-    const u = new URL(String(server.base == null ? "" : server.base));
-    if (u.protocol === "http:" || u.protocol === "https:") base = u.origin + u.pathname;
-  } catch { base = null; }
-  const docId = draftScalarString(server.docId, DRAFT_NAME_MAX);
-  const rev = draftFiniteNumber(server.rev);
-  if (!base && !docId) return null;
-  return { base, docId, rev: rev === null ? 0 : rev };
 }
 
 function buildDraftHeader(tab, p) {
@@ -465,8 +388,7 @@ function buildDraftHeader(tab, p) {
       fileKind: DRAFT_FILE_KINDS.has(p.fileKind) ? p.fileKind : null,
       importName: draftScalarString(p.importName, DRAFT_NAME_MAX),
       baseLastModified: draftFiniteNumber(p.baseLastModified),
-      baseSize: draftFiniteNumber(p.baseSize),
-      server: draftServerOrigin(p.server)
+      baseSize: draftFiniteNumber(p.baseSize)
     },
     placement: { windowKey: tab.windowId, index: index >= 0 ? index : 0, active: !!(w && w.activeTabId === tab.id) }
   };
@@ -526,66 +448,13 @@ function normalizeBounds(b) {
   return ok ? { x: b.x, y: b.y, width: b.width, height: b.height } : null;
 }
 
-const SERVER_URL_MAX = 2048;
-const TUNNEL_USERHOST_RE = /^[A-Za-z0-9._@:[\]-]{1,255}$/;
-const CONN_TOKEN_RE = /^[A-Za-z0-9_-]{1,256}$/;
-
-function normalizeServerUrl(v) {
-  if (v === "" || v === null || v === undefined) return "";
-  if (typeof v !== "string" || v.length > SERVER_URL_MAX || /\s/.test(v) || !v.endsWith("/")) return null;
-  let u;
-  try { u = new URL(v); } catch { return null; }
-  if (u.protocol !== "http:" && u.protocol !== "https:") return null;
-  if (u.username || u.password || u.search || u.hash || v.indexOf("?") !== -1 || v.indexOf("#") !== -1) return null;
-  if (!/^https?:\/\//i.test(v)) return null;
-  return v;
-}
-
-function normalizeTunnel(t) {
-  if (!t || typeof t !== "object") return null;
-  const port = (n) => Number.isInteger(n) && n >= 1 && n <= 65535;
-  if (typeof t.userHost !== "string" || !TUNNEL_USERHOST_RE.test(t.userHost) || t.userHost[0] === "-") return null;
-  if (!port(t.remotePort) || !port(t.localPort)) return null;
-  return { userHost: t.userHost, remotePort: t.remotePort, localPort: t.localPort };
-}
-
-function normalizeConnToken(t) { return typeof t === "string" && CONN_TOKEN_RE.test(t) ? t : ""; }
-function normalizeConnRole(r) { return r === "edit" || r === "review" ? r : ""; }
-
-function serverSource(serverDocId, c) {
-  const o = c || {};
-  return {
-    kind: "server",
-    serverDocId,
-    serverUrl: normalizeServerUrl(o.serverUrl) || "",
-    tunnel: normalizeTunnel(o.tunnel),
-    token: normalizeConnToken(o.token),
-    role: normalizeConnRole(o.role)
-  };
-}
-
-function serverRouteKey(src) {
-  return (src.serverUrl || "") + "\n" + src.serverDocId;
-}
-
 function normalizeTabSource(src) {
   if (src && typeof src === "object") {
     if (src.kind === "file" && typeof src.absPath === "string" && src.absPath && path.isAbsolute(src.absPath)) {
       return { kind: "file", absPath: src.absPath };
     }
-    if (src.kind === "server" && typeof src.serverDocId === "string" && src.serverDocId) {
-      const serverUrl = normalizeServerUrl(src.serverUrl);
-      if (serverUrl === null) return { kind: "blank" };
-      return { kind: "server", serverDocId: src.serverDocId, serverUrl, tunnel: normalizeTunnel(src.tunnel) };
-    }
   }
   return { kind: "blank" };
-}
-
-function liveTabSource(src) {
-  const base = normalizeTabSource(src);
-  if (base.kind !== "server") return base;
-  return serverSource(base.serverDocId, { ...base, token: src.token, role: src.role });
 }
 
 function blankDesktopWindow(extra) {
@@ -881,8 +750,6 @@ function historyCapBytes() {
 const HISTORY_TEST_FAULT = TEST_MODE ? String(process.env.SPLITPAGE_TEST_HISTORY_FAULT || "") : "";
 
 function historyTestKill() {
-  killDocumentServer();
-  killTunnel();
   process.kill(process.pid, "SIGKILL");
 }
 
@@ -985,159 +852,6 @@ function initBlobStore() {
     blobStore = null;
     if (TEST_MODE) process.stderr.write(`[splitpage] blob store unavailable: ${err && err.stack || err}\n`);
     return null;
-  }
-}
-
-function isPortFree(port, host) {
-  return new Promise((resolve) => {
-    const probe = net_.createServer();
-    probe.once("error", () => resolve(false));
-    probe.once("listening", () => probe.close(() => resolve(true)));
-    probe.listen(port, host);
-  });
-}
-
-async function findFreePort(wanted, host) {
-  let port = wanted;
-  for (let i = 0; i < 20 && !(await isPortFree(port, host)); i++) port++;
-  if (!(await isPortFree(port, host))) return null;
-  return port;
-}
-
-async function waitForHealth(port, tries = 120) {
-  for (let i = 0; i < tries; i++) {
-    try {
-      const res = await net.fetch(`http://127.0.0.1:${port}/api/health`);
-      if (res.ok) return true;
-    } catch { }
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  return false;
-}
-
-async function startDocumentServer() {
-  const host = documentServerHost({ hosting: HOSTING, testMode: TEST_MODE });
-  const port = await findFreePort(WANTED_PORT, host);
-  if (port == null) {
-    const message = `Ports ${WANTED_PORT}-${WANTED_PORT + 20} are all busy. Try --port with something else.`;
-    if (TEST_MODE) {
-      process.stderr.write(`[splitpage-test] ${message}\n`);
-      killDocumentServer();
-      killTunnel();
-      app.exit(71);
-      return false;
-    }
-    dialog.showErrorBox("Splitpage", message);
-    return false;
-  }
-  await fsp.mkdir(DATA_DIR, { recursive: true }).catch(() => {});
-
-  documentServerChild = utilityProcess.fork(path.join(APP_ROOT, "server", "server.js"), [], {
-    cwd: APP_ROOT,
-    stdio: "pipe",
-    env: {
-      ...process.env,
-      PORT: String(port),
-      HOST: host,
-      STATIC_DIR: APP_ROOT,
-      DATA_DIR,
-      NO_API: "0",
-      JOIN_PIN,
-      REVIEW_PIN,
-      REVIEW_KEY,
-      ALLOW_ORIGINS: ALLOW_ORIGINS.join(","),
-      LAUNCH_TOKEN: ""
-    }
-  });
-  if (documentServerChild.stdout) documentServerChild.stdout.on("data", (d) => process.stdout.write(`[doc-server] ${d}`));
-  if (documentServerChild.stderr) documentServerChild.stderr.on("data", (d) => process.stderr.write(`[doc-server] ${d}`));
-
-  const healthy = await waitForHealth(port);
-  if (!healthy) {
-    dialog.showErrorBox("Splitpage", "The document server did not start. Check the console for details.");
-    try { documentServerChild.kill(); } catch {}
-    documentServerChild = null;
-    return false;
-  }
-  documentServerPort = port;
-  return true;
-}
-
-function killDocumentServer() {
-  if (documentServerChild) {
-    try { documentServerChild.kill(); } catch {}
-    documentServerChild = null;
-    documentServerPort = null;
-  }
-}
-
-function lanAddresses() {
-  const out = [];
-  for (const list of Object.values(os.networkInterfaces())) {
-    for (const net_addr of list || []) {
-      if (net_addr.family === "IPv4" && !net_addr.internal) out.push(net_addr.address);
-    }
-  }
-  return out;
-}
-
-async function waitForLocalPort(port, tries = 120) {
-  for (let i = 0; i < tries; i++) {
-    const ok = await new Promise((resolve) => {
-      const socket = net_.connect({ port, host: "127.0.0.1" });
-      const done = (v) => { socket.destroy(); resolve(v); };
-      socket.once("connect", () => done(true));
-      socket.once("error", () => done(false));
-      socket.setTimeout(1000, () => done(false));
-    });
-    if (ok) return true;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  return false;
-}
-
-async function startTunnel() {
-  const forward = `${TUNNEL_LOCAL_PORT}:localhost:${TUNNEL_REMOTE_PORT}`;
-  tunnelChild = spawn("ssh", [
-    "-N",
-    "-o", "BatchMode=yes",
-    "-o", "ExitOnForwardFailure=yes",
-    "-L", forward,
-    TUNNEL_TARGET
-  ], { stdio: ["ignore", "pipe", "pipe"] });
-
-  let sshOutput = "";
-  tunnelChild.stdout.on("data", (d) => { sshOutput += d; });
-  tunnelChild.stderr.on("data", (d) => { sshOutput += d; });
-
-  const exitedEarly = new Promise((resolve) => {
-    tunnelChild.once("exit", (code) => resolve(code));
-    tunnelChild.once("error", (err) => resolve(err));
-  });
-
-  const ready = await Promise.race([
-    waitForLocalPort(TUNNEL_LOCAL_PORT).then((ok) => (ok ? "ready" : "timeout")),
-    exitedEarly.then(() => "exited")
-  ]);
-
-  if (ready !== "ready") {
-    const reason = ready === "exited"
-      ? "The SSH connection closed before the tunnel came up. Key-based login is required — this window has no password prompt for you to answer, so BatchMode is on and a login that needs a password or passphrase fails immediately. Make sure your key is loaded in an agent (ssh-add) and that the host accepts it."
-      : `The tunnel did not come up on port ${TUNNEL_LOCAL_PORT} within a minute. Check that ${TUNNEL_TARGET} is reachable and that nothing else is using that local port.`;
-    dialog.showErrorBox("Splitpage — could not reach that server", `${reason}\n\n${sshOutput.trim()}`);
-    try { tunnelChild.kill(); } catch {}
-    tunnelChild = null;
-    return false;
-  }
-
-  tunnelLocalUrl = `http://localhost:${TUNNEL_LOCAL_PORT}/`;
-  return true;
-}
-
-function killTunnel() {
-  if (tunnelChild) {
-    try { tunnelChild.kill(); } catch {}
-    tunnelChild = null;
   }
 }
 
@@ -1437,8 +1151,6 @@ function runUpdateInstaller() {
   });
 }
 
-const SERVER_DOC_ID_RE = /^[a-z0-9][a-z0-9-]{0,63}$/;
-
 let prompterShare = null;
 function prompterShareInstance() {
   if (!prompterShare) {
@@ -1457,10 +1169,7 @@ function prompterShareInstance() {
           const st = helper.status();
           if (st.tabId === VOICE_RELAY_PREFIX + ownerId && st.session === session) helper.stop(VOICE_RELAY_PREFIX + ownerId);
         }
-      },
-      corsOrigins: () => documentServerPort
-        ? [`http://127.0.0.1:${documentServerPort}`, `http://localhost:${documentServerPort}`]
-        : []
+      }
     });
   }
   return prompterShare;
@@ -1497,23 +1206,8 @@ async function openPrompterInBrowser(tab, opts) {
   }
   const source = tab.source || { kind: "blank" };
   let url;
-  let relay = !chromium && prompterRelaysVoice();
-  if (source.kind === "server") {
-    if (source.serverUrl) return { ok: false, code: "REMOTE_SERVER" };
-    const id = typeof source.serverDocId === "string" ? source.serverDocId : "";
-    if (!SERVER_DOC_ID_RE.test(id)) return { ok: false, code: "NOT_SAVED" };
-    if (!documentServerPort) return { ok: false, code: "NO_SERVER" };
-    url = `http://127.0.0.1:${documentServerPort}/?doc=${encodeURIComponent(id)}&teleprompter=1`;
-    if (relay) {
-      try {
-        url += "#" + await prompterShareInstance().publishVoice(tab.id);
-      } catch (err) {
-        if (TEST_MODE) process.stderr.write(`[splitpage] prompter voice relay failed: ${err && err.stack || err}\n`);
-        relay = false;
-      }
-      if (!tabs.has(tab.id)) { if (prompterShare) prompterShare.revoke(tab.id); return { ok: false, code: "NO_TAB" }; }
-    }
-  } else if (source.kind === "file") {
+  const relay = !chromium && prompterRelaysVoice();
+  if (source.kind === "file") {
     const absPath = source.absPath;
     if (!isShareableName(absPath)) return { ok: false, code: "NOT_A_PROJECT" };
     let text;
@@ -1551,45 +1245,6 @@ async function openPrompterInBrowser(tab, opts) {
     return { ok: false, code: "OPEN_FAILED" };
   }
   return { ok: true, kind: source.kind, voice: relay ? "relay" : "browser" };
-}
-
-const DRIVE_TEST_BASIC_TEXT = TEST_MODE && process.env.SPLITPAGE_TEST_DRIVE_BASIC_TEXT === "1";
-let driveBasicTextArmed = false;
-function driveSafeStorage() {
-  return {
-    isEncryptionAvailable() {
-      if (DRIVE_TEST_BASIC_TEXT && process.platform === "linux" && !driveBasicTextArmed &&
-          typeof safeStorage.setUsePlainTextEncryption === "function") {
-        driveBasicTextArmed = true;
-        safeStorage.setUsePlainTextEncryption(true);
-      }
-      if (!safeStorage.isEncryptionAvailable()) return false;
-      if (process.platform === "linux" && !DRIVE_TEST_BASIC_TEXT) {
-        let backend = "unknown";
-        try { backend = safeStorage.getSelectedStorageBackend(); } catch { }
-        if (backend === "basic_text" || backend === "unknown") return false;
-      }
-      return true;
-    },
-    encryptString: (s) => safeStorage.encryptString(s),
-    decryptString: (b) => safeStorage.decryptString(b)
-  };
-}
-
-let googleDrive = null;
-function googleDriveInstance() {
-  if (!googleDrive) {
-    googleDrive = createGoogleDrive({
-      userDataDir: app.getPath("userData"),
-      env: process.env,
-      safeStorage: driveSafeStorage(),
-      openExternal: (url) => shell.openExternal(url),
-      testMode: TEST_MODE,
-      testEndpointsBase: TEST_MODE && process.env.SPLITPAGE_TEST_GOOGLE_BASE ? process.env.SPLITPAGE_TEST_GOOGLE_BASE : undefined,
-      log: (line) => { if (TEST_MODE) process.stderr.write("[splitpage] " + line + "\n"); }
-    });
-  }
-  return googleDrive;
 }
 
 const VOICE_SCRIPT = app.isPackaged
@@ -1723,33 +1378,6 @@ function registerProtocol() {
     }
 
     if (url.hostname !== "app") return new Response("not found", { status: 404 });
-
-    if (pathname.startsWith("/api/")) {
-      if (!documentServerPort) {
-        return new Response(JSON.stringify({ error: "no server" }), {
-          status: 404,
-          headers: { "content-type": "application/json" }
-        });
-      }
-      const target = `http://127.0.0.1:${documentServerPort}${pathname}${url.search}`;
-      const headers = new Headers(request.headers);
-      headers.delete("origin");
-      headers.delete("host");
-      headers.delete("referer");
-      const init = { method: request.method, headers, redirect: "manual" };
-      if (request.method !== "GET" && request.method !== "HEAD" && request.body) {
-        init.body = request.body;
-        init.duplex = "half";
-      }
-      try {
-        return await net.fetch(target, init);
-      } catch {
-        return new Response(JSON.stringify({ error: "no server" }), {
-          status: 502,
-          headers: { "content-type": "application/json" }
-        });
-      }
-    }
 
     if (pathname === "/update-status.json") {
       return new Response(JSON.stringify(updateStatus), {
@@ -1918,18 +1546,11 @@ function createTabWindow(restoreSpec) {
     if (closeConfirmedWindows.has(win)) return;
     if (rec.closeKeepingDrafts) { event.preventDefault(); return; }
 
-    const lastWhenAsked = liveWindows().length <= 1;
-
-    if (HOSTING && lastWhenAsked && !hostingConfirmed) {
-      if (!askHostingPrompt(win)) { event.preventDefault(); return; }
-    }
-
     const tabIds = rec.tabIds.slice();
     const confirmClose = (closing) => {
       const othersOpen = liveWindows().some((w) => w.win !== win);
-      const { freezeSession, confirmHosting } = lastWindowClose(lastWhenAsked, othersOpen, HOSTING);
+      const { freezeSession } = lastWindowClose(othersOpen);
       settleDraftsForClose(closing, true, "close-without-saving");
-      if (confirmHosting) hostingConfirmed = true;
       if (freezeSession) sessionWritesFrozen = true;
       closeConfirmedWindows.add(win);
     };
@@ -1989,49 +1610,6 @@ function createTabWindow(restoreSpec) {
   return rec;
 }
 
-function createTunnelWindow() {
-  const saved = savedBoundsIfVisible();
-  const iconPath = app.isPackaged ? undefined : path.join(APP_ROOT, "installer", "icon.ico");
-
-  const win = new BrowserWindow({
-    width: saved ? saved.width : 1400,
-    height: saved ? saved.height : 900,
-    x: saved ? saved.x : undefined,
-    y: saved ? saved.y : undefined,
-    minWidth: MIN_WINDOW_W,
-    minHeight: MIN_WINDOW_H,
-    backgroundColor: backgroundColorForTheme(),
-    show: false,
-    skipTaskbar: TEST_MODE,
-    title: "Splitpage",
-    icon: iconPath,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-      contextIsolation: true,
-      sandbox: true,
-      nodeIntegration: false,
-      webSecurity: true,
-      backgroundThrottling: !TEST_MODE
-    }
-  });
-
-  win.once("ready-to-show", () => { if (!TEST_MODE) win.show(); });
-  win.loadURL(tunnelLocalUrl);
-
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^(https?|mailto):/i.test(url)) shell.openExternal(url);
-    return { action: "deny" };
-  });
-  win.webContents.on("will-navigate", (event, url) => {
-    if (url.startsWith(`http://localhost:${TUNNEL_LOCAL_PORT}/`)) return;
-    event.preventDefault();
-    if (/^https?:/i.test(url)) shell.openExternal(url);
-  });
-
-  win.on("closed", () => { if (tunnelWindow === win) tunnelWindow = null; });
-  return win;
-}
-
 function firstWindowRecord() {
   const it = windowsById.values().next();
   return it.done ? null : it.value;
@@ -2050,12 +1628,10 @@ function claimRoutingKey(map, key, tabId) {
 
 function indexTabSource(tab) {
   if (tab.source.kind === "file") claimRoutingKey(pathToTabId, pathKey(tab.source.absPath), tab.id);
-  if (tab.source.kind === "server") claimRoutingKey(serverDocIdToTabId, serverRouteKey(tab.source), tab.id);
 }
 
 function unindexTabSource(tab) {
   for (const [key, id] of pathToTabId) if (id === tab.id) pathToTabId.delete(key);
-  for (const [key, id] of serverDocIdToTabId) if (id === tab.id) serverDocIdToTabId.delete(key);
 }
 
 function deliverRestoreNotice(tab) {
@@ -2123,13 +1699,12 @@ function createTab(windowId, opts) {
     windowId,
     view,
     webContentsId: view.webContents.id,
-    source: liveTabSource(o.source),
+    source: normalizeTabSource(o.source),
     fileId: null,
     title: "",
     dirty: false,
     pristine: true,
     docId: null,
-    serverKey: null,
     launchIntent: o.launchIntent || { type: "blank" },
     ready: false,
     pendingPayload: o.pendingPayload || null,
@@ -2360,7 +1935,6 @@ function shellStateForWindow(windowId) {
         title: t.title || "Untitled",
         dirty: !!t.dirty && !t.crashedNotReloaded,
         crashed: !!t.crashedNotReloaded,
-        isServerDoc: t.source.kind === "server",
         pristine: !!t.pristine,
         fullPathForTooltip: t.source.kind === "file" ? t.source.absPath : null
       };
@@ -2419,42 +1993,6 @@ function routeOpenPath(absPath, opts) {
     pendingPayload: { kind: "open-file", absPath: resolved }
   });
   focusWindow(w.id);
-  return created ? { where: "new-tab", tabId: created.id } : null;
-}
-
-function routeOpenServerDoc(serverDocId, c, opts) {
-  const o = opts || {};
-  if (typeof serverDocId !== "string" || !serverDocId) return null;
-  const source = serverSource(serverDocId, c);
-
-  const existingId = serverDocIdToTabId.get(serverRouteKey(source));
-  const existing = existingId ? tabs.get(existingId) : null;
-  if (existing) {
-    activateTab(existing.id);
-    focusWindow(existing.windowId);
-    return { where: existingId === o.fromTabId ? "this-tab" : "other-tab", tabId: existing.id };
-  }
-
-  const w = windowRecordFor(o.fromWindowId);
-  if (!w) return null;
-  const target = tabs.get(o.fromTabId) || tabs.get(w.activeTabId);
-  if (target && target.pristine && target.ready) {
-    source.token = "";
-    target.source = source;
-    indexTabSource(target);
-    if (!target.view.webContents.isDestroyed()) {
-      target.view.webContents.send("splitpage:open-server-doc", payloadForSource(source));
-    }
-    activateTab(target.id);
-    persistShellState();
-    return { where: "this-tab", tabId: target.id };
-  }
-
-  const created = createTab(w.id, {
-    source,
-    launchIntent: { type: "open-server" },
-    pendingPayload: payloadForSource(source)
-  });
   return created ? { where: "new-tab", tabId: created.id } : null;
 }
 
@@ -2620,20 +2158,6 @@ function reviewFirstUnsaved(list) {
   focusWindow(first.windowId);
 }
 
-function askHostingPrompt(parentWin) {
-  const answer = consumeTestDialogAnswer();
-  if (answer === "confirm") return true;
-  if (answer === "cancel") return false;
-  return dialog.showMessageBoxSync(parentWin, {
-    type: "warning",
-    buttons: ["Stop sharing and close", "Cancel"],
-    defaultId: 1,
-    cancelId: 1,
-    title: "Splitpage",
-    message: "Closing Splitpage stops the shared session — anyone connected loses access."
-  }) === 0;
-}
-
 function settleDraftsForClose(tabIds, discardUnsaved, reason) {
   const unsaved = [];
   const clean = [];
@@ -2697,9 +2221,6 @@ function focusWindow(windowId) {
 function payloadForSource(source) {
   if (!source) return null;
   if (source.kind === "file") return { kind: "open-file", absPath: source.absPath };
-  if (source.kind === "server") {
-    return { kind: "open-server", serverDocId: source.serverDocId, serverUrl: source.serverUrl || "" };
-  }
   return null;
 }
 
@@ -2710,19 +2231,11 @@ function flushPendingPayload(tab, opts) {
   tab.pendingPayload = null;
   if (payload.kind === "open-file") {
     deliverOpenFile(tab, payload.absPath);
-  } else if (payload.kind === "open-server" && !tab.view.webContents.isDestroyed()) {
-    tab.view.webContents.send("splitpage:open-server-doc", { serverDocId: payload.serverDocId });
   }
 }
 
 function draftSourceFromListing(listing) {
-  const origin = (listing.header && listing.header.origin) || null;
   if (listing.filePath) return { kind: "file", absPath: listing.filePath };
-  if (origin && origin.server && typeof origin.server.docId === "string" && origin.server.docId) {
-    const base = typeof origin.server.base === "string" && origin.server.base
-      ? origin.server.base.replace(/\/*$/, "/") : "";
-    return normalizeTabSource({ kind: "server", serverDocId: origin.server.docId, serverUrl: base });
-  }
   return { kind: "blank" };
 }
 
@@ -2781,17 +2294,6 @@ function restoreSessionAtLaunch(draftInit) {
             source: pt.source,
             launchIntent: { type: "open-file" },
             pendingPayload: { kind: "open-file", absPath: pt.source.absPath }
-          });
-          if (tab) placed.add(tab.id);
-          continue;
-        }
-
-        if (pt.source.kind === "server") {
-          const tab = createTab(rec.id, {
-            tabId: pt.tabId,
-            source: pt.source,
-            launchIntent: { type: "open-server" },
-            pendingPayload: payloadForSource(pt.source)
           });
           if (tab) placed.add(tab.id);
           continue;
@@ -2892,10 +2394,6 @@ function activeTabContents() {
 }
 
 function sendMenuCommand(command) {
-  if (tunnelWindow && !tunnelWindow.isDestroyed()) {
-    tunnelWindow.webContents.send("splitpage:menu-command", command);
-    return;
-  }
   const contents = activeTabContents();
   if (contents) contents.send("splitpage:menu-command", command);
 }
@@ -2944,12 +2442,6 @@ function buildMenu() {
       { label: "Open…", accelerator: "CmdOrCtrl+O", click: () => sendMenuCommand("open") },
       { label: "Paste a script…", click: () => sendMenuCommand("paste") },
       { label: "Import from Google Doc link…", click: () => sendMenuCommand("gdoc-import") },
-      { label: "Google Drive files…", click: () => sendMenuCommand("drive-open") },
-      { type: "separator" },
-      { label: "Collaborate…", click: () => sendMenuCommand("collaborate") },
-      { label: "Open from the server…", click: () => sendMenuCommand("server-open") },
-      { label: "Put this script on the server", click: () => sendMenuCommand("server-publish") },
-      { label: "Servers…", click: () => sendMenuCommand("servers") },
       { type: "separator" },
       { label: "Version history…", click: () => sendMenuCommand("history") },
       { type: "separator" },
@@ -3169,7 +2661,6 @@ function dialogParentFor(event) {
 function launchIntentFor(tab) {
   if (draftsHasDraft(tab.id)) return { type: "restore-draft" };
   if (tab.source.kind === "file" && tab.pendingPayload) return { type: "open-file" };
-  if (tab.source.kind === "server") return { type: "open-server" };
   return { type: "blank" };
 }
 
@@ -3278,17 +2769,6 @@ function registerIpc() {
 
   ipcHandle("splitpage:get-session-info", async () => {
     return {
-      library: LIBRARY,
-      hosting: HOSTING,
-      port: documentServerPort,
-      lanUrls: HOSTING && documentServerPort
-        ? lanAddresses().map((addr) => `http://${addr}:${documentServerPort}/`)
-        : [],
-      pin: JOIN_PIN || "",
-      reviewPin: REVIEW_PIN || "",
-      reviewUrls: HOSTING && documentServerPort && REVIEW_KEY
-        ? lanAddresses().map((addr) => `http://${addr}:${documentServerPort}/#review=${REVIEW_KEY}`)
-        : [],
       testDialogsSeen: TEST_MODE ? testDialogsSeen : undefined
     };
   });
@@ -3308,15 +2788,10 @@ function registerIpc() {
         try { draftStore.release(tab.id); } catch { }
       }
     }
-    const connection = tab.source.kind === "server"
-      ? { serverUrl: tab.source.serverUrl || "", token: tab.source.token || "", tunnel: tab.source.tunnel || null }
-      : null;
-    if (tab.source.kind === "server") tab.source.token = "";
     return {
       tabId: tab.id,
       windowId: tab.windowId,
       launchIntent: intent,
-      connection,
       hadPriorSession,
       firstTabOfLaunch: tab.firstTabOfLaunch === true,
       hasDraftToRestore
@@ -3398,44 +2873,6 @@ function registerIpc() {
     return voiceHelperInstance().stop(tab.id);
   });
 
-  ipcHandle("splitpage:drive-status", async (event) => {
-    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
-    return Object.assign({ ok: true }, googleDriveInstance().status());
-  });
-
-  ipcHandle("splitpage:drive-sign-in", async (event) => {
-    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
-    const result = await googleDriveInstance().signIn();
-    if (result && result.ok && !TEST_MODE) {
-      const win = dialogParentFor(event);
-      if (win && !win.isDestroyed()) {
-        if (win.isMinimized()) win.restore();
-        win.focus();
-      }
-    }
-    return result;
-  });
-
-  ipcHandle("splitpage:drive-sign-out", async (event) => {
-    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
-    return googleDriveInstance().signOut();
-  });
-
-  ipcHandle("splitpage:drive-list", async (event, folderId) => {
-    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
-    return googleDriveInstance().listFolder(folderId);
-  });
-
-  ipcHandle("splitpage:drive-download", async (event, fileId) => {
-    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
-    return googleDriveInstance().download(fileId);
-  });
-
-  ipcHandle("splitpage:drive-upload", async (event, request) => {
-    if (!tabOf(event)) return { ok: false, code: "NO_TAB" };
-    return googleDriveInstance().upload(request);
-  });
-
   ipcOn("splitpage:set-document-state", (event, docState) => {
     const tab = tabOf(event);
     if (!tab) return;
@@ -3447,27 +2884,11 @@ function registerIpc() {
     if ("docId" in s) tab.docId = typeof s.docId === "string" ? s.docId : null;
 
     const hasFileId = "fileId" in s;
-    const hasServerKey = "serverKey" in s;
     const absPath = hasFileId && typeof s.fileId === "string" ? fileRegistry.get(s.fileId) || null : null;
-    if (hasServerKey) tab.serverKey = typeof s.serverKey === "string" && s.serverKey ? s.serverKey : null;
-    if (hasFileId) tab.fileId = absPath ? s.fileId : null;
-    if (hasFileId || hasServerKey) {
-      const prev = tab.source.kind === "server" ? tab.source : null;
+    if (hasFileId) {
+      tab.fileId = absPath ? s.fileId : null;
       unindexTabSource(tab);
-      if (tab.serverKey) {
-        const reported = "serverUrl" in s ? normalizeServerUrl(s.serverUrl) : null;
-        const kept = prev && prev.serverDocId === tab.serverKey ? prev.serverUrl : "";
-        const serverUrl = reported === null ? kept : reported;
-        const sameServer = !!prev && prev.serverUrl === serverUrl;
-        tab.source = serverSource(tab.serverKey, {
-          serverUrl,
-          tunnel: "tunnel" in s ? s.tunnel : (sameServer ? prev.tunnel : null),
-          token: sameServer ? prev.token : "",
-          role: "role" in s ? s.role : (sameServer ? prev.role : "")
-        });
-      }
-      else if (absPath) tab.source = { kind: "file", absPath };
-      else if (hasFileId && hasServerKey) tab.source = { kind: "blank" };
+      tab.source = absPath ? { kind: "file", absPath } : { kind: "blank" };
       indexTabSource(tab);
     }
 
@@ -3500,14 +2921,6 @@ function registerIpc() {
       if (!absPath) throw new Error("ENOENT: unknown file id");
       const result = routeOpenPath(absPath, { fromWindowId: tab.windowId, fromTabId: tab.id });
       if (!result) throw new Error("ENOENT: file is not readable");
-      return { where: result.where };
-    }
-    if (p.kind === "server") {
-      const serverUrl = normalizeServerUrl(p.serverUrl);
-      if (serverUrl === null) throw new Error("route-open: not a server address");
-      const c = { serverUrl, token: p.token, tunnel: p.tunnel };
-      const result = routeOpenServerDoc(String(p.serverDocId || ""), c, { fromWindowId: tab.windowId, fromTabId: tab.id });
-      if (!result) throw new Error("could not route that server document");
       return { where: result.where };
     }
     throw new Error("route-open: unknown kind");
@@ -3799,13 +3212,7 @@ function registerIpc() {
               title: t.title || "",
               dirty: !!t.dirty,
               pristine: !!t.pristine,
-              isServerDoc: t.source.kind === "server",
-              path: t.source.kind === "file" ? t.source.absPath : null,
-              serverDocId: t.source.kind === "server" ? t.source.serverDocId : null,
-              serverUrl: t.source.kind === "server" ? t.source.serverUrl : null,
-              tunnel: t.source.kind === "server" ? t.source.tunnel : null,
-              hasToken: t.source.kind === "server" ? !!t.source.token : false,
-              role: t.source.kind === "server" ? t.source.role : null
+              path: t.source.kind === "file" ? t.source.absPath : null
             } : null;
           }).filter(Boolean)
         }))
@@ -3856,15 +3263,6 @@ function registerIpc() {
           return prompterShare ? prompterShare.status() : { listening: false, port: null, shares: [] };
         case "voiceStatus":
           return voiceHelperInstance().status();
-        case "driveInfo": {
-          let backend = null;
-          try { if (process.platform === "linux") backend = safeStorage.getSelectedStorageBackend(); } catch { backend = null; }
-          return {
-            backend,
-            encryptionAvailable: safeStorage.isEncryptionAvailable(),
-            tokenEndpoint: googleDriveInstance().endpoints.token
-          };
-        }
         default:
           throw new Error("test-shell: unknown op " + op);
       }
@@ -3890,7 +3288,7 @@ app.on("open-file", (event, filePath) => {
 
 app.setAppUserModelId("com.retrogorilla.splitpage");
 
-app.whenReady().then(async () => {
+app.whenReady().then(() => {
   nativeTheme.themeSource = readThemeChoice();
   sweepDesktopStateTempFiles();
   loadRecentsAtLaunch();
@@ -3911,7 +3309,6 @@ app.whenReady().then(async () => {
     for (const tab of tabs.values()) {
       if (!tab.view.webContents.isDestroyed()) tab.view.setBackgroundColor(backgroundColorForTheme());
     }
-    if (tunnelWindow && !tunnelWindow.isDestroyed()) tunnelWindow.setBackgroundColor(backgroundColorForTheme());
   });
 
   session.defaultSession.on("will-download", (_event, item) => {
@@ -3933,19 +3330,7 @@ app.whenReady().then(async () => {
   });
   installPlayerReferer(session.defaultSession);
 
-  if (TUNNEL_TARGET) {
-    const ok = await startTunnel();
-    if (!ok) { app.quit(); return; }
-  } else if (LIBRARY) {
-    await startDocumentServer();
-  }
-
   if (!SKIP_UPDATE_CHECK) checkForUpdate();
-
-  if (TUNNEL_TARGET) {
-    tunnelWindow = createTunnelWindow();
-    return;
-  }
 
   restoreSessionAtLaunch(draftInit);
 
@@ -3962,14 +3347,6 @@ app.on("before-quit", (event) => {
   if (quitConfirmed) return;
   if (quitKeepingDrafts) { event.preventDefault(); return; }
 
-  if (HOSTING && !hostingConfirmed) {
-    const w = windowsById.get(lastFocusedWindowId) || firstWindowRecord();
-    if (!askHostingPrompt(w && !w.win.isDestroyed() ? w.win : undefined)) {
-      event.preventDefault();
-      return;
-    }
-  }
-
   const tabIds = allTabsInOrder();
   const parentOf = (list) => {
     const w = list.length ? windowsById.get(list[0].windowId) : null;
@@ -3977,12 +3354,10 @@ app.on("before-quit", (event) => {
   };
   const stayOpen = () => {
     quitConfirmed = false;
-    hostingConfirmed = false;
     sessionWritesFrozen = false;
   };
   const confirmQuit = (quitting) => {
     settleDraftsForClose(quitting, true, "quit-without-saving");
-    if (HOSTING) hostingConfirmed = true;
     quitConfirmed = true;
     sessionWritesFrozen = true;
   };
@@ -4024,11 +3399,8 @@ app.on("will-quit", () => {
       installQuitWatcher = null;
     }
   }
-  killDocumentServer();
-  killTunnel();
   if (prompterShare) prompterShare.closeAll();
   if (voiceHelper) voiceHelper.stopAll();
-  if (googleDrive) googleDrive.shutdown();
   if (draftStore) { try { draftStore.markCleanExit(); } catch { } }
 });
 
