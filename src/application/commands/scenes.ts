@@ -1,4 +1,4 @@
-import type { DocumentComment, ValidatedDocument } from "../../core/document/validated.ts";
+import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Plan } from "../session/document-session.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
@@ -63,25 +63,6 @@ export function removeScenesCommand(rowIds: readonly string[]): Command {
             const row = live.rows[i];
             if (row && out.has(row.id)) live.rows.splice(i, 1);
           }
-        }
-      };
-    }
-  };
-}
-
-export function addHeldCommentsCommand(comments: readonly DocumentComment[]): Command {
-  return {
-    name: "add-held-comments",
-    needs: "edit",
-    plan: function (doc): Plan | null {
-      const fresh = comments.filter(function (c) {
-        return !doc.comments.some(function (had) { return had.id === c.id; });
-      });
-      if (!fresh.length) return null;
-      return {
-        changes: changeSet({ docFields: ["comments"], runsMoved: true, saveNow: true }),
-        apply: function (live) {
-          fresh.forEach(function (c) { live.comments.push(JSON.parse(JSON.stringify(c)) as DocumentComment); });
         }
       };
     }

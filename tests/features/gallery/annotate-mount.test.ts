@@ -11,7 +11,7 @@ import { migrateRows } from "../../../src/core/migrate.ts";
 import { galleryActions } from "../../../src/features/gallery/actions.ts";
 import type { GalleryMount, GalleryPorts } from "../../../src/features/gallery/ports.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeNotices, fakeOwnership, fakePictures, fakeReview } from "../fakes.ts";
+import { fakeDocument, fakeNotices, fakeOwnership, fakePictures } from "../fakes.ts";
 
 type AnnotateState = { tool: string; marks: Mark[]; undo: number; redo: number; ready: boolean };
 const win = jsdomWindow() as unknown as Window & typeof globalThis & {
@@ -66,12 +66,11 @@ function setup(t: TestContext) {
   assert.ok(ref);
   const reader = fakeDocument(migrateRows({ schema: 2, rows: [{ id: "r1", imageRef: ref }] }, fakeMigration({ [ref.sha256]: ref }).ports));
   const notices = fakeNotices();
-  const review = fakeReview();
   const ownership = fakeOwnership();
   const edits: { rowId: string; message: string; row: DocumentRow }[] = [];
   let accepted = true;
   const ports: GalleryPorts = {
-    document: reader.document, notices: notices.notices, review: review.review,
+    document: reader.document, notices: notices.notices,
     pictures: store.pictures, ownership: ownership.ownership,
     cells: { editGallery: (rowId, message, edit) => {
       const source = reader.document.current()?.rows[0];
@@ -96,19 +95,16 @@ function setup(t: TestContext) {
     assert.equal(win.__annotateTest?.state()?.ready, true);
   };
   const dispose = () => { holder.current?.dispose(); holder.current = null; unregister(); };
-  return { ports, registry, reader, store, ref, notices, review, ownership, edits, frames, mount, loaded, dispose,
+  return { ports, registry, reader, store, ref, notices, ownership, edits, frames, mount, loaded, dispose,
     refuse: () => { accepted = false; } };
 }
 
-test("gallery mounts with ports, refuses review and missing originals, and keeps its action hidden", async (t) => {
+test("gallery mounts with ports, refuses missing originals, and keeps its action hidden", async (t) => {
   const h = setup(t);
   try {
     assert.equal(h.registry.invoke("annotate-picture", "button").kind, "unavailable");
     h.mount();
     assert.equal(h.registry.view("annotate-picture")?.visible, false);
-    h.review.setReviewing(true);
-    assert.equal(annotate.openAnnotator("r1", 0), false);
-    h.review.setReviewing(false);
     assert.equal(annotate.openAnnotator("absent", 0), false);
     assert.equal(annotate.openAnnotator("r1", 1), false);
     h.store.forget(h.ref.sha256);

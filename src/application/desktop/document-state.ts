@@ -1,28 +1,18 @@
-import type { Connection } from "../location/document-location.ts";
-
 export interface DesktopDocumentState {
   readonly title: string;
   readonly dirty: boolean;
   readonly pristine: boolean;
   readonly docId: string | null;
   readonly fileId: string | null;
-  readonly serverKey: string | null;
-  readonly serverUrl: string | null;
-  readonly tunnel: unknown;
-  readonly role: string | null;
 }
-
-export type DesktopDocumentConnection = Pick<Connection, "serverUrl" | "tunnel" | "role">;
 
 export interface DesktopDocumentFacts {
   readonly running: () => boolean;
   readonly document: () => { readonly title?: string; readonly docId?: string | null } | null;
   readonly restoring: () => boolean;
-  readonly connection: () => DesktopDocumentConnection | null;
   readonly unsaved: () => boolean;
   readonly pristine: () => boolean;
   readonly fileId: () => string | null;
-  readonly serverKey: () => string | null;
 }
 
 export interface DesktopDocumentStatePorts {
@@ -52,18 +42,13 @@ export function createDesktopDocumentState(ports: DesktopDocumentStatePorts): De
   function current(): DesktopDocumentState | null {
     if (!facts.running() || !facts.document() || awaitingHandedDocument) return null;
     const restoring = facts.restoring();
-    const c = facts.connection();
     const doc = facts.document();
     return {
       title: doc?.title || "Untitled Script",
       dirty: facts.unsaved() || restoring,
       pristine: facts.pristine() && !restoring,
       docId: doc?.docId || null,
-      fileId: facts.fileId(),
-      serverKey: facts.serverKey(),
-      serverUrl: c ? c.serverUrl : null,
-      tunnel: c ? c.tunnel : null,
-      role: c ? c.role : null
+      fileId: facts.fileId()
     };
   }
 
@@ -87,7 +72,7 @@ export function createDesktopDocumentState(ports: DesktopDocumentStatePorts): De
       notify();
     },
     awaitHanded: (intent) => {
-      awaitingHandedDocument = intent === "open-file" || intent === "open-server";
+      awaitingHandedDocument = intent === "open-file";
     },
     listeners: () => ({
       session: changed,

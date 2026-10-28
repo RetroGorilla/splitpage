@@ -5,14 +5,13 @@ import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
 import { parseProjectFileState } from "../../adapters/formats/project-file.ts";
 import { inlineStateJson, internDataUrl, persist } from "../../adapters/storage/02c-blobs.js";
-import { DRAFT_LIMITS, browserDraftKey, draftBaseOf, normalizeDraftBase } from "../../adapters/storage/draft-store-idb.ts";
+import { DRAFT_LIMITS, browserDraftKey, draftBaseOf } from "../../adapters/storage/draft-store-idb.ts";
 import { browserWriterId, browserWriterIsLive, holdBrowserWriterLock, releaseBrowserWriterLock } from "../../adapters/storage/draft-writer-lock.js";
-import { createPendingBanner } from "../../features/recovery/pending-banner.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { migrateRows } from "../../legacy/document-ports.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { notifyDesktopDocumentState } from "../../legacy/desktop-bridge.ts";
-import { documentLocation, onServerDoc } from "../../legacy/location-bridge.ts";
+import { documentLocation } from "../../legacy/location-bridge.ts";
 import { applyMerge } from "../../legacy/merge-bridge.ts";
 import { resetProductionPanelState } from "../../legacy/production-editing-bridge.ts";
 import { applyStashedWork, browserDrafts, captureRestore, desktopDrafts, draftResume, recoveryStarted, stillRestoring, useBrowserDraftFactory } from "../../legacy/recovery-bridge.ts";
@@ -22,7 +21,7 @@ import { mergeBase, noteAbsorbedDirty } from "../../legacy/session-bridge.ts";
 import { openDocument } from "../../legacy/transition-bridge.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { notices as portNotices } from "./ports/effects.ts";
-import { place as portPlace, review as portReview } from "./ports/location.ts";
+import { place as portPlace } from "./ports/location.ts";
 import { transitions as portTransitions } from "./ports/transitions.ts";
 
 const drafts = owned<DraftsMount>();
@@ -39,9 +38,7 @@ function draftsPorts(): DraftsPorts {
     document: portDocument,
     session: { mergeBase: () => mergeBase(), noteAbsorbedDirty: (reason) => { noteAbsorbedDirty(reason as Parameters<typeof noteAbsorbedDirty>[0]); } },
     place: portPlace,
-    onServerDoc: () => onServerDoc(),
     markWrittenOut: (on) => { documentLocation().markWrittenOut(on); },
-    review: portReview,
     saves: { unsaved: () => unsavedChanges(), editSeq: () => saveChanges() },
     notices: portNotices,
     entry: { migrate: (raw) => migrateRows(raw) },
@@ -66,8 +63,7 @@ function draftsPorts(): DraftsPorts {
     },
     browserDraft: {
       key: (base, docId) => browserDraftKey(base, docId),
-      base: (serverUrl) => draftBaseOf(serverUrl, location.href),
-      normalizeBase: (value) => normalizeDraftBase(value, location.href)
+      base: (serverUrl) => draftBaseOf(serverUrl, location.href)
     },
     lock: {
       writerId: () => browserWriterId,
@@ -75,8 +71,7 @@ function draftsPorts(): DraftsPorts {
       release: () => { releaseBrowserWriterLock(); },
       isLive: (writerId) => browserWriterIsLive(writerId)
     },
-    documentState: { notify: () => { notifyDesktopDocumentState(); } },
-    banner: createPendingBanner(document)
+    documentState: { notify: () => { notifyDesktopDocumentState(); } }
   };
 }
 
@@ -144,18 +139,12 @@ export function draftRecoveryPorts() {
 
 const draftPorts: LegacyDraftPorts = {
   flush: (opts) => { const mounted = drafts.owner(); return mounted ? mounted.flush(opts) : Promise.resolve({ ok: true }); },
-  armServer: (docId) => { const mounted = drafts.owner(); return mounted ? mounted.armBrowserServer(docId) : Promise.resolve(false); },
-  offerAfterLinkOff: (docId) => { const mounted = drafts.owner(); return mounted ? mounted.offerAfterLinkOff(docId) : Promise.resolve(false); },
   noteChange: () => { drafts.owner()?.noteChange(); }
 };
 
-export function armServerDraftResume(taken: unknown): void {
-  drafts.owner()?.armServerResume(taken);
-}
-
-export function desktopDraftTaker(): (() => Promise<unknown>) | null {
+export function draftTaker(): (() => Promise<unknown>) | null {
   const mounted = drafts.owner();
-  return mounted ? mounted.desktopTaker() : null;
+  return mounted ? mounted.taker() : null;
 }
 
 export function applyTakenDraft(taken: unknown): Promise<string> {

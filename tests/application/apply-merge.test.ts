@@ -105,14 +105,14 @@ test("mergeOnly hands the merge back and touches no screen, baseline or document
 test("an adopted merge runs in the documented order: adopt, history, undo point, baseline, chips, report, toast", () => {
   const h = harness();
   const opts: ApplyMergeOptions = {
-    base: doc("b"), mine: doc("m"), theirs: doc("t"), source: "server-resume",
+    base: doc("b"), mine: doc("m"), theirs: doc("t"), source: "stash", recovery: true,
     undoPoint: doc("t"), keepLabel: "Kept", historyFrom: "d0", newBase: "nb", chips: true,
     toast: { text: () => "said " + titleOf(h.current), tone: "warn", sticky: true }
   };
   const out = sync(applyIncomingMerge(opts, h.ports));
   assert.deepEqual(h.calls, [
-    "snapshot:Before merging your recovered changes:t", "snapshot:Kept:m", "merge",
-    "adopt:recovery:true", "historyFrom:d0", "armUndo", "setBase:merge: server-resume",
+    "snapshot:Before merging your unsaved changes:t", "snapshot:Kept:m", "merge",
+    "adopt:recovery:true", "historyFrom:d0", "armUndo", "setBase:merge: stash",
     "chips", "report:recovery:false", "toast:said m+t:warn:true"
   ]);
   assert.equal(out.state, h.current);
@@ -129,13 +129,12 @@ test("unchanged adopts theirs with no merge and no undo point; reporting marks i
   assert.equal(h.undo, null, "an undo point asked for and not taken is cleared, as before");
 });
 
-test("report: false neither reports nor marks unsaved; the kind follows recovery or server-resume", () => {
+test("report: false neither reports nor marks unsaved; the kind follows recovery", () => {
   const h = harness();
   sync(applyIncomingMerge({ mine: doc("m"), theirs: doc("t"), report: false, noAutoSave: true }, h.ports));
   assert.deepEqual(h.calls, ["merge", "adopt:server:true"]);
   assert.equal(mergeKind({ theirs: null, recovery: true }), "recovery");
-  assert.equal(mergeKind({ theirs: null, source: "server-resume" }), "recovery");
-  assert.equal(mergeKind({ theirs: null, source: "server-conflict" }), "server");
+  assert.equal(mergeKind({ theirs: null, source: "stash" }), "server");
 });
 
 test("newBase: a function is read once at adoption; undefined leaves the baseline; null is a value", () => {

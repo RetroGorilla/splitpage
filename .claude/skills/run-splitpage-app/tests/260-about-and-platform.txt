@@ -50,6 +50,6 @@ eval (function(){ var t = document.getElementById('doc-title'); t.value = 'Untit
 expect document.title == Splitpage
 
 # --- fields that had only a placeholder are labelled; the notices close with an icon
-expect ['import-textarea', 'gdoc-url-input', 'drive-folder-input', 'tag-name'].every(function(id){ return !!document.getElementById(id).getAttribute('aria-label'); })
+expect ['import-textarea', 'gdoc-url-input', 'tag-name'].every(function(id){ return !!document.getElementById(id).getAttribute('aria-label'); })
 expect [].every.call(document.querySelectorAll('[data-role="link-input"], [data-role="video-input"]'), function(el){ return !!el.getAttribute('aria-label'); })
 expect document.querySelectorAll('.update-bar-dismiss svg').length == 2

@@ -1,4 +1,4 @@
-export type AutoSaveTarget = "server" | "file" | null;
+export type AutoSaveTarget = "file" | null;
 
 export interface SaveStatusInput {
   readonly busy: boolean;
@@ -8,9 +8,6 @@ export interface SaveStatusInput {
   readonly target: AutoSaveTarget;
   readonly where: string;
   readonly homeKind: string;
-  readonly onServer: boolean;
-  readonly signedOut: boolean;
-  readonly linkOff: boolean;
 }
 
 export interface SaveStatusLine {
@@ -42,12 +39,6 @@ export function saveButtonView(input: Pick<SaveStatusInput, "busy" | "dirty">): 
 
 function line(input: SaveStatusInput): SaveStatusLine | null {
   const where = input.where;
-  if (input.onServer && input.signedOut) {
-    return { text: "Not saving", cls: "warn", title: "Your sign-in to the server has lapsed — reload the page to sign in again." };
-  }
-  if (input.onServer && input.linkOff) {
-    return { text: "Not saving", cls: "warn", title: "The owner turned off the link you opened this with — File ▸ Save a copy… keeps what's on screen." };
-  }
   if (input.busy) {
     return { text: "Saving…", cls: "busy", title: where ? "Writing your changes to " + where + "." : "Writing your changes." };
   }

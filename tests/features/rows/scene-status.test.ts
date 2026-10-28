@@ -8,9 +8,8 @@ import { migrateRows } from "../../../src/core/migrate.ts";
 import { createSceneStatus } from "../../../src/features/rows/scene-status.ts";
 import { productionReaders } from "../../../src/legacy/document-ports.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices } from "../fakes.ts";
+import { fakeDocument, fakeEdits } from "../fakes.ts";
 
-const REFUSAL = "review only";
 const TEN = "one two three four five six seven eight nine ten";
 
 function setup(opts: { targetSeconds?: number; hideShot?: boolean; status?: string; applies?: boolean } = {}) {
@@ -26,7 +25,6 @@ function setup(opts: { targetSeconds?: number; hideShot?: boolean; status?: stri
   }, fakeMigration().ports);
   const held = fakeDocument(doc);
   const edits = fakeEdits();
-  const notices = fakeNotices();
   const grace: string[] = [];
   const owner = createSceneStatus({
     document: held.document,
@@ -40,14 +38,12 @@ function setup(opts: { targetSeconds?: number; hideShot?: boolean; status?: stri
       },
       stamps: edits.edits.stamps
     } : edits.edits,
-    reviewRefusal: REFUSAL,
     text: { productionReaders },
-    notices: notices.notices,
     hideShot: () => !!opts.hideShot,
     shots: { armGrace: (id) => { grace.push("arm:" + id); }, clearGrace: (id) => { grace.push("clear:" + id); } },
     element: (id) => document.getElementById(id)
   });
-  return { doc, held, edits, notices, grace, owner };
+  return { doc, held, edits, grace, owner };
 }
 
 function change(changes: ChangeSet) {
@@ -92,14 +88,10 @@ test("scene status: the stats follow status, length and target changes only", ()
   assert.equal(heard.length, 3);
 });
 
-test("scene status: a status click runs the status command; a review refusal warns", () => {
-  const { edits, notices, owner } = setup();
+test("scene status: a status click runs the status command", () => {
+  const { edits, owner } = setup();
   owner.cycleRowStatus("r1");
   assert.deepEqual(edits.ran.map((c) => c.name), ["cycle-scene-status"]);
-  assert.equal(notices.shown.length, 0);
-  edits.answer({ kind: "rejected", reason: REFUSAL });
-  owner.cycleRowStatus("r1");
-  assert.deepEqual(notices.shown.map((n) => [n.message, n.kind]), [["This is a review copy — comment on a scene instead of changing its status.", "warn"]]);
 });
 
 test("scene status: with shot scenes hidden, a scene that becomes shot arms its grace and one that stops being shot clears it", () => {

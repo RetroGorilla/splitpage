@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createDocumentIdentityOwner } from "../application/identity/document-identity.js";
 import { deriveDocId } from "../core/document/ids.ts";
-import { handDocumentIdentityTo, syncDocIdentity as bridgeSync } from "../legacy/document-identity-bridge.ts";
 
 const A = "d" + "1".repeat(32);
 const B = "d" + "2".repeat(32);
@@ -20,7 +19,7 @@ function fake() {
       currentDocument: () => document,
       stampDocument: (stamp) => { log.push(["stamp", stamp.name]); stamp.plan(document).apply(document); }
     },
-    location: { home: () => home, writtenOut: () => writtenOut, markWrittenOut: (value) => { log.push(["written", value]); writtenOut = value; }, onServerDoc: () => home.kind === "server" },
+    location: { home: () => home, writtenOut: () => writtenOut, markWrittenOut: (value) => { log.push(["written", value]); writtenOut = value; } },
     history: { copyHistory: (from, to) => { log.push(["copy", from, to]); return copy(); }, historyDocumentChanged: () => log.push(["changed"]) },
     effects: { show: (...args) => log.push(["toast", ...args]) },
     desktop: { running: () => desktop },
@@ -74,11 +73,9 @@ test("reassignment stamps, clears written-out, copies history, synchronizes, ann
   stop();
 });
 
-test("invalid, stale and server reassignment refuse without effects", () => {
+test("invalid and stale reassignment refuse without effects", () => {
   const f = fake(); const stop = f.owner.startIdentity(f.ports);
   for (const [to, from] of [["bad", A], [B, "bad"], [A, A], [B, B]]) assert.equal(f.owner.reassignDocId(to, { fromId: from }), false);
-  f.home.kind = "server";
-  assert.equal(f.owner.reassignDocId(B, { fromId: A }), false);
   assert.deepEqual(f.log, [["nonce", 16]]);
   stop();
 });
@@ -131,16 +128,6 @@ test("history copying is not awaited, failed copies warn once, and invalid copie
   f.owner.copyDocHistorySafe(A, B); f.owner.copyDocHistorySafe("bad", B); f.owner.copyDocHistorySafe(A, A);
   assert.equal(f.log.filter(([kind]) => kind === "toast").length, 1);
   assert.equal(f.owner.docIdEvents().length, 2);
-  stop();
-});
-
-test("the numbered bridge refuses outside its hand-off lifetime", () => {
-  assert.throws(bridgeSync, /not started yet/);
-  const f = fake(); const stop = f.owner.startIdentity(f.ports);
-  const disconnect = handDocumentIdentityTo(f.owner, {});
-  bridgeSync();
-  disconnect();
-  assert.throws(bridgeSync, /not started yet/);
   stop();
 });
 

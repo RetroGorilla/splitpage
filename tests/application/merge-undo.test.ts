@@ -6,7 +6,7 @@ test("the merge undo holds the last armed record until another arm replaces or c
   const undo = createMergeUndo();
   assert.equal(undo.last(), null);
   const first = { id: "s-1", docId: "d1", source: "stash" };
-  const second = { id: "s-2", docId: "d1", source: "server-conflict" };
+  const second = { id: "s-2", docId: "d1", source: "stash" };
   undo.arm(first);
   assert.equal(undo.last(), first);
   undo.arm(second);

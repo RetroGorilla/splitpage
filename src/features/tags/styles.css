@@ -393,17 +393,6 @@
   }
   .tag-owner-select:focus, .tag-person-input:focus, .comment-assignee-select:focus { outline: none; border-color: var(--visual); }
 
-  .tag-status-pill.is-static:hover { background: transparent; color: var(--text-visual); }
-  .tag-status-seg button:disabled, .tag-status-menu-btn:disabled { cursor: default; }
-  .tag-status-choice:disabled:not(.is-active):hover { background: transparent; color: var(--text-dim); }
-  .tag-status-menu-btn:disabled { border-color: transparent; }
-  .tag-owner-field.is-readonly,
-  .tag-owner-field.is-readonly:hover,
-  .tag-owner-field.is-readonly:focus-within { border-color: transparent; }
-  .tag-owner-select:disabled { cursor: default; opacity: 1; color: var(--text); }
-  textarea.tag-notes-input[readonly] { border-color: transparent; resize: none; cursor: default; }
-  body.is-review #production-bulk { display: none; }
-
   .tag-person-head .person-avatar { --size: 20px; }
   .tag-person-none {
     width: 18px; height: 18px; flex: none; color: var(--text-faint);

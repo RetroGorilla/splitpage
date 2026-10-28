@@ -131,15 +131,6 @@ async function nothingWritten(gesture) {
   assert.equal(JSON.stringify(currentDocument()), before, "the document is unchanged");
 }
 
-async function inReview(body) {
-  window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
-  try {
-    await body();
-  } finally {
-    window.__hostedTest.setSession({ role: "edit", docId: null });
-  }
-}
-
 beforeEach(() => { clock += 10_000; });
 
 test("B03: the toolbar's Bold over a selection is one edit through the session and one undo step", async () => {
@@ -202,33 +193,10 @@ test("B04 and B05: a link added by Enter or Add lands as one edit; Escape and Ca
   assert.equal(vbox.hidden, true);
 });
 
-test("B44: a scene's status button cycles its status through the session; B45: a review copy's static lamp is refused with a word", async () => {
+test("B44: a scene's status button cycles its status through the session", async () => {
   await open();
   await throughSession(() => click(rowEl("r1").querySelector('[data-action="cycle-status"]')));
   assert.notEqual(row("r1").status, "todo");
-  await inReview(async () => {
-    const lamp = rowEl("r3").querySelector(".status-btn.is-static");
-    assert.ok(lamp, "a review copy shows a static lamp");
-    assert.equal(rowEl("r3").querySelector('[data-action="cycle-status"]'), null);
-    await nothingWritten(() => click(lamp));
-    assert.equal(toasts().length, 1, "the refusal says why");
-  });
-});
-
-test("the review gate still refuses a formatting button forced into a review copy's toolbar, with a word", async () => {
-  await open();
-  await inReview(async () => {
-    const cell = cellOf("r1", "audioText");
-    const toolbar = wrapOf(cell).querySelector(".mini-toolbar");
-    assert.ok(toolbar);
-    assert.equal(toolbar.querySelector('[data-cmd="bold"]'), null, "a review copy has no Bold");
-    const forced = document.createElement("button");
-    forced.setAttribute("data-cmd", "bold");
-    toolbar.appendChild(forced);
-    select(cell, 0, 5);
-    await nothingWritten(() => click(forced));
-    assert.equal(toasts().length, 1);
-  });
 });
 
 test("B46: a hidden-shot strip opens its scenes without an edit", async () => {
@@ -270,7 +238,7 @@ test("B47: jump to scene centres and flashes the scene, opening a hidden one fir
   }
 });
 
-test("a text drop on a script cell inserts through the session as one edit; a review copy refuses it", async () => {
+test("a text drop on a script cell inserts through the session as one edit", async () => {
   await open();
   const cell = cellOf("r3", "audioText");
   select(cell, 10, 10);
@@ -278,10 +246,6 @@ test("a text drop on a script cell inserts through the session as one edit; a re
   await throughSession(() => { e = drop(cell, { types: ["text/plain"], text: " more" }); });
   assert.ok(e.defaultPrevented);
   assert.equal(row("r3").audioText, "Last words more");
-  await inReview(async () => {
-    select(cellOf("r1", "audioText"), 11, 11);
-    await nothingWritten(() => drop(cellOf("r1", "audioText"), { types: ["text/plain"], text: "no" }));
-  });
 });
 
 test("a file that is not a picture or video dropped on a scene's Image section is refused with a word and writes nothing", async () => {

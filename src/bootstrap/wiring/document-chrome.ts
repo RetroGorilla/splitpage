@@ -1,10 +1,9 @@
 import { onSessionChange } from "../../legacy/session-bridge.ts";
-import { documentLocation, serverStatus } from "../../legacy/location-bridge.ts";
+import { documentLocation } from "../../legacy/location-bridge.ts";
 import { onPreferenceChange, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { onSaveChange } from "../../legacy/save-bridge.ts";
 import { identityChipListeners } from "./title-chrome.ts";
 import { saveStatusListeners } from "./save-status.ts";
-import { presence } from "../../legacy/presence-bridge.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { refreshOpenFileMenu } from "./file-menu-controls.ts";
 import { desktopDocumentListeners } from "../../legacy/desktop-bridge.ts";
@@ -19,7 +18,6 @@ export function mountDocumentChromeFeature(): void {
     stops.push(
       onSessionChange(chip.session),
       documentLocation().onChange(chip.location),
-      serverStatus().onChange(chip.status),
       onSaveChange(chip.save)
     );
   }
@@ -27,7 +25,6 @@ export function mountDocumentChromeFeature(): void {
   stops.push(
     onSaveChange(status.save),
     documentLocation().onChange(status.location),
-    serverStatus().onChange(status.status),
     onPreferenceChange(status.preference)
   );
   status.paint();
@@ -36,7 +33,6 @@ export function mountDocumentChromeFeature(): void {
   stops.push(
     onSessionChange(identity.session),
     onPreferenceChange(identity.preference),
-    presence().onRecolor(identity.colours),
     onSessionChange(desktop.session),
     documentLocation().onChange(desktop.location),
     onSaveChange(desktop.save),

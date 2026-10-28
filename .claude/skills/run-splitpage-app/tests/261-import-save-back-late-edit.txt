@@ -20,18 +20,16 @@
 # Every `eval` is one physical line.
 
 open
-eval (function(){window.F=window.__splitpageFormats; window.D=window.__desktopTest; window.HT=window.__hostedTest; window.__chip=function(){return document.getElementById('file-chip-state').textContent;}; window.__text=function(b){return typeof b === 'string' ? Promise.resolve(b) : new Blob([b]).text();}; return !!(F && D && HT);})()
+eval (function(){window.F=window.__splitpageFormats; window.D=window.__desktopTest; window.__savedToasts=function(){return Array.prototype.filter.call(document.querySelectorAll('#toast-host .toast'), function(t){return t.textContent.indexOf('Saved to late.txt') !== -1;}).length;}; window.__chip=function(){return document.getElementById('file-chip-state').textContent;}; window.__text=function(b){return typeof b === 'string' ? Promise.resolve(b) : new Blob([b]).text();}; return !!(F && D);})()
 expect true
 
 # --- in place: a fake handle whose write can be held open at close() -----
 eval (function(){window.__hold=true; window.__closing=false; window.__wrote=null; window.__release=null; window.__closed=0; window.__h={name:'late.txt', _mtime:1000, createWritable: async function(){return {write: async function(b){window.__wrote=await window.__text(b);}, close: async function(){window.__closing=true; if(window.__hold){await new Promise(function(r){window.__release=r;});} window.__h._mtime=window.__h._mtime+4000; window.__closed++;}};}, getFile: async function(){return new File(['one\n\ntwo'],'late.txt',{type:'text/plain', lastModified: window.__h._mtime});}}; return F.openFile(new File(['one\n\ntwo'],'late.txt',{type:'text/plain', lastModified: 1000}), window.__h);})()
-wait HT.home().kind === 'import' && HT.home().name === 'late.txt'
-expect HT.home().dirty === false
+wait !document.getElementById('file-chip').hidden && document.getElementById('file-chip-name').textContent === 'late.txt'
 expect __chip() === '· up to date'
 
 # an edit first, so the chip has something to clear
 eval (function(){F.state().rows[0].audioText='typed BEFORE the save'; D.markDirtyForTest(); return true;})()
-expect HT.home().dirty === true
 expect __chip() === '· unsaved changes'
 
 # save, hold the write open, type more, let it finish
@@ -42,11 +40,10 @@ eval (function(){F.state().rows[0].audioText='typed DURING write'; D.markDirtyFo
 eval (function(){window.__release(); return true;})()
 wait window.__closed === 1
 # the file's own timestamp moved, edits or not
-wait HT.home().lastModified === 5000
+wait __savedToasts() === 1
 expect __wrote.indexOf('typed BEFORE the save') !== -1
 expect __wrote.indexOf('typed DURING write') === -1
 expect F.state().rows[0].audioText === 'typed DURING write'
-expect HT.home().dirty === true
 expect __chip() === '· unsaved changes'
 expect document.getElementById('file-chip-state').classList.contains('unsaved')
 
@@ -55,16 +52,21 @@ eval (function(){window.__hold=false; window.__closing=false; return true;})()
 jsclick #btn-file
 jsclick #menu-save-back
 wait window.__closed === 2
-wait HT.home().dirty === false
+wait __chip() === '· up to date'
 expect __wrote.indexOf('typed DURING write') !== -1
-expect HT.home().lastModified === 9000
 expect __chip() === '· up to date'
+eval (function(){F.state().rows[0].audioText='typed AFTER both saves'; D.markDirtyForTest(); return true;})()
+jsclick #btn-file
+jsclick #menu-save-back
+wait window.__closed === 3
+wait __chip() === '· up to date'
+expect __wrote.indexOf('typed AFTER both saves') !== -1
 
 # --- download: the Save dialog is held open, an edit lands under it ------
 eval (function(){window.__fake=D.makeFakeBackend(); var orig=window.__fake.saveFileDialog.bind(window.__fake); window.__dialog=false; window.__finish=null; window.__dl=0; window.__hold2=true; window.__fake.saveFileDialog=function(o){window.__dialog=true; if(!window.__hold2) return orig(o); return new Promise(function(res){window.__finish=function(){res(orig(o));};});}; var w=window.__fake.writeFile.bind(window.__fake); window.__fake.writeFile=function(id,d){window.__dl++; return w(id,d);}; D.setBackend(window.__fake); return F.openFile(new File(['one\n\ntwo'],'copy.txt',{type:'text/plain', lastModified: 1000}), null);})()
-wait HT.home().kind === 'import' && HT.home().name === 'copy.txt'
-expect HT.home().inPlace === false
-expect HT.home().dirty === false
+wait !document.getElementById('file-chip').hidden && document.getElementById('file-chip-name').textContent === 'copy.txt'
+expect document.querySelector('#menu-save-back .mi-label').textContent === 'Save a new copy of copy.txt'
+expect __chip() === '· up to date'
 eval (function(){F.state().rows[0].audioText='typed BEFORE download'; D.markDirtyForTest(); return true;})()
 expect __chip() === '· unsaved changes'
 jsclick #btn-file
@@ -74,7 +76,6 @@ eval (function(){F.state().rows[0].audioText='typed DURING download'; D.markDirt
 eval (function(){window.__finish(); return true;})()
 wait window.__dl === 1
 sleep 300
-expect HT.home().dirty === true
 expect __chip() === '· unsaved changes'
 
 # --- and a download with nothing typed under the dialog clears it --------
@@ -82,8 +83,7 @@ eval (function(){window.__dialog=false; window.__hold2=false; return true;})()
 jsclick #btn-file
 jsclick #menu-save-back
 wait window.__dl === 2
-wait HT.home().dirty === false
-expect __chip() === '· up to date'
+wait __chip() === '· up to date'
 eval (function(){D.restoreBackend(); return true;})()
 
 quit

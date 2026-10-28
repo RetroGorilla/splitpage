@@ -84,9 +84,8 @@ function runCloseCheck(io, tabIdsNow, verb, parentOf, stillWanted) {
     });
 }
 
-function lastWindowClose(askedAsLast, othersOpen, hosting) {
-  const last = !othersOpen;
-  return { freezeSession: last, confirmHosting: !!(hosting && askedAsLast && last) };
+function lastWindowClose(othersOpen) {
+  return { freezeSession: !othersOpen };
 }
 
 module.exports = { checkFileGone, copyKept, holdKeep, releaseKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS };

@@ -89,8 +89,6 @@ function rig(options: RigOptions = {}): Rig {
       desktop: options.desktop ?? false,
       draft: {
         taker: options.taker ?? null,
-        detectServer: () => { log.push("detect-server"); },
-        armServerResume: (draft) => { log.push(`arm:${String(draft)}`); },
         applyDraft: (draft) => { log.push(`apply-draft:${String(draft)}`); return "restored"; }
       },
       document: {
@@ -133,15 +131,15 @@ function rig(options: RigOptions = {}): Rig {
 
 const ADOPTION = ["clone", "open:Seed:true", "first-draw", "identity-chip", "autosave-menu", "hidden-shot-menu", "save-status"];
 
-test("in the browser: the server is detected first, then load, stash adoption, first draw, chrome, editor toast, last-project resume, identity and history", async () => {
+test("in the browser: load, stash adoption, first draw, chrome, editor toast, last-project resume, identity and history", async () => {
   const r = rig();
   const startup = beginStartup(r.ports);
   try {
-    assert.deepEqual(r.log, ["detect-server"]);
+    assert.deepEqual(r.log, []);
     const outcome = await startup.openDocument();
     assert.equal(outcome, undefined);
     assert.deepEqual(r.log, [
-      "detect-server", "load", "stash:true:false", ...ADOPTION,
+      "load", "stash:true:false", ...ADOPTION,
       "toast:Seed", "resume-last-project", "sync-identity", "identity-channel", "history-migration"
     ]);
   } finally {
@@ -159,14 +157,14 @@ test("the initial load is handed the seed check's answer, asked once, when the l
       assert.equal(asked, 0, "the seed check waits for the load");
       await startup.openDocument();
       assert.equal(asked, 1);
-      assert.deepEqual(r.log.slice(0, 3), ["detect-server", "seed-check", pristine ? "load pristine" : "load"]);
+      assert.deepEqual(r.log.slice(0, 2), ["seed-check", pristine ? "load pristine" : "load"]);
     } finally {
       startup.dispose();
     }
   }
 });
 
-test("on the desktop with a draft to restore: the draft is taken before the server is detected, then armed, detected and applied after the initial document", async () => {
+test("on the desktop with a draft to restore: the draft is taken at once and applied after the initial document", async () => {
   let took = 0;
   const r = rig({ desktop: true, taker: () => { took++; r.log.push("take-draft"); return Promise.resolve("draft-1"); } });
   const startup = beginStartup(r.ports);
@@ -179,19 +177,35 @@ test("on the desktop with a draft to restore: the draft is taken before the serv
     assert.deepEqual(r.log.filter((s) => s !== "take-draft"), [
       "load", "stash:true:false", ...ADOPTION,
       "toast:Seed", "sync-identity", "notify-desktop", "history-migration",
-      "arm:draft-1", "detect-server", "apply-draft:draft-1"
+      "apply-draft:draft-1"
     ]);
   } finally {
     startup.dispose();
   }
 });
 
-test("a draft that cannot be taken becomes null and still arms, detects and applies in that order", async () => {
+test("in the browser a leftover draft's taker is applied after the initial document, the same way", async () => {
+  const r = rig({ taker: () => { r.log.push("take-draft"); return Promise.resolve("leftover"); } });
+  const startup = beginStartup(r.ports);
+  try {
+    assert.equal(await startup.openDocument(), "restored");
+    assert.deepEqual(r.log.filter((s) => s !== "take-draft"), [
+      "load", "stash:true:false", ...ADOPTION,
+      "toast:Seed", "resume-last-project", "sync-identity", "identity-channel", "history-migration",
+      "apply-draft:leftover"
+    ]);
+    assert.equal(r.log.filter((s) => s === "take-draft").length, 1);
+  } finally {
+    startup.dispose();
+  }
+});
+
+test("a draft that cannot be taken becomes null and is still applied", async () => {
   const r = rig({ desktop: true, taker: () => Promise.reject(new Error("locked")) });
   const startup = beginStartup(r.ports);
   try {
     await startup.openDocument();
-    assert.deepEqual(r.log.slice(-3), ["arm:null", "detect-server", "apply-draft:null"]);
+    assert.deepEqual(r.log.slice(-1), ["apply-draft:null"]);
   } finally {
     startup.dispose();
   }
@@ -284,7 +298,7 @@ test("dispose after the document opens but before the draft resumes: the draft i
   draft.resolve("late");
   await opening;
   assert.ok(r.log.includes("history-migration"));
-  assert.ok(!r.log.some((s) => s.startsWith("arm:") || s.startsWith("apply-draft:")));
+  assert.ok(!r.log.some((s) => s.startsWith("apply-draft:")));
 });
 
 test("a normal completion is the control: identity, history and the draft all run once", async () => {
@@ -292,7 +306,7 @@ test("a normal completion is the control: identity, history and the draft all ru
   const startup = beginStartup(r.ports);
   try {
     await startup.openDocument();
-    for (const step of ["sync-identity", "history-migration", "arm:d", "apply-draft:d"]) {
+    for (const step of ["sync-identity", "history-migration", "apply-draft:d"]) {
       assert.equal(r.log.filter((s) => s === step).length, 1, step);
     }
   } finally {

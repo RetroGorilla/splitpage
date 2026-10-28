@@ -99,7 +99,6 @@ function updateGearHeadCount(n) {
 export function renderGearList() {
   var panel = document.getElementById("gear-panel");
   if (!panel || panel.hidden || !ports.document.current()) return;
-  dropEditingForReview();
   var listEl = document.getElementById("gear-list");
   var entries = gearEntries();
   updateGearBadge(entries.length);
@@ -142,7 +141,6 @@ function fillGearQuickAdd() {
 }
 
 export function applyGearQuickAdd() {
-  if (ports.review.refuseInReview()) return;
   var raw = document.getElementById("gear-quickadd-input").value || "";
   function planned(doc) { return planQuickAdd(doc, ports.text.productionReaders, raw, currentProductionIndex()); }
   var plan = ports.document.read(planned);
@@ -206,7 +204,7 @@ function mentionLinksHtml(item) {
 
 function personAvatarHtml(name) {
   var initial = Array.from(String(name || "").trim())[0] || "?";
-  return '<span class="person-avatar" style="--presence:' + ports.presence.personColor(name) + '" aria-hidden="true">' +
+  return '<span class="person-avatar" style="--presence:' + ports.personColors.personColor(name) + '" aria-hidden="true">' +
     escapeHtml(initial.toUpperCase()) + '</span>';
 }
 
@@ -224,9 +222,6 @@ function statusCellHtml(item) {
   var st = tagStatus(item.status) || TAG_STATUSES[0];
   var k = escapeHtml(item.key);
   var inner = tagStatusLampHtml(st.id) + escapeHtml(st.label);
-  if (ports.review.reviewing()) {
-    return '<span class="tag-status-pill is-static" data-action="tag-expand" data-key="' + k + '">' + inner + '</span>';
-  }
   var nextSt = tagStatus(nextTagStatus(st.id)) || TAG_STATUSES[0];
   return '<button type="button" class="tag-status-pill" data-action="tag-status-cycle" data-key="' + k +
     '" title="' + escapeHtml(st.label + " — click for " + nextSt.label) + '" aria-label="' +
@@ -242,21 +237,12 @@ function iconHtml(id, cls) {
   return '<svg' + (cls ? ' class="' + cls + '"' : '') + ' aria-hidden="true" focusable="false"><use href="#' + id + '"/></svg>';
 }
 
-function dropEditingForReview() {
-  if (!ports.review.reviewing()) return;
-  ports.view.setTagRenaming(null);
-  ports.view.setTagAddingPerson(null);
-  if (ports.selection.selectedKeys().length) ports.selection.clear();
-  if (ports.selection.armed()) ports.selection.disarm();
-}
-
 function untaggedMentionCount(item) {
   if (!ports.document.current() || !item.name) return 0;
   return bulkTagRows(ports.document.current().rows, item.name, item.cat.id, item.name, false, true).hits;
 }
 
-function untaggedMentionsHtml(item, ro) {
-  if (ro) return "";
+function untaggedMentionsHtml(item) {
   var n = untaggedMentionCount(item);
   if (!n) return "";
   return '<dt>Untagged</dt><dd class="tag-untagged-dd">' +
@@ -266,7 +252,6 @@ function untaggedMentionsHtml(item, ro) {
 }
 
 export function tagAllMentions(key) {
-  if (ports.review.refuseInReview()) return;
   var item = findTagByKey(key);
   if (!item) return;
   ports.undo.breakCoalescing();
@@ -284,8 +269,6 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
   var k = escapeHtml(item.key);
   var name = escapeHtml(item.name);
   var st = tagStatus(item.status) || TAG_STATUSES[0];
-  var ro = ports.review.reviewing();
-  var off = ro ? ' disabled' : '';
   var ownerId = tagFieldId("owner", gear, item.key);
   var notesId = tagFieldId("notes", gear, item.key);
   var renameId = tagFieldId("rename", gear, item.key);
@@ -295,31 +278,31 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
     return '<button type="button" role="' + (gear ? 'menuitemradio' : 'radio') + '" class="' +
         (gear ? 'tag-menu-item' : 'tag-status-choice') + (on ? ' is-active' : '') +
         '" data-action="tag-status-set" data-key="' + k + '" data-status="' + escapeHtml(s.id) +
-        '" aria-checked="' + (on ? 'true' : 'false') + '"' + off + '>' +
+        '" aria-checked="' + (on ? 'true' : 'false') + '">' +
       tagStatusLampHtml(s.id) + escapeHtml(s.label) + '</button>';
   }).join("");
   var status = gear
     ? '<div class="tag-menu-wrap">' +
         '<button type="button" class="tag-status-menu-btn tag-menu-btn" aria-haspopup="menu" aria-expanded="false" ' +
-          'aria-label="' + escapeHtml("Status: " + st.label + (ro ? "" : ". Change")) + '"' + off + '>' +
-          tagStatusLampHtml(st.id) + escapeHtml(st.label) + (ro ? '' : iconHtml("i-chevron-down", "tag-chevron")) +
+          'aria-label="' + escapeHtml("Status: " + st.label + ". Change") + '">' +
+          tagStatusLampHtml(st.id) + escapeHtml(st.label) + iconHtml("i-chevron-down", "tag-chevron") +
         '</button>' +
         '<div class="tag-menu tag-status-seg" role="menu" aria-label="Status of ' + name + '" hidden>' + choices + '</div>' +
       '</div>'
     : '<div class="tag-status-seg" role="radiogroup" aria-label="Status of ' + name + '">' + choices + '</div>';
 
-  var ownerField = '<span class="ev-field tag-owner-field' + (ro ? ' is-readonly' : '') + '">' +
+  var ownerField = '<span class="ev-field tag-owner-field">' +
       '<select class="tag-owner-select' + (personById(item.owner) ? '' : ' is-unassigned') + '" id="' + ownerId +
-        '" data-key="' + k + '"' + off + '>' +
+        '" data-key="' + k + '">' +
         '<option value=""' + (item.owner ? '' : ' selected') + '>Unassigned</option>' +
         (ports.document.current()?.people || []).map(function (p) {
           return '<option value="' + escapeHtml(p.id) + '"' +
             (p.id === item.owner ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>';
         }).join("") +
       '</select>' +
-      (ro ? '' : iconHtml("i-chevron-down", "ev-chevron")) +
+      iconHtml("i-chevron-down", "ev-chevron") +
     '</span>';
-  var addPerson = ro ? '' :
+  var addPerson =
     '<button type="button" class="tag-person-add tag-quiet-btn" data-action="tag-person-new" data-key="' + k +
       '" title="Add someone to the crew list"' +
       (gear ? ' aria-label="Add a person to the crew list">' + iconHtml("i-plus") + 'Person' : '>Add person') +
@@ -333,7 +316,7 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
       '</div>'
     : '';
 
-  var more = ro ? '' :
+  var more =
     '<div class="tag-menu-wrap tag-more">' +
       '<button type="button" class="tag-more-btn tag-menu-btn' + (gear ? ' tag-icon-btn' : ' btn-outline is-small is-icon') +
         '" aria-haspopup="menu" aria-expanded="false" title="More" aria-label="' +
@@ -362,7 +345,7 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
           '</dd>'
         : '') +
       '<dt>Status</dt><dd class="tag-status-dd">' + status + '</dd>' +
-      untaggedMentionsHtml(item, ro) +
+      untaggedMentionsHtml(item) +
       (gear
         ? '<dt>Mentions</dt><dd class="tag-mentions">' +
             (item.orphaned ? '<span class="tag-orphan-badge">Not in script</span>' : mentionLinksHtml(item)) + '</dd>'
@@ -372,12 +355,10 @@ function tagEntityDetailHtml(item, renaming, gear, detailId) {
       '<dt><label for="' + notesId + '">Notes &amp; links</label></dt>' +
       '<dd class="tag-notes-dd">' +
         '<textarea class="tag-notes-input ev-field" id="' + notesId + '" data-key="' + k + '" rows="2" ' +
-          (ro ? 'readonly placeholder="No notes">'
-              : 'placeholder="Reference link, file path, spec, where it’s coming from…">') +
-          '\n' + escapeHtml(item.notes) + '</textarea>' +
+          'placeholder="Reference link, file path, spec, where it’s coming from…">\n' + escapeHtml(item.notes) + '</textarea>' +
       '</dd>' +
     '</dl>';
-  if (!gear || ro) return dl;
+  if (!gear) return dl;
   return dl +
     '<div class="tag-detail-foot">' +
       (renaming ? '' :
@@ -393,7 +374,7 @@ function tagEntityHtml(item, opts) {
   var renaming = ports.view.tagRenamingKey() === item.key;
   var expanded = ports.view.tagExpandedKey() === item.key || renaming;
   var k = escapeHtml(item.key);
-  var selected = opts.selection && !ports.review.reviewing() && ports.selection.selected(item.key);
+  var selected = opts.selection && ports.selection.selected(item.key);
   var detailId = tagFieldId("detail", gear, item.key);
   var dot = '<span class="tag-row-dot" data-tag-cat="' + item.cat.id + '" aria-hidden="true"></span>';
   return '<li class="tag-entity' + (gear ? ' is-gear' : '') + (item.orphaned ? ' is-orphaned' : '') +
@@ -462,7 +443,7 @@ function renderProductionByPerson(all) {
         (id ? personAvatarHtml(g.label) : iconHtml("i-person", "tag-person-none")) +
         '<span class="tag-person-name">' + escapeHtml(g.label) + '</span>' +
         '<span class="tag-group-count">' + g.items.length + '</span>' +
-        (id && !ports.review.reviewing() ? '<button type="button" class="tag-person-remove" data-action="person-delete" ' +
+        (id ? '<button type="button" class="tag-person-remove" data-action="person-delete" ' +
                 'data-person="' + escapeHtml(id) + '" title="Remove from the crew list" aria-label="' +
                 escapeHtml("Remove " + g.label + " from the crew list") + '">' +
                 iconHtml("i-close") + '</button>' : '') +
@@ -569,7 +550,6 @@ export function renderProduction() {
 function renderProductionPanel() {
   var panel = document.getElementById("production-panel");
   if (!panel || panel.hidden || !ports.document.current()) return;
-  dropEditingForReview();
   var entries = productionEntries();
   if (ports.selection.selectedKeys().length) ports.selection.prune(entries);
   renderProductionList(entries);
@@ -738,14 +718,12 @@ export function armDeleteTag(btn, key) {
 }
 
 export function toggleCardSelection(key) {
-  if (ports.review.reviewing()) return;
   ports.selection.toggle(key);
   ports.selection.disarm();
   renderProduction();
 }
 
 export function handleSelectionClick(e, card) {
-  if (ports.review.reviewing()) return false;
   var key = card.getAttribute("data-key");
   if (!key) return false;
   var order = Array.prototype.map.call(
@@ -833,7 +811,7 @@ function renderBulkBar(entries) {
   if (!bar) return;
   var items = selectedEntries(entries);
   var cardView = ports.view.productionGroupBy() === "cat" || ports.view.productionGroupBy() === "person";
-  if (!items.length || !cardView || ports.review.reviewing()) { bar.hidden = true; bar.innerHTML = ""; return; }
+  if (!items.length || !cardView) { bar.hidden = true; bar.innerHTML = ""; return; }
 
   var n = items.length;
   var liveMentions = bulkCountsLabel(items);

@@ -6,7 +6,7 @@ import { REPO, listRepoFiles } from "../../tools/source-scan.mjs";
 import { CONFIGURATION } from "../../src/test/_load-order-hooks.mjs";
 import { loadAlone, NOTHING_STARTED } from "./load-order-support.ts";
 
-const QUERIES = new Set(["src/legacy/location-bridge.ts#onServerDoc"]);
+const QUERIES = new Set<string>();
 const CONFIGURES = /^(?:start|install|register|provide|configure|route|watch|hand|use|on)[A-Z]/;
 
 test("every configuration function the load-order check spies on exists, and every bridge or bootstrap export that configures is spied on", () => {
@@ -35,7 +35,7 @@ test("the load-order check catches a module that configures a bridge while it lo
   const report = await loadAlone("src/test/_configures-on-load.mjs");
   assert.equal(report.error, null);
   assert.deepEqual(report.calls.map((c) => [c.file, c.name, c.from]), [
-    ["src/legacy/tour-pause.ts", "handTourPauseTo", "src/test/_configures-on-load.mjs"],
+    ["src/legacy/desktop-bridge.ts", "handDesktopTo", "src/test/_configures-on-load.mjs"],
     ["src/bootstrap/wiring/export-registry.ts", "installExportFormats", "src/test/_configures-on-load.mjs"]
   ]);
   assert.deepEqual(report.owners, { ...NOTHING_STARTED, exports: true });

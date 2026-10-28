@@ -16,17 +16,11 @@ function running() {
 
 function currentDocument(...args) { return running().document.current(...args); }
 function preferences() { return running().preferences; }
-function onServerDoc(...args) { return running().onServerDoc(...args); }
-function serverStatus() { return running().server; }
-function currentHome(...args) { return running().place.home(...args); }
 function importHome(...args) { return running().place.importHome(...args); }
 function fileHome(...args) { return running().place.fileHome(...args); }
-function unsavedChanges(...args) { return running().saves.unsaved(...args); }
-function autoSavePolicy(...args) { return running().autoSaves.policy(...args); }
 function saveBackItemState(...args) { return running().writeback.saveBackItemState(...args); }
 function captureExportDocument(...args) { return running().exports.captureExportDocument(...args); }
 function loadExportAssets(...args) { return running().exports.loadExportAssets(...args); }
-function blobSourceNow(...args) { return running().assetSource(...args); }
 function exportAssetsRequest(...args) { return running().assets.request(...args); }
 function standaloneHtmlFor(...args) { return running().standaloneHtml(...args); }
 function warnImagesLeftOut(...args) { return running().imagesLeftOut(...args); }
@@ -41,7 +35,6 @@ function rememberExport(...args) { return running().exportControls.rememberExpor
 
 function updateFileChip() {
   updateHeaderFileChip();
-  updateReadonlyBanner();
 }
 
 function fileChipListeners(refresh) {
@@ -54,21 +47,11 @@ function fileChipListeners(refresh) {
       if (!active) return;
       if (change !== "writtenOut") refresh();
     },
-    status: function (change) {
-      if (!active) return;
-      if (change !== "bookmarks") refresh();
-    },
     save: function (change) {
       if (!active) return;
-      if (change === "clean" || change === "halt" || (change === "change" && onServerDoc())) refresh();
+      if (change === "clean" || change === "halt") refresh();
     }
   };
-}
-
-function updateReadonlyBanner() {
-  var banner = document.getElementById("readonly-banner");
-  if (!banner) return;
-  banner.hidden = !(serverStatus().mode().readOnly && onServerDoc());
 }
 
 function mirrorFileChipToWriter() {
@@ -94,19 +77,6 @@ function paintSaveBackItem() {
 function updateHeaderFileChip() {
   var chip = document.getElementById("file-chip");
   paintSaveBackItem();
-  if (onServerDoc()) {
-    chip.hidden = false;
-    document.getElementById("file-chip-name").textContent = "On the server";
-    var srvState = document.getElementById("file-chip-state");
-    var unsaved = unsavedChanges();
-    srvState.textContent = serverStatus().sessionExpired()
-      ? "· signed out — reload"
-      : serverStatus().linkTurnedOff() ? "· link turned off — not saving"
-      : unsaved && autoSavePolicy().halted() ? "· not saved yet"
-      : (unsaved ? "· saving…" : "· v" + currentHome().rev + ", everyone sees this");
-    srvState.classList.toggle("unsaved", serverStatus().sessionExpired() || serverStatus().linkTurnedOff() || unsaved);
-    return;
-  }
   var imported = importHome();
   if (!imported) {
     chip.hidden = true;
@@ -139,7 +109,7 @@ function exportRequest(kind, opts) {
       allowImageBundle: !!opts.allowImageBundle,
       brollView: Object.freeze(running().brollView.printView(opts.brollView))
     })),
-    assets: exportAssetsRequest(doc, blobSourceNow())
+    assets: exportAssetsRequest(doc)
   });
 }
 

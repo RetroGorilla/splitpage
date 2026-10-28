@@ -19,12 +19,10 @@ import {
 } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
-import { serverStatus } from "../legacy/location-bridge.ts";
 
 await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
@@ -32,8 +30,8 @@ const { confirmSavedNow, setAutoSaveEnabled } = await import("../legacy/save-bri
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");
-const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
-const { armBrowserServerDraft, flushDraftNow, offerBrowserDraftAfterLinkOff } = await import("../legacy/recovery-bridge.ts");
+const { applyTakenDraft, draftTaker } = await import("../bootstrap/wiring/drafts.ts");
+const { flushDraftNow } = await import("../legacy/recovery-bridge.ts");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 const { bytesForSync, createMemoryBackend, ensureBytes, has, internDataUrl, isDurableSync, persist, setBackend: setBlobBackend } = await import("../adapters/storage/02c-blobs.js");
@@ -87,9 +85,19 @@ function useDocument(doc) {
   return doc;
 }
 
-function serverDocument(serverId, title, docLetter) {
-  useDocument(script(title, { docId: idOf(docLetter) }));
-  window.__hostedTest.setSession({ docId: serverId, rev: 1 });
+function leftOver(serverId, doc) {
+  return {
+    header: { origin: { kind: "server", server: { base: draftBaseOf("", location.href), docId: serverId, rev: 1 } }, writtenAt: 0, title: doc.title, docIdWrittenOut: true },
+    stateJson: JSON.stringify(doc),
+    baseJson: JSON.stringify(doc),
+    browserKey: draftKey(serverId)
+  };
+}
+
+async function copyDocument(serverId, title, docLetter) {
+  useDocument(script("Before " + title));
+  assert.equal(await applyTakenDraft(leftOver(serverId, script(title, { docId: idOf(docLetter) }))), "untitled-copy", "setup: the left-over draft opened as an unsaved copy");
+  assert.equal(drafts().browser.status().copy, true, "setup: the copy keeps writing its browser draft");
 }
 
 function typeInto(text) {
@@ -121,8 +129,7 @@ function browserStore(wrap) {
 async function endCase() {
   confirmSavedNow();
   await flushDraftNow();
-  draftResume().dropServerResume();
-  window.__hostedTest.setSession({ docId: null });
+  useDocument(script("After the case", { docId: idOf("0") }));
   drafts().browser.useIndexedDB(new IDBFactory());
   setAutoSaveEnabled(true);
 }
@@ -139,10 +146,10 @@ function toasts() {
   return Array.from(document.querySelectorAll("#toast-host .toast:not(.is-leaving)")).map((el) => (el.classList.contains("has-action") ? el.firstChild.nodeValue : el.textContent));
 }
 
-async function resumeBrowserDraft(serverId, outcome) {
-  assert.equal(await armBrowserServerDraft(serverId), true, "the draft was taken for restoring");
-  draftResume().serverResume().onDone(outcome || "server-resumed");
-  await until(() => !drafts().restorePending(), "the restore settled");
+async function takeLeftOver() {
+  const take = draftTaker();
+  assert.equal(typeof take, "function", "setup: the browser offers its left-over drafts");
+  return take();
 }
 
 rightToday("B1", "a late draft write for the previous document neither removes the current document's draft record nor claims its key", async (t) => {
@@ -151,9 +158,8 @@ rightToday("B1", "a late draft write for the previous document neither removes t
   const blobs = createHeldBlobBackend(createMemoryBackend());
   setBlobBackend(blobs.backend);
   try {
-    serverDocument("srv-a", "Document A", "a");
+    await copyDocument("srv-a", "Document A", "a");
     addGalleryPicture(currentDocument().rows[0], internDataUrl(PNG), "a.png");
-    window.__hostedTest.setSession({ docId: "srv-a", rev: 1 });
     blobs.holdOp("put");
     typeInto("Edited in A.");
     clock.tick(1500);
@@ -161,8 +167,7 @@ rightToday("B1", "a late draft write for the previous document neither removes t
 
     const docB = script("Document B", { docId: idOf("b") });
     await idb.store.put(record("srv-b", docB, OTHER));
-    serverDocument("srv-b", "Document B", "b");
-    await resumeBrowserDraft("srv-b");
+    await copyDocument("srv-b", "Document B", "b");
     assert.equal(drafts().browser.status().keyOnDisk, draftKey("srv-b"), "setup: the writer tracks document B's draft");
     assert.notEqual(await idb.store.get(draftKey("srv-b")), null, "setup: document B's draft record is stored before the late write lands");
     assert.equal(blobs.gates.parked("blob.put").length, 1, "setup: document A's write is still held");
@@ -189,16 +194,17 @@ rightToday("B2", "with Web Locks a live writer's draft is not taken over, and it
     assert.equal(locks.isHeld(LOCK_PREFIX + OTHER), true, "setup: the other tab holds its writer lock");
     const doc = script("Shared", { docId: idOf("c") });
     await idb.store.put(record("srv-c", doc, OTHER));
-    serverDocument("srv-c", "Shared", "c");
+    useDocument(script("Open here"));
 
-    assert.equal(await armBrowserServerDraft("srv-c"), false, "a live writer's draft is not taken over");
-    assert.equal(draftResume().serverResume(), null, "nothing is waiting to resume");
+    assert.equal(await takeLeftOver(), null, "a live writer's draft is not taken over");
     assert.equal(drafts().restorePending(), false);
     assert.equal((await idb.store.get(draftKey("srv-c"))).writerId, OTHER, "the draft still belongs to the other tab");
 
     letGo();
     await alive;
-    await resumeBrowserDraft("srv-c");
+    const taken = await takeLeftOver();
+    assert.equal(taken && taken.browserKey, draftKey("srv-c"), "the draft is offered once its writer is gone");
+    assert.equal(await applyTakenDraft(taken), "untitled-copy");
     await until(async () => (await idb.store.get(draftKey("srv-c"))).writerId === drafts().browser.writerId(), "the draft was claimed");
   } finally {
     uninstall();
@@ -222,8 +228,8 @@ rightToday("B3", "without Web Locks every other writer counts as dead and its dr
     const idb = browserStore();
     const doc = script("Shared without locks", { docId: idOf("d") });
     await idb.store.put(record("srv-d", doc, OTHER));
-    serverDocument("srv-d", "Shared without locks", "d");
-    await resumeBrowserDraft("srv-d");
+    useDocument(script("Open here"));
+    assert.equal(await applyTakenDraft(await takeLeftOver()), "untitled-copy");
     await until(async () => (await idb.store.get(draftKey("srv-d"))).writerId === drafts().browser.writerId(), "the draft was claimed");
     assert.equal(drafts().browser.status().keyOnDisk, draftKey("srv-d"));
   } finally {
@@ -244,9 +250,12 @@ async function quotaSetup(clock, faults) {
     faulty = createFaultyIdbFactory(factory);
     return faulty;
   });
-  serverDocument("srv-q", "Quota", "e");
+  await copyDocument("srv-q", "Quota", "e");
+  await settleIo();
+  const writes = () => faulty.transactions.filter((mode) => mode === "readwrite").length;
+  const before = writes();
   faulty.failNext(faulty.quotaError(), { mode: "readwrite", times: faults });
-  return { faulty: faulty, idb: idb, attempts: () => faulty.transactions.filter((mode) => mode === "readwrite").length };
+  return { faulty: faulty, idb: idb, attempts: () => writes() - before };
 }
 
 rightToday("B4", "quota pauses crash recovery with a notice and backs off 5, 10, 20 and 40 seconds, then writes the latest work", (t) => cleanly(async () => {
@@ -299,9 +308,11 @@ rightToday("B4b", "a change noted while a retry is in flight does not bring the 
 rightToday("B5", "unavailable storage turns browser drafts off quietly, with no retry and no notice", (t) => cleanly(async () => {
   const clock = mockClock(t);
   setAutoSaveEnabled(false);
+  browserStore();
+  await copyDocument("srv-u", "Unavailable", "f");
+  await settleIo();
   let opens = 0;
   browserStore(() => ({ open() { opens++; throw new Error("SecurityError"); } }));
-  serverDocument("srv-u", "Unavailable", "f");
   typeInto("Typed with no storage.");
   await advance(clock, 1500);
   assert.equal(opens, 1, "storage was tried once");
@@ -315,13 +326,9 @@ rightToday("B5", "unavailable storage turns browser drafts off quietly, with no 
   assert.equal(drafts().browser.status().off, false, "a working store turns them back on");
 }));
 
-rightToday("B6", "a corrupt draft record reads as none: nothing is resumed, offered or thrown", () => cleanly(async () => {
+rightToday("B6", "a corrupt draft record reads as none: nothing is restored, offered or thrown", () => cleanly(async () => {
   const idb = browserStore();
   const doc = script("Corrupt", { docId: idOf("1") });
-  await idb.store.put(record("srv-k", doc, OTHER));
-  serverDocument("srv-k", "Corrupt", "1");
-  await resumeBrowserDraft("srv-k");
-  draftResume().dropServerResume();
   const kinds = {
     "not JSON": "{ this is not json",
     "JSON that is not a document": JSON.stringify({ title: "x" }),
@@ -329,13 +336,13 @@ rightToday("B6", "a corrupt draft record reads as none: nothing is resumed, offe
   };
   for (const [kind, stateJson] of Object.entries(kinds)) {
     await idb.store.put(record("srv-k", doc, OTHER, { stateJson: stateJson }));
-    serverDocument("srv-k", "Corrupt", "1");
-    assert.equal(await armBrowserServerDraft("srv-k"), false, kind + ": not resumed");
-    assert.equal(draftResume().serverResume(), null, kind + ": nothing waits");
+    useDocument(script("Corrupt", { docId: idOf("1") }));
+    const taken = await takeLeftOver();
+    assert.equal(await applyTakenDraft(taken), "failed", kind + ": not restored");
     assert.equal(drafts().restorePending(), false, kind + ": no restore is pending");
-    window.__hostedTest.setSession({ docId: null });
-    assert.equal(await offerBrowserDraftAfterLinkOff("srv-k"), false, kind + ": not offered after a link was turned off");
+    assert.equal(drafts().browser.status().copy, false, kind + ": no copy keeps writing to it");
     assert.equal(currentDocument().title, "Corrupt", kind + ": the open document is untouched");
+    assert.equal(currentDocument().docId, idOf("1"), kind + ": with its own identity");
   }
   await idb.store.remove(draftKey("srv-k"));
   const raw = await new Promise((resolve, reject) => {
@@ -350,15 +357,15 @@ rightToday("B6", "a corrupt draft record reads as none: nothing is resumed, offe
     tx.onerror = () => reject(tx.error);
   });
   raw.close();
-  serverDocument("srv-k", "Corrupt", "1");
-  assert.equal(await armBrowserServerDraft("srv-k"), false, "a header with no body: not resumed");
+  useDocument(script("Corrupt", { docId: idOf("1") }));
+  assert.equal(await takeLeftOver(), null, "a header with no body: not offered");
 }));
 
 rightToday("B7", "a writer discards only the draft it wrote: a newer generation from another tab survives", (t) => cleanly(async () => {
   const clock = mockClock(t);
   setAutoSaveEnabled(false);
   const idb = browserStore();
-  serverDocument("srv-g", "Generations", "2");
+  await copyDocument("srv-g", "Generations", "2");
   typeInto("Mine, generation one.");
   await advance(clock, 1500);
   const key = draftKey("srv-g");
@@ -376,68 +383,46 @@ rightToday("B7", "a writer discards only the draft it wrote: a newer generation 
   assert.equal(JSON.parse(kept.stateJson).rows[0].audioText, "Theirs, generation two.", "and it holds its own generation");
 }));
 
-rightToday("B8", "restoring a browser draft onto a server document, or an unsaved script, writes neither the server nor a file", (t) => cleanly(async () => {
+rightToday("B8", "restoring a draft of an unsaved script writes nothing anywhere", (t) => cleanly(async () => {
   const clock = mockClock(t);
   setAutoSaveEnabled(true);
   const base = script("Restored", { docId: idOf("3") });
   const mine = cloneState(base);
   mine.rows[0].audioText = "Unsaved in the browser.";
-  const theirs = cloneState(base);
-  theirs.rows[1].audioText = "Changed on the server.";
-  const sent = createHeldFetch({
-    connection: () => "tab",
-    answer: (r) => (r.method === "GET" && r.url.includes("api/docs/srv-r") ? { status: 200, body: { id: "srv-r", rev: 3, state: theirs } } : { status: 200, body: {} })
-  });
+  const sent = createHeldFetch({ connection: () => "tab" });
   const uninstall = sent.install();
-  const available = serverStatus().mode().available;
-  serverStatus().recordMode({ available: true });
   try {
-    const idb = browserStore();
-    await idb.store.put(record("srv-r", mine, OTHER, { baseJson: JSON.stringify(base) }));
-    useDocument(script("Before the server draft"));
-        assert.equal(await openDocument({ kind: "server", id: "srv-r" }), true);
-    assert.equal(currentDocument().rows[0].audioText, "Unsaved in the browser.", "the draft was resumed");
-    assert.equal(currentDocument().rows[1].audioText, "Changed on the server.");
-    assert.equal(unsavedChanges(), true, "the resumed work is unsaved");
-    await advance(clock, 40000);
-    assert.deepEqual(sent.requests.filter((r) => r.method !== "GET").map((r) => r.method + " " + r.url), [], "nothing was written to the server");
-
+    browserStore();
     useDocument(script("Before the untitled draft"));
     const outcome = await applyTakenDraft({ header: { origin: { kind: "untitled" }, docIdWrittenOut: false }, stateJson: JSON.stringify(mine) });
     assert.equal(outcome, "applied");
     assert.equal(currentDocument().rows[0].audioText, "Unsaved in the browser.", "the recovered work is on screen");
     assert.equal(unsavedChanges(), true, "and unsaved");
     await advance(clock, 40000);
-    assert.deepEqual(sent.requests.filter((r) => r.method !== "GET").map((r) => r.method + " " + r.url), [], "still nothing written");
-    assert.equal(homeModule.currentHome().kind, "none", "no file or server destination was set");
+    assert.deepEqual(sent.requests, [], "nothing was sent anywhere");
+    assert.equal(homeModule.currentHome().kind, "none", "no file destination was set");
     assert.equal(autoSavePolicy().pending(), false, "no autosave is armed");
   } finally {
-    serverStatus().recordMode({ available: available });
     uninstall();
   }
 }));
 
-rightToday("B9", "a revoked link keeps the draft as an unsaved local copy and sends no write to the server", async (t) => {
+rightToday("B9", "a left-over browser draft of a server document opens as an unsaved local copy and sends nothing", async (t) => {
   mockClock(t);
-  const sent = createHeldFetch({
-    connection: () => "tab",
-    answer: (r) => (r.method === "GET" && r.url.includes("api/docs/srv-gone") ? { status: 404, body: { error: "not-found" } } : { status: 200, body: {} })
-  });
+  const sent = createHeldFetch({ connection: () => "tab" });
   const uninstall = sent.install();
   try {
     const idb = browserStore();
-    const doc = script("Unsaved work on a revoked link", { docId: idOf("5") });
+    const doc = script("Unsaved work on a server document", { docId: idOf("5") });
     doc.rows[0].audioText = "Kept for the user.";
     await idb.store.put(record("srv-gone", doc, OTHER));
     useDocument(script("Open elsewhere", { docId: idOf("6") }));
-        window.__hostedTest.setSession({ docId: null });
-    assert.equal(await openDocument({ kind: "server", id: "srv-gone" }), false);
-    await until(() => !drafts().restorePending(), "the restore settled");
+    assert.equal(await applyTakenDraft(await takeLeftOver()), "untitled-copy");
     assert.equal(currentDocument().rows[0].audioText, "Kept for the user.", "the draft's work is open");
     assert.equal(unsavedChanges(), true, "as unsaved work");
-    assert.equal(homeModule.currentHome().kind, "none", "with no server destination");
+    assert.equal(homeModule.currentHome().kind, "none", "with no destination");
     assert.notEqual(currentDocument().docId, idOf("5"), "and its own new identity");
-    assert.deepEqual(sent.requests.filter((r) => r.method !== "GET").map((r) => r.method + " " + r.url), [], "no write went to the server");
+    assert.deepEqual(sent.requests, [], "nothing was sent anywhere");
     assert.ok(toasts().some((x) => /unsaved copy/.test(x)), "the user is told it is an unsaved copy");
   } finally {
     uninstall();
@@ -455,10 +440,9 @@ rightToday("B10", "a draft whose pictures could not be persisted carries them in
   const warns = consoles.map((c) => c.warn);
   consoles.forEach((c) => { c.warn = () => {}; });
   try {
-    serverDocument("srv-p", "Pictures", "7");
+    await copyDocument("srv-p", "Pictures", "7");
     const rec = internDataUrl(PNG);
     addGalleryPicture(currentDocument().rows[0], rec, "p.png");
-    window.__hostedTest.setSession({ docId: "srv-p", rev: 1 });
     typeInto("With a picture.");
     await advance(clock, 1500);
     const stored = await idb.store.get(draftKey("srv-p"));
@@ -480,12 +464,11 @@ rightToday("B10b", "a draft whose pictures are stored locally carries only their
   const disk = Object.assign(createMemoryBackend(), { name: "disk", persistent: true });
   setBlobBackend(disk);
   try {
-    serverDocument("srv-q", "Stored pictures", "8");
+    await copyDocument("srv-q", "Stored pictures", "8");
     const rec = internDataUrl(PNG);
     assert.deepEqual(await persist([rec.sha256]), [], "setup: the picture is stored");
     assert.equal(isDurableSync(rec.sha256), true);
     addGalleryPicture(currentDocument().rows[0], rec, "q.png");
-    window.__hostedTest.setSession({ docId: "srv-q", rev: 1 });
     typeInto("With a stored picture.");
     await advance(clock, 1500);
     const stored = await idb.store.get(draftKey("srv-q"));

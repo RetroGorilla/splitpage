@@ -11,7 +11,6 @@ await bootApp();
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { handleToolbarCmd } = await import("../features/rows/render.js");
 const { cellEditing } = await import("../legacy/editor-bridge.ts");
 const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../legacy/undo-bridge.ts");
 const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
@@ -186,28 +185,6 @@ test("typing away a commented word reconciles in the transaction; the comment ke
   await settle();
   assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
   assert.deepEqual(lastUndoEntry().steps.map((s) => s.op + ":" + s.key), ["rowField:audioText"]);
-});
-
-test("in review mode, a comment a reviewer anchors on selected words is stored in the cell", async () => {
-  await open();
-  window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
-  try {
-    const el = cellOf("r1", "audioText");
-    el.focus();
-    const text = lastText(el);
-    const r = document.createRange();
-    r.setStart(text, 6);
-    r.setEnd(text, 11);
-    window.getSelection().removeAllRanges();
-    window.getSelection().addRange(r);
-    const generation = liveSession().generation();
-    handleToolbarCmd(el.closest(".field-wrap").querySelector('[data-cmd="comment"]'));
-    assert.match(row("r1").audioText, /^Hello <span class="cmt-anchor" data-cmt="c[^"]+">there<\/span>$/);
-    assert.equal(liveSession().generation(), generation + 1);
-    document.getElementById("comment-modal").hidden = true;
-  } finally {
-    window.__hostedTest.setSession({ role: "edit", docId: null });
-  }
 });
 
 test("#380: a cancelled composition that began its own undo step leaves no step behind", async () => {
@@ -575,7 +552,7 @@ for (const drop of ["type and delete", "slow cancel"]) {
     clock += 5000;
     const theirs = cloneState(currentDocument());
     theirs.rows.find((r) => r.id === "r3").audioText = "Three.x theirs";
-    applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false });
+    applyMerge({ theirs: theirs, source: "stash", unchanged: true, report: false });
     flushEdits();
     assert.equal(row("r3").audioText, "Three.x theirs");
     assert.deepEqual(undoSizes(), { undo: 0, redo: 0 });

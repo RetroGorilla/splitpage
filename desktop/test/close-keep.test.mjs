@@ -322,20 +322,9 @@ test("close check: with no file gone, nothing is waited on and a clean tab is no
   assert.deepEqual([r.answer, r.questions], ["discard", [["b"]]]);
 });
 
-test("closing window: only a window still the last one at 'close' freezes the session, and hosting is confirmed only when it was asked as the last (#531)", () => {
-  const cases = [
-    [true, false, true, { freezeSession: true, confirmHosting: true }],
-    [true, true, true, { freezeSession: false, confirmHosting: false }],
-    [false, false, true, { freezeSession: true, confirmHosting: false }],
-    [false, true, true, { freezeSession: false, confirmHosting: false }],
-    [true, false, false, { freezeSession: true, confirmHosting: false }],
-    [true, true, false, { freezeSession: false, confirmHosting: false }],
-    [false, false, false, { freezeSession: true, confirmHosting: false }],
-    [false, true, false, { freezeSession: false, confirmHosting: false }]
-  ];
-  for (const [askedAsLast, othersOpen, hosting, expected] of cases) {
-    assert.deepEqual(lastWindowClose(askedAsLast, othersOpen, hosting), expected, JSON.stringify([askedAsLast, othersOpen, hosting]));
-  }
+test("closing window: only a window still the last one at 'close' freezes the session (#531)", () => {
+  assert.deepEqual(lastWindowClose(false), { freezeSession: true });
+  assert.deepEqual(lastWindowClose(true), { freezeSession: false });
 });
 
 let failed = 0;

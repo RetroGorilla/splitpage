@@ -65,33 +65,6 @@ function importAvailable() {
   return !!view && view.visible;
 }
 
-function collaborationHtml() {
-  var v = ports.collaboration.view();
-  var where = v.servedHere
-    ? '<p class="settings-hint settings-hint-flat">This page comes from <strong>' + escapeHtml(v.label) +
-        '</strong>, so Collaborate stores scripts there.</p>'
-    : '<div class="settings-field settings-inline">' +
-        '<label class="settings-label" for="settings-collab-server">Server address</label>' +
-        '<span class="settings-inline-control"><input type="text" id="settings-collab-server" class="settings-wide" autocomplete="off" ' +
-          'spellcheck="false" autocapitalize="off" placeholder="' + escapeHtml(ports.collaboration.defaultServer) + '" value="' +
-          escapeHtml(ports.collaboration.address()) + '">' +
-          (v.isDefault ? '' : '<button type="button" class="btn-outline is-small" data-settings-action="collab-default">Use the default</button>') +
-        '</span>' +
-      '</div>' +
-      '<p class="settings-hint">Where Collaborate stores the scripts you share. Everyone you invite works on the copy there.</p>';
-  return where +
-    '<div class="settings-field settings-inline">' +
-      '<span class="settings-label" id="settings-collab-signin">' + (v.signedIn
-        ? 'Signed in on this device'
-        : 'Not signed in on this device') + '</span>' +
-      '<span class="settings-inline-control"><button type="button" class="btn-outline is-small" data-settings-action="collab-signout"' +
-        (v.signedIn ? '' : ' disabled') + '>Sign out</button></span>' +
-    '</div>' +
-    '<p class="settings-hint">' + (v.signedIn
-      ? 'Collaborate uses your owner key without asking. Sign out to make this device ask for it again.'
-      : 'Collaborate asks for your server’s owner key the first time, and remembers it here.') + '</p>';
-}
-
 function bodyHtml() {
   var clock = ports.preferences.clock();
   var scale = ports.preferences.scriptScale();
@@ -140,7 +113,6 @@ function bodyHtml() {
       '</div>' +
       '<p class="settings-hint">Signs your edits and comments.</p>' +
       ports.identity.swatchesHtml(name, "settings-person-color", "settings-label")) +
-    section("Collaboration", collaborationHtml()) +
     section("Help & tips",
       '<div class="settings-actions">' +
         '<button type="button" class="btn-outline" data-settings-action="tagging-help">Show the tagging reference</button>' +
@@ -151,10 +123,8 @@ function bodyHtml() {
       '<div class="settings-actions">' +
         '<button type="button" class="btn-outline" data-settings-action="export-app-data">Export app data…</button>' +
         (importAvailable() ? '<button type="button" class="btn-outline" data-settings-action="import-app-data">Import app data…</button>' : '') +
-        '<button type="button" class="btn-outline" data-settings-action="servers">Servers…</button>' +
-        '<button type="button" class="btn-outline" data-settings-action="drive">Google Drive…</button>' +
       '</div>' +
-      '<p class="settings-hint">App data is your version history, server bookmarks and these settings — take it to another computer or the desktop app.</p>');
+      '<p class="settings-hint">App data is your version history and these settings — take it to another computer or the desktop app.</p>');
 }
 
 function ensureModal() {
@@ -181,8 +151,7 @@ function ensureModal() {
 function typedFields() {
   return {
     "settings-name": function (key) { return key === "commentAuthor"; },
-    "settings-default-wpm": function (key) { return key === "defaultWpm"; },
-    "settings-collab-server": function (key) { return key === "collabServer"; }
+    "settings-default-wpm": function (key) { return key === "defaultWpm"; }
   };
 }
 
@@ -275,17 +244,6 @@ function applyChange(target) {
     if (!v || v === getSavedAuthorName(ports.preferences)) { target.value = getSavedAuthorName(ports.preferences); return; }
     ports.preferences.setCommentAuthor(v);
   }
-  if (id === "settings-collab-server") {
-    var raw = (target.value || "").trim();
-    var url = raw ? ports.collaboration.normalize(raw) : ports.collaboration.defaultServer;
-    if (!url) {
-      ports.notices.show("That isn't a web address — something like https://script.example.com/", "warn");
-      target.value = ports.collaboration.address();
-      return;
-    }
-    if (url === ports.collaboration.address()) { target.value = url; return; }
-    ports.preferences.setCollabServer(url === ports.collaboration.defaultServer ? null : url);
-  }
 }
 
 function applyInput(target) {
@@ -319,14 +277,6 @@ function runAction(action) {
     ports.notices.show(ports.desktop.running() ? "The desktop-app notice only shows in the browser." : "The desktop-app notice will show again.", "ok");
     return;
   }
-  if (action === "collab-default") { ports.preferences.setCollabServer(null); return; }
-  if (action === "collab-signout") {
-    ports.collaboration.signOut();
-    renderSettings();
-    return;
-  }
-  if (action === "servers") { closeSettings(); ports.actions.invoke("servers", "button"); return; }
-  if (action === "drive") { closeSettings(); ports.actions.invoke("drive-open", "button"); return; }
   if (action === "export-app-data") { closeSettings(); ports.actions.invoke("export-app-data", "button"); return; }
   if (action === "import-app-data") { closeSettings(); ports.actions.invoke("import-app-data", "button"); }
 }
@@ -335,8 +285,7 @@ function wireModal(m) {
   listen(m, "change", function (e) { if (e.target && e.target.closest(".settings-body")) applyChange(e.target); });
   listen(m, "input", function (e) { if (e.target) applyInput(e.target); });
   listen(m, "keydown", function (e) {
-    if (e.key === "Enter" && e.target && (e.target.id === "settings-name" || e.target.id === "settings-default-wpm" ||
-        e.target.id === "settings-collab-server")) {
+    if (e.key === "Enter" && e.target && (e.target.id === "settings-name" || e.target.id === "settings-default-wpm")) {
       e.preventDefault();
       applyChange(e.target);
       return;

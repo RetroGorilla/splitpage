@@ -9,9 +9,8 @@ test("Write is unavailable before mount and after stop, and each mounted owner r
   let owner: { openWriter: () => void } | null = null;
   let first = 0;
   let second = 0;
-  let reviewing = false;
   const registry = createActionRegistry();
-  const unregister = registerAll(registry, writerActions(() => owner, { screen: () => ({ loading: false, dialog: false, launcher: false, tour: false, prompter: false, writer: false, shotlist: false }), review: { reviewing: () => reviewing } }));
+  const unregister = registerAll(registry, writerActions(() => owner, { screen: () => ({ loading: false, dialog: false, launcher: false, tour: false, prompter: false, writer: false, shotlist: false }) }));
   try {
     assert.equal(registry.view("write", "command-menu")?.enabled, false);
     assert.equal(registry.invoke("write", "button").kind, "unavailable");
@@ -19,10 +18,6 @@ test("Write is unavailable before mount and after stop, and each mounted owner r
     assert.equal(registry.view("write", "command-menu")?.enabled, true);
     assert.equal(registry.invoke("write", "button").kind, "ran");
     assert.equal(first, 1);
-    reviewing = true;
-    assert.equal(registry.view("write", "command-menu")?.reason, "Viewing only — the writer changes the script");
-    assert.equal(registry.invoke("write", "button").kind, "unavailable");
-    reviewing = false;
     owner = null;
     assert.equal(registry.view("write", "command-menu")?.enabled, false);
     assert.equal(registry.invoke("write", "button").kind, "unavailable");

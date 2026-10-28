@@ -1,7 +1,6 @@
 import type { BrollView } from "../../application/preferences/broll-view.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
-import type { Presence } from "../../application/collaboration/presence.ts";
-import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { PersonColorLookup } from "../../core/document/person-colors.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
@@ -69,9 +68,8 @@ export interface BrollPanelPorts {
   readonly shotHiding: Pick<ShotHiding, "reveal">;
   readonly panels: Pick<SidePanels, "open" | "close" | "closeAll" | "registerPanel" | "sync">;
   readonly flags: Pick<ViewFlags, "brollPageOpen" | "setBrollPageOpen">;
-  readonly presence: Pick<Presence, "personColor">;
+  readonly personColors: PersonColorLookup;
   readonly undo: Pick<UndoControl, "breakCoalescing">;
-  readonly review: ReviewFacts;
   readonly actions: Pick<ActionRegistry, "invoke">;
   readonly notices: Pick<NoticePort, "show">;
   readonly records: Pick<BrollRecords, "brollEntries" | "addBrollProp" | "renameBrollInScript" | "updateBrollBadge">;

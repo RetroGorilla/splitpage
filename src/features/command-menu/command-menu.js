@@ -19,8 +19,7 @@ function el(id) { return document.getElementById(id); }
 var OWN_ACTION = "command-menu";
 
 var LIST_BEFORE_EXPORTS = [
-  "save", "save-as", "save-back", "autosave", "new", "open", "server-open", "paste", "gdoc-import", "drive-open",
-  "collaborate", "server-publish", "servers", "export"
+  "save", "save-as", "save-back", "autosave", "new", "open", "paste", "gdoc-import", "export"
 ];
 
 var LIST_AFTER_EXPORTS = [

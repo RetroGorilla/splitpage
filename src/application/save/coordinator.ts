@@ -15,7 +15,6 @@ export type SaveOutcome =
 
 export type WriterResult =
   | { readonly kind: "saved" }
-  | { readonly kind: "copied" }
   | { readonly kind: "failed"; readonly error?: unknown }
   | { readonly kind: "cancelled" }
   | { readonly kind: "refused"; readonly reason: string; readonly conflict?: FileConflict };
@@ -177,7 +176,6 @@ export function createSaveCoordinator<R, B>(ports: SaveCoordinatorPorts<R>): Sav
       ports.report.obsolete(entry.request, here);
       return { kind: "obsolete", here: here };
     }
-    if (result.kind === "copied") return { kind: "saved", acknowledged: false };
     acknowledge(landed, generation);
     return { kind: "saved", acknowledged: true };
   }

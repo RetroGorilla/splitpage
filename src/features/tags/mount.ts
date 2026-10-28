@@ -4,8 +4,6 @@ import { createViewLifetime } from "../common/view-lifetime.ts";
 type TagEvent = MouseEvent & { readonly target: HTMLElement & { value: string }; readonly key: string; readonly pointerType: string };
 interface EntityPorts {
   readonly rootClick: (e: MouseEvent) => void;
-  readonly reviewMode: () => boolean;
-  readonly reviewBlocked: () => void;
   readonly renderProduction: () => void;
   readonly saveTagRename: (key: string | null) => void;
   readonly addPersonForTag: (key: string | null) => void;
@@ -68,10 +66,6 @@ export interface TagsRoutes {
   readonly anchorMouseDown: (e: MouseEvent) => void;
   readonly dispose: () => void;
 }
-function isTagField(t: HTMLElement): boolean {
-  return !!t.classList && (t.classList.contains("tag-owner-select") || t.classList.contains("tag-notes-input") ||
-  t.classList.contains("tag-rename-input") || t.classList.contains("tag-person-input"));
-}
 export function mountTagEntityContainer(mount: { window: Window; id: string; ports: EntityPorts }): () => void {
   const doc = mount.window.document;
   const ports = mount.ports;
@@ -81,13 +75,6 @@ export function mountTagEntityContainer(mount: { window: Window; id: string; por
   listen(el, "click", ports.rootClick);
   listen(el, "keydown", function (e) {
     if (!e.target.classList) return;
-    if (ports.reviewMode() && e.key === "Enter" &&
-    (e.target.classList.contains("tag-rename-input") || e.target.classList.contains("tag-person-input"))) {
-      e.preventDefault();
-      ports.reviewBlocked();
-      ports.renderProduction();
-      return;
-    }
     if (e.target.classList.contains("tag-rename-input")) {
       if (e.key === "Enter") { e.preventDefault(); ports.saveTagRename(e.target.getAttribute("data-key")); }
       else if (e.key === "Escape") { e.preventDefault(); ports.setRenaming(null); ports.renderProduction(); }
@@ -99,25 +86,16 @@ export function mountTagEntityContainer(mount: { window: Window; id: string; por
     }
   });
   listen(el, "change", function (e) {
-    if (ports.reviewMode()) {
-      if (isTagField(e.target)) { ports.reviewBlocked(); ports.renderProduction(); }
-      return;
-    }
     if (e.target.classList && e.target.classList.contains("tag-owner-select")) {
       ports.setTagOwner(e.target.getAttribute("data-key"), e.target.value);
     }
   });
   listen(el, "input", function (e) {
-    if (ports.reviewMode()) {
-      if (isTagField(e.target)) { ports.reviewBlocked(); ports.renderProduction(); }
-      return;
-    }
     if (e.target.classList && e.target.classList.contains("tag-notes-input")) {
       ports.setTagNotes(e.target.getAttribute("data-key"), e.target.value);
     }
   });
   listen(el, "focusout", function (e) {
-    if (ports.reviewMode()) return;
     if (e.target.classList && e.target.classList.contains("tag-notes-input")) ports.queueAutoSave();
   });
   return life.dispose;
@@ -137,7 +115,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
   const list = doc.getElementById("production-list");
   if (list) {
     listen(list, "pointerdown", function (e) {
-      if (e.pointerType === "mouse" || ports.reviewMode()) return;
+      if (e.pointerType === "mouse") return;
       const card = e.target.closest(".tag-entity");
       if (!card) return;
       if (e.target.closest(".tag-entity-detail, .tag-rename-input")) return;
@@ -202,8 +180,7 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
   listen(doc.getElementById("production-panel"), "keydown", function (e) {
     if (!e.target.classList) return;
     if (e.target.id === "bulk-person-input") {
-      if (e.key === "Enter" && ports.reviewMode()) { e.preventDefault(); ports.reviewBlocked(); ports.renderProduction(); }
-      else if (e.key === "Enter") { e.preventDefault(); ports.bulkAddPerson(); }
+      if (e.key === "Enter") { e.preventDefault(); ports.bulkAddPerson(); }
       else if (e.key === "Escape") { e.preventDefault(); ports.setAddingPerson(null); ports.renderProduction(); }
       return;
     }
@@ -215,10 +192,6 @@ export function mountTags(mount: { window: Window; ports: TagsPorts }): TagsRout
     }
   });
   listen(doc.getElementById("production-panel"), "change", function (e) {
-    if (ports.reviewMode()) {
-      if (e.target.id === "bulk-owner" || e.target.id === "bulk-status") { ports.reviewBlocked(); ports.renderProduction(); }
-      return;
-    }
     if (e.target.id === "bulk-owner") {
       if (e.target.value !== "__none__") ports.bulkSetOwner(e.target.value);
       return;

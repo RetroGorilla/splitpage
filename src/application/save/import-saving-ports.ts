@@ -24,7 +24,6 @@ export interface BuiltLocalFile {
 
 export interface ImportSavingPorts {
   readonly location: Pick<DocumentLocation, "importHome" | "amendHome">;
-  readonly onServerDoc: () => boolean;
   readonly saving: {
     readonly request: (request: ImportSaveRequest) => Promise<SaveOutcome>;
     readonly unsavedFor: (target: unknown) => boolean;

@@ -65,8 +65,6 @@ expect C.results('voice over')[0].items[0].id == export-narration-docx
 # the workbook by name (2026-09-28), the CSV still found by the word
 expect C.results('excel')[0].items[0].id == export-xlsx
 expect C.results('excel')[0].items.some(function(i){return i.id === 'export-csv';})
-expect C.results('invite').some(function(g){return g.items.some(function(i){return i.id === 'collaborate' && !i.disabled && i.why === '';});})
-expect C.results('publish').some(function(g){return g.items.some(function(i){return i.id === 'collaborate';});})
 expect C.results('zzzzqq').length === 0
 eval (function(){var i=document.getElementById('cmdk-input');i.value='zzzzqq';i.dispatchEvent(new Event('input'));return true;})()
 sleep 100
@@ -226,21 +224,5 @@ sleep 300
 expect document.getElementById('cmdk').hidden
 jsclick #wr-close
 sleep 600
-
-# --- a review session: the same reasons the menu gives -----------------------
-eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
-sleep 200
-key ctrl KeyK
-sleep 300
-type write
-sleep 200
-expect document.querySelector('#cmdk-list [data-cmd="write"]').getAttribute('aria-disabled') == true
-expect document.querySelector('#cmdk-list [data-cmd="write"] .cmdk-why').textContent == Viewing only — the writer changes the script
-expect C.results('paste').some(function(g){return g.items.some(function(i){return i.id === 'paste' && i.disabled && i.why.indexOf('Viewing only') === 0;});})
-key Enter
-sleep 300
-expect document.getElementById('writer').hidden
-key Escape
-eval window.__hostedTest.setSession({role:'edit',docId:null})
 
 quit

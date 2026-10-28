@@ -16,7 +16,7 @@ function setup() {
   const storage = new Map<string, string>();
   const hearing = new Set<(change: PreferenceNotice) => void>();
   const stored = new Set<(name: PreferenceName | null) => void>();
-  let signedIn = false;
+  let writerSize = 22;
   const preferences = createPreferences({
     storage: () => ({ getItem: (key) => storage.get(key) ?? null, setItem: (key, value) => { storage.set(key, value); }, removeItem: (key) => { storage.delete(key); } }),
     announce: (change) => {
@@ -35,7 +35,7 @@ function setup() {
       return { isConnected: false, dismiss: () => {}, removeEventListener: () => {} };
     } },
     editor: {
-      writerSize: () => 22,
+      writerSize: () => writerSize,
       setWriterSize: (value, persist) => { calls.push(["writer", value, persist]); },
       autoSave: (value) => { calls.push(["autosave", value]); },
       hideShot: (value) => { calls.push(["hide", value]); }
@@ -46,17 +46,10 @@ function setup() {
       flip: (value) => { calls.push(["flip", value]); },
       sceneMode: (value) => { calls.push(["scene", value]); }
     },
-    collaboration: {
-      defaultServer: "https://scripts.example.com",
-      address: () => "https://scripts.example.com",
-      normalize: () => null,
-      view: () => ({ servedHere: false, label: "", signedIn, isDefault: true }),
-      signOut: () => { calls.push(["signout"]); }
-    },
     desktop: { running: () => false, renderNotice: () => { calls.push(["desktop"]); } }
   };
   const mounted: SettingsMount = mountSettings(ports);
-  return { mounted, ports, preferences, calls, hearing, stored, signIn: (on: boolean) => { signedIn = on; } };
+  return { mounted, ports, preferences, calls, hearing, stored, storeWriterSize: (size: number) => { writerSize = size; } };
 }
 
 function input(id: string): HTMLInputElement {
@@ -87,8 +80,6 @@ test("settings ports preserve field edits and focus across local and external pr
     assert.equal(input("settings-name").value, "Saved");
     change("settings-default-wpm", "500");
     assert.equal(input("settings-default-wpm").value, String(h.preferences.defaultWpm()));
-    change("settings-collab-server", "invalid");
-    assert.equal(h.calls.at(-1)?.[0], "notice");
   } finally {
     h.mounted.dispose();
   }
@@ -124,13 +115,13 @@ test("settings routes controls to their existing owners and disposal permits a f
 
 test("settings repaints when another tab changes stored app state, a preference or not, and stops hearing it once disposed", () => {
   const h = setup();
-  const signInText = (): string | null | undefined => win.document.getElementById("settings-collab-signin")?.textContent;
   try {
     h.mounted.openSettings({ focus: "settings-name" });
     input("settings-name").value = "Unsubmitted";
-    h.signIn(true);
+    assert.equal(input("settings-writer-size").value, "22");
+    h.storeWriterSize(25);
     for (const listener of h.stored) listener(null);
-    assert.equal(signInText(), "Signed in on this device");
+    assert.equal(input("settings-writer-size").value, "25");
     assert.equal(input("settings-name").value, "Unsubmitted");
     assert.equal(win.document.activeElement?.id, "settings-name");
     h.preferences.setCommentAuthor("Saved");

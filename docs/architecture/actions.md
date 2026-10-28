@@ -3,7 +3,7 @@
 An action is one thing a person can ask the app to do, with one definition
 that every surface uses: the File menu, the command menu, a keyboard shortcut,
 a button (the header's, the Writer's, the Settings dialog's, the setup
-wizard's, the Servers dialog's, the New Tab page's), and the desktop app's
+wizard's, the New Tab page's), and the desktop app's
 native menu.
 
 ## The registry
@@ -36,7 +36,6 @@ differences the surfaces had in 3.1, which 4.0 does not change:
 | Action | Difference kept from 3.1 |
 | --- | --- |
 | `toggle-rundown-min` | The rundown's own button does not wait for the document to load; the File menu and the native menu do |
-| `write` | In a review session the command menu reads "Viewing only — the writer changes the script"; the button and the native menu say "Viewing only — you can comment on this script, but not change it." |
 | `find` | With the bar already open, Ctrl+F only puts the focus back in it and selects its query; the File menu, the command menu and the native Edit menu open the bar again, taking the selected words as the query (`run` looks at its source; `286-find-from-every-surface.txt`) |
 | `command-menu` | Ctrl+K closes an open command menu; the native menu's Search commands leaves it open (`run` looks at its source). The header's Search button is refused without a reason, so nothing is shown, as `openCommandMenu()` returned quietly in 3.1 |
 
@@ -64,8 +63,7 @@ shortcut, which leaves the key to the browser. A refusal without a reason
 shows nothing. So every caller in `src/js` just calls `appActions.invoke()`
 and none of them imports the toast module for it, and no refusal is dropped:
 the File menu, the header and Writer buttons, the rundown's button, the
-Servers dialog's Collaborate button, the Settings and wizard buttons, the
-native menu and a command run from the command menu all show theirs. The
+Settings and wizard buttons, the native menu and a command run from the command menu all show theirs. The
 command menu also shows a refusal greyed out with the reason before anything
 runs. A key that a focused control already handled (`defaultPrevented`)
 never reaches a global action.
@@ -88,25 +86,21 @@ and both the menu's painting and the action's availability call it:
 
 | State | Function |
 | --- | --- |
-| Paste a script, greyed out in a review session | `pasteItemState()`, `18b-file-menu.js` |
-| Open from the server, Put this script on the server | `serverOpenItemState()`, `serverPublishItemState()`, `13-hosted.js` |
 | Save to file, and its label | `saveBackItemState()`, `18-local-files.js` |
 | Export again, and its label | `exportAgainItemState()`, `18c-export-dialog.js` |
-| The Servers label | `serversMenuLabel()`, `20e-connect.js` |
-| Present in browser, Chromium speech, Google Drive, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `driveOpenShown()`, `appDataImportShown()`, `20f-desktop.js` |
+| Present in browser, Chromium speech, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `appDataImportShown()`, `20f-desktop.js` |
 | Autosave's switch | `autoSavePolicy().enabled()`, `src/legacy/save-bridge.ts` |
 | Save while a save is running | `saveInProgress()`, `src/legacy/screen-state.ts` |
-| Collaborate | `collaborateBlockedReason()`, `13b-collaborate.js` |
 
-`src/legacy/menu-items.ts` turns such a state into an availability. `label`
-may be a function: Servers shows the connected host, Save to file the
+`itemAvailability()` (`src/features/file-menu/actions.ts`) turns such a state
+into an availability. `label` may be a function: Save to file shows the
 imported file's name. `276-availability-follows-state.txt` changes the state
 with the File menu closed and checks that the command menu and the native
 menu follow it.
 
 `visible: false` only keeps an action out of the command menu. It still runs
 from a surface that has it: the desktop app's native menu reaches items the
-File menu hides (Google Drive, Present in browser), and their handlers explain
+File menu hides (Present in browser), and their handlers explain
 the refusal themselves. Export again is never listed (its availability always
 says `visible: false`), because the 3.1 command menu did not offer it.
 
@@ -121,8 +115,8 @@ not know is listed after the known groups. So an action registered anywhere
 shows up in the command menu with no edit to it. The command menu never lists
 its own action, `command-menu`. `tests/legacy/command-palette.test.ts` checks
 this against the real registry instance; `279-command-menu-listing.txt` pins
-the whole listing, key chips, switch states and icons in the browser, a
-review session and the desktop app, and passes against the code before the
+the whole listing, key chips, switch states and icons in the browser and the
+desktop app, and passes against the code before the
 registry (4.0-development 19c66f7 and 47c0309) too.
 
 `src/application/shortcuts.ts` parses chords, names them canonically
@@ -160,8 +154,7 @@ of `src/bootstrap/` (the registry installers and `register` methods included),
 and finds no call and no started owner.
 
 `src/legacy/this-document-actions.ts` (the command menu's "This document"
-group), `file-actions.ts`, `view-actions.ts`, `help-actions.ts`,
-`share-actions.ts` and `zoom-actions.ts` define the actions whose handlers are
+group), `file-actions.ts`, `view-actions.ts` and `zoom-actions.ts` define the actions whose handlers are
 still in `src/js`. `src/legacy/screen.ts` names what can refuse an action
 (still loading, a dialog, the open command menu, the tour, Present, the
 Writer, the B-roll shot-list page) with the reason a person is shown; it
@@ -202,20 +195,19 @@ started over one of them.
 | Action | Refused under |
 | --- | --- |
 | `save`, `save-as` | still loading, a dialog, the command menu |
-| `save-back`, `server-publish`, `prompter-open-in-browser`, `prompter-open-in-chromium` | still loading, a dialog, the command menu (then their own state) |
+| `save-back`, `prompter-open-in-browser`, `prompter-open-in-chromium` | still loading, a dialog, the command menu (then their own state) |
 | `open`, `export` | still loading, every overlay |
 | `command-menu` | still loading, every overlay but itself |
 | `find` | still loading, every overlay but the command menu |
 | `history` | every overlay (it opens while loading, as in 3.1) |
 | `panel-production`, `panel-gear`, `panel-broll`, `panel-comments` | their loading rule (above), then every overlay |
 | `present` | still loading, every overlay but Present |
-| `write` | still loading, every overlay but the writer (then a review session) |
+| `write` | still loading, every overlay but the writer |
 | `toggle-hide-shot` | still loading, a dialog |
-| `about`, `settings`, `setup`, `tagging-help`, `drive-open` | a dialog, the tour (`OPENS_A_DIALOG`) |
-| `servers` | a dialog other than the join-PIN prompt, the tour |
-| `collaborate`, `paste`, `gdoc-import`, `server-open` | still loading, a dialog, the tour (then their own state) |
+| `about`, `settings`, `setup`, `tagging-help` | a dialog, the tour (`OPENS_A_DIALOG`) |
+| `paste`, `gdoc-import` | still loading, a dialog, the tour |
 | `help` | a dialog; during the tour it opens and puts the tour aside until it closes |
-| `tour` | a dialog (#368); it starts over Present, the writer and the shot list as before; the wizard's tour button closes the wizard and then asks this action (#400); the "Resume tour" toast that follows a join-PIN prompt which interrupted the tour asks this action too, so the same rule applies, and it continues at the interrupted step (#401) |
+| `tour` | a dialog (#368); it starts over Present, the writer and the shot list as before; the wizard's tour button closes the wizard and then asks this action (#400) |
 | The File menu's export formats (not actions yet) | a dialog, the command menu, from the native menu only (`nativeMenuRunner`) |
 
 Save, Save a copy and Hide shot scenes still act in the writer, Present, the
@@ -227,27 +219,10 @@ are never open at once, and during the tour, which sits above dialogs and
 would hide one under its dimming. It opens over the writer, Present and the
 shot list, which sit below dialogs. Every button that runs one of these from
 inside a dialog closes its own dialog first (the Settings dialog's Tagging
-reference, Google Drive and Servers, the wizard's Servers and Help, the
-Servers dialog's Collaborate), and a File menu item chosen over the setup
+reference, the wizard's Help), and a File menu item chosen over the setup
 wizard closes the wizard first (below), so neither is refused. The open
 command menu is not in the list, as in #307's proposal: it closes itself when
 it runs a command or loses the focus.
-
-The one hand-off (#361): Servers opens in front of the join-PIN prompt, as the
-way out when the code is not to hand, for example in a new desktop tab that
-inherited a server without its token. Of the two, the one opened last is in
-front: a prompt opened from inside Servers (a bookmark's PIN button, or Use
-this server on a server that asks for one) comes in front of it. Escape
-closes the one in front, and closing Servers over the prompt puts the focus
-back in its field. Once the tab moves to another server (joining or using
-one, or going back to this copy), the prompt for the old server closes;
-joining the same server leaves it open. Over the prompt alone, every other
-command that opens a dialog is still refused, and so is a second Servers
-over the pair. The tour can no longer start over the prompt. A tour already
-showing when the prompt opens is interrupted instead (#401): it hides, Servers
-still opens in front of the prompt, and when the prompt closes a "The tour was
-paused." toast offers "Resume tour", which continues at the step the tour was
-on. Dismissing the toast leaves the tour ended.
 
 A dialog (`dialog`, any open `.modal-backdrop`) and the open command menu
 (`launcher`) are separate blockers, because the shortcuts never treated them
@@ -327,15 +302,13 @@ now refuse too, and the File menu path shows the reason as a toast. 3.1.x gets t
 the only change of behavior the move to the registry keeps. As in #273, an
 open dialog is checked first, so with a dialog over the writer or Present the
 toast names the dialog ("Close the open dialog first."); the writer's reason
-is "Close the writer first.". The toast that follows a link being turned off
-offers Save a copy…, which calls `saveDoc({ saveAs: true })` itself rather
-than the registry, so a dialog in front of it cannot refuse it.
+is "Close the writer first.".
 
 #274 extends the same rule, in the same suite, to what the native menu still
 ran behind an overlay: Present, Write, the panels and Version history behind
 the writer, Present, the shot-list page or the tour; Open, Export, Search
 commands and Find behind the shot-list page and the tour, and Find behind
-Present; Save to file, Put this script on the server, the two Present in the
+Present; Save to file, the two Present in the
 browser items and the export formats behind a dialog or the command menu. The
 shot-list page and the tour are overlays like the others ("What is in front",
 above). This is a change of behavior on every surface, not only the native
@@ -369,11 +342,9 @@ item goes through `handleFileMenuAction(id, "native-menu")`, what choosing
 that item does: it closes the setup wizard and the File menu, remembers an
 export, and invokes the action. Any other registered command (the script
 zoom commands) runs as itself. Refusals are shown as toasts, except where
-the File menu would show the item greyed out (Collaborate for a link guest,
-Paste a script in a review session, the server items, Save while a save
-runs): the native menu cannot grey an item out, and in 3.1 it did nothing
-there, so `greyedOut()` and `itemAvailability()` (`src/legacy/menu-items.ts`)
-give such a refusal no reason for that source, and the native path does
+the File menu would show the item greyed out (Save to file, Export again, Save while a save runs): the
+native menu cannot grey an item out, and in 3.1 it did nothing there, so
+`itemAvailability()` (`src/features/file-menu/actions.ts`) gives such a refusal no reason for that source, and the native path does
 nothing at all for a refusal without one; a dialog or other overlay in front
 of a greyed-out item is still named, as it is checked first. The export
 formats are not actions yet (milestone 5) and keep the File menu item's own
@@ -413,28 +384,19 @@ open when a command runs from the keyboard or a menu.
 | `panel-production`, `panel-gear`, `panel-broll`, `panel-comments` | Header buttons, command menu, desktop menu | `21-events.js` and `08d-broll-panel.js` click listeners, `18d-command-menu.js` button mirror |
 | `write` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
 | `present` | Header button, command menu, desktop menu | `21-events.js` click listener, `18d-command-menu.js` |
-| `settings`, `servers`, `help`, `tour`, `setup` | File menu, command menu, desktop menu (F1 for Help); Servers, Help and Tour also from the Settings dialog's and the setup wizard's buttons; Servers (Join a shared session) and Tour also from the New Tab page; Tour also from the "Resume tour" toast after a join-PIN prompt interrupted the tour (#401) | Capture-phase File menu listeners in `20s-settings.js`, `20e-connect.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js`; direct calls in `20s-settings.js`, `20b-onboarding.js` and `20j-newtab.js`; the toast's button in `offerTourResume` (`20c-help.js`) |
+| `settings`, `help`, `tour`, `setup` | File menu, command menu, desktop menu (F1 for Help); Help and Tour also from the Settings dialog's and the setup wizard's buttons; Tour also from the New Tab page | Capture-phase File menu listeners in `20s-settings.js`, `20c-help.js` and `20b-onboarding.js`; `18d-command-menu.js`; direct calls in `20s-settings.js`, `20b-onboarding.js` and `20j-newtab.js` |
 | `about`, `tagging-help`, `export-app-data`, `import-app-data` | File menu, command menu, desktop menu; Tagging reference and app data also from the Settings dialog | `18-local-files.js` dispatch, `18d-command-menu.js`, `20s-settings.js` direct calls and File menu clicks |
 | `long-demo` | Command menu (the New Tab page's link stays its own) | `18d-command-menu.js` |
-| `new`, `paste`, `gdoc-import`, `drive-open`, `save-back`, `autosave`, `export-again`, `server-open`, `server-publish` | File menu, command menu, desktop menu; Google Drive also from the Settings dialog | `18-local-files.js` dispatch, `18d-command-menu.js`, a `20s-settings.js` File menu click |
-| `collaborate` | File menu, command menu, header Collab button, the Servers dialog's button | `18-local-files.js`, `18d-command-menu.js`, `13b-collaborate.js` and `20e-connect.js` click handlers |
+| `new`, `paste`, `gdoc-import`, `save-back`, `autosave`, `export-again` | File menu, command menu, desktop menu | `18-local-files.js` dispatch, `18d-command-menu.js` |
 | `set-target` | Command menu | `18d-command-menu.js` |
 | `prompter-open-in-browser`, `prompter-open-in-chromium` | File menu, command menu, desktop menu (Ctrl+Shift+P) | `18-local-files.js`, `18d-command-menu.js` |
 | `script-zoom-in`, `script-zoom-out`, `script-zoom-reset` | Desktop View menu, Ctrl + "+" / "-" / "0" (not listed in the command menu) | `20f-desktop.js` via `runScriptZoomCommand`, the `05s-script-zoom.js` keydown listener |
 
 The File menu's export formats (`export-pdf` and the rest) still dispatch in
 `18-local-files.js`; milestone 5's format registry takes them over. The New
-Tab page's Tour and Join a shared session run the `tour` and `servers`
-actions (source `button`; neither can be refused, so nothing changed for
-them). Its other buttons are different actions (a blank new script, a
+Tab page's Tour runs the `tour` action (source `button`; it cannot be
+refused, so nothing changed for it). Its other buttons are different actions (a blank new script, a
 starter, paste as a new script, open into this tab) and stay its own.
-
-The export dialog's Collaborate… link is kept as it was: it closes the
-dialog and clicks the File menu's Collaborate item through
-`runExportAction()`, as the dialog's formats do. So it does nothing, and says
-nothing, when that item was last painted greyed out (a link guest), where
-invoking `collaborate` would show the reason in a toast. It moves with the
-formats in milestone 5.
 
 Browser suites `268-actions-every-surface.txt`,
 `269-file-actions-every-surface.txt`, `270-save-open-every-surface.txt`,

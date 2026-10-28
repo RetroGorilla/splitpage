@@ -654,10 +654,6 @@ export function startExportDialog(given) {
   life.listen(el("export-close"), "click", closeExportDialog);
   life.listen(el("export-cancel"), "click", closeExportDialog);
   life.listen(el("export-go"), "click", exportChosen);
-  life.listen(el("export-share-link"), "click", function () {
-    closeExportDialog();
-    ports.share();
-  });
   life.release(ports.onMenuRefresh(refreshExportAgainItem));
   syncExportMenu();
   life.release(ports.exports.onChange(function () {

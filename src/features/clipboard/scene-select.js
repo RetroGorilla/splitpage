@@ -3,9 +3,8 @@ import { cssAttr } from "../common/dom.ts";
 import {
   SCENES_MIME, buildScenePayload, parseScenePayload, scenePaste, scenesOnClipboard, setLiveCut
 } from "./scene-clip.js";
-import { addHeldCommentsCommand, pasteScenesCommand, removeScenesCommand } from "../../application/commands/scenes.ts";
+import { pasteScenesCommand, removeScenesCommand } from "../../application/commands/scenes.ts";
 import { cappedLongText } from "../../core/document/text-policy.ts";
-import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 
 var TOLERANCE = 4;
 var SCROLL_ZONE = 120;
@@ -190,12 +189,6 @@ function prefetchPictures() {
 
 function count(n) { return n === 1 ? "1 scene" : n + " scenes"; }
 
-function refused(what) {
-  if (!ports.review.reviewing()) return false;
-  ports.notices.show("This is a review copy — scenes can be copied from it, not " + what + ".", "warn");
-  return true;
-}
-
 function writeScenes(cd, cut) {
   var ids = selectedSceneIds();
   var nonce = cut ? ports.nonce() : null;
@@ -221,16 +214,13 @@ function onCopyEvent(e) {
   pendingCut = false;
   e.preventDefault();
   e.stopImmediatePropagation();
-  var readOnly = ports.review.reviewing();
-  var w = writeScenes(e.clipboardData, cut && !readOnly);
+  var w = writeScenes(e.clipboardData, cut);
   clipWritten = w;
-  if (cut && !readOnly) {
+  if (cut) {
     afterCut(w);
     return;
   }
-  var msg = count(w.ids.length) + " copied";
-  if (cut && readOnly) msg = "This is a review copy — " + count(w.ids.length) + " copied, not cut";
-  announceLeftOut(msg, w.out.leftOut, readOnly && cut ? "warn" : "ok");
+  announceLeftOut(count(w.ids.length) + " copied", w.out.leftOut, "ok");
 }
 
 function announceLeftOut(msg, leftOut, kind) {
@@ -255,7 +245,6 @@ function runClipboardCommand(cut) {
   if (ok && clipWritten) return;
   var ids = selectedSceneIds();
   if (!ids.length || !navigator.clipboard) { ports.notices.show("Could not reach the clipboard.", "warn"); return; }
-  if (cut && refused("cut")) cut = false;
   var nonce = cut ? ports.nonce() : null;
   var out = buildScenePayload(ports.document.current(), ids, { cut: nonce });
   var write = typeof ClipboardItem === "function" && navigator.clipboard.write
@@ -281,7 +270,6 @@ function afterCut(w) {
 function runSceneCommand(command) {
   var outcome = ports.edits.run(command);
   if (outcome.kind === "failed") throw outcome.error;
-  if (outcome.kind === "rejected" && outcome.reason === ports.reviewRefusal) ports.notices.show(VIEWING_ONLY, "warn");
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
@@ -300,7 +288,7 @@ function takeOut(ids) {
 
 export function deleteSelectedScenes() {
   var ids = selectedSceneIds();
-  if (!ids.length || refused("deleted")) return;
+  if (!ids.length) return;
   closeSceneMenu();
   offerUndo(count(ids.length) + " deleted", takeOut(ids));
 }
@@ -317,17 +305,10 @@ function pasteClip(clip, afterRowId, opts) {
   opts = opts || {};
   ports.undo.breakCoalescing();
   var before = ports.undo.last();
-  var hold = ports.onServer();
-  var paste = scenePaste(clip, { afterRowId: afterRowId, holdComments: hold, title: opts.title, stamp: ports.stampRow });
+  var paste = scenePaste(clip, { afterRowId: afterRowId, title: opts.title, stamp: ports.stampRow });
   if (!runSceneCommand(pasteScenesCommand(paste))) return null;
   var res = paste.result();
   ports.undo.flush();
-  if (res.held.length) {
-    runSceneCommand(addHeldCommentsCommand(res.held));
-    ports.undo.flush();
-  } else if (hold) {
-    ports.saves.dueNow();
-  }
   ports.undo.breakCoalescing();
   ports.production.scheduleRefresh();
   if (!ports.writerOpen() && res.rowIds.length) {
@@ -353,7 +334,6 @@ export function pasteScenesAt(cd, cellEl) {
   if (!cd || !ports.document.current()) return false;
   var clip = scenesOnClipboard(function (t) { return cd.getData(t); });
   if (!clip) return false;
-  if (refused("pasted into")) return true;
   ports.cells.sync(cellEl);
   pasteClip(clip, cellEl.getAttribute("data-id"));
   return true;
@@ -365,7 +345,6 @@ function onPasteEvent(e) {
   if (!clip) return;
   e.preventDefault();
   e.stopImmediatePropagation();
-  if (refused("pasted into")) return;
   var ids = selectedSceneIds();
   pasteClip(clip, ids[ids.length - 1]);
 }
@@ -374,10 +353,6 @@ export function newScriptFromSelection() {
   var ids = selectedSceneIds();
   if (!ids.length) return;
   closeSceneMenu();
-  if (ports.review.reviewing()) {
-    ports.notices.show("This is a review copy — copy the scenes, then paste them into a new script.", "warn");
-    return;
-  }
   var source = ports.document.current();
   var title = source.title || "Untitled Script";
   var clip = parseScenePayload(buildScenePayload(source, ids).json);
@@ -447,14 +422,7 @@ export function openSceneMenu(x, y) {
   var ids = selectedSceneIds();
   if (!ids.length) return;
   var menu = ensureMenu();
-  var review = ports.review.reviewing();
   menu.setAttribute("aria-label", count(ids.length) + " selected");
-  Array.prototype.forEach.call(menu.querySelectorAll("[data-scene-action]"), function (b) {
-    var a = b.getAttribute("data-scene-action");
-    var off = review && a !== "copy";
-    b.disabled = off;
-    b.title = off ? "A review copy can only copy scenes" : "";
-  });
   menu.hidden = false;
   var w = menu.offsetWidth, h = menu.offsetHeight;
   menu.style.left = Math.max(8, Math.min(x, window.innerWidth - w - 8)) + "px";

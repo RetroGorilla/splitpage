@@ -142,33 +142,12 @@
 !macroend
 
 !macro customInstall
-  ; Create "Splitpage (shared session)" shortcut in Start Menu.
-  ;
-  ; "--pin" (no value) tells main.js to generate a random 6-digit PIN at
-  ; launch (see its own argHas/argValueOf handling) instead of leaving
-  ; JOIN_PIN empty. An empty JOIN_PIN makes server.js skip authentication
-  ; entirely (authRequired:false) — this shortcut starts the server bound to
-  ; 0.0.0.0 (HOSTING), so without a PIN, double-clicking it from the Start
-  ; Menu handed anyone on the LAN full read/write access to whatever
-  ; project is open, with nothing in the UI making that obvious (see
-  ; renderDesktopShareInfo() in src/js/20f-desktop.js, which now also warns
-  ; explicitly on the rare occasion a session really is PIN-less).
-  CreateDirectory "$SMPROGRAMS\Splitpage"
-  CreateShortCut "$SMPROGRAMS\Splitpage\Splitpage (shared session).lnk" \
-    "$INSTDIR\${APP_EXECUTABLE_FILENAME}" \
-    "--host --pin" \
-    "$INSTDIR\${APP_EXECUTABLE_FILENAME}" \
-    0 \
-    SW_SHOWNORMAL
-  DetailPrint "Created Splitpage (shared session) shortcut"
+  Delete "$SMPROGRAMS\Splitpage\Splitpage (shared session).lnk"
 !macroend
 
 !macro customUnInstall
-  ; Remove "Splitpage (shared session)" shortcut
   Delete "$SMPROGRAMS\Splitpage\Splitpage (shared session).lnk"
-  ; Try to remove the folder if empty
   RMDir "$SMPROGRAMS\Splitpage"
-  DetailPrint "Removed Splitpage (shared session) shortcut"
 !macroend
 
 ; --- Running-app check (replaces electron-builder's default) ---------------
@@ -222,8 +201,7 @@
 ;                                 its way out. After 5 s of that: the
 ;                                 "cannot be closed" Retry/Cancel box. Never /F.
 ;   no window at all           -> nothing can be asking. Allow 10 s to finish
-;                                 quitting (will-quit stops the document server
-;                                 and flushes drafts), then /F.
+;                                 quitting (will-quit flushes drafts), then /F.
 ;
 ; "Window" means a VISIBLE top-level window of class Chrome_WidgetWin_1 (every
 ; Electron BrowserWindow) or #32770 (MessageBox, Electron's TaskDialog, the
@@ -404,8 +382,7 @@
       ${endIf}
 
       ; No window at all, so nothing can be asking. Give quitting time to
-      ; finish, then force whatever is left (a stuck quit, an orphaned
-      ; document server).
+      ; finish, then force whatever is left (a stuck quit).
       ${if} $R0 >= ${SP_NOWINDOW_MS}
         DetailPrint `"${PRODUCT_NAME}" has no window open but is still running; ending it.`
         nsExec::Exec `"$CmdPath" /C taskkill /F /IM "${APP_EXECUTABLE_FILENAME}" /FI "USERNAME eq %USERNAME%"`

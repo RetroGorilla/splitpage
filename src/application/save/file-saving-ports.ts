@@ -3,7 +3,6 @@ import type { Clock, IdSource } from "../../core/document/ports.ts";
 import type { NoticePort } from "../effects/ports.ts";
 import type { FileDelivery } from "../files/file-delivery.ts";
 import type { DocumentLocation } from "../location/document-location.ts";
-import type { ServerStatus } from "../location/server-status.ts";
 import type { PictureStore } from "../media/picture-store.ts";
 import type { DocumentReader } from "../session/document-reader.ts";
 import type { Stamp } from "../session/document-session.ts";
@@ -59,8 +58,7 @@ export interface FileSavingPorts {
   readonly ids: Pick<IdSource, "docId">;
   readonly clock: Clock;
   readonly document: Pick<DocumentReader, "current"> & { readonly stamp: (stamp: Stamp) => unknown };
-  readonly location: Pick<DocumentLocation, "home" | "fileHome" | "setHome" | "amendHome" | "restoreHome" | "writtenOut" | "markWrittenOut" | "serverOf">;
-  readonly server: Pick<ServerStatus, "sessionExpired" | "linkTurnedOff">;
+  readonly location: Pick<DocumentLocation, "home" | "fileHome" | "setHome" | "amendHome" | "restoreHome" | "writtenOut" | "markWrittenOut">;
   readonly lastFile: { readonly remember: (handle: FileSaveHandle) => Promise<void> };
   readonly pictures: Pick<PictureStore, "ensureBytes">;
   readonly exports: Pick<ExportKit, "captureExportDocument">;

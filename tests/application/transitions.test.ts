@@ -1,7 +1,5 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createOperations } from "../../src/application/session/operation.ts";
-import type { OperationContext } from "../../src/application/session/operation.ts";
 import { createTransitions } from "../../src/application/transitions/transitions.ts";
 import type { Transitions } from "../../src/application/transitions/transitions.ts";
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
@@ -21,9 +19,6 @@ interface World {
   baseline: () => string | null;
   writtenOut: () => boolean;
   epoch: () => number;
-  capture: () => OperationContext;
-  setDestination: (d: Destination) => void;
-  setConnection: (c: object) => void;
 }
 
 const FILE: Destination = Object.freeze({ name: "file" });
@@ -38,19 +33,11 @@ function world(opened?: { doc: ValidatedDocument; writtenOut: boolean; destinati
   const migration = fakeMigration();
   const log: string[] = [];
   let live: ValidatedDocument | null = opened ? opened.doc : null;
-  let held: ValidatedDocument | null = live;
   let epoch = opened ? 1 : 0;
   let destination: Destination = opened ? opened.destination : NOWHERE;
   let baseline: string | null = opened ? JSON.stringify(opened.doc) : null;
   let writtenOut = opened ? opened.writtenOut : false;
-  let connection: object = {};
   let minted = 0;
-  const operations = createOperations({
-    session: { epoch: function () { return epoch; }, generation: function () { return 0; } },
-    document: { id: function () { return held ? held.docId : null; } },
-    destination: { identity: function () { return destination; }, generation: function () { return 0; }, revision: function () { return null; } },
-    connection: { current: function () { return connection; } }
-  });
   const transitions = createTransitions<Destination>({
     entry: function (raw) { log.push("entry"); return migrateRows(raw, migration.ports); },
     live: {
@@ -58,7 +45,6 @@ function world(opened?: { doc: ValidatedDocument; writtenOut: boolean; destinati
       assign: function (doc) {
         log.push("assign:" + doc.title);
         live = doc;
-        held = doc;
         epoch++;
       },
       stamp: function (task) {
@@ -83,8 +69,7 @@ function world(opened?: { doc: ValidatedDocument; writtenOut: boolean; destinati
         log.push("keep:" + label + ":" + (doc ? doc.title : (live ? live.title : "none")));
         return label === "not stored" ? null : { label: label };
       }
-    },
-    ownership: operations
+    }
   });
   return {
     transitions: transitions,
@@ -93,10 +78,7 @@ function world(opened?: { doc: ValidatedDocument; writtenOut: boolean; destinati
     destination: function () { return destination; },
     baseline: function () { return baseline; },
     writtenOut: function () { return writtenOut; },
-    epoch: function () { return epoch; },
-    capture: operations.capture,
-    setDestination: function (d) { destination = d; },
-    setConnection: function (c) { connection = c; }
+    epoch: function () { return epoch; }
   };
 }
 
@@ -190,50 +172,6 @@ test("INV-36: planning a fork changes neither the id nor the destination, so a c
   w.transitions.copyId();
   assert.deepEqual({ id: w.live()?.docId, destination: w.destination(), baseline: w.baseline() }, before);
   assert.deepEqual(w.log, []);
-});
-
-test("publish moves the open document to its new destination under the id it was published with", () => {
-  const w = opened(true, NOWHERE);
-  const ctx = w.capture();
-  const docId = w.transitions.copyId();
-  const accepted = scriptWith("Open", docId);
-  const outcome = w.transitions.publish(ctx, { destination: SERVER, docId: docId, baseline: accepted, reason: "what the server accepted" });
-  assert.deepEqual(outcome, { kind: "published", forkedFrom: idOf("1") });
-  assert.equal(w.live()?.docId, docId);
-  assert.equal(w.destination(), SERVER);
-  assert.equal(w.writtenOut(), true);
-  assert.deepEqual(w.log, ["destination:server", "baseline:Open:what the server accepted", "writtenOut:true"]);
-});
-
-test("publish of a document never written out keeps its id", () => {
-  const w = opened(false, NOWHERE);
-  const ctx = w.capture();
-  const docId = w.transitions.copyId();
-  assert.deepEqual(w.transitions.publish(ctx, { destination: SERVER, docId: docId, baseline: scriptWith("Open", docId), reason: "published" }), { kind: "published", forkedFrom: null });
-  assert.equal(w.live()?.docId, idOf("1"));
-});
-
-test("#247: a publish that lands after the document was replaced, reopened, moved or reconnected changes nothing", () => {
-  const cases: [string, (w: World) => void][] = [
-    ["replaced", function (w) { w.transitions.startNew({ from: { document: scriptWith("Other", idOf("8")) }, reason: "new" }); }],
-    ["reopened with the same id", function (w) { w.transitions.open({ from: { document: scriptWith("Open", idOf("1")) }, reason: "reopened" }); }],
-    ["given another destination", function (w) { w.setDestination(FILE); }],
-    ["on another connection instance", function (w) { w.setConnection({}); }]
-  ];
-  for (const [name, change] of cases) {
-    const w = opened(true, NOWHERE);
-    const ctx = w.capture();
-    const docId = w.transitions.copyId();
-    change(w);
-    const doc = w.live();
-    const before = { doc: JSON.stringify(doc), destination: w.destination(), baseline: w.baseline(), writtenOut: w.writtenOut() };
-    w.log.length = 0;
-    const outcome = w.transitions.publish(ctx, { destination: SERVER, docId: docId, baseline: scriptWith("Open", docId), reason: "late" });
-    assert.deepEqual(outcome, { kind: "obsolete" }, name);
-    assert.equal(w.live(), doc, name);
-    assert.deepEqual({ doc: JSON.stringify(w.live()), destination: w.destination(), baseline: w.baseline(), writtenOut: w.writtenOut() }, before, name);
-    assert.deepEqual(w.log, [], name);
-  }
 });
 
 test("a transition with keep snapshots the live document through the history port before it is replaced, and says so", () => {

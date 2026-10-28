@@ -140,9 +140,6 @@ expect __toasts() === 'Close the open dialog first.'
 eval __run('prompter-open-in-browser')
 sleep 300
 expect __toasts() === 'Close the open dialog first.'
-eval __run('server-publish')
-sleep 300
-expect __toasts() === 'Close the open dialog first.'
 eval __tidy()
 # a command its shortcut never refused still acts
 eval __run('toggle-rundown-min')

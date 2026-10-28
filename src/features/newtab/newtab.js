@@ -309,9 +309,8 @@ async function newTabEligibleForAutoShow() {
   var mounted = activeMount;
   if (newTabSuppressed()) return false;
   if (!ports.seedCheck.passes()) return false;
-  if (typeof ports.place.arrivingOnLink === "function" && ports.place.arrivingOnLink()) return false;
   if (ports.desktop() && ports.draftResume.restorePending()) return false;
-  if (ports.place.home().kind === "server" || ports.place.home().kind === "file") return false;
+  if (ports.place.home().kind === "file") return false;
   if (ports.desktop()) {
     if ((ports.launch.launchIntent() && ports.launch.launchIntent().type !== "blank") ||
         ports.launch.hasDraftToRestore()) return false;
@@ -349,7 +348,6 @@ export function startNewTab(given) {
       else if (action === "starter") startStarterScript(target.getAttribute("data-starter"));
       else if (action === "long-demo") startStarterScript("long-demo");
       else if (action === "open") newTabOpenFile();
-      else if (action === "join") ports.actions.invoke("servers", "button");
       else if (action === "paste") openPasteAsNewDocument();
       else if (action === "gdoc") ports.actions.invoke("show-gdoc-import", "button");
       else if (action === "dismiss") closeNewTabPage();
