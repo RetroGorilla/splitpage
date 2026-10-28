@@ -12,7 +12,11 @@ const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { cellEditing } = await import("../legacy/editor-bridge.ts");
 const { toggleCellFormat, maybeCueShortcut } = await import("../features/rows/render.js");
-const { undo, undoSizes, lastUndoEntry, flushEdits } = await import("../legacy/undo-bridge.ts");
+const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
+const undo = () => undoOwner().undo();
+const undoSizes = () => undoOwner().sizes();
+const lastUndoEntry = () => undoOwner().last();
+const flushEdits = () => undoOwner().flush();
 const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const { setMark } = await import("../core/text/edits.ts");
 const writer = await import("../features/writer/writer.js");

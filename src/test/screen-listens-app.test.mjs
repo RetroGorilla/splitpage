@@ -20,7 +20,10 @@ const { preferences, viewFlags } = await import("../legacy/preferences-bridge.ts
 const { documentLocation } = await import("../legacy/location-bridge.ts");
 const { setHideShotScenes } = await import("../bootstrap/wiring/hide-shot.ts");
 const { expandHiddenShotStrip } = await import("../bootstrap/wiring/hide-shot.ts");
-const { flushEdits, redo, undo } = await import("../legacy/undo-bridge.ts");
+const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
+const flushEdits = () => undoOwner().flush();
+const redo = () => undoOwner().redo();
+const undo = () => undoOwner().undo();
 const writer = await import("../features/writer/writer.js");
 
 after(closeApp);

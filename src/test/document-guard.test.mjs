@@ -12,7 +12,10 @@ const { DocumentWriteError, documentGuardOn, isDocumentView, quietly, rawOf } = 
 const { currentDocument, heldDocument, liveDocumentPort, liveSession, runDocumentEdit, sessionStamps } = await import("../legacy/session-bridge.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
-const { flushEdits, undo, undoSizes } = await import("../legacy/undo-bridge.ts");
+const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
+const flushEdits = () => undoOwner().flush();
+const undo = () => undoOwner().undo();
+const undoSizes = () => undoOwner().sizes();
 const { loadTestDocument } = await import("./_document.mjs");
 
 function shown() {

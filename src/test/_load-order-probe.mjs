@@ -53,7 +53,7 @@ const exports = await import("../bootstrap/wiring/export-registry.ts");
 const exportServices = await import("../application/export/services.ts");
 const projectFileServices = await import("../application/formats/project-file-services.ts");
 const shotHiding = await import("../bootstrap/wiring/shot-hiding.ts");
-const undo = await import("../legacy/undo-bridge.ts");
+const undo = await import("../bootstrap/wiring/undo.ts");
 const exportKit = await import("../bootstrap/wiring/export-capture.ts");
 const owners = {
   session: session.sessionStarted(),

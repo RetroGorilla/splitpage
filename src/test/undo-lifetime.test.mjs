@@ -3,11 +3,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
-import {
-  absorbRemoteChange, flushEdits, lastUndoEntry, noteEdit, noteRemoteChange, redo, resetUndo, trackDocument,
-  undo, undoLifetime, undoMark, undoSizes
-} from "../legacy/undo-bridge.ts";
+import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { loadTestDocument } from "./_document.mjs";
+const absorbRemoteChange = () => undoOwner().absorbRemote();
+const flushEdits = () => undoOwner().flush();
+const lastUndoEntry = () => undoOwner().last();
+const noteEdit = () => undoOwner().noteEdit();
+const noteRemoteChange = (next) => undoOwner().noteRemote(next);
+const redo = () => undoOwner().redo();
+const resetUndo = () => undoOwner().reset();
+const trackDocument = () => undoOwner().track();
+const undo = () => undoOwner().undo();
+const undoLifetime = () => undoOwner().lifetime();
+const undoMark = () => undoOwner().mark();
+const undoSizes = () => undoOwner().sizes();
 
 function doc(title) {
   return migrateRows({ schema: 2, title: title || "Lifetime", comments: [], rows: [

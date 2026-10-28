@@ -49,8 +49,7 @@ import type { SessionBridgePorts, SessionUndoPorts } from "../legacy/session-bri
 import type { RecordsReconciler } from "../application/production/broll-records.ts";
 import { captureOperation, documentSources, startTransitions, stillOwns } from "../legacy/transition-bridge.ts";
 import type { LegacyDocumentSource, LegacyTransitionPorts } from "../legacy/transition-bridge.ts";
-import { createUndoAdapter, routeReplays } from "../legacy/undo-adapter.ts";
-import { flushEdits, legacyUndoPorts, startUndo, undoSizes } from "../legacy/undo-bridge.ts";
+import { routeUndoReplays, startUndo, undoOwner, undoPorts, undoSessionPort } from "./wiring/undo.ts";
 
 export interface WiringDeps {
   readonly entry: DocumentEntry;
@@ -309,7 +308,7 @@ const SYSTEM_TIMERS: TimerPort = Object.freeze({
   stop: function (handle: unknown) { clearTimeout(handle as number); }
 });
 
-const LEGACY_UNDO: Omit<SessionUndoPorts, "adapter"> = Object.freeze({ route: routeReplays });
+const LEGACY_UNDO: Omit<SessionUndoPorts, "adapter"> = Object.freeze({ route: routeUndoReplays });
 
 function reportError(error: unknown): void {
   console.error(error);
@@ -321,7 +320,7 @@ export function legacySessionPorts(deps: SessionPortDeps): SessionBridgePorts {
   const effects = deps.effects;
   return Object.freeze({
     entry: function (raw: unknown) { return deps.entry(raw); },
-    undo: deps.undo ?? Object.freeze({ adapter: createUndoAdapter(), ...LEGACY_UNDO }),
+    undo: deps.undo ?? Object.freeze({ adapter: undoSessionPort(), ...LEGACY_UNDO }),
     effects: Object.freeze({
       dirty: function (change: SessionChange) { effects.dirty(change); },
       draft: function (change: SessionChange) { effects.draft(change); },
@@ -389,8 +388,8 @@ export function wireApp(deps: WiringDeps): Wiring {
   const exports = build("export registry", () => createExportRegistry(), installExportFormats);
   build("built-in exporters", () => checkedExporters((deps.exporters ?? registerBuiltInExporters)(exports)), (drop) => drop);
   build("undo", () => {
-    const stop = startUndo(legacyUndoPorts());
-    Object.assign(window, { __undoTest: { sizes: undoSizes, flush: flushEdits } });
+    const stop = startUndo(undoPorts());
+    Object.assign(window, { __undoTest: { sizes: () => undoOwner().sizes(), flush: () => { undoOwner().flush(); } } });
     return stop;
   }, (stop) => stop);
   build("session", () => {

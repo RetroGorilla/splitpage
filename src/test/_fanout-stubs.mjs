@@ -2,8 +2,9 @@ import { viewFlags } from "../legacy/preferences-bridge.ts";
 import { currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import { productionReaders as documentReaders } from "../legacy/document-ports.ts";
 import { hasSetLength as coreHasSetLength } from "../core/document/timing.ts";
-import { noteEdit } from "../legacy/undo-bridge.ts";
+import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { startTestSession } from "./_session.mjs";
+const noteEdit = () => undoOwner().noteEdit();
 
 export function wireSession(effects) {
   const given = Object.assign({

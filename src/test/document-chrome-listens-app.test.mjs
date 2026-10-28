@@ -11,7 +11,8 @@ const { documentLocation, setHome, amendHome, currentHome } = await import("../l
 const { preferences, viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { autoSavePolicy, confirmSavedNow, noteSaveChange, onSaveChange } = await import("../legacy/save-bridge.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { flushEdits } = await import("../legacy/undo-bridge.ts");
+const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
+const flushEdits = () => undoOwner().flush();
 const { titleCommand } = await import("../application/commands/title.ts");
 const { mountDocumentChromeFeature, stopDocumentChromeFeature } = await import("../bootstrap/wiring/document-chrome.ts");
 const writer = await import("../features/writer/writer.js");

@@ -13,7 +13,8 @@ const { amendHome, currentHome, setHome } = await import("../legacy/location-bri
 const { preferences } = await import("../legacy/preferences-bridge.ts");
 const { autoSavePolicy, confirmSavedNow, saveDoc, unsavedChanges } = await import("../legacy/save-bridge.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { flushEdits } = await import("../legacy/undo-bridge.ts");
+const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
+const flushEdits = () => undoOwner().flush();
 const { titleCommand } = await import("../application/commands/title.ts");
 const { toggleFileMenu } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { loadTestDocument } = await import("./_document.mjs");

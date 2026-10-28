@@ -17,7 +17,12 @@ const { render } = await import("../features/rows/render.js");
 const { cellEditing } = await import("../legacy/editor-bridge.ts");
 const { cellSelection } = await import("../features/common/cell-selection.ts");
 const { armDeleteComment } = await import("../features/comments/comments.js");
-const { undo, redo, undoSizes, lastUndoEntry, flushEdits } = await import("../legacy/undo-bridge.ts");
+const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
+const undo = () => undoOwner().undo();
+const redo = () => undoOwner().redo();
+const undoSizes = () => undoOwner().sizes();
+const lastUndoEntry = () => undoOwner().last();
+const flushEdits = () => undoOwner().flush();
 const { openDocument } = await import("../legacy/transition-bridge.ts");
 
 after(closeApp);

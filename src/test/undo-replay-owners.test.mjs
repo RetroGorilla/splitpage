@@ -3,11 +3,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { flushEdits, noteEdit, redo, undo } from "../legacy/undo-bridge.ts";
+import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { applyStepsLive, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";
 import { invertSteps } from "../core/text/steps.ts";
 import { loadTestDocument } from "./_document.mjs";
+const flushEdits = () => undoOwner().flush();
+const noteEdit = () => undoOwner().noteEdit();
+const redo = () => undoOwner().redo();
+const undo = () => undoOwner().undo();
 
 const clone = (v) => JSON.parse(JSON.stringify(v));
 const person = (id, name) => ({ id, name });
