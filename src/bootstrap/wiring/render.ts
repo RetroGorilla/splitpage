@@ -1,7 +1,6 @@
 import { owned } from "../../features/routing/owned.ts";
 import { startRowsRender } from "../../features/rows/render.js";
 import type { RowsRenderPorts } from "../../features/rows/render-ports.ts";
-import { handRowFormattingTo } from "../../legacy/row-formatting.ts";
 import { documentReader } from "./ports/document.ts";
 import { edits, renderEditing, renderDraft, renderUndo } from "./ports/editing.ts";
 import { text, video } from "./ports/text.ts";
@@ -26,7 +25,7 @@ export function mountRowsRenderFeature() {
       deletes: renderDeletes, tagPanel: tagPanelState, ids, production: renderProduction
     };
     return startRowsRender(ports);
-  }, (owner) => [() => { handRowFormattingTo(owner); return () => { handRowFormattingTo(null); }; }]);
+  });
 }
 
 export const stopRowsRenderFeature = render.stop;

@@ -2,7 +2,6 @@ import * as productionTags from "../../features/tags/production-tags.js";
 import type { ProductionTagPorts } from "../../features/tags/ports.ts";
 import { tagComposerActions as composerDefinitions } from "../../features/tags/actions.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { handTagProductionTo } from "../../legacy/tag-production.ts";
 import { documentReader, refresh, stamping } from "./ports/document.ts";
 import { edits, tagEditing, undoControl } from "./ports/editing.ts";
 import { text } from "./ports/text.ts";
@@ -27,7 +26,6 @@ export function mountProductionTagsFeature() {
 export const stopProductionTagsFeature = production.stop;
 
 export function wireTagProduction() {
-  handTagProductionTo(productionTags);
   return {
     refresh: (jobs: ReadonlySet<string>) => { production.owner()?.refresh(jobs); },
     bulkCell: productionTags.bulkTagCell,

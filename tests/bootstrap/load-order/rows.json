@@ -13,8 +13,7 @@
     "src/features/gallery/video-files.js",
     "src/bootstrap/wiring/video-files.ts",
     "src/features/rows/render.js",
-    "src/bootstrap/wiring/render.ts",
-    "src/legacy/row-formatting.ts"
+    "src/bootstrap/wiring/render.ts"
   ],
-  "expectedLoads": 14
+  "expectedLoads": 13
 }
