@@ -58,6 +58,12 @@
       "replace": "const clean = String(text);\n  const ins"
     },
     {
+      "label": "edits-replace-atom-marks",
+      "file": "src/core/text/edits.ts",
+      "find": "const marks = first.atom ? typingMarks(cell, from) : first.marks;",
+      "replace": "const marks = first.marks;"
+    },
+    {
       "label": "edits-broll-key-end",
       "file": "src/core/text/edits.ts",
       "find": "end: r.from + 1 };",

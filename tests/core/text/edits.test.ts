@@ -396,6 +396,11 @@ test("replaceText over a key takes the typing marks, so a link or comment on the
   assert.deepEqual(replaceText(cell, 2, 3, "q"), [T("a q z")]);
 });
 
+test("replaceText over a key reads the typing marks from the cell before the key is removed", () => {
+  assert.deepEqual(replaceText([B("bs1", "B-roll:", { b: true }), T("z")], 0, 1, "q"), [T("q", { b: true }), T("z")]);
+  assert.deepEqual(replaceText([T("a", { dir: true }), B("bs1"), T("b", { dir: true })], 1, 2, "q"), [T("a", { dir: true }), T("q"), T("b", { dir: true })]);
+});
+
 test("markThroughout ignores line breaks in the range", () => {
   const cell = [T("a", { b: true }), T("\n"), T("b", { b: true })];
   assert.equal(markThroughout(cell, 0, 3, "b"), true);
