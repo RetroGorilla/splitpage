@@ -142,7 +142,7 @@ An `obsolete` outcome calls the report port's `obsolete(request, here)`. A run t
 
 `S.baseState` and the Save buttons are projections that legacy readers still read. The coordinator is the owner; the projection is written by `clearDirty`, `setBaseState` and the dirty effect. The unsaved flag, the change count and the busy state have no copy (L3b PR 1).
 
-### The save ports (`savePorts` in `application/save/file-saving.js`)
+### The save ports (`savePorts` in `application/save/file-saving.ts`)
 
 | Port | In the app |
 | --- | --- |
@@ -166,7 +166,7 @@ A destination is `{ id, takes(request, place), autoSaveTarget(place), write(job)
 
 | Destination | Takes | Autosave target |
 | --- | --- | --- |
-| `file` (`destination()` of the file-saving owner, `application/save/file-saving.js`) | `saveAs`, `save`, `auto`, `autosave` and `force` | `autoSaveWhere` with the file home |
+| `file` (`destination()` of the file-saving owner, `application/save/file-saving.ts`) | `saveAs`, `save`, `auto`, `autosave` and `force` | `autoSaveWhere` with the file home |
 | `import` (`importSaveDestination` in `bootstrap/wiring/local-files.ts`) | `writeback` and `writebackForce` | none: an import never autosaves |
 
 The built-ins never take the same request, so their order does not matter. A destination registered later (in a test, or a future cloud drive) is asked before them. `src/test/save-destinations-app.test.mjs` registers a throwaway destination in the booted app and saves through Save As, then Save and autosave to the place it chose, with no other change.
@@ -179,7 +179,7 @@ The file check is `checkFileConflict(handle, lastModified)` in `src/adapters/fil
 
 ### The file writer (4.11, 4.13)
 
-`writeDoc` (`application/save/file-saving.js`) writes files, Save As and downloads, over `src/adapters/files/file-target.ts` and the save dialogs in `src/adapters/files/save-dialogs.ts`, reached through the owner's `files` port.
+`writeDoc` (`application/save/file-saving.ts`) writes files, Save As and downloads, over `src/adapters/files/file-target.ts` and the save dialogs in `src/adapters/files/save-dialogs.ts`, reached through the owner's `files` port.
 
 - **The port.** A `FileHandle` is `{ name, createWritable() → { write, close }, getFile() → { lastModified } }`. `pickTarget(dialogs)` asks the desktop dialog, else the browser picker, else answers a download; an abort or an empty dialog is `cancelled`. `existingTarget(handle)` is Save's own file. `writeToHandle(handle, body)` writes, closes and returns the file's `lastModified`. If `close()` resolves `{ lastModified }` the writer uses that and does not call `getFile()`; otherwise it reads `getFile()` once.
 - **The desktop shim.** `makeDesktopHandle` (`src/adapters/desktop/desktop-handle.ts`, through the desktop port) resolves `close()` with the `lastModified` that `splitpage:write-file` answered (main stats the file right after `atomicWrite`), so on the desktop the baseline timestamp is the write's own and the second read is gone (F8). A missing or non-finite stamp falls back to `getFile()`. Main still has a short window between the atomic write and its stat.
