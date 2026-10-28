@@ -9,7 +9,7 @@ await bootApp();
 after(closeApp);
 
 const { exportFormats } = await import("../bootstrap/wiring/export-registry.ts");
-const { commandResults } = await import("../features/command-menu/command-menu.js");
+const { commandResults } = await import("../features/command-menu/command-menu.ts");
 const { localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");
 const {
   closeExportDialog, exportAgain, exportAgainItemState, exportActionReason, exportFileNameFor, exportSummary, lastExportAction,

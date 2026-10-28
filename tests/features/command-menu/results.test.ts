@@ -2,7 +2,7 @@ import { captureExportDocument } from "../../../src/bootstrap/wiring/export-capt
 import "../../../src/test/_dom.mjs";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
-import { commandResults } from "../../../src/features/command-menu/command-menu.js";
+import { commandResults } from "../../../src/features/command-menu/command-menu.ts";
 import { appActions } from "../../../src/legacy/app-actions.ts";
 import { wireRegistries } from "../../../src/test/_registries.mjs";
 import { mountFileMenuExportFeature, stopFileMenuExportFeature } from "../../../src/bootstrap/wiring/file-menu-export.ts";
