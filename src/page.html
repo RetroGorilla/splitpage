@@ -130,22 +130,13 @@
               <div class="menu-group-head" id="fm-g-new">New &amp; open</div>
               <button type="button" role="menuitem" class="mi" data-file-action="new" title="An empty script in this tab — the one on screen goes into Version history first"><svg class="mi-icon" aria-hidden="true"><use href="#i-file-plus"/></svg><span class="mi-text"><span class="mi-label">New script</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi" data-file-action="open" data-keys="mod+o"><svg class="mi-icon" aria-hidden="true"><use href="#i-folder"/></svg><span class="mi-text"><span class="mi-label">Open…</span><span class="mi-why" hidden></span></span></button>
-              <button type="button" role="menuitem" class="mi" data-file-action="server-open" id="menu-server-open" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-server"/></svg><span class="mi-text"><span class="mi-label">Open from the server…</span><span class="mi-why" hidden></span></span></button>
               <button type="button" role="menuitem" class="mi mi-parent" data-submenu="recent" id="menu-recent" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-sub-recent" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-clock"/></svg><span class="mi-text"><span class="mi-label">Open recent</span></span><svg class="mi-chevron" aria-hidden="true"><use href="#i-chevron"/></svg></button>
               <div class="menu-sub" id="menu-sub-recent" role="menu" aria-label="Open recent" hidden></div>
               <button type="button" role="menuitem" class="mi mi-parent" data-submenu="import" id="menu-import" aria-haspopup="menu" aria-expanded="false" aria-controls="menu-sub-import"><svg class="mi-icon" aria-hidden="true"><use href="#i-import"/></svg><span class="mi-text"><span class="mi-label">Import</span></span><svg class="mi-chevron" aria-hidden="true"><use href="#i-chevron"/></svg></button>
               <div class="menu-sub" id="menu-sub-import" role="menu" aria-label="Import" hidden>
                 <button type="button" role="menuitem" class="mi" data-file-action="paste" title="Brings a revised draft into this document — its breakdown, cast, b-roll and comments all stay"><svg class="mi-icon" aria-hidden="true"><use href="#i-clipboard"/></svg><span class="mi-text"><span class="mi-label">Paste a script…</span><span class="mi-why" hidden></span></span></button>
                 <button type="button" role="menuitem" class="mi" data-file-action="gdoc-import"><svg class="mi-icon" aria-hidden="true"><use href="#i-link"/></svg><span class="mi-text"><span class="mi-label">Google Doc link…</span><span class="mi-why" hidden></span></span></button>
-                <button type="button" role="menuitem" class="mi" data-file-action="drive-open" id="menu-drive-open"><svg class="mi-icon" aria-hidden="true"><use href="#i-cloud"/></svg><span class="mi-text"><span class="mi-label">Google Drive…</span><span class="mi-why" hidden></span></span></button>
               </div>
-            </div>
-
-            <div class="menu-group" role="group" aria-labelledby="fm-g-share" data-menu-group="share">
-              <div class="menu-group-head" id="fm-g-share">Share</div>
-              <button type="button" role="menuitem" class="mi" data-file-action="collaborate" id="menu-collaborate" title="Stores this script on your collaboration server and gives you two links to send: one to edit it, one to comment on it."><svg class="mi-icon" aria-hidden="true"><use href="#i-people"/></svg><span class="mi-text"><span class="mi-label">Collaborate…</span><span class="mi-why" hidden></span></span></button>
-              <button type="button" role="menuitem" class="mi" data-file-action="server-publish" id="menu-server-new" hidden><svg class="mi-icon" aria-hidden="true"><use href="#i-cloud-up"/></svg><span class="mi-text"><span class="mi-label">Put this script on the server</span><span class="mi-why" hidden></span></span></button>
-              <button type="button" role="menuitem" class="mi" data-file-action="servers" id="menu-servers"><svg class="mi-icon" aria-hidden="true"><use href="#i-globe"/></svg><span class="mi-text"><span class="mi-label">Servers…</span><span class="mi-why" hidden></span></span></button>
             </div>
 
             <div class="menu-group" role="group" aria-labelledby="fm-g-export" data-menu-group="export">
@@ -207,7 +198,6 @@
           <button class="btn panel-toggle" id="btn-broll" type="button" aria-pressed="false" title="B-roll: start a line in the visual column with B-roll: and it lands on this list"><svg class="btn-icon" aria-hidden="true"><use href="#i-camera"/></svg><span class="btn-label">B-roll</span><span class="comments-badge broll-badge" id="broll-badge" hidden>0</span></button>
           <button class="btn panel-toggle" id="btn-comments" type="button" aria-pressed="false" title="Comments"><svg class="btn-icon" aria-hidden="true"><use href="#i-comment"/></svg><span class="btn-label">Comments</span><span class="comments-badge" id="comments-badge" hidden>0</span></button>
         </div>
-        <button class="btn btn-mode btn-collab" id="btn-collab" type="button" aria-label="Collaborate — invite people to this script" title="Collaborate — invite people to this script"><svg class="btn-icon" aria-hidden="true"><use href="#i-people"/></svg><span class="btn-label">Collab</span></button>
         <button class="btn btn-mode" id="btn-write" type="button" title="Write the narration as one flowing document"><svg class="btn-icon" aria-hidden="true"><use href="#i-pen"/></svg><span class="btn-label">Write</span></button>
         <button class="btn btn-accent" id="btn-present" type="button"><span class="tally-dot" aria-hidden="true"></span><svg class="btn-icon btn-phone-icon" aria-hidden="true"><use href="#i-present"/></svg>Present</button>
       </div>
@@ -442,8 +432,6 @@
       </div>
     </div>
     <div class="export-foot">
-      <p class="export-note">Exports are copies. To work on one live script together, use
-        <button type="button" class="export-note-link" id="export-share-link">Collaborate…</button></p>
       <div class="modal-footer-actions">
         <button type="button" class="btn" id="export-cancel">Cancel</button>
         <button type="button" class="btn btn-accent" id="export-go">Export</button>
@@ -844,106 +832,6 @@
   </div>
 </div>
 
-<div class="modal-backdrop" id="server-modal" hidden>
-  <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="server-title">
-    <div class="modal-header">
-      <h2 id="server-title">Documents on the server</h2>
-      <button type="button" class="modal-close" id="server-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
-    </div>
-    <p class="modal-hint">Everyone who can reach this page sees the same documents. Saving publishes
-      straight back, and if two of you edit at once the versions are merged rather than one
-      overwriting the other.</p>
-    <div class="server-doc-list" id="server-doc-list"></div>
-    <div class="modal-footer">
-      <span></span>
-      <div class="modal-footer-actions">
-        <button type="button" class="btn" id="server-cancel">Close</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="modal-backdrop" id="drive-modal" hidden>
-  <div class="modal-panel drive-panel" role="dialog" aria-modal="true" aria-labelledby="drive-title">
-    <div class="modal-header">
-      <h2 id="drive-title">Google Drive files</h2>
-      <button type="button" class="modal-close" id="drive-close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
-    </div>
-    <p class="modal-hint" id="drive-web-hint">Browse, upload, rename, and delete files in any publicly shared Google
-      Drive folder, straight from here — separate from opening and saving your script.</p>
-    <p class="modal-hint" id="drive-desktop-hint" hidden>Browse your Google Drive, download files to this
-      computer and upload files to it — separate from opening and saving your script. You sign in once, in
-      your own browser; Splitpage keeps the sign-in, never your password.</p>
-
-    <div id="drive-desktop-setup" hidden>
-      <p class="modal-hint">Google Drive needs a Google Cloud <strong>OAuth client ID</strong> of type
-        <strong>Desktop app</strong>, with the Google Drive API enabled. Put it in a file at</p>
-      <p class="drive-desktop-path"><code id="drive-desktop-client-path"></code></p>
-      <p class="modal-hint">— the JSON file Google Cloud Console lets you download for the client works as it
-        is, or write <code>{"client_id": "…", "client_secret": "…"}</code> — or set the environment variables
-        <code id="drive-desktop-env-vars"></code> before starting Splitpage. Then open this again.
-        File ▸ Help, under “Google Drive files”, has the steps.</p>
-    </div>
-
-    <div id="drive-setup">
-      <p class="modal-hint">Google requires a project of your own for this: an <strong>API key</strong>
-        to read a public folder, and an <strong>OAuth Client ID</strong> to make changes to it. Both are
-        free, and only ever leave this browser to talk to Google's own APIs.</p>
-      <ol class="drive-setup-steps">
-        <li>Open <a href="https://console.cloud.google.com/apis/library/drive.googleapis.com" target="_blank" rel="noopener">Google Cloud Console</a> and enable the <strong>Google Drive API</strong> for a project (create one if needed).</li>
-        <li>Under <strong>APIs &amp; Services ▸ Credentials</strong>, create an <strong>API key</strong> and paste it below.</li>
-        <li>Also create an <strong>OAuth client ID</strong> (type: Web application), add this page's address as an <strong>Authorized JavaScript origin</strong>, and paste that Client ID below too.</li>
-      </ol>
-      <div class="drive-field">
-        <label for="drive-api-key">API key</label>
-        <input type="text" id="drive-api-key" placeholder="AIza…" autocomplete="off" spellcheck="false">
-      </div>
-      <div class="drive-field">
-        <label for="drive-client-id">OAuth Client ID</label>
-        <input type="text" id="drive-client-id" placeholder="123456…apps.googleusercontent.com" autocomplete="off" spellcheck="false">
-      </div>
-      <div class="modal-row">
-        <span></span>
-        <button type="button" class="btn btn-accent" data-action="drive-save-creds">Save</button>
-      </div>
-    </div>
-
-    <div id="drive-main" hidden>
-      <div class="modal-row drive-account" id="drive-account"></div>
-      <div class="drive-connect-row">
-        <input type="text" id="drive-folder-input" aria-label="Google Drive folder link or ID" placeholder="Paste a Drive folder link or ID…" autocomplete="off" spellcheck="false">
-        <button type="button" class="btn btn-accent" id="drive-connect-btn" data-action="drive-connect">Open folder</button>
-      </div>
-      <button type="button" class="drive-edit-creds" data-action="drive-edit-creds">Change API key / Client ID…</button>
-
-      <div id="drive-browser" hidden>
-        <div class="drive-toolbar">
-          <div class="drive-breadcrumb" id="drive-breadcrumb"></div>
-          <div class="drive-toolbar-actions">
-            <button type="button" class="btn drive-refresh" data-action="drive-refresh" title="Refresh" aria-label="Refresh"><svg aria-hidden="true" focusable="false"><use href="#i-repeat"/></svg></button>
-            <button type="button" class="btn" data-action="drive-newfolder-toggle" id="drive-newfolder-toggle">New folder</button>
-            <button type="button" class="btn" data-action="drive-upload">Upload…</button>
-          </div>
-        </div>
-        <div class="drive-newfolder-row" id="drive-newfolder-row" hidden>
-          <input type="text" id="drive-newfolder-input" placeholder="Folder name…">
-          <button type="button" class="btn btn-accent" data-action="drive-newfolder-create">Create</button>
-          <button type="button" class="btn" data-action="drive-newfolder-cancel">Cancel</button>
-        </div>
-        <div class="drive-list" id="drive-list"></div>
-      </div>
-    </div>
-
-    <div class="modal-footer">
-      <span></span>
-      <div class="modal-footer-actions">
-        <button type="button" class="btn" id="drive-done">Close</button>
-      </div>
-    </div>
-  </div>
-</div>
-<input type="file" id="drive-upload-input" hidden multiple>
-
 <div class="modal-backdrop" id="tag-modal" hidden>
   <div class="modal-panel tag-panel" role="dialog" aria-modal="true" aria-labelledby="tag-title">
     <div class="modal-header">
@@ -1068,102 +956,6 @@
   </div>
 </div>
 
-<div class="modal-backdrop" id="pin-modal" hidden>
-  <div class="modal-panel pin-panel" role="dialog" aria-modal="true" aria-labelledby="pin-title">
-    <div class="modal-header">
-      <h2 id="pin-title">Join PIN or key</h2>
-      <button type="button" class="modal-close" data-connect-action="pin-cancel" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
-    </div>
-    <p class="modal-hint" id="pin-reason">This server asks for its join PIN or key.</p>
-    <input type="text" id="pin-input" autocomplete="off" autocapitalize="off"
-           spellcheck="false" placeholder="Join PIN or key" aria-labelledby="pin-title">
-    <div class="connect-error" id="pin-error" hidden></div>
-    <label class="connect-check"><input type="checkbox" id="pin-remember">
-      Remember this code on this device</label>
-    <p class="modal-hint connect-caveat">The code is checked by the computer hosting the session,
-      but it travels in the clear over plain HTTP — fine on your own network, not over the
-      internet.</p>
-    <div class="modal-footer">
-      <span></span>
-      <div class="modal-footer-actions">
-        <button type="button" class="btn" data-connect-action="pin-cancel">Cancel</button>
-        <button type="button" class="btn btn-accent" data-connect-action="pin-submit">Join</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div class="modal-backdrop" id="connect-modal" hidden>
-  <div class="modal-panel connect-panel" role="dialog" aria-modal="true" aria-labelledby="connect-title">
-    <div class="modal-header">
-      <h2 id="connect-title">Servers</h2>
-      <button type="button" class="modal-close" data-connect-action="close" aria-label="Close"><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
-    </div>
-    <p class="modal-hint">A server is someone's shared session — theirs or your own. Add its
-      address once and this browser remembers it. Splitpage never stores a password or an SSH
-      key; a join PIN is kept only for as long as this tab is open unless you ask otherwise.</p>
-
-    <div class="connect-current" id="connect-current"></div>
-    <div class="connect-current" id="desktop-share-info" hidden></div>
-    <div class="connect-current" id="connect-review" hidden></div>
-    <div class="connect-list" id="connect-list"></div>
-
-    <div class="connect-add">
-      <div class="connect-add-title">Add a server</div>
-      <label class="connect-field"><span>Name</span>
-        <input type="text" id="connect-name" placeholder="Studio Mac" autocomplete="off"></label>
-      <label class="connect-field"><span>Address</span>
-        <input type="text" id="connect-url" placeholder="http://192.168.1.20:8791/"
-               autocomplete="off" spellcheck="false"></label>
-      <label class="connect-field"><span>Join PIN</span>
-        <input type="text" id="connect-pin" placeholder="only if they gave you one"
-               inputmode="numeric" autocomplete="off"></label>
-      <label class="connect-check"><input type="checkbox" id="connect-remember">
-        Remember the PIN on this device</label>
-
-      <label class="connect-check"><input type="checkbox" id="connect-ssh-toggle">
-        Reach it over SSH (a tunnel from this computer)</label>
-      <div class="connect-ssh-fields" id="connect-ssh-fields" hidden>
-        <label class="connect-field"><span>SSH login</span>
-          <input type="text" id="connect-ssh-userhost" placeholder="me@studio.example.com"
-                 autocomplete="off" spellcheck="false"></label>
-        <label class="connect-field"><span>Port there</span>
-          <input type="text" id="connect-ssh-remote" placeholder="8791" inputmode="numeric"></label>
-        <label class="connect-field"><span>Port here</span>
-          <input type="text" id="connect-ssh-local" placeholder="8791" inputmode="numeric"></label>
-        <p class="modal-hint">The address above should then be
-          <code>http://localhost:&lt;port here&gt;/</code>. Splitpage does not run ssh for you and
-          keeps no key or password — it writes the command out for you to run.</p>
-      </div>
-
-      <div class="connect-error" id="connect-error" hidden></div>
-      <div class="modal-row">
-        <span></span>
-        <button type="button" class="btn btn-accent" data-connect-action="add">Add server</button>
-      </div>
-    </div>
-
-    <div class="connect-ssh-out" id="connect-ssh-out" hidden>
-      <div class="connect-add-title">Open the tunnel first</div>
-      <pre class="connect-cmd" id="connect-ssh-cmd"></pre>
-      <div class="modal-row">
-        <span class="modal-hint" id="connect-ssh-note"></span>
-        <span class="modal-footer-actions">
-          <button type="button" class="btn" data-connect-action="ssh-copy">Copy</button>
-          <button type="button" class="btn" data-connect-action="ssh-save">Save a .cmd</button>
-        </span>
-      </div>
-    </div>
-
-    <div class="modal-footer">
-      <button type="button" class="btn" data-connect-action="back">Back to this copy</button>
-      <div class="modal-footer-actions">
-        <button type="button" class="btn" data-connect-action="close">Close</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <div class="newtab-page" id="newtab-page" hidden>
   <header class="newtab-bar">
     <span class="newtab-wordmark">
@@ -1171,10 +963,6 @@
       Splitpage
     </span>
     <div class="newtab-bar-actions">
-      <button type="button" class="btn-outline newtab-bar-btn" data-newtab-action="join" aria-label="Join a shared session">
-        <svg class="nt-icon" aria-hidden="true"><use href="#i-people"/></svg>
-        <span>Join<span class="newtab-long"> a shared session</span></span>
-      </button>
       <button type="button" class="btn-outline newtab-bar-btn is-primary" data-newtab-action="open" aria-label="Open a file">
         <svg class="nt-icon" aria-hidden="true"><use href="#i-folder"/></svg>
         <span>Open<span class="newtab-long"> a file…</span></span>
@@ -1227,14 +1015,6 @@
           </div>
           <div class="newtab-recents-list" id="newtab-recents-list"></div>
         </section>
-
-        <section class="newtab-join" aria-labelledby="newtab-join-title">
-          <div class="newtab-join-copy">
-            <h3 class="newtab-join-title" id="newtab-join-title">Join a shared session</h3>
-            <p class="newtab-join-text">Open the link you were sent, or connect to a server with its PIN.</p>
-          </div>
-          <button type="button" class="btn-outline newtab-join-btn" data-newtab-action="join">Connect…</button>
-        </section>
       </div>
 
       <div class="newtab-drop" id="newtab-drop">
@@ -1272,7 +1052,6 @@
       <span class="onboard-dot" data-step="1"></span>
       <span class="onboard-dot" data-step="2"></span>
       <span class="onboard-dot" data-step="3"></span>
-      <span class="onboard-dot" data-step="4"></span>
     </div>
 
     <div class="onboard-panel-body">
@@ -1286,67 +1065,13 @@
       </section>
 
       <section class="onboard-step" data-onboard-step="2">
-        <div id="onboard-install-body">
-          <p class="modal-hint">Checking how this copy was started…</p>
-        </div>
+        <div id="onboard-install-body"></div>
       </section>
 
       <section class="onboard-step" data-onboard-step="3">
-        <p class="modal-hint">How will you be working?</p>
-        <div class="onboard-cards" id="onboard-work-cards">
-          <button type="button" class="onboard-card" data-onboard-work="solo" aria-pressed="false">
-            <strong>Just me</strong>
-            <span>Nothing to set up — save files wherever you like.</span>
-          </button>
-          <button type="button" class="onboard-card" data-onboard-work="host" aria-pressed="false">
-            <strong>Host for others on my network</strong>
-            <span>Share a session with a join PIN over your LAN.</span>
-          </button>
-          <button type="button" class="onboard-card" data-onboard-work="join" aria-pressed="false">
-            <strong>Join a server</strong>
-            <span>Connect to a session someone else is hosting.</span>
-          </button>
-        </div>
-
-        <div class="onboard-work-panel" id="onboard-host-panel" hidden>
-          <p class="modal-hint">Run this from the folder Splitpage is in, then share the
-            address it prints, along with the PIN, with whoever is joining. This travels
-            in the clear over plain HTTP — fine on your own network, not over the
-            internet.</p>
-          <pre class="connect-cmd" id="onboard-host-cmd">start.bat --host --pin</pre>
-          <div class="modal-row">
-            <span></span>
-            <span class="modal-footer-actions">
-              <button type="button" class="btn" data-onboard-action="host-copy">Copy</button>
-              <button type="button" class="btn" data-onboard-action="host-save">Save a .cmd</button>
-            </span>
-          </div>
-        </div>
-
-        <div class="onboard-work-panel" id="onboard-join-panel" hidden>
-          <label class="connect-field"><span>Name</span>
-            <input type="text" id="onboard-join-name" placeholder="Studio Mac" autocomplete="off"></label>
-          <label class="connect-field"><span>Address</span>
-            <input type="text" id="onboard-join-url" placeholder="http://192.168.1.20:8791/"
-                   autocomplete="off" spellcheck="false"></label>
-          <label class="connect-field"><span>Join PIN</span>
-            <input type="text" id="onboard-join-pin" placeholder="only if they gave you one"
-                   inputmode="numeric" autocomplete="off"></label>
-          <label class="connect-check"><input type="checkbox" id="onboard-join-remember">
-            Remember the PIN on this device</label>
-          <div class="connect-error" id="onboard-join-error" hidden></div>
-          <div class="modal-row">
-            <span class="modal-hint">Need SSH, or more than one server?
-              <a href="#" data-onboard-action="open-servers">Servers…</a></span>
-            <button type="button" class="btn btn-accent" data-onboard-action="join-submit">Join</button>
-          </div>
-        </div>
-      </section>
-
-      <section class="onboard-step" data-onboard-step="4">
         <p class="modal-hint">That's it — Splitpage saves your scripts as Markdown files
           you keep wherever you like, and everything above is always reachable again from
-          File ▸ Set up Splitpage… and File ▸ Servers….</p>
+          File ▸ Set up Splitpage….</p>
         <div class="modal-row">
           <span class="modal-hint">Want a quick tour of the editor?</span>
           <button type="button" class="btn btn-accent" data-onboard-action="finish-tour">Take the 5-step tour</button>

@@ -12,7 +12,6 @@ export const THEME_MODES: readonly string[] = Object.freeze(["system", "light", 
 const KEYS = Object.freeze({
   autosave: "splitpage-autosave",
   clock: "splitpage-clock",
-  collabServer: "splitpage-collab-server",
   commentAuthor: "splitpage-comment-author",
   commentsSort: "splitpage-comments-sort",
   commentFilter: "splitpage-comments-filter",
@@ -120,8 +119,6 @@ export interface Preferences {
   readonly clearScriptScale: () => void;
   readonly prompterFlag: (name: PrompterFlag) => boolean;
   readonly setPrompterFlag: (name: PrompterFlag, on: boolean) => void;
-  readonly collabServer: () => string | null;
-  readonly setCollabServer: (url: string | null) => void;
   readonly desktopNoticeDismissed: () => boolean;
   readonly dismissDesktopNotice: () => void;
   readonly resetDesktopNotice: () => void;
@@ -336,8 +333,6 @@ export function createPreferences(ports: PreferencePorts): Preferences {
     clearScriptScale: function (): void { announce(KEYS.scriptScale, null); },
     prompterFlag: function (name: PrompterFlag): boolean { return read(KEYS[name]) === "1"; },
     setPrompterFlag: function (name: PrompterFlag, on: boolean): void { announce(KEYS[name], on ? "1" : "0"); },
-    collabServer: function (): string | null { return read(KEYS.collabServer); },
-    setCollabServer: function (url: string | null): void { announce(KEYS.collabServer, url); },
     desktopNoticeDismissed: function (): boolean { return read(KEYS.desktopNotice) === "1"; },
     dismissDesktopNotice: function (): void { announce(KEYS.desktopNotice, "1"); },
     resetDesktopNotice: function (): void { announce(KEYS.desktopNotice, null); },

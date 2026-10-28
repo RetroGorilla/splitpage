@@ -174,7 +174,7 @@ var bindingsVersion = 0;
 var commentTimers = new Set();
 
 function ownsDocument(operation) {
-  return ports.ownership.stillOwns(Object.assign({}, operation, { connection: ports.ownership.capture().connection }));
+  return ports.ownership.stillOwns(operation);
 }
 
 function commentTimer(fn, delay) {
