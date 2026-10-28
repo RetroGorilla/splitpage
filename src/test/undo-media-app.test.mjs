@@ -33,7 +33,6 @@ const CARD = sanitizeHtml('<a class="video-embed-card" href="https://youtu.be/ab
 
 let opened = 0;
 async function open(audio) {
-  window.__hostedTest.setSession({ role: "edit", docId: null });
   const doc = { schema: 2, title: "Undo media", rows: [{ id: "r1", visualText: "", audioText: audio, status: "todo" }], comments: [] };
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(doc)))], "undo-media-" + (++opened) + ".splitpage", { lastModified: opened });
   await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });

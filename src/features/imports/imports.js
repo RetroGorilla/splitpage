@@ -285,7 +285,6 @@ function confirmImport() {
   var outcome = runCommand(imported.command);
   if (outcome.kind === "failed") throw outcome.error;
   if (outcome.kind !== "applied" && outcome.kind !== "committed") {
-    if (outcome.kind === "rejected" && outcome.reason === ports.reviewOnly) showToast(IMPORT_REVIEW_REFUSAL, "warn");
     closeImportModal();
     return;
   }
@@ -294,7 +293,6 @@ function confirmImport() {
 }
 
 var IMPORT_MOVED = "The script changed while the import was open, so nothing was imported. Open the import again to bring the text in.";
-var IMPORT_REVIEW_REFUSAL = "Viewing only — you can comment, but not change the script.";
 
 function hasRows(doc) {
   return !!doc && doc.rows.length > 0;

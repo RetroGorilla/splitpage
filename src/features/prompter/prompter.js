@@ -7,7 +7,6 @@ import { projection } from "../../core/text/runs.ts";
 
 var ports = null;
 var initialReadyTimer = null;
-var serverLaunchTimer = null;
 
 export var prompterMirror;
 export var prompterFlip;
@@ -917,7 +916,6 @@ export function stopVoiceFollow() {
 
 var PROMPTER_LAUNCH_KEY = "splitpage-prompter-launch";
 var PROMPTER_TOKEN_RE = /^[0-9a-f]{64}$/;
-var HOSTED_LAUNCH_WAIT_MS = 5 * 60 * 1000;
 
 function readPrompterLaunch() {
   if (ports.desktop.running()) return null;
@@ -997,23 +995,12 @@ async function launchPrompterFromScript(token) {
   return true;
 }
 
-function launchPrompterForServerDoc() {
-  var owner = ports;
-  var deadline = Date.now() + HOSTED_LAUNCH_WAIT_MS;
-  (function check() {
-    if (ports !== owner) return;
-    if (ports.place.serverHomeId()) { showPrompterForLaunch(); return; }
-    if (Date.now() < deadline) serverLaunchTimer = setTimeout(check, 250);
-  })();
-}
-
 function startPrompterLaunch(launch) {
   var owner = ports;
   ports.preferences.skipOnboardingForPrompter();
   whenInitialStateReady().then(function () {
     if (ports !== owner) return;
     if (launch.token) return launchPrompterFromScript(launch.token);
-    launchPrompterForServerDoc();
   });
 }
 
@@ -1071,8 +1058,7 @@ export function startPrompter(nextPorts) {
       if (ports !== nextPorts) return;
       disposePrompterView();
       clearTimeout(initialReadyTimer);
-      clearTimeout(serverLaunchTimer);
-      initialReadyTimer = serverLaunchTimer = null;
+      initialReadyTimer = null;
       delete window.__prompterTest;
       ports = null;
     }

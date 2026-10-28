@@ -1,5 +1,5 @@
 import type { HistoryDesktopPort } from "../../application/recovery/history-ports.ts";
-import { runningOnDesktop, setRunningOnDesktop } from "../../application/desktop-presence.ts";
+import { setRunningOnDesktop } from "../../application/desktop-presence.ts";
 import type { DesktopDocumentState } from "../../application/desktop/document-state.ts";
 
 export type Listener<T> = (value: T) => void;
@@ -172,10 +172,6 @@ export function canOpenPrompterInChromium(): boolean {
   return current !== null && typeof current.openPrompterInChromium === "function";
 }
 
-export function driveOpenShown(): boolean {
-  return !runningOnDesktop() || typeof (current as DesktopPort).driveStatus === "function";
-}
-
 export function useDesktopForTest(fake: Partial<DesktopPort> | null | undefined): void {
   use(fake as DesktopPort | null | undefined);
 }
@@ -183,23 +179,3 @@ export function useDesktopForTest(fake: Partial<DesktopPort> | null | undefined)
 export function restoreDesktop(): void {
   use(attached);
 }
-
-export type DriveAnswer = DesktopResult & { readonly ok: boolean };
-
-async function driveCall(run: (port: DesktopPort) => Promise<DesktopResult | null>): Promise<DriveAnswer> {
-  try {
-    const res = await run(current as DesktopPort);
-    return (res || { ok: false, code: "FAILED" }) as DriveAnswer;
-  } catch {
-    return { ok: false, code: "FAILED" };
-  }
-}
-
-export const desktopDrive = Object.freeze({
-  status: (): Promise<DriveAnswer> => driveCall((p) => p.driveStatus()),
-  signIn: (): Promise<DriveAnswer> => driveCall((p) => p.driveSignIn()),
-  signOut: (): Promise<DriveAnswer> => driveCall((p) => p.driveSignOut()),
-  list: (folderId: string): Promise<DriveAnswer> => driveCall((p) => p.driveList(folderId)),
-  download: (fileId: string): Promise<DriveAnswer> => driveCall((p) => p.driveDownload(fileId)),
-  upload: (request: unknown): Promise<DriveAnswer> => driveCall((p) => p.driveUpload(request))
-});

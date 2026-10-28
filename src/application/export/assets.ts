@@ -1,8 +1,5 @@
-export type ExportAssetSource = (sha: string) => unknown;
-
 export interface ExportAssetRequest {
   readonly shas: readonly string[];
-  readonly source: ExportAssetSource | null;
 }
 
 export interface ExportPicture {
@@ -17,12 +14,12 @@ export interface ExportAssets {
 }
 
 export interface ExportAssetPorts {
-  readonly load: (shas: readonly string[], source: ExportAssetSource | null) => Promise<unknown>;
+  readonly load: (shas: readonly string[]) => Promise<unknown>;
   readonly bytes: (sha: string) => Uint8Array | null;
   readonly mime: (sha: string, bytes: Uint8Array) => string | null;
 }
 
-export function exportAssetRequest(shas: readonly string[], source: ExportAssetSource | null): ExportAssetRequest {
+export function exportAssetRequest(shas: readonly string[]): ExportAssetRequest {
   const seen: Record<string, true> = Object.create(null) as Record<string, true>;
   const list: string[] = [];
   shas.forEach(function (sha) {
@@ -30,7 +27,7 @@ export function exportAssetRequest(shas: readonly string[], source: ExportAssetS
     seen[sha] = true;
     list.push(sha);
   });
-  return Object.freeze({ shas: Object.freeze(list), source: source });
+  return Object.freeze({ shas: Object.freeze(list) });
 }
 
 export function heldExportAssets(request: ExportAssetRequest, ports: ExportAssetPorts): ExportAssets {
@@ -52,7 +49,7 @@ export function heldExportAssets(request: ExportAssetRequest, ports: ExportAsset
 }
 
 export function resolveExportAssets(request: ExportAssetRequest, ports: ExportAssetPorts): Promise<ExportAssets> {
-  const loaded = request.shas.length ? ports.load(request.shas, request.source) : Promise.resolve();
+  const loaded = request.shas.length ? ports.load(request.shas) : Promise.resolve();
   return Promise.resolve(loaded).then(null, function () { return null; }).then(function () {
     return heldExportAssets(request, ports);
   });

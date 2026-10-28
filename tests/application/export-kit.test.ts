@@ -122,14 +122,12 @@ test("comment numbering keeps nested and document ordering, duplicates, fields a
 
 test("export assets load before their bytes and mime are held, including a failed load", async () => {
   const f = fake();
-  const source = () => null;
-  const owner = createExportKit({ ...f.ports, assets: { ...f.ports.assets, load: async (shas, passed) => {
+  const owner = createExportKit({ ...f.ports, assets: { ...f.ports.assets, load: async (shas) => {
     assert.deepEqual(shas, ["sha"]);
-    assert.equal(passed, source);
     f.log.push("load");
     throw new Error("offline");
   } } });
-  const got = await owner.loadExportAssets({ shas: ["sha"], source });
+  const got = await owner.loadExportAssets({ shas: ["sha"] });
   assert.deepEqual(f.log, ["load", "bytes", "mime"]);
   assert.deepEqual(got.picture("sha"), { bytes: new Uint8Array([1, 2]), mime: "image/png" });
 });
@@ -165,12 +163,12 @@ test("the numbered bridge throws outside startup and an old teardown leaves a re
   const f = fake();
   assert.throws(() => captureExportDocument(), /not started yet/);
   assert.throws(() => exportDocumentOf({}), /not started yet/);
-  assert.throws(() => loadExportAssets({ shas: [], source: null }), /not started yet/);
+  assert.throws(() => loadExportAssets({ shas: [] }), /not started yet/);
   const stop = startExportKit(f.owner);
   assert.throws(() => startExportKit(fake().owner), /already started/);
   assert.equal(captureExportDocument().title, "Capture");
   assert.equal(exportDocumentOf(f.doc).title, "Capture");
-  assert.deepEqual((await loadExportAssets({ shas: [], source: null })).shas, []);
+  assert.deepEqual((await loadExportAssets({ shas: [] })).shas, []);
   stop();
   const replacement = fake();
   replacement.doc.title = "Replacement";

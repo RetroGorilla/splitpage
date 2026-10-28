@@ -2,8 +2,6 @@ import { rowIndexOf } from "../../core/document/rows.ts";
 import { safeId } from "../../core/document/text-policy.ts";
 import { addSceneCommand, deleteSceneCommand, isBlankScene, swapScenesCommand } from "../../application/commands/rows.ts";
 import { splitSceneCommand, textCut } from "../../application/commands/split-join.ts";
-import { REVIEW_REFUSAL_REASON } from "../../application/collaboration/authority.ts";
-import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 import { armDeleteButton, disarmDeleteButton } from "./delete-button.ts";
 
 var ports = null;
@@ -16,7 +14,6 @@ function rowCellSelector(rowId, field) {
 function runRowCommand(command) {
   var outcome = ports.edits.run(command);
   if (outcome.kind === "failed") throw outcome.error;
-  if (outcome.kind === "rejected" && outcome.reason === REVIEW_REFUSAL_REASON) ports.notices.show(VIEWING_ONLY, "warn");
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 

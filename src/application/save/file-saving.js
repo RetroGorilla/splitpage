@@ -17,7 +17,6 @@ function currentHome() { return ports.location.home(); }
 function fileHome() { return ports.location.fileHome(); }
 function setHome(kind, fields) { return ports.location.setHome(kind, fields); }
 function amendHome(record, fields) { return ports.location.amendHome(record, fields); }
-function serverStatus() { return ports.server; }
 function rememberLastFileHandle(handle) { return ports.lastFile.remember(handle); }
 function copyDocHistorySafe(fromId, toId) { return ports.deferred.copyHistory(fromId, toId); }
 function syncDocIdentity() { return ports.deferred.syncIdentity(); }
@@ -45,23 +44,22 @@ function getEditorName() { return ports.preferences.editorName(); }
 function preferences() { return ports.preferences; }
 
 var SAVED = Object.freeze({ kind: "saved" });
-var COPIED = Object.freeze({ kind: "copied" });
 var CANCELLED = Object.freeze({ kind: "cancelled" });
 var FAILED = Object.freeze({ kind: "failed" });
 var FILE_CHANGED = "The file changed on disk since it was opened";
 var CONFLICTED = Object.freeze({ kind: "refused", reason: FILE_CHANGED });
 
-function confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted, landed) {
+function confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, landed) {
   var stamp = captured.document;
   stampDocument(editStamp({ rev: stamp.rev, lastEditedBy: stamp.lastEditedBy, lastEditedAt: stamp.lastEditedAt }));
-  if (!copyOfHosted) setBaseState(published, "saveDoc: the bytes just written");
+  setBaseState(published, "saveDoc: the bytes just written");
   if (landed) {
     amendHome(landed.home, landed.lastModified !== null
       ? { diskBase: published, lastModified: landed.lastModified }
       : { diskBase: published });
   }
   adoptSavedCopyDocId(forkDocId, docIdAtSave, true);
-  if (!copyOfHosted && saveChanges() === seqAtSave) confirmSavedNow();
+  if (saveChanges() === seqAtSave) confirmSavedNow();
 }
 
 async function writeDoc(opts, job) {
@@ -79,7 +77,6 @@ async function writeDoc(opts, job) {
   var forkDocId = (saveAs && opts.saveAs && documentLocation().writtenOut()) ? mintDocId() : null;
   var docIdAtSave = currentDocument().docId;
   var homeAtSave = currentHome();
-  var copyOfHosted = homeAtSave.kind === "server";
   var captured = captureExportDocument({
     docId: forkDocId,
     stamp: { rev: (currentDocument().rev || 0) + 1, lastEditedBy: getEditorName(), lastEditedAt: nowIso() }
@@ -96,7 +93,6 @@ async function writeDoc(opts, job) {
 
   function retargetTo(handle, k) {
     if (!job.owns()) return;
-    if (currentHome().kind === "server") { pickedFor = currentHome(); return; }
     prevHome = currentHome();
     retarget = setHome("file", { handle: handle, format: k, name: handle.name });
     pickedFor = retarget;
@@ -146,24 +142,24 @@ async function writeDoc(opts, job) {
       wrote = true;
       if (job.owns()) {
         var landedHome = fileHome() && fileHome().handle === handle ? currentHome() : null;
-        confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted,
+        confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave,
           landedHome ? { home: landedHome, lastModified: landedOn.lastModified } : null);
         if (forkDocId) job.moved();
       } else adoptSavedCopyDocId(forkDocId, docIdAtSave, false);
       if (pickedFor && currentHome() === pickedFor) rememberLastFileHandle(handle);
       if (!auto) showToast((saveAs ? "Saved a new copy: " : "Saved to ") + handle.name, "ok");
       warnImagesLeftOut(imagesLeftOut, handle.name);
-      written = copyOfHosted ? COPIED : SAVED;
+      written = SAVED;
     } else {
       var ok = await deliverFile(filename, body, { savedMsg: "Downloaded " + filename });
       if (!ok) return CANCELLED;
       wrote = true;
       if (job.owns()) {
-        confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, copyOfHosted, null);
+        confirmWrite(captured, published, forkDocId, docIdAtSave, seqAtSave, null);
         if (forkDocId) job.moved();
       } else adoptSavedCopyDocId(forkDocId, docIdAtSave, false);
       warnImagesLeftOut(imagesLeftOut, filename);
-      written = copyOfHosted ? COPIED : SAVED;
+      written = SAVED;
     }
   } catch (err) {
     if (isAbort(err)) {
@@ -184,7 +180,7 @@ function adoptSavedCopyDocId(forkDocId, docIdAtSave, owned) {
   forkDocId = normalizeDocId(forkDocId);
   if (forkDocId) copyDocHistorySafe(docIdAtSave, forkDocId);
   if (!owned) return;
-  if (forkDocId && currentHome().kind !== "server") stampDocument(documentIdStamp(null, forkDocId));
+  if (forkDocId) stampDocument(documentIdStamp(null, forkDocId));
   documentLocation().markWrittenOut(true);
   syncDocIdentity();
 }
@@ -196,9 +192,6 @@ function readAutoSavePref() {
 function fileAutoSaveTarget() {
   var file = fileHome();
   return autoSaveWhere({
-    onServer: false,
-    signedOut: !!serverStatus().sessionExpired(),
-    linkOff: !!serverStatus().linkTurnedOff(),
     file: file ? { handle: file.handle, format: file.format || null } : null
   });
 }
@@ -215,11 +208,10 @@ function autoSaveChanged(what) {
   if (what === "enabled") updateAutoSaveMenu();
 }
 
-var TAKEN_OFF_THE_SERVER = ["save", "auto", "autosave", "force"];
+var FILE_REQUESTS = ["saveAs", "save", "auto", "autosave", "force"];
 
-function fileTakes(request, place) {
-  if (request.kind === "saveAs") return true;
-  return TAKEN_OFF_THE_SERVER.indexOf(request.kind) !== -1 && !(place && place.kind === "server");
+function fileTakes(request) {
+  return FILE_REQUESTS.indexOf(request.kind) !== -1;
 }
 
 function writeToFile(job) {
@@ -235,7 +227,6 @@ var NO_DESTINATION_KEY = Object.freeze({});
 
 function destinationKeyOf(h) {
   if (!h || h.kind === "none") return { owner: NO_DESTINATION_KEY, name: "none" };
-  if (h.kind === "server") return { owner: documentLocation().serverOf(h.conn) || h, name: "doc:" + String(h.id) };
   var handle = h.handle;
   if (handle && handle._desktopId) return { owner: "desktop:" + String(handle._desktopId), name: "handle" };
   if (handle) return { owner: handle, name: "handle" };
@@ -243,7 +234,7 @@ function destinationKeyOf(h) {
 }
 
 function reportObsoleteSave(request, here) {
-  if (!here || currentHome().kind === "server" || !currentDocument()) return;
+  if (!here || !currentDocument()) return;
   showToast(obsoleteSaveText(currentDocument().title), "warn");
 }
 
@@ -251,24 +242,12 @@ export function obsoleteSaveText(title) {
   return "An earlier save of “" + (title || "Untitled Script") + "” finished after you reopened it. Your open copy is unchanged.";
 }
 
-function saveOwnership(ownership) {
-  return {
-    capture: ownership.capture,
-    stillOwns: function (ctx) {
-      if (ownership.stillOwns(ctx)) return true;
-      if (ctx.destination && ctx.destination.kind === "server") return false;
-      var now = ownership.capture();
-      return now.epoch === ctx.epoch && now.docId === ctx.docId && now.destination === ctx.destination;
-    }
-  };
-}
-
 function savePorts(ownership) {
   return {
     destination: function () { return currentHome(); },
     keyOf: destinationKeyOf,
     obsolete: reportObsoleteSave,
-    ownership: saveOwnership(ownership),
+    ownership: ownership,
     autosave: {
       enabledAtStart: readAutoSavePref,
       changed: autoSaveChanged

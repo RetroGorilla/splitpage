@@ -159,34 +159,6 @@ test("an edit that leaves the stored cell as it is makes no command, no stamp an
   assert.deepEqual(w.seen, []);
 });
 
-test("in review mode the session refuses a formatting edit: the document, the cell on screen and the edit count stay as they were", async () => {
-  await open();
-  window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
-  try {
-    const el = cellOf("r1", "audioText");
-    select(el, 6, 11);
-    const before = JSON.stringify(currentDocument());
-    const shown = el.innerHTML;
-    const generation = liveSession().generation();
-    const seq = saveChanges();
-    const w = watch();
-    let out;
-    try {
-      out = cellEditing().edit(el, bold);
-    } finally {
-      w.stop();
-    }
-    assert.equal(out, null);
-    assert.equal(JSON.stringify(currentDocument()), before);
-    assert.equal(el.innerHTML, shown);
-    assert.equal(liveSession().generation(), generation);
-    assert.equal(saveChanges(), seq);
-    assert.deepEqual(w.seen, []);
-  } finally {
-    window.__hostedTest.setSession({ role: "edit", docId: null });
-  }
-});
-
 test("a command that fails is thrown, and leaves the document, the cell on screen, the edit count and undo as they were", async () => {
   await open();
   const el = cellOf("r1", "audioText");

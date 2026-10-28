@@ -372,17 +372,17 @@ test("deleting or cutting a scene points a comment split across it at the words 
   assert.equal(currentDocument().comments[0].rowId, "r2", "no words left anywhere: detached, as it was");
 });
 
-test("a paste onto a blank scene takes its place; comments can be held back for a second step", () => {
+test("a paste onto a blank scene takes its place, and its comments land with it", () => {
   const t = target();
   assert.equal(isBlankScene(t, t.rows[1], { cellOf }), true);
   assert.equal(isBlankScene(t, t.rows[0], { cellOf }), false);
   loadTestDocument(t);
   n = 0;
-  const res = insertScenes(clip(buildScenePayload(source(), ["r2"])), { replaceRowId: "t2", holdComments: true, mint });
+  const res = insertScenes(clip(buildScenePayload(source(), ["r2"])), { replaceRowId: "t2", mint });
   assert.deepEqual(currentDocument().rows.map((r) => r.id), ["t1", "rnew1"]);
-  assert.equal(currentDocument().comments.length, 0);
-  assert.equal(res.held.length, 1);
-  assert.equal(res.held[0].rowId, "rnew1");
+  assert.equal(currentDocument().comments.length, 1);
+  assert.equal(currentDocument().comments[0].rowId, "rnew1");
+  assert.equal(res.comments, 1);
 });
 
 test("a paste, a cut and a delete are each one undo entry that puts the document back", () => {

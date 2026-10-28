@@ -1,8 +1,7 @@
 import type { DocumentSession } from "../../application/session/document-session.ts";
 import type { FocusMemory } from "../../application/editing/focus-memory.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
-import type { Presence } from "../../application/collaboration/presence.ts";
-import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { PersonColorLookup } from "../../core/document/person-colors.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
 import type { DeleteConfirm } from "../../application/editing/delete-confirm.ts";
 import type { ProductionSelection } from "../../application/editing/production-selection.ts";
@@ -54,9 +53,8 @@ export interface TagPanelPorts {
   readonly selection: Pick<ProductionSelection, "selectedKeys" | "selected" | "toggle" | "select" | "prune" | "clear" | "armed" | "disarm">;
   readonly shotHiding: Pick<ShotHiding, "reveal">;
   readonly panels: Pick<SidePanels, "open">;
-  readonly presence: Pick<Presence, "personColor">;
+  readonly personColors: PersonColorLookup;
   readonly undo: Pick<UndoControl, "breakCoalescing">;
-  readonly review: Pick<ReviewFacts, "reviewing" | "refuseInReview">;
   readonly notices: Pick<NoticePort, "show">;
   readonly ids: IdSource;
 }

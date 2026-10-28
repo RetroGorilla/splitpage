@@ -9,7 +9,7 @@ await bootApp();
 after(closeApp);
 
 const { noteAbsorbedDirty, noteSessionEdit, runCommand } = await import("../legacy/session-bridge.ts");
-const { amendHome, currentHome, documentLocation, serverStatus, setHome } = await import("../legacy/location-bridge.ts");
+const { amendHome, currentHome, setHome } = await import("../legacy/location-bridge.ts");
 const { preferences } = await import("../legacy/preferences-bridge.ts");
 const { autoSavePolicy, confirmSavedNow, saveDoc, unsavedChanges } = await import("../legacy/save-bridge.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
@@ -175,7 +175,7 @@ test("typing paints the save buttons once per key and the status line once per p
   assert.equal(lines, 5);
 });
 
-test("location and server status changes repaint the status line, and the link stays off for the rest of this file", () => {
+test("location changes repaint the status line", () => {
   open(null);
   noteSessionEdit();
   assert.equal(status().title, "Press Save to choose where this script is kept.");
@@ -183,10 +183,5 @@ test("location and server status changes repaint the status line, and the link s
   setHome("file", { format: "splitpage", name: "moved.splitpage", handle: target.handle });
   assert.equal(status().title, "Autosave is off — press Save to write these to moved.splitpage.");
   setHome("none");
-  documentLocation().setConnection({ serverUrl: "http://localhost:7777/", token: "token", role: "edit" });
-  setHome("server", { id: "listening", rev: 2 });
-  assert.equal(status().textContent, "Unsaved changes");
-  serverStatus().turnLinkOff();
-  assert.equal(status().textContent, "Not saving");
-  assert.match(status().title, /turned off the link/);
+  assert.equal(status().title, "Press Save to choose where this script is kept.");
 });

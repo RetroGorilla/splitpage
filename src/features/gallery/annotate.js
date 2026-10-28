@@ -43,7 +43,7 @@ function round4(v) { return Math.round(Math.min(1, Math.max(0, v)) * 10000) / 10
 export function annotatorOpen() { return !!ed; }
 
 export function openAnnotator(rowId, at) {
-  if (ed || ports.review.reviewing() || !ports.document.current()) return false;
+  if (ed || !ports.document.current()) return false;
   var idx = ports.document.read(function (doc) { return rowIndexOf(doc, rowId); });
   if (idx === -1) return false;
   var slot = rowSlots(ports.document.current().rows[idx])[at];
@@ -655,11 +655,6 @@ function disarmCancel() {
 function done() {
   commitText();
   if (!ed.ready || ed.saving) return;
-  if (ports.review.reviewing()) {
-    closeAnnotator();
-    ports.notices.show("This script can only be commented on now, so the annotations weren’t saved.", "warn");
-    return;
-  }
   var marks = normalizeMarks(ed.marks);
   if (JSON.stringify(marks) === ed.start) { closeAnnotator(); return; }
   if (locate() === -1) { lost(); return; }

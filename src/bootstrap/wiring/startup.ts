@@ -25,16 +25,13 @@ import { seedCheckPasses } from "../../adapters/page/seed-check.ts";
 import { startDesktopShell } from "./desktop.ts";
 import { notifyDesktopDocumentState } from "../../legacy/desktop-bridge.ts";
 import { runningOnDesktop } from "../../application/desktop-presence.ts";
-import { applyTakenDraft, armServerDraftResume, desktopDraftTaker } from "./drafts.ts";
-import { checkServer } from "../../legacy/location-bridge.ts";
+import { applyTakenDraft, draftTaker } from "./drafts.ts";
 
 export function startupPorts(): StartupPorts<unknown, ValidatedDocument, ValidatedDocument, MergedStates> {
   return {
     desktop: runningOnDesktop(),
     draft: {
-      taker: desktopDraftTaker(),
-      detectServer: checkServer,
-      armServerResume: armServerDraftResume,
+      taker: draftTaker(),
       applyDraft: applyTakenDraft
     },
     document: {

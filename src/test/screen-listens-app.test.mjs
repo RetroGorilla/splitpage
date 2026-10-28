@@ -237,16 +237,10 @@ test("a stamp that rewrites a scene's text repaints the screen once; a save stam
   assert.equal(counts().render, 1);
 });
 
-test("a location change repaints only when review or edit permission changes", () => {
+test("a location change that keeps edit permission repaints nothing", () => {
   open();
   documentLocation().markWrittenOut(!documentLocation().writtenOut());
   assert.equal(counts().render, 0);
-  window.__hostedTest.setSession({ role: "review", docId: "doc-review" });
-  assert.ok(counts().render >= 1);
-  assert.equal(cellOf("r1", "audioText").getAttribute("contenteditable"), "false");
-  window.__hostedTest.setSession({ role: "edit", docId: "doc-review" });
-  assert.equal(cellOf("r1", "audioText").getAttribute("contenteditable"), "true");
-  window.__hostedTest.setSession({ docId: null });
 });
 
 test("closing the writer repaints the screen once", () => {

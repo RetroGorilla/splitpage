@@ -87,8 +87,8 @@ test("document merge: report shows the banner, and only an unsaved merge marks t
   const merge = createDocumentMerge(w.ports);
   const result = merge.states(null, doc("a"), doc("b"));
   w.seen.length = 0;
-  merge.report(result, { alreadySaved: true, undo: "saved" });
-  assert.deepEqual(w.seen, ["banner merged saved"]);
+  merge.report(result, { alreadySaved: true, undo: true });
+  assert.deepEqual(w.seen, ["banner merged true"]);
   w.seen.length = 0;
   merge.report(result, { kind: "recovery", noAutoSave: true });
   assert.deepEqual(w.seen, ["banner merged undefined", "absorbed recovery", "autosave paused"]);

@@ -25,7 +25,6 @@ for (const operation of ["download", "install"] as const) {
         };
         const ports: UpdateFeaturePorts = {
           desktop: () => true,
-          place: { arrivingOnLink: () => false },
           preferences: { desktopNoticeDismissed: () => false, dismissDesktopNotice: () => {} },
           externalLinks: { available: () => true, open: () => {} },
           updates: {
@@ -72,7 +71,6 @@ test("update mount owns its subscription, About listeners and probe across repla
   let stopped = 0;
   const ports: UpdateFeaturePorts = {
     desktop: () => true,
-    place: { arrivingOnLink: () => false },
     preferences: { desktopNoticeDismissed: () => false, dismissDesktopNotice: () => {} },
     externalLinks: { available: () => true, open: () => {} },
     updates: {

@@ -6,7 +6,7 @@ import { createEditorSelection } from "../../../src/application/editing/selectio
 import { changeSet } from "../../../src/application/session/change-set.ts";
 import type { RowsRenderPorts } from "../../../src/features/rows/render-ports.ts";
 import { startRowsRender } from "../../../src/features/rows/render.js";
-import { fakeDocument, fakeNotices, fakePictures, fakeReview, fakeTextServices } from "../fakes.ts";
+import { fakeDocument, fakeNotices, fakePictures, fakeTextServices } from "../fakes.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 
@@ -32,8 +32,7 @@ function fixture() {
     undo: { track: () => { tracks++; } },
     hiding: () => ({ groups: () => [] }),
     pictures: fakePictures().pictures,
-    presence: () => ({ personColor: () => "#000000" }),
-    review: fakeReview().review,
+    personColors: { personColor: () => "#000000" },
     preferences: () => ({ clock: () => "24h" }),
     view: () => ({ writerOpen: () => false }),
     notices: notices.notices,

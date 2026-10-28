@@ -645,31 +645,6 @@ test("a scene that has left the document: a paste into its stale cell is refused
   assert.equal(JSON.stringify(currentDocument()), before);
 });
 
-test("in review mode a cut only copies and a paste is ignored: the words stay, no marker is written, nothing is dirtied", async () => {
-  await open();
-  window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
-  try {
-    const el = cellOf("r1", "audioText");
-    el.focus();
-    selectText(el, 0, 6);
-    const before = JSON.stringify(currentDocument());
-    const got = record(() => clip("cut", el));
-    assert.equal(got.out.prevented, true);
-    assert.equal(got.out.store["text/plain"], "Hello ");
-    assert.equal(got.out.store["text/html"], "Hello ", "a copy, with no cut marker");
-    assert.equal(JSON.stringify(currentDocument()), before);
-    assert.deepEqual({ seq: got.seq, generation: got.generation, undo: got.undo }, { seq: 0, generation: 0, undo: 0 });
-    const to = cellOf("r3", "audioText");
-    to.focus();
-    selectText(to, 6, 6);
-    const pasted = record(() => clip("paste", to, { "text/plain": "x", "text/html": "x" }));
-    assert.equal(pasted.out.prevented, true, "the browser's own paste is still stopped");
-    assert.equal(row("r3").audioText, "Three.");
-    assert.deepEqual({ seq: pasted.seq, generation: pasted.generation, undo: pasted.undo }, { seq: 0, generation: 0, undo: 0 });
-  } finally {
-    window.__hostedTest.setSession({ role: "edit", docId: null });
-  }
-});
 test("the undo entry of a cut or a paste is on the stack as soon as the call returns, which the Undo toast relies on", async () => {
   await open();
   const el = cellOf("r1", "audioText");

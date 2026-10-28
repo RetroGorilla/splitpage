@@ -4,6 +4,11 @@ What changed for a person using Splitpage, newest first. The same entries
 appear in the app under **Help**. The format follows
 [Keep a Changelog](https://keepachangelog.com/); versions are in `VERSION`.
 
+## Unreleased
+
+### Removed
+- Collaboration and server documents are gone for now: live collaboration, presence, invite, share and review links, server bookmarks and PINs, saving and opening documents on a Splitpage server, hosting from the desktop app, and Google Drive. They will come back, rebuilt, later in 4.1. Drafts and sessions that pointed at a server document open as unsaved local documents with their content intact.
+
 ## 4.0.0-beta.1 — 2026-10-16
 
 This is the 4.0 beta. 4.0 rebuilds how Splitpage is put together and adds no new feature. Your 3.1

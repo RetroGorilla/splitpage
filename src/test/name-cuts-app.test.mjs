@@ -21,11 +21,9 @@ const addBrollProp = (...args) => currentBrollRecords().addBrollProp(...args);
 const { openBrollPanel } = await import("../features/broll/panel.js");
 const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { renderComments, setCommentAssignee } = await import("../features/comments/comments.js");
-const NAME_KEY = "splitpage-comment-author";
 const { preferences } = await import("../legacy/preferences-bridge.ts");
 const { colorsWithMine } = await import("../core/document/person-colors.ts");
 const { cleanAuthorName } = await import("../core/document/people.ts");
-const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
@@ -158,16 +156,6 @@ for (const [what, c] of CASES) {
     load();
     setCommentAssignee("c1", c.typed(80));
     assert.equal(currentDocument().comments[0].assignee, c.kept(80));
-  });
-
-  test("13b the guest's name: " + what + " (#344, #419)", () => {
-    load();
-    localStorage.removeItem(NAME_KEY);
-    sessionStorage.clear();
-    assert.ok(maybeAskGuestName());
-    document.getElementById("guest-name").value = c.typed(30);
-    document.querySelector('#guest-modal [data-guest-action="save"]').click();
-    assert.equal(localStorage.getItem(NAME_KEY), c.kept(30));
   });
 }
 

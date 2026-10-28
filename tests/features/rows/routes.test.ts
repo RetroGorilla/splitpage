@@ -15,12 +15,11 @@ function page() {
       '<button data-action="row-menu" data-id="' + id + '"></button><button data-action="move-up" data-id="' + id + '"></button>' +
       '<button data-action="move-down" data-id="' + id + '"></button><button data-action="insert-below" data-id="' + id + '"></button>' +
       '<button data-action="delete-row" data-id="' + id + '"></button>' +
-      '<button class="status-btn" data-action="cycle-status" data-id="' + id + '" id="status-' + id + '"><i id="status-dot-' + id + '"></i></button>' +
-      '<span class="status-btn is-static" id="lamp-' + id + '"><i id="lamp-dot-' + id + '"></i></span></div>').join("") +
+      '<button class="status-btn" data-action="cycle-status" data-id="' + id + '" id="status-' + id + '"><i id="status-dot-' + id + '"></i></button></div>').join("") +
     '<button class="hidden-shot-strip" data-action="expand-hidden-shot" data-ids="r4,r5" id="strip-btn"><span id="strip-label"></span></button>' +
     '</div><div id="panel"><button data-action="jump-row" data-row="r2" id="jump-r2"><span id="jump-label"></span></button>' +
     '<button data-action="jump-row" data-row="gone" id="jump-gone"></button>' +
-    '<div class="row"><span class="status-btn is-static" id="lamp-outside"></span></div></div><div class="add-row-bar"><button data-action="add-row" id="add"></button></div><div id="other"></div>';
+    '</div><div class="add-row-bar"><button data-action="add-row" id="add"></button></div><div id="other"></div>';
   const byId = (id: string): HTMLElement => win.document.getElementById(id) as HTMLElement;
   const row = (id: string): HTMLElement => win.document.querySelector('.row[data-id="' + id + '"]') as HTMLElement;
   return { win, doc: win.document, byId, row };
@@ -176,17 +175,14 @@ function sceneClick(routes: RowRoutes, win: Realm, target: Element): boolean {
   return handled;
 }
 
-test("row routes: a scene's status button and its static lamp cycle that scene's status, from inner content too", () => {
+test("row routes: a scene's status button cycles that scene's status, from inner content too", () => {
   const p = page();
   const h = harness(p);
   const routes = h.mount();
   assert.equal(sceneClick(routes, p.win, p.byId("status-r1")), true);
   assert.equal(sceneClick(routes, p.win, p.byId("status-dot-r3")), true);
-  assert.equal(sceneClick(routes, p.win, p.byId("lamp-r2")), true);
-  assert.equal(sceneClick(routes, p.win, p.byId("lamp-dot-r3")), true);
-  assert.equal(sceneClick(routes, p.win, p.byId("lamp-outside")), false, "a static lamp outside the script's rows is not a scene's");
   assert.equal(sceneClick(routes, p.win, p.byId("other")), false);
-  assert.deepEqual(h.calls, ["status:r1", "status:r3", "status:r2", "status:r3"]);
+  assert.deepEqual(h.calls, ["status:r1", "status:r3"]);
   routes.dispose();
 });
 

@@ -1,7 +1,6 @@
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { CommentSorting } from "../../application/comment-sort.ts";
-import type { Presence } from "../../application/collaboration/presence.ts";
-import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { PersonColorLookup } from "../../core/document/person-colors.ts";
 import type { DeleteConfirm } from "../../application/editing/delete-confirm.ts";
 import type { EditorSelectionPort } from "../../application/editing/selection.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
@@ -22,19 +21,17 @@ export interface CommentStatePorts {
   readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
   readonly notices: Pick<NoticePort, "show">;
   readonly preferences: Pick<Preferences, "clock" | "commentAuthor" | "rememberCommentAuthor" | "commentsSort" | "setCommentsSort" | "commentFilter" | "setCommentFilter" | "taggingHelpShown" | "taggingHelpDismissed">;
-  readonly review: Pick<ReviewFacts, "reviewing" | "refuseInReview">;
   readonly sidePanels: Pick<SidePanels, "open" | "close">;
   readonly text: Pick<TextServices<HTMLElement>, "inertBody" | "sanitizeHtml">;
   readonly ids: Pick<IdSource, "id">;
   readonly clock: Clock;
-  readonly saves: Pick<SaveState, "resume" | "dueNow">;
+  readonly saves: Pick<SaveState, "dueNow">;
   readonly selection: EditorSelectionPort;
   readonly deletion: Pick<DeleteConfirm, "armedId" | "arm" | "disarm">;
   readonly ownership: Operations;
   readonly history: HistoryPort;
-  readonly presence: Pick<Presence, "personColor">;
+  readonly personColors: PersonColorLookup;
   readonly shots: Pick<ShotHiding, "reveal">;
   readonly pictures: Pick<PictureStore, "imgHtml">;
   readonly clearDraftUndo: (box: HTMLElement) => void;
-  readonly onThreadsSent: (listener: () => void) => () => void;
 }

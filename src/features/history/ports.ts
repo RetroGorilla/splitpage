@@ -5,7 +5,7 @@ import type { SessionMergeOwner, SnapshotRestoreRequest, SnapshotRestoreResult }
 import type { SidePanels } from "../../application/side-panels.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { Preferences } from "../../application/preferences/preferences.ts";
-import type { Presence } from "../../application/collaboration/presence.ts";
+import type { PersonColorLookup } from "../../core/document/person-colors.ts";
 
 export interface HistoryPanelPorts {
   readonly ids: Pick<IdSource, "id">;
@@ -15,7 +15,7 @@ export interface HistoryPanelPorts {
   readonly panels: Pick<SidePanels, "open" | "close">;
   readonly effects: Pick<NoticePort, "show">;
   readonly preferences: Pick<Preferences, "clock"> & { readonly editorName: () => string };
-  readonly presence: Pick<Presence, "personColor">;
+  readonly personColors: PersonColorLookup;
 }
 
 export interface HistoryPanelControl {

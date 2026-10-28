@@ -11,7 +11,7 @@ export interface LoadReport {
   readonly owners: Readonly<Record<string, boolean | string>>;
 }
 
-export const NOTHING_STARTED = { session: false, saves: false, recovery: false, merge: false, editor: false, productionEditing: false, preferences: false, location: false, effects: false, transitions: false, actions: false, exports: false, exportServices: false, projectFileServices: false, shotHiding: false, presence: false, undo: false, exportCapture: false };
+export const NOTHING_STARTED = { session: false, saves: false, recovery: false, merge: false, editor: false, productionEditing: false, preferences: false, location: false, effects: false, transitions: false, actions: false, exports: false, exportServices: false, projectFileServices: false, shotHiding: false, undo: false, exportCapture: false };
 const run = promisify(execFile);
 
 export async function loadAlone(target: string): Promise<LoadReport> {

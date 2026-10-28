@@ -377,7 +377,6 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `05f-rundown.js` | features/panels | `app-actions`, `cache-freeze`, `editor-bridge`, `location-bridge`, `richtext` |
 | `05g-scene-clip.js` | features/clipboard | `richtext` |
 | `05h-scene-select.js` | features/rows | `editor-bridge`, `location-bridge`, `preferences-bridge`, `review-wording`, `session-bridge` |
-| `05p-rundown-presence.js` | features/panels | none |
 | `05r-read-time.js` | features/rows | `location-bridge`, `session-bridge` |
 | `05s-script-zoom.js` | features/settings | `app-actions`, `preferences-bridge` |
 | `05t-target.js` | features/panels | `location-bridge` |
@@ -394,9 +393,6 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `11-import.js` | features/imports | `session-bridge`, `transition-bridge` |
 | `12-dirty-toast.js` | features/notices (session effects: composition root) | `location-bridge`, `preferences-bridge`, `save-bridge`, `session-bridge` |
 | `12a-undo.js` | features/undo | `richtext` |
-| `13-hosted.js` | adapters/transport | `location-bridge`, `production-editing-bridge`, `recovery-bridge`, `review-wording`, `save-bridge`, `transition-bridge` |
-| `13a-presence.js` | adapters/transport | `location-bridge`, `preferences-bridge`, `transition-bridge` |
-| `13b-collaborate.js` | features/file-menu | `app-actions`, `location-bridge`, `preferences-bridge` |
 | `14-export.js` | adapters/files (save writer) | `location-bridge`, `preferences-bridge`, `recovery-bridge`, `save-bridge` |
 | `application/save/export-kit.ts` | application/save | none (session, preferences, clock, ids, export services, document entry and assets arrive as ports; numbered callers use `legacy/export-kit-bridge.ts`) |
 | `docx.ts` | adapters/formats | none (decodes through the export services port) |
@@ -412,9 +408,8 @@ The modules it starts, the owner each is expected to move to in 4.x (a planning 
 | `20-teleprompter.js` | features/prompter | `editor-bridge`, `location-bridge`, `preferences-bridge`, `richtext`, `startup-bridge` |
 | `20a-update.js` | features/notices | none |
 | `20b-onboarding.js` | composition root (onboarding) | `app-actions`, `location-bridge`, `preferences-bridge`, `recovery-bridge`, `seed-check` |
-| `20c-help.js` | features/settings | `app-actions`, `preferences-bridge`, `tour-pause` |
+| `20c-help.js` | features/settings | `app-actions`, `preferences-bridge` |
 | `20d-formats.js` | adapters/formats | `location-bridge`, `richtext`, `save-bridge` |
-| `20e-connect.js` | adapters/transport | `app-actions`, `location-bridge`, `tour-pause` |
 | `20f-desktop.js` | composition root (desktop host) | `location-bridge`, `recovery-bridge`, `save-bridge`, `startup-bridge` |
 | `20g-drafts.js` | adapters/storage (draft recovery) | `location-bridge`, `production-editing-bridge`, `recovery-bridge`, `save-bridge`, `transition-bridge` |
 | `20h-appdata.js` | adapters/storage | `location-bridge`, `preferences-bridge` |

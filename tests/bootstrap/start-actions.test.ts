@@ -42,7 +42,7 @@ test("the app's actions start, stop and start again with one key listener and no
     assert.ok(history >= 0);
     assert.equal(started[history + 1], "find");
     const settingsAt = started.indexOf("settings");
-    assert.deepEqual(started.slice(settingsAt - 2, settingsAt + 4), ["servers", "show-servers-dialog", "settings", "help", "tour", "long-demo"]);
+    assert.deepEqual(started.slice(settingsAt - 1, settingsAt + 4), ["present", "settings", "help", "tour", "long-demo"]);
     assert.ok(started.includes("save") && started.includes("toggle-hide-shot") && started.length > 30, `registers the app's actions (${started.length})`);
     assert.equal(target.listeners, 1);
     target.dispatchEvent(probeKey());

@@ -9,7 +9,7 @@
 #     picking along; Delete does nothing here;
 #   * Esc, the × or a click on the backdrop go back to the dialog with the
 #     same item picked and the focus on the preview;
-#   * a video's still is not expanded; a review session can still expand;
+#   * a video's still is not expanded;
 #   * no network request, no undo entry, the document unchanged.
 # Every `eval` is one physical line.
 
@@ -135,23 +135,7 @@ wait M().hidden && Z().hidden
 expect JSON.stringify(F.state()) === before
 expect performance.getEntriesByType('resource').filter(function(e, i){ return i >= res0 && !/^(blob|data):/.test(e.name); }).length === 0
 
-# ---- a review session expands too ------------------------------------------------------
-eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
-sleep 300
-expect window.__hostedTest.reviewMode() === true
-eval document.querySelector('#rows .row[data-id="z1"] .scene-gallery-tile').click()
-wait !M().hidden && picked() === 0
-expect pic().classList.contains('is-zoomable')
-expect !M().querySelector('[data-gact="remove"]') && !M().querySelector('[data-gact="cover"]')
-click .scene-gallery-preview-pic
-wait !Z().hidden && scaleOf() < 1
-key Escape
-wait Z().hidden && !M().hidden
-key Escape
-wait M().hidden
-
 # ---- the dark theme ----------------------------------------------------------------------
-eval window.__hostedTest.setSession({role:'edit',docId:'shared-doc'})
 eval document.documentElement.setAttribute('data-theme', 'dark')
 eval document.querySelector('#rows .row[data-id="z1"] .scene-gallery-tile').click()
 wait !M().hidden
