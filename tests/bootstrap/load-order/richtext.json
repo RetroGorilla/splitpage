@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/core/document/text-policy.ts",
     "src/legacy/richtext.ts",
