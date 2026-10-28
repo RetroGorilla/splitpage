@@ -81,37 +81,19 @@ jobs:
           fail() { echo "::error::$1"; docker logs --tail 60 splitpage-ci || true; exit 1; }
           wait_up() {
             for _ in $(seq 1 30); do
-              curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:8791/api/health && return 0
+              curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:8791/ && return 0
               sleep 1
             done
-            fail "no answer from /api/health within 30s"
+            fail "no 200 from / within 30s"
           }
           version="$(tr -d '[:space:]' < VERSION)"
-
-          data="$RUNNER_TEMP/splitpage-data"
-          mkdir -p "$data"
-          sudo chown 99:100 "$data"
-          pin="ci$(openssl rand -hex 16)"
-          echo "::add-mask::$pin"
-          printf 'JOIN_PIN=%s\nPERSIST_LINKS=1\nTRUST_PROXY=cloudflare\nALLOW_ORIGINS=splitpage://app\n' "$pin" > "$RUNNER_TEMP/ci.env"
 
           docker run -d --name splitpage-ci \
             --user 99:100 \
             -p 127.0.0.1:8791:8791 \
-            --env-file "$RUNNER_TEMP/ci.env" \
-            -v "$data:/data" \
             --health-interval 2s \
             splitpage-ci
           wait_up
-
-          health="$(curl -fsS http://127.0.0.1:8791/api/health)"
-          echo "/api/health: $health"
-          jq -e --arg v "$version" '.version == $v' <<<"$health" >/dev/null \
-            || fail "/api/health does not report the built VERSION ($version)"
-          jq -e '.authRequired == true' <<<"$health" >/dev/null \
-            || fail "/api/health says no owner key is required, with JOIN_PIN set"
-          jq -e '.links == 1 and .linksPersist == true' <<<"$health" >/dev/null \
-            || fail "/api/health does not report links: 1 and linksPersist: true with PERSIST_LINKS=1"
 
           curl -fsS http://127.0.0.1:8791/ | grep -q "<meta name=\"splitpage-version\" content=\"$version\">" \
             || fail "/ does not serve the app built from this VERSION"
@@ -128,21 +110,8 @@ jobs:
           [ "$status" = healthy ] \
             || fail "the image's HEALTHCHECK says '$status': $(docker inspect -f '{{json .State.Health}}' splitpage-ci)"
 
-          token="$(curl -fsS -X POST -H 'content-type: application/json' \
-                     --data "{\"pin\":\"$pin\"}" http://127.0.0.1:8791/api/join | jq -r '.token // empty')"
-          [ -n "$token" ] || fail "POST /api/join with the owner key returned no token"
-          echo "::add-mask::$token"
-          me() { curl -fsS -H "x-splitpage-token: $token" http://127.0.0.1:8791/api/me; }
-          me | jq -e '.role == "edit"' >/dev/null || fail "the owner's token is not an editor's"
-          docker restart splitpage-ci >/dev/null
-          wait_up
-          me | jq -e '.role == "edit"' >/dev/null \
-            || fail "after a restart the owner's sign-in was refused — PERSIST_LINKS is not keeping it"
-
-          sudo ls -lnR "$data" | head -40
-          sudo test -d "$data/links" || fail "PERSIST_LINKS=1, but the server made no data/links/ folder"
-          wrong="$(sudo find "$data" \( ! -uid 99 -o ! -gid 100 \) -print)"
-          [ -z "$wrong" ] || fail "files in the data folder that 99:100 does not own: $wrong"
+          code="$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8791/api/health)"
+          [ "$code" = 404 ] || fail "/api/health answered HTTP $code; the server has no API"
 
       - name: Container log
         if: always()
@@ -177,31 +146,18 @@ jobs:
           fail() { echo "::error::$1"; docker logs --tail 60 splitpage-prebuilt || true; exit 1; }
           version="$(tr -d '[:space:]' < VERSION)"
 
-          data="$RUNNER_TEMP/splitpage-data"
-          mkdir -p "$data"
-          sudo chown 99:100 "$data"
-          pin="ci$(openssl rand -hex 16)"
-          echo "::add-mask::$pin"
-          printf 'JOIN_PIN=%s\n' "$pin" > "$RUNNER_TEMP/prebuilt.env"
-
           docker run -d --name splitpage-prebuilt \
             --user 99:100 \
             -p 127.0.0.1:8791:8791 \
-            --env-file "$RUNNER_TEMP/prebuilt.env" \
-            -v "$data:/data" \
             --health-interval 2s \
             splitpage-prebuilt
 
+          up=0
           for _ in $(seq 1 30); do
-            curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:8791/api/health && break
+            curl -fsS -o /dev/null --max-time 2 http://127.0.0.1:8791/ && { up=1; break; }
             sleep 1
           done
-          health="$(curl -fsS --max-time 2 http://127.0.0.1:8791/api/health)" || fail "no answer from /api/health within 30s"
-          echo "/api/health: $health"
-          jq -e --arg v "$version" '.version == $v' <<<"$health" >/dev/null \
-            || fail "/api/health does not report the built VERSION ($version)"
-          jq -e '.authRequired == true' <<<"$health" >/dev/null \
-            || fail "/api/health says no owner key is required, with JOIN_PIN set"
+          [ "$up" = 1 ] || fail "no 200 from / within 30s"
 
           curl -fsS http://127.0.0.1:8791/ | grep -q "<meta name=\"splitpage-version\" content=\"$version\">" \
             || fail "/ does not serve the app built from this VERSION"
