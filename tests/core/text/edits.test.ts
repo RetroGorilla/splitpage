@@ -375,3 +375,43 @@ test("random edits keep lengths and canonical form", () => {
     }
   }
 });
+
+test("a pair whose halves are the lowest or highest in range is still one character", () => {
+  for (const pair of ["\u{10000}", "\u{10FFFF}"]) {
+    const cell = [T("a" + pair + "b")];
+    assert.equal(clamp(cell, 2), 3, JSON.stringify(pair));
+    assert.deepEqual(clampRange(cell, 2, 2), { from: 3, to: 3 }, JSON.stringify(pair));
+    assert.deepEqual(clampRange(cell, 2, 3), { from: 1, to: 3 }, JSON.stringify(pair));
+  }
+});
+
+test("insertText with no text inserts nothing", () => {
+  const cell = [T("ab")];
+  assert.deepEqual(insertText(cell, 1, null as unknown as string), cell);
+  assert.deepEqual(insertText(cell, 1, undefined as unknown as string), cell);
+});
+
+test("replaceText over a key takes the typing marks, so a link or comment on the key is not copied", () => {
+  const cell = [T("a "), B("bs1", "B-roll:", { b: true, href: "https://e.x/", cmt: ["c1"] }), T(" z")];
+  assert.deepEqual(replaceText(cell, 2, 3, "q"), [T("a q z")]);
+});
+
+test("markThroughout ignores line breaks in the range", () => {
+  const cell = [T("a", { b: true }), T("\n"), T("b", { b: true })];
+  assert.equal(markThroughout(cell, 0, 3, "b"), true);
+  assert.deepEqual(toggleMark(cell, 0, 3, "b"), [T("a\nb")]);
+});
+
+test("breakLine carries a link only when both sides share the same one", () => {
+  const cell = [T("ab", { href: "https://e.x/1" }), T("cd", { href: "https://e.x/2" })];
+  assert.deepEqual(breakLine(cell, 2, 2).cell, [T("ab", { href: "https://e.x/1" }), T("\n"), T("cd", { href: "https://e.x/2" })]);
+  const same = [T("abcd", { href: "https://e.x/1" })];
+  assert.deepEqual(breakLine(same, 2, 2).cell, [T("ab\ncd", { href: "https://e.x/1" })]);
+});
+
+test("a glue between joined cells does not take a link or direction that only one side has", () => {
+  const link = joinCells([T("a", { href: "https://e.x/1" })], [T("b", { href: "https://e.x/2" })], "-");
+  assert.deepEqual(link, [T("a", { href: "https://e.x/1" }), T("-"), T("b", { href: "https://e.x/2" })]);
+  assert.deepEqual(joinCells([T("a", { dir: true })], [T("b")], "-"), [T("a", { dir: true }), T("-b")]);
+  assert.deepEqual(joinCells([T("a")], [T("b", { dir: true })], "-"), [T("a-"), T("b", { dir: true })]);
+});

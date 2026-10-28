@@ -1,0 +1,241 @@
+{
+  "tests": [
+    "tests/core/text"
+  ],
+  "mutants": [
+    {
+      "label": "edits-within-upper",
+      "file": "src/core/text/edits.ts",
+      "find": "pos < 0 ? 0 : (pos > n ? n : pos)",
+      "replace": "pos < 0 ? 0 : (pos >= n ? n - 1 : pos)"
+    },
+    {
+      "label": "edits-cuts-pair-lo-start",
+      "file": "src/core/text/edits.ts",
+      "find": "lo >= 0xdc00 && lo <= 0xdfff",
+      "replace": "lo > 0xdc00 && lo <= 0xdfff"
+    },
+    {
+      "label": "edits-cuts-pair-hi-end",
+      "file": "src/core/text/edits.ts",
+      "find": "hi >= 0xd800 && hi <= 0xdbff",
+      "replace": "hi >= 0xd800 && hi < 0xdbff"
+    },
+    {
+      "label": "edits-clamp-range-swap",
+      "file": "src/core/text/edits.ts",
+      "find": "if (b < a) { const x = a; a = b; b = x; }",
+      "replace": "if (b < a) { b = a; }"
+    },
+    {
+      "label": "edits-marks-at-prefers-before",
+      "file": "src/core/text/edits.ts",
+      "find": "const c = chars[pos - 1] || chars[pos];",
+      "replace": "const c = chars[pos] || chars[pos - 1];"
+    },
+    {
+      "label": "edits-typing-keeps-tag",
+      "file": "src/core/text/edits.ts",
+      "find": "  delete m.tag;\n  delete m.cmt;\n  delete m.href;",
+      "replace": "  delete m.cmt;\n  delete m.href;"
+    },
+    {
+      "label": "edits-inside-direction-or",
+      "file": "src/core/text/edits.ts",
+      "find": "isDirChar(chars[pos - 1]) && isDirChar(chars[pos])",
+      "replace": "isDirChar(chars[pos - 1]) || isDirChar(chars[pos])"
+    },
+    {
+      "label": "edits-slice-open-end",
+      "file": "src/core/text/edits.ts",
+      "find": "const end = to === undefined ? chars.length : within(chars.length, to);",
+      "replace": "const end = to === undefined ? chars.length - 1 : within(chars.length, to);"
+    },
+    {
+      "label": "edits-insert-cleans-text",
+      "file": "src/core/text/edits.ts",
+      "find": "const clean = cleanText(text);\n  const ins",
+      "replace": "const clean = String(text);\n  const ins"
+    },
+    {
+      "label": "edits-broll-key-end",
+      "file": "src/core/text/edits.ts",
+      "find": "end: r.from + 1 };",
+      "replace": "end: r.from };"
+    },
+    {
+      "label": "edits-throughout-newline",
+      "file": "src/core/text/edits.ts",
+      "find": "if (c.atom || c.ch === \"\\n\") continue;",
+      "replace": "if (c.atom) continue;"
+    },
+    {
+      "label": "edits-breakline-trailing-double",
+      "file": "src/core/text/edits.ts",
+      "find": "const text = from === chars.length ? \"\\n\\n\" : \"\\n\";",
+      "replace": "const text = \"\\n\";"
+    },
+    {
+      "label": "edits-breakline-href-carry",
+      "file": "src/core/text/edits.ts",
+      "find": "if (pm.href && pm.href === nm.href) marks.href = pm.href;",
+      "replace": "if (pm.href) marks.href = pm.href;"
+    },
+    {
+      "label": "edits-breakline-cmt-intersect",
+      "file": "src/core/text/edits.ts",
+      "find": "return (nm.cmt || []).indexOf(id) !== -1; });",
+      "replace": "return (nm.cmt || []).indexOf(id) === -1; });"
+    },
+    {
+      "label": "edits-join-href-glue",
+      "file": "src/core/text/edits.ts",
+      "find": "if (last.marks.href && last.marks.href === first.marks.href) marks.href = last.marks.href;",
+      "replace": "if (last.marks.href) marks.href = last.marks.href;"
+    },
+    {
+      "label": "edits-join-dir-glue",
+      "file": "src/core/text/edits.ts",
+      "find": "if (isDirRun(last) && isDirRun(first)) marks.dir = true;",
+      "replace": "if (isDirRun(last) || isDirRun(first)) marks.dir = true;"
+    },
+    {
+      "label": "runs-clean-text-crlf",
+      "file": "src/core/text/runs.ts",
+      "find": ".replace(/\\r\\n?/g, \"\\n\")",
+      "replace": ".replace(/\\r\\n/g, \"\\n\")"
+    },
+    {
+      "label": "runs-clean-marks-cmt-dedupe",
+      "file": "src/core/text/runs.ts",
+      "find": "ids = ids.filter(function (id, i) { return ids.indexOf(id) === i; }).sort();",
+      "replace": "ids = ids.sort();"
+    },
+    {
+      "label": "runs-same-marks-cmt-length",
+      "file": "src/core/text/runs.ts",
+      "find": "if (!b.cmt || ac.length !== b.cmt.length) return false;",
+      "replace": "if (!b.cmt) return false;"
+    },
+    {
+      "label": "runs-ordered-marks-order",
+      "file": "src/core/text/runs.ts",
+      "find": "[\"b\", \"i\", \"u\", \"s\", \"hl\", \"dir\", \"cue\", \"href\", \"tag\", \"cmt\"]",
+      "replace": "[\"i\", \"b\", \"u\", \"s\", \"hl\", \"dir\", \"cue\", \"href\", \"tag\", \"cmt\"]"
+    },
+    {
+      "label": "runs-broll-id-sanitize",
+      "file": "src/core/text/runs.ts",
+      "find": "replace(/[^A-Za-z0-9_-]/g, \"\")",
+      "replace": "replace(/[^A-Za-z0-9_]/g, \"\")"
+    },
+    {
+      "label": "runs-has-comment-empty",
+      "file": "src/core/text/runs.ts",
+      "find": "      m.cmt = m.cmt.filter(opts.hasComment);\n      if (!m.cmt.length) delete m.cmt;",
+      "replace": "      m.cmt = m.cmt.filter(opts.hasComment);"
+    },
+    {
+      "label": "runs-tag-merge-href",
+      "file": "src/core/text/runs.ts",
+      "find": "if (!href && marks.href) href = marks.href;",
+      "replace": "if (marks.href) href = marks.href;"
+    },
+    {
+      "label": "runs-cue-line-anchor",
+      "file": "src/core/text/runs.ts",
+      "find": "/^[ \\t\\u00a0]*(sfx",
+      "replace": "/[ \\t\\u00a0]*(sfx"
+    },
+    {
+      "label": "runs-media-video-host",
+      "file": "src/core/text/runs.ts",
+      "find": "cleanText(r.host).replace(/\\n/g, \" \") : href;",
+      "replace": "cleanText(r.host).replace(/\\n/g, \" \") : \"\";"
+    },
+    {
+      "label": "runs-lone-surrogate-pass",
+      "file": "src/core/text/runs.ts",
+      "find": "return out.some(holdsLoneSurrogate) ? normalizeCell(out.map(withoutLoneHalves)) : out;",
+      "replace": "return out;"
+    },
+    {
+      "label": "html-esc-text-amp-first",
+      "file": "src/core/text/html.ts",
+      "find": "return t.replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\")",
+      "replace": "return t.replace(/</g, \"&lt;\").replace(/&/g, \"&amp;\")"
+    },
+    {
+      "label": "html-esc-attr-quote",
+      "file": "src/core/text/html.ts",
+      "find": "return String(t).replace(/&/g, \"&amp;\").replace(/\"/g, \"&quot;\")",
+      "replace": "return String(t).replace(/&/g, \"&amp;\")"
+    },
+    {
+      "label": "html-format-tags",
+      "file": "src/core/text/html.ts",
+      "find": "{ hl: \"mark\", b: \"strong\", i: \"em\", u: \"u\", s: \"s\" }",
+      "replace": "{ hl: \"mark\", b: \"em\", i: \"strong\", u: \"u\", s: \"s\" }"
+    },
+    {
+      "label": "html-link-rel",
+      "file": "src/core/text/html.ts",
+      "find": "target=\"_blank\" rel=\"noopener\">' + inner + \"</a>\"",
+      "replace": "target=\"_blank\">' + inner + \"</a>\""
+    },
+    {
+      "label": "html-broll-not-editable",
+      "file": "src/core/text/html.ts",
+      "find": "data-broll-id=\"' + escAttr(n.atom.id) + '\" contenteditable=\"false\">",
+      "replace": "data-broll-id=\"' + escAttr(n.atom.id) + '\">"
+    },
+    {
+      "label": "html-dir-text-hook",
+      "file": "src/core/text/html.ts",
+      "find": "e.k === \"dir\" ? INSIDE_DIRECTION : where",
+      "replace": "where"
+    },
+    {
+      "label": "html-host-escape",
+      "file": "src/core/text/html.ts",
+      "find": "escText(n.atom.host)",
+      "replace": "n.atom.host"
+    },
+    {
+      "label": "tree-unknown-tag-dropped",
+      "file": "src/core/text/tree.ts",
+      "find": "if (!r.atom && marks.tag && !tagOf(marks.tag)) {",
+      "replace": "if (false) {"
+    },
+    {
+      "label": "tree-text-merge",
+      "file": "src/core/text/tree.ts",
+      "find": "if (last && last.text !== undefined) last.text += p; else here.push({ text: p });",
+      "replace": "here.push({ text: p });"
+    },
+    {
+      "label": "anchors-skip-conflict",
+      "file": "src/core/text/anchors.ts",
+      "find": "c.kind === \"conflict\" || c.field === \"title\"",
+      "replace": "c.field === \"title\""
+    },
+    {
+      "label": "anchors-moved-same-place",
+      "file": "src/core/text/anchors.ts",
+      "find": "(c.rowId === at.rowId && c.field === at.field)",
+      "replace": "(c.rowId === at.rowId)"
+    },
+    {
+      "label": "dir-shortcut-min",
+      "file": "src/core/text/directions.ts",
+      "find": "if (pos < 5 ||",
+      "replace": "if (pos < 6 ||"
+    },
+    {
+      "label": "dir-max-inclusive",
+      "file": "src/core/text/directions.ts",
+      "find": "inner.length > DIRECTION_MAX",
+      "replace": "inner.length >= DIRECTION_MAX"
+    }
+  ]
+}
