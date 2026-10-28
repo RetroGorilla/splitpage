@@ -77,17 +77,17 @@ const ENTRIES = {
   server: {
     kind: "server",
     opens: false,
-    run: (raw) => applyMerge({ theirs: raw, source: "server-conflict", unchanged: true, report: false })
+    run: (raw) => applyMerge({ theirs: raw, source: "stash", unchanged: true, report: false })
   },
   merge: {
     kind: "server",
     opens: false,
-    run: (raw, base, mine) => applyMerge({ base: base, mine: mine, theirs: raw, source: "server-conflict", report: false })
+    run: (raw, base, mine) => applyMerge({ base: base, mine: mine, theirs: raw, source: "stash", report: false })
   },
   recovery: {
     kind: "recovery",
     opens: true,
-    run: (raw, base, mine) => applyMerge({ base: base, mine: mine, theirs: raw, source: "server-resume", report: false })
+    run: (raw, base, mine) => applyMerge({ base: base, mine: mine, theirs: raw, source: "stash", recovery: true, report: false })
   }
 };
 
@@ -340,7 +340,7 @@ test("a comment createdAt whose toString is not a function migrates to null, so 
   const epoch = session.epoch();
   heard.length = 0;
   confirmSavedNow();
-  applyMerge({ base: cloneState(before), mine: cloneState(before), theirs: theirs, source: "server-resume", report: true, noAutoSave: true });
+  applyMerge({ base: cloneState(before), mine: cloneState(before), theirs: theirs, source: "stash", recovery: true, report: true, noAutoSave: true });
   assert.notEqual(currentDocument(), before);
   assert.equal(held(), currentDocument());
   assert.equal(heard[0], "recovery");
@@ -362,7 +362,7 @@ test("a merge whose raw theirs has a string rev migrates theirs first, so the me
   settle(start);
   const theirs = table304Document("Theirs");
   theirs.rev = "seven";
-  applyMerge({ base: cloneState(currentDocument()), mine: cloneState(currentDocument()), theirs: theirs, source: "server-conflict", report: false });
+  applyMerge({ base: cloneState(currentDocument()), mine: cloneState(currentDocument()), theirs: theirs, source: "stash", report: false });
   assert.equal(held(), currentDocument());
   assert.equal(currentDocument().rev, 6);
   assert.deepEqual(judge(currentDocument(), migrate, allowed).problems, []);
@@ -393,10 +393,10 @@ const NOT_DOCUMENTS = [[{ id: "r1", audioText: "x" }], [], 7, "doc", true, null]
 
 test("applyMerge refuses a theirs or a mine that is no document, and nothing changes: an array no longer merges in as an empty script that deletes the scenes mine didn't touch (#407)", () => {
   const calls = {
-    server: (raw) => ({ theirs: raw, source: "server-conflict", unchanged: true, report: false }),
-    merge: (raw, start) => ({ base: start.base, mine: start.mine, theirs: raw, source: "server-conflict", report: true, undoPoint: cloneState(start.doc) }),
-    recovery: (raw, start) => ({ base: start.base, mine: start.mine, theirs: raw, source: "server-resume", report: true }),
-    mine: (raw, start) => ({ base: start.base, mine: raw, theirs: table304Document("Theirs"), source: "server-conflict", report: true })
+    server: (raw) => ({ theirs: raw, source: "stash", unchanged: true, report: false }),
+    merge: (raw, start) => ({ base: start.base, mine: start.mine, theirs: raw, source: "stash", report: true, undoPoint: cloneState(start.doc) }),
+    recovery: (raw, start) => ({ base: start.base, mine: start.mine, theirs: raw, source: "stash", recovery: true, report: true }),
+    mine: (raw, start) => ({ base: start.base, mine: raw, theirs: table304Document("Theirs"), source: "stash", report: true })
   };
   for (const raw of NOT_DOCUMENTS) {
     for (const [name, call] of Object.entries(calls)) {
@@ -423,7 +423,7 @@ test("applyMerge takes a base that is no document as no base, the way it takes a
     const start = twoScenes("Base");
     const theirs = table304Document("Untitled Script");
     theirs.rows[1].audioText = "Theirs, edited.";
-    const out = applyMerge({ base: base === "start" ? start.base : base, mine: start.mine, theirs: theirs, source: "server-conflict", mergeOnly: true });
+    const out = applyMerge({ base: base === "start" ? start.base : base, mine: start.mine, theirs: theirs, source: "stash", mergeOnly: true });
     return { title: out.state.title, stats: out.result.stats, conflicts: out.result.conflicts.map((c) => c.field), rows: out.state.rows.map((row) => [row.id, row.audioText]) };
   };
   const none = merged(null);

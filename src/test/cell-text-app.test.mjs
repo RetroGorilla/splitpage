@@ -552,7 +552,7 @@ for (const drop of ["type and delete", "slow cancel"]) {
     clock += 5000;
     const theirs = cloneState(currentDocument());
     theirs.rows.find((r) => r.id === "r3").audioText = "Three.x theirs";
-    applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false });
+    applyMerge({ theirs: theirs, source: "stash", unchanged: true, report: false });
     flushEdits();
     assert.equal(row("r3").audioText, "Three.x theirs");
     assert.deepEqual(undoSizes(), { undo: 0, redo: 0 });

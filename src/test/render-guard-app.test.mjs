@@ -184,7 +184,7 @@ function conflictMerge() {
 }
 
 function mergeOn(ctx) {
-  const out = applyMerge({ base: ctx.base, mine: ctx.mine, theirs: ctx.theirs, source: "server-conflict", report: true, undoPoint: ctx.undoPoint });
+  const out = applyMerge({ base: ctx.base, mine: ctx.mine, theirs: ctx.theirs, source: "stash", report: true, undoPoint: ctx.undoPoint });
   return { stats: out.result.stats, conflicts: out.result.conflicts.map((c) => c.rowId + "." + c.field) };
 }
 
@@ -207,7 +207,7 @@ test("a recovery merge whose render throws still reports the merge, marks it uns
     theirs.rows[0].audioText = "Theirs.";
     return { base: cloneState(doc), mine: mine, theirs: theirs };
   }, (ctx) => {
-    applyMerge({ base: ctx.base, mine: ctx.mine, theirs: ctx.theirs, source: "server-resume", report: true, noAutoSave: true });
+    applyMerge({ base: ctx.base, mine: ctx.mine, theirs: ctx.theirs, source: "stash", recovery: true, report: true, noAutoSave: true });
   });
   assert.equal(seen.book.dirty, true);
   assert.ok(seen.book.banner);
@@ -310,7 +310,7 @@ test("the redraw toast is a sticky error with a Redraw button: Redraw while rend
   const cell = () => document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');
   const unbreak = breakRender("early");
   try {
-    const first = await logging(() => applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false }));
+    const first = await logging(() => applyMerge({ theirs: theirs, source: "stash", unchanged: true, report: false }));
     assert.equal(first.threw, null);
     assert.deepEqual(first.logged, [BROKE]);
     assert.equal(held(), currentDocument());
@@ -321,7 +321,7 @@ test("the redraw toast is a sticky error with a Redraw button: Redraw while rend
     assert.ok(toasts[0].classList.contains("error"));
     assert.ok(toasts[0].classList.contains("is-sticky"));
     assert.equal(toasts[0].querySelector(".toast-action").textContent, "Redraw");
-    const second = await logging(() => applyMerge({ theirs: cloneState(theirs), source: "server-conflict", unchanged: true, report: false }));
+    const second = await logging(() => applyMerge({ theirs: cloneState(theirs), source: "stash", unchanged: true, report: false }));
     assert.deepEqual(second.logged, [BROKE]);
     assert.equal(redrawToasts().length, 1, "a second failure while the toast is up does not stack another");
     const again = await logging(() => redrawToasts()[0].querySelector(".toast-action").click());
@@ -343,7 +343,7 @@ test("a redraw toast still on screen goes away when a later update draws cleanly
   theirs.title = "Drawn later";
   const unbreak = breakRender("early");
   try {
-    await logging(() => applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false }));
+    await logging(() => applyMerge({ theirs: theirs, source: "stash", unchanged: true, report: false }));
   } finally {
     unbreak();
   }
@@ -352,14 +352,14 @@ test("a redraw toast still on screen goes away when a later update draws cleanly
   other.className = "toast ok";
   other.textContent = "Another toast";
   toastHost().appendChild(other);
-  const clean = await logging(() => applyMerge({ theirs: cloneState(theirs), source: "server-conflict", unchanged: true, report: false }));
+  const clean = await logging(() => applyMerge({ theirs: cloneState(theirs), source: "stash", unchanged: true, report: false }));
   assert.deepEqual(clean.logged, []);
   assert.equal(document.getElementById("doc-title").value, "Drawn later");
   assert.equal(redrawToasts().length, 0, "the redraw toast is gone after a clean draw");
   assert.ok(shown().includes(other), "another toast is untouched");
   const unbreakAgain = breakRender("early");
   try {
-    await logging(() => applyMerge({ theirs: cloneState(theirs), source: "server-conflict", unchanged: true, report: false }));
+    await logging(() => applyMerge({ theirs: cloneState(theirs), source: "stash", unchanged: true, report: false }));
   } finally {
     unbreakAgain();
   }
@@ -482,7 +482,7 @@ async function staleScreen(setup, change) {
   const unbreak = breakRender("early");
   let out;
   try {
-    out = await logging(() => applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false }));
+    out = await logging(() => applyMerge({ theirs: theirs, source: "stash", unchanged: true, report: false }));
   } finally {
     unbreak();
   }
@@ -783,7 +783,7 @@ test("a paste with a file that is still being read when the screen goes stale ch
   const unbreak = breakRender("early");
   let merged;
   try {
-    merged = logging(() => applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false }));
+    merged = logging(() => applyMerge({ theirs: theirs, source: "stash", unchanged: true, report: false }));
   } finally {
     unbreak();
   }
@@ -917,13 +917,13 @@ test("a later update that draws cleanly lifts the block without Redraw, and neit
   theirs.title = "Drawn by the next update";
   const unbreak = breakRender("early");
   try {
-    await logging(() => applyMerge({ theirs: cloneState(theirs), source: "server-conflict", unchanged: true, report: false }));
+    await logging(() => applyMerge({ theirs: cloneState(theirs), source: "stash", unchanged: true, report: false }));
   } finally {
     unbreak();
   }
   assert.equal(redrawToasts().length, 1);
   assert.equal(document.activeElement, save, "a second failure leaves the focus outside the script alone");
-  const clean = await logging(() => applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false }));
+  const clean = await logging(() => applyMerge({ theirs: theirs, source: "stash", unchanged: true, report: false }));
   await idle();
   assert.deepEqual(clean.logged, []);
   assert.equal(redrawToasts().length, 0);
@@ -956,7 +956,7 @@ test("a failed render marks the page as a stale screen, and Redraw or a later cl
   assert.equal(document.body.classList.contains("is-stale-screen"), true, "marked again by the next failed render");
   const theirs = cloneState(currentDocument());
   theirs.title = "Cleared by a clean update";
-  const clean = await logging(() => applyMerge({ theirs: cloneState(theirs), source: "server-conflict", unchanged: true, report: false }));
+  const clean = await logging(() => applyMerge({ theirs: cloneState(theirs), source: "stash", unchanged: true, report: false }));
   await idle();
   assert.deepEqual(clean.logged, []);
   assert.equal(document.body.classList.contains("is-stale-screen"), false, "a later clean update takes the mark off");

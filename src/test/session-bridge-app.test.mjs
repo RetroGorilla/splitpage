@@ -96,7 +96,7 @@ test("a merge right after a document was swapped in, with no flush between, leav
   loadTestDocument(cloneState(base));
   const theirs = cloneState(base);
   theirs.rows[1].audioText = "Theirs.";
-  applyMerge({ base: base, mine: cloneState(base), theirs: theirs, source: "server-conflict", report: false });
+  applyMerge({ base: base, mine: cloneState(base), theirs: theirs, source: "stash", report: false });
   assert.deepEqual(heard, ["adopt", "server"], "the session adopts the swapped-in document as it is handed over, then the merge lands");
   assert.equal(session.epoch(), epoch + 1);
   assert.equal(session.generation(), gen);
@@ -120,7 +120,7 @@ test("a server update over undo entries forgets the ones on a field their side c
   const theirs = cloneState(currentDocument());
   theirs.rows[1].visualText = "Their close.";
   listen();
-  applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false });
+  applyMerge({ theirs: theirs, source: "stash", unchanged: true, report: false });
   assert.deepEqual(heard, ["server"]);
   assert.equal(session.epoch(), epoch);
   assert.equal(held(), currentDocument());
@@ -138,7 +138,7 @@ test("a reported merge marks the document dirty and advances saveChanges() as be
   mine.rows[0].audioText = "Mine.";
   const gen = session.generation(), seq = saveChanges();
   listen();
-  applyMerge({ base: base, mine: mine, theirs: theirs, source: "server-conflict" });
+  applyMerge({ base: base, mine: mine, theirs: theirs, source: "stash" });
   assert.deepEqual(heard, ["server"]);
   assert.equal(session.generation(), gen);
   assert.equal(saveChanges(), seq + 1);
