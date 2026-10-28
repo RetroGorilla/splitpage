@@ -3,7 +3,7 @@ import { screen as portScreen } from "./ports/screen.ts";
 import type { ActionDefinition } from "../../application/actions.ts";
 import { updateActions as definitions } from "../../features/update/actions.ts";
 import type { UpdatePorts, UpdateStatus } from "../../features/update/ports.ts";
-import { mountUpdate } from "../../features/update/update.js";
+import { mountUpdate } from "../../features/update/update.ts";
 import type { UpdateMount } from "../../features/update/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runningOnDesktop } from "../../application/desktop-presence.ts";

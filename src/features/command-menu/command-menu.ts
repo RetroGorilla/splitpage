@@ -1,28 +1,34 @@
+import type { CommandMenuPorts } from "./ports.ts";
+import type { ActionView } from "../../application/actions.ts";
+import type { Exporter } from "../../application/export/registry.ts";
 import { IS_MAC, keyChipWords, keyChipsHtml } from "../common/key-chips.js";
 import { placeEditorSelection, rememberCellSelection } from "../common/cell-selection.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 
-var ports = null;
-var listeners = [];
+let ports: CommandMenuPorts = null as unknown as CommandMenuPorts;
+const listeners: (() => void)[] = [];
 
-function listen(target, type, handler) {
+function listen<K extends keyof HTMLElementEventMap>(target: HTMLElement, type: K, handler: (event: HTMLElementEventMap[K]) => void) {
   target.addEventListener(type, handler);
   listeners.push(function () { target.removeEventListener(type, handler); });
 }
 
-var RECENT_KEY = "splitpage-recent-commands";
-var RECENT_MAX = 5;
-var GROUP_ORDER = ["Recent", "Tags", "File", "Share", "Export", "View", "This document", "Help"];
+type Entry = ReturnType<typeof actionEntry>;
+type Result = Entry & { order: number; score?: number };
 
-function el(id) { return document.getElementById(id); }
+const RECENT_KEY = "splitpage-recent-commands";
+const RECENT_MAX = 5;
+const GROUP_ORDER = ["Recent", "Tags", "File", "Share", "Export", "View", "This document", "Help"];
 
-var OWN_ACTION = "command-menu";
+function el(id: string) { return document.getElementById(id) as HTMLInputElement; }
 
-var LIST_BEFORE_EXPORTS = [
+const OWN_ACTION = "command-menu";
+
+const LIST_BEFORE_EXPORTS = [
   "save", "save-as", "save-back", "autosave", "new", "open", "paste", "gdoc-import", "export"
 ];
 
-var LIST_AFTER_EXPORTS = [
+const LIST_AFTER_EXPORTS = [
   "panel-production", "panel-gear", "panel-broll", "panel-comments", "write", "present",
   "history", "find", "toggle-hide-shot", "toggle-rundown-min", "set-target",
   "prompter-open-in-browser", "prompter-open-in-chromium",
@@ -30,19 +36,19 @@ var LIST_AFTER_EXPORTS = [
 ];
 
 function listOrder() {
-  return LIST_BEFORE_EXPORTS.concat(ports.exports.exporters().map(function (e) { return e.action; }), LIST_AFTER_EXPORTS);
+  return LIST_BEFORE_EXPORTS.concat(ports.exports.exporters().map(function (e) { return e.action as string; }), LIST_AFTER_EXPORTS);
 }
 
-function exportEntry(exporter) {
-  var action = exporter.action;
-  var why = ports.exportActionReason(action);
+function exportEntry(exporter: Exporter) {
+  const action = exporter.action as string;
+  const why = ports.exportActionReason(action);
   return {
     cmd: { id: action, group: "Export", words: "export download " + (exporter.words || ""), run: function () { ports.runExportAction(action); } },
     view: { label: "Export as " + ports.exportActionName(action), icon: "i-export", keys: "", why: why, disabled: !!why, state: "" }
   };
 }
 
-function actionEntry(view) {
+function actionEntry(view: ActionView) {
   return {
     cmd: { id: view.id, group: view.group, words: view.words, run: function () { ports.actions.invoke(view.id, "command-menu"); } },
     view: {
@@ -56,42 +62,42 @@ function actionEntry(view) {
   };
 }
 
-function listRank(id, order) {
-  var at = order.indexOf(id);
+function listRank(id: string, order: string[]) {
+  const at = order.indexOf(id);
   return at === -1 ? order.length : at;
 }
 
 function listedEntries() {
-  var views = ports.screen.askingFromLauncher(function () { return ports.actions.list(); });
-  var entries = views.filter(function (v) { return v.visible && v.id !== OWN_ACTION; }).map(actionEntry)
+  const views = ports.screen.askingFromLauncher(function () { return ports.actions.list(); });
+  const entries = views.filter(function (v) { return v.visible && v.id !== OWN_ACTION; }).map(actionEntry)
     .concat(ports.exports.exporters().map(exportEntry));
-  var order = listOrder();
+  const order = listOrder();
   return entries.map(function (entry, i) { return { entry: entry, at: i }; })
     .sort(function (a, b) { return (listRank(a.entry.cmd.id, order) - listRank(b.entry.cmd.id, order)) || (a.at - b.at); })
     .map(function (x) { return x.entry; });
 }
 
 function recentIds() {
-  var list;
+  let list: unknown;
   try { list = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); } catch (e) { list = []; }
   return Array.isArray(list) ? list.filter(function (x) { return typeof x === "string"; }).slice(0, RECENT_MAX) : [];
 }
 
-function noteRecent(id) {
-  var list = recentIds().filter(function (x) { return x !== id; });
+function noteRecent(id: string) {
+  const list = recentIds().filter(function (x) { return x !== id; });
   list.unshift(id);
   try { localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(0, RECENT_MAX))); } catch (e) { }
 }
 
-function scoreFor(view, cmd, terms) {
-  var label = view.label.toLowerCase();
-  var labelWords = label.split(/[^a-z0-9]+/).filter(Boolean);
-  var otherWords = (cmd.words + " " + cmd.group).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-  var total = 0;
-  for (var i = 0; i < terms.length; i++) {
-    var t = terms[i];
-    var one = t.length > 3 && /s$/.test(t) ? t.slice(0, -1) : t;
-    var s = 0;
+function scoreFor(view: Entry["view"], cmd: Entry["cmd"], terms: string[]) {
+  const label = view.label.toLowerCase();
+  const labelWords = label.split(/[^a-z0-9]+/).filter(Boolean);
+  const otherWords = (cmd.words + " " + cmd.group).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  let total = 0;
+  for (let i = 0; i < terms.length; i++) {
+    const t = terms[i] as string;
+    const one = t.length > 3 && /s$/.test(t) ? t.slice(0, -1) : t;
+    let s = 0;
     if (labelWords.some(function (w) { return w.indexOf(t) === 0 || w.indexOf(one) === 0; })) s = 3;
     else if (label.indexOf(t) !== -1) s = 2;
     else if (otherWords.some(function (w) { return w.indexOf(t) === 0; })) s = 1;
@@ -102,17 +108,17 @@ function scoreFor(view, cmd, terms) {
   return total;
 }
 
-export function commandResults(query) {
-  var q = String(query || "").trim().toLowerCase();
-  var terms = q.split(/\s+/).filter(Boolean);
-  var all = listedEntries().map(function (entry, i) { return { cmd: entry.cmd, view: entry.view, order: i }; });
-  var groupOrder = GROUP_ORDER.slice();
+export function commandResults(query: unknown) {
+  const q = String(query || "").trim().toLowerCase();
+  const terms = q.split(/\s+/).filter(Boolean);
+  const all: Result[] = listedEntries().map(function (entry, i) { return { cmd: entry.cmd, view: entry.view, order: i }; });
+  const groupOrder = GROUP_ORDER.slice();
   all.forEach(function (it) { if (groupOrder.indexOf(it.cmd.group) === -1) groupOrder.push(it.cmd.group); });
-  var groups = {};
-  var put = function (g, item) { (groups[g] = groups[g] || []).push(item); };
+  const groups: Record<string, Result[]> = {};
+  const put = function (g: string, item: Result) { (groups[g] = groups[g] || []).push(item); };
   if (!terms.length) {
-    var recent = recentIds();
-    var byId = {};
+    const recent = recentIds();
+    const byId: Record<string, Result> = {};
     all.forEach(function (it) { byId[it.cmd.id] = it; });
     recent.forEach(function (id) { if (byId[id]) put("Recent", byId[id]); });
     all.forEach(function (it) { if (recent.indexOf(it.cmd.id) === -1) put(it.cmd.group, it); });
@@ -122,32 +128,32 @@ export function commandResults(query) {
       if (it.score) put(it.cmd.group, it);
     });
     Object.keys(groups).forEach(function (g) {
-      groups[g].sort(function (a, b) { return (b.score - a.score) || (a.order - b.order); });
+      (groups[g] as Result[]).sort(function (a, b) { return ((b.score as number) - (a.score as number)) || (a.order - b.order); });
     });
   }
-  var out = groupOrder.filter(function (g) { return groups[g]; }).map(function (g) { return { group: g, items: groups[g] }; });
+  const out = groupOrder.filter(function (g) { return groups[g]; }).map(function (g) { return { group: g, items: groups[g] as Result[] }; });
   if (terms.length) {
-    var best = function (g) { return Math.max.apply(null, g.items.map(function (it) { return it.score; })); };
+    const best = function (g: { items: Result[] }) { return Math.max.apply(null, g.items.map(function (it) { return it.score as number; })); };
     out.sort(function (a, b) { return best(b) - best(a) || groupOrder.indexOf(a.group) - groupOrder.indexOf(b.group); });
   }
   return out;
 }
 
-var shown = [];
-var active = -1;
-var returnFocus = null;
+let shown: Result[] = [];
+let active = -1;
+let returnFocus: { el: HTMLElement; range: Range | null; editor: string | null } | null = null;
 
-function labelHtml(label, terms) {
-  var lower = label.toLowerCase();
-  var marks = [];
+function labelHtml(label: string, terms: string[]) {
+  const lower = label.toLowerCase();
+  const marks: [number, number][] = [];
   terms.forEach(function (t) {
-    var at = -1;
-    var re = /[a-z0-9]+/g, m;
+    let at = -1;
+    const re = /[a-z0-9]+/g; let m;
     while ((m = re.exec(lower))) {
       if (m[0].indexOf(t) === 0) { at = m.index; break; }
     }
     if (at === -1 && t.length > 3 && /s$/.test(t)) {
-      var one = t.slice(0, -1);
+      const one = t.slice(0, -1);
       re.lastIndex = 0;
       while ((m = re.exec(lower))) {
         if (m[0].indexOf(one) === 0) { at = m.index; t = one; break; }
@@ -160,7 +166,7 @@ function labelHtml(label, terms) {
   });
   if (!marks.length) return escapeHtml(label);
   marks.sort(function (a, b) { return a[0] - b[0]; });
-  var out = "", pos = 0;
+  let out = "", pos = 0;
   marks.forEach(function (r) {
     out += escapeHtml(label.slice(pos, r[0])) + "<mark>" + escapeHtml(label.slice(r[0], r[1])) + "</mark>";
     pos = r[1];
@@ -169,23 +175,23 @@ function labelHtml(label, terms) {
 }
 
 function renderList() {
-  var list = el("cmdk-list");
-  var input = el("cmdk-input");
-  var results = commandResults(input.value);
-  var terms = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const list = el("cmdk-list");
+  const input = el("cmdk-input");
+  const results = commandResults(input.value);
+  const terms = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
   shown = [];
   if (!results.length) {
     list.innerHTML = '<div class="cmdk-empty">No command matches “' + escapeHtml(input.value.trim()) + '”.</div>';
     setActive(-1);
     return;
   }
-  var html = "";
+  let html = "";
   results.forEach(function (g, gi) {
     html += '<div role="group" aria-labelledby="cmdk-g-' + gi + '"><div class="cmdk-group" id="cmdk-g-' + gi + '">' + escapeHtml(g.group) + '</div>';
     g.items.forEach(function (it) {
-      var n = shown.length;
+      const n = shown.length;
       shown.push(it);
-      var v = it.view;
+      const v = it.view;
       html += '<div class="cmdk-item" role="option" id="cmdk-opt-' + n + '" data-index="' + n + '" data-cmd="' + escapeHtml(it.cmd.id) + '"' +
         ' aria-selected="false"' + (v.disabled ? ' aria-disabled="true"' : '') + '>' +
         '<svg class="cmdk-icon" aria-hidden="true"><use href="#' + escapeHtml(v.icon) + '"/></svg>' +
@@ -198,16 +204,16 @@ function renderList() {
     html += '</div>';
   });
   list.innerHTML = html;
-  var first = shown.findIndex(function (it) { return !it.view.disabled; });
+  const first = shown.findIndex(function (it) { return !it.view.disabled; });
   setActive(first === -1 ? 0 : first);
 }
 
-function setActive(i) {
-  var input = el("cmdk-input");
-  var prev = document.querySelector("#cmdk-list .cmdk-item.is-active");
+function setActive(i: number) {
+  const input = el("cmdk-input");
+  const prev = document.querySelector("#cmdk-list .cmdk-item.is-active");
   if (prev) { prev.classList.remove("is-active"); prev.setAttribute("aria-selected", "false"); }
   active = i;
-  var row = i >= 0 ? el("cmdk-opt-" + i) : null;
+  const row = i >= 0 ? el("cmdk-opt-" + i) : null;
   if (!row) { input.removeAttribute("aria-activedescendant"); active = -1; return; }
   row.classList.add("is-active");
   row.setAttribute("aria-selected", "true");
@@ -215,9 +221,9 @@ function setActive(i) {
   row.scrollIntoView({ block: "nearest" });
 }
 
-function move(delta) {
+function move(delta: number) {
   if (!shown.length) return;
-  var n = shown.length;
+  const n = shown.length;
   setActive(((active === -1 ? (delta > 0 ? -1 : 0) : active) + delta + n) % n);
 }
 
@@ -228,16 +234,16 @@ export function commandMenuOpen() {
 export function openCommandMenu() {
   if (commandMenuOpen()) return false;
   if (ports.fileMenuOpen()) ports.actions.invoke("close-file-menu", "button");
-  var ae = document.activeElement;
-  var range = null;
-  var sel = window.getSelection && window.getSelection();
+  const ae = document.activeElement as HTMLElement | null;
+  let range = null;
+  const sel = window.getSelection && window.getSelection();
   if (ae && ae.isContentEditable && sel && sel.rangeCount && ae.contains(sel.anchorNode)) range = sel.getRangeAt(0).cloneRange();
-  var surface = ae && ae.closest ? ae.closest("#rows, #writer-doc") : null;
-  var editor = surface && rememberCellSelection(ports.selection, ae) ? surface.id : null;
+  const surface = ae && ae.closest ? ae.closest("#rows, #writer-doc") : null;
+  const editor = surface && rememberCellSelection(ports.selection, ae) ? surface.id : null;
   returnFocus = ae && ae !== document.body ? { el: ae, range: range, editor: editor } : null;
   ports.refreshFileMenu();
-  var modal = el("cmdk");
-  var input = el("cmdk-input");
+  const modal = el("cmdk");
+  const input = el("cmdk-input");
   input.value = "";
   modal.hidden = false;
   renderList();
@@ -245,14 +251,14 @@ export function openCommandMenu() {
   return true;
 }
 
-export function closeCommandMenu(restore) {
-  var modal = el("cmdk");
+export function closeCommandMenu(restore?: boolean) {
+  const modal = el("cmdk");
   if (!modal || modal.hidden) return;
   modal.hidden = true;
   el("cmdk-list").innerHTML = "";
   shown = [];
   active = -1;
-  var back = returnFocus;
+  const back = returnFocus;
   returnFocus = null;
   if (restore === false || !back) return;
   if (!document.contains(back.el)) {
@@ -262,15 +268,15 @@ export function closeCommandMenu(restore) {
   back.el.focus({ preventScroll: true });
   if (back.range) {
     try {
-      var sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(back.range);
+      const sel = window.getSelection();
+      (sel as Selection).removeAllRanges();
+      (sel as Selection).addRange(back.range);
     } catch (e) { }
   }
 }
 
-function runAt(i) {
-  var it = shown[i];
+function runAt(i: number) {
+  const it = shown[i];
   if (!it || it.view.disabled) return false;
   closeCommandMenu();
   noteRecent(it.cmd.id);
@@ -278,11 +284,11 @@ function runAt(i) {
   return true;
 }
 
-export function startCommandMenu(given) {
+export function startCommandMenu(given: CommandMenuPorts) {
   ports = given;
-  var modal = el("cmdk");
-  var input = el("cmdk-input");
-  var list = el("cmdk-list");
+  const modal = el("cmdk");
+  const input = el("cmdk-input");
+  const list = el("cmdk-list");
   if (modal && input && list) {
     listen(input, "input", renderList);
     listen(input, "keydown", function (e) {
@@ -296,41 +302,41 @@ export function startCommandMenu(given) {
       if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeCommandMenu(); }
     });
     listen(list, "mousemove", function (e) {
-      var row = e.target.closest(".cmdk-item");
-      if (row && +row.getAttribute("data-index") !== active) setActive(+row.getAttribute("data-index"));
+      const row = (e.target as Element).closest(".cmdk-item");
+      if (row && +(row.getAttribute("data-index") as string) !== active) setActive(+(row.getAttribute("data-index") as string));
     });
     listen(list, "mousedown", function (e) { e.preventDefault(); });
     listen(list, "click", function (e) {
-      var row = e.target.closest(".cmdk-item");
-      if (row) runAt(+row.getAttribute("data-index"));
+      const row = (e.target as Element).closest(".cmdk-item");
+      if (row) runAt(+(row.getAttribute("data-index") as string));
     });
     listen(modal, "mousedown", function (e) { if (e.target === modal) { e.preventDefault(); closeCommandMenu(); } });
-    var closeBtn = el("cmdk-close");
+    const closeBtn = el("cmdk-close");
     if (closeBtn) {
       listen(closeBtn, "mousedown", function (e) { e.preventDefault(); });
       listen(closeBtn, "click", function () { closeCommandMenu(); });
     }
     listen(modal, "focusout", function (e) {
-      if (commandMenuOpen() && !(e.relatedTarget && modal.contains(e.relatedTarget))) closeCommandMenu(false);
+      if (commandMenuOpen() && !(e.relatedTarget && modal.contains(e.relatedTarget as Node))) closeCommandMenu(false);
     });
 
-    var trigger = el("btn-command");
+    const trigger = el("btn-command");
     if (trigger) {
       trigger.title = "Search or run a command (" + keyChipWords("mod+k").join(IS_MAC ? "" : "+") + ")";
       listen(trigger, "click", function () { ports.actions.invoke("command-menu", "button"); });
     }
   }
 
-  var test = {
-    results: function (q) {
+  const test = {
+    results: function (q: unknown) {
       return commandResults(q).map(function (g) {
         return { group: g.group, items: g.items.map(function (it) { return { id: it.cmd.id, label: it.view.label, disabled: !!it.view.disabled, why: it.view.why }; }) };
       });
     },
     recent: recentIds
   };
-  window.__commandTest = test;
-  var disposed = false;
+  (window as Window & { __commandTest?: typeof test }).__commandTest = test;
+  let disposed = false;
   return {
     openCommandMenu: openCommandMenu,
     closeCommandMenu: closeCommandMenu,
@@ -339,12 +345,12 @@ export function startCommandMenu(given) {
       if (disposed) return;
       disposed = true;
       closeCommandMenu(false);
-      while (listeners.length) listeners.pop()();
-      if (window.__commandTest === test) delete window.__commandTest;
+      while (listeners.length) (listeners.pop() as () => void)();
+      if ((window as Window & { __commandTest?: typeof test }).__commandTest === test) delete (window as Window & { __commandTest?: typeof test }).__commandTest;
       shown = [];
       active = -1;
       returnFocus = null;
-      ports = null;
+      ports = null as unknown as CommandMenuPorts;
     }
   };
 }
