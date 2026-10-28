@@ -9,8 +9,12 @@ export function galleryActions(current: () => GalleryControls | null): ActionDef
     group: "Open",
     availability: () => ({ enabled: current() !== null, visible: false }),
     run: (_source, input) => {
-      const at = fields("annotate-picture", input, ["rowId"], ["slot"]);
-      current()?.openAnnotator(at["rowId"] as string, at["slot"] as number);
+      const at = objectFields("annotate-picture", input);
+      const rowId = at["rowId"];
+      const slot = at["slot"];
+      if (typeof rowId !== "string") throw new TypeError("annotate-picture needs rowId as text");
+      if (typeof slot !== "number") throw new TypeError("annotate-picture needs slot as a number");
+      current()?.openAnnotator(rowId, slot);
     }
   }];
 }
@@ -19,9 +23,13 @@ const OPENED_FROM_ITS_VIEW: Availability = { enabled: true, visible: false };
 
 type Fields = Readonly<Record<string, unknown>>;
 
-function fields(id: string, input: unknown, strings: readonly string[], numbers: readonly string[] = []): Fields {
+function objectFields(id: string, input: unknown): Fields {
   if (typeof input !== "object" || input === null) throw new TypeError(`${id} needs what to open`);
-  const record = input as Fields;
+  return input as Fields;
+}
+
+function fields(id: string, input: unknown, strings: readonly string[], numbers: readonly string[] = []): Fields {
+  const record = objectFields(id, input);
   for (const key of strings) {
     if (typeof record[key] !== "string") throw new TypeError(`${id} needs ${key} as text`);
   }
