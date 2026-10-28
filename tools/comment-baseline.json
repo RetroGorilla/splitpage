@@ -230,12 +230,6 @@
       "# {\"type\":\"start\",\"lang\":\"en-US\"} listening",
       "# {\"type\":\"warning\",\"code\":\"...\"} no-signal / too-quiet / too-noisy /"
     ],
-    "server/comments.js": [
-      "/* eslint-disable-next-line no-control-regex -- C0 controls, minus the tab/LF/CR a comment may legitimately contain, are what this strips. */"
-    ],
-    "server/server.js": [
-      "/* eslint-disable-next-line no-control-regex -- stripping them is the job. */"
-    ],
     "shared/history-policy.js": [
       "/* condition does the work */",
       "/* condition does the work */",
@@ -266,9 +260,6 @@
     "start.sh": [
       "# A bundled runtime wins, same as on Windows.",
       "# Splitpage on macOS and Linux."
-    ],
-    "tools/test-server.mjs": [
-      "/* nothing to clean up */"
     ]
   }
 }
