@@ -272,3 +272,7 @@ Things the code does today that the plan says will change, or that a reader woul
 - **Duplicated constant.** `REVIEW_REFUSAL_REASON` (`authority.ts`) and `REVIEW_ONLY` (`session-bridge.ts`) hold the same value; one constant would be safer.
 - **Blobs.** `02c-blobs.js` delegates to `adapters/storage/blob-store.ts` (4.19). The writers call `ensureBytes` before they write and `sendWithBlobs` and `uploadBlobs` for the server; neither runs under the operation context.
 - **App-lifetime subscriptions.** No app module subscribes to the live session; the replacement listener of section 3 is the one app-lifetime hook, and the listeners, observers and the presence timer that live for the whole session are named in `src/test/m4-lifecycle.test.mjs`.
+
+## Local file owner lifetimes
+
+Opening, resume and reload continuations belong to the owner that began them. Stopping that owner retires pending reads and decoding, ends its busy indicators and prevents later adoption, confirmation or handle persistence. Import write-back checks both its owner lifetime and save job ownership after asynchronous work. A retired write aborts an acquired writable when supported; a buffered desktop writable is left unclosed so it cannot commit. A close already in progress cannot be undone, but its retired continuation does not update metadata or report completion. File menu controls, conflict timers and pending exports belong to their originating mount and cannot use a replacement mount's ports. Disposing an old mount again cannot stop its replacement.
