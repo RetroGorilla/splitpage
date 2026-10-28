@@ -71,7 +71,7 @@ function selectionIn(el) {
 }
 
 function merge(theirs) {
-  return applyMerge({ theirs: theirs, source: "server-conflict", unchanged: true, report: false });
+  return applyMerge({ theirs: theirs, source: "stash", unchanged: true, report: false });
 }
 
 function observe(run) {

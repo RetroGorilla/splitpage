@@ -185,7 +185,7 @@ function focusCalls(run) {
 }
 
 function merged(theirs, mine, base) {
-  return applyMerge({ base: base, mine: mine, theirs: theirs, source: "server-conflict", report: false });
+  return applyMerge({ base: base, mine: mine, theirs: theirs, source: "stash", report: false });
 }
 
 test("R1a: a render with a grid cell focused that the update leaves alone keeps that very cell, its focus and its caret, and makes no edit", () => {
@@ -288,7 +288,7 @@ function conflictRun(label, focused) {
   const theirs = cloneState(base);
   theirs.rows[0].audioText = "Theirs one.";
   theirs.rows[1].audioText = "Theirs two.";
-  const decided = applyMerge({ base: cloneState(base), mine: cloneState(currentDocument()), theirs: cloneState(theirs), source: "server-conflict", mergeOnly: true })
+  const decided = applyMerge({ base: cloneState(base), mine: cloneState(currentDocument()), theirs: cloneState(theirs), source: "stash", mergeOnly: true })
     .state.rows.map((r) => [r.id, r.visualText, r.audioText]);
   const got = observe(() => merged(theirs, cloneState(currentDocument()), base));
   return { decided: decided, got: got, texts: modelTexts(), grid: gridTexts() };
