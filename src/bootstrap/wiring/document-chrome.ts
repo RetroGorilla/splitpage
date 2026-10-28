@@ -5,7 +5,7 @@ import { onSaveChange } from "../../legacy/save-bridge.ts";
 import { identityChipListeners } from "./title-chrome.ts";
 import { saveStatusListeners } from "./save-status.ts";
 import { presence } from "../../legacy/presence-bridge.ts";
-import { fileChipListeners, mirrorFileChipToWriter, updateFileChip } from "../../js/18-local-files.js";
+import { fileChipListeners, mirrorFileChipToWriter, updateFileChip } from "./local-files.ts";
 import { refreshOpenFileMenu } from "./file-menu-controls.ts";
 import { desktopDocumentListeners } from "../../legacy/desktop-bridge.ts";
 

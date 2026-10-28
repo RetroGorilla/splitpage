@@ -25,3 +25,9 @@ export interface EffectPorts<Item> {
   readonly menuItems: MenuItemPort<Item>;
   readonly clipboard: ClipboardPort;
 }
+
+export interface BusyNotices {
+  readonly begin: (label: string) => unknown;
+  readonly end: (token: unknown) => void;
+  readonly withBar: <T>(label: string, work: () => T | Promise<T>) => Promise<T>;
+}

@@ -5,7 +5,7 @@
     "src/bootstrap/wiring/project-files.ts",
     "src/bootstrap/wiring/ports/project-files.ts",
     "src/application/save/export-kit.ts",
-    "src/legacy/export-kit-bridge.ts",
+    "src/bootstrap/wiring/export-capture.ts",
     "src/bootstrap/wiring/export-kit.ts",
     "src/adapters/formats/export-projections.ts",
     "src/adapters/formats/export-kit.ts",

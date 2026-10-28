@@ -16,7 +16,7 @@ import {
 } from "../adapters/formats/export-kit.ts";
 import {
   exportDocumentOf
-} from "../legacy/export-kit-bridge.ts";
+} from "../bootstrap/wiring/export-capture.ts";
 import { exportRuns } from "../adapters/formats/export-kit.ts";
 import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { assemblePdf, pdfLampOp, pdfTextWidth, pdfWrapRuns } from "../adapters/formats/pdf.ts";

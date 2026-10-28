@@ -7,7 +7,7 @@ import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
 await bootApp();
 
 const { cycleRowStatus } = await import("../bootstrap/wiring/scene-status.ts");
-const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
+const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { setSceneLength } = await import("../features/rows/read-time.js");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");

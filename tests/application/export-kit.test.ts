@@ -9,7 +9,7 @@ import { createProductionReaders } from "../../src/core/production/readers.ts";
 import type { ExportServices } from "../../src/application/export/services.ts";
 import type { ExportAnchorBody } from "../../src/application/save/export-kit.ts";
 import type { DocumentView } from "../../src/application/session/document-session.ts";
-import { captureExportDocument, exportDocumentOf, loadExportAssets, startExportKit } from "../../src/legacy/export-kit-bridge.ts";
+import { captureExportDocument, exportDocumentOf, loadExportAssets, startExportKit } from "../../src/bootstrap/wiring/export-capture.ts";
 
 function fake() {
   const log: string[] = [];

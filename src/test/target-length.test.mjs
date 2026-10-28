@@ -18,7 +18,7 @@ import { applyStepsLive, diffStates } from "../application/editing/undo/history.
 import { cellRuns } from "./_cell-runs.mjs";
 import { invertSteps } from "../core/text/steps.ts";
 import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject } from "../adapters/formats/project-file.ts";
-import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
+import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
 

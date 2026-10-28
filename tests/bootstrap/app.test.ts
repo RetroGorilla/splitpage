@@ -1,4 +1,4 @@
-import { captureExportDocument } from "../../src/legacy/export-kit-bridge.ts";
+import { captureExportDocument } from "../../src/bootstrap/wiring/export-capture.ts";
 import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
 import { test } from "node:test";

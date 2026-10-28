@@ -1,6 +1,6 @@
 import { prompterActions } from "../../src/features/prompter/actions.ts";
 import { screen } from "../../src/bootstrap/wiring/ports/screen.ts";
-import { captureExportDocument } from "../../src/legacy/export-kit-bridge.ts";
+import { captureExportDocument } from "../../src/bootstrap/wiring/export-capture.ts";
 import { startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
 import { tagPanelActions, mountTagPanelsFeature, stopTagPanelsFeature } from "../../src/bootstrap/wiring/production.ts";
 import { brollPanelActions, mountBrollPanelStateFeature, stopBrollPanelStateFeature } from "../../src/bootstrap/wiring/broll.ts";

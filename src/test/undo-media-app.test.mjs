@@ -8,7 +8,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
+const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { undo, redo, undoSizes, flushEdits } = await import("../legacy/undo-bridge.ts");
 const { applyStepsLive } = await import("../application/editing/undo/history.ts");

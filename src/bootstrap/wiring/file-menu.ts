@@ -21,7 +21,7 @@ import { migrateRows } from "../../legacy/document-ports.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { importControls } from "./imports.ts";
 import { applyReviewMode } from "../../js/13-hosted.js";
-import { openLocalFile } from "../../js/18-local-files.js";
+import { openLocalFile } from "./local-files.ts";
 import { LONG_DEMO } from "../../starters/index.ts";
 
 export function mountFileMenuDropdownFeature(): FileMenuDropdownMount {

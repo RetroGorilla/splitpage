@@ -11,14 +11,14 @@ await bootApp();
 
 const { liveSession, noteReload } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
+const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { adoptRestoredState } = await import("../bootstrap/startup/document-entry.js");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
 const { applyMerge } = await import("../legacy/merge-bridge.ts");
 const { scheduleIdleRefresh, productionIndexStats } = await import("../features/tags/production-tags.js");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { flushEdits, lastUndoEntry, undoSizes } = await import("../legacy/undo-bridge.ts");
-const { reloadFileFromDisk } = await import("../js/18-local-files.js");
+const { reloadFileFromDisk } = await import("../bootstrap/wiring/local-files.ts");
 const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");

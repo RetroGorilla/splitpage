@@ -2,7 +2,6 @@ import type { ActionDefinition, Availability } from "../application/actions.ts";
 import { openDriveModal, openServerPicker, publishToServer, serverOpenItemState, serverPublishItemState } from "../js/13-hosted.js";
 import { collaborateBlockedReason, maybeAskGuestName, openCollaborate } from "../js/13b-collaborate.js";
 import { autoSavePolicy, savesStarted, toggleAutoSave } from "./save-bridge.ts";
-import { saveBackItemState, saveBackToFile } from "../js/18-local-files.js";
 import { driveOpenShown } from "../adapters/desktop/desktop-port.ts";
 import { greyedOut, itemAvailability, shownWhen } from "./menu-items.ts";
 import { OPENS_A_DIALOG, availableUnless, firstRefusal } from "../application/screen.ts";
@@ -21,18 +20,6 @@ function loaded(own: Availability = { enabled: true }, blockers: readonly Blocke
 
 export function shareActions(): ActionDefinition[] {
   const definitions: ActionDefinition[] = [
-    {
-      id: "save-back",
-      label: () => saveBackItemState().label,
-      group: "File",
-      icon: "i-save",
-      words: "write back original docx csv txt",
-      availability: (source) => {
-        const a = loaded(itemAvailability(saveBackItemState(), source), NO_DIALOG);
-        return a.enabled ? a : { ...a, visible: false };
-      },
-      run: async () => { await saveBackToFile(); }
-    },
     {
       id: "autosave",
       label: "Autosave",

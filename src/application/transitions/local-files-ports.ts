@@ -1,0 +1,71 @@
+import type { BusyNotices, NoticePort } from "../effects/ports.ts";
+import type { UndoControl } from "../editing/undo-control.ts";
+import type { LocalFileAccess, LocalFileData } from "../files/local-file-access.ts";
+import type { DocumentLocation } from "../location/document-location.ts";
+import type { FileConflicts } from "../save/file-conflict.ts";
+import type { SaveConfirmation, SaveState } from "../save/save-state.ts";
+import type { DocumentReader } from "../session/document-reader.ts";
+import type { SessionMergeOwner } from "../session/session-merge-ports.ts";
+import type { SidePanels } from "../side-panels.ts";
+import type { TextServices } from "../text/services.ts";
+import type { DocumentDestination, HistoryPort } from "./ports.ts";
+import type { DocumentSource } from "./sources.ts";
+import type { Transitions } from "./transitions.ts";
+
+export interface LocalFileOpening {
+  readonly kind: string;
+  readonly file?: unknown;
+  readonly handle?: unknown;
+  readonly parsed?: unknown;
+  readonly options?: unknown;
+}
+
+export interface LocalFileImports {
+  readonly parseProjectFileState: (file: unknown) => Promise<unknown>;
+  readonly docxToRows: (file: LocalFileData) => Promise<unknown>;
+  readonly csvToRows: (text: string) => unknown;
+  readonly detectTwoColumnFormat: (text: string) => string | null;
+  readonly parseImportRows: (text: string, mode: string) => unknown;
+  readonly normalizeImportedRows: (rows: unknown, sanitize: TextServices["sanitizeHtml"]) => unknown;
+}
+
+export interface LocalFilesOwnerPorts {
+  readonly document: Pick<DocumentReader, "current">;
+  readonly session: {
+    readonly noteAbsorbedDirty: (kind: "reload" | "adopt") => void;
+    readonly noteReload: (content: unknown) => void;
+  };
+  readonly transitions: Pick<Transitions<DocumentDestination>, "open">;
+  readonly history: HistoryPort;
+  readonly saving: SaveConfirmation;
+  readonly saves: Pick<SaveState, "unsaved">;
+  readonly conflicts: Pick<FileConflicts, "close">;
+  readonly location: Pick<DocumentLocation, "amendHome" | "setHome" | "fileHome" | "importHome">;
+  readonly lastFile: { readonly load: () => Promise<unknown>; readonly remember: (handle: unknown) => Promise<void> };
+  readonly syncIdentity: () => void;
+  readonly stamps: Pick<SessionMergeOwner, "stampRow">;
+  readonly notices: Pick<NoticePort, "show"> & { readonly busy: Pick<BusyNotices, "begin" | "end"> };
+  readonly resetProductionPanel: () => void;
+  readonly panels: Pick<SidePanels, "close">;
+  readonly undo: Pick<UndoControl, "flush">;
+  readonly imports: LocalFileImports;
+  readonly text: Pick<TextServices, "sanitizeHtml">;
+  readonly resumeNeeded: (handle: unknown) => void;
+  readonly desktop: {
+    readonly running: () => boolean;
+    readonly openFileDialog: () => Promise<unknown>;
+    readonly routeOpen: (request: { kind: "file"; fileId: unknown }) => Promise<unknown>;
+  };
+  readonly files: LocalFileAccess;
+  readonly chooseFallback: () => void;
+}
+
+export interface LocalFilesOwner {
+  readonly startLocalFiles: (ports: LocalFilesOwnerPorts) => () => void;
+  readonly projectFileSource: () => DocumentSource<LocalFileOpening>;
+  readonly tryResumeLastProject: () => Promise<void>;
+  readonly resumeFromHandle: (handle: unknown) => Promise<void>;
+  readonly openLocalFile: () => Promise<void>;
+  readonly reloadFileFromDisk: () => Promise<void>;
+  readonly reloadProjectFromDisk: () => Promise<void>;
+}
