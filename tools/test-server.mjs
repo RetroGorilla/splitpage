@@ -87,6 +87,12 @@ writeFileSync(join(root, "blob.bin"), "abc");
 mkdirSync(join(root, ".git"));
 writeFileSync(join(root, ".git", "config"), "[remote \"origin\"]\n");
 writeFileSync(join(root, ".env"), "SECRET=1\n");
+mkdirSync(join(root, "data", "links"), { recursive: true });
+mkdirSync(join(root, "data", "blobs", "ab"), { recursive: true });
+writeFileSync(join(root, "data", "my-doc-1a2b3c.json"), "{\"id\":\"my-doc-1a2b3c\"}");
+writeFileSync(join(root, "data", "links", "secret"), "00\n");
+writeFileSync(join(root, "data", "links", "links.json"), "{}");
+writeFileSync(join(root, "data", "blobs", "ab", "abcdef"), "blob");
 mkdirSync(join(root, "sub"));
 writeFileSync(join(root, "sub", "page.txt"), "hello");
 
@@ -138,6 +144,15 @@ try {
   eq("...nor .env", (await fetch(base + ".env")).status, 404);
   eq("...nor percent-encoded", (await fetch(base + "%2Eenv")).status, 404);
   eq("...nor a dot folder", (await fetch(base + ".git/")).status, 404);
+
+  eq("a leftover documents folder is not served: data/<id>.json", (await fetch(base + "data/my-doc-1a2b3c.json")).status, 404);
+  eq("...not with a token header either", (await fetch(base + "data/my-doc-1a2b3c.json", { headers: { "x-splitpage-token": "x" } })).status, 404);
+  eq("...nor spelled in capitals", (await fetch(base + "DATA/my-doc-1a2b3c.json")).status, 404);
+  eq("...nor percent-encoded", (await fetch(base + "%64ata/my-doc-1a2b3c.json")).status, 404);
+  eq("...nor the link store's secret", (await fetch(base + "data/links/secret")).status, 404);
+  eq("...nor links.json", (await fetch(base + "data/links/links.json")).status, 404);
+  eq("...nor a stored blob", (await fetch(base + "data/blobs/ab/abcdef")).status, 404);
+  eq("a file merely named like data is served", (await fetch(base + "sub/page.txt")).status, 200);
 
   eq("a percent-encoded .. is refused", statusOf(await rawRequest(s.port, "GET /%2e%2e/%2e%2e/etc/passwd HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")) >= 400, true);
   const traversal = await rawRequest(s.port, "GET /..%2f" + outside.split(/[\\/]/).pop() + "/secret.txt HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n");
