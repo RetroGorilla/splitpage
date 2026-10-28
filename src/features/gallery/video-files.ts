@@ -75,7 +75,7 @@ export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
     if (disposed) return;
     const idx = ports.document.read(function (doc: DocumentView | null) { return rowIndexOf(doc, rowId); });
     if (idx === -1) return;
-    const s = rowSlots((ports.document.current() as DocumentView).rows[idx])[slot];
+    const s = rowSlots((ports.document.current() as { rows: readonly unknown[] }).rows[idx])[slot];
     const link = s && s.links.filter(function (l: VideoLink) { return videoLinkKey(l) === key; })[0];
     if (!link) return;
     if (link.href) {
