@@ -12,7 +12,7 @@ import { tagPrintColor } from "../../adapters/formats/print-colors.ts";
 import { fileMenuExportActions as definitions } from "../../features/file-menu/actions.ts";
 import { startExportDialog as mountExportDialog } from "../../features/file-menu/export-dialog.js";
 import type { FileMenuExportMount, FileMenuExportPorts } from "../../features/file-menu/ports.ts";
-import { exportBaseName, exportFileName, handleFileMenuAction, runExportAction } from "../../js/18-local-files.js";
+import { exportBaseName, exportFileName, handleFileMenuAction, runExportAction } from "./local-files.ts";
 import { fileMenuOpen, onFileMenuRefresh, toggleFileMenu } from "./file-menu-controls.ts";
 import { fileMenuExport as dialog } from "./file-menu-export-controls.ts";
 

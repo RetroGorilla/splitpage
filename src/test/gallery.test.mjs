@@ -20,7 +20,7 @@ import { buildDocx, docxToRows } from "../adapters/formats/docx.ts";
 import { buildPdf } from "../adapters/formats/pdf.ts";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
 import { refsIn } from "../../shared/blob-policy.js";
-import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
+import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
 

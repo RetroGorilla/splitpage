@@ -8,7 +8,7 @@ import { selection } from "./ports/editing.ts";
 import { exports } from "./ports/files.ts";
 import { askingFromLauncher, launcherShown, screen } from "./ports/screen.ts";
 import { exportActionName, exportActionReason } from "./file-menu-export-controls.ts";
-import { runExportAction } from "../../js/18-local-files.js";
+import { runExportAction } from "./local-files.ts";
 import { fileMenuOpen, refreshFileMenu } from "./file-menu-controls.ts";
 
 const commandMenu = owned<CommandMenuMount>();

@@ -99,7 +99,7 @@ export async function appWiringDeps() {
     import("../bootstrap/wiring/file-saving.ts"),
     import("../bootstrap/wiring/drafts.ts"),
     import("../js/13-hosted.js"),
-    import("../js/18-local-files.js"),
+    import("../bootstrap/wiring/local-files.ts"),
     import("../bootstrap/wiring/imports.ts"),
     import("../bootstrap/wiring/project-files.ts")
   ]);
@@ -140,6 +140,7 @@ export async function rewireApp(overrides) {
   mountHistoryOwner();
   (await import("../bootstrap/wiring/session-merge.ts")).mountSessionMergeOwner();
   (await import("../bootstrap/wiring/document-identity.ts")).mountDocumentIdentityOwner();
+  (await import("../bootstrap/wiring/local-files.ts")).mountLocalFilesFeature();
   return wiring;
 }
 

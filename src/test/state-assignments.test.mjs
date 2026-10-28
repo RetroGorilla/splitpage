@@ -9,7 +9,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 const atBoot = await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
+const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { adoptRestoredState } = await import("../bootstrap/startup/document-entry.js");
 const { applyMerge } = await import("../legacy/merge-bridge.ts");
 const { openLongDemo, startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");

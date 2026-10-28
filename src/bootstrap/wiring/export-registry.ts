@@ -1,4 +1,4 @@
-import type { ExportRegistry } from "../application/export/registry.ts";
+import type { ExportRegistry } from "../../application/export/registry.ts";
 
 let installed: ExportRegistry | null = null;
 

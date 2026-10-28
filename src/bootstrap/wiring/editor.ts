@@ -132,7 +132,7 @@ import {
   settleAfterApply,
   undo
 } from "../../legacy/undo-bridge.ts";
-import { runExport } from "../../js/18-local-files.js";
+import { runExport } from "./local-files.ts";
 import { connectWriter } from "./writer.ts";
 import { reviewBlocked, reviewMode, onServerDoc } from "../../legacy/location-bridge.ts";
 

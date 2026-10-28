@@ -9,7 +9,7 @@ import { intern } from "../adapters/storage/02c-blobs.js";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { commentEntries } from "../adapters/formats/export-projections.ts";
 import { buildPdf, pdfCommentImagesFor } from "../adapters/formats/pdf.ts";
-import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
+import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();

@@ -58,7 +58,7 @@ import {
   setTagNotes
 } from "../../features/tags/panels.js";
 import { queueAutoSave } from "../../legacy/save-bridge.ts";
-import { exportAs, runExport } from "../../js/18-local-files.js";
+import { exportAs, runExport } from "./local-files.ts";
 import { saves as portSaves } from "./ports/saving.ts";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";
 import { productionGroupBy, setGearGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey } from "../../application/tag-panel-state.ts";

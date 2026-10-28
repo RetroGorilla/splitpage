@@ -17,7 +17,7 @@ await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts");
-const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
+const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildDocx } = await import("../adapters/formats/docx.ts");
 const { closeImportModal, openImportModal } = (await import("../bootstrap/wiring/imports.ts")).importControls();
 const { zipRead } = await import("../adapters/formats/zip.ts");
@@ -26,7 +26,7 @@ const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, fileConflicts, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { exportAs, saveBackToFile } = await import("../js/18-local-files.js");
+const { exportAs, saveBackToFile } = await import("../bootstrap/wiring/local-files.ts");
 const { finishServerDetect } = await import("../js/13-hosted.js");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { openPrompterInBrowser } = await import("../legacy/desktop-bridge.ts");

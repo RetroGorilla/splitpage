@@ -13,7 +13,7 @@ import { startOnboarding as mountOnboarding } from "../../features/onboarding/on
 import type { OnboardingMount, OnboardingPorts } from "../../features/onboarding/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { launcherFetch } from "../../js/13-hosted.js";
-import { onFileMenuChoice } from "../../js/18-local-files.js";
+import { onFileMenuChoice } from "./local-files.ts";
 import { addServerBookmark } from "../../js/20e-connect.js";
 import { preferences } from "../../legacy/preferences-bridge.ts";
 

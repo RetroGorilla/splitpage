@@ -25,7 +25,7 @@ import type { LegacySavePorts } from "../../src/legacy/save-bridge.ts";
 import { cacheSeal } from "../../src/legacy/cache-freeze.ts";
 import { productionReaders } from "../../src/legacy/document-ports.ts";
 import { editorSelection, startEditor } from "../../src/legacy/editor-bridge.ts";
-import { installExportFormats } from "../../src/legacy/export-formats.ts";
+import { installExportFormats } from "../../src/bootstrap/wiring/export-registry.ts";
 import { productionIndex, startProductionIndex } from "../../src/application/production/index-owner.ts";
 import { liveDocumentPort } from "../../src/legacy/session-bridge.ts";
 import { deleteConfirmation, productionSelection, startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";

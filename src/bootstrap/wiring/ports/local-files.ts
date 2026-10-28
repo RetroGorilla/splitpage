@@ -1,0 +1,120 @@
+import type { LocalFilesOwnerPorts } from "../../../application/transitions/local-files-ports.ts";
+import type { LocalFileMenuPorts, LocalFileMenuControls } from "../../../features/file-menu/local-files-ports.ts";
+import type { ImportSavingOwner, ImportSavingPorts } from "../../../application/save/import-saving-ports.ts";
+import type { LocalFileAccess } from "../../../application/files/local-file-access.ts";
+import { localFileAccess } from "../../../adapters/files/local-files.js";
+import { loadLastFileHandle, rememberLastFileHandle } from "../../../adapters/files/last-file.ts";
+import { detectTwoColumnFormat, parseImportRows } from "../../../adapters/formats/import-text.js";
+import { docxToRows } from "../../../adapters/formats/docx.ts";
+import { csvToRows } from "../../../adapters/formats/csv.ts";
+import { normalizeImportedRows } from "../../../adapters/formats/import-rows.ts";
+import { parseProjectFileState } from "../../../adapters/formats/project-file.ts";
+import { exportAssetsRequest } from "../../../adapters/formats/export-assets.ts";
+import { standaloneHtmlFor } from "../../../adapters/page/standalone-html.js";
+import { desktopPort } from "../../../adapters/desktop/desktop-port.ts";
+import { runningOnDesktop } from "../../../application/desktop-presence.ts";
+import { brollView } from "../../../application/preferences/broll-view.ts";
+import { noteAbsorbedDirty, noteReload } from "../../../legacy/session-bridge.ts";
+import { amendHome, fileHome, importHome, onServerDoc, serverStatus, setHome } from "../../../legacy/location-bridge.ts";
+import { unsavedFor, requestSave } from "../../../legacy/save-bridge.ts";
+import { warnImagesLeftOut } from "../../../legacy/effects-bridge.ts";
+import { blobSourceNow } from "../../../js/13-hosted.js";
+import { documentIdentity } from "./document-identity-controls.ts";
+import { stampRow } from "../session-merge.ts";
+import { captureExportDocument, loadExportAssets } from "../export-capture.ts";
+import { offerFileMerge, resetMergeOffer } from "../merge-review.ts";
+import { isExportAction, rememberExport } from "../file-menu-export-controls.ts";
+import { documentReader } from "./document.ts";
+import { notices, menuItems } from "./effects.ts";
+import { exports as formats, fileDelivery } from "./files.ts";
+import { place } from "./location.ts";
+import { confirmation, saves, fileConflicts, autoSaves } from "./saving.ts";
+import { transitions, history } from "./transitions.ts";
+import { panelControl } from "./panels.ts";
+import { preferenceValues } from "./preferences.ts";
+import { resetProductionPanel } from "./production.ts";
+import { text } from "./text.ts";
+import { undoControl } from "./editing.ts";
+import { actions } from "./actions.ts";
+
+export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFilesOwnerPorts {
+  const files: LocalFileAccess = localFileAccess(window);
+  return {
+    document: documentReader,
+    session: { noteAbsorbedDirty, noteReload: (content) => { noteReload(content as Parameters<typeof noteReload>[0]); } },
+    transitions,
+    history,
+    saving: confirmation,
+    saves,
+    conflicts: fileConflicts,
+    location: { amendHome, setHome, fileHome, importHome },
+    lastFile: { load: loadLastFileHandle, remember: rememberLastFileHandle },
+    syncIdentity: () => { documentIdentity.syncDocIdentity(); },
+    stamps: { stampRow },
+    notices,
+    resetProductionPanel,
+    panels: panelControl,
+    undo: undoControl,
+    imports: {
+      parseProjectFileState: (file) => parseProjectFileState(file as Parameters<typeof parseProjectFileState>[0]),
+      detectTwoColumnFormat,
+      parseImportRows,
+      docxToRows: (file) => docxToRows(file as Parameters<typeof docxToRows>[0]),
+      csvToRows,
+      normalizeImportedRows: (rows, sanitize) => normalizeImportedRows(rows as Parameters<typeof normalizeImportedRows>[0], sanitize)
+    },
+    text,
+    resumeNeeded: (handle) => { menu().showResumeBanner(handle); },
+    desktop: {
+      running: runningOnDesktop,
+      openFileDialog: () => requireDesktop().openFileDialog(),
+      routeOpen: (request) => requireDesktop().routeOpen(request as Parameters<NonNullable<ReturnType<typeof desktopPort>>["routeOpen"]>[0])
+    },
+    files,
+    chooseFallback: () => { document.getElementById("open-file-input")?.click(); }
+  };
+}
+
+export function importSavingPorts(menu: () => LocalFileMenuControls): ImportSavingPorts {
+  return {
+    location: { importHome, amendHome },
+    onServerDoc,
+    saving: { request: (request) => requestSave(request as Parameters<typeof requestSave>[0]), unsavedFor },
+    buildFileData: (kind, base) => menu().buildFileData(kind, base),
+    files: localFileAccess(window),
+    delivery: fileDelivery,
+    notices
+  };
+}
+
+export function localFileMenuPorts(writeback: ImportSavingOwner): LocalFileMenuPorts {
+  return {
+    document: documentReader,
+    preferences: preferenceValues,
+    onServerDoc,
+    server: { mode: () => serverStatus().mode(), sessionExpired: () => serverStatus().sessionExpired(), linkTurnedOff: () => serverStatus().linkTurnedOff() },
+    place,
+    saves,
+    autoSaves,
+    writeback,
+    exports: { captureExportDocument, loadExportAssets },
+    formats,
+    assetSource: blobSourceNow,
+    assets: { request: exportAssetsRequest },
+    standaloneHtml: standaloneHtmlFor,
+    imagesLeftOut: warnImagesLeftOut,
+    brollView,
+    notices,
+    delivery: fileDelivery,
+    menuItems,
+    merge: { offer: offerFileMerge, reset: resetMergeOffer },
+    exportControls: { isExportAction, rememberExport },
+    actions
+  };
+}
+
+function requireDesktop(): NonNullable<ReturnType<typeof desktopPort>> {
+  const port = desktopPort();
+  if (!port) throw new Error("The desktop is unavailable");
+  return port;
+}

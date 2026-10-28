@@ -1,3 +1,4 @@
+import { fileWritebackActions } from "./wiring/local-files.ts";
 import { tagComposerActions } from "./wiring/production-tags.ts";
 import { prompterActions } from "./wiring/prompter.ts";
 import { importActions } from "./wiring/imports.ts";
@@ -17,7 +18,7 @@ import { videoFiles } from "./wiring/video-files.ts";
 import { fileMenuActions } from "./wiring/file-menu.ts";
 import { toggleFileMenu } from "./wiring/file-menu-controls.ts";
 import { helpMenuActions } from "../legacy/help-actions.ts";
-import { nativeMenuRunner } from "../legacy/native-menu.ts";
+import { nativeMenuRunner } from "./native-menu.ts";
 import { shareActions } from "../legacy/share-actions.ts";
 import { historyActions } from "./wiring/history-panel.ts";
 import { targetActions } from "./wiring/title-chrome.ts";
@@ -59,7 +60,7 @@ export function startActions(registry: ActionRegistry, keyTarget: EventTarget): 
     () => {
       const share = shareActions();
       const file = fileMenuActions();
-      return registerAll(registry, [...share.slice(0, 2), ...file.slice(4, 5), ...share.slice(2, 3), ...file.slice(5, 6), ...importActions(), ...share.slice(3, 7), ...fileMenuExportActions().slice(1), ...targetActions(), ...desktopActions()]);
+      return registerAll(registry, [...fileWritebackActions(), ...share.slice(0, 1), ...file.slice(4, 5), ...share.slice(1, 2), ...file.slice(5, 6), ...importActions(), ...share.slice(2, 6), ...fileMenuExportActions().slice(1), ...targetActions(), ...desktopActions()]);
     },
     () => registerAll(registry, scriptZoomActions()),
     () => {

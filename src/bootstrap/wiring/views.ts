@@ -73,13 +73,13 @@ import {
   exportAs,
   handleFileMenuAction,
   hideResumeBanner,
-  pendingResumeHandle,
+  pendingHandle,
   reloadFileFromDisk,
   reloadProjectFromDisk,
   resumeFromHandle,
   saveBackToFile,
   showFileConflictView
-} from "../../js/18-local-files.js";
+} from "./local-files.ts";
 import { currentMergeReview } from "./merge-review.ts";
 import { toggleFileMenu, toggleSubmenu } from "./file-menu-controls.ts";
 import { connectWriter } from "./writer.ts";
@@ -237,7 +237,7 @@ export function mountSaveRecoveryFeature(): ReturnType<typeof mountSaveRecovery>
       saveDoc: saveDoc,
       exportAs: exportAs,
       pendingHandle: function () {
-        const handle: ReturnType<SaveRecoveryPorts["pendingHandle"]> = pendingResumeHandle;
+        const handle: ReturnType<SaveRecoveryPorts["pendingHandle"]> = pendingHandle();
         return handle;
       },
       capture: captureViewDocument

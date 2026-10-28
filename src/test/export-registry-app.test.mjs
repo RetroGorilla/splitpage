@@ -8,9 +8,9 @@ import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
 await bootApp();
 after(closeApp);
 
-const { exportFormats } = await import("../legacy/export-formats.ts");
+const { exportFormats } = await import("../bootstrap/wiring/export-registry.ts");
 const { commandResults } = await import("../features/command-menu/command-menu.js");
-const { buildFileData, exportBaseName } = await import("../js/18-local-files.js");
+const { buildFileData, exportBaseName } = await import("../bootstrap/wiring/local-files.ts");
 const {
   closeExportDialog, exportAgain, exportAgainItemState, exportActionReason, exportFileNameFor, exportSummary, lastExportAction,
   openExportDialog

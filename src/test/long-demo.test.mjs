@@ -18,7 +18,7 @@ import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/prod
 import { brollInCell } from "../core/production/broll.ts";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
 import { LONG_DEMO, STARTERS, starterById } from "../starters/index.ts";
-import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
+import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 import { loadTestDocument } from "./_document.mjs";
 

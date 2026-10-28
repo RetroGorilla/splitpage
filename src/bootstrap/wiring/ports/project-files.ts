@@ -1,5 +1,5 @@
 import type { ProjectFileOpeningPort, ProjectFileSavePort, ProjectFilesPorts } from "../../../application/save/project-files.ts";
-import { captureExportDocument, exportDocumentOf } from "../../../legacy/export-kit-bridge.ts";
+import { captureExportDocument, exportDocumentOf } from "../export-capture.ts";
 import { amendHome } from "../../../legacy/location-bridge.ts";
 import { stashLocalWork } from "../../../legacy/recovery-bridge.ts";
 import { autoSavePolicy, autoSaveTarget, flushAutoSave, saveDoc, toggleAutoSave } from "../../../legacy/save-bridge.ts";

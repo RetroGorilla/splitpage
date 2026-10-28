@@ -13,7 +13,7 @@ import { collectTagsFromRows } from "../features/tags/production-tags.js";
 import { brollInCell } from "../core/production/broll.ts";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
 import { STARTERS, starterById } from "../starters/index.ts";
-import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
+import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
 const copy = (o) => JSON.parse(JSON.stringify(o));

@@ -2,7 +2,7 @@ import "../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentMergeReview, mountMergeReviewFeature, stopMergeReviewFeature } from "../../src/bootstrap/wiring/merge-review.ts";
-import { offerFileMerge, resetMergeOffer } from "../../src/legacy/merge-offer-bridge.ts";
+import { offerFileMerge, resetMergeOffer } from "../../src/bootstrap/wiring/merge-review.ts";
 
 function shownButton(): HTMLElement {
   document.body.innerHTML = '<div id="file-conflict-modal"><button id="file-conflict-merge"></button></div>';

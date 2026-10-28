@@ -115,7 +115,7 @@ test("b-roll app: remount adds once, preserves review refusal, and disposal clea
 
 test("export capture keeps the owner's live scope with the panel stopped", async () => {
   const { brollView } = await import("../application/preferences/broll-view.ts");
-  const { exportRequest } = await import("../js/18-local-files.js");
+  const { exportRequest } = await import("../bootstrap/wiring/local-files.ts");
   const { stopBrollPanelStateFeature, mountBrollPanelStateFeature } = await import("../bootstrap/wiring/broll.ts");
   const saved = brollView.current();
   open();

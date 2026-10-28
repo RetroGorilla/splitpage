@@ -20,7 +20,7 @@ import { opening, transitions } from "./ports/transitions.ts";
 import { migrateRows } from "../../legacy/document-ports.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { importControls } from "./imports.ts";
-import { openLocalFile } from "../../js/18-local-files.js";
+import { openLocalFile } from "./local-files.ts";
 import { STARTERS, starterById } from "../../starters/index.ts";
 
 const newTab = owned<NewTabMount>();

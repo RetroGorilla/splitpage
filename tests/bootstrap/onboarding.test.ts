@@ -5,7 +5,7 @@ import { createActionRegistry, registerAll } from "../../src/application/actions
 import { mountOnboardingFeature, stopOnboardingFeature, onboardingActions } from "../../src/bootstrap/wiring/onboarding.ts";
 import { startPreferences, preferences } from "../../src/legacy/preferences-bridge.ts";
 import { startSidePanels } from "../../src/legacy/panels-bridge.ts";
-import { noteFileMenuChoice } from "../../src/js/18-local-files.js";
+import { noteFileMenuChoice, mountLocalFilesFeature, stopLocalFilesFeature } from "../../src/bootstrap/wiring/local-files.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
 
 test("wired onboarding replaces its mount, closes on file choices and disables setup after stopping", () => {
@@ -19,6 +19,7 @@ test("wired onboarding replaces its mount, closes on file choices and disables s
     registerPanel: () => () => {}, registerPage: () => () => {}, open: () => {}, close: () => {},
     closeAll: () => { closed++; }, sync: () => {}, applyWidth: () => {}
   });
+  mountLocalFilesFeature();
   const registry = createActionRegistry();
   const off = registerAll(registry, onboardingActions());
   try {
@@ -45,6 +46,7 @@ test("wired onboarding replaces its mount, closes on file choices and disables s
     assert.equal(preferences().onboarding(), null);
   } finally {
     stopOnboardingFeature();
+    stopLocalFilesFeature();
     off();
     stopPanels();
     stopPreferences();

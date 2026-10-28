@@ -20,7 +20,7 @@ import { updateSaveStatus } from "./save-status.ts";
 import { saves } from "./ports/saving.ts";
 import { updateAutoSaveMenu } from "./file-saving.ts";
 import { applyStashedWork } from "../../legacy/recovery-bridge.ts";
-import { tryResumeLastProject } from "../../js/18-local-files.js";
+import { tryResumeLastProject } from "./local-files.ts";
 import { seedCheckPasses } from "../../adapters/page/seed-check.ts";
 import { startDesktopShell } from "./desktop.ts";
 import { notifyDesktopDocumentState } from "../../legacy/desktop-bridge.ts";

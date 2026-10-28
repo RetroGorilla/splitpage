@@ -21,7 +21,7 @@ const { finishServerDetect } = await import("../js/13-hosted.js");
 const { SERVER_RESUME_KEY } = await import("../application/location/server-status.ts");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
-const { reloadFileFromDisk } = await import("../js/18-local-files.js");
+const { reloadFileFromDisk } = await import("../bootstrap/wiring/local-files.ts");
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument } = await import("../legacy/transition-bridge.ts");

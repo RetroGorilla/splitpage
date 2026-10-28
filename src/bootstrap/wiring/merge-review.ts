@@ -4,7 +4,6 @@ import { owned } from "../../features/routing/owned.ts";
 import { parseProjectFileState } from "../../adapters/formats/project-file.ts";
 import { textMergeContext } from "./session-merge.ts";
 import { migrateRows } from "../../legacy/document-ports.ts";
-import { handMergeOfferTo } from "../../legacy/merge-offer-bridge.ts";
 import { applyStashedWork } from "../../legacy/recovery-bridge.ts";
 import { mergeBase } from "../../legacy/session-bridge.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
@@ -32,14 +31,17 @@ function mergeReviewPorts(): MergeReviewPorts {
 }
 
 export function mountMergeReviewFeature(): MergeReviewMount {
-  return mergeReview.replace(() => mountMergeReview(mergeReviewPorts()), (owner) => [
-    () => {
-      handMergeOfferTo({ offer: owner.offer, reset: owner.reset });
-      return () => { handMergeOfferTo(null); };
-    }
-  ]);
+  return mergeReview.replace(() => mountMergeReview(mergeReviewPorts()));
 }
 
 export const stopMergeReviewFeature = mergeReview.stop;
 
 export const currentMergeReview: () => MergeReviewControl | null = mergeReview.owner;
+
+export function offerFileMerge(currentFile: unknown, home: unknown): Promise<void> {
+  return mergeReview.owner()?.offer(currentFile, home) ?? Promise.resolve();
+}
+
+export function resetMergeOffer(): void {
+  mergeReview.owner()?.reset();
+}
