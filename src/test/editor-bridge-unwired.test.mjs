@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const bridge = await import("../legacy/editor-bridge.ts");
+const bridge = await import("../bootstrap/wiring/editor-owners.ts");
 
 const live = { current: () => null, assign() {} };
 

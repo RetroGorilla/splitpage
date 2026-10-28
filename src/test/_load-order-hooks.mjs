@@ -23,7 +23,7 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/merge-bridge.ts": { functions: ["startMerge", "installMergeBanner"] },
   "src/legacy/production-editing-bridge.ts": { functions: ["startProductionEditing"] },
   "src/application/production/index-owner.ts": { functions: ["startProductionIndex"] },
-  "src/legacy/editor-bridge.ts": { functions: ["startEditor", "installPicturePicker", "installCellEditing"] },
+  "src/bootstrap/wiring/editor-owners.ts": { functions: ["startEditor", "installPicturePicker", "installCellEditing"] },
   "src/legacy/preferences-bridge.ts": { functions: ["startPreferences", "onPreferenceChange"] },
   "src/bootstrap/wiring/shot-hiding.ts": { functions: ["startShotHiding"] },
   "src/legacy/location-bridge.ts": { functions: ["startLocation"] },
