@@ -71,7 +71,7 @@ export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFi
       routeOpen: (request) => requireDesktop().routeOpen(request as Parameters<NonNullable<ReturnType<typeof desktopPort>>["routeOpen"]>[0])
     },
     files,
-    chooseFallback: () => { document.getElementById("open-file-input")?.click(); }
+    chooseFallback: () => { (document.getElementById("open-file-input") as HTMLInputElement).click(); }
   };
 }
 
