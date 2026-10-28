@@ -4,7 +4,7 @@ A two-column visual/audio script editor — pictures on one side, narration on
 the other — with a teleprompter, comments, and a production breakdown that
 tracks every prop, location, VFX shot and person in the script. It ships as
 one self-contained `index.html`, plus an optional Node launcher, a small
-document server for shared sessions, and an Electron desktop app for Windows
+static file server for the app, and an Electron desktop app for Windows
 (x64 and native ARM64).
 
 This file is the **repo-facing** documentation: how to build it, how to cut a
@@ -16,7 +16,7 @@ everything the app itself can do. That same file is rendered into the app's
 own Help page (File ▸ User guide…) at build time, which is why it lives
 apart from this one: a change to the README no longer rebuilds the app.
 
-Hosting Splitpage for other people on a server is [DEPLOY.md](DEPLOY.md).
+Serving the app from a server, and deploying it, is [DEPLOY.md](DEPLOY.md).
 Developer notes — architecture, invariants, how to test — are
 [HANDOFF.md](HANDOFF.md). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md); to
 report a security problem, [SECURITY.md](SECURITY.md); what changed in each
@@ -31,11 +31,8 @@ will be offered to everyone, beta users included.
 4.0 is a rebuild of the inside of Splitpage and adds no new feature: the code
 now lives in folders that each own one job, and saving and switching
 documents is safer. What changed for a person using it is in
-[CHANGELOG.md](CHANGELOG.md). Scripts, `.splitpage` and Markdown files and
-shared-script servers from 3.1 work unchanged, and a 4.0 app and a 3.1 server
-work with each other either way: 13 of 13 checks passed in each direction (see
-[the release checklist](docs/architecture/release-4.0-checklist.md)). What is
-still legacy is listed honestly in
+[CHANGELOG.md](CHANGELOG.md). Scripts, `.splitpage` and Markdown files from
+3.1 work unchanged. What is still legacy is listed honestly in
 [the implementation plan](docs/IMPLEMENTATION-PLAN.md#8-follow-up-refactors-for-4x).
 
 Installers and the portable zip are on the
@@ -99,9 +96,9 @@ drives the browser suites.
 CI (`.github/workflows/ci.yml`) runs the same fast gate on every pull
 request, plus the smoke, CSP and persistence browser suites, builds the app,
 and uploads the built files as a `splitpage-app` artifact — a ready-built
-copy for running the server without a checkout (`Dockerfile.prebuilt`;
-[DEPLOY.md](DEPLOY.md) §8). The server itself is deployed from a checkout by
-`deploy.sh`, whose `Dockerfile` builds the app. Whenever a file either image
+copy for building the server image without a checkout (`Dockerfile.prebuilt`;
+[DEPLOY.md](DEPLOY.md) §1). The server image is built from a checkout by
+`Dockerfile`, and `deploy.sh` deploys it. Whenever a file either image
 depends on changes, `.github/workflows/docker.yml` builds and starts both:
 the root `Dockerfile` from the checkout, and `Dockerfile.prebuilt` from the
 artifact's files alone.
@@ -121,7 +118,7 @@ For the desktop installers — x64 and native ARM64 — it's `cd desktop && npm
 run dist:win`; see [Desktop app](docs/help.md#desktop-app) and DEPLOY.md.
 Pushing a `v<version>` tag runs `.github/workflows/release.yml`, which builds
 all of it and opens a draft release on the releases page
-([DEPLOY.md §7](DEPLOY.md#7-publishing-a-release-to-the-mirror)). On a portable copy
+([DEPLOY.md §4](DEPLOY.md#4-publishing-a-release-to-the-mirror)). On a portable copy
 carrying both architectures' runtimes, `start.bat` picks the right one
 automatically.
 
@@ -210,8 +207,8 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
 
 **Running it**
 
-- `start.mjs` — the launcher: serves the app, opens your browser, and with
-  `--host` shares the session with your network. It installs nothing.
+- `start.mjs` — the launcher: serves the app and opens your browser. It
+  installs nothing.
 - `start.bat` / `start.sh` — thin wrappers, the double-click and terminal ways
   in. Both prefer a bundled runtime, then a Node on PATH.
 - `update.mjs` — says whether a newer release exists. It does not download or
@@ -227,14 +224,14 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
 - `desktop/` — the Electron desktop app: source, `npm run dist:win` to build
   the per-architecture installers, and its own test suite.
 
-**Hosting for other people**
+**Serving the app**
 
-- `server/server.js`, `Dockerfile`, `docker-compose.yml` — the hosted mode: a
-  dependency-free Node server that serves the app and stores documents as one
-  JSON file each. See [DEPLOY.md](DEPLOY.md).
-- `deploy.sh`, `.env.example` — the one-command deploy on the owner's
-  server and the settings template it checks; `Dockerfile.prebuilt` builds
-  the same image from CI's already-built `splitpage-app` artifact.
+- `server/server.js`, `Dockerfile`, `docker-compose.yml` — a dependency-free
+  Node server that serves the built app as static files. See
+  [DEPLOY.md](DEPLOY.md).
+- `deploy.sh`, `.env.example` — the one-command deploy on the owner's server,
+  and a note on the optional `.env` it reads; `Dockerfile.prebuilt` builds the
+  same image from CI's already-built `splitpage-app` artifact.
 
 **Notes**
 

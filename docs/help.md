@@ -12,23 +12,21 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 ## What's new in the 4.0 beta
 
 - **No new features; sturdier saving.** 4.0 rebuilds the inside of
-  Splitpage. Your 3.1 scripts and files open as before, and a 4.0 app and a
-  3.1 server work with each other either way.
-- **Saving and switching scripts is safer.** A save, publish, paste, drop,
+  Splitpage. Your 3.1 scripts and files open as before.
+- **Saving and switching scripts is safer.** A save, paste, drop,
   thumbnail, annotation, history restore or draft restore that finishes after
   you opened or reopened another script no longer lands in it. A failed save
-  no longer changes the next script's revision, saves to one place wait for
-  each other, and a save keeps to the server and sign-in it started with. A
-  paste or drop that was too late says the picture was not added.
+  no longer changes the next script's revision, and saves to one place wait
+  for each other. A paste or drop that was too late says the picture was not
+  added.
 - **Exports are built from the script as you chose them.** Edits made while an
   export is prepared no longer change it.
 - **Damaged files open or merge instead of failing.** A file whose top level is
   not a script counts as no document; odd scenes, comments, people, tags,
   shots and reply times are dropped or ignored.
 - **Editing.** No edit leaves half an emoji; names cut at their limit keep
-  whole characters. A cancelled IME composition leaves no empty Undo step. In
-  review mode the writer refuses edits ("Viewing only"), and a split or join
-  in the writer refreshes Production and B-roll. If drawing the screen fails,
+  whole characters. A cancelled IME composition leaves no empty Undo step.
+  A split or join in the writer refreshes Production and B-roll. If drawing the screen fails,
   the previous picture stays.
 - **Production.** A tag name of only invisible characters is refused. Deleting
   a person clears them as owner of their b-roll shots at once. Gear quick add
@@ -52,14 +50,12 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
   writer, Present, the shot list or the tour is open (Present and Write not
   for themselves); Open… (Ctrl+O), Export… (Ctrl+E), Search Commands…
   (Ctrl+K) and Find & replace (Ctrl+F) also while the shot list or the tour
-  is, and Find & replace while Present is; Save to file, Put this script on
-  the server, Present in Browser (Ctrl+Shift+P), Use Chromium Speech
+  is, and Find & replace while Present is; Save to file, Present in Browser (Ctrl+Shift+P), Use Chromium Speech
   Recognition and each File ▸ Export format while a dialog or the command
   menu is.
 - In the desktop app, a menu-bar command that opens a dialog opened it
   underneath the tour, or on top of a dialog that was already open. About
-  Splitpage, Settings…, Servers…, Collaborate…, Paste a script…, Import from
-  Google Doc link…, Google Drive files…, Open from the server…, Set up
+  Splitpage, Settings…, Paste a script…, Import from Google Doc link…, Set up
   Splitpage… and Tagging reference now stop and say what to close first while
   the tour or a dialog is open. User guide… (F1) still opens during the
   tour, but not over another dialog.
@@ -143,12 +139,8 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 - **The tagging reference lists every word form**: `Prop:`, `Location:` or
   `Loc:`, `Cast:`, `VFX:`, `Gear:`, and `SFX:` or `Music:`, each with its
   tag colour, beside the bracket shortcuts.
-- **Saving you can trust.** Text typed while a publish or a save is still
-  going stays marked unsaved until it is saved, instead of being called
-  saved. Opening another script during a publish leaves that script alone;
-  the published copy waits on the server. **Save As** on a shared script
-  now makes a copy without calling the shared one saved. And a malformed
-  request can no longer stop a shared-script server.
+- **Saving you can trust.** Text typed while a save is still going stays
+  marked unsaved until it is saved, instead of being called saved.
 - **An empty scene deletes in one click**: its **⋯ ▸ Delete** no longer
   asks twice when there is nothing in it to lose.
 - **Version history from 2.x** is no longer converted. If you are updating
@@ -189,9 +181,9 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 - **Whole scenes**: drag out of a text box to select scenes, then copy, cut,
   paste or delete them, comments and pictures included.
 - **The rundown** magnifies the scenes under the pointer, shows the script's
-  length at its end, and shows where other people are working.
+  length at its end.
 - **In the desktop app**: Follow My Voice through Windows' own speech
-  recognition, Google Drive, and a server connection per tab.
+  recognition.
 
 Release notes for every version are on the
 [releases page](https://github.com/RetroGorilla/splitpage-releases/releases).
@@ -276,6 +268,9 @@ Each scene is a row: **Visual** on the left, **Audio** on the right.
   dragged scene on it to move the scene. **File ▸ Minimise the rundown**
   shrinks it to a line; click the line to bring it back.
 - **The header's buttons**: **Production**, **Gear**, **B-roll** and
+  **Comments** open their panels; **Write** and **Present** are the two other
+  ways to see it. In a narrower window the panel buttons shrink to their icons
+  and counts, and Write to its icon. Point at one,
   **Comments** open their panels; **Write** and **Present** are the
   two other ways to see it. In a narrower window the panel buttons shrink to
   their icons and counts, and Write to its icon. Point at one,
@@ -598,6 +593,7 @@ The **Save** button shows where things stand:
   for as long as nothing changes. Autosave still writes a couple of seconds
   after every change.
 - **Saving…** or **Unsaved changes**.
+- **Not saving** when something is in the way: the file changed on disk or a
 - **Not saving** when something is in the way: the file changed on disk, a
   write failed.
 
@@ -618,6 +614,10 @@ yours is kept as an **Unmerged edit** comment.
 
 ### Sending it to someone
 
+- **Nothing installed?** **File ▸ Export… ▸ SplitShare** writes one `.html`
+  file with the script and the whole app in it. It opens in any browser, on
+  any device, with nothing to install, and they can read, edit and present
+  it. It's a copy: their edits stay in their file.
 **File ▸ Export… ▸ SplitShare** writes one `.html` file with the script and
 the whole app in it. It opens in any browser, on any device, with nothing to
 install, and they can read, edit and present it. It's a copy: their edits
@@ -748,6 +748,8 @@ change the script.
 - **Editor**: Hide shot scenes, Autosave, Fetch video thumbnails, the reading
   speed for new scripts, the writer's text size and script zoom.
 - **Present**: the teleprompter's Mirror, Flip and One scene at a time.
+- **You**: your name and colour. Clicking your name in the header opens these
+  too.
 - **You**: your name and colour, which sign your edits and comments.
   Clicking your name in the header opens these too.
 - **Help & tips**: bring back the tagging reference, the tour and the
@@ -806,6 +808,10 @@ Your tabs come back next time you launch Splitpage.
 
 ### Moving between the browser app and the desktop app
 
+**File ▸ Export app data…** saves your version history and preferences as a
+`.json` file. In the desktop app, **File ▸ Import app data…** merges one in;
+nothing is overwritten. Scripts themselves aren't included (they're your
+files).
 **File ▸ Export app data…** saves your version history and
 preferences as a `.json` file. In the desktop app, **File ▸ Import app
 data…** merges one in; nothing is overwritten. Scripts themselves aren't
