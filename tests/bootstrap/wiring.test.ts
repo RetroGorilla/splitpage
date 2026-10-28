@@ -24,7 +24,6 @@ import { editorStarted, startEditor } from "../../src/legacy/editor-bridge.ts";
 import { locationStarted, startLocation } from "../../src/legacy/location-bridge.ts";
 import { preferencesStarted, startPreferences } from "../../src/legacy/preferences-bridge.ts";
 import { shotHidingPorts, shotHidingStarted, startShotHiding } from "../../src/bootstrap/wiring/shot-hiding.ts";
-import { legacyPresencePorts, presenceStarted, startPresence } from "../../src/legacy/presence-bridge.ts";
 import { legacyUndoPorts, startUndo, undoStarted } from "../../src/legacy/undo-bridge.ts";
 import { effectsStarted, startEffects } from "../../src/legacy/effects-bridge.ts";
 import type { EffectPorts } from "../../src/application/effects/ports.ts";
@@ -55,7 +54,7 @@ import type { ProjectFileServices } from "../../src/application/formats/project-
 
 after(closeApp);
 
-const OWNERS = ["location", "effects", "actions", "exportServices", "projectFiles", "exports", "undo", "session", "saves", "transitions", "merge", "recovery", "editor", "productionEditing", "preferences", "shotHiding", "presence", "exportCapture"] as const;
+const OWNERS = ["location", "effects", "actions", "exportServices", "projectFiles", "exports", "undo", "session", "saves", "transitions", "merge", "recovery", "editor", "productionEditing", "preferences", "shotHiding", "exportCapture"] as const;
 
 type Owner = (typeof OWNERS)[number];
 type Started = Record<Owner, boolean>;
@@ -88,7 +87,6 @@ function started(): Started {
     productionEditing: productionEditingStarted(),
     preferences: preferencesStarted(),
     shotHiding: shotHidingStarted(),
-    presence: presenceStarted(),
     undo: undoStarted()
   };
 }
@@ -238,7 +236,7 @@ function fakes(): Fakes {
       return {
         indexedDB: null, limits: { maxAgeMs: 1, maxCount: 1, maxBytes: 1 }, now: () => 0, writerId: "w", desktop: () => null,
         sessionStorage: () => null, localStorage: () => null, internImage: () => {}, merge: (request) => ({ state: migrateRows(request["theirs"]) }),
-        drafts: { flush: () => Promise.resolve({ ok: true }), armServer: () => Promise.resolve(false), offerAfterLinkOff: () => Promise.resolve(false), noteChange: () => {} }
+        drafts: { flush: () => Promise.resolve({ ok: true }), noteChange: () => {} }
       };
     },
     projectFiles: () => {
@@ -519,7 +517,7 @@ test("failed partial startup: an actions, exporters, merge or recovery factory t
     ]),
     ["recovery nothing", (f) => ({ ...f.deps, recovery: () => undefined }), "recovery", "the recovery dependency returned no recovery ports"],
     ["recovery drafts nothing", (f) => ({ ...f.deps, recovery: () => without(f.deps.recovery(), "drafts") }), "recovery", "the recovery dependency returned no draft ports"],
-    ...(["flush", "armServer", "offerAfterLinkOff", "noteChange"] as const).map((method): Spoilt => [
+    ...(["flush", "noteChange"] as const).map((method): Spoilt => [
       "recovery drafts " + method, (f) => ({ ...f.deps, recovery: () => ({ ...f.deps.recovery(), drafts: without(f.deps.recovery().drafts, method) }) }), "recovery", "the recovery dependency's draft ports have no " + method + " function"
     ]),
     ...recoveryMethods.flatMap((method): Spoilt[] => [
@@ -581,10 +579,9 @@ test("failed partial startup: a step that throws undoes every step before it, in
     "production editing": (f) => ({ deps: f.deps, cleanup: startProductionEditing(must(f.deps.timers)), cause: false }),
     preferences: (f) => ({ deps: f.deps, cleanup: startPreferences(), cause: false }),
     "shot hiding": (f) => ({ deps: f.deps, cleanup: startShotHiding(shotHidingPorts(must(f.deps.timers))), cause: false }),
-    presence: (f) => ({ deps: f.deps, cleanup: startPresence(legacyPresencePorts()), cause: false }),
     "export capture": (f) => ({ deps: f.deps, cleanup: wireExportKit(f.deps.entry).stop, cause: false })
   };
-  const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { location: "location", "page effects": "effects", "export services": "exportServices", "export registry": "exports", undo: "undo", transitions: "transitions", editor: "editor", "production editing": "productionEditing", preferences: "preferences", "shot hiding": "shotHiding", presence: "presence", "export capture": "exportCapture" };
+  const preStarted: Partial<Record<(typeof WIRING_STEPS)[number], Owner>> = { location: "location", "page effects": "effects", "export services": "exportServices", "export registry": "exports", undo: "undo", transitions: "transitions", editor: "editor", "production editing": "productionEditing", preferences: "preferences", "shot hiding": "shotHiding", "export capture": "exportCapture" };
   assert.deepEqual(Object.keys(breakers), [...WIRING_STEPS], "every step is broken once");
   for (const step of WIRING_STEPS) {
     const f = fakes();
@@ -1008,12 +1005,12 @@ const SURVIVING_GLOBAL_LISTENERS: Record<string, number> = {
   "document beforecopy/C": 1, "document beforecut/C": 1, "document click/B": 1, "document contextmenu/B": 1, "document copy/C": 1,
   "document cut/C": 1, "document dragend/B": 1, "document dragover/B": 1, "document dragstart/C": 1, "document drop/B": 1, "document focusin/B": 1,
   "document input/C": 1, "document keydown/C": 3, "document mousedown/B": 1, "document mousedown/C": 2, "document mousemove/B": 1,
-  "document mouseup/B": 1, "document paste/C": 1, "document securitypolicyviolation/B": 1, "document selectionchange/B": 4,
-  "document splitpage:pref/B": 4, "document undo-owner-cleared/B": 1, "document visibilitychange/B": 3, "window beforeinput/C": 1,
+  "document mouseup/B": 1, "document paste/C": 1, "document securitypolicyviolation/B": 1, "document selectionchange/B": 3,
+  "document splitpage:pref/B": 4, "document undo-owner-cleared/B": 1, "document visibilitychange/B": 2, "window beforeinput/C": 1,
   "window blur/B": 2, "window click/C": 3, "window compositionstart/C": 1, "window cut/C": 1, "window dragstart/C": 1, "window drop/C": 1,
-  "window focus/C": 2, "window focusin/C": 3, "window hashchange/B": 1, "window input/C": 1, "window keydown/B": 3, "window keydown/C": 8,
-  "window keyup/C": 2, "window mousedown/C": 3, "window mouseout/C": 2, "window mouseover/C": 2, "window mouseup/C": 2, "window pagehide/B": 2,
-  "window pageshow/B": 1, "window paste/C": 1, "window pointerdown/C": 1, "window pointerup/C": 1, "window resize/B": 6,
+  "window focus/C": 2, "window focusin/C": 2, "window input/C": 1, "window keydown/B": 3, "window keydown/C": 6,
+  "window keyup/C": 2, "window mousedown/C": 3, "window mouseout/C": 2, "window mouseover/C": 2, "window mouseup/C": 2, "window pagehide/B": 1,
+  "window pageshow/B": 1, "window paste/C": 1, "window pointerdown/C": 1, "window resize/B": 5,
   "window scroll/C": 2, "window storage/B": 2, "window touchmove/B": 1, "window wheel/B": 1
 };
 
@@ -1057,8 +1054,8 @@ async function bootFresh(arrival: string): Promise<OnboardingReport> {
   return JSON.parse(stdout.trim().split("\n").pop() ?? "") as OnboardingReport;
 }
 
-test("INV-30: through the shim's real wiring, initializers and startup, the wizard opens over a pristine copy and stays shut when a document arrives by file, link or restore", { timeout: 120_000 }, async () => {
-  const arrivals = ["pristine", "file", "link", "desktop pristine", "restore"];
+test("INV-30: through the shim's real wiring, initializers and startup, the wizard opens over a pristine copy and stays shut when a document arrives by file or restore", { timeout: 120_000 }, async () => {
+  const arrivals = ["pristine", "file", "desktop pristine", "restore"];
   const reports = await Promise.all(arrivals.map(bootFresh));
   for (const report of reports) {
     assert.equal(report.error, null, report.arrival + ": the app booted");
@@ -1068,7 +1065,6 @@ test("INV-30: through the shim's real wiring, initializers and startup, the wiza
   assert.deepEqual(reports.map((r) => [r.arrival, r.desktop, r.opened]), [
     ["pristine", false, true],
     ["file", false, false],
-    ["link", false, false],
     ["desktop pristine", true, true],
     ["restore", true, false]
   ], "the pristine copies are the positive controls: the same boot path opens the wizard when nothing arrives");

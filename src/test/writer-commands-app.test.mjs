@@ -41,7 +41,6 @@ function fixture() {
 let opened = 0;
 async function open() {
   if (viewFlags().writerOpen()) writer.closeWriter();
-  window.__hostedTest.setSession({ role: "edit", docId: null });
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "writer-commands-" + (++opened) + ".splitpage", { lastModified: opened });
   await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
@@ -252,18 +251,4 @@ test("writer: an input that leaves the title as it was makes no edit", async () 
   untouched(() => typeTitle(docTitle(), "Writer commands"));
   assert.equal(unsavedChanges(), false);
   writer.closeWriter();
-});
-
-test("writer: a review copy refuses either title, puts the words back and changes nothing", async () => {
-  await openInWriter();
-  window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
-  flushEdits();
-  confirmSavedNow();
-  untouched(() => typeTitle(writerTitle(), "Not mine"));
-  assert.equal(writerTitle().value, "Writer commands");
-  writer.closeWriter();
-  untouched(() => typeTitle(docTitle(), "Not mine either"));
-  assert.equal(docTitle().value, "Writer commands");
-  assert.equal(unsavedChanges(), false);
-  window.__hostedTest.setSession({ role: "edit", docId: null });
 });

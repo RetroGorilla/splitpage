@@ -1,6 +1,5 @@
 import type { ActionDefinition } from "../../application/actions.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
-import { review as portReview } from "./ports/location.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { pictures as portPictures } from "./ports/pictures.ts";
 import { ownership as portOwnership } from "./ports/saving.ts";
@@ -27,7 +26,6 @@ export function mountGalleryFeature(): GalleryMount {
   return gallery.replace(() => {
     const ports: GalleryPorts = {
       document: portDocument,
-      review: portReview,
       notices: portNotices,
       pictures: portPictures,
       ownership: portOwnership,
@@ -49,7 +47,6 @@ export function mountGalleryOverlayFeature(): GalleryOverlayMount {
   return overlay.replace(() => {
     const ports: GalleryOverlayPorts = {
       document: portDocument,
-      review: portReview,
       notices: portNotices,
       ownership: portOwnership,
       cells: { editGallery: (...a) => cellEditing().editGallery(...a) },

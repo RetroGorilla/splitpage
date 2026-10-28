@@ -60,10 +60,8 @@ function harness(setup: Setup = {}) {
       amendHome: (record, fields) => { log.push("amendHome:" + Object.keys(fields).join(",")); Object.assign(record, fields); return record; },
       restoreHome: (record) => { log.push("restoreHome:" + record.kind); state.home = record; return record; },
       writtenOut: () => state.writtenOut,
-      markWrittenOut: (on) => { state.writtenOut = on; log.push("markWrittenOut:" + on); },
-      serverOf: () => null
+      markWrittenOut: (on) => { state.writtenOut = on; log.push("markWrittenOut:" + on); }
     },
-    server: { sessionExpired: () => false, linkTurnedOff: () => false },
     lastFile: { remember: (handle) => { log.push("remember:" + handle.name); return Promise.resolve(); } },
     pictures: { ensureBytes: (shas) => { log.push("ensureBytes:" + shas.length); return Promise.resolve([]); } },
     exports: {
@@ -240,26 +238,24 @@ test("a failed write reports it, halts autosave on an automatic save and undoes 
   assert.deepEqual(aborted.toasts, []);
 });
 
-test("the file destination takes Save As anywhere and the other saves off the server", () => {
+test("the file destination takes Save As and the other file saves wherever the document is", () => {
   const destination = harness().mounted.destination();
   assert.equal(destination.id, "file");
-  const server = { kind: "server" };
-  assert.equal(destination.takes({ kind: "saveAs" }, server), true);
-  for (const kind of ["save", "auto", "autosave", "force"]) {
-    assert.equal(destination.takes({ kind }, server), false);
+  for (const kind of ["saveAs", "save", "auto", "autosave", "force"]) {
     assert.equal(destination.takes({ kind }, { kind: "file" }), true);
+    assert.equal(destination.takes({ kind }, { kind: "none" }), true);
   }
-  assert.equal(destination.takes({ kind: "server" }, { kind: "file" }), false);
   assert.equal(destination.takes({ kind: "writeback" }, { kind: "none" }), false);
   assert.equal(harness({ home: FILE_HOME }).mounted.destination().autoSaveTarget({ kind: "file" }), "file");
   assert.equal(harness().mounted.destination().autoSaveTarget({ kind: "none" }), null);
 });
 
-test("the save ports key destinations, report late saves, relax ownership off the server and drive the autosave menu", () => {
+test("the save ports key destinations, report late saves, pass ownership through and drive the autosave menu", () => {
   const h = harness({ home: FILE_HOME, autosave: false });
+  let owns = true;
   const ownership = {
-    capture: () => ({ epoch: 1, docId: OLD_ID, destination: h.state.home, destinationGeneration: 0, generation: 0, connection: null, revision: null }) as OperationContext,
-    stillOwns: () => false
+    capture: () => ({ epoch: 1, docId: OLD_ID, destination: h.state.home, destinationGeneration: 0, generation: 0 }) as OperationContext,
+    stillOwns: () => owns
   };
   const ports = h.mounted.savePorts(ownership);
   assert.equal(ports.destination(), h.state.home);
@@ -267,13 +263,14 @@ test("the save ports key destinations, report late saves, relax ownership off th
   assert.deepEqual(ports.keyOf({ kind: "file", handle: { _desktopId: 7 } }), { owner: "desktop:7", name: "handle" });
   const handle = {};
   assert.equal(ports.keyOf({ kind: "file", handle }).owner, handle);
-  assert.equal(ports.keyOf({ kind: "server", id: 3 }).name, "doc:3");
   ports.obsolete({ kind: "save" }, true);
   ports.obsolete({ kind: "save" }, false);
   assert.deepEqual(h.toasts, [obsoleteSaveText("Pilot Script")]);
   const ctx = ownership.capture();
+  assert.equal(ports.ownership.capture, ownership.capture);
   assert.equal(ports.ownership.stillOwns(ctx), true);
-  assert.equal(ports.ownership.stillOwns({ ...ctx, destination: { kind: "server" } }), false);
+  owns = false;
+  assert.equal(ports.ownership.stillOwns(ctx), false);
   assert.equal(ports.autosave.enabledAtStart(), false);
   ports.autosave.changed("enabled");
   assert.equal(h.menu.attributes["aria-checked"], "true");

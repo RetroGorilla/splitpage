@@ -97,20 +97,6 @@ test("03-sync applyMerge's adopt, nothing to merge: the session absorbs theirs a
   assert.equal(fixedPoint(raw), true, "in place: the very object handed over is now a migrateRows fixed point");
 });
 
-test("13-hosted openServerDoc: migrateDocument's answer through the live-document port, a migrateRows fixed point", async () => {
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response(JSON.stringify({ id: "doc1", rev: 3, state: rawDoc("From the server") }),
-    { status: 200, headers: { "content-type": "application/json" } });
-  useDesktopForTest({});
-  try {
-    const got = await drive(() => openDocument({ kind: "server", id: "doc1" }));
-    assert.equal(fixedPoint(only(got, "replaced")), true);
-  } finally {
-    globalThis.fetch = realFetch;
-    restoreDesktop();
-  }
-});
-
 test("18-local-files adoptProjectState, from a .splitpage file, through the live-document port: a migrateRows fixed point", async () => {
   const file = new File([buildSplitpageFile(exportDocumentOf(migrated("On disk")))], "disk.splitpage", { lastModified: 1 });
   const got = await drive(() => openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } }));

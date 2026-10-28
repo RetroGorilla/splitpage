@@ -127,9 +127,6 @@ var tourStepIndex = -1;
 var tourResizeHandler = null;
 var tourTaggingHelpWasHidden = true;
 var tourSuspendedAt = -1;
-var tourInterruptedAt = -1;
-var tourResumeFrom = -1;
-var tourPausedToast = null;
 
 export function tourShowing() {
   return tourStepIndex >= 0;
@@ -215,49 +212,7 @@ function renderTourStep() {
   positionTourStep();
 }
 
-function dismissPausedToast() {
-  var el = tourPausedToast;
-  tourPausedToast = null;
-  if (el) el.dismiss();
-}
-
-function interruptTour() {
-  dismissPausedToast();
-  var at = tourStepIndex >= 0 ? tourStepIndex : tourSuspendedAt;
-  if (at < 0) return;
-  tourInterruptedAt = at;
-  tourSuspendedAt = -1;
-  tourStepIndex = -1;
-  ports.viewFlags.setTourOpen(false);
-  var overlay = document.getElementById("tour-overlay");
-  if (overlay) overlay.hidden = true;
-  var taggingHelp = document.getElementById("tagging-help");
-  if (taggingHelp) taggingHelp.hidden = tourTaggingHelpWasHidden;
-}
-
-function resumePausedTour() {
-  tourPausedToast = null;
-  tourResumeFrom = tourInterruptedAt;
-  var outcome = ports.actions.invoke("tour", "button");
-  tourResumeFrom = -1;
-  if (outcome.kind !== "ran") offerTourResume();
-}
-
-function offerTourResume() {
-  if (tourInterruptedAt < 0) return;
-  dismissPausedToast();
-  var el = ports.notices.showAction("The tour was paused.", "", "Resume tour", resumePausedTour, true);
-  tourPausedToast = el;
-  listen(el, "click", function () {
-    if (tourPausedToast !== el) return;
-    tourPausedToast = null;
-    tourInterruptedAt = -1;
-  });
-}
-
 export function startTour() {
-  var from = tourResumeFrom;
-  tourResumeFrom = -1;
   if (!ports.document.current()) {
     ports.notices.show("Still loading…", "warn");
     return;
@@ -266,13 +221,11 @@ export function startTour() {
   if (!overlay) return;
   ports.sidePanels.closeAll();
   tourSuspendedAt = -1;
-  tourInterruptedAt = -1;
-  dismissPausedToast();
   closeHelp();
   var taggingHelp = document.getElementById("tagging-help");
   tourTaggingHelpWasHidden = taggingHelp ? taggingHelp.hidden : true;
 
-  tourStepIndex = from >= 0 ? from : 0;
+  tourStepIndex = 0;
   ports.viewFlags.setTourOpen(true);
   overlay.hidden = false;
   renderTourStep();
@@ -360,14 +313,9 @@ export function startHelp(given) {
   var disposed = false;
   return {
     openHelp, startTour,
-    tour: {
-      interrupt: function () { if (!disposed) interruptTour(); },
-      offerResume: function () { if (!disposed) offerTourResume(); }
-    },
     dispose: function () {
       if (disposed) return;
       disposed = true;
-      dismissPausedToast();
       while (listeners.length) listeners.pop()();
       if (tourReadMoreLink) tourReadMoreLink.onclick = null;
       tourReadMoreLink = null;
@@ -382,7 +330,7 @@ export function startHelp(given) {
         if (guide) guide.remove();
       }
       ports.viewFlags.setTourOpen(false);
-      tourStepIndex = tourSuspendedAt = tourInterruptedAt = tourResumeFrom = -1;
+      tourStepIndex = tourSuspendedAt = -1;
       tourResizeHandler = helpReturnFocus = null;
       ports = null;
     }

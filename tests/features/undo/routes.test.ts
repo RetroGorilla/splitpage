@@ -39,12 +39,11 @@ function counted(target: EventTarget) {
 }
 
 function harness(p: ReturnType<typeof page>) {
-  const state = { stale: false, review: false, writer: false, latest: null as unknown, installs: 0, releases: 0 };
+  const state = { stale: false, writer: false, latest: null as unknown, installs: 0, releases: 0 };
   const replays: UndoDirection[] = [];
   const warnings: string[] = [];
   const hooks: UndoRouteHooks[] = [];
   const after = (): void => {};
-  const sent = (): boolean => true;
   const mount = (): UndoRoutes => mountUndoRoutes({
     window: p.win,
     roots: p.roots,
@@ -52,11 +51,9 @@ function harness(p: ReturnType<typeof page>) {
       replay: (dir) => { replays.push(dir); },
       writerStep: () => state.writer,
       stale: () => state.stale,
-      reviewOnly: () => state.review,
       scriptCell: (el) => el.classList.contains("script"),
       latest: () => state.latest,
       warn: (message) => { warnings.push(message); },
-      commentsAreSent: sent,
       afterReplay: after,
       install: (h) => {
         state.installs++;
@@ -65,7 +62,7 @@ function harness(p: ReturnType<typeof page>) {
       }
     }
   });
-  return { state, replays, warnings, hooks, after, sent, mount };
+  return { state, replays, warnings, hooks, after, mount };
 }
 
 function keydown(p: ReturnType<typeof page>, target: EventTarget, key: string, mods: Keys = {}): KeyboardEvent {
@@ -146,17 +143,6 @@ test("a focused field or a non-script editable owns its undo, and a focused scri
   p.byId("writer-script").focus();
   assert.equal(routes.key(new p.win.KeyboardEvent("keydown", { key: "z", ctrlKey: true, cancelable: true })), true);
   assert.deepEqual(h.replays, ["redo", "undo"]);
-  routes.dispose();
-});
-
-test("review-only leaves the gesture to the browser and replays nothing", () => {
-  const p = page();
-  const h = harness(p);
-  const routes = h.mount();
-  h.state.review = true;
-  const e = keydown(p, p.byId("outside"), "z", { ctrlKey: true });
-  assert.equal(e.defaultPrevented, false);
-  assert.deepEqual(h.replays, []);
   routes.dispose();
 });
 
@@ -244,7 +230,6 @@ test("the installed hooks pass the ports through and word a refusal exactly", ()
   assert.equal(h.state.installs, 1);
   const hooks = h.hooks[0] as UndoRouteHooks;
   assert.equal(hooks.afterApply, h.after);
-  assert.equal(hooks.commentsAreSent, h.sent);
   hooks.onRefused(undefined, "redo");
   hooks.onRefused("", "undo");
   hooks.onRefused("the scene is locked", "undo");

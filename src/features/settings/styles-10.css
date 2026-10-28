@@ -34,8 +34,6 @@
 }
 .settings-inline-control input[type="number"] { width: 80px; }
 .settings-inline-control input[type="text"] { width: 220px; max-width: 100%; }
-.settings-inline-control input[type="text"].settings-wide { width: 280px; font-family: var(--font-display); font-size: 12.5px; }
-.settings-hint.settings-hint-flat { margin: 0; }
 .settings-hint strong { color: var(--text); font-weight: 600; }
 .settings-inline-control input:focus { outline: none; border-color: var(--visual); box-shadow: 0 0 0 1px var(--visual); }
 .settings-inline-control input[type="range"] { width: 160px; accent-color: var(--visual); }
@@ -74,8 +72,6 @@
   .modal-panel.settings-panel { max-height: calc(100vh - 20px); }
   .settings-body { margin: 0 -14px; padding: 0 var(--space-14) var(--space-4); }
   .settings-inline-control input[type="text"], .settings-inline-control input[type="number"] { font-size: 16px; }
-  .settings-inline-control input[type="text"].settings-wide { font-size: 16px; width: 100%; }
-  .settings-inline-control:has(.settings-wide) { width: 100%; }
   .settings-inline-control input[type="range"] { width: 130px; }
 }
 @media (prefers-reduced-motion: reduce) {

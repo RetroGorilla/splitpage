@@ -49,7 +49,7 @@ expect typeof window.__c1Doc.snapshots[0].stateJson === 'string'
 # =============================================================================
 # 2. invariant #48: an explicit key walk over a real bundle matches none of
 # the secret regex as a KEY (never as a value); assertNoSecrets throws on a
-# nested credential-shaped key and does not throw on a bookmark's ssh.userHost.
+# nested credential-shaped key.
 # =============================================================================
 eval (async function(){ await H.resetForTest(); window.__c2Bundle = await A.build(); window.__c2Keys = []; (function walk(v){ if (!v || typeof v !== 'object') return; if (Array.isArray(v)) { v.forEach(walk); return; } Object.keys(v).forEach(function(k){ window.__c2Keys.push(k); walk(v[k]); }); })(window.__c2Bundle); window.__c2Bad = window.__c2Keys.filter(function(k){ return /token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i.test(k); }); return window.__c2Bad; })()
 expect window.__c2Bad.length === 0
@@ -57,8 +57,6 @@ eval (function(){ window.__c2Threw = false; window.__c2Err = null; try { A.asser
 expect window.__c2Threw === true
 expect window.__c2Err.code === 'secret'
 expect window.__c2Err.secretKey === 'clientId'
-eval (function(){ window.__c2Ok = true; try { A.assertNoSecrets({bookmarks:[{id:'s1', name:'X', url:'http://x.example/', ssh:{userHost:'user@host', remotePort:8791, localPort:8791}}]}); } catch (e) { window.__c2Ok = false; } return window.__c2Ok; })()
-expect window.__c2Ok === true
 
 # =============================================================================
 # 3. round trip after resetForTest(): byte-identical stateJson bodies and
@@ -100,41 +98,11 @@ expect window.__c5Ob.done === true
 expect window.__c5Ob.v === 1
 
 # =============================================================================
-# 6. bookmarks: same normalised URL -> one entry, the LOCAL name kept; a
-# different URL -> two entries with unique ids; an imported id that collides
-# with an existing one gets a fresh id; only whitelisted fields are copied
-# (an extra field like evil:1 never reaches localStorage).
-# =============================================================================
-eval (function(){ localStorage.setItem('splitpage-server-bookmarks', JSON.stringify([{id:'slocal1', name:'Local Name', url:'http://existing.example/'}])); window.__c6BundleA = {format:'splitpage-app-data', version:1, exportedAt:new Date().toISOString(), appVersion:'', history:{docs:[],older:[]}, bookmarks:[{id:'simport1', name:'Import Name', url:'http://existing.example/'}], prefs:{} }; return true; })()
-eval (async function(){ window.__c6ResultA = await A.importText(JSON.stringify(window.__c6BundleA)); window.__c6ListA = JSON.parse(localStorage.getItem('splitpage-server-bookmarks')); return [window.__c6ResultA, window.__c6ListA]; })()
-expect window.__c6ResultA.bookmarks.added === 0
-expect window.__c6ResultA.bookmarks.skipped === 1
-expect window.__c6ListA.length === 1
-expect window.__c6ListA[0].name === 'Local Name'
-
-eval (function(){ window.__c6BundleB = {format:'splitpage-app-data', version:1, exportedAt:new Date().toISOString(), appVersion:'', history:{docs:[],older:[]}, bookmarks:[{id:'simport2', name:'Different', url:'http://different2.example/'}], prefs:{} }; return true; })()
-eval (async function(){ window.__c6ResultB = await A.importText(JSON.stringify(window.__c6BundleB)); window.__c6ListB = JSON.parse(localStorage.getItem('splitpage-server-bookmarks')); return [window.__c6ResultB, window.__c6ListB]; })()
-expect window.__c6ResultB.bookmarks.added === 1
-expect window.__c6ListB.length === 2
-eval (function(){ window.__c6Ids = window.__c6ListB.map(function(b){return b.id;}); window.__c6Unique = (new Set(window.__c6Ids)).size === window.__c6Ids.length; return window.__c6Unique; })()
-expect window.__c6Unique === true
-
-eval (function(){ window.__c6CollideId = window.__c6ListB[0].id; window.__c6BundleC = {format:'splitpage-app-data', version:1, exportedAt:new Date().toISOString(), appVersion:'', history:{docs:[],older:[]}, bookmarks:[{id:window.__c6CollideId, name:'Collider', url:'http://collide.example/', evil:1}], prefs:{} }; return window.__c6CollideId; })()
-eval (async function(){ window.__c6ResultC = await A.importText(JSON.stringify(window.__c6BundleC)); window.__c6ListC = JSON.parse(localStorage.getItem('splitpage-server-bookmarks')); return [window.__c6ResultC, window.__c6ListC]; })()
-expect window.__c6ResultC.bookmarks.added === 1
-expect window.__c6ListC.length === 3
-eval (function(){ window.__c6New = window.__c6ListC.filter(function(b){return b.url === 'http://collide.example/';})[0]; return window.__c6New; })()
-expect window.__c6New.id !== window.__c6CollideId
-expect window.__c6New.evil === undefined
-expect Object.keys(window.__c6New).sort().join(',') === 'id,name,url'
-eval (function(){ localStorage.removeItem('splitpage-server-bookmarks'); return true; })()
-
-# =============================================================================
 # 7. wrong format, version 99, truncated JSON, and a bundle carrying apiKey
 # are all refused (parse) — and importing the truncated one through the full
-# path leaves both history counts and the bookmarks key unchanged.
+# path leaves the history counts unchanged.
 # =============================================================================
-eval (async function(){ await H.resetForTest(); window.__c7Id = await openFixture(did('a4'), 'Refuse Case'); await pushForeign('c7-note.txt'); await H.idle(); window.__c7CountBefore = (await H.listRaw(__c7Id)).length; localStorage.setItem('splitpage-server-bookmarks', JSON.stringify([{id:'skeep', name:'Keep', url:'http://keep.example/'}])); window.__c7BmBefore = localStorage.getItem('splitpage-server-bookmarks'); return window.__c7CountBefore; })()
+eval (async function(){ await H.resetForTest(); window.__c7Id = await openFixture(did('a4'), 'Refuse Case'); await pushForeign('c7-note.txt'); await H.idle(); window.__c7CountBefore = (await H.listRaw(__c7Id)).length; return window.__c7CountBefore; })()
 expect window.__c7CountBefore === 1
 eval (function(){ window.__c7Wrong = null; try { A.parse(JSON.stringify({format:'not-splitpage', version:1})); } catch (e) { window.__c7Wrong = e.code; } return window.__c7Wrong; })()
 expect window.__c7Wrong === 'wrong-format'
@@ -144,12 +112,10 @@ eval (function(){ window.__c7Trunc = null; try { A.parse('{"format":"splitpage-a
 expect window.__c7Trunc === 'not-json'
 eval (function(){ window.__c7Secret = null; try { A.parse(JSON.stringify({format:'splitpage-app-data', version:1, prefs:{apiKey:'x'}})); } catch (e) { window.__c7Secret = e.code; } return window.__c7Secret; })()
 expect window.__c7Secret === 'secret'
-eval (async function(){ window.__c7Import = await A.importText('{"format":"splitpage-app-data", "vers'); window.__c7CountAfter = (await H.listRaw(__c7Id)).length; window.__c7BmAfter = localStorage.getItem('splitpage-server-bookmarks'); return [window.__c7Import, window.__c7CountAfter, window.__c7BmAfter === window.__c7BmBefore]; })()
+eval (async function(){ window.__c7Import = await A.importText('{"format":"splitpage-app-data", "vers'); window.__c7CountAfter = (await H.listRaw(__c7Id)).length; return [window.__c7Import, window.__c7CountAfter]; })()
 expect window.__c7Import.ok === false
 expect window.__c7Import.code === 'not-json'
 expect window.__c7CountAfter === 1
-expect window.__c7BmAfter === window.__c7BmBefore
-eval (function(){ localStorage.removeItem('splitpage-server-bookmarks'); return true; })()
 
 # =============================================================================
 # 8. legacy 'snapshots' land in Older, never back into localStorage —

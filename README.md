@@ -59,8 +59,8 @@ node build.mjs --check   # are both in step with src/ and VERSION?
 The source is `src/` — `page.html` (the shell), `app.css` and `styles/`,
 `seed-state.json` (the demo document), the folders that own one job each
 (`core/`, `application/`, `adapters/`, `features/`, `bootstrap/`, and
-`legacy/` for the bridges to the old modules) and the numbered ES modules in
-`src/js/` that are still legacy, which esbuild bundles — plus `VERSION` and
+`legacy/` for the bridges to the old modules) and `src/js/_entry.js`, the
+entry point esbuild bundles from — plus `VERSION` and
 `docs/help.md`, which is rendered into the in-app Help page. Nothing else
 feeds the build. Which folder may import which is
 [docs/architecture/dependencies.md](docs/architecture/dependencies.md).
@@ -184,9 +184,9 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
   that a slow or unreachable font server cannot stop the app starting.
 - `src/` — the source. `page.html` (the shell), `app.css` and `styles/`,
   `seed-state.json` (the demo document), `core/`, `application/`,
-  `adapters/`, `features/`, `bootstrap/` and `legacy/` (see above), and `js/`
-  — the remaining numbered ES modules esbuild bundles into the app's one inline
-  script, in the boot order the legacy initializer shim `js/_entry.js` sets.
+  `adapters/`, `features/`, `bootstrap/` and `legacy/` (see above), and
+  `js/_entry.js`, which esbuild bundles into the app's one inline script and
+  which sets the boot order.
 - `tests/` — unit tests for the owned folders; `src/test/` holds the older
   ones and the browser suites' helpers. `tools/` — the gates and runners;
   [docs/architecture/testing.md](docs/architecture/testing.md) says which to

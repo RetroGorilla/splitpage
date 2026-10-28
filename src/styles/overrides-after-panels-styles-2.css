@@ -28,7 +28,6 @@
   cursor: pointer;
 }
 .notice-actions button.armed { border-color: var(--danger); color: var(--danger); background: var(--danger-soft); }
-body.is-review .cell-editable { cursor: text; }
 .btn-outline {
   display: inline-flex; align-items: center; justify-content: center; gap: var(--space-6);
   flex: none;

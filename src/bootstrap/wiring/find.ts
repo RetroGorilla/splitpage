@@ -2,7 +2,6 @@ import type { ActionDefinition } from "../../application/actions.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits, undoControl as portUndo } from "./ports/editing.ts";
 import { text as portText } from "./ports/text.ts";
-import { review as portReview } from "./ports/location.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { flags as portFlags } from "./ports/preferences.ts";
 import { screen as portScreen } from "./ports/screen.ts";
@@ -22,7 +21,6 @@ export function mountFindFeature(): FindControls {
       edits: portEdits,
       text: portText,
       shotHiding,
-      review: portReview,
       undo: portUndo,
       notices: portNotices,
       flags: portFlags

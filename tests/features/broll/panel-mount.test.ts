@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
 import { startBrollPanel, mountBrollPanel } from "../../../src/features/broll/panel.js";
 import type { BrollPanelPorts } from "../../../src/features/broll/ports.ts";
-import { fakeDocument, fakeEdits, fakeReview, fakeNotices } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices } from "../fakes.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -41,9 +41,8 @@ function fixture() {
       sync: () => { calls.push("sync"); }
     },
     flags: { brollPageOpen: () => open, setBrollPageOpen: (value) => { open = value; } },
-    presence: { personColor: () => "blue" },
+    personColors: { personColor: () => "blue" },
     undo: { breakCoalescing: () => { calls.push("break"); } },
-    review: fakeReview().review,
     actions: { invoke: (id) => { calls.push(id); return { kind: "ran", id }; } },
     notices: fakeNotices().notices,
     records: { brollEntries: () => [], addBrollProp: () => false, renameBrollInScript: () => false, updateBrollBadge: () => {} },

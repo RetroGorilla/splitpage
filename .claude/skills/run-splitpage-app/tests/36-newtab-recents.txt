@@ -38,11 +38,8 @@ expect document.querySelectorAll('#newtab-recents-list [data-newtab-action="open
 expect document.getElementById('newtab-recents-list').textContent.indexOf('/') === -1
 # the start screen's layout (issue #144, and "On air" since #169): at a
 # desktop window's width the starters are a row above, and Recent sits
-# under them with the 282px Join card beside it; the file name is in the
-# mono face, the title in the body face
+# under them; the file name is in the mono face, the title in the body face
 expect innerWidth < 1100 || document.getElementById('newtab-recents').getBoundingClientRect().top >= document.getElementById('newtab-cards').getBoundingClientRect().bottom
-expect innerWidth < 1100 || document.querySelector('.newtab-join').getBoundingClientRect().left > document.getElementById('newtab-recents').getBoundingClientRect().right
-expect innerWidth < 1100 || Math.abs(document.querySelector('.newtab-join').getBoundingClientRect().width - 282) < 2
 expect getComputedStyle(document.querySelector('.newtab-recent-name')).fontFamily.indexOf('Chivo Mono') !== -1
 expect getComputedStyle(document.querySelector('.newtab-recent-title')).fontFamily.indexOf('Chivo,') === 0
 # the band's Continue row is the most recent entry: its title, and the same
@@ -112,14 +109,14 @@ expect window.__cleared.length == 0
 # of its own.
 eval (function(){ window.__fileCalls = []; ['openFileDialog', 'saveFileDialog', 'writeFile', 'readFile', 'statFile', 'routeOpen'].forEach(function (n) { var f = window.fake[n]; window.fake[n] = function () { window.__fileCalls.push(n); return f.apply(this, arguments); }; }); window.__idWas = window.__splitpageFormats.state().docId; window.__newTab.open(); return true; })()
 wait document.getElementById('newtab-page').hidden == false
-expect window.__hostedTest.home().kind !== 'none'
+expect window.__splitpageFormats.docFile().kind !== null || !document.getElementById('file-chip').hidden
 click [data-starter="to-camera"]
 wait document.getElementById('newtab-page').hidden == true
 expect document.querySelectorAll('#rows .row').length == 6
 expect document.getElementById('doc-title').value == Three Lights for Under $200
 sleep 800
 expect window.__fileCalls.length == 0
-expect window.__hostedTest.home().kind == none
+expect window.__splitpageFormats.docFile().kind === null && document.getElementById('file-chip').hidden
 expect window.__splitpageFormats.state().docId !== window.__idWas
 expect window.fake._lastDocState.fileId === null
 expect window.fake._lastDocState.dirty == false

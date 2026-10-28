@@ -24,7 +24,6 @@ function functionBody(src, name) {
 
 const wireTabView = functionBody(MAIN, "wireTabView");
 const createTabWindow = functionBody(MAIN, "createTabWindow");
-const createTunnelWindow = functionBody(MAIN, "createTunnelWindow");
 
 const cases = [];
 const test = (name, fn) => cases.push({ name, fn });
@@ -35,10 +34,6 @@ test("wireTabView (the document tab's own webContents) registers a context-menu 
 
 test("the tab strip's webContents (createTabWindow) gets no context-menu handler", () => {
   assert.doesNotMatch(createTabWindow, /context-menu/);
-});
-
-test("the tunnel window's webContents gets no context-menu handler either", () => {
-  assert.doesNotMatch(createTunnelWindow, /context-menu/);
 });
 
 test("a misspelled word offers its dictionary suggestions through replaceMisspelling", () => {

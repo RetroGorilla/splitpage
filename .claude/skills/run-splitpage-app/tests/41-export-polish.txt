@@ -346,7 +346,7 @@ expect __dxCsv.split('\r\n').filter(function(l){ return /,\[image\]$/.test(l); }
 # .txt — written only back to a foreign .txt (its import home): open one,
 # carry this document's comments into it, Save to file, read what was written
 eval (function(){ window.__dxComments = JSON.parse(JSON.stringify(F.state().comments)); window.__txtBody = null; window.__txtH = { name: 'dx.txt', createWritable: async function(){ return { write: async function(b){ window.__txtBody = b; }, close: async function(){} }; }, getFile: async function(){ return new File(['one\n\ntwo'], 'dx.txt', { type: 'text/plain', lastModified: 1000 }); } }; return F.openFile(new File(['one\n\ntwo'], 'dx.txt', { type: 'text/plain', lastModified: 1000 }), window.__txtH); })()
-wait window.__hostedTest.home().kind === 'import' && window.__hostedTest.home().name === 'dx.txt'
+wait !document.getElementById('file-chip').hidden && document.getElementById('file-chip-name').textContent === 'dx.txt'
 eval (function(){ var rid = F.state().rows[0].id; F.state().comments = __dxComments.map(function(c){ c.rowId = rid; return c; }); return F.state().comments.length; })()
 jsclick #btn-file
 jsclick #menu-save-back

@@ -32,7 +32,7 @@ import { cellSelection, placeEditorSelection, rememberCellSelection } from "../c
 import { formatVideoLength } from "../../../shared/text.js";
 
 
-var currentDocument, readSession, editAllowed, sanitizeHtml, storedHtmlFromDom, fromHtml, productionReaders, buildVideoCardEl, videoHostLabel, cellEditing, editorSelection, paintGuard, undoGuard, appendDraftMedia, draftModel, editDraft, isDraftBox, isScriptCell, trackDocument, shotHiding, blobImgHtml, presence, reviewMode, preferences, viewFlags, showToast, showActionToast, appActions, deleteConfirmation, setTagAddingPerson, makeId, productionIndexStats, resetProductionIndexStats, scheduleUntaggedScan, tagFieldOccurrences;
+var currentDocument, readSession, editAllowed, sanitizeHtml, storedHtmlFromDom, fromHtml, productionReaders, buildVideoCardEl, videoHostLabel, cellEditing, editorSelection, paintGuard, undoGuard, appendDraftMedia, draftModel, editDraft, isDraftBox, isScriptCell, trackDocument, shotHiding, blobImgHtml, personColors, preferences, viewFlags, showToast, showActionToast, appActions, deleteConfirmation, setTagAddingPerson, makeId, productionIndexStats, resetProductionIndexStats, scheduleUntaggedScan, tagFieldOccurrences;
 var activeRender = null;
 
 var FIELD_PLACEHOLDERS = {
@@ -40,14 +40,13 @@ var FIELD_PLACEHOLDERS = {
   audioText: "Write what gets said…"
 };
 
-function rowFieldHtml(row, field, review) {
+function rowFieldHtml(row, field) {
   return editableCellHtml({
     rowId: row.id,
     field: field,
     value: row[field],
     placeholder: FIELD_PLACEHOLDERS[field],
-    readOnly: review,
-    toolbar: review ? "review" : field === "audioText" ? "scriptAudio" : "script"
+    toolbar: field === "audioText" ? "scriptAudio" : "script"
   });
 }
 
@@ -61,20 +60,15 @@ function rowMenuItemHtml(row, action, icon, label, title, danger) {
     '<span class="row-menu-label">' + label + '</span></button>';
 }
 
-function rowGutterHtml(row, index, review) {
+function rowGutterHtml(row, index) {
   var st = rowStatus(row.status) || ROW_STATUSES[0];
   var num = pad2(index + 1);
   var lamp = '<span class="status-dot ' + st.cls + '" aria-hidden="true">' +
     (st.id === "shot" ? STATUS_CHECK_SVG : '') + '</span><span class="status-word">' + escapeHtml(st.label) + '</span>';
-  var head = review
-    ? '<div class="row-head"><span class="row-num">' + num + '</span><span class="row-start"></span></div>'
-    : '<div class="row-head" data-action="drag-grip" data-id="' + row.id + '" title="Drag to reorder">' +
+  var head = '<div class="row-head" data-action="drag-grip" data-id="' + row.id + '" title="Drag to reorder">' +
         '<span class="row-num">' + num + '</span><span class="row-start"></span>' +
       '</div>';
-  var controls = review
-    ? '<span class="status-btn is-static" title="' + escapeHtml(st.label) +
-        '" aria-label="Scene status: ' + escapeHtml(st.label) + '">' + lamp + '</span>'
-    : '<button class="status-btn" type="button" data-action="cycle-status" data-id="' + row.id +
+  var controls = '<button class="status-btn" type="button" data-action="cycle-status" data-id="' + row.id +
         '" title="' + escapeHtml(st.label) + ' — click to change" aria-label="Scene ' + num + ' status: ' +
         escapeHtml(st.label) + '. Change status">' + lamp + '</button>' +
       '<div class="row-tools">' +
@@ -98,7 +92,7 @@ function rowGutterHtml(row, index, review) {
       '<div class="row-controls">' + controls + '</div>' +
       (row.updatedBy
         ? '<div class="row-meta" title="Last edited by ' + escapeHtml(row.updatedBy) + '">' +
-            '<span class="row-meta-who"><span class="person-dot" style="--person:' + presence().personColor(row.updatedBy) +
+            '<span class="row-meta-who"><span class="person-dot" style="--person:' + personColors.personColor(row.updatedBy) +
               '" aria-hidden="true"></span>' + escapeHtml(String(row.updatedBy).split(/\s+/)[0]) + '</span><br>' +
             formatTimestamp(row.updatedAt, preferences().clock()) + '</div>'
         : '') +
@@ -115,19 +109,18 @@ export function paintRowTimes() {
     if (c.classList.contains("row")) byId[c.getAttribute("data-id")] = c;
   }
   var t = 0;
-  var review = reviewMode();
   doc.rows.forEach(function (row) {
     var secs = rowSeconds(row, doc, productionReaders);
     var el = byId[row.id];
     if (el) {
       setTextIfChanged(el.querySelector(".row-start"), formatTimecode(t));
-      paintReadTime(el.querySelector(".row-read"), row, secs, review, doc);
+      paintReadTime(el.querySelector(".row-read"), row, secs, doc);
     }
     t += secs;
   });
 }
 
-function paintReadTime(btn, row, secs, review, doc) {
+function paintReadTime(btn, row, secs, doc) {
   if (!btn) return;
   var set = hasSetLength(row);
   var est = set ? estimatedSeconds(row, doc, productionReaders) : secs;
@@ -138,11 +131,9 @@ function paintReadTime(btn, row, secs, review, doc) {
   var title = set
     ? "Set by hand · estimate " + formatDuration(est) +
       (over ? " — the Audio now reads longer than this" : "") +
-      (review ? "" : ". Click to change; clear it to use the estimate")
-    : (review ? "Estimated read time" : "Estimated read time — click to set this scene’s length");
+      ". Click to change; clear it to use the estimate"
+    : "Estimated read time — click to set this scene’s length";
   if (btn.title !== title) btn.title = title;
-  var ro = review ? "true" : "false";
-  if (btn.getAttribute("aria-disabled") !== ro) btn.setAttribute("aria-disabled", ro);
 }
 
 function setTextIfChanged(el, text) {
@@ -193,9 +184,8 @@ function galleryLinkHtml(row, slotIdx, l) {
     ? '<a class="scene-gallery-link" href="' + escapeHtml(href) + '" target="_blank" rel="noopener noreferrer"' + attrs + '>' + label + '</a>'
     : '<button type="button" class="scene-gallery-link is-file"' + attrs + '>' + label + '</button>';
   return '<div class="scene-gallery-line"><span class="scene-gallery-host">' + escapeHtml(videoHostLabel(l)) + '</span>' + link +
-    (reviewMode() ? '' :
-      '<button type="button" class="scene-gallery-link-remove" data-action="gallery-link-remove" data-id="' + row.id +
-        '" data-slot="' + slotIdx + '" data-key="' + key + '" title="Take this link off" aria-label="Take ' + label + ' off">×</button>') +
+    '<button type="button" class="scene-gallery-link-remove" data-action="gallery-link-remove" data-id="' + row.id +
+      '" data-slot="' + slotIdx + '" data-key="' + key + '" title="Take this link off" aria-label="Take ' + label + ' off">×</button>' +
     '</div>';
 }
 
@@ -205,7 +195,7 @@ export function galleryVideoLinks(slots) {
   return out;
 }
 
-function rowGalleryHtml(row, slots, review) {
+function rowGalleryHtml(row, slots) {
   var n = slots.length;
   var tiles = galleryTileHtml(row, slots, 0, "cover");
   for (var i = 1; i < Math.min(n, GALLERY_CELL_MAX); i++) {
@@ -221,26 +211,23 @@ function rowGalleryHtml(row, slots, review) {
   var single = n === 1;
   return '<div class="image-thumb-wrap scene-gallery ' + (single ? 'is-single' : 'is-mosaic') + '" data-id="' + row.id + '" data-count="' + n + '">' +
       tiles +
-      (review ? '' :
-        '<div class="image-thumb-actions">' +
-          '<button type="button" data-action="image-add-more" data-id="' + row.id + '" title="Add another picture to this scene">Add</button>' +
-          (single
-            ? '<button type="button" data-action="image-replace" data-id="' + row.id + '" data-slot="0">Replace</button>' +
-              '<button type="button" data-action="image-remove" data-id="' + row.id + '" data-slot="0">Remove</button>'
-            : '') +
-        '</div>') +
+      '<div class="image-thumb-actions">' +
+        '<button type="button" data-action="image-add-more" data-id="' + row.id + '" title="Add another picture to this scene">Add</button>' +
+        (single
+          ? '<button type="button" data-action="image-replace" data-id="' + row.id + '" data-slot="0">Replace</button>' +
+            '<button type="button" data-action="image-remove" data-id="' + row.id + '" data-slot="0">Remove</button>'
+          : '') +
+      '</div>' +
     '</div>' +
     (caption ? '<div class="scene-gallery-caption">' + caption + '</div>' : '');
 }
 
-function rowMediaHtml(row, review) {
+function rowMediaHtml(row) {
   var imageBlock;
   var slots = rowSlots(row);
   var img = slots.length ? slots[0] : null;
   if (img) {
-    imageBlock = rowGalleryHtml(row, slots, review);
-  } else if (review) {
-    imageBlock = "";
+    imageBlock = rowGalleryHtml(row, slots);
   } else {
     imageBlock =
       '<button type="button" class="image-clip" data-action="image-add" data-id="' + row.id +
@@ -252,13 +239,12 @@ function rowMediaHtml(row, review) {
 }
 
 function rowParts(row, index) {
-  var review = reviewMode();
   return {
     cls: "row" + (row.status === "shot" ? " is-shot" : ""),
-    gutter: rowGutterHtml(row, index, review),
-    media: rowMediaHtml(row, review),
-    visualText: rowFieldHtml(row, "visualText", review),
-    audioText: rowFieldHtml(row, "audioText", review)
+    gutter: rowGutterHtml(row, index),
+    media: rowMediaHtml(row),
+    visualText: rowFieldHtml(row, "visualText"),
+    audioText: rowFieldHtml(row, "audioText")
   };
 }
 
@@ -390,7 +376,7 @@ export function noteFieldPainted(cellEl, field, row) {
   var rowEl = cellEl.closest(".row");
   if (!rowEl || !rowEl[ROW_SIG] || !rowEl.parentNode || rowEl.parentNode.id !== "rows") return;
   if (rowEl.getAttribute("data-id") !== row.id) return;
-  rowEl[ROW_SIG][field] = rowFieldHtml(row, field, reviewMode());
+  rowEl[ROW_SIG][field] = rowFieldHtml(row, field);
 }
 
 function markLongestIncreasing(positions, from, to, lo, hi, keep) {
@@ -609,7 +595,6 @@ function paintAll() {
   var link = editorSelection().heldLink();
   if (link && !link.cell.isConnected) editorSelection().dropLink();
   screen.drawn = true;
-  screen.review = reviewMode();
   screen.edit = editAllowed();
 }
 
@@ -714,7 +699,7 @@ export function renderFirstDraw() {
   return absorbRender(FIRST_DRAW_FAILED);
 }
 
-var screen = { drawn: false, review: false, edit: true };
+var screen = { drawn: false, edit: true };
 
 var ABSORBED = { adopt: true, server: true, recovery: true, reload: true };
 
@@ -788,14 +773,11 @@ export function screenListeners() {
     hiding: function () {
       if (screen.drawn) render();
     },
-    colours: function () {
-      if (screen.drawn) render();
-    },
     preference: function (name) {
       if (screen.drawn && SHOWN_PREFERENCES[name]) render();
     },
     location: function () {
-      if (screen.drawn && (reviewMode() !== screen.review || editAllowed() !== screen.edit)) render();
+      if (screen.drawn && editAllowed() !== screen.edit) render();
     },
     flag: function (change) {
       if (screen.drawn && change.flag === "writerOpen" && !change.value) absorbRender(REDRAW_FAILED);
@@ -1220,8 +1202,7 @@ export function startRowsRender(ports) {
   trackDocument = ports.undo.track;
   shotHiding = ports.hiding;
   blobImgHtml = ports.pictures.imgHtml;
-  presence = ports.presence;
-  reviewMode = ports.review.reviewing;
+  personColors = ports.personColors;
   preferences = ports.preferences;
   viewFlags = ports.view;
   showToast = ports.notices.show;
@@ -1301,7 +1282,7 @@ export function startRowsRender(ports) {
       pendingMarks = null;
       partTemplate = null;
       paintBroke = false;
-      screen = { drawn: false, review: false, edit: true };
+      screen = { drawn: false, edit: true };
       renderCalls = rowsPainted = cellsPainted = 0;
       if (window.__renderTest === renderTest) delete window.__renderTest;
       currentDocument = null;
@@ -1325,8 +1306,7 @@ export function startRowsRender(ports) {
       trackDocument = null;
       shotHiding = null;
       blobImgHtml = null;
-      presence = null;
-      reviewMode = null;
+      personColors = null;
       preferences = null;
       viewFlags = null;
       showToast = null;

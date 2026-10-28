@@ -217,15 +217,6 @@ test("a refusal keeps the file conflict its writer named, so a view can show it"
   assert.equal(w.coordinator.dirty(), true);
 });
 
-test("C1: a copy that lands is saved but acknowledges nothing for the destination", async () => {
-  const w = world();
-  w.coordinator.noteChange();
-  const done = w.coordinator.request({ kind: "saveAs" });
-  nth(w, 0).answer({ kind: "copied" });
-  assert.deepEqual(await done, { kind: "saved", acknowledged: false });
-  assert.equal(w.coordinator.confirmed().generation, NEVER_CONFIRMED);
-});
-
 test("a save that moves the document to the place it picked owns that place, and acknowledges it there", async () => {
   const w = world();
   w.coordinator.noteChange();

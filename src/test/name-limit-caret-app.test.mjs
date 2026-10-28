@@ -11,7 +11,6 @@ await bootApp(JSON.stringify({ schema: 2, title: "Mine", rows: [], rev: 5 }));
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { promptForName } = await import("../bootstrap/wiring/title-chrome.ts");
 const { toggleReplyComposer } = await import("../features/comments/comments.js");
-const { maybeAskGuestName } = await import("../js/13b-collaborate.js");
 const { openSettings } = await import("../features/settings/settings.js");
 const { render } = await import("../features/rows/render.js");
 const { loadTestDocument } = await import("./_document.mjs");
@@ -183,8 +182,7 @@ function openReply() {
 const OTHER_FIELDS = [
   ["reply", openReply],
   ["identity chip", () => { localStorage.setItem(NAME_KEY, "Sam"); promptForName(); return document.getElementById("identity-input"); }],
-  ["Settings", () => { localStorage.setItem(NAME_KEY, "Sam"); openSettings(); return document.getElementById("settings-name"); }],
-  ["guest", () => { localStorage.removeItem(NAME_KEY); sessionStorage.clear(); maybeAskGuestName(); return document.getElementById("guest-name"); }]
+  ["Settings", () => { localStorage.setItem(NAME_KEY, "Sam"); openSettings(); return document.getElementById("settings-name"); }]
 ];
 
 for (const [label, open] of OTHER_FIELDS) {

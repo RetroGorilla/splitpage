@@ -56,7 +56,6 @@ function fixture() {
 
 let opened = 0;
 async function open() {
-  window.__hostedTest.setSession({ role: "edit", docId: null });
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(fixture())))], "document-edits-" + (++opened) + ".splitpage", { lastModified: opened });
   await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
@@ -94,36 +93,16 @@ async function roundTrip(gesture, look) {
   assert.deepEqual(copy(look()), done, "one redo makes it again");
 }
 
-function refused(gesture, look) {
-  window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
-  flushEdits();
-  confirmSavedNow();
-  const before = copy(look());
-  const generation = liveSession().generation();
-  const sizes = undoSizes();
-  try {
-    gesture();
-    assert.deepEqual(copy(look()), before, "a review copy is not changed");
-    assert.equal(liveSession().generation(), generation);
-    assert.deepEqual(undoSizes(), sizes);
-    assert.equal(unsavedChanges(), false);
-  } finally {
-    window.__hostedTest.setSession({ role: "edit", docId: null });
-  }
-}
-
 beforeEach(() => { clock += 10_000; });
 
-test("document edits: target length undoes and redoes in one step and a review copy refuses it", async () => {
+test("document edits: target length undoes and redoes in one step", async () => {
   await open();
   await roundTrip(() => setTargetLength(150), () => held().targetSeconds);
-  refused(() => setTargetLength(60), () => held().targetSeconds);
 });
 
-test("document edits: words per minute undoes and redoes in one step and a review copy refuses it", async () => {
+test("document edits: words per minute undoes and redoes in one step", async () => {
   await open();
   await roundTrip(() => runDocumentEdit(wordsPerMinuteCommand(190)), () => held().wordsPerMinute);
-  refused(() => runDocumentEdit(wordsPerMinuteCommand(120)), () => held().wordsPerMinute);
 });
 
 test("document edits: registering a tag and adding a person undo and redo in one step", async () => {
@@ -131,8 +110,6 @@ test("document edits: registering a tag and adding a person undo and redo in one
   await roundTrip(() => registerProductionTag("gear", "Drone"), () => held().productionTags);
   assert.ok(tagNamed("gear", "Drone"));
   await roundTrip(() => !!findOrAddPerson("Sam"), () => held().people);
-  refused(() => registerProductionTag("gear", "Crane"), () => held().productionTags);
-  refused(() => findOrAddPerson("Lee"), () => held().people);
 });
 
 test("document edits: renaming and removing a tag rewrite its mentions and undo in one step", async () => {
@@ -142,7 +119,6 @@ test("document edits: renaming and removing a tag rewrite its mentions and undo 
   assert.match(held().rows[0].audioText, /data-tag-name="Trawl"/);
   await roundTrip(() => removeTag("prop", "Trawl", { run: runDocumentEdit, read: readSession, mentions: retagMentions, rewrites: retagRewrites, stamps: sessionStamps }) > 0, look);
   assert.doesNotMatch(held().rows[0].audioText, /tag-anchor/);
-  refused(() => renameTag("prop", "Net", "Rope", { run: runDocumentEdit, rewrites: retagRewrites, stamps: sessionStamps }), look);
 });
 
 test("document edits: b-roll shots and their props undo and redo in one step", async () => {
@@ -151,20 +127,17 @@ test("document edits: b-roll shots and their props undo and redo in one step", a
   await roundTrip(() => addBrollProp("b1", "Rope"), () => ({ shots: held().brollShots, tags: held().productionTags }));
   const prop = held().brollShots.find((b) => b.id === "b1").props[0];
   await roundTrip(() => removeBrollProp("b1", prop.id, { run: runDocumentEdit }), () => held().brollShots);
-  refused(() => addBrollProp("b1", "Rope"), () => held().brollShots);
 });
 
 test("document edits: deleting a person undoes in one step with their ownership", async () => {
   await open();
   await roundTrip(() => runDocumentEdit(deletePersonCommand("p1")), () => ({ people: held().people, shots: held().brollShots }));
-  refused(() => runDocumentEdit(deletePersonCommand("p1")), () => held().people);
 });
 
 test("document edits: assigning and resolving a comment undo and redo in one step", async () => {
   await open();
   await roundTrip(() => { setCommentAssignee("c1", "Mara"); return held().comments[0].assignee === "Mara"; }, () => held().comments);
   await roundTrip(() => { toggleResolve("c1"); return held().comments[0].resolved === true; }, () => held().comments);
-  refused(() => toggleResolve("c1"), () => held().comments);
 });
 
 test("document edits: a save stamp changes the document without an undo entry or an unsaved change", async () => {

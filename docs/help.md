@@ -116,6 +116,13 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 
 ## What's new in 3.1
 
+- **Collaborate.** **Collab** in the header (or **File ▸ Collaborate…**)
+  puts the script on your server and gives you two links to send: one to
+  edit, one to comment. A link opens that one script, needs no account, and
+  can be renewed or turned off.
+- **Unsaved changes to a server script survive a closed tab.** The browser
+  keeps them as you type and merges them back in the next time you open
+  the script, with **Undo merge**.
 - **Draw on your pictures.** In a scene's gallery, press **Annotate** to
   mark up a picture with a pen, a highlighter, text and an eraser (P, H, T
   and E pick them). Your marks stay editable, and **Remove annotations**
@@ -264,6 +271,9 @@ Each scene is a row: **Visual** on the left, **Audio** on the right.
   **Comments** open their panels; **Write** and **Present** are the two other
   ways to see it. In a narrower window the panel buttons shrink to their icons
   and counts, and Write to its icon. Point at one,
+  **Comments** open their panels; **Write** and **Present** are the
+  two other ways to see it. In a narrower window the panel buttons shrink to
+  their icons and counts, and Write to its icon. Point at one,
   or <kbd>Tab</kbd> to it, and its name slides out over its neighbours.
 - **Scene status**: click the lamp in the scene's gutter to cycle **To do →
   Ready → Shot**.
@@ -584,6 +594,7 @@ The **Save** button shows where things stand:
   after every change.
 - **Saving…** or **Unsaved changes**.
 - **Not saving** when something is in the way: the file changed on disk or a
+- **Not saving** when something is in the way: the file changed on disk, a
   write failed.
 
 Hover it for where and when ("Last saved to script.md at 2:52 PM") or what
@@ -607,6 +618,10 @@ yours is kept as an **Unmerged edit** comment.
   file with the script and the whole app in it. It opens in any browser, on
   any device, with nothing to install, and they can read, edit and present
   it. It's a copy: their edits stay in their file.
+**File ▸ Export… ▸ SplitShare** writes one `.html` file with the script and
+the whole app in it. It opens in any browser, on any device, with nothing to
+install, and they can read, edit and present it. It's a copy: their edits
+stay in their file.
 
 ## Reopening a saved project
 
@@ -735,6 +750,8 @@ change the script.
 - **Present**: the teleprompter's Mirror, Flip and One scene at a time.
 - **You**: your name and colour. Clicking your name in the header opens these
   too.
+- **You**: your name and colour, which sign your edits and comments.
+  Clicking your name in the header opens these too.
 - **Help & tips**: bring back the tagging reference, the tour and the
   desktop-app notice.
 - **Data**: Export app data.
@@ -795,6 +812,10 @@ Your tabs come back next time you launch Splitpage.
 `.json` file. In the desktop app, **File ▸ Import app data…** merges one in;
 nothing is overwritten. Scripts themselves aren't included (they're your
 files).
+**File ▸ Export app data…** saves your version history and
+preferences as a `.json` file. In the desktop app, **File ▸ Import app
+data…** merges one in; nothing is overwritten. Scripts themselves aren't
+included (they're your files).
 
 ## Installing and updating
 

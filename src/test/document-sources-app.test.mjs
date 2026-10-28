@@ -24,8 +24,8 @@ function splitpageFile(doc, name) {
   return new File([buildSplitpageFile(exportDocumentOf(doc))], name, { lastModified: 1 });
 }
 
-test("the built-in document sources are the project file, the import and the server, newest first", () => {
-  assert.deepEqual(documentSources().ids(), ["server", "import", "project-file"]);
+test("the built-in document sources are the project file and the import, newest first", () => {
+  assert.deepEqual(documentSources().ids(), ["import", "project-file"]);
 });
 
 test("opening a project file through the sources keeps the document it replaces in that document's history", async () => {

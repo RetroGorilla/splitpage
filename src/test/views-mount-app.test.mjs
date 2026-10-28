@@ -31,7 +31,7 @@ test("views app: main and Writer saves submit one existing action each after dis
   }
 });
 
-test("views app: the shared review gate precedes B43 and permits B55 after remount", () => {
+test("views app: B43 and B55 each route once after remount", () => {
   views.mountHistoryGalleryFeature().dispose();
   const owner = views.mountHistoryGalleryFeature();
   const restore = owner.restoreClick;
@@ -50,20 +50,14 @@ test("views app: the shared review gate precedes B43 and permits B55 after remou
   };
   const button = document.createElement("button");
   document.getElementById("history-panel").append(button);
-  window.__hostedTest.setSession({ role: "review", docId: "daaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" });
   try {
-    button.dataset.action = "restore-snapshot";
-    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
-    assert.equal(restores, 0);
     button.dataset.action = "gallery-open";
     button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     assert.equal(galleries, 1);
-    window.__hostedTest.setSession({ role: "edit", docId: null });
     button.dataset.action = "restore-snapshot";
     button.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
     assert.equal(restores, 1);
   } finally {
-    window.__hostedTest.setSession({ role: "edit", docId: null });
     owner.restoreClick = restore;
     owner.galleryClick = gallery;
     owner.dispose();

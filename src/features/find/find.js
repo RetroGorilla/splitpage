@@ -205,7 +205,6 @@ export function stepFind(dir) {
 }
 
 export function replaceCurrent() {
-  if (ports.review.refuseInReview()) return;
   var needle = findNeedle();
   if (!needle || findIndex < 0 || !findMatches[findIndex]) return;
   var m = findMatches[findIndex];
@@ -225,7 +224,6 @@ export function replaceCurrent() {
 }
 
 export function replaceAll() {
-  if (ports.review.refuseInReview()) return;
   var needle = findNeedle();
   if (!needle) return;
   var replacement = document.getElementById("replace-input").value || "";
@@ -329,7 +327,6 @@ function defaultBulkTagCat(needle) {
 }
 
 export function openBulkTag() {
-  if (ports.review.refuseInReview()) return;
   if (!ports.document.current()) return;
   bulkTagCat = defaultBulkTagCat(bulkTagNeedle());
   var row = bulkTagRowEl();
@@ -358,7 +355,6 @@ function refreshBulkTagRow() {
 }
 
 export function runBulkTag() {
-  if (ports.review.refuseInReview()) return;
   var doc = ports.document.current();
   if (!doc) return;
   var needle = bulkTagNeedle();

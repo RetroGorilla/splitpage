@@ -47,7 +47,6 @@ function fixture() {
 let opened = 0;
 async function open(doc) {
   if (viewFlags().writerOpen()) writer.closeWriter();
-  window.__hostedTest.setSession({ role: "edit", docId: null });
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(doc || fixture())))], "split-" + (++opened) + ".splitpage", { lastModified: opened });
   await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();
@@ -762,20 +761,5 @@ test("a Writer join whose commit is followed by a throw still redraws the Writer
   assert.deepEqual(ids(), ["j1"]);
   assert.equal(para("j2"), null, "the joined scene left the Writer");
   assert.equal(unsavedChanges(), true);
-  writer.closeWriter();
-});
-
-test("a Writer split is refused when the session turns review with the Writer open: no scene, no undo step, no new generation", async () => {
-  await open();
-  writer.openWriter();
-  window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
-  const p = para("r1");
-  p.focus();
-  selectText(p, 5, 5);
-  const got = observe(() => key(p, "Enter"));
-  assert.equal(got.undo, 0);
-  assert.equal(got.generation, 0);
-  assert.equal(currentDocument().rows.length, 4);
-  window.__hostedTest.setSession({ role: "edit", docId: null });
   writer.closeWriter();
 });

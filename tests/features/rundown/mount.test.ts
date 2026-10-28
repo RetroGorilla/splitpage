@@ -6,7 +6,7 @@ import { rundownMinimizeActions, rundownSceneActions } from "../../../src/featur
 import type { RundownControls } from "../../../src/features/rundown/actions.ts";
 import type { RundownPorts } from "../../../src/features/rundown/ports.ts";
 import { startRundown as mountRundown, isRundownMinimized, toggleRundownMinimized } from "../../../src/features/rundown/rundown.js";
-import { fakeActions, fakeDocument, fakePreferenceChanges, fakeReview, fakeScreen } from "../fakes.ts";
+import { fakeActions, fakeDocument, fakePreferenceChanges, fakeScreen } from "../fakes.ts";
 
 function setup() {
   document.body.innerHTML = '<div id="rows"><div class="row" data-id="r1"><div class="audio-cell"><div class="cell-editable" tabindex="0"></div></div></div></div><div id="rundown"><div class="rundown-track"><div class="rundown-blocks"></div><div class="rundown-ruler"></div></div></div><button id="menu-rundown-min"></button>';
@@ -23,7 +23,6 @@ function setup() {
     },
     rowDrag: { dragging: () => null, end: () => { drag.push("end"); } },
     cells: { moveRow: (rowId, targetId, after) => { drag.push(`move ${rowId} ${targetId} ${String(after)}`); } },
-    review: fakeReview().review,
     actions: actions.actions,
     minimized: { rundownMin: () => false, setRundownMin: (on) => { stored.push(on); } },
     changes: changes.changes

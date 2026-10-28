@@ -278,27 +278,12 @@ test("Follow My Voice takes no argument, from the app page only", () => {
   assert.deepEqual([...events.allowedOrigins], [APP_ORIGIN]);
 });
 
-test("the Google Drive channels: argument-free account calls, id-only Drive calls, app page only", () => {
-  const row = (name) => channelFor(name, "invoke");
-  for (const name of ["splitpage:drive-status", "splitpage:drive-sign-in", "splitpage:drive-sign-out"]) {
-    assert.ok(row(name), name + " declared");
-    assert.deepEqual([...row(name).argsSchema], [], name + " takes no argument");
-    assert.ok(checkArgs(row(name).argsSchema, ["https://accounts.google.com/o/oauth2/v2/auth?client_id=evil"]), name + " refuses a URL");
-    assert.ok(checkArgs(row(name).argsSchema, [{ clientId: "evil" }]), name + " refuses a client");
-  }
-  assert.deepEqual([...row("splitpage:drive-list").argsSchema], ["string"]);
-  assert.deepEqual([...row("splitpage:drive-download").argsSchema], ["string"]);
-  assert.deepEqual([...row("splitpage:drive-upload").argsSchema], ["object"]);
-  assert.ok(checkArgs(row("splitpage:drive-list").argsSchema, []), "a list with no folder");
-  assert.ok(checkArgs(row("splitpage:drive-list").argsSchema, ["root", "https://www.googleapis.com/"]), "a second argument");
-  assert.ok(checkArgs(row("splitpage:drive-upload").argsSchema, ["name", "bytes"]), "an upload that is not one request object");
-  const drive = IPC_CHANNELS.filter((c) => c.name.startsWith("splitpage:drive-"));
-  assert.equal(drive.length, 6);
-  for (const c of drive) {
-    assert.deepEqual([...c.allowedOrigins], [APP_ORIGIN], c.name);
-    assert.equal(c.direction, "invoke", c.name);
-    assert.ok(!c.testOnly, c.name);
-  }
+test("packaging: every ./module main.js requires is in electron-builder.yml's files", () => {
+  const yml = read("electron-builder.yml");
+  const listed = new Set([...yml.matchAll(/^\s*-\s+([A-Za-z0-9_.-]+\.js)\s*$/gm)].map((m) => m[1]));
+  const required = [...MAIN.matchAll(/require\("\.\/([A-Za-z0-9_-]+)(?:\.js)?"\)/g)].map((m) => m[1] + ".js");
+  assert.ok(required.includes("drafts.js"), "main.js requires ./drafts");
+  for (const f of required) assert.ok(listed.has(f), f + " is required by main.js but not in electron-builder.yml files");
 });
 
 test("the blob channels: a typed sha256, app page only", () => {
