@@ -2,9 +2,6 @@ import { hasSetLength, parseSceneLength } from "../../core/document/timing.ts";
 import { estimatedSeconds, formatDuration, rowSeconds } from "../../core/production/timing.ts";
 import { cssAttr } from "../common/dom.ts";
 import { sceneAt, sceneLengthCommand } from "../../application/commands/scene-length.ts";
-import { REVIEW_REFUSAL_REASON } from "../../application/collaboration/authority.ts";
-
-var REVIEW_REFUSAL = "This is a review copy — comment on a scene instead of changing its length.";
 
 var ports = null;
 var editing = null;
@@ -14,7 +11,6 @@ export function readTimeEditing() { return editing ? editing.rowId : null; }
 function applySceneLength(rowId, seconds) {
   var outcome = ports.edits.run(sceneLengthCommand(rowId, seconds, ports.edits.stamps));
   if (outcome.kind === "failed") throw outcome.error;
-  if (outcome.kind === "rejected" && outcome.reason === REVIEW_REFUSAL_REASON) ports.notices.show(REVIEW_REFUSAL, "warn");
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
@@ -25,7 +21,6 @@ export function setSceneLength(rowId, seconds) {
 
 export function openReadTimeEditor(btn) {
   if (!btn || !ports) return;
-  if (ports.review.reviewing()) { ports.notices.show(REVIEW_REFUSAL, "warn"); return; }
   var rowId = btn.getAttribute("data-id");
   var scene = ports.document.read(sceneAt(rowId));
   if (!scene) return;
@@ -156,7 +151,7 @@ export function startReadTime(given) {
   });
   listen("keydown", function (e) {
     if (!(e.target.classList && e.target.classList.contains("row-read"))) return;
-    if (!(e.ctrlKey || e.metaKey) || e.altKey || ports.review.reviewing()) return;
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
     var k = String(e.key).toLowerCase();
     if (k !== "z" && k !== "y") return;
     e.preventDefault();

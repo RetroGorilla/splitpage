@@ -9,7 +9,6 @@ export interface RowsEditorPorts {
   readonly rowDragOver: (e: DragEvent) => boolean;
   readonly rowDrop: (e: DragEvent) => boolean;
   readonly scriptCell: (cell: Element) => boolean;
-  readonly reviewOnly: () => boolean;
   readonly hasMedia: (files: Files) => boolean;
   readonly insert: (cell: Element, html: string, text: string, files: Files) => void;
   readonly notMedia: () => void;
@@ -143,7 +142,6 @@ export function mountRowsEditor(mount: RowsEditorMount): RowsEditor {
     }
     if (mediaDrop && !cell) {
       e.preventDefault();
-      if (ports.reviewOnly()) return;
       const visualCell = visual ? visual.querySelector(".cell-editable") : null;
       if (visualCell) ports.insert(visualCell, "", "", files);
       return;
@@ -156,7 +154,6 @@ export function mountRowsEditor(mount: RowsEditorMount): RowsEditor {
     const text = data ? data.getData("text/plain") : "";
     if (!html && !text && !ports.hasMedia(files)) return;
     const script = ports.scriptCell(cell);
-    if (script && ports.reviewOnly()) return;
     if (cell instanceof realm.HTMLElement) cell.focus();
     placeCaretAt(cell, e);
     if (script) ports.insert(cell, html, text, files);
