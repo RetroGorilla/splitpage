@@ -28,7 +28,6 @@ test("tagging help listeners stop on disposal and install once on remount", () =
 function fixture() {
   document.body.innerHTML = '<div id="comment-modal" hidden><div id="comment-modal-quote"></div><input id="comment-name"><div id="comment-body-editable"></div></div><div id="comments-panel" hidden></div>';
   const calls: string[] = [];
-  const listeners = new Set<() => void>();
   const clock = { nowIso: () => "2026-10-23T12:00:00.000Z" };
   const ports: CommentStatePorts = {
     sort: { current: () => "position", choose: (value) => value === "recent" ? "recent" : "position" },
@@ -52,17 +51,16 @@ function fixture() {
     selection: { dropLink: () => {} },
     deletion: { armedId: () => null, arm: () => {}, disarm: () => {} },
     ownership: {
-      capture: () => ({ epoch: 1, docId: "d1", destination: null, destinationGeneration: 1, generation: 1, connection: null, revision: null }),
+      capture: () => ({ epoch: 1, docId: "d1", destination: null, destinationGeneration: 1, generation: 1 }),
       stillOwns: () => true
     },
     history: { keep: () => {} },
     personColors: { personColor: () => "#000000" },
     shots: { reveal: () => {} },
     pictures: { imgHtml: () => "" },
-    clearDraftUndo: () => {},
-    onThreadsSent: (listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; }
+    clearDraftUndo: () => {}
   };
-  return { ports, calls, listeners };
+  return { ports, calls };
 }
 
 test("posting requests an immediate save", () => {
@@ -80,10 +78,9 @@ test("posting requests an immediate save", () => {
   } finally {
     owner.dispose();
   }
-  assert.equal(fake.listeners.size, 0);
 });
 
-test("disposing cancels composer focus and releases the refresh callback, then remounts once", async () => {
+test("disposing cancels composer focus, then remounts once", async () => {
   const fake = fixture();
   const owner = startComments(fake.ports);
   openCommentComposer({ id: "c_new", rowId: "r1", field: "audioText", quotedText: "Words" });
@@ -92,11 +89,8 @@ test("disposing cancels composer focus and releases the refresh callback, then r
   owner.dispose();
   assert.equal(resolveComposer(), null);
   await new Promise((resolve) => setTimeout(resolve, 10));
-  assert.equal(fake.listeners.size, 0);
   assert.equal(document.getElementById("comment-modal")?.hidden, true);
   assert.notEqual(document.activeElement?.id, "comment-body-editable");
   const next = startComments(fake.ports);
-  assert.equal(fake.listeners.size, 1);
   next.dispose();
-  assert.equal(fake.listeners.size, 0);
 });

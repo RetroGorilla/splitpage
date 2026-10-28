@@ -1,5 +1,4 @@
 import { createDraftWriter } from "../application/recovery/draft-writer.ts";
-import { restoreOwnership } from "../application/recovery/restore-policy.ts";
 import type { DesktopDraftStore, DraftLimits } from "../application/recovery/ports.ts";
 import type { BrowserDrafts, DraftFlush } from "../application/recovery/drafts-ports.ts";
 import { createConflictStash } from "../application/recovery/conflict-stash.ts";
@@ -39,8 +38,6 @@ export interface LegacyRecoveryPorts {
 
 export interface LegacyDraftPorts {
   readonly flush: (opts?: { readonly keep?: boolean } | null) => Promise<DraftFlush>;
-  readonly armServer: (docId: string) => Promise<boolean>;
-  readonly offerAfterLinkOff: (docId: string) => Promise<boolean>;
   readonly noteChange: () => void;
 }
 
@@ -82,7 +79,6 @@ export function startRecovery(ports: LegacyRecoveryPorts): () => void {
     stash: stash,
     stashedWork: createStashedWork<ValidatedDocument, MergedStates>({
       stash: stash,
-      sessionStorage: ports.sessionStorage,
       markWrittenOut: function () { documentLocation().markWrittenOut(true); },
       copy: function (doc) { return migrateRows(cloneState(doc)); },
       merge: ports.merge
@@ -141,14 +137,6 @@ export function noteDraftChange(): void {
   started?.ports.drafts.noteChange();
 }
 
-export function armBrowserServerDraft(docId: string): Promise<boolean> {
-  return running().ports.drafts.armServer(docId);
-}
-
-export function offerBrowserDraftAfterLinkOff(docId: string): Promise<boolean> {
-  return running().ports.drafts.offerAfterLinkOff(docId);
-}
-
 export function legacySnapshots(): LegacySnapshots {
   return running().snapshots;
 }
@@ -159,12 +147,10 @@ export function useBrowserDraftFactory(factory: IDBFactory | null): BrowserDraft
   return now.browser;
 }
 
-const restoring = restoreOwnership({ capture: captureOperation, stillOwns: stillOwns });
-
 export function captureRestore(): OperationContext {
-  return restoring.capture();
+  return captureOperation();
 }
 
 export function stillRestoring(ctx: OperationContext): boolean {
-  return restoring.stillOwns(ctx);
+  return stillOwns(ctx);
 }

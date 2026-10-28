@@ -81,12 +81,6 @@ function savedWord(at) {
 
 function fileCardView() {
   if (!ports.document.current()) return { name: "Loading…", bits: [] };
-  if (ports.place.home().kind === "server") {
-    var srv = ports.place.sessionExpired() ? { text: "Signed out — reload to sign in", unsaved: true }
-      : ports.place.linkTurnedOff() ? { text: "Link turned off — not saving", unsaved: true }
-      : savedWord(null);
-    return { name: ports.document.current().title || "Untitled Script", bits: [srv, { text: "On the server · v" + ports.place.home().rev }] };
-  }
   if (ports.place.home().kind === "file") {
     return {
       name: ports.place.home().name || (ports.place.home().handle && ports.place.home().handle.name) || "Untitled",

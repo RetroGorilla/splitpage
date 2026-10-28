@@ -20,7 +20,7 @@ import type { TimerPort } from "../application/session/ports.ts";
 import { showToast } from "./effects-bridge.ts";
 import { preferences } from "./preferences-bridge.ts";
 
-export type LegacySaveKind = "save" | "auto" | "autosave" | "force" | "saveAs" | "server" | "writeback" | "writebackForce";
+export type LegacySaveKind = "save" | "auto" | "autosave" | "force" | "saveAs" | "writeback" | "writebackForce";
 
 export interface LegacySaveRequest {
   readonly kind: LegacySaveKind;
@@ -87,7 +87,7 @@ function running(): Coordinator {
   return live().coordinator;
 }
 
-const PLAIN: readonly LegacySaveKind[] = Object.freeze(["save", "auto", "autosave", "server"]);
+const PLAIN: readonly LegacySaveKind[] = Object.freeze(["save", "auto", "autosave"]);
 const AUTOMATIC: readonly LegacySaveKind[] = Object.freeze(["auto", "autosave"]);
 
 export function joinSaves(pending: LegacySaveRequest, next: LegacySaveRequest): LegacySaveRequest | null {
@@ -296,14 +296,6 @@ export function saveDoc(opts?: SaveDocOptions | null): Promise<void> {
   const given = opts || {};
   if (!given.auto) resumeAutoSave();
   return requestSave({ kind: saveKind(given) }).then(function () {});
-}
-
-const SENT_OUTCOMES: readonly SaveOutcome["kind"][] = Object.freeze(["saved", "obsolete"]);
-
-export function saveToServer(): Promise<boolean> {
-  return requestSave({ kind: "server" }).then(function (outcome) {
-    return SENT_OUTCOMES.indexOf(outcome.kind) !== -1;
-  });
 }
 
 export function fileConflicts(): FileConflicts {

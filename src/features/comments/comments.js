@@ -986,10 +986,6 @@ export function startComments(nextPorts) {
   listen(document, "keydown", onCommentMenuKeydown, true);
 
   initTaggingHelp();
-  commentDisposers.push(ports.onThreadsSent(function () {
-    captureReplyDrafts();
-    renderComments();
-  }));
   var active = true;
   return { dispose: function () {
     if (!active) return;

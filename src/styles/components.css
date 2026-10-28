@@ -1608,7 +1608,6 @@ body:has(> .writer:not([hidden])) .tagging-help { z-index: 147; }
   color: var(--text);
 }
 .notice[hidden] { display: none; }
-.notice-readonly { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
 .notice-merge { border-color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, var(--surface)); }
 .notice-merge.notice-warn { border-color: var(--danger); background: color-mix(in srgb, var(--danger) 12%, var(--surface)); }
 .notice-body { flex: 1; min-width: 220px; }

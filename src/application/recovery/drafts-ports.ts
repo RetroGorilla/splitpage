@@ -1,4 +1,3 @@
-import type { ReviewFacts } from "../collaboration/review.ts";
 import type { NoticePort } from "../effects/ports.ts";
 import type { DocumentPlace } from "../location/document-place.ts";
 import type { DocumentReader } from "../session/document-reader.ts";
@@ -53,10 +52,8 @@ export interface DraftsPorts {
   readonly report: (error: unknown) => void;
   readonly document: Pick<DocumentReader, "current">;
   readonly session: { readonly mergeBase: () => unknown; readonly noteAbsorbedDirty: (reason: string) => void };
-  readonly place: Pick<DocumentPlace, "home" | "connection" | "fileHome" | "importHome" | "stillOnServer" | "writtenOut" | "serverMode">;
-  readonly onServerDoc: () => boolean;
+  readonly place: Pick<DocumentPlace, "home" | "fileHome" | "importHome" | "writtenOut">;
   readonly markWrittenOut: (on: boolean) => void;
-  readonly review: Pick<ReviewFacts, "reviewing">;
   readonly saves: { readonly unsaved: () => boolean; readonly editSeq: () => number };
   readonly notices: Pick<NoticePort, "show">;
   readonly entry: { readonly migrate: (raw: unknown) => ValidatedDocument };
@@ -76,7 +73,6 @@ export interface DraftsPorts {
   readonly browserDraft: {
     readonly key: (base: string, docId: string) => string;
     readonly base: (serverUrl: unknown) => string;
-    readonly normalizeBase: (value: unknown) => string;
   };
   readonly lock: {
     readonly writerId: () => string;
@@ -85,16 +81,12 @@ export interface DraftsPorts {
     readonly isLive: (writerId: string) => Promise<boolean>;
   };
   readonly documentState: { readonly notify: () => void };
-  readonly banner: { readonly show: (text: string, onCopy: () => void) => boolean; readonly hide: () => void };
 }
 
 export interface DraftsMount {
   readonly flush: (opts?: { readonly keep?: boolean } | null) => Promise<DraftFlush>;
   readonly noteChange: () => void;
-  readonly armBrowserServer: (docId: string) => Promise<boolean>;
-  readonly offerAfterLinkOff: (docId: string) => Promise<boolean>;
-  readonly armServerResume: (taken: unknown) => void;
-  readonly desktopTaker: () => (() => Promise<unknown>) | null;
+  readonly taker: () => (() => Promise<unknown>) | null;
   readonly applyTaken: (taken: unknown) => Promise<string>;
   readonly holdLock: () => void;
   readonly releaseLock: () => void;
