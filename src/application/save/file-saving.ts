@@ -74,7 +74,7 @@ const SAVED: WriterResult = Object.freeze({ kind: "saved" });
 const CANCELLED: WriterResult = Object.freeze({ kind: "cancelled" });
 const FAILED: WriterResult = Object.freeze({ kind: "failed" });
 const FILE_CHANGED = "The file changed on disk since it was opened";
-const CONFLICTED: WriterResult = Object.freeze({ kind: "refused", reason: FILE_CHANGED });
+const CONFLICTED: WriterResult = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
 
 function confirmWrite(captured: ExportDocument, published: unknown, forkDocId: string | null, docIdAtSave: string, seqAtSave: number, landed: Landed | null): void {
   const stamp = captured.document;
