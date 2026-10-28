@@ -4,7 +4,6 @@ export interface DesktopDocumentState {
   readonly pristine: boolean;
   readonly docId: string | null;
   readonly fileId: string | null;
-  readonly serverKey: null;
 }
 
 export interface DesktopDocumentFacts {
@@ -49,8 +48,7 @@ export function createDesktopDocumentState(ports: DesktopDocumentStatePorts): De
       dirty: facts.unsaved() || restoring,
       pristine: facts.pristine() && !restoring,
       docId: doc?.docId || null,
-      fileId: facts.fileId(),
-      serverKey: null
+      fileId: facts.fileId()
     };
   }
 

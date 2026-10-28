@@ -71,13 +71,6 @@ const CHANNELS = [
   { name: "splitpage:voice-start", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
   { name: "splitpage:voice-stop", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
 
-  { name: "splitpage:drive-status", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
-  { name: "splitpage:drive-sign-in", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
-  { name: "splitpage:drive-sign-out", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
-  { name: "splitpage:drive-list", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
-  { name: "splitpage:drive-download", direction: "invoke", argsSchema: ["string"], allowedOrigins: APP },
-  { name: "splitpage:drive-upload", direction: "invoke", argsSchema: ["object"], allowedOrigins: APP },
-
   { name: "splitpage:set-document-state", direction: "send", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:renderer-ready", direction: "send", argsSchema: NONE, allowedOrigins: APP },
   { name: "splitpage:route-open", direction: "invoke", argsSchema: ["object"], allowedOrigins: APP },
@@ -101,7 +94,6 @@ const CHANNELS = [
 
   { name: "splitpage:open-file", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:menu-command", direction: "receive", argsSchema: ["string"], allowedOrigins: APP },
-  { name: "splitpage:open-server-doc", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:restore-notice", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:update-status", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
   { name: "splitpage:reassign-doc-id", direction: "receive", argsSchema: ["object"], allowedOrigins: APP },
