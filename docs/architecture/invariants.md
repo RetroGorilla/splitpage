@@ -114,8 +114,8 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 ### INV-12 — A modifier-click on a breakdown card outranks its controls
 
-- **Behaviour:** A Ctrl, Cmd or Shift click anywhere on a breakdown card, including on a control inside it, selects the card for bulk actions instead of running the control. In review mode it opens the card instead.
-- **Tests:** browser `02-production.txt` (Ctrl-click selects cards), `89-production-review-mode.txt` (review mode: a modifier-click opens the card and selects nothing). No test covers a modifier-click on a control inside a card.
+- **Behaviour:** A Ctrl, Cmd or Shift click anywhere on a breakdown card, including on a control inside it, selects the card for bulk actions instead of running the control.
+- **Tests:** browser `02-production.txt` (Ctrl-click selects cards). No test covers a modifier-click on a control inside a card.
 - **Owner:** `src/features/tags` · **Milestone:** 6 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** both suites pass. New browser check: a Ctrl-click on a card's status control selects the card and leaves its status unchanged.
@@ -228,7 +228,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-25 — Tag cards have one event path
 
 - **Behaviour:** Every panel showing `tagEntityHtml()` cards gets their behaviour from one wiring (`wireTagEntityContainer()`). No panel adds its own handlers for these cards.
-- **Tests:** browser `12-gear.txt` (the Gear panel's cards work through the shared wiring), `89-production-review-mode.txt`.
+- **Tests:** browser `12-gear.txt` (the Gear panel's cards work through the shared wiring).
 - **Owner:** `src/features/tags` · **Milestone:** 6 · **Class:** absorb
 - **Replacement:** the tag-card view owns its bindings through mount and dispose (M6). A new panel mounts the card list instead of wiring events.
 - **Acceptance:** remount/dispose test: mounting the card list in a third container gives one handler set per container, and none remain after dispose.
@@ -255,7 +255,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Tests:** partial.
   - `tools/test-server.mjs`: "launcher/info without the launch header is 404"; the staging and register routes answer 404.
   - `desktop/test/ipc-table.test.mjs`: "checkArgs refuses the shapes…", plus one argument test per channel.
-  - `desktop/test/prompter-share.test.mjs` and `desktop/test/google-drive.test.mjs`.
+  - `desktop/test/prompter-share.test.mjs`.
   - `desktop/test/blob-store.test.mjs`: "a sha that is not 64 lowercase hex is refused everywhere…".
   - `desktop/test/smoke.mjs`: "no answer names a path (invariant #28)".
 
@@ -328,8 +328,8 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 ### INV-36 — The id follows the Save target
 
-- **Behaviour:** A document forks to a new id only on Save As, on publishing an id that has already been written out, or on detached draft recovery. History copies only after the write succeeds. Restoring a snapshot keeps the id. Whether a document is already open is decided by path or server document id, never by `docId`.
-- **Tests:** browser `22-doc-id.txt` ("a Save As whose write fails does not retarget Save (invariant #36)"), `24-history.txt` ("restore records its backup first and keeps the docId"); `src/test/publish-in-flight.test.mjs` ("#247: the fork's new id is not put on the document that replaced this one"); `src/test/doc-id-policy.test.mjs` (`chooseDuplicateLoser`); `desktop/test/smoke.mjs` ("routing: pristine reuse, dirty->new tab, path dedupe…").
+- **Behaviour:** A document forks to a new id only on Save As or on detached draft recovery. History copies only after the write succeeds. Restoring a snapshot keeps the id. Whether a document is already open is decided by path or server document id, never by `docId`.
+- **Tests:** browser `22-doc-id.txt` ("a Save As whose write fails does not retarget Save (invariant #36)"), `24-history.txt` ("restore records its backup first and keeps the docId"); `src/test/doc-id-policy.test.mjs` (`chooseDuplicateLoser`); `desktop/test/smoke.mjs` ("routing: pristine reuse, dirty->new tab, path dedupe…").
 - **Owner:** `src/application` (session transitions) · **Milestone:** 4 · **Class:** absorb
 - **Replacement:** one transition API for adopting open, new, restore and publish (M4), which is the only writer of `docId`. History copies run when the save coordinator confirms completion. This matches plan §6: identity, epoch and generations have different meanings.
 - **Acceptance:** application race tests:
@@ -367,8 +367,8 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:**
   - **Desktop:** a crash draft is deleted only when its tab becomes clean, or on an explicit user decision. It is never deleted on a crash, kill, renderer loss, session end, quit or restore. A discard writes a tombstone before anything is unlinked. A file tab whose file is no longer at its path is asked about on close, window close and quit as if it had unsaved changes; on "without saving" its tab writes a draft even when clean, and that draft is kept, so the next launch restores it, as an unsaved copy while the file is still missing (#258). The close goes ahead only once main finds that copy in the draft folder; if the tab doesn't answer in time or the write fails, the same unsaved-changes question is asked again for those tabs, and the tab, window or app stays open unless the user confirms (#496). A Windows session end writes and keeps the same copy without asking (#492). The file check waits at most one second, and a check that doesn't finish counts as the file being gone (#497). Once the check ends with "close", every tab it covers is checked again in the same step that closes: a tab that has unsaved changes it didn't have when its question was answered (it was edited while the check waited for a copy) is asked about before anything closes (#532).
-  - **Browser:** a draft is removed only by the page that wrote it, or took it over, once that page is clean or has moved to another server document. The store's bounds still apply (30 days, 20 drafts, 64 MiB).
-  - **Both:** a lost link or lapsed sign-in stops saves, not the draft writer, and a restore never saves.
+  - **Browser:** drafts only keep an unsaved copy restored from a draft a former server document left behind. Such a draft is removed only by the page that wrote it, or took it over, once that page is clean. The store's bounds still apply (30 days, 20 drafts, 64 MiB).
+  - **Both:** a restore never saves.
 - **Tests:**
   - `desktop/test/drafts.test.mjs`: "discardForUserDecision during a delayed write…", "session states, take never deletes…".
   - `src/test/browser-drafts.test.mjs`: "remove takes only the writer's own draft; claim hands it over", plus the eviction tests.
@@ -376,7 +376,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
   - `desktop/test/close-keep.test.mjs`: the time-limited file check and the kept-copy rule (#496, #497), and the close check's rounds and last re-check (`runCloseCheck`, #508, #509, #532).
   - `desktop/test/smoke.mjs`: the "close check:" groups, including "a tab edited during a window close's/quit's copy wait is asked about again (#532)".
   - `src/test/draft-keep-app.test.mjs`: a keep flush writes a clean file tab's draft, and only then (#258).
-  - Browser suites `26-desktop-drafts.txt` and `265-browser-drafts.txt`.
+  - Browser suite `26-desktop-drafts.txt`.
 - **Owner:** `src/application` (recovery writer ownership), `desktop/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (plan §6: recovery preserves source work through failed adoption, writer conflict or revoked access).
 - **Acceptance:** the M4 gate's recovery tests pass (multi-tab ownership, revoked links, restart), and a writer discards only the draft generation acknowledged to it.
@@ -449,8 +449,8 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 ### INV-49 — App-data import only adds
 
-- **Behaviour:** Import writes through the history store's public write path and never deletes. Existing preferences are never overwritten, and bookmarks are merged by URL with the local entry winning. Each image is verified and stored durably before the first snapshot that names it. A bad image is dropped and reported, and its snapshots still import. A bundle without `blobs` imports exactly as before.
-- **Tests:** browser `27-app-data.txt` (cases 4–6: idempotence, preferences, bookmarks; cases 16–18: images first, a tampered image, an old bundle).
+- **Behaviour:** Import writes through the history store's public write path and never deletes. Existing preferences are never overwritten. Each image is verified and stored durably before the first snapshot that names it. A bad image is dropped and reported, and its snapshots still import. A bundle without `blobs` imports exactly as before.
+- **Tests:** browser `27-app-data.txt` (cases 4 and 5: idempotence, preferences; cases 16–18: images first, a tampered image, an old bundle).
 - **Owner:** app-data bundle codec under `src/adapters/` · **Milestone:** 6 · **Class:** keep
 - **Replacement:** —
 - **Acceptance:** the suite passes. New unit test: importing into a store that already holds newer snapshots and preferences leaves all of them unchanged.
@@ -466,13 +466,13 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-51 — Autosave writes only where the user sent the document, only reviewed work, only when on
 
 - **Behaviour:**
-  - **Where:** autosave writes only to a file handle the user picked, or to the server. It never opens a picker and never downloads.
+  - **Where:** autosave writes only to a file handle the user picked. It never opens a picker and never downloads.
   - **When:** only while the preference is on. Typing and discrete actions both check the preference first.
   - **Halting:** when unreviewed work comes on screen (a crash-draft restore's merge, a `noAutoSave` merge), autosave stops until an explicit Save. A failed or conflicted automatic save stops it too.
 - **Tests:**
   - Browser `28-autosave.txt`: "off means off", "a file that changed on disk stops autosave…", "a manual Save…".
   - Browser `42-local-merge.txt` (halt after a merge; cites invariant #51) and `185-autosave-every-edit.txt`.
-  - `src/test/home.test.mjs`: "autoSaveTarget answers server, file or null off the home".
+  - `src/test/home.test.mjs`: "autoSaveTarget answers file or null off the home".
   - `desktop/test/smoke.mjs`: "the merge does NOT autosave…".
 - **Owner:** `src/application` (save coordinator) · **Milestone:** 4 · **Class:** keep
 - **Replacement:** —
@@ -483,8 +483,8 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:** An image is uploaded and made durable before any record naming its sha is written, and `refsIn()` is always the list of what a record names.
   - **Server:** it refuses a document or comment that names missing blobs (422 `missing-blobs`). `acceptMissing` lets a document name a sha known to be lost for good; comments cannot use it. A pre-#82 client cannot save over a document that names blobs (426).
-  - **Client:** it uploads first. History, drafts and app-data import await `persist()` before they write.
-- **Tests:** `tools/test-server.mjs` (`missing-blobs`, `acceptMissing`, `client-too-old`); `src/test/blob-store.test.mjs` ("persist resolves only once the backend has stored the bytes"); `src/test/blob-policy.test.mjs` (`refsIn`); browser `65-blobs.txt`, `66-hosted-blobs.txt`, `26-desktop-drafts.txt`, `27-app-data.txt` (case 16).
+  - **Client:** history, drafts and app-data import await `persist()` before they write.
+- **Tests:** `tools/test-server.mjs` (`missing-blobs`, `acceptMissing`, `client-too-old`); `src/test/blob-store.test.mjs` ("persist resolves only once the backend has stored the bytes"); `src/test/blob-policy.test.mjs` (`refsIn`); browser `65-blobs.txt`, `26-desktop-drafts.txt`, `27-app-data.txt` (case 16).
 - **Owner:** `src/application` (save coordinator: blob transfer before the write), `server/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (M4: one transport instance owns both the blob transfer and the write that follows).
 - **Acceptance:** M4 race matrix: when a blob upload fails or is cancelled, no record is written. The server checks are unchanged.
@@ -492,7 +492,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 ### INV-53 — Every edit is recorded once; nothing else is recorded
 
-- **Behaviour:** Every edit to the document ends in `markDirty()` or is a session command, and undo learns of the edit by diffing. An edit is recorded once, unless it ends where it began: typing that coalesces back to its start, such as a letter typed and deleted within a second, leaves no step. Changes that are not the user's edits are registered as such and never become undo steps: a new document, someone else's merge, a reload in place, or the repair made by an undo's own repaint. On a server document, changes to comments are never recorded.
+- **Behaviour:** Every edit to the document ends in `markDirty()` or is a session command, and undo learns of the edit by diffing. An edit is recorded once, unless it ends where it began: typing that coalesces back to its start, such as a letter typed and deleted within a second, leaves no step. Changes that are not the user's edits are registered as such and never become undo steps: a new document, someone else's merge, a reload in place, or the repair made by an undo's own repaint.
 - **Tests:** `src/test/undo.test.mjs` ("diffStates: the lists and comments are one step each; bookkeeping is never a step", "forget (design D4)…", the coalesced-back and redo tests, and `redoInvariantRun`); `src/test/apply-merge.test.mjs` ("nothing differed: no merge, no snapshot, no rev bump"); `tests/application/document-session.test.ts` (the "E2", "E3" and "E4" tests); `src/test/cell-text-app.test.mjs`, `split-join-app.test.mjs` and `cut-paste-app.test.mjs` (one generation, one change count step and one undo step per command); browser `73-undo.txt`, `76-tags-model.txt` (`settleAfterApply`), `185-autosave-every-edit.txt`, `186-autosave-panel-edits.txt`, `289-script-cell-ime.txt`.
 - **Owner:** `src/application` (DocumentSession) · **Milestone:** 3 · **Class:** absorb
 - **Replacement:** DocumentSession transactions (M3; plan §6):

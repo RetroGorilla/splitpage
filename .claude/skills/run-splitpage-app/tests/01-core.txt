@@ -57,13 +57,12 @@ eval (function(){var bad=[];document.querySelectorAll('[hidden]').forEach(functi
 expect window.__hiddenButRendered.length == 0
 expect document.getElementById('update-bar').getBoundingClientRect().height == 0
 
-# the same rule, where it is easiest to regress: the File menu's server items
-# are hidden unless a document server answered, and hidden means gone
+# the same rule, where it is easiest to regress: a File menu item that is
+# hidden is gone
 jsclick #btn-file
 sleep 250
 eval (function(){var bad=[];document.querySelectorAll('#file-menu [data-file-action]').forEach(function(b){if(b.hidden&&b.getBoundingClientRect().height>0)bad.push(b.getAttribute('data-file-action'));});window.__menuBad=bad;return bad.join(', ')||'(none)';})()
 expect window.__menuBad.length == 0
-expect document.getElementById('menu-server-open').getBoundingClientRect().height == 0
 jsclick #btn-file
 sleep 200
 

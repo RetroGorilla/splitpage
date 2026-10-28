@@ -4,8 +4,7 @@
 # close an open File menu as they save. With the command menu open, Find and
 # Hide shot scenes still act from their shortcut, the File menu item and the
 # desktop app's native menu, Ctrl+E, Ctrl+S and Ctrl+O do not, and the native
-# menu's Search commands leaves it open. Write in a review session reads
-# differently in the command menu and on its button. The header's Search
+# menu's Search commands leaves it open. The header's Search
 # button does nothing where it cannot open. Passes against the code before
 # the registry (4.0-development 47c0309) and after it.
 
@@ -159,25 +158,6 @@ expect __toasts() === ''
 jsclick #wr-close
 wait document.getElementById('writer').hidden
 sleep 600
-
-# --- Write in a review session ------------------------------------------------
-eval (function(){ window.__fetchWas = window.fetch; window.fetch = function(){ return new Promise(function(){}); }; window.__hostedTest.setSession({ role: 'review', docId: 'shared-doc' }); return true; })()
-sleep 300
-expect window.__hostedTest.reviewMode() === true
-expect __item('write', 'write').disabled === true
-expect __item('write', 'write').why == Viewing only — the writer changes the script
-eval __toasts()
-jsclick #btn-write
-sleep 300
-expect document.getElementById('writer').hidden
-expect __toasts() === 'Viewing only — you can comment on this script, but not change it.'
-eval D.runMenuCommand('write'); true
-sleep 300
-expect document.getElementById('writer').hidden
-expect __toasts() === 'Viewing only — you can comment on this script, but not change it.'
-eval (function(){ window.__hostedTest.setSession({ role: 'edit', docId: null }); window.fetch = window.__fetchWas; return true; })()
-sleep 300
-expect window.__hostedTest.reviewMode() === false
 
 # nothing here edited the document
 expect document.getElementById('save-status').textContent !== 'Unsaved changes'

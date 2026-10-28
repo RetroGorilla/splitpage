@@ -13,8 +13,6 @@
 #   * a paste into another document brings them in as new scenes after the
 #     caret's scene, one undo entry, with fresh comment ids;
 #   * cut and delete are one undo entry each; Esc and a click clear;
-#   * a review session selects and copies, and refuses cut, paste and
-#     delete;
 #   * the grip still drags one scene to a new place (#185).
 # The payload itself is src/test/scene-clip.test.mjs. Every `eval` is one
 # physical line. The mouse lines are real CDP mouse events (driver `mouse`).
@@ -307,49 +305,4 @@ expect F.state().rows.length === 2
 expect F.state().rows[0].status === 'shot'
 expect F.state().comments.length === 1
 
-# ---- 14. a review session: select and copy, nothing else -------------------
-eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
-wait document.body.classList.contains('is-review')
-eval (function(){ untoast(); getSelection().removeAllRanges(); window.__before = ids(); window.__json = JSON.stringify(F.state().rows); window.scrollTo(0, 0); return true; })()
-sleep 400
-mouse down pt(cell(F.state().rows[0].id, 'audioText'), 0.05, 0.5)
-mouse move pt(cell(F.state().rows[0].id, 'audioText'), 0.3, 0.5)
-mouse move pt(cell(F.state().rows[1].id, 'audioText'), 0.5, 0.5)
-mouse up pt(cell(F.state().rows[1].id, 'audioText'), 0.5, 0.5)
-expect T.ids().length === 2
-eval (function(){ window.__rc = clip('copy', document.body); return __rc.types.join(); })()
-expect __rc.types.indexOf('application/x-splitpage-scenes') !== -1
-key Delete
-wait toasts().indexOf('review copy') !== -1
-expect ids() === __before
-eval (function(){ window.__rx = clip('cut', document.body); return __rx.prevented; })()
-expect __rx.types.indexOf('application/x-splitpage-scenes') !== -1
-expect JSON.parse(__rx['application/x-splitpage-scenes']).cut === undefined
-expect ids() === __before
-eval T.openMenu(200, 200)
-expect document.querySelector('#scene-menu [data-scene-action="copy"]').disabled === false
-expect document.querySelector('#scene-menu [data-scene-action="cut"]').disabled === true
-expect document.querySelector('#scene-menu [data-scene-action="delete"]').disabled === true
-key Escape
-eval (function(){ T.clear(); var el = cell(F.state().rows[0].id, 'audioText'); el.focus(); var data = {}; ['application/x-splitpage-scenes', 'text/html', 'text/plain'].forEach(function(t){ data[t] = __c[t]; }); return clip('paste', el, data).prevented; })()
-expect ids() === __before
-expect JSON.stringify(F.state().rows) === __json
-wait toasts().indexOf('pasted into') !== -1
-eval window.__hostedTest.setSession({role:'review',docId:null})
-eval (function(){ document.body.classList.remove('is-review'); return true; })()
-
-# ---- 15. a server document: the scenes are one undo entry, their comments
-#          are sent and stay (design D5, 12a-undo.js) ----------------------
-eval (function(){ window.fetch = function(){ return new Promise(function(){}); }; window.__hostedTest.setSession({role:'edit',docId:'srv-doc'}); return window.__hostedTest.home().kind; })()
-expect window.__hostedTest.home().kind === 'server'
-expect !document.body.classList.contains('is-review')
-eval (function(){ T.clear(); untoast(); window.__before = ids(); window.__c0 = F.state().comments.length; var el = cell(F.state().rows[0].id, 'audioText'); el.focus(); U.flush(); window.__u3 = U.sizes().undo; var data = {}; ['application/x-splitpage-scenes', 'text/html', 'text/plain'].forEach(function(t){ data[t] = __c[t]; }); return clip('paste', el, data).prevented; })()
-wait F.state().rows.length === __before.split(',').length + 2
-expect F.state().comments.length === __c0 + 1
-eval U.flush()
-expect U.sizes().undo === __u3 + 1
-eval (function(){ document.activeElement.blur(); return true; })()
-key ctrl KeyZ
-wait ids() === __before
-expect F.state().comments.length === __c0 + 1
 logs

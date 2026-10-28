@@ -1,6 +1,6 @@
 # Document identity
 
-The identity owner is in `src/application/identity/document-identity.js`. Its wiring creates it at the old 02b initializer slot, after page entry, scene status and shot hiding, before blobs, gallery and sync. Importing it creates nothing. Its methods and identity port refuse before start and after stop; stop disconnects the numbered bridge and closes the cross-tab channel. Pending history copies remain unawaited, but a late failure cannot display a notice after that owner stops.
+The identity owner is in `src/application/identity/document-identity.js`. Its wiring creates it at the old 02b initializer slot, after page entry, scene status and shot hiding, before blobs, gallery and sync. Importing it creates nothing. Its methods and identity port refuse before start and after stop; stop closes the cross-tab channel. Pending history copies remain unawaited, but a late failure cannot display a notice after that owner stops.
 
 ## Responsibilities and ports
 
@@ -12,9 +12,9 @@ The document guard is a small owner beside identity in `src/application/identity
 
 ## Remaining numbered callers
 
-`src/legacy/document-identity-bridge.ts` is the one temporary bridge for `03-sync.js`, `13-hosted.js` and `18-local-files.js`. Wiring hands it the started owner and document-entry functions. It refuses outside that lifetime. It is deleted when its last numbered caller moves; hosted remains paused. The old `src/legacy/document-guard.ts` bridge is deleted. No compatibility re-exports remain.
+None. `src/legacy/document-identity-bridge.ts` went with `13-hosted.js`, its last numbered caller, when the server features were removed. The old `src/legacy/document-guard.ts` bridge is deleted. No compatibility re-exports remain.
 
-The 02b numbered-file exception, 03 → 02b, 13 → 02b, 18 → 02b and bootstrap → 02b dependencies are removed. The paused hosted file changes only its import path.
+The 02b numbered-file exception, 03 → 02b, 13 → 02b, 18 → 02b and bootstrap → 02b dependencies are removed.
 
 ## Validation
 
