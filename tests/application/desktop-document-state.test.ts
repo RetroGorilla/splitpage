@@ -37,7 +37,7 @@ test("notify publishes the document's state, with defaults for a missing title a
   const h = harness({ doc: { title: "", docId: null } });
   h.owner.notify();
   assert.deepEqual(h.sent, [{
-    title: "Untitled Script", dirty: false, pristine: false, docId: null, fileId: null, serverKey: null
+    title: "Untitled Script", dirty: false, pristine: false, docId: null, fileId: null
   }]);
 });
 
@@ -48,12 +48,11 @@ test("restoring a draft reads as dirty and never pristine", () => {
   assert.equal(h.sent[0]?.pristine, false);
 });
 
-test("the file is reported as read, and the server key is always null", () => {
+test("the file is reported as read", () => {
   const h = harness({ fileId: "file-2", unsaved: true });
   h.owner.notify();
   assert.equal(h.sent[0]?.fileId, "file-2");
   assert.equal(h.sent[0]?.dirty, true);
-  assert.equal(h.sent[0]?.serverKey, null);
 });
 
 test("nothing is published off the desktop or without a document", () => {
