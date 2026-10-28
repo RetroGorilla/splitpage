@@ -58,7 +58,7 @@ import {
   setTagNotes
 } from "../../features/tags/panels.js";
 import { queueAutoSave } from "../../legacy/save-bridge.ts";
-import { exportAs, runExport } from "./local-files.ts";
+import { localFileMenuControls } from "./local-files.ts";
 import { saves as portSaves } from "./ports/saving.ts";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";
 import { productionGroupBy, setGearGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey } from "../../application/tag-panel-state.ts";
@@ -147,8 +147,8 @@ export function mountTagsFeature(): ReturnType<typeof mountTags> {
       toggleCardSelection: toggleCardSelection,
       tagKey: function (cat: string | null, name: string | null) { return tagKey(cat as string, name as string); },
       cssAttr: cssAttr,
-      exportAs: exportAs,
-      runExport: runExport,
+      exportAs: (...args: Parameters<ReturnType<typeof localFileMenuControls>["exportAs"]>) => localFileMenuControls().exportAs(...args),
+      runExport: (...args: Parameters<ReturnType<typeof localFileMenuControls>["runExport"]>) => localFileMenuControls().runExport(...args),
       rootClick: onRootClick,
       runFromButton: runFromButton,
       setTagOwner: setTagOwner,
@@ -179,7 +179,7 @@ export function mountTagsFeature(): ReturnType<typeof mountTags> {
 export const stopTagsFeature = tags.stop;
 
 export function mountBrollEventsFeature(): ReturnType<typeof mountBrollPanelFeature> {
-  return mountBrollPanelFeature({ exportAs: exportAs });
+  return mountBrollPanelFeature({ exportAs: (...args: Parameters<ReturnType<typeof localFileMenuControls>["exportAs"]>) => localFileMenuControls().exportAs(...args) });
 }
 
 type TagEntityContainerFactory = (id: string, rootClick: (event: MouseEvent) => void) => () => void;

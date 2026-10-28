@@ -8,7 +8,7 @@ import { selection } from "./ports/editing.ts";
 import { exports } from "./ports/files.ts";
 import { askingFromLauncher, launcherShown, screen } from "./ports/screen.ts";
 import { exportActionName, exportActionReason } from "./file-menu-export-controls.ts";
-import { runExportAction } from "./local-files.ts";
+import { localFileMenuControls } from "./local-files.ts";
 import { fileMenuOpen, refreshFileMenu } from "./file-menu-controls.ts";
 
 const commandMenu = owned<CommandMenuMount>();
@@ -18,7 +18,7 @@ export function mountCommandMenuFeature(): CommandMenuMount {
     const ports: CommandMenuPorts = {
       actions, selection, exports,
       screen: { askingFromLauncher, launcherShown },
-      exportActionName, exportActionReason, runExportAction, fileMenuOpen, refreshFileMenu
+      exportActionName, exportActionReason, runExportAction: (...args: Parameters<ReturnType<typeof localFileMenuControls>["runExportAction"]>) => localFileMenuControls().runExportAction(...args), fileMenuOpen, refreshFileMenu
     };
     return mountCommandMenu(ports);
   });

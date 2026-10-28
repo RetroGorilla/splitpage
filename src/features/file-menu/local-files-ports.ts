@@ -1,3 +1,4 @@
+import type { ResumeHandle } from "./mount.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { BusyNotices, MenuItemPort, NoticePort } from "../../application/effects/ports.ts";
 import type { ExportAssetRequest, ExportAssetSource } from "../../application/export/assets.ts";
@@ -57,7 +58,7 @@ export interface LocalFileMenuControls {
   readonly buildFileData: (kind: string, baseName: string, options?: Readonly<Record<string, unknown>>) => Promise<BuiltLocalFile>;
   readonly showResumeBanner: (handle: unknown) => void;
   readonly hideResumeBanner: () => void;
-  readonly pendingHandle: () => unknown;
+  readonly pendingHandle: () => ResumeHandle | null;
   readonly showFileConflictView: (conflict: FileConflict | null) => void;
   readonly exportAs: (kind: string, more?: Readonly<Record<string, unknown>>) => Promise<void>;
   readonly runExport: (action: string) => Promise<boolean>;

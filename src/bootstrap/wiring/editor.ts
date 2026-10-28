@@ -132,7 +132,7 @@ import {
   settleAfterApply,
   undo
 } from "../../legacy/undo-bridge.ts";
-import { runExport } from "./local-files.ts";
+import { localFileMenuControls } from "./local-files.ts";
 import { connectWriter } from "./writer.ts";
 import { reviewBlocked, reviewMode, onServerDoc } from "../../legacy/location-bridge.ts";
 
@@ -582,7 +582,7 @@ const writerRoutePorts: { -readonly [K in keyof WriterRoutePorts]: WriterRoutePo
   editKeydown: inactiveWriter,
   format: inactiveWriter,
   gutter: inactiveWriter,
-  exportNarration: function () { runExport("export-narration-docx"); }
+  exportNarration: function () { localFileMenuControls().runExport("export-narration-docx"); }
 };
 
 export function mountWriterFeature(): ReturnType<typeof mountWriterRoutes> {

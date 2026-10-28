@@ -12,7 +12,7 @@ import { tagPrintColor } from "../../adapters/formats/print-colors.ts";
 import { fileMenuExportActions as definitions } from "../../features/file-menu/actions.ts";
 import { startExportDialog as mountExportDialog } from "../../features/file-menu/export-dialog.js";
 import type { FileMenuExportMount, FileMenuExportPorts } from "../../features/file-menu/ports.ts";
-import { exportBaseName, exportFileName, handleFileMenuAction, runExportAction } from "./local-files.ts";
+import { localFileMenuControls } from "./local-files.ts";
 import { fileMenuOpen, onFileMenuRefresh, toggleFileMenu } from "./file-menu-controls.ts";
 import { fileMenuExport as dialog } from "./file-menu-export-controls.ts";
 
@@ -39,9 +39,9 @@ export function mountFileMenuExportFeature(capture: FileMenuExportPorts["capture
         markdownTable: (doc) => toMarkdownTableDoc(doc, { export: true, scenes: 7 }),
         tagColor: tagPrintColor
       },
-      fileName: (format, options) => exportFileName(format, exportBaseName(), options),
-      exportAction: runExportAction,
-      share: () => { handleFileMenuAction("collaborate"); },
+      fileName: (format, options) => localFileMenuControls().exportFileName(format, localFileMenuControls().exportBaseName(), options),
+      exportAction: (...args: Parameters<ReturnType<typeof localFileMenuControls>["runExportAction"]>) => localFileMenuControls().runExportAction(...args),
+      share: () => { localFileMenuControls().handleFileMenuAction("collaborate"); },
       onMenuRefresh: onFileMenuRefresh
     };
     return mountExportDialog(ports) as FileMenuExportMount;
