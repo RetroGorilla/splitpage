@@ -2,10 +2,15 @@ import { formatTimestamp } from "../common/comment-time.js";
 import { exportToggleOptions } from "../../application/export/registry.ts";
 import { slugify } from "../../../shared/text.js";
 
-var ports = null;
+var mounted = null;
+
+function mountLocalFileMenu(next) {
+var ports = next;
+var active = true;
+var conflictTimers = new Set();
 
 function running() {
-  if (!ports) throw new Error("The local file menu is not started yet");
+  if (!active) throw new Error("The local file menu is not started yet");
   return ports;
 }
 
@@ -34,23 +39,27 @@ function resetMergeOffer(...args) { return running().merge.reset(...args); }
 function isExportAction(...args) { return running().exportControls.isExportAction(...args); }
 function rememberExport(...args) { return running().exportControls.rememberExport(...args); }
 
-export function updateFileChip() {
+function updateFileChip() {
   updateHeaderFileChip();
   updateReadonlyBanner();
 }
 
-export function fileChipListeners(refresh) {
+function fileChipListeners(refresh) {
   return {
     session: function (change) {
+      if (!active) return;
       if (change.kind === "adopt" || change.kind === "server" || change.kind === "recovery" || change.kind === "reload") refresh();
     },
     location: function (change) {
+      if (!active) return;
       if (change !== "writtenOut") refresh();
     },
     status: function (change) {
+      if (!active) return;
       if (change !== "bookmarks") refresh();
     },
     save: function (change) {
+      if (!active) return;
       if (change === "clean" || change === "halt" || (change === "change" && onServerDoc())) refresh();
     }
   };
@@ -62,7 +71,7 @@ function updateReadonlyBanner() {
   banner.hidden = !(serverStatus().mode().readOnly && onServerDoc());
 }
 
-export function mirrorFileChipToWriter() {
+function mirrorFileChipToWriter() {
   var src = document.getElementById("file-chip");
   var dst = document.getElementById("wr-file-chip");
   if (!src || !dst) return;
@@ -110,16 +119,16 @@ function updateHeaderFileChip() {
   stateEl.classList.toggle("unsaved", !!imported.dirty);
 }
 
-export function exportFileName(kind, baseName, opts) {
+function exportFileName(kind, baseName, opts) {
   var exporter = running().formats.byId(kind);
   return exporter ? exporter.fileName(baseName, opts || {}) : baseName + "." + kind;
 }
 
-export function exportBaseName() {
+function exportBaseName() {
   return importHome() ? importHome().name.replace(/\.[^.]+$/, "") : slugify(currentDocument().title);
 }
 
-export function exportRequest(kind, opts) {
+function exportRequest(kind, opts) {
   opts = opts || {};
   var exporter = running().formats.byId(kind) || running().formats.byId("md");
   var doc = captureExportDocument();
@@ -134,17 +143,19 @@ export function exportRequest(kind, opts) {
   });
 }
 
-export async function buildFileData(kind, baseName, opts) {
+async function buildFileData(kind, baseName, opts) {
   var request = exportRequest(kind, opts);
   var registered = running().formats.byId(kind);
   var exporter = registered || running().formats.byId("md");
   var assets = await loadExportAssets(request.assets);
+  if (!active) throw new Error("The local file menu is not started yet");
   var made = await exporter.build({
     doc: request.doc,
     options: request.options,
     assets: assets,
     ports: { standaloneHtml: standaloneHtmlFor }
   }, baseName);
+  if (!active) throw new Error("The local file menu is not started yet");
   var filename = registered
     ? exporter.fileName(baseName, { imageBundle: !!made.imageBundle })
     : baseName + "." + kind;
@@ -162,7 +173,7 @@ function showResumeBanner(handle) {
   banner.hidden = false;
 }
 
-export function hideResumeBanner() {
+function hideResumeBanner() {
   pendingResumeHandle = null;
   document.getElementById("resume-banner").hidden = true;
 }
@@ -173,7 +184,7 @@ function fileConflictHome(conflict) {
   return conflict.kind === "project" ? fileHome() : importHome();
 }
 
-export function showFileConflictView(conflict) {
+function showFileConflictView(conflict) {
   if (!conflict) {
     hideFileConflictView();
     return;
@@ -196,13 +207,14 @@ export function showFileConflictView(conflict) {
     ", after you opened it here. Saving now would overwrite that version.";
   var token = ++fileConflictShowToken;
   var show = function () {
-    if (token !== fileConflictShowToken) return;
+    if (!active || token !== fileConflictShowToken) return;
     document.getElementById("file-conflict-modal").hidden = false;
   };
   var probe = offerFileMerge(currentFile, fileConflictHome(conflict));
   var timer = setTimeout(show, 1500);
-  probe.then(function () { clearTimeout(timer); show(); },
-             function () { clearTimeout(timer); show(); });
+  conflictTimers.add(timer);
+  probe.then(function () { clearTimeout(timer); conflictTimers.delete(timer); show(); },
+             function () { clearTimeout(timer); conflictTimers.delete(timer); show(); });
 }
 
 function hideFileConflictView() {
@@ -211,7 +223,7 @@ function hideFileConflictView() {
   resetMergeOffer();
 }
 
-export async function exportAs(kind, more) {
+async function exportAs(kind, more) {
   var base = exportBaseName();
   var built;
   try {
@@ -219,27 +231,30 @@ export async function exportAs(kind, more) {
       return buildFileData(kind, base, Object.assign({ allowImageBundle: true }, more));
     });
   } catch (e) {
+    if (!active) return;
     showToast("Could not build the " + kind.toUpperCase() + " file.", "error");
     return;
   }
+  if (!active) return;
   await deliverFile(built.filename, built.data, { savedMsg: "Exported " + built.filename });
 }
 
-export async function runExport(action) {
+async function runExport(action) {
   var exporter = running().formats.byAction(action);
   if (!exporter) return false;
   var why = exporter.reason ? exporter.reason(captureExportDocument()) : "";
+  if (!active) return false;
   if (why) {
     showToast(exporter.refusal || why + ".", "warn");
     return false;
   }
   await exportAs(exporter.id, exporter.defaults);
-  return true;
+  return active;
 }
 
 var fileMenuChoiceListeners = [];
 
-export function onFileMenuChoice(listener) {
+function onFileMenuChoice(listener) {
   fileMenuChoiceListeners.push(listener);
   return function () {
     var index = fileMenuChoiceListeners.indexOf(listener);
@@ -247,17 +262,17 @@ export function onFileMenuChoice(listener) {
   };
 }
 
-export function noteFileMenuChoice(action) {
+function noteFileMenuChoice(action) {
   fileMenuChoiceListeners.forEach(function (listener) { listener(action); });
 }
 
-export function runExportAction(action) {
+function runExportAction(action) {
   if (!running().formats.isAction(action)) return false;
   handleFileMenuAction(action, "command-menu");
   return true;
 }
 
-export function handleFileMenuAction(action, source) {
+function handleFileMenuAction(action, source) {
   noteFileMenuChoice(action);
   if (action !== "autosave" && action !== "toggle-hide-shot" && action !== "toggle-rundown-min") running().actions.invoke("close-file-menu", "button");
   if (isExportAction(action)) rememberExport(action);
@@ -272,13 +287,31 @@ export function handleFileMenuAction(action, source) {
 }
 
 
-export function startLocalFileMenu(next) {
-  if (ports) throw new Error("The local file menu is already started; stop it first");
-  ports = next;
-  return { updateFileChip, fileChipListeners, mirrorFileChipToWriter, exportFileName, exportBaseName, exportRequest, buildFileData, showResumeBanner, hideResumeBanner, showFileConflictView, exportAs, runExport, onFileMenuChoice, noteFileMenuChoice, runExportAction, handleFileMenuAction, pendingHandle: function () { return pendingResumeHandle; }, dispose: function () {
+  var controls = { updateFileChip, fileChipListeners, mirrorFileChipToWriter, exportFileName, exportBaseName, exportRequest, buildFileData, showResumeBanner, hideResumeBanner, showFileConflictView, exportAs, runExport, onFileMenuChoice, noteFileMenuChoice, runExportAction, handleFileMenuAction, pendingHandle: function () { return pendingResumeHandle; }, dispose: function () {
+    if (!active) return;
+    active = false;
     fileConflictShowToken++;
+    conflictTimers.forEach(clearTimeout);
+    conflictTimers.clear();
     fileMenuChoiceListeners = [];
     pendingResumeHandle = null;
     ports = null;
+    if (mounted === controls) mounted = null;
   } };
+  Object.keys(controls).forEach(function (key) {
+    if (key === "dispose") return;
+    var call = controls[key];
+    controls[key] = function (...args) {
+      if (!active) throw new Error("The local file menu is not started yet");
+      return call(...args);
+    };
+  });
+  return controls;
+}
+
+export function startLocalFileMenu(next) {
+  if (mounted) throw new Error("The local file menu is already started; stop it first");
+  var mine = mountLocalFileMenu(next);
+  mounted = mine;
+  return mine;
 }
