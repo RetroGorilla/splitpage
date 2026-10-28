@@ -200,7 +200,7 @@ const ACTION_REGISTRY_METHODS: readonly (keyof ActionRegistry)[] = ["register", 
 
 const RECOVERY_METHODS: readonly (keyof LegacyRecoveryPorts)[] = ["now", "desktop", "sessionStorage", "localStorage", "internImage", "merge"];
 
-const DRAFT_METHODS: readonly (keyof LegacyDraftPorts)[] = ["flush", "armServer", "offerAfterLinkOff", "noteChange"];
+const DRAFT_METHODS: readonly (keyof LegacyDraftPorts)[] = ["flush", "noteChange"];
 
 const MERGE_METHODS: readonly (keyof LegacyMergePorts)[] = ["states", "entry", "isDocument", "snapshot", "current", "adopt", "documentId", "noteHistoryFrom", "armUndo", "setBase", "capture", "stillOwns"];
 

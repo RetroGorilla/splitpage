@@ -1,11 +1,10 @@
 import type { ResumeHandle } from "./mount.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { BusyNotices, MenuItemPort, NoticePort } from "../../application/effects/ports.ts";
-import type { ExportAssetRequest, ExportAssetSource } from "../../application/export/assets.ts";
+import type { ExportAssetRequest } from "../../application/export/assets.ts";
 import type { ExportRegistry, FileNameOptions } from "../../application/export/registry.ts";
 import type { FileDelivery } from "../../application/files/file-delivery.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
-import type { ServerStatus } from "../../application/location/server-status.ts";
 import type { BrollView } from "../../application/preferences/broll-view.ts";
 import type { Preferences } from "../../application/preferences/preferences.ts";
 import type { FileConflict } from "../../application/save/file-conflict.ts";
@@ -20,16 +19,13 @@ import type { FileMenuExportMount } from "./ports.ts";
 export interface LocalFileMenuPorts {
   readonly document: Pick<DocumentReader, "current">;
   readonly preferences: Pick<Preferences, "clock">;
-  readonly onServerDoc: () => boolean;
-  readonly server: Pick<ServerStatus, "mode" | "sessionExpired" | "linkTurnedOff">;
   readonly place: Pick<DocumentPlace, "home" | "importHome" | "fileHome">;
   readonly saves: Pick<SaveState, "unsaved">;
   readonly autoSaves: Pick<AutoSaveReads, "policy">;
   readonly writeback: Pick<ImportSavingOwner, "saveBackItemState">;
   readonly exports: Pick<ExportKit, "captureExportDocument" | "loadExportAssets">;
   readonly formats: Pick<ExportRegistry, "byId" | "byAction" | "isAction" | "card">;
-  readonly assetSource: () => ExportAssetSource | null;
-  readonly assets: { readonly request: (doc: ExportDocument, source: ExportAssetSource | null) => ExportAssetRequest };
+  readonly assets: { readonly request: (doc: ExportDocument) => ExportAssetRequest };
   readonly standaloneHtml: (doc: ExportDocument) => unknown;
   readonly imagesLeftOut: (count: number, filename: string) => void;
   readonly brollView: Pick<BrollView, "printView">;
@@ -44,7 +40,6 @@ export interface LocalFileMenuPorts {
 export interface LocalFileChipListeners {
   readonly session: (change: SessionChange) => void;
   readonly location: (change: string) => void;
-  readonly status: (change: string) => void;
   readonly save: (change: string) => void;
 }
 

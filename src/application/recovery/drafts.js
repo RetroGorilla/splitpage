@@ -11,14 +11,9 @@ function runningOnDesktop() { return ports.running(); }
 function currentDocument() { return ports.document.current(); }
 function mergeBase() { return ports.session.mergeBase(); }
 function noteAbsorbedDirty(reason) { ports.session.noteAbsorbedDirty(reason); }
-function currentConn() { return ports.place.connection(); }
 function currentHome() { return ports.place.home(); }
 function fileHome() { return ports.place.fileHome(); }
 function importHome() { return ports.place.importHome(); }
-function stillOnServer(connection) { return ports.place.stillOnServer(connection); }
-function onServerDoc() { return ports.onServerDoc(); }
-function reviewMode() { return ports.review.reviewing(); }
-function serverStatus() { return { mode: ports.place.serverMode }; }
 function documentLocation() { return { writtenOut: ports.place.writtenOut, markWrittenOut: ports.markWrittenOut }; }
 function migrateRows(raw) { return ports.entry.migrate(raw); }
 function persist(refs) { return ports.pictures.persist(refs); }
@@ -29,7 +24,6 @@ function resetProductionPanelState() { ports.resetProductionPanel(); }
 function showToast(message, kind, sticky) { return ports.notices.show(message, kind, sticky); }
 function browserDraftKey(base, docId) { return ports.browserDraft.key(base, docId); }
 function draftBaseOf(serverUrl) { return ports.browserDraft.base(serverUrl); }
-function normalizeDraftBase(value) { return ports.browserDraft.normalizeBase(value); }
 function browserWriterIsLive(writerId) { return ports.lock.isLive(writerId); }
 function holdWriterLock() { ports.lock.hold(); }
 function releaseBrowserWriterLock() { ports.lock.release(); }
@@ -62,8 +56,7 @@ var draftTiming = {
   largeBytes: 8 * 1024 * 1024,
   slowStringifyMs: 50,
   backoffMin: 5000,
-  backoffMax: 60000,
-  serverWait: 20000
+  backoffMax: 60000
 };
 
 var draftSchedule = createCaptureSchedule({
@@ -85,9 +78,6 @@ var draftSentBase = {};
 var draftSentSignature = "";
 var draftStats = { writes: 0, failures: 0, discards: 0, obsolete: 0, lastCode: null };
 
-var draftPendingFor = null;
-var draftServerSettle = null;
-
 var browserDraftsOff = false;
 var browserCopyOf = null;
 
@@ -101,10 +91,6 @@ function browserKeyOnDisk() {
 
 function browserDraftTarget() {
   if (runningOnDesktop() || browserDraftsOff) return null;
-  if (onServerDoc()) {
-    if (reviewMode()) return null;
-    return { base: (currentHome().conn && currentHome().conn.serverUrl) || "", docId: String(currentHome().id), rev: currentHome().rev || 0, copy: false };
-  }
   if (browserCopyOf && currentHome().kind === "none" && currentDocument() && currentDocument().docId === browserCopyOf.docId) {
     return { base: browserCopyOf.server.base, docId: browserCopyOf.server.docId, rev: browserCopyOf.server.rev, copy: true };
   }
@@ -180,11 +166,6 @@ function draftOriginOf() {
       origin.kind = "server";
       origin.server = { base: target.base, docId: target.docId, rev: target.rev, copy: target.copy };
     }
-    return origin;
-  }
-  if (onServerDoc()) {
-    origin.kind = "server";
-    origin.server = { base: currentHome().conn.serverUrl || "", docId: currentHome().id, rev: currentHome().rev || 0 };
     return origin;
   }
   var file = fileHome();
@@ -483,26 +464,6 @@ function draftTitleOf(s, fallback) {
   return (s && s.title) || fallback || "this script";
 }
 
-function hideDraftPendingBanner() {
-  ports.banner.hide();
-  draftPendingFor = null;
-}
-
-function copyPendingDraft() {
-  var waiting = draftPendingFor;
-  if (!waiting) { hideDraftPendingBanner(); return; }
-  draftResume().dropServerResume();
-  hideDraftPendingBanner();
-  recoverDraftAsUnsavedCopy(waiting,
-    "These recovered changes are open here as an unsaved copy — the server document they came " +
-    "from was not reached. Save them wherever you want them.");
-  if (draftServerSettle) draftServerSettle.settle("server-copy");
-}
-
-function showDraftPendingBanner(t, title) {
-  if (ports.banner.show("Recovered changes to “" + title + "” are waiting for the server", copyPendingDraft)) draftPendingFor = t;
-}
-
 function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
   if (!t || !t.header) return false;
   mine = mine || draftMigrate(t.stateJson);
@@ -526,108 +487,12 @@ function recoverDraftAsUnsavedCopy(t, reasonText, mine) {
   return true;
 }
 
-function armServerDraftResume(t) {
-  if (!t || !t.header) return;
-  var origin = t.header.origin;
-  if (!origin || origin.kind !== "server" || !origin.server || !origin.server.docId) return;
-  var mine = draftMigrate(t.stateJson);
-  if (!mine) return;
-  var base = t.baseJson ? draftMigrate(t.baseJson) : null;
-
-  var settled = false;
-  var resolveSettle = null;
-  var promise = new Promise(function (resolve) { resolveSettle = resolve; });
-  draftServerSettle = {
-    promise: promise,
-    settle: function (outcome) {
-      if (settled) return;
-      settled = true;
-      resolveSettle(outcome);
-    }
-  };
-  draftResume().armServerResume({
-    id: String(origin.server.docId),
-    rev: origin.server.rev || 0,
-    base: base,
-    mine: mine,
-    at: t.header.writtenAt || 0,
-    onDone: function (outcome) { draftServerSettle.settle(outcome); }
-  });
-}
-
-function draftWaitForServerDetect() {
-  var deadline = now() + draftTiming.serverWait;
-  return new Promise(function (resolve) {
-    (function tick() {
-      if (serverStatus().mode().checked || now() > deadline) { resolve(); return; }
-      setTimer(tick, 50);
-    })();
-  });
-}
-
-function draftRaceTimeout(promise, ms) {
-  if (ms <= 0) return Promise.resolve(null);
-  return new Promise(function (resolve) {
-    var done = false;
-    var timer = setTimer(function () { if (!done) { done = true; resolve(null); } }, ms);
-    promise.then(function (v) {
-      if (done) return;
-      done = true;
-      clearTimer(timer);
-      resolve(v);
-    });
-  });
-}
-
-async function restoreServerDraft(t, mine, origin) {
-  var resume = draftResume();
-  var server = origin.server || {};
-  var title = draftTitleOf(mine, server.docId);
-  await draftWaitForServerDetect();
-
-  var headerBase = normalizeDraftBase(server.base);
-  if (headerBase && headerBase !== normalizeDraftBase(currentConn().serverUrl)) {
-    resume.dropServerResume();
-    if (draftServerSettle) draftServerSettle.settle("server-copy");
-    recoverDraftAsUnsavedCopy(t,
-      "These recovered changes came from a document on another server — they are open here as an " +
-      "unsaved copy. Save them wherever you want them.", mine);
-    return "server-copy";
-  }
-
-  if (serverStatus().mode().checked && !serverStatus().mode().available) {
-    resume.dropServerResume();
-    if (draftServerSettle) draftServerSettle.settle("server-copy");
-    recoverDraftAsUnsavedCopy(t,
-      "These recovered changes belong to “" + title + "” on a server this copy can't reach — they " +
-      "are open here as an unsaved copy.", mine);
-    return "server-copy";
-  }
-
-  if (!draftServerSettle) armServerDraftResume(t);
-  if (!draftServerSettle) {
-    recoverDraftAsUnsavedCopy(t,
-      "The changes recovered from the last session are open here as an unsaved copy — the server " +
-      "document they came from could not be identified.", mine);
-    return "server-copy";
-  }
-
-  var waitMs = (serverStatus().mode().authRequired && !currentConn().token) ? 0 : draftTiming.serverWait;
-  var outcome = await draftRaceTimeout(draftServerSettle.promise, waitMs);
-  if (outcome === null) {
-    showDraftPendingBanner(t, title);
-    outcome = await draftServerSettle.promise;
-  }
-
-  hideDraftPendingBanner();
-  if (outcome === "server-resumed") return "server-resumed";
-  if (outcome === "server-copy") return "server-copy";
-  if (outcome === "replaced") return keptForNextLaunch();
-  resume.dropServerResume();
+function restoreServerDraft(t, mine) {
   recoverDraftAsUnsavedCopy(t,
-    "“" + title + "” is no longer on the server — the changes recovered from the last session are " +
-    "open here as an unsaved copy.", mine);
-  return "server-copy";
+    "Your unsaved changes to “" + draftTitleOf(mine) + "” were recovered. It was a document on a " +
+    "Splitpage server, which this version no longer opens, so they are open here as an unsaved copy. " +
+    "Save them wherever you want them.", mine);
+  return "untitled-copy";
 }
 
 function keptForNextLaunch() {
@@ -751,7 +616,7 @@ async function runDraftRestore(t) {
   var origin = t.header.origin || { kind: "untitled" };
   var ctx = captureRestore();
 
-  if (origin.kind === "server") return await restoreServerDraft(t, mine, origin);
+  if (origin.kind === "server") return restoreServerDraft(t, mine);
   if (origin.kind === "file") return await restoreFileDraft(t, mine, base, origin, ctx);
   if (origin.kind === "import") {
     recoverDraftAsUnsavedCopy(t,
@@ -766,7 +631,7 @@ function takenFromBrowserDraft(rec, key) {
   var at = Number(rec.writtenAt) || 0;
   return {
     header: {
-      origin: { kind: "server", server: { base: currentConn().serverUrl || "", docId: String(rec.docId), rev: rec.rev || 0 } },
+      origin: { kind: "server", server: { base: rec.base || "", docId: String(rec.docId), rev: rec.rev || 0 } },
       writtenAt: at,
       title: rec.title || "",
       docIdWrittenOut: !!rec.docIdWrittenOut
@@ -779,77 +644,35 @@ function takenFromBrowserDraft(rec, key) {
 }
 
 function browserDraftRestoreDone(t, outcome) {
-  if (outcome !== "server-resumed" && outcome !== "server-copy") return;
+  if (outcome !== "untitled-copy") return;
   var key = t.browserKey;
-  if (outcome === "server-copy") {
-    var server = t.header.origin.server;
-    browserCopyOf = currentHome().kind === "none" && currentDocument()
-      ? { key: key, docId: currentDocument().docId, server: { base: server.base, docId: server.docId, rev: server.rev } }
-      : null;
-  }
+  var server = t.header.origin.server;
+  browserCopyOf = currentHome().kind === "none" && currentDocument()
+    ? { key: key, docId: currentDocument().docId, server: { base: server.base, docId: server.docId, rev: server.rev } }
+    : null;
   draftOnDisk = true;
   browserDrafts().writer.take(key);
 }
 
-function armBrowserServerDraft(docId) {
-  var resume = draftResume();
-  if (runningOnDesktop() || browserDraftsOff || !docId || resume.restorePending() || resume.serverResume()) return Promise.resolve(false);
-  if (currentConn().role === "review") return Promise.resolve(false);
-  var base = draftBaseOf(currentConn().serverUrl);
-  if (!base) return Promise.resolve(false);
-  var key = browserDraftKey(base, docId);
-  var via = currentConn();
-  return browserDraftStore().get(key).then(function (rec) {
-    if (!rec) return false;
-    return browserWriterIsLive(rec.writerId).then(function (live) {
-      if (live || !stillOnServer(via) || resume.restorePending() || resume.serverResume()) return false;
-      var t = takenFromBrowserDraft(rec, key);
-      armServerDraftResume(t);
-      if (!resume.serverResume()) return false;
-      resume.setRestorePending(true);
-      applyTakenDraft(t);
-      return true;
-    });
-  }).then(null, function () { return false; });
-}
-
-function offerBrowserDraftAfterLinkOff(docId) {
-  var resume = draftResume();
-  if (runningOnDesktop() || browserDraftsOff || resume.restorePending() || onServerDoc() || unsavedChanges()) return Promise.resolve(false);
-  var base = draftBaseOf(currentConn().serverUrl);
-  if (!base) return Promise.resolve(false);
+function newestLeftoverBrowserDraft() {
   var store = browserDraftStore();
   return store.list().then(function (metas) {
-    var here = metas.filter(function (m) { return m.base === base; })
-      .sort(function (a, b) { return b.writtenAt - a.writtenAt; });
-    if (docId) {
-      here = here.filter(function (m) { return m.docId === String(docId); })
-        .concat(here.filter(function (m) { return m.docId !== String(docId); }));
-    }
+    var newest = metas.slice().sort(function (a, b) { return b.writtenAt - a.writtenAt; });
     return (function next(i) {
-      if (i >= here.length) return null;
-      return browserWriterIsLive(here[i].writerId).then(function (live) {
-        return live ? next(i + 1) : here[i];
+      if (i >= newest.length) return null;
+      return browserWriterIsLive(newest[i].writerId).then(function (live) {
+        return live ? next(i + 1) : newest[i];
       });
     })(0);
   }).then(function (pick) {
     return pick ? store.get(pick.key) : null;
   }).then(function (rec) {
-    if (!rec || onServerDoc() || unsavedChanges() || resume.restorePending()) return false;
-    var mine = draftMigrate(rec.stateJson);
-    if (!mine) return false;
-    var t = takenFromBrowserDraft(rec, rec.key);
-    var when = draftWhenText(t);
-    var ok = recoverDraftAsUnsavedCopy(t,
-      "Your unsaved changes to “" + draftTitleOf(mine, rec.docId) + "” were kept in this browser" +
-      (when ? " " + when : "") + " — they are open here as an unsaved copy. Save a copy… to keep them.", mine);
-    if (ok) browserDraftRestoreDone(t, "server-copy");
-    noteDraftChange();
-    return ok;
-  }).then(null, function () { return false; });
+    return rec ? takenFromBrowserDraft(rec, rec.key) : null;
+  }, function () { return null; });
 }
 
-function desktopDraftTaker() {
+function draftTaker() {
+  if (!runningOnDesktop()) return browserDraftsOff ? null : newestLeftoverBrowserDraft;
   var take = desktopDrafts().taker();
   if (!(take && draftResume().restorePending())) return null;
   return take;
@@ -859,7 +682,7 @@ async function applyTakenDraft(t) {
   var resume = draftResume();
   var outcome;
   try {
-    outcome = await runDraftRestore(t);
+    outcome = !runningOnDesktop() && t && t.browserKey && unsavedChanges() ? "kept" : await runDraftRestore(t);
   } catch (e) {
     reportError(e);
     outcome = "failed";
@@ -886,10 +709,7 @@ export function startDrafts(given) {
   return {
     flush: flushDraftNow,
     noteChange: noteDraftChange,
-    armBrowserServer: armBrowserServerDraft,
-    offerAfterLinkOff: offerBrowserDraftAfterLinkOff,
-    armServerResume: armServerDraftResume,
-    desktopTaker: desktopDraftTaker,
+    taker: draftTaker,
     applyTaken: applyTakenDraft,
     holdLock: holdBrowserWriterLock,
     releaseLock: releaseBrowserWriterLock,
@@ -922,7 +742,6 @@ export function startDrafts(given) {
       restorePending: function () { return draftResume().restorePending(); },
       applyForTest: function (taken) {
         draftResume().setRestorePending(true);
-        armServerDraftResume(taken);
         return applyTakenDraft(taken);
       },
       noteChange: function () { noteDraftChange(); },
@@ -930,7 +749,7 @@ export function startDrafts(given) {
       browser: {
         list: function () { return browserDraftStore().list(); },
         get: function (docId, serverUrl) {
-          var base = draftBaseOf(serverUrl === undefined ? currentConn().serverUrl : serverUrl);
+          var base = draftBaseOf(serverUrl === undefined ? "" : serverUrl);
           return browserDraftStore().get(browserDraftKey(base, docId));
         },
         all: function () {

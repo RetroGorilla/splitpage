@@ -2,9 +2,6 @@ import type { TimerPort } from "../session/ports.ts";
 import type { AutoSaveTarget } from "./status.ts";
 
 export interface AutoSaveWhereInput {
-  readonly onServer: boolean;
-  readonly signedOut: boolean;
-  readonly linkOff: boolean;
   readonly file: { readonly handle: unknown; readonly format: string | null } | null;
 }
 
@@ -15,8 +12,6 @@ export interface AutoSaveWhenInput {
 }
 
 export function autoSaveWhere(input: AutoSaveWhereInput): AutoSaveTarget {
-  if (input.signedOut || (input.linkOff && input.onServer)) return null;
-  if (input.onServer) return "server";
   const file = input.file;
   if (!file || !file.handle) return null;
   if (file.format === "html") return null;
@@ -29,7 +24,6 @@ export function autoSaveMay(input: AutoSaveWhenInput): boolean {
 
 export interface AutoSaveTiming {
   idle: number;
-  hostedIdle: number;
   max: number;
 }
 
@@ -50,7 +44,7 @@ export interface AutoSavePolicy {
   readonly halt: (reason: string) => void;
   readonly resume: () => boolean;
   readonly may: (target: AutoSaveTarget) => boolean;
-  readonly idleFor: (target: AutoSaveTarget) => number;
+  readonly idleFor: () => number;
   readonly schedule: (target: AutoSaveTarget) => void;
   readonly clear: () => void;
   readonly dueNow: () => void;
@@ -59,7 +53,7 @@ export interface AutoSavePolicy {
   readonly stop: () => void;
 }
 
-export const DEFAULT_AUTOSAVE_TIMING: Readonly<AutoSaveTiming> = Object.freeze({ idle: 2000, hostedIdle: 5000, max: 15000 });
+export const DEFAULT_AUTOSAVE_TIMING: Readonly<AutoSaveTiming> = Object.freeze({ idle: 2000, max: 15000 });
 
 export const HALTED_BY_DEFAULT = "Autosave is paused — press Save to try again.";
 
@@ -77,8 +71,8 @@ export function createAutoSavePolicy(ports: AutoSavePolicyPorts): AutoSavePolicy
     return on;
   }
 
-  function idleFor(target: AutoSaveTarget): number {
-    return target === "server" ? timing.hostedIdle : timing.idle;
+  function idleFor(): number {
+    return timing.idle;
   }
 
   function clear(): void {
@@ -120,7 +114,7 @@ export function createAutoSavePolicy(ports: AutoSavePolicyPorts): AutoSavePolicy
     schedule: function (target: AutoSaveTarget) {
       if (stopped || !may(target)) return;
       if (idleTimer !== null) ports.timers.stop(idleTimer);
-      idleTimer = ports.timers.start(due, idleFor(target));
+      idleTimer = ports.timers.start(due, idleFor());
       arms += 1;
       if (maxTimer === null) maxTimer = ports.timers.start(due, timing.max);
     },

@@ -34,5 +34,4 @@ export interface CommentStatePorts {
   readonly shots: Pick<ShotHiding, "reveal">;
   readonly pictures: Pick<PictureStore, "imgHtml">;
   readonly clearDraftUndo: (box: HTMLElement) => void;
-  readonly onThreadsSent: (listener: () => void) => () => void;
 }

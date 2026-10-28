@@ -16,7 +16,6 @@ import type { CommentStatePorts } from "../../features/comments/ports.ts";
 import { keepSnapshot } from "../../legacy/transition-bridge.ts";
 import { personColors as portPersonColors } from "./ports/person-colors.ts";
 import { shotHiding } from "./shot-hiding.ts";
-import { onCommentsSent } from "../../js/13-hosted.js";
 import { resetDraftHistory } from "../../features/editing/draft-edit.js";
 import type { CommentsPorts } from "../../features/comments/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -151,8 +150,7 @@ export function mountCommentsLogicFeature(): ReturnType<typeof mountCommentState
       personColors: portPersonColors,
       shots: { reveal: (id) => shotHiding().reveal(id) },
       pictures: portPictures,
-      clearDraftUndo: resetDraftHistory,
-      onThreadsSent: onCommentsSent
+      clearDraftUndo: resetDraftHistory
     };
     return mountCommentState(ports);
   });

@@ -120,7 +120,7 @@ export interface FileMenuDropdownMount extends FileMenuControls {
 
 export interface FileMenuDropdownPorts {
   readonly document: Pick<DocumentReader, "current">;
-  readonly place: Pick<DocumentPlace, "home" | "sessionExpired" | "linkTurnedOff">;
+  readonly place: Pick<DocumentPlace, "home">;
   readonly desktop: () => boolean;
   readonly recents: Pick<RecentFiles, "available" | "list" | "routeOpen" | "read">;
   readonly recentHandle: (entry: RecentFileData) => { readonly getFile: () => Promise<File> };

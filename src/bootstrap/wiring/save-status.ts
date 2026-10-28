@@ -39,7 +39,6 @@ export function saveStatusListeners(): SaveStatusListeners {
     paint: () => { saveStatus.owner()?.listeners().paint(); },
     save: (change) => { saveStatus.owner()?.listeners().save(change); },
     location: (change) => { saveStatus.owner()?.listeners().location(change); },
-    status: (change) => { saveStatus.owner()?.listeners().status(change); },
     preference: (change) => { saveStatus.owner()?.listeners().preference(change); }
   };
 }

@@ -1,7 +1,6 @@
 import { createSessionMergeOwner } from "../../application/session/session-merge.js";
 import type { SessionMergeOwner, SessionMergeOwnerPorts, SessionMergePorts } from "../../application/session/session-merge-ports.ts";
 import type { DocumentDestination, DestinationPort, HistoryPort } from "../../application/transitions/ports.ts";
-import { handSessionMergeTo } from "../../legacy/session-merge-bridge.ts";
 import { sessionMergeOwnerPorts } from "./ports/session-merge.ts";
 import { mountHistoryPanelFeature, historyPanelControls, stopHistoryPanelFeature } from "./history-panel.ts";
 import { mountTitleChromeFeature, stopTitleChromeFeature } from "./title-chrome.ts";
@@ -20,9 +19,8 @@ export function mountSessionMergeOwner(ports: SessionMergeOwnerPorts = sessionMe
   const dispose = mine.startSessionMerge(ports);
   started = mine;
   mountHistoryPanelFeature(mine);
-  const chrome = mountTitleChromeFeature();
-  const disconnect = handSessionMergeTo(mine, chrome);
-  stop = () => { disconnect(); stopTitleChromeFeature(); stopHistoryPanelFeature(); started = null; dispose(); };
+  mountTitleChromeFeature();
+  stop = () => { stopTitleChromeFeature(); stopHistoryPanelFeature(); started = null; dispose(); };
   return mine;
 }
 

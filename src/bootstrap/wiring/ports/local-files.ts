@@ -15,10 +15,9 @@ import { desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../../../application/desktop-presence.ts";
 import { brollView } from "../../../application/preferences/broll-view.ts";
 import { noteAbsorbedDirty, noteReload } from "../../../legacy/session-bridge.ts";
-import { amendHome, fileHome, importHome, onServerDoc, serverStatus, setHome } from "../../../legacy/location-bridge.ts";
+import { amendHome, fileHome, importHome, setHome } from "../../../legacy/location-bridge.ts";
 import { unsavedFor, requestSave } from "../../../legacy/save-bridge.ts";
 import { warnImagesLeftOut } from "../../../legacy/effects-bridge.ts";
-import { blobSourceNow } from "../../../js/13-hosted.js";
 import { documentIdentity } from "./document-identity-controls.ts";
 import { stampRow } from "../session-merge.ts";
 import { captureExportDocument, loadExportAssets } from "../export-capture.ts";
@@ -78,7 +77,6 @@ export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFi
 export function importSavingPorts(menu: () => LocalFileMenuControls): ImportSavingPorts {
   return {
     location: { importHome, amendHome },
-    onServerDoc,
     saving: { request: (request) => requestSave(request as Parameters<typeof requestSave>[0]), unsavedFor },
     buildFileData: (kind, base) => menu().buildFileData(kind, base),
     files: localFileAccess(window),
@@ -91,15 +89,12 @@ export function localFileMenuPorts(writeback: ImportSavingOwner): LocalFileMenuP
   return {
     document: documentReader,
     preferences: preferenceValues,
-    onServerDoc,
-    server: { mode: () => serverStatus().mode(), sessionExpired: () => serverStatus().sessionExpired(), linkTurnedOff: () => serverStatus().linkTurnedOff() },
     place,
     saves,
     autoSaves,
     writeback,
     exports: { captureExportDocument, loadExportAssets },
     formats,
-    assetSource: blobSourceNow,
     assets: { request: exportAssetsRequest },
     standaloneHtml: standaloneHtmlFor,
     imagesLeftOut: warnImagesLeftOut,
