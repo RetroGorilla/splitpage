@@ -111,7 +111,6 @@ function quiet() {
 }
 
 function fresh(title) {
-  window.__hostedTest.setSession({ docId: null });
   answer = () => null;
   loadTestDocument(migrateRows(table304Document(title)));
   flushEdits();
@@ -169,15 +168,11 @@ async function bothWays(where, prepare, run, how = "late", renders = 1) {
     seen.push({ value: out.value, book: bookkeeping(), more: ctx && ctx.observe ? ctx.observe() : null });
   }
   assert.deepEqual(seen[1], seen[0], where + ": with render throwing, the same bookkeeping as a clean render");
-  window.__hostedTest.setSession({ docId: null });
   return seen[0];
 }
 
-function serverMerge() {
+function conflictMerge() {
   const doc = fresh("Guard");
-  window.__hostedTest.setSession({ docId: "doc-guard", rev: 1 });
-  answer = (ask) => ask === "PUT api/docs/doc-guard" ? reply(200, { id: "doc-guard", rev: 2 }) : null;
-  quiet();
   const base = cloneState(doc);
   const mine = cloneState(doc);
   mine.rows[0].audioText = "Mine.";
@@ -185,7 +180,7 @@ function serverMerge() {
   const theirs = cloneState(doc);
   theirs.rows[0].audioText = "Theirs.";
   theirs.title = "Theirs";
-  return { base: base, mine: mine, theirs: theirs, undoPoint: cloneState(doc), observe: () => window.__hostedTest.home().rev };
+  return { base: base, mine: mine, theirs: theirs, undoPoint: cloneState(doc) };
 }
 
 function mergeOn(ctx) {
@@ -194,13 +189,12 @@ function mergeOn(ctx) {
 }
 
 for (const how of ["late", "early"]) {
-  test("a merge whose render throws (" + how + ") still reports the merge, marks it unsaved and saves it, as a clean merge does, and logs the error (#418)", async () => {
-    const seen = await bothWays("server-conflict merge", serverMerge, mergeOn, how);
+  test("a merge whose render throws (" + how + ") still reports the merge and marks it unsaved, as a clean merge does, and logs the error (#418)", async () => {
+    const seen = await bothWays("conflict merge", conflictMerge, mergeOn, how);
     assert.ok(seen.book.banner, "the merge was reported");
     assert.deepEqual(seen.book.highlighted, ["r1"], "the conflicting row is highlighted");
     assert.equal(seen.book.undoButton, true);
-    assert.ok(seen.book.server.includes("PUT api/docs/doc-guard"), "the merged document was saved: " + JSON.stringify(seen.book.server));
-    assert.equal(seen.more, 2);
+    assert.equal(seen.book.dirty, true, "the merged document is unsaved");
   });
 }
 
@@ -219,25 +213,6 @@ test("a recovery merge whose render throws still reports the merge, marks it uns
   assert.ok(seen.book.banner);
   assert.match(seen.book.halted, /^Autosave is paused/);
   assert.deepEqual(seen.book.heard, ["recovery"]);
-});
-
-test("a server update whose render throws still takes the new rev, reports the merge and says whose changes came in (#418)", async () => {
-  const seen = await bothWays("server update", () => {
-    const doc = fresh("Pulled");
-    window.__hostedTest.setSession({ docId: "doc-pull", rev: 1 });
-    const theirs = cloneState(doc);
-    theirs.rows[0].audioText = "Theirs, pulled.";
-    answer = (ask) => ask === "GET api/docs/doc-pull" ? reply(200, { id: "doc-pull", rev: 2, state: theirs, updatedBy: "Ann" }) : null;
-    quiet();
-    return { observe: () => window.__hostedTest.home().rev };
-  }, async () => {
-    window.__hostedTest.noteRev({ docId: "doc-pull", rev: 2 });
-    await idle();
-  });
-  assert.deepEqual(seen.book.heard, ["server"]);
-  assert.deepEqual(seen.book.toasts, ["Merged in changes from Ann"]);
-  assert.ok(seen.book.banner);
-  assert.equal(seen.more, 2);
 });
 
 let disk = null;
@@ -292,25 +267,6 @@ test("a new blank script whose render throws still replaces the document, as a c
   assert.equal(seen.book.dirty, false);
 });
 
-test("reopening a server document after a reload whose render throws still reopens it and says so (#418)", async () => {
-  const { finishServerDetect } = await import("../js/13-hosted.js");
-  const { SERVER_RESUME_KEY } = await import("../application/location/server-status.ts");
-  const seen = await bothWays("server reopen", () => {
-    fresh("Before the reopen");
-    sessionStorage.setItem(SERVER_RESUME_KEY, JSON.stringify({ id: "doc-again", rev: 1 }));
-    answer = (ask) => ask === "GET api/me" ? reply(200, { role: "edit" })
-      : ask === "GET api/docs/doc-again" ? reply(200, { id: "doc-again", rev: 2, state: table304Document("Again") }) : null;
-    quiet();
-    return { observe: () => [window.__hostedTest.home().kind, window.__hostedTest.home().id, sessionStorage.getItem(SERVER_RESUME_KEY)] };
-  }, async () => {
-    await finishServerDetect();
-    await idle();
-  });
-  assert.deepEqual(seen.more, ["server", "doc-again", null]);
-  assert.equal(seen.book.title, "Again");
-  assert.deepEqual(seen.book.toasts, ["Signed back in — reopened Again"]);
-});
-
 test("opening a .splitpage file whose render throws still opens it: the chips, the toast and the answer are a clean open's (#418)", async () => {
   const seen = await bothWays("open file", () => { fresh("Before the file"); return null; },
     () => openDocument({ kind: "file", file: new File([JSON.stringify(table304Document("From disk"))], "guard.splitpage", { lastModified: 3 }), handle: null, options: { skipSnapshot: true } }));
@@ -318,20 +274,6 @@ test("opening a .splitpage file whose render throws still opens it: the chips, t
   assert.equal(seen.book.title, "From disk");
   assert.equal(seen.book.dirty, false);
   assert.deepEqual(seen.book.toasts, ["Opened From disk — # rows, # comment"]);
-});
-
-test("opening a server document whose render throws still opens it and says so (#418)", async () => {
-  const seen = await bothWays("server open", () => {
-    fresh("Before the server");
-    answer = (ask) => ask === "GET api/docs/doc-open" ? reply(200, { id: "doc-open", rev: 4, state: table304Document("Hosted") }) : null;
-    quiet();
-    return { observe: () => [window.__hostedTest.home().kind, window.__hostedTest.home().id] };
-  }, () => openDocument({ kind: "server", id: "doc-open" }));
-  assert.equal(seen.value, true);
-  assert.deepEqual(seen.more, ["server", "doc-open"]);
-  assert.equal(seen.book.fileChip, "On the server · v4, everyone sees this");
-  assert.notEqual(seen.book.identityChip, "Stale name");
-  assert.deepEqual(seen.book.toasts, ["Opened Hosted from the server — # scenes"]);
 });
 
 test("restoring a snapshot whose render throws still restores it, closes the history and says so (#418)", async () => {

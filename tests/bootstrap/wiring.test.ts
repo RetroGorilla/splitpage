@@ -1005,12 +1005,12 @@ const SURVIVING_GLOBAL_LISTENERS: Record<string, number> = {
   "document beforecopy/C": 1, "document beforecut/C": 1, "document click/B": 1, "document contextmenu/B": 1, "document copy/C": 1,
   "document cut/C": 1, "document dragend/B": 1, "document dragover/B": 1, "document dragstart/C": 1, "document drop/B": 1, "document focusin/B": 1,
   "document input/C": 1, "document keydown/C": 3, "document mousedown/B": 1, "document mousedown/C": 2, "document mousemove/B": 1,
-  "document mouseup/B": 1, "document paste/C": 1, "document securitypolicyviolation/B": 1, "document selectionchange/B": 4,
-  "document splitpage:pref/B": 4, "document undo-owner-cleared/B": 1, "document visibilitychange/B": 3, "window beforeinput/C": 1,
+  "document mouseup/B": 1, "document paste/C": 1, "document securitypolicyviolation/B": 1, "document selectionchange/B": 3,
+  "document splitpage:pref/B": 4, "document undo-owner-cleared/B": 1, "document visibilitychange/B": 2, "window beforeinput/C": 1,
   "window blur/B": 2, "window click/C": 3, "window compositionstart/C": 1, "window cut/C": 1, "window dragstart/C": 1, "window drop/C": 1,
-  "window focus/C": 2, "window focusin/C": 3, "window hashchange/B": 1, "window input/C": 1, "window keydown/B": 3, "window keydown/C": 8,
-  "window keyup/C": 2, "window mousedown/C": 3, "window mouseout/C": 2, "window mouseover/C": 2, "window mouseup/C": 2, "window pagehide/B": 2,
-  "window pageshow/B": 1, "window paste/C": 1, "window pointerdown/C": 1, "window pointerup/C": 1, "window resize/B": 6,
+  "window focus/C": 2, "window focusin/C": 2, "window input/C": 1, "window keydown/B": 3, "window keydown/C": 6,
+  "window keyup/C": 2, "window mousedown/C": 3, "window mouseout/C": 2, "window mouseover/C": 2, "window mouseup/C": 2, "window pagehide/B": 1,
+  "window pageshow/B": 1, "window paste/C": 1, "window pointerdown/C": 1, "window resize/B": 5,
   "window scroll/C": 2, "window storage/B": 2, "window touchmove/B": 1, "window wheel/B": 1
 };
 

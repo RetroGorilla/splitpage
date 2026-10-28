@@ -6,21 +6,15 @@ import {
   TABLE_304, chance, judge, pick, rawObject, seeded, table304Document, text, upTo
 } from "../../tests/application/raw-inputs.ts";
 import { cloneState } from "../core/document/clone.ts";
-import { confirmSavedNow, saveToServer, unsavedChanges } from "../legacy/save-bridge.ts";
-import { serverStatus } from "../legacy/location-bridge.ts";
+import { confirmSavedNow, unsavedChanges } from "../legacy/save-bridge.ts";
 
 await bootApp();
 
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { draftResume } = await import("../legacy/recovery-bridge.ts");
 const { applyMerge } = await import("../legacy/merge-bridge.ts");
 const { mergeUndo } = await import("../legacy/editor-bridge.ts");
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
-const { finishServerDetect } = await import("../js/13-hosted.js");
-const { SERVER_RESUME_KEY } = await import("../application/location/server-status.ts");
-const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
-const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 const { localFilesOwner } = await import("../bootstrap/wiring/local-files.ts");
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { loadTestDocument } = await import("./_document.mjs");
@@ -448,31 +442,6 @@ test("the reload seed that found #411 now ends in a migrateRows fixed point", as
 
 const toastHost = () => document.getElementById("toast-host");
 const toasts = () => Array.from(toastHost().querySelectorAll(".toast")).map((t) => t.textContent);
-const idle = async (n = 20) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0)); };
-
-function reply(status, body) {
-  return { status: status, ok: status >= 200 && status < 300, redirected: false, headers: { get: () => "application/json" }, json: async () => body };
-}
-
-async function withServer(answer, run) {
-  const was = globalThis.fetch;
-  const asked = [];
-  globalThis.fetch = async (url, init) => {
-    const path = String(url).replace(/^.*?(?=api\/)/, "");
-    const method = (init && init.method) || "GET";
-    asked.push(method + " " + path);
-    return answer(method + " " + path) || reply(404, { error: "not-found" });
-  };
-  try { return await run(asked); } finally { globalThis.fetch = was; }
-}
-
-let reloads = 0;
-
-function keptAfterReload(id) {
-  reloads += 1;
-  return JSON.stringify({ id: id, rev: reloads });
-}
-
 function holding(title) {
   twoScenes(title);
   heard.length = 0;
@@ -495,158 +464,3 @@ test("opening a legacy .html file whose state is no document is refused as not a
   }
 });
 
-test("opening a server document whose state is no document is refused like an empty one, and nothing changes (#407)", async () => {
-  for (const raw of NOT_DOCUMENTS) {
-    const start = holding("Server open");
-    const opened = await withServer((ask) => ask === "GET api/docs/doc-open" ? reply(200, { id: "doc-open", rev: 4, state: raw }) : null, () => openDocument({ kind: "server", id: "doc-open" }));
-    assert.equal(opened, false, JSON.stringify(raw));
-    assert.deepEqual(toasts(), ["That document is empty."]);
-    unchangedBy("open " + JSON.stringify(raw), start, start.epoch, start.gen);
-  }
-});
-
-test("a server update whose state is no document is refused like one with no state: no merge, and the rev the tab knows stays (#407)", async () => {
-  for (const raw of NOT_DOCUMENTS) {
-    twoScenes("Pull");
-    window.__hostedTest.setSession({ docId: "doc-pull", rev: 1 });
-    const start = { doc: currentDocument(), text: JSON.stringify(currentDocument()) };
-    const epoch = session.epoch(), gen = session.generation();
-    heard.length = 0;
-    await withServer((ask) => ask === "GET api/docs/doc-pull" ? reply(200, { id: "doc-pull", rev: 2, state: raw, updatedBy: "Ann" }) : null, async (asked) => {
-      window.__hostedTest.noteRev({ docId: "doc-pull", rev: 2 });
-      await idle();
-      assert.deepEqual(asked, ["GET api/docs/doc-pull"]);
-    });
-    unchangedBy("pull " + JSON.stringify(raw), start, epoch, gen);
-    assert.equal(window.__hostedTest.home().rev, 1);
-  }
-  window.__hostedTest.setSession({ docId: null });
-});
-
-test("a save conflict whose state is no document is not merged: the save fails as a conflict with no state does, and both scenes stay (#407)", async () => {
-  for (const raw of NOT_DOCUMENTS) {
-    twoScenes("Conflict");
-    window.__hostedTest.setSession({ docId: "doc-save", rev: 1 });
-    const doc = currentDocument(), rows = JSON.stringify(currentDocument().rows);
-    const epoch = session.epoch(), gen = session.generation();
-    heard.length = 0;
-    toastHost().textContent = "";
-    const saved = await withServer((ask) => ask === "PUT api/docs/doc-save" ? reply(409, { error: "conflict", rev: 3, state: raw }) : null, () => saveToServer());
-    assert.equal(saved, false, JSON.stringify(raw));
-    assert.equal(currentDocument(), doc);
-    assert.equal(JSON.stringify(currentDocument().rows), rows);
-    assert.equal(held(), currentDocument());
-    assert.deepEqual([session.epoch(), session.generation(), heard], [epoch, gen, []]);
-    assert.deepEqual(toasts().map((t) => t.split(" — ")[0]), ["Could not save to the server"]);
-    assert.equal(window.__hostedTest.home().rev, 1);
-  }
-  window.__hostedTest.setSession({ docId: null });
-});
-
-test("reopening a server document after a reload refuses a state that is no document as a server open does: \"That document is empty.\", nothing changes and the reopen stays pending (#407)", async () => {
-  for (const me of [{ role: "edit" }, { role: "edit", scope: "doc-resume" }]) {
-    for (const raw of NOT_DOCUMENTS) {
-      const where = "resume " + JSON.stringify(me) + " " + JSON.stringify(raw);
-      const start = holding("Resume");
-      const pending = keptAfterReload("doc-resume");
-      sessionStorage.setItem(SERVER_RESUME_KEY, pending);
-      await withServer((ask) => ask === "GET api/me" ? reply(200, me) : ask === "GET api/docs/doc-resume" ? reply(200, { id: "doc-resume", rev: 2, state: raw }) : null, async (asked) => {
-        await finishServerDetect();
-        await idle();
-        assert.deepEqual(asked, ["GET api/me", "GET api/docs/doc-resume"], where);
-      });
-      assert.deepEqual(toasts(), ["That document is empty."], where);
-      unchangedBy(where, start, start.epoch, start.gen);
-      assert.notEqual(window.__hostedTest.home().kind, "server");
-      assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending);
-      sessionStorage.removeItem(SERVER_RESUME_KEY);
-    }
-  }
-  window.__hostedTest.setSession({ docId: null });
-  settle(startingDocument("After the server"));
-});
-
-test("a reopen after a reload whose fetch fails still falls back to the link's document", async () => {
-  const start = holding("Resume offline");
-  sessionStorage.setItem(SERVER_RESUME_KEY, keptAfterReload("doc-resume"));
-  await withServer((ask) => {
-    if (ask === "GET api/me") return reply(200, { role: "edit", scope: "doc-resume" });
-    if (ask === "GET api/docs/doc-resume") throw new Error("offline");
-    return null;
-  }, async (asked) => {
-    await finishServerDetect();
-    await idle();
-    assert.deepEqual(asked, ["GET api/me", "GET api/docs/doc-resume", "GET api/docs/doc-resume"]);
-  });
-  assert.equal(currentDocument(), start.doc);
-  sessionStorage.removeItem(SERVER_RESUME_KEY);
-  window.__hostedTest.setSession({ docId: null });
-  settle(startingDocument("After the server"));
-});
-
-test("a reopen after a reload that is refused as no document does not stop the document the link names from opening", async () => {
-  for (const link of [{ role: "edit", scope: "doc-other" }, { role: "edit", scope: "doc-resume" }]) {
-    const opensOther = link.scope === "doc-other";
-    const where = "reopen " + JSON.stringify(link);
-    const start = holding("Resume then link");
-    const pending = keptAfterReload("doc-resume");
-    sessionStorage.setItem(SERVER_RESUME_KEY, pending);
-    await withServer((ask) => {
-      if (ask === "GET api/me") return reply(200, link);
-      if (ask === "GET api/docs/doc-resume") return reply(200, { id: "doc-resume", rev: 2, state: [] });
-      if (ask === "GET api/docs/doc-other") return reply(200, { id: "doc-other", rev: 5, state: startingDocument("Other") });
-      return null;
-    }, async (asked) => {
-      await finishServerDetect();
-      await idle();
-      assert.deepEqual(asked, ["GET api/me", "GET api/docs/doc-resume"].concat(opensOther ? ["GET api/docs/doc-other"] : []), where);
-    });
-    if (opensOther) {
-      assert.equal(toasts().length, 2, where);
-      assert.equal(toasts()[0], "That document is empty.", where);
-      assert.match(toasts()[1], /^Opened .* from the server — \d+ scenes?$/, where);
-      assert.equal(window.__hostedTest.home().kind, "server", where);
-      assert.equal(window.__hostedTest.home().id, "doc-other", where);
-      assert.notEqual(currentDocument(), start.doc, where);
-    } else {
-      assert.deepEqual(toasts(), ["That document is empty."], where);
-      assert.equal(currentDocument(), start.doc, where);
-    }
-    assert.equal(sessionStorage.getItem(SERVER_RESUME_KEY), pending, where);
-    sessionStorage.removeItem(SERVER_RESUME_KEY);
-    window.__hostedTest.setSession({ docId: null });
-    settle(startingDocument("After the server"));
-  }
-});
-
-test("a server open that takes a pending browser draft and finds a state that is no document answers not opened: the picker stays open and the message shows once", async () => {
-  const store = openDraftStore({ indexedDB: window.indexedDB });
-  const key = browserDraftKey(draftBaseOf("", window.location.href), "doc-draft");
-  const draft = JSON.stringify(startingDocument("Draft"));
-  const put = await store.put({
-    key: key, base: draftBaseOf("", window.location.href), docId: "doc-draft", rev: 1, title: "Draft",
-    writerId: "another-tab", editSeq: 1, schema: 2, docIdWrittenOut: true, stateJson: draft, baseJson: draft
-  });
-  assert.equal(put.ok, true);
-  const start = holding("Server pick");
-  const modal = document.getElementById("server-modal");
-  modal.hidden = false;
-  serverStatus().recordMode({ checked: true });
-  const opened = await withServer((ask) => ask === "GET api/docs/doc-draft" ? reply(200, { id: "doc-draft", rev: 2, state: [] }) : null, async (asked) => {
-    const result = await openDocument({ kind: "server", id: "doc-draft" });
-    assert.deepEqual(asked, ["GET api/docs/doc-draft"]);
-    return result;
-  });
-  assert.ok(draftResume().serverResume(), "the browser draft was taken");
-  assert.equal(opened, false);
-  assert.deepEqual(toasts(), ["That document is empty."]);
-  assert.equal(modal.hidden, false);
-  unchangedBy("server open with a draft", start, start.epoch, start.gen);
-  assert.notEqual(window.__hostedTest.home().kind, "server");
-  draftResume().serverResume().onDone("not-found");
-  await idle();
-  await store.remove(key);
-  modal.hidden = true;
-  window.__hostedTest.setSession({ docId: null });
-  settle(startingDocument("After the server"));
-});
