@@ -16,7 +16,6 @@ import * as saveCoordinator from "../../src/application/save/coordinator.ts";
 import * as saveStatus from "../../src/application/save/status.ts";
 import * as autoSave from "../../src/application/save/autosave.ts";
 import * as saveDestinations from "../../src/application/save/destinations.ts";
-import * as serverDestination from "../../src/application/save/server-destination.ts";
 import * as fileConflict from "../../src/application/save/file-conflict.ts";
 import * as documentSources from "../../src/application/transitions/sources.ts";
 import * as stashedWork from "../../src/application/recovery/stashed-work.ts";
@@ -32,7 +31,6 @@ import * as preferences from "../../src/application/preferences/preferences.ts";
 import * as viewFlags from "../../src/application/preferences/view-flags.ts";
 import * as panelWidths from "../../src/application/preferences/panel-widths.ts";
 import * as documentLocation from "../../src/application/location/document-location.ts";
-import * as serverStatus from "../../src/application/location/server-status.ts";
 import * as projectFileServices from "../../src/application/formats/project-file-services.ts";
 import * as documentMerge from "../../src/application/session/document-merge.ts";
 import * as shotHiding from "../../src/application/shot-hiding.ts";
@@ -111,10 +109,10 @@ test("E12: importing the owners constructs nothing: each export is a constructor
   const loaded: Record<string, Record<string, unknown>> = {
     operation: operation, transitionPorts: transitionPorts, transitions: transitions, recoveryPorts: recoveryPorts, draftWriter: draftWriter,
     draftResume: draftResume, conflictStash: conflictStash, legacySnapshots: legacySnapshots, stashedWork: stashedWork, documentSources: documentSources,
-    saveCoordinator: saveCoordinator, saveStatus: saveStatus, autoSave: autoSave, saveDestinations: saveDestinations, serverDestination: serverDestination, fileConflict: fileConflict,
+    saveCoordinator: saveCoordinator, saveStatus: saveStatus, autoSave: autoSave, saveDestinations: saveDestinations, fileConflict: fileConflict,
     rowDrag: rowDrag, cellEditing: cellEditing, focusMemory: focusMemory, paintGuard: paintGuard, selection: selection, deleteConfirm: deleteConfirm, productionSelection: productionSelection, mergeUndo: mergeUndo,
     preferences: preferences, viewFlags: viewFlags, panelWidths: panelWidths,
-    documentLocation: documentLocation, serverStatus: serverStatus, projectFileServices: projectFileServices, documentMerge: documentMerge,
+    documentLocation: documentLocation, projectFileServices: projectFileServices, documentMerge: documentMerge,
     shotHiding: shotHiding
   };
   for (const [module, exports] of Object.entries(loaded)) {
@@ -131,7 +129,6 @@ test("E12: importing the owners constructs nothing: each export is a constructor
   assert.equal(typeof legacySnapshots.createLegacySnapshots, "function");
   assert.equal(typeof saveCoordinator.createSaveCoordinator, "function");
   assert.equal(typeof saveDestinations.createSaveDestinations, "function");
-  assert.equal(typeof serverDestination.createServerDestination, "function");
   assert.equal(typeof documentSources.createDocumentSources, "function");
   assert.equal(typeof stashedWork.createStashedWork, "function");
   assert.equal(typeof cellEditing.createCellEditing, "function");

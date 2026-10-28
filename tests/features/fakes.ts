@@ -83,7 +83,6 @@ export function fakePrompterPorts(initial: DocumentView | null = null) {
       hasRelay: () => false, setRelay: (value) => { calls.push(["relay", value]); return false; },
       browserRecognition: () => null
     },
-    place: { serverHomeId: () => null },
     panels: { close: (id) => { calls.push(["close", id]); }, closeAll: () => { calls.push(["closeAll"]); } },
     preferences: {
       prompterFlag: (name) => flags[name],
@@ -405,28 +404,23 @@ export function fakePictures() {
 
 export function fakeOnboardingPorts() {
   const state = {
-    desktop: false, seed: true, link: false, pending: false, firstTab: true,
+    desktop: false, seed: true, pending: false, firstTab: true,
     prior: false, intent: { type: "blank" }, draft: false, last: null as unknown,
     home: { kind: "none" } as ReturnType<DocumentPlace["home"]>
   };
   const actions = fakeActions();
-  const notices = fakeNotices();
   const panels = fakeSidePanels();
   let record: ReturnType<Preferences["onboarding"]> = null;
-  let launcherCalls = 0;
   const recorded: boolean[] = [];
-  const delivered: unknown[][] = [];
-  const joined: unknown[][] = [];
   const choices = new Set<() => void>();
   const ports: OnboardingPorts = {
     desktop: () => state.desktop,
-    actions: actions.actions, notices: notices.notices, sidePanels: panels.sidePanels,
+    actions: actions.actions, sidePanels: panels.sidePanels,
     preferences: {
       onboarding: () => record,
       recordOnboarding: (skipped, at) => { recorded.push(skipped); record = { v: 1, done: true, skipped, at }; }
     },
-    place: { home: () => state.home, arrivingOnLink: () => state.link },
-    fileDelivery: { deliver: async (...args) => { delivered.push(args); return true; } },
+    place: { home: () => state.home },
     draftResume: { restorePending: () => state.pending },
     seedCheck: { passes: () => state.seed },
     launchFacts: {
@@ -434,9 +428,7 @@ export function fakeOnboardingPorts() {
       launchIntent: () => state.intent, hasDraftToRestore: () => state.draft
     },
     lastFile: { load: async () => state.last },
-    launcherInfo: async () => { launcherCalls++; return { root: "C:/Splitpage" }; },
-    onFileMenuChoice: (listener) => { choices.add(listener); return () => { choices.delete(listener); }; },
-    addServerBookmark: async (...args) => { joined.push(args); return { ok: true, bookmark: { name: "Team" } }; }
+    onFileMenuChoice: (listener) => { choices.add(listener); return () => { choices.delete(listener); }; }
   };
-  return { ports, state, actions, notices, panels, recorded, delivered, joined, choices, launcherCalls: () => launcherCalls };
+  return { ports, state, actions, panels, recorded, choices };
 }

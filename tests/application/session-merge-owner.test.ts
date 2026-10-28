@@ -27,7 +27,7 @@ function setup() {
   };
   let reading: Promise<HistorySnapshotRead | null> = Promise.resolve(snapshot);
   let backup: (() => Promise<HistoryWriteResult>) | null = null;
-  const ctx: OperationContext = { epoch: 1, generation: 0, docId: "d-live", destination: null, destinationGeneration: 0, connection: null, revision: null };
+  const ctx: OperationContext = { epoch: 1, generation: 0, docId: "d-live", destination: null, destinationGeneration: 0 };
   const ports: SessionMergeOwnerPorts = {
     document: { current: () => document },
     session: {

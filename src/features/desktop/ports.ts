@@ -7,11 +7,11 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { StartupSignal } from "../../application/startup-signal.ts";
 import type { ScreenState } from "../../application/screen.ts";
 
-export interface DesktopOpening {
+export type DesktopOpening = {
   readonly kind: "file";
   readonly file: unknown;
   readonly handle: unknown;
-}
+};
 
 export interface DesktopFileSource {
   readonly getFile: () => Promise<unknown>;

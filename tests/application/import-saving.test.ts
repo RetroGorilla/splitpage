@@ -13,7 +13,7 @@ function harness() {
   const state = { conflict: false, owns: true };
   const owner: ImportSavingOwner = createImportSavingOwner();
   const ports: ImportSavingPorts = {
-    location, onServerDoc: () => false,
+    location,
     saving: { request: async (request) => { assert.equal(request.target, imported); log.push(request.kind); return { kind: "saved", acknowledged: true }; }, unsavedFor: () => true },
     buildFileData: async (kind, base) => { log.push("build:" + kind + ":" + base); return { data: "bytes", filename: "draft.txt" }; },
     files: {
@@ -27,7 +27,7 @@ function harness() {
   const job: SaveJob<ImportSaveRequest> = {
     request: { kind: "writeback", target: imported }, generation: 1,
     owns: () => state.owns, alive: () => true, moved: () => {},
-    operation: () => ({ epoch: 1, docId: "d1", destination: imported, destinationGeneration: 0, generation: 1, connection: null, revision: null })
+    operation: () => ({ epoch: 1, docId: "d1", destination: imported, destinationGeneration: 0, generation: 1 })
   };
   return { owner, ports, log, imported, state, job };
 }

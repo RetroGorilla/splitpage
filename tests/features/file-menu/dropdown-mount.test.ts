@@ -41,13 +41,13 @@ function harness() {
   const state = {
     document: documentOf({ title: "Before", docId: "d-old", rows: [{ id: "a" }] }) as DocumentView | null,
     home: { kind: "none" } as ReturnType<FileMenuDropdownPorts["place"]["home"]>,
-    desktop: false, browser: false, chromium: false, expired: false, linkOff: false,
+    desktop: false, browser: false, chromium: false,
     busy: false, unsaved: false, kept: { label: "kept" } as unknown, recent: [] as unknown[]
   };
   const notices = fakeNotices();
   const ports: FileMenuDropdownPorts = {
     document: { current: () => state.document },
-    place: { home: () => state.home, sessionExpired: () => state.expired, linkTurnedOff: () => state.linkOff },
+    place: { home: () => state.home },
     desktop: () => state.desktop,
     recents: {
       available: () => true,
@@ -169,19 +169,6 @@ test("refreshing reads prompter, desktop and save facts through the ports", () =
     assert.equal(win.document.getElementById("fm-card-meta")?.textContent, "Unsaved changes · Markdown");
     mounted.toggleFileMenu(false);
     assert.equal(mounted.fileMenuOpen(), false);
-  } finally { mounted.dispose(); }
-});
-
-test("the file card reads the server's status through the place port", () => {
-  page();
-  const h = harness();
-  h.state.home = { kind: "server", rev: 4 } as ReturnType<FileMenuDropdownPorts["place"]["home"]>;
-  h.state.linkOff = true;
-  const mounted = startFileMenu(h.ports);
-  const probe = (win as unknown as { __fileMenuTest: { cardView: () => { name: string; bits: { text: string }[] } } }).__fileMenuTest;
-  try {
-    assert.deepEqual(probe.cardView().bits.map((bit) => bit.text), ["Link turned off — not saving", "On the server · v4"]);
-    assert.equal(probe.cardView().name, "Before");
   } finally { mounted.dispose(); }
 });
 
