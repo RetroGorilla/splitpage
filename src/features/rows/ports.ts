@@ -1,4 +1,3 @@
-import type { ReviewFacts } from "../../application/collaboration/review.ts";
 import type { CellEditing, CellRange } from "../../application/editing/cell-editing.ts";
 import type { DeleteConfirm } from "../../application/editing/delete-confirm.ts";
 import type { PaintGuard } from "../../application/editing/paint-guard.ts";
@@ -18,7 +17,6 @@ export interface ReadTimePorts {
   readonly edits: Pick<DocumentEdits, "run" | "stamps">;
   readonly undo: Pick<UndoControl, "undo" | "redo">;
   readonly paint: Pick<PaintGuard, "afterThisPaint">;
-  readonly review: Pick<ReviewFacts, "reviewing">;
   readonly notices: Pick<NoticePort, "show">;
 }
 
