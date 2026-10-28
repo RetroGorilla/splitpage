@@ -3,7 +3,7 @@
   "loadOnly": [
     "src/features/update/ports.ts",
     "src/features/update/actions.ts",
-    "src/features/update/update.js",
+    "src/features/update/update.ts",
     "src/bootstrap/wiring/update.ts"
   ],
   "expectedLoads": 4
