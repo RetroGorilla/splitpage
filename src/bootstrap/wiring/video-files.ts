@@ -1,5 +1,5 @@
 import type { VideoFiles } from "../../application/media/video-files.ts";
-import { startVideoFiles as mountVideoFiles } from "../../features/gallery/video-files.js";
+import { startVideoFiles as mountVideoFiles } from "../../features/gallery/video-files.ts";
 import type { VideoFileMount, VideoFilePorts } from "../../features/gallery/video-files-ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { desktopVideo } from "./desktop-video.ts";

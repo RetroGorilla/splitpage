@@ -1,95 +1,99 @@
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { safeHref } from "../../core/document/text-policy.ts";
 import { normalizeVideoLink, rowSlots, videoLinkKey } from "../../core/document/gallery.ts";
+import type { DesktopVideoResult } from "../../application/media/desktop-video.ts";
+import type { DocumentView } from "../../application/session/document-session.ts";
+import type { VideoLink } from "../../core/document/gallery.ts";
+import type { VideoFileMount, VideoFilePorts } from "./video-files-ports.ts";
 
-export function startVideoFiles(ports) {
-  var disposed = false;
-  var videoFileTokens = {};
-  var sessionVideoFiles = {};
-  var sessionVideoUrls = {};
+export function startVideoFiles(ports: VideoFilePorts): VideoFileMount {
+  let disposed = false;
+  let videoFileTokens: Record<string, string> = {};
+  let sessionVideoFiles: Record<string, unknown> = {};
+  const sessionVideoUrls: Record<string, string> = {};
 
-  function grantVideoFile(file, link) {
+  function grantVideoFile(file: unknown, link: VideoLink): void {
     if (disposed) return;
-    var key = videoLinkKey(normalizeVideoLink(link) || link);
-    if (file && typeof file.size === "number") {
+    const key = videoLinkKey(normalizeVideoLink(link) || link);
+    if (file && typeof (file as { size?: unknown }).size === "number") {
       if (sessionVideoUrls[key] && sessionVideoFiles[key] !== file) {
         try { URL.revokeObjectURL(sessionVideoUrls[key]); } catch (e) { }
-        delete sessionVideoUrls[key];
+        Reflect.deleteProperty(sessionVideoUrls, key);
       }
       sessionVideoFiles[key] = file;
     }
-    var granting = ports.desktop.grant(file);
+    const granting = ports.desktop.grant(file);
     if (granting === null) return;
-    Promise.resolve(granting).then(function (token) {
+    Promise.resolve(granting).then(function (token: string | null) {
       if (disposed) return;
       if (typeof token === "string" && token) videoFileTokens[key] = token;
     }, function () {});
   }
 
-  function hasSessionVideo(link) {
+  function hasSessionVideo(link: VideoLink | null | undefined): boolean {
     return !!(!disposed && link && !link.href && sessionVideoFiles[videoLinkKey(link)]);
   }
 
-  function sessionVideoUrl(link) {
+  function sessionVideoUrl(link: VideoLink): string | null {
     if (!hasSessionVideo(link)) return null;
-    var key = videoLinkKey(link);
+    const key = videoLinkKey(link);
     if (!sessionVideoUrls[key]) {
-      try { sessionVideoUrls[key] = URL.createObjectURL(sessionVideoFiles[key]); } catch (e) { return null; }
+      try { sessionVideoUrls[key] = URL.createObjectURL(sessionVideoFiles[key] as Blob); } catch (e) { return null; }
     }
     return sessionVideoUrls[key];
   }
 
-  function releaseSessionVideoUrls() {
+  function releaseSessionVideoUrls(): void {
     Object.keys(sessionVideoUrls).forEach(function (key) {
-      try { URL.revokeObjectURL(sessionVideoUrls[key]); } catch (e) { }
-      delete sessionVideoUrls[key];
+      try { URL.revokeObjectURL(sessionVideoUrls[key] as string); } catch (e) { }
+      Reflect.deleteProperty(sessionVideoUrls, key);
     });
   }
 
-  function openVideoFile(link) {
+  function openVideoFile(link: VideoLink): void {
     if (disposed) return;
-    var name = link.name || "that video";
+    const name = link.name || "that video";
     if (!ports.desktop.opens()) {
       ports.notices.show("“" + name + "” is a video file on the computer it was added from — only its name is kept here. " +
         "Open it from there, or in the Splitpage desktop app.", "warn", true);
       return;
     }
-    var token = videoFileTokens[videoLinkKey(link)];
+    const token = videoFileTokens[videoLinkKey(link)];
     if (!token) {
       ports.notices.show("Splitpage only opens a video file you dropped or pasted in since it started — " +
         "drop “" + name + "” onto this scene again to open it from here.", "warn", true);
       return;
     }
-    Promise.resolve(ports.desktop.open(token)).then(function (res) {
+    Promise.resolve(ports.desktop.open(token)).then(function (res: DesktopVideoResult | null) {
       if (disposed) return;
       if (res && res.ok) return;
       ports.notices.show("Could not open “" + name + "”" + (res && res.code === "GONE" ? " — it is no longer where it was." : "."), "error");
     }, function () { if (!disposed) ports.notices.show("Could not open “" + name + "”.", "error"); });
   }
 
-  function openGalleryLink(rowId, slot, key) {
+  function openGalleryLink(rowId: string, slot: number, key: unknown): void {
     if (disposed) return;
-    var idx = ports.document.read(function (doc) { return rowIndexOf(doc, rowId); });
+    const idx = ports.document.read(function (doc: DocumentView | null) { return rowIndexOf(doc, rowId); });
     if (idx === -1) return;
-    var s = rowSlots(ports.document.current().rows[idx])[slot];
-    var link = s && s.links.filter(function (l) { return videoLinkKey(l) === key; })[0];
+    const s = rowSlots((ports.document.current() as DocumentView).rows[idx])[slot];
+    const link = s && s.links.filter(function (l: VideoLink) { return videoLinkKey(l) === key; })[0];
     if (!link) return;
     if (link.href) {
-      var href = safeHref(link.href);
+      const href = safeHref(link.href);
       if (!href || !/^https?:\/\//i.test(href)) return;
       if (ports.externalLinks.available()) { ports.externalLinks.open(href); return; }
-      var win = window.open(href, "_blank", "noopener");
+      const win = window.open(href, "_blank", "noopener");
       if (win) win.opener = null;
       return;
     }
     openVideoFile(link);
   }
 
-  var off = ports.document.onReplaced(releaseSessionVideoUrls);
+  const off = ports.document.onReplaced(releaseSessionVideoUrls);
   return {
     grant: grantVideoFile, has: hasSessionVideo, url: sessionVideoUrl,
     releaseUrls: releaseSessionVideoUrls, openFile: openVideoFile, openGallery: openGalleryLink,
-    dispose: function () {
+    dispose: function (): void {
       if (disposed) return;
       disposed = true;
       off();
