@@ -27,7 +27,8 @@ const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
-const { flushEdits } = await import("../legacy/undo-bridge.ts");
+const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
+const flushEdits = () => undoOwner().flush();
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { applyTakenDraft, draftTaker } = await import("../bootstrap/wiring/drafts.ts");

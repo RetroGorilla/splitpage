@@ -22,7 +22,9 @@ const { openBrollPanel, renderBroll, runBrollRefresh } = await import("../featur
 const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
-const { flushEdits, undo } = await import("../legacy/undo-bridge.ts");
+const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
+const flushEdits = () => undoOwner().flush();
+const undo = () => undoOwner().undo();
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const homeModule = await import("../legacy/location-bridge.ts");

@@ -1,6 +1,6 @@
 {
   "loadOnly": [
-    "src/legacy/undo-bridge.ts"
+    "src/bootstrap/wiring/undo.ts"
   ],
   "expectedLoads": 1
 }

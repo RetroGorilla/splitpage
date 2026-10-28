@@ -2,12 +2,20 @@ import "./_dom.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { flushEdits, lastUndoEntry, nextRedoEntry, noteEdit, noteRemoteChange, redo, resetUndo, undo, undoSizes } from "../legacy/undo-bridge.ts";
+import { undoOwner, undoSessionPort } from "../bootstrap/wiring/undo.ts";
 import { cellEdit, changeSet } from "../application/session/change-set.ts";
 import { liveSession, currentDocument } from "../legacy/session-bridge.ts";
-import { createUndoAdapter } from "../legacy/undo-adapter.ts";
 import { loadTestDocument } from "./_document.mjs";
 import { startTestSession } from "./_session.mjs";
+const flushEdits = () => undoOwner().flush();
+const lastUndoEntry = () => undoOwner().last();
+const nextRedoEntry = () => undoOwner().nextRedo();
+const noteEdit = () => undoOwner().noteEdit();
+const noteRemoteChange = (next) => undoOwner().noteRemote(next);
+const redo = () => undoOwner().redo();
+const resetUndo = () => undoOwner().reset();
+const undo = () => undoOwner().undo();
+const undoSizes = () => undoOwner().sizes();
 
 const SEEDS = 60;
 const OPS = 40;
@@ -121,7 +129,7 @@ startTestSession({
   editorName: () => "Differential",
   refresh() {},
   records: () => null,
-  undo: { adapter: createUndoAdapter(), route: () => () => {} },
+  undo: { adapter: undoSessionPort(), route: () => () => {} },
   report: (error) => { throw error; },
   timers: { now: () => clock, start: () => 0, stop() {} }
 });

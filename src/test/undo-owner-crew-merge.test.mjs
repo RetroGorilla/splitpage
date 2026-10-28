@@ -7,10 +7,15 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
-import { flushEdits, noteEdit, noteRemoteChange, redo, undo } from "../legacy/undo-bridge.ts";
+import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { startTestSession } from "./_session.mjs";
 import { appSessionDeps } from "./_app-session.mjs";
 import { loadTestDocument } from "./_document.mjs";
+const flushEdits = () => undoOwner().flush();
+const noteEdit = () => undoOwner().noteEdit();
+const noteRemoteChange = (next) => undoOwner().noteRemote(next);
+const redo = () => undoOwner().redo();
+const undo = () => undoOwner().undo();
 
 startTestSession(appSessionDeps());
 

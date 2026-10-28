@@ -119,17 +119,7 @@ import {
 } from "../../features/comments/comments.js";
 import { showActionToast, showToast } from "../../legacy/effects-bridge.ts";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
-import {
-  breakUndoCoalescing,
-  compositionUndoMark,
-  configureUndo,
-  dropEmptyStepsSince,
-  flushEdits,
-  lastUndoEntry,
-  redo,
-  settleAfterApply,
-  undo
-} from "../../legacy/undo-bridge.ts";
+import { configureUndo, undoOwner } from "./undo.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { connectWriter } from "./writer.ts";
 
@@ -301,9 +291,9 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
       },
       undo: {
         applying: function () { return undoGuard().applying(); },
-        breakCoalescing: breakUndoCoalescing,
-        flush: flushEdits,
-        latest: lastUndoEntry
+        breakCoalescing: () => { undoOwner().breakCoalescing(); },
+        flush: () => { undoOwner().flush(); },
+        latest: () => undoOwner().last()
       },
       stale: screenIsStale,
       painted: noteFieldPainted,
@@ -330,11 +320,11 @@ function editorRoots(): Element[] {
 const undoRoutes = owned<ReturnType<typeof mountUndoRoutes>>();
 
 const undoRoutePorts: { -readonly [K in keyof UndoRoutePorts]: UndoRoutePorts[K] } = {
-  replay: function (dir) { if (dir === "redo") redo(); else undo(); },
+  replay: function (dir) { if (dir === "redo") undoOwner().redo(); else undoOwner().undo(); },
   writerStep: skipWriterUndo,
   stale: screenIsStale,
   scriptCell: isScriptCell,
-  latest: lastUndoEntry,
+  latest: () => undoOwner().last(),
   warn: function (message) { showToast(message, "warn"); },
   afterReplay: afterUndoApplied,
   install: configureUndo
@@ -476,7 +466,7 @@ function afterUndoApplied(steps: readonly unknown[]): void {
     if (!cellStep && (st.key === "visualText" || st.key === "audioText")) cellStep = st;
   }
   undoGuard().whileApplying(renderProduction);
-  settleAfterApply();
+  undoOwner().settleAfterApply();
   if (cellStep) {
     const sel = '.cell-editable[data-id="' + cssAttr(cellStep.rowId) + '"][data-field="' + cellStep.key + '"]';
     const cell = document.querySelector<HTMLElement>((viewFlags().writerOpen() ? "#writer-doc " : "#rows ") + sel) || document.querySelector<HTMLElement>(sel);
@@ -527,8 +517,8 @@ export function mountCompositionFeature(): ReturnType<typeof mountComposition> {
       ports: {
         cellOf: scriptCellOf,
         epoch: function () { return liveSession().epoch(); },
-        mark: function (cell) { return compositionUndoMark(cell.rowId, cell.field); },
-        dropEmptySince: dropEmptyStepsSince
+        mark: function (cell) { return undoOwner().compositionMark(cell.rowId, cell.field); },
+        dropEmptySince: (mark, cancelled) => undoOwner().dropEmptySince(mark, cancelled)
       }
     });
   });
@@ -673,7 +663,7 @@ function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, ex
     showToast("Could not paste — press Redraw first.", "error");
     return;
   }
-  const before = lastUndoEntry();
+  const before = undoOwner().last();
   const res: PasteOutcome = pasteIntoCell(cellEl, html, text, extra);
   if (!res.done) return;
   const lost = res.lost + (extra ? (extra as { lost: number }).lost : 0);
@@ -682,7 +672,7 @@ function insertIntoScriptCellNow(cellEl: Element, html: string, text: string, ex
     const attachedRowId = cellEl.getAttribute("data-id");
     announceAttached(res.attached, res.rowIndex, before);
     if (res.attached.links && res.attached.links.length) {
-      const entry = lastUndoEntry();
+      const entry = undoOwner().last();
       thumbnailsAfterPaste(attachedRowId, res.attached.links, entry === before ? null : entry);
     }
   }
@@ -700,7 +690,7 @@ function announceAttached(attached: PasteAttached, rowIndex: number, before: unk
   const what = pics && vids ? n(pics, "picture") + " and " + n(vids, "video")
     : pics ? n(pics, "picture") : n(vids, "video");
   const msg = what.charAt(0).toUpperCase() + what.slice(1) + " added to scene " + (rowIndex + 1);
-  const entry = lastUndoEntry();
+  const entry = undoOwner().last();
   if (!entry || entry === before) { showToast(msg, "ok"); return; }
   showActionToast(msg, "ok", "Undo", function () {
     const undoOwner = undoRoutes.owner();

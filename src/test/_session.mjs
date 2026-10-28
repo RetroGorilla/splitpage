@@ -10,12 +10,12 @@ import { sessionStarted, startSessionBridge } from "../legacy/session-bridge.ts"
 import { legacySessionPorts } from "../bootstrap/wiring.ts";
 import { startPageEffects } from "../bootstrap/effects.ts";
 import { effectsStarted } from "../legacy/effects-bridge.ts";
-import { legacyUndoPorts, startUndo, undoStarted } from "../legacy/undo-bridge.ts";
+import { undoPorts, startUndo, undoStarted } from "../bootstrap/wiring/undo.ts";
 
 export function startTestSession(deps) {
   if (sessionStarted()) throw new Error("startTestSession: a session is already started, so the dependencies passed would be ignored");
   if (!effectsStarted()) startPageEffects(window);
-  if (!undoStarted()) startUndo(legacyUndoPorts());
+  if (!undoStarted()) startUndo(undoPorts());
   const stopGuard = documentGuardStarted() ? () => {} : startDocumentGuard(false, console.error);
   const stopIndex = wireProductionIndex({ cell: bulkTagCell, stamp: stampRow });
   try {

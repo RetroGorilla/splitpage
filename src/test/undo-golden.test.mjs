@@ -3,11 +3,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { STATE_FIELDS } from "../core/merge/state-fields.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { flushEdits, lastUndoEntry, noteEdit, undo, undoSizes } from "../legacy/undo-bridge.ts";
+import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { changedBetween } from "../application/editing/undo/history.ts";
 import { assertGolden, goldenNames, jsonCopy } from "./golden-helpers.mjs";
 import { loadTestDocument } from "./_document.mjs";
 import { currentDocument } from "../legacy/session-bridge.ts";
+const flushEdits = () => undoOwner().flush();
+const lastUndoEntry = () => undoOwner().last();
+const noteEdit = () => undoOwner().noteEdit();
+const undo = () => undoOwner().undo();
+const undoSizes = () => undoOwner().sizes();
 
 const at = (day) => "2026-04-" + String(day).padStart(2, "0") + "T09:00:00.000Z";
 
