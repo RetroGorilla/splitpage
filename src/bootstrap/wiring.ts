@@ -43,6 +43,8 @@ export { mountFileMenuExportFeature } from "./wiring/file-menu-export.ts";
 export { mountFileMenuDropdownFeature } from "./wiring/file-menu.ts";
 export { mountSaveStatusFeature } from "./wiring/save-status.ts";
 export { mountHostedFeature } from "./wiring/hosted.ts";
+export { mountLocalFilesFeature } from "./wiring/local-files.ts";
+import { importSaveDestination, projectFileSource, stopLocalFilesFeature } from "./wiring/local-files.ts";
 export { mountFileSavingFeature } from "./wiring/file-saving.ts";
 import { wireFileSaving } from "./wiring/file-saving.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
@@ -62,7 +64,7 @@ import type { Operations } from "../application/session/operation.ts";
 import { startPageEffects } from "./effects.ts";
 import { legacyExportServices } from "./export-services.ts";
 import { createAppActions, installAppActions } from "../legacy/app-actions.ts";
-import { installExportFormats } from "../legacy/export-formats.ts";
+import { installExportFormats } from "./wiring/export-registry.ts";
 import { startEditor } from "../legacy/editor-bridge.ts";
 import { startLocation } from "../legacy/location-bridge.ts";
 import { getEditorName, startPreferences } from "../legacy/preferences-bridge.ts";
@@ -392,8 +394,8 @@ export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFile
     bulkTags: { cell: tags.bulkCell, stamp: stampRow },
     projectFiles: () => wireProjectFiles({ replaceSyncBase: setBaseState, prepareDocument: migrateDocument, restoreDocument: adoptRestoredState, changeDocumentId: (to, options) => documentIdentityOwner().reassignDocId(to, options), identityEvents: () => documentIdentityOwner().docIdEvents(), connectIdentity: (factory) => documentIdentityOwner().initDocIdentityChannel(factory), standaloneHtml: standaloneHtmlFor, tagOccurrences: tags.tagOccurrences }).services,
     saves: fileSaving.savePorts,
-    sources: () => { const sources = [...deps.sources()]; sources.splice(1, 0, importDocumentSource()); return sources; },
-    destinations: () => [fileSaving.destination(), ...deps.destinations()],
+    sources: () => { const sources = [projectFileSource(), ...deps.sources()]; sources.splice(1, 0, importDocumentSource()); return sources; },
+    destinations: () => [fileSaving.destination(), importSaveDestination(), ...deps.destinations()],
     editorName: getEditorName
   });
 }
@@ -447,6 +449,7 @@ export function wireApp(deps: WiringDeps): Wiring {
   disposers.push(stopDocumentIdentityOwner);
   disposers.push(stopHistoryOwner);
   disposers.push(stopSessionMergeOwner);
+  disposers.push(stopLocalFilesFeature);
   build("editor", () => startEditor(liveDocumentPort), (stop) => stop);
   build("production editing", () => wireProductionEditing(deps.timers ?? SYSTEM_TIMERS), (stop) => stop);
   build("preferences", () => startPreferences(), (stop) => stop);

@@ -9,7 +9,7 @@ window.__splitpageNoRemote = true;
 await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
+const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { copyFromCell, pasteIntoCell } = await import("../features/clipboard/cell-clipboard.js");

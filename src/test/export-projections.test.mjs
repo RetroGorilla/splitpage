@@ -9,7 +9,7 @@ import { migrateRows } from "../legacy/document-ports.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import "./_broll-mounted.mjs";
 import { exportComments } from "../adapters/formats/export-kit.ts";
-import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
+import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { brollGroups } from "../core/production/broll-view.ts";
 import {
   breakdownRows,

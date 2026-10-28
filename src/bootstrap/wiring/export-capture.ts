@@ -1,6 +1,6 @@
-import type { ExportKit } from "../application/save/export-kit.ts";
-import type { ExportCaptureOptions, ExportDocument } from "../core/document/export-document.ts";
-import type { ExportAssetRequest, ExportAssets } from "../application/export/assets.ts";
+import type { ExportKit } from "../../application/save/export-kit.ts";
+import type { ExportCaptureOptions, ExportDocument } from "../../core/document/export-document.ts";
+import type { ExportAssetRequest, ExportAssets } from "../../application/export/assets.ts";
 
 let started: ExportKit | null = null;
 

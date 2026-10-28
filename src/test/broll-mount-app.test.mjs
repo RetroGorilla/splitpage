@@ -115,7 +115,7 @@ test("b-roll app: remount adds once, preserves review refusal, and disposal clea
 
 test("export capture keeps the owner's live scope with the panel stopped", async () => {
   const { brollView } = await import("../application/preferences/broll-view.ts");
-  const { exportRequest } = await import("../js/18-local-files.js");
+  const { localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");
   const { stopBrollPanelStateFeature, mountBrollPanelStateFeature } = await import("../bootstrap/wiring/broll.ts");
   const saved = brollView.current();
   open();
@@ -124,12 +124,12 @@ test("export capture keeps the owner's live scope with the panel stopped", async
     brollView.setPageGroup("person");
     stopBrollPanelStateFeature();
     assert.ok(currentDocument());
-    const captured = exportRequest("b-roll csv");
+    const captured = localFileMenuControls().exportRequest("b-roll csv");
     assert.deepEqual(captured.options.brollView, { filter: "flagged", group: "person" });
     brollView.setFilter("shot");
     assert.deepEqual(captured.options.brollView, { filter: "flagged", group: "person" });
-    assert.deepEqual(exportRequest("b-roll csv").options.brollView, { filter: "shot", group: "person" });
-    assert.deepEqual(exportRequest("b-roll csv", { brollView: { filter: "all", group: "scene" } }).options.brollView, { filter: "all", group: "scene" });
+    assert.deepEqual(localFileMenuControls().exportRequest("b-roll csv").options.brollView, { filter: "shot", group: "person" });
+    assert.deepEqual(localFileMenuControls().exportRequest("b-roll csv", { brollView: { filter: "all", group: "scene" } }).options.brollView, { filter: "all", group: "scene" });
   } finally {
     brollView.setFilter(saved.filter);
     brollView.setGroup(saved.group);

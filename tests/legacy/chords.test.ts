@@ -1,7 +1,8 @@
+import { mountLocalFilesFeature, stopLocalFilesFeature, fileWritebackActions } from "../../src/bootstrap/wiring/local-files.ts";
 import { prompterActions } from "../../src/features/prompter/actions.ts";
 import { screen } from "../../src/bootstrap/wiring/ports/screen.ts";
 import { importActions } from "../../src/bootstrap/wiring/imports.ts";
-import { captureExportDocument } from "../../src/legacy/export-kit-bridge.ts";
+import { captureExportDocument } from "../../src/bootstrap/wiring/export-capture.ts";
 import { commandMenuActions, mountCommandMenuFeature, stopCommandMenuFeature } from "../../src/bootstrap/wiring/command-menu.ts";
 import { startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
 import { tagPanelActions, mountTagPanelsFeature, stopTagPanelsFeature } from "../../src/bootstrap/wiring/production.ts";
@@ -46,6 +47,7 @@ function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   mountRundownFeature();
   mountFileMenuDropdownFeature();
   mountFileMenuExportFeature(captureExportDocument);
+  mountLocalFilesFeature();
   mountHelpFeature();
   mountOnboardingFeature();
   mountCommandMenuFeature();
@@ -53,10 +55,10 @@ function appRegistry(): { registry: ActionRegistry; dispose: () => void } {
   mountFindFeature();
   const menu = helpMenuActions();
   const file = fileMenuActions();
-  const share = shareActions();
+  const share = [...fileWritebackActions(), ...shareActions()];
   const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFileMenuDropdownFeature, stopFindFeature,
     registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...historyActions(), ...findActions()]), registerAll(registry, [...file.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...file.slice(3, 4)]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...writerActions(), ...prompterActions(() => ({ openPrompter() {} }), { screen })]),
-    registerAll(registry, [...menu, ...helpActions(), ...file.slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions()]), registerAll(registry, [...share.slice(0, 2), ...file.slice(4, 5), ...share.slice(2, 3), ...file.slice(5, 6), ...importActions(), ...share.slice(3, 7), ...fileMenuExportActions().slice(1), ...share.slice(7), ...desktopActions()]), stopDesktopFeature, registerAll(registry, scriptZoomActions()), stopCommandMenuFeature, stopHelpFeature, stopOnboardingFeature
+    registerAll(registry, [...menu, ...helpActions(), ...file.slice(6), ...onboardingActions(), ...updateActions(), ...commentsHelpActions()]), registerAll(registry, [...share.slice(0, 2), ...file.slice(4, 5), ...share.slice(2, 3), ...file.slice(5, 6), ...importActions(), ...share.slice(3, 7), ...fileMenuExportActions().slice(1), ...share.slice(7), ...desktopActions()]), stopDesktopFeature, registerAll(registry, scriptZoomActions()), stopCommandMenuFeature, stopHelpFeature, stopOnboardingFeature, stopLocalFilesFeature
   ];
   return { registry, dispose: () => {
     try {

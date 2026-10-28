@@ -16,10 +16,10 @@ import type { StampPorts, TimerPort } from "../../src/application/session/ports.
 import { WIRING_STEPS, WiringError, legacySessionPorts, wireApp } from "../../src/bootstrap/wiring.ts";
 import { legacyExportServices } from "../../src/bootstrap/export-services.ts";
 import { wireExportKit } from "../../src/bootstrap/wiring/export-kit.ts";
-import { exportKitStarted } from "../../src/legacy/export-kit-bridge.ts";
+import { exportKitStarted } from "../../src/bootstrap/wiring/export-capture.ts";
 import type { TransitionDeps, Wiring, WiringDeps } from "../../src/bootstrap/wiring.ts";
 import { appActions } from "../../src/legacy/app-actions.ts";
-import { exportFormats, installExportFormats } from "../../src/legacy/export-formats.ts";
+import { exportFormats, installExportFormats } from "../../src/bootstrap/wiring/export-registry.ts";
 import { editorStarted, startEditor } from "../../src/legacy/editor-bridge.ts";
 import { locationStarted, startLocation } from "../../src/legacy/location-bridge.ts";
 import { preferencesStarted, startPreferences } from "../../src/legacy/preferences-bridge.ts";

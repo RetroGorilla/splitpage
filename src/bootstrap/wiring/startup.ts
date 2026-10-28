@@ -20,7 +20,7 @@ import { updateSaveStatus } from "./save-status.ts";
 import { saves } from "./ports/saving.ts";
 import { updateAutoSaveMenu } from "./file-saving.ts";
 import { applyStashedWork } from "../../legacy/recovery-bridge.ts";
-import { tryResumeLastProject } from "../../js/18-local-files.js";
+import { localFilesOwner } from "./local-files.ts";
 import { seedCheckPasses } from "../../adapters/page/seed-check.ts";
 import { startDesktopShell } from "./desktop.ts";
 import { notifyDesktopDocumentState } from "../../legacy/desktop-bridge.ts";
@@ -57,7 +57,7 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
       refreshChrome: [updateAutoSaveMenu, updateHideShotMenu, updateSaveStatus],
       reportRecovery: function (report) { reportMerge(report, { kind: "recovery" }); },
       toastLastEditor: toastLastEditor,
-      resumeLastProject: tryResumeLastProject,
+      resumeLastProject: (...args: Parameters<ReturnType<typeof localFilesOwner>["tryResumeLastProject"]>) => localFilesOwner().tryResumeLastProject(...args),
       syncIdentity: documentIdentity.syncDocIdentity,
       openIdentityChannel: function () { documentIdentityOwner().initDocIdentityChannel(); },
       notifyDesktop: notifyDesktopDocumentState,

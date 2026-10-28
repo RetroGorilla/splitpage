@@ -13,14 +13,14 @@ const { blobStore, createMemoryBackend, intern, setBackend } = await import("../
 const { brollShotListForPrint } = await import("../adapters/formats/export-projections.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
-const { captureExportDocument } = await import("../legacy/export-kit-bridge.ts");
+const { captureExportDocument } = await import("../bootstrap/wiring/export-capture.ts");
 const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts");
 const { buildDocx, buildNarrationDocx, buildNarrationText } = await import("../adapters/formats/docx.ts");
 const { narrationIncludesDirections, setNarrationIncludesDirections } = await import("../bootstrap/wiring/exporters.ts");
 const { buildBreakdownCsv, buildBrollCsv, buildCsv } = await import("../adapters/formats/csv.ts");
 const { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } = await import("../adapters/formats/xlsx.ts");
 const { buildPackingListPdf, buildPdf, buildShotListPdf } = await import("../adapters/formats/pdf.ts");
-const { buildFileData } = await import("../js/18-local-files.js");
+const { localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");
 const homeModule = await import("../legacy/location-bridge.ts");
 const hosted = await import("../js/13-hosted.js");
 const { loadTestDocument } = await import("./_document.mjs");
@@ -111,17 +111,17 @@ rightToday("X18", "every export route builds from the one capture taken before i
     const opts = { allowImageBundle: true };
     const directions = narrationIncludesDirections();
     useDocument(demo());
-    const reference = await buildFileData(kind, "export", opts);
+    const reference = await localFileMenuControls().buildFileData(kind, "export", opts);
     setNarrationIncludesDirections(directions);
     useDocument(demo());
-    const building = buildFileData(kind, "export", opts);
+    const building = localFileMenuControls().buildFileData(kind, "export", opts);
     mutateLive();
     const mutated = liveJson();
     const built = await building;
     assert.equal(liveJson(), mutated, kind + ": the export left the live document as it was");
     sameBytes(built.data, reference.data, kind + ": the export gives the bytes of the document as it was when asked");
     assert.equal(built.filename, reference.filename, kind + ": the file name is the requested one");
-    const live = await buildFileData(kind, "export", opts);
+    const live = await localFileMenuControls().buildFileData(kind, "export", opts);
     if (!bytesOf(live.data).equals(bytesOf(reference.data))) changed.push(kind);
     setNarrationIncludesDirections(directions);
   }
@@ -206,14 +206,14 @@ rightToday("X19", "an export whose local picture reads are held keeps the captur
       const replacement = freshPicture(jpegBytes, 120, 90, 34);
       const doc = picturedScript({ row: row.ref, more: more.ref, comment: comment.ref });
       useDocument(doc);
-      const reference = await buildFileData(kind, "pictures", { allowImageBundle: true });
+      const reference = await localFileMenuControls().buildFileData(kind, "pictures", { allowImageBundle: true });
       await held.fill([row, more, comment]);
       setBackend(held.backend);
       blobStore.forgetMemory();
       intern(replacement.bytes);
       useDocument(picturedScript({ row: row.ref, more: more.ref, comment: comment.ref }));
       gates.hold("blob.get", { times: 99 });
-      const building = buildFileData(kind, "pictures", { allowImageBundle: true });
+      const building = localFileMenuControls().buildFileData(kind, "pictures", { allowImageBundle: true });
       await gates.arrived("blob.get");
       mutateLive();
       swapPictures(replacement);
@@ -281,11 +281,11 @@ rightToday("X20", "a PDF whose picture decoding is held prints the captured pict
     const comment = freshPicture(pngBytes, 40, 30, 43);
     const replacement = freshPicture(pngBytes, 40, 30, 44);
     useDocument(picturedScript({ row: row.ref, more: more.ref, comment: comment.ref }));
-    const reference = await buildFileData("pdf", "pictures");
+    const reference = await localFileMenuControls().buildFileData("pdf", "pictures");
     const asked = decoder.decoded.length;
     useDocument(picturedScript({ row: row.ref, more: more.ref, comment: comment.ref }));
     gates.hold("decode", { times: 99 });
-    const building = buildFileData("pdf", "pictures");
+    const building = localFileMenuControls().buildFileData("pdf", "pictures");
     await gates.arrived("decode");
     mutateLive();
     swapPictures(replacement);
@@ -323,7 +323,7 @@ rightToday("X21", "an export of a server document fetches its missing pictures f
   const uninstall = held.install();
   try {
     useDocument(picturedScript({ row: row.ref, more: more.ref, comment: comment.ref }));
-    const reference = await buildFileData("docx", "pictures");
+    const reference = await localFileMenuControls().buildFileData("docx", "pictures");
     hosted.pointTabAt("http://origin.test/");
     useDocument(picturedScript({ row: row.ref, more: more.ref, comment: comment.ref }));
     window.__hostedTest.setSession({ docId: "srv-pictures", rev: 1, blobs: true });
@@ -331,7 +331,7 @@ rightToday("X21", "an export of a server document fetches its missing pictures f
     setBackend(local.backend);
     blobStore.forgetMemory();
     gates.hold("blob.get", { times: 99 });
-    const building = buildFileData("docx", "pictures");
+    const building = localFileMenuControls().buildFileData("docx", "pictures");
     await gates.arrived("blob.get");
     window.__hostedTest.pointTabAt("http://other.test/");
     useDocument(script("Elsewhere"));
@@ -373,15 +373,15 @@ rightToday("X22", "INV-60: every export captured at two times on one day is the 
   for (const kind of KINDS) {
     const opts = { allowImageBundle: true };
     useDocument(demo());
-    const morning = await buildFileData(kind, "export", opts);
+    const morning = await localFileMenuControls().buildFileData(kind, "export", opts);
     t.mock.timers.setTime(localTime(2026, 9, 14, 23, 59, 59));
-    const evening = await buildFileData(kind, "export", opts);
+    const evening = await localFileMenuControls().buildFileData(kind, "export", opts);
     sameBytes(evening.data, morning.data, kind + ": two captures on one day give the same bytes");
-    const lateBuild = buildFileData(kind, "export", opts);
+    const lateBuild = localFileMenuControls().buildFileData(kind, "export", opts);
     clock.tick(2000);
     const late = await lateBuild;
     sameBytes(late.data, morning.data, kind + ": a capture serialized after midnight keeps its captured day");
-    const nextDay = await buildFileData(kind, "export", opts);
+    const nextDay = await localFileMenuControls().buildFileData(kind, "export", opts);
     if (bytesOf(nextDay.data).equals(bytesOf(morning.data))) undated.push(kind);
     t.mock.timers.setTime(localTime(2026, 9, 14, 8, 5, 1));
   }

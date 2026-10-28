@@ -18,8 +18,8 @@ after(closeApp);
 
 test("a Markdown export with pictures that the caller allows to bundle is named '(with images).zip'", async () => {
   await bootApp(scriptJson(intern(jpegBytes)));
-  const { buildFileData } = await import("../js/18-local-files.js");
-  const made = await buildFileData("md", "Pictures", { allowImageBundle: true });
+  const { localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");
+  const made = await localFileMenuControls().buildFileData("md", "Pictures", { allowImageBundle: true });
   assert.equal(made.filename, "Pictures (with images).zip");
-  assert.equal((await buildFileData("md", "Pictures", {})).filename, "Pictures.md", "bundling is off unless the caller allows it");
+  assert.equal((await localFileMenuControls().buildFileData("md", "Pictures", {})).filename, "Pictures.md", "bundling is off unless the caller allows it");
 });

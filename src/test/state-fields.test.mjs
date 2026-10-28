@@ -10,7 +10,7 @@ import { migrateRows } from "../legacy/document-ports.ts";
 import { mergeStates } from "../legacy/merge-bridge.ts";
 import "./_merge-started.mjs";
 import { buildSplitpageFile } from "../adapters/formats/project-file.ts";
-import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
+import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
 
 const SEED = JSON.parse(readFileSync(new URL("../seed-state.json", import.meta.url), "utf8"));

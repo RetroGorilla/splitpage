@@ -7,7 +7,7 @@ import { saveDialogs } from "../../adapters/files/save-dialogs.ts";
 import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "../../adapters/formats/project-file.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { warnImagesLeftOut } from "../../legacy/effects-bridge.ts";
-import { captureExportDocument } from "../../legacy/export-kit-bridge.ts";
+import { captureExportDocument } from "./export-capture.ts";
 import { amendHome, currentHome, documentLocation, fileHome, serverStatus, setHome } from "../../legacy/location-bridge.ts";
 import { getEditorName, preferences } from "../../legacy/preferences-bridge.ts";
 import { autoSavePolicy, confirmSavedNow, flushAutoSave, haltAutoSave, resumeAutoSave, saveChanges } from "../../legacy/save-bridge.ts";

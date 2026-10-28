@@ -4,13 +4,13 @@ import { relative } from "node:path";
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 
 export const CONFIGURATION = Object.freeze({
-  "src/legacy/export-kit-bridge.ts": { functions: ["startExportKit"] },
+  "src/bootstrap/wiring/export-capture.ts": { functions: ["startExportKit"] },
   "src/bootstrap/wiring/export-kit.ts": { functions: ["wireExportKit"] },
   "src/legacy/session-bridge.ts": { functions: ["startSessionBridge", "onDocumentReplaced", "onSessionChange", "onRefresh", "onStamped"] },
   "src/legacy/undo-adapter.ts": { functions: ["routeReplays"] },
   "src/legacy/undo-bridge.ts": { functions: ["startUndo", "configureUndo", "routeUndoReplays"] },
   "src/legacy/app-actions.ts": { functions: ["installAppActions"], facade: { name: "appActions", methods: ["register", "presentRefusals"] } },
-  "src/legacy/export-formats.ts": { functions: ["installExportFormats"], facade: { name: "exportFormats", methods: ["defineCard", "register", "onChange"] } },
+  "src/bootstrap/wiring/export-registry.ts": { functions: ["installExportFormats"], facade: { name: "exportFormats", methods: ["defineCard", "register", "onChange"] } },
   "src/legacy/save-bridge.ts": { functions: ["startSaves", "onSaveChange"] },
   "src/legacy/transition-bridge.ts": { functions: ["startTransitions"] },
   "src/legacy/document-identity-bridge.ts": { functions: ["handDocumentIdentityTo"] },
@@ -37,7 +37,6 @@ export const CONFIGURATION = Object.freeze({
   "src/legacy/tour-pause.ts": { functions: ["handTourPauseTo"] },
   "src/legacy/pin-dialog.ts": { functions: ["handPinDialogTo"] },
   "src/legacy/tag-production.ts": { functions: ["handTagProductionTo"] },
-  "src/legacy/merge-offer-bridge.ts": { functions: ["handMergeOfferTo"] },
   "src/legacy/desktop-bridge.ts": { functions: ["startDesktopDocumentState", "handDesktopTo"] },
   "src/application/desktop/menu-commands.ts": { functions: ["runMenuCommandsWith"] },
   "src/bootstrap/wiring/script-zoom.ts": { functions: ["mountScriptZoomFeature"] },
