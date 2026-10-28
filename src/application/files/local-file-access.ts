@@ -9,6 +9,7 @@ export interface LocalFileHandle {
 }
 
 export interface LocalFileWritable {
+  readonly abort?: () => Promise<void>;
   readonly write: (data: unknown) => Promise<void>;
   readonly close: () => Promise<unknown>;
 }
