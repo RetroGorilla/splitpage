@@ -365,9 +365,6 @@ html.is-newtab-open { overflow: hidden; }
 .newtab-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-24); margin-top: 36px; }
 .newtab-main.has-recents { grid-template-columns: minmax(0, 1fr) 282px; }
 .newtab-page .newtab-recent-forget .nt-icon { width: 16px; height: 16px; }
-.newtab-main.has-recents .newtab-join { align-self: start; min-height: 170px; margin-top: 30px; }
-.newtab-main:not(.has-recents) .newtab-join { flex-direction: row; align-items: center; justify-content: space-between; }
-.newtab-main:not(.has-recents) .newtab-join-btn { margin-top: 0; }
 .newtab-page .newtab-desktop .nt-icon { width: 16px; height: 16px; }
 @media (max-width: 1040px) {
   .newtab-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-16); }
@@ -379,6 +376,4 @@ html.is-newtab-open { overflow: hidden; }
   .newtab-body { padding-top: var(--space-24); padding-bottom: 32px; }
   .newtab-cards { grid-template-columns: minmax(0, 1fr); gap: var(--space-10); }
   .newtab-main, .newtab-main.has-recents { grid-template-columns: minmax(0, 1fr); margin-top: 28px; }
-  .newtab-main.has-recents .newtab-join { min-height: 0; margin-top: 0; }
-  .newtab-main:not(.has-recents) .newtab-join { flex-direction: column; align-items: flex-start; }
 }

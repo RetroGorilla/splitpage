@@ -33,7 +33,6 @@ function harness(label: string) {
   const notices = fakeNotices();
   const ports: LocalFileMenuPorts = {
     document: fakeDocument(doc).document, preferences: { clock: () => "24h" }, place: createDocumentLocation(),
-    saves: { unsaved: () => false }, autoSaves: { policy: () => { throw new Error("unused"); } },
     writeback: { saveBackItemState: () => ({ hidden: false, disabled: true, reason: "", label: "Save to file" }) },
     exports: { captureExportDocument: () => captured, loadExportAssets: async () => assets }, formats,
     assets: { request: () => ({ shas: [] }) }, standaloneHtml: () => "",

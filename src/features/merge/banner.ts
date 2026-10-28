@@ -37,7 +37,7 @@ export interface MergeBannerMount {
 }
 
 export interface ShowOptions {
-  readonly undo?: boolean | "saved";
+  readonly undo?: boolean;
 }
 
 export interface MergeBanner {
@@ -48,16 +48,6 @@ export interface MergeBanner {
 
 export const ARM_MS = 3000;
 const UNDO_LABEL = "Undo merge";
-
-const UNDO_SAVED_NOTE = "Undo merge puts your version back here; the next save replaces the merged copy on the server.";
-const UNDO_SAVED_TITLE = "Go back to the version you were saving, before someone else's changes were merged into it. " +
-  "It stays unsaved until the next save, which replaces the merged copy on the server. Recoverable from Version history.";
-
-const UNDO_CONFIRM: Readonly<Record<string, string>> = { "server-conflict": "Drop their changes?" };
-const UNDO_LOCAL: Readonly<Record<string, boolean>> = { "server-conflict": true };
-const UNDO_RESTORED: Readonly<Record<string, string>> = {
-  "server-conflict": "Your version is back, unsaved. The next save replaces the merged copy on the server."
-};
 
 const RESTORE_SAYS: Readonly<Record<string, string>> = {
   "missing": "The snapshot from before the merge is no longer in the history.",
@@ -109,13 +99,11 @@ export function mountMergeBanner(mount: MergeBannerMount): MergeBanner {
 
   function show(result: MergeReport, opts?: ShowOptions): boolean {
     if (!open) return false;
-    let summary = mergeSummary(result);
+    const summary = mergeSummary(result);
     if (summary === null) return false;
-    const undo = opts?.undo;
-    const offerUndo = undo !== false && !!ports.lastUndo();
+    const offerUndo = opts?.undo !== false && !!ports.lastUndo();
     undoBtn.hidden = !offerUndo;
-    undoBtn.title = undo === "saved" ? UNDO_SAVED_TITLE : undoTitleDefault;
-    if (offerUndo && undo === "saved") summary += " " + UNDO_SAVED_NOTE;
+    undoBtn.title = undoTitleDefault;
 
     el("merge-summary").textContent = " " + summary;
     reviewBtn.hidden = !result.conflicts.length;
@@ -141,11 +129,10 @@ export function mountMergeBanner(mount: MergeBannerMount): MergeBanner {
       disarm();
       const force = forceFor === undo;
       forceFor = null;
-      const source = undo.source ?? "";
       ports.restore(undo.id, {
         force: force,
-        local: !!UNDO_LOCAL[source],
-        restoredText: UNDO_RESTORED[source]
+        local: false,
+        restoredText: undefined
       }).then((r) => {
         if (!open) return;
         if (r === "no-backup") {
@@ -158,7 +145,7 @@ export function mountMergeBanner(mount: MergeBannerMount): MergeBanner {
       return;
     }
     armed = true;
-    undoBtn.textContent = UNDO_CONFIRM[undo.source ?? ""] || "Discard my edits?";
+    undoBtn.textContent = "Discard my edits?";
     undoBtn.classList.add("armed");
     if (armTimer !== null) realm.clearTimeout(armTimer);
     armTimer = realm.setTimeout(disarm, ARM_MS);

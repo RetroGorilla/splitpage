@@ -10,11 +10,11 @@ export interface MergeReportOptions {
   readonly kind?: MergeKind | undefined;
   readonly noAutoSave?: boolean | undefined;
   readonly alreadySaved?: boolean | undefined;
-  readonly undo?: boolean | "saved" | undefined;
+  readonly undo?: boolean | undefined;
 }
 
 export interface MergeOutcomeView {
-  readonly banner: (result: MergedStates, undo: boolean | "saved" | undefined) => void;
+  readonly banner: (result: MergedStates, undo: boolean | undefined) => void;
   readonly absorbed: (kind: MergeKind) => void;
   readonly autoSave: (paused: boolean) => void;
   readonly toast: (text: string, tone: NoticeKind, sticky: boolean) => void;

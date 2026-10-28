@@ -71,13 +71,11 @@ export interface ApplyMergePorts<Ctx> {
 }
 
 export const UNDO_LABELS: Readonly<Record<string, string>> = Object.freeze({
-  "server-conflict": "Before merging in someone else's changes",
-  "server-resume": "Before merging your recovered changes",
   "stash": "Before merging your unsaved changes"
 });
 
 export function mergeKind(opts: ApplyMergeOptions): MergeKind {
-  return opts.recovery || opts.source === "server-resume" ? "recovery" : "server";
+  return opts.recovery ? "recovery" : "server";
 }
 
 export function applyIncomingMerge<Ctx>(opts: ApplyMergeOptions, ports: ApplyMergePorts<Ctx>): MergeOutcome | Promise<MergeOutcome> {

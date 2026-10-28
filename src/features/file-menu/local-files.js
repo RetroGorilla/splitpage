@@ -16,11 +16,8 @@ function running() {
 
 function currentDocument(...args) { return running().document.current(...args); }
 function preferences() { return running().preferences; }
-function currentHome(...args) { return running().place.home(...args); }
 function importHome(...args) { return running().place.importHome(...args); }
 function fileHome(...args) { return running().place.fileHome(...args); }
-function unsavedChanges(...args) { return running().saves.unsaved(...args); }
-function autoSavePolicy(...args) { return running().autoSaves.policy(...args); }
 function saveBackItemState(...args) { return running().writeback.saveBackItemState(...args); }
 function captureExportDocument(...args) { return running().exports.captureExportDocument(...args); }
 function loadExportAssets(...args) { return running().exports.loadExportAssets(...args); }

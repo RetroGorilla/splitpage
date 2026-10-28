@@ -9,7 +9,6 @@ import type { BrollView } from "../../application/preferences/broll-view.ts";
 import type { Preferences } from "../../application/preferences/preferences.ts";
 import type { FileConflict } from "../../application/save/file-conflict.ts";
 import type { BuiltLocalFile, ImportSavingOwner } from "../../application/save/import-saving-ports.ts";
-import type { AutoSaveReads, SaveState } from "../../application/save/save-state.ts";
 import type { ExportKit } from "../../application/save/export-kit.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { SessionChange } from "../../application/session/change-set.ts";
@@ -19,9 +18,7 @@ import type { FileMenuExportMount } from "./ports.ts";
 export interface LocalFileMenuPorts {
   readonly document: Pick<DocumentReader, "current">;
   readonly preferences: Pick<Preferences, "clock">;
-  readonly place: Pick<DocumentPlace, "home" | "importHome" | "fileHome">;
-  readonly saves: Pick<SaveState, "unsaved">;
-  readonly autoSaves: Pick<AutoSaveReads, "policy">;
+  readonly place: Pick<DocumentPlace, "importHome" | "fileHome">;
   readonly writeback: Pick<ImportSavingOwner, "saveBackItemState">;
   readonly exports: Pick<ExportKit, "captureExportDocument" | "loadExportAssets">;
   readonly formats: Pick<ExportRegistry, "byId" | "byAction" | "isAction" | "card">;

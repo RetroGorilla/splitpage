@@ -3,7 +3,3 @@
 .is-stale-part {
   opacity: 0.5;
 }
-.collab-link-actions .btn-outline.armed,
-.collab-link-actions .btn-outline.armed:hover {
-  border-color: var(--danger); color: var(--danger); background: var(--danger-soft);
-}
