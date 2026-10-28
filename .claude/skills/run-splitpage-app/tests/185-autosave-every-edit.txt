@@ -1,6 +1,6 @@
 # Every kind of edit to the script is saved by autosave (#208), part 1: the
 # script itself. 186 is the side panels, comments and the gallery; 187 the
-# hosted document and the words the status uses.
+# desktop file target and the words the status uses.
 #
 # "Saved 43 min ago" was only ever honest if every edit marks the document
 # dirty (markDirty, 12-dirty-toast.js): that is what arms the autosave
@@ -257,6 +257,6 @@ expect __same()
 sleep 500
 expect __same()
 expect A.pending() === false
-expect window.__hostedTest.dirty() === false
+expect document.getElementById('btn-save').classList.contains('is-dirty') === false
 
 quit

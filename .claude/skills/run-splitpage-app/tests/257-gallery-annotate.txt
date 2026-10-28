@@ -1,7 +1,7 @@
 # Drawing on a picture in a scene's gallery (2026-09-27; 05w-annotate.js,
 # the gallery dialog's Annotate button in 05e-gallery-overlay.js, the data
 # layer in 02d-gallery.js), driven with real mouse input:
-#   * Annotate is offered for a picture, not a video's tile, not in review;
+#   * Annotate is offered for a picture, not a video's tile;
 #   * a pen stroke and a highlight (drawn once where it crosses itself) are
 #     marks; the eraser takes a whole mark; a text is placed, typed, put
 #     down, edited in place and dragged; the editor's own undo / redo
@@ -335,14 +335,5 @@ wait !document.querySelector('.annotate-textbox')
 expect A().marks.length === 1 && A().undo === 0
 click #annotate-cancel
 wait AM().hidden
-
-# ---- a review session: no Annotate -------------------------------------------------------------------
-key Escape
-wait M().hidden
-eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
-sleep 300
-eval document.querySelector('#rows .row[data-id="a1"] .scene-gallery-tile').click()
-wait !M().hidden
-expect !btn('annotate') && !btn('unannotate')
 key Escape
 wait M().hidden

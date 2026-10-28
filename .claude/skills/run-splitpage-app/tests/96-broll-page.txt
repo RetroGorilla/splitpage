@@ -70,7 +70,7 @@ eval (function(){ var s = document.getElementById('broll-page-group'); s.value =
 wait pheads() === 'Ada Brenner|Jordan Sato|Unassigned'
 expect JSON.parse(localStorage.getItem('splitpage-broll-view')).pageGroup === 'person'
 expect window.__brollTest.view().group === 'scene'
-expect window.__hostedTest.dirty() === false
+expect document.getElementById('btn-save').classList.contains('is-dirty') === false
 
 # ---- 4. edited in place, through the panel's own code -------------------
 eval (function(){ U.flush(); window.__u0 = U.sizes().undo; return window.__u0; })()

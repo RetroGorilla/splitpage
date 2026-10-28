@@ -130,6 +130,8 @@ Planned homes and waves are from the [feature-ports.md](feature-ports.md) table.
 
 The paused files total 4,189 lines. The other 13 files total 7,808 lines.
 
+Later, not counted above: by `5cbfc10` the 13 open files had moved, and the server and collaboration removal deleted the four paused ones. `src/js/` now holds only `_entry.js`; numbered files left: none.
+
 ## Recheck before the next assignment
 
 Read the current remote branch and PR heads, then rerun the two metric commands. Counts here stay pinned to the measured revision; no pending change is counted as merged.
