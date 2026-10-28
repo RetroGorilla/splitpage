@@ -1,4 +1,3 @@
-import type { ActionRegistry } from "../../application/actions.ts";
 import type { DesktopDocumentStateOwner } from "../../application/desktop/document-state.ts";
 import type { DesktopHandOff, DesktopOpenedFile, DesktopShell, PrompterElsewhere } from "../../application/desktop/shell.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
@@ -8,9 +7,11 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { StartupSignal } from "../../application/startup-signal.ts";
 import type { ScreenState } from "../../application/screen.ts";
 
-export type DesktopOpening =
-  | { readonly kind: "file"; readonly file: unknown; readonly handle: unknown }
-  | { readonly kind: "server"; readonly id: string };
+export interface DesktopOpening {
+  readonly kind: "file";
+  readonly file: unknown;
+  readonly handle: unknown;
+}
 
 export interface DesktopFileSource {
   readonly getFile: () => Promise<unknown>;
@@ -18,7 +19,6 @@ export interface DesktopFileSource {
 
 export interface DesktopMount extends DesktopHandOff {
   readonly openPrompterInChromium: () => Promise<PrompterElsewhere>;
-  readonly routeServerOpen: (id: string | null) => Promise<boolean> | null;
   readonly initDesktop: () => void;
   readonly runMenuCommand: (command: string) => void;
   readonly wireReassignDocId: () => void;
@@ -29,22 +29,14 @@ export interface DesktopPorts {
   readonly running: () => boolean;
   readonly shell: () => DesktopShell | null;
   readonly canOpenPrompter: { readonly browser: () => boolean; readonly chromium: () => boolean };
-  readonly driveOpenShown: () => boolean;
   readonly makeHandle: (entry: DesktopOpenedFile) => DesktopFileSource;
   readonly wireBlobs: () => void;
   readonly document: Pick<DocumentReader, "current">;
-  readonly place: Pick<DocumentPlace, "home" | "connection" | "fileHome" | "homeConn" | "serverHomeId" | "serverMode">;
-  readonly server: {
-    readonly setHome: (kind: "none") => void;
-    readonly forgetMode: () => void;
-    readonly check: () => void;
-    readonly pointTabAt: (url: string, options: { readonly token: string; readonly tunnel?: unknown }) => void;
-  };
+  readonly place: Pick<DocumentPlace, "fileHome">;
   readonly notices: Pick<NoticePort, "show">;
   readonly documents: { readonly open: (opening: DesktopOpening) => Promise<unknown> };
   readonly saves: Pick<SaveState, "unsaved"> & { readonly save: () => Promise<unknown> };
   readonly startup: StartupSignal;
-  readonly actions: Pick<ActionRegistry, "invoke">;
   readonly flushDraft: (request: { readonly keep: boolean }) => unknown;
   readonly reassignDocId: (toId: string, message: unknown) => boolean;
   readonly documentState: Pick<DesktopDocumentStateOwner, "notify" | "settled" | "awaitHanded">;

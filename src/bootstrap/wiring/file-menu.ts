@@ -1,10 +1,10 @@
 import type { ActionDefinition } from "../../application/actions.ts";
 import { runningOnDesktop } from "../../application/desktop-presence.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
-import { fileMenuActions as definitions } from "../../features/file-menu/actions.ts";
+import { autosaveActions as autosaveDefinitions, fileMenuActions as definitions } from "../../features/file-menu/actions.ts";
 import { startFileMenu as mountFileMenuDropdown } from "../../features/file-menu/file-menu.js";
 import type { FileMenuDropdownMount, FileMenuDropdownPorts } from "../../features/file-menu/ports.ts";
-import { saveDoc } from "../../legacy/save-bridge.ts";
+import { autoSavePolicy, saveDoc, savesStarted, toggleAutoSave } from "../../legacy/save-bridge.ts";
 import { documentReader } from "./ports/document.ts";
 import { prompterWindows, recents } from "./ports/desktop.ts";
 import { notices } from "./ports/effects.ts";
@@ -60,5 +60,12 @@ export function fileMenuActions(): ActionDefinition[] {
     save: (options) => saveDoc(options),
     openFile: () => localFilesOwner().openLocalFile(),
     openImport: () => { importControls()?.openImportModal(); }
+  });
+}
+
+export function autosaveActions(): ActionDefinition[] {
+  return autosaveDefinitions({
+    screen,
+    autosave: { on: () => savesStarted() && autoSavePolicy().enabled(), toggle: () => { toggleAutoSave(); } }
   });
 }

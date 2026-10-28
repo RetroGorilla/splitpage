@@ -1442,18 +1442,7 @@ body:has([role="menu"]:not([hidden]), .anchor-popover, .link-popover:not([hidden
   gap: var(--space-16);
   padding: var(--space-12) var(--space-24);
 }
-.export-note { flex: 1 1 auto; margin: 0; font-size: 13px; color: var(--text-dim); line-height: 1.4; }
-.export-note-link {
-  font: inherit;
-  color: var(--visual);
-  background: none;
-  border: none;
-  padding: 0;
-  text-decoration: underline;
-  text-underline-offset: 2px;
-  cursor: pointer;
-}
-.export-note-link:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; border-radius: 2px; }
+.export-foot .modal-footer-actions { margin-left: auto; }
 @media (max-width: 760px) {
   .modal-panel.export-panel { display: block; height: auto; max-height: calc(100vh - 20px); overflow-y: auto; padding: 0; }
   .export-body { display: block; border-bottom: none; }
@@ -1469,7 +1458,6 @@ body:has([role="menu"]:not([hidden]), .anchor-popover, .link-popover:not([hidden
     background: var(--surface-2);
     border-top: 1px solid var(--border);
   }
-  .export-foot .modal-footer-actions { margin-left: auto; }
 }
 .stat-chips { display: inline-flex; align-items: center; gap: var(--space-6); margin-left: var(--space-6); vertical-align: middle; }
 .stat-chip {

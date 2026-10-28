@@ -6,12 +6,8 @@ export interface RecentFileData {
 }
 
 export interface RecentFileOpenRequest {
-  readonly kind: "file" | "server";
-  readonly fileId?: string;
-  readonly serverDocId?: string;
-  readonly serverUrl?: string;
-  readonly token?: string;
-  readonly tunnel?: unknown;
+  readonly kind: "file";
+  readonly fileId: string;
 }
 
 export interface RecentFiles {

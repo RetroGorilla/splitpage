@@ -56,7 +56,6 @@ export interface FileMenuExportPorts {
   readonly preview: ExportPreviewPort;
   readonly fileName: (format: string, options: FileNameOptions) => string;
   readonly exportAction: (action: string) => boolean;
-  readonly share: () => void;
   readonly onMenuRefresh: (listener: () => void) => () => void;
 }
 
@@ -148,4 +147,9 @@ export interface FileMenuActionPorts {
   readonly save: (options?: { saveAs?: boolean }) => Promise<void>;
   readonly openFile: () => Promise<unknown>;
   readonly openImport: () => void;
+}
+
+export interface AutosaveActionPorts {
+  readonly screen: () => ScreenState;
+  readonly autosave: { readonly on: () => boolean; readonly toggle: () => void };
 }
