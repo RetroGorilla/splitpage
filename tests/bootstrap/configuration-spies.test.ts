@@ -35,7 +35,7 @@ test("the load-order check catches a module that configures a bridge while it lo
   const report = await loadAlone("src/test/_configures-on-load.mjs");
   assert.equal(report.error, null);
   assert.deepEqual(report.calls.map((c) => [c.file, c.name, c.from]), [
-    ["src/legacy/tour-pause.ts", "handTourPauseTo", "src/test/_configures-on-load.mjs"],
+    ["src/legacy/desktop-bridge.ts", "handDesktopTo", "src/test/_configures-on-load.mjs"],
     ["src/bootstrap/wiring/export-registry.ts", "installExportFormats", "src/test/_configures-on-load.mjs"]
   ]);
   assert.deepEqual(report.owners, { ...NOTHING_STARTED, exports: true });
