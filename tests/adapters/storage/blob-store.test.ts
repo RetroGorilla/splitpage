@@ -25,7 +25,6 @@ function hostWith(preferred: PreferredBlobBackend | null): Recorded {
     objectUrl: (bytes, mime) => { rec.urls.push({ bytes: bytes, mime: mime }); return "blob:test/" + rec.urls.length; },
     revokeObjectUrl: (url) => { rec.revoked.push(url); },
     later: (run) => { rec.queued.push(run); },
-    now: () => 1000,
     warn: (...args) => { rec.warnings.push(args); }
   };
   return rec;

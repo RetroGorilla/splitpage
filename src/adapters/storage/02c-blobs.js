@@ -22,7 +22,6 @@ export var blobStore = createBlobStore({
   objectUrl: function (bytes, mime) { return URL.createObjectURL(new Blob([bytes], { type: mime })); },
   revokeObjectUrl: function (url) { URL.revokeObjectURL(url); },
   later: function (run) { setTimeout(run, 0); },
-  now: function () { return Date.now(); },
   warn: function () {
     if (typeof window !== "undefined" && window.console) console.warn.apply(console, arguments);
   }
@@ -49,11 +48,9 @@ export function dataUrlForSync(sha) { return blobStore.dataUrlFor(sha); }
 export function isDurableSync(sha) { return blobStore.isDurable(sha); }
 export function queuePersist(shas) { blobStore.queuePersist(shas); }
 export function persist(shas) { return blobStore.persist(shas); }
-export function ensureBytes(shas, opts) { return blobStore.ensureBytes(shas, opts); }
+export function ensureBytes(shas) { return blobStore.ensureBytes(shas); }
 export function setBackend(backend) { blobStore.setBackend(backend); }
 export function backendInfo() { return blobStore.backendInfo(); }
-export function setRemoteSource(fn) { blobStore.setRemoteSource(fn); }
-export function forgetRemoteMisses() { blobStore.forgetRemoteMisses(); }
 export var createMemoryBackend = createMemoryBlobBackend;
 
 export function rowImageUrl(row) {
@@ -289,12 +286,6 @@ export function startBlobs() {
       return blobStore.resolveBackend().then(function () { return backendInfo(); });
     },
     idbRecord: function (sha) { return idbBlobs.record(sha); },
-    remoteMisses: function () { return blobStore.remoteMisses(); },
-    forgetRemoteMisses: forgetRemoteMisses,
-    ageRemoteMisses: function () {
-      blobStore.ageRemoteMisses();
-      return true;
-    },
     forgetMemory: function () {
       blobStore.forgetMemory();
       return true;

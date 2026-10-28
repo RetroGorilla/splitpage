@@ -1,6 +1,4 @@
 import type { ValidatedDocument } from "../../core/document/validated.ts";
-import { documentIdStamp } from "../commands/save-stamps.ts";
-import type { OperationContext } from "../session/operation.ts";
 import type { TransitionPorts } from "./ports.ts";
 
 export type Incoming =
@@ -28,29 +26,17 @@ export interface Recovery<D> extends Arrival<D> {
   readonly writtenOut?: boolean | undefined;
 }
 
-export interface Publication<D> {
-  readonly destination: D;
-  readonly docId: string;
-  readonly baseline: ValidatedDocument;
-  readonly reason: string;
-}
-
 export interface Arrived {
   readonly document: ValidatedDocument;
   readonly forkedFrom: string | null;
   readonly kept: boolean;
 }
 
-export type Published =
-  | { readonly kind: "published"; readonly forkedFrom: string | null }
-  | { readonly kind: "obsolete" };
-
 export interface Transitions<D> {
   readonly open: (opening: Opening<D>) => Arrived;
   readonly startNew: (arrival: Arrival<D>) => Arrived;
   readonly restore: (restoration: Restoration) => Arrived;
   readonly recover: (recovery: Recovery<D>) => Arrived;
-  readonly publish: (ctx: OperationContext, publication: Publication<D>) => Published;
   readonly copyId: () => string;
 }
 
@@ -106,17 +92,6 @@ export function createTransitions<D>(ports: TransitionPorts<D>): Transitions<D> 
     return settle(recovery, recovery.baseline, writtenOut, arrive(doc, forkedFrom, kept));
   }
 
-  function publish(ctx: OperationContext, publication: Publication<D>): Published {
-    const live = ports.live.current();
-    if (!live || !ports.ownership.stillOwns(ctx)) return Object.freeze({ kind: "obsolete" });
-    const was = live.docId;
-    ports.destination.set(publication.destination);
-    ports.destination.confirm(publication.baseline, publication.reason);
-    ports.live.stamp(documentIdStamp(was, publication.docId));
-    ports.identity.markWrittenOut(true);
-    return Object.freeze({ kind: "published", forkedFrom: was === publication.docId ? null : was });
-  }
-
   function copyId(): string {
     const live = ports.live.current();
     if (!live || ports.identity.writtenOut()) return ports.identity.mint();
@@ -128,7 +103,6 @@ export function createTransitions<D>(ports: TransitionPorts<D>): Transitions<D> 
     startNew: startNew,
     restore: restore,
     recover: recover,
-    publish: publish,
     copyId: copyId
   });
 }

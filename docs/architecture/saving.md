@@ -46,7 +46,6 @@ Callers outside saving use it for work that waits: the pasted-picture and droppe
 | `startNew(arrival)` | As `open`, with the baseline the new document and `docIdWrittenOut` false | None: the caller supplies a fresh id |
 | `restore(restoration)` | Makes a document live that keeps the live document's id, and adopts it. No destination or baseline change | Keeps the live id |
 | `recover(recovery)` | As `open` with a given baseline. A `detached` recovery mints a new id (the old one is returned as `forkedFrom`) and sets `docIdWrittenOut` false | Forks when detached |
-| `publish(ctx, publication)` | If `stillOwns(ctx)`, sets the destination and baseline, changes the live id and marks it written out; the result says which id it replaced. Otherwise `{ kind: "obsolete" }` and nothing changes. Its one caller was the server publish; nothing calls it now | Changes id and destination only |
 | `copyId()` | The id a copy should carry: the live id until it has been written out, then a fresh one | INV-36 |
 
 An arrival (`open`, `startNew`, `recover`) may carry `keep`, a label: the history snapshot taken before a replacement (L3h PR 3). If the live document has rows, the transition hands the label to the history port before the new document is assigned, and `Arrived.kept` says whether a snapshot was stored. `restore` never keeps one.
@@ -63,7 +62,6 @@ The ports, all supplied by the legacy modules:
 | `destination` | `documentDestinationPort` (`03-sync.js`) | `set` calls `setHome`; `confirm` calls `setBaseState` with a clone of the baseline |
 | `identity` | `documentIdentityPort` (`application/identity/document-identity.js`) | Mints ids and reads and writes whether the id was written out, through the document location owner (`documentLocation()`) |
 | `history` | `documentHistoryPort` (`03-sync.js`) | `keep(label, doc?)` takes a history snapshot of `doc`, or of the live document when none is given |
-| `ownership` | The operation context | `stillOwns` |
 
 Destinations are `LegacyDestination` values (`kind` and `fields`), and `NO_DESTINATION` is `{ kind: "none" }`.
 
