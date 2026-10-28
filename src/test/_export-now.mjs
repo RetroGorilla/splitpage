@@ -4,7 +4,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 import { brollView } from "../application/preferences/broll-view.ts";
 import { brollShotListForPrint } from "../adapters/formats/export-projections.ts";
 import { exportAssetsNow } from "../adapters/formats/export-assets.ts";
-import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
+import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 
 export function liveDoc() {
   return exportDocumentOf(currentDocument());

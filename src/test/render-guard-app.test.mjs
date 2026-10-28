@@ -26,7 +26,7 @@ const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { cellEditing, focusMemory, mergeUndo } = await import("../legacy/editor-bridge.ts");
 const find = await import("../features/find/find.js");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
-const { reloadFileFromDisk, updateFileChip } = await import("../js/18-local-files.js");
+const { localFilesOwner, localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");
 const { openLongDemo } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { loadTestDocument } = await import("./_document.mjs");
@@ -117,7 +117,7 @@ function fresh(title) {
   flushEdits();
   renderAbsorbed();
   confirmSavedNow();
-  updateFileChip();
+  localFileMenuControls().updateFileChip();
   document.getElementById("identity-name").textContent = "Stale name";
   mergeUndo().arm(null);
   for (const id of ["merge-banner", "merge-undo", "merge-review"]) document.getElementById(id).hidden = true;
@@ -253,7 +253,7 @@ test("a reload in place whose render throws still marks the reload unsaved and s
     quiet();
     disk = new File(["# Reloaded\n\nWide\tOne, again.\nClose\tTwo.\nTight\tThree."], "guard.txt", { lastModified: 2 });
     return null;
-  }, () => reloadFileFromDisk());
+  }, () => localFilesOwner().reloadFileFromDisk());
   assert.deepEqual(seen.book.heard, ["reload"]);
   assert.equal(seen.book.title, "Reloaded");
   assert.deepEqual(seen.book.toasts, ["Reloaded guard.txt — # rows"]);

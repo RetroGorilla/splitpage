@@ -68,18 +68,7 @@ import {
 } from "../../js/13-hosted.js";
 import { fileConflicts, saveDoc } from "../../legacy/save-bridge.ts";
 import { deliverFile } from "../../legacy/file-delivery.ts";
-import {
-  buildFileData,
-  exportAs,
-  handleFileMenuAction,
-  hideResumeBanner,
-  pendingResumeHandle,
-  reloadFileFromDisk,
-  reloadProjectFromDisk,
-  resumeFromHandle,
-  saveBackToFile,
-  showFileConflictView
-} from "../../js/18-local-files.js";
+import { localFileMenuControls, localFilesOwner, importSavingOwner } from "./local-files.ts";
 import { currentMergeReview } from "./merge-review.ts";
 import { toggleFileMenu, toggleSubmenu } from "./file-menu-controls.ts";
 import { connectWriter } from "./writer.ts";
@@ -231,13 +220,13 @@ export function mountDriveFeature(): ReturnType<typeof mountDrive> {
 export function mountSaveRecoveryFeature(): ReturnType<typeof mountSaveRecovery> {
   return replaceViewMount("mountSaveRecovery", function () {
     const ports: SaveRecoveryPorts = {
-      hideResumeBanner: hideResumeBanner,
-      resumeFromHandle: resumeFromHandle,
+      hideResumeBanner: (...args: Parameters<ReturnType<typeof localFileMenuControls>["hideResumeBanner"]>) => localFileMenuControls().hideResumeBanner(...args),
+      resumeFromHandle: (...args: Parameters<ReturnType<typeof localFilesOwner>["resumeFromHandle"]>) => localFilesOwner().resumeFromHandle(...args),
       showToast: showToast,
       saveDoc: saveDoc,
-      exportAs: exportAs,
+      exportAs: (...args: Parameters<ReturnType<typeof localFileMenuControls>["exportAs"]>) => localFileMenuControls().exportAs(...args),
       pendingHandle: function () {
-        const handle: ReturnType<SaveRecoveryPorts["pendingHandle"]> = pendingResumeHandle;
+        const handle: ReturnType<SaveRecoveryPorts["pendingHandle"]> = localFileMenuControls().pendingHandle();
         return handle;
       },
       capture: captureViewDocument
@@ -250,22 +239,22 @@ export function mountConflictsFeature(): ReturnType<typeof mountConflicts> {
   return replaceViewMount("mountConflicts", function () {
     const ports: ConflictsPorts = {
       closeFileConflict: function () { fileConflicts().close(); },
-      reloadProjectFromDisk: reloadProjectFromDisk,
-      reloadFileFromDisk: reloadFileFromDisk,
+      reloadProjectFromDisk: (...args: Parameters<ReturnType<typeof localFilesOwner>["reloadProjectFromDisk"]>) => localFilesOwner().reloadProjectFromDisk(...args),
+      reloadFileFromDisk: (...args: Parameters<ReturnType<typeof localFilesOwner>["reloadFileFromDisk"]>) => localFilesOwner().reloadFileFromDisk(...args),
       saveDoc: saveDoc,
-      saveBackToFile: saveBackToFile,
+      saveBackToFile: (...args: Parameters<ReturnType<typeof importSavingOwner>["saveBackToFile"]>) => importSavingOwner().saveBackToFile(...args),
       openMergeReview: function () { currentMergeReview()?.open(); },
       cancelMergeReview: function () { currentMergeReview()?.cancel(); },
       confirmFileMerge: function () { currentMergeReview()?.confirm(); },
       importHome: importHome as unknown as ConflictsPorts["importHome"],
-      buildFileData: buildFileData,
+      buildFileData: (...args: Parameters<ReturnType<typeof localFileMenuControls>["buildFileData"]>) => localFileMenuControls().buildFileData(...args),
       deliverFile: deliverFile,
       conflict: function () { return fileConflicts().current(); },
       capture: captureViewDocument
     };
     return mountConflicts({ window: window, ports: ports });
   }, function () {
-    return [function () { return fileConflicts().onChange(function () { showFileConflictView(fileConflicts().current()); }); }];
+    return [function () { return fileConflicts().onChange(function () { localFileMenuControls().showFileConflictView(fileConflicts().current()); }); }];
   });
 }
 
@@ -306,7 +295,7 @@ export function mountFileMenuFeature(): ReturnType<typeof mountFileMenu> {
     const ports: FileMenuPorts = {
       toggleFileMenu: toggleFileMenu,
       toggleSubmenu: toggleSubmenu,
-      handleFileMenuAction: handleFileMenuAction,
+      handleFileMenuAction: (...args: Parameters<ReturnType<typeof localFileMenuControls>["handleFileMenuAction"]>) => localFileMenuControls().handleFileMenuAction(...args),
       openProjectFile: function (file, handle) { void openDocument({ kind: "file", file: file, handle: handle }); }
     };
     return mountFileMenu({ window: window, ports: ports });

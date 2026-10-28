@@ -13,7 +13,7 @@ import { TAG_PRINT_COLORS } from "../adapters/formats/print-colors.ts";
 import { htmlToPlainText } from "../bootstrap/plain-text.ts";
 import { buildDocx, docxToRows } from "../adapters/formats/docx.ts";
 import { buildPackingListPdf, buildPdf } from "../adapters/formats/pdf.ts";
-import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
+import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 initTags();

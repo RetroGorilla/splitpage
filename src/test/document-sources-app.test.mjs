@@ -7,7 +7,7 @@ await bootApp();
 const { migrateRows } = await import("../legacy/document-ports.ts");
 import { historyOwner } from "../bootstrap/wiring/history.ts";
 const listDocHistory = (...args) => historyOwner().listDocHistory(...args);
-const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
+const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { documentSources, openDocument } = await import("../legacy/transition-bridge.ts");

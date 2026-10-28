@@ -1,3 +1,5 @@
+import type { ImportSavingOwner } from "../../application/save/import-saving-ports.ts";
+import type { ScreenState } from "../../application/screen.ts";
 import type { ActionDefinition, ActionSource, Availability } from "../../application/actions.ts";
 import { EVERY_OVERLAY, OPENS_A_DIALOG, availableUnless, firstRefusal } from "../../application/screen.ts";
 import type { Blocker } from "../../application/screen.ts";
@@ -147,6 +149,27 @@ export function fileMenuExportActions(current: () => FileMenuExportControls | nu
         return { ...firstRefusal(availableUnless(["loading"], ports.screen()), own), visible: false };
       },
       run: () => { current()?.exportAgain(); }
+    }
+  ];
+}
+
+export function fileWritebackActions(current: () => Pick<ImportSavingOwner, "saveBackItemState" | "saveBackToFile"> | null, screen: () => ScreenState): ActionDefinition[] {
+  const saveBackItemState = () => current()?.saveBackItemState() ?? { hidden: false, disabled: true, reason: "", label: "Save to file" };
+  const saveBackToFile = () => current()?.saveBackToFile();
+  const loaded = (own: Availability, blockers: readonly Blocker[]) => firstRefusal(availableUnless(blockers, screen()), own);
+  const NO_DIALOG: readonly Blocker[] = ["loading", "dialog", "launcher"];
+  return [
+    {
+      id: "save-back",
+      label: () => saveBackItemState().label,
+      group: "File",
+      icon: "i-save",
+      words: "write back original docx csv txt",
+      availability: (source) => {
+        const a = loaded(itemAvailability(saveBackItemState(), source), NO_DIALOG);
+        return a.enabled ? a : { ...a, visible: false };
+      },
+      run: async () => { await saveBackToFile(); }
     }
   ];
 }

@@ -3,12 +3,13 @@ import type { FileDelivery } from "../../../application/files/file-delivery.ts";
 import type { LastFile } from "../../../application/files/last-file.ts";
 import { loadLastFileHandle } from "../../../adapters/files/last-file.ts";
 import { deliverFile } from "../../../legacy/file-delivery.ts";
-import { exportFormats } from "../../../legacy/export-formats.ts";
+import { exportFormats } from "../export-registry.ts";
 
-export const exports: Pick<ExportRegistry, "card" | "cards" | "exporters" | "byAction" | "isAction" | "onChange"> = {
+export const exports: Pick<ExportRegistry, "card" | "cards" | "exporters" | "byId" | "byAction" | "isAction" | "onChange"> = {
   card: (id) => exportFormats.card(id),
   cards: () => exportFormats.cards(),
   exporters: () => exportFormats.exporters(),
+  byId: (kind) => exportFormats.byId(kind),
   byAction: (action) => exportFormats.byAction(action),
   isAction: (action) => exportFormats.isAction(action),
   onChange: (listener) => exportFormats.onChange(listener)

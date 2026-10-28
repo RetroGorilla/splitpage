@@ -14,7 +14,7 @@ import {
   exportFacts,
   exportSummaryParts
 } from "../adapters/formats/export-kit.ts";
-import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
+import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { sceneFacts } from "../adapters/formats/export-projections.ts";
 import { buildPdf, pdfTextWidth } from "../adapters/formats/pdf.ts";
 import { LONG_DEMO } from "../starters/index.ts";

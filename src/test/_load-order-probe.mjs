@@ -49,13 +49,13 @@ const preferences = await import("../legacy/preferences-bridge.ts");
 const location = await import("../legacy/location-bridge.ts");
 const effects = await import("../legacy/effects-bridge.ts");
 const actions = await import("../legacy/app-actions.ts");
-const exports = await import("../legacy/export-formats.ts");
+const exports = await import("../bootstrap/wiring/export-registry.ts");
 const exportServices = await import("../application/export/services.ts");
 const projectFileServices = await import("../application/formats/project-file-services.ts");
 const shotHiding = await import("../bootstrap/wiring/shot-hiding.ts");
 const presence = await import("../legacy/presence-bridge.ts");
 const undo = await import("../legacy/undo-bridge.ts");
-const exportKit = await import("../legacy/export-kit-bridge.ts");
+const exportKit = await import("../bootstrap/wiring/export-capture.ts");
 const owners = {
   session: session.sessionStarted(),
   saves: saves.savesStarted(),

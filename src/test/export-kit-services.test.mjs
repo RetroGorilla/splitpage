@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { installExportServices } from "../application/export/services.ts";
 import { legacyExportServices } from "../bootstrap/export-services.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { exportDocumentOf } from "../legacy/export-kit-bridge.ts";
+import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";
 import { exportRuns } from "../adapters/formats/export-kit.ts";
 import { exportFacts } from "../adapters/formats/export-kit.ts";
 

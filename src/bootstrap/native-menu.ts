@@ -1,8 +1,8 @@
 import type { ActionRegistry, RefusalPresenter } from "../application/actions.ts";
-import { handleFileMenuAction, noteFileMenuChoice } from "../js/18-local-files.js";
-import { exportFormats } from "./export-formats.ts";
+import { localFileMenuControls } from "./wiring/local-files.ts";
+import { exportFormats } from "./wiring/export-registry.ts";
 import { availableUnless } from "../application/screen.ts";
-import { screenNow } from "./screen-state.ts";
+import { screenNow } from "../legacy/screen-state.ts";
 
 const HEADER_ACTIONS: Readonly<Record<string, string>> = {
   "save": "save",
@@ -20,7 +20,7 @@ function isFileMenuItem(id: string): boolean {
 
 function formatRefused(id: string, present: RefusalPresenter): boolean {
   if (!exportFormats.isAction(id)) return false;
-  noteFileMenuChoice(id);
+  localFileMenuControls().noteFileMenuChoice(id);
   const a = availableUnless(["dialog", "launcher"], screenNow());
   if (a.enabled) return false;
   present({ kind: "unavailable", id, reason: a.reason ?? "" }, "native-menu");
@@ -38,7 +38,7 @@ export function nativeMenuRunner(registry: ActionRegistry, present: RefusalPrese
       registry.invoke(id, "native-menu");
       closeFileMenu();
     } else if (isFileMenuItem(id)) {
-      handleFileMenuAction(id, "native-menu");
+      localFileMenuControls().handleFileMenuAction(id, "native-menu");
     } else {
       registry.invoke(id, "native-menu");
     }

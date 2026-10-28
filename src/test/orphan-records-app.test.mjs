@@ -9,7 +9,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
+const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { maybeAutoTagShortcut } = await import("../features/tags/production-tags.js");
 const { maybeOpenPlainTag, closePlainTag, cancelPlainTag } = await import("../features/tags/plain-tags.js");

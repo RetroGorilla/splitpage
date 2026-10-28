@@ -21,7 +21,7 @@ import { migrateRows } from "../../legacy/document-ports.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { importControls } from "./imports.ts";
 import { applyReviewMode } from "../../js/13-hosted.js";
-import { openLocalFile } from "../../js/18-local-files.js";
+import { localFilesOwner } from "./local-files.ts";
 import { LONG_DEMO } from "../../starters/index.ts";
 
 export function mountFileMenuDropdownFeature(): FileMenuDropdownMount {
@@ -62,7 +62,7 @@ export function fileMenuActions(): ActionDefinition[] {
     desktop: runningOnDesktop,
     saves,
     save: (options) => saveDoc(options),
-    openFile: () => openLocalFile(),
+    openFile: () => localFilesOwner().openLocalFile(),
     openImport: () => { importControls()?.openImportModal(); }
   });
 }

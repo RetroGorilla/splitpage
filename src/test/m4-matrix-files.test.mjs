@@ -17,7 +17,7 @@ await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts");
-const { exportDocumentOf } = await import("../legacy/export-kit-bridge.ts");
+const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildDocx } = await import("../adapters/formats/docx.ts");
 const { closeImportModal, openImportModal } = (await import("../bootstrap/wiring/imports.ts")).importControls();
 const { zipRead } = await import("../adapters/formats/zip.ts");
@@ -26,7 +26,7 @@ const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, fileConflicts, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { exportAs, saveBackToFile } = await import("../js/18-local-files.js");
+const { localFileMenuControls, importSavingOwner } = await import("../bootstrap/wiring/local-files.ts");
 const { finishServerDetect } = await import("../js/13-hosted.js");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { openPrompterInBrowser } = await import("../legacy/desktop-bridge.ts");
@@ -533,7 +533,7 @@ rightToday("I1", "an edit while import writeback awaits its bytes leaves the imp
   const gates = createGates();
   gates.hold("blob.get");
   setBlobBackend({ name: "held", persistent: false, get: async (sha) => { await gates.pass("blob.get", sha); return null; } });
-  const saving = saveBackToFile();
+  const saving = importSavingOwner().saveBackToFile();
   await gates.arrived("blob.get");
   edit("Typed while the bytes were being prepared.");
   gates.release("blob.get");
@@ -548,7 +548,7 @@ rightToday("I2", "import writeback acknowledges only the import home", scene(asy
   const imported = homeModule.currentHome();
   edit("Typed before the write back.");
   const before = observed();
-  await saveBackToFile();
+  await importSavingOwner().saveBackToFile();
   assert.equal(target.commits.length, 1, "the file was written");
   assert.equal(imported.dirty, false, "the import home is saved");
   assert.equal(homeModule.currentHome(), before.home.record, "the home is the same record");
@@ -584,7 +584,7 @@ rightToday("I3", "import writeback stores the document as it stood when the writ
     const gates = createGates();
     gates.hold("blob.get");
     setBlobBackend({ name: "held", persistent: false, get: async (sha) => { await gates.pass("blob.get", sha); return null; } });
-    const saving = saveBackToFile();
+    const saving = importSavingOwner().saveBackToFile();
     await gates.arrived("blob.get");
     edit("Typed while held.");
     gates.release("blob.get");
@@ -667,10 +667,10 @@ test("import writeback is the import destination's save: it waits behind a write
   await importFrom(target);
   edit("Typed before the first write back.");
   gates.hold("file.close");
-  const first = saveBackToFile();
+  const first = importSavingOwner().saveBackToFile();
   await gates.arrived("file.close");
   edit("Typed while the first write back was writing.");
-  const second = saveBackToFile();
+  const second = importSavingOwner().saveBackToFile();
   for (let turn = 0; turn < 20; turn++) await new Promise((resolve) => setImmediate(resolve));
   assert.equal(target.calls.filter((op) => op === "createWritable").length, 1, "the second write back has not opened the file while the first holds it");
   gates.release("file.close");
@@ -686,7 +686,7 @@ test("an import writeback that lands after another file was imported leaves the 
   await importFrom(target);
   edit("Typed before the write back.");
   gates.hold("file.close");
-  const saving = saveBackToFile();
+  const saving = importSavingOwner().saveBackToFile();
   await gates.arrived("file.close");
   const other = createHeldFileHandle({ name: "other.txt", text: "Gamma line.\n\nDelta line.\n", lastModified: 2000 });
   await openDocument({ kind: "file", file: await other.handle.getFile(), handle: other.handle });
@@ -706,9 +706,9 @@ test("a writeback queued behind another writes nothing once a different file was
   await importFrom(target);
   edit("Typed before the write backs.");
   gates.hold("file.close");
-  const first = saveBackToFile();
+  const first = importSavingOwner().saveBackToFile();
   await gates.arrived("file.close");
-  const second = saveBackToFile();
+  const second = importSavingOwner().saveBackToFile();
   const other = createHeldFileHandle({ name: "other.txt", text: "Gamma line.\n\nDelta line.\n", lastModified: 2000 });
   await openDocument({ kind: "file", file: await other.handle.getFile(), handle: other.handle });
   const replaced = homeModule.currentHome();
@@ -748,7 +748,7 @@ rightToday("D1", "an export acknowledges nothing", scene(async () => {
   const downloads = noDownloads();
   try {
     for (const kind of ["md", "html", "csv", "txt"]) {
-      await exportAs(kind);
+      await localFileMenuControls().exportAs(kind);
       assertSame(before, "document after the " + kind + " export");
     }
   } finally {
@@ -762,7 +762,7 @@ rightToday("D1", "an export acknowledges nothing", scene(async () => {
   edit("Typed before the desktop export.");
   const desktopBefore = observed();
   const stored = await fake.readFile(picked.id);
-  await exportAs("md");
+  await localFileMenuControls().exportAs("md");
   assert.ok(held.calls.some((c) => c.op === "writeFile" && c.args[0] !== picked.id), "the export went to a file of its own");
   assertSame(desktopBefore, "document after the desktop export");
   assert.deepEqual(Array.from((await fake.readFile(picked.id)).bytes), Array.from(stored.bytes), "and the document's own file holds what it held");

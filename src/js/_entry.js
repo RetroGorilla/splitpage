@@ -14,7 +14,7 @@ import { mountHostedFeature } from "../bootstrap/wiring.ts";
 import { __init as init_13a_presence } from "./13a-presence.js";
 import { __init as init_13b_collaborate } from "./13b-collaborate.js";
 import { mountFileSavingFeature } from "../bootstrap/wiring.ts";
-import { __init as init_18_local_files } from "./18-local-files.js";
+import { mountLocalFilesFeature } from "../bootstrap/wiring.ts";
 import { mountMergeReviewFeature } from "../bootstrap/wiring.ts";
 import { mountFileMenuDropdownFeature, mountCommandMenuFeature } from "../bootstrap/wiring.ts";
 import { mountWriterRuntimeFeature } from "../bootstrap/wiring.ts";
@@ -22,7 +22,6 @@ import { mountPrompterRuntimeFeature } from "../bootstrap/wiring.ts";
 import { __init as init_20e_connect } from "./20e-connect.js";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { serverDocumentSource, serverSaveDestination } from "./13-hosted.js";
-import { importSaveDestination, projectFileSource } from "./18-local-files.js";
 import { mountProjectFiles } from "../bootstrap/wiring.ts";
 import { wireLegacyApp, mountUpdateFeature, mountNewTabFeature, mountCommentsLogicFeature, mountReadTimeFeature, mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature, mountScriptZoomFeature, mountDraftEditFeature, mountHelpFeature, mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature, mountCopyPasteFeature, mountSettingsFeature, mountAppDataFeature, mountHideShotFeature, mountFileMenuExportFeature, mountSceneStatusFeature, mountBrollFeature, mountBrollPanelStateFeature, mountScenesFeature, mountSceneMediaFeature, derivedRecordsPlan, mountOnboardingFeature, mountVideoFilesFeature, mountDesktopFeature, mountDraftsFeature, draftRecoveryPorts } from "../bootstrap/wiring.ts";
 import { startAppWhenReady } from "../bootstrap/app.ts";
@@ -32,8 +31,8 @@ try {
   wiring = wireLegacyApp({
     entry: migrateRows,
     records: derivedRecordsPlan,
-    destinations: function () { return [importSaveDestination(), serverSaveDestination()]; },
-    sources: function () { return [projectFileSource(), serverDocumentSource()]; },
+    destinations: function () { return [serverSaveDestination()]; },
+    sources: function () { return [serverDocumentSource()]; },
     recovery: draftRecoveryPorts,
     keyTarget: window
   });
@@ -77,7 +76,7 @@ if (wiring) {
   init_13a_presence();
   init_13b_collaborate();
   mountFileSavingFeature();
-  init_18_local_files();
+  mountLocalFilesFeature();
   mountMergeReviewFeature();
   mountFileMenuDropdownFeature();
   mountFileMenuExportFeature(wiring.captureExportDocument);

@@ -5,7 +5,7 @@ import { exportServices } from "../../application/export/services.ts";
 import type { ExportServices } from "../../application/export/services.ts";
 import { randomIds, systemClock } from "../../adapters/identity/ids.ts";
 import { assetPorts } from "../../adapters/formats/export-assets.ts";
-import { startExportKit } from "../../legacy/export-kit-bridge.ts";
+import { startExportKit } from "./export-capture.ts";
 import { documentReader } from "./ports/document.ts";
 import { preferenceValues } from "./ports/preferences.ts";
 

@@ -8,9 +8,9 @@ import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
 await bootApp();
 after(closeApp);
 
-const { exportFormats } = await import("../legacy/export-formats.ts");
+const { exportFormats } = await import("../bootstrap/wiring/export-registry.ts");
 const { commandResults } = await import("../features/command-menu/command-menu.js");
-const { buildFileData, exportBaseName } = await import("../js/18-local-files.js");
+const { localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");
 const {
   closeExportDialog, exportAgain, exportAgainItemState, exportActionReason, exportFileNameFor, exportSummary, lastExportAction,
   openExportDialog
@@ -86,13 +86,13 @@ test("one provider and one registration put a new exporter in the menu, the pale
     assert.ok(document.querySelector('.export-card[data-format="demo"]'), "the dialog draws a card");
     assert.equal(document.querySelector('input[name="export-format"]:checked').value, "demo");
     assert.equal(document.getElementById("export-go").textContent, "Export Demo sheet");
-    assert.equal(document.getElementById("export-filename").textContent, exportBaseName() + " - demo.demo");
-    assert.equal(exportFileNameFor("export-demo-sheet"), exportBaseName() + " - demo.demo");
+    assert.equal(document.getElementById("export-filename").textContent, localFileMenuControls().exportBaseName() + " - demo.demo");
+    assert.equal(exportFileNameFor("export-demo-sheet"), localFileMenuControls().exportBaseName() + " - demo.demo");
     assert.equal(typeof exportSummary("export-demo-sheet"), "string");
 
     document.getElementById("export-go").click();
     await new Promise((resolve) => setTimeout(resolve, 50));
-    assert.deepEqual(files.files.map((f) => f.name), [exportBaseName() + " - demo.demo"], "the dialog ran the provider");
+    assert.deepEqual(files.files.map((f) => f.name), [localFileMenuControls().exportBaseName() + " - demo.demo"], "the dialog ran the provider");
     assert.equal(await files.files[0].blob.text(), "demo of " + currentDocument().title);
     assert.deepEqual(demo.built.map((b) => [b.frozen, b.allowImageBundle]), [[true, true]], "the provider got the captured, frozen document");
     assert.equal(lastExportAction(), "export-demo-sheet", "the choice is remembered by its action id");
@@ -171,7 +171,7 @@ test("the file name comes from the exporter that built the bytes, even if its re
   const drop = exportFormats.register(demo.decl);
   let dropOther = () => {};
   try {
-    const pending = buildFileData("demo-sheet", "report");
+    const pending = localFileMenuControls().buildFileData("demo-sheet", "report");
     drop();
     dropOther = exportFormats.register({
       ...demo.decl,
@@ -194,7 +194,7 @@ test("the file name comes from the exporter that built the bytes, even if its re
   const dropCard2 = exportFormats.defineCard(CARD);
   const drop2 = exportFormats.register(demoExporter({ build: async () => { await held2; return { data: "x" }; } }).decl);
   try {
-    const pending = buildFileData("demo-sheet", "report");
+    const pending = localFileMenuControls().buildFileData("demo-sheet", "report");
     drop2();
     release2();
     const made = await pending;
