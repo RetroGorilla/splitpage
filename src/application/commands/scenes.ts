@@ -1,4 +1,4 @@
-import type { DocumentComment, ValidatedDocument } from "../../core/document/validated.ts";
+import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Plan } from "../session/document-session.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
