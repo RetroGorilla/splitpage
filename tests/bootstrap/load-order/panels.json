@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/panels/script-place.js",
     "src/bootstrap/wiring/side-panels.ts"

@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/application/recovery/history.js",
     "src/adapters/storage/history-backends.js",
