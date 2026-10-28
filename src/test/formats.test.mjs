@@ -98,6 +98,18 @@ test(".splitpage round-trips the whole document, byte for byte", () => {
   assert.ok(back.rows[0].audioText.includes('data-cmt="ctest1"'));
 });
 
+test("a .splitpage file that carries serverDocId opens and saves as before, the field kept and the content unchanged", () => {
+  const s = fixture();
+  const file = JSON.stringify(Object.assign(JSON.parse(buildSplitpageFile(exportDocumentOf(s))), { serverDocId: "srv-doc-7" }));
+  const opened = migrateRows(parseSplitpageFile(file));
+  assert.equal(opened.serverDocId, "srv-doc-7");
+  assert.equal(opened.docId, s.docId);
+  const saved = JSON.parse(buildSplitpageFile(exportDocumentOf(opened)));
+  assert.equal(saved.serverDocId, "srv-doc-7");
+  delete saved.serverDocId;
+  assert.equal(norm(migrateRows(saved)), norm(s));
+});
+
 test("buildSplitpage never writes an unmigrated document", () => {
   const raw = JSON.parse(buildSplitpageFile(exportDocumentOf({ title: "<b>Raw</b>", rows: [{ id: "r1", audioText: "one" }] })));
   assert.equal(raw.title, "Raw");

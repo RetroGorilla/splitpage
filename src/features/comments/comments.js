@@ -223,7 +223,7 @@ export function resetCommentBindings() {
 var expandedReplyIds = idMap();
 var replyDrafts = idMap();
 
-export var AUTHOR_NAME_FIELDS = "#settings-name, #comment-name, .reply-name-input, #identity-input, #guest-name";
+export var AUTHOR_NAME_FIELDS = "#settings-name, #comment-name, .reply-name-input, #identity-input";
 var EMOJI_PART = /[\p{Extended_Pictographic}\p{Regional_Indicator}⃣]/u;
 function wholeEmojiCut(value, at) {
   if (typeof Intl === "undefined" || typeof Intl.Segmenter !== "function") return at;
