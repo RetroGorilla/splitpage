@@ -1,4 +1,10 @@
 function startImportSaving(ports) {
+  var active = true;
+  async function discardWritable(writable) {
+    if (writable && typeof writable.abort === "function") {
+      try { await writable.abort(); } catch (e) {}
+    }
+  }
   var { importHome, amendHome } = ports.location;
   var onServerDoc = ports.onServerDoc;
   var { request: requestSave, unsavedFor } = ports.saving;
@@ -24,12 +30,13 @@ function saveBackToFile(opts) {
   var imported = importHome();
   if (!imported) return Promise.resolve();
   return requestSave({ kind: opts && opts.force ? "writebackForce" : "writeback", target: imported }).then(function (outcome) {
+    if (!active) return;
     if (outcome.kind === "saved" && outcome.acknowledged) amendHome(imported, { dirty: unsavedFor(imported) });
   });
 }
 
 function stillWritingBack(job, imported) {
-  return importHome() === imported && job.owns();
+  return active && importHome() === imported && job.owns();
 }
 
 async function writeBackToFile(job) {
@@ -41,6 +48,7 @@ async function writeBackToFile(job) {
   try {
     built = await buildFileData(imported.format, baseName);
   } catch (e) {
+    if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
     showToast("Could not build the file.", "error");
     return WRITEBACK_FAILED;
   }
@@ -49,30 +57,38 @@ async function writeBackToFile(job) {
   if (imported.handle && imported.handle.createWritable) {
     if (job.request.kind !== "writebackForce") {
       var check = await checkFileConflict(imported.handle, imported.lastModified);
+      if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
       if (!check.ok) {
         return { kind: "refused", reason: FILE_CHANGED, conflict: { fileName: imported.name, current: check.current, kind: "import" } };
       }
-      if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
     }
     try {
       var writable = await ports.files.createWritable(imported.handle);
+      if (!stillWritingBack(job, imported)) { await discardWritable(writable); return IMPORT_REPLACED; }
       await writable.write(built.data);
+      if (!stillWritingBack(job, imported)) { await discardWritable(writable); return IMPORT_REPLACED; }
       await writable.close();
+      if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
       try {
         var after = await ports.files.read(imported.handle);
+        if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
         amendHome(imported, { lastModified: after.lastModified, size: after.size });
       } catch (e) { }
+      if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
       showToast("Saved to " + imported.name, "ok");
       return WRITTEN_BACK;
     } catch (err) {
+      if (!stillWritingBack(job, imported)) { await discardWritable(writable); return IMPORT_REPLACED; }
       if (err && err.name === "AbortError") return WRITEBACK_CANCELLED;
       amendHome(imported, { inPlace: false });
     }
   }
 
+  if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
   var ok = await deliverFile(imported.name, built.data, {
     savedMsg: "Saved a copy of " + imported.name + " to your downloads"
   });
+  if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
   return ok ? WRITTEN_BACK : WRITEBACK_FAILED;
 }
 
@@ -88,7 +104,7 @@ function importSaveDestination() {
 }
 
 
-  return { saveBackItemState, saveBackToFile, writeBackToFile, importSaveDestination, dispose: function () {} };
+  return { saveBackItemState, saveBackToFile, writeBackToFile, importSaveDestination, dispose: function () { active = false; } };
 }
 
 export function createImportSavingOwner() {

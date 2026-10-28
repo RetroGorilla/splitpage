@@ -32,6 +32,75 @@ function harness() {
   return { owner, ports, log, imported, state, job };
 }
 
+function deferred<T>() {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
+}
+
+for (const stage of ["build", "conflict", "writable", "write", "close", "metadata"]) {
+  test("writeback stopped during " + stage + " performs only safe writable cleanup", async () => {
+    const h = harness();
+    const entered = deferred<undefined>();
+    const gate = deferred<undefined>();
+    const hold = async () => { entered.resolve(undefined); await gate.promise; };
+    const ports: ImportSavingPorts = {
+      ...h.ports,
+      buildFileData: async (kind, base) => { const built = h.ports.buildFileData(kind, base); if (stage === "build") await hold(); return built; },
+      files: {
+        checkConflict: async () => { if (stage === "conflict") await hold(); return { ok: true }; },
+        createWritable: async () => {
+          if (stage === "writable") await hold();
+          return {
+            abort: async () => { h.log.push("abort"); },
+            write: async () => { h.log.push("write"); if (stage === "write") await hold(); },
+            close: async () => { h.log.push("close"); if (stage === "close") await hold(); }
+          };
+        },
+        read: async () => { if (stage === "metadata") await hold(); return { name: "draft.txt", lastModified: 50, size: 100, text: async () => "", arrayBuffer: async () => new ArrayBuffer(0) }; }
+      }
+    };
+    const stop = h.owner.startImportSaving(ports);
+    const pending = h.owner.writeBackToFile(h.job);
+    await entered.promise;
+    stop();
+    h.state.owns = false;
+    const before = [...h.log];
+    const stopReplacement = h.owner.startImportSaving(h.ports);
+    gate.resolve(undefined);
+    assert.equal((await pending).kind, "refused");
+    assert.deepEqual(h.log, stage === "writable" || stage === "write" ? [...before, "abort"] : before);
+    assert.equal(h.imported["lastModified"], null);
+    stopReplacement();
+  });
+}
+
+test("requestSave completion after teardown never amends the old or replacement home", async () => {
+  const h = harness();
+  const completion = deferred<Awaited<ReturnType<ImportSavingPorts["saving"]["request"]>>>();
+  const stop = h.owner.startImportSaving({ ...h.ports, saving: { ...h.ports.saving, request: () => completion.promise } });
+  const pending = h.owner.saveBackToFile();
+  stop();
+  const stopReplacement = h.owner.startImportSaving(h.ports);
+  completion.resolve({ kind: "saved", acknowledged: true });
+  await pending;
+  assert.equal(h.imported["dirty"], false);
+  stopReplacement();
+});
+
+test("a stale buffered writable without abort is never closed or delivered", async () => {
+  const h = harness();
+  const entered = deferred<undefined>();
+  const gate = deferred<undefined>();
+  const stop = h.owner.startImportSaving({ ...h.ports, files: { ...h.ports.files, createWritable: async () => { entered.resolve(undefined); await gate.promise; return { write: async () => { h.log.push("write"); }, close: async () => { h.log.push("close"); } }; } } });
+  const pending = h.owner.writeBackToFile(h.job);
+  await entered.promise;
+  stop();
+  gate.resolve(undefined);
+  assert.equal((await pending).kind, "refused");
+  assert.deepEqual(h.log, ["build:txt:draft", "check"]);
+});
+
 test("import writer guards lifecycle and retained destinations", () => {
   const h = harness();
   assert.throws(() => h.owner.saveBackItemState(), /not started yet/);
