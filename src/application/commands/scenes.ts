@@ -68,22 +68,3 @@ export function removeScenesCommand(rowIds: readonly string[]): Command {
     }
   };
 }
-
-export function addHeldCommentsCommand(comments: readonly DocumentComment[]): Command {
-  return {
-    name: "add-held-comments",
-    needs: "edit",
-    plan: function (doc): Plan | null {
-      const fresh = comments.filter(function (c) {
-        return !doc.comments.some(function (had) { return had.id === c.id; });
-      });
-      if (!fresh.length) return null;
-      return {
-        changes: changeSet({ docFields: ["comments"], runsMoved: true, saveNow: true }),
-        apply: function (live) {
-          fresh.forEach(function (c) { live.comments.push(JSON.parse(JSON.stringify(c)) as DocumentComment); });
-        }
-      };
-    }
-  };
-}
