@@ -5,7 +5,6 @@ import { saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
 import {
   createGates,
   createHeldDesktop,
-  createHeldFetch,
   createHeldFileHandle,
   mockClock,
   rightToday
@@ -13,6 +12,7 @@ import {
 import { documentLocation } from "../legacy/location-bridge.ts";
 import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
 
+localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
 await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
@@ -27,7 +27,6 @@ const { confirmSavedNow, fileConflicts, saveDoc, setAutoSaveEnabled } = await im
 const { flushEdits } = await import("../legacy/undo-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { localFileMenuControls, importSavingOwner } = await import("../bootstrap/wiring/local-files.ts");
-const { finishServerDetect } = await import("../js/13-hosted.js");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { openPrompterInBrowser } = await import("../legacy/desktop-bridge.ts");
 const { makeDesktopHandle } = await import("../adapters/desktop/desktop-handle.ts");
@@ -346,27 +345,6 @@ rightToday("F5-stale", "overlapping saves never leave the file older than the do
   await turns(60);
   await finishSaves(target);
   assert.ok(unsavedChanges() || target.text().includes(currentDocument().rows[0].audioText), "the document is not marked saved while its file holds older text");
-}));
-
-rightToday("F5-link", "the turned-off link's copy waits for the save that is running", scene(async () => {
-  const target = await firstSaveInFlight();
-  const copy = createHeldFileHandle({ name: "copy.splitpage" });
-  window.showSaveFilePicker = async () => copy.handle;
-  const server = createHeldFetch({ answer: () => ({ status: 403, body: { error: "link-off" } }) });
-  const uninstall = server.install();
-  try {
-    await finishServerDetect();
-  } finally {
-    uninstall();
-  }
-  const action = document.querySelector("#toast-host .toast.has-action .toast-action");
-  assert.ok(action, "the turned-off link offers a copy");
-  action.click();
-  await turns(60);
-  sessionStorage.clear();
-  assert.equal(writers(target, copy), 1, "no second writer was opened while the first save was writing");
-  await finishSaves(target, [copy]);
-  assertEndsWithLaterSave(target, copy);
 }));
 
 rightToday("F5-prompter", "the prompter's save waits for the save that is running", scene(async () => {

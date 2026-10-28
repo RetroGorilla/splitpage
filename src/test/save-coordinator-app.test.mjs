@@ -98,22 +98,6 @@ test("D10: a file save that lands after another file's document was opened says 
   assert.deepEqual(warnings().slice(before), []);
 }));
 
-test("D10: a file save that lands after a connection refresh is saved, not reported as reopened", scene(async () => {
-  const target = heldFile(script("Refreshed", ID("f")), "refreshed.splitpage");
-  await openFrom(target);
-  edit("Typed before the refresh.");
-  target.holdOp("close");
-  const saving = saveDoc();
-  await target.arrivedAt("close");
-  homeModule.documentLocation().updateConnection({ role: "edit", scope: "" });
-  const before = warnings().length;
-  target.releaseOp("close");
-  await saving;
-  assert.deepEqual(warnings().slice(before), [], "nothing was reopened");
-  assert.equal(saves.unsavedChanges(), false);
-  assert.equal(saves.confirmedGeneration(), saves.saveChanges(), "the save is acknowledged for the file");
-}));
-
 test("INV-20: while a save waits behind another, both Save buttons stay busy until the last one finishes, then read saved", scene(async () => {
   const target = heldFile(script("Busy", ID("d")), "busy.splitpage");
   await openFrom(target);

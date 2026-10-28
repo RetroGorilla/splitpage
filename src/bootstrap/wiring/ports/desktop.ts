@@ -34,8 +34,7 @@ export const launch: LaunchFacts = {
   hadPriorSession: () => desktopPort()?.hadPriorSession,
   launchIntent: () => desktopPort()?.launchIntent,
   hasDraftToRestore: () => desktopPort()?.hasDraftToRestore,
-  appVersion: () => desktopPort()?.appVersion,
-  sessionInfo: () => desktopPort()?.getSessionInfo()
+  appVersion: () => desktopPort()?.appVersion
 };
 
 export const importDesktop = {

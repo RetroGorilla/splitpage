@@ -15,7 +15,6 @@ const { maybeAutoTagShortcut } = await import("../features/tags/production-tags.
 const { maybeOpenPlainTag, closePlainTag, cancelPlainTag } = await import("../features/tags/plain-tags.js");
 const { maybeCaptureBroll } = await import("../bootstrap/wiring/broll.ts");
 const { pasteIntoCell } = await import("../features/clipboard/cell-clipboard.js");
-const { closeImportModal, openImportModal } = (await import("../bootstrap/wiring/imports.ts")).importControls();
 const { undo, undoSizes, flushEdits } = await import("../legacy/undo-bridge.ts");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const writer = await import("../features/writer/writer.js");
@@ -98,15 +97,6 @@ function assertUntouched(before, seen) {
   assert.deepEqual(seen, []);
 }
 
-async function asReviewer(fn) {
-  window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
-  try {
-    return await fn();
-  } finally {
-    window.__hostedTest.setSession({ role: "edit", docId: null });
-  }
-}
-
 function failingClock(fn) {
   const real = Date.prototype.toISOString;
   Date.prototype.toISOString = function () { throw new Error("no clock"); };
@@ -176,23 +166,6 @@ test("a typed [tag] writes its registry record in the same command as the tag: o
   assert.deepEqual(tagNames(), []);
 });
 
-test("a typed [tag] refused by the session writes no registry record", async () => {
-  await open();
-  await settle();
-  await asReviewer(async () => {
-    await settle();
-    const before = snapshot();
-    const w = watch();
-    try {
-      typeTagClose();
-    } finally {
-      w.stop();
-    }
-    assert.deepEqual(tagNames(), []);
-    assertUntouched(before, w.seen);
-  });
-});
-
 test("a typed [tag] whose command fails leaves no registry record behind", async () => {
   await open();
   await settle();
@@ -224,24 +197,6 @@ test("a Tab-closed plain tag writes its registry record in the same command", as
   assert.equal(w.seen.length, 1);
   assert.deepEqual(w.seen[0].changes.docFields, ["productionTags"]);
   assert.ok(el);
-});
-
-test("a Tab-closed plain tag refused by the session writes no registry record", async () => {
-  await open();
-  await settle();
-  await asReviewer(async () => {
-    await settle();
-    openPlainTag();
-    const before = snapshot();
-    const w = watch();
-    try {
-      assert.equal(closePlainTag(), true);
-    } finally {
-      w.stop();
-    }
-    assert.deepEqual(tagNames(), []);
-    assertUntouched(before, w.seen);
-  });
 });
 
 test("a Tab-closed plain tag whose command fails leaves no registry record behind", async () => {
@@ -285,22 +240,6 @@ test("typing B-roll: writes the shot record in the same command as its key", asy
   assert.equal(shotIds().indexOf(key[1]), -1, "undo takes the shot record back with its key");
 });
 
-test("typing B-roll: refused by the session writes no shot record", async () => {
-  await open(withBrollLine);
-  await settle();
-  await asReviewer(async () => {
-    await settle();
-    const before = snapshot();
-    const w = watch();
-    try {
-      typeBrollMarker();
-      assertUntouched(before, w.seen);
-    } finally {
-      w.stop();
-    }
-  });
-});
-
 test("typing B-roll: whose command fails leaves no shot record behind", async () => {
   await open(withBrollLine);
   await settle();
@@ -327,45 +266,4 @@ test("control: the same media paste, allowed, attaches the picture and records t
   assert.equal(shotIds().length, 1);
   assert.match(row("r1").visualText, new RegExp('data-broll-id="' + shotIds()[0] + '"'));
   assert.ok(row("r1").imageRef, "the picture is in the scene's gallery");
-});
-
-test("a refused media paste with a picture and a b-roll key leaves no picture, shot or tag record in the document", async () => {
-  await open();
-  await settle();
-  const el = cellOf("r1", "visualText");
-  caretAtEnd(el);
-  const before = snapshot();
-  const w = watch();
-  const html = MEDIA_PASTE + ' <span class="tag-anchor" data-tag-cat="prop" data-tag-id="t_x">Lamp</span>';
-  try {
-    await asReviewer(() => pasteIntoCell(el, html, "B-roll: Drone Lamp"));
-  } finally {
-    w.stop();
-  }
-  assert.deepEqual(shotIds(), []);
-  assert.deepEqual(tagNames(), []);
-  assert.equal(row("r1").imageRef ?? null, null);
-  assertUntouched(before, w.seen);
-});
-
-test("a refused import whose scan would track a b-roll line leaves no scene or shot record", async () => {
-  await open();
-  await settle();
-  const before = snapshot();
-  const w = watch();
-  try {
-    await asReviewer(() => {
-      openImportModal();
-      document.getElementById("import-textarea").value = "Visual: B-roll: Drone over the hill\nAudio: We start high.";
-      document.querySelector('input[name="import-split"][value="twocolumn"]').checked = true;
-      const box = document.querySelector('[data-import-scan="broll"]');
-      if (box) box.checked = true;
-      document.getElementById("import-confirm").click();
-    });
-  } finally {
-    w.stop();
-    closeImportModal();
-  }
-  assert.deepEqual(shotIds(), []);
-  assertUntouched(before, w.seen);
 });

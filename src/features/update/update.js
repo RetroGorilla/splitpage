@@ -224,7 +224,6 @@ function dismissUpdateNotice() {
 
 function desktopAppOffered() {
   if (ports.desktop()) return false;
-  if (ports.place.arrivingOnLink()) return false;
   var ua = (typeof navigator !== "undefined" && navigator.userAgent) || "";
   return /Windows/.test(ua) && !/Mobi|Android/.test(ua);
 }

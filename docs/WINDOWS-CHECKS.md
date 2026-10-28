@@ -395,28 +395,6 @@ that proves #76's `shared/` staging and #77's `files` entry.
   Web Speech, and the page says so. Also try it on an unsaved new document:
   it should ask you to save first, with no Save dialog popping up by
   itself.
-- **Google Drive, signed in to the real Google** (#10). The smoke suite runs
-  the whole loopback flow against `desktop/test/fake-google.mjs`, so it has
-  never met the real consent screen, a real Desktop-type client, DPAPI
-  storing the token, or Drive's real answers. By hand, once a Google Cloud
-  project has the Drive API enabled, a consent screen with the `…/auth/drive`
-  scope and you as a test user, and an OAuth client ID of type **Desktop
-  app**: save its downloaded JSON as
-  `%APPDATA%\Splitpage\google-oauth-client.json`. Before that, open File ▸
-  **Google Drive files…** once and check it shows exactly that path and the
-  two `SPLITPAGE_GOOGLE_*` variable names. With the file in place, Sign in
-  with Google: the default browser opens Google's consent page, and
-  approving it lands on a page saying to return to Splitpage, with the app
-  showing "Signed in as <you>" and My Drive listed. Open a folder, download
-  a file and a Google Doc (it arrives as `.txt`), upload a file, then upload
-  one with the same name and check Drive shows a new version rather than a
-  second file. Quit and relaunch: still signed in, with
-  `%APPDATA%\Splitpage\google-drive-token.bin` present and not readable as
-  text. Sign out: the file is gone and
-  https://myaccount.google.com/permissions no longer lists the app. Also
-  refuse consent once (the app should say sign-in was cancelled) and leave
-  the consent tab open for over 5 minutes once (it should say it timed out).
-
 - **Version history after 3.0.0's move is cleaned up** (#100, which
   removed #83's one-time migration), on your real profile. 3.0.0 moved the
   old history into the new layout and kept the old folders in
@@ -468,11 +446,8 @@ re-run on Windows with `run-tests.ps1`:
 - `run-tests.ps1` runs them in one pass with its own orphan-process sweep,
   which is a different shape of run from one invocation per suite.
 
-New suites worth a first Windows run: `53-service-worker.txt` (#79),
-`54-server-conflict.txt` (#72) and `55-pull-merge.txt` (#69), all written
-here. 55 drives the real 2s heartbeat rather than poking the function, so it
-is the most timing-sensitive of the three and the most worth a second
-opinion on a different machine.
+New suite worth a first Windows run: `53-service-worker.txt` (#79), written
+here.
 
 ---
 
@@ -497,7 +472,6 @@ Anything changed since then is due again in run 2.
 | packaged-arm64 | the ARM machine | **never run** |
 | upgrade over a 1.0.x install | a VM / Windows Sandbox | **never run** |
 | #73, #71, #98, #11 | dev + packaged smoke, `run-tests.ps1` | **Windows x64, run 2** |
-| #10 Drive, packaged | packaged smoke (fake Google) | **Windows x64, run 2**; real Google sign-in never run (no client ID) |
 | #86 Open in browser | by hand, desktop app | save-first **Windows x64, run 2**; real browser launch **unverified** (that machine's default browser is broken); the menu route and the covered control bar were fixed after run 2 — re-check |
 | #83 history move on a real profile | by hand, desktop app | **Windows x64, run 2b** (incl. kills mid-move); the move itself removed by #100 |
 | #100 `v1-backup\` deleted at launch, raw v1 left alone | dev + packaged smoke; by hand on a real 3.0.0 profile (§3) | dev smoke **Windows x64** (804/804, 2026-09-27); packaged smoke and by hand **never run** |

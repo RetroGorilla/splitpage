@@ -5,7 +5,7 @@
 # back to the estimate, Esc leaves it. A set length replaces the estimate,
 # feeds every scene start, the program clock and the rundown strip, is one
 # undo step, turns amber when the Audio now reads longer, and a scene with
-# no Audio can have one. Read-only in a review session. The parser, the
+# no Audio can have one. The parser, the
 # merge, migrateRows and the formats are src/test/scene-length.test.mjs.
 #
 # Every `eval` is one physical line (the driver splits on newlines).
@@ -150,16 +150,3 @@ expect document.querySelectorAll('#rows .row .row-start')[2].textContent == 00:2
 
 # --- it goes out in the file -----------------------------------------------------
 expect JSON.parse(F.buildSplitpage(F.state())).rows[2].lengthSeconds === 20
-
-# --- a review session reads it and cannot change it ----------------------------
-eval document.activeElement.blur()
-eval window.__hostedTest.setSession({role:'review',docId:'shared-doc'})
-sleep 400
-expect window.__hostedTest.reviewMode() === true
-expect rd(2).getAttribute('aria-disabled') == true
-expect rd(2).textContent == 0:20
-expect rd(2).title.indexOf('Set by hand') === 0
-jsclick #rows .row:nth-child(3) .row-read
-sleep 200
-expect document.querySelector('#rows .row-read-input') === null
-expect F.state().rows[2].lengthSeconds === 20

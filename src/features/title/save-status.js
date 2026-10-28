@@ -42,9 +42,6 @@ function saveStatusListeners() {
     location: function (change) {
       if (change !== "writtenOut") updateSaveStatus();
     },
-    status: function (change) {
-      if (change === "link" || change === "session") updateSaveStatus();
-    },
     preference: function (change) {
       if (ports.preferences.nameOf(change.key) === "clock") updateSaveStatus();
     }
@@ -60,12 +57,10 @@ function savedTitle(where) {
 function saveStatusView() {
   var target = ports.autoSave.target();
   var place = ports.place;
-  var where = target === "server" ? "the server"
-    : place.home().kind === "file" ? (place.home().handle && place.home().handle.name) || ""
+  var where = place.home().kind === "file" ? (place.home().handle && place.home().handle.name) || ""
     : place.home().kind === "import" ? place.home().name || ""
     : "";
 
-  var onServer = place.home().kind === "server";
   var autosave = ports.autoSave.policy();
   var line = saveStatus({
     busy: ports.saves.busy(),
@@ -74,10 +69,7 @@ function saveStatusView() {
     autoSaveOn: autosave.enabled(),
     target: target,
     where: where,
-    homeKind: place.home().kind,
-    onServer: !!onServer,
-    signedOut: !!place.sessionExpired(),
-    linkOff: !!place.linkTurnedOff()
+    homeKind: place.home().kind
   }).line;
   return line ? Object.assign({}, line) : null;
 }

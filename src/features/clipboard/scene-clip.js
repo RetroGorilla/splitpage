@@ -230,7 +230,7 @@ export function scenePaste(clip, opts) {
         inserted: clip.rows.map(function (r) { return rowMap[r.id]; }),
         replaced: planned.replaceRowId,
         title: !!opts.title,
-        saveNow: !opts.holdComments
+        saveNow: true
       };
     },
     apply: function (live) {
@@ -240,7 +240,6 @@ export function scenePaste(clip, opts) {
         afterRowId: opts.afterRowId,
         replaceRowId: planned.replaceRowId,
         move: planned.move,
-        holdComments: !!opts.holdComments,
         mint: mint,
         stamp: opts.stamp
       });
@@ -381,13 +380,12 @@ export function insertScenes(clip, opts) {
     ports.recordPastedBroll(state, rowId, mintedByRow[rowId].cell, mintedByRow[rowId].ids);
   });
 
-  if (!opts.holdComments) added.forEach(function (c) { comments.push(c); });
+  added.forEach(function (c) { comments.push(c); });
   syncCommentAnchors(state, ports.text.cellOf);
 
   return {
     rowIds: rows.map(function (r) { return r.id; }),
-    comments: opts.holdComments ? 0 : added.length,
-    held: opts.holdComments ? added : [],
+    comments: added.length,
     broll: { kept: kept, minted: minted }
   };
 }

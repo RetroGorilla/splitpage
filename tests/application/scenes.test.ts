@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { changeSet } from "../../src/application/session/change-set.ts";
 import { CELL_TEXT_DERIVES } from "../../src/application/commands/cell-text.ts";
 import {
-  SCENE_PASTE_FIELDS, addHeldCommentsCommand, pasteScenesCommand, removeScenesCommand
+  SCENE_PASTE_FIELDS, pasteScenesCommand, removeScenesCommand
 } from "../../src/application/commands/scenes.ts";
 import type { ScenePaste, ScenePastePlan } from "../../src/application/commands/scenes.ts";
 import type { DocumentRow, ValidatedDocument } from "../../src/core/document/validated.ts";
@@ -142,20 +142,3 @@ test("scenes: removing scenes that have all gone is a no-op", () => {
   assert.deepEqual(h.log, []);
 });
 
-test("scenes: held comments land as their own step, anchored, saved at once, and copied rather than shared", () => {
-  const h = opened();
-  const note = { id: "c7", rowId: "r1", field: "audioText", body: "Held", replies: [] };
-  const held = [note];
-  const out = runConfined(h.session, addHeldCommentsCommand(held));
-  assert.deepEqual(out, {
-    kind: "applied", generation: 1,
-    changes: changeSet({ docFields: ["comments"], runsMoved: true, saveNow: true })
-  });
-  assert.deepEqual(h.log, ["reconcile"].concat(ONE_EDIT));
-  note.body = "changed later";
-  const bodies = h.session.read(function (doc) { return doc ? doc.comments.map(function (c) { return c.id + ":" + String(c.body); }) : []; });
-  assert.deepEqual(bodies, ["c1:Tighter", "c7:Held"]);
-  h.log.length = 0;
-  assert.deepEqual(runConfined(h.session, addHeldCommentsCommand([{ id: "c7", rowId: "r1", field: "audioText", body: "Held" }])), { kind: "noop" });
-  assert.deepEqual(h.log, []);
-});

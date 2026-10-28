@@ -1,15 +1,12 @@
 import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { REVIEW_REFUSAL_REASON } from "../../../src/application/collaboration/authority.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import type { ReadTimePorts } from "../../../src/features/rows/ports.ts";
 import { startReadTime as mountReadTime, readTimeEditing, setSceneLength } from "../../../src/features/rows/read-time.js";
 import { productionReaders } from "../../../src/legacy/document-ports.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices, fakeReview, fakeUndo } from "../fakes.ts";
-
-const REVIEW_REFUSAL = "This is a review copy — comment on a scene instead of changing its length.";
+import { fakeDocument, fakeEdits, fakeNotices, fakeUndo } from "../fakes.ts";
 
 function setup() {
   document.body.innerHTML = '<div id="rows"><div class="row" data-id="r1"><button class="row-read" data-id="r1">0:05</button></div></div>';
@@ -17,7 +14,6 @@ function setup() {
   const edits = fakeEdits();
   const undo = fakeUndo();
   const notices = fakeNotices();
-  const review = fakeReview();
   const painted: string[] = [];
   const ports: ReadTimePorts = {
     document: fakeDocument(doc).document,
@@ -25,12 +21,11 @@ function setup() {
     edits: edits.edits,
     undo: undo.undo,
     paint: { afterThisPaint: (fn) => { painted.push("after"); fn(); } },
-    review: review.review,
     notices: notices.notices
   };
   const button = document.querySelector<HTMLButtonElement>(".row-read");
   assert.ok(button);
-  return { edits, undo, notices, review, painted, button, owner: mountReadTime(ports) };
+  return { edits, undo, notices, painted, button, owner: mountReadTime(ports) };
 }
 
 function key(target: Element, init: KeyboardEventInit): void {
@@ -53,25 +48,11 @@ test("read time: a click opens the length editor, and Enter runs the scene lengt
   owner.dispose();
 });
 
-test("read time: while reviewing a click only warns, and a refused length warns the same way", () => {
-  const { edits, notices, review, button, owner } = setup();
-  review.setReviewing(true);
-  button.click();
-  assert.equal(readTimeEditing(), null);
-  assert.deepEqual(notices.shown.map(({ message, kind }) => ({ message, kind })), [{ message: REVIEW_REFUSAL, kind: "warn" }]);
-  edits.answer({ kind: "rejected", reason: REVIEW_REFUSAL_REASON });
-  assert.equal(setSceneLength("r1", 30), false);
-  assert.deepEqual(notices.shown.map(({ message, kind }) => ({ message, kind })), [{ message: REVIEW_REFUSAL, kind: "warn" }, { message: REVIEW_REFUSAL, kind: "warn" }]);
-  owner.dispose();
-});
-
-test("read time: undo and redo keys on a length button run through the undo port, but not while reviewing", () => {
-  const { undo, review, button, owner } = setup();
+test("read time: undo and redo keys on a length button run through the undo port", () => {
+  const { undo, button, owner } = setup();
   key(button, { key: "z", ctrlKey: true });
   key(button, { key: "z", ctrlKey: true, shiftKey: true });
   key(button, { key: "y", metaKey: true });
-  review.setReviewing(true);
-  key(button, { key: "z", ctrlKey: true });
   assert.deepEqual(undo.calls, ["undo", "redo", "redo"]);
   owner.dispose();
 });

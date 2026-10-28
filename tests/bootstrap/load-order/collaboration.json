@@ -1,9 +1,0 @@
-{
-  "legacyImports": [
-    "./13a-presence.js",
-    "./13b-collaborate.js",
-    "./20e-connect.js"
-  ],
-  "loadOnly": [],
-  "expectedLoads": 3
-}

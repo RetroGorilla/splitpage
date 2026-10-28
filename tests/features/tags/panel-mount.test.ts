@@ -9,7 +9,7 @@ import { createProductionIndex } from "../../../src/application/production/produ
 import { deepFreeze } from "../../../src/core/document/freeze.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices, fakeReview, fakeScreen } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices, fakeScreen } from "../fakes.ts";
 import { tagPanelActions } from "../../../src/features/tags/actions.ts";
 import { TAG_STATUSES } from "../../../src/core/production/looks.ts";
 import { tagStatusLampHtml } from "../../../src/features/common/tag-status.ts";
@@ -63,9 +63,8 @@ function fixture() {
     selection,
     shotHiding: { reveal: (id) => { calls.push(id); } },
     panels: { open: (id) => { calls.push(id); } },
-    presence: { personColor: () => "blue" },
+    personColors: { personColor: () => "blue" },
     undo: { breakCoalescing: () => { calls.push("undo"); } },
-    review: fakeReview().review,
     notices: fakeNotices().notices,
     ids: migration.ids
   };

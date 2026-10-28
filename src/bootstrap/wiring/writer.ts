@@ -10,7 +10,6 @@ import { writerPreferences, writerView } from "./ports/preferences.ts";
 import { notices } from "./ports/effects.ts";
 import { actions } from "./ports/actions.ts";
 import { screen } from "./ports/screen.ts";
-import { review } from "./ports/location.ts";
 import { splitRowFieldCore } from "./rows.ts";
 import { currentHideShot } from "./hide-shot.ts";
 import { currentRowsRender } from "./render.ts";
@@ -61,5 +60,5 @@ export const stopWriterRuntimeFeature = writer.stop;
 export const writerControls = writer.owner;
 
 export function writerActions() {
-  return definitions(writer.owner, { screen, review });
+  return definitions(writer.owner, { screen });
 }

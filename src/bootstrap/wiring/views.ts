@@ -2,7 +2,7 @@ import { updateControls } from "./update.ts";
 import type { Disposable, Owned } from "../../features/routing/owned.ts";
 import type { NoticesPorts } from "../../features/notices/mount.ts";
 import type { PrompterVisibilityPorts, PrompterOpenPorts, PrompterPorts } from "../../features/prompter/mount.ts";
-import type { IdentityPorts, ServerPorts, DrivePorts } from "../../features/settings/mount.ts";
+import type { IdentityPorts } from "../../features/settings/mount.ts";
 import type { AppearancePorts } from "../../features/settings/appearance.ts";
 import type { HistoryPorts } from "../../features/history/mount.ts";
 import type { SaveRecoveryPorts, ConflictsPorts, SavePorts, FileMenuPorts } from "../../features/file-menu/mount.ts";
@@ -13,7 +13,7 @@ import { owned } from "../../features/routing/owned.ts";
 import { runFromButton, saveFromButton } from "../../legacy/app-actions.ts";
 import { mountNotices } from "../../features/notices/mount.ts";
 import { mountPrompterVisibility, mountPrompterOpen, mountPrompter } from "../../features/prompter/mount.ts";
-import { mountIdentity, mountServer, mountDrive } from "../../features/settings/mount.ts";
+import { mountIdentity } from "../../features/settings/mount.ts";
 import { mountAppearance } from "../../features/settings/appearance.ts";
 import { mountHistory } from "../../features/history/mount.ts";
 import { mountSaveRecovery, mountConflicts, mountSave, mountFileMenu } from "../../features/file-menu/mount.ts";
@@ -44,28 +44,6 @@ import { panelWidths, preferences } from "../../legacy/preferences-bridge.ts";
 import { sidePanels } from "../../legacy/panels-bridge.ts";
 import { SIDE_PANEL_IDS } from "../../application/preferences/panel-widths.ts";
 import { mountPanels } from "../../features/panels/mount.ts";
-import {
-  armDriveDelete,
-  armServerDelete,
-  captureServerPicker,
-  closeDriveModal,
-  closeServerPicker,
-  driveCancelRename,
-  driveConnect,
-  driveCreateFolder,
-  driveCrumbTo,
-  driveItemById,
-  driveListCurrent,
-  driveOpenItem,
-  driveSaveCredsFromForm,
-  driveSaveRename,
-  driveShowCredsForm,
-  driveSignIn,
-  driveSignOut,
-  driveStartRename,
-  driveUploadFiles,
-  toggleDriveNewFolder
-} from "../../js/13-hosted.js";
 import { fileConflicts, saveDoc } from "../../legacy/save-bridge.ts";
 import { deliverFile } from "../../legacy/file-delivery.ts";
 import { localFileMenuControls, localFilesOwner, importSavingOwner } from "./local-files.ts";
@@ -73,7 +51,6 @@ import { currentMergeReview } from "./merge-review.ts";
 import { toggleFileMenu, toggleSubmenu } from "./file-menu-controls.ts";
 import { connectWriter } from "./writer.ts";
 import { prompterControls } from "./prompter.ts";
-import { routeServerOpen } from "./desktop.ts";
 import { finishMarkdownRowChoice } from "./project-files.ts";
 import { onRootClick, routeRootClick } from "./editor.ts";
 
@@ -172,48 +149,6 @@ export function mountHistoryFeature(): ReturnType<typeof mountHistory> {
       onRootClick: onRootClick
     };
     return mountHistory({ window: window, ports: ports });
-  });
-}
-
-export function mountServerFeature(): ReturnType<typeof mountServer> {
-  return replaceViewMount("mountServer", function () {
-    const ports: ServerPorts = {
-      closeServerPicker: closeServerPicker,
-      openServerDoc: function (id) { void openDocument({ kind: "server", id: id }); },
-      armServerDelete: armServerDelete,
-      routeOpen: routeServerOpen,
-      capture: function () {
-        const ownsDocument = captureViewDocument();
-        const ownsModal = captureServerPicker();
-        return function () { return ownsDocument() && ownsModal(); };
-      }
-    };
-    return mountServer({ window: window, ports: ports });
-  });
-}
-
-export function mountDriveFeature(): ReturnType<typeof mountDrive> {
-  return replaceViewMount("mountDrive", function () {
-    const ports: DrivePorts = {
-      closeDriveModal: closeDriveModal,
-      driveSaveCredsFromForm: driveSaveCredsFromForm,
-      driveShowCredsForm: driveShowCredsForm,
-      driveConnect: driveConnect,
-      driveCrumbTo: driveCrumbTo,
-      driveOpenItem: driveOpenItem,
-      driveListCurrent: driveListCurrent,
-      toggleDriveNewFolder: toggleDriveNewFolder,
-      driveCreateFolder: driveCreateFolder,
-      driveSignIn: driveSignIn,
-      driveSignOut: driveSignOut,
-      driveStartRename: driveStartRename,
-      driveSaveRename: driveSaveRename,
-      driveCancelRename: driveCancelRename,
-      driveItemById: driveItemById,
-      armDriveDelete: armDriveDelete,
-      driveUploadFiles: driveUploadFiles
-    };
-    return mountDrive({ window: window, ports: ports });
   });
 }
 

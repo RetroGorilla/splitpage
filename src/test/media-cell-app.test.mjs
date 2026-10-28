@@ -61,7 +61,6 @@ function joinFixture() {
 let opened = 0;
 async function open(doc) {
   if (viewFlags().writerOpen()) writer.closeWriter();
-  window.__hostedTest.setSession({ role: "edit", docId: null });
   const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows(doc || fixture())))], "media-" + (++opened) + ".splitpage", { lastModified: opened });
   await openDocument({ kind: "file", file: file, handle: null, options: { skipSnapshot: true } });
   flushEdits();

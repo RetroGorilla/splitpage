@@ -102,7 +102,6 @@ const RESOURCE_ROWS = {
     "#btn-gear pointerenter/B", "#btn-gear focus/B", "#btn-gear pointerleave/B",
     "#btn-broll pointerenter/B", "#btn-broll focus/B", "#btn-broll pointerleave/B",
     "#btn-comments pointerenter/B", "#btn-comments focus/B", "#btn-comments pointerleave/B",
-    "#btn-collab pointerenter/B", "#btn-collab focus/B", "#btn-collab pointerleave/B",
     "#doc-title mouseenter/B", "window resize/B", "window scroll/B"
   ],
   cellReach: ["#rows mousedown/B"],
@@ -145,11 +144,11 @@ app.startApp(await rewireApp());
 await startupReady();
 const second = minus(snapshot(), stopped);
 
-test("the ledger has 294 rows: 204 registrations, and 90 delegated branches and startup or resource rows", () => {
+test("the ledger has 282 rows: 192 registrations, and 90 delegated branches and startup or resource rows", () => {
   const rows = ledgerRows();
-  assert.equal(rows.reduce((n, r) => n + r.count, 0), 294);
+  assert.equal(rows.reduce((n, r) => n + r.count, 0), 282);
   const registrations = rows.reduce((n, r) => n + r.registrations.length, 0);
-  assert.equal(registrations, 204);
+  assert.equal(registrations, 192);
   for (const row of rows) {
     if (row.registrations.length) assert.equal(row.registrations.length, row.count, `${row.step}: every row of a registration line is a registration`);
   }

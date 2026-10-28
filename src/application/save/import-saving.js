@@ -6,14 +6,13 @@ function startImportSaving(ports) {
     }
   }
   var { importHome, amendHome } = ports.location;
-  var onServerDoc = ports.onServerDoc;
   var { request: requestSave, unsavedFor } = ports.saving;
   var buildFileData = ports.buildFileData;
   var checkFileConflict = ports.files.checkConflict;
   var deliverFile = ports.delivery.deliver;
   var showToast = ports.notices.show;
 function saveBackItemState() {
-  var imported = onServerDoc() ? null : importHome();
+  var imported = importHome();
   if (!imported) return { hidden: false, disabled: true, reason: "", label: "Save to file" };
   return { hidden: false, disabled: false, reason: "",
            label: imported.inPlace ? "Save to " + imported.name : "Save a new copy of " + imported.name };

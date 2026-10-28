@@ -1,7 +1,6 @@
 import { refsIn } from "../../../shared/blob-policy.js";
 import { normalizeDocId } from "../../../shared/doc-id-policy.js";
-import { SERVER_RESUME_KEY } from "../location/server-status.ts";
-import type { ConflictStash, KeyValueStorage, StashedWork } from "./conflict-stash.ts";
+import type { ConflictStash, StashedWork } from "./conflict-stash.ts";
 
 export interface StashMerged<D, R> {
   readonly state: D;
@@ -14,7 +13,6 @@ export type StashMerge<D, R> = (request: Readonly<Record<string, unknown>>) => S
 
 export interface StashedWorkPorts<D, R> {
   readonly stash: ConflictStash;
-  readonly sessionStorage: () => KeyValueStorage | null | undefined;
   readonly markWrittenOut: () => void;
   readonly copy: (doc: D) => D;
   readonly merge: StashMerge<D, R>;
@@ -42,22 +40,12 @@ function docIdOf(doc: unknown): unknown {
 }
 
 export function createStashedWork<D extends { docId: string }, R>(ports: StashedWorkPorts<D, R>): ApplyStashedWork<D, R> {
-  function resumePending(): boolean {
-    try {
-      const storage = ports.sessionStorage();
-      return !!(storage && storage.getItem(SERVER_RESUME_KEY));
-    } catch {
-      return false;
-    }
-  }
-
   return function applyStashedWork(loaded, override, apply) {
     const stash = override || ports.stash.read();
     if (!override) ports.stash.dropReloadGuard();
     if (!stash || !stash.mine || !Array.isArray(rowsOf(stash.mine))) return { state: loaded, report: null, snapshot: null };
     ports.stash.accept(stash, loaded);
     if (!override) {
-      if (resumePending()) return { state: loaded, report: null, snapshot: null };
       const stashId = normalizeDocId(docIdOf(stash.mine));
       if (stashId) {
         loaded.docId = stashId;

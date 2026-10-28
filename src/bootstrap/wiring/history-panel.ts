@@ -7,7 +7,7 @@ import type { SessionMergeOwner } from "../../application/session/session-merge-
 import { documentReader } from "./ports/document.ts";
 import { panelControl as panels } from "./ports/panels.ts";
 import { notices } from "./ports/effects.ts";
-import { presence } from "./ports/presence.ts";
+import { personColors } from "./ports/person-colors.ts";
 import { historyPreferences } from "./ports/preferences.ts";
 import { ids } from "./ports/identity.ts";
 import { screen } from "./ports/screen.ts";
@@ -24,7 +24,7 @@ export function mountHistoryPanelFeature(merge: Pick<SessionMergeOwner, "restore
       history: { listDocHistory: (...args) => historyOwner().listDocHistory(...args) },
       document: documentReader,
       merge: { restoreMergeSnapshot: (...args) => merge.restoreMergeSnapshot(...args) },
-      panels, effects: notices, presence, ids,
+      panels, effects: notices, personColors, ids,
       preferences: historyPreferences
     };
     return startHistoryPanel(ports);

@@ -41,7 +41,6 @@ export function mountFileMenuExportFeature(capture: FileMenuExportPorts["capture
       },
       fileName: (format, options) => localFileMenuControls().exportFileName(format, localFileMenuControls().exportBaseName(), options),
       exportAction: (...args: Parameters<ReturnType<typeof localFileMenuControls>["runExportAction"]>) => localFileMenuControls().runExportAction(...args),
-      share: () => { localFileMenuControls().handleFileMenuAction("collaborate"); },
       onMenuRefresh: onFileMenuRefresh
     };
     return mountExportDialog(ports) as FileMenuExportMount;

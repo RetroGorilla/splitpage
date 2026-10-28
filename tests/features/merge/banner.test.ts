@@ -108,18 +108,15 @@ test("show fills the banner, marks conflicted rows and offers Review conflicts o
   m.banner.dispose();
 });
 
-test("undo: \"saved\" adds the note and title; undo: false hides the button; the default title comes back", () => {
+test("undo: false hides the button; by default it shows with the default title", () => {
   const win = page();
-  const m = mount(win, { undo: { id: "s1", docId: "d1", source: "server-conflict" } });
-  m.banner.show(report({ rowsFromMe: 1 }), { undo: "saved" });
-  assert.equal(el(win, "merge-undo").hidden, false);
-  assert.match(el(win, "merge-summary").textContent ?? "", /the next save replaces the merged copy on the server\.$/);
-  assert.notEqual(el(win, "merge-undo").title, DEFAULT_TITLE);
+  const m = mount(win, { undo: { id: "s1", docId: "d1", source: "stash" } });
   m.banner.show(report({ rowsFromMe: 1 }), { undo: false });
   assert.equal(el(win, "merge-undo").hidden, true);
   assert.equal(el(win, "merge-undo").title, DEFAULT_TITLE);
   m.banner.show(report({ rowsFromMe: 1 }));
   assert.equal(el(win, "merge-undo").hidden, false);
+  assert.equal(el(win, "merge-undo").title, DEFAULT_TITLE);
   assert.equal(el(win, "merge-summary").textContent, " Kept 1 row you edited.");
   m.banner.dispose();
 });
@@ -137,13 +134,13 @@ test("× hides the banner; Review conflicts hides it and opens the comments", ()
   m.banner.dispose();
 });
 
-test("Undo merge arms first, disarms after its window, and restores on the second click with the source's rules", async () => {
+test("Undo merge arms first, disarms after its window, and restores on the second click", async () => {
   const win = page();
-  const undo = { id: "s1", docId: "d1", source: "server-conflict" };
+  const undo = { id: "s1", docId: "d1", source: "stash" };
   const m = mount(win, { undo });
   const btn = el(win, "merge-undo");
   btn.click();
-  assert.equal(btn.textContent, "Drop their changes?");
+  assert.equal(btn.textContent, "Discard my edits?");
   assert.ok(btn.classList.contains("armed"));
   await new Promise((r) => setTimeout(r, ARM_MS + 50));
   assert.equal(btn.textContent, "Undo merge");
@@ -154,17 +151,14 @@ test("Undo merge arms first, disarms after its window, and restores on the secon
   btn.click();
   assert.equal(btn.textContent, "Undo merge");
   assert.equal(m.held.length, 1);
-  assert.deepEqual(at(m.held, 0).request, {
-    force: false, local: true,
-    restoredText: "Your version is back, unsaved. The next save replaces the merged copy on the server."
-  });
+  assert.deepEqual(at(m.held, 0).request, { force: false, local: false, restoredText: undefined });
   at(m.held, 0).answer("ok");
   await settle();
   assert.deepEqual(m.said, []);
   m.banner.dispose();
 });
 
-test("a stash's Undo merge asks to discard and restores as a server save would", () => {
+test("a stash's Undo merge asks to discard and restores without a local note", () => {
   const win = page();
   const m = mount(win, { undo: { id: "s2", docId: "d1", source: "stash" } });
   el(win, "merge-undo").click();

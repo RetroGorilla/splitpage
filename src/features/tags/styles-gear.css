@@ -35,7 +35,6 @@
     padding: 16px 20px calc(16px + env(safe-area-inset-bottom));
     border-top: 1px solid var(--border); border-bottom: 0;
   }
-  body.is-review #gear-panel .gear-quickadd { display: none; }
   #gear-panel .gear-quickadd label {
     margin: 0;
     font-size: 12.5px; line-height: 16px; font-weight: 450; color: var(--text-faint);
