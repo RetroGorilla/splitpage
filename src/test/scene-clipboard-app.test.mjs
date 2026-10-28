@@ -223,31 +223,6 @@ test("on a server document the pasted comments land in a second transaction, as 
   }
 });
 
-test("in review mode a scene paste, cut and delete are refused: nothing published, the document as it was", async () => {
-  await open();
-  const cd = copiedScenes(["r1"]);
-  window.__hostedTest.setSession({ role: "review", docId: "scene-clip-review" });
-  try {
-    const before = JSON.stringify(currentDocument());
-    const was = counters();
-    const w = watch();
-    try {
-      assert.equal(pasteScenesAt(cd, cellOf("r3", "audioText")), true);
-      window.__sceneSelectTest.select("r1", "r1");
-      cutEvent(clipboardWith({}));
-      window.__sceneSelectTest.select("r1", "r1");
-      deleteSelectedScenes();
-    } finally {
-      w.stop();
-    }
-    assert.equal(JSON.stringify(currentDocument()), before);
-    assert.equal(liveSession().generation(), was.generation);
-    assert.deepEqual(w.seen, []);
-  } finally {
-    window.__hostedTest.setSession({ role: "edit", docId: null });
-  }
-});
-
 test("a scene paste that fails part way is thrown and leaves the document, the edit count and undo as they were", async () => {
   await open();
   const cd = copiedScenes(["r1", "r2"]);

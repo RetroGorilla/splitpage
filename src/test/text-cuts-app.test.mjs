@@ -24,7 +24,6 @@ const { setTagNotes } = await import("../features/tags/panels.js");
 const { openBrollPanel } = await import("../features/broll/panel.js");
 const { sidePanels } = await import("../legacy/panels-bridge.ts");
 const { closeExportDialog, openExportDialog } = await import("../bootstrap/wiring/file-menu-export-controls.ts");
-const { presenceInitials } = await import("../js/13a-presence.js");
 const { buildMarkdownProject, parseMarkdownProject, applyMarkdownProject } = await import("../adapters/formats/project-file.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
@@ -169,13 +168,6 @@ test("02d a video link's label never ends in half an emoji (#434)", () => {
 test("11 the import preview never ends in half an emoji (#434)", () => {
   assert.equal(truncateForPreview(x(33) + GRIN + "a", 34), x(33) + "…");
   assert.equal(truncateForPreview(x(32) + GRIN + "a", 34), x(32) + GRIN + "…");
-});
-
-test("13a presence initials take whole characters (#434)", () => {
-  assert.equal(presenceInitials(GRIN + "abc"), GRIN + "A");
-  assert.equal(presenceInitials("a" + GRIN), "A" + GRIN);
-  assert.equal(presenceInitials(GRIN + "x " + GRIN + "y"), GRIN + GRIN);
-  assert.equal(presenceInitials("ann lee"), "AL");
 });
 
 test("18c the export preview never cuts a name or a scene in half an emoji (#434)", () => {

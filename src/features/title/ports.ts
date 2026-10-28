@@ -1,7 +1,6 @@
 import type { SessionListener } from "../../application/session/document-session.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
-import type { ReviewFacts } from "../../application/collaboration/review.ts";
-import type { Presence } from "../../application/collaboration/presence.ts";
+import type { PersonColorLookup } from "../../core/document/person-colors.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
@@ -49,8 +48,7 @@ export interface SaveStatusMount {
 export interface DocumentChromePorts {
   readonly document: Pick<DocumentReader, "current">;
   readonly preferences: Pick<Preferences, "commentAuthor" | "myColor" | "nameOf" | "setCommentAuthor" | "setMyColor">;
-  readonly presence: Pick<Presence, "personColor">;
-  readonly review: Pick<ReviewFacts, "reviewing">;
+  readonly personColors: PersonColorLookup;
   readonly edits: Pick<DocumentEdits, "edit">;
   readonly notices: Pick<NoticePort, "show">;
 }
@@ -60,7 +58,6 @@ export interface DocumentChromeControl {
   readonly identityChipListeners: () => {
     readonly session: SessionListener;
     readonly preference: (change: PreferenceChange) => void;
-    readonly colours: () => void;
   };
   readonly personSwatchesHtml: (name: string, radioName?: string, legendClass?: string) => string;
   readonly promptForName: () => void;

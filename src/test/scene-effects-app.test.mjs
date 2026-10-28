@@ -56,99 +56,15 @@ test("a status click on a scene that is gone adds none", () => {
   assert.equal(saveChanges(), seq);
 });
 
-test("in review mode a scene length is refused with a warning toast and has no other effect", async () => {
-  const { liveSession } = await import("../legacy/session-bridge.ts");
-  const { flushEdits, undoSizes } = await import("../legacy/undo-bridge.ts");
-  window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
-  flushEdits();
-  const host = document.getElementById("toast-host");
-  host.textContent = "";
-  const seq = saveChanges(), dirty = unsavedChanges(), generation = liveSession().generation(), sizes = undoSizes();
-  const before = JSON.stringify(currentDocument());
-  assert.equal(setSceneLength("r1", 30), false);
-  const toasts = host.querySelectorAll(".toast");
-  assert.equal(toasts.length, 1);
-  assert.equal(toasts[0].textContent, "This is a review copy — comment on a scene instead of changing its length.");
-  assert.ok(toasts[0].classList.contains("warn"));
-  await Promise.resolve();
-  flushEdits();
-  assert.equal(JSON.stringify(currentDocument()), before);
-  assert.equal(saveChanges(), seq);
-  assert.equal(unsavedChanges(), dirty);
-  assert.equal(liveSession().generation(), generation);
-  assert.deepEqual(undoSizes(), sizes);
-});
-
-test("in review mode a status click is refused with a warning toast and has no other effect", async () => {
-  const { liveSession } = await import("../legacy/session-bridge.ts");
-  const { flushEdits, undoSizes } = await import("../legacy/undo-bridge.ts");
-  window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
-  flushEdits();
-  const host = document.getElementById("toast-host");
-  host.textContent = "";
-  const seq = saveChanges(), dirty = unsavedChanges(), generation = liveSession().generation(), sizes = undoSizes();
-  const before = JSON.stringify(currentDocument());
-  cycleRowStatus("r1");
-  const toasts = host.querySelectorAll(".toast");
-  assert.equal(toasts.length, 1);
-  assert.equal(toasts[0].textContent, "This is a review copy — comment on a scene instead of changing its status.");
-  assert.ok(toasts[0].classList.contains("warn"));
-  await Promise.resolve();
-  flushEdits();
-  assert.equal(JSON.stringify(currentDocument()), before);
-  assert.equal(saveChanges(), seq);
-  assert.equal(unsavedChanges(), dirty);
-  assert.equal(liveSession().generation(), generation);
-  assert.deepEqual(undoSizes(), sizes);
-});
-
-async function reviewClick(selector, wording) {
-  const { liveSession } = await import("../legacy/session-bridge.ts");
-  const { flushEdits, undoSizes } = await import("../legacy/undo-bridge.ts");
-  window.__hostedTest.setSession({ role: "review", docId: "shared-doc" });
-  flushEdits();
-  const target = document.querySelector(selector);
-  assert.ok(target, selector + " is on the page");
-  const host = document.getElementById("toast-host");
-  host.textContent = "";
-  const seq = saveChanges(), dirty = unsavedChanges(), generation = liveSession().generation(), sizes = undoSizes();
-  const before = JSON.stringify(currentDocument());
-  target.dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true }));
-  const toasts = host.querySelectorAll(".toast");
-  assert.equal(toasts.length, 1);
-  assert.equal(toasts[0].textContent, wording);
-  assert.ok(toasts[0].classList.contains("warn"));
-  await Promise.resolve();
-  flushEdits();
-  assert.equal(JSON.stringify(currentDocument()), before);
-  assert.equal(saveChanges(), seq);
-  assert.equal(unsavedChanges(), dirty);
-  assert.equal(liveSession().generation(), generation);
-  assert.deepEqual(undoSizes(), sizes);
-}
-
-test("in review mode a click on the status lamp a reviewer sees shows the status toast and changes nothing", async () => {
-  await reviewClick('#rows .row[data-id="r1"] .status-btn.is-static .status-dot',
-    "This is a review copy — comment on a scene instead of changing its status.");
-  assert.equal(document.querySelectorAll('#rows [data-action="cycle-status"]').length, 0);
-});
-
-test("in review mode a click on a scene's length opens no editor and shows the length toast", async () => {
-  await reviewClick('#rows .row[data-id="r1"] .row-read',
-    "This is a review copy — comment on a scene instead of changing its length.");
-  assert.equal(document.querySelector("#rows .row-read-input"), null);
-});
-
-function backToEditMode() {
-  window.__hostedTest.setSession({ role: "edit", docId: null });
+function clearToasts() {
   const host = document.getElementById("toast-host");
   host.textContent = "";
   return host;
 }
 
-test("in edit mode a click on a scene's length opens the editor and shows no toast", async () => {
+test("a click on a scene's length opens the editor and shows no toast", async () => {
   const { flushEdits } = await import("../legacy/undo-bridge.ts");
-  const host = backToEditMode();
+  const host = clearToasts();
   flushEdits();
   const target = document.querySelector('#rows .row[data-id="r1"] .row-read');
   assert.ok(target, "the length button is on the page");
@@ -160,9 +76,9 @@ test("in edit mode a click on a scene's length opens the editor and shows no toa
   assert.equal(host.querySelectorAll(".toast").length, 0);
 });
 
-test("in edit mode a click on the status button cycles the status and shows no toast", async () => {
+test("a click on the status button cycles the status and shows no toast", async () => {
   const { flushEdits } = await import("../legacy/undo-bridge.ts");
-  const host = backToEditMode();
+  const host = clearToasts();
   flushEdits();
   const target = document.querySelector('#rows .row[data-id="r1"] [data-action="cycle-status"]');
   assert.ok(target, "the status button is on the page");

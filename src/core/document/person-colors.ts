@@ -2,6 +2,10 @@ import { cappedName, settledNames } from "./text-policy.ts";
 
 export type PersonColors = Record<string, string>;
 
+export interface PersonColorLookup {
+  readonly personColor: (seed: unknown) => string;
+}
+
 export const PERSON_COLORS: readonly string[] = [
   "#80BDFB", "#F9B64F", "#CBA1FA", "#73D4AC",
   "#F89DC9", "#C8DE63", "#EF958E", "#64D1D7"

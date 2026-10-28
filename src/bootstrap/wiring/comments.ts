@@ -3,7 +3,6 @@ import { documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits, selection as portSelection } from "./ports/editing.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { preferenceValues as portPreferences } from "./ports/preferences.ts";
-import { review as portReview } from "./ports/location.ts";
 import { panelControl as portSidePanels } from "./ports/panels.ts";
 import { text as portText } from "./ports/text.ts";
 import { ids as portIds, clock as portClock } from "./ports/identity.ts";
@@ -15,7 +14,7 @@ import { startComments as mountCommentState } from "../../features/comments/comm
 import type { CommentStatePorts } from "../../features/comments/ports.ts";
 
 import { keepSnapshot } from "../../legacy/transition-bridge.ts";
-import { presence } from "../../legacy/presence-bridge.ts";
+import { personColors as portPersonColors } from "./ports/person-colors.ts";
 import { shotHiding } from "./shot-hiding.ts";
 import { onCommentsSent } from "../../js/13-hosted.js";
 import { resetDraftHistory } from "../../features/editing/draft-edit.js";
@@ -140,7 +139,6 @@ export function mountCommentsLogicFeature(): ReturnType<typeof mountCommentState
       edits: portEdits,
       notices: portNotices,
       preferences: portPreferences,
-      review: portReview,
       sidePanels: portSidePanels,
       text: portText,
       ids: portIds,
@@ -150,7 +148,7 @@ export function mountCommentsLogicFeature(): ReturnType<typeof mountCommentState
       deletion: portDeletion,
       ownership: portOwnership,
       history: { keep: keepSnapshot },
-      presence: { personColor: (name) => presence().personColor(name) },
+      personColors: portPersonColors,
       shots: { reveal: (id) => shotHiding().reveal(id) },
       pictures: portPictures,
       clearDraftUndo: resetDraftHistory,

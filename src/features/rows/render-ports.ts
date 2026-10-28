@@ -1,6 +1,5 @@
 import type { ActionRegistry } from "../../application/actions.ts";
-import type { Presence } from "../../application/collaboration/presence.ts";
-import type { ReviewFacts } from "../../application/collaboration/review.ts";
+import type { PersonColorLookup } from "../../core/document/person-colors.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
 import type { DeleteConfirm } from "../../application/editing/delete-confirm.ts";
 import type { PaintGuard, UndoGuard } from "../../application/editing/paint-guard.ts";
@@ -51,8 +50,7 @@ export interface RowsRenderPorts {
   readonly undo: Pick<Undo, "track">;
   readonly hiding: () => Pick<ShotHiding, "groups">;
   readonly pictures: Pick<PictureStore, "imgHtml">;
-  readonly presence: () => Pick<Presence, "personColor">;
-  readonly review: Pick<ReviewFacts, "reviewing">;
+  readonly personColors: PersonColorLookup;
   readonly preferences: () => Pick<Preferences, "clock">;
   readonly view: () => Pick<ViewFlags, "writerOpen">;
   readonly notices: NoticePort;

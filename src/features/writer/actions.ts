@@ -1,9 +1,6 @@
 import type { ActionDefinition, Availability } from "../../application/actions.ts";
-import { VIEWING_ONLY } from "../../application/collaboration/review.ts";
 import type { WriterActionPorts } from "./ports.ts";
 import { availableUnless, everyOverlayBut } from "../../application/screen.ts";
-
-const VIEWING_ONLY_LISTED = "Viewing only — the writer changes the script";
 
 function shownButton(id: string): boolean {
   const button = document.getElementById(id);
@@ -22,11 +19,9 @@ export function writerActions(owner: () => { readonly openWriter: (keepMark?: nu
       group: "View",
       icon: "i-pen",
       words: "writer narration word processor audio column",
-      availability: (source) => {
+      availability: () => {
         const screen = availableUnless(["loading", ...everyOverlayBut("writer")], ports.screen());
-        const refused: Availability = { enabled: false, reason: source === "command-menu" ? VIEWING_ONLY_LISTED : VIEWING_ONLY };
-        const availability = screen.enabled && ports.review.reviewing() ? refused : screen;
-        const mounted = owner() ? availability : { ...availability, enabled: false };
+        const mounted = owner() ? screen : { ...screen, enabled: false };
         return withButton("btn-write", mounted);
       },
       run: () => { owner()?.openWriter(); }

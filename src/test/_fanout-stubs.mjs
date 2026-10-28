@@ -1,5 +1,5 @@
 import { viewFlags } from "../legacy/preferences-bridge.ts";
-import { REVIEW_ONLY, currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
+import { currentDocument, readSession, runCommand, sessionStamps } from "../legacy/session-bridge.ts";
 import { productionReaders as documentReaders } from "../legacy/document-ports.ts";
 import { hasSetLength as coreHasSetLength } from "../core/document/timing.ts";
 import { noteEdit } from "../legacy/undo-bridge.ts";
@@ -21,14 +21,13 @@ export function wireSession(effects) {
 export const calls = [];
 export const stamped = [];
 export const dirtied = [];
-const answers = { renderRow: true, reviewMode: false, noteEdit: false };
+const answers = { renderRow: true, noteEdit: false };
 
 export function resetFanout(opts) {
   calls.length = 0;
   stamped.length = 0;
   dirtied.length = 0;
   answers.renderRow = opts && "renderRow" in opts ? opts.renderRow : true;
-  answers.reviewMode = !!(opts && opts.reviewMode);
   answers.noteEdit = !!(opts && opts.noteEdit);
   viewFlags().setHideShot(!!(opts && opts.hideShot));
 }
@@ -73,11 +72,6 @@ export function scheduleBrollRefresh() { calls.push("scheduleBrollRefresh"); }
 export function queueAutoSave() { calls.push("queueAutoSave"); }
 export function showToast(text) { calls.push("showToast:" + text); }
 
-export function reviewMode() {
-  calls.push("reviewMode");
-  return answers.reviewMode;
-}
-
 export function undo() { calls.push("undo"); }
 export function redo() { calls.push("redo"); }
 export function cssAttr(v) { return String(v); }
@@ -94,7 +88,6 @@ export function readTimePorts() {
     edits: { run: runCommand, stamps: sessionStamps },
     undo: { undo, redo },
     paint: { afterThisPaint },
-    review: { reviewing: reviewMode },
     notices: { show: showToast }
   };
 }
@@ -103,9 +96,7 @@ export function sceneStatusPorts() {
   return {
     document: { current: currentDocument, read: readSession },
     edits: { run: runCommand, stamps: sessionStamps },
-    reviewRefusal: REVIEW_ONLY,
     text: { productionReaders: documentReaders },
-    notices: { show: showToast },
     hideShot: () => viewFlags().hideShot(),
     shots: shotHiding(),
     element: (id) => document.getElementById(id)

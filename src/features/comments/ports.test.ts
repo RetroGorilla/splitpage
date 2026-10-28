@@ -5,7 +5,7 @@ import type { CommentStatePorts } from "./ports.ts";
 import { startComments, captureCommentComposer, openCommentComposer, postComment } from "./comments.js";
 
 test("tagging help listeners stop on disposal and install once on remount", () => {
-  const fake = fixture(false);
+  const fake = fixture();
   const card = document.createElement("div");
   card.id = "tagging-help";
   const dismiss = document.createElement("button");
@@ -25,7 +25,7 @@ test("tagging help listeners stop on disposal and install once on remount", () =
   next.dispose();
 });
 
-function fixture(reviewing: boolean) {
+function fixture() {
   document.body.innerHTML = '<div id="comment-modal" hidden><div id="comment-modal-quote"></div><input id="comment-name"><div id="comment-body-editable"></div></div><div id="comments-panel" hidden></div>';
   const calls: string[] = [];
   const listeners = new Set<() => void>();
@@ -41,7 +41,6 @@ function fixture(reviewing: boolean) {
       commentFilter: () => ({ mode: "open", assignee: "" }), setCommentFilter: () => {},
       taggingHelpShown: () => {}, taggingHelpDismissed: () => {}
     },
-    review: { reviewing: () => reviewing, refuseInReview: () => false },
     sidePanels: { open: () => {}, close: () => {} },
     text: {
       inertBody: (html) => { const body = document.createElement("div"); body.innerHTML = String(html); return body; },
@@ -49,7 +48,7 @@ function fixture(reviewing: boolean) {
     },
     ids: { id: (prefix) => prefix + "_new" },
     clock,
-    saves: { resume: () => { calls.push("resume"); }, dueNow: () => { calls.push("dueNow"); } },
+    saves: { dueNow: () => { calls.push("dueNow"); } },
     selection: { dropLink: () => {} },
     deletion: { armedId: () => null, arm: () => {}, disarm: () => {} },
     ownership: {
@@ -57,7 +56,7 @@ function fixture(reviewing: boolean) {
       stillOwns: () => true
     },
     history: { keep: () => {} },
-    presence: { personColor: () => "#000000" },
+    personColors: { personColor: () => "#000000" },
     shots: { reveal: () => {} },
     pictures: { imgHtml: () => "" },
     clearDraftUndo: () => {},
@@ -66,28 +65,26 @@ function fixture(reviewing: boolean) {
   return { ports, calls, listeners };
 }
 
-for (const reviewing of [false, true]) {
-  test("posting requests an immediate save" + (reviewing ? " after resuming review autosave" : ""), () => {
-    const fake = fixture(reviewing);
-    const owner = startComments(fake.ports);
-    try {
-      openCommentComposer({ id: "c_new", rowId: "r1", field: "audioText", quotedText: "Words" });
-      const body = document.getElementById("comment-body-editable");
-      assert.ok(body);
-      body.innerHTML = "A comment";
-      postComment();
-      assert.deepEqual(fake.calls, reviewing ? ["edit", "resume", "dueNow"] : ["edit", "dueNow"]);
-      assert.equal(document.getElementById("comment-modal")?.hidden, true);
-      assert.equal(body.innerHTML, "");
-    } finally {
-      owner.dispose();
-    }
-    assert.equal(fake.listeners.size, 0);
-  });
-}
+test("posting requests an immediate save", () => {
+  const fake = fixture();
+  const owner = startComments(fake.ports);
+  try {
+    openCommentComposer({ id: "c_new", rowId: "r1", field: "audioText", quotedText: "Words" });
+    const body = document.getElementById("comment-body-editable");
+    assert.ok(body);
+    body.innerHTML = "A comment";
+    postComment();
+    assert.deepEqual(fake.calls, ["edit", "dueNow"]);
+    assert.equal(document.getElementById("comment-modal")?.hidden, true);
+    assert.equal(body.innerHTML, "");
+  } finally {
+    owner.dispose();
+  }
+  assert.equal(fake.listeners.size, 0);
+});
 
 test("disposing cancels composer focus and releases the refresh callback, then remounts once", async () => {
-  const fake = fixture(false);
+  const fake = fixture();
   const owner = startComments(fake.ports);
   openCommentComposer({ id: "c_new", rowId: "r1", field: "audioText", quotedText: "Words" });
   const resolveComposer = captureCommentComposer();

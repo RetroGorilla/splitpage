@@ -141,7 +141,7 @@ export function startReadTime(given) {
   }
   listen("mousedown", function (e) {
     var btn = e.target.closest && e.target.closest(".row-read");
-    if (btn && btn.getAttribute("aria-disabled") !== "true") e.preventDefault();
+    if (btn) e.preventDefault();
   });
   listen("click", function (e) {
     var btn = e.target.closest && e.target.closest(".row-read");

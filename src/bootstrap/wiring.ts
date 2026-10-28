@@ -29,7 +29,7 @@ import { wireExportKit } from "./wiring/export-kit.ts";
 export { mountReadTimeFeature } from "./wiring/read-time.ts";
 export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
 export { mountDraftEditFeature } from "./wiring/draft-edit.ts";
-export { mountRundownFeature, mountRundownPresenceFeature, mountTargetFeature } from "./wiring/rundown.ts";
+export { mountRundownFeature, mountTargetFeature } from "./wiring/rundown.ts";
 export { mountHelpFeature } from "./wiring/help.ts";
 export { derivedRecordsPlan, mountBrollFeature, mountBrollPanelStateFeature } from "./wiring/broll.ts";
 export { mountFindFeature } from "./wiring/find.ts";

@@ -41,14 +41,13 @@ function harness() {
   const state = {
     document: documentOf({ title: "Before", docId: "d-old", rows: [{ id: "a" }] }) as DocumentView | null,
     home: { kind: "none" } as ReturnType<FileMenuDropdownPorts["place"]["home"]>,
-    desktop: false, reviewing: false, browser: false, chromium: false, expired: false, linkOff: false,
+    desktop: false, browser: false, chromium: false, expired: false, linkOff: false,
     busy: false, unsaved: false, kept: { label: "kept" } as unknown, recent: [] as unknown[]
   };
   const notices = fakeNotices();
   const ports: FileMenuDropdownPorts = {
     document: { current: () => state.document },
     place: { home: () => state.home, sessionExpired: () => state.expired, linkTurnedOff: () => state.linkOff },
-    review: { reviewing: () => state.reviewing },
     desktop: () => state.desktop,
     recents: {
       available: () => true,
@@ -62,7 +61,6 @@ function harness() {
     transitions: { startNew: (arrival) => { calls.push(["startNew", arrival]); assert.ok("document" in arrival.from); return { document: arrival.from.document, forkedFrom: null, kept: false }; } },
     history: { keep: (...args) => { calls.push(["keepSnapshot", ...args]); return state.kept; } },
     notices: notices.notices,
-    menuItems: { setReason: (item, reason) => { calls.push(["setMenuItemReason", (item as Element).getAttribute("data-file-action"), reason]); } },
     saves: { busy: () => state.busy, unsaved: () => state.unsaved },
     saving: { confirmSavedNow: () => { calls.push(["confirmSavedNow"]); } },
     preferences: { defaultWpm: () => 180, clock: () => "24" },
@@ -71,7 +69,6 @@ function harness() {
     ids: { id: (prefix) => { calls.push(["makeId", prefix]); return "r-new"; } },
     prepareDocument: (raw) => { const snapshot: unknown = JSON.parse(JSON.stringify(raw)); calls.push(["migrateRows", snapshot]); return migrateRows(raw, fakeMigration().ports); },
     syncIdentity: () => { calls.push(["syncDocIdentity"]); },
-    applyReviewMode: () => { calls.push(["applyReviewMode"]); },
     longDemo: LONG_DEMO
   };
   return { ports, state, calls, notices };
@@ -97,7 +94,7 @@ test("a new script keeps the owners, arguments and order of the document-creatin
   const mounted = startFileMenu(h.ports);
   try {
     assert.equal(mounted.startNewScript(), true);
-    assert.deepEqual(names(h.calls), ["makeId", "migrateRows", "keepSnapshot", "keepSnapshot", "resetProductionPanelState", "startNew", "confirmSavedNow", "applyReviewMode", "syncDocIdentity", "sidePanels.close"]);
+    assert.deepEqual(names(h.calls), ["makeId", "migrateRows", "keepSnapshot", "keepSnapshot", "resetProductionPanelState", "startNew", "confirmSavedNow", "syncDocIdentity", "sidePanels.close"]);
     assert.deepEqual(h.calls[0], ["makeId", "r"]);
     assert.deepEqual(h.calls[1], ["migrateRows", { title: "Untitled Script", rows: [{ id: "r-new", visualText: "", imageRef: null, audioText: "" }], wordsPerMinute: 180 }]);
     assert.deepEqual(h.calls[2], ["keepSnapshot", "Before starting a new script"]);
@@ -108,7 +105,7 @@ test("a new script keeps the owners, arguments and order of the document-creatin
     assert.notEqual(next.docId, "d-old");
     assert.equal(arrival.reason, "startNewScript: a new blank document");
     assert.equal(arrival.destination, NO_DESTINATION);
-    assert.deepEqual(h.calls[9], ["sidePanels.close", "newtab-page"]);
+    assert.deepEqual(h.calls[8], ["sidePanels.close", "newtab-page"]);
     assert.deepEqual(shown(h.notices), [{ message: "New script — the one before is in Version history.", kind: "ok" }]);
   } finally { mounted.dispose(); }
 });
@@ -120,7 +117,7 @@ test("a new script over an empty document keeps no snapshot", () => {
   const mounted = startFileMenu(h.ports);
   try {
     assert.equal(mounted.startNewScript(), true);
-    assert.deepEqual(names(h.calls), ["makeId", "migrateRows", "resetProductionPanelState", "startNew", "confirmSavedNow", "applyReviewMode", "syncDocIdentity", "sidePanels.close"]);
+    assert.deepEqual(names(h.calls), ["makeId", "migrateRows", "resetProductionPanelState", "startNew", "confirmSavedNow", "syncDocIdentity", "sidePanels.close"]);
     assert.deepEqual(shown(h.notices), [{ message: "New script.", kind: "ok" }]);
   } finally { mounted.dispose(); }
 });
@@ -131,7 +128,7 @@ test("the long demo copies its starter state and creates the document through th
   const mounted = startFileMenu(h.ports);
   try {
     assert.equal(mounted.openLongDemo(), true);
-    assert.deepEqual(names(h.calls), ["migrateRows", "keepSnapshot", "keepSnapshot", "resetProductionPanelState", "startNew", "confirmSavedNow", "applyReviewMode", "syncDocIdentity", "sidePanels.close"]);
+    assert.deepEqual(names(h.calls), ["migrateRows", "keepSnapshot", "keepSnapshot", "resetProductionPanelState", "startNew", "confirmSavedNow", "syncDocIdentity", "sidePanels.close"]);
     assert.deepEqual(h.calls[0], ["migrateRows", LONG_DEMO.state]);
     assert.deepEqual(h.calls[1], ["keepSnapshot", "Before opening the long demo"]);
     const arrival = h.calls[4]?.[1] as Arrival;
@@ -155,10 +152,9 @@ test("while loading, neither a new script nor the demo touches the document owne
   } finally { mounted.dispose(); }
 });
 
-test("refreshing reads review, prompter, desktop and save facts through the ports", () => {
+test("refreshing reads prompter, desktop and save facts through the ports", () => {
   page();
   const h = harness();
-  h.state.reviewing = true;
   h.state.browser = true;
   h.state.unsaved = true;
   h.state.home = { kind: "file", name: "Script.md", format: "md", lastModified: 1 } as ReturnType<FileMenuDropdownPorts["place"]["home"]>;
@@ -166,15 +162,11 @@ test("refreshing reads review, prompter, desktop and save facts through the port
   try {
     mounted.toggleFileMenu(true);
     assert.equal(mounted.fileMenuOpen(), true);
-    const paste = win.document.querySelector<HTMLButtonElement>('[data-file-action="paste"]');
-    assert.equal(paste?.disabled, true);
-    assert.deepEqual(h.calls.find((call) => call[0] === "setMenuItemReason"), ["setMenuItemReason", "paste", "Viewing only — you can comment, but not change the script"]);
     assert.equal(win.document.getElementById("menu-present-browser")?.hidden, false);
     assert.equal(win.document.getElementById("menu-present-chromium")?.hidden, true);
     assert.equal(win.document.getElementById("menu-recent")?.hidden, true);
     assert.equal(win.document.getElementById("fm-card-name")?.textContent, "Script.md");
     assert.equal(win.document.getElementById("fm-card-meta")?.textContent, "Unsaved changes · Markdown");
-    assert.deepEqual(mounted.pasteItemState(), { hidden: false, disabled: true, reason: "Viewing only — you can comment, but not change the script" });
     mounted.toggleFileMenu(false);
     assert.equal(mounted.fileMenuOpen(), false);
   } finally { mounted.dispose(); }
@@ -286,10 +278,6 @@ test("the file menu's actions refuse while it is unmounted and reach the mounted
     assert.deepEqual(ran, ["save", "save-as", "open", "paste"]);
     await registry.invoke("new", "menu");
     assert.equal(h.calls.filter((call) => call[0] === "startNew").length, 1);
-    h.state.reviewing = true;
-    assert.equal(registry.view("paste", "native-menu")?.enabled, false);
-    assert.equal(registry.view("paste", "native-menu")?.reason, "");
-    assert.equal(registry.view("paste", "menu")?.reason, "Viewing only — you can comment, but not change the script");
   } finally {
     stop();
     owner?.dispose();
