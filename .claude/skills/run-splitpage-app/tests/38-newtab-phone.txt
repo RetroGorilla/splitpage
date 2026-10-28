@@ -28,9 +28,8 @@ expect Array.from(document.querySelectorAll('#newtab-page .newtab-card, #newtab-
 expect getComputedStyle(document.getElementById('newtab-cards')).gridTemplateColumns.split(' ').length == 1
 expect document.querySelectorAll('#newtab-cards .newtab-card').length == 4
 expect (function () { var c = document.querySelector('[data-starter="to-camera"]'); var p = c.querySelector('.newtab-preview').getBoundingClientRect(); var n = c.querySelector('.newtab-card-name').getBoundingClientRect(); return n.left > p.right; })()
-# the bar keeps both actions, on their short labels, on one line
+# the bar keeps its action on the short label
 expect getComputedStyle(document.querySelector('.newtab-long')).display == none
-expect Math.abs(document.querySelector('[data-newtab-action="join"]').getBoundingClientRect().top - document.querySelector('.newtab-bar [data-newtab-action="open"]').getBoundingClientRect().top) < 1
 expect document.querySelector('.newtab-bar [data-newtab-action="open"]').getAttribute('aria-label') == Open a file
 # 16px side gutter
 expect Math.round(document.querySelector('#newtab-cards').getBoundingClientRect().left) == 16
