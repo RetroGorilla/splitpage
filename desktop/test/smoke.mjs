@@ -1914,33 +1914,68 @@ async function caseRestoreStoredServerTabs(target, fixturesDir) {
   const fixtureA = writeFixture(fixturesDir, "case-stored-server-a.splitpage", "Stored Server Keep A", [["a", "b"]]);
   const fixtureB = writeFixture(fixturesDir, "case-stored-server-b.splitpage", "Stored Server Keep B", [["g", "h"]]);
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-"));
+  const marker = "MARKER-SERVER-DRAFT-" + Date.now();
   const win1Id = newHexId(), win2Id = newHexId();
   const tabA = newHexId(), tabServer1 = newHexId(), tabB = newHexId(), tabServer2 = newHexId();
   const serverSource = (id) => ({
     kind: "server", serverDocId: id, serverUrl: "https://docs.example.com/",
     tunnel: { userHost: "me@studio.example.com", remotePort: 8791, localPort: 8791 }, token: "f".repeat(64), role: "edit"
   });
-  writeDesktopStateFile(userDataDir, {
-    version: 2,
-    windows: [
-      {
-        windowId: win1Id, bounds: null, maximized: false, activeTabId: tabB,
-        tabs: [
-          { tabId: tabA, source: { kind: "file", absPath: fixtureA }, lastKnownTitle: "Stored Server Keep A" },
-          { tabId: tabServer1, source: serverSource("doc-one"), lastKnownTitle: "On the server" },
-          { tabId: tabB, source: { kind: "file", absPath: fixtureB }, lastKnownTitle: "Stored Server Keep B" }
-        ]
-      },
-      {
-        windowId: win2Id, bounds: null, maximized: false, activeTabId: tabServer2,
-        tabs: [{ tabId: tabServer2, source: serverSource("doc-two"), lastKnownTitle: "Also on the server" }]
-      }
-    ]
-  });
-
   let app = null;
   let cdpB = null;
+  let cdpD = null;
   try {
+    app = await launchApp(target, { label: "restore-stored-server-seed", userDataDir });
+    await waitForRows(app.cdp, 20000);
+    const draftTabId = await tabIdOfTarget(app.cdp);
+    const payload = {
+      seq: 1, editSeq: 1, title: "Server Draft", docId: null, docIdWrittenOut: false,
+      schema: 2, originKind: "untitled", fileId: null, fileKind: null,
+      importName: null, baseLastModified: null, baseSize: null,
+      stateJson: JSON.stringify({ title: "Server Draft", rows: [{ id: "r1", visualText: marker, audioText: "", status: "todo" }] }),
+      baseJson: JSON.stringify({ title: "Server Draft", rows: [] })
+    };
+    const write = await evalPage(app.cdp, "window.splitpageDesktop.writeDraft(" + JSON.stringify(payload) + ")");
+    record(tag + ": setup: a draft is written for the tab", !!write && write.ok === true, JSON.stringify(write));
+    await crashApp(app);
+    app = null;
+
+    const tabDraftDir = path.join(userDataDir, "drafts", draftTabId);
+    let planted = 0;
+    for (const name of ["current.draft", "previous.draft"]) {
+      const file = path.join(tabDraftDir, name);
+      if (!fs.existsSync(file)) continue;
+      const text = fs.readFileSync(file, "utf8");
+      const nl = text.indexOf("\n");
+      const header = JSON.parse(text.slice(0, nl));
+      header.origin = Object.assign({}, header.origin, {
+        kind: "server", filePath: null, fileName: null,
+        server: { base: "https://docs.example.com/", docId: "doc-one", rev: 3 }
+      });
+      fs.writeFileSync(file, JSON.stringify(header) + text.slice(nl));
+      planted++;
+    }
+    record(tag + ": setup: the draft header now names a server document", planted > 0, "files=" + planted);
+
+    writeDesktopStateFile(userDataDir, {
+      version: 2,
+      windows: [
+        {
+          windowId: win1Id, bounds: null, maximized: false, activeTabId: tabB,
+          tabs: [
+            { tabId: tabA, source: { kind: "file", absPath: fixtureA }, lastKnownTitle: "Stored Server Keep A" },
+            { tabId: draftTabId, source: serverSource("doc-one"), lastKnownTitle: "Server Draft" },
+            { tabId: tabServer1, source: serverSource("doc-three"), lastKnownTitle: "On the server" },
+            { tabId: tabB, source: { kind: "file", absPath: fixtureB }, lastKnownTitle: "Stored Server Keep B" }
+          ]
+        },
+        {
+          windowId: win2Id, bounds: null, maximized: false, activeTabId: tabServer2,
+          tabs: [{ tabId: tabServer2, source: serverSource("doc-two"), lastKnownTitle: "Also on the server" }]
+        }
+      ]
+    });
+
     app = await launchApp(target, { label: "restore-stored-server", userDataDir });
     cdpB = await connectTab(app, tabB);
     const settled = await pollNode(async () => {
@@ -1950,26 +1985,33 @@ async function caseRestoreStoredServerTabs(target, fixturesDir) {
       const b = w && w.tabs.find((x) => x.tabId === tabB);
       return a && b && a.title === "Stored Server Keep A" && b.title === "Stored Server Keep B" ? l : null;
     }, 20000).catch(() => null);
-    record(tag + ": the file tabs beside the server tab load their documents", !!settled);
+    record(tag + ": the file tabs beside the server tabs load their documents", !!settled);
     const listing = settled || await shell(cdpB, "listTargets", {});
     const w1 = listing.windows.find((w) => w.windowId === win1Id);
-    record(tag + ": window 1 keeps both file tabs in order and drops the server tab",
-      !!w1 && w1.tabs.length === 2 && w1.tabs[0].tabId === tabA && w1.tabs[1].tabId === tabB, JSON.stringify(w1));
+    record(tag + ": window 1 keeps the file tabs and the draft tab in order and drops the draft-less server tab",
+      !!w1 && w1.tabs.length === 3 && w1.tabs[0].tabId === tabA && w1.tabs[1].tabId === draftTabId && w1.tabs[2].tabId === tabB,
+      JSON.stringify(w1));
     record(tag + ": the active file tab is still active", !!w1 && w1.activeTabId === tabB, JSON.stringify(w1 && w1.activeTabId));
     const w2 = listing.windows.find((w) => w.windowId === win2Id);
     record(tag + ": a window that held only a server tab comes back with one blank tab",
       !!w2 && w2.tabs.length === 1 && w2.tabs[0].path === null, JSON.stringify(w2));
-    record(tag + ": no restored tab carries a server binding",
-      listing.windows.every((w) => w.tabs.every((t) => !("serverDocId" in t) && !("isServerDoc" in t))), JSON.stringify(listing));
+
+    cdpD = await connectTab(app, draftTabId);
+    const gotMarker = await waitForMarker(cdpD, marker, 20000);
+    record(tag + ": the server-origin draft restores in its tab with its content", !!gotMarker);
+    record(tag + ": the restored draft is dirty", !!(await isDirty(cdpD)));
+    const draftRow = (await shell(cdpD, "listTargets", {})).windows.reduce((a, w) => a.concat(w.tabs), []).find((t) => t.tabId === draftTabId);
+    record(tag + ": the restored draft has no file path", !!draftRow && draftRow.path === null, JSON.stringify(draftRow));
+
     const saved = await pollNode(async () => {
       const s = readDesktopStateFile(userDataDir);
-      return s && !JSON.stringify(s).includes("doc-one") ? s : null;
+      return s && !JSON.stringify(s).includes("doc-three") ? s : null;
     }, 15000).catch(() => null);
     record(tag + ": the rewritten desktop-state.json holds no server source, URL or token",
-      !!saved && !/"kind":"server"|docs\.example\.com|doc-two|"token"|"tunnel"|f{64}/.test(JSON.stringify(saved)), JSON.stringify(saved));
+      !!saved && !/"kind":"server"|docs\.example\.com|doc-one|doc-two|doc-three|"token"|"tunnel"|f{64}/.test(JSON.stringify(saved)), JSON.stringify(saved));
   } finally {
-    if (cdpB) { try { cdpB.close(); } catch {} }
-    if (app) { await teardown(app, tag); rmrf(app.userDataDir); }
+    for (const c of [cdpB, cdpD]) if (c) { try { c.close(); } catch {} }
+    if (app) { await teardown(app, tag, { expectForceKill: ENDS_DIRTY }); rmrf(app.userDataDir); }
     rmrf(userDataDir);
   }
 }

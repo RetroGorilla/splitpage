@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
+import net from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -348,6 +350,33 @@ test("sharing again, or revoking, ends the old relay; a wrong or old token is 40
     await s2.ended;
     assert.equal(s2.events[s2.events.length - 1].reason, "revoked");
     assert.deepEqual(voice.log[voice.log.length - 1], ["stop", "tab1", 2]);
+  } finally { share.closeAll(); }
+});
+
+function lanAddresses() {
+  const out = [];
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const addr of list || []) if (addr.family === "IPv4" && !addr.internal) out.push(addr.address);
+  }
+  return out;
+}
+
+function connects(host, port) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host, port });
+    socket.once("connect", () => { socket.destroy(); resolve(true); });
+    socket.once("error", () => resolve(false));
+    socket.setTimeout(2000, () => { socket.destroy(); resolve(false); });
+  });
+}
+
+test("the teleprompter share listens on loopback only", async () => {
+  const share = createPrompterShare({ staticAllowlist: {}, preferredPort: 0 });
+  try {
+    const url = new URL(await share.publish("tab1", "script.md", "x"));
+    const port = Number(url.port);
+    assert.equal(await connects("127.0.0.1", port), true);
+    for (const addr of lanAddresses()) assert.equal(await connects(addr, port), false, addr + " must not reach the share");
   } finally { share.closeAll(); }
 });
 

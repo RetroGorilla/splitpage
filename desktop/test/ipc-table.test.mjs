@@ -278,6 +278,14 @@ test("Follow My Voice takes no argument, from the app page only", () => {
   assert.deepEqual([...events.allowedOrigins], [APP_ORIGIN]);
 });
 
+test("packaging: every ./module main.js requires is in electron-builder.yml's files", () => {
+  const yml = read("electron-builder.yml");
+  const listed = new Set([...yml.matchAll(/^\s*-\s+([A-Za-z0-9_.-]+\.js)\s*$/gm)].map((m) => m[1]));
+  const required = [...MAIN.matchAll(/require\("\.\/([A-Za-z0-9_-]+)(?:\.js)?"\)/g)].map((m) => m[1] + ".js");
+  assert.ok(required.includes("drafts.js"), "main.js requires ./drafts");
+  for (const f of required) assert.ok(listed.has(f), f + " is required by main.js but not in electron-builder.yml files");
+});
+
 test("the blob channels: a typed sha256, app page only", () => {
   const sha = "0123456789abcdef".repeat(4);
   const row = (name) => channelFor(name, "invoke");
