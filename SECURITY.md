@@ -16,10 +16,8 @@ Only the latest release. Fixes are not back-ported.
 
 ## Deploying safely
 
-The document server has **no login of its own by design**: put it behind
-Cloudflare Access or a VPN, and never expose its port to the internet
-directly. [DEPLOY.md](DEPLOY.md) covers this, including what `JOIN_PIN` is
-and is not for.
+The server serves the app's static files and nothing else: it has no login
+and stores no data. [DEPLOY.md](DEPLOY.md) covers running it.
 
 The Windows installers are not code-signed yet, so Windows SmartScreen will
 warn on first run. Download them only from the releases page, and check the

@@ -636,8 +636,7 @@ root `Dockerfile` from the checkout and starts it the way `deploy.sh` does.
 Job `prebuilt` runs `npm ci` and `node build.mjs`, copies the files of the
 `splitpage-app` artifact into an empty folder (`tools/artifact-files.mjs`,
 which reads the list from `ci.yml`), builds `Dockerfile.prebuilt`
-there, starts it and checks `/api/health`'s version, `/` and `/sw.js` against
-`VERSION` and its HEALTHCHECK. `.github/workflows/release.yml` builds the
+there, starts it and checks that `/` and `/sw.js` answer, and its HEALTHCHECK. `.github/workflows/release.yml` builds the
 Windows installers from a tag. [ci.md](ci.md) explains the settings in these
 files that the files themselves cannot.
 
