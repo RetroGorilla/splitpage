@@ -12,15 +12,15 @@
 #   * one that writes makes the project file the home and the import chip
 #     goes with the import.
 open
-eval (function(){window.F=window.__splitpageFormats; window.D=window.__desktopTest; window.HT=window.__hostedTest; return !!(F && D && HT);})()
+eval (function(){window.F=window.__splitpageFormats; window.D=window.__desktopTest; window.FM=window.__fileMenuTest; return !!(F && D && FM);})()
 expect true
 expect F.docFile().kind === null && document.getElementById('file-chip').hidden === true
 
 # --- a foreign .txt opens as an import home, chip shows it ---------------
 eval (function(){window.__h = {name:'notes.txt', createWritable: async function(){return {write: async function(){}, close: async function(){}};}, getFile: async function(){return new File(['one\n\ntwo'],'notes.txt',{type:'text/plain'});}}; return F.openFile(new File(['one\n\ntwo'],'notes.txt',{type:'text/plain', lastModified: 1000}), window.__h);})()
 wait document.getElementById('file-chip').hidden === false
-expect HT.home().format === 'txt'
-expect HT.home().inPlace === true
+expect FM.cardView().name === 'notes.txt' && FM.cardView().bits[1].text === 'Plain text'
+expect document.querySelector('#menu-save-back .mi-label').textContent === 'Save to notes.txt'
 expect F.docFile().kind === null
 expect document.getElementById('file-chip').hidden === false
 expect document.getElementById('file-chip-name').textContent === 'notes.txt'

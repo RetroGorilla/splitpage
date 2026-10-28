@@ -63,8 +63,7 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
     live: ports.live,
     destination: ports.destination,
     identity: ports.identity,
-    history: ports.history,
-    ownership: operations
+    history: ports.history
   });
   const mine: Started = Object.freeze({
     transitions: transitions,

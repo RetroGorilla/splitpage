@@ -266,7 +266,6 @@ export function fakeTransitions(arriving: (from: Incoming) => ValidatedDocument)
       calls.push({ kind: "recover", reason: recovery.reason, destination: recovery.destination });
       return arrive(recovery.from);
     },
-    publish: () => ({ kind: "obsolete" }),
     copyId: () => "d" + "0".repeat(32)
   };
   return { transitions, calls };
