@@ -5,7 +5,7 @@ import { restoreDesktop, useDesktopForTest } from "../../../src/adapters/desktop
 import type { DesktopPort } from "../../../src/adapters/desktop/desktop-port.ts";
 import { updates as updatesPort } from "../../../src/bootstrap/wiring/update.ts";
 import type { UpdatePorts, UpdateStatus } from "../../../src/features/update/ports.ts";
-import { mountUpdate } from "../../../src/features/update/update.js";
+import { mountUpdate } from "../../../src/features/update/update.ts";
 import type { UpdateFeaturePorts } from "../../../src/features/update/ports.ts";
 import type { UpdateResult } from "../../../src/features/update/ports.ts";
 
