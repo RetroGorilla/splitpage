@@ -46,7 +46,7 @@ async function handleStatic(req, res, url) {
     return;
   }
   const segments = path.relative(root, full).split(path.sep);
-  if (segments.some((seg) => seg.charAt(0) === ".") || segments[0].toLowerCase() === "data") {
+  if (rel.includes(":") || segments.some((seg) => seg.charAt(0) === ".") || segments[0].toLowerCase() === "data") {
     notFound(res);
     return;
   }
