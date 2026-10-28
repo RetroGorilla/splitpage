@@ -1,47 +1,14 @@
 import "../../src/test/_dom.mjs";
-import { review as portReview } from "../../src/bootstrap/wiring/ports/location.ts";
 import { documentReader as portDocument } from "../../src/bootstrap/wiring/ports/document.ts";
 import { text as portText } from "../../src/bootstrap/wiring/ports/text.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { EffectPorts, Notice } from "../../src/application/effects/ports.ts";
-import { VIEWING_ONLY } from "../../src/application/collaboration/review.ts";
 import { legacyExportServices } from "../../src/bootstrap/export-services.ts";
 
-import { startEffects } from "../../src/legacy/effects-bridge.ts";
-import { documentLocation, setHome, startLocation } from "../../src/legacy/location-bridge.ts";
 import { sanitizeHtml, storedHtmlFromDom } from "../../src/legacy/richtext.ts";
 import { adoptReplacement } from "../../src/legacy/session-bridge.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
 import { migrateRows } from "../../src/legacy/document-ports.ts";
-
-test("review facts follow the location and refuse through the notices only while reviewing", () => {
-  const review = portReview;
-  const stopLocation = startLocation({ storage: () => null });
-  const shown: unknown[][] = [];
-  const notice: Notice = { isConnected: true, dismiss: () => {}, removeEventListener: () => {} };
-  const ports: EffectPorts<Element> = {
-    notices: { show: (...args) => { shown.push(args); return notice; }, showAction: () => notice },
-    menuItems: { setLabel: () => {}, setReason: () => {} },
-    clipboard: { copyText: () => Promise.resolve(true) }
-  };
-  const stopEffects = startEffects(ports);
-  try {
-    assert.equal(review.reviewing(), false);
-    assert.equal(review.refuseInReview(), false);
-    assert.deepEqual(shown, []);
-    documentLocation().setConnection({ serverUrl: "http://a:1/", token: "t", role: "review", scope: "doc-1" });
-    setHome("server", { id: "doc-1" });
-    assert.equal(review.reviewing(), true);
-    assert.equal(review.refuseInReview(), true);
-    assert.deepEqual(shown, [[VIEWING_ONLY, "warn", undefined]]);
-  } finally {
-    setHome("none");
-    documentLocation().setConnection({});
-    stopEffects();
-    stopLocation();
-  }
-});
 
 test("the document reader reads the session's document and hears replacements until unsubscribed", () => {
   const reader = portDocument;

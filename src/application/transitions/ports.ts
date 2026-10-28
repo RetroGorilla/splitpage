@@ -1,6 +1,5 @@
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { CommandOutcome, Stamp } from "../session/document-session.ts";
-import type { OperationContext } from "../session/operation.ts";
 import type { DocumentEntry } from "../session/ports.ts";
 
 export interface DocumentDestination {
@@ -31,15 +30,10 @@ export interface HistoryPort {
   readonly keep: (label: string, doc?: ValidatedDocument | null) => unknown;
 }
 
-export interface OwnershipPort {
-  readonly stillOwns: (ctx: OperationContext) => boolean;
-}
-
 export interface TransitionPorts<D> {
   readonly entry: DocumentEntry;
   readonly live: LiveDocumentPort;
   readonly destination: DestinationPort<D>;
   readonly identity: IdentityPort;
   readonly history: HistoryPort;
-  readonly ownership: OwnershipPort;
 }

@@ -22,9 +22,10 @@ function setup() {
   localStorage.clear();
   document.body.innerHTML = '<input id="import-app-data-input" type="file"><div id="connect-modal"></div>';
   const calls: { name: string; args: unknown[] }[] = [];
+  const shown: [string, string | undefined][] = [];
   const note = (name: string, ...args: unknown[]): void => { calls.push({ name, args }); };
   const ports: AppDataPorts = {
-    notices: { show: () => ({ isConnected: false, dismiss: () => undefined, removeEventListener: () => undefined }) },
+    notices: { show: (message, kind) => { shown.push([message, kind]); return { isConnected: false, dismiss: () => undefined, removeEventListener: () => undefined }; } },
     fileDelivery: { deliver: () => Promise.resolve(true) },
     preferences: {
       appDataExport: (extra) => { note("preferences.export", extra); return {}; },
@@ -33,11 +34,6 @@ function setup() {
     },
     desktop: () => false,
     launchFacts: { appVersion: () => "desktop-version" },
-    bookmarks: {
-      loadBookmarks: () => { note("bookmarks.load"); },
-      bookmarks: () => { note("bookmarks.read"); return []; },
-      addBookmarks: (added) => { note("bookmarks.add", added); }
-    },
     commentSorting: { choose: (mode) => { note("comments.choose", mode); return "recent"; } },
     history: {
       exportAll: () => { note("history.export"); return Promise.resolve({ docs: [], older: [] }); },
@@ -49,18 +45,12 @@ function setup() {
     },
     writer: { size: () => { note("writer.read"); return 20; }, setSize: (size, persist) => { note("writer.apply", size, persist); } },
     embeddedVersion: () => "embedded-version",
-    bookmarkEditor: {
-      newId: () => { note("bookmarks.newId"); return "new-mark"; },
-      portOr: (value, fallback) => { note("bookmarks.portOr", value, fallback); return fallback; },
-      save: () => { note("bookmarks.save"); },
-      render: () => { note("bookmarks.render"); }
-    },
     useBlobBackend: (backend) => { note("blob.backend", backend); }
   };
-  return { ports, calls };
+  return { ports, calls, shown };
 }
 
-test("app data export reads legacy storage, history, bookmarks and preferences in the same order", async () => {
+test("app data export reads legacy storage, history and preferences in the same order, and writes no server bookmarks", async () => {
   const { ports, calls } = setup();
   const storage = Object.getPrototypeOf(localStorage) as Storage;
   const getItem = storage.getItem;
@@ -68,13 +58,16 @@ test("app data export reads legacy storage, history, bookmarks and preferences i
     calls.push({ name: "storage.get", args: [key] });
     return getItem.call(this, key);
   };
+  localStorage.setItem("splitpage-server-bookmarks", JSON.stringify([{ name: "Team", url: "https://server.test/" }]));
+  calls.length = 0;
   const mounted = mountAppData(ports);
   try {
-    assert.equal((await probe().build()).appVersion, "embedded-version");
-    assert.deepEqual(calls.map((call) => call.name), ["storage.get", "history.export", "storage.get", "preferences.export"]);
+    const bundle = await probe().build();
+    assert.equal(bundle.appVersion, "embedded-version");
+    assert.equal("bookmarks" in bundle, false);
+    assert.deepEqual(calls.map((call) => call.name), ["storage.get", "history.export", "preferences.export"]);
     assert.deepEqual(calls[0]?.args, ["splitpage-snapshots"]);
-    assert.deepEqual(calls[2]?.args, ["splitpage-server-bookmarks"]);
-    const extra = calls[3]?.args[0] as readonly { readonly name: string }[];
+    const extra = calls[2]?.args[0] as readonly { readonly name: string }[];
     assert.equal(extra[0]?.name, "theme");
     assert.equal(extra.at(-1)?.name, "scriptScale");
   } finally {
@@ -83,8 +76,8 @@ test("app data export reads legacy storage, history, bookmarks and preferences i
   }
 });
 
-test("app data import preserves each history, bookmark, preference and writer call and argument", async () => {
-  const { ports, calls } = setup();
+test("app data import preserves each history, preference and writer call and argument, and ignores old server bookmarks", async () => {
+  const { ports, calls, shown } = setup();
   const mounted = mountAppData(ports);
   const snapshots = [{ old: "snapshot" }];
   const docs = [{ docId: "doc", title: "Title", lastOpenedAt: 3, snapshots: [] }];
@@ -96,17 +89,16 @@ test("app data import preserves each history, bookmark, preference and writer ca
       bookmarks: [{ name: "Server", url: "https://server.test", ssh: { userHost: "adam@server", remotePort: "9000", localPort: 9001 } }],
       prefs: { commentsSort: "recent", writerSize: "20" }
     }));
-    assert.deepEqual(calls.map((call) => call.name), ["history.normalize", "history.import", "bookmarks.load", "bookmarks.read", "bookmarks.newId", "bookmarks.portOr", "bookmarks.portOr", "bookmarks.add", "bookmarks.save", "bookmarks.render", "preferences.import", "preferences.commentsSort", "comments.choose", "writer.read", "writer.apply"]);
+    assert.deepEqual(calls.map((call) => call.name), ["history.normalize", "history.import", "preferences.import", "preferences.commentsSort", "comments.choose", "writer.read", "writer.apply"]);
     assert.deepEqual(calls[0]?.args, [JSON.stringify(snapshots)]);
     assert.deepEqual(calls[1]?.args, [{ docs, older: [...older, { legacy: true }], blobs: {} }]);
-    assert.deepEqual(calls[5]?.args, ["9000", 8791]);
-    assert.deepEqual(calls[6]?.args, [9001, 8791]);
-    assert.deepEqual(calls[7]?.args, [[{ id: "new-mark", name: "Server", url: "https://server.test/", ssh: { userHost: "adam@server", remotePort: 8791, localPort: 8791 } }]]);
-    assert.deepEqual(calls[12]?.args, ["recent"]);
-    assert.deepEqual(calls[14]?.args, [20, false]);
-    const incoming = calls[10]?.args[0] as Record<string, unknown>;
+    assert.deepEqual(calls[4]?.args, ["recent"]);
+    assert.deepEqual(calls[6]?.args, [20, false]);
+    const incoming = calls[2]?.args[0] as Record<string, unknown>;
     assert.equal(incoming.commentsSort, "recent");
     assert.equal(incoming.writerSize, "20");
+    assert.equal(localStorage.getItem("splitpage-server-bookmarks"), null);
+    assert.deepEqual(shown, [["Imported 1 version-history snapshot across 1 document and your preferences.", "ok"]]);
   } finally {
     mounted.dispose();
   }

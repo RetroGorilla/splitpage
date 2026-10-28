@@ -5,7 +5,7 @@ import { startDocumentChrome } from "../../../src/features/title/document-chrome
 import type { DocumentChromeControl, DocumentChromePorts } from "../../../src/features/title/ports.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices, fakeReview } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices } from "../fakes.ts";
 import { PERSON_COLORS } from "../../../src/core/document/person-colors.ts";
 
 function setup() {
@@ -13,7 +13,6 @@ function setup() {
   let name = "";
   let colour = "";
   const edits = fakeEdits();
-  const review = fakeReview();
   const doc = migrateRows({ title: "Test", wordsPerMinute: 120, targetSeconds: 60, rows: [] }, fakeMigration().ports);
   const ports: DocumentChromePorts = {
     document: fakeDocument(doc).document,
@@ -22,11 +21,11 @@ function setup() {
       setCommentAuthor: (value) => { name = value; }, setMyColor: (value) => { colour = value || ""; },
       nameOf: () => "commentAuthor"
     },
-    presence: { personColor: () => PERSON_COLORS[0] ?? "" },
-    review: review.review, edits: edits.edits, notices: fakeNotices().notices
+    personColors: { personColor: () => PERSON_COLORS[0] ?? "" },
+    edits: edits.edits, notices: fakeNotices().notices
   };
   const owner: DocumentChromeControl = startDocumentChrome(ports);
-  return { owner, review, edits, name: () => name, colour: () => colour };
+  return { owner, edits, name: () => name, colour: () => colour };
 }
 
 test("the identity chip, name and colour controls read and change their named ports", () => {
@@ -40,7 +39,7 @@ test("the identity chip, name and colour controls read and change their named po
   input.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
   assert.equal(f.name(), "Ann");
   assert.equal(document.getElementById("identity-editor"), null);
-  f.owner.identityChipListeners().colours();
+  f.owner.updateIdentityChip();
   assert.equal(document.getElementById("identity-name")?.textContent, "Ann");
   f.owner.promptForName();
   const swatch = document.querySelector('input[name="person-color"]') as HTMLInputElement;
@@ -53,7 +52,7 @@ test("the identity chip, name and colour controls read and change their named po
   assert.throws(() => f.owner.promptForName(), /not started/);
 });
 
-test("WPM and target popovers dispatch the existing commands and review keeps both disabled", () => {
+test("WPM and target popovers dispatch the existing commands", () => {
   const f = setup();
   f.owner.promptForWpm();
   const input = document.getElementById("wpm-input") as HTMLInputElement;
@@ -65,11 +64,7 @@ test("WPM and target popovers dispatch the existing commands and review keeps bo
   assert.equal(document.activeElement?.id, "target-input");
   (document.querySelector('[data-target-seconds="120"]') as HTMLButtonElement).click();
   assert.deepEqual(f.edits.ran.map((command) => command.name), ["set-words-per-minute", "set-target-length"]);
-  f.review.setReviewing(true);
   f.owner.promptForWpm();
-  assert.ok((document.getElementById("wpm-input") as HTMLInputElement).disabled);
-  assert.ok((document.getElementById("target-input") as HTMLInputElement).disabled);
-  assert.equal(document.activeElement?.id, "wpm-editor");
   f.owner.dispose();
   assert.equal(document.getElementById("wpm-editor"), null);
   const remounted = setup();

@@ -29,7 +29,7 @@ expect document.getElementById('doc-title').value == I Fixed a $40 Film Camera (
 # a new untitled copy: a fresh id, no file, nothing unsaved
 expect /^d[0-9a-f]{32}$/.test(F.state().docId) == true
 expect window.__ids.indexOf(F.state().docId) === -1
-expect window.__hostedTest.home().kind == none
+expect window.__splitpageFormats.docFile().kind === null
 expect F.docFile().name === null
 expect document.getElementById('file-chip').hidden == true
 expect document.getElementById('btn-save').classList.contains('is-dirty') == false
@@ -78,7 +78,7 @@ wait document.getElementById('cmdk').hidden == true
 wait F.state().rows[0].audioText.indexOf('Edited.') === -1
 expect F.state().rows.length == 30
 expect window.__ids.indexOf(F.state().docId) === -1
-expect window.__hostedTest.home().kind == none
+expect window.__splitpageFormats.docFile().kind === null && document.getElementById('file-chip').hidden
 expect document.getElementById('btn-save').classList.contains('is-dirty') == false
 # the edited copy went into Version history, and the toast says so
 wait Array.prototype.some.call(document.querySelectorAll('#toast-host > *'), function(t){ return t.textContent.indexOf('The long demo') !== -1 && t.textContent.indexOf('Version history') !== -1; })
@@ -89,5 +89,5 @@ expect window.__canon(F.state()) === window.__canon(window.__newTab.starterState
 caret #rows .row .audio-cell .cell-editable
 type More.
 wait document.getElementById('btn-save').classList.contains('is-dirty') == true
-expect window.__hostedTest.home().kind == none
+expect window.__splitpageFormats.docFile().kind === null && document.getElementById('file-chip').hidden
 expect F.docFile().name === null

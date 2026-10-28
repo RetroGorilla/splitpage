@@ -78,7 +78,7 @@ for (const scenario of ["dispose and reopen", "same-ID document replacement", "s
   });
 }
 
-test("b-roll app: remount adds once, preserves review refusal, and disposal clears menus, selection and page focus resources", () => {
+test("b-roll app: remount adds once, and disposal clears menus, selection and page focus resources", () => {
   open();
   const owner = mountBrollFeature();
   openBrollPanel();
@@ -98,17 +98,10 @@ test("b-roll app: remount adds once, preserves review refusal, and disposal clea
     openBrollPanel();
     assert.equal(document.querySelector(".broll-group-menu"), null);
     assert.equal(document.querySelector(".broll-card"), null);
-    window.__hostedTest.setSession({ role: "review", docId: currentDocument().docId });
-    const before = JSON.stringify(currentDocument().brollShots);
-    document.getElementById("broll-add-input").value = "Review refused";
-    fire(document.getElementById("broll-add-save"), "click");
-    assert.equal(JSON.stringify(currentDocument().brollShots), before);
-    window.__hostedTest.setSession({ role: "edit", docId: null });
     document.getElementById("broll-add-input").value = "Once after remount";
     fire(document.getElementById("broll-add-save"), "click");
     assert.equal(currentDocument().brollShots.filter((shot) => shot.name === "Once after remount").length, 1);
   } finally {
-    window.__hostedTest.setSession({ role: "edit", docId: null });
     replacement.dispose();
   }
 });

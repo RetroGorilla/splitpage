@@ -124,11 +124,6 @@ export function mountRowRoutes(mount: RowRoutesMount): RowRoutes {
       if (!open) return false;
       const status = closest(e, '[data-action="cycle-status"]');
       if (status) { ports.cycleStatus(idOf(status)); return true; }
-      const lamp = closest(e, ".row .status-btn.is-static");
-      if (lamp && mount.rows.contains(lamp)) {
-        const row = lamp.closest(".row");
-        if (row) { ports.cycleStatus(idOf(row)); return true; }
-      }
       const strip = closest(e, '[data-action="expand-hidden-shot"]');
       if (strip) { ports.expandHidden(strip.getAttribute("data-ids")); return true; }
       const jump = closest(e, '[data-action="jump-row"]');

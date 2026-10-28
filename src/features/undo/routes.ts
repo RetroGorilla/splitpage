@@ -1,7 +1,6 @@
 import type { UndoDirection } from "../../application/editing/undo/undo.ts";
 
 export interface UndoRouteHooks {
-  readonly commentsAreSent: () => boolean;
   readonly afterApply: (steps: readonly unknown[], dir: UndoDirection) => void;
   readonly onRefused: (reason: string | undefined, dir: UndoDirection) => void;
 }
@@ -10,11 +9,9 @@ export interface UndoRoutePorts {
   readonly replay: (dir: UndoDirection) => void;
   readonly writerStep: (dir: UndoDirection) => boolean;
   readonly stale: () => boolean;
-  readonly reviewOnly: () => boolean;
   readonly scriptCell: (el: Element) => boolean;
   readonly latest: () => unknown;
   readonly warn: (message: string) => void;
-  readonly commentsAreSent: () => boolean;
   readonly afterReplay: (steps: readonly unknown[], dir: UndoDirection) => void;
   readonly install: (hooks: UndoRouteHooks) => () => void;
 }
@@ -73,7 +70,6 @@ export function mountUndoRoutes(mount: UndoRoutesMount): UndoRoutes {
     const dir = undoGesture(e);
     if (!dir) return false;
     if (ownsItsUndo(realm.document.activeElement)) return false;
-    if (ports.reviewOnly()) return false;
     e.preventDefault();
     step(dir);
     return true;
@@ -97,7 +93,6 @@ export function mountUndoRoutes(mount: UndoRoutesMount): UndoRoutes {
   }
 
   let release: (() => void) | null = ports.install({
-    commentsAreSent: ports.commentsAreSent,
     afterApply: ports.afterReplay,
     onRefused: (reason, dir) => { ports.warn("Could not " + dir + " — " + (reason || "the document has changed since") + "."); }
   });

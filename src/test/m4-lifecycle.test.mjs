@@ -164,7 +164,6 @@ const APP_LIFETIME_LISTENERS = [
   "window:drop",
   "window:focus",
   "window:focusin",
-  "window:hashchange",
   "window:input",
   "window:keydown",
   "window:keyup",
@@ -176,7 +175,6 @@ const APP_LIFETIME_LISTENERS = [
   "window:pageshow",
   "window:paste",
   "window:pointerdown",
-  "window:pointerup",
   "window:resize",
   "window:scroll",
   "window:storage",
@@ -192,7 +190,7 @@ const APP_LIFETIME_UNNAMED_ELEMENT_LISTENERS = [
   "element#div:pointermove",
   "element#input:change"
 ];
-const APP_LIFETIME_OBSERVERS = ["MutationObserver:element#comments-badge", "MutationObserver:element#div", "MutationObserver:element#html"];
+const APP_LIFETIME_OBSERVERS = ["MutationObserver:element#comments-badge", "MutationObserver:element#html"];
 
 test("E9: no app module subscribes to the document session, so none outlives a replacement", () => {
   assert.deepEqual(subscribers, APP_LIFETIME_SUBSCRIPTIONS_TO_THE_SESSION, "the sites that subscribed to the live session during boot");

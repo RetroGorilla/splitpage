@@ -1,11 +1,8 @@
-import { onServerDoc } from "../../legacy/location-bridge.ts";
 import { randomHexBytes, randomIds } from "../../adapters/identity/ids.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits, undoControl as portUndo } from "./ports/editing.ts";
 import { pictures as portPictures } from "./ports/pictures.ts";
 import { text as portText } from "./ports/text.ts";
-import { saves as portSaves } from "./ports/saving.ts";
-import { review as portReview } from "./ports/location.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { brollSeedOf, recordPastedBroll } from "../../application/production/broll-records.ts";
 import { startCellClipboard as mountCellClipboard } from "../../features/clipboard/cell-clipboard.js";
@@ -23,7 +20,6 @@ import { startNewScript } from "./file-menu-controls.ts";
 import { cellEditing, paintGuard, rowDrag } from "../../legacy/editor-bridge.ts";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
 import { imageRefOf } from "../../legacy/richtext.ts";
-import { REVIEW_ONLY } from "../../legacy/session-bridge.ts";
 
 const copyPaste = owned<CopyPasteMount>();
 
@@ -59,11 +55,8 @@ export function mountCopyPasteFeature(): CopyPasteMount {
     const selectPorts: SceneSelectPorts = {
       document: portDocument,
       edits: portEdits,
-      reviewRefusal: REVIEW_ONLY,
       undo: portUndo,
-      saves: portSaves,
       pictures: portPictures,
-      review: portReview,
       notices: portNotices,
       cells: { sync: (cell) => { cellEditing().sync(cell); } },
       rowDrag: { dragging: () => rowDrag().dragging() },
@@ -71,7 +64,6 @@ export function mountCopyPasteFeature(): CopyPasteMount {
       rows: { closeMenus: () => { closeRowMenus(); } },
       production: { scheduleRefresh: scheduleProductionRefresh },
       stampRow,
-      onServer: onServerDoc,
       writerOpen: () => viewFlags().writerOpen(),
       startNewScript,
       nonce

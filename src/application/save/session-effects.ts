@@ -1,5 +1,3 @@
-import type { ReviewFacts } from "../collaboration/review.ts";
-import { authorityOf, editCapability } from "../collaboration/authority.ts";
 import type { DocumentLocation } from "../location/document-location.ts";
 import type { Preferences } from "../preferences/preferences.ts";
 import type { DraftsMount } from "../recovery/drafts-ports.ts";
@@ -28,16 +26,17 @@ export interface SessionEffectPorts {
   readonly saves: Pick<SaveState, "dueNow">;
   readonly changes: SaveChangeNotes;
   readonly drafts: Pick<DraftsMount, "noteChange">;
-  readonly location: Pick<DocumentLocation, "home" | "amendHome" | "homeConn">;
-  readonly review: Pick<ReviewFacts, "reviewing">;
+  readonly location: Pick<DocumentLocation, "home" | "amendHome">;
   readonly preferences: Pick<Preferences, "commentAuthor" | "myColor">;
 }
+
+const EDIT_ALLOWED: Capability = Object.freeze({ allowed: true });
 
 export function createSessionEffects(ports: SessionEffectPorts): SessionEffects {
   const myColor = changeSet({ docFields: ["personColors"] });
 
   function myColorPlan(doc: DocumentView): Plan | null {
-    if (!doc || ports.review.reviewing()) return null;
+    if (!doc) return null;
     const next = colorsWithMine(doc.personColors, cleanAuthorName(ports.preferences.commentAuthor()).trim(), ports.preferences.myColor());
     if (!next) return null;
     return { changes: myColor, apply: function (live) { live.personColors = next; } };
@@ -57,7 +56,7 @@ export function createSessionEffects(ports: SessionEffectPorts): SessionEffects 
       if (change.changes.saveNow) ports.saves.dueNow();
     },
     edit: function () {
-      return editCapability(authorityOf(ports.location.homeConn()));
+      return EDIT_ALLOWED;
     }
   };
 }

@@ -202,18 +202,3 @@ test("a scene length whose effect throws after the commit still closes as applie
   assert.equal(unsavedChanges(), true);
   assert.deepEqual(reported.map((e) => e.message), ["effect broke"]);
 });
-
-test("in review mode neither a legacy edit nor an absorbed change records the colour", () => {
-  named();
-  fresh();
-  window.__hostedTest.setSession({ role: "review", docId: "d" + "8".repeat(32) });
-  try {
-    currentDocument().personColors = {};
-    noteSessionEdit();
-    noteAbsorbedDirty("server");
-    assert.deepEqual(currentDocument().personColors, {});
-  } finally {
-    window.__hostedTest.setSession({ role: "edit", docId: null });
-    unnamed();
-  }
-});

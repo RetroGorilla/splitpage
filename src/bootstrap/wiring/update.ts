@@ -8,13 +8,12 @@ import type { UpdateMount } from "../../features/update/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runningOnDesktop } from "../../application/desktop-presence.ts";
 import { updatePreferences } from "./ports/preferences.ts";
-import { place } from "./ports/location.ts";
 import { externalLinks } from "./ports/desktop.ts";
 
 const update = owned<UpdateMount>();
 
 export function mountUpdateFeature(): UpdateMount {
-  return update.replace(() => mountUpdate({ updates, preferences: updatePreferences, place, externalLinks, desktop: runningOnDesktop }));
+  return update.replace(() => mountUpdate({ updates, preferences: updatePreferences, externalLinks, desktop: runningOnDesktop }));
 }
 
 export const stopUpdateFeature = update.stop;

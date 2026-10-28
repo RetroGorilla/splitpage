@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import {
-  DESKTOP_PORT_MEMBERS, UNUSED_DESKTOP_MEMBERS, attachDesktop, canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopDrive, desktopPort,
+  DESKTOP_PORT_MEMBERS, UNUSED_DESKTOP_MEMBERS, attachDesktop, canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort,
   restoreDesktop, useDesktopForTest
 } from "../../../src/adapters/desktop/desktop-port.ts";
 import type { DesktopMember, DesktopPort } from "../../../src/adapters/desktop/desktop-port.ts";
@@ -242,44 +242,6 @@ test("the attached bridge is the port, and the test seam swaps it and restores i
   assert.equal(desktopPort(), real);
   assert.equal(runningOnDesktop(), true);
   attachDesktop(null);
-});
-
-test("the six Drive calls pass their argument and hand back the bridge's answer", async () => {
-  const seen: unknown[] = [];
-  const answer = (name: string) => async (...args: unknown[]) => { seen.push([name, ...args]); return { ok: true, from: name }; };
-  useDesktopForTest({
-    driveStatus: answer("driveStatus"), driveSignIn: answer("driveSignIn"), driveSignOut: answer("driveSignOut"),
-    driveList: answer("driveList"), driveDownload: answer("driveDownload"), driveUpload: answer("driveUpload")
-  });
-  try {
-    assert.deepEqual(await desktopDrive.status(), { ok: true, from: "driveStatus" });
-    assert.deepEqual(await desktopDrive.signIn(), { ok: true, from: "driveSignIn" });
-    assert.deepEqual(await desktopDrive.signOut(), { ok: true, from: "driveSignOut" });
-    assert.deepEqual(await desktopDrive.list("folder"), { ok: true, from: "driveList" });
-    assert.deepEqual(await desktopDrive.download("file"), { ok: true, from: "driveDownload" });
-    assert.deepEqual(await desktopDrive.upload({ name: "a" }), { ok: true, from: "driveUpload" });
-    assert.deepEqual(seen, [["driveStatus"], ["driveSignIn"], ["driveSignOut"], ["driveList", "folder"], ["driveDownload", "file"], ["driveUpload", { name: "a" }]]);
-  } finally {
-    restoreDesktop();
-  }
-});
-
-test("a Drive call that answers nothing, throws, rejects or has no bridge reads as FAILED", async () => {
-  const failed = { ok: false, code: "FAILED" };
-  try {
-    useDesktopForTest({ driveStatus: async () => null });
-    assert.deepEqual(await desktopDrive.status(), failed);
-    useDesktopForTest({ driveList: () => { throw new Error("boom"); } });
-    assert.deepEqual(await desktopDrive.list("f"), failed);
-    useDesktopForTest({ driveDownload: () => Promise.reject(new Error("gone")) });
-    assert.deepEqual(await desktopDrive.download("f"), failed);
-    useDesktopForTest({});
-    assert.deepEqual(await desktopDrive.upload({}), failed);
-    useDesktopForTest(null);
-    assert.deepEqual(await desktopDrive.signIn(), failed);
-  } finally {
-    restoreDesktop();
-  }
 });
 
 test("the prompter can open in a browser or Chromium only when the attached desktop app offers it", () => {

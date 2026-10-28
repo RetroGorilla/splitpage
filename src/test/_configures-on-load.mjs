@@ -1,6 +1,6 @@
-import { handTourPauseTo } from "../legacy/tour-pause.ts";
+import { handDesktopTo } from "../legacy/desktop-bridge.ts";
 import { installExportFormats } from "../bootstrap/wiring/export-registry.ts";
 import { createExportRegistry } from "../application/export/registry.ts";
 
-handTourPauseTo({ interrupt: () => {}, offerResume: () => {} });
+handDesktopTo({ openPrompterInBrowser: () => Promise.resolve({ ok: false, message: "" }) });
 installExportFormats(createExportRegistry());

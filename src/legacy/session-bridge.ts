@@ -29,8 +29,6 @@ export interface SessionBridgePorts {
   readonly timers: TimerPort;
 }
 
-export const REVIEW_ONLY = "review";
-
 interface Started {
   readonly ports: SessionBridgePorts;
   current: DocumentSession;

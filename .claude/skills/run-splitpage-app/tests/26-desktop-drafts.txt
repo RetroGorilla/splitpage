@@ -95,7 +95,7 @@ eval (function(){ D.drafts.setTiming({backoffMin: 5000, backoffMax: 60000}); ret
 # From here on nothing should write on its own — every remaining case drives
 # the restore side, which leaves the document dirty and would otherwise arm
 # a stray idle/max write against whatever fake happens to be current later.
-eval (function(){ D.drafts.setTiming({idle: 3600000, max: 3600000, serverWait: 20000}); return true; })()
+eval (function(){ D.drafts.setTiming({idle: 3600000, max: 3600000}); return true; })()
 
 # =============================================================================
 # THE RESTORE — file origin
@@ -189,92 +189,17 @@ expect window.__r7eEqual === true
 expect window.__r7eDifferent === false
 
 # =============================================================================
-# server override: unavailable / resumed / not-found
+# a draft whose home was a server document: an unsaved copy
 # =============================================================================
 
-# ---- unavailable: no server ever answered this launch (nothing mocked
-# yet), so the draft opens as an unsaved copy straight away (Adam's
-# default, overrides.md §2) ----
+# ---- this version opens no server documents, so the draft opens as an
+# unsaved copy with all its content straight away ----
 eval (async function(){ await H.resetForTest(); window.fakeSrvA = D.makeFakeBackend(); D.setBackend(window.fakeSrvA); var base = F.clone(F.state()); base.docId = mkId('3'); var mine = F.clone(base); mine.rows[0].audioText = 'SRV-UNAVAIL-EDIT'; window.__srvATaken = { header: { writtenAt: Date.now(), docIdWrittenOut: true, origin: { kind: 'server', server: { base: '', docId: 'srv-unavailable-1', rev: 0 } } }, stateJson: JSON.stringify(mine), baseJson: null }; window.__srvAOutcome = await D.drafts.applyForTest(window.__srvATaken); return true; })()
-expect window.__srvAOutcome === 'server-copy'
+expect window.__srvAOutcome === 'untitled-copy'
 expect F.docId() !== mkId('3')
-
-# ---- from here on the server is mocked reachable, via the real "back to
-# this copy" action (the "resumed"/"not-found" cases below re-run
-# detectServer() for real this way, rather than teaching 20g-drafts.js a
-# second server path just for a test) — so the pending-latch case below can
-# actually reach the "waiting on a server" branch instead of the
-# short-circuit above.
-eval (function(){ window.__origFetch = window.fetch.bind(window); window.__srvFetchLog = []; window.fetch = function(url, opts){ var u = String(url); window.__srvFetchLog.push({url: u, method: ((opts && opts.method) || 'GET').toUpperCase()}); if (u.indexOf('api/health') !== -1) return Promise.resolve(new Response(JSON.stringify({ok: true, readOnly: false, authRequired: false, version: 'test'}), {status: 200, headers: {'content-type': 'application/json'}})); if (u.indexOf('api/me') !== -1) return Promise.resolve(new Response(JSON.stringify({}), {status: 200, headers: {'content-type': 'application/json'}})); if (u.indexOf('api/docs/srv-resumed-1') !== -1) return Promise.resolve(new Response(JSON.stringify({id: 'srv-resumed-1', rev: 5, state: {schema: 2, docId: mkId('e'), title: 'Server Doc', rows: [{id: 'r1', audioText: 'SERVER SIDE R1', visualText: '', visualImage: null}], comments: []}}), {status: 200, headers: {'content-type': 'application/json'}})); if (u.indexOf('api/docs/srv-notfound-1') !== -1) return Promise.resolve(new Response(JSON.stringify({error: 'not-found'}), {status: 404, headers: {'content-type': 'application/json'}})); return window.__origFetch(url, opts); }; D.drafts.setTiming({serverWait: 300}); return true; })()
-jsclick #btn-file
-jsclick #menu-servers
-wait !document.getElementById('connect-modal').hidden
-jsclick [data-connect-action="back"]
-wait !document.getElementById('menu-server-open').hidden
-
-# =============================================================================
-# the pending latch: a recovered SERVER draft that cannot sign in yet holds
-# draftRestorePending open indefinitely (K's own report), which is exactly
-# what makes this a reliable window to test rather than a one-tick race —
-# needs the server reachable (above) so it clears the "unreachable" fast
-# path and actually waits on draftServerSettle instead.
-# =============================================================================
-eval (async function(){ await H.resetForTest(); window.fakeP10 = D.makeFakeBackend(); D.setBackend(window.fakeP10); var base = F.clone(F.state()); base.docId = mkId('a'); var mine = F.clone(base); mine.rows[0].audioText = 'P10-EDIT'; window.__p10Taken = { header: { writtenAt: Date.now(), docIdWrittenOut: true, origin: { kind: 'server', server: { base: '', docId: 'p10-pending-doc', rev: 0 } } }, stateJson: JSON.stringify(mine), baseJson: null }; return true; })()
-eval (function(){ window.__p10Log0 = window.fakeP10._draftLog.length; window.__p10P = D.drafts.applyForTest(window.__p10Taken); window.__p10DuringSync = D.drafts.restorePending(); return true; })()
-expect window.__p10DuringSync === true
-wait !document.getElementById('draft-pending-banner').hidden
-expect D.drafts.restorePending() === true
-eval (async function(){ window.__p10FlushResult = await D.drafts.flushNow(); return true; })()
-expect window.fakeP10._draftLog.filter(function(e){ return e.op === 'discard'; }).length === 0
-eval (async function(){ window.__p10Eligible = await window.__onboarding.eligible(); return true; })()
-expect window.__p10Eligible === false
-eval (function(){ D.markDirtyForTest(); return true; })()
-expect window.fakeP10._lastDocState
-expect window.fakeP10._lastDocState.dirty === true
-
-# ---- resumed: the override merges into what the mocked server holds -------
-eval (function(){ sessionStorage.setItem('splitpage-server-resume', JSON.stringify({id: 'unrelated-doc', rev: 1})); sessionStorage.setItem('splitpage-conflict-stash', JSON.stringify({at: new Date().toISOString(), by: 'Tester', base: null, mine: {schema: 2, docId: mkId('u'), title: 'Unrelated', rows: [{id: 'z1', audioText: 'unrelated work', visualText: '', visualImage: null}], comments: []}})); return true; })()
-eval (function(){ window.fakeSrvR = D.makeFakeBackend(); D.setBackend(window.fakeSrvR); var mine = F.clone(F.state()); mine.docId = mkId('e'); mine.rows[0].audioText = 'MINE SERVER EDIT'; window.__srvRTaken = { header: { writtenAt: Date.now(), docIdWrittenOut: true, origin: { kind: 'server', server: { base: '', docId: 'srv-resumed-1', rev: 0 } } }, stateJson: JSON.stringify(mine), baseJson: null }; window.__srvRP = D.drafts.applyForTest(window.__srvRTaken); return true; })()
-jsclick #btn-file
-jsclick #menu-servers
-wait !document.getElementById('connect-modal').hidden
-jsclick [data-connect-action="back"]
-eval (async function(){ window.__srvROutcome = await window.__srvRP; return true; })()
-expect window.__srvROutcome === 'server-resumed'
-expect /^d[0-9a-f]{32}$/.test(F.docId())
-# The merge is NOT published on its own (invariant #41 / overrides §1). A
-# crash restore runs at launch with nobody having touched anything, so a PUT
-# here would bump the rev for every other viewer, commit conflict comments
-# the user has never seen, and — by clearing dirty — discard the crash draft
-# holding the pre-merge version. The settle is for queueAutoSave, which is
-# not debounced: if one were coming it would already have gone out.
-eval (async function(){ await new Promise(function(r){ setTimeout(r, 800); }); return true; })()
-expect window.__srvFetchLog.filter(function(e){ return e.method === 'PUT' && e.url.indexOf('api/docs/') !== -1; }).length === 0
-# it stays dirty instead: the user's next Save publishes it
-expect document.getElementById('btn-save').classList.contains('is-dirty')
-expect sessionStorage.getItem('splitpage-server-resume') === JSON.stringify({id: 'unrelated-doc', rev: 1})
-eval (function(){ window.__srvUnrelatedStash = sessionStorage.getItem('splitpage-conflict-stash'); return true; })()
-expect window.__srvUnrelatedStash.indexOf('unrelated work') !== -1
-
-# ---- not-found: the server document is gone → an unsaved copy, named -----
-jsclick #btn-file
-jsclick #menu-servers
-wait !document.getElementById('connect-modal').hidden
-jsclick [data-connect-action="back"]
-wait !document.getElementById('menu-server-open').hidden
-eval (function(){ window.fakeSrvN = D.makeFakeBackend(); D.setBackend(window.fakeSrvN); var mine = F.clone(F.state()); mine.docId = mkId('f'); mine.rows[0].audioText = 'MINE NOTFOUND EDIT'; window.__srvNTaken = { header: { writtenAt: Date.now(), docIdWrittenOut: true, origin: { kind: 'server', server: { base: '', docId: 'srv-notfound-1', rev: 0 } } }, stateJson: JSON.stringify(mine), baseJson: null }; window.__srvNP = D.drafts.applyForTest(window.__srvNTaken); return true; })()
-jsclick #btn-file
-jsclick #menu-servers
-wait !document.getElementById('connect-modal').hidden
-jsclick [data-connect-action="back"]
-eval (async function(){ window.__srvNOutcome = await window.__srvNP; return true; })()
-expect window.__srvNOutcome === 'server-copy'
-expect F.docId() !== mkId('f')
-eval (function(){ var toasts = document.querySelectorAll('.toast.warn.is-sticky'); window.__srvNToast = toasts[toasts.length - 1].textContent; return true; })()
-expect window.__srvNToast.indexOf('no longer on the server') !== -1
-eval (function(){ window.fetch = window.__origFetch; return true; })()
-jsclick [data-connect-action="close"]
-wait document.getElementById('connect-modal').hidden
+expect F.state().rows[0].audioText === 'SRV-UNAVAIL-EDIT'
+eval (function(){ var toasts = document.querySelectorAll('.toast.warn.is-sticky'); window.__srvAToast = toasts[toasts.length - 1].textContent; return true; })()
+expect window.__srvAToast.indexOf('no longer opens') !== -1
 
 # =============================================================================
 # sanitisation of a hostile draft stateJson

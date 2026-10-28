@@ -30,7 +30,7 @@ test("the recent files port forwards each call and follows the current desktop",
         removeRecent(fileId: string) { assert.equal(this, desktop); calls.push(["removeRecent", fileId]); return removed; },
         clearRecents() { assert.equal(this, desktop); calls.push(["clearRecents"]); return cleared; },
         readFile(fileId: string) { assert.equal(this, desktop); calls.push(["readFile", fileId]); return read; },
-        routeOpen(input: RecentFileOpenRequest) { assert.equal(this, desktop); calls.push(["routeOpen", input]); return routed; }
+        routeOpen(input: unknown) { assert.equal(this, desktop); calls.push(["routeOpen", input]); return routed; }
       };
       useDesktopForTest(desktop);
       assert.equal(recents.available(), true);
@@ -43,16 +43,11 @@ test("the recent files port forwards each call and follows the current desktop",
       assert.equal(recents.clear(), cleared);
       assert.equal(recents.read(id), read);
       assert.equal(recents.routeOpen(request), routed);
-      const serverRequest: RecentFileOpenRequest = {
-        kind: "server", serverDocId: "doc-1", serverUrl: "https://example.test", token: "token", tunnel: { localPort: 1234 }
-      };
-      assert.equal(recents.routeOpen(serverRequest), routed);
       assert.deepEqual(calls, [
         ["listRecents"], ["removeRecent", id + "-removed"], ["clearRecents"], ["readFile", id],
-        ["routeOpen", request], ["routeOpen", serverRequest]
+        ["routeOpen", request]
       ]);
       assert.equal(calls[4]?.[1], request);
-      assert.equal(calls[5]?.[1], serverRequest);
     }
     const failure = new Error("file missing");
     const rejected = Promise.reject(failure);

@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import { after } from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../legacy/session-bridge.ts";
-import { createGates, createHeldFetch, mockClock, rightToday } from "./_m4-matrix.mjs";
+import { createGates, mockClock, rightToday } from "./_m4-matrix.mjs";
 
 await bootApp();
 after(closeApp);
@@ -21,8 +21,6 @@ const { buildBreakdownCsv, buildBrollCsv, buildCsv } = await import("../adapters
 const { buildBreakdownXlsx, buildBrollXlsx, buildScriptXlsx } = await import("../adapters/formats/xlsx.ts");
 const { buildPackingListPdf, buildPdf, buildShotListPdf } = await import("../adapters/formats/pdf.ts");
 const { localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");
-const homeModule = await import("../legacy/location-bridge.ts");
-const hosted = await import("../js/13-hosted.js");
 const { loadTestDocument } = await import("./_document.mjs");
 
 const KINDS = [
@@ -196,7 +194,7 @@ function swapPictures(replacement) {
   currentDocument().comments[0].body = "No picture now";
 }
 
-rightToday("X19", "an export whose local picture reads are held keeps the captured pictures and their places when the document, connection and pictures change", async (t) => {
+rightToday("X19", "an export whose local picture reads are held keeps the captured pictures and their places when the document and pictures change", async (t) => {
   mockClock(t);
   for (const kind of ["docx", "md", "md-table", "html"]) {
     await withHeldStore(async ({ gates, held }) => {
@@ -217,11 +215,9 @@ rightToday("X19", "an export whose local picture reads are held keeps the captur
       await gates.arrived("blob.get");
       mutateLive();
       swapPictures(replacement);
-      homeModule.documentLocation().setConnection({ serverUrl: "http://elsewhere.test/", token: "t-other", role: "edit" });
       const replaced = liveJson();
       gates.releaseAll("blob.get");
       const built = await building;
-      homeModule.documentLocation().setConnection({});
       assert.deepEqual(held.reads.slice().sort(), [row.ref.sha256, more.ref.sha256, comment.ref.sha256].sort(), kind + ": the held reads were for the captured pictures");
       sameBytes(built.data, reference.data, kind + ": the export holds the captured pictures where they were");
       assert.equal(liveJson(), replaced, kind + ": the replacement document is as it was left");
@@ -302,66 +298,6 @@ rightToday("X20", "a PDF whose picture decoding is held prints the captured pict
     decoder.restore();
   }
 });
-
-function blobServer(pictures) {
-  const byHex = new Map(pictures.map((p) => [p.ref.sha256, p.bytes]));
-  return function (r) {
-    const m = /api\/blobs\/([0-9a-f]{64})$/.exec(r.url);
-    if (m && r.method === "GET") return byHex.has(m[1]) ? { status: 200, bytes: byHex.get(m[1]), headers: { "content-type": "image/jpeg" } } : { status: 404, body: { error: "not-found" } };
-    return { status: 404, body: { error: "no-such-route" } };
-  };
-}
-
-rightToday("X21", "an export of a server document fetches its missing pictures from the server it was asked on, even when the tab moves to another server's document meanwhile", async (t) => {
-  mockClock(t);
-  const row = freshPicture(jpegBytes, 300, 200, 51);
-  const more = freshPicture(jpegBytes, 200, 300, 52);
-  const comment = freshPicture(jpegBytes, 40, 30, 53);
-  const gates = createGates();
-  const local = heldBackend(gates, () => false);
-  const held = createHeldFetch({ connection: () => homeModule.currentConn(), answer: blobServer([row, more, comment]) });
-  const uninstall = held.install();
-  try {
-    useDocument(picturedScript({ row: row.ref, more: more.ref, comment: comment.ref }));
-    const reference = await localFileMenuControls().buildFileData("docx", "pictures");
-    hosted.pointTabAt("http://origin.test/");
-    useDocument(picturedScript({ row: row.ref, more: more.ref, comment: comment.ref }));
-    window.__hostedTest.setSession({ docId: "srv-pictures", rev: 1, blobs: true });
-    await new Promise((resolve) => setImmediate(resolve));
-    setBackend(local.backend);
-    blobStore.forgetMemory();
-    gates.hold("blob.get", { times: 99 });
-    const building = localFileMenuControls().buildFileData("docx", "pictures");
-    await gates.arrived("blob.get");
-    window.__hostedTest.pointTabAt("http://other.test/");
-    useDocument(script("Elsewhere"));
-    window.__hostedTest.setSession({ docId: "srv-elsewhere", rev: 1, blobs: true });
-    const before = held.requests.length;
-    gates.releaseAll("blob.get");
-    const built = await building;
-    const blobGets = held.requests.slice(before).filter((r) => r.url.includes("api/blobs/"));
-    const asked = new Set(blobGets.map((r) => r.url.replace(/^.*api\/blobs\//, "")));
-    assert.deepEqual([...asked].sort(), [row.ref.sha256, more.ref.sha256, comment.ref.sha256].sort(), "setup: the three pictures were fetched after the move");
-    assert.deepEqual(blobGets.filter((r) => !r.url.startsWith("http://origin.test/")).map((r) => r.url), [], "every picture request went to the server the export was asked on");
-    sameBytes(built.data, reference.data, "the export holds the pictures the original server sent, where they were");
-  } finally {
-    gates.releaseAll("blob.get");
-    held.gates.releaseAll("fetch");
-    uninstall();
-    if (homeModule.currentHome().kind === "server") homeModule.setHome("none");
-    hosted.pointTabAt("");
-    homeModule.documentLocation().updateConnection({ token: "", role: "", scope: "" });
-    setBackend(createMemoryBackend());
-    confirmSavedNow();
-  }
-});
-
-function script(title) {
-  return migrateRows({
-    schema: 5, title: title, docId: "d" + "8".repeat(32),
-    rows: [{ id: "r1", visualText: "Wide", audioText: "One.", status: "todo" }]
-  });
-}
 
 function localTime(y, m, d, h, min, s) {
   return new Date(y, m, d, h, min, s || 0).getTime();

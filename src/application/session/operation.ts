@@ -4,8 +4,6 @@ export interface OperationContext {
   readonly destination: unknown;
   readonly destinationGeneration: number;
   readonly generation: number;
-  readonly connection: unknown;
-  readonly revision: number | null;
 }
 
 export interface OperationPorts {
@@ -14,9 +12,7 @@ export interface OperationPorts {
   readonly destination: {
     readonly identity: () => unknown;
     readonly generation: () => number;
-    readonly revision: () => number | null;
   };
-  readonly connection: { readonly current: () => unknown };
 }
 
 export interface Operations {
@@ -31,17 +27,14 @@ export function createOperations(ports: OperationPorts): Operations {
       docId: ports.document.id(),
       destination: ports.destination.identity(),
       destinationGeneration: ports.destination.generation(),
-      generation: ports.session.generation(),
-      connection: ports.connection.current(),
-      revision: ports.destination.revision()
+      generation: ports.session.generation()
     });
   }
 
   function stillOwns(ctx: OperationContext): boolean {
     return ctx.epoch === ports.session.epoch() &&
       ctx.docId === ports.document.id() &&
-      ctx.destination === ports.destination.identity() &&
-      ctx.connection === ports.connection.current();
+      ctx.destination === ports.destination.identity();
   }
 
   return Object.freeze({ capture: capture, stillOwns: stillOwns });

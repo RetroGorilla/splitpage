@@ -31,7 +31,7 @@ test("the stored keys keep the 3.x names, and each key maps back to its preferen
   assert.equal(prefs.nameOf("splitpage-tour-done"), "tourDone");
   assert.equal(prefs.nameOf("splitpage-writer-size"), "writerSize");
   assert.equal(prefs.nameOf("splitpage-clock"), "clock");
-  assert.equal(prefs.nameOf("splitpage-collab-server"), "collabServer");
+  assert.equal(prefs.nameOf("splitpage-collab-server"), null);
   assert.equal(prefs.nameOf("splitpage-default-wpm"), "defaultWpm");
   assert.equal(prefs.nameOf("splitpage-desktop-notice-dismissed"), "desktopNotice");
   assert.equal(prefs.nameOf("splitpage-export-directions"), "exportDirections");
@@ -169,13 +169,8 @@ test("the script zoom reads 1 unless a value in range is stored, rounds writes a
   ]);
 });
 
-test("the collaboration server is read as stored, and the desktop notice is shown again by removing its key", () => {
+test("the desktop notice is shown again by removing its key", () => {
   const { prefs, storage, announced } = setup();
-  assert.equal(prefs.collabServer(), null);
-  prefs.setCollabServer("https://mine.example.com/");
-  assert.equal(prefs.collabServer(), "https://mine.example.com/");
-  prefs.setCollabServer(null);
-  assert.equal(storage.items.has("splitpage-collab-server"), false);
   assert.equal(prefs.desktopNoticeDismissed(), false);
   storage.items.set("splitpage-desktop-notice-dismissed", "0");
   assert.equal(prefs.desktopNoticeDismissed(), false);
@@ -186,8 +181,6 @@ test("the collaboration server is read as stored, and the desktop notice is show
   assert.equal(prefs.desktopNoticeDismissed(), false);
   assert.equal(storage.items.has("splitpage-desktop-notice-dismissed"), false);
   assert.deepEqual(announced, [
-    { key: "splitpage-collab-server", value: "https://mine.example.com/" },
-    { key: "splitpage-collab-server", value: null },
     { key: "splitpage-desktop-notice-dismissed", value: "1" },
     { key: "splitpage-desktop-notice-dismissed", value: null }
   ]);

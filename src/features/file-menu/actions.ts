@@ -3,7 +3,7 @@ import type { ScreenState } from "../../application/screen.ts";
 import type { ActionDefinition, ActionSource, Availability } from "../../application/actions.ts";
 import { EVERY_OVERLAY, OPENS_A_DIALOG, availableUnless, firstRefusal } from "../../application/screen.ts";
 import type { Blocker } from "../../application/screen.ts";
-import type { FileMenuActionPorts, FileMenuControls, FileMenuExportActionPorts, FileMenuExportControls, MenuItemState } from "./ports.ts";
+import type { AutosaveActionPorts, FileMenuActionPorts, FileMenuControls, FileMenuExportActionPorts, FileMenuExportControls, MenuItemState } from "./ports.ts";
 
 const UNMOUNTED: Availability = { enabled: false };
 
@@ -98,10 +98,7 @@ export function fileMenuActions(current: () => FileMenuControls | null, ports: F
       group: "File",
       icon: "i-clipboard",
       words: "import revised draft text",
-      availability: (source) => {
-        const owner = current();
-        return owner ? loaded(itemAvailability(owner.pasteItemState(), source), OPENS_ONE) : UNMOUNTED;
-      },
+      availability: () => current() ? loaded({ enabled: true }, OPENS_ONE) : UNMOUNTED,
       run: () => { ports.openImport(); }
     },
     {
@@ -170,6 +167,20 @@ export function fileWritebackActions(current: () => Pick<ImportSavingOwner, "sav
         return a.enabled ? a : { ...a, visible: false };
       },
       run: async () => { await saveBackToFile(); }
+    }
+  ];
+}
+
+export function autosaveActions(ports: AutosaveActionPorts): ActionDefinition[] {
+  return [
+    {
+      id: "autosave",
+      label: "Autosave",
+      group: "File",
+      icon: "i-autosave",
+      words: "automatic save saving",
+      availability: () => ({ ...firstRefusal(availableUnless(["loading"], ports.screen()), { enabled: true }), checked: ports.autosave.on() }),
+      run: () => { ports.autosave.toggle(); }
     }
   ];
 }

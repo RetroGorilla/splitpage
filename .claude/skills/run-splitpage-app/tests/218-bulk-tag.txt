@@ -4,8 +4,7 @@
 # as one category, named as typed, after asking with the count; a match
 # across formatting is one tag with the bold kept; mentions already tagged
 # or in a link are counted and left; the Audio column is left alone; it is
-# ONE undo entry; the Production panel follows; a reviewer cannot do it;
-# and the Production panel's open item offers "Tag all N mentions".
+# ONE undo entry; the Production panel follows; and the Production panel's open item offers "Tag all N mentions".
 #
 # Every `eval` is one physical line (the driver splits on newlines).
 
@@ -123,17 +122,4 @@ expect U.sizes().undo === window.__n + 1
 expect !document.querySelector('[data-action="tag-all-mentions"]')
 key ctrl KeyZ
 sleep 400
-expect snap() === window.__before
-
-# --- a review session cannot bulk-tag ---------------------------------------
-eval (function(){ window.__hostedTest.setSession({ docId: 'doc-x', role: 'review' }); return true; })()
-sleep 200
-key ctrl KeyF
-wait !document.getElementById('findbar').hidden
-expect getComputedStyle(document.getElementById('find-tag')).display == none
-eval (function(){ var i = document.getElementById('find-input'); i.value = 'drone'; i.dispatchEvent(new Event('input', { bubbles: true })); return true; })()
-jsclick #find-tag
-sleep 200
-expect document.getElementById('find-tag-row').hidden
-expect !document.querySelector('[data-action="tag-all-mentions"]')
 expect snap() === window.__before

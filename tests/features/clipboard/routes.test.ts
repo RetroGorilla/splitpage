@@ -37,7 +37,7 @@ interface Held {
 }
 
 function harness(p: ReturnType<typeof page>) {
-  const state = { review: false, scenes: false, copied: true, owner: 0, owns: true, found: null as Element | null };
+  const state = { scenes: false, copied: true, owner: 0, owns: true, found: null as Element | null };
   const calls: string[] = [];
   const held: Held[] = [];
   const mount = (): ClipboardRoutes => mountClipboardRoutes<Owner, string, Extra>({
@@ -45,8 +45,7 @@ function harness(p: ReturnType<typeof page>) {
     roots: p.roots,
     ports: {
       scriptCell: (el) => el.classList.contains("script"),
-      reviewOnly: () => state.review,
-      copy: (_e, cell, cut, readOnly) => { calls.push((cut ? "cut:" : "copy:") + cell.id + (readOnly ? ":read" : "")); return state.copied; },
+      copy: (_e, cell, cut) => { calls.push((cut ? "cut:" : "copy:") + cell.id); return state.copied; },
       afterCut: (cell) => { calls.push("afterCut:" + cell.id); },
       pasteScenes: (_data, cell) => { calls.push("scenes:" + cell.id); return state.scenes; },
       pasteDraft: (cell, html, text) => { calls.push("draft:" + cell.id + ":" + html + ":" + text); },
@@ -97,20 +96,17 @@ test("copy and cut in a script cell call the clipboard once, and a real cut refr
   routes.dispose();
 });
 
-test("a cut that took nothing, or a cut in review mode, refreshes nothing; copy and cut outside script cells are left to the browser", () => {
+test("a cut that took nothing refreshes nothing; copy and cut outside script cells are left to the browser", () => {
   const p = page();
   const h = harness(p);
   const routes = h.mount();
   h.state.copied = false;
   clip(p, "cut", p.byId("rows-script"), null);
   h.state.copied = true;
-  h.state.review = true;
-  clip(p, "cut", p.byId("rows-script"), null);
-  h.state.review = false;
   clip(p, "copy", p.byId("rows-note"), null);
   clip(p, "cut", p.byId("rows-bare"), null);
   clip(p, "copy", p.byId("outside"), null);
-  assert.deepEqual(h.calls, ["cut:rows-script", "cut:rows-script:read"]);
+  assert.deepEqual(h.calls, ["cut:rows-script"]);
   routes.dispose();
 });
 
@@ -132,17 +128,6 @@ test("a paste into a script cell tries scenes first, then inserts the text; a dr
   const bare = clip(p, "paste", p.byId("rows-bare"), { text: "x" });
   assert.equal(bare.defaultPrevented, false, "outside an editable the browser keeps the paste");
   assert.deepEqual(h.calls, []);
-  routes.dispose();
-});
-
-test("in review mode a script paste still offers scenes (which refuse with their toast) and inserts nothing", () => {
-  const p = page();
-  const h = harness(p);
-  const routes = h.mount();
-  h.state.review = true;
-  const e = clip(p, "paste", p.byId("rows-script"), { text: "x" });
-  assert.equal(e.defaultPrevented, true);
-  assert.deepEqual(h.calls, ["scenes:rows-script"]);
   routes.dispose();
 });
 

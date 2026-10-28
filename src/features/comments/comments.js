@@ -174,7 +174,7 @@ var bindingsVersion = 0;
 var commentTimers = new Set();
 
 function ownsDocument(operation) {
-  return ports.ownership.stillOwns(Object.assign({}, operation, { connection: ports.ownership.capture().connection }));
+  return ports.ownership.stillOwns(operation);
 }
 
 function commentTimer(fn, delay) {
@@ -223,7 +223,7 @@ export function resetCommentBindings() {
 var expandedReplyIds = idMap();
 var replyDrafts = idMap();
 
-export var AUTHOR_NAME_FIELDS = "#settings-name, #comment-name, .reply-name-input, #identity-input, #guest-name";
+export var AUTHOR_NAME_FIELDS = "#settings-name, #comment-name, .reply-name-input, #identity-input";
 var EMOJI_PART = /[\p{Extended_Pictographic}\p{Regional_Indicator}⃣]/u;
 function wholeEmojiCut(value, at) {
   if (typeof Intl === "undefined" || typeof Intl.Segmenter !== "function") return at;
@@ -291,7 +291,6 @@ function commentAssigneeCandidates() {
 export function setCommentAssignee(id, name) {
   var idx = findCommentIndex(id);
   if (idx === -1) return;
-  if (ports.review.refuseInReview()) { renderComments(); return; }
   ports.edits.edit(setCommentAssigneeCommand(id, name, ports.edits.stamps.clock));
 }
 
@@ -299,7 +298,7 @@ function commentAssigneeOptionsHtml(current) {
   var candidates = commentAssigneeCandidates();
   var found = false;
   var html = '<option value=""' + (current ? "" : " selected") + '>' +
-    (current || ports.review.reviewing() ? "Unassigned" : "Assign…") + '</option>';
+    (current ? "Unassigned" : "Assign…") + '</option>';
   candidates.forEach(function (name) {
     var sel = normalizeTagName(name) === normalizeTagName(current || "");
     if (sel) found = true;
@@ -407,7 +406,7 @@ function commentThreadNumbers() {
 
 function commentAvatarHtml(name) {
   var first = Array.from(String(name || "").trim())[0] || "?";
-  return '<span class="person-avatar comment-avatar" style="--size:28px;--presence:' + ports.presence.personColor(name) +
+  return '<span class="person-avatar comment-avatar" style="--size:28px;--presence:' + ports.personColors.personColor(name) +
     '" aria-hidden="true">' + escapeHtml(first.toUpperCase()) + '</span>';
 }
 
@@ -543,7 +542,6 @@ export function postComment() {
 }
 
 function sendNow() {
-  if (ports.review.reviewing()) ports.saves.resume();
   ports.saves.dueNow();
 }
 
@@ -562,7 +560,6 @@ export function openCommentsPanel() {
 }
 
 export function toggleResolve(id) {
-  if (ports.review.reviewing()) return;
   ports.edits.edit(toggleResolveCommand(id, ports.edits.stamps));
 }
 
@@ -833,7 +830,6 @@ function commentCardHtml(c, num) {
   var liveText = anchorLiveText(c.id);
   var orphaned = liveText === null || liveText.length === 0;
   var changed = !orphaned && liveText !== c.quotedText;
-  var review = ports.review.reviewing();
   var entries = commentEntryHtml(c.author, c.createdAt, c.body, false) +
     c.replies.map(function (r) { return commentEntryHtml(r.author, r.createdAt, r.body, true); }).join("");
   return (
@@ -864,21 +860,19 @@ function commentCardHtml(c, num) {
       '<ol class="comment-thread" aria-label="Comments in this thread">' + entries + '</ol>' +
       commentReplyHtml(c) +
       '<div class="comment-actions comment-foot">' +
-        (review ? '' :
-          '<button type="button" class="btn-outline comment-resolve" data-action="toggle-resolve" data-id="' + c.id + '">' +
-            (c.resolved
-              ? '<svg aria-hidden="true"><use href="#i-return"/></svg>Unresolve'
-              : '<svg class="comment-resolve-tick" aria-hidden="true"><use href="#i-check-circle"/></svg>Resolve') +
-          '</button>') +
+        '<button type="button" class="btn-outline comment-resolve" data-action="toggle-resolve" data-id="' + c.id + '">' +
+          (c.resolved
+            ? '<svg aria-hidden="true"><use href="#i-return"/></svg>Unresolve'
+            : '<svg class="comment-resolve-tick" aria-hidden="true"><use href="#i-check-circle"/></svg>Resolve') +
+        '</button>' +
         '<span class="ev-field comment-assign">' +
           '<svg class="comment-assign-icon" aria-hidden="true"><use href="#i-person"/></svg>' +
-          '<select class="comment-assignee-select" id="comment-assignee-' + c.id + '" data-id="' + c.id + '" aria-label="Assign this thread to"' +
-            (review ? ' disabled' : '') + '>' +
+          '<select class="comment-assignee-select" id="comment-assignee-' + c.id + '" data-id="' + c.id + '" aria-label="Assign this thread to">' +
             commentAssigneeOptionsHtml(c.assignee) +
           '</select>' +
           '<svg class="ev-chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg>' +
         '</span>' +
-        (review ? '' : commentMoreHtml(c)) +
+        commentMoreHtml(c) +
       '</div>' +
     '</div>'
   );
@@ -910,13 +904,12 @@ function conflictCardHtml(c) {
         commentEntryHtml(c.author, c.createdAt,
           '<div class="conflict-body">' + (c.emptyValue ? "<em>(you had cleared this)</em>" : conflictBodyHtml(c)) + '</div>', false) +
       '</ol>' +
-      (ports.review.reviewing() ? '' :
-        '<div class="comment-actions comment-foot">' +
-          '<button type="button" class="btn-outline" data-action="restore-conflict" data-id="' + c.id + '">Use my version</button>' +
-          '<button type="button" class="btn-outline" data-action="toggle-resolve" data-id="' + c.id + '">' +
-            (c.resolved ? "Unresolve" : "Keep theirs") + '</button>' +
-          commentMoreHtml(c) +
-        '</div>') +
+      '<div class="comment-actions comment-foot">' +
+        '<button type="button" class="btn-outline" data-action="restore-conflict" data-id="' + c.id + '">Use my version</button>' +
+        '<button type="button" class="btn-outline" data-action="toggle-resolve" data-id="' + c.id + '">' +
+          (c.resolved ? "Unresolve" : "Keep theirs") + '</button>' +
+        commentMoreHtml(c) +
+      '</div>' +
     '</div>'
   );
 }
@@ -993,10 +986,6 @@ export function startComments(nextPorts) {
   listen(document, "keydown", onCommentMenuKeydown, true);
 
   initTaggingHelp();
-  commentDisposers.push(ports.onThreadsSent(function () {
-    captureReplyDrafts();
-    renderComments();
-  }));
   var active = true;
   return { dispose: function () {
     if (!active) return;

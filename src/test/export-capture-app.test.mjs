@@ -7,7 +7,7 @@ await bootApp();
 after(closeApp);
 
 const { LONG_DEMO } = await import("../starters/index.ts");
-const { documentLocation, setHome } = await import("../legacy/location-bridge.ts");
+const { setHome } = await import("../legacy/location-bridge.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { standaloneHtmlFor } = await import("../adapters/page/standalone-html.js");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
@@ -18,7 +18,6 @@ const { exportFacts } = await import("../adapters/formats/export-kit.ts");
 const { buildMarkdownProject, buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
-const TOKEN = "tok-e15-0123456789abcdef";
 const FILE_NAME = "e15-private-plan.md";
 
 function useDemo() {
@@ -27,9 +26,8 @@ function useDemo() {
   confirmSavedNow();
 }
 
-test("E15: a capture taken with a live connection and a file home holds no token, file name or handle", () => {
+test("E15: a capture taken with a file home holds no file name or handle", () => {
   useDemo();
-  documentLocation().setConnection({ serverUrl: "http://127.0.0.1:9/", token: TOKEN, role: "edit" });
   setHome("file", { handle: { name: FILE_NAME, kind: "file" }, format: "md", name: FILE_NAME });
   try {
     const doc = captureExportDocument();
@@ -43,14 +41,12 @@ test("E15: a capture taken with a live connection and a file home holds no token
       JSON.stringify(exportFacts(doc))
     ];
     outputs.forEach((text, i) => {
-      assert.equal(text.includes(TOKEN), false, "output " + i + " holds the token");
       assert.equal(text.includes(FILE_NAME), false, "output " + i + " holds the file name");
     });
     assert.deepEqual(Object.keys(doc).sort(),
       ["broll", "capturedAt", "clockMode", "commentNumbers", "comments", "document", "people", "production", "scenes", "shots", "tags", "title"]);
   } finally {
     setHome("none");
-    documentLocation().setConnection({});
   }
 });
 

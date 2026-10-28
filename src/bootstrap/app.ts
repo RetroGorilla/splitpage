@@ -38,7 +38,6 @@ import {
   mountAppearanceFeature,
   mountConflictsFeature,
   mountCellReachFeature,
-  mountDriveFeature,
   mountFileMenuFeature,
   mountGdocFeature,
   mountHistoryFeature,
@@ -53,7 +52,6 @@ import {
   mountPrompterVisibilityFeature,
   mountSaveFeature,
   mountSaveRecoveryFeature,
-  mountServerFeature,
   mountTopbarFeature,
   mountWriterCloseFeature,
   mountWriterNavigationFeature,
@@ -133,8 +131,6 @@ export function startApp(wiring: Wiring): () => void {
     run(view("mountHistory", mountHistoryFeature));
     overlay.mountToolbar();
     run([mountBrollFeature, stopBrollFeature]);
-    run(view("mountServer", mountServerFeature));
-    run(view("mountDrive", mountDriveFeature));
     run(view("mountSaveRecovery", mountSaveRecoveryFeature));
     run([mountMergeBannerFeature, stopMergeBannerFeature]);
     run(view("mountConflicts", mountConflictsFeature));
