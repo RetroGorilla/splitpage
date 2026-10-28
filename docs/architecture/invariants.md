@@ -276,6 +276,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/application` (the session keeps credentials out of serialised content), `server/`, `desktop/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (plan §6: credentials never enter project exports or recovery metadata).
 - **Acceptance:** application test: serialising a session with a live server connection yields no token, PIN or key. New server test: after a join, no file under the static root contains the PIN or token.
+- **App-side part (connection details as browser state, the server transport, the authority model):** Retired 2026-10-28: feature removed. The app has no server connection any more. The desktop and server part (no PIN, session or launch token in `update-status.json`, `desktop-state.json`, a draft or a served file) still holds until the desktop and server removal.
 - **Milestone 4 (4.22):** held. `captureExportDocument` carries no connection, token, link key, handle or path (E15: `src/test/export-capture-app.test.mjs`, "a capture taken with a live connection and a file home holds no token, file name or handle"). A server transport holds a frozen copy of server and token for one operation and is never serialised (`src/test/server-transport.test.mjs`). The authority model reads connection facts and stores none (`src/test/collaboration-authority.test.mjs`). Still no test for `update-status.json` or statically served files. `HANDOFF.md` §5.29 points here.
 
 ### INV-30 — The setup wizard appears only over a pristine copy
@@ -595,6 +596,8 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Acceptance:** both pass. New unit test: text extracted from a PDF export contains no footer text.
 
 ### INV-62 — Collaborate credentials stay in this browser, per server
+
+Retired 2026-10-28: feature removed.
 
 - **Behaviour:**
   - **Owner key:** typed, posted to `/api/join` and never stored.
