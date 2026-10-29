@@ -8,7 +8,7 @@ import { migrateRows } from "../../../src/core/migrate.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
 import { productionReaders } from "../../../src/bootstrap/document-ports.ts";
 import { htmlToPlainText } from "../../../src/bootstrap/plain-text.ts";
-import { cellOf } from "../../../src/legacy/richtext.ts";
+import { cellOf } from "../../../src/bootstrap/richtext.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 
 const text = { htmlToPlainText, productionReaders };

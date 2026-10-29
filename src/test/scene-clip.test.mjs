@@ -6,7 +6,7 @@ import { migrateRows } from "../bootstrap/document-ports.ts";
 import { dataUrlForSync, intern } from "../adapters/storage/02c-blobs.js";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { commentIds } from "../core/text/runs.ts";
-import { cellOf, fromHtml } from "../legacy/richtext.ts";
+import { cellOf, fromHtml } from "../bootstrap/richtext.ts";
 import { isBlankScene } from "../application/commands/rows.ts";
 import { createUndoHistory, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";

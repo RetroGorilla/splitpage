@@ -8,7 +8,7 @@ import { migrateRows } from "../../../src/bootstrap/document-ports.ts";
 import { mountProductionTagsFeature as initTags } from "../../../src/bootstrap/wiring/production-tags.ts";
 import { detectTwoColumnFormat, parseImportRows } from "../../../src/adapters/formats/import-text.js";
 import { parseMarkdownTable } from "../../../src/adapters/formats/markdown-table.ts";
-import { cellOf } from "../../../src/legacy/richtext.ts";
+import { cellOf } from "../../../src/bootstrap/richtext.ts";
 import { toMarkdown } from "../../../src/core/text/projections.ts";
 import { exportMetaLine, toMarkdownDoc, toMarkdownTableDoc } from "../../../src/adapters/formats/export-text.ts";
 import { LONG_DEMO } from "../../../src/starters/index.ts";

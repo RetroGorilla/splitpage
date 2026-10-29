@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { htmlToMarkdown } from "../legacy/richtext.ts";
+import { htmlToMarkdown } from "../bootstrap/richtext.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { breakdownRows } from "../adapters/formats/export-projections.ts";
 import { commentBodyText, commentEntries } from "../adapters/formats/export-projections.ts";

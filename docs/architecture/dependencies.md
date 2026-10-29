@@ -157,13 +157,13 @@ to about 1.4 s on the Windows workstation).
 [INV-10](invariants.md) lets content reach a script cell only through the rich
 text adapter. The `html-cells` rule reports a production module (every layer
 but `tests`, `tools` and `other`) outside `src/adapters/richtext/` and its
-bridge `src/legacy/richtext.ts` that does either of these:
+shared reader `src/bootstrap/richtext.ts` that does either of these:
 
 - Imports, re-exports, `require`s or dynamically imports a file under
   `src/adapters/richtext/` (target: that file). `import type` is not a decoder
   and passes. Under `verbatimModuleSyntax` an `import { type X }` still loads
   the module, and the report counts it as a value import, so only a whole
-  `import type` passes. The decoder is meant to be reached through the bridge.
+  `import type` passes. The decoder is meant to be reached through the shared reader.
 - Calls a method that parses an HTML string into a document (target:
   `html-parse:<method>`): `parseFromString` unless its second argument is a
   literal `application/xml`, `text/xml`, `image/svg+xml` or

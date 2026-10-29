@@ -30,7 +30,7 @@ const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts
 const homeModule = await import("../bootstrap/wiring/location-owner.ts");
 const { cellRuns, cellTextCommand } = await import("../application/commands/cell-text.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
-const { scriptCellOf } = await import("../legacy/richtext.ts");
+const { scriptCellOf } = await import("../bootstrap/richtext.ts");
 const { liveSession, runCommand, sessionTextPorts } = await import("../bootstrap/wiring/session-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
