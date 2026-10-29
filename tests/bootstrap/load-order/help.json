@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/help/help.js",
     "src/features/help/actions.ts",

@@ -123,3 +123,24 @@ test("merging never leaves a cell out of canonical form, and without conflicts t
     if (!res.conflict && !res.markConflicts) assert.deepEqual(mergeCells(o, b, a), res);
   }
 });
+
+test("edits far apart on one side still merge with the other side's edit", () => {
+  const words = Array.from({ length: 40 }, (_, k) => "w" + k);
+  const edited = (at: number[]) => [T(words.map((w, k) => (at.includes(k) ? w.toUpperCase() : w)).join(" "))];
+  const res = mergeCells([T(words.join(" "))], edited([1, 38]), edited([20]));
+  assert.deepEqual(res, { cell: edited([1, 20, 38]), conflict: false, markConflicts: 0 });
+});
+
+test("when two alignments of the base tie, the merge keeps the words they share in their first place", () => {
+  assert.deepEqual(mergeCells([T("c b")], [T("b")], [T("b a d c")]), { cell: [T("b a d c")], conflict: false, markConflicts: 0 });
+  assert.deepEqual(mergeCells([T("a c a b c")], [T("a a a")], [T("a c a a")]), { cell: [T("a a a")], conflict: false, markConflicts: 0 });
+});
+
+test("a b-roll key both sides keep takes its text from theirs and merges the marks on it", () => {
+  const o = [T("a "), B("bs1"), T(" z")];
+  const mine = [T("a "), B("bs1", "b-roll -"), T(" z")];
+  const theirs = [T("a "), B("bs1", "B-roll \u2014", { b: true }), T(" z")];
+  assert.deepEqual(mergeCells(o, mine, theirs), { cell: theirs, conflict: false, markConflicts: 0 });
+  const links = mergeCells(o, setMark(o, 2, 3, "href", "https://a.x/"), setMark(o, 2, 3, "href", "https://b.x/"));
+  assert.deepEqual(links, { cell: [T("a "), B("bs1", "B-roll:", { href: "https://b.x/" }), T(" z")], conflict: false, markConflicts: 1 });
+});

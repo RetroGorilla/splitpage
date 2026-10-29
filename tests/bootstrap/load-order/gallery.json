@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/gallery/annotate.js",
     "src/features/gallery/overlay.js",
