@@ -1,3 +1,5 @@
+import type { NewTabPorts, NewTabMount } from "./ports.ts";
+import type { DocumentRow, ValidatedDocument } from "../../core/document/validated.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import { DEFAULT_WPM } from "../../core/document/timing.ts";
 import { SCHEMA_VERSION } from "../../core/document/fields.ts";
@@ -5,38 +7,65 @@ import { escapeHtml } from "../../core/document/text-policy.ts";
 import { NO_DESTINATION } from "../../application/transitions/ports.ts";
 import { fileKindFromName } from "../../../shared/file-names.js";
 
-var ports = null;
-var activeMount = null;
-var listeners = [];
 
-function listen(target, type, listener) {
+type RecentEntry = {
+  readonly fileId: string;
+  readonly title?: string;
+  readonly name: string;
+  readonly at: number;
+};
+
+type StarterState = {
+  readonly wordsPerMinute?: number;
+  readonly rows: readonly Pick<DocumentRow, "audioText">[];
+};
+
+type NewTabWindow = Window & {
+  __splitpageNoNewTab?: boolean;
+  __newTab?: {
+    open: () => void;
+    isOpen: () => boolean;
+    eligible: () => Promise<boolean>;
+    blankState: () => ValidatedDocument | null;
+    starterIds: () => string[];
+    starterState: (id: string) => ValidatedDocument | null;
+    refreshRecents: () => Promise<void>;
+  };
+};
+
+let ports: NewTabPorts;
+((() => { (ports as unknown) = null; }) satisfies (() => void))();
+let activeMount: object | null = null;
+const listeners: Array<() => void> = [];
+
+function listen<K extends keyof HTMLElementEventMap>(target: HTMLElement, type: K, listener: (event: HTMLElementEventMap[K]) => void) {
   target.addEventListener(type, listener);
   listeners.push(function () { target.removeEventListener(type, listener); });
 }
 
-var newTabPageShown = false;
+let newTabPageShown = false;
 
 function newTabPageEl() { return document.getElementById("newtab-page"); }
 
 function newTabSuppressed() {
-  return window.__splitpageNoNewTab === true;
+  return (window as NewTabWindow).__splitpageNoNewTab === true;
 }
 
 function openNewTabPage() {
-  var el = newTabPageEl();
+  const el = newTabPageEl();
   if (!el || newTabPageShown) return;
   newTabPageShown = true;
   el.hidden = false;
   document.documentElement.classList.add("is-newtab-open");
   updateDesktopPitch();
   document.addEventListener("keydown", onNewTabKeydown, true);
-  var first = el.querySelector('[data-newtab-action="new"]');
+  const first = el.querySelector<HTMLElement>('[data-newtab-action="new"]');
   if (first) first.focus();
   refreshRecents();
 }
 
 function closeNewTabPage() {
-  var el = newTabPageEl();
+  const el = newTabPageEl();
   if (!newTabPageShown) return;
   newTabPageShown = false;
   if (el) el.hidden = true;
@@ -45,7 +74,7 @@ function closeNewTabPage() {
   document.removeEventListener("keydown", onNewTabKeydown, true);
 }
 
-function onNewTabKeydown(e) {
+function onNewTabKeydown(e: KeyboardEvent) {
   if (e.key !== "Escape") return;
   if (document.querySelector(".modal-backdrop:not([hidden]), #tour-overlay:not([hidden])")) return;
   e.stopPropagation();
@@ -61,13 +90,13 @@ function blankDocumentState() {
   });
 }
 
-function starterDocumentState(id) {
-  var starter = ports.findStarter(id);
+function starterDocumentState(id: string | null) {
+  const starter = ports.findStarter(id as string);
   return starter ? ports.prepareDocument(JSON.parse(JSON.stringify(starter.state))) : null;
 }
 
-function adoptNewDocument(next, reason) {
-  var leaves = ports.place.home().kind === "file" || ports.place.home().kind === "import";
+function adoptNewDocument(next: ValidatedDocument, reason: string) {
+  const leaves = ports.place.home().kind === "file" || ports.place.home().kind === "import";
   ports.resetProductionPanel();
   ports.transitions.startNew({ from: { document: next }, reason: reason, destination: leaves ? NO_DESTINATION : undefined });
   ports.saving.confirmSavedNow();
@@ -75,13 +104,13 @@ function adoptNewDocument(next, reason) {
   closeNewTabPage();
 }
 
-function startNewDocument(makeState, reason) {
-  var mounted = activeMount;
-  var ready = ports.document.current() ? null : ports.startup.ready();
+function startNewDocument(makeState: () => ValidatedDocument | null, reason: string): Promise<boolean> {
+  const mounted = activeMount;
+  const ready = ports.document.current() ? null : ports.startup.ready();
   if (ready) {
     return ready.then(function () { return activeMount === mounted ? startNewDocument(makeState, reason) : false; });
   }
-  var next = makeState();
+  const next = makeState();
   if (!next) return Promise.resolve(false);
   adoptNewDocument(next, reason);
   return Promise.resolve(true);
@@ -91,17 +120,17 @@ function startBlankScript() {
   return startNewDocument(blankDocumentState, "startBlankScript: a new blank document");
 }
 
-function startStarterScript(id) {
+function startStarterScript(id: string | null) {
   return startNewDocument(function () { return starterDocumentState(id); },
     "startStarterScript: a new document from the " + id + " starter");
 }
 
 function openPasteAsNewDocument() {
-  var mounted = activeMount;
+  const mounted = activeMount;
   ports.importText({
     intoNewDocument: function (rows, scan) {
       if (activeMount !== mounted) return;
-      var next = ports.prepareDocument({ schema: SCHEMA_VERSION, title: "Untitled Script", rows: rows });
+      const next = ports.prepareDocument({ schema: SCHEMA_VERSION, title: "Untitled Script", rows: rows });
       scan(next);
       adoptNewDocument(next, "newtab paste: a new document from pasted text");
     }
@@ -109,27 +138,27 @@ function openPasteAsNewDocument() {
 }
 
 async function newTabOpenFile() {
-  var mounted = activeMount;
+  const mounted = activeMount;
   await ports.openFile();
   if (activeMount !== mounted) return;
   if (ports.place.home().kind === "import" || ports.place.home().kind === "file") closeNewTabPage();
 }
 
-function isFileDrag(e) {
-  var types = e.dataTransfer && e.dataTransfer.types;
+function isFileDrag(e: DragEvent) {
+  const types = e.dataTransfer && e.dataTransfer.types;
   if (!types) return false;
-  for (var i = 0; i < types.length; i++) if (types[i] === "Files") return true;
+  for (let i = 0; i < types.length; i++) if (types[i] === "Files") return true;
   return false;
 }
 
-function setDropHover(on) {
-  var zone = document.getElementById("newtab-drop");
+function setDropHover(on: boolean) {
+  const zone = document.getElementById("newtab-drop");
   if (zone) zone.classList.toggle("is-over", !!on);
 }
 
-function newTabOpenDropped(file) {
+function newTabOpenDropped(file: File | undefined) {
   if (!file) return Promise.resolve(false);
-  if (!fileKindFromName(file.name)) {
+  if (!(fileKindFromName(file.name) as unknown)) {
     ports.notices.show("Splitpage opens .md, .splitpage, .docx, .txt and .csv files — " +
       file.name + " isn't one of them.", "warn");
     return Promise.resolve(false);
@@ -137,14 +166,14 @@ function newTabOpenDropped(file) {
   return ports.opening.open({ kind: "file", file: file, handle: null });
 }
 
-function starterSceneSeconds(state) {
-  var wpm = state.wordsPerMinute || DEFAULT_WPM;
+function starterSceneSeconds(state: StarterState) {
+  const wpm = state.wordsPerMinute || DEFAULT_WPM;
   return state.rows.map(function (row) { return ports.text.productionReaders.wordCount(row.audioText) / wpm * 60; });
 }
 
-function starterPreviewHtml(state) {
-  var secs = starterSceneSeconds(state);
-  var total = secs.reduce(function (n, s) { return n + s; }, 0);
+function starterPreviewHtml(state: StarterState) {
+  const secs = starterSceneSeconds(state);
+  const total = secs.reduce(function (n, s) { return n + s; }, 0);
   return '<span class="newtab-preview" aria-hidden="true">' +
     '<span class="newtab-preview-bar">' + secs.map(function (s) {
       return '<i style="flex-grow:' + Math.max(1, Math.round(s)) + '"></i>';
@@ -154,10 +183,10 @@ function starterPreviewHtml(state) {
 }
 
 function renderStarterCards() {
-  var cards = document.getElementById("newtab-cards");
+  const cards = document.getElementById("newtab-cards");
   if (!cards || cards.querySelector('[data-newtab-action="starter"]')) return;
   cards.insertAdjacentHTML("beforeend", ports.starters.map(function (s) {
-    var scenes = s.state.rows.length;
+    const scenes = s.state.rows.length;
     return '<button type="button" class="newtab-card" data-newtab-action="starter" data-starter="' + escapeHtml(s.id) + '">' +
       '<strong class="newtab-card-name">' + escapeHtml(s.name) + '</strong>' +
       '<span class="newtab-card-desc">' + escapeHtml(s.desc) + '</span>' +
@@ -166,73 +195,73 @@ function renderStarterCards() {
         '<span aria-hidden="true">·</span>' +
         '<span class="newtab-card-count">' + scenes + (scenes === 1 ? ' scene' : ' scenes') + '</span>' +
       '</span>' +
-      starterPreviewHtml(s.state) +
+      starterPreviewHtml(s.state as unknown as StarterState) +
     '</button>';
   }).join(""));
 }
 
 function updateDesktopPitch() {
-  var pitch = document.getElementById("newtab-desktop");
+  const pitch = document.getElementById("newtab-desktop");
   if (!pitch) return;
   pitch.hidden = !ports.desktopDownload.offered();
-  var link = document.getElementById("newtab-desktop-link");
-  if (link && ports.desktopDownload.offered()) link.href = ports.desktopDownload.url();
+  const link = document.getElementById("newtab-desktop-link");
+  if (link && ports.desktopDownload.offered()) (link as HTMLAnchorElement).href = ports.desktopDownload.url();
 }
 
 function recentsSupported() {
   return !!(ports.desktop() && ports.recents.available());
 }
 
-function formatRecentWhen(at) {
+function formatRecentWhen(at: number) {
   if (!at) return "";
-  var mins = Math.floor((Date.now() - at) / 60000);
+  const mins = Math.floor((Date.now() - at) / 60000);
   if (mins < 1) return "Just now";
   if (mins < 60) return mins + " min ago";
-  var hours = Math.floor(mins / 60);
+  const hours = Math.floor(mins / 60);
   if (hours < 24) return hours + " h ago";
-  var days = Math.floor(hours / 24);
+  const days = Math.floor(hours / 24);
   if (days === 1) return "Yesterday";
   if (days < 7) return days + " days ago";
-  var d = new Date(at);
+  const d = new Date(at);
   return d.toLocaleDateString(undefined, d.getFullYear() === new Date().getFullYear()
     ? { day: "numeric", month: "short" }
     : { day: "numeric", month: "short", year: "numeric" });
 }
 
-function renderContinue(entry) {
-  var row = document.getElementById("newtab-continue");
-  var sub = document.querySelector("#newtab-page .newtab-sub");
-  var btn = document.getElementById("newtab-continue-btn");
+function renderContinue(entry: RecentEntry | null) {
+  const row = document.getElementById("newtab-continue");
+  const sub = document.querySelector<HTMLElement>("#newtab-page .newtab-sub");
+  const btn = document.getElementById("newtab-continue-btn");
   if (!row || !btn) return;
-  var has = !!(entry && entry.fileId);
+  const has = !!(entry && entry.fileId);
   row.hidden = !has;
   if (sub) sub.hidden = !has;
   if (!has) { btn.setAttribute("data-file-id", ""); return; }
-  var title = entry.title || entry.name;
-  document.getElementById("newtab-continue-title").textContent = title;
-  document.getElementById("newtab-continue-when").textContent = formatRecentWhen(entry.at);
-  btn.setAttribute("data-file-id", entry.fileId);
+  const title = (entry as RecentEntry).title || (entry as RecentEntry).name;
+  (document.getElementById("newtab-continue-title") as HTMLElement).textContent = title;
+  (document.getElementById("newtab-continue-when") as HTMLElement).textContent = formatRecentWhen((entry as RecentEntry).at);
+  btn.setAttribute("data-file-id", (entry as RecentEntry).fileId);
   btn.setAttribute("aria-label", "Continue " + title);
-  btn.title = entry.name;
+  btn.title = (entry as RecentEntry).name;
 }
 
-function renderRecents(entries) {
-  var col = document.getElementById("newtab-recents");
-  var list = document.getElementById("newtab-recents-list");
-  var main = document.querySelector("#newtab-page .newtab-main");
+function renderRecents(entries: RecentEntry[]) {
+  const col = document.getElementById("newtab-recents");
+  const list = document.getElementById("newtab-recents-list");
+  const main = document.querySelector("#newtab-page .newtab-main");
   if (!col || !list) return;
   col.hidden = false;
   if (main) main.classList.add("has-recents");
   renderContinue(entries[0] || null);
-  var clear = document.getElementById("newtab-recents-clear");
+  const clear = document.getElementById("newtab-recents-clear");
   if (clear) clear.hidden = !entries.length;
   if (!entries.length) {
     list.innerHTML = '<div class="newtab-recents-empty">Nothing yet — what you open shows up here.</div>';
     return;
   }
   list.innerHTML = entries.map(function (r) {
-    var when = formatRecentWhen(r.at);
-    var title = r.title || r.name;
+    const when = formatRecentWhen(r.at);
+    const title = r.title || r.name;
     return '<div class="newtab-recent">' +
       '<button type="button" class="newtab-recent-open" data-newtab-action="open-recent" ' +
         'data-file-id="' + escapeHtml(r.fileId) + '" title="' + escapeHtml(r.name) + '">' +
@@ -252,21 +281,21 @@ function renderRecents(entries) {
 }
 
 async function refreshRecents() {
-  var mounted = activeMount;
+  const mounted = activeMount;
   updateDesktopPitch();
   if (!recentsSupported()) { renderContinue(null); return; }
-  var entries;
+  let entries;
   try { entries = await ports.recents.list(); } catch (e) { return; }
   if (activeMount !== mounted) return;
-  renderRecents(Array.isArray(entries) ? entries : []);
+  renderRecents(Array.isArray(entries) ? entries as RecentEntry[] : []);
 }
 
-async function openRecent(fileId) {
-  var mounted = activeMount;
+async function openRecent(fileId: string | null) {
+  const mounted = activeMount;
   if (!fileId || !recentsSupported()) return;
-  var entry;
+  let entry;
   try {
-    var r = await ports.recents.routeOpen({ kind: "file", fileId: fileId });
+    const r = await ports.recents.routeOpen({ kind: "file", fileId: fileId });
     if (activeMount !== mounted) return;
     if (!r || r.where !== "this-tab") {
       refreshRecents();
@@ -281,41 +310,41 @@ async function openRecent(fileId) {
     return;
   }
   if (activeMount !== mounted) return;
-  var handle = ports.recentHandle(entry);
-  var file = await handle.getFile();
+  const handle = ports.recentHandle(entry as NonNullable<typeof entry>);
+  const file = await handle.getFile();
   if (activeMount !== mounted) return;
   await ports.opening.open({ kind: "file", file: file, handle: handle });
 }
 
-async function forgetRecent(fileId) {
-  var mounted = activeMount;
+async function forgetRecent(fileId: string | null) {
+  const mounted = activeMount;
   if (!fileId || !recentsSupported() || !ports.recents.canRemove()) return;
-  var entries;
+  let entries;
   try { entries = await ports.recents.remove(fileId); } catch (e) { return; }
   if (activeMount !== mounted) return;
-  renderRecents(Array.isArray(entries) ? entries : []);
+  renderRecents(Array.isArray(entries) ? entries as RecentEntry[] : []);
 }
 
 async function clearRecents() {
-  var mounted = activeMount;
+  const mounted = activeMount;
   if (!recentsSupported() || !ports.recents.canClear()) return;
-  var entries;
+  let entries;
   try { entries = await ports.recents.clear(); } catch (e) { return; }
   if (activeMount !== mounted) return;
-  renderRecents(Array.isArray(entries) ? entries : []);
+  renderRecents(Array.isArray(entries) ? entries as RecentEntry[] : []);
 }
 
 async function newTabEligibleForAutoShow() {
-  var mounted = activeMount;
+  const mounted = activeMount;
   if (newTabSuppressed()) return false;
   if (!ports.seedCheck.passes()) return false;
   if (ports.desktop() && ports.draftResume.restorePending()) return false;
   if (ports.place.home().kind === "file") return false;
   if (ports.desktop()) {
-    if ((ports.launch.launchIntent() && ports.launch.launchIntent().type !== "blank") ||
+    if ((ports.launch.launchIntent() && (ports.launch.launchIntent() as { type: string }).type !== "blank") ||
         ports.launch.hasDraftToRestore()) return false;
   } else {
-    var handle;
+    let handle;
     try { handle = await ports.lastFile.load(); } catch (e) { handle = null; }
     if (activeMount !== mounted) return false;
     if (handle) return false;
@@ -325,24 +354,24 @@ async function newTabEligibleForAutoShow() {
 }
 
 async function maybeAutoShowNewTabPage() {
-  var mounted = activeMount;
-  var eligible;
+  const mounted = activeMount;
+  let eligible;
   try { eligible = await newTabEligibleForAutoShow(); } catch (e) { eligible = false; }
   if (eligible && activeMount === mounted) openNewTabPage();
 }
 
-export function startNewTab(given) {
+export function startNewTab(given: NewTabPorts): NewTabMount {
   ports = given;
-  var mounted = {};
+  const mounted = {};
   activeMount = mounted;
   (function wireNewTabPage() {
-    var el = newTabPageEl();
+    const el = newTabPageEl();
     if (!el) return;
     renderStarterCards();
     listen(el, "click", function (e) {
-      var target = e.target.closest("[data-newtab-action]");
+      const target = (e.target as Element).closest("[data-newtab-action]");
       if (!target) return;
-      var action = target.getAttribute("data-newtab-action");
+      const action = target.getAttribute("data-newtab-action");
       e.preventDefault();
       if (action === "new") startBlankScript();
       else if (action === "starter") startStarterScript(target.getAttribute("data-starter"));
@@ -360,43 +389,43 @@ export function startNewTab(given) {
     listen(el, "dragover", function (e) {
       if (!isFileDrag(e)) return;
       e.preventDefault();
-      try { e.dataTransfer.dropEffect = "copy"; } catch (err) {}
+      try { (e.dataTransfer as DataTransfer).dropEffect = "copy"; } catch (err) {}
       setDropHover(true);
     });
     listen(el, "dragleave", function (e) {
-      if (!e.relatedTarget || !el.contains(e.relatedTarget)) setDropHover(false);
+      if (!e.relatedTarget || !(el as HTMLElement).contains(e.relatedTarget as Node)) setDropHover(false);
     });
     listen(el, "drop", function (e) {
       if (!isFileDrag(e)) return;
       e.preventDefault();
       setDropHover(false);
-      newTabOpenDropped(e.dataTransfer.files && e.dataTransfer.files[0]);
+      newTabOpenDropped((e.dataTransfer as DataTransfer).files && (e.dataTransfer as DataTransfer).files[0]);
     });
   })();
 
   maybeAutoShowNewTabPage();
 
-  window.__newTab = {
+  (window as NewTabWindow).__newTab = {
     open: function () { if (activeMount === mounted) openNewTabPage(); },
     isOpen: function () { return activeMount === mounted && newTabPageShown; },
     eligible: function () { return activeMount === mounted ? newTabEligibleForAutoShow() : Promise.resolve(false); },
     blankState: function () { return activeMount === mounted ? blankDocumentState() : null; },
     starterIds: function () { return activeMount === mounted ? ports.starters.map(function (s) { return s.id; }) : []; },
-    starterState: function (id) { return activeMount === mounted ? starterDocumentState(id) : null; },
+    starterState: function (id: string) { return activeMount === mounted ? starterDocumentState(id) : null; },
     refreshRecents: function () { return activeMount === mounted ? refreshRecents() : Promise.resolve(); }
   };
-  var probe = window.__newTab;
-  var disposed = false;
+  const probe = (window as NewTabWindow).__newTab;
+  let disposed = false;
   return {
     closeNewTabPage: function () { if (!disposed) closeNewTabPage(); },
     dispose: function () {
       if (disposed) return;
       disposed = true;
-      while (listeners.length) listeners.pop()();
+      while (listeners.length) (listeners.pop() as () => void)();
       closeNewTabPage();
-      if (window.__newTab === probe) delete window.__newTab;
+      if ((window as NewTabWindow).__newTab === probe) delete (window as NewTabWindow).__newTab;
       activeMount = null;
-      ports = null;
+      (ports as unknown) = null;
     }
   };
 }

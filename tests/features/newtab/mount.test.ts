@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startNewTab } from "../../../src/features/newtab/newtab.js";
+import { startNewTab } from "../../../src/features/newtab/newtab.ts";
 import type { NewTabPorts } from "../../../src/features/newtab/ports.ts";
 import { NO_DESTINATION } from "../../../src/application/transitions/ports.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
