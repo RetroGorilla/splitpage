@@ -1,4 +1,5 @@
 import "../../src/test/_dom.mjs";
+import "../../src/test/_screen-state-started.mjs";
 import { externalLinks as portExternalLinks } from "../../src/bootstrap/wiring/ports/desktop.ts";
 import { changes as portChanges } from "../../src/bootstrap/wiring/ports/preferences.ts";
 import { actions as portActions } from "../../src/bootstrap/wiring/ports/actions.ts";
