@@ -90,7 +90,7 @@ and both the menu's painting and the action's availability call it:
 | Export again, and its label | `exportAgainItemState()`, `18c-export-dialog.js` |
 | Present in browser, Chromium speech, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `appDataImportShown()`, `20f-desktop.js` |
 | Autosave's switch | `autoSavePolicy().enabled()`, `src/legacy/save-bridge.ts` |
-| Save while a save is running | `saveInProgress()`, `src/legacy/screen-state.ts` |
+| Save while a save is running | `saves.busy()`, `src/bootstrap/wiring/ports/saving.ts` |
 
 `itemAvailability()` (`src/features/file-menu/actions.ts`) turns such a state
 into an availability. `label` may be a function: Save to file shows the
@@ -155,16 +155,16 @@ and finds no call and no started owner.
 
 `src/legacy/this-document-actions.ts` (the command menu's "This document"
 group), `file-actions.ts`, `view-actions.ts` and `zoom-actions.ts` define the actions whose handlers are
-still in `src/js`. `src/legacy/screen.ts` names what can refuse an action
+still in `src/js`. `src/application/screen.ts` names what can refuse an action
 (still loading, a dialog, the open command menu, the tour, Present, the
 Writer, the B-roll shot-list page) with the reason a person is shown; it
 imports nothing from `src/js`, so the numbered modules can import it without
 joining their import cycle.
 
-`src/legacy/screen-state.ts` is the one bridge to the global state `S`: it
-answers `screenNow()`, `inDesktopApp()` and `saveInProgress()`. No other file under `src/legacy/` imports `S`; an action
-file that needs to know something `S` holds asks the bridge, so the day `S`
-goes, one file changes.
+The screen state owner (`src/application/screen-state.ts`) answers
+`screenNow()` from ports the wiring builds in `src/bootstrap/wiring/ports/screen.ts`:
+the document reader, the view flags, the prompter state and the page's dialog
+and launcher backdrops (`src/adapters/page/overlays.ts`).
 
 ### What is in front
 

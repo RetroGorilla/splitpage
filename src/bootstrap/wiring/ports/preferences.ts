@@ -44,6 +44,8 @@ export const flags: Pick<ViewFlags, "findOpen" | "setFindOpen" | "brollPageOpen"
   setFindOpen: (open) => viewFlags().setFindOpen(open)
 };
 
+export const screenFlags: () => Pick<ViewFlags, "tourOpen" | "writerOpen" | "brollPageOpen"> = viewFlags;
+
 export const preferenceValues = {
   defaultWpm: () => preferences().defaultWpm(),
   clock: () => preferences().clock(),
