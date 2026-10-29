@@ -3,7 +3,7 @@ import { heldDocument, holdMergeBase, noteAbsorbedDirty, noteMerged, noteRecover
 import { migrateRows, withDocumentPorts } from "../../../legacy/document-ports.ts";
 import { captureRestore, stillRestoring } from "../../../legacy/recovery-bridge.ts";
 import { autoSavePolicy, confirmBaseline, saveChanges } from "../../../legacy/save-bridge.ts";
-import { mergeUndo } from "../../../legacy/editor-bridge.ts";
+import { mergeUndo } from "../editor-owners.ts";
 import { setHome } from "../../../legacy/location-bridge.ts";
 import { getEditorName } from "../../../legacy/preferences-bridge.ts";
 import { documentIdentityOwner } from "../document-identity.ts";

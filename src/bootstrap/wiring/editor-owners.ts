@@ -1,18 +1,18 @@
-import type { CellEditing } from "../application/editing/cell-editing.ts";
-import { createFocusMemory } from "../application/editing/focus-memory.ts";
-import type { FocusMemory } from "../application/editing/focus-memory.ts";
-import { createPaintGuard, createUndoGuard } from "../application/editing/paint-guard.ts";
-import type { PaintGuard, UndoGuard } from "../application/editing/paint-guard.ts";
-import { createRowDrag } from "../application/editing/row-drag.ts";
-import type { RowDrag } from "../application/editing/row-drag.ts";
-import { createEditorSelection } from "../application/editing/selection.ts";
-import type { EditorSelection, SelectionPorts } from "../application/editing/selection.ts";
-import { createMergeUndo } from "../application/session/merge-undo.ts";
-import type { MergeUndo } from "../application/session/merge-undo.ts";
-import type { LiveDocumentPort } from "../application/transitions/ports.ts";
-import { editorKeys } from "../core/text/selection.ts";
-import { scriptCellOf } from "./richtext.ts";
-import { liveSession } from "./session-bridge.ts";
+import type { CellEditing } from "../../application/editing/cell-editing.ts";
+import { createFocusMemory } from "../../application/editing/focus-memory.ts";
+import type { FocusMemory } from "../../application/editing/focus-memory.ts";
+import { createPaintGuard, createUndoGuard } from "../../application/editing/paint-guard.ts";
+import type { PaintGuard, UndoGuard } from "../../application/editing/paint-guard.ts";
+import { createRowDrag } from "../../application/editing/row-drag.ts";
+import type { RowDrag } from "../../application/editing/row-drag.ts";
+import { createEditorSelection } from "../../application/editing/selection.ts";
+import type { EditorSelection, SelectionPorts } from "../../application/editing/selection.ts";
+import { createMergeUndo } from "../../application/session/merge-undo.ts";
+import type { MergeUndo } from "../../application/session/merge-undo.ts";
+import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
+import { editorKeys } from "../../core/text/selection.ts";
+import { scriptCellOf } from "../../legacy/richtext.ts";
+import { liveSession } from "../../legacy/session-bridge.ts";
 
 export type PicturePicker = (rowId: string) => void;
 

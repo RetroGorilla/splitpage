@@ -11,7 +11,7 @@ import type { PastePlace, SceneMedia, SceneMediaPorts, ScenePorts, Scenes } from
 import { startSceneMedia as mountSceneMedia } from "../../features/rows/scene-media.js";
 import { startSceneRows as mountScenes } from "../../features/rows/scenes.js";
 import { randomIds } from "../../adapters/identity/ids.ts";
-import { cellEditing, rowDrag } from "../../legacy/editor-bridge.ts";
+import { cellEditing, rowDrag } from "./editor-owners.ts";
 import { deleteConfirmation } from "../../legacy/production-editing-bridge.ts";
 
 const scenes = owned<Scenes>();

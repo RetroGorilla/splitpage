@@ -20,7 +20,7 @@ import { exportKitStarted } from "../../src/bootstrap/wiring/export-capture.ts";
 import type { TransitionDeps, Wiring, WiringDeps } from "../../src/bootstrap/wiring.ts";
 import { appActions } from "../../src/legacy/app-actions.ts";
 import { exportFormats, installExportFormats } from "../../src/bootstrap/wiring/export-registry.ts";
-import { editorStarted, startEditor } from "../../src/legacy/editor-bridge.ts";
+import { editorStarted, startEditor } from "../../src/bootstrap/wiring/editor-owners.ts";
 import { locationStarted, startLocation } from "../../src/legacy/location-bridge.ts";
 import { preferencesStarted, startPreferences } from "../../src/legacy/preferences-bridge.ts";
 import { shotHidingPorts, shotHidingStarted, startShotHiding } from "../../src/bootstrap/wiring/shot-hiding.ts";

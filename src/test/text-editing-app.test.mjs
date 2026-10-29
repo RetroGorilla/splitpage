@@ -12,7 +12,7 @@ const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { render } = await import("../features/rows/render.js");
-const { cellEditing, undoGuard } = await import("../legacy/editor-bridge.ts");
+const { cellEditing, undoGuard } = await import("../bootstrap/wiring/editor-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const undo = () => undoOwner().undo();
 const redo = () => undoOwner().redo();
