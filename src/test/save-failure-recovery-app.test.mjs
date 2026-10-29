@@ -53,10 +53,10 @@ function edit(text) {
 
 function scene(run) {
   return async (t) => {
-    mockClock(t);
+    const clock = mockClock(t);
     setAutoSaveEnabled(false);
     try {
-      await run(t);
+      await run(t, clock);
     } finally {
       window.__desktopTest.restoreBackend();
       fileConflicts().close();
@@ -65,6 +65,10 @@ function scene(run) {
       homeModule.setHome("none");
     }
   };
+}
+
+async function turns(count) {
+  for (let turn = 0; turn < (count || 40); turn++) await new Promise((resolve) => setImmediate(resolve));
 }
 
 function toasts(kind) {
@@ -113,9 +117,9 @@ function assertSavedCleanly(who) {
 }
 
 const FAULTS = [
-  { op: "createWritable", why: "the file is read-only", error: () => new DOMException("The file is read-only.", "NoModificationAllowedError") },
-  { op: "write", why: "the disk is full", error: () => new DOMException("There is not enough space on the disk.", "QuotaExceededError") },
-  { op: "close", why: "permission is lost while closing", error: () => new DOMException("The request is not allowed by the user agent.", "NotAllowedError") }
+  { op: "createWritable", why: "the file is read-only", shown: /read-only/i, error: () => new DOMException("The file is read-only.", "NoModificationAllowedError") },
+  { op: "write", why: "the disk is full", shown: /space on the disk/i, error: () => new DOMException("There is not enough space on the disk.", "QuotaExceededError") },
+  { op: "close", why: "permission is lost while closing", shown: /not allowed/i, error: () => new DOMException("The request is not allowed by the user agent.", "NotAllowedError") }
 ];
 
 for (const fault of FAULTS) {
@@ -137,6 +141,7 @@ for (const fault of FAULTS) {
     assert.equal(unsavedChanges(), true, "the document is still dirty");
     assert.equal(toasts("error").length, 1, "one error is shown");
     assert.match(toasts("error")[0], /^Could not save — /, "and it says the save failed");
+    assert.match(toasts("error")[0], fault.shown, "and it says why");
     assert.equal(currentDocument().rows[0].audioText, "Typed before the save.", "the typed text is still in the document");
     assert.equal(closeWouldWarn(), true, "closing still warns");
     assert.equal(fileConflicts().current(), null, "a failed write is not reported as a conflict");
@@ -152,7 +157,7 @@ for (const fault of FAULTS) {
   }));
 }
 
-test("a handle whose permission is withdrawn fails the save, and saving again once it is granted completes", scene(async () => {
+test("a handle whose permission is withdrawn is refused as an unreadable file, writes nothing, and saving again once it is granted completes", scene(async () => {
   const target = createHeldFileHandle({
     name: "revoked.splitpage", text: buildSplitpageFile(exportDocumentOf(script("Revoked", { docId: ID("2") }))), lastModified: 1000
   });
@@ -166,6 +171,9 @@ test("a handle whose permission is withdrawn fails the save, and saving again on
   assertUnchangedByFailure(before, "after the refused save");
   assert.equal(unsavedChanges(), true, "the document is still dirty");
   assert.equal(closeWouldWarn(), true, "closing still warns");
+  assert.deepEqual(fileConflicts().current(), { fileName: "revoked.splitpage", current: null, kind: "project" }, "the save is refused as a file conflict with nothing to compare");
+  assert.match(document.getElementById("file-conflict-detail").textContent, /Could not check whether/, "and the dialog says the file could not be checked");
+  assert.equal(toasts("error").length, 0, "no error toast is shown");
   fileConflicts().close();
 
   target.setPermission("granted");
@@ -176,16 +184,19 @@ test("a handle whose permission is withdrawn fails the save, and saving again on
   assertSavedCleanly("after the retry");
 }));
 
-test("a failed automatic save pauses autosave and keeps the work, and a manual save writes, clears the pause and the dirty state", scene(async () => {
+test("a failed automatic save pauses autosave and keeps the work, and a manual save writes, clears the pause and the dirty state", scene(async (t, clock) => {
   const target = createHeldFileHandle({
     name: "auto.splitpage", text: buildSplitpageFile(exportDocumentOf(script("Automatic", { docId: ID("3") }))), lastModified: 1000
   });
   await openFrom(target.handle);
+  setAutoSaveEnabled(true);
   edit("Typed before the automatic save.");
   const before = observed();
 
   target.failNext("write", new DOMException("There is not enough space on the disk.", "QuotaExceededError"));
-  await saveDoc({ auto: true });
+  clock.tick(2000);
+  await turns();
+  assert.equal(target.calls.includes("createWritable"), true, "the autosave timer ran a save");
   assert.equal(target.commits.length, 0, "nothing was committed");
   assertUnchangedByFailure(before, "after the failed automatic save");
   assert.equal(unsavedChanges(), true, "the document is still dirty");
@@ -249,6 +260,7 @@ for (const code of ["EACCES", "ENOSPC"]) {
     assert.equal(closeWouldWarn(), true, "closing still warns");
     assert.equal(toasts("error").length, 1, "one error is shown");
     assert.match(toasts("error")[0], /^Could not save — /, "and it says the save failed");
+    assert.match(toasts("error")[0], new RegExp(code), "and it says why");
     assert.equal(currentDocument().rows[0].audioText, "Typed before the save.", "the typed text is still in the document");
     assert.equal(fileConflicts().current(), null, "a failed write is not reported as a conflict");
 
