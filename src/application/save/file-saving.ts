@@ -1,7 +1,6 @@
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
-import { documentIdStamp, editStamp } from "../commands/save-stamps.ts";
 import { refsIn } from "../../../shared/blob-policy.js";
 import { autoSaveWhere } from "./autosave.ts";
+import { createSaveCompletion } from "./save-completion.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { fileKindFromName } from "../../../shared/file-names.js";
 import { slugify } from "../../../shared/text.js";
@@ -9,11 +8,12 @@ import type { ExportCaptureOptions, ExportDocument } from "../../core/document/e
 import type { NoticeKind } from "../effects/ports.ts";
 import type { DeliverOptions } from "../files/file-delivery.ts";
 import type { Home, HomeFields } from "../location/document-location.ts";
-import type { DocumentView, Stamp } from "../session/document-session.ts";
+import type { DocumentView } from "../session/document-session.ts";
 import type { Operations } from "../session/operation.ts";
 import type { AutoSaveChange } from "./autosave.ts";
 import type { DestinationKey, SaveJob, WriterResult } from "./coordinator.ts";
 import type { SaveDestination } from "./destinations.ts";
+import type { LandedWrite, SaveCompletion } from "./save-completion.ts";
 import type { FileSaveDialogs, FileSaveHandle, FileSavePorts, FileSaveRequest, FileSaveTarget, FileSavingMount, FileSavingPorts } from "./file-saving-ports.ts";
 import type { AutoSaveTarget } from "./status.ts";
 
@@ -23,31 +23,27 @@ interface WriteOptions {
   readonly force?: boolean;
 }
 
-interface Landed {
-  readonly home: Home;
-  readonly lastModified: number | null;
-}
-
 let ports: FileSavingPorts | null = null;
+let completion: SaveCompletion | null = null;
 
 function mountedPorts(): FileSavingPorts {
   if (!ports) throw new Error("The file saving is not started yet");
   return ports;
 }
 
+function mountedCompletion(): SaveCompletion {
+  if (!completion) throw new Error("The file saving is not started yet");
+  return completion;
+}
+
 function mintDocId(): string { return mountedPorts().ids.docId(); }
 function nowIso(): string { return mountedPorts().clock.nowIso(); }
 function currentDocument(): DocumentView | null { return mountedPorts().document.current(); }
-function stampDocument(stamp: Stamp): unknown { return mountedPorts().document.stamp(stamp); }
 function documentLocation(): FileSavingPorts["location"] { return mountedPorts().location; }
 function currentHome(): Home { return mountedPorts().location.home(); }
 function fileHome(): Home | null { return mountedPorts().location.fileHome(); }
 function setHome(kind: string, fields?: HomeFields | null): Home { return mountedPorts().location.setHome(kind, fields); }
-function amendHome(record: Home, fields: HomeFields): Home { return mountedPorts().location.amendHome(record, fields); }
 function rememberLastFileHandle(handle: FileSaveHandle): Promise<void> { return mountedPorts().lastFile.remember(handle); }
-function copyDocHistorySafe(fromId: string, toId: string): void { return mountedPorts().deferred.copyHistory(fromId, toId); }
-function syncDocIdentity(): void { return mountedPorts().deferred.syncIdentity(); }
-function setBaseState(state: unknown, reason: string): void { return mountedPorts().deferred.setBaseline(state, reason); }
 function ensureBytes(shas: readonly string[]): Promise<unknown> { return mountedPorts().pictures.ensureBytes(shas); }
 function captureExportDocument(opts?: ExportCaptureOptions | null): ExportDocument { return mountedPorts().exports.captureExportDocument(opts); }
 function buildSplitpageFile(doc: ExportDocument): string { return mountedPorts().formats.buildSplitpage(doc); }
@@ -61,7 +57,6 @@ function writeToHandle(handle: FileSaveHandle, body: string): Promise<{ readonly
 function isAbort(error: unknown): boolean { return mountedPorts().files.isAbort(error); }
 function deliverFile(filename: string, data: unknown, opts?: DeliverOptions | null): Promise<boolean> { return mountedPorts().delivery.deliver(filename, data, opts); }
 function autoSavePolicy(): ReturnType<FileSavingPorts["saves"]["policy"]> { return mountedPorts().saves.policy(); }
-function confirmSavedNow(): void { return mountedPorts().saves.confirmSavedNow(); }
 function haltAutoSave(reason: string): void { return mountedPorts().saves.halt(reason); }
 function resumeAutoSave(): void { return mountedPorts().saves.resume(); }
 function saveChanges(): number { return mountedPorts().saves.changes(); }
@@ -76,17 +71,8 @@ const FAILED: WriterResult = Object.freeze({ kind: "failed" });
 const FILE_CHANGED = "The file changed on disk since it was opened";
 const CONFLICTED: WriterResult = Object.freeze({ kind: "refused", reason: "The file changed on disk since it was opened" });
 
-function confirmWrite(captured: ExportDocument, published: unknown, forkDocId: string | null, docIdAtSave: string, seqAtSave: number, landed: Landed | null): void {
-  const stamp = captured.document;
-  stampDocument(editStamp({ rev: stamp.rev, lastEditedBy: stamp.lastEditedBy, lastEditedAt: stamp.lastEditedAt }));
-  setBaseState(published, "saveDoc: the bytes just written");
-  if (landed) {
-    amendHome(landed.home, landed.lastModified !== null
-      ? { diskBase: published, lastModified: landed.lastModified }
-      : { diskBase: published });
-  }
-  adoptSavedCopyDocId(forkDocId, docIdAtSave, true);
-  if (saveChanges() === seqAtSave) confirmSavedNow();
+function confirmWrite(captured: ExportDocument, published: unknown, forkDocId: string | null, docIdAtSave: string, seqAtSave: number, landed: LandedWrite | null): void {
+  mountedCompletion().confirmWrite({ captured, published, forkDocId, docIdAtSave, seqAtSave, landed });
 }
 
 async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<FileSaveRequest>): Promise<WriterResult> {
@@ -204,12 +190,7 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
 }
 
 function adoptSavedCopyDocId(forkDocId: string | null, docIdAtSave: string, owned: boolean): void {
-  forkDocId = normalizeDocId(forkDocId);
-  if (forkDocId) copyDocHistorySafe(docIdAtSave, forkDocId);
-  if (!owned) return;
-  if (forkDocId) stampDocument(documentIdStamp(null, forkDocId));
-  documentLocation().markWrittenOut(true);
-  syncDocIdentity();
+  mountedCompletion().adoptSavedCopyDocId(forkDocId, docIdAtSave, owned);
 }
 
 function readAutoSavePref(): boolean {
@@ -285,12 +266,15 @@ function savePorts(ownership: Operations): FileSavePorts {
 export function mountFileSaving(given: FileSavingPorts): FileSavingMount {
   ports = given;
   const mounted = given;
+  const completed = createSaveCompletion(given);
+  completion = completed;
   return {
     destination: fileDestination,
     savePorts: savePorts,
     updateAutoSaveMenu: updateAutoSaveMenu,
     dispose: function () {
       if (ports === mounted) ports = null;
+      if (completion === completed) completion = null;
     }
   };
 }

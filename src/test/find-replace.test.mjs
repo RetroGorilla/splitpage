@@ -1,9 +1,9 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { cellOf } from "../legacy/richtext.ts";
+import { cellOf } from "../bootstrap/richtext.ts";
 import { projection } from "../core/text/runs.ts";
-import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
+import { inertBody, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { countInTags, findInCell, findInRows, noMatchLabel, replaceInHtml } from "../features/find/find.js";
 import { domProjection, domRangeFor } from "../features/common/find-dom.js";
 import { startFind } from "../features/find/find.js";

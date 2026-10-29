@@ -22,11 +22,20 @@ Everything listed here goes inside the asar.
 | `voice-helper.js` | Follow My Voice's listener process (#8). The PowerShell script it runs (`desktop/voice/listen.ps1`) cannot be read from inside the asar, so `stage.mjs` stages it into `resources/splitpage/voice` instead. |
 | `chromium-browsers.js` | Finds an installed Chromium browser for "Use Chromium Speech Recognition" (#123). |
 | `history-fs-backend.js` | Version history on disk (#83): the file-system backend the shared history store runs over in the main process. It requires `./blob-store.js` itself. |
+| `desktop-state.js` | `desktop-state.json` in the user-data folder: the windows, tabs and recent documents the next launch restores. It reads, migrates (v1 to v2) and normalizes the file, and writes it through one queue with `writeFileDurableSync` from `./drafts.js`. |
+| `update-release.js` | Which release the update check offers: version order, the installer for this platform and architecture, the hosts a download may come from, and the release's published SHA-256. `main.js` does the fetching and the download. |
+| `file-service.js` | The documents the renderer opens and saves: the opaque file ids that stand for paths (`createFileRegistry`), the case rule for comparing paths (`pathKey`), which launch arguments are files to open, reading a file entry and the atomic write. |
+| `doc-claims.js` | Which tab holds which document id from which file, so that two tabs holding the same document from different files are noticed and the later one is asked to take a new id. The id rules come from `shared/doc-id-policy.js`, which `main.js` passes in, and `main.js` still sends `splitpage:reassign-doc-id` itself, so the IPC table test sees it. |
+| `recents.js` | The recent documents list (`createRecents`): noting an opened file, removing one by its file id, clearing, persisting into `desktop-state.json` and describing the list for the renderer without paths. When a note is written straight away or with the next session write stays in `main.js`. |
+| `window-appearance.js` | The stored theme choice in `<userData>/theme.json` (`createThemeChoice`), the window and title bar colours for dark and light, and whether saved window bounds still overlap a display. `main.js` passes in `nativeTheme` and `screen` values. |
+| `tab-registry.js` | The maps of open tabs and windows and the two routing indexes (web contents to tab, file path to tab), how a tab or window id is minted unique, and which tab a routed path or file belongs to (`createTabRegistry`). Creating, moving and closing tabs stay in `main.js`. |
+| `restore-notice.js` | The one notice, after a session restore, that some files could not be reopened (`createRestoreNotice`): which tab it waits for, delivering it once that tab is ready, and moving it to another tab if that one closes first. `main.js` still sends `splitpage:restore-notice` itself. |
+| `unsaved-dialog.js` | The wording and buttons of the unsaved-changes question asked before closing a tab, a window or the app, the titles it lists, and which answer each button means. Whether to ask, the test-mode answers and showing the dialog stay in `main.js`. |
 
 From `ipc-channels.js` down, `main.js` requires each of these modules at
 startup, so each must ship for the same reason `drafts.js` does. A new
 `./module` that `main.js` requires has to be added to this list:
-`desktop/test/google-drive.test.mjs` fails if one is missing.
+`desktop/test/ipc-table.test.mjs` fails if one is missing.
 
 Two things `main.js` needs at startup are deliberately left out of `files`:
 

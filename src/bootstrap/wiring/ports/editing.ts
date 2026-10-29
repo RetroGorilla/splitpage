@@ -1,12 +1,12 @@
 import type { EditorSelection } from "../../../application/editing/selection.ts";
 import type { ProductionSelection } from "../../../application/editing/production-selection.ts";
-import { productionSelection as productionSelectionOwner } from "../../../legacy/production-editing-bridge.ts";
+import { productionSelection as productionSelectionOwner } from "../production-editing-owners.ts";
 import type { UndoControl } from "../../../application/editing/undo-control.ts";
 import type { DocumentEdits } from "../../../application/session/document-edits.ts";
 import { undoOwner } from "../undo.ts";
 import type { CellEditing } from "../../../application/editing/cell-editing.ts";
 import { cellEditing, editorSelection, focusMemory } from "../editor-owners.ts";
-import { editAllowed, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../../../legacy/session-bridge.ts";
+import { editAllowed, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../session-owner.ts";
 import { paintGuard, undoGuard } from "../editor-owners.ts";
 import { appendDraftMedia, draftModel, editDraft } from "../../../features/editing/draft-edit.js";
 import { isDraftBox, isScriptCell } from "../../../features/editing/cell-page.ts";

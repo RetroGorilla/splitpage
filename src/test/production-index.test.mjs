@@ -3,11 +3,11 @@ import { mintTagId } from "../core/document/tags.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { healTagRegistry, productionIndexStats, resetProductionIndexStats } from "../features/tags/production-tags.js";
 
 import { productionIndex } from "../application/production/index-owner.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { loadTestDocument } from "./_document.mjs";
 
 const tag = (cat, name) =>

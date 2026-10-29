@@ -7,7 +7,7 @@ import { decideDuplicateLoser } from "../../shared/doc-id-policy.js";
 import { mergedDocId, sha256Hex } from "../core/document/ids.ts";
 import { migrateDocument } from "../bootstrap/startup/document-entry.js";
 import { createHash } from "node:crypto";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 
 const ID_A = "d" + "1".repeat(32);
 const ID_B = "d" + "2".repeat(32);

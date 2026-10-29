@@ -10,7 +10,7 @@ import type { TextSpan } from "../../../src/core/text/edits.ts";
 import type { SceneMediaPorts, ScenePorts } from "../../../src/features/rows/ports.ts";
 import { startSceneMedia as mountSceneMedia } from "../../../src/features/rows/scene-media.js";
 import { startSceneRows as mountScenes } from "../../../src/features/rows/scenes.js";
-import { cellOf, storedHtmlFromDom } from "../../../src/legacy/richtext.ts";
+import { cellOf, storedHtmlFromDom } from "../../../src/bootstrap/richtext.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices, fakeOwnership, fakePictures } from "../fakes.ts";
 

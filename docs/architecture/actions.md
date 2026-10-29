@@ -89,7 +89,7 @@ and both the menu's painting and the action's availability call it:
 | Save to file, and its label | `saveBackItemState()`, `18-local-files.js` |
 | Export again, and its label | `exportAgainItemState()`, `18c-export-dialog.js` |
 | Present in browser, Chromium speech, Import app data | `canOpenPrompterInBrowser()`, `canOpenPrompterInChromium()`, `appDataImportShown()`, `20f-desktop.js` |
-| Autosave's switch | `autoSavePolicy().enabled()`, `src/legacy/save-bridge.ts` |
+| Autosave's switch | `autoSavePolicy().enabled()`, `src/bootstrap/wiring/save-owners.ts` |
 | Save while a save is running | `saves.busy()`, `src/bootstrap/wiring/ports/saving.ts` |
 
 `itemAvailability()` (`src/features/file-menu/actions.ts`) turns such a state
@@ -134,32 +134,29 @@ lookup, and asks once for any other keydown. A key whose action ran, or
 threw, is kept from the browser, as 3.1's handlers did by calling
 `preventDefault` first; a refused one only when the action claims its keys.
 
-## The legacy shim
+## The registry facade
 
-Until the composition root of 4.x exists, the numbered modules share one
-registry through the facade `appActions` in `src/legacy/app-actions.ts`. Since
-milestone 7.1 the wiring step (`wireApp` in `src/bootstrap/wiring.ts`, called
-by the composition root `src/bootstrap/main.js`) builds the registry with
+The wiring modules that register or run actions share one registry through
+the facade `appActions` in `src/legacy/app-actions.ts`, the last file in
+`src/legacy/`. The wiring step (`wireApp` in `src/bootstrap/wiring.ts`, called
+by the composition root `src/bootstrap/main.ts`) builds the registry with
 `createAppActions()` and installs it into the facade; before that, and after
 the wiring's `dispose()`, every facade call throws "The action registry is not
 started yet". Its `report` rethrows the error on a microtask, so a failing
 action still reaches the browser as an uncaught error, as it did before. The
-export registry behind `exportFormats` (`src/legacy/export-formats.ts`) follows
-the same pattern, and `registerBuiltInExporters(registry)` in
-`src/bootstrap/wiring/exporters.ts` fills it from the wiring instead of at
-module evaluation. Since milestone 7.2 no numbered module configures a bridge while it
-loads: `tests/bootstrap/legacy-shim.test.ts` imports each of the 79 alone, in a
-fresh process, with a spy on every configuration function of the bridges and
-of `src/bootstrap/` (the registry installers and `register` methods included),
-and finds no call and no started owner.
+facade retires when those wiring modules take the registry from the actions
+port (`src/bootstrap/wiring/ports/actions.ts`). The export registry behind
+`exportFormats` (`src/bootstrap/wiring/export-registry.ts`) is filled by
+`registerBuiltInExporters(registry)` in `src/bootstrap/wiring/exporters.ts`
+from the wiring, not at module evaluation. The load-order check (`tests/bootstrap/module-load.test.ts`, with its spies
+checked by `configuration-spies.test.ts`) finds no module that configures
+anything while it loads.
 
-`src/legacy/this-document-actions.ts` (the command menu's "This document"
-group), `file-actions.ts`, `view-actions.ts` and `zoom-actions.ts` define the actions whose handlers are
-still in `src/js`. `src/application/screen.ts` names what can refuse an action
+Each feature defines its actions in `src/features/<name>/actions.ts`, and
+`src/bootstrap/actions.ts` registers them in one ordered list.
+`src/application/screen.ts` names what can refuse an action
 (still loading, a dialog, the open command menu, the tour, Present, the
-Writer, the B-roll shot-list page) with the reason a person is shown; it
-imports nothing from `src/js`, so the numbered modules can import it without
-joining their import cycle.
+Writer, the B-roll shot-list page) with the reason a person is shown.
 
 The screen state owner (`src/application/screen-state.ts`) answers
 `screenNow()` from ports built in `src/bootstrap/wiring/screen-state.ts`:
@@ -331,9 +328,9 @@ passes against 47c0309 too.
 
 ## The desktop app's native menu
 
-`runDesktopMenuCommand` (`20f-desktop.js`) receives a command name from
+`runDesktopMenuCommand` (`features/desktop/desktop.js`) receives a command name from
 `desktop/main.js` and hands it to the runner the bootstrap supplied,
-`nativeMenuRunner()` in `src/legacy/native-menu.ts`, which runs the action of
+`nativeMenuRunner()` in `src/bootstrap/native-menu.ts`, which runs the action of
 that id with the source `"native-menu"`, reading no rendered state; a command
 the runner does not know (an export format) clicks its File menu item as
 before. Its six header commands
@@ -454,7 +451,7 @@ native menu that a registered command which is not a File menu item runs as
 itself (every registered native command until then was a File menu item or a
 header button). The runtime import cycle shrank from 61 to 60 modules, since
 `20f-desktop.js` no longer imports `05s-script-zoom.js`. That routing has
-since moved out of `20f-desktop.js` into `src/legacy/native-menu.ts`, which
+since moved out of `20f-desktop.js` into `src/bootstrap/native-menu.ts`, which
 the bootstrap supplies; a command added there the same way needs no edit to
 either.
 
