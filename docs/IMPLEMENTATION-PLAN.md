@@ -99,7 +99,7 @@ A parser-aware check must distinguish actual comments from URLs, regexes and str
 | `src/adapters/` | HTML decoding, formats, storage, files, HTTP, clipboard and native integration | Port interfaces, contracts and platform APIs |
 | `src/features/<feature>/` | Controller, view, bindings, local state, styles and tests | Public application interfaces and presentation utilities |
 | `src/bootstrap/` | Explicit construction, registration and resource teardown | Implementations needed to compose the app |
-| `src/legacy/` | Temporary, named adapters over unmigrated code. The numbered files are gone; `app-actions.ts` is the last one | Only explicitly allowed legacy/application interfaces |
+| `src/legacy/` | Retired: the numbered files and every bridge are gone (the last, `app-actions.ts`, in #906). Do not add files here | Only explicitly allowed legacy/application interfaces |
 | `shared/` | Policies genuinely shared with server/desktop | Environment-independent definitions |
 | `tests/` | Application, adapter, browser, architecture and compatibility tests | Testable public interfaces and fixtures |
 
@@ -410,7 +410,7 @@ The 4.1 plan for the places where 4.0 fell short of this plan (the legacy layer'
 In this order (Adam, 2026-10-07):
 
 1. The composition root as build entry, replacing `src/js/_entry.js`, as the first 4.x milestone, with the packaged check and an external review of its own. Done: `src/bootstrap/main.ts` ([dependencies.md, The composition root](architecture/dependencies.md#the-composition-root)).
-2. Any bridge still standing after milestone 6, with the legacy modules that keep it. Done apart from one file: `src/js/` is deleted, and `src/legacy/` holds only `app-actions.ts`, the action registry facade that some wiring modules still import. It retires when they take the registry from the actions port (`src/bootstrap/wiring/ports/actions.ts`). The production index and export capture owners reach their callers through ports built by the wiring.
+2. Any bridge still standing after milestone 6, with the legacy modules that keep it. Done: `src/js/` is deleted, and `src/legacy/` is gone; its last file, the action registry facade `app-actions.ts`, moved into the actions port (`src/bootstrap/wiring/ports/actions.ts`) in #906. The production index and export capture owners reach their callers through ports built by the wiring.
 3. Unused `S` fields.
 4. CSS: sorting the remaining rules into base, layout and components (done: `src/styles/base.css`, `layout.css`, `components.css`, and `overrides*.css` for rules that must follow specific feature styles), then spacing tokens (done).
 
