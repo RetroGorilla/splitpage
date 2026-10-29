@@ -18,6 +18,7 @@ const { createRecents } = require("./recents");
 const { createThemeChoice, backgroundColorFor, titleBarOverlayFor, boundsIfVisible } = require("./window-appearance");
 const { createTabRegistry } = require("./tab-registry");
 const { createRestoreNotice } = require("./restore-notice");
+const { unsavedTitles, unsavedDialogFor, decisionFor } = require("./unsaved-dialog");
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
 const { createQuitWatchdog } = require("./quit-watchdog");
@@ -1612,16 +1613,6 @@ function allTabsInOrder() {
   return out;
 }
 
-function unsavedTitles(list) {
-  let listing = null;
-  return list.map((tab) => {
-    if (tab.title) return tab.title;
-    if (!listing) listing = draftsList();
-    const found = listing.find((d) => d.tabId === tab.id);
-    return (found && found.title) || "Untitled";
-  });
-}
-
 function buildUnsavedDialog(list, verb, parentWin) {
   if (TEST_MODE) process.stderr.write(`[splitpage] test question (${verb}): ${JSON.stringify(list.map((tab) => tab.id))}\n`);
   const answer = consumeTestDialogAnswer();
@@ -1630,33 +1621,8 @@ function buildUnsavedDialog(list, verb, parentWin) {
   if (answer === "review") return "review";
   if (answer === "throw") throw new Error("test: the unsaved-changes question failed");
 
-  if (list.length === 1) {
-    const choice = dialog.showMessageBoxSync(parentWin, {
-      type: "warning",
-      buttons: ["Leave without saving", "Stay"],
-      defaultId: 1,
-      cancelId: 1,
-      title: "Splitpage",
-      message: "You have unsaved changes",
-      detail: verb === "Close tab"
-        ? "If you close this tab now, your changes will be lost."
-        : "If you leave now, your changes will be lost."
-    });
-    return choice === 0 ? "discard" : "cancel";
-  }
-
-  const titles = unsavedTitles(list);
-  const leaveLabel = verb === "Quit" ? "Quit without saving" : "Close without saving";
-  const choice = dialog.showMessageBoxSync(parentWin, {
-    type: "warning",
-    buttons: ["Review", leaveLabel, "Cancel"],
-    defaultId: 0,
-    cancelId: 2,
-    title: "Splitpage",
-    message: `You have unsaved changes in ${list.length} documents`,
-    detail: titles.map((t) => "• " + t).join("\n") + "\n\nIf you continue, these changes will be lost."
-  });
-  return choice === 0 ? "review" : choice === 1 ? "discard" : "cancel";
+  const spec = unsavedDialogFor(list.length, verb, list.length === 1 ? [] : unsavedTitles(list, draftsList));
+  return decisionFor(spec, dialog.showMessageBoxSync(parentWin, spec.options));
 }
 
 function reviewFirstUnsaved(list) {
