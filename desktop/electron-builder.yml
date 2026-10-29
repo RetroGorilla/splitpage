@@ -27,6 +27,7 @@ files:
   - window-appearance.js
   - tab-registry.js
   - restore-notice.js
+  - unsaved-dialog.js
   - package.json
 
 extraResources:
