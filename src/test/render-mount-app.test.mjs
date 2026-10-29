@@ -1,9 +1,9 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
-import { documentTransitions } from "../legacy/transition-bridge.ts";
+import { documentTransitions } from "../bootstrap/wiring/transition-owners.ts";
 import { mountRowsRenderFeature, stopRowsRenderFeature } from "../bootstrap/wiring/render.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { addRow } from "../bootstrap/wiring/rows.ts";
 import { mountPanelListenersFeature, stopPanelListenersFeature } from "../bootstrap/wiring/panels.ts";
 import { openWriter, closeWriter } from "../features/writer/writer.js";

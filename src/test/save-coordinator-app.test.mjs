@@ -2,22 +2,22 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { createHeldFileHandle, mockClock } from "./_m4-matrix.mjs";
-import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
+import { mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
-const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
-const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
+const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
+const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { obsoleteSaveText } = await import("../application/save/file-saving.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const homeModule = await import("../legacy/location-bridge.ts");
-const saves = await import("../legacy/save-bridge.ts");
+const homeModule = await import("../bootstrap/wiring/location-owner.ts");
+const saves = await import("../bootstrap/wiring/save-owners.ts");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

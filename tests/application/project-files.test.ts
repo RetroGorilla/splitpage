@@ -6,7 +6,7 @@ import { buildExportDocument } from "../../src/core/document/export-document.ts"
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import type { Home } from "../../src/application/location/document-location.ts";
 import { deriveDocId } from "../../src/core/document/ids.ts";
-import { migrateRows } from "../../src/legacy/document-ports.ts";
+import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 
 function fixture() {
   const calls: unknown[][] = [];

@@ -532,11 +532,11 @@ eq("the adapter itself may parse HTML and import its own modules", htmlCells({
   "src/adapters/richtext/sanitize.ts": 'import { decode } from "./decode.ts";\nexport const s = (h: string, p: { parseFromString(a: string, b: string): unknown }) => [decode(h), p.parseFromString(h, "text/html")];\n'
 }), []);
 eq("the bridge may import the adapter and parse", htmlCells({
-  "src/legacy/richtext.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nimport { decode } from "../adapters/richtext/decode.ts";\nexport const r = [createRichText(), decode("")];\n'
+  "src/bootstrap/richtext.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nimport { decode } from "../adapters/richtext/decode.ts";\nexport const r = [createRichText(), decode("")];\n'
 }), []);
 eq("another legacy module importing the adapter is reported", htmlCells({
-  "src/legacy/document-ports.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nexport const r = createRichText();\n'
-}), ["src/legacy/document-ports.ts:1 src/adapters/richtext/richtext.ts"]);
+  "src/bootstrap/document-ports.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nexport const r = createRichText();\n'
+}), ["src/bootstrap/document-ports.ts:1 src/adapters/richtext/richtext.ts"]);
 eq("a numbered legacy module importing the decoder is reported", htmlCells({
   "src/js/05-x.js": 'import { decode } from "../adapters/richtext/decode.ts";\nexport const d = decode;\n'
 }), ["src/js/05-x.js:1 src/adapters/richtext/decode.ts"]);
@@ -642,7 +642,7 @@ eq("a parse in a test, a tool or a root script is not reported", [
 ], [[], [], []]);
 eq("a parse inside the adapter and inside the bridge is not reported", [
   htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");', "src/adapters/richtext/inert.ts"),
-  htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");', "src/legacy/richtext.ts")
+  htmlSinks('export const p = (s) => new DOMParser().parseFromString(s, "text/html");', "src/bootstrap/richtext.ts")
 ], [[], []]);
 eq("each sink is reported once, at its first line", htmlCells({
   "src/js/two.js": 'export const a = (s) => new DOMParser().parseFromString(s, "text/html");\nexport const b = (s) => new DOMParser().parseFromString(s, "text/html");\n'
@@ -1002,7 +1002,7 @@ try {
   spawnSync("git", ["init", "-q"], { cwd: repo });
   writeFiles(repo, {
     ...ADAPTER_FILES,
-    "src/legacy/richtext.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nexport const r = createRichText();\n',
+    "src/bootstrap/richtext.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nexport const r = createRichText();\n',
     "src/js/old.js": 'export const p = (s) => new DOMParser().parseFromString(s, "text/html");\n'
   });
   const baselinePath = join(repo, "baseline.json");

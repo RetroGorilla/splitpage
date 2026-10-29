@@ -1,7 +1,7 @@
 import { bindBulkTagRows } from "../../application/commands/bulk-tags.ts";
 import type { BulkTagPorts } from "../../application/commands/bulk-tags.ts";
-import { cacheSeal } from "../../legacy/cache-freeze.ts";
-import { productionReaders } from "../../legacy/document-ports.ts";
+import { cacheSeal } from "../cache-freeze.ts";
+import { productionReaders } from "../document-ports.ts";
 import { startProductionIndex } from "../../application/production/index-owner.ts";
 
 export function wireProductionIndex(bulkTags: BulkTagPorts): () => void {

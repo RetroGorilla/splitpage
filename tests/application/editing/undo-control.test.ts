@@ -6,9 +6,9 @@ import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import type { UndoControl } from "../../../src/application/editing/undo-control.ts";
 
-import { migrateRows } from "../../../src/legacy/document-ports.ts";
+import { migrateRows } from "../../../src/bootstrap/document-ports.ts";
 import { undoOwner, undoPorts, startUndo, undoSessionPort, routeUndoReplays } from "../../../src/bootstrap/wiring/undo.ts";
-import { heldDocument, liveSession, startSessionBridge } from "../../../src/legacy/session-bridge.ts";
+import { heldDocument, liveSession, startSessionBridge } from "../../../src/bootstrap/wiring/session-owner.ts";
 const lastUndoEntry = () => undoOwner().last();
 const noteEdit = () => undoOwner().noteEdit();
 const undoSizes = () => undoOwner().sizes();
