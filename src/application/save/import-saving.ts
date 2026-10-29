@@ -77,13 +77,16 @@ async function writeBackToFile(job: SaveJob<ImportSaveRequest>): Promise<WriterR
       if (!stillWritingBack(job, imported)) { await discardWritable(writable); return IMPORT_REPLACED; }
       await writable.write(built.data);
       if (!stillWritingBack(job, imported)) { await discardWritable(writable); return IMPORT_REPLACED; }
-      await writable.close();
+      const closed = await writable.close();
       if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
       try {
         const after = await ports.files.read(imported.handle);
         if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
         completion.landed(imported, after);
-      } catch (e) { }
+      } catch (e) {
+        if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
+        completion.landedUnread(imported, closed);
+      }
       if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
       showToast("Saved to " + (imported.name as string), "ok");
       return WRITTEN_BACK;
