@@ -17,7 +17,7 @@ import { galleryBadgeHtml, gallerySlotPictureHtml } from "../../features/rows/re
 import { videoFiles } from "./video-files.ts";
 import { undoOwner } from "./undo.ts";
 import { cellEditing, pickPictureFor } from "./editor-owners.ts";
-import { preferences } from "../../legacy/preferences-bridge.ts";
+import { preferences } from "./preferences-owner.ts";
 import { desktopVideo } from "./desktop-video.ts";
 
 const gallery = owned<GalleryMount>();

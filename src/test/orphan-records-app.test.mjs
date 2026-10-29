@@ -21,7 +21,7 @@ const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const writer = await import("../features/writer/writer.js");
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);

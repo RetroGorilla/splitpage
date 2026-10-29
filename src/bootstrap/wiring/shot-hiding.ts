@@ -1,7 +1,7 @@
 import { createShotHiding } from "../../application/shot-hiding.ts";
 import type { ShotHiding, ShotHidingPorts } from "../../application/shot-hiding.ts";
 import type { TimerPort } from "../../application/session/ports.ts";
-import { preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
+import { preferences, viewFlags } from "./preferences-owner.ts";
 import { currentDocument } from "./session-owner.ts";
 
 let started: ShotHiding | null = null;

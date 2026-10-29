@@ -1,4 +1,4 @@
-import { PREF_EVENT, notePreferenceChange } from "../../legacy/preferences-bridge.ts";
+import { PREF_EVENT, notePreferenceChange } from "./preferences-owner.ts";
 import type { PreferenceChange } from "../../application/preferences/preferences.ts";
 
 let stopWatch: (() => void) | null = null;
