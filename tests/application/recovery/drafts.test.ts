@@ -1,42 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { startDrafts } from "../../../src/application/recovery/drafts.ts";
-import type { BrowserDrafts, DraftsMount, DraftsPorts } from "../../../src/application/recovery/drafts-ports.ts";
+import type { DraftsMount, DraftsPorts } from "../../../src/application/recovery/drafts-ports.ts";
 import { createDraftResume } from "../../../src/application/recovery/draft-resume.ts";
-import type { DraftCapture, DraftWriteOutcome } from "../../../src/application/recovery/draft-writer.ts";
-import type { DesktopDraftResult, StoredDraft } from "../../../src/application/recovery/ports.ts";
+import type { DesktopDraftResult } from "../../../src/application/recovery/ports.ts";
 import { NO_DESTINATION } from "../../../src/application/transitions/ports.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration, pngDataUrl } from "../../core/migrate-ports.ts";
 
 interface Timer { run: () => void; ms: number; live: boolean }
 
-interface BrowserStart { records: StoredDraft[]; live?: string[]; write?: DraftWriteOutcome }
-
-function fakeBrowserDrafts(browser: BrowserStart, log: string[]): BrowserDrafts {
-  let tracked: string | null = null;
-  const capture = (key: string): DraftCapture => ({ key, generation: 0, before: null, operation: { epoch: 0, docId: null, destination: null, destinationGeneration: 0, generation: 0 } });
-  return {
-    store: {
-      available: () => Promise.resolve(true),
-      put: () => Promise.resolve({ ok: true, evicted: 0 }),
-      get: (key) => Promise.resolve(browser.records.find((r) => r.key === key) ?? null),
-      list: () => Promise.resolve(browser.records.map((r) => ({ ...r }))),
-      remove: () => Promise.resolve(true),
-      claim: () => Promise.resolve(true)
-    },
-    writer: {
-      writerId: () => "w".repeat(32),
-      tracked: () => tracked,
-      capture,
-      write: (c) => { log.push("browserWrite:" + c.key); return Promise.resolve(browser.write ?? { ok: true, evicted: 0, obsolete: false }); },
-      discard: () => Promise.resolve(true),
-      take: (key) => { tracked = key; log.push("take:" + key); return Promise.resolve(true); }
-    }
-  };
-}
-
-function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boolean; writes?: DesktopDraftResult[]; browser?: BrowserStart } = {}) {
+function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boolean; writes?: DesktopDraftResult[] } = {}) {
   const timers: Timer[] = [];
   const log: string[] = [];
   const written: Record<string, unknown>[] = [];
@@ -48,7 +22,6 @@ function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boole
   const resume = createDraftResume();
   const doc = migrateRows({ title: "Pilot", docId: "d0123456789abcdef0123456789abcdef", rows: [] }, fakeMigration().ports);
   const state = { unsaved: start.unsaved ?? true, editSeq: 1, now: 1000, base: null as unknown, current: doc };
-  const browser = start.browser ? fakeBrowserDrafts(start.browser, log) : null;
   const desktop = {
     writable: () => true,
     canDiscard: () => true,
@@ -72,7 +45,6 @@ function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boole
     document: { current: () => state.current },
     session: { mergeBase: () => state.base, noteAbsorbedDirty: (reason) => { log.push("absorbed:" + reason); } },
     place: {
-      home: () => ({ kind: "none" }),
       fileHome: () => null,
       importHome: () => null,
       writtenOut: () => false
@@ -103,21 +75,11 @@ function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boole
     pictures: { persist: () => Promise.resolve([]), inline: (json) => json },
     files: { handle: () => ({ getFile: () => Promise.reject(new Error("no file")) }), parse: () => Promise.resolve(null) },
     recovery: {
-      started: () => true,
       draftResume: () => resume,
-      browserDrafts: () => { if (!browser) throw new Error("no browser drafts on the desktop"); return browser; },
       desktopDrafts: () => desktop,
       captureRestore: () => ({ epoch: 0, docId: null, destination: null, destinationGeneration: 0, generation: 0 }),
       stillRestoring: () => true,
-      applyStashedWork: () => { throw new Error("no stash"); },
-      useBrowserDraftFactory: () => { throw new Error("no browser drafts on the desktop"); }
-    },
-    browserDraft: { key: (base, docId) => base + "#" + docId, base: (serverUrl) => String(serverUrl ?? "") },
-    lock: {
-      writerId: () => "w".repeat(32),
-      hold: () => { log.push("hold"); },
-      release: () => { log.push("release"); },
-      isLive: (writerId) => Promise.resolve((start.browser?.live ?? []).includes(writerId))
+      applyStashedWork: () => { throw new Error("no stash"); }
     },
     documentState: { notify: () => { log.push("notify"); } }
   };
@@ -293,13 +255,6 @@ function serverDocumentJson(title: string): string {
   }, fakeMigration().ports));
 }
 
-function storedServerDraft(key: string, writerId: string, writtenAt: number, stateJson: string): StoredDraft {
-  return {
-    key, base: SERVER_BASE, docId: SERVER_DOC_ID, rev: 4, title: "Pilot", writtenAt, writerId, generation: 1,
-    editSeq: 3, schema: 2, docIdWrittenOut: false, bytes: stateJson.length, stateJson, baseJson: null
-  };
-}
-
 function assertSameContent(recovered: unknown, stateJson: string) {
   const saved = JSON.parse(stateJson) as Record<string, unknown>;
   const doc = recovered as Record<string, unknown>;
@@ -311,7 +266,7 @@ function assertSameContent(recovered: unknown, stateJson: string) {
   assert.match(String((doc["comments"] as { body: unknown }[])[0]?.body), new RegExp('data-blob="' + IMAGE_SHA + '"'));
 }
 
-test("a desktop draft of a former server document restores as an unsaved local copy with all its content", async () => {
+test("a leftover desktop draft with a server origin restores as an untitled script with all its content", async () => {
   const h = harness();
   const drafts = mount(h.ports);
   try {
@@ -322,98 +277,35 @@ test("a desktop draft of a former server document restores as an unsaved local c
       stateJson,
       baseJson: stateJson
     });
-    assert.equal(outcome, "untitled-copy");
+    assert.equal(outcome, "applied");
     assert.equal(h.recovered.length, 1);
     const recovery = h.recovered[0] as { from: { document: unknown }; destination: unknown; detached: boolean; baseline: unknown; writtenOut: boolean };
     assert.equal(recovery.destination, NO_DESTINATION);
-    assert.deepEqual([recovery.detached, recovery.baseline, recovery.writtenOut], [true, null, false]);
+    assert.deepEqual([recovery.detached, recovery.writtenOut], [false, false]);
+    assert.equal(JSON.stringify(recovery.baseline), stateJson, "the draft's own base is the baseline");
     assertSameContent(recovery.from.document, stateJson);
-    assert.deepEqual(h.restoreDone, ["untitled-copy"]);
+    assert.deepEqual(h.restoreDone, ["applied"]);
     assert.deepEqual(h.discarded, [], "the desktop draft is not discarded");
     assert.equal(h.resume.restorePending(), false);
     assert.equal(h.toasts.length, 1);
-    assert.match(h.toasts[0]?.message ?? "", /unsaved copy/);
+    assert.equal(h.toasts[0]?.message, "Restored your unsaved script — it has never been saved, so save it somewhere.");
     assert.deepEqual([h.toasts[0]?.kind, h.toasts[0]?.sticky], ["warn", true]);
   } finally {
     drafts.dispose();
   }
 });
 
-test("a leftover browser draft of a former server document is offered newest non-live first and restored as an unsaved copy it keeps protecting", async () => {
-  const stateJson = serverDocumentJson("Pilot");
-  const key = SERVER_BASE + "#" + SERVER_DOC_ID;
-  const h = harness({
-    running: false,
-    unsaved: false,
-    browser: {
-      records: [
-        storedServerDraft("old", "a".repeat(32), 500, serverDocumentJson("Older")),
-        storedServerDraft("busy", "b".repeat(32), 900, serverDocumentJson("Open elsewhere")),
-        storedServerDraft(key, "c".repeat(32), 800, stateJson)
-      ],
-      live: ["b".repeat(32)]
-    }
-  });
+test("in the browser no draft is offered, captured or written", async () => {
+  const h = harness({ running: false });
   const drafts = mount(h.ports);
   try {
-    const take = drafts.taker();
-    assert.equal(typeof take, "function");
-    const taken = await take?.() as { browserKey: string; header: { origin: unknown } };
-    assert.equal(taken.browserKey, key);
-    assert.deepEqual(taken.header.origin, { kind: "server", server: { base: SERVER_BASE, docId: SERVER_DOC_ID, rev: 4 } });
-    const outcome = await drafts.applyTaken(taken);
-    assert.equal(outcome, "untitled-copy");
-    assert.equal(h.recovered.length, 1);
-    const recovery = h.recovered[0] as { from: { document: unknown }; destination: unknown };
-    assert.equal(recovery.destination, NO_DESTINATION);
-    assertSameContent(recovery.from.document, stateJson);
-    assert.ok(h.log.includes("take:" + key), "the draft is taken over by this tab");
-    const status = (drafts.testing["browser"] as { status: () => unknown }).status();
-    assert.deepEqual(status, { off: false, keyOnDisk: key, copy: true, target: { docId: SERVER_DOC_ID, copy: true } });
-    h.state.unsaved = true;
-    h.state.editSeq = 2;
-    await drafts.flush();
-    assert.ok(h.log.includes("browserWrite:" + key), "later changes keep landing in the same draft until saved");
-  } finally {
-    drafts.dispose();
-  }
-});
-
-test("a leftover browser draft is kept, not restored, when the page already has unsaved changes", async () => {
-  const stateJson = serverDocumentJson("Pilot");
-  const key = SERVER_BASE + "#" + SERVER_DOC_ID;
-  const h = harness({ running: false, unsaved: true, browser: { records: [storedServerDraft(key, "c".repeat(32), 800, stateJson)] } });
-  const drafts = mount(h.ports);
-  try {
-    const before = h.state.current;
-    const taken = await drafts.taker()?.();
-    assert.equal(await drafts.applyTaken(taken), "kept");
-    assert.equal(h.recovered.length, 0);
-    assert.equal(h.state.current, before, "the open document is not replaced");
-    assert.equal(h.log.some((entry) => entry.startsWith("take:")), false, "the draft is left for later");
-    assert.equal(h.toasts.length, 0);
-  } finally {
-    drafts.dispose();
-  }
-});
-
-test("in the browser no taker is offered once browser drafts are off", async () => {
-  const stateJson = serverDocumentJson("Pilot");
-  const key = SERVER_BASE + "#" + SERVER_DOC_ID;
-  const h = harness({
-    running: false,
-    unsaved: false,
-    browser: { records: [storedServerDraft(key, "c".repeat(32), 800, stateJson)], write: { ok: false, code: "UNAVAILABLE" } }
-  });
-  const drafts = mount(h.ports);
-  try {
-    assert.equal(await drafts.applyTaken(await drafts.taker()?.()), "untitled-copy");
-    assert.equal(typeof drafts.taker(), "function");
-    h.state.unsaved = true;
-    h.state.editSeq = 9;
-    await drafts.flush();
-    assert.ok(h.log.includes("browserWrite:" + key));
     assert.equal(drafts.taker(), null);
+    drafts.noteChange();
+    assert.equal(h.timers.length, 0, "a change schedules no capture");
+    h.state.editSeq = 2;
+    assert.deepEqual(await drafts.flush(), { ok: true });
+    assert.deepEqual(h.written, []);
+    assert.deepEqual(h.discarded, []);
   } finally {
     drafts.dispose();
   }

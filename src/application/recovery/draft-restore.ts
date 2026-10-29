@@ -3,17 +3,10 @@ import { cloneState } from "../../core/document/clone.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { DocumentView } from "../session/document-session.ts";
 
-export interface TakenServer {
-  readonly base: string;
-  readonly docId: string;
-  readonly rev: number;
-}
-
 export interface TakenOrigin {
   readonly kind?: string | undefined;
   readonly fileName?: string | undefined;
   readonly importName?: string | undefined;
-  readonly server?: TakenServer | undefined;
 }
 
 export interface TakenHeader {
@@ -29,7 +22,6 @@ export interface TakenDraft {
   readonly baseJson?: unknown;
   readonly ageMs?: number | null | undefined;
   readonly previousSession?: string | undefined;
-  readonly browserKey?: string | undefined;
   readonly unsupported?: boolean | undefined;
   readonly corrupt?: boolean | undefined;
   readonly file?: unknown;
@@ -42,7 +34,7 @@ export interface HeaderedDraft extends TakenDraft {
 
 export type DraftRestoreOutcome = "nothing-unsaved" | "failed" | "untitled-copy" | "unreadable" | "kept" | "applied" | "merged";
 
-export type DraftRoute = "server" | "file" | "import" | "untitled";
+export type DraftRoute = "file" | "import" | "untitled";
 
 export type TakenDraftFate =
   | { readonly kind: "settled"; readonly outcome: DraftRestoreOutcome; readonly notice: string | null }
@@ -171,7 +163,6 @@ export function hasHeader(t: TakenDraft): t is HeaderedDraft {
 }
 
 function routeOf(origin: TakenOrigin): DraftRoute {
-  if (origin.kind === "server") return "server";
   if (origin.kind === "file") return "file";
   if (origin.kind === "import") return "import";
   return "untitled";
@@ -194,15 +185,6 @@ export function takenDraftFate(t: TakenDraft | null | undefined, migrate: DraftM
   const base = t.baseJson ? draftMigrate(t.baseJson, migrate) : null;
   const origin: TakenOrigin = t.header.origin || { kind: "untitled" };
   return { kind: "restore", route: routeOf(origin), draft: t, mine: mine, base: base, origin: origin };
-}
-
-export function serverCopy(mine: ValidatedDocument): DraftCopy {
-  return {
-    notice: "Your unsaved changes to “" + draftTitleOf(mine) + "” were recovered. It was a document on a " +
-      "Splitpage server, which this version no longer opens, so they are open here as an unsaved copy. " +
-      "Save them wherever you want them.",
-    outcome: "untitled-copy"
-  };
 }
 
 export function importCopy(origin: TakenOrigin): DraftCopy {

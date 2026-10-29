@@ -270,7 +270,6 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Tests:** partial.
   - `desktop/test/smoke.mjs`: "no token and no PIN in desktop-state.json after the quit (invariant #29)"; "draft: no PIN, token or launch URL ever reaches disk".
   - `src/test/connection.test.mjs`: "a tunnel is host and ports, and nothing that could carry a secret".
-  - `src/test/browser-drafts.test.mjs`: "nothing credential-shaped is added on the way in".
 
   No test covers `update-status.json` or statically served files.
 - **Owner:** `src/application` (the session keeps credentials out of serialised content), `server/`, `desktop/` · **Milestone:** 4 · **Class:** keep
@@ -368,11 +367,10 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 
 - **Behaviour:**
   - **Desktop:** a crash draft is deleted only when its tab becomes clean, or on an explicit user decision. It is never deleted on a crash, kill, renderer loss, session end, quit or restore. A discard writes a tombstone before anything is unlinked. A file tab whose file is no longer at its path is asked about on close, window close and quit as if it had unsaved changes; on "without saving" its tab writes a draft even when clean, and that draft is kept, so the next launch restores it, as an unsaved copy while the file is still missing (#258). The close goes ahead only once main finds that copy in the draft folder; if the tab doesn't answer in time or the write fails, the same unsaved-changes question is asked again for those tabs, and the tab, window or app stays open unless the user confirms (#496). A Windows session end writes and keeps the same copy without asking (#492). The file check waits at most one second, and a check that doesn't finish counts as the file being gone (#497). Once the check ends with "close", every tab it covers is checked again in the same step that closes: a tab that has unsaved changes it didn't have when its question was answered (it was edited while the check waited for a copy) is asked about before anything closes (#532).
-  - **Browser:** drafts only keep an unsaved copy restored from a draft a former server document left behind. Such a draft is removed only by the page that wrote it, or took it over, once that page is clean. The store's bounds still apply (30 days, 20 drafts, 64 MiB).
+  - **Browser:** keeps no drafts.
   - **Both:** a restore never saves.
 - **Tests:**
   - `desktop/test/drafts.test.mjs`: "discardForUserDecision during a delayed write…", "session states, take never deletes…".
-  - `src/test/browser-drafts.test.mjs`: "remove takes only the writer's own draft; claim hands it over", plus the eviction tests.
   - `desktop/test/smoke.mjs`: the draft crash-recovery cases, the "draft: moved file …" cases (#258, #496) and "draft: session end keeps a copy of a clean tab whose file is gone (#492)".
   - `desktop/test/close-keep.test.mjs`: the time-limited file check and the kept-copy rule (#496, #497), and the close check's rounds and last re-check (`runCloseCheck`, #508, #509, #532).
   - `desktop/test/smoke.mjs`: the "close check:" groups, including "a tab edited during a window close's/quit's copy wait is asked about again (#532)".
@@ -381,7 +379,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 - **Owner:** `src/application` (recovery writer ownership), `desktop/` · **Milestone:** 4 · **Class:** keep
 - **Replacement:** — (plan §6: recovery preserves source work through failed adoption, writer conflict or revoked access).
 - **Acceptance:** the M4 gate's recovery tests pass (multi-tab ownership, revoked links, restart), and a writer discards only the draft generation acknowledged to it.
-- **Milestone 4 (4.22):** held, with the recovery split of 4.17 and 4.18: `draft-writer.ts` discards only the generation acknowledged to it (B1, B7), `capture-schedule.ts` owns the timers and backoff (B4, B4b), `restore-policy.ts` the ownership check (K1, H1). A superseded desktop file-draft restore keeps its draft (outcome `kept`, `restoreDoneAction` in `desktop/drafts.js`); the one way to lose it is the user answering "Don't save" for the script that replaced it (the same as the unreadable-draft path; saving.md §7). Tests: `src/test/m4-matrix-recovery.test.mjs`, `tests/application/draft-writer.test.ts`, `tests/application/capture-schedule.test.ts`, `desktop/test/drafts.test.mjs`. The desktop and browser recovery groups run at the gate. `HANDOFF.md` §5.40 points here.
+- **Milestone 4 (4.22):** held, with the recovery split of 4.17 and 4.18: the draft writer discarded only the generation acknowledged to it (B1, B7; the browser writer was removed later, and on the desktop main's `STALE_SEQ` check holds B7), `capture-schedule.ts` owns the timers and backoff (B4, B4b), `restore-policy.ts` the ownership check (K1, H1). A superseded desktop file-draft restore keeps its draft (outcome `kept`, `restoreDoneAction` in `desktop/drafts.js`); the one way to lose it is the user answering "Don't save" for the script that replaced it (the same as the unreadable-draft path; saving.md §7). Tests: `src/test/m4-matrix-recovery.test.mjs`, `tests/application/capture-schedule.test.ts`, `desktop/test/drafts.test.mjs`. The desktop recovery groups run at the gate. `HANDOFF.md` §5.40 points here.
 
 ### INV-41 — Restoring a draft never writes the user's file
 

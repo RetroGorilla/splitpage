@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   KEPT_NOTICE, RESTORE_FAILED_NOTICE, alreadySavedNotice, differentScriptCopy, draftAgeText, draftMigrate, draftReasonFor, draftRefId,
   draftTitleOf, draftWhenText, importCopy, mergedFileNotice, missingFileCopy, missingFileName, restoredFileNotice, sameDocContent,
-  serverCopy, takenDraftFate, unreadableFileCopy, untitledRestoredNotice
+  takenDraftFate, unreadableFileCopy, untitledRestoredNotice
 } from "../../../src/application/recovery/draft-restore.ts";
 import type { DraftMigrate, TakenDraft } from "../../../src/application/recovery/draft-restore.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
@@ -51,7 +51,7 @@ test("draft restore: a draft whose state does not parse to rows fails with the u
 
 test("draft restore: a readable draft is routed by its origin, untitled when it has none", () => {
   const migrate = migrator();
-  const routes = [["server", "server"], ["file", "file"], ["import", "import"], ["untitled", "untitled"], ["other", "untitled"]] as const;
+  const routes = [["server", "untitled"], ["file", "file"], ["import", "import"], ["untitled", "untitled"], ["other", "untitled"]] as const;
   for (const [kind, route] of routes) {
     const fate = takenDraftFate(taken({ header: { origin: { kind } } }), migrate);
     assert.equal(fate.kind === "restore" && fate.route, route, kind);
@@ -84,12 +84,6 @@ test("draft restore: draftMigrate only migrates an object with rows", () => {
 });
 
 test("draft restore: copies say why the draft opened as an unsaved copy and what the outcome is", () => {
-  const migrate = migrator();
-  const mine = doc(migrate, "Pilot");
-  assert.deepEqual(serverCopy(mine), {
-    notice: "Your unsaved changes to “Pilot” were recovered. It was a document on a Splitpage server, which this version no longer opens, so they are open here as an unsaved copy. Save them wherever you want them.",
-    outcome: "untitled-copy"
-  });
   assert.equal(importCopy({ importName: "notes.docx" }).notice, "Your unsaved changes to notes.docx were recovered. They are open here as an unsaved copy — save them as a Splitpage script to keep them.");
   assert.match(importCopy({}).notice, /^Your unsaved changes to an imported file were recovered/);
   assert.deepEqual(missingFileCopy(taken({ fileProblem: "unreadable" }), "a.splitpage"), {
