@@ -1,8 +1,8 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
-import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
+import { saveChanges, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 await bootApp();
 
@@ -11,7 +11,7 @@ const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { setSceneLength } = await import("../features/rows/read-time.js");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

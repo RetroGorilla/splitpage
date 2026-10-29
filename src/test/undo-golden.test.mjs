@@ -7,7 +7,7 @@ import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { changedBetween } from "../application/editing/undo/history.ts";
 import { assertGolden, goldenNames, jsonCopy } from "./golden-helpers.mjs";
 import { loadTestDocument } from "./_document.mjs";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 const flushEdits = () => undoOwner().flush();
 const lastUndoEntry = () => undoOwner().last();
 const noteEdit = () => undoOwner().noteEdit();

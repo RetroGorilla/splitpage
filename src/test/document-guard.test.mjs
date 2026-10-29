@@ -9,7 +9,7 @@ const { migrateRows } = await import("../legacy/document-ports.ts");
 (await import("../application/identity/document-guard.ts")).startDocumentGuard(documentGuardAsked(location.search), console.error);
 
 const { DocumentWriteError, documentGuardOn, isDocumentView, quietly, rawOf } = await import("../application/identity/document-guard.ts");
-const { currentDocument, heldDocument, liveDocumentPort, liveSession, runDocumentEdit, sessionStamps } = await import("../legacy/session-bridge.ts");
+const { currentDocument, heldDocument, liveDocumentPort, liveSession, runDocumentEdit, sessionStamps } = await import("../bootstrap/wiring/session-owner.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");

@@ -5,17 +5,17 @@ import { isDeepStrictEqual } from "node:util";
 import { readBuiltCss } from "../../tools/css-colours.mjs";
 import { table304Document } from "../../tests/application/raw-inputs.ts";
 import { cloneState } from "../core/document/clone.ts";
-import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { currentDocument, liveSession, mergeBase } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession, mergeBase } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
-const { applyMerge } = await import("../legacy/merge-bridge.ts");
+const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { renderAbsorbed } = await import("../features/rows/render.js");
 const { cellSelection } = await import("../features/common/cell-selection.ts");
 const { pasteIntoCell } = await import("../features/clipboard/cell-clipboard.js");
@@ -27,15 +27,15 @@ const nextRedoEntry = () => undoOwner().nextRedo();
 const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
 const writer = await import("../features/writer/writer.js");
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { cellEditing, focusMemory, mergeUndo } = await import("../bootstrap/wiring/editor-owners.ts");
 const find = await import("../features/find/find.js");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { localFilesOwner, localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");
 const { openLongDemo } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
+const { openDocument, keepSnapshot } = await import("../bootstrap/wiring/transition-owners.ts");
 
 const REDRAW = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
 const BROKE = "render broke (#418)";
@@ -372,7 +372,7 @@ test("a redraw toast still on screen goes away when a later update draws cleanly
 });
 
 test("a desktop file draft over an untouched file whose render throws still restores the changes and marks them unsaved (#418)", async () => {
-  const { setHome } = await import("../legacy/location-bridge.ts");
+  const { setHome } = await import("../bootstrap/wiring/location-owner.ts");
   const seen = await bothWays("file draft", () => {
     fresh("Before the file draft");
     const disk = table304Document("On disk");

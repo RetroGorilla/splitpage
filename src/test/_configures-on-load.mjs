@@ -1,4 +1,4 @@
-import { handDesktopTo } from "../legacy/desktop-bridge.ts";
+import { handDesktopTo } from "../bootstrap/wiring/desktop-owners.ts";
 import { installExportFormats } from "../bootstrap/wiring/export-registry.ts";
 import { createExportRegistry } from "../application/export/registry.ts";
 

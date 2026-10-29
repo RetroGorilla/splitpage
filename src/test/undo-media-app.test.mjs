@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -20,9 +20,9 @@ const { cellRuns } = await import("./_cell-runs.mjs");
 const { invertSteps } = await import("../core/text/steps.ts");
 const { rememberCellSelection, placeEditorSelection, cellSelection } = await import("../features/common/cell-selection.ts");
 const { editorSelection } = await import("../bootstrap/wiring/editor-owners.ts");
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { sanitizeHtml } = await import("../legacy/richtext.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

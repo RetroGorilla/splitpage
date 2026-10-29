@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { cloneState } from "../core/document/clone.ts";
-import { saveChanges } from "../legacy/save-bridge.ts";
+import { saveChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -18,13 +18,13 @@ const redo = () => undoOwner().redo();
 const undoSizes = () => undoOwner().sizes();
 const lastUndoEntry = () => undoOwner().last();
 const flushEdits = () => undoOwner().flush();
-const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { fromHtml, sanitizeHtml, storedHtmlFromDom } = await import("../legacy/richtext.ts");
 const { toHtml } = await import("../core/text/html.ts");
 const writer = await import("../features/writer/writer.js");
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
-const { applyMerge } = await import("../legacy/merge-bridge.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
+const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

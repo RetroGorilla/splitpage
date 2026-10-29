@@ -2,19 +2,19 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import { after } from "node:test";
 import assert from "node:assert/strict";
 import zlib from "node:zlib";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { createHeldFetch, createHeldImageDecode, rightToday } from "./_m4-matrix.mjs";
-import { unsavedChanges } from "../legacy/save-bridge.ts";
+import { unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { renderAbsorbed } = await import("../features/rows/render.js");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const lastUndoEntry = () => undoOwner().last();
@@ -26,7 +26,7 @@ const { thumbnailsAfterPaste } = await import("../bootstrap/wiring/gallery.ts");
 const annotate = await import("../features/gallery/annotate.js");
 const { addGalleryVideo, rowSlots } = await import("../core/document/gallery.ts");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 function pngDataUrl(red, green, blue) {

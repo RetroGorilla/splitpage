@@ -6,7 +6,7 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { adoptReplacement, liveSession, onSessionChange, runCommand, sessionStamps, stampDocument } = await import("../legacy/session-bridge.ts");
+const { adoptReplacement, liveSession, onSessionChange, runCommand, sessionStamps, stampDocument } = await import("../bootstrap/wiring/session-owner.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
 const { editStamp } = await import("../application/commands/save-stamps.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
@@ -16,8 +16,8 @@ const { registerTagCommand } = await import("../application/commands/production-
 const { wordsPerMinuteCommand } = await import("../application/commands/document-settings.ts");
 const { addSceneCommand } = await import("../application/commands/rows.ts");
 const { cellEditing, paintGuard } = await import("../bootstrap/wiring/editor-owners.ts");
-const { preferences, viewFlags } = await import("../legacy/preferences-bridge.ts");
-const { documentLocation } = await import("../legacy/location-bridge.ts");
+const { preferences, viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
+const { documentLocation } = await import("../bootstrap/wiring/location-owner.ts");
 const { setHideShotScenes } = await import("../bootstrap/wiring/hide-shot.ts");
 const { expandHiddenShotStrip } = await import("../bootstrap/wiring/hide-shot.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");

@@ -31,20 +31,20 @@ import {
   setPrompterSkipShot,
   voiceIsFollowing
 } from "../../application/prompter-state.ts";
-import { captureOperation, openDocument, stillOwns } from "../../legacy/transition-bridge.ts";
-import { importHome } from "../../legacy/location-bridge.ts";
+import { captureOperation, openDocument, stillOwns } from "./transition-owners.ts";
+import { importHome } from "./location-owner.ts";
 import { expandHiddenShotStrip } from "./hide-shot.ts";
 import { promptForName, promptForWpm } from "./title-chrome.ts";
 import { restoreSnapshotFromCard } from "./history-panel.ts";
 import { openGalleryOverlay } from "../../features/gallery/overlay.js";
 import { importControls } from "./imports.ts";
 import { updateSaveStatus } from "./save-status.ts";
-import { showToast } from "../../legacy/effects-bridge.ts";
-import { panelWidths, preferences } from "../../legacy/preferences-bridge.ts";
+import { showToast } from "./effects-owner.ts";
+import { panelWidths, preferences } from "./preferences-owner.ts";
 import { sidePanels } from "./ports/panels.ts";
 import { SIDE_PANEL_IDS } from "../../application/preferences/panel-widths.ts";
 import { mountPanels } from "../../features/panels/mount.ts";
-import { fileConflicts, saveDoc } from "../../legacy/save-bridge.ts";
+import { fileConflicts, saveDoc } from "./save-owners.ts";
 import { fileDelivery } from "./ports/files.ts";
 import { localFileMenuControls, localFilesOwner, importSavingOwner } from "./local-files.ts";
 import { currentMergeReview } from "./merge-review.ts";

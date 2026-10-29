@@ -2,7 +2,7 @@ import { createUndo } from "../../application/editing/undo/undo.ts";
 import type { ReplayRunner, Undo, UndoHooks, UndoPorts } from "../../application/editing/undo/undo.ts";
 import type { StampPorts, UndoPort } from "../../application/session/ports.ts";
 import { fromHtml } from "../../legacy/richtext.ts";
-import { heldDocument } from "../../legacy/session-bridge.ts";
+import { heldDocument } from "./session-owner.ts";
 
 const WITH_MEDIA = Object.freeze({ media: true });
 

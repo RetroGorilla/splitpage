@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { legacyExportServices } from "../../src/bootstrap/export-services.ts";
 
 import { sanitizeHtml, storedHtmlFromDom } from "../../src/legacy/richtext.ts";
-import { adoptReplacement } from "../../src/legacy/session-bridge.ts";
+import { adoptReplacement } from "../../src/bootstrap/wiring/session-owner.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
 import { migrateRows } from "../../src/legacy/document-ports.ts";
 

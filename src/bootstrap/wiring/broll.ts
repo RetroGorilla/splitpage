@@ -27,7 +27,7 @@ import { owned } from "../../features/routing/owned.ts";
 import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";
 import { cellEditing, paintGuard } from "./editor-owners.ts";
 import { scriptCellOf } from "../../legacy/richtext.ts";
-import { currentDocument, heldDocument, requestRefresh } from "../../legacy/session-bridge.ts";
+import { currentDocument, heldDocument, requestRefresh } from "./session-owner.ts";
 
 const broll = owned<BrollRecordsMount>();
 

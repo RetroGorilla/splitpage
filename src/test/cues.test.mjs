@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { sanitizeHtml } from "../legacy/richtext.ts";
 import { breakLine, deleteRange, insertText } from "../core/text/edits.ts";
@@ -23,7 +23,7 @@ import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/prod
 import { healTagRegistry, tagsInField } from "../features/tags/production-tags.js";
 
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
-import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../legacy/session-bridge.ts";
+import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions } from "../application/commands/tag-rewrites.ts";
 
 const retagText = portText;
