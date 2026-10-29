@@ -1,10 +1,11 @@
 import { changeSet } from "../../session/change-set.ts";
 import type { ChangeSet } from "../../session/change-set.ts";
-import { STATE_FIELDS } from "../../../core/document/fields.ts";
+import { NO_UNDO_KEYS, STATE_FIELDS } from "../../../core/document/fields.ts";
 import { idMap } from "../../../core/document/id-map.ts";
 import { mergeCells } from "../../../core/merge/cells.ts";
-import { LIST_MERGERS, personIdRemap, personSurvives, repointOwners } from "../../../core/merge/lists.ts";
+import { personIdRemap, personSurvives, repointOwners } from "../../../core/merge/lists.ts";
 import type { ListMerger, PersonList, PersonSurvives } from "../../../core/merge/lists.ts";
+import { FIELD_LIST_MERGERS } from "../../../core/merge/state-fields.ts";
 import { toHtml } from "../../../core/text/html.ts";
 import { commentIds, normalizeCell } from "../../../core/text/runs.ts";
 import type { Run } from "../../../core/text/runs.ts";
@@ -137,20 +138,12 @@ export interface UndoHistory {
 
 type Owned = { id?: unknown; name?: unknown; owner?: unknown; [key: string]: unknown };
 
-const SKIP_DOC_KEYS: Record<string, true> = {};
-STATE_FIELDS.forEach(function (f) { if (!f.undo) SKIP_DOC_KEYS[f.key] = true; });
-const SKIP_ROW_KEYS: Readonly<Record<string, true>> = { id: true, updatedAt: true, updatedBy: true };
-const TEXT_KEYS: Readonly<Record<string, true>> = { visualText: true, audioText: true };
+const SKIP_ROW_KEYS: Readonly<Record<string, true>> = Object.freeze({ id: true, updatedAt: true, updatedBy: true });
+const TEXT_KEYS: Readonly<Record<string, true>> = Object.freeze({ visualText: true, audioText: true });
 const COALESCE_MS = 1000;
 const MAX_ENTRIES = 200;
 
-const LIST_MERGES = idMap<ListMerger>();
-STATE_FIELDS.forEach(function (f) {
-  const merger = LIST_MERGERS[f.key];
-  if (merger) LIST_MERGES[f.key] = merger;
-});
-
-const OWNED_LISTS: Readonly<Record<string, true>> = { productionTags: true, brollShots: true };
+const OWNED_LISTS: Readonly<Record<string, true>> = Object.freeze({ productionTags: true, brollShots: true });
 
 function clone<T>(v: T): T { return v === undefined ? v : JSON.parse(JSON.stringify(v)) as T; }
 function same(a: unknown, b: unknown): boolean { return a === b || JSON.stringify(a) === JSON.stringify(b); }
@@ -181,7 +174,7 @@ function docKeys(before: UndoDocument | null | undefined, after: UndoDocument | 
   STATE_FIELDS.forEach(function (f) { keys[f.key] = true; });
   Object.keys(before || {}).forEach(function (k) { keys[k] = true; });
   Object.keys(after || {}).forEach(function (k) { keys[k] = true; });
-  return Object.keys(keys).filter(function (k) { return !SKIP_DOC_KEYS[k]; });
+  return Object.keys(keys).filter(function (k) { return !NO_UNDO_KEYS[k]; });
 }
 
 function rowsEqualIgnoringStamps(a: StepRow | undefined, b: StepRow | undefined): boolean {
@@ -262,7 +255,7 @@ export function diffStates(before: UndoDocument, after: UndoDocument, opts?: Dif
 }
 
 function listMergeFor(key: string): ListMerger | null {
-  return LIST_MERGES[key] || null;
+  return FIELD_LIST_MERGERS[key] || null;
 }
 
 function resolveCell(runs: HtmlRunDecoder, live: unknown, step: { before: unknown; after: unknown }): { value: unknown } | null {
