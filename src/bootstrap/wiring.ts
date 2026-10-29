@@ -6,6 +6,7 @@ import { standaloneHtmlFor } from "../adapters/page/standalone-html.js";
 import { stopDocumentIdentityOwner } from "./wiring/document-identity.ts";
 import { startDocumentGuard } from "../application/identity/document-guard.ts";
 import { stopHistoryOwner } from "./wiring/history.ts";
+import { stopScreenStateOwner } from "./wiring/screen-state.ts";
 import { wireTagProduction } from "./wiring/production-tags.ts";
 import { importDocumentSource } from "./wiring/imports.ts";
 import { wireProjectFiles } from "./wiring/project-files.ts";
@@ -368,7 +369,7 @@ export function wireLegacyApp(deps: Omit<WiringDeps, "editorName" | "projectFile
 
 export function wireApp(deps: WiringDeps): Wiring {
   validate(deps);
-  const disposers: (() => void)[] = [];
+  const disposers: (() => void)[] = [stopScreenStateOwner];
   const build = <T>(step: WiringStep, construct: () => T, release: (built: T) => () => void): T => {
     try {
       const built = construct();

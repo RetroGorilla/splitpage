@@ -1,5 +1,6 @@
 import { captureExportDocument } from "../../../src/bootstrap/wiring/export-capture.ts";
 import "../../../src/test/_dom.mjs";
+import "../../../src/test/_screen-state-started.mjs";
 import { after, test } from "node:test";
 import assert from "node:assert/strict";
 import { commandResults } from "../../../src/features/command-menu/command-menu.ts";

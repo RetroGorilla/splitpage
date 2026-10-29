@@ -17,7 +17,7 @@ const whilePainting = (paint) => paintGuard().whilePainting(paint);
 const afterThisPaint = (work) => paintGuard().afterThisPaint(work);
 const { setHideShotScenes } = await import("../bootstrap/wiring/hide-shot.ts");
 const { runBrollRefresh, closeBrollPage, openBrollPage, openBrollPanel } = await import("../features/broll/panel.js");
-const { sidePanels } = await import("../legacy/panels-bridge.ts");
+const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const undoSizes = () => undoOwner().sizes();

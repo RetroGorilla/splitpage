@@ -28,7 +28,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/shot-hiding.ts": { functions: ["startShotHiding"] },
   "src/legacy/location-bridge.ts": { functions: ["startLocation"] },
   "src/legacy/effects-bridge.ts": { functions: ["startEffects"] },
-  "src/legacy/panels-bridge.ts": { functions: ["startSidePanels"] },
+  "src/bootstrap/wiring/ports/panels.ts": { functions: ["startSidePanels"] },
   "src/legacy/desktop-bridge.ts": { functions: ["startDesktopDocumentState", "handDesktopTo"] },
   "src/application/desktop/menu-commands.ts": { functions: ["runMenuCommandsWith"] },
   "src/bootstrap/wiring/script-zoom.ts": { functions: ["mountScriptZoomFeature"] },
