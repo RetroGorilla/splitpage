@@ -11,7 +11,7 @@ import { rundownMinimizeActions as minimizeDefinitions, rundownSceneActions as s
 import type { RundownPorts, TargetMount, TargetPorts } from "../../features/rundown/ports.ts";
 import { startRundown as mountRundown } from "../../features/rundown/rundown.js";
 import { startTarget as mountTarget } from "../../features/rundown/target.js";
-import { cellEditing, rowDrag } from "../../legacy/editor-bridge.ts";
+import { cellEditing, rowDrag } from "./editor-owners.ts";
 import { preferences } from "../../legacy/preferences-bridge.ts";
 
 const rundown = owned<ReturnType<typeof mountRundown>>();

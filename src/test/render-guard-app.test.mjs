@@ -28,7 +28,7 @@ const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
 const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
-const { cellEditing, focusMemory, mergeUndo } = await import("../legacy/editor-bridge.ts");
+const { cellEditing, focusMemory, mergeUndo } = await import("../bootstrap/wiring/editor-owners.ts");
 const find = await import("../features/find/find.js");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { localFilesOwner, localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");

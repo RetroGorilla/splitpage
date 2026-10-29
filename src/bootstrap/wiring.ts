@@ -35,7 +35,7 @@ import { startPageEffects } from "./effects.ts";
 import { legacyExportServices } from "./export-services.ts";
 import { createAppActions, installAppActions } from "../legacy/app-actions.ts";
 import { installExportFormats } from "./wiring/export-registry.ts";
-import { startEditor } from "../legacy/editor-bridge.ts";
+import { startEditor } from "./wiring/editor-owners.ts";
 import { startLocation } from "../legacy/location-bridge.ts";
 import { getEditorName, startPreferences } from "../legacy/preferences-bridge.ts";
 import { shotHidingPorts, startShotHiding } from "./wiring/shot-hiding.ts";

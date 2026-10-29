@@ -13,7 +13,7 @@ await bootApp();
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { applyMerge } = await import("../legacy/merge-bridge.ts");
-const { mergeUndo } = await import("../legacy/editor-bridge.ts");
+const { mergeUndo } = await import("../bootstrap/wiring/editor-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { localFilesOwner } = await import("../bootstrap/wiring/local-files.ts");

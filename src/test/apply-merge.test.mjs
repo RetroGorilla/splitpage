@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { baseStateReason, setBaseState } from "../bootstrap/wiring/session-merge.ts";
 import { applyMerge, mergeStates } from "../legacy/merge-bridge.ts";
-import { mergeUndo } from "../legacy/editor-bridge.ts";
+import { mergeUndo } from "../bootstrap/wiring/editor-owners.ts";
 import { historyOwner } from "../bootstrap/wiring/history.ts";
 const getHistorySnapshot = (...args) => historyOwner().getHistorySnapshot(...args);
 const listDocHistory = (...args) => historyOwner().listDocHistory(...args);
