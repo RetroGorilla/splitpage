@@ -40,10 +40,8 @@ breakdown for props/locations/cast/VFX/sound.
   `desktop/stage.mjs` all copy the repo-root file out verbatim. `--check`
   reports on both, separately, so two stale outputs are not found one at a
   time.
-- **Seven edits go through `DocumentSession`** (milestone 3): scene length,
-  scene status, typing, split, join, cut and paste are commands in
-  `src/application/commands/`, run through `src/bootstrap/wiring/session-owner.ts`.
-  Every other writer still assigns into `S.state` and calls `markDirty()`.
+- **Document edits go through `DocumentSession`**, run through
+  `src/bootstrap/wiring/session-owner.ts`.
   [docs/architecture/session.md](architecture/session.md) describes the
   session, the effect scheduler and the command shape as built.
 - **The shipped app must stay one self-contained file.** Save writes
@@ -54,7 +52,8 @@ breakdown for props/locations/cast/VFX/sound.
   guide, and a build input — it becomes the in-app Help page), `start.mjs`
   with thin `start.bat`/`start.sh`
   wrappers (local launcher), `update.mjs` (says whether a newer release
-  exists; installs nothing), `server/server.js` (hosted mode),
+  exists; installs nothing), `server/server.js` (the static file server
+  `start.mjs` runs),
   `tools/package.mjs` (the portable zip), `desktop/` (the Electron app and its NSIS
   installers). #75 deleted the rest of the packaging: `installer/` (the
   IExpress setup), `tools/fetch-runtime.mjs`, `start.ps1` (a third HTTP server
@@ -339,226 +338,6 @@ successful write or open (or `null`: no ancestor), and goes through
 `setBaseState`, and nothing else. `reportMerge(result, {alreadySaved:true})`
 avoids re-queuing an autosave for a mid-save merge.
 
-### 3.7 The server
-
-`server/server.js` — plain Node, no dependencies, `server.js` plus five helpers (`comments.js`, `blobs.js`, `links.js`, `html-tokens.js`, `text.js`). One JSON file
-per document in `DATA_DIR`.
-
-- No identity of its own — `Cf-Access-Authenticated-User-Email` is read for
-  display and attribution only. Without Access in front it is whatever the
-  caller wrote (as trustworthy as the `by` in every write body), so nothing
-  that decides what a token may do ever reads it.
-- **Two shapes, one file.** No `JOIN_PIN`: open, everyone the owner, meant
-  for behind Cloudflare Access or a VPN. `JOIN_PIN` set: a short code on a
-  LAN (the desktop app's `--host`, `start.mjs`), or — with a long random key,
-  `PERSIST_LINKS=1` and TLS in front — the owner's key to a server that faces
-  the internet on its own, with guests on per-document invite links. The gate at the top of
-  `handleApi()` is the one place that decides what a token reaches.
-- `JOIN_PIN` → the **owner token**: sha256 + `timingSafeEqual`, refusal is
-  `401 {error:"pin-required"}` JSON. 10 wrong guesses/minute per address;
-  only the join PIN itself clears an address's count — a link key or the
-  review code used to as well, and every guest holds one, so a reviewer could
-  walk six digits to the editor's PIN at 90% speed (9 wrong, 1 good join,
-  repeat). Without `PERSIST_LINKS` the owner token is random per process (a
-  restart signs everyone out, as always). With it, it is
-  `HMAC-SHA256(secret, "owner\0" + JOIN_PIN)`, the secret in
-  `DATA_DIR/links/secret`: a redeploy keeps the owner signed in, changing
-  `JOIN_PIN` signs every owner device out. `PERSIST_LINKS=1` with a
-  `JOIN_PIN` under 20 characters prints a loud startup WARNING (an
-  internet-facing server with a guessable key); a LAN PIN does not.
-- **Who the limiter counts** (#74): the socket; `TRUST_PROXY=1` → the first
-  `X-Forwarded-For` entry (for a proxy that REPLACES the header);
-  `TRUST_PROXY=cloudflare` → `Cf-Connecting-Ip`, which Cloudflare overwrites.
-  Behind Cloudflare `=1` is spoofable: Cloudflare APPENDS to a client-sent
-  X-Forwarded-For, so its first entry is the guesser's to choose — a fresh
-  bucket per guess. Junk (or a comma list) in either header falls back to
-  the socket. Any other `TRUST_PROXY` value is ignored with a warning (`0`
-  silently).
-- CORS opt-in per origin, never carries credentials; `OPTIONS /api/*`
-  answered 204 before any route runs.
-- `/api/launcher/info` is loopback-only and launch-token-gated — launch
-  token in the URL fragment, `HOST === "127.0.0.1"`. Any failing check is
-  404, not 401 (invariant #28). It answers with this process's `root`,
-  `platform` and `arch`; the app no longer asks it. It used to have company: `register`
-  spawned `installer/install.ps1 -InPlace` for a Start Menu entry, and
-  `update/stage` spawned `update.mjs stage --json` for the update bar's
-  Download button. #75 deleted both of those programs, so both routes went
-  with them, along with `stageUpdate()` and `installedHere()` — this server
-  no longer starts another process at all. The gating rules above stay as
-  written: they are why a route here could exist, and anything that ever
-  joins `info` inherits them.
-- `REVIEW_PIN`/`REVIEW_KEY` are a second, LIBRARY-wide credential minting a
-  second token with the role `review` (#30), unscoped, random per process
-  even under `PERSIST_LINKS` (it belongs to the launcher's LAN session, the
-  only thing that sets it). Both are ignored without a `JOIN_PIN`. Role and
-  scope are read from the token on every request (`sessionOfToken`), so they
-  survive a reconnect and cannot be asserted by a client. **A review session never
-  PUTs** (#71): `POST /api/docs/:id/comments` takes one new comment or reply
-  from either role. **Reviewers never resolve or unresolve** (owner's
-  decision): `PATCH /api/docs/:id/comments/:cid` is editor-only, and a
-  review-role PATCH is a flat 403 `reviewers-cannot-resolve`, refused before
-  its body is read. Authorship cannot be established — an author is a typed
-  name and every reviewer on a link shares one token — so any resolve by a
-  reviewer would be a resolve of somebody else's comment. A
-  review-role PUT is a flat 403 `review-only`, refused before its body is
-  read. The whole-state
-  proof that used to decide whether a review PUT changed "only comments" —
-  `reviewWriteAllowed`, a key-by-key `deepEqual`, and the rest — is gone.
-  What survives is `htmlTokens`/`fieldSignature`, now scoped to ONE field:
-  the comments endpoint uses them to check that an anchor adds a
-  `.cmt-anchor` span and changes no words, which plain string comparison
-  cannot do (wrapping a selection across a `<strong>` splits it, and
-  attributes may re-serialise in a different order). A stale anchor is not
-  a refusal — it is dropped and the comment lands with `anchored:false`.
-  Edit-role users keep PUT for everything, comments
-  included. `GET /api/share?doc=<id>` (owner only) is kept for older clients:
-  it is get-or-create that document's REVIEW link from the store below,
-  answered `{reviewAvailable:true, reviewKey, docId}` — never the PIN.
-- **Invite links: the link store** (`server/links.js`; replaced #63's in-memory
-  `reviewGrantFor`/`reviewGrantsBy*`/`reviewScopeByToken`). A link is
-  `{id (12 hex), key (24 random bytes hex — what the URL carries), token (32
-  bytes hex — what join hands back), docId, role "edit"|"review", createdAt,
-  createdBy}`, at most ONE active per (docId, role), looked up through Maps
-  (`linkByKey`, `linkByToken`, `linkByDocRole`) so the gate is O(1). Revoking
-  leaves a tombstone of `sha256(key)` and `sha256(token)` — never either
-  itself — capped at 2000, oldest dropped. Links need only a `JOIN_PIN`
-  (not a review code), which is why `/api/health`'s `reviewAvailable` is now
-  `!!JOIN_PIN`; health also says `links: 1` and `linksPersist`.
-  - **Where it lives.** Without `PERSIST_LINKS`: memory only, a restart
-    cancels every link and token (the LAN sessions, unchanged in lifetime).
-    With `PERSIST_LINKS=1`: `DATA_DIR/links/` (0700) holding `secret` and
-    `links.json` (both 0600, the mode set when the temp file is CREATED via
-    `writeFileDurable(…, mode)`), rewritten whole on every change through a
-    one-at-a-time chain that writes the store as it is when the write RUNS.
-    On disk BEFORE a new key is handed out (a failed write drops the new
-    link) or a revoke is confirmed. An unreadable `secret` or `links.json`
-    stops the server at startup rather than being silently replaced (that
-    would sign the owner out / drop every link). `links/` does not end in
-    `.json`, so the list skips it; the static handler refuses all of
-    `DATA_DIR`. The file holds keys and tokens in the clear: it must hold
-    keys (the owner copies a link again) and a key mints its token on
-    request, so hashing tokens there would protect nothing.
-  - **Join** (`POST /api/join`): `{pin}` = JOIN_PIN → `{token, role:"edit"}`;
-    `{key}` of an active link → `{token, role, docId, scope: docId}`; a
-    tombstoned key → **410 `link-off`**, NOT counted as a guess (a dead
-    link re-opened is not an attack, and must not lock out the house);
-    library review code/key unchanged; else 401 `bad-pin`, counted.
-  - **The gate.** `sessionOfToken` → `{role, scope, token}` (scope "" for
-    the owner and the library review token), `{revoked:true}` for a
-    tombstoned token → **401 `link-off`** (header or beacon body), or null →
-    401 `pin-required`. A SCOPED token (either
-    role): `GET /api/docs` lists only its document; any `/api/docs/:id…` on
-    another id → 403 `wrong-document`, before the body; `POST /api/docs`
-    → 403 `owner-only` for a scoped edit (review keeps `review-only`);
-    `DELETE /api/docs/:id` (any id, its own included), the links API and
-    `/api/share` → 403 `owner-only`; `POST /api/presence` on another docId
-    → 403 `wrong-document` (it used to check no scope at all — a link could
-    read who was in any document and its rev). A scoped EDIT token PUTs
-    its own document through the ordinary compare-and-set/409/426/422 path
-    and may PATCH-resolve its comments. `GET /api/me` →
-    `{role, scope, email, name}`.
-  - **Links API** (`handleLinks`, owner only = unscoped edit; else 403
-    `owner-only`; no JOIN_PIN → 409 `no-pin`): `GET /api/docs/:id/links` →
-    `{links:[{id, role, key, createdAt}]}` (active only; answers even for a
-    document removed by hand, so its links can still be revoked);
-    `POST {role, replace?}` (8 KB cap) → the active link (200) or a new one
-    (201), `replace:true` revokes first and always mints; 400 `bad-role`,
-    404 `not-found` (no such document), 403 `read-only` for an EDIT link
-    under READ_ONLY (review links and revokes still work); runs under the
-    document's lock so it cannot race a DELETE. `DELETE …/links/:linkId` →
-    `{ok:true}`, off from the token's next request; 404 **`no-such-link`**
-    (not `not-found`, which the client reads as "the script is gone").
-    Deleting a document revokes its links first, persisted before the
-    unlink. The token is never in any answer here. Placed above the
-    comment/read/save routes, and any OTHER sub-path under a document is now
-    404 — it used to be answered as the document itself, so a `DELETE` one
-    letter off `/links/…` deleted the script.
-- `POST /api/presence` (#28) is a heartbeat and a listing in one round trip,
-  in memory only, capped and swept per request, TTL 15s. It is behind the
-  same gate but carries its own copy of it, because a closing tab's
-  `sendBeacon` cannot set the token header — including `link-off` and a
-  link's scope (403 `wrong-document` for another docId). Presence is never
-  part of a document and never touches one.
-- Document ids whitelisted (`^[a-z0-9][a-z0-9-]{0,63}$`), not sanitised.
-- Writes are temp-file-plus-rename, serialised per doc id (`withDocLock`).
-  `Cache-Control: no-store` on every response except a blob's.
-- **What an internet-facing server must not do.** A request line of `GET //` threw in `new URL()`
-  outside every handler — an uncaught exception, one request from anyone
-  took the process down; now 400. A token or launch header with a non-ASCII
-  byte reached `timingSafeEqual` with mismatched BYTE lengths (the string
-  lengths matched) and threw — a 500 plus a stack trace per request;
-  `sameToken` compares bytes now. The static handler refuses anything under
-  `DATA_DIR` by real path, case-folded on Windows/macOS (`insideDataDir`):
-  `start.mjs` serves its whole folder with the library in `data/` beneath
-  it, so `GET /data/<id>.json` handed any document to anyone on the LAN,
-  PIN or no PIN. And nothing whose path has a segment starting with `.`
-  (`.git/config`, `.env` in a checkout).
-- **Images are content-addressed blobs** (#82). Bytes live at
-  `DATA_DIR/blobs/<first 2 hex>/<sha256>`, written like a document (temp in
-  the same dir, fsync, rename, fsync the dir — `writeFileDurable`), global
-  across documents, never deleted (D4); a successful save or comment touches
-  the mtime of every blob it names. The list route skips `blobs/` (it only
-  reads `*.json`). `GET /api/health` carries `blobs: 1`. All three routes
-  sit behind the token gate:
-  - `GET /api/blobs/<sha>` (64 lowercase hex, else 400): raw bytes,
-    `Content-Type` sniffed (png/jpeg/gif/webp only), `Cache-Control:
-    private, max-age=31536000, immutable`, `ETag: "<sha>"` (304 on
-    `If-None-Match`), `nosniff`, `CSP: default-src 'none'; sandbox`. A file
-    whose bytes do not hash to its name is 404 and logged, not served.
-  - `PUT /api/blobs/<sha>`, raw body: READ_ONLY 403, bad sha 400, declared
-    length over `MAX_BLOB_BYTES` (8 MiB) 413 and a metered guest over budget
-    429 `review-budget` — all four before the body is read (#74); then
-    `hash-mismatch` 400, not png/jpeg/gif/webp (SVG included) 415
-    `unsupported-type`, already stored 200 `{stored:false}`, else 201
-    `{stored:true}`.
-  - `POST /api/blobs/missing {shas:[≤2000]}` (256 KB body cap) →
-    `{missing:[…]}`, both roles, READ_ONLY too.
-  - **Who sees what** (`blobVisibility(session)`). The owner and the
-    library-wide review token: every blob. A per-document link of EITHER
-    role: the shas its document's stored state names (`refsIn`, cached by
-    doc id + rev) plus the shas it uploaded itself; anything else is 404 on
-    GET and "missing" on `/missing` whether or not it exists, a PUT of such
-    bytes is answered 201 `{stored:true}` (and charged) even when they were
-    already here, and a comment naming one is 422 — and so, for an edit
-    link, is a document PUT naming one (`refusedRefs(…, visible)`); the
-    client uploads it, after which it is the link's own. None of these
-    answers tells a link what the rest of the library holds. Residual: an
-    edit link that already KNOWS a sha can put it in `acceptMissing`, save,
-    and then learn from a GET whether the library holds those bytes — which
-    needs the image's hash, i.e. effectively the image.
-  - **Guest budgets** (`blobLedgers`, per token per rolling hour, each
-    upload charged at least 4 KiB): review tokens `REVIEW_BLOB_BUDGET_BYTES`
-    (20 MiB; screenshots in comments, D6), scoped edit tokens
-    `LINK_EDIT_BLOB_BUDGET_BYTES` (100 MiB; stills in its one script). Over
-    either is 429 `review-budget`. The declared length is
-    reserved before the body and settled to what was stored; a re-send of
-    bytes the token could already see is free. The library-wide review
-    token is one budget shared by everyone holding it. The owner is
-    unmetered.
-  - `refsIn(state)` counts `imageRef.sha256` / `imageValue.sha256` anywhere
-    in the state and `data-blob="<sha>"` on any TAG in any string (comment
-    and reply bodies, row HTML) — read through `htmlTokens`, so the same
-    characters typed as words are not a ref.
-  - **422 `{error:"missing-blobs", missing}`**: a document POST or PUT whose
-    state names a sha that is not on disk, not already named by the stored
-    document, and not listed in the request's `acceptMissing` array (after
-    the token/role and the PUT's rev check, before anything is written); a
-    comment or reply POST whose body names one (no `acceptMissing` there).
-    Legacy states carrying
-    base64 images are accepted forever; `MAX_BODY` stays 25 MB.
-  - **426 `{error:"client-too-old"}`** (D7): clients send
-    `x-splitpage-client: 2` on every API call (listed in the CORS allowed
-    headers). A document PUT without it, or with a lower number, is refused
-    before its body when the STORED document names any blob — an older
-    client cannot see those images and its save would drop them. A
-    document with no refs is still saveable by an old client; a document
-    that gains refs between the check and the write is caught by the rev
-    compare-and-set. The comments POST is NOT gated: an old client's
-    comment only appends, and its anchor HTML must match the stored field
-    tag for tag, images included, or it is dropped as stale.
-  - The app no longer talks to this server: its client half (`apiFetch`,
-    `sendWithBlobs`, `fetchBlob`) went with the server features.
-
 ### 3.8 Untagged mentions are painted, never wrapped
 
 `scanUntaggedMentions()` finds registry items written as plain text, painted
@@ -679,9 +458,7 @@ tabs**.
 - **Close/quit authority is per tab and per window; a quit asks at most one
   dialog** (#44). `unsaved(tab) = tab.dirty || drafts.isHeld(tab.id)`. One
   unsaved tab: 2-button dialog. Window close/quit with 2+ unsaved tabs: one
-  3-button dialog listing every title. Hosting prompt fires at most once
-  per quit, before the unsaved dialog. Server/tunnel killed in `will-quit`,
-  never `before-quit`. `session-end` asks nothing.
+  3-button dialog listing every title. `session-end` asks nothing.
 - Session restore: `<userData>/desktop-state.json` v2 — windows, bounds,
   tabs, each tab's *source*, no docId, no draft id; one serialized write
   queue, frozen once quit begins. `splitpage:tab-boot-sync` (sendSync,
@@ -780,8 +557,7 @@ tabs**.
   side is `makeDesktopBlobBackend(bridge)` in `20f-desktop.js` (the page
   registry's `get`/`put`/`missing` interface; `put` rejects with
   `err.code`), and `makeFakeDesktopBackend({blobs:true})` fakes the three
-  bridge calls for browser suites. The `--host` server keeps its own
-  `DATA_DIR/blobs` (#82 D9).
+  bridge calls for browser suites.
 - **YouTube and Vimeo in the gallery** (#141, #168, `main.js` §9e,
   `shared/video-embed.js`). The page's policy is build.mjs's, re-served
   as a header (§10), so its `frame-src` — `'self'` plus YouTube's no-cookie
@@ -817,25 +593,6 @@ tabs**.
   is unchanged and `caseAtomicSaveKeepsBirthtime` stays as the guard against
   a birthtime rule being written back in. The reassigned tab doesn't
   dirty/autosave.
-- Launch args: `--library`, `--host`, `--pin [code]`, `--data DIR`,
-  `--port`, `--allow-origin`, `--tunnel user@host [...]`. Files as
-  arguments open through `routeOpenPath`; a second launch hands files to
-  the running app.
-- **Per-tab server connections** (#11), main's side only: the page no
-  longer has a connection or opens server documents. A server
-  tab's `source` is `{kind:'server', serverDocId, serverUrl, tunnel}` and
-  routing keys it by server AND id (`serverRouteKey`), so the same id on two
-  servers is two tabs. `set-document-state` reports `serverUrl`/`tunnel`/
-  `role` (never a token). `route-open` for a server document carries the
-  asking tab's `serverUrl`, `token` and `tunnel`; a malformed address is
-  refused. The token is held in memory **only in transit** — on a new
-  tab's record until TAB-BOOT-SYNC hands it over as `connection`, then
-  dropped; a this-tab route stores none. `desktop-state.json` gets
-  `normalizeTabSource()`'s whitelist and never a token or role. The
-  teleprompter's Open in browser answers `REMOTE_SERVER` for a tab on
-  someone else's server. A `tunnel` is
-  host and ports only — the SSH forward the reader runs; nothing starts
-  ssh for a tab. `--tunnel` is still its own single non-tab window.
 - Test mode: `SPLITPAGE_TEST=1` — window never shown/taskbarred, an
   unanswered dialog resolves Cancel, an uncaught main-process error exits
   to stderr instead of a modal. `SPLITPAGE_USER_DATA` gives a temp profile;
@@ -1340,407 +1097,8 @@ File ▸ Export app data carries them (`settingsAppData()`).
 
 ## 5. Invariants — break these and data goes quietly wrong
 
-Each rule below has a row in [docs/architecture/invariants.md](architecture/invariants.md) (tests, 4.0 owner, milestone, and whether code will absorb it). Change the two together.
+The rules live in [docs/architecture/invariants.md](architecture/invariants.md): 62 entries, `INV-01` to `INV-62`, each with the behaviour it protects, its tests and its owner. Older notes that cite "invariant #N" mean `INV-N` there. Read it before touching saving, merging, history, undo or the document format.
 
-1. **Edit with the Edit tool, one site at a time.** Never in-place regex
-   substitution (`sed`/`perl -pi`) on `index.html` — no git to restore from.
-2. **Change a script cell through the document model, never by editing its
-   HTML** (#85, `docs/DOCUMENT-MODEL.md`): `editCell()` (05b-cell-edit.js)
-   for anything done at the selection, the edit functions of
-   `04c-doc-model.js` (`replaceText`, `setMark`, `insertText`, …) for the
-   rest, `toHtml()` to write the result. Where a path still edits HTML
-   (only the guards split/join and the tag and b-roll edits keep for a
-   cell still holding a picture, which none does since D7), it walks the
-   DOM, never regexes HTML. No edit uses `execCommand` (not in a comment
-   or reply box either — invariant #55).
-3. **Never touch text inside a tag** (§3.3): the model's edits keep a
-   comment or link over all of a tag or none of it, and find/replace never
-   matches inside one.
-4. Absorbed in milestone 2.5: see INV-04 in [docs/architecture/invariants.md](architecture/invariants.md#inv-04--every-top-level-field-survives-migration-and-merge).
-5. **Gate script-only behaviour on `isScriptCell()`** (§3.5).
-6. Absorbed in milestone 3: see INV-06 in [docs/architecture/invariants.md](architecture/invariants.md#inv-06--no-document-wide-work-per-keystroke).
-7. **Repaint a row, don't re-render the document** for a single-row
-   change: `renderRow(rowId)`, which repaints only the parts whose markup
-   changed and never a field whose text did not (§3.16). `cycleRowStatus()`
-   uses it.
-8. **Escape values going into CSS attribute selectors** with `cssAttr()` —
-   stripping quotes isn't enough, a backslash reads as a CSS escape.
-9. **Markdown table cells need `mdCell()`**; a raw `|` shears the row.
-10. **Anything entering a script cell goes through `fromHtml()` or a model
-    edit**, which only produce canonical, sanitised cells;
-    `syncFieldFromDom()` stores every keystroke that way. `sanitizeHtml()`
-    on anything else reconstructed (a comment body) before it re-enters
-    state.
-11. **A control nested inside `.tag-entity-head` must be checked *before*
-    `tag-expand`** in the click delegation's sequential `if` chain.
-12. **A modifier-click on a breakdown card outranks every control inside
-    it** — checked at the very top of the click delegation.
-13. **Two different drags share the root handlers.** The image branch is
-    gated on `isFileDrag(e) && !dragRowId`, or scene reordering breaks.
-14. **A new `TAG_CATEGORIES` entry needs its colour tokens and a matching
-    `.tag-anchor[data-tag-cat="…"]` CSS rule** — `--tag-<id>` and
-    `--tag-<id>-tint` in `:root` and in both dark blocks of the stylesheet, its
-    `color` set to `"var(--tag-<id>)"`, and the rule pointing `--tag-color`/
-    `--tag-tint` at them. Panels read the colour through `TAG_CATEGORIES`,
-    the script through the rule; both land on the same token, so the dark
-    theme and the prompter (which always takes the dark tokens) follow on
-    their own (#143). Keep the hues off the Visual blue and Audio amber.
-    It also needs its light hex in `TAG_PRINT_COLORS` (14-export.js, #171):
-    the PDF and .docx exports draw categories in the light `:root` values
-    (the page is white whatever the theme), and a file format cannot read
-    a CSS token, so that table is a deliberate second copy — the one place
-    they are written out, read through `tagPrintColor(catId)`.
-    `src/test/palette.test.mjs` checks all of it, contrast included, and
-    fails the moment `TAG_PRINT_COLORS` and `:root` disagree. It also needs
-    an `icon` (#217): a stroked 24×24 SVG's inside in `TAG_ICON_PATHS`, next
-    to `TAG_CATEGORIES`, which `tagIconCss()` gives to `[data-tag-cat]` as
-    `--tag-icon` for Settings ▸ Show icons on tags. The icon is CSS only
-    (`::before` and the panels' dots, under `<html data-tag-icons>`), never
-    a node in a `.cell-editable`, or `syncFieldFromDom()` would read it back.
-15. **The writer never re-parses the document into rows** (§3.9). Row-list
-    changes go through `splitWriterRow()`/`mergeWriterRows()`; DOM rebuilds
-    through `renderWriter()`.
-16. **Anything that opens over the whole screen must close the side
-    panels**, through the one helper `closeAllSidePanels()`
-    (03b-side-panels.js, #163). It walks `SIDE_PANEL_IDS`, calls each open
-    panel's own close function (`closeCommentsPanel()`,
-    `closeProductionPanel()`, `closeGearPanel()`, `closeBrollPanel()`,
-    `closeHistoryPanel()`, via `SIDE_PANEL_CLOSERS`) and then
-    `syncPanelClass()` once, so `body.panel-open` and `#root`'s padding
-    reset. Present (`openPrompter()`), the Writer (`openWriter()`, which
-    also closes the find bar), Help, the tour, the setup wizard and the
-    full-page shot list (`openBrollPage()`) all call it. Present and the
-    Writer call it in the same call that starts their fade-in, so the
-    panels' slide-out (`--dur-exit`) runs under and inside the mode's
-    arrival (`--dur-enter`) as one transition (§3.14). Leaving Present or
-    the Writer brings no panel back; the shot list alone reopens the B-roll
-    panel on close if that is where it was opened from. A new panel goes in
-    `SIDE_PANEL_WIDTH_DEFAULTS` (which is `SIDE_PANEL_IDS`) and, if it has a
-    close function, in `SIDE_PANEL_CLOSERS`. `tests/128-side-panels-modes.txt`
-    checks every panel against both modes. Writer and Present sit at
-    `z-index: 145`, above panels (140), below modals (150) and toasts (200).
-17. **A hint about the document must never edit the document** (§3.8).
-18. Absorbed in milestone 3: see INV-18 in [docs/architecture/invariants.md](architecture/invariants.md#inv-18--a-comment-is-anchored-by-its-mark). A new path that moves words between rows is a session command that declares what it changes (`docs/architecture/session.md`); the scene-level paths of 05g, 05h and 06-rows still call `syncCommentAnchors(state)` themselves.
-19. **A full-screen overlay must own the focus and the stacking, not just
-    the pixels.** `.tag-ghost-hint` raised to 146; a `focusin` trap on
-    `#writer` lets modals/toasts through.
-20. Absorbed in milestone 4: see INV-20 in [docs/architecture/invariants.md](architecture/invariants.md#inv-20--two-save-buttons-one-save-state). Both Save buttons render one view from `saveStatus` (`src/application/save/status.ts`) through `setSaveButtons()`/`mirrorFileChipToWriter()`.
-21. **There is one place a field gets split, not two** (§3.10) —
-    `splitRowFieldCore()`.
-22. **Scroll to the caret's own rect, never the cell's**, when the cell
-    might be taller than the viewport (§3.10) — `keepCaretInView()`.
-23. **A click that ends a text selection must never also fire a
-    click-target action** — the comment card's `isCollapsed` gate (§3.11).
-24. **The export appendix and the panel's own display can be sorted
-    differently, on purpose** (§3.11) — `commentEntries()` always uses
-    `commentPositionCompare()`.
-25. **A new panel showing `tagEntityHtml()` cards is a fourth call to
-    `wireTagEntityContainer()`, not a new event-handling path** (§3.12).
-26. **A quick-add box that tracks things whether or not they're in the
-    script must only ever forget what it alone added** (§3.12).
-27. **A "the registry looks corrupted" symptom from a `jsclick`-driven test
-    is not proof — check `document.activeElement` first** (§3.12).
-28. **No HTTP endpoint spawns a process or installs files.** No exception:
-    `server/server.js` does not require `node:child_process` at all. There
-    used to be one — `/api/launcher/*`, loopback-only and launch-token-gated
-    (§3.7) — where `register` ran `installer/install.ps1` and `update/stage`
-    ran `update.mjs stage --json`. #75 deleted both of those programs and
-    both routes went with them; all that is left under `/api/launcher/` is
-    `info`, which reports this process's own `root`, `platform` and `arch`
-    and nothing else. The gate stays on it, and anything ever added beside
-    it inherits the gate: a missing lock answers 404, not 401. In the
-    desktop app the equivalent
-    pair is `splitpage:update-download` / `splitpage:update-install`, and
-    neither takes an argument: the renderer can ask for the update to be
-    fetched and run, but never names the URL to fetch or the file to
-    execute (main picked both from the release it checked).
-    `splitpage:prompter-open-in-browser` (#86) follows the same rule: no
-    arguments at all. Main builds the loopback URL from the calling tab's
-    own record — the path it registered, or the server document id it
-    holds — so a compromised page can at worst open a loopback page of this
-    app showing a document that tab already has open. The script is served
-    from memory by `desktop/prompter-share.js` behind a 256-bit token in the
-    URL fragment and a Host-header check; no temp file is ever written, so
-    a crash leaves nothing on disk.
-    The blob folder (#82) is the third. The page names a blob by the
-    SHA-256 of its bytes and nothing else — `sha256` is a typed argument
-    (64 lowercase hex), so a path, a URL or a `..` is refused by the table
-    before a handler runs, and main builds `sha256/<aa>/<sha>` under its own
-    `userData`. Answers carry shas, bytes and a sniffed mime, never a path.
-    A put must hash to its sha and be a raster image, so a compromised page
-    can at worst add images to the folder (up to 16 MiB each) and read back
-    ones it already knows the sha of — it cannot name a file, read anything
-    outside the folder, or plant an SVG that a later page would render.
-    Version history (#83) is the fourth, and its six channels are the
-    fewest that say what a snapshot is. The page names a document by
-    `docId` and a snapshot by its id (both typed in the table and checked
-    again in main, invariant #38) and the Older bucket only by an explicit
-    `{older:true}` flag — `history-get`'s query, or `history-put` with a
-    null docId — never by a string: `"_older"` is not a docId, so it is
-    refused as one, flag or no flag. Main builds every path under its own
-    `userData/history`; answers carry metas, state JSON as text (never
-    parsed in main) and counts, never a path. #83 step 4 took the set from
-    eight to six by folding usage into `history-list`'s answer and
-    import-into-Older into `history-put`'s flag rather than keeping a
-    channel per store method. So a compromised page can at worst read,
-    write and copy the history of documents whose ids it knows, fill the
-    cap (which evicts oldest-first, never a document's newest snapshot),
-    and list which documents have history — it cannot name a file or reach
-    anything outside that folder.
-    Follow My Voice (#8) is the fifth: invariants #45–#47.
-    A pasted video's thumbnail (#141) is the sixth.
-    `splitpage:video-thumbnail` takes a host from a list of two and a video
-    id of a fixed shape, both typed in the table, and main rebuilds every
-    address from them against `shared/video-embed.js`'s fixed hosts (a
-    Vimeo oEmbed answer's `thumbnail_url` is used only when it is on
-    Vimeo's own image host). No redirect is followed and only a raster
-    image of at most 1 MiB comes back. So a compromised page can at worst
-    make main fetch the thumbnail of a video it names from YouTube or
-    Vimeo — what pasting the link does anyway.
-29. **The join PIN, session token, and launch token never enter
-    `update-status.json`, the document, or any file the static handler
-    serves.** Since #11 the same holds for `desktop-state.json` and a
-    draft header: a server tab's persisted source is `{kind, serverDocId,
-    serverUrl, tunnel}` and nothing else, and a token only ever sits in
-    main's memory between a route-open and the new tab's boot. The page
-    itself no longer holds any of them.
-    Held in milestone 4: see INV-29 in [docs/architecture/invariants.md](architecture/invariants.md#inv-29--connection-secrets-never-persist-in-shared-places).
-30. **The first-run setup wizard may only appear over a genuinely pristine
-    copy of the app.** `<meta name="splitpage-seed-check">` (stamped by
-    `build.mjs`, checked by `seedCheckPasses()`) plus
-    `localStorage["splitpage-onboarding"]` plus checks that no document is
-    already loading. File ▸ "Set up Splitpage…" bypasses this deliberately.
-31. **A `.splitpage` file is exactly `inlineBlobs(migrateRows(state))`** —
-    `inlineStateImages()` puts every picture's bytes back inline (§4), and
-    nothing else wraps, renames, or adds fields on the way to disk (§3.1).
-    A reader gets refs back through `migrateRows()`.
-32. **The Markdown data block is authoritative for everything the table
-    cannot show; the table is authoritative for scene text only, and only
-    where it differs from the block.** Don't make the table authoritative
-    for a column it renders but doesn't own (`Status`); don't let a
-    row-count difference pick a side silently. Both halves carry images
-    inline (#82 D2): a row's picture as a `data:` URI at the head of its
-    Visual cell AND in the data block; HTML images in the data block.
-33. **Every automated launch of the desktop app sets `SPLITPAGE_TEST=1`,
-    and nothing a test does may appear on screen** (§3.13). Doesn't cover a
-    renderer `alert`/`confirm` (Help ▸ About); proof of invisibility needs
-    `MainWindowHandle === 0`, not `document.visibilityState`.
-34. **The renderer never sends a file path to the main process; files are
-    addressed by opaque ids from the main process's registry** (§3.13). A
-    new bridge method that works on a file takes an id, never a path.
-35. **Every document carries `state.docId` matching `/^d[0-9a-f]{32}$/`.**
-    Never in the seed, `#state-data`, or Standalone HTML export.
-    `SCHEMA_VERSION` deliberately not bumped for it. A missing id must fail
-    as *unique*, never as *shared*.
-36. Absorbed in milestone 4: see INV-36 in [docs/architecture/invariants.md](architecture/invariants.md#inv-36--the-id-follows-the-save-target). The transition API is the only writer of `docId` (`docs/architecture/saving.md`); "already open" is still decided by path or server doc id, never by `docId`.
-37. **`sha256Hex` and `deriveDocId` are frozen.** Changing either
-    re-identifies every legacy file and every duplicate-replacement id,
-    splitting history on the next open.
-38. **Version history is addressed only by `(docId, snapshot id)`**,
-    validated in renderer and main; the resolved path must stay inside the
-    history folder. The Older bucket is reachable only via `{older: true}`
-    (on the desktop wire: `history-get`'s query, and `history-put` with a
-    null docId — a docId beside the flag rejects).
-    The shared store (`shared/history-store.js`) refuses every other bucket
-    itself, in the browser and in main alike.
-39. **`pushSnapshot()` captures synchronously, and no save ever waits on
-    history.** A restore overwrites the document only after its "Before
-    restoring" backup is stored or an explicit second confirm.
-    Held in milestone 4: see INV-39 in [docs/architecture/invariants.md](architecture/invariants.md#inv-39--snapshots-are-captured-synchronously-saves-never-wait-on-history).
-40. **A crash draft is deleted only when its tab becomes clean, or on an
-    explicit user decision** — never on crash, kill, renderer loss,
-    session-end, quit, or restore. A discard writes a tombstone before
-    anything is unlinked. The browser's (PR #233, now only for an unsaved
-    copy restored from a former server document's draft) keeps the same
-    rule per page: removed only by the page that took it over after a
-    restore, when that page is clean, never by another tab's save, never by
-    a restore that failed — plus the store's own bounds (30 days, 20 drafts,
-    64 MiB). A restore never saves.
-    Held in milestone 4: see INV-40 in [docs/architecture/invariants.md](architecture/invariants.md#inv-40--a-crash-draft-is-removed-only-when-clean-or-by-the-user).
-41. **Restoring a draft never writes the user's file by itself.**
-    "Unchanged on disk" is decided by content, never mtime. The draft
-    header is built only by main from allowlisted scalar fields; draft
-    bodies are written with fsync and two generations.
-    Held in milestone 4: see INV-41 in [docs/architecture/invariants.md](architecture/invariants.md#inv-41--restoring-a-draft-never-writes-the-users-file).
-42. **Each tab is its own page, and the main process is the only authority
-    on tab identity, unsaved state, and what is already open** (§3.13).
-    Moving a tab moves its `WebContentsView`, never copies it.
-43. **The tab strip runs on the separate origin `splitpage://tabstrip`**,
-    with no `splitpageDesktop` bridge and its own trust check
-    (`isTrustedTabStripSender`) — a compromise of either page can't reach
-    the other's powers.
-44. **One quit asks at most one unsaved-changes dialog and one
-    stop-sharing prompt; Windows session-end asks neither and discards
-    nothing.** `desktop-state.json` is written durably through one queue.
-
-45. **The page can only ask the voice listener to start or stop, for
-    itself.** `splitpage:voice-status`, `voice-start` and `voice-stop` take
-    no argument (invariant #28's rule). Main alone builds the command line —
-    Windows' own `powershell.exe` from `%SystemRoot%`, running
-    `voice/listen.ps1` from APP_ROOT — and the script takes no arguments and
-    reads nothing but stdin. A compromised page can at worst turn the
-    microphone listener on for its own tab, which the voice button does
-    anyway. Under `SPLITPAGE_TEST=1` the real listener never runs: only the
-    fake named by `SPLITPAGE_TEST_VOICE_HELPER`, or nothing.
-46. **What the listener says is rebuilt before the page sees it.**
-    `parseHelperLine` (`desktop/voice-helper.js`) keeps a type from a fixed
-    list, a capped `text`, a short lower-case `code`, a culture name or a
-    capped microphone `name` without control characters (#118), and
-    drops everything else; main adds the session number and sends it to the
-    tab that owns the session, no other. The page uses `text` as words to
-    match and `name` as status text, never as markup.
-47. **One listener at a time, and it never outlives its tab or the app.**
-    One microphone: a second tab starting takes it over, and the first is
-    told (`end`, reason `taken`) rather than left to restart. `forgetTab`
-    and quit end the session; the script exits when its stdin closes, so
-    even a main-process crash stops it listening.
-
-48. **An exported bundle contains no key matching
-    `/token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i`, asserted
-    before any byte is written; an import carrying one is refused.**
-    The bundle (`20h-appdata.js`) is `{format:"splitpage-app-data",
-    version:1, exportedAt, appVersion, snapshots, history:{docs:[{docId,
-    title, lastOpenedAt, snapshots:[{meta, stateJson}]}], older, truncated},
-    blobs:{"<sha256 hex>":{mime, b64}}, missingBlobs:["<sha256 hex>"],
-    prefs}`; it no longer carries server bookmarks. `blobs` (#82) holds every image an exported
-    snapshot names (`refsIn`) whose bytes the page could get, once each;
-    `missingBlobs` the ones it could not, which the export names in a
-    warning. Blob bytes count toward `HISTORY_EXPORT_CAP_BYTES` (200 MB)
-    with the snapshot bodies. Hex keys and `mime`/`b64` cannot match the
-    regex (hex has no t/o/k/s/p/l; values are never walked).
-49. **Import merges through the history store's public write path and
-    never deletes; existing preferences are never overwritten.** Images first: `importHistoryBundle`
-    verifies each `blobs` entry (key is a sha, strict base64, at most
-    16 MiB, sniffed PNG/JPEG/GIF/WebP with a readable size, hashes to its
-    key) and awaits the blob registry's `persist()` for the ones that pass
-    BEFORE the first history put — no imported snapshot is stored naming an
-    image the store does not already hold durably. A blob that fails is
-    dropped and reported; its snapshots still import (placeholder). A blob
-    no snapshot in the file names is ignored. A bundle without `blobs`
-    (every pre-#82 export) imports exactly as before.
-50. **The 1.0.x removal in the installer waits for the old folder to
-    disappear before writing** — the old uninstaller's detached `rmdir`
-    runs ~2s after it exits, into the same folder. `installer/uninstall.ps1`
-    is gone from this repo (#75), but it is still on every machine that
-    installed 1.0.x, which is exactly who this macro runs for:
-    `desktop/build/installer.nsh` keeps it.
-51. **Autosave writes only where the user has already sent this document,
-    only work they have seen, and only while it is on.** With autosave off,
-    neither path writes — not typing (`scheduleAutoSave`) and not a discrete
-    action (`queueAutoSave`); both check the preference first. `autoSaveTarget()` (14-export.js) is the
-    single gate: a file handle the user picked — never a picker, never a
-    download. Anything that puts work on screen the user has
-    not reviewed (a crash-draft restore's merge, `reportMerge`'s
-    `noAutoSave`) calls `haltAutoSave()`, and only an explicit Save starts
-    the automatic writes again (#41). A failed or conflicted automatic save
-    halts too, rather than repeating a toast or a modal every two seconds.
-    Held in milestone 4: see INV-51 in [docs/architecture/invariants.md](architecture/invariants.md#inv-51--autosave-writes-only-where-the-user-sent-the-document-only-reviewed-work-only-when-on).
-52. **No durable record names a blob its store does not already hold
-    durably** (#82). An image is uploaded (and fsynced) before anything
-    that refers to it by sha is written; the list of what a record names
-    is always `refsIn()`.
-    - **Server half:** the 422 `missing-blobs` check on document POST/PUT
-      and on the comments POST (§3.7); `acceptMissing` is the one
-      deliberate exception, for a sha the client knows is lost for good, so
-      a missing picture can never make a script unsaveable (a comment may
-      not use it). The 426 `client-too-old` gate keeps a pre-#82 client from
-      saving over a document that names blobs, since it would drop them.
-    - **Client half:** the history job and the desktop drafts await `persist(refsIn(state))` before they
-      write, and inline (`inlineStateJson`) any blob the store refused; the
-      stash carries non-durable blobs as `data:` URIs; app-data import
-      stores blobs before snapshots (#49); file writers inline everything
-      (#31, #32). Capture stays synchronous (#39) — only the job awaits.
-    Held in milestone 4: see INV-52 in [docs/architecture/invariants.md](architecture/invariants.md#inv-52--no-durable-record-names-a-blob-its-store-lacks).
-
-53. Absorbed in milestone 3: see INV-53 in [docs/architecture/invariants.md](architecture/invariants.md#inv-53--every-edit-is-recorded-once-nothing-else-is-recorded). The seven session commands record themselves; every other edit path still ends in `markDirty()`, and a change that is not somebody's edit must say so (the ledger row lists how).
-54. **A b-roll key's id is one line's** (`docs/DOCUMENT-MODEL.md` §3.3):
-    `state.brollShots` records are found by it, so two keys sharing one
-    make two lines claim one shot. A path that brings a key into the
-    script from outside it (paste, drop) gives it a new `makeId("bs")`
-    whenever the document already knows its id — `freshBrollIds`
-    (05c-clipboard.js) — except a cut then paste in the same tab, which
-    moves it and keeps it. A path that moves a key (split, join, cut) keeps
-    its id and never copies it. A new path that copies script text between
-    places does the same; the anchoring pass (08c-broll.js) re-keys any
-    second key that still gets through.
-55. **A comment or reply draft owns its undo** (`05d-draft-edit.js`). Its
-    edits go through the model (`editDraft`), which the browser's own undo
-    stack never saw, so the browser's undo must never run in a draft box:
-    Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y and `beforeinput` `historyUndo` /
-    `historyRedo` are answered from the box's history and always taken. A
-    new edit path in a draft box goes through `editDraft` (or
-    `throughModel`), never `execCommand` or a bare DOM edit — either would
-    be an edit nothing can undo. A picture or video card in a draft must
-    survive every edit; `mediaTable` lifts and restores them, and a new
-    kind of object in a comment body needs a place there and in
-    `walkCell`'s atoms.
-56. **A b-roll shot stores only the props added to it by hand, and names
-    each by its registry id** (#149, 08c-broll.js). The props tagged on its
-    own lines are read off the script every time (`brollPropsInCell`) and
-    never copied onto the record. `props` is `[{id, name}]`: `id` is the
-    `productionTags` entry's id, which a rename keeps, so a rename carries
-    through with nothing to do; `name` is the fallback for an entry the
-    breakdown no longer has, refreshed from the entry by `migrateRows`
-    (`normalizeBrollProps`: garbage tolerated, an unknown name kept, a
-    name-only one given the id of the prop of that name, capped at 40).
-    The one rename that drops an id — folding onto another entry's name —
-    re-points them (`brollPropsRenamed`, called from `renameTag` in the
-    same edit). The merge is a base-aware set per shot (`mergeBrollProps`,
-    03-sync.js): both sides' additions kept, a removal kept unless the
-    other side still has it and did not have it in the base. A pasted copy
-    of a shot's line gets none of them (`pasteCommand`'s `pastedShots`, and
-    `recordPastedBroll` for a scene paste, make a fresh record), exactly as it gets none of the status, notes or owner. A new
-    field on a shot record needs `migrateRows`, `mergeBrollShots` (which
-    clones a shot whole and folds the other side in field by field) and
-    `newBrollRecord`; `state-fields.test.mjs` checks the record's keys
-    survive a merge and a save.
-57. **Every document export says what it says besides the words through
-    the kit** (`14b-export-kit.js`, 2026-09-26): the facts line, each
-    scene's number / start timecode / status / read time, the open
-    threads' numbers (counted as the script's markers count them), a
-    cell's tags, b-roll keys and markers, the breakdown by category and the
-    b-roll by scene. A format that works any of these out for itself will
-    drift from the others and from the app. The print colours are a second
-    copy of `:root` (`PRINT_COLORS`, `TAG_PRINT_COLORS`) that
-    palette.test.mjs holds to it.
-58. **Anything an export prints that is not script is skipped on the way
-    back in, for files exported before and after.** .docx: named styles —
-    `SplitpageMeta` (paragraph, skipped anywhere), `SplitpageMarker` and
-    `SplitpageSceneNo` (runs dropped), `SplitpageBroll` (its text kept, the
-    chip's bold and padding dropped), `SplitpageTag` (its words kept); in a
-    Splitpage .docx (a `SplitpageTable` table or a `SplitpageMeta`
-    paragraph) a `w:u` carrying `w:color` is the export's drawing, so the
-    writer's own underline is always written without one;
-    `EXPORT_SECTION_HEADINGS` is Production breakdown / B-roll shot list /
-    Comments; `isBreakdownHeader` knows the old seven-column head and the
-    new five. Markdown: `MD_SCENE_META_RE`, `MD_SCENE_FACTS_RE`,
-    `MD_MARKER_RE` (`<sup>N</sup>`), the hard breaks after a timed heading,
-    and the `MD_EXPORT_TAIL_RE` headings (11-import.js). CSV: our header,
-    then a cut at our own "Comments" line; the Total/Target rows read as
-    empty. The .docx fixtures in `src/test/fixtures/` are the old writer's
-    output — the "old files still reopen" contract; never regenerate them
-    with the new writer. The narration .txt stays exactly title, blank
-    line, a paragraph a scene: it has no styles to hide anything else in.
-59. **The saved .md project's human half is frozen byte for byte.**
-    `toMarkdownTableDoc(s)` without `opts.export`, and the tail without
-    it, write what they wrote before the exports changed; everything
-    export-only (the meta line, the Start/Status/Read columns, the grouped
-    breakdown, the b-roll list, numbered comments) sits behind
-    `opts.export`. `formats.test.mjs` keeps the pre-change writer verbatim
-    and compares. (See also the comment above `mdSceneCellSource`.)
-60. **An export is the same bytes all day.** Suite 98 exports every format
-    twice, by two routes, and compares the bytes (zeroing only a zip
-    entry's own timestamp): a PDF's `/CreationDate` and a .docx's
-    `docProps` dates are the day, never the second, and nothing prints a
-    time of export. The comments' own posted times are data, and fine.
-61. **The PDFs' footer is a pagination artifact** (`/Artifact <<
-    /Type /Pagination /Subtype /Footer >> BDC … EMC`, `pdfFooterOps`):
-    text extraction skips it, and a test that reads the content streams
-    must too — its hairline is the same operator as a scene's rule.
-62. **Collaborate's credentials** — Collaborate is gone from the app, and
-    the server-only keys it stored (`splitpage-server-token`,
-    `splitpage-server-tokens`, `splitpage-review-key`, `splitpage-invites`)
-    are never read again. See INV-62 in [docs/architecture/invariants.md](architecture/invariants.md#inv-62--collaborate-credentials-stay-in-this-browser-per-server).
 ---
 
 ## 6. Map of the source
@@ -1855,16 +1213,7 @@ same shape of text. Re-derive it if it is ever needed again.
 
 ---
 
-## 7. Current status
-
-Status, verification history, and step-by-step state live in the plan
-file's Progress table, not here:
-`C:\Users\Adam\.claude\plans\breezy-booping-toucan.md`. Read it before
-picking up any work on this branch.
-
----
-
-## 8. Where to pick up
+## 7. Where to pick up
 
 **Bugs and features live in GitHub Issues** —
 https://github.com/RetroGorilla/splitpage/issues. That is the tracker: open
@@ -1875,14 +1224,10 @@ desktop, installer, server, export, ui) for where it lives,
 `needs-decision` for anything waiting on Adam, `blocked` for work that
 can't start yet. Issue forms are in `.github/ISSUE_TEMPLATE/`.
 
-Longer-range sequencing and the pending decisions for Adam are
-tracked in the plan file, not here:
-`C:\Users\Adam\.claude\plans\breezy-booping-toucan.md`. Follow My Voice on
-desktop (#8) runs Windows' own recogniser (System.Speech, offline) through
+Follow My Voice on desktop (#8) runs Windows' own recogniser (System.Speech, offline) through
 `desktop/voice/listen.ps1`, driven by `desktop/voice-helper.js` (main.js
 § 9d, invariants #45–#47); it has never heard a real voice from an agent
-session — the by-hand check is in `docs/WINDOWS-CHECKS.md` §3. Per-tab
-server/tunnel connections are built in main (#11, §3.13).
+session — the by-hand check is in `docs/WINDOWS-CHECKS.md` §3.
 
 **The header after Direction B (#169).** The row no longer overlaps
 itself at any width (#174): its right column is never narrower than its
@@ -1970,7 +1315,7 @@ copy with all its content.
 
 ---
 
-## 9. Working with Adam
+## 8. Working with Adam
 
 - **Get sign-off on anything that changes what they type** — delimiters,
   shortcuts, auto-formatting. Syntax used daily becomes muscle memory and is

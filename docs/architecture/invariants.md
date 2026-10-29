@@ -1,6 +1,6 @@
 # Invariant ledger
 
-This ledger audits the 62 invariants in `docs/HANDOFF.md` §5, one row each, under the same numbers. `docs/HANDOFF.md` §5 stays in step with it. When a milestone absorbs a rule into code, the PR that does so replaces that rule's `docs/HANDOFF.md` entry with a one-line pointer to its row here (plan §5, milestone 0 item 7), so the two never disagree. The behaviour tests of an absorbed rule stay; only the prose rule goes. Update a row in the same PR that changes its tests, owner or class.
+This ledger holds the 62 invariants, `INV-01` to `INV-62`, under the numbers they had in `docs/HANDOFF.md` §5, which now points here. The behaviour tests of a rule absorbed into code stay. Update a row in the same PR that changes its tests, owner or class.
 
 ## Legend
 
