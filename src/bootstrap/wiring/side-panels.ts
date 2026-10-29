@@ -1,6 +1,6 @@
 import { SIDE_PANEL_IDS } from "../../application/preferences/panel-widths.ts";
 import { createSidePanels } from "../../features/panels/side-panels.ts";
-import { startSidePanels } from "../../legacy/panels-bridge.ts";
+import { startSidePanels } from "./ports/panels.ts";
 import { panelWidths } from "../../legacy/preferences-bridge.ts";
 import { mountScriptPlace } from "../../features/panels/script-place.js";
 import { owned } from "../../features/routing/owned.ts";

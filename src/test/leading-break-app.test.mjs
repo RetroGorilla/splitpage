@@ -10,7 +10,7 @@ const { render } = await import("../features/rows/render.js");
 const { registryKey } = await import("../core/document/tags.ts");
 const { openProductionPanel } = await import("../features/tags/panels.js");
 const { closeBrollPage, openBrollPage, openBrollPanel } = await import("../features/broll/panel.js");
-const { sidePanels } = await import("../legacy/panels-bridge.ts");
+const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const closeBroll = () => { sidePanels().close("broll-panel"); };
 const closeProduction = () => { sidePanels().close("production-panel"); };
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");

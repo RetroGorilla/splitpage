@@ -3,7 +3,7 @@ import { documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits, selection as portSelection } from "./ports/editing.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { preferenceValues as portPreferences } from "./ports/preferences.ts";
-import { panelControl as portSidePanels } from "./ports/panels.ts";
+import { panelControl as portSidePanels, sidePanels } from "./ports/panels.ts";
 import { text as portText } from "./ports/text.ts";
 import { ids as portIds, clock as portClock } from "./ports/identity.ts";
 import { saves as portSaves, ownership as portOwnership } from "./ports/saving.ts";
@@ -56,7 +56,6 @@ import {
   toggleResolve
 } from "../../features/comments/comments.js";
 import { showToast } from "../../legacy/effects-bridge.ts";
-import { sidePanels } from "../../legacy/panels-bridge.ts";
 import {
   onRootClick,
   onRootFocusOut,
