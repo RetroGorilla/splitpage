@@ -6,6 +6,7 @@ import { SCHEMA_VERSION } from "../../core/document/fields.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { NO_DESTINATION } from "../../application/transitions/ports.ts";
 import { fileKindFromName } from "../../../shared/file-names.js";
+import { addListener } from "../common/listeners.ts";
 
 
 type RecentEntry = {
@@ -37,11 +38,6 @@ let ports: NewTabPorts;
 ((() => { (ports as unknown) = null; }) satisfies (() => void))();
 let activeMount: object | null = null;
 const listeners: Array<() => void> = [];
-
-function listen<K extends keyof HTMLElementEventMap>(target: HTMLElement, type: K, listener: (event: HTMLElementEventMap[K]) => void) {
-  target.addEventListener(type, listener);
-  listeners.push(function () { target.removeEventListener(type, listener); });
-}
 
 let newTabPageShown = false;
 
@@ -368,7 +364,7 @@ export function startNewTab(given: NewTabPorts): NewTabMount {
     const el = newTabPageEl();
     if (!el) return;
     renderStarterCards();
-    listen(el, "click", function (e) {
+    listeners.push(addListener(el, "click", function (e) {
       const target = (e.target as Element).closest("[data-newtab-action]");
       if (!target) return;
       const action = target.getAttribute("data-newtab-action");
@@ -384,23 +380,23 @@ export function startNewTab(given: NewTabPorts): NewTabMount {
       else if (action === "open-recent") openRecent(target.getAttribute("data-file-id"));
       else if (action === "forget-recent") forgetRecent(target.getAttribute("data-file-id"));
       else if (action === "clear-recents") clearRecents();
-    });
+    }));
 
-    listen(el, "dragover", function (e) {
+    listeners.push(addListener(el, "dragover", function (e) {
       if (!isFileDrag(e)) return;
       e.preventDefault();
       try { (e.dataTransfer as DataTransfer).dropEffect = "copy"; } catch (err) {}
       setDropHover(true);
-    });
-    listen(el, "dragleave", function (e) {
+    }));
+    listeners.push(addListener(el, "dragleave", function (e) {
       if (!e.relatedTarget || !(el as HTMLElement).contains(e.relatedTarget as Node)) setDropHover(false);
-    });
-    listen(el, "drop", function (e) {
+    }));
+    listeners.push(addListener(el, "drop", function (e) {
       if (!isFileDrag(e)) return;
       e.preventDefault();
       setDropHover(false);
       newTabOpenDropped((e.dataTransfer as DataTransfer).files && (e.dataTransfer as DataTransfer).files[0]);
-    });
+    }));
   })();
 
   maybeAutoShowNewTabPage();

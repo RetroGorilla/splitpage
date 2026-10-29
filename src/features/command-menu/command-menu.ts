@@ -4,14 +4,10 @@ import type { Exporter } from "../../application/export/registry.ts";
 import { IS_MAC, keyChipWords, keyChipsHtml } from "../common/key-chips.js";
 import { placeEditorSelection, rememberCellSelection } from "../common/cell-selection.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
+import { addListener } from "../common/listeners.ts";
 
 let ports: CommandMenuPorts = null as unknown as CommandMenuPorts;
 const listeners: (() => void)[] = [];
-
-function listen<K extends keyof HTMLElementEventMap>(target: HTMLElement, type: K, handler: (event: HTMLElementEventMap[K]) => void) {
-  target.addEventListener(type, handler);
-  listeners.push(function () { target.removeEventListener(type, handler); });
-}
 
 type Entry = ReturnType<typeof actionEntry>;
 type Result = Entry & { order: number; score?: number };
@@ -290,40 +286,40 @@ export function startCommandMenu(given: CommandMenuPorts) {
   const input = el("cmdk-input");
   const list = el("cmdk-list");
   if (modal && input && list) {
-    listen(input, "input", renderList);
-    listen(input, "keydown", function (e) {
+    listeners.push(addListener(input, "input", renderList));
+    listeners.push(addListener(input, "keydown", function (e) {
       if (e.isComposing) return;
       if (e.key === "ArrowDown") { e.preventDefault(); move(1); }
       else if (e.key === "ArrowUp") { e.preventDefault(); move(-1); }
       else if (e.key === "Enter") { e.preventDefault(); runAt(active); }
       else if (e.key === "Tab") { e.preventDefault(); move(e.shiftKey ? -1 : 1); }
-    });
-    listen(modal, "keydown", function (e) {
+    }));
+    listeners.push(addListener(modal, "keydown", function (e) {
       if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); closeCommandMenu(); }
-    });
-    listen(list, "mousemove", function (e) {
+    }));
+    listeners.push(addListener(list, "mousemove", function (e) {
       const row = (e.target as Element).closest(".cmdk-item");
       if (row && +(row.getAttribute("data-index") as string) !== active) setActive(+(row.getAttribute("data-index") as string));
-    });
-    listen(list, "mousedown", function (e) { e.preventDefault(); });
-    listen(list, "click", function (e) {
+    }));
+    listeners.push(addListener(list, "mousedown", function (e) { e.preventDefault(); }));
+    listeners.push(addListener(list, "click", function (e) {
       const row = (e.target as Element).closest(".cmdk-item");
       if (row) runAt(+(row.getAttribute("data-index") as string));
-    });
-    listen(modal, "mousedown", function (e) { if (e.target === modal) { e.preventDefault(); closeCommandMenu(); } });
+    }));
+    listeners.push(addListener(modal, "mousedown", function (e) { if (e.target === modal) { e.preventDefault(); closeCommandMenu(); } }));
     const closeBtn = el("cmdk-close");
     if (closeBtn) {
-      listen(closeBtn, "mousedown", function (e) { e.preventDefault(); });
-      listen(closeBtn, "click", function () { closeCommandMenu(); });
+      listeners.push(addListener(closeBtn, "mousedown", function (e) { e.preventDefault(); }));
+      listeners.push(addListener(closeBtn, "click", function () { closeCommandMenu(); }));
     }
-    listen(modal, "focusout", function (e) {
+    listeners.push(addListener(modal, "focusout", function (e) {
       if (commandMenuOpen() && !(e.relatedTarget && modal.contains(e.relatedTarget as Node))) closeCommandMenu(false);
-    });
+    }));
 
     const trigger = el("btn-command");
     if (trigger) {
       trigger.title = "Search or run a command (" + keyChipWords("mod+k").join(IS_MAC ? "" : "+") + ")";
-      listen(trigger, "click", function () { ports.actions.invoke("command-menu", "button"); });
+      listeners.push(addListener(trigger, "click", function () { ports.actions.invoke("command-menu", "button"); }));
     }
   }
 
