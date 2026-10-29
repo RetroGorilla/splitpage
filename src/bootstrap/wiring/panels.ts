@@ -1,6 +1,6 @@
 import { syncAnchorResolvedClasses } from "../../features/common/comment-anchors.js";
-import { currentDocument, onRefresh, onSessionChange } from "../../legacy/session-bridge.ts";
-import { onPreferenceChange, preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
+import { currentDocument, onRefresh, onSessionChange } from "./session-owner.ts";
+import { onPreferenceChange, preferences, viewFlags } from "./preferences-owner.ts";
 import { onScriptStats, statsFollowChange, updateScriptStats } from "./scene-status.ts";
 import { historyOwner } from "./history.ts";
 import { renderHistory } from "./history-panel.ts";

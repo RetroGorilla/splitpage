@@ -4,7 +4,7 @@ import type { ExportDocument } from "../../core/document/export-document.ts";
 import { strBytes } from "../../adapters/formats/bytes.ts";
 import { zipWrite } from "../../adapters/formats/zip.ts";
 import { tagCategory } from "../../core/production/looks.ts";
-import { preferences } from "../../legacy/preferences-bridge.ts";
+import { preferences } from "./preferences-owner.ts";
 import { exportServices } from "../../application/export/services.ts";
 import { exportBrollScenes, exportDay, exportFacts } from "../../adapters/formats/export-kit.ts";
 import { brollShotListForPrint } from "../../adapters/formats/export-projections.ts";

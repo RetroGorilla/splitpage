@@ -20,7 +20,7 @@ Read this first. It is the short version of the rules; the linked documents hold
 | `src/bootstrap/wiring/<name>.ts` | Builds one feature's ports from the real owners and mounts it | anything |
 | `src/bootstrap/wiring/ports/` | Shared ports, one module per responsibility (document, editing, text, preferences, screen, effects...) | anything |
 | `src/bootstrap/actions.ts` | The one ordered list of actions. Order is what the command menu shows; `tests/bootstrap/action-order.test.ts` pins it | anything |
-| `src/bootstrap/main.js` | The composition root and build entry: wires the app, then mounts owners and features in a fixed order. `tests/bootstrap/composition-root.test.ts` pins the order | anything in `src/bootstrap/`; outside it, only its frozen set |
+| `src/bootstrap/main.ts` | The composition root and build entry: wires the app, then mounts owners and features in a fixed order. `tests/bootstrap/composition-root.test.ts` pins the order | anything in `src/bootstrap/`; outside it, only its frozen set |
 | `src/legacy/` | Bridges that still hand owners between wiring modules. Each one goes when its last reader takes the owner from a port instead. Do not add files here | core, `application`, `adapters`, `shared/`; never features or bootstrap |
 | `server/`, `desktop/`, `shared/` | Hosted server, Electron shell, code shared by all three | see the layer table |
 

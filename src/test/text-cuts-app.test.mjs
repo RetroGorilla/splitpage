@@ -3,13 +3,13 @@ import { documentIdentityOwner } from "../bootstrap/wiring/document-identity.ts"
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
-import { setHome } from "../legacy/location-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
+import { setHome } from "../bootstrap/wiring/location-owner.ts";
 import { truncateForPreview } from "../core/document/text-policy.ts";
 
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const initDocIdentityChannel = (...args) => documentIdentityOwner().initDocIdentityChannel(...args);
 const reassignDocId = (...args) => documentIdentityOwner().reassignDocId(...args);

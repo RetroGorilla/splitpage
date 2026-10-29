@@ -6,7 +6,7 @@ import type { ChangeSet } from "../../../src/application/session/change-set.ts";
 import type { CommandOutcome } from "../../../src/application/session/document-session.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { createSceneStatus } from "../../../src/features/rows/scene-status.ts";
-import { productionReaders } from "../../../src/legacy/document-ports.ts";
+import { productionReaders } from "../../../src/bootstrap/document-ports.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeDocument, fakeEdits } from "../fakes.ts";
 

@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const bridge = await import("../legacy/save-bridge.ts");
+const bridge = await import("../bootstrap/wiring/save-owners.ts");
 
 function probe(log, target = "file") {
   return {

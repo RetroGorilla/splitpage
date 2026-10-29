@@ -1,4 +1,4 @@
-import { inertBody } from "../legacy/richtext.ts";
+import { inertBody } from "./richtext.ts";
 
 export function htmlToPlainText(html: unknown): string {
   if (!html) return "";

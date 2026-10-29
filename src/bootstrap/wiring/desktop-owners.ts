@@ -4,10 +4,10 @@ import type { DesktopHandOff, PrompterElsewhere } from "../../application/deskto
 import { runningOnDesktop } from "../../application/desktop-presence.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import type { HistoryOwner } from "../../application/recovery/history-ports.ts";
-import { draftResume, recoveryStarted } from "../../legacy/recovery-bridge.ts";
-import { unsavedChanges } from "../../legacy/save-bridge.ts";
-import { currentDocument } from "../../legacy/session-bridge.ts";
-import { currentHome } from "../../legacy/location-bridge.ts";
+import { draftResume, recoveryStarted } from "./recovery-owners.ts";
+import { unsavedChanges } from "./save-owners.ts";
+import { currentDocument } from "./session-owner.ts";
+import { currentHome } from "./location-owner.ts";
 
 let started: DesktopDocumentStateOwner | null = null;
 let handOff: DesktopHandOff | null = null;

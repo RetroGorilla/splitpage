@@ -12,7 +12,7 @@ import type { RundownPorts, TargetMount, TargetPorts } from "../../features/rund
 import { startRundown as mountRundown } from "../../features/rundown/rundown.js";
 import { startTarget as mountTarget } from "../../features/rundown/target.js";
 import { cellEditing, rowDrag } from "./editor-owners.ts";
-import { preferences } from "../../legacy/preferences-bridge.ts";
+import { preferences } from "./preferences-owner.ts";
 
 const rundown = owned<ReturnType<typeof mountRundown>>();
 
