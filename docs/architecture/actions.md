@@ -139,7 +139,7 @@ threw, is kept from the browser, as 3.1's handlers did by calling
 Until the composition root of 4.x exists, the numbered modules share one
 registry through the facade `appActions` in `src/legacy/app-actions.ts`. Since
 milestone 7.1 the wiring step (`wireApp` in `src/bootstrap/wiring.ts`, called
-by the composition root `src/bootstrap/main.js`) builds the registry with
+by the composition root `src/bootstrap/main.ts`) builds the registry with
 `createAppActions()` and installs it into the facade; before that, and after
 the wiring's `dispose()`, every facade call throws "The action registry is not
 started yet". Its `report` rethrows the error on a microtask, so a failing
