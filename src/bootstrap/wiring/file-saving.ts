@@ -6,7 +6,7 @@ import { rememberLastFileHandle } from "../../adapters/files/last-file.ts";
 import { saveDialogs } from "../../adapters/files/save-dialogs.ts";
 import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "../../adapters/formats/project-file.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { warnImagesLeftOut } from "../../legacy/effects-bridge.ts";
+import { warnImagesLeftOut } from "./effects-owner.ts";
 import { captureExportDocument } from "./export-capture.ts";
 import { amendHome, currentHome, documentLocation, fileHome, setHome } from "./location-owner.ts";
 import { getEditorName, preferences } from "../../legacy/preferences-bridge.ts";
