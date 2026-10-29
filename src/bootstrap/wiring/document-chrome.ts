@@ -1,12 +1,12 @@
-import { onSessionChange } from "../../legacy/session-bridge.ts";
-import { documentLocation } from "../../legacy/location-bridge.ts";
-import { onPreferenceChange, viewFlags } from "../../legacy/preferences-bridge.ts";
-import { onSaveChange } from "../../legacy/save-bridge.ts";
+import { onSessionChange } from "./session-owner.ts";
+import { documentLocation } from "./location-owner.ts";
+import { onPreferenceChange, viewFlags } from "./preferences-owner.ts";
+import { onSaveChange } from "./save-owners.ts";
 import { identityChipListeners } from "./title-chrome.ts";
 import { saveStatusListeners } from "./save-status.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { refreshOpenFileMenu } from "./file-menu-controls.ts";
-import { desktopDocumentListeners } from "../../legacy/desktop-bridge.ts";
+import { desktopDocumentListeners } from "./desktop-owners.ts";
 
 let stopChrome: (() => void) | null = null;
 

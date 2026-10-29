@@ -2,9 +2,9 @@ import "./_dom.mjs";
 import "./_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { loadInitialState, migrateDocument } from "../bootstrap/startup/document-entry.js";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 
 const GRIN = String.fromCodePoint(0x1F600);

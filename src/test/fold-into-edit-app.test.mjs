@@ -1,16 +1,16 @@
-import { getEditorName } from "../legacy/preferences-bridge.ts";
+import { getEditorName } from "../bootstrap/wiring/preferences-owner.ts";
 import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { createHeldFetch, createHeldImageDecode } from "./_m4-matrix.mjs";
-import { unsavedChanges } from "../legacy/save-bridge.ts";
+import { unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
@@ -21,11 +21,11 @@ const undoSizes = () => undoOwner().sizes();
 const lastUndoEntry = () => undoOwner().last();
 const flushEdits = () => undoOwner().flush();
 const { thumbnailsAfterPaste } = await import("../bootstrap/wiring/gallery.ts");
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { addGalleryVideo, setVideoThumbnail, videoLinkKey } = await import("../core/document/gallery.ts");
 const writer = await import("../features/writer/writer.js");
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 const naming = { name: getEditorName };
 await rewireRunningApp({ editorName: () => naming.name() });

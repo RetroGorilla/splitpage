@@ -2,14 +2,14 @@ import "./_session-merge-started.mjs";
 import { documentGuardStarted, startDocumentGuard } from "../application/identity/document-guard.ts";
 import "./_production-tags-started.mjs";
 import { wireProductionIndex } from "../bootstrap/wiring/production-index.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { stampRow } from "../bootstrap/wiring/session-merge.ts";
 import { bulkTagCell } from "../features/tags/production-tags.js";
 
-import { sessionStarted, startSessionBridge } from "../legacy/session-bridge.ts";
+import { sessionStarted, startSessionBridge } from "../bootstrap/wiring/session-owner.ts";
 import { legacySessionPorts } from "../bootstrap/wiring.ts";
 import { startPageEffects } from "../bootstrap/effects.ts";
-import { effectsStarted } from "../legacy/effects-bridge.ts";
+import { effectsStarted } from "../bootstrap/wiring/effects-owner.ts";
 import { undoPorts, startUndo, undoStarted } from "../bootstrap/wiring/undo.ts";
 
 export function startTestSession(deps) {

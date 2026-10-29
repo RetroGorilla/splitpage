@@ -1,3 +1,4 @@
+import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { MergedStates } from "../../core/merge-states.ts";
 import type { MergeInput } from "./merge-incoming.ts";
 import type { NoticeKind } from "../effects/ports.ts";
@@ -10,10 +11,10 @@ export interface MergeToast {
   readonly sticky?: boolean;
 }
 
-export interface ApplyMergeOptions {
+export interface ApplyMergeOptions<T = unknown> {
   readonly base?: unknown;
   readonly mine?: unknown;
-  readonly theirs: unknown;
+  readonly theirs: T;
   readonly source?: string;
   readonly unchanged?: boolean;
   readonly mergeOnly?: boolean;
@@ -41,8 +42,8 @@ export interface MergeUndoRecord {
   readonly source: string | undefined;
 }
 
-export interface MergeOutcome {
-  readonly state: unknown;
+export interface MergeOutcome<D = unknown> {
+  readonly state: D | null;
   readonly result: MergedStates | null;
   readonly snapshot: UndoPointTicket | null;
   readonly replaced?: true;
@@ -55,12 +56,12 @@ export interface MergeView {
   readonly toast: (text: string, tone: NoticeKind, sticky: boolean) => void;
 }
 
-export interface ApplyMergePorts<Ctx> {
+export interface ApplyMergePorts<Ctx, D = unknown> {
   readonly isDocument: (raw: unknown) => boolean;
   readonly merge: (input: MergeInput) => MergedStates;
   readonly snapshot: (label: string | undefined, doc: unknown) => UndoPointTicket | null;
-  readonly current: () => unknown;
-  readonly adopt: (kind: MergeKind, next: unknown, merged: boolean) => unknown;
+  readonly current: () => D | null;
+  readonly adopt: (kind: MergeKind, next: unknown, merged: boolean) => D | null;
   readonly documentId: (doc: unknown) => string | null | undefined;
   readonly noteHistoryFrom: (prevDocId: string) => void;
   readonly armUndo: (record: MergeUndoRecord | null) => void;
@@ -78,7 +79,7 @@ export function mergeKind(opts: ApplyMergeOptions): MergeKind {
   return opts.recovery ? "recovery" : "server";
 }
 
-export function applyIncomingMerge<Ctx>(opts: ApplyMergeOptions, ports: ApplyMergePorts<Ctx>): MergeOutcome | Promise<MergeOutcome> {
+export function applyIncomingMerge<Ctx, D, T>(opts: ApplyMergeOptions<T>, ports: ApplyMergePorts<Ctx, D>): MergeOutcome<D | T | ValidatedDocument> | Promise<MergeOutcome<D | T | ValidatedDocument>> {
   if (!ports.isDocument(opts.theirs) || (!opts.unchanged && !ports.isDocument(opts.mine))) {
     return { state: ports.current(), result: null, snapshot: null };
   }
@@ -90,7 +91,7 @@ export function applyIncomingMerge<Ctx>(opts: ApplyMergeOptions, ports: ApplyMer
     if (opts.keepLabel) ports.snapshot(opts.keepLabel, opts.mine);
     result = ports.merge({ base: opts.base, mine: opts.mine, theirs: opts.theirs });
   }
-  let next: unknown = result ? result.merged : opts.theirs;
+  let next: D | T | ValidatedDocument | null = result ? result.merged : opts.theirs;
 
   function armUndoPoint(docId: string | null | undefined): void {
     if (!opts.undoPoint) return;
@@ -104,7 +105,7 @@ export function applyIncomingMerge<Ctx>(opts: ApplyMergeOptions, ports: ApplyMer
 
   const kind = mergeKind(opts);
 
-  function adopt(): MergeOutcome {
+  function adopt(): MergeOutcome<D | T | ValidatedDocument> {
     next = ports.adopt(kind, next, result !== null);
     if (opts.historyFrom) ports.noteHistoryFrom(opts.historyFrom);
     armUndoPoint(ports.documentId(ports.current()));
@@ -127,7 +128,7 @@ export function applyIncomingMerge<Ctx>(opts: ApplyMergeOptions, ports: ApplyMer
   if (!opts.awaitUndoPoint) return adopt();
   const written = snap?.done ?? null;
   const ctx = ports.capture();
-  return Promise.resolve(written).then(null, () => undefined).then((): MergeOutcome => {
+  return Promise.resolve(written).then(null, () => undefined).then((): MergeOutcome<D | T | ValidatedDocument> => {
     if (!ports.stillOwns(ctx)) return { state: ports.current(), result: null, snapshot: snap, replaced: true };
     return adopt();
   });

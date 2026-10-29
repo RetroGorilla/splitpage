@@ -1,6 +1,6 @@
-import { documentLocation } from "../../legacy/location-bridge.ts";
-import { documentTransitions } from "../../legacy/transition-bridge.ts";
-import { withDocumentPorts, migrateRows } from "../../legacy/document-ports.ts";
+import { documentLocation } from "../wiring/location-owner.ts";
+import { documentTransitions } from "../wiring/transition-owners.ts";
+import { withDocumentPorts, migrateRows } from "../document-ports.ts";
 import { migrateDocument as migrateDocumentWith } from "../../core/migrate.ts";
 import { STATE_FIELDS } from "../../core/merge/state-fields.ts";
 import { cloneState } from "../../core/document/clone.ts";

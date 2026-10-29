@@ -1,5 +1,5 @@
-import { createDocumentLocation } from "../application/location/document-location.ts";
-import type { DocumentLocation, Home, HomeFields } from "../application/location/document-location.ts";
+import { createDocumentLocation } from "../../application/location/document-location.ts";
+import type { DocumentLocation, Home, HomeFields } from "../../application/location/document-location.ts";
 
 let kept: DocumentLocation | null = null;
 let started: DocumentLocation | null = null;

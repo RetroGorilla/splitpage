@@ -31,18 +31,18 @@ import { mountVideoPopover } from "../../features/video/popover.ts";
 import { mountWriterRoutes } from "../../features/writer/routes.ts";
 import type { WriterRoutePorts } from "../../features/writer/routes.ts";
 import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
-import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
+import { captureOperation, stillOwns } from "./transition-owners.ts";
 import { cellEditing, focusMemory, installCellEditing, installPicturePicker, mergeUndo, paintGuard, rowDrag, undoGuard } from "./editor-owners.ts";
-import { currentDocument, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "../../legacy/session-bridge.ts";
-import { fromHtml } from "../../legacy/richtext.ts";
+import { currentDocument, liveDocumentPort, liveSession, runCommand, sessionTextPorts } from "./session-owner.ts";
+import { fromHtml } from "../richtext.ts";
 import { cycleRowStatus } from "./scene-status.ts";
 import { expandHiddenShotStrip } from "./hide-shot.ts";
 import { shotHiding } from "./shot-hiding.ts";
 import { restoreMergeSnapshot } from "./session-merge.ts";
-import { installMergeBanner } from "../../legacy/merge-bridge.ts";
+import { installMergeBanner } from "./document-merge.ts";
 import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";
 import { safeId } from "../../adapters/identity/safe-id.ts";
-import { sanitizeHtml, storedHtmlFromDom } from "../../legacy/richtext.ts";
+import { sanitizeHtml, storedHtmlFromDom } from "../richtext.ts";
 import { cssAttr } from "../../features/common/dom.ts";
 import { announceGalleryEdit } from "../../features/gallery/overlay.js";
 import {
@@ -117,8 +117,8 @@ import {
   openCommentsPanel,
   renderComments
 } from "../../features/comments/comments.js";
-import { showActionToast, showToast } from "../../legacy/effects-bridge.ts";
-import { viewFlags } from "../../legacy/preferences-bridge.ts";
+import { showActionToast, showToast } from "./effects-owner.ts";
+import { viewFlags } from "./preferences-owner.ts";
 import { configureUndo, undoOwner } from "./undo.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { connectWriter } from "./writer.ts";

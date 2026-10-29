@@ -9,7 +9,7 @@ import {
   showActionToast,
   showToast,
   startEffects
-} from "../../src/legacy/effects-bridge.ts";
+} from "../../src/bootstrap/wiring/effects-owner.ts";
 
 function recorder(): { calls: unknown[][]; ports: EffectPorts<Element> } {
   const calls: unknown[][] = [];

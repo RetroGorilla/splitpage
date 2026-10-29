@@ -21,7 +21,7 @@ expect rd(1).textContent == 0:12
 expect document.getElementById('runtime-total').textContent == 0:24
 expect rd(0).classList.contains('is-set') === false
 expect rd(0).title.indexOf('Estimated read time') === 0
-expect rd(0).getAttribute('aria-disabled') == false
+expect rd(0).getAttribute('aria-disabled') === null
 expect F.state().rows.every(function (r) { return !('lengthSeconds' in r); })
 
 # --- a click opens the box, holding the time ---------------------------------

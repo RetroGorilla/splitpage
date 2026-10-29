@@ -1,7 +1,7 @@
 import { beginBusy, endBusy, withBusyBar } from "../../../features/notices/busy.js";
 import type { BusyNotices } from "../../../application/effects/ports.ts";
 import type { EffectPorts } from "../../../application/effects/ports.ts";
-import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../../../legacy/effects-bridge.ts";
+import { copyShareText, setMenuItemLabel, setMenuItemReason, showActionToast, showToast } from "../effects-owner.ts";
 
 export const notices: EffectPorts<Element>["notices"] & { readonly busy: BusyNotices } = { show: showToast, showAction: showActionToast, busy: { begin: beginBusy, end: endBusy, withBar: withBusyBar } };
 

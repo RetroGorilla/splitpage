@@ -4,30 +4,30 @@ import type { StashResult } from "../startup/initial-document.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { MergedStates } from "../../core/merge-states.ts";
 import { connectStartup } from "../../application/startup-signal.ts";
-import { documentTransitions } from "../../legacy/transition-bridge.ts";
+import { documentTransitions } from "./transition-owners.ts";
 import { suppressUnloadWarning } from "../startup/page-entry.ts";
 import { updateHideShotMenu } from "./hide-shot.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { loadInitialState } from "../startup/document-entry.js";
-import { heldDocument } from "../../legacy/session-bridge.ts";
+import { heldDocument } from "./session-owner.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
 import { toastLastEditor } from "./history-panel.ts";
-import { reportMerge } from "../../legacy/merge-bridge.ts";
+import { reportMerge } from "./document-merge.ts";
 import { historyOwner } from "./history.ts";
 import { currentRowsRender } from "./render.ts";
 import { updateSaveStatus } from "./save-status.ts";
 import { saves } from "./ports/saving.ts";
 import { updateAutoSaveMenu } from "./file-saving.ts";
-import { applyStashedWork } from "../../legacy/recovery-bridge.ts";
+import { applyStashedWork } from "./recovery-owners.ts";
 import { localFilesOwner } from "./local-files.ts";
 import { seedCheckPasses } from "../../adapters/page/seed-check.ts";
 import { startDesktopShell } from "./desktop.ts";
-import { notifyDesktopDocumentState } from "../../legacy/desktop-bridge.ts";
+import { notifyDesktopDocumentState } from "./desktop-owners.ts";
 import { runningOnDesktop } from "../../application/desktop-presence.ts";
 import { applyTakenDraft, draftTaker } from "./drafts.ts";
 
-export function startupPorts(): StartupPorts<unknown, ValidatedDocument, ValidatedDocument, MergedStates> {
+export function startupPorts(): StartupPorts<unknown, ValidatedDocument, ValidatedDocument | null, MergedStates> {
   return {
     desktop: runningOnDesktop(),
     draft: {
@@ -41,11 +41,14 @@ export function startupPorts(): StartupPorts<unknown, ValidatedDocument, Validat
       applyStash: function (loaded, options) {
         const applied = applyStashedWork(loaded, null, { ...options });
         if (applied instanceof Promise) throw new Error("The stashed work opened at startup must merge without waiting for an undo point");
-        const result: StashResult<ValidatedDocument, MergedStates> = applied;
+        const result: StashResult<ValidatedDocument | null, MergedStates> = applied;
         return result;
       },
       liveDocument: function () { return heldDocument(); },
-      open: function (doc, reason) { documentTransitions().open({ from: { document: doc }, reason: reason }); },
+      open: function (doc, reason) {
+        if (doc === null) throw new Error("The stashed work opened at startup left no document to open");
+        documentTransitions().open({ from: { document: doc }, reason: reason });
+      },
       firstDraw: () => {
         const render = currentRowsRender();
         if (!render) throw new Error("Rows rendering is not started yet");

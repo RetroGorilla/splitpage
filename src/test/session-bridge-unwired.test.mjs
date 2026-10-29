@@ -1,10 +1,10 @@
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
-const bridge = await import("../legacy/session-bridge.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const bridge = await import("../bootstrap/wiring/session-owner.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
 const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");

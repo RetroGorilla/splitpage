@@ -9,7 +9,7 @@ import {
   savedStatusText,
   savedWhenText
 } from "../../shared/clock.js";
-import { preferences } from "../legacy/preferences-bridge.ts";
+import { preferences } from "../bootstrap/wiring/preferences-owner.ts";
 
 const CLOCK_KEY = "splitpage-clock";
 

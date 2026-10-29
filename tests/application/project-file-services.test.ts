@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { installProjectFileServices, projectFileServices, projectFileServicesStarted } from "../../src/application/formats/project-file-services.ts";
 import type { ProjectFileServices } from "../../src/application/formats/project-file-services.ts";
-import { migrateRows } from "../../src/legacy/document-ports.ts";
+import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 
 function services(tag: string): ProjectFileServices {
   return {
