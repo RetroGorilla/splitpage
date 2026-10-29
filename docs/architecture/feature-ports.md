@@ -245,7 +245,7 @@ Status (2026-10-29): with no numbered files left, each bridge below that still s
 | `merge-bridge` | `applyMerge`, `mergeStates` and `reportMerge` (`13`, `20g`) go with the Opus moves of `13` and `20g` (Wave 4), as the document-merge owner's interface in `src/application/`. No feature reads it before then |
 | `transition-bridge` | P12 (`captureOperation`, `stillOwns`), P20 (`documentTransitions`, `NO_DESTINATION`) |
 | `app-actions` | P4 |
-| `recovery-bridge` | P18 (`draftResume`). The rest (`captureRestore`, `conflictStash`, `stillRestoring`, `browserDrafts`, `desktopDrafts`, `legacySnapshots`, `recoveryStarted`, `useBrowserDraftFactory`) goes with the Wave 4 owner moves of `03`, `03a`, `13`, `14`, `20f` and `20g`, on Opus |
+| `recovery-bridge` | P18 (`draftResume`). The rest (`captureRestore`, `conflictStash`, `stillRestoring`, `desktopDrafts`, `legacySnapshots`, `recoveryStarted`) goes with the Wave 4 owner moves of `03`, `03a`, `13`, `14`, `20f` and `20g`, on Opus |
 | `file-delivery` | P17 |
 | `review-wording` | P5 |
 | `production-index-bridge` | P21 |

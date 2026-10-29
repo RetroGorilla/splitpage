@@ -233,7 +233,7 @@ function fakes(): Fakes {
     recovery: () => {
       note("recovery");
       return {
-        indexedDB: null, limits: { maxAgeMs: 1, maxCount: 1, maxBytes: 1 }, now: () => 0, writerId: "w", desktop: () => null,
+        desktop: () => null,
         sessionStorage: () => null, localStorage: () => null, internImage: () => {}, merge: (request) => ({ state: migrateRows(request["theirs"]) }),
         drafts: { flush: () => Promise.resolve({ ok: true }), noteChange: () => {} }
       };
@@ -498,7 +498,7 @@ test("failed partial startup: a timers port, undo adapter or key target that lac
 
 test("failed partial startup: an actions, exporters, merge or recovery factory that returns something malformed fails its step, names what is missing and leaves no owner", () => {
   const registryMethods = ["register", "has", "shortcuts", "view", "list", "invoke", "presentRefusals"] as const;
-  const recoveryMethods = ["now", "desktop", "sessionStorage", "localStorage", "internImage", "merge"] as const;
+  const recoveryMethods = ["desktop", "sessionStorage", "localStorage", "internImage", "merge"] as const;
   const mergeMethods = ["states", "entry", "isDocument", "snapshot", "current", "adopt", "documentId", "noteHistoryFrom", "armUndo", "setBase", "capture", "stillOwns"] as const;
   type Spoilt = [string, (f: Fakes) => WiringDeps | Record<string, unknown>, string, string];
   const cases: Spoilt[] = [
@@ -1012,7 +1012,7 @@ const SURVIVING_GLOBAL_LISTENERS: Record<string, number> = {
   "window blur/B": 2, "window click/C": 3, "window compositionstart/C": 1, "window cut/C": 1, "window dragstart/C": 1, "window drop/C": 1,
   "window focus/C": 2, "window focusin/C": 2, "window input/C": 1, "window keydown/B": 3, "window keydown/C": 6,
   "window keyup/C": 2, "window mousedown/C": 3, "window mouseout/C": 2, "window mouseover/C": 2, "window mouseup/C": 2, "window pagehide/B": 1,
-  "window pageshow/B": 1, "window paste/C": 1, "window pointerdown/C": 1, "window resize/B": 5,
+  "window paste/C": 1, "window pointerdown/C": 1, "window resize/B": 5,
   "window scroll/C": 2, "window storage/B": 2, "window touchmove/B": 1, "window wheel/B": 1
 };
 
