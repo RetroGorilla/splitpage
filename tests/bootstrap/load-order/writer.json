@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/writer/writer.js",
     "src/bootstrap/wiring/writer.ts"

@@ -148,3 +148,17 @@ test("a context is built from each side's registry without changing it, and take
   assert.deepEqual(given.out.tagOf("t_x"), { cat: "gear", name: "Tripod" });
   assert.equal(given.decode, decode);
 });
+
+test("a merge that lands exactly on my cell is mine, though theirs changed too", () => {
+  const base = [T("a c a b c")], mine = [T("a a a")], theirs = [T("a c a a")];
+  const k = textMergeContext(fakeDecoder([base, mine, theirs]).decode, side(), side(), side());
+  assert.deepEqual(mergeTextField(html(base), html(mine), html(theirs), k), { html: html(mine), outcome: "mine" });
+});
+
+test("a side whose html changed but not its words is unchanged, even beside a rewrite too big to diff", () => {
+  const big = (w: string) => [T(Array.from({ length: 2500 }, (_, i) => w + i).join(" "))];
+  const respelled = { html: html(big("o")) + " ", cell: big("o") };
+  const k = textMergeContext(fakeDecoder([big("o"), big("m"), big("t"), respelled]).decode, side(), side(), side());
+  assert.deepEqual(mergeTextField(html(big("o")), respelled.html, html(big("t")), k), { html: html(big("t")), outcome: "theirs" });
+  assert.deepEqual(mergeTextField(html(big("o")), html(big("m")), respelled.html, k), { html: html(big("m")), outcome: "mine" });
+});

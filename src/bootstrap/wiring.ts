@@ -1,5 +1,4 @@
 import { sessionMergePorts, stampRow, setBaseState, documentDestinationPort, documentHistoryPort, stopSessionMergeOwner } from "./wiring/session-merge.ts";
-export { mountSessionMergeOwner } from "./wiring/session-merge.ts";
 import { documentGuardAsked } from "../adapters/page/document-guard-query.ts";
 import { documentIdentityOwner, documentIdentityPort } from "./wiring/document-identity.ts";
 import { migrateDocument, adoptRestoredState } from "./startup/document-entry.js";
@@ -7,44 +6,15 @@ import { standaloneHtmlFor } from "../adapters/page/standalone-html.js";
 import { stopDocumentIdentityOwner } from "./wiring/document-identity.ts";
 import { startDocumentGuard } from "../application/identity/document-guard.ts";
 import { stopHistoryOwner } from "./wiring/history.ts";
-export { mountRowsRenderFeature } from "./wiring/render.ts";
-export { mountProductionTagsFeature } from "./wiring/production-tags.ts";
 import { wireTagProduction } from "./wiring/production-tags.ts";
-export { mountImportDialogFeature } from "./wiring/imports.ts";
 import { importDocumentSource } from "./wiring/imports.ts";
-export { mountPageEntry } from "./startup/page-entry.ts";
-export { mountProjectFiles } from "./wiring/project-files.ts";
 import { wireProjectFiles } from "./wiring/project-files.ts";
 import { sessionEffects } from "./wiring/session-effects.ts";
 import type { SessionEffects } from "../application/save/session-effects.ts";
-export { mountCommandMenuFeature } from "./wiring/command-menu.ts";
-export { mountOnboardingFeature } from "./wiring/onboarding.ts";
-export { mountDesktopFeature } from "./wiring/desktop.ts";
-export { draftRecoveryPorts, mountDraftsFeature } from "./wiring/drafts.ts";
-export { mountVideoFilesFeature } from "./wiring/video-files.ts";
-export { mountCommentsLogicFeature } from "./wiring/comments.ts";
 import { wireProductionIndex } from "./wiring/production-index.ts";
 import type { ExportKit } from "../application/save/export-kit.ts";
 import { wireExportKit } from "./wiring/export-kit.ts";
-export { mountReadTimeFeature } from "./wiring/read-time.ts";
-export { mountScriptZoomFeature } from "./wiring/script-zoom.ts";
-export { mountDraftEditFeature } from "./wiring/draft-edit.ts";
-export { mountRundownFeature, mountTargetFeature } from "./wiring/rundown.ts";
-export { mountHelpFeature } from "./wiring/help.ts";
-export { derivedRecordsPlan, mountBrollFeature, mountBrollPanelStateFeature } from "./wiring/broll.ts";
-export { mountFindFeature } from "./wiring/find.ts";
-export { mountSettingsFeature, mountAppDataFeature } from "./wiring/settings.ts";
-export { mountCopyPasteFeature } from "./wiring/clipboard.ts";
-export { mountScenesFeature, mountSceneMediaFeature } from "./wiring/rows.ts";
-export { mountGalleryFeature, mountGalleryOverlayFeature, mountGalleryVideoFeature } from "./wiring/gallery.ts";
-export { mountSceneStatusFeature } from "./wiring/scene-status.ts";
-export { mountHideShotFeature } from "./wiring/hide-shot.ts";
-export { mountFileMenuExportFeature } from "./wiring/file-menu-export.ts";
-export { mountFileMenuDropdownFeature } from "./wiring/file-menu.ts";
-export { mountSaveStatusFeature } from "./wiring/save-status.ts";
-export { mountLocalFilesFeature } from "./wiring/local-files.ts";
 import { importSaveDestination, projectFileSource, stopLocalFilesFeature } from "./wiring/local-files.ts";
-export { mountFileSavingFeature } from "./wiring/file-saving.ts";
 import { wireFileSaving } from "./wiring/file-saving.ts";
 import type { BulkTagPorts } from "../application/commands/bulk-tags.ts";
 import { registerBuiltInExporters } from "./wiring/exporters.ts";
@@ -461,20 +431,3 @@ export function wireApp(deps: WiringDeps): Wiring {
   };
   return Object.freeze({ captureExportDocument: capture.owner.captureExportDocument, actions: actions, exports: exports, session: liveSession(), keyTarget: deps.keyTarget, dispose: dispose });
 }
-
-export { mountTagPanelsFeature } from "./wiring/production.ts";
-export { mountPlainTagsFeature } from "./wiring/plain-tags.ts";
-export { mountMergeReviewFeature } from "./wiring/merge-review.ts";
-export { mountNewTabFeature } from "./wiring/newtab.ts";
-
-export { mountScriptPlaceFeature } from "./wiring/side-panels.ts";
-
-export { mountUpdateFeature } from "./wiring/update.ts";
-
-export { mountPrompterRuntimeFeature } from "./wiring/prompter.ts";
-
-export { mountWriterRuntimeFeature } from "./wiring/writer.ts";
-
-export { mountHistoryOwner } from "./wiring/history.ts";
-
-export { mountDocumentIdentityOwner } from "./wiring/document-identity.ts";

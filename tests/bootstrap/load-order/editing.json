@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/editing/cell-reach.js",
     "src/bootstrap/wiring/editor.ts",

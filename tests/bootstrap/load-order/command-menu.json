@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/command-menu/command-menu.ts",
     "src/features/command-menu/actions.ts",
