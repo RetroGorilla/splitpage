@@ -11,7 +11,7 @@ const { documentTransitions } = await import("../legacy/transition-bridge.ts");
 const { render } = await import("../features/rows/render.js");
 const { openProductionPanel } = await import("../features/tags/panels.js");
 const { tagKey } = await import("../core/document/tags.ts");
-const { selectedKeys, clearProductionSelection } = await import("../legacy/production-editing-bridge.ts");
+const { selectedKeys, clearProductionSelection } = await import("../bootstrap/wiring/production-editing-owners.ts");
 after(closeApp);
 
 function open() {

@@ -1,4 +1,4 @@
-import { deleteConfirmation } from "../legacy/production-editing-bridge.ts";
+import { deleteConfirmation } from "../bootstrap/wiring/production-editing-owners.ts";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";

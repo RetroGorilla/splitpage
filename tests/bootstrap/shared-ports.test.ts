@@ -29,7 +29,7 @@ import { editorSelection, startEditor } from "../../src/bootstrap/wiring/editor-
 import { installExportFormats } from "../../src/bootstrap/wiring/export-registry.ts";
 import { productionIndex, startProductionIndex } from "../../src/application/production/index-owner.ts";
 import { liveDocumentPort } from "../../src/legacy/session-bridge.ts";
-import { deleteConfirmation, productionSelection, startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
+import { deleteConfirmation, productionSelection, startProductionEditing } from "../../src/bootstrap/wiring/production-editing-owners.ts";
 import { productionGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../../src/application/tag-panel-state.ts";
 import { migrateRows } from "../../src/legacy/document-ports.ts";
 
