@@ -5,13 +5,12 @@ import { REPO, listRepoFiles } from "../../tools/source-scan.mjs";
 
 export interface LoadManifest {
   readonly area: string;
-  readonly legacyImports: readonly string[];
   readonly loadOnly: readonly string[];
   readonly expectedLoads: number;
 }
 
 const FOLDER = "tests/bootstrap/load-order";
-const ENTRY_INFRASTRUCTURE_IMPORTS = ["../bootstrap/wiring.ts", "../bootstrap/app.ts", "../legacy/document-ports.ts"];
+export const COMPOSITION_ROOT = "src/bootstrap/main.js";
 
 function strings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");
@@ -20,15 +19,14 @@ function strings(value: unknown): value is string[] {
 export function parseLoadManifest(area: string, text: string): LoadManifest {
   const value = JSON.parse(text) as Partial<LoadManifest>;
   assert.ok(value && typeof value === "object" && !Array.isArray(value), area + ": manifest object");
-  assert.deepEqual(Object.keys(value).sort(), ["expectedLoads", "legacyImports", "loadOnly"], area + ": manifest fields");
-  assert.ok(strings(value.legacyImports), area + ": legacy import strings");
+  assert.deepEqual(Object.keys(value).sort(), ["expectedLoads", "loadOnly"], area + ": manifest fields");
   assert.ok(strings(value.loadOnly), area + ": load-only target strings");
   assert.ok(typeof value.expectedLoads === "number" && Number.isInteger(value.expectedLoads) && value.expectedLoads >= 0, area + ": expected load count");
-  return { area, legacyImports: value.legacyImports, loadOnly: value.loadOnly, expectedLoads: value.expectedLoads };
+  return { area, loadOnly: value.loadOnly, expectedLoads: value.expectedLoads };
 }
 
 export function manifestTargets(manifest: LoadManifest): readonly string[] {
-  return [...manifest.legacyImports.map((spec) => posix.normalize(posix.join("src/js", spec))), ...manifest.loadOnly];
+  return manifest.loadOnly;
 }
 
 export function validateManifestNames(areas: readonly string[], names: readonly string[]): void {
@@ -40,22 +38,19 @@ export function validateManifestNames(areas: readonly string[], names: readonly 
 
 export function validateManifestCoverage(manifests: readonly LoadManifest[], sourceFiles: readonly string[]): void {
   const files = new Set(sourceFiles);
-  assert.ok(files.has("src/js/_entry.js"), "the coverage scan includes the legacy shim");
   const targets: string[] = [];
   for (const manifest of manifests) {
-    assert.ok(manifest.legacyImports.every((spec) => /^\.\/\d[^/]*\.js$/.test(spec) || /^\.\.\/adapters\/storage\/\d[^/]*\.js$/.test(spec)), manifest.area + ": only numbered legacy shim imports");
     const owned = manifestTargets(manifest);
     assert.equal(owned.length, manifest.expectedLoads, manifest.area + ": pinned load-only coverage");
     for (const target of owned) {
       assert.ok(files.has(target), manifest.area + ": target exists: " + target);
       assert.ok(/^src\//.test(target), manifest.area + ": source target: " + target);
       assert.equal(posix.normalize(target), target, manifest.area + ": normalized target: " + target);
+      assert.notEqual(target, COMPOSITION_ROOT, manifest.area + ": the composition root starts the app, so it is never load-only");
     }
     targets.push(...owned);
   }
   assert.equal(new Set(targets).size, targets.length, "each load-only target has exactly one owner");
-  const numbered = sourceFiles.filter((file) => /^src\/js\/\d[^/]*\.js$/.test(file)).sort();
-  assert.deepEqual(targets.filter((file) => /^src\/js\/\d[^/]*\.js$/.test(file)).sort(), numbered, "every remaining numbered module is loaded exactly once");
 }
 
 export function readLoadManifests(): readonly LoadManifest[] {
@@ -66,8 +61,4 @@ export function readLoadManifests(): readonly LoadManifest[] {
   const manifests = areas.map((area) => parseLoadManifest(area, readFileSync(join(REPO, FOLDER, area + ".json"), "utf8")));
   validateManifestCoverage(manifests, listRepoFiles(REPO) as readonly string[]);
   return manifests;
-}
-
-export function frozenShimImports(manifests: readonly LoadManifest[]): readonly string[] {
-  return [...ENTRY_INFRASTRUCTURE_IMPORTS, ...manifests.flatMap((manifest) => manifest.legacyImports)];
 }

@@ -92,3 +92,9 @@ test("only cells with an anchor are decoded, and nothing is decoded without comm
   assert.equal(syncCommentAnchors(without("rows", migratedThenSet({ comments: [{ id: "c1" }] })), decode), 0);
   assert.deepEqual(seen, []);
 });
+
+test("a comment on the right row but the wrong field moves to the field that holds its anchor", () => {
+  const c1 = { id: "c1", rowId: "r1", field: "visualText" };
+  assert.equal(syncCommentAnchors(state([c1]), decode), 1);
+  assert.deepEqual(c1, { id: "c1", rowId: "r1", field: "audioText" });
+});

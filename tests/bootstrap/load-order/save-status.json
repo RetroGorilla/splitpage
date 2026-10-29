@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/title/ports.ts",
     "src/features/title/save-status.js",

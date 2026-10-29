@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/update/ports.ts",
     "src/features/update/actions.ts",

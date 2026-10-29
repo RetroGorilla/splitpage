@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/bootstrap/wiring/views.ts",
     "src/bootstrap/wiring/overlay.ts",

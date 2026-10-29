@@ -65,14 +65,14 @@ export async function bootApp(stateData, opts) {
   if (opts && opts.beforeStart) {
     Object.defineProperty(document, "readyState", { configurable: true, get: () => "loading" });
     try {
-      await import("../js/_entry.js");
+      await import("../bootstrap/main.js");
       opts.beforeStart();
     } finally {
       delete document.readyState;
     }
     document.dispatchEvent(new window.Event("DOMContentLoaded"));
   } else {
-    await import("../js/_entry.js");
+    await import("../bootstrap/main.js");
   }
   await startupReady();
   return seen.splice(0);
