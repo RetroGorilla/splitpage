@@ -8,7 +8,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/export-kit.ts": { functions: ["wireExportKit"] },
   "src/bootstrap/wiring/session-owner.ts": { functions: ["startSessionBridge", "onDocumentReplaced", "onSessionChange", "onRefresh", "onStamped"] },
   "src/bootstrap/wiring/undo.ts": { functions: ["startUndo", "configureUndo", "routeUndoReplays"] },
-  "src/legacy/app-actions.ts": { functions: ["installAppActions"], facade: { name: "appActions", methods: ["register", "presentRefusals"] } },
+  "src/bootstrap/wiring/ports/actions.ts": { functions: ["installAppActions"], facade: { name: "appActions", methods: ["register", "presentRefusals"] } },
   "src/bootstrap/wiring/export-registry.ts": { functions: ["installExportFormats"], facade: { name: "exportFormats", methods: ["defineCard", "register", "onChange"] } },
   "src/bootstrap/wiring/save-owners.ts": { functions: ["startSaves", "onSaveChange"] },
   "src/bootstrap/wiring/transition-owners.ts": { functions: ["startTransitions"] },
