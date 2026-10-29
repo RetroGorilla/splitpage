@@ -1,14 +1,20 @@
 # Structured document model — design (issue #85)
 
 Status: **built** (2026-09-23), with the few leftovers §10 names — the
-model (`04c-doc-model.js`), registry ids, the readers, every edit of a
-script cell (`05b-cell-edit.js`, `05c-clipboard.js`, the tag panel, split
-and join), undo (`12a-undo.js`) and the word-level merge. Adam made the
+model (`src/core/text/`), registry ids, the readers, every edit of a
+script cell (the cell-editing owner `src/application/editing/cell-editing.ts`,
+the clipboard in `src/application/commands/clipboard.ts` and
+`src/features/clipboard/`, the tag panel, split and join), undo
+(`src/application/editing/undo/`) and the word-level merge
+(`src/core/merge/`). Adam made the
 decisions in §12; the sections below reflect them. Not yet run on Windows:
 the by-hand pass in `docs/WINDOWS-CHECKS.md` covers it with the rest.
 #85 ships in the 3.0 pre-releases (from 3.0.0-beta.1) and in 3.0.0.
 
-Line numbers are from `main` at `53eb67d`.
+Line numbers and `NN-name.js` file names in the design text are from `main`
+at `53eb67d`, when the code lived in numbered fragments under `src/js/`.
+That folder is gone; where the design says what is built, it names today's
+files. [feature-map.md](architecture/feature-map.md) maps the rest.
 
 ---
 
@@ -179,7 +185,7 @@ A comment's anchor is the set of runs whose `cmt` contains its id. There is
 no span to lose. `comment.rowId` / `comment.field` become derived and are
 kept in step by one function, so the server and old readers still get them.
 Invariant #18 goes away.
-**Built:** that function is `syncCommentAnchors(state)` (04c): every
+**Built:** that function is `syncCommentAnchors(state)` (`src/core/text/anchors.ts`): every
 comment marked somewhere points at the first cell holding its mark, in
 document order (row by row, visual before audio); one marked nowhere keeps
 what it had. Split, join and a cut-then-paste are session commands whose
@@ -191,14 +197,15 @@ ledger's INV-18.
 - Splitting a row moves the runs, and their marks move with them. Joining
   rows does the same. **Built:** `splitSceneCommand`
   (`src/application/commands/split-join.ts`, run by `splitRowFieldCore` in
-  06-rows.js) is `splitCell` at the caret; `joinScenesCommand` (the same
-  file, run by `mergeWriterRows` in 19-writer.js) is
+  `src/bootstrap/wiring/rows.ts`) is `splitCell` at the caret;
+  `joinScenesCommand` (the same file, run by `mergeWriterRows` in
+  `src/features/writer/writer.js`) is
   `joinCells`, whose glue space carries a comment (or link) the text on
   both sides of it is in, so a phrase a split cut in two is one anchor
   again when joined back.
 - **Copy** never copies a `cmt` mark. **Cut then paste** in the same tab
   moves it (D6).
-  **Built** (`src/js/05c-clipboard.js`): a copy's clipboard HTML is the
+  **Built** (`src/features/clipboard/cell-clipboard.js`): a copy's clipboard HTML is the
   slice's `toHtml` with every `cmt` mark stripped. A cut keeps them and
   wraps the HTML in `<span data-splitpage-cut="nonce">`, the nonce random
   and held only in that tab's memory. A paste keeps `cmt` marks only when
@@ -233,9 +240,10 @@ is special. **It is the only atom.**
   location comes with it. Split and join move a key rather than copy it,
   and import brings only plain-text markers, which the anchoring pass keys.
   **Built:** `freshBrollIds` / `takenBrollIds` and `pastedShots`
-  (`src/application/commands/clipboard.ts`; 05c-clipboard.js keeps thin
-  wrappers), and `recordPastedBroll` (08c-broll.js) for a scene paste
-  (05g-scene-clip.js). A document that already has two keys
+  (`src/application/commands/clipboard.ts`; `src/features/clipboard/cell-clipboard.js`
+  keeps thin wrappers), and `recordPastedBroll`
+  (`src/application/production/broll-records.ts`) for a scene paste
+  (`src/features/clipboard/scene-clip.js`). A document that already has two keys
   with one id (pasted by an older version) is healed by the anchoring
   pass: the list reads the second as unanchored, a name match never takes
   a record a key further down still holds, and the pass gives the second
@@ -255,7 +263,7 @@ is special. **It is the only atom.**
   the document's). #124 made a comment of each instead; comments it made
   stay as they are. The gallery's shape is `imageRef` (the first picture,
   unchanged), `imageLinks` (its caption) and `moreImages`
-  (`[{imageRef, links}]`), 02d-gallery.js; the merge takes both sides'
+  (`[{imageRef, links}]`), `src/core/document/gallery.ts`; the merge takes both sides'
   additions (a set merge, never a conflict).
 - **Existing documents.** A picture or video card already inside a cell is
   **moved into a comment on the same scene** when the document is read:
@@ -269,9 +277,9 @@ is special. **It is the only atom.**
   - Nothing is lost: version history still has the original.
   - **Built:** paste and drop go through `fromHtml` with pictures and video
     cards taken out first and put in the scene's gallery (`pasteIntoCell`
-    in 05c-clipboard.js, `attachToGallery` in `clipboard.ts`, #135), with a "Picture added to scene N" toast
+    in `src/features/clipboard/cell-clipboard.js`, `attachToGallery` in `clipboard.ts`, #135), with a "Picture added to scene N" toast
     whose Undo takes back that paste's entry while it is still the last.
-    `migrateRows` (02-state.js, `moveMediaOutOfCell`) does the move: the
+    `migrateRows` (`src/core/migrate.ts`, `moveMediaOutOfCell`) does the move: the
     comment is by "Splitpage", dated the row's `updatedAt`, with an empty
     quote and a line saying where it came from; its id is
     `mediaCommentId(rowId, field, "img:"+sha | "video:"+href)`. Like every
@@ -279,10 +287,11 @@ is special. **It is the only atom.**
     no span carries: it is not anchored to any words. Every way a document
     arrives goes through `migrateRows` (a file, a server copy, a merge, a
     restore, a crash draft, an import), and nothing in the app puts a
-    picture into a cell, so no cell holds one. `editCell` still declines
+    picture into a cell, so no cell holds one. The cell-editing owner's
+    `edit` still declines
     one as a guard, and since §10 step 7 nothing else edits it; the HTML
     paths that read one without editing at the selection
-    (`syncFieldFromDom`, `mergeTextField`, split and join, retag, the
+    (the owner's `sync`, `mergeTextField`, split and join, retag, the
     b-roll list's rename) are guards of the same kind.
 
 ## 4. Operations
@@ -291,8 +300,9 @@ Nothing outside the document model writes a cell. Its pure operations live
 in `src/core/text/` (typed, and unit-tested under `node --test` without a
 DOM): the edits in `edits.ts`, `toHtml` in `html.ts`, the readers in
 `projections.ts`, the steps in `steps.ts`, and `mergeCells` in
-`src/core/merge/cells.ts`. `src/js/04c-doc-model.js` exports all of them,
-with `fromHtml` and `cellOf`, which still decode through the sanitiser:
+`src/core/merge/cells.ts`. `fromHtml` and `cellOf`, which still decode
+through the sanitiser, are in `src/adapters/richtext/decode.ts` (bound to
+the app's sanitiser in `src/bootstrap/richtext.ts`):
 
 - **Constructors and converters**
   - `fromHtml(html)` parses a sanitised HTML cell into runs. This is the
@@ -365,16 +375,17 @@ What changes is who owns the truth once the browser has changed the DOM.
 
 **Built so far: formatting and line breaks.** In a script cell (#rows or
 the writer) B/I/U/S, highlight, a link and Enter / Shift+Enter are model
-edits through `editCell` (05b-cell-edit.js), one undo entry each, with the
+edits through the cell-editing owner's `edit`
+(`src/application/editing/cell-editing.ts`), one undo entry each, with the
 selection kept:
 
-- `toggleMark` (04c): every visible character of the selection already
+- `toggleMark` (`src/core/text/edits.ts`): every visible character of the selection already
   has the mark (line breaks and b-roll keys aside, `markThroughout`) → off,
   else on over all of it. The toolbars' lit state is the same question
-  (`cellFormatState`, 05-render.js), so a lit button always means
+  (`cellFormatState`, `src/features/rows/render.js`), so a lit button always means
   "pressing this removes it".
 - A link is `setMark(…, "href", url)`; the caret goes just past it.
-- `breakLine` (04c) replaces the selection with `"\n"`, or `"\n\n"` with
+- `breakLine` (`src/core/text/edits.ts`) replaces the selection with `"\n"`, or `"\n\n"` with
   the caret between them when nothing follows (the sentinel a trailing
   `<br>` needs to give the new line a box). Formatting carries through the
   break; a comment or link only where both sides are in it.
@@ -384,7 +395,7 @@ selection kept:
   (tag shortcuts, b-roll capture). Moving the caret forgets it.
 - The comment composer and reply boxes, which are not document cells and
   may hold pictures and video cards, go through the same model functions
-  by way of `editDraft` (`05d-draft-edit.js`, §10 step 7), with an undo
+  by way of `editDraft` (`src/features/editing/draft-edit.js`, §10 step 7), with an undo
   history of each box's own. No edit anywhere uses `execCommand`; the
   page-wide `styleWithCSS` and `applyHighlight` are gone.
 
@@ -546,12 +557,12 @@ sides:
 
 This fixes the named case: a tag re-wrap (marks only) on one side plus a
 word edit on the other merges cleanly. The on-disk merge review
-(18a-local-merge.js) uses the same function, so its preview and its outcome
+(`src/features/merge/local-merge.js`) uses the same function, so its preview and its outcome
 can no longer disagree.
 
 **Built (step 6).** `mergeTextField(base, mine, theirs, ctx)` in
-`src/core/merge/text-field.ts` (re-exported by `03-sync.js`, and reading
-cells through the decoder its context carries) is the one decision,
+`src/core/merge/text-field.ts` (reading cells through the decoder its
+context carries) is the one decision,
 returning `{html, outcome}` with outcome
 `same`, `mine`, `theirs`, `merged` or `conflict`; `mergeRow` and the
 on-disk review both call it (the review labels `merged` "both sets of
@@ -608,21 +619,21 @@ changes are combined"). What building it settled:
 
 ## 9. What changes where
 
-| Area | Change |
-| --- | --- |
-| `02-state.js` `migrateRows` | resolves tag ids and heals the registry; `fromHtml` into a memo |
-| `03-sync.js` | `mergeRow` per §8; conflict cards unchanged in shape |
-| `04-richtext.js` | `sanitizeHtml` stays for comment bodies and paste input; cells go through `fromHtml` |
-| `05-render.js` | cells render from `toHtml(runs)`; `syncFieldFromDom` becomes read back plus diff; toolbar actions become steps |
-| `06-rows.js`, `19-writer.js` | split, join, move and delete become steps; `repointCommentsForRows` is deleted |
-| `07-production-tags.js` | tag shortcut, completion and untagged accept become steps; `eachTagSpan` becomes a run walk; rename touches the registry only |
-| `08c-broll.js` | capture and rename become steps; the marker is an atom |
-| `09-find-replace.js` | searches the plain-text projection, so matches cross formatting; replace is `replaceText` |
-| `10-comments.js` | anchors from `cmt` marks; create/delete are steps |
-| `14-export.js`, `15-docx.js`, `16-csv.js`, `17-pdf.js`, `20d-formats.js` | read runs via `toPlainText` / `toMarkdown` / `toDocxRuns` (the `.md` project's table stays `htmlToMarkdown`, step 3) |
-| `20-teleprompter.js` | word spans from runs |
-| `src/bootstrap/wiring/editor.ts` (with `src/features/editing/`) | `beforeinput` / keydown routing (§5); paste via `fromHtml` |
-| `server/server.js`, `shared/blob-policy.js` | unchanged (D2: HTML stays the stored format) |
+| Area (at design time) | Now | Change |
+| --- | --- | --- |
+| `02-state.js` `migrateRows` | `src/core/migrate.ts` | resolves tag ids and heals the registry; `fromHtml` into a memo |
+| `03-sync.js` | `src/core/merge/`, `src/application/session/` | `mergeRow` per §8; conflict cards unchanged in shape |
+| `04-richtext.js` | `src/adapters/richtext/` | `sanitizeHtml` stays for comment bodies and paste input; cells go through `fromHtml` |
+| `05-render.js` | `src/features/rows/render.js`, `src/application/editing/cell-editing.ts` | cells render from `toHtml(runs)`; `syncFieldFromDom` becomes read back plus diff; toolbar actions become steps |
+| `06-rows.js`, `19-writer.js` | `src/application/commands/`, `src/features/rows/`, `src/features/writer/` | split, join, move and delete become steps; `repointCommentsForRows` is deleted |
+| `07-production-tags.js` | `src/features/tags/` | tag shortcut, completion and untagged accept become steps; `eachTagSpan` becomes a run walk; rename touches the registry only |
+| `08c-broll.js` | `src/features/broll/`, `src/application/production/` | capture and rename become steps; the marker is an atom |
+| `09-find-replace.js` | `src/features/find/` | searches the plain-text projection, so matches cross formatting; replace is `replaceText` |
+| `10-comments.js` | `src/features/comments/` | anchors from `cmt` marks; create/delete are steps |
+| `14-export.js`, `15-docx.js`, `16-csv.js`, `17-pdf.js`, `20d-formats.js` | `src/adapters/formats/` | read runs via `toPlainText` / `toMarkdown` / `toDocxRuns` (the `.md` project's table stays `htmlToMarkdown`, step 3) |
+| `20-teleprompter.js` | `src/features/prompter/` | word spans from runs |
+| editor wiring | `src/bootstrap/wiring/editor.ts`, `src/features/editing/` | `beforeinput` / keydown routing (§5); paste via `fromHtml` |
+| `server/server.js`, `shared/blob-policy.js` | `shared/blob-policy.js` (the server was removed in 4.1) | unchanged (D2: HTML stays the stored format) |
 
 `execCommand` goes from 17 editing calls to none.
 
@@ -631,7 +642,7 @@ changes are combined"). What building it settled:
 Each step ships on its own, with the suites green, and changes no behaviour
 until step 4.
 
-1. **`04c-doc-model.js`, pure. Done.** Types, `normalizeCell`,
+1. **The pure model (now `src/core/text/`). Done.** Types, `normalizeCell`,
    `fromHtml`/`toHtml`, positions, edit functions, steps and their inverses,
    tokenised diff3. `src/test/doc-model.test.mjs` checks, on a fixture of
    every construct the sanitiser keeps, the demo document and 400 seeded
@@ -706,10 +717,10 @@ until step 4.
    rewriting all 33 write paths first — but in three parts:
    - every keystroke is stored canonical (`syncFieldFromDom` through the
      model), so state never holds unsanitised HTML any more;
-   - everything structural in a script cell goes through `editCell`
-     (`05b-cell-edit.js`): bold/italic/underline/strike/highlight (with a
+   - everything structural in a script cell goes through the cell-editing
+     owner (`src/application/editing/cell-editing.ts`): bold/italic/underline/strike/highlight (with a
      collapsed caret too), links, Enter, the three tag routes, the b-roll
-     key, paste, drop, copy and cut (`05c-clipboard.js`). Copy never
+     key, paste, drop, copy and cut (`src/features/clipboard/`). Copy never
      carries a comment; cut then paste moves it (D6). A pasted b-roll key
      gets an id of its own unless a cut is moving it (§3.3). Pictures and video
      cards are dropped from pasted script text and moved out of existing
@@ -727,7 +738,7 @@ until step 4.
    `broll-model.test.mjs`, browser suite 79. Still on the old paths only
    the HTML fallback each of these keeps for a cell still holding a
    picture (which D7's load-time move empties).
-5. **Undo stack. Done** (`12a-undo.js`), recording every edit by diffing
+5. **Undo stack. Done** (now `src/application/editing/undo/`), recording every edit by diffing
    after `markDirty()` rather than per path — see §7 and HANDOFF invariant
    #53. The browser's own undo is never used in a script cell.
 6. **Merge per §8. Done** — built ahead of steps 4–5, since it only needs
@@ -741,7 +752,7 @@ until step 4.
    comment's `rowId`/`field` is derived from its mark. And no edit uses
    `execCommand` any more:
    - **The comment composer and reply boxes** edit through the model
-     (`editDraft`, `05d-draft-edit.js`), though no model stands behind
+     (`editDraft`, `src/features/editing/draft-edit.js`), though no model stands behind
      them and they may hold pictures and video cards: each one is lifted
      out as a private-use placeholder character (U+E000–U+F8FF, never one
      the box or a paste already holds), which the model treats as a
@@ -769,7 +780,7 @@ until step 4.
    - **The fallback for a script cell still holding a picture is
      deleted** (the browser's format, highlight, link, line break, paste
      and drop commands, and the tag and b-roll key put straight into the
-     DOM): §3.3 says why no cell holds one. `editCell` still declines one,
+     DOM): §3.3 says why no cell holds one. The cell-editing owner still declines one,
      and nothing edits it instead. The tag and b-roll shortcuts, which
      also fell back when the model did not read the same words at the
      caret, now leave the typed words as they are.
@@ -790,7 +801,7 @@ words.
   each new path. No step deletes an old path until its replacement has
   passed the full browser run on Windows.
 - **Caret restore after re-render.** Position-based restore exists already
-  (the writer's `(rowId, char offset)`, 19-writer.js). It gets one shared
+  (the writer's `(rowId, char offset)`, `src/features/writer/writer.js`). It gets one shared
   implementation used by every re-render.
 - **IME and spellcheck.** These are left to the browser (§5) exactly because
   they are the risk. The by-hand check list gets a Japanese-IME and a
