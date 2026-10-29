@@ -1,6 +1,6 @@
 {
   "loadOnly": [
-    "src/features/script-zoom/script-zoom.js",
+    "src/features/script-zoom/script-zoom.ts",
     "src/bootstrap/wiring/script-zoom.ts",
     "src/features/script-zoom/actions.ts"
   ],
