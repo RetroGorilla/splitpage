@@ -29,6 +29,7 @@ Everything listed here goes inside the asar.
 | `recents.js` | The recent documents list (`createRecents`): noting an opened file, removing one by its file id, clearing, persisting into `desktop-state.json` and describing the list for the renderer without paths. When a note is written straight away or with the next session write stays in `main.js`. |
 | `window-appearance.js` | The stored theme choice in `<userData>/theme.json` (`createThemeChoice`), the window and title bar colours for dark and light, and whether saved window bounds still overlap a display. `main.js` passes in `nativeTheme` and `screen` values. |
 | `tab-registry.js` | The maps of open tabs and windows and the two routing indexes (web contents to tab, file path to tab), how a tab or window id is minted unique, and which tab a routed path or file belongs to (`createTabRegistry`). Creating, moving and closing tabs stay in `main.js`. |
+| `restore-notice.js` | The one notice, after a session restore, that some files could not be reopened (`createRestoreNotice`): which tab it waits for, delivering it once that tab is ready, and moving it to another tab if that one closes first. `main.js` still sends `splitpage:restore-notice` itself. |
 
 From `ipc-channels.js` down, `main.js` requires each of these modules at
 startup, so each must ship for the same reason `drafts.js` does. A new

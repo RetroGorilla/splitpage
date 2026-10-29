@@ -17,6 +17,7 @@ const { createDocClaims } = require("./doc-claims");
 const { createRecents } = require("./recents");
 const { createThemeChoice, backgroundColorFor, titleBarOverlayFor, boundsIfVisible } = require("./window-appearance");
 const { createTabRegistry } = require("./tab-registry");
+const { createRestoreNotice } = require("./restore-notice");
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
 const { createQuitWatchdog } = require("./quit-watchdog");
@@ -175,7 +176,11 @@ let sessionRestoreInProgress = false;
 let draftFlushReqId = 0;
 const pendingDraftFlushes = new Map();
 const DRAFT_FLUSH_BUDGET_MS = 1500;
-let pendingRestoreNotice = null;
+const restoreNotice = createRestoreNotice({
+  tabs,
+  liveWindows,
+  send: (wc, payload) => wc.send("splitpage:restore-notice", payload)
+});
 
 const closeConfirmedWindows = new WeakSet();
 const closeConfirmedTabViews = new WeakSet();
@@ -1159,28 +1164,6 @@ function windowRecordFor(windowId) {
   return windowsById.get(windowId) || (lastFocusedWindowId ? windowsById.get(lastFocusedWindowId) : null) || firstWindowRecord();
 }
 
-function deliverRestoreNotice(tab) {
-  if (!pendingRestoreNotice || !tab || tab.view.webContents.isDestroyed()) return;
-  const notice = pendingRestoreNotice;
-  pendingRestoreNotice = null;
-  try { tab.view.webContents.send("splitpage:restore-notice", { skipped: notice.skipped }); }
-  catch { }
-}
-
-function retargetRestoreNotice(deadTabId, deadWindow) {
-  if (!pendingRestoreNotice || pendingRestoreNotice.tabId !== deadTabId) return;
-  let next = deadWindow && deadWindow.activeTabId ? tabs.get(deadWindow.activeTabId) : null;
-  if (!next) {
-    for (const rec of liveWindows()) {
-      next = rec.activeTabId ? tabs.get(rec.activeTabId) : null;
-      if (next) break;
-    }
-  }
-  if (!next) { pendingRestoreNotice = null; return; }
-  if (next.ready) deliverRestoreNotice(next);
-  else pendingRestoreNotice.tabId = next.id;
-}
-
 function forgetTab(tabId) {
   const tab = tabs.get(tabId);
   if (!tab) return;
@@ -1198,7 +1181,7 @@ function forgetTab(tabId) {
     }
   }
   historyHolds.delete(tab.webContentsId);
-  retargetRestoreNotice(tabId, w);
+  restoreNotice.retarget(tabId, w);
 }
 
 function createTab(windowId, opts) {
@@ -1876,7 +1859,7 @@ function restoreSessionAtLaunch(draftInit) {
 
   if (skipped.length) {
     const first = firstWindowRecord();
-    if (first && first.activeTabId) pendingRestoreNotice = { tabId: first.activeTabId, skipped };
+    if (first && first.activeTabId) restoreNotice.set(first.activeTabId, skipped);
   }
 
   persistShellState();
@@ -2431,7 +2414,7 @@ function registerIpc() {
     if (!tab) return;
     tab.ready = true;
     flushPendingPayload(tab);
-    if (pendingRestoreNotice && pendingRestoreNotice.tabId === tab.id) deliverRestoreNotice(tab);
+    if (restoreNotice.isFor(tab.id)) restoreNotice.deliver(tab);
   });
 
   ipcHandle("splitpage:route-open", async (event, payload) => {
