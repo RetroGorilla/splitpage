@@ -65,13 +65,23 @@ export interface ImportCompletionPorts {
 
 export interface ImportCompletion {
   readonly landed: (imported: Home, after: Pick<LocalFileData, "lastModified" | "size">) => void;
+  readonly landedUnread: (imported: Home, closed: unknown) => void;
   readonly acknowledged: (imported: Home) => void;
+}
+
+function closedStamp(closed: unknown): number | null {
+  if (!closed || typeof closed !== "object") return null;
+  const stamp = (closed as { lastModified?: unknown }).lastModified;
+  return typeof stamp === "number" && Number.isFinite(stamp) ? stamp : null;
 }
 
 export function createImportCompletion(ports: ImportCompletionPorts): ImportCompletion {
   return Object.freeze({
     landed: function (imported: Home, after: Pick<LocalFileData, "lastModified" | "size">): void {
       ports.location.amendHome(imported, { lastModified: after.lastModified, size: after.size });
+    },
+    landedUnread: function (imported: Home, closed: unknown): void {
+      ports.location.amendHome(imported, { lastModified: closedStamp(closed), size: null });
     },
     acknowledged: function (imported: Home): void {
       ports.location.amendHome(imported, { dirty: ports.saving.unsavedFor(imported) });
