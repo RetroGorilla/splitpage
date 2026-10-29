@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { IDBFactory } from "fake-indexeddb";
 
-const bridge = await import("../legacy/recovery-bridge.ts");
+const bridge = await import("../bootstrap/wiring/recovery-owners.ts");
 const { DRAFT_LIMITS } = await import("../adapters/storage/draft-store-idb.ts");
 
 function ports(over) {

@@ -32,7 +32,7 @@ const flushEdits = () => undoOwner().flush();
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { applyTakenDraft, draftTaker } = await import("../bootstrap/wiring/drafts.ts");
-const { flushDraftNow } = await import("../legacy/recovery-bridge.ts");
+const { flushDraftNow } = await import("../bootstrap/wiring/recovery-owners.ts");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 const { bytesForSync, createMemoryBackend, ensureBytes, has, internDataUrl, isDurableSync, persist, setBackend: setBlobBackend } = await import("../adapters/storage/02c-blobs.js");
