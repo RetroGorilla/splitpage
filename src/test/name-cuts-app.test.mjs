@@ -19,7 +19,7 @@ const { plainTagPhrase } = await import("../features/tags/plain-tags.js");
 const { currentBrollRecords } = await import("../bootstrap/wiring/broll.ts");
 const addBrollProp = (...args) => currentBrollRecords().addBrollProp(...args);
 const { openBrollPanel } = await import("../features/broll/panel.js");
-const { sidePanels } = await import("../legacy/panels-bridge.ts");
+const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const { renderComments, setCommentAssignee } = await import("../features/comments/comments.js");
 const { preferences } = await import("../legacy/preferences-bridge.ts");
 const { colorsWithMine } = await import("../core/document/person-colors.ts");

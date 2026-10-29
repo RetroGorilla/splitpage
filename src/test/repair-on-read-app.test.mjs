@@ -19,7 +19,7 @@ const { anchorBrollInLeftCell, updateBrollBadge } = await import("../bootstrap/w
 const { currentBrollRecords } = await import("../bootstrap/wiring/broll.ts");
 const brollEntries = () => currentBrollRecords().brollEntries();
 const { openBrollPanel, renderBroll, runBrollRefresh } = await import("../features/broll/panel.js");
-const { sidePanels } = await import("../legacy/panels-bridge.ts");
+const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { flushEdits, undo } = await import("../legacy/undo-bridge.ts");

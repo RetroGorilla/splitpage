@@ -41,7 +41,7 @@ import { importControls } from "./imports.ts";
 import { updateSaveStatus } from "./save-status.ts";
 import { showToast } from "../../legacy/effects-bridge.ts";
 import { panelWidths, preferences } from "../../legacy/preferences-bridge.ts";
-import { sidePanels } from "../../legacy/panels-bridge.ts";
+import { sidePanels } from "./ports/panels.ts";
 import { SIDE_PANEL_IDS } from "../../application/preferences/panel-widths.ts";
 import { mountPanels } from "../../features/panels/mount.ts";
 import { fileConflicts, saveDoc } from "../../legacy/save-bridge.ts";
