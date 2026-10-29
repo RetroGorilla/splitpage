@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/rows/row-motion.js",
     "src/features/rows/actions.ts",
