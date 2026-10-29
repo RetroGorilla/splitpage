@@ -1,5 +1,5 @@
 import { runningOnDesktop } from "../../application/desktop-presence.ts";
-import { startDrafts as mountDrafts } from "../../application/recovery/drafts.js";
+import { startDrafts as mountDrafts } from "../../application/recovery/drafts.ts";
 import type { DraftsMount, DraftsPorts } from "../../application/recovery/drafts-ports.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";

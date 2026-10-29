@@ -732,7 +732,7 @@ tabs**.
   document left behind is not lost: at startup the newest one whose writer
   is not live (Web Lock `splitpage-draft-writer-<id>`) is offered once as an
   unsaved copy, with all its content, and that copy keeps writing the same
-  draft (`browserCopyOf` in `src/application/recovery/drafts.js`) until it
+  draft (`browserCopyOf` in `src/application/recovery/drafts.ts`) until it
   is saved somewhere (`browserDraftTarget`). Nothing else writes a browser
   draft: untitled scripts and local files are desktop-only. The record is
   the document, its ancestor and scalars (`rev`, `title`, `writerId`, …),
