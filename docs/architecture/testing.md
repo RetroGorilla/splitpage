@@ -52,7 +52,7 @@ lint, types and the other checks run in a separate job.
 | A script-cell command (`cell-text.ts`, `split-join.ts`, `clipboard.ts`), or the code that runs them (the cell-editing owner `src/application/editing/cell-editing.ts`, `splitRowFieldCore`, `mergeWriterRows`, `pasteIntoCell`, `copyFromCell`) | The command's application test (`tests/application/`, every command test through `runConfined`; the owner's is `tests/application/editing/cell-editing.test.ts`) and its booted-app test (`src/test/cell-text-app`, `split-join-app`, `cut-paste-app`, `text-editing-app`), then the text-command suite set of [milestone-3.md](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestone-3.md#the-text-command-suite-set), run plain and with `SPLITPAGE_FREEZE_CACHES=1`. A change to 12a's grouping also runs `src/test/undo.test.mjs`. Add 186 when the change reaches picture-or-video paste or its dirty marking |
 | The rich-text sanitiser (`src/adapters/richtext/sanitize.ts`) | `tests/adapters/richtext/*.test.ts`, then browser suites 01, 69, 77, 80, 81, 86, 92, 155 and both 280 suites (the set #413 ran) |
 | A cache or a caller of one (`contentMemo`, the production readers, `cellOf`, 07's index) | Its unit tests, `production-frozen.test.mjs`, and the suites that read through it with `SPLITPAGE_FREEZE_CACHES=1` set ([Frozen caches](#frozen-caches)) |
-| Bootstrap, tooling, bundling or distribution | `npm run verify`, the broader integration suites, and the package or platform checks the change reaches (the Docker workflow, `node package.mjs`, `desktop/verify-dist.mjs`) |
+| Bootstrap, tooling, bundling or distribution | `npm run verify`, the broader integration suites, and the package or platform checks the change reaches (`node tools/package.mjs`, `desktop/verify-dist.mjs`) |
 | Closing a milestone, cutting a release | The recorded full gates of plan section 4: every suite through `run-tests.ps1` on Windows, and through `tools/run-suites.mjs` on Linux for the 4.0 release, the Electron smoke, the Windows x64 packaged check, and the native ARM64 packaged check for the 4.0 release; `summary.txt` and the logs attached to the closing pull request |
 
 `npm run verify` before pushing is cheap and runs CI's fast gate apart from
@@ -631,15 +631,8 @@ not prose: the comment gate reads it, so a change to it runs the checks.
 `tools/test-ci-changes.mjs` fails if any file the comment gate reads would be
 classed as prose.
 
-`.github/workflows/docker.yml` runs when a Docker build input changes; its
-path filters list every file either Dockerfile copies. Job `image` builds the
-root `Dockerfile` from the checkout and starts it the way `deploy.sh` does.
-Job `prebuilt` runs `npm ci` and `node build.mjs`, copies the files of the
-`splitpage-app` artifact into an empty folder (`tools/artifact-files.mjs`,
-which reads the list from `ci.yml`), builds `Dockerfile.prebuilt`
-there, starts it and checks that `/` and `/sw.js` answer, and its HEALTHCHECK. `.github/workflows/release.yml` builds the
-Windows installers from a tag. [ci.md](ci.md) explains the settings in these
-files that the files themselves cannot.
+`.github/workflows/release.yml` builds the
+Windows installers from a tag. [ci.md](ci.md) explains the settings in the workflow files that the files themselves cannot.
 
 The full browser regression, the Windows runs and the packaged x64 check
 are local milestone and release gates; the Linux full run and the packaged

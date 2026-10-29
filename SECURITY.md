@@ -17,7 +17,7 @@ Only the latest release. Fixes are not back-ported.
 ## Deploying safely
 
 The server serves the app's static files and nothing else: it has no login
-and stores no data. [DEPLOY.md](DEPLOY.md) covers running it.
+and stores no data. [RELEASING.md](docs/RELEASING.md) covers running it.
 
 The Windows installers are not code-signed yet, so Windows SmartScreen will
 warn on first run. Download them only from the releases page, and check the

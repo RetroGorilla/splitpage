@@ -49,7 +49,7 @@ Commit messages say what changed for a person using the app, in the
 imperative ("Help contents: render a heading's formatting"). Reference an
 issue number when there is one.
 
-Read the invariants in [HANDOFF.md](HANDOFF.md) before changing saving,
+Read the invariants in [HANDOFF.md](docs/HANDOFF.md) before changing saving,
 merging, history or the document format; several tests exist only to hold
 them in place.
 

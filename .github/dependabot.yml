@@ -27,8 +27,3 @@ updates:
       actions:
         patterns: ['*']
 
-  - package-ecosystem: docker
-    directory: /
-    schedule:
-      interval: weekly
-    target-branch: 4.1-development

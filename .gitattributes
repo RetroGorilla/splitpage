@@ -1,6 +1,5 @@
-# Normalise to LF in the repository. The Docker image copies these files
-# straight into a Linux container, so what lands there should not depend on
-# which machine committed it.
+# Normalise to LF in the repository, so what the build and release zip copy
+# does not depend on which machine committed it.
 * text=auto eol=lf
 
 *.sh text eol=lf

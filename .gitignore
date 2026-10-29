@@ -6,14 +6,9 @@ _*.html
 # of index.html with your script inside it, so committing one by accident
 # publishes the script as well as the app.
 *.splitpage.html
-data/
-
-/data/
-/backups/
-/.env
 
 # Session hand-off notes — per-session scratch, not project documentation.
-# The durable equivalents are README.md, docs/help.md, DEPLOY.md, HANDOFF.md.
+# The durable equivalents are README.md, docs/help.md, docs/RELEASING.md, docs/HANDOFF.md.
 .claude/handoff/
 
 # OS / editor noise
@@ -28,8 +23,8 @@ desktop.ini
 # docs/help.md and VERSION. It was tracked until #80, where 1.4MB of generated
 # HTML in every pull request diff — and a pre-commit hook nothing installed to
 # keep it honest — stopped being worth it. CI builds it and uploads it as the
-# `splitpage-app` artifact; `node package.mjs` builds it before packaging; the
-# server image builds it itself (DEPLOY.md).
+# `splitpage-app` artifact; `node tools/package.mjs` builds it before packaging; the
+# server image builds it itself (docs/RELEASING.md).
 #
 # Not being tracked is also what retired the hook's second job: a copy of the
 # app with YOUR script saved into it is now an untracked local file, so there
@@ -43,7 +38,7 @@ desktop.ini
 # hand-written source file and must stay tracked.
 /index.html
 
-# Built releases. `node package.mjs` regenerates the lot.
+# Built releases. `node tools/package.mjs` regenerates the lot.
 dist/
 
 # Written by the launcher at runtime so the app can show an update notice.

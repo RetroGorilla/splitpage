@@ -1,9 +1,0 @@
-services:
-  splitpage:
-    build: .
-    image: splitpage:latest
-    container_name: splitpage
-    restart: unless-stopped
-
-    ports:
-      - "8791:8791"

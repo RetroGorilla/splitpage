@@ -42,7 +42,7 @@ jobs:
         run: npm ci
 
       - name: Portable zip
-        run: node package.mjs
+        run: node tools/package.mjs
 
       - name: Install desktop dependencies
         working-directory: desktop
