@@ -10,7 +10,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 import { estimatedSeconds, rowSeconds, totalSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { applyStepsLive, diffStates } from "../application/editing/undo/history.ts";

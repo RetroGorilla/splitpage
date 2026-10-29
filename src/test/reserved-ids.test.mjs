@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { migrateDocument } from "../bootstrap/startup/document-entry.js";
 import { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge/lists.ts";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { PROTOTYPE_IDS } from "../core/document/id-map.ts";
