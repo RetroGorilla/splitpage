@@ -5,7 +5,7 @@ import { PREF_EVENT, preferences, startPreferences } from "../legacy/preferences
 import { isRundownMinimized, toggleRundownMinimized } from "../features/rundown/rundown.js";
 import { mountRundownFeature as initRundown } from "../bootstrap/wiring/rundown.ts";
 import { mountScriptZoomFeature as initZoom } from "../bootstrap/wiring/script-zoom.ts";
-import { scriptScale, setScriptScale } from "../features/script-zoom/script-zoom.js";
+import { scriptScale, setScriptScale } from "../features/script-zoom/script-zoom.ts";
 import { mountUpdateFeature } from "../bootstrap/wiring/update.ts";
 
 const frames = new Map();
