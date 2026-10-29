@@ -520,9 +520,15 @@ function runIn(repo, mode) {
   check("the new comment is located", added.err.includes("src/js/a.js:2 // new"), added.err);
   eq("prune will not absorb a new comment", runIn(repo, "prune").code, 1);
 
+  writeFileSync(join(repo, "src/js/a.js"), "x(); // swapped\n");
+  const swapped = runIn(repo, "check");
+  eq("a new comment fails even when it replaces a baselined one", swapped.code, 1);
+  check("the new comment is named", swapped.err.includes("new comment src/js/a.js:1 // swapped"), swapped.err);
+
   writeFileSync(join(repo, "src/js/a.js"), "x();\n");
   const stale = runIn(repo, "check");
-  eq("a removed comment left in the baseline fails", stale.code, 1);
+  eq("a removed comment left in the baseline warns and passes", stale.code, 0);
+  check("the warning names the entry and the prune command", stale.err.includes("warning: resolved src/js/a.js // old (remove it with `node tools/comment-gate.mjs --prune`)"), stale.err);
   eq("prune removes it", runIn(repo, "prune").code, 0);
   eq("the check then passes", runIn(repo, "check").code, 0);
 

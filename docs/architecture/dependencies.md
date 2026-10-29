@@ -11,7 +11,8 @@ comments.
 | `npm run check:deps` (`tools/dep-report.mjs`) | Layer rules, platform imports and globals, HTML parsed into cells outside the rich text adapter, unresolvable modules, computed dynamic loads, cycles through migrated folders, the deleted `S` module, and the legacy debt: `S` importers, `S` writers and runtime cycle edges | `tools/dep-baseline.json` |
 | `npm run check:comments` (`tools/comment-gate.mjs`) | Comments in authored JS/TS, CSS, HTML, shell, PowerShell and batch files, and in YAML (workflow `run:` scripts included) and JSON; short reason comments are allowed as described below | `tools/comment-baseline.json` |
 
-Both fail on anything new and on anything the baseline lists that has gone.
+Both fail on anything new. An entry the baseline lists that has gone only
+warns, naming the entry and the `--prune` command, and the check still passes.
 `--prune` removes gone entries and refuses to add new ones. `--init` writes a
 baseline only when none exists. `node tools/dep-report.mjs --accept "<reason>"`
 records reviewed new dependency exceptions ([Baseline workflow](#baseline-workflow)).
@@ -359,9 +360,10 @@ The numbered modules the shim started are gone: each moved into a feature folder
 
 ## Baseline workflow
 
-- **Paying debt.** Make the change. `npm run check:deps` fails and lists the
-  resolved entries; `node tools/dep-report.mjs --prune` removes them. Commit
-  the smaller baseline with the change.
+- **Paying debt.** Make the change. `npm run check:deps` passes and warns
+  about each resolved entry; `node tools/dep-report.mjs --prune` removes them.
+  Commit the smaller baseline with the change. The comment gate works the same
+  way with `node tools/comment-gate.mjs --prune`. Baselines never grow.
 - **Reviewed new debt.** `--prune` refuses new entries. When one is expected,
   such as a bridge in `src/legacy/` or a helper moved between two modules
   already in the cycle (which adds a `cycle-edge`), run

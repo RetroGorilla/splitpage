@@ -977,8 +977,8 @@ try {
 
   writeFileSync(join(repo, "shared/p.js"), '"use strict";\nmodule.exports = 1;\n');
   const resolved = runIn(repo, "check");
-  eq("a resolved exception left in the baseline fails", resolved.code, 1);
-  check("it says to prune", resolved.err.includes("--prune"), resolved.err);
+  eq("a resolved exception left in the baseline warns and passes", resolved.code, 0);
+  check("the warning names the entry and the prune command", resolved.err.includes("warning: resolved platform-global: shared/p.js -> global:URL (remove it with `node tools/dep-report.mjs --prune`)"), resolved.err);
   eq("prune removes it", runIn(repo, "prune").code, 0);
   eq("the pruned baseline is empty", JSON.parse(readFileSync(join(repo, "baseline.json"), "utf8")).exceptions, []);
   eq("and the check passes again", runIn(repo, "check").code, 0);
@@ -1030,7 +1030,8 @@ try {
 
   writeFiles(repo, { "src/js/old.js": "export const p = (s) => s;\n" });
   const resolved = go("check");
-  eq("removing the parse leaves a resolved exception that fails", resolved.code, 1);
+  eq("removing the parse leaves a resolved exception that warns and passes", resolved.code, 0);
+  check("the warning names the resolved html-cells entry", resolved.err.includes("warning: resolved html-cells: src/js/old.js"), resolved.err);
   eq("prune clears it", go("prune").code, 0);
   eq("and the check passes", go("check").code, 0);
 } finally {
@@ -1111,7 +1112,7 @@ try {
   });
   eq("a new S importer fails even when another importer goes in the same change", swap.code, 1);
   eq("the new importer is named", lines(swap, "new state-"), ["new state-import: src/js/c.js:1 -> global:S", "new state-module: src/js/c.js:1 -> src/js/_state.js"]);
-  eq("the removed importer is resolved", lines(swap, "resolved state-"), ["resolved state-import: src/js/a.js -> global:S", "resolved state-module: src/js/a.js -> src/js/_state.js"]);
+  eq("the removed importer is resolved", lines(swap, "warning: resolved state-"), ["warning: resolved state-import: src/js/a.js -> global:S", "warning: resolved state-module: src/js/a.js -> src/js/_state.js"]);
 
   const writer = attempt(repo, { "src/js/a.js": 'import { S } from "./_state.js";\nimport { b } from "./b.js";\nexport function a() { S.state = null; return b(); }\n' });
   eq("a new S.state writer fails", writer.code, 1);
@@ -1176,13 +1177,13 @@ try {
     "src/js/f.js": "export function f() { return 1; }\n"
   });
   const paid = cli(repo);
-  eq("removing debt without pruning fails", paid.code, 1);
-  eq("every resolved entry is listed", lines(paid, "resolved "), [
-    "resolved cycle-edge: src/js/a.js -> src/js/b.js",
-    "resolved cycle-edge: src/js/b.js -> src/js/f.js",
-    "resolved cycle-edge: src/js/f.js -> src/js/a.js",
-    "resolved state-write: src/js/b.js -> direct:S.state",
-    "resolved state-write: src/js/b.js -> global:S.state"
+  eq("removing debt without pruning warns and passes", paid.code, 0);
+  eq("every resolved entry is listed as a warning", lines(paid, "warning: resolved "), [
+    "warning: resolved cycle-edge: src/js/a.js -> src/js/b.js",
+    "warning: resolved cycle-edge: src/js/b.js -> src/js/f.js",
+    "warning: resolved cycle-edge: src/js/f.js -> src/js/a.js",
+    "warning: resolved state-write: src/js/b.js -> direct:S.state",
+    "warning: resolved state-write: src/js/b.js -> global:S.state"
   ]);
   eq("--prune accepts it", cli(repo, "--prune").code, 0);
   eq("the pruned baseline keeps the importers and reference counts", JSON.parse(readFileSync(join(repo, "tools/dep-baseline.json"), "utf8")).exceptions.map((e) => `${e.rule} ${e.source}`), ["legacy-state-refs src/js/a.js", "legacy-state-refs src/js/b.js", "state-import src/js/a.js", "state-import src/js/b.js", "state-module src/js/_state.js", "state-module src/js/a.js", "state-module src/js/b.js"]);
@@ -1214,7 +1215,8 @@ try {
 
   writeFiles(accepting, { "src/js/b.js": 'import { S } from "./_state.js";\nimport { f } from "./f.js";\nexport function b() { S.dirty = true; return f(); }\n' });
   const mixed = cli(accepting, "--accept", "b.js sets the dirty flag while it waits for the session owner");
-  eq("--accept adds new entries but does not prune", [mixed.code, cli(accepting).code], [0, 1]);
+  const afterMixed = cli(accepting);
+  eq("--accept adds new entries but does not prune; the check then warns about what is left", [mixed.code, afterMixed.code, lines(afterMixed, "warning: resolved ").length], [0, 0, 2]);
   check("and says what is left to prune", mixed.out.includes("2 resolved"), mixed.out);
   eq("--prune then removes the resolved entry and keeps both reasons", [cli(accepting, "--prune").code, JSON.parse(readFileSync(baselineFile, "utf8")).exceptions.filter((e) => e.reason).map((e) => e.target)], [0, ["src/js/f.js", "global:S.dirty"]]);
   eq("and the check passes", cli(accepting).code, 0);
@@ -1431,7 +1433,8 @@ try {
   eq("moving the last imported name cuts the loop", JSON.parse(modeled.out).steps.map((s) => [s.label, s.loopModules, s.loopLinks]), [["now", 2, 2], ["moved b", 0, 0]]);
   eq("loop steps needs a filename", cli(guarded, "--loop-model").code, 2);
   writeFiles(guarded, { "src/js/00-a.js": numberedFiles["src/js/00-a.js"].replace("S.dirty", "true") });
-  eq("a fallen reference count must be pruned", cli(guarded).code, 1);
+  const fallen = cli(guarded);
+  eq("a fallen reference count warns and passes", [fallen.code, lines(fallen, "warning: resolved legacy-state-refs")], [0, ["warning: resolved legacy-state-refs: src/js/00-a.js -> global:S"]]);
   eq("prune lowers the recorded reference count", cli(guarded, "--prune").code, 0);
   eq("the lower reference count is recorded", JSON.parse(readFileSync(join(guarded, "tools/dep-baseline.json"), "utf8")).exceptions.find((e) => e.rule === "legacy-state-refs" && e.source === "src/js/00-a.js")?.count, 1);
   eq("the lowered baseline passes", cli(guarded).code, 0);
@@ -1440,7 +1443,8 @@ try {
   const deleted = cliRepo({ "src/js/00-leaf.js": "export const leaf = 1;\n" });
   cli(deleted, "--init");
   rmSync(join(deleted, "src/js/00-leaf.js"));
-  eq("a deleted numbered file must be pruned", cli(deleted).code, 1);
+  const gone = cli(deleted);
+  eq("a deleted numbered file warns and passes", [gone.code, gone.err.includes("warning: resolved")], [0, true]);
   eq("prune removes the deleted numbered file", cli(deleted, "--prune").code, 0);
   eq("the deleted numbered file leaves no exceptions", JSON.parse(readFileSync(join(deleted, "tools/dep-baseline.json"), "utf8")).exceptions, []);
 } finally {

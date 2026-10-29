@@ -56,9 +56,11 @@ eq("action ids passed to a helper that takes id are read", actionIds('const zoom
 console.log("\nthe repository:\n");
 
 {
+  const out = [];
   const err = [];
-  const code = run({ print: () => {}, printError: (l) => err.push(l) });
-  check("the committed feature map is current and no exported type name is duplicated", code === 0, err.join("\n"));
+  const code = run({ print: (l) => out.push(l), printError: (l) => err.push(l) });
+  check("no exported type name is duplicated", code === 0, err.join("\n"));
+  check("the feature map is printed", out.join("\n").startsWith("# Feature map\n") && out.join("\n").includes("| `find` |"), out.join("\n").slice(0, 200));
 }
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);
