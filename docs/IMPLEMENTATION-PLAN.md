@@ -12,7 +12,7 @@
 
 | Decision | Outcome |
 | --- | --- |
-| Release | 4.0, from `4.1-development` (created from `main`); `main` merged in at least weekly |
+| Release | 4.1, from `4.1-development` (which carries on from `4.0-development`); `main` merged in at least weekly |
 | Plugins, SDK, extension runtime | Out of scope |
 | Language for new folders | TypeScript, strict, erasable syntax only (section 3) |
 | Comments | None in authored code, tests, CSS, HTML, scripts or workflow/configuration files, except short reason comments (section 2) |
