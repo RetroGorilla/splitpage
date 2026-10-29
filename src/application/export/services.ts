@@ -2,7 +2,7 @@ import type { TextServices } from "../text/services.ts";
 
 export type ExportServices<Body = unknown> = Pick<TextServices<Body>, "cellOf" | "inertBody" | "fromHtml" | "htmlToMarkdown" | "htmlToPlainText" | "productionReaders" | "cacheSeal">;
 
-const SERVICES: readonly (keyof ExportServices)[] = ["cellOf", "inertBody", "fromHtml", "htmlToMarkdown", "htmlToPlainText", "productionReaders", "cacheSeal"];
+const SERVICES: readonly (keyof ExportServices)[] = Object.freeze(["cellOf", "inertBody", "fromHtml", "htmlToMarkdown", "htmlToPlainText", "productionReaders", "cacheSeal"]);
 
 let installed: ExportServices | null = null;
 
