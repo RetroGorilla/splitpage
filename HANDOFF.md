@@ -23,11 +23,11 @@ visual/audio editor with a teleprompter, review comments, and a production
 breakdown for props/locations/cast/VFX/sound.
 
 - **Edit `src/`, never `index.html`.** Source is `src/page.html` (shell),
-  `src/app.css`, `src/seed-state.json` (demo document), the owned folders
+  `src/styles/`, `src/seed-state.json` (demo document) and the owned folders
   (`core/`, `application/`, `adapters/`, `features/`, `bootstrap/`,
-  `legacy/`) and `src/js/_entry.js`, the bundle entry, which mounts the
-  owners and features in a fixed order. No numbered module is left in
-  `src/js/`. `node build.mjs` bundles from `_entry.js` with
+  `legacy/`). `src/bootstrap/main.ts` is the bundle entry, which mounts the
+  owners and features in a fixed order; `src/js/` is gone.
+  `node build.mjs` bundles from `main.ts` with
   esbuild and inlines the result into `index.html`; `node build.mjs --check`
   says whether the copy on disk is in step. `index.html` is **not in the
   repository** since #80 — it is generated, it is ignored, and a fresh clone
@@ -877,7 +877,7 @@ tabs**.
 
 ### 3.14 Motion is a token layer, and `render()` stays synchronous
 
-`src/app.css` defines one motion vocabulary on `:root` — `--dur-press`,
+`src/styles/base.css` defines one motion vocabulary on `:root` — `--dur-press`,
 `--dur-fast`, `--dur-enter`, `--dur-exit`, `--dur-move`, plus
 `--ease-standard`/`--ease-enter`/`--ease-exit`. Every transition and
 animation in the file reads from it. Add motion by reaching for a token, not
@@ -1190,7 +1190,7 @@ changes are combined" for an outcome of `merged`.
 Audio column, stored as `<span class="stage-dir">` (the sanitiser keeps the
 class and nothing else), nested just inside the comments so only a comment
 edge can cut one; never on a b-roll key; a tag is all in one or not
-(`normalizeCell`). Its brackets are never stored: app.css draws them in the
+(`normalizeCell`). Its brackets are never stored: the stylesheets in `src/styles/` draw them in the
 editor, the Writer and the prompter, and every text reader adds them —
 `toPlainText` "(beat)" (its `directions: "omit"` and `spokenText()` leave
 them out), `toMarkdown` `*(beat)*`, `toDocxRuns` a `(`/`)` run each side with
@@ -1399,7 +1399,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
     gated on `isFileDrag(e) && !dragRowId`, or scene reordering breaks.
 14. **A new `TAG_CATEGORIES` entry needs its colour tokens and a matching
     `.tag-anchor[data-tag-cat="…"]` CSS rule** — `--tag-<id>` and
-    `--tag-<id>-tint` in `:root` and in both dark blocks of `app.css`, its
+    `--tag-<id>-tint` in `:root` and in both dark blocks of the stylesheet, its
     `color` set to `"var(--tag-<id>)"`, and the rule pointing `--tag-color`/
     `--tag-tint` at them. Panels read the colour through `TAG_CATEGORIES`,
     the script through the rule; both land on the same token, so the dark
@@ -1765,82 +1765,38 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
 
 ## 6. Map of the source
 
-`src/js/` now holds only `_entry.js`; no numbered module is left. The table
-below is the old module map, kept as a record of which job each one held;
-the code now lives in the owned folders, and
-[feature-map.md](docs/architecture/feature-map.md) says where:
+`src/js/` is gone: every numbered module moved into the owned folders below
+or was removed with the server and collaboration features. The old module
+map is in git history (`git show 84282e24:HANDOFF.md`). For a feature,
+[feature-map.md](docs/architecture/feature-map.md) lists its files, wiring,
+shared ports, actions and tests; [AGENTS.md](AGENTS.md) has the layer rules.
 
-| Fragment | What is in it |
+| Folder | What is in it |
 | --- | --- |
-| `_state.js` | the 54 cross-module mutable vars, as one exported object `S` |
-| `_home.js` | where the document lives: the one tagged `home` record (`none` / `file` / `import`) and `setHome()`, its only writer (#73) |
-| `_entry.js` | the bundle entry, and the one file left in `src/js/`: mounts the owners and features in order |
-| `00-prelude.js` | `PAGE_SHELL`, module-wide vars |
-| `01-scene-status.js` | scene status and runtime estimates |
-| `02-state.js` | `defaultState`, `migrateRows`, `legacyMdToHtml`, `buildPublishHtml` |
-| `02b-doc-id.js` | document id: `DOC_ID_RE`, `mintDocId`, frozen `sha256Hex`/`deriveDocId` (over `sha256Bytes`, the synchronous SHA-256 core), `mergedDocId`, `reassignDocId`, duplicate-claim BroadcastChannel; `standaloneHtmlFor(s, head)` and `withPageHead`, which give the Standalone page export the script's `<title>` and a `<meta name="description">` (the app's own page and `buildPublishHtml` unchanged) |
-| `02c-blobs.js` | image blob registry (#82): `intern`/`internDataUrl` (sync hash, sniff, measure), `recordFor`/`urlForSync`/`bytesForSync`/`dataUrlForSync`, `ensureBytes`/`persist`/`queuePersist`, a row's picture (`rowImage`, `rowImageUrl`, `rowImageBytes`, `blobImgHtml`), the file writers' `inlineStateImages`/`inlineStateJson`, the document-wide hydrator for `img[data-blob]` ("Image unavailable" when nobody has it), IndexedDB `splitpage-blobs` + memory backends (`setBackend` for the desktop folder); record gate and `refsIn` in `shared/blob-policy.js` |
-| `03-sync.js` | identity, `mergeStates`, save loop, restore/undo-merge |
-| `03a-history-store.js` | per-document version history, the renderer's half (#83): the backend choice (desktop IPC client / `shared/history-store.js` over 03c's IndexedDB backend / over the memory backend), synchronous `captureSnapshot` + pending entries and their retry, `historyPersistRefs` (#52), holds, the panel's list and notice line, the legacy `splitpage-snapshots` → Older migration, export/import, `window.__historyTest` |
-| `03c-history-idb.js` | the browser's IndexedDB backend for `shared/history-store.js` (`splitpage-history` v3: `index` + `bodies`, one strict transaction per job; the v3 upgrade drops 2.1's v1 stores only when they hold no snapshot), `hashText` |
-| `04-richtext.js` | `walkSanitize` (images in HTML become `<img data-blob>`, #82), `storedImageHtml`, `storedHtmlFromDom`, html→markdown (the `.md` project's table only), video link cards |
-| `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s reconcile, measures before and after in document space, animates what moved (§3.14) |
-| `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
-| `04c-doc-model.js` | the structured document model (#85): a cell as runs with marks, `fromHtml`/`toHtml`/`cellOf`, the readers (`toPlainText`, `toDocxRuns`, `toMarkdown`, …), edits, steps and `mergeCells` |
-| `05b-cell-edit.js` | removed in 4.1 (L3d PR 4): opening, editing, syncing and closing a script cell is the cell-editing owner (`src/application/editing/cell-editing.ts`, the page side in `src/features/editing/cell-page.ts`), reached through the editing ports the wiring builds (`src/bootstrap/wiring/ports/editing.ts`); `domToPos`/`posToDom` are in `src/features/editing/cell-dom.ts` |
-| `05c-clipboard.js` | copy, cut, paste and drop in a script cell: the view of `pasteCommand` and `cutCommand` (`src/application/commands/clipboard.ts`, run through the session; an attachments-only paste runs outside `openCellEdit` and `closeCellEdit`, between its own undo-grouping breaks); a cut comment moves with its words (D6); a pasted b-roll key gets an id of its own unless a cut moves it (invariant #54) |
-| `05d-draft-edit.js` | `editDraft` — one edit of a comment or reply draft through the model, its pictures and video cards carried as placeholder characters (`mediaTable`); the draft's own undo history and typing bursts; `pasteIntoDraft`, `appendDraftMedia` |
-| `12a-undo.js` | the one undo/redo stack: every edit recorded by diffing after `markDirty()`; remote merges forget what they touched; `foldIntoEdit` puts something the app finishes later (a pasted link's thumbnail, #141) into the edit's own entry, or nowhere when a later entry touches it |
-| `05-render.js` | `editableCellHtml` (the one cell builder), `rowParts`/`rowHtml`, `render` (keyed reconcile of `#rows`) and `renderRow`, rich-text commands (§3.16), which run through `cellEditing().edit`; typing reaches the document through `cellEditing().sync` (L3d PR 4) |
-| `05g-scene-clip.js` | whole scenes on the clipboard (#204): the payload (`application/x-splitpage-scenes` JSON — the scenes and everything they name, comments, b-roll records, breakdown entries, owners, picture bytes up to `SCENE_BLOB_CAP`, 16 MiB, the rest by reference), the two-column table (the payload without bytes on its `data-splitpage-scenes` attribute) and labelled plain text; reading it back through `migrateRows`; `insertScenes` (fresh row/comment/reply ids, anchors renamed, a b-roll key's id kept only when free — invariant #54 — with its record, a live cut in the same document a move while none of its scenes are in it, so it follows undo) and `removeScenes` (comments re-pointed at words that stay) |
-| `05h-scene-select.js` | selecting whole scenes by dragging out of a script cell (#204): the gesture, the autoscroll, the highlight (a `<style>` keyed by row id, since `render()` resets row classes), Ctrl+C/X, Delete/Backspace, Esc, the right-click menu, New script from these scenes, `pasteScenesAt` (called from the paste route wired in src/bootstrap/wiring/editor.ts), each change one undo entry |
-| `05q-cell-reach.js` | a press anywhere in a script cell puts the caret at the end of its field (#182) |
-| `05r-read-time.js` | the rail's Read time as a button: setting and clearing a scene's length by hand (#179) |
-| `05s-script-zoom.js` | Ctrl + wheel / pinch / Ctrl + `+` `−` `0` zoom the script alone via `--script-scale` (#191) |
-| `05t-target.js` | a script's target length (#170): `setTargetLength()`, the clock popover's Target section, and the line / label / hatching on the rundown's overlay |
-| `05v-video.js` | YouTube and Vimeo in a scene's gallery (#141, #168): a pasted link's thumbnail fetched once (`fetchThumbnailRecord` — the page's own fetch, or the desktop bridge's `videoThumbnail`; YouTube's letterbox trimmed), interned as a blob and folded into the paste's undo entry (`thumbnailsAfterPaste` → `foldIntoEdit`); the player's address (`playerSrc`) and where it cannot play (`embedRefusal`: YouTube from `file://`); `window.__videoTest` (a fake fetch/host for the suites; the drivers' `__splitpageNoRemote` keeps everything else off the network) |
-| `05e-gallery-overlay.js` | a scene's gallery dialog (#135): the still, ‹ ›, the grid, Make cover / Remove / reorder as undo steps; click-to-play in the preview (#168: a sandboxed frame for YouTube/Vimeo, a `<video>` for a file dropped this session, a note plus Open where it cannot play), Retry thumbnail (#141) |
-| `06-rows.js` | row add/move/drag, images; a gallery video's Open (`openGalleryLink`, `openVideoFile`), the desktop's per-run file grants, and the Files dropped or pasted this session (`hasSessionVideo`/`sessionVideoUrl`, #168) |
-| `07-production-tags.js` | tag registry, people, tagging, autocomplete, untagged mentions |
-| `07b-plain-tags.js` | plain-language tagging (#210): `VFX:` in a Visual cell opens a tag, Tab wraps it, Esc puts the keyword back — Adam's typing convention is written out at the top of the file; the keyword is only hidden on screen, never taken out of the document until Tab |
-| `08-production-panels.js` | production and gear panels, multi-select, breakdown |
-| `08c-broll.js` | the b-roll list itself: reading `B-roll:` lines off the model, the records in `state.brollShots`, anchoring (#21), a pasted key's record (invariant #54), the props a shot needs (#149, invariant #56), the badge and the idle refresh |
-| `08d-broll-panel.js` | how the b-roll list is shown and edited (#148): the side panel — one line per shot, summary bar, filter chips and Group menu (remembered per device, `splitpage-broll-view`), the compact detail card, multi-select and the bulk bar (one change, one undo); and the full-page shot list (#150) — a table over the script at the writer's z-index that closes the side panels and traps the focus (invariants #16, #19), edited through the panel's own handlers (`wireBrollRoot`), with its CSV (`buildBrollCsv`) and printable PDF (`buildShotListPdf` in `src/adapters/formats/pdf.ts`, the packing list's writer) |
-| `09-find-replace.js` | find & replace |
-| `10-comments.js` | comments: composer, panel, cards |
-| `11-import.js` | paste import, two-column detection, `parseMarkdownTable`, Google Doc import; the Markdown exports reopened (`parseStackedMarkdownExport`, `markdownExportScript`), old shapes and new (invariant 58) |
-| `12-dirty-toast.js` | dirty flag, toasts (`showActionToast`'s `sticky` for a state that lasts), draft-change hook, save-state indicator (`updateSaveStatus`) |
-| `14-export.js` | `saveDoc`, autosave (`autoSaveTarget`, `scheduleAutoSave`, `queueAutoSave`, `haltAutoSave`), Markdown writers, zip writer, `adoptSavedCopyDocId`, the exports' category colours (`TAG_PRINT_COLORS`, `tagPrintColor`, #171). The Markdown exports: `exportMetaLine()` (also the standalone page's description), timed scene headings with a status/read line, open threads' `<sup>N</sup>` markers (`markdownWithMarkers`), hard breaks (`mdHardBreaks`), and `appendExportTail` — the breakdown by category, the b-roll shot list as task lists, numbered comments — all behind `opts.export` (invariant 59); `opts.scenes` for the dialog's sketch |
-| `14b-export-kit.js` | what every document export says besides the words, so they all say it alike and as the app does: the document's facts (`exportFacts`, `exportSummaryParts` — scenes, running time, target, shot count, date), each scene's gutter (`sceneFacts` — number, start timecode, read time and whether it was set by hand, status), the open threads' numbers counted as the script's markers count them (`commentNumbers`) and the comments in that numbering (`exportComments`, "Scene 03 · Audio"), a cell's runs with their tag and its colour, the comments over them, the markers after them and the b-roll key (`exportRuns`, over `toDocxRuns(cell, {annotate})`), the breakdown by category (`breakdownGroups`), the b-roll by scene (`exportBrollScenes`), and the rest of the light palette the exports print with (`PRINT_COLORS`, `STATUS_PRINT`, `TAG_STATUS_PRINT`; palette.test.mjs holds `PRINT_COLORS` to `:root`) |
-| `src/adapters/formats/docx.ts` | .docx read/write, narration-only export. The script export draws the app's look (#169) — the facts line, the Scene/Visual/Audio/Read table ruled across only, each scene's gutter, tags, b-roll chips and comment markers, the grouped breakdown (rows that cannot split), the b-roll shot list and numbered comments, "Page X of Y", `docProps` — in named styles the reader skips (invariant 58); the narration .docx hangs each scene's number in the margin (`SplitpageSceneNo`) and reopens as the rows it always did |
-| `src/adapters/formats/csv.ts` | the script spreadsheet — Scene, Start, Status, Read, Read set by hand, Visual, Audio, Tags (`sceneTagLists`), B-roll (`sceneBrollLists`), Open comments; a Total row and a Target row; the Comments block numbered — and `csvToRows`, which maps Visual/Audio by header and stops at our own "Comments" line |
-| `src/adapters/formats/pdf.ts` | every PDF, through one assembler (`assemblePdf`: Info title and `/DisplayDocTitle`, link annotations, bookmarks) and shared pieces (`pdfTextOp`, `pdfLampOp`, `pdfCheckboxOp`, `pdfRoundRectPath`, `pdfFooterOps`, `pdfWrapRuns` carrying a run's annotations and making room for its markers). `buildPdf`: the script as the app lays it out — title block (facts line, rundown strip, status legend), column heads per page, each scene's gutter, annotated runs, clickable links, then the breakdown by category, the b-roll by scene and the numbered comments, each bookmarked, and a footer artifact (invariant 61) per page. The packing list and the b-roll shot list share the list-sheet helpers (`listSheet`, `listHead`, `listWrap`, `listLineOps`): a kicker and heading, Out/Back boxes and a sign-off block on the packing list (items from `breakdownGroups()`), groups as on screen on the shot list (`brollShotListForPrint()`), the opening of a shot's "cuts against" only |
-| `18-local-files.js` | `openProjectFile`/`adoptProjectState`, save-back, File menu dispatch |
-| `18a-local-merge.js` | the on-disk conflict modal's "Merge them": the mergeable-file probe, the retained ancestor (`diskBase`), the field-by-field review pane and its word-level diff |
-| `18b-file-menu.js` | the File menu as a dropdown (#145): `toggleFileMenu`, the file card, `refreshFileMenu` (what is offered right now), `setMenuItemReason`/`setMenuItemLabel` (the second line and the label, never the button's textContent), shortcut chips from `data-keys`, submenus opening in place, Open recent, New script (`startNewScript`), the keyboard, and the browser's Ctrl+S / Ctrl+Shift+S / Ctrl+O (the desktop's are main's accelerators) |
-| `18c-export-dialog.js` | File ▸ Export… (#146): the `EXPORT_FORMATS` table the cards and options are built from, the page sketch, summary and file name (`exportFileName`, 18-local-files.js, which `buildFileData` names every file with), `exportActionReason`, the remembered format (`splitpage-last-export`, per device) and Export again, Ctrl/Cmd+E. Builds nothing itself: Export clicks the format's own hidden `data-file-action` button. Each sketch shows its file's first page, from the kit and the writers themselves (the Markdown one is `toMarkdownDoc({scenes: 3})`), drawn in the print palette whatever the theme and escaped all the way; `exportSummary` names only the sections the script has |
-| `18d-command-menu.js` | the command menu (#147, Ctrl/Cmd+K and File ▸ Search commands…): the `COMMANDS` list (File-menu buttons, each export format, the header's panel/Write/Present/Save buttons) with the words each is found by, ranking, recently run (`splitpage-recent-commands`, per device), and where it will not open (teleprompter, writer, a modal, the tour). Runs every command by clicking the button the menu or header already has, and reads whether it is offered and why not off that same button |
-| `19-writer.js` | the writer (word-processor view of the audio column) |
-| `20-teleprompter.js` | teleprompter and voice follow |
-| `20a-update.js` | update notice (desktop: Download/Install; portable: release-page signpost), desktop-app notice, About box |
-| `20b-onboarding.js` | first-run wizard, pristine-seed gate (invariant #30) |
-| `20c-help.js` | in-app Help modal, coach-mark tour |
-| `20d-formats.js` | the two document formats, hand-edit reconcile |
-| `20h-appdata.js` | app-data export/import: `assertNoSecrets` (#48), `importAppData` (#49), the bundle's `blobs`/`missingBlobs` (#82) |
-| `20f-desktop.js` | desktop glue, inert unless `DESKTOP` set: bridge wrapper, tab-boot-sync handling, native-menu dispatcher; `window.__desktopTest`'s fake bridge, whose history (`makeFakeBackend({history:true})`) is the real `shared/history-store.js` over the memory backend behind main's IPC shapes |
-| `20g-drafts.js` | crash-safe draft renderer: writer/idle-flush loop over a pluggable backend (the desktop bridge, or the browser's `03d-drafts-idb.js`, PR #233), `applyTakenDraft`, `sameDocContent`; the writer's Web Lock; `__desktopTest.drafts.browser` |
-| `20i-topbar.js` | the header on scroll (`.is-condensed`: the rundown's ruler shed, played as FLIP, two thresholds and the scroll offset put back); the title's full text as its tooltip; and the toolbar's labels (PR #233): each panel toggle's and Write's label width measured with a Range into `--label-w` (the CSS animates the label closing below 1300 / 1000 and a closed one opening on hover or focus, over its neighbours, with a negative margin of the same width — app.css "the toolbar's labels"), `--label-x` to carry an opening pill to a neighbour's edge, and `.is-label-open` for a pointer that isn't a touch |
-| `20j-newtab.js` | the New Tab page, a start screen since #144 ("On air" since #169: the clock band with the most recent script and Continue): its gate, the new documents (blank, a starter, a paste — `adoptNewDocument`), the drop zone, the desktop recents column (DESKTOP-RECENTS, issue #15) |
-| `20k-phone-bar.js` | the phone's bottom bar (#169, ≤760px): Script, Write and the panel tabs, each clicking its header button, with the header badges' counts mirrored |
-| `20s-settings.js` | the Settings dialog (#181): File ▸ Settings (the registry's `settings` action, `src/application/settings-actions.ts`), Ctrl K "Settings", the desktop File ▸ Settings…; Appearance / Editor / Present / You / Help & tips / Data, each control on its old home's key and setter, redrawn on every `"splitpage:pref"` and `storage` event while open |
-| `_starters.js` | the starter scripts (#144): `src/starters/*.json`, stored already migrated and without a docId, bundled by esbuild's JSON loader (`with { type: "json" }`) rather than inlined like the seed; and `LONG_DEMO` (#215), the 30-scene demo written by `tools/make-long-demo.mjs`, opened from the New Tab page's footer and the command menu (`openLongDemo`, 18b-file-menu.js) |
-| `src/bootstrap/wiring/` | typed event and startup wiring: `editor.ts`, `production.ts`, `comments.ts`, `views.ts`, `overlay.ts` and `startup.ts` supply each feature's ports and own its mount lifetime; `_entry.js` calls `wireApp` and hands the result to `startAppWhenReady` |
+| `src/bootstrap/main.ts` | the composition root and build entry: calls `wireLegacyApp` (`src/bootstrap/wiring.ts`), then mounts owners and features in a fixed order (`tests/bootstrap/composition-root.test.ts`) |
+| `src/bootstrap/` | `app.ts` (start and stop), `actions.ts` (the one ordered action list), `native-menu.ts` (the desktop menu's runner), `startup/` (page entry, the initial document, DOM ready, page lifetime) |
+| `src/bootstrap/wiring/` | one module per feature or owner: builds its ports from the real owners and mounts it; the `*-owner(s).ts` modules hold the app's single owners (session, location, preferences, saves, recovery, editor) |
+| `src/bootstrap/wiring/ports/` | shared ports, one module per responsibility (document, editing, effects, files, saving, screen, text, transitions…) |
+| `src/features/<name>/` | one part of the screen each (rows, writer, prompter, tags, broll, file-menu, find, gallery, comments, history, settings, title…); `features/common/` holds stateless DOM helpers |
+| `src/application/session/` | the document session (`document-session.ts`), change sets, merge (`apply-merge.ts`, `merge-incoming.ts`, `session-merge.js`) |
+| `src/application/commands/` | document edits as session commands: cell text, split and join, clipboard, scene length and status, rows, comments, b-roll and production records |
+| `src/application/editing/` | cell editing, the selection, focus memory, the paint guard, row drag, delete confirmation, and the undo stack (`undo/`) |
+| `src/application/save/` | the save coordinator, autosave, file saving and import write-back, save completion, export capture, the status selector |
+| `src/application/recovery/` | crash-safe drafts (`drafts.ts`), the capture schedule, draft restore and resume, the history owner (`history.js`) |
+| `src/application/transitions/` | bringing a document in: new, open, import, restore (`transitions.ts`, `local-files.js`) |
+| `src/application/` (other) | preferences, document location and identity (with the document guard), production index and b-roll records, media and picture store, files and recents, export registry and services, screen and screen state, actions, shortcuts |
+| `src/adapters/` | `richtext/` (HTML in and out of cells), `formats/` (DOCX, PDF, CSV/XLSX, Markdown, the `.splitpage` file), `storage/` (blobs, gallery, history IndexedDB, desktop drafts), `files/`, `desktop/`, `page/`, `identity/`, `production/` |
+| `src/core/` | pure rules: `document/`, `text/` (runs, marks, steps, anchors), `merge/`, `production/`, `migrate.ts` |
+| `src/legacy/app-actions.ts` | the last legacy file: the action registry facade some wiring modules still import |
+| `src/starters/` | the starter scripts and the 30-scene long demo |
+| `src/styles/` | `base.css`, `layout.css`, `components.css` and the `overrides*.css` files that must follow specific feature styles |
 
 **Desktop files** (optional; the web app runs without them):
 
 | File | What is in it |
 | --- | --- |
-| `desktop/main.js` | Electron main: scheme handlers, windows/tabs registries, route-open dedupe, close/quit lifecycle, session restore, recent documents (DESKTOP-RECENTS), doc-id claim table, the history store and its IPC (`shared/history-store.js` over `history-fs-backend.js`), draft headers, file dialogs, server launcher, native menus, test mode |
+| `desktop/main.js` | Electron main: scheme handlers, window and tab creation, route-open dedupe, close/quit lifecycle, session restore, the history store and its IPC (`shared/history-store.js` over `history-fs-backend.js`), draft headers, file dialogs, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](docs/architecture/desktop-build.md) says what each holds |
+| `desktop/desktop-state.js`, `file-service.js`, `doc-claims.js`, `recents.js`, `tab-registry.js`, `window-appearance.js`, `restore-notice.js`, `unsaved-dialog.js`, `update-release.js` | the state file (windows, tabs, recents), opaque file ids and the atomic write, doc-id claims across tabs, the recent documents list, the tab and window maps, theme and window colours, the after-restore notice, the unsaved-changes question's wording, which release an update offers |
 | `desktop/preload.js` | preload for `splitpage://app`: origin-gated `window.splitpageDesktop` bridge |
 | `desktop/ipc-channels.js` | the IPC channel table (IPC-TABLE): every channel's name, direction, argument schema and allowed origins, and the one validator main runs on every inbound message; the preloads get their slice over `splitpage:ipc-table-sync`. Version history is six channels (§3.13) |
 | `desktop/tabstrip-preload.js` | preload for `splitpage://tabstrip` only — no file/draft/history methods (#43) |
@@ -1868,7 +1824,7 @@ the code now lives in the owned folders, and
 | `.claude/skills/run-splitpage-app/driver.ps1` | the test driver: static server + headless Edge over CDP, Windows only (§2) |
 | `.claude/skills/run-splitpage-app/driver.mjs` | the same driver in Node, for the cloud container — same suites, same output (§2) |
 
-Other source: `src/page.html` (shell), `src/app.css` (visual),
+Other source: `src/page.html` (shell), `src/styles/` (visual),
 `src/seed-state.json` (demo document). `docs/help.md` is a build input too —
 `build.mjs`'s `mdToHtml()` renders it into the Help modal at build time. It
 was `README.md` until #80, with developer-only sections fenced off by
@@ -1879,7 +1835,7 @@ visible text on the Help page — keep any inside a fenced code block.
 
 **Choosing a File menu item:** one click listener on `#file-menu`
 (`mountFileMenu` in `src/features/file-menu/mount.ts`, wired by `src/bootstrap/wiring/views.ts`) hands an enabled item's id to `handleFileMenuAction()`
-(`18-local-files.js`), which runs the `onFileMenuChoice()` listeners, closes
+(`src/features/file-menu/local-files.js`), which runs the `onFileMenuChoice()` listeners, closes
 the menu, remembers an export and invokes the action from the registry
 (`docs/architecture/actions.md`). Help, Tour and Set up are actions
 like the rest; the capture-phase listeners `20c-help.js`, `20e-connect.js`
@@ -1891,7 +1847,7 @@ closes the wizard and runs where its shortcut is refused under the wizard,
 as in 3.1. The wizard's own Escape/Tab handling listens in the bubble phase
 instead, since it can sit open, unnoticed, during an unrelated test.
 
-Since #145 the menu is a dropdown (`18b-file-menu.js`), but every item is
+Since #145 the menu is a dropdown (`src/features/file-menu/file-menu.js`), but every item is
 still one `<button data-file-action>` inside `#file-menu`, exactly once. The
 desktop native menu no longer clicks them: `runDesktopMenuCommand` hands the
 command to `nativeMenuRunner()` (`src/bootstrap/native-menu.ts`), which runs a
@@ -1952,7 +1908,7 @@ server/tunnel connections are built in main (#11, §3.13).
 **The header after Direction B (#169).** The row no longer overlaps
 itself at any width (#174): its right column is never narrower than its
 buttons (`minmax(max-content, 1fr)`), and "the header's widths" in
-`app.css` drop what they can as the window narrows — Search to its word
+the stylesheets in `src/styles/` drop what they can as the window narrows — Search to its word
 and then its magnifier (#175), the panel toggles to icon + count below
 1300, the File button to its mark below 1180, Write to its
 icon below 1000, the save status to a dot below 880 — each label staying
