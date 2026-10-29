@@ -57,12 +57,15 @@ if (process.env.SPLITPAGE_USER_DATA) {
   app.setPath("userData", process.env.SPLITPAGE_USER_DATA);
 }
 
+const TEST_MODE = process.env.SPLITPAGE_TEST === "1";
+
 let testDialogAnswers = null;
 let testDialogCursor = 0;
 let testDialogsSeen = 0;
-if (process.env.SPLITPAGE_TEST_DIALOGS) {
+const TEST_DIALOGS_FILE = TEST_MODE ? process.env.SPLITPAGE_TEST_DIALOGS || "" : "";
+if (TEST_DIALOGS_FILE) {
   try {
-    testDialogAnswers = JSON.parse(fs.readFileSync(process.env.SPLITPAGE_TEST_DIALOGS, "utf8"));
+    testDialogAnswers = JSON.parse(fs.readFileSync(TEST_DIALOGS_FILE, "utf8"));
     if (!Array.isArray(testDialogAnswers)) testDialogAnswers = null;
   } catch {
     testDialogAnswers = null;
@@ -76,7 +79,6 @@ function consumeTestDialogAnswer() {
 
 const SKIP_UPDATE_CHECK = process.env.SPLITPAGE_NO_UPDATE_CHECK === "1";
 
-const TEST_MODE = process.env.SPLITPAGE_TEST === "1";
 const testExternalOpens = [];
 const testChromiumLaunches = [];
 const testVideoOpens = [];
@@ -535,7 +537,7 @@ function readAppVersion() {
 }
 
 function updateApiUrl() {
-  return process.env.SPLITPAGE_UPDATE_API || DEFAULT_UPDATE_API;
+  return (TEST_MODE && process.env.SPLITPAGE_UPDATE_API) || DEFAULT_UPDATE_API;
 }
 
 async function fetchPublishedChecksum(assets, assetName) {
