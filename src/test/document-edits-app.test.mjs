@@ -34,7 +34,7 @@ const { setCommentAssignee, toggleResolve } = await import("../features/comments
 const { wordsPerMinuteCommand } = await import("../application/commands/document-settings.ts");
 const { deletePersonCommand } = await import("../application/commands/production-records.ts");
 const { editStamp, documentIdStamp } = await import("../application/commands/save-stamps.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

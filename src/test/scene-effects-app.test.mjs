@@ -11,7 +11,7 @@ const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { setSceneLength } = await import("../features/rows/read-time.js");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

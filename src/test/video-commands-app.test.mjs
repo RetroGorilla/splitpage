@@ -20,7 +20,7 @@ const { liveSession } = await import("../legacy/session-bridge.ts");
 const { addGalleryVideo } = await import("../core/document/gallery.ts");
 const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 const decode = createHeldImageDecode({ dataUrl: PNG, encodedDataUrl: PNG });

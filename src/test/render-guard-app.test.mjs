@@ -35,7 +35,7 @@ const { localFilesOwner, localFileMenuControls } = await import("../bootstrap/wi
 const { openLongDemo } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
+const { openDocument, keepSnapshot } = await import("../bootstrap/wiring/transition-owners.ts");
 
 const REDRAW = "Could not redraw the script after the update. Nothing was lost — press Redraw before you keep editing.";
 const BROKE = "render broke (#418)";

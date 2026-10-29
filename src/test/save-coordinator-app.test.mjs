@@ -17,7 +17,7 @@ const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts
 const homeModule = await import("../legacy/location-bridge.ts");
 const saves = await import("../legacy/save-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

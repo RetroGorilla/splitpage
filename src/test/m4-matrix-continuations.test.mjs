@@ -26,7 +26,7 @@ const { thumbnailsAfterPaste } = await import("../bootstrap/wiring/gallery.ts");
 const annotate = await import("../features/gallery/annotate.js");
 const { addGalleryVideo, rowSlots } = await import("../core/document/gallery.ts");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 function pngDataUrl(red, green, blue) {

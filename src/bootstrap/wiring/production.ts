@@ -19,7 +19,7 @@ import type { TagsPorts } from "../../features/tags/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runFromButton } from "../../legacy/app-actions.ts";
 import { mountTagEntityContainer, mountTags } from "../../features/tags/mount.ts";
-import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
+import { captureOperation, stillOwns } from "./transition-owners.ts";
 import { cssAttr } from "../../features/common/dom.ts";
 import {
   acceptTagGhost,

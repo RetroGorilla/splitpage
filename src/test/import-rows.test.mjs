@@ -20,7 +20,7 @@ const homeModule = await import("../legacy/location-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 if (!window.Element.prototype.scrollIntoView) window.Element.prototype.scrollIntoView = function () {};
 

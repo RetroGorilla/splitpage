@@ -10,7 +10,7 @@ const listDocHistory = (...args) => historyOwner().listDocHistory(...args);
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const { documentSources, openDocument } = await import("../legacy/transition-bridge.ts");
+const { documentSources, openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 const { heldDocument, noteSessionEdit } = await import("../legacy/session-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 

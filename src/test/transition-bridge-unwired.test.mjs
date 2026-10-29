@@ -3,7 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import "./_location-started.mjs";
 
-const bridge = await import("../legacy/transition-bridge.ts");
+const bridge = await import("../bootstrap/wiring/transition-owners.ts");
 const { NO_DESTINATION } = await import("../application/transitions/ports.ts");
 const { currentDocument, liveDocumentPort, liveSession, requestRefresh } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");

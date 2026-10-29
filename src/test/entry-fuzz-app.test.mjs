@@ -19,7 +19,7 @@ const flushEdits = () => undoOwner().flush();
 const { localFilesOwner } = await import("../bootstrap/wiring/local-files.ts");
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

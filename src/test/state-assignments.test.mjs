@@ -16,7 +16,7 @@ const { openLongDemo, startNewScript } = await import("../bootstrap/wiring/file-
 const { seedCheckPasses } = await import("../adapters/page/seed-check.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 
