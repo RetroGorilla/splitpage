@@ -2021,8 +2021,8 @@ under us is the same document with newer bytes.
 **Recent documents (issue #15), contract DESKTOP-RECENTS.** Desktop only.
 `recents: [{absPath, title, at}]` sits beside `windows` in
 `desktop-state.json`, most recent first, capped at 20 and de-duplicated by
-path on read. `recentDocuments` in `desktop/main.js` is the authority once
-the process is up (`loadRecentsAtLaunch` at `whenReady`, and
+path on read. The list held by `createRecents` in `desktop/recents.js` is the
+authority once the process is up (`recents.load()` at `whenReady`, and
 `shellStateAsV2()` carries it into every session write, because that object
 REPLACES the file). It is recorded on `deliverOpenFile` and refreshed on
 every `set-document-state` report of a file tab, and only a real change
