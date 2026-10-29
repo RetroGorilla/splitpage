@@ -25,7 +25,7 @@ import { locationStarted, startLocation } from "../../src/bootstrap/wiring/locat
 import { preferencesStarted, startPreferences } from "../../src/legacy/preferences-bridge.ts";
 import { shotHidingPorts, shotHidingStarted, startShotHiding } from "../../src/bootstrap/wiring/shot-hiding.ts";
 import { undoPorts, startUndo, undoStarted, undoSessionPort, routeUndoReplays } from "../../src/bootstrap/wiring/undo.ts";
-import { effectsStarted, startEffects } from "../../src/legacy/effects-bridge.ts";
+import { effectsStarted, startEffects } from "../../src/bootstrap/wiring/effects-owner.ts";
 import type { EffectPorts } from "../../src/application/effects/ports.ts";
 import { recoveryStarted } from "../../src/bootstrap/wiring/recovery-owners.ts";
 import { mergeStarted } from "../../src/bootstrap/wiring/document-merge.ts";

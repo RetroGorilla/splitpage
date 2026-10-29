@@ -1,5 +1,5 @@
-import type { EffectPorts, Notice, NoticeKind } from "../application/effects/ports.ts";
-import { imagesLeftOutText } from "../application/export/diagnostics.ts";
+import type { EffectPorts, Notice, NoticeKind } from "../../application/effects/ports.ts";
+import { imagesLeftOutText } from "../../application/export/diagnostics.ts";
 
 let started: EffectPorts<Element> | null = null;
 let stopped = false;
