@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 
 const seed = migrateRows(JSON.parse(SEED_TEXT));

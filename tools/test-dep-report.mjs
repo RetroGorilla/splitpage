@@ -535,8 +535,8 @@ eq("the bridge may import the adapter and parse", htmlCells({
   "src/legacy/richtext.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nimport { decode } from "../adapters/richtext/decode.ts";\nexport const r = [createRichText(), decode("")];\n'
 }), []);
 eq("another legacy module importing the adapter is reported", htmlCells({
-  "src/legacy/document-ports.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nexport const r = createRichText();\n'
-}), ["src/legacy/document-ports.ts:1 src/adapters/richtext/richtext.ts"]);
+  "src/bootstrap/document-ports.ts": 'import { createRichText } from "../adapters/richtext/richtext.ts";\nexport const r = createRichText();\n'
+}), ["src/bootstrap/document-ports.ts:1 src/adapters/richtext/richtext.ts"]);
 eq("a numbered legacy module importing the decoder is reported", htmlCells({
   "src/js/05-x.js": 'import { decode } from "../adapters/richtext/decode.ts";\nexport const d = decode;\n'
 }), ["src/js/05-x.js:1 src/adapters/richtext/decode.ts"]);

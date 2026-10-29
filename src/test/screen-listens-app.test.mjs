@@ -9,7 +9,7 @@ await bootApp();
 const { adoptReplacement, liveSession, onSessionChange, runCommand, sessionStamps, stampDocument } = await import("../bootstrap/wiring/session-owner.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
 const { editStamp } = await import("../application/commands/save-stamps.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
 const { registerTagCommand } = await import("../application/commands/production-records.ts");

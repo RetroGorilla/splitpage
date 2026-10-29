@@ -290,7 +290,7 @@ No test coverage found: INV-05, INV-08, INV-50. Partial coverage: INV-11, INV-12
 ### INV-31 — A `.splitpage` file is the migrated state, pictures inline
 
 - **Behaviour:** A `.splitpage` file is exactly `inlineBlobs(migrateRows(state))`: every picture's bytes are inline, with no envelope and no renamed or added fields. A reader gets image refs back through `migrateRows()`.
-- **Tests:** `src/test/formats.test.mjs` (".splitpage has no envelope…", ".splitpage round-trips the whole document, byte for byte", "buildSplitpage never writes an unmigrated document", ".splitpage carries its pictures inline…"); `src/test/state-fields.test.mjs` ("a .splitpage save carries every registry field", "INV-04: a field added to STATE_FIELDS survives…"); `tests/legacy/document-ports.test.ts` ("a save straight after a load finds every picture the load decoded").
+- **Tests:** `src/test/formats.test.mjs` (".splitpage has no envelope…", ".splitpage round-trips the whole document, byte for byte", "buildSplitpage never writes an unmigrated document", ".splitpage carries its pictures inline…"); `src/test/state-fields.test.mjs` ("a .splitpage save carries every registry field", "INV-04: a field added to STATE_FIELDS survives…"); `tests/bootstrap/document-ports.test.ts` ("a save straight after a load finds every picture the load decoded").
 - **Owner:** `src/adapters/formats` · **Milestone:** 5 · **Class:** keep
 - **Replacement:** — (plan §6: format compatibility is held by fixtures).
 - **Acceptance:** the named tests pass against the registered `.splitpage` codec, and 3.1 project fixtures open unchanged.
