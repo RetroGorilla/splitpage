@@ -4,7 +4,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import type { SidePanels } from "../../src/application/side-panels.ts";
 
-import { startSidePanels } from "../../src/legacy/panels-bridge.ts";
+import { startSidePanels } from "../../src/bootstrap/wiring/ports/panels.ts";
 
 test("shared side panels close the current owner across restarts", () => {
   const panels = portSidePanels;

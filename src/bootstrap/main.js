@@ -7,6 +7,7 @@ import { mountPageEntry } from "./startup/page-entry.ts";
 import { mountDocumentIdentityOwner } from "./wiring/document-identity.ts";
 import { mountSessionMergeOwner } from "./wiring/session-merge.ts";
 import { mountHistoryOwner } from "./wiring/history.ts";
+import { mountScreenStateOwner } from "./wiring/screen-state.ts";
 import { mountSceneStatusFeature } from "./wiring/scene-status.ts";
 import { mountHideShotFeature } from "./wiring/hide-shot.ts";
 import { mountScriptPlaceFeature } from "./wiring/side-panels.ts";
@@ -56,6 +57,7 @@ try {
   console.error(error);
 }
 if (wiring) {
+  mountScreenStateOwner();
   mountPageEntry();
   mountSceneStatusFeature();
   mountHideShotFeature();

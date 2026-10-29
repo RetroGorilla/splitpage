@@ -21,7 +21,7 @@ const { sceneStatusCommand } = await import("../application/commands/scene-statu
 const { sceneLengthCommand } = await import("../application/commands/scene-length.ts");
 const { targetLengthCommand } = await import("../application/commands/document-settings.ts");
 const { openProductionPanel } = await import("../features/tags/panels.js");
-const { sidePanels } = await import("../legacy/panels-bridge.ts");
+const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { mountPanelListenersFeature, stopPanelListenersFeature } = await import("../bootstrap/wiring/panels.ts");
