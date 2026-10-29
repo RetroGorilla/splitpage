@@ -36,7 +36,7 @@ breakdown for props/locations/cast/VFX/sound.
   `sw.js` — whose cache name is stamped from `VERSION`, which is what makes a
   deploy take effect on the next load instead of the one after it. `sw.js` is
   stamped in place rather than generated from `src/`, because a worker needs
-  its own URL so it cannot be inlined, and `package.mjs`, the `Dockerfile` and
+  its own URL so it cannot be inlined, and `tools/package.mjs` and
   `desktop/stage.mjs` all copy the repo-root file out verbatim. `--check`
   reports on both, separately, so two stale outputs are not found one at a
   time.
@@ -44,7 +44,7 @@ breakdown for props/locations/cast/VFX/sound.
   scene status, typing, split, join, cut and paste are commands in
   `src/application/commands/`, run through `src/bootstrap/wiring/session-owner.ts`.
   Every other writer still assigns into `S.state` and calls `markDirty()`.
-  [docs/architecture/session.md](docs/architecture/session.md) describes the
+  [docs/architecture/session.md](architecture/session.md) describes the
   session, the effect scheduler and the command shape as built.
 - **The shipped app must stay one self-contained file.** Save writes
   `"<!doctype html>" + document.documentElement.outerHTML` with the document
@@ -54,8 +54,8 @@ breakdown for props/locations/cast/VFX/sound.
   guide, and a build input — it becomes the in-app Help page), `start.mjs`
   with thin `start.bat`/`start.sh`
   wrappers (local launcher), `update.mjs` (says whether a newer release
-  exists; installs nothing), `server/server.js` + `Dockerfile` (hosted mode),
-  `package.mjs` (the portable zip), `desktop/` (the Electron app and its NSIS
+  exists; installs nothing), `server/server.js` (hosted mode),
+  `tools/package.mjs` (the portable zip), `desktop/` (the Electron app and its NSIS
   installers). #75 deleted the rest of the packaging: `installer/` (the
   IExpress setup), `tools/fetch-runtime.mjs`, `start.ps1` (a third HTTP server
   implementation), `uninstall.*`, and the launcher's in-place self-update.
@@ -89,7 +89,7 @@ Rebuild (`node build.mjs`) before testing any `src/` change; a stale
 `index.html` looks exactly like a change that had no effect. Which tests a
 change needs, and when the full browser regression runs (milestone and
 release gates), is the table in
-[docs/architecture/testing.md](docs/architecture/testing.md#what-to-run-for-which-change);
+[docs/architecture/testing.md](architecture/testing.md#what-to-run-for-which-change);
 how to drive the suites, and their gotchas, is
 `.claude/skills/run-splitpage-app/SKILL.md`.
 
@@ -123,7 +123,7 @@ request: lint, types, the dependency and comment gates, the build and its
 `sw.js` stamp, every discovered unit, desktop and tool test
 (`npm run test:all`), and the smoke and CSP browser suites
 (`01-core.txt`, `52-csp.txt`).
-[docs/architecture/testing.md](docs/architecture/testing.md#ci) lists the
+[docs/architecture/testing.md](architecture/testing.md#ci) lists the
 jobs. A separate job, `desktop-smoke`, runs `desktop/test/smoke.mjs
 --only-target dev` against an Xvfb display (#89) on pushes to `main` — that
 is where `main.js` and `preload.js` are actually executed, ~600 checks of it.
@@ -134,27 +134,10 @@ regression: every suite through `tools/run-suites.mjs` on Linux and
 `run-tests.ps1` on Windows, plus the packaged targets, runs at milestone and
 release gates.
 
-Since #80 CI also **produces** the app. It builds `index.html` and uploads
-it, with `sw.js`, `manifest.webmanifest`, the icons, `VERSION`, `server/`
-and `Dockerfile.prebuilt`, as the `splitpage-app` artifact, arranged so the
-download is itself a working `docker build -f Dockerfile.prebuilt` context
-(DEPLOY.md §8). The upload is the last step, so an artifact only exists for a
-run whose checks all passed.
-
-The owner's server does not use the artifact. `deploy.sh` pulls `main` and
-builds the root `Dockerfile`, which is two-stage: `npm ci` + `node build.mjs`
-in a `node:24-alpine` build stage, then only the built `index.html`/`sw.js`,
-the static files, `VERSION` and `server/` in the runtime stage. Docker is not
-on the Windows machine, so `.github/workflows/docker.yml` is where that image
-is really built: `bash -n` and shellcheck over `deploy.sh`, a legacy-builder
-`docker build`, then the container started as `99:100` with the settings
-`deploy.sh` insists on, checked through `/api/health` (VERSION, `links`,
-`linksPersist`), its own HEALTHCHECK and an owner sign-in that must survive a
-restart. A second job in the same workflow, `prebuilt`, builds the app, copies
-only the artifact's files (the list `tools/artifact-files.mjs` reads from
-`ci.yml`) into an empty folder and builds and starts `Dockerfile.prebuilt`
-from there. The workflow runs only when a deploy-relevant file changes (its
-`paths:`).
+Since #80 CI also **produces** the app. It builds `index.html` and uploads it,
+with `sw.js`, `manifest.webmanifest`, the icons, `VERSION` and `server/`, as the
+`splitpage-app` artifact. The upload is the last step, so an
+artifact only exists for a run whose checks all passed.
 
 **`.githooks/` is gone** (#80). It held a pre-commit hook that did two jobs:
 it re-ran `build.mjs --check` against the staged tree so a commit could not
@@ -368,9 +351,8 @@ per document in `DATA_DIR`.
 - **Two shapes, one file.** No `JOIN_PIN`: open, everyone the owner, meant
   for behind Cloudflare Access or a VPN. `JOIN_PIN` set: a short code on a
   LAN (the desktop app's `--host`, `start.mjs`), or — with a long random key,
-  `PERSIST_LINKS=1` and TLS in front (Adam's Unraid box behind a Cloudflare
-  tunnel, NO Access) — the owner's key to a server that faces the internet on
-  its own, with guests on per-document invite links. The gate at the top of
+  `PERSIST_LINKS=1` and TLS in front — the owner's key to a server that faces
+  the internet on its own, with guests on per-document invite links. The gate at the top of
   `handleApi()` is the one place that decides what a token reaches.
 - `JOIN_PIN` → the **owner token**: sha256 + `timingSafeEqual`, refusal is
   `401 {error:"pin-required"}` JSON. 10 wrong guesses/minute per address;
@@ -500,8 +482,7 @@ per document in `DATA_DIR`.
 - Document ids whitelisted (`^[a-z0-9][a-z0-9-]{0,63}$`), not sanitised.
 - Writes are temp-file-plus-rename, serialised per doc id (`withDocLock`).
   `Cache-Control: no-store` on every response except a blob's.
-- **What an internet-facing server must not do** (found reviewing for the
-  Unraid deployment). A request line of `GET //` threw in `new URL()`
+- **What an internet-facing server must not do.** A request line of `GET //` threw in `new URL()`
   outside every handler — an uncaught exception, one request from anyone
   took the process down; now 400. A token or launch header with a non-ASCII
   byte reached `timingSafeEqual` with mismatched BYTE lengths (the string
@@ -1359,7 +1340,7 @@ File ▸ Export app data carries them (`settingsAppData()`).
 
 ## 5. Invariants — break these and data goes quietly wrong
 
-Each rule below has a row in [docs/architecture/invariants.md](docs/architecture/invariants.md) (tests, 4.0 owner, milestone, and whether code will absorb it). Change the two together.
+Each rule below has a row in [docs/architecture/invariants.md](architecture/invariants.md) (tests, 4.0 owner, milestone, and whether code will absorb it). Change the two together.
 
 1. **Edit with the Edit tool, one site at a time.** Never in-place regex
    substitution (`sed`/`perl -pi`) on `index.html` — no git to restore from.
@@ -1375,9 +1356,9 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
 3. **Never touch text inside a tag** (§3.3): the model's edits keep a
    comment or link over all of a tag or none of it, and find/replace never
    matches inside one.
-4. Absorbed in milestone 2.5: see INV-04 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-04--every-top-level-field-survives-migration-and-merge).
+4. Absorbed in milestone 2.5: see INV-04 in [docs/architecture/invariants.md](architecture/invariants.md#inv-04--every-top-level-field-survives-migration-and-merge).
 5. **Gate script-only behaviour on `isScriptCell()`** (§3.5).
-6. Absorbed in milestone 3: see INV-06 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-06--no-document-wide-work-per-keystroke).
+6. Absorbed in milestone 3: see INV-06 in [docs/architecture/invariants.md](architecture/invariants.md#inv-06--no-document-wide-work-per-keystroke).
 7. **Repaint a row, don't re-render the document** for a single-row
    change: `renderRow(rowId)`, which repaints only the parts whose markup
    changed and never a field whose text did not (§3.16). `cycleRowStatus()`
@@ -1439,11 +1420,11 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
     checks every panel against both modes. Writer and Present sit at
     `z-index: 145`, above panels (140), below modals (150) and toasts (200).
 17. **A hint about the document must never edit the document** (§3.8).
-18. Absorbed in milestone 3: see INV-18 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-18--a-comment-is-anchored-by-its-mark). A new path that moves words between rows is a session command that declares what it changes (`docs/architecture/session.md`); the scene-level paths of 05g, 05h and 06-rows still call `syncCommentAnchors(state)` themselves.
+18. Absorbed in milestone 3: see INV-18 in [docs/architecture/invariants.md](architecture/invariants.md#inv-18--a-comment-is-anchored-by-its-mark). A new path that moves words between rows is a session command that declares what it changes (`docs/architecture/session.md`); the scene-level paths of 05g, 05h and 06-rows still call `syncCommentAnchors(state)` themselves.
 19. **A full-screen overlay must own the focus and the stacking, not just
     the pixels.** `.tag-ghost-hint` raised to 146; a `focusin` trap on
     `#writer` lets modals/toasts through.
-20. Absorbed in milestone 4: see INV-20 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-20--two-save-buttons-one-save-state). Both Save buttons render one view from `saveStatus` (`src/application/save/status.ts`) through `setSaveButtons()`/`mirrorFileChipToWriter()`.
+20. Absorbed in milestone 4: see INV-20 in [docs/architecture/invariants.md](architecture/invariants.md#inv-20--two-save-buttons-one-save-state). Both Save buttons render one view from `saveStatus` (`src/application/save/status.ts`) through `setSaveButtons()`/`mirrorFileChipToWriter()`.
 21. **There is one place a field gets split, not two** (§3.10) —
     `splitRowFieldCore()`.
 22. **Scroll to the caret's own rect, never the cell's**, when the cell
@@ -1523,7 +1504,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
     serverUrl, tunnel}` and nothing else, and a token only ever sits in
     main's memory between a route-open and the new tab's boot. The page
     itself no longer holds any of them.
-    Held in milestone 4: see INV-29 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-29--connection-secrets-never-persist-in-shared-places).
+    Held in milestone 4: see INV-29 in [docs/architecture/invariants.md](architecture/invariants.md#inv-29--connection-secrets-never-persist-in-shared-places).
 30. **The first-run setup wizard may only appear over a genuinely pristine
     copy of the app.** `<meta name="splitpage-seed-check">` (stamped by
     `build.mjs`, checked by `seedCheckPasses()`) plus
@@ -1551,7 +1532,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
     Never in the seed, `#state-data`, or Standalone HTML export.
     `SCHEMA_VERSION` deliberately not bumped for it. A missing id must fail
     as *unique*, never as *shared*.
-36. Absorbed in milestone 4: see INV-36 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-36--the-id-follows-the-save-target). The transition API is the only writer of `docId` (`docs/architecture/saving.md`); "already open" is still decided by path or server doc id, never by `docId`.
+36. Absorbed in milestone 4: see INV-36 in [docs/architecture/invariants.md](architecture/invariants.md#inv-36--the-id-follows-the-save-target). The transition API is the only writer of `docId` (`docs/architecture/saving.md`); "already open" is still decided by path or server doc id, never by `docId`.
 37. **`sha256Hex` and `deriveDocId` are frozen.** Changing either
     re-identifies every legacy file and every duplicate-replacement id,
     splitting history on the next open.
@@ -1565,7 +1546,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
 39. **`pushSnapshot()` captures synchronously, and no save ever waits on
     history.** A restore overwrites the document only after its "Before
     restoring" backup is stored or an explicit second confirm.
-    Held in milestone 4: see INV-39 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-39--snapshots-are-captured-synchronously-saves-never-wait-on-history).
+    Held in milestone 4: see INV-39 in [docs/architecture/invariants.md](architecture/invariants.md#inv-39--snapshots-are-captured-synchronously-saves-never-wait-on-history).
 40. **A crash draft is deleted only when its tab becomes clean, or on an
     explicit user decision** — never on crash, kill, renderer loss,
     session-end, quit, or restore. A discard writes a tombstone before
@@ -1575,12 +1556,12 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
     restore, when that page is clean, never by another tab's save, never by
     a restore that failed — plus the store's own bounds (30 days, 20 drafts,
     64 MiB). A restore never saves.
-    Held in milestone 4: see INV-40 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-40--a-crash-draft-is-removed-only-when-clean-or-by-the-user).
+    Held in milestone 4: see INV-40 in [docs/architecture/invariants.md](architecture/invariants.md#inv-40--a-crash-draft-is-removed-only-when-clean-or-by-the-user).
 41. **Restoring a draft never writes the user's file by itself.**
     "Unchanged on disk" is decided by content, never mtime. The draft
     header is built only by main from allowlisted scalar fields; draft
     bodies are written with fsync and two generations.
-    Held in milestone 4: see INV-41 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-41--restoring-a-draft-never-writes-the-users-file).
+    Held in milestone 4: see INV-41 in [docs/architecture/invariants.md](architecture/invariants.md#inv-41--restoring-a-draft-never-writes-the-users-file).
 42. **Each tab is its own page, and the main process is the only authority
     on tab identity, unsaved state, and what is already open** (§3.13).
     Moving a tab moves its `WebContentsView`, never copies it.
@@ -1653,7 +1634,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
     `noAutoSave`) calls `haltAutoSave()`, and only an explicit Save starts
     the automatic writes again (#41). A failed or conflicted automatic save
     halts too, rather than repeating a toast or a modal every two seconds.
-    Held in milestone 4: see INV-51 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-51--autosave-writes-only-where-the-user-sent-the-document-only-reviewed-work-only-when-on).
+    Held in milestone 4: see INV-51 in [docs/architecture/invariants.md](architecture/invariants.md#inv-51--autosave-writes-only-where-the-user-sent-the-document-only-reviewed-work-only-when-on).
 52. **No durable record names a blob its store does not already hold
     durably** (#82). An image is uploaded (and fsynced) before anything
     that refers to it by sha is written; the list of what a record names
@@ -1669,9 +1650,9 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
       stash carries non-durable blobs as `data:` URIs; app-data import
       stores blobs before snapshots (#49); file writers inline everything
       (#31, #32). Capture stays synchronous (#39) — only the job awaits.
-    Held in milestone 4: see INV-52 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-52--no-durable-record-names-a-blob-its-store-lacks).
+    Held in milestone 4: see INV-52 in [docs/architecture/invariants.md](architecture/invariants.md#inv-52--no-durable-record-names-a-blob-its-store-lacks).
 
-53. Absorbed in milestone 3: see INV-53 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-53--every-edit-is-recorded-once-nothing-else-is-recorded). The seven session commands record themselves; every other edit path still ends in `markDirty()`, and a change that is not somebody's edit must say so (the ledger row lists how).
+53. Absorbed in milestone 3: see INV-53 in [docs/architecture/invariants.md](architecture/invariants.md#inv-53--every-edit-is-recorded-once-nothing-else-is-recorded). The seven session commands record themselves; every other edit path still ends in `markDirty()`, and a change that is not somebody's edit must say so (the ledger row lists how).
 54. **A b-roll key's id is one line's** (`docs/DOCUMENT-MODEL.md` §3.3):
     `state.brollShots` records are found by it, so two keys sharing one
     make two lines claim one shot. A path that brings a key into the
@@ -1759,7 +1740,7 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
 62. **Collaborate's credentials** — Collaborate is gone from the app, and
     the server-only keys it stored (`splitpage-server-token`,
     `splitpage-server-tokens`, `splitpage-review-key`, `splitpage-invites`)
-    are never read again. See INV-62 in [docs/architecture/invariants.md](docs/architecture/invariants.md#inv-62--collaborate-credentials-stay-in-this-browser-per-server).
+    are never read again. See INV-62 in [docs/architecture/invariants.md](architecture/invariants.md#inv-62--collaborate-credentials-stay-in-this-browser-per-server).
 ---
 
 ## 6. Map of the source
@@ -1767,8 +1748,8 @@ Each rule below has a row in [docs/architecture/invariants.md](docs/architecture
 `src/js/` is gone: every numbered module moved into the owned folders below
 or was removed with the server and collaboration features. The old module
 map is in git history (`git show 84282e24:HANDOFF.md`). For a feature,
-[feature-map.md](docs/architecture/feature-map.md) lists its files, wiring,
-shared ports, actions and tests; [AGENTS.md](AGENTS.md) has the layer rules.
+[feature-map.md](architecture/feature-map.md) lists its files, wiring,
+shared ports, actions and tests; [AGENTS.md](../AGENTS.md) has the layer rules.
 
 | Folder | What is in it |
 | --- | --- |
@@ -1793,7 +1774,7 @@ shared ports, actions and tests; [AGENTS.md](AGENTS.md) has the layer rules.
 
 | File | What is in it |
 | --- | --- |
-| `desktop/main.js` | Electron main: scheme handlers, window and tab creation, route-open dedupe, close/quit lifecycle, session restore, the history store and its IPC (`shared/history-store.js` over `history-fs-backend.js`), draft headers, file dialogs, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](docs/architecture/desktop-build.md) says what each holds |
+| `desktop/main.js` | Electron main: scheme handlers, window and tab creation, route-open dedupe, close/quit lifecycle, session restore, the history store and its IPC (`shared/history-store.js` over `history-fs-backend.js`), draft headers, file dialogs, native menus, updates, test mode. The pieces below were split out of it; [desktop-build.md](architecture/desktop-build.md) says what each holds |
 | `desktop/desktop-state.js`, `file-service.js`, `doc-claims.js`, `recents.js`, `tab-registry.js`, `window-appearance.js`, `restore-notice.js`, `unsaved-dialog.js`, `update-release.js` | the state file (windows, tabs, recents), opaque file ids and the atomic write, doc-id claims across tabs, the recent documents list, the tab and window maps, theme and window colours, the after-restore notice, the unsaved-changes question's wording, which release an update offers |
 | `desktop/preload.js` | preload for `splitpage://app`: origin-gated `window.splitpageDesktop` bridge |
 | `desktop/ipc-channels.js` | the IPC channel table (IPC-TABLE): every channel's name, direction, argument schema and allowed origins, and the one validator main runs on every inbound message; the preloads get their slice over `splitpage:ipc-table-sync`. Version history is six channels (§3.13) |

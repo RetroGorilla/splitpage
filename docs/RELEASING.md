@@ -1,13 +1,14 @@
-# Running Splitpage
+# Running and releasing Splitpage
 
-Splitpage's server serves the built app as static files and nothing else. It
-has no API, no data folder and no settings you need to set.
+This file covers running the app locally, building the desktop installers and
+publishing releases. Splitpage's server serves the built app as static files and
+nothing else. It has no API, no data folder and no settings you need to set.
 
 ---
 
 ## 1. Serving the app
 
-Without Docker, from the project folder:
+From the project folder:
 
 ```bash
 node start.mjs
@@ -22,133 +23,13 @@ server reads three settings, all optional:
 | `HOST` | `0.0.0.0` | Address to listen on |
 | `STATIC_DIR` | `public/` beside `server/` | Folder of files to serve |
 
-With Docker, from a checkout:
-
-```bash
-docker build -t splitpage .
-docker run -d --name splitpage --restart unless-stopped -p 8791:8791 splitpage
-```
-
-or `docker compose up -d --build` on a machine that has compose. The image
-healthcheck asks `/` for a 200.
-
-From the CI build (Actions, the run, *Artifacts*: `splitpage-app`), unzipped,
-`Dockerfile.prebuilt` copies the built files in and compiles nothing:
-
-```bash
-docker build -f Dockerfile.prebuilt -t splitpage .
-```
-
-The root `Dockerfile` needs the repository's source, so it does not work on
-the artifact.
-
 ---
 
-## 2. Deploying with deploy.sh
-
-This section is for the unRAID box that hosts the app, at
-`/mnt/user/appdata/splitpage/`, a clone of `RetroGorilla/splitpage`.
-
-### 2.1 Getting the code
-
-The repository is private, so the box pulls it over SSH with a read-only
-deploy key. Its private half lives at `/boot/config/ssh/root/splitpage_deploy`
-(the unRAID USB stick keeps root's SSH settings, so it survives reboots):
-
-```bash
-ssh-keygen -t ed25519 -N "" -C "oldman splitpage deploy" -f /boot/config/ssh/root/splitpage_deploy
-cat >> /boot/config/ssh/root/config <<'EOF'
-
-Host github-splitpage
-    HostName github.com
-    User git
-    IdentityFile /boot/config/ssh/root/splitpage_deploy
-    IdentitiesOnly yes
-EOF
-cat /boot/config/ssh/root/splitpage_deploy.pub
-```
-
-Add the printed public key on GitHub under `RetroGorilla/splitpage` →
-**Settings** → **Deploy keys**, with **Allow write access** unticked. Then
-check it with `ssh -T git@github-splitpage`. The clone uses that host name:
-
-```bash
-git clone git@github-splitpage:RetroGorilla/splitpage.git /mnt/user/appdata/splitpage
-```
-
-If the folder already exists and is not empty, move it aside rather than
-deleting it: `mv /mnt/user/appdata/splitpage /mnt/user/appdata/splitpage-old`.
-
-### 2.2 Deploying
-
-```bash
-cd /mnt/user/appdata/splitpage
-./deploy.sh
-```
-
-It, in order:
-
-1. pulls the latest `main` from GitHub (and starts over if that changed
-   `deploy.sh` itself);
-2. keeps the version running now as the image `splitpage:previous`, only if
-   it answers `/`;
-3. builds the new image. **The server stays up during the build.**
-4. stops the server;
-5. starts the new container;
-6. waits up to 60 seconds for `/` to answer, then shows the log.
-
-It refuses to run, with a red **STOPPED** line saying what to fix, if `.env`
-sets `PORT`, `HOST` or `STATIC_DIR`, if any setting appears twice, or if
-`.dockerignore` no longer excludes `.env`. `.env` itself is optional.
-
-To go back to the previous version:
-
-```bash
-./deploy.sh rollback
-```
-
-The code folder keeps the newer commit, so the next `./deploy.sh` builds it
-again. Get the problem fixed on GitHub first. Anyone with Splitpage open
-should reload it after a deploy.
-
-### 2.3 Traps
-
-- **`git remote`** should show `git@github-splitpage:RetroGorilla/splitpage.git`.
-  If it shows `https://` or `git@github.com:`, run
-  `git remote set-url origin git@github-splitpage:RetroGorilla/splitpage.git`.
-- **`git pull` refuses** (a deploy stops at step 1). Someone edited files in
-  the code folder on the server. Nothing was deployed. `git status` lists the
-  edits; `git stash push -m server-edits` sets them aside, kept, not deleted.
-  If it still refuses, stop and ask. Do not reach for `git reset`.
-- **`Permission denied (publickey)`** means the deploy key step did not take,
-  or the `Host github-splitpage` block has a typo.
-- **`Permission denied` running `./deploy.sh`** means the file lost its
-  executable mark. `bash deploy.sh` does the same thing.
-- **`$'\r': command not found`** means `deploy.sh` was saved with Windows line
-  endings. `git checkout -- deploy.sh` puts GitHub's copy back.
-- **Run it from the project folder.** `git` and `./deploy.sh` only work there.
-
-### 2.4 When something is broken
-
-```bash
-docker ps -a | grep splitpage       # running, or exited?
-docker logs --tail 100 splitpage    # the actual error
-```
-
-| Symptom | What to do |
-| --- | --- |
-| `./deploy.sh` stops with **STOPPED:** | The line says which setting in `.env` is wrong. Nothing was changed. |
-| Deploy ends *did not come up healthy* | Read the log it printed, then `./deploy.sh rollback`. |
-| *Bad gateway* / 502 at the address | The container isn't running (`docker ps -a`), or the address points at the wrong port. Port `8791` is the one the box publishes. |
-| Container exited straight away | Read the log. |
-
----
-
-## 3. Desktop installers (Windows)
+## 2. Desktop installers (Windows)
 
 Splitpage is available as a standalone desktop application built with Electron 44
 and packaged with electron-builder 26. Starting with 2.0.0, these installers are
-part of the release recipe (§4) alongside the portable zip.
+part of the release recipe (§3) alongside the portable zip.
 
 ### Building the installers
 
@@ -214,7 +95,7 @@ overrides detection, in that order; unknown values fail.
 
 ### Where they differ from the IExpress recipe that used to be here
 
-Until 3.0 there was a second Windows installer: `package.mjs --installer` wrapped
+Until 3.0 there was a second Windows installer: `tools/package.mjs --installer` wrapped
 `installer/install.ps1`, `installer/uninstall.ps1` and a downloaded `node.exe`
 in a self-extracting archive built by `iexpress.exe`. It had been deprecated
 since 2.0.0 and unpublished since then; it is **deleted** now, along with
@@ -229,9 +110,8 @@ Electron-built installers, which ship instead:
   portable Node has to be downloaded and packed
 - Support both x64 and ARM64 architectures with native binaries
 
----
 
-## 4. Publishing a release to the mirror
+## 3. Publishing a release to the mirror
 
 **From CI.** Pushing a `v<version>` tag on the commit that bumped `VERSION`
 runs `.github/workflows/release.yml` on a Windows runner: the two builds
@@ -243,17 +123,17 @@ review it and press Publish. Without the secret the files are left on the
 run as an artifact to upload by hand, as in steps 1–3 below.
 
 **By hand.** When it's time to cut a new release for users to update to, build the two pieces
-separately — the portable zip from `package.mjs`, and the Electron installers
+separately — the portable zip from `tools/package.mjs`, and the Electron installers
 from `desktop/`:
 
 ```bash
-node package.mjs
+node tools/package.mjs
 cd desktop && npm run dist:win
 ```
 
-`node package.mjs` writes `dist/splitpage-<version>.zip` and nothing else — it
+`node tools/package.mjs` writes `dist/splitpage-<version>.zip` and nothing else — it
 has no flags left. `npm run dist:win` runs `stage.mjs`, `electron-builder`, and
-finishes with `verify-dist.mjs` (§3); do not publish if it does not print ALL
+finishes with `verify-dist.mjs` (§2); do not publish if it does not print ALL
 PASS.
 
 Ship the zip every release. It is the portable app, and it is also what a
@@ -280,7 +160,7 @@ On the GitHub releases mirror repository (`RetroGorilla/splitpage-releases`):
 
 The Electron installers are unsigned, so Windows SmartScreen will warn on first
 run — click "More info" then "Run anyway" to proceed. This is expected until
-code signing is set up (see §3, "What's NOT verified").
+code signing is set up (see §2, "What's NOT verified").
 
 The 2.0.0 installer also removes a detected 1.0.x install from
 `%LOCALAPPDATA%\Programs\Splitpage` before installing, keeping the shared-session
@@ -295,6 +175,6 @@ compiled into `update.mjs` and `desktop/main.js`, and nothing else. `release.jso
 used to be copied into each release's `.splitpage-release.json` as an
 `updateApi` field that the next update check would follow; #64 made that field
 ignored (a release naming where the next release comes from is a redirect
-nobody could revoke) and #75 stopped writing it. To move the mirror, change the
+nobody could revoke) and #75 stopped writing it, and the file itself is gone. To move the mirror, change the
 default in those two files and cut a release from it.
 

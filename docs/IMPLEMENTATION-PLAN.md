@@ -20,7 +20,7 @@
 | Lane models | Sonnet by default; Opus for the areas listed in section 2; every review is Opus (Adam, 2026-10-07) |
 | Milestones 4–7 | Re-scoped and approved by Adam, 2026-10-07: milestone 5 in full with the registry, milestone 6 with the bounded CSS split, milestone 7 narrowed to explicit wiring and the named legacy initializer shim (sections 1, 5, 7 and 8); the approved page is [milestones-4-7-rescope.md](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestones-4-7-rescope.md) |
 | ARM64 | A Windows ARM64 device is available; native ARM64 runtime checks run on it at the 4.0 release gate and the release row stands as written |
-| Invariants | Ledger in `docs/architecture/invariants.md`; `HANDOFF.md` section 5 stays in step with it (milestone 0) |
+| Invariants | Ledger in `docs/architecture/invariants.md`; `docs/HANDOFF.md` section 5 stays in step with it (milestone 0) |
 
 ## 1. Outcome and release boundaries
 
@@ -46,7 +46,7 @@ No UI framework replacement, editor-engine replacement, persisted document schem
 
 ### Branches and small changes
 
-1. Read applicable repository instructions, `docs/help.md`, `HANDOFF.md` section 5, build/packaging scripts and tests for the area being changed. Resolve stale prose against executable source and fixtures.
+1. Read applicable repository instructions, `docs/help.md`, `docs/HANDOFF.md` section 5, build/packaging scripts and tests for the area being changed. Resolve stale prose against executable source and fixtures.
 2. Use the existing `4.0-development` branch, or create it from current `main` if absent. Preserve unrelated working changes; use a clean worktree where necessary.
 3. Keep PRs focused on one ownership boundary. Separate a demonstrated behavioral repair from a broad extraction. Keep the application runnable after each PR.
 4. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more bug fixes, and nothing is forward-merged from it. A bug that also exists on 3.1.x is fixed on `4.1-development` instead, as [review.md](architecture/review.md#2-where-bugs-get-fixed) describes. A bug in code that a pending step is moving is fixed after that move lands, in the module that now owns it, with its regression test; do not restore deleted implementations or maintain two competing paths. The closed 3.1.x fix branches (`fix/274-overlay-commands`, `fix/276-save-during-load`, `fix/278-290-ids-and-nested-links`, `fix/280-282-anchor-tags-and-cue-retitle`, `fix/281-283-md-null-href-and-person-merge`, `test/293-history-toast-race`) are the reference for those ports and their fail-first tests. Every defect that milestone 2 pinned or deferred has a disposition in [pinned-defects.md](architecture/pinned-defects.md), and each one that will be fixed has an issue.
@@ -73,7 +73,7 @@ Do not split a foundational interface across multiple simultaneous implementatio
 
 Add no inline, block, documentation, TODO/FIXME or lint/type suppression comments to authored code, tests, CSS, HTML, scripts or workflow/configuration files. Write contracts and rationale in `docs/architecture/`, `docs/decisions/`, types, names and tests.
 
-One exception (Adam, 2026-10-26): a **reason comment** in a script, so that an agent editing the code sees that a rationale exists. It is one `//` line of at most 120 characters, `// why: docs/<file>.md#<heading-anchor>` or a root file such as `HANDOFF.md#<anchor>`, optionally followed by a short reason. The rationale itself stays in the document. `npm run check:comments` accepts the line only when the document has that heading (GitHub's anchor for it) or an `<a id>`, so renaming the heading fails the gate and the link cannot rot. Reason comments never enter the baseline.
+One exception (Adam, 2026-10-26): a **reason comment** in a script, so that an agent editing the code sees that a rationale exists. It is one `//` line of at most 120 characters, `// why: docs/<file>.md#<heading-anchor>` or `docs/HANDOFF.md#<anchor>`, optionally followed by a short reason. The rationale itself stays in the document. `npm run check:comments` accepts the line only when the document has that heading (GitHub's anchor for it) or an `<a id>`, so renaming the heading fails the gate and the link cannot rot. Reason comments never enter the baseline.
 
 A parser-aware check must distinguish actual comments from URLs, regexes and strings. Preserve interpreter directives and exact required build-template markers through file-specific configuration. Move the two `build.mjs` lint suppressions, and the other inline `eslint-disable` directives across the repository (sixteen at the baseline), into narrowly scoped configuration as their files are touched; milestone 0 handles `build.mjs`. Do not introduce broad exclusions for whole workflow files or new folders. Existing unmigrated comments have an exact, frozen baseline; no new comments are allowed, and migrated areas have none. Preserve attribution in LICENSE/NOTICE and third-party metadata; generated/vendor content is outside the authored-source check.
 
@@ -147,7 +147,7 @@ The workstation is never registered as a self-hosted runner for automatically tr
 | Browser | Actual typing/IME, selection, shortcuts, clipboard, drag/drop, dialogs, review modes, focus, responsive views and save/recovery flows |
 | Native/security | Real Electron main/preload execution, sender/origin validation, tabs, resource shutdown and supported speech/native behavior |
 | Compatibility | 3.1 fixtures and client/server combinations; deterministic project/export fixtures; existing IPC shapes/capabilities |
-| Distribution | Standalone app, worker/CSP/offline behavior, portable package, both Docker recipes and Windows x64/ARM64 payload/runtime checks |
+| Distribution | Standalone app, worker/CSP/offline behavior, portable package and Windows x64/ARM64 payload/runtime checks |
 
 Do not weaken assertions, rewrite golden bytes, suppress genuine failures or expand exceptions to get a green check. Replace brittle source-text checks only after equivalent executable behavior/security checks exist. Use controlled completions/fake clocks for application races and real input for browser composition/selection.
 
@@ -165,7 +165,7 @@ Each milestone usually contains several PRs. Finish its gate before expanding mi
 4. Add `tools/dep-report.mjs`, `tools/dep-baseline.json`, layer checks and the parser-aware no-comment gate. Keep informational metrics separate from the exception baseline. Tests must prove a new forbidden edge fails even when total counts do not increase.
 5. Add TypeScript-aware lint/type/test discovery and documented local verification scripts. Add a failing-then-passing discovery probe so an omitted `.ts` test cannot go unnoticed.
 6. Configure the CI policy of section 4 and retain existing smoke/Docker/release jobs. Commit locked tooling dependencies; run a clean install on Node 22 and 24.
-7. Audit the current 62 `HANDOFF.md` invariants into `docs/architecture/invariants.md`: ID, behavior, test coverage, owner, target milestone, keep/absorb/practice classification, replacement mechanism and acceptance test. Keep behavior tests for absorbed rules; documentation getting shorter is not a quality metric. When a later milestone absorbs a rule into code, its `HANDOFF.md` entry is replaced by a one-line pointer to the ledger in the same PR, so the two never disagree.
+7. Audit the current 62 `docs/HANDOFF.md` invariants into `docs/architecture/invariants.md`: ID, behavior, test coverage, owner, target milestone, keep/absorb/practice classification, replacement mechanism and acceptance test. Keep behavior tests for absorbed rules; documentation getting shorter is not a quality metric. When a later milestone absorbs a rule into code, its `docs/HANDOFF.md` entry is replaced by a one-line pointer to the ledger in the same PR, so the two never disagree.
 8. Record representative typing, row edit, bulk operation and export performance on short/long fixtures, with machine/browser/font conditions, as one script run once. Preserve bounded/coalesced per-keystroke work; investigate material regression rather than optimizing from file size. This item does not gate the other milestone 0 work.
 
 **Gate:** Deliberately failing/empty tooling runs fail locally and in CI; all old/new test locations are discovered; prohibited imports/comments are rejected; baseline constraints and platform skips are recorded. Capture a full Linux/Windows browser baseline or explicit platform blockers before moving behavior.
@@ -427,7 +427,7 @@ Extract `createServer(dependencies, config)` from process startup. Separate vali
 
 Define and test memory/disk/restart consistency for mint/renew/revoke/delete under injected persistence failure. Preserve malformed-input responses, compare-and-set writes, per-document serialization, owner rotation, link revocation/restart behavior, tombstones and private permissions. Keep the documented public owner-key/capability-link deployment boundary and intentional LAN profiles explicit.
 
-Update both Docker recipes, `deploy.sh`, portable/desktop staging and CI payload assertions in the same PR as module extraction. Backups include documents, blobs and link/owner-secret data. Code rollback preserves newer revocations; data restore has an explicit revocation/rotation procedure. Test configuration and deploy/rollback behavior against isolated fixtures, never the live server.
+Update portable/desktop staging and CI payload assertions in the same PR as module extraction. Backups include documents, blobs and link/owner-secret data. Code rollback preserves newer revocations; data restore has an explicit revocation/rotation procedure. Test configuration and deploy/rollback behavior against isolated fixtures, never the live server.
 
 ### Desktop services
 

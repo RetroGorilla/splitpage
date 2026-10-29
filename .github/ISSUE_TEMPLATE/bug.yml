@@ -20,4 +20,4 @@ body:
     id: notes
     attributes:
       label: Notes for whoever picks this up
-      description: Suspected source file, related invariant in HANDOFF.md, or a test suite that should have caught it. Optional.
+      description: Suspected source file, related invariant in docs/HANDOFF.md, or a test suite that should have caught it. Optional.

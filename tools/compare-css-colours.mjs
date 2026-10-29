@@ -8,9 +8,9 @@ import { readBuiltCss, repoUrl, compareCssColours, cssRules } from "./css-colour
 const { css } = readBuiltCss();
 const revision = process.argv.slice(2).find((arg) => arg !== "--built") || "HEAD";
 const git = (args) => execFileSync("git", args, { cwd: fileURLToPath(repoUrl), encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
-const manifest = "css-inputs.json";
-const inputs = git(["ls-tree", "--name-only", revision, "--", manifest]).trim()
-  ? JSON.parse(git(["show", `${revision}:${manifest}`])) : ["src/app.css"];
+const manifest = ["tools/css-inputs.json", "css-inputs.json"]
+  .find((path) => git(["ls-tree", "--name-only", revision, "--", path]).trim());
+const inputs = manifest ? JSON.parse(git(["show", `${revision}:${manifest}`])) : ["src/app.css"];
 const { css: original } = readBuiltCss({ inputs, read: (path) => git(["show", `${revision}:${path}`]) });
 const differences = compareCssColours(original, css);
 if (differences.length) {

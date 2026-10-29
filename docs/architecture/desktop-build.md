@@ -3,7 +3,7 @@
 `desktop/electron-builder.yml` carries no comments
 ([plan](../IMPLEMENTATION-PLAN.md) section 2; `npm run check:comments` enforces
 it). This page explains each of its settings whose reason is not visible in the
-file, under the key that holds it. [DEPLOY.md §6](../../DEPLOY.md#6-desktop-installers-windows)
+file, under the key that holds it. [docs/RELEASING.md §2](../RELEASING.md#2-desktop-installers-windows)
 covers building the installers, and [ci.md](ci.md#githubworkflowsreleaseyml)
 covers the release workflow that runs `npm run dist:win`.
 
@@ -65,7 +65,7 @@ On the maintainer's Snapdragon machine that means ARM64 only. The old IExpress
 setups fell into the same trap: 1.0.1's "x64" setup came out as an ARM64 binary
 that no x64 PC could start. `npm run dist:win` also passes `--x64 --arm64`, then
 runs `verify-dist.mjs`. That script reads the PE machine field of each binary
-the build produced and fails the build on a mismatch (DEPLOY.md §6).
+the build produced and fails the build on a mismatch (docs/RELEASING.md §2).
 
 ## `nsis`
 
@@ -89,10 +89,10 @@ each installer's payload to catch this ([ci.md](ci.md#githubworkflowsreleaseyml)
 step `Desktop installers`).
 
 Turning differential packaging off costs nothing here. Blockmaps are not
-published (DEPLOY.md §7 publishes the zip, the two per-architecture setups and
+published (docs/RELEASING.md §3 publishes the zip, the two per-architecture setups and
 `SHA256SUMS.txt`), and the updater downloads whole installers.
 
 ## `mac` and `linux`
 
 Configured but never built or published. Only the Windows installers ship
-(DEPLOY.md §6, "What's NOT verified").
+(docs/RELEASING.md §2, "What's NOT verified").

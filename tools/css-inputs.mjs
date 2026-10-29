@@ -1,7 +1,7 @@
 import { readFileSync, readdirSync } from "node:fs";
 
 const root = new URL("../", import.meta.url);
-export const cssInputs = Object.freeze(JSON.parse(readFileSync(new URL("css-inputs.json", root), "utf8")));
+export const cssInputs = Object.freeze(JSON.parse(readFileSync(new URL("tools/css-inputs.json", root), "utf8")));
 
 function readInput(path) {
   let directory = root;

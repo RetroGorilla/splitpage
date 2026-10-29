@@ -33,16 +33,7 @@ const workflow = (...steps) => ["jobs:", "  checks:", "    runs-on: ubuntu-lates
 console.log("\nthe repository's own lists:\n");
 
 const real = artifactPaths(readFileSync(join(REPO, WORKFLOW), "utf8"));
-check("ci.yml's splitpage-app upload is found", real.includes("index.html") && real.includes("Dockerfile.prebuilt") && real.includes("server"), JSON.stringify(real));
-
-{
-  const copies = readFileSync(join(REPO, "Dockerfile.prebuilt"), "utf8").split("\n")
-    .filter((line) => /^COPY\s/i.test(line))
-    .flatMap((line) => line.trim().split(/\s+/).slice(1).filter((t) => !t.startsWith("--")).slice(0, -1))
-    .map((p) => p.replace(/\/+$/, ""));
-  check("Dockerfile.prebuilt copies something", copies.length > 0);
-  eq("everything Dockerfile.prebuilt copies is in the artifact", copies.filter((p) => !real.includes(p)), []);
-}
+check("ci.yml's splitpage-app upload is found", real.includes("index.html") && real.includes("server"), JSON.stringify(real));
 
 console.log("\nartifactPaths():\n");
 

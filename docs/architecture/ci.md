@@ -1,4 +1,4 @@
-# Why the CI and container configuration looks the way it does
+# Why the CI configuration looks the way it does
 
 Workflow and configuration files carry no comments
 ([plan](../IMPLEMENTATION-PLAN.md) section 2; `npm run check:comments` enforces
@@ -29,9 +29,9 @@ cache layout. No new schedule or runner routing is introduced.
 | Where | Why |
 | --- | --- |
 | `checks` job, `SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage` | Ubuntu 24.04's AppArmor blocks the user namespaces Chromium's sandbox needs. Without these flags the browser dies before it opens a DevTools (CDP) port, and every browser step fails. |
-| `changes`, `checks`, `tests` and `gate` jobs, `runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' \|\| vars.CI_RUNNER \|\| 'ubuntu-latest' }}` | The label `ci-github` on a pull request sends only that pull request's runs to GitHub's runners, so one queued run can skip the queue without moving every other run (see [Testing](testing.md#ci)). The label's string literal makes the comment gate's runner reading `unknown`, so a comment in these jobs' scripts that reads differently as bash and as PowerShell needs a `shell:` on its step. The repository variable `CI_RUNNER` (`splitpage-local`) sends these jobs to the self-hosted runners with that label: `splitpage-unraid-1` and `splitpage-unraid-2` on the unRAID server, `splitpage-wsl` and `splitpage-wsl-2` in WSL Ubuntu on the maintainer's PC. Delete the variable and they go back to GitHub's runners. While no runner with that label is online, jobs wait in the queue for up to a day, the `gate` check with them. `desktop-smoke` and `docker.yml` stay on GitHub's runners: they need `sudo apt-get` and Docker. `CI_RUNNER` must name a Linux runner: the comment gate reads a `runs-on` expression by its string literals, here `'ubuntu-latest'`, and so scans these jobs' scripts as bash. The runner needs git, a workspace on the Linux filesystem (not under `/mnt/`) and Chromium's libraries. Playwright's versioned Chromium cache lives under `RUNNER_TOOL_CACHE`, outside checkout cleanup. Pull requests from forks must never reach it: delete `CI_RUNNER` before the repository goes public. |
+| `changes`, `checks`, `tests` and `gate` jobs, `runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' \|\| vars.CI_RUNNER \|\| 'ubuntu-latest' }}` | The label `ci-github` on a pull request sends only that pull request's runs to GitHub's runners, so one queued run can skip the queue without moving every other run (see [Testing](testing.md#ci)). The label's string literal makes the comment gate's runner reading `unknown`, so a comment in these jobs' scripts that reads differently as bash and as PowerShell needs a `shell:` on its step. The repository variable `CI_RUNNER` (`splitpage-local`) sends these jobs to the self-hosted runners with that label: `splitpage-unraid-1` and `splitpage-unraid-2` on the unRAID server, `splitpage-wsl` and `splitpage-wsl-2` in WSL Ubuntu on the maintainer's PC. Delete the variable and they go back to GitHub's runners. While no runner with that label is online, jobs wait in the queue for up to a day, the `gate` check with them. `desktop-smoke` stays on GitHub's runners: it needs `sudo apt-get`. `CI_RUNNER` must name a Linux runner: the comment gate reads a `runs-on` expression by its string literals, here `'ubuntu-latest'`, and so scans these jobs' scripts as bash. The runner needs git, a workspace on the Linux filesystem (not under `/mnt/`) and Chromium's libraries. Playwright's versioned Chromium cache lives under `RUNNER_TOOL_CACHE`, outside checkout cleanup. Pull requests from forks must never reach it: delete `CI_RUNNER` before the repository goes public. |
 | Tab strip width check | Removed by the maintainer's decision (2026-10-14). It guarded PR #17's bug (editing one tab's title resized every other tab) and cost about 55 s per run; see `ci-audit.md` in the project files. `desktop/tabstrip/` still ships. |
-| Node 24 | CI has no separate Node 24 job: `checks` and both test shards read `.nvmrc`, which pins Node 24.22.0 since the end-of-M5 upgrade (with `Dockerfile` and `Dockerfile.prebuilt` on `node:24-alpine`). Node 22 stays inside `package.json`'s `engines` for the portable install, which uses the user's own Node, but CI no longer runs it. |
+| Node 24 | CI has no separate Node 24 job: `checks` and both test shards read `.nvmrc`, which pins Node 24.22.0 since the end-of-M5 upgrade. Node 22 stays inside `package.json`'s `engines` for the portable install, which uses the user's own Node, but CI no longer runs it. |
 | `tests` matrix and `checks` | Two jobs run `npm run test:all -- --shard 1/2` and `2/2` independently of `checks`, which retains lint, types, dependency/comment checks, the build, the three critical browser suites and the single app-artifact upload. With both Unraid runners online, the scheduler runs the shards on separate available runner slots; the short `checks` job also shares the two slots. Each shard builds its own app and checks the worker stamp before testing. No build artifact is passed between checkouts. Sorted files in each discovered group are distributed by alternating index, so every file runs in exactly one shard, with no maintained filename list. `fail-fast: false` lets the other shard finish after a failure. |
 | `gate`, `needs: [changes, checks, tests]` | The required `gate` succeeds for code only when classification, `checks` and the aggregate result of both test shards succeed. Failed, cancelled or skipped shards cannot pass a code change. For prose-only changes both `checks` and `tests` must be skipped. `tools/test-ci-shards.mjs` checks the workflow's matrix/dependencies and executes the actual gate script against success, failure, cancellation and skip combinations. |
 | `on.push` and `concurrency` | Every merge to `4.1-development` runs CI again on the merged commit, the only run that tests the merged result when the base moved after the pull request's last run (unless the `changes` job finds the same tree already passed, below). A push run classifies only the files its own push changed (`github.event.before` to the new commit), so a docs-only merge skips `checks`. `cancel-in-progress` on `ci-${{ github.ref }}` cancels a push run when the next merge lands before it finishes. If that next merge is docs-only, the cancelled merge's code is never tested after merging; rerun the cancelled run by hand. |
@@ -43,27 +43,12 @@ cache layout. No new schedule or runner routing is introduced.
 | `desktop-smoke` job, step `Fetch the dev Electron binary` | Runs `npm run fetch-electron`. `desktop/electron-arch.mjs` selects the machine architecture, detecting native Windows ARM64 even under x64 Node emulation, then sets `npm_config_arch` for Electron's installer. Explicit `npm_config_arch` or `ELECTRON_ARCH` wins, in that order; unknown values fail. Electron 44 has no postinstall. |
 | `desktop-smoke` job, step `Desktop smoke (dev target)` | Xvfb is started by hand because `xvfb-run` intermittently returns its own cleanup failure as the exit status. The `grep` on Xvfb's stderr drops xkbcomp's harmless unknown-keysym warnings, about 1,700 lines a run. |
 
-## `.github/workflows/docker.yml`
-
-`image` builds the root `Dockerfile` with the legacy builder (as `deploy.sh`
-does on unRAID) and starts it with the settings `deploy.sh` insists on.
-`prebuilt` builds the app, copies into an empty folder only the files
-`ci.yml` uploads as the `splitpage-app` artifact, and builds and starts
-`Dockerfile.prebuilt` from that folder, so the recipe DEPLOY.md §8 gives for
-running without a checkout is exercised on the artifact's inputs. The job
-holds no file list of its own: `node tools/artifact-files.mjs --stage <dir>`
-reads the paths from `ci.yml`'s `Upload the built app` step and copies
-exactly those, failing on a missing file or on a glob it cannot reproduce.
-`tools/test-artifact-files.mjs` also checks that everything
-`Dockerfile.prebuilt` copies is in that list. A change to `ci.yml` or to
-the script runs this workflow.
-
 ## `.github/workflows/release.yml`
 
-The workflow builds what DEPLOY.md §7 publishes, from a `v*` tag, on a
-GitHub-hosted Windows runner: `node package.mjs` (which builds `index.html`
+The workflow builds what docs/RELEASING.md §3 publishes, from a `v*` tag, on a
+GitHub-hosted Windows runner: `node tools/package.mjs` (which builds `index.html`
 itself before zipping), then `npm run dist:win` in `desktop/`, then
-`SHA256SUMS.txt`. DEPLOY.md §7 has the release procedure. A run started by
+`SHA256SUMS.txt`. docs/RELEASING.md §3 has the release procedure. A run started by
 hand (Actions ▸ Release ▸ Run workflow) builds from any branch and never
 drafts a release; the `draft` job runs only for a tag.
 
@@ -72,7 +57,7 @@ drafts a release; the `draft` job runs only for a tag.
 | `build` job, `CSC_IDENTITY_AUTO_DISCOVERY: 'false'` | The installers are unsigned (#81). Without this electron-builder looks for a signing certificate in the runner's store. |
 | `build` job, step `Read VERSION and check the tag` | `VERSION` is the single source of truth (`desktop/stage.mjs` checks `desktop/package.json` against it). A tag naming another version would publish files whose names and update checks disagree with it. |
 | `build` job, step `Desktop installers (dist:win, with verify-dist)` | `dist:win` runs `stage.mjs`, electron-builder for x64 and arm64, then `verify-dist.mjs`: the architecture checks and the payload extraction that caught 2.0.1's empty ARM64 installer. A mismatch fails the job there. |
-| `build` job, step `Collect the release files and their checksums` | Only the per-arch installers are published, not the combined one (DEPLOY.md §7). The `sha256sum` output format is the one `desktop/main.js` reads to check a downloaded update. |
+| `build` job, step `Collect the release files and their checksums` | Only the per-arch installers are published, not the combined one (docs/RELEASING.md §3). The `sha256sum` output format is the one `desktop/main.js` reads to check a downloaded update. |
 | `draft` job, `SPLITPAGE_RELEASES_TOKEN` | A fine-grained personal access token with Contents read and write on `RetroGorilla/splitpage-releases` and nothing else. This repository's own `GITHUB_TOKEN` cannot write to another repository. Without the secret the job leaves the files on the run as an artifact and says so. |
 
 ## Desktop packaging (`desktop/electron-builder.yml`)
@@ -91,25 +76,3 @@ one pull request per area rather than a stream.
 | Entry | Why |
 | --- | --- |
 | npm, `/desktop` | The Electron shell and its installer builder. Major Electron releases change Chromium and the security defaults, so they are read, not merged on green. |
-| docker, `/` | The server image's base, `node:24-alpine` in both Dockerfiles. |
-
-## `Dockerfile` and `Dockerfile.prebuilt`
-
-`Dockerfile` builds the app and the static server into one small image in
-two stages; `Dockerfile.prebuilt` is its second stage alone, over the built
-files in the `splitpage-app` artifact.
-
-| Where | Why |
-| --- | --- |
-| `USER node` | The server runs as the image's built-in non-root user. |
-| `COPY … ./public/` | The files the browser downloads live in their own directory, so `STATIC_DIR` can never expose the server source. |
-| `COPY server/ ./server/` | `server.js` is CommonJS and `server/package.json` says so; a `"type": "module"` anywhere above it would otherwise stop it running, so the folder is copied whole. |
-| `HEALTHCHECK … CMD node -e …` | A plain request to `/` made with `node` itself, so the image needs no `curl` or `wget`. |
-
-## `docker-compose.yml`
-
-The compose file runs the same container as `deploy.sh` (DEPLOY.md §1).
-
-| Where | Why |
-| --- | --- |
-| `ports: "8791:8791"` | Publishes the server's port on the host. |
