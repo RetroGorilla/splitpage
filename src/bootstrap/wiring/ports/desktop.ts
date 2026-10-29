@@ -4,7 +4,7 @@ import { createDesktopRecognition, desktopVoiceAvailable, desktopVoiceKnown, loa
 import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "../../../adapters/desktop/voice-relay.js";
 import { SpeechRecognitionCtor } from "../../../adapters/page/speech-recognition.js";
 import { canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort } from "../../../adapters/desktop/desktop-port.ts";
-import { runningOnDesktop } from "../../../application/desktop-presence.ts";
+import { presence } from "./desktop-presence.ts";
 import type { ExternalLinks, LaunchFacts } from "../../../application/desktop-presence.ts";
 import type { RecentFiles } from "../../../application/files/recent-files.ts";
 
@@ -38,12 +38,12 @@ export const launch: LaunchFacts = {
 };
 
 export const importDesktop = {
-  running: runningOnDesktop,
+  running: presence.running,
   openExternal: (url: string) => { const desktop = desktopPort(); if (desktop) return desktop.openExternal(url); }
 };
 
 export const prompterDesktop: PrompterDesktop = {
-  running: runningOnDesktop,
+  running: presence.running,
   canOpen: () => canOpenPrompterInBrowser(),
   open: () => openPrompterInBrowser()
 };
@@ -62,4 +62,4 @@ export const prompterVoice: PrompterVoice = {
   }
 };
 
-export const historyDesktop = { history: desktopPort, running: runningOnDesktop };
+export const historyDesktop = { history: desktopPort, running: presence.running };

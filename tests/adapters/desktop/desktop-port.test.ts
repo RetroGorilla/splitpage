@@ -6,10 +6,9 @@ import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import {
   DESKTOP_PORT_MEMBERS, UNUSED_DESKTOP_MEMBERS, attachDesktop, canOpenPrompterInBrowser, canOpenPrompterInChromium, desktopPort,
-  restoreDesktop, useDesktopForTest
+  restoreDesktop, runningOnDesktop, useDesktopForTest
 } from "../../../src/adapters/desktop/desktop-port.ts";
 import type { DesktopMember, DesktopPort } from "../../../src/adapters/desktop/desktop-port.ts";
-import { runningOnDesktop } from "../../../src/application/desktop-presence.ts";
 
 const require = createRequire(import.meta.url);
 const PRELOAD = fileURLToPath(new URL("../../../desktop/preload.js", import.meta.url));
