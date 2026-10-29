@@ -17,7 +17,7 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
 const { preferences } = await import("../bootstrap/wiring/preferences-owner.ts");
 
-import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";
+import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.ts";
 import { preferences as commentPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 const flushEdits = () => undoOwner().flush();
 const lastUndoEntry = () => undoOwner().last();

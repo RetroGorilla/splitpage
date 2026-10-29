@@ -1,4 +1,4 @@
-import { getSavedAuthorName } from "../../application/comment-author.js";
+import { getSavedAuthorName } from "../../application/comment-author.ts";
 import { createPanelWidths } from "../../application/preferences/panel-widths.ts";
 import type { PanelWidths } from "../../application/preferences/panel-widths.ts";
 import { createPreferences } from "../../application/preferences/preferences.ts";
