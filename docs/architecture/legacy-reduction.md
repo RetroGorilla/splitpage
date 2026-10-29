@@ -2,7 +2,7 @@
 
 A plan for the places where 4.0 fell short of [the implementation plan](../IMPLEMENTATION-PLAN.md). It is written for 4.1 and lives on `4.1-development`.
 
-Planning baseline: revised on 2026-10-16 after two independent reviews of `c728fbb`; the findings and responses are on the PR. The import loop is cut by giving each shared job an owner, not by handing files their imports at startup ([why](#why-not-hand-files-their-imports-at-startup)). Adam chose to delete the global `S` object within this plan (2026-10-16), and the plan counts the whole of that work, tests included. The historical baseline below is not current progress: `S` is now gone and L5 is underway. See [the October 26 status audit](migration-status-2026-10-26.md) for measured results and the remaining numbered files.
+Planning baseline: revised on 2026-10-16 after two independent reviews of `c728fbb`; the findings and responses are on the PR. The import loop is cut by giving each shared job an owner, not by handing files their imports at startup ([why](#why-not-hand-files-their-imports-at-startup)). Adam chose to delete the global `S` object within this plan (2026-10-16), and the plan counts the whole of that work, tests included. The historical baseline below is not current progress. Status on 2026-10-29: the steps are done. `S` is gone, there are no import loops, every numbered file has moved or was removed with the server and collaboration features, and `src/js/` is deleted; the build starts from `src/bootstrap/main.ts`. Of the bridges in `src/legacy/`, only `app-actions.ts` is left. The closing [gate](#gate) has not been run. [The October 26 status audit](migration-status-2026-10-26.md) is the last measured report.
 
 ## The rule every step follows
 
@@ -25,7 +25,7 @@ The layers the steps move code into, with dependencies pointing down only (`laye
 | `src/adapters/` | Storage, file formats, transport, and the desktop bridge | Core, application, contracts, shared |
 | `src/bootstrap/` | The one place that builds and connects everything at startup | Anything except `src/js/_state.js` |
 
-**How numbered files reach an owner.** An owner that more than one area uses lives in `src/application/` and is constructed by the wiring at startup; nothing creates one at module evaluation. Numbered files reach it through one named bridge in `src/legacy/`, which throws before startup and after teardown, as `session-bridge.ts` does with `running()`. Each new bridge joins plan §8's list of bridges to retire, and goes when its last numbered importer becomes a feature. Features receive owners as ports from the wiring, as `features/file-menu/mount.ts` receives `showToast` today. Nothing goes into a feature or adapter folder that another area will import, because no feature may import another feature or an adapter.
+**How numbered files reach an owner.** An owner that more than one area uses lives in `src/application/` and is constructed by the wiring at startup; nothing creates one at module evaluation. Numbered files reach it through one named bridge in `src/legacy/`, which throws before startup and after teardown, as the session bridge did with `running()` (now `src/bootstrap/wiring/session-owner.ts`). Each new bridge joins plan §8's list of bridges to retire, and goes when its last numbered importer becomes a feature. Features receive owners as ports from the wiring, as `features/file-menu/mount.ts` receives `showToast` today. Nothing goes into a feature or adapter folder that another area will import, because no feature may import another feature or an adapter.
 
 ## The shortfalls
 
@@ -354,7 +354,7 @@ Exit: the 6 files are gone (−4,165 numbered lines). With L4b, L4 removes 16 fi
 
 After L3, the remaining numbered files are in no loop and use no `S`, so each is feature code in the wrong folder. Each moves into `src/features/` when a 4.1 feature next changes it, with L0's ratchets keeping the counts falling, and its bridges retire as it does. Scheduling them as their own work instead is Adam's call.
 
-Status: done. The last four (`13-hosted`, `13a-presence`, `13b-collaborate`, `20e-connect`) were deleted with the server and collaboration features instead of moving. Numbered files left: none. `_entry.js`, the last file in `src/js/`, was then replaced by the composition root `src/bootstrap/main.js` and `src/js/` deleted.
+Status: done. The last four (`13-hosted`, `13a-presence`, `13b-collaborate`, `20e-connect`) were deleted with the server and collaboration features instead of moving. Numbered files left: none. `_entry.js`, the last file in `src/js/`, was then replaced by the composition root `src/bootstrap/main.js` (now `main.ts`) and `src/js/` deleted.
 
 [feature-ports.md](feature-ports.md) sets how a moved file connects to the rest of the app (ports, wiring, actions and tests), proposes an order for the moves in five waves (0 to 4), and marks which need Opus. It also finds that 16 of the files are wholly or partly owners or adapters, not feature code, and those parts go to `src/application/` or `src/adapters/` instead.
 

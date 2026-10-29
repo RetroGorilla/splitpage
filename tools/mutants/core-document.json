@@ -1,0 +1,229 @@
+{
+  "mutants": [
+    {
+      "label": "row-last-index",
+      "file": "src/core/document/rows.ts",
+      "find": "findIndex(function (row)",
+      "replace": "findLastIndex(function (row)",
+      "tests": [
+        "tests/core/document/rows.test.ts"
+      ]
+    },
+    {
+      "label": "row-missing",
+      "file": "src/core/document/rows.ts",
+      "find": "if (doc === null) return -1;",
+      "replace": "if (doc === null) return 0;",
+      "tests": [
+        "tests/core/document/rows.test.ts"
+      ]
+    },
+    {
+      "label": "clone-shallow",
+      "file": "src/core/document/clone.ts",
+      "find": "JSON.parse(JSON.stringify(s))",
+      "replace": "Object.assign({}, s)",
+      "tests": [
+        "tests/core/document/clone.test.ts"
+      ]
+    },
+    {
+      "label": "id-map-prototype",
+      "file": "src/core/document/id-map.ts",
+      "find": "Object.create(null)",
+      "replace": "{}",
+      "tests": [
+        "tests/core/document/id-map.test.ts"
+      ]
+    },
+    {
+      "label": "fields-editor-limit",
+      "file": "src/core/document/fields.ts",
+      "find": "EDITOR_NAME_MAX = 30",
+      "replace": "EDITOR_NAME_MAX = 29",
+      "tests": [
+        "tests/core/document/fields.test.ts"
+      ]
+    },
+    {
+      "label": "fields-revision-default",
+      "file": "src/core/document/fields.ts",
+      "find": "return 0; }, merge: \"max-plus-one\"",
+      "replace": "return 1; }, merge: \"max-plus-one\"",
+      "tests": [
+        "tests/core/document/fields.test.ts"
+      ]
+    },
+    {
+      "label": "fields-row-undo",
+      "file": "src/core/document/fields.ts",
+      "find": "merge: \"rows\", undo: false",
+      "replace": "merge: \"rows\", undo: true",
+      "tests": [
+        "tests/core/document/fields.test.ts"
+      ]
+    },
+    {
+      "label": "fields-missing-presence",
+      "file": "src/core/document/fields.ts",
+      "find": "!(f.key in (s as object))",
+      "replace": "!((s as Record<string, unknown>)[f.key])",
+      "tests": [
+        "tests/core/document/fields.test.ts"
+      ]
+    },
+    {
+      "label": "ids-utf8-ascii-boundary",
+      "file": "src/core/document/ids.ts",
+      "find": "if (c < 0x80)",
+      "replace": "if (c <= 0x80)",
+      "tests": [
+        "tests/core/document/ids.test.ts"
+      ]
+    },
+    {
+      "label": "ids-utf8-two-boundary",
+      "file": "src/core/document/ids.ts",
+      "find": "else if (c < 0x800)",
+      "replace": "else if (c <= 0x800)",
+      "tests": [
+        "tests/core/document/ids.test.ts"
+      ]
+    },
+    {
+      "label": "ids-high-surrogate-end",
+      "file": "src/core/document/ids.ts",
+      "find": "c <= 0xdbff",
+      "replace": "c < 0xdbff",
+      "tests": [
+        "tests/core/document/ids.test.ts"
+      ]
+    },
+    {
+      "label": "ids-low-surrogate-end",
+      "file": "src/core/document/ids.ts",
+      "find": "n <= 0xdfff",
+      "replace": "n < 0xdfff",
+      "tests": [
+        "tests/core/document/ids.test.ts"
+      ]
+    },
+    {
+      "label": "ids-hash-padding",
+      "file": "src/core/document/ids.ts",
+      "find": "rest + 9 <= 64",
+      "replace": "rest + 9 < 64",
+      "tests": [
+        "tests/core/document/ids.test.ts"
+      ]
+    },
+    {
+      "label": "ids-domain-separator",
+      "file": "src/core/document/ids.ts",
+      "find": "String(domain) + \"\\n\" + String(text)",
+      "replace": "String(domain) + String(text)",
+      "tests": [
+        "tests/core/document/ids.test.ts"
+      ]
+    },
+    {
+      "label": "ids-media-length",
+      "file": "src/core/document/ids.ts",
+      "find": "slice(0, 24)",
+      "replace": "slice(0, 23)",
+      "tests": [
+        "tests/core/document/ids.test.ts"
+      ]
+    },
+    {
+      "label": "ids-head-description",
+      "file": "src/core/document/ids.ts",
+      "find": "if (!had) top = top.replace",
+      "replace": "if (had) top = top.replace",
+      "tests": [
+        "tests/core/document/ids.test.ts"
+      ]
+    },
+    {
+      "label": "text-safe-prefix",
+      "file": "src/core/document/text-policy.ts",
+      "find": "end--;",
+      "replace": "end++;",
+      "tests": [
+        "tests/core/document/text-cuts.test.ts"
+      ]
+    },
+    {
+      "label": "text-number-conversion",
+      "file": "src/core/document/text-policy.ts",
+      "find": "typeof v === \"number\" ? String(v) : \"\"",
+      "replace": "typeof v === \"number\" ? \"\" : \"\"",
+      "tests": [
+        "tests/core/document/text-policy.test.ts"
+      ]
+    },
+    {
+      "label": "text-name-default",
+      "file": "src/core/document/text-policy.ts",
+      "find": "|| \"Anonymous\"",
+      "replace": "|| \"\"",
+      "tests": [
+        "tests/core/document/text-policy.test.ts"
+      ]
+    },
+    {
+      "label": "text-preview-boundary",
+      "file": "src/core/document/text-policy.ts",
+      "find": "s.length > n ? unitSafePrefix(s, n) + \"…\" : s",
+      "replace": "s.length >= n ? unitSafePrefix(s, n) + \"…\" : s",
+      "tests": [
+        "tests/core/document/text-policy.test.ts"
+      ]
+    },
+    {
+      "label": "text-escape-quote",
+      "file": "src/core/document/text-policy.ts",
+      "find": ".replace(/\"/g, \"&quot;\")",
+      "replace": ".replace(/\"/g, \"&apos;\")",
+      "tests": [
+        "tests/core/document/text-policy.test.ts"
+      ]
+    },
+    {
+      "label": "text-safe-id-hyphen",
+      "file": "src/core/document/text-policy.ts",
+      "find": "/[^A-Za-z0-9_-]/g",
+      "replace": "/[^A-Za-z0-9_]/g",
+      "tests": [
+        "tests/core/document/text-policy.test.ts"
+      ]
+    },
+    {
+      "label": "text-codepoint-boundary",
+      "file": "src/core/document/text-policy.ts",
+      "find": "n < max && end < s.length",
+      "replace": "n <= max && end < s.length",
+      "tests": [
+        "tests/core/document/text-cuts.test.ts"
+      ]
+    },
+    {
+      "label": "text-image-dimensions",
+      "file": "src/core/document/text-policy.ts",
+      "find": "ref.width && ref.height && ref.mime",
+      "replace": "ref.width || ref.height || ref.mime",
+      "tests": [
+        "tests/core/document/text-policy.test.ts"
+      ]
+    },
+    {
+      "label": "clone-row-objects-shared",
+      "file": "src/core/document/clone.ts",
+      "find": "JSON.parse(JSON.stringify(s))",
+      "replace": "(s && typeof s === \"object\" && \"rows\" in s ? Object.assign(JSON.parse(JSON.stringify(s)), { rows: (s as { rows: unknown[] }).rows.slice() }) : JSON.parse(JSON.stringify(s)))",
+      "tests": [
+        "tests/core/document/clone.test.ts"
+      ]
+    }
+  ]
+}

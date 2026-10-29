@@ -42,7 +42,7 @@ const PLATFORM_GLOBALS = new Set([
 const COMMONJS_GLOBALS = new Set(["require", "module", "exports"]);
 
 export const RICHTEXT_ADAPTER = "src/adapters/richtext/";
-export const RICHTEXT_BRIDGE = "src/legacy/richtext.ts";
+export const RICHTEXT_READER = "src/bootstrap/richtext.ts";
 const HTML_PARSE_METHODS = new Set(["createContextualFragment", "parseHTMLUnsafe", "setHTMLUnsafe", "setHTML"]);
 const XML_MIME_TYPES = new Set(["application/xml", "text/xml", "image/svg+xml", "application/xhtml+xml"]);
 
@@ -242,7 +242,7 @@ function htmlParseSink(call) {
 }
 
 export function ownsHtmlCells(path) {
-  return path.startsWith(RICHTEXT_ADAPTER) || path === RICHTEXT_BRIDGE;
+  return path.startsWith(RICHTEXT_ADAPTER) || path === RICHTEXT_READER;
 }
 
 function dynamicCodeUse(node) {
@@ -951,7 +951,7 @@ export function findViolations(modules) {
     if (isProduction(m.layer) && !ownsHtmlCells(m.path)) {
       for (const e of m.edges) {
         if (e.kind === "file" && !e.typeOnly && htmlCellModules.has(e.target)) {
-          add("html-cells", m.path, e.target, e.line, `reaches the HTML decoder; only ${RICHTEXT_BRIDGE} may import ${RICHTEXT_ADAPTER}`);
+          add("html-cells", m.path, e.target, e.line, `reaches the HTML decoder; only ${RICHTEXT_READER} may import ${RICHTEXT_ADAPTER}`);
         }
       }
       for (const p of m.htmlParses) add("html-cells", m.path, `html-parse:${p.name}`, p.line, `parses HTML with ${p.name}; only ${RICHTEXT_ADAPTER} builds cells from HTML`);

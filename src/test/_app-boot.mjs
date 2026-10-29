@@ -1,10 +1,10 @@
 import "./_dom.mjs";
-import { getEditorName } from "../legacy/preferences-bridge.ts";
+import { getEditorName } from "../bootstrap/wiring/preferences-owner.ts";
 import "fake-indexeddb/auto";
 import { readFileSync } from "node:fs";
 import { checksumText } from "../../shared/text.js";
 import { startupReady } from "../application/startup-signal.ts";
-import { currentDocument, onDocumentReplaced } from "../legacy/session-bridge.ts";
+import { currentDocument, onDocumentReplaced } from "../bootstrap/wiring/session-owner.ts";
 
 export const seen = [];
 
@@ -65,14 +65,14 @@ export async function bootApp(stateData, opts) {
   if (opts && opts.beforeStart) {
     Object.defineProperty(document, "readyState", { configurable: true, get: () => "loading" });
     try {
-      await import("../bootstrap/main.js");
+      await import("../bootstrap/main.ts");
       opts.beforeStart();
     } finally {
       delete document.readyState;
     }
     document.dispatchEvent(new window.Event("DOMContentLoaded"));
   } else {
-    await import("../bootstrap/main.js");
+    await import("../bootstrap/main.ts");
   }
   await startupReady();
   return seen.splice(0);
@@ -90,7 +90,7 @@ export function closeApp() {
 
 export async function appWiringDeps() {
   const [{ migrateRows }, docId, sync, production, broll, effects, exporting, drafts, files, imports, formats] = await Promise.all([
-    import("../legacy/document-ports.ts"),
+    import("../bootstrap/document-ports.ts"),
     import("../bootstrap/wiring/document-identity.ts"),
     import("../bootstrap/wiring/session-merge.ts"),
     import("../features/tags/production-tags.js"),

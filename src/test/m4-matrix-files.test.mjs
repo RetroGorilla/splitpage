@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { saveBusy, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import {
   createGates,
   createHeldDesktop,
@@ -9,30 +9,30 @@ import {
   mockClock,
   rightToday
 } from "./_m4-matrix.mjs";
-import { documentLocation } from "../legacy/location-bridge.ts";
-import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
+import { documentLocation } from "../bootstrap/wiring/location-owner.ts";
+import { mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildDocx } = await import("../adapters/formats/docx.ts");
 const { closeImportModal, openImportModal } = (await import("../bootstrap/wiring/imports.ts")).importControls();
 const { zipRead } = await import("../adapters/formats/zip.ts");
 const { setBackend: setBlobBackend } = await import("../adapters/storage/02c-blobs.js");
-const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
-const { confirmSavedNow, fileConflicts, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
+const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
+const { confirmSavedNow, fileConflicts, saveDoc, setAutoSaveEnabled } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { localFileMenuControls, importSavingOwner } = await import("../bootstrap/wiring/local-files.ts");
-const homeModule = await import("../legacy/location-bridge.ts");
-const { openPrompterInBrowser } = await import("../legacy/desktop-bridge.ts");
+const homeModule = await import("../bootstrap/wiring/location-owner.ts");
+const { openPrompterInBrowser } = await import("../bootstrap/wiring/desktop-owners.ts");
 const { makeDesktopHandle } = await import("../adapters/desktop/desktop-handle.ts");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

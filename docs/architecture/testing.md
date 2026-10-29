@@ -88,7 +88,7 @@ all the way down (`Frozen<T>` in `src/core/document/freeze.ts`), so a write
 from TypeScript is a type error. A write from legacy JavaScript is caught only
 under the test-only freeze flag (milestone 3, decisions D2 and D3).
 
-- **The switch.** `src/legacy/cache-freeze.ts` reads the page's query once,
+- **The switch.** `src/bootstrap/cache-freeze.ts` reads the page's query once,
   when the bundle starts: `freeze-caches=1`, and nothing else, makes
   `cacheSeal` core's `deepLock`; otherwise it is `noFreeze`, which hands the
   value back untouched, so a build without the flag behaves and saves exactly
@@ -215,7 +215,8 @@ import of it. A write into the document must be a session command
 drafts, saves and displays see it. A write through a read
 (`currentDocument().comments.push(...)`) needs the guard.
 
-- **The switch.** `src/legacy/document-guard.ts` reads the page's query once,
+- **The switch.** The document guard (`src/application/identity/document-guard.ts`,
+  with the query read by `src/adapters/page/document-guard-query.ts`) reads the page's query once,
   when the bundle starts: `document-guard=1`, and nothing else, makes
   `currentDocument()` and `liveDocumentPort.current()` hand out a read-only
   view of the session's document; otherwise they hand out the document itself
