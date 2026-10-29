@@ -13,6 +13,7 @@ const { createDraftStore, restoreDoneAction, MAX_BODY_BYTES } = require("./draft
 const {
   filesToOpenFrom, pathKey, createFileRegistry, readFileEntry, toBuffer, atomicWrite
 } = require("./file-service");
+const { createDocClaims } = require("./doc-claims");
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
 const { createQuitWatchdog } = require("./quit-watchdog");
@@ -178,21 +179,10 @@ let pendingRestoreNotice = null;
 const closeConfirmedWindows = new WeakSet();
 const closeConfirmedTabViews = new WeakSet();
 
-const docClaims = new Map();
-let docClaimSeq = 0;
-const docClaimCleanupRegistered = new WeakSet();
-
 function homeKeyForClaim(tab) {
   const absPath = tab.fileId ? fileIds.pathOf(tab.fileId) : null;
   if (absPath) return "file:" + pathKey(absPath);
   return null;
-}
-
-function replacementDocId(fromId, homeKey) {
-  const digest = crypto.createHash("sha256")
-    .update(duplicateReplacementInput(fromId, homeKey), "utf8")
-    .digest("hex");
-  return docIdFromSha256Hex(digest);
 }
 
 function tabWebContentsForClaim(webContentsId) {
@@ -202,52 +192,12 @@ function tabWebContentsForClaim(webContentsId) {
   return tab.view.webContents;
 }
 
-function checkDuplicateDocId(senderId) {
-  const mine = docClaims.get(senderId);
-  if (!mine) return;
-  for (const [otherId, theirs] of docClaims) {
-    if (otherId === senderId) continue;
-    const loser = chooseDuplicateLoser(mine, theirs);
-    if (!loser) continue;
-    const winner = loser === mine ? theirs : mine;
-    const loserId = loser === mine ? senderId : otherId;
-    const toId = replacementDocId(loser.docId, loser.homeKey);
-    if (loser.pendingToId === toId) continue;
-    const wc = tabWebContentsForClaim(loserId);
-    if (!wc) continue;
-    loser.pendingToId = toId;
-    try {
-      wc.send("splitpage:reassign-doc-id", { fromId: loser.docId, toId, otherTitle: winner.title });
-    } catch { }
-  }
-}
-
-function recordDocClaim(sender, tab) {
-  const webContentsId = sender.id;
-  const docId = typeof tab.docId === "string" && DOC_ID_RE.test(tab.docId) ? tab.docId : null;
-  const homeKey = docId ? homeKeyForClaim(tab) : null;
-  if (!docId || !homeKey) {
-    docClaims.delete(webContentsId);
-    return;
-  }
-  const previous = docClaims.get(webContentsId);
-  if (previous && previous.docId === docId && previous.homeKey === homeKey) {
-    previous.title = tab.title;
-    return;
-  }
-  if (!docClaimCleanupRegistered.has(sender)) {
-    docClaimCleanupRegistered.add(sender);
-    sender.once("destroyed", () => { docClaims.delete(webContentsId); });
-  }
-  docClaims.set(webContentsId, {
-    docId,
-    homeKey,
-    seq: ++docClaimSeq,
-    title: tab.title,
-    pendingToId: null
-  });
-  checkDuplicateDocId(webContentsId);
-}
+const docClaims = createDocClaims({
+  policy: { DOC_ID_RE, chooseDuplicateLoser, docIdFromSha256Hex, duplicateReplacementInput },
+  homeKeyOf: homeKeyForClaim,
+  contentsFor: tabWebContentsForClaim,
+  askToReassign: (wc, payload) => wc.send("splitpage:reassign-doc-id", payload)
+});
 
 let draftStore = null;
 let draftsPreviousSession = "none";
@@ -2591,7 +2541,7 @@ function registerIpc() {
       pushShellState(w.id);
     }
     persistShellState();
-    try { recordDocClaim(event.sender, tab); }
+    try { docClaims.record(event.sender, tab); }
     catch (err) { if (TEST_MODE) console.error("[splitpage-test] doc claim failed", err); }
   });
 
