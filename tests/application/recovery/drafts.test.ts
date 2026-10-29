@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { startDrafts } from "../../../src/application/recovery/drafts.js";
+import { startDrafts } from "../../../src/application/recovery/drafts.ts";
 import type { BrowserDrafts, DraftsMount, DraftsPorts } from "../../../src/application/recovery/drafts-ports.ts";
 import { createDraftResume } from "../../../src/application/recovery/draft-resume.ts";
 import type { DraftCapture, DraftWriteOutcome } from "../../../src/application/recovery/draft-writer.ts";
@@ -101,7 +101,7 @@ function harness(start: { running?: boolean; unsaved?: boolean; hasDraft?: boole
     documents: { open: () => Promise.resolve(true) },
     resetProductionPanel: () => { log.push("resetPanel"); },
     pictures: { persist: () => Promise.resolve([]), inline: (json) => json },
-    files: { handle: () => ({ getFile: () => Promise.resolve(null) }), parse: () => Promise.resolve(null) },
+    files: { handle: () => ({ getFile: () => Promise.reject(new Error("no file")) }), parse: () => Promise.resolve(null) },
     recovery: {
       started: () => true,
       draftResume: () => resume,
