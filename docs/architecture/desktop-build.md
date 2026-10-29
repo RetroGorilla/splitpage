@@ -27,6 +27,7 @@ Everything listed here goes inside the asar.
 | `file-service.js` | The documents the renderer opens and saves: the opaque file ids that stand for paths (`createFileRegistry`), the case rule for comparing paths (`pathKey`), which launch arguments are files to open, reading a file entry and the atomic write. |
 | `doc-claims.js` | Which tab holds which document id from which file, so that two tabs holding the same document from different files are noticed and the later one is asked to take a new id. The id rules come from `shared/doc-id-policy.js`, which `main.js` passes in, and `main.js` still sends `splitpage:reassign-doc-id` itself, so the IPC table test sees it. |
 | `recents.js` | The recent documents list (`createRecents`): noting an opened file, removing one by its file id, clearing, persisting into `desktop-state.json` and describing the list for the renderer without paths. When a note is written straight away or with the next session write stays in `main.js`. |
+| `window-appearance.js` | The stored theme choice in `<userData>/theme.json` (`createThemeChoice`), the window and title bar colours for dark and light, and whether saved window bounds still overlap a display. `main.js` passes in `nativeTheme` and `screen` values. |
 
 From `ipc-channels.js` down, `main.js` requires each of these modules at
 startup, so each must ship for the same reason `drafts.js` does. A new
