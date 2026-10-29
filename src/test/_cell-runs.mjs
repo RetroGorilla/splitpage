@@ -1,4 +1,4 @@
-import { fromHtml } from "../legacy/richtext.ts";
+import { fromHtml } from "../bootstrap/richtext.ts";
 
 const WITH_MEDIA = Object.freeze({ media: true });
 

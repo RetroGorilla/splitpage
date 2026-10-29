@@ -2,11 +2,11 @@
 
 The as-built description of the `DocumentSession`, its effect scheduler and the command shape, on `4.0-development` after PRs 3.6 (#384), 3.7 (#402), 3.8 (#405), 3.9 (#414), 3.12 (#427), 3.13 (#447) and 3.14 (#455), with #448 (the composition undo fix) merged after them, and milestone 4's PRs 4.7 (the colour inside the transaction, the committed outcome and `dispose`), 4.8 (adoption through the transition API), 4.12 (file open and import), 4.15 (`absorbMerged`), 4.16 (the edit capability from the authority model), 4.18 (the draft and history restores) and 4.22 (the replacement listener). [Milestone 3](https://github.com/RetroGorilla/splitpage/blob/d84f28bd/docs/architecture/milestone-3.md) is the plan; this file says what the code does today. Where the two differ, a sentence says so, and the section "Known gaps and exceptions" collects them. It names functions and types, not lines.
 
-The code lives in `src/application/session/` (`document-session.ts`, `change-set.ts`, `effects.ts`, `ports.ts`), `src/application/commands/` (`scene-length.ts`, `scene-status.ts`, `cell-text.ts`, `split-join.ts`, `clipboard.ts`), `src/legacy/session-bridge.ts` and `src/bootstrap/wiring/undo.ts` (the undo owner and its session port). How documents reach the session and how saving is ordered is in [saving.md](saving.md).
+The code lives in `src/application/session/` (`document-session.ts`, `change-set.ts`, `effects.ts`, `ports.ts`), `src/application/commands/` (`scene-length.ts`, `scene-status.ts`, `cell-text.ts`, `split-join.ts`, `clipboard.ts`), `src/bootstrap/wiring/session-owner.ts` and `src/bootstrap/wiring/undo.ts` (the undo owner and its session port). How documents reach the session and how saving is ordered is in [saving.md](saving.md).
 
 ## 1. Purpose
 
-`createDocumentSession(ports)` returns the one object that owns the live document while the page runs. The app has exactly one, created by `startSessionBridge(ports)` in `session-bridge.ts`, which the wiring step (`wireApp` in `src/bootstrap/wiring.ts`) calls from the composition root (`src/bootstrap/main.ts`) before the first mount. It owns:
+`createDocumentSession(ports)` returns the one object that owns the live document while the page runs. The app has exactly one, created by `startSessionBridge(ports)` in `bootstrap/wiring/session-owner.ts`, which the wiring step (`wireApp` in `src/bootstrap/wiring.ts`) calls from the composition root (`src/bootstrap/main.ts`) before the first mount. It owns:
 
 | Owns | As built |
 | --- | --- |
@@ -184,14 +184,14 @@ All port types are in `ports.ts`. `SessionPorts` in `document-session.ts` bundle
 
 | Type | Meaning | Implemented by |
 | --- | --- | --- |
-| `DocumentEntry` | `(raw) => ValidatedDocument` | `session-bridge.ts` (`migrateRows` of `02-state.js`); fakes (`migrateRows` from `src/core/migrate.ts` with `fakeMigration` ports, or a `hooks.entry`) |
+| `DocumentEntry` | `(raw) => ValidatedDocument` | `bootstrap/wiring/session-owner.ts` (`migrateRows` of `02-state.js`); fakes (`migrateRows` from `src/core/migrate.ts` with `fakeMigration` ports, or a `hooks.entry`) |
 | `UndoPort` | `adopt`, `record`, `absorbServer`, `absorbReload` | `src/bootstrap/wiring/undo.ts` (`undoSessionPort`); fakes log the call |
 | `EffectPort` | `dirty`, `draft`, `save`, `refresh` | `legacySessionPorts` in `src/bootstrap/wiring.ts`, which forwards to the `effects` (dirty, draft, save, from `application/save/session-effects.ts`) and `refresh` (`07-production-tags.js`) passed to `wireApp`; fakes log dirty, draft and save with the generation and refresh without it |
 | `Capability`, `CapabilityPort` | `edit()` gives `{ allowed: true }` or `{ allowed: false, reason }` | `legacySessionPorts`, with the session effects' `edit`, which always allows; the fake's `deny(reason)` |
-| `ReconcilePort` | `anchors(doc)` returns the count moved | `session-bridge.ts` (`syncCommentAnchors` from `core/text/anchors.ts` with the legacy `cellOf`); fakes log `reconcile` and call an optional hook |
+| `ReconcilePort` | `anchors(doc)` returns the count moved | `bootstrap/wiring/session-owner.ts` (`syncCommentAnchors` from `core/text/anchors.ts` with the legacy `cellOf`); fakes log `reconcile` and call an optional hook |
 | `AttributionPort` | `attribute(doc)` gives the editor's own write for an accepted command, a `Plan` or `null`. Defined in `document-session.ts`, beside `Plan` | `legacySessionPorts`, forwarding to `myColorPlan` from the session effects; the fake returns `null` unless a test hands in `hooks.attribute`, and then logs `attribute` |
-| `ReportPort` | `(error) => void`, called once for each throw after a commit | `session-bridge.ts` (`console.error`, the app's existing error reporting); the fake logs `report` and keeps the error in `reported` |
-| `TimerPort` | `now`, `start`, `stop` | `session-bridge.ts` (`Date.now`, `setTimeout`, `clearTimeout`); `fakeClock` |
+| `ReportPort` | `(error) => void`, called once for each throw after a commit | `bootstrap/wiring/session-owner.ts` (`console.error`, the app's existing error reporting); the fake logs `report` and keeps the error in `reported` |
+| `TimerPort` | `now`, `start`, `stop` | `bootstrap/wiring/session-owner.ts` (`Date.now`, `setTimeout`, `clearTimeout`); `fakeClock` |
 | `Clock`, `IdSource` | Re-exported from `core/document/ports.ts` | `systemClock` from `adapters/identity/ids.ts` in the bridge; fake clocks in tests |
 | `EditorPort`, `StampPorts` | The editor's name; the clock and editor together, for row stamps | `sessionStamps` in the bridge: `systemClock` and the editor name passed to `wireApp` (`getEditorName` from `03-sync.js`, default "Anonymous"); fakes in the command tests |
 | `CellTextPorts` | `StampPorts` plus `cells`, a `CellDecoder` from stored HTML to runs | `sessionTextPorts` in the bridge: `sessionStamps` and the legacy `cellOf`; the text commands' tests use the real adapter over jsdom or a map of known HTML |

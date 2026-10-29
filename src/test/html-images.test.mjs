@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { sanitizeHtml, storedHtmlFromDom } from "../legacy/richtext.ts";
+import { sanitizeHtml, storedHtmlFromDom } from "../bootstrap/richtext.ts";
 import { storedImageHtml } from "../core/document/text-policy.ts";
 import { dataUrlForSync, has, inlineStateImages, recordFor } from "../adapters/storage/02c-blobs.js";
 import { migrateRows } from "../bootstrap/document-ports.ts";

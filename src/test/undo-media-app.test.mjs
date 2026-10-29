@@ -21,7 +21,7 @@ const { invertSteps } = await import("../core/text/steps.ts");
 const { rememberCellSelection, placeEditorSelection, cellSelection } = await import("../features/common/cell-selection.ts");
 const { editorSelection } = await import("../bootstrap/wiring/editor-owners.ts");
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
-const { sanitizeHtml } = await import("../legacy/richtext.ts");
+const { sanitizeHtml } = await import("../bootstrap/richtext.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
