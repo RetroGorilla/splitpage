@@ -7,7 +7,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { mergeProductionTags } from "../core/merge/lists.ts";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { fromHtml } from "../legacy/richtext.ts";
 import { toHtml } from "../core/text/html.ts";

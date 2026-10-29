@@ -9,7 +9,7 @@ import assert from "node:assert/strict";
 import { rowSeconds } from "../core/production/timing.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { sanitizeHtml } from "../legacy/richtext.ts";
 import { breakLine, deleteRange, insertText } from "../core/text/edits.ts";

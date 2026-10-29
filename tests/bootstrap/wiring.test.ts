@@ -28,8 +28,8 @@ import { undoPorts, startUndo, undoStarted, undoSessionPort, routeUndoReplays } 
 import { effectsStarted, startEffects } from "../../src/legacy/effects-bridge.ts";
 import type { EffectPorts } from "../../src/application/effects/ports.ts";
 import { recoveryStarted } from "../../src/legacy/recovery-bridge.ts";
-import { mergeStarted } from "../../src/legacy/merge-bridge.ts";
-import type { LegacyMergePorts } from "../../src/legacy/merge-bridge.ts";
+import { mergeStarted } from "../../src/bootstrap/wiring/document-merge.ts";
+import type { LegacyMergePorts } from "../../src/bootstrap/wiring/document-merge.ts";
 import { requestSave, savesStarted, savesWaiting } from "../../src/legacy/save-bridge.ts";
 import { startupReady } from "../../src/application/startup-signal.ts";
 import type { LegacySaveJob, LegacySavePorts } from "../../src/legacy/save-bridge.ts";
