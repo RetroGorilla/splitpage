@@ -21,6 +21,7 @@ files:
   - history-fs-backend.js
   - desktop-state.js
   - update-release.js
+  - file-service.js
   - package.json
 
 extraResources:
