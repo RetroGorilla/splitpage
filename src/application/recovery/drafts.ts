@@ -1,7 +1,4 @@
-import { normalizeDocId } from "../../../shared/doc-id-policy.js";
-import { refsIn } from "../../../shared/blob-policy.js";
 import { NO_DESTINATION } from "../transitions/ports.ts";
-import { SCHEMA_VERSION } from "../../core/document/fields.ts";
 import { createCaptureSchedule } from "./capture-schedule.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import type { DocumentView } from "../session/document-session.ts";
@@ -17,43 +14,10 @@ import {
   hasHeader, importCopy, mergedFileNotice, missingFileCopy, missingFileName, restoredFileNotice, sameDocContent as sameDraftContent,
   serverCopy, takenDraftFate, unreadableFileCopy, untitledRestoredNotice
 } from "./draft-restore.ts";
+import { browserDraftOrigin, desktopDraftOrigin, draftOriginSignature, draftPayloadFor, draftRefsFor, draftRefusal } from "./draft-origin.ts";
+import type { DraftOrigin, DraftPayload, DraftServer } from "./draft-origin.ts";
 import type { DraftCopy, DraftRestoreOutcome, HeaderedDraft, TakenDraft, TakenOrigin } from "./draft-restore.ts";
 import type { DraftFile, DraftFlush, DraftOpening, DraftParsedFile, DraftsMount, DraftsPorts } from "./drafts-ports.ts";
-
-interface DraftServer {
-  readonly base: string;
-  readonly docId: string;
-  readonly rev: number;
-  readonly copy?: boolean;
-}
-
-interface DraftOrigin {
-  kind: "untitled" | "server" | "file" | "import";
-  fileId: unknown;
-  fileKind: unknown;
-  importName: unknown;
-  baseLastModified: unknown;
-  baseSize: number | null;
-  server: DraftServer | null;
-}
-
-interface DraftPayload {
-  seq: number;
-  editSeq: number;
-  title: string;
-  docId: string | null;
-  docIdWrittenOut: boolean;
-  schema: unknown;
-  originKind: DraftOrigin["kind"];
-  fileId: unknown;
-  fileKind: unknown;
-  importName: unknown;
-  baseLastModified: unknown;
-  baseSize: number | null;
-  server: DraftServer | null;
-  stateJson: string;
-  baseJson: string | null;
-}
 
 interface BrowserCapture {
   readonly base: string;
@@ -244,51 +208,8 @@ function noteDraftChange(): void {
   schedule().noteChange();
 }
 
-function fieldOf(value: unknown, name: string): unknown {
-  const field: unknown = Reflect.get(Object(value), name);
-  return field;
-}
-
 function draftOriginOf(): DraftOrigin {
-  const origin: DraftOrigin = {
-    kind: "untitled", fileId: null, fileKind: null, importName: null,
-    baseLastModified: null, baseSize: null, server: null
-  };
-  if (!runningOnDesktop()) {
-    const target = browserDraftTarget();
-    if (target) {
-      origin.kind = "server";
-      origin.server = { base: target.base, docId: target.docId, rev: target.rev, copy: target.copy };
-    }
-    return origin;
-  }
-  const file = fileHome();
-  const handle = file && file["handle"];
-  const fileId = (handle && fieldOf(handle, "_desktopId")) || null;
-  if (file && fileId) {
-    origin.kind = "file";
-    origin.fileId = fileId;
-    origin.fileKind = file["format"];
-    origin.baseLastModified = file["lastModified"] || null;
-    return origin;
-  }
-  const imported = importHome();
-  if (imported) {
-    origin.kind = "import";
-    origin.importName = imported["name"];
-    origin.baseLastModified = imported["lastModified"] || null;
-    return origin;
-  }
-  return origin;
-}
-
-function draftOriginSignature(origin: DraftOrigin): string {
-  const doc = currentDocument();
-  return [
-    origin.kind, origin.fileId || "", origin.fileKind || "", origin.importName || "",
-    origin.server ? (origin.server.docId + "@" + origin.server.rev + "@" + origin.server.base) : "",
-    (doc && doc.docId) || "", documentLocation().writtenOut() ? "1" : "0"
-  ].join("|");
+  return runningOnDesktop() ? desktopDraftOrigin(fileHome(), importHome) : browserDraftOrigin(browserDraftTarget());
 }
 
 function captureAndSendDraft(keepClean?: boolean): Promise<DraftFlush | null | undefined> {
@@ -322,7 +243,7 @@ function captureAndSendDraft(keepClean?: boolean): Promise<DraftFlush | null | u
     schedule().dropPending();
     return Promise.resolve(null);
   }
-  const signature = draftOriginSignature(origin);
+  const signature = draftOriginSignature(origin, currentDocument(), documentLocation().writtenOut());
   if ((draftOnDisk || !keepCleanFile) &&
       saveChanges() === draftSentEditSeq && draftSentBase === mergeBase() && signature === draftSentSignature) {
     schedule().dropPending();
@@ -353,30 +274,19 @@ function captureAndSendDraft(keepClean?: boolean): Promise<DraftFlush | null | u
     }
     return baseTextCache;
   }
-  const payload: DraftPayload = {
+  const payload = draftPayloadFor({
     seq: ++draftSeq,
     editSeq: editSeqAtCapture,
-    title: (doc.title || ""),
-    docId: normalizeDocId(doc.docId) || null,
-    docIdWrittenOut: documentLocation().writtenOut(),
-    schema: SCHEMA_VERSION,
-    originKind: origin.kind,
-    fileId: origin.fileId,
-    fileKind: origin.fileKind,
-    importName: origin.importName,
-    baseLastModified: origin.baseLastModified,
-    baseSize: origin.baseSize,
-    server: origin.server,
+    doc: doc,
+    writtenOut: documentLocation().writtenOut(),
+    origin: origin,
     stateJson: stateJson,
     baseJson: sendBase ? baseTextFor() : null
-  };
+  });
 
   const captured = runningOnDesktop() ? null : browserDraftCapture(origin.server);
 
-  const draftRefs: string[] = refsIn(doc);
-  if (sendBase && baseAtCapture) {
-    refsIn(baseAtCapture).forEach(function (sha: string) { if (draftRefs.indexOf(sha) === -1) draftRefs.push(sha); });
-  }
+  const draftRefs = draftRefsFor(doc, baseAtCapture, sendBase);
 
   schedule().dropPending();
   const sent = draftRefs.length
@@ -474,10 +384,11 @@ function noteDraftWriteRefused(code: string): void {
   draftStats.lastCode = code;
   if (code !== "HELD") draftStats.failures++;
 
-  if (code === "DISCARDED" || code === "NO_TAB") { draftStopped = true; return; }
-  if (code === "UNAVAILABLE" && !runningOnDesktop()) { browserDraftsOff = true; schedule().dropPending(); return; }
+  const refusal = draftRefusal(code, runningOnDesktop());
+  if (refusal === "stop") { draftStopped = true; return; }
+  if (refusal === "browser-off") { browserDraftsOff = true; schedule().dropPending(); return; }
 
-  if (code !== "STALE_SEQ") showDraftPaused(code);
+  if (refusal === "pause") showDraftPaused(code);
 
   schedule().refused();
 }
