@@ -7,7 +7,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { appActions } = await import("../legacy/app-actions.ts");
-const { currentDocument } = await import("../legacy/session-bridge.ts");
+const { currentDocument } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();

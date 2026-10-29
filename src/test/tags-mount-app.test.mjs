@@ -1,13 +1,13 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 const { mountTagsFeature } = await import("../bootstrap/wiring/production.ts");
-const { documentTransitions } = await import("../legacy/transition-bridge.ts");
+const { documentTransitions } = await import("../bootstrap/wiring/transition-owners.ts");
 const { render } = await import("../features/rows/render.js");
 const { openProductionPanel } = await import("../features/tags/panels.js");
 const { tagKey } = await import("../core/document/tags.ts");

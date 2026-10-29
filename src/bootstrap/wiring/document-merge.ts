@@ -1,12 +1,12 @@
-import { createDocumentMerge } from "../application/session/document-merge.ts";
-import type { DocumentMerge, DocumentMergePorts, MergeReportOptions } from "../application/session/document-merge.ts";
-import type { ApplyMergeOptions, MergeOutcome } from "../application/session/apply-merge.ts";
-import type { ValidatedDocument } from "../core/document/validated.ts";
-import type { MergedStates } from "../core/merge-states.ts";
-import type { OperationContext } from "../application/session/operation.ts";
-import { showToast } from "./effects-bridge.ts";
-import { autoSavePolicy, haltAutoSave } from "./save-bridge.ts";
-import { noteAbsorbedDirty } from "./session-bridge.ts";
+import { createDocumentMerge } from "../../application/session/document-merge.ts";
+import type { DocumentMerge, DocumentMergePorts, MergeReportOptions } from "../../application/session/document-merge.ts";
+import type { ApplyMergeOptions, MergeOutcome } from "../../application/session/apply-merge.ts";
+import type { ValidatedDocument } from "../../core/document/validated.ts";
+import type { MergedStates } from "../../core/merge-states.ts";
+import type { OperationContext } from "../../application/session/operation.ts";
+import { showToast } from "./effects-owner.ts";
+import { autoSavePolicy, haltAutoSave } from "./save-owners.ts";
+import { noteAbsorbedDirty } from "./session-owner.ts";
 
 export type LegacyMergePorts = Omit<DocumentMergePorts<OperationContext>, "view">;
 

@@ -19,7 +19,7 @@ import type { TagsPorts } from "../../features/tags/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runFromButton } from "../../legacy/app-actions.ts";
 import { mountTagEntityContainer, mountTags } from "../../features/tags/mount.ts";
-import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
+import { captureOperation, stillOwns } from "./transition-owners.ts";
 import { cssAttr } from "../../features/common/dom.ts";
 import {
   acceptTagGhost,
@@ -55,7 +55,7 @@ import {
   setTagOwner,
   setTagNotes
 } from "../../features/tags/panels.js";
-import { queueAutoSave } from "../../legacy/save-bridge.ts";
+import { queueAutoSave } from "./save-owners.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { saves as portSaves } from "./ports/saving.ts";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";

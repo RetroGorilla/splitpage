@@ -6,17 +6,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { textMergeContext } from "../bootstrap/wiring/session-merge.ts";
-import { stashLocalWork } from "../legacy/recovery-bridge.ts";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { stashLocalWork } from "../bootstrap/wiring/recovery-owners.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { createMemoryBackend, dataUrlForSync, intern, internDataUrl, setBackend } from "../adapters/storage/02c-blobs.js";
-import { conflictStash, startRecovery } from "../legacy/recovery-bridge.ts";
+import { conflictStash, startRecovery } from "../bootstrap/wiring/recovery-owners.ts";
 import { DRAFT_LIMITS } from "../adapters/storage/draft-store-idb.ts";
 import { changedBetween } from "../application/editing/undo/history.ts";
 import { personIdRemap } from "../core/merge/lists.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { loadTestDocument } from "./_document.mjs";
-import { holdMergeBase, mergeBase, currentDocument } from "../legacy/session-bridge.ts";
+import { holdMergeBase, mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 startRecovery({
   indexedDB: null, limits: DRAFT_LIMITS, now: () => Date.now(), writerId: "w-merge-states", desktop: () => null,

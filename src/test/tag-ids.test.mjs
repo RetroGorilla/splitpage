@@ -7,7 +7,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { mergeProductionTags } from "../core/merge/lists.ts";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { fromHtml } from "../legacy/richtext.ts";
 import { toHtml } from "../core/text/html.ts";
@@ -15,7 +15,7 @@ import { registryEntryById } from "../features/tags/production-tags.js";
 import { ensureTagIds } from "../core/document/tags.ts";
 import { isTagId } from "../core/document/tags.ts";
 import { renameTag } from "../application/commands/production-actions.ts";
-import { runDocumentEdit, sessionStamps, currentDocument } from "../legacy/session-bridge.ts";
+import { runDocumentEdit, sessionStamps, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { retagRewrites as planRetagRewrites } from "../application/commands/tag-rewrites.ts";
 
 const retagText = portText;

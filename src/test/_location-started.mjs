@@ -1,3 +1,3 @@
-import { locationStarted, startLocation } from "../legacy/location-bridge.ts";
+import { locationStarted, startLocation } from "../bootstrap/wiring/location-owner.ts";
 
 if (!locationStarted()) startLocation();

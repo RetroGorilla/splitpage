@@ -2,7 +2,7 @@ import { deleteConfirmation } from "../bootstrap/wiring/production-editing-owner
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { createHeldImageDecode } from "./_m4-matrix.mjs";
 
 window.Element.prototype.scrollIntoView = function () {};
@@ -10,7 +10,7 @@ window.Element.prototype.scrollBy = function () {};
 await bootApp();
 const { commentSortMode } = await import("../application/comment-sort.ts");
 const { mountCommentsFeature } = await import("../bootstrap/wiring/comments.ts");
-const { documentTransitions } = await import("../legacy/transition-bridge.ts");
+const { documentTransitions } = await import("../bootstrap/wiring/transition-owners.ts");
 const { render } = await import("../features/rows/render.js");
 const { openCommentComposer, openCommentsPanel, closeCommentComposer } = await import("../features/comments/comments.js");
 after(closeApp);

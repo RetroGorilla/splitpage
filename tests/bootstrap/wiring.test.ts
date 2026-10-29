@@ -21,18 +21,18 @@ import type { TransitionDeps, Wiring, WiringDeps } from "../../src/bootstrap/wir
 import { appActions } from "../../src/legacy/app-actions.ts";
 import { exportFormats, installExportFormats } from "../../src/bootstrap/wiring/export-registry.ts";
 import { editorStarted, startEditor } from "../../src/bootstrap/wiring/editor-owners.ts";
-import { locationStarted, startLocation } from "../../src/legacy/location-bridge.ts";
-import { preferencesStarted, startPreferences } from "../../src/legacy/preferences-bridge.ts";
+import { locationStarted, startLocation } from "../../src/bootstrap/wiring/location-owner.ts";
+import { preferencesStarted, startPreferences } from "../../src/bootstrap/wiring/preferences-owner.ts";
 import { shotHidingPorts, shotHidingStarted, startShotHiding } from "../../src/bootstrap/wiring/shot-hiding.ts";
 import { undoPorts, startUndo, undoStarted, undoSessionPort, routeUndoReplays } from "../../src/bootstrap/wiring/undo.ts";
-import { effectsStarted, startEffects } from "../../src/legacy/effects-bridge.ts";
+import { effectsStarted, startEffects } from "../../src/bootstrap/wiring/effects-owner.ts";
 import type { EffectPorts } from "../../src/application/effects/ports.ts";
-import { recoveryStarted } from "../../src/legacy/recovery-bridge.ts";
-import { mergeStarted } from "../../src/legacy/merge-bridge.ts";
-import type { LegacyMergePorts } from "../../src/legacy/merge-bridge.ts";
-import { requestSave, savesStarted, savesWaiting } from "../../src/legacy/save-bridge.ts";
+import { recoveryStarted } from "../../src/bootstrap/wiring/recovery-owners.ts";
+import { mergeStarted } from "../../src/bootstrap/wiring/document-merge.ts";
+import type { LegacyMergePorts } from "../../src/bootstrap/wiring/document-merge.ts";
+import { requestSave, savesStarted, savesWaiting } from "../../src/bootstrap/wiring/save-owners.ts";
 import { startupReady } from "../../src/application/startup-signal.ts";
-import type { LegacySaveJob, LegacySavePorts } from "../../src/legacy/save-bridge.ts";
+import type { LegacySaveJob, LegacySavePorts } from "../../src/bootstrap/wiring/save-owners.ts";
 import type { SaveOutcome, WriterResult } from "../../src/application/save/coordinator.ts";
 import {
   liveDocumentPort,
@@ -43,9 +43,9 @@ import {
   sessionStamps,
   sessionStarted,
   startSessionBridge
-} from "../../src/legacy/session-bridge.ts";
-import type { SessionReplayRunner, SessionUndoPorts } from "../../src/legacy/session-bridge.ts";
-import { captureOperation, documentSources, documentTransitions, openDocument, startTransitions } from "../../src/legacy/transition-bridge.ts";
+} from "../../src/bootstrap/wiring/session-owner.ts";
+import type { SessionReplayRunner, SessionUndoPorts } from "../../src/bootstrap/wiring/session-owner.ts";
+import { captureOperation, documentSources, documentTransitions, openDocument, startTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
 import { migrateRows } from "../../src/legacy/document-ports.ts";
 import { projectFileServices, projectFileServicesStarted } from "../../src/application/formats/project-file-services.ts";
