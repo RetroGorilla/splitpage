@@ -13,7 +13,7 @@ const { closeBrollPage, openBrollPage, openBrollPanel } = await import("../featu
 const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const closeBroll = () => { sidePanels().close("broll-panel"); };
 const closeProduction = () => { sidePanels().close("production-panel"); };
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);

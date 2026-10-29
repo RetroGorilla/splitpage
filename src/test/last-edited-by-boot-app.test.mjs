@@ -17,7 +17,7 @@ const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { promptForName } = await import("../bootstrap/wiring/title-chrome.ts");
 const { openCommentComposer, postComment, postReply, toggleReplyComposer } = await import("../features/comments/comments.js");
 import { getSavedAuthorName as getSavedAuthorNameWith } from "../application/comment-author.js";
-import { getEditorName, preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+import { getEditorName, preferences as commentPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 function getSavedAuthorName() { return getSavedAuthorNameWith(commentPreferences()); }
 const { openSettings } = await import("../features/settings/settings.js");
 const { render } = await import("../features/rows/render.js");

@@ -13,7 +13,7 @@ const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const breakUndoCoalescing = () => undoOwner().breakCoalescing();
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { appActions } = await import("../legacy/app-actions.ts");
 
 after(closeApp);

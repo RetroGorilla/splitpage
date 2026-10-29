@@ -1,7 +1,7 @@
 import "./_dom.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { PREF_EVENT, preferences, startPreferences } from "../legacy/preferences-bridge.ts";
+import { PREF_EVENT, preferences, startPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 import { isRundownMinimized, toggleRundownMinimized } from "../features/rundown/rundown.js";
 import { mountRundownFeature as initRundown } from "../bootstrap/wiring/rundown.ts";
 import { mountScriptZoomFeature as initZoom } from "../bootstrap/wiring/script-zoom.ts";

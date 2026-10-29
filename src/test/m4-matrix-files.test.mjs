@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { saveBusy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { saveBusy, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import {
   createGates,
   createHeldDesktop,
@@ -9,7 +9,7 @@ import {
   mockClock,
   rightToday
 } from "./_m4-matrix.mjs";
-import { documentLocation } from "../legacy/location-bridge.ts";
+import { documentLocation } from "../bootstrap/wiring/location-owner.ts";
 import { mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
@@ -23,12 +23,12 @@ const { closeImportModal, openImportModal } = (await import("../bootstrap/wiring
 const { zipRead } = await import("../adapters/formats/zip.ts");
 const { setBackend: setBlobBackend } = await import("../adapters/storage/02c-blobs.js");
 const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
-const { confirmSavedNow, fileConflicts, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow, fileConflicts, saveDoc, setAutoSaveEnabled } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { localFileMenuControls, importSavingOwner } = await import("../bootstrap/wiring/local-files.ts");
-const homeModule = await import("../legacy/location-bridge.ts");
+const homeModule = await import("../bootstrap/wiring/location-owner.ts");
 const { openPrompterInBrowser } = await import("../bootstrap/wiring/desktop-owners.ts");
 const { makeDesktopHandle } = await import("../adapters/desktop/desktop-handle.ts");
 const { loadTestDocument } = await import("./_document.mjs");

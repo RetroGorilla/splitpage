@@ -1,7 +1,7 @@
 import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { unsavedChanges } from "../legacy/save-bridge.ts";
+import { unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -19,7 +19,7 @@ const { sessionEffects } = await import("../bootstrap/wiring/session-effects.ts"
 const { addRow } = await import("../bootstrap/wiring/rows.ts");
 const { cellEditing, rowDrag } = await import("../bootstrap/wiring/editor-owners.ts");
 const writer = await import("../features/writer/writer.js");
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);

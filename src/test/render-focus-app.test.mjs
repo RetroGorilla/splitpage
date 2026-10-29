@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { cloneState } from "../core/document/clone.ts";
-import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
+import { saveChanges, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -21,10 +21,10 @@ const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const undoSizes = () => undoOwner().sizes();
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const writer = await import("../features/writer/writer.js");
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);

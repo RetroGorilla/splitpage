@@ -19,7 +19,7 @@ const { openCommentComposer, closeCommentComposer } = await import("../features/
 const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { addGalleryVideo } = await import("../core/document/gallery.ts");
 const writer = await import("../features/writer/writer.js");
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";

@@ -1,4 +1,4 @@
-import { viewFlags } from "../legacy/preferences-bridge.ts";
+import { viewFlags } from "../bootstrap/wiring/preferences-owner.ts";
 import { currentDocument, readSession, runCommand, sessionStamps } from "../bootstrap/wiring/session-owner.ts";
 import { productionReaders as documentReaders } from "../bootstrap/document-ports.ts";
 import { hasSetLength as coreHasSetLength } from "../core/document/timing.ts";

@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
+import { saveChanges, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -18,7 +18,7 @@ const lastUndoEntry = () => undoOwner().last();
 const flushEdits = () => undoOwner().flush();
 const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const writer = await import("../features/writer/writer.js");
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { openProductionPanel } = await import("../features/tags/panels.js");
 const { openBrollPanel } = await import("../features/broll/panel.js");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");

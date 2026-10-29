@@ -9,7 +9,7 @@ import { bulkTagCell } from "../features/tags/production-tags.js";
 import { sessionStarted, startSessionBridge } from "../bootstrap/wiring/session-owner.ts";
 import { legacySessionPorts } from "../bootstrap/wiring.ts";
 import { startPageEffects } from "../bootstrap/effects.ts";
-import { effectsStarted } from "../legacy/effects-bridge.ts";
+import { effectsStarted } from "../bootstrap/wiring/effects-owner.ts";
 import { undoPorts, startUndo, undoStarted } from "../bootstrap/wiring/undo.ts";
 
 export function startTestSession(deps) {

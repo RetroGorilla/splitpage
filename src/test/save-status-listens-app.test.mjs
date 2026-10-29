@@ -9,9 +9,9 @@ await bootApp();
 after(closeApp);
 
 const { noteAbsorbedDirty, noteSessionEdit, runCommand } = await import("../bootstrap/wiring/session-owner.ts");
-const { amendHome, currentHome, setHome } = await import("../legacy/location-bridge.ts");
-const { preferences } = await import("../legacy/preferences-bridge.ts");
-const { autoSavePolicy, confirmSavedNow, saveDoc, unsavedChanges } = await import("../legacy/save-bridge.ts");
+const { amendHome, currentHome, setHome } = await import("../bootstrap/wiring/location-owner.ts");
+const { preferences } = await import("../bootstrap/wiring/preferences-owner.ts");
+const { autoSavePolicy, confirmSavedNow, saveDoc, unsavedChanges } = await import("../bootstrap/wiring/save-owners.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();

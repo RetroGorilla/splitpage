@@ -9,7 +9,7 @@ import { mergeUndo } from "../bootstrap/wiring/editor-owners.ts";
 import { historyOwner } from "../bootstrap/wiring/history.ts";
 const listDocHistory = (...args) => historyOwner().listDocHistory(...args);
 import { cloneState } from "../core/document/clone.ts";
-import { autoSavePolicy, confirmSavedNow, resumeAutoSave, unsavedChanges } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, confirmSavedNow, resumeAutoSave, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import { loadTestDocument } from "./_document.mjs";
 import { mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 

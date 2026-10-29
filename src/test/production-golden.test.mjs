@@ -31,7 +31,7 @@ import { mountTagPanelsFeature } from "../bootstrap/wiring/production.ts";
 import { applyGearQuickAdd } from "../features/tags/panels.js";
 import { LONG_DEMO } from "../starters/index.ts";
 import { assertGolden, freezeClockAndRandom, goldenNames, jsonCopy, maskTokens, newTokens } from "./golden-helpers.mjs";
-import { confirmSavedNow, startSaves, unsavedChanges } from "../legacy/save-bridge.ts";
+import { confirmSavedNow, startSaves, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import { WHOLE_DOCUMENT } from "../application/session/change-set.ts";
 import { startTestSession } from "./_session.mjs";
 import { appSessionDeps } from "./_app-session.mjs";

@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { confirmSavedNow, unsavedChanges } from "../legacy/save-bridge.ts";
+import { confirmSavedNow, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};

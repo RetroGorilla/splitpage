@@ -9,13 +9,13 @@ await bootApp();
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
-const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { obsoleteSaveText } = await import("../application/save/file-saving.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const homeModule = await import("../legacy/location-bridge.ts");
-const saves = await import("../legacy/save-bridge.ts");
+const homeModule = await import("../bootstrap/wiring/location-owner.ts");
+const saves = await import("../bootstrap/wiring/save-owners.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 

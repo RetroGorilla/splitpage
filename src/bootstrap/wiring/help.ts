@@ -8,7 +8,7 @@ import { startHelp as mountHelp } from "../../features/help/help.js";
 import type { HelpMount, HelpPorts } from "../../features/help/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { sidePanels } from "./ports/panels.ts";
-import { preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
+import { preferences, viewFlags } from "./preferences-owner.ts";
 
 const help = owned<HelpMount>();
 
