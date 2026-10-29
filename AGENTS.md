@@ -22,7 +22,7 @@ Read this first. It is the short version of the rules; the linked documents hold
 | `src/bootstrap/actions.ts` | The one ordered list of actions. Order is what the command menu shows; `tests/bootstrap/action-order.test.ts` pins it | anything |
 | `src/bootstrap/main.ts` | The composition root and build entry: wires the app, then mounts owners and features in a fixed order. `tests/bootstrap/composition-root.test.ts` pins the order | anything in `src/bootstrap/`; outside it, only its frozen set |
 | `src/legacy/` | Retired; do not add files here | core, `application`, `adapters`, `shared/`; never features or bootstrap |
-| `server/`, `desktop/`, `shared/` | Static file server for `start.mjs` and Docker, Electron shell, code shared by all three | see the layer table |
+| `server/`, `desktop/`, `shared/` | Static file server for `start.mjs`, Electron shell, code shared by all three | see the layer table |
 
 The layer table is enforced by `npm run check:deps`: [dependencies.md, Layers](docs/architecture/dependencies.md#layers).
 
