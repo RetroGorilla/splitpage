@@ -22,11 +22,12 @@ Everything listed here goes inside the asar.
 | `voice-helper.js` | Follow My Voice's listener process (#8). The PowerShell script it runs (`desktop/voice/listen.ps1`) cannot be read from inside the asar, so `stage.mjs` stages it into `resources/splitpage/voice` instead. |
 | `chromium-browsers.js` | Finds an installed Chromium browser for "Use Chromium Speech Recognition" (#123). |
 | `history-fs-backend.js` | Version history on disk (#83): the file-system backend the shared history store runs over in the main process. It requires `./blob-store.js` itself. |
+| `desktop-state.js` | `desktop-state.json` in the user-data folder: the windows, tabs and recent documents the next launch restores. It reads, migrates (v1 to v2) and normalizes the file, and writes it through one queue with `writeFileDurableSync` from `./drafts.js`. |
 
 From `ipc-channels.js` down, `main.js` requires each of these modules at
 startup, so each must ship for the same reason `drafts.js` does. A new
 `./module` that `main.js` requires has to be added to this list:
-`desktop/test/google-drive.test.mjs` fails if one is missing.
+`desktop/test/ipc-table.test.mjs` fails if one is missing.
 
 Two things `main.js` needs at startup are deliberately left out of `files`:
 

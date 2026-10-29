@@ -9,7 +9,7 @@ const fs = require("node:fs");
 const fsp = require("node:fs/promises");
 const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
-const { createDraftStore, restoreDoneAction, writeFileDurableSync, MAX_BODY_BYTES } = require("./drafts");
+const { createDraftStore, restoreDoneAction, MAX_BODY_BYTES } = require("./drafts");
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
 const { createQuitWatchdog } = require("./quit-watchdog");
@@ -19,6 +19,10 @@ const {
   createBlobStore, imageBlobRefusal, sniffImageMime, isSha256, MAX_MISSING_QUERY
 } = require("./blob-store");
 const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = require("./history-fs-backend");
+const {
+  DESKTOP_STATE_VERSION, TAB_OR_WINDOW_ID_RE, LAST_KNOWN_TITLE_MAX, RECENTS_MAX,
+  mintTabOrWindowId, normalizeBounds, normalizeTabSource, createDesktopStateStore
+} = require("./desktop-state");
 const {
   APP_ORIGIN, TABSTRIP_ORIGIN, channelFor, channelsForOrigin, checkArgs
 } = require("./ipc-channels");
@@ -420,189 +424,13 @@ function requestDraftFlush(tab, budgetMs, keep) {
   });
 }
 
-const DESKTOP_STATE_VERSION = 2;
-const TAB_OR_WINDOW_ID_RE = /^[0-9a-f]{32}$/;
-const LAST_KNOWN_TITLE_MAX = 300;
-const RECENTS_MAX = 20;
-
-function stateFilePath() { return path.join(app.getPath("userData"), "desktop-state.json"); }
-
-function mintTabOrWindowId() { return crypto.randomBytes(16).toString("hex"); }
-
-const DESKTOP_STATE_TMP_RE = /^\.tmp-[0-9a-f]{12}-desktop-state\.json$/;
-function sweepDesktopStateTempFiles() {
-  const dir = path.dirname(stateFilePath());
-  let names;
-  try { names = fs.readdirSync(dir); } catch { return 0; }
-  let removed = 0;
-  for (const name of names) {
-    if (!DESKTOP_STATE_TMP_RE.test(name)) continue;
-    try { fs.unlinkSync(path.join(dir, name)); removed++; } catch { }
+const desktopState = createDesktopStateStore({
+  filePath: () => path.join(app.getPath("userData"), "desktop-state.json"),
+  pathKey,
+  onWriteError: (err) => {
+    if (TEST_MODE) process.stderr.write(`[splitpage] desktop-state write failed: ${err && err.stack || err}\n`);
   }
-  return removed;
-}
-
-function normalizeBounds(b) {
-  if (!b || typeof b !== "object") return null;
-  const ok = ["x", "y", "width", "height"].every((k) => typeof b[k] === "number" && Number.isFinite(b[k]));
-  return ok ? { x: b.x, y: b.y, width: b.width, height: b.height } : null;
-}
-
-function normalizeTabSource(src) {
-  if (src && typeof src === "object") {
-    if (src.kind === "file" && typeof src.absPath === "string" && src.absPath && path.isAbsolute(src.absPath)) {
-      return { kind: "file", absPath: src.absPath };
-    }
-  }
-  return { kind: "blank" };
-}
-
-function blankDesktopWindow(extra) {
-  const tabId = mintTabOrWindowId();
-  return {
-    windowId: mintTabOrWindowId(),
-    bounds: null,
-    maximized: false,
-    activeTabId: tabId,
-    tabs: [{ tabId, source: { kind: "blank" }, lastKnownTitle: "" }],
-    ...(extra || {})
-  };
-}
-
-function freshDesktopState() {
-  return { version: DESKTOP_STATE_VERSION, windows: [blankDesktopWindow()], recents: [] };
-}
-
-function migrateDesktopStateV1(v1) {
-  const tabId = mintTabOrWindowId();
-  const source = typeof v1.lastFilePath === "string" && v1.lastFilePath
-    ? { kind: "file", absPath: v1.lastFilePath }
-    : { kind: "blank" };
-  return {
-    version: DESKTOP_STATE_VERSION,
-    windows: [{
-      windowId: mintTabOrWindowId(),
-      bounds: normalizeBounds(v1.windowBounds),
-      maximized: v1.windowMaximized === true,
-      activeTabId: tabId,
-      tabs: [{ tabId, source, lastKnownTitle: "" }]
-    }],
-    recents: []
-  };
-}
-
-function normalizeRecentsList(raw) {
-  const out = [];
-  const seen = new Set();
-  for (const r of Array.isArray(raw) ? raw : []) {
-    if (!r || typeof r !== "object") continue;
-    if (typeof r.absPath !== "string" || !r.absPath || !path.isAbsolute(r.absPath)) continue;
-    const key = pathKey(r.absPath);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({
-      absPath: r.absPath,
-      title: typeof r.title === "string" ? r.title.slice(0, LAST_KNOWN_TITLE_MAX) : "",
-      at: typeof r.at === "number" && Number.isFinite(r.at) ? r.at : 0
-    });
-    if (out.length >= RECENTS_MAX) break;
-  }
-  return out;
-}
-
-function normalizeDesktopStateV2(raw) {
-  const seen = new Set();
-  const uniqueId = (id) => {
-    const v = typeof id === "string" && TAB_OR_WINDOW_ID_RE.test(id) && !seen.has(id) ? id : mintTabOrWindowId();
-    seen.add(v);
-    return v;
-  };
-  const windows = [];
-  for (const w of Array.isArray(raw && raw.windows) ? raw.windows : []) {
-    if (!w || typeof w !== "object") continue;
-    const tabs = [];
-    for (const t of Array.isArray(w.tabs) ? w.tabs : []) {
-      if (!t || typeof t !== "object") continue;
-      tabs.push({
-        tabId: uniqueId(t.tabId),
-        source: normalizeTabSource(t.source),
-        lastKnownTitle: typeof t.lastKnownTitle === "string" ? t.lastKnownTitle.slice(0, LAST_KNOWN_TITLE_MAX) : ""
-      });
-    }
-    if (!tabs.length) continue;
-    windows.push({
-      windowId: uniqueId(w.windowId),
-      bounds: normalizeBounds(w.bounds),
-      maximized: w.maximized === true,
-      activeTabId: tabs.some((t) => t.tabId === w.activeTabId) ? w.activeTabId : tabs[0].tabId,
-      tabs
-    });
-  }
-  const recents = normalizeRecentsList(raw && raw.recents);
-  if (!windows.length) {
-    const fresh = freshDesktopState();
-    fresh.recents = recents;
-    return fresh;
-  }
-  return { version: DESKTOP_STATE_VERSION, windows, recents };
-}
-
-let desktopStateSynthesized = null;
-
-function readDesktopStateV2() {
-  let text;
-  try { text = fs.readFileSync(stateFilePath(), "utf8"); } catch { text = null; }
-  if (desktopStateSynthesized && desktopStateSynthesized.text === text) {
-    return structuredClone(desktopStateSynthesized.state);
-  }
-  let parsed;
-  try { parsed = text === null ? undefined : JSON.parse(text); } catch { parsed = undefined; }
-
-  const isObject = !!parsed && typeof parsed === "object" && !Array.isArray(parsed);
-  const state = isObject && parsed.version === DESKTOP_STATE_VERSION ? normalizeDesktopStateV2(parsed)
-    : isObject && !("version" in parsed) ? migrateDesktopStateV1(parsed)
-    : freshDesktopState();
-  desktopStateSynthesized = { text, state: structuredClone(state) };
-  return state;
-}
-
-const desktopStateQueue = [];
-let desktopStateDraining = false;
-
-function writeDesktopStateV2(mutator) {
-  return new Promise((resolve) => {
-    desktopStateQueue.push({ mutator, resolve });
-    if (!desktopStateDraining) drainDesktopStateQueue();
-  });
-}
-
-function drainDesktopStateQueue() {
-  desktopStateDraining = true;
-  try {
-    while (desktopStateQueue.length) {
-      const job = desktopStateQueue.shift();
-      let written = false;
-      try {
-        const current = readDesktopStateV2();
-        const result = job.mutator(current);
-        if (result !== false) {
-          const next = normalizeDesktopStateV2(result && typeof result === "object" ? result : current);
-          const file = stateFilePath();
-          const text = JSON.stringify(next, null, 2);
-          fs.mkdirSync(path.dirname(file), { recursive: true });
-          writeFileDurableSync(file, text);
-          desktopStateSynthesized = null;
-          written = true;
-        }
-      } catch (err) {
-        if (TEST_MODE) process.stderr.write(`[splitpage] desktop-state write failed: ${err && err.stack || err}\n`);
-      }
-      job.resolve(written);
-    }
-  } finally {
-    desktopStateDraining = false;
-  }
-}
+});
 
 let recentDocuments = [];
 
@@ -617,12 +445,12 @@ function fileIdForPath(absPath) {
 }
 
 function loadRecentsAtLaunch() {
-  recentDocuments = readDesktopStateV2().recents || [];
+  recentDocuments = desktopState.read().recents || [];
 }
 
 function persistRecents() {
   const snapshot = recentDocuments.map((r) => ({ ...r }));
-  return writeDesktopStateV2((current) => { current.recents = snapshot; return current; });
+  return desktopState.write((current) => { current.recents = snapshot; return current; });
 }
 
 function noteRecentDocument(absPath, title) {
@@ -703,7 +531,7 @@ function shellStateAsV2() {
 function persistShellState() {
   if (sessionWritesFrozen || sessionRestoreInProgress) return Promise.resolve(false);
   if (!windowsById.size) return Promise.resolve(false);
-  return writeDesktopStateV2(() => shellStateAsV2());
+  return desktopState.write(() => shellStateAsV2());
 }
 
 async function readFileEntry(id, absPath) {
@@ -1436,7 +1264,7 @@ function boundsIfVisible(b) {
 }
 
 function savedBoundsIfVisible() {
-  return boundsIfVisible(primaryDesktopWindow(readDesktopStateV2()).bounds);
+  return boundsIfVisible(primaryDesktopWindow(desktopState.read()).bounds);
 }
 
 function titleBarOverlayColors() {
@@ -2245,7 +2073,7 @@ function indexDraftPath(tabId, filePath) {
 }
 
 function restoreSessionAtLaunch(draftInit) {
-  const persisted = readDesktopStateV2();
+  const persisted = desktopState.read();
   const drafts = (draftInit && Array.isArray(draftInit.drafts) ? draftInit.drafts : draftsList())
     .filter((d) => d && d.status !== "unsupported");
   const draftByTab = new Map(drafts.map((d) => [d.tabId, d]));
@@ -3290,7 +3118,7 @@ app.setAppUserModelId("com.retrogorilla.splitpage");
 
 app.whenReady().then(() => {
   nativeTheme.themeSource = readThemeChoice();
-  sweepDesktopStateTempFiles();
+  desktopState.sweepTempFiles();
   loadRecentsAtLaunch();
   const draftInit = initDraftStore();
   initBlobStore();
