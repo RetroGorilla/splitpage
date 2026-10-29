@@ -162,10 +162,10 @@ export function startOnboarding(given: OnboardingPorts): OnboardingMount {
       if ((e as KeyboardEvent).key !== "Tab") return;
       const focusables = Array.prototype.filter.call(
         (modal as HTMLElement).querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'),
-        function (el: HTMLButtonElement) { return !el.disabled && el.offsetParent !== null; }
-      );
+        function (el: HTMLElement & { disabled?: boolean }) { return !el.disabled && el.offsetParent !== null; }
+      ) as HTMLElement[];
       if (!focusables.length) return;
-      const first = focusables[0], last = focusables[focusables.length - 1];
+      const first = focusables[0] as HTMLElement, last = focusables[focusables.length - 1] as HTMLElement;
       if ((e as KeyboardEvent).shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       else if (!(e as KeyboardEvent).shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
     });
