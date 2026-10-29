@@ -14,6 +14,7 @@ const {
   filesToOpenFrom, pathKey, createFileRegistry, readFileEntry, toBuffer, atomicWrite
 } = require("./file-service");
 const { createDocClaims } = require("./doc-claims");
+const { createRecents } = require("./recents");
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
 const { createQuitWatchdog } = require("./quit-watchdog");
@@ -24,7 +25,7 @@ const {
 } = require("./blob-store");
 const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = require("./history-fs-backend");
 const {
-  DESKTOP_STATE_VERSION, TAB_OR_WINDOW_ID_RE, LAST_KNOWN_TITLE_MAX, RECENTS_MAX,
+  DESKTOP_STATE_VERSION, TAB_OR_WINDOW_ID_RE, LAST_KNOWN_TITLE_MAX,
   mintTabOrWindowId, normalizeBounds, normalizeTabSource, createDesktopStateStore
 } = require("./desktop-state");
 const {
@@ -363,72 +364,12 @@ const desktopState = createDesktopStateStore({
   }
 });
 
-let recentDocuments = [];
-
-const recentFileIdByPath = new Map();
-function fileIdForPath(absPath) {
-  const key = pathKey(absPath);
-  const existing = recentFileIdByPath.get(key);
-  if (existing && fileIds.pathOf(existing) === absPath) return existing;
-  const id = fileIds.register(absPath);
-  recentFileIdByPath.set(key, id);
-  return id;
-}
-
-function loadRecentsAtLaunch() {
-  recentDocuments = desktopState.read().recents || [];
-}
-
-function persistRecents() {
-  const snapshot = recentDocuments.map((r) => ({ ...r }));
-  return desktopState.write((current) => { current.recents = snapshot; return current; });
-}
-
-function noteRecentDocument(absPath, title) {
-  if (typeof absPath !== "string" || !absPath) return false;
-  const key = pathKey(absPath);
-  const name = typeof title === "string" ? title.slice(0, LAST_KNOWN_TITLE_MAX) : "";
-  const at = Date.now();
-  const existingIndex = recentDocuments.findIndex((r) => pathKey(r.absPath) === key);
-  if (existingIndex === 0) {
-    const head = recentDocuments[0];
-    head.at = at;
-    if (!name || head.title === name) return false;
-    head.title = name;
-    return true;
-  }
-  const previous = existingIndex === -1 ? null : recentDocuments.splice(existingIndex, 1)[0];
-  recentDocuments.unshift({
-    absPath,
-    title: name || (previous ? previous.title : ""),
-    at
-  });
-  if (recentDocuments.length > RECENTS_MAX) recentDocuments.length = RECENTS_MAX;
-  return true;
-}
+const recents = createRecents({ store: desktopState, pathKey, fileIds });
 
 function noteRecentDocumentAndPersist(absPath, title) {
-  if (!noteRecentDocument(absPath, title)) return;
-  if (sessionWritesFrozen || sessionRestoreInProgress || !windowsById.size) persistRecents();
+  if (!recents.note(absPath, title)) return;
+  if (sessionWritesFrozen || sessionRestoreInProgress || !windowsById.size) recents.persist();
   else persistShellState();
-}
-
-function removeRecentDocumentByFileId(fileId) {
-  const absPath = typeof fileId === "string" ? fileIds.pathOf(fileId) : null;
-  if (!absPath) return false;
-  const key = pathKey(absPath);
-  const before = recentDocuments.length;
-  recentDocuments = recentDocuments.filter((r) => pathKey(r.absPath) !== key);
-  return recentDocuments.length !== before;
-}
-
-function recentsForRenderer() {
-  return recentDocuments.map((r) => ({
-    fileId: fileIdForPath(r.absPath),
-    name: path.basename(r.absPath),
-    title: r.title || "",
-    at: r.at || 0
-  }));
 }
 
 function primaryDesktopWindow(state) { return state.windows[0]; }
@@ -456,7 +397,7 @@ function shellStateAsV2() {
       tabs: rows
     });
   }
-  return { version: DESKTOP_STATE_VERSION, windows, recents: recentDocuments };
+  return { version: DESKTOP_STATE_VERSION, windows, recents: recents.list() };
 }
 
 function persistShellState() {
@@ -2392,20 +2333,17 @@ function registerIpc() {
   });
 
   ipcHandle("splitpage:recents-list", async () => {
-    return recentsForRenderer();
+    return recents.forRenderer();
   });
 
   ipcHandle("splitpage:recents-remove", async (event, fileId) => {
-    if (removeRecentDocumentByFileId(fileId)) await persistRecents();
-    return recentsForRenderer();
+    if (recents.removeByFileId(fileId)) await recents.persist();
+    return recents.forRenderer();
   });
 
   ipcHandle("splitpage:recents-clear", async () => {
-    if (recentDocuments.length) {
-      recentDocuments = [];
-      await persistRecents();
-    }
-    return recentsForRenderer();
+    if (recents.clear()) await recents.persist();
+    return recents.forRenderer();
   });
 
   ipcHandle("splitpage:get-session-info", async () => {
@@ -2533,7 +2471,7 @@ function registerIpc() {
       indexTabSource(tab);
     }
 
-    if (tab.source.kind === "file") noteRecentDocument(tab.source.absPath, tab.title);
+    if (tab.source.kind === "file") recents.note(tab.source.absPath, tab.title);
 
     const w = windowsById.get(tab.windowId);
     if (w) {
@@ -2932,7 +2870,7 @@ app.setAppUserModelId("com.retrogorilla.splitpage");
 app.whenReady().then(() => {
   nativeTheme.themeSource = readThemeChoice();
   desktopState.sweepTempFiles();
-  loadRecentsAtLaunch();
+  recents.load();
   const draftInit = initDraftStore();
   initBlobStore();
   initHistoryStore();
