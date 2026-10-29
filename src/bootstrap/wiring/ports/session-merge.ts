@@ -1,7 +1,7 @@
 import type { SessionMergeOwnerPorts } from "../../../application/session/session-merge-ports.ts";
 import { heldDocument, holdMergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteServerUpdate } from "../../../legacy/session-bridge.ts";
 import { migrateRows, withDocumentPorts } from "../../../legacy/document-ports.ts";
-import { captureRestore, stillRestoring } from "../../../legacy/recovery-bridge.ts";
+import { captureRestore, stillRestoring } from "../recovery-owners.ts";
 import { autoSavePolicy, confirmBaseline, saveChanges } from "../../../legacy/save-bridge.ts";
 import { mergeUndo } from "../editor-owners.ts";
 import { setHome } from "../../../legacy/location-bridge.ts";

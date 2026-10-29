@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createDraftResume } from "../../src/application/recovery/draft-resume.ts";
 import "../../src/test/_dom.mjs";
 
-import { draftResume, startRecovery } from "../../src/legacy/recovery-bridge.ts";
+import { draftResume, startRecovery } from "../../src/bootstrap/wiring/recovery-owners.ts";
 import { DRAFT_LIMITS } from "../../src/adapters/storage/draft-store-idb.ts";
 
 test("a new draft resume holds nothing: no restore is pending", () => {

@@ -19,7 +19,7 @@ import { currentRowsRender } from "./render.ts";
 import { updateSaveStatus } from "./save-status.ts";
 import { saves } from "./ports/saving.ts";
 import { updateAutoSaveMenu } from "./file-saving.ts";
-import { applyStashedWork } from "../../legacy/recovery-bridge.ts";
+import { applyStashedWork } from "./recovery-owners.ts";
 import { localFilesOwner } from "./local-files.ts";
 import { seedCheckPasses } from "../../adapters/page/seed-check.ts";
 import { startDesktopShell } from "./desktop.ts";
