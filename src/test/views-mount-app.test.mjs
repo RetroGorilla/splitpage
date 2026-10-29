@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 await bootApp();
 const views = await import("../bootstrap/wiring/views.ts");
-const { appActions } = await import("../legacy/app-actions.ts");
+const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
 after(closeApp);
 
 test("views app: main and Writer saves submit one existing action each after disposal and remount", () => {

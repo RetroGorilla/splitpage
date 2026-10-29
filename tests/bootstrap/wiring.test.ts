@@ -18,7 +18,7 @@ import { legacyExportServices } from "../../src/bootstrap/export-services.ts";
 import { wireExportKit } from "../../src/bootstrap/wiring/export-kit.ts";
 import { exportKitStarted } from "../../src/bootstrap/wiring/export-capture.ts";
 import type { TransitionDeps, Wiring, WiringDeps } from "../../src/bootstrap/wiring.ts";
-import { appActions } from "../../src/legacy/app-actions.ts";
+import { appActions } from "../../src/bootstrap/wiring/ports/actions.ts";
 import { exportFormats, installExportFormats } from "../../src/bootstrap/wiring/export-registry.ts";
 import { editorStarted, startEditor } from "../../src/bootstrap/wiring/editor-owners.ts";
 import { locationStarted, startLocation } from "../../src/legacy/location-bridge.ts";

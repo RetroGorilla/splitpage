@@ -14,7 +14,7 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const breakUndoCoalescing = () => undoOwner().breakCoalescing();
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
-const { appActions } = await import("../legacy/app-actions.ts");
+const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
 
 after(closeApp);
 
