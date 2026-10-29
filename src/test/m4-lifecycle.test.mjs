@@ -42,7 +42,7 @@ for (const name of ["MutationObserver", "ResizeObserver"]) {
   globalThis[name] = Tracked;
 }
 
-const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const session = liveSession();
 const realSubscribe = session.subscribe;
 session.subscribe = function (listener) {
@@ -59,7 +59,7 @@ const refreshed = { into: null };
 await rewireRunningApp({ refresh: (due) => (refreshed.into ? refreshed.into.push(...due) : runIdleRefresh(due)) });
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
@@ -69,7 +69,7 @@ const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.
 const { videoFiles } = await import("../bootstrap/wiring/video-files.ts");
 const { grant: grantVideoFile, has: hasSessionVideo, url: sessionVideoUrl } = videoFiles;
 const { normalizeVideoLink } = await import("../core/document/gallery.ts");
-const { requestRefresh } = await import("../legacy/session-bridge.ts");
+const { requestRefresh } = await import("../bootstrap/wiring/session-owner.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 

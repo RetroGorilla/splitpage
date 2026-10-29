@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import "./_preferences-started.mjs";
 import { settingsAppData } from "../application/preferences/preferences.ts";
 import { preferences } from "../legacy/preferences-bridge.ts";

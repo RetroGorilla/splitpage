@@ -12,7 +12,7 @@ import type { MergeUndo } from "../../application/session/merge-undo.ts";
 import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
 import { editorKeys } from "../../core/text/selection.ts";
 import { scriptCellOf } from "../../legacy/richtext.ts";
-import { liveSession } from "../../legacy/session-bridge.ts";
+import { liveSession } from "./session-owner.ts";
 
 export type PicturePicker = (rowId: string) => void;
 

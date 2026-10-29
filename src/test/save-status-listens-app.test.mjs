@@ -8,7 +8,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 after(closeApp);
 
-const { noteAbsorbedDirty, noteSessionEdit, runCommand } = await import("../legacy/session-bridge.ts");
+const { noteAbsorbedDirty, noteSessionEdit, runCommand } = await import("../bootstrap/wiring/session-owner.ts");
 const { amendHome, currentHome, setHome } = await import("../legacy/location-bridge.ts");
 const { preferences } = await import("../legacy/preferences-bridge.ts");
 const { autoSavePolicy, confirmSavedNow, saveDoc, unsavedChanges } = await import("../legacy/save-bridge.ts");

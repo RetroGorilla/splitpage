@@ -15,7 +15,7 @@ const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
 const breakUndoCoalescing = () => undoOwner().breakCoalescing();
-const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { focusMemory } = await import("../bootstrap/wiring/editor-owners.ts");

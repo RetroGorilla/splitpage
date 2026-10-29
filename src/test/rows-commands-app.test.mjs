@@ -14,7 +14,7 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
-const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { sessionEffects } = await import("../bootstrap/wiring/session-effects.ts");
 const { addRow } = await import("../bootstrap/wiring/rows.ts");
 const { cellEditing, rowDrag } = await import("../bootstrap/wiring/editor-owners.ts");

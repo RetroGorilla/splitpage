@@ -10,7 +10,7 @@ await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
-const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { copyFromCell, pasteIntoCell } = await import("../features/clipboard/cell-clipboard.js");
 const { render } = await import("../features/rows/render.js");

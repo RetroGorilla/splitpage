@@ -1,5 +1,5 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { documentLocation } from "../legacy/location-bridge.ts";
 
 const pristine = process.argv[2] === "pristine";

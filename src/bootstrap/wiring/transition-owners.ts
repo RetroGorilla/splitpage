@@ -9,7 +9,7 @@ import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { migrateRows } from "../../legacy/document-ports.ts";
 import { currentHome } from "../../legacy/location-bridge.ts";
 import { confirmedGeneration } from "../../legacy/save-bridge.ts";
-import { liveSession } from "../../legacy/session-bridge.ts";
+import { liveSession } from "./session-owner.ts";
 
 export interface LegacyTransitionPorts {
   readonly live: LiveDocumentPort;

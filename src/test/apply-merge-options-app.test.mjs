@@ -11,7 +11,7 @@ const listDocHistory = (...args) => historyOwner().listDocHistory(...args);
 import { cloneState } from "../core/document/clone.ts";
 import { autoSavePolicy, confirmSavedNow, resumeAutoSave, unsavedChanges } from "../legacy/save-bridge.ts";
 import { loadTestDocument } from "./_document.mjs";
-import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
+import { mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 await bootApp();
 await window.__historyTest.forceBackend("memory");

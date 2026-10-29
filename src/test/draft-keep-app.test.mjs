@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 
@@ -9,7 +9,7 @@ await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
-const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
 const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { flushDraftNow } = await import("../bootstrap/wiring/recovery-owners.ts");

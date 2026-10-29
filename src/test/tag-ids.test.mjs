@@ -15,7 +15,7 @@ import { registryEntryById } from "../features/tags/production-tags.js";
 import { ensureTagIds } from "../core/document/tags.ts";
 import { isTagId } from "../core/document/tags.ts";
 import { renameTag } from "../application/commands/production-actions.ts";
-import { runDocumentEdit, sessionStamps, currentDocument } from "../legacy/session-bridge.ts";
+import { runDocumentEdit, sessionStamps, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { retagRewrites as planRetagRewrites } from "../application/commands/tag-rewrites.ts";
 
 const retagText = portText;

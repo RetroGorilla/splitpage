@@ -3,7 +3,7 @@ import { importActions as definitions } from "../../features/imports/actions.ts"
 import type { LegacyOpening } from "./transition-owners.ts";
 import type { ImportDialogControls, ImportDialogPorts } from "../../features/imports/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { noteSessionEdit } from "../../legacy/session-bridge.ts";
+import { noteSessionEdit } from "./session-owner.ts";
 import { importDesktop } from "./ports/desktop.ts";
 import { documentReader } from "./ports/document.ts";
 import { edits } from "./ports/editing.ts";

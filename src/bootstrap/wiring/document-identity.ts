@@ -2,7 +2,7 @@ import { createDocumentIdentityOwner } from "../../application/identity/document
 import type { DocumentIdentityOwner, DocumentIdentityPorts } from "../../application/identity/ports.ts";
 import type { IdentityPort } from "../../application/transitions/ports.ts";
 import { documentGuardOn, documentView, quietly } from "../../application/identity/document-guard.ts";
-import { heldDocument, currentDocument } from "../../legacy/session-bridge.ts";
+import { heldDocument, currentDocument } from "./session-owner.ts";
 import { startStandaloneHtml } from "../../adapters/page/standalone-html.js";
 import { migrateRows } from "../../legacy/document-ports.ts";
 import { documentIdentityPorts } from "./ports/document-identity.ts";

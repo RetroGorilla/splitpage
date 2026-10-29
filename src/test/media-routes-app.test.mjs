@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import zlib from "node:zlib";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { createHeldImageDecode } from "./_m4-matrix.mjs";
 import { saveChanges } from "../legacy/save-bridge.ts";
 
@@ -17,7 +17,7 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { rowSlots } = await import("../core/document/gallery.ts");
 const { openGalleryOverlay, closeGalleryOverlay } = await import("../features/gallery/overlay.js");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");

@@ -1,14 +1,14 @@
-import { createDocumentSession } from "../application/session/document-session.ts";
-import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView, Plan, ReloadedContent, Replay, SessionCounters, SessionListener, Stamp } from "../application/session/document-session.ts";
-import type { ChangeSet } from "../application/session/change-set.ts";
-import type { RecordsReconciler } from "../application/production/broll-records.ts";
-import type { CapabilityPort, CellTextPorts, DocumentEntry, EditorPort, EffectPort, ReportPort, StampPorts, TimerPort, UndoPort } from "../application/session/ports.ts";
-import type { ValidatedDocument } from "../core/document/validated.ts";
-import type { LiveDocumentPort } from "../application/transitions/ports.ts";
-import { syncCommentAnchors } from "../core/text/anchors.ts";
-import { systemClock } from "../adapters/identity/ids.ts";
-import { cellOf, scriptCellOf } from "./richtext.ts";
-import { documentGuardOn, documentView, unwrapped } from "../application/identity/document-guard.ts";
+import { createDocumentSession } from "../../application/session/document-session.ts";
+import type { AbsorbedKind, Command, CommandOutcome, DocumentSession, DocumentView, Plan, ReloadedContent, Replay, SessionCounters, SessionListener, Stamp } from "../../application/session/document-session.ts";
+import type { ChangeSet } from "../../application/session/change-set.ts";
+import type { RecordsReconciler } from "../../application/production/broll-records.ts";
+import type { CapabilityPort, CellTextPorts, DocumentEntry, EditorPort, EffectPort, ReportPort, StampPorts, TimerPort, UndoPort } from "../../application/session/ports.ts";
+import type { ValidatedDocument } from "../../core/document/validated.ts";
+import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
+import { syncCommentAnchors } from "../../core/text/anchors.ts";
+import { systemClock } from "../../adapters/identity/ids.ts";
+import { cellOf, scriptCellOf } from "../../legacy/richtext.ts";
+import { documentGuardOn, documentView, unwrapped } from "../../application/identity/document-guard.ts";
 
 export type SessionReplayRunner = (replay: Replay) => CommandOutcome;
 

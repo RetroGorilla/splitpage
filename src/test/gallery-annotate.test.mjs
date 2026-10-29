@@ -11,7 +11,7 @@ import {
 } from "../adapters/storage/02d-gallery.js";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { applyMarkdownProject, buildMarkdownProject, buildSplitpageFile, parseMarkdownProject } from "../adapters/formats/project-file.ts";
 import { refsIn } from "../../shared/blob-policy.js";
 import { exportDocumentOf } from "../bootstrap/wiring/export-capture.ts";

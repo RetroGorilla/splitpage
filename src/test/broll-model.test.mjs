@@ -19,7 +19,7 @@ import { anchorBrollInRows } from "../adapters/production/broll-anchors.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { removeBrollProp, renameTag } from "../application/commands/production-actions.ts";
-import { runDocumentEdit, sessionStamps, currentDocument } from "../legacy/session-bridge.ts";
+import { runDocumentEdit, sessionStamps, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { retagRewrites as planRetagRewrites } from "../application/commands/tag-rewrites.ts";
 
 const retagText = portText;

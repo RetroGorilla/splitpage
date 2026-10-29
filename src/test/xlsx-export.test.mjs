@@ -3,7 +3,7 @@ import "./_export-services-started.mjs";
 import { liveDoc } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { breakdownTable } from "../adapters/formats/export-projections.ts";
