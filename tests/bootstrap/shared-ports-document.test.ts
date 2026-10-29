@@ -8,7 +8,7 @@ import { legacyExportServices } from "../../src/bootstrap/export-services.ts";
 import { sanitizeHtml, storedHtmlFromDom } from "../../src/legacy/richtext.ts";
 import { adoptReplacement } from "../../src/bootstrap/wiring/session-owner.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
-import { migrateRows } from "../../src/legacy/document-ports.ts";
+import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 
 test("the document reader reads the session's document and hears replacements until unsubscribed", () => {
   const reader = portDocument;

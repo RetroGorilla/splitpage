@@ -4,12 +4,12 @@ import assert from "node:assert/strict";
 
 globalThis.location = new URL("https://splitpage.test/index.html?freeze-caches=1");
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { healTagRegistry, productionIndexStats, resetProductionIndexStats } = await import("../features/tags/production-tags.js");
 const { productionIndex } = await import("../application/production/index-owner.ts");
 const { currentDocument } = await import("../bootstrap/wiring/session-owner.ts");
 const { mintTagId } = await import("../core/document/tags.ts");
-const { productionReaders } = await import("../legacy/document-ports.ts");
+const { productionReaders } = await import("../bootstrap/document-ports.ts");
 const { TAG_CATEGORIES } = await import("../core/production/looks.ts");
 const { cellOf } = await import("../legacy/richtext.ts");
 const { cacheSeal, freezeCachesAsked } = await import("../legacy/cache-freeze.ts");

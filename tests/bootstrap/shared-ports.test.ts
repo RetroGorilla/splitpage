@@ -24,14 +24,14 @@ import type { SaveChange } from "../../src/application/save/save-state.ts";
 import { autoSavePolicy, haltAutoSave, noteSaveChange, saveDestinations, startSaves } from "../../src/bootstrap/wiring/save-owners.ts";
 import type { LegacySavePorts } from "../../src/bootstrap/wiring/save-owners.ts";
 import { cacheSeal } from "../../src/legacy/cache-freeze.ts";
-import { productionReaders } from "../../src/legacy/document-ports.ts";
+import { productionReaders } from "../../src/bootstrap/document-ports.ts";
 import { editorSelection, startEditor } from "../../src/bootstrap/wiring/editor-owners.ts";
 import { installExportFormats } from "../../src/bootstrap/wiring/export-registry.ts";
 import { productionIndex, startProductionIndex } from "../../src/application/production/index-owner.ts";
 import { liveDocumentPort } from "../../src/bootstrap/wiring/session-owner.ts";
 import { deleteConfirmation, productionSelection, startProductionEditing } from "../../src/bootstrap/wiring/production-editing-owners.ts";
 import { productionGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../../src/application/tag-panel-state.ts";
-import { migrateRows } from "../../src/legacy/document-ports.ts";
+import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 
 test("external links check the current desktop capability and forward each address to the current bridge", () => {
   const externalLinks: ExternalLinks = portExternalLinks;

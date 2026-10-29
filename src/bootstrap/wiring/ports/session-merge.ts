@@ -1,6 +1,6 @@
 import type { SessionMergeOwnerPorts } from "../../../application/session/session-merge-ports.ts";
 import { heldDocument, holdMergeBase, noteAbsorbedDirty, noteMerged, noteRecovery, noteServerUpdate } from "../session-owner.ts";
-import { migrateRows, withDocumentPorts } from "../../../legacy/document-ports.ts";
+import { migrateRows, withDocumentPorts } from "../../document-ports.ts";
 import { captureRestore, stillRestoring } from "../recovery-owners.ts";
 import { autoSavePolicy, confirmBaseline, saveChanges } from "../save-owners.ts";
 import { mergeUndo } from "../editor-owners.ts";

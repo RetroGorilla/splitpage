@@ -4,7 +4,7 @@ import type { IdentityPort } from "../../application/transitions/ports.ts";
 import { documentGuardOn, documentView, quietly } from "../../application/identity/document-guard.ts";
 import { heldDocument, currentDocument } from "./session-owner.ts";
 import { startStandaloneHtml } from "../../adapters/page/standalone-html.js";
-import { migrateRows } from "../../legacy/document-ports.ts";
+import { migrateRows } from "../document-ports.ts";
 import { documentIdentityPorts } from "./ports/document-identity.ts";
 
 let started: DocumentIdentityOwner | null = null;
