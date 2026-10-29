@@ -6,7 +6,7 @@ The code lives in `src/application/session/operation.ts`, `src/application/trans
 
 ## 1. Purpose
 
-Three small owners, each created once and started once by the wiring step (`wireApp` in `src/bootstrap/wiring.ts`, called by the legacy initializer shim `src/js/_entry.js`):
+Three small owners, each created once and started once by the wiring step (`wireApp` in `src/bootstrap/wiring.ts`, called by the composition root `src/bootstrap/main.js`):
 
 | Owner | Question it answers | Created by |
 | --- | --- | --- |

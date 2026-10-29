@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/bootstrap/startup/page-entry.ts",
     "src/adapters/files/last-file.ts",

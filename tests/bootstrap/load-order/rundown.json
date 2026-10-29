@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/rundown/rundown.js",
     "src/features/rundown/actions.ts",
