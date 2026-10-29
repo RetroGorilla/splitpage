@@ -7,7 +7,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { STATE_FIELDS, missingStateFields } from "../core/merge/state-fields.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { cellOf } from "../legacy/richtext.ts";
+import { cellOf } from "../bootstrap/richtext.ts";
 import { collectTagsFromRows } from "../features/tags/production-tags.js";
 
 import { brollInCell } from "../core/production/broll.ts";

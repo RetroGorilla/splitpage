@@ -7,7 +7,7 @@ import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { escapeHtml } from "../core/document/text-policy.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { withPageHead } from "../core/document/ids.ts";
-import { cellOf } from "../legacy/richtext.ts";
+import { cellOf } from "../bootstrap/richtext.ts";
 import { toPlainText } from "../core/text/projections.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { exportMetaLine } from "../adapters/formats/export-text.ts";

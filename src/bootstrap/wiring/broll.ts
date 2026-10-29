@@ -26,7 +26,7 @@ import { domToPos } from "../../features/common/cell-dom.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";
 import { cellEditing, paintGuard } from "./editor-owners.ts";
-import { scriptCellOf } from "../../legacy/richtext.ts";
+import { scriptCellOf } from "../richtext.ts";
 import { currentDocument, heldDocument, requestRefresh } from "./session-owner.ts";
 
 const broll = owned<BrollRecordsMount>();
