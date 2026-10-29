@@ -13,7 +13,7 @@ import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { notifyDesktopDocumentState } from "./desktop-owners.ts";
 import { documentLocation } from "./location-owner.ts";
 import { applyMerge } from "./document-merge.ts";
-import { resetProductionPanelState } from "../../legacy/production-editing-bridge.ts";
+import { resetProductionPanelState } from "./production-editing-owners.ts";
 import { applyStashedWork, browserDrafts, captureRestore, desktopDrafts, draftResume, recoveryStarted, stillRestoring, useBrowserDraftFactory } from "./recovery-owners.ts";
 import type { LegacyDraftPorts } from "./recovery-owners.ts";
 import { saveChanges, unsavedChanges } from "./save-owners.ts";
