@@ -510,7 +510,7 @@ One stack per tab, of step lists (§4). What counts as one entry:
   someone else. These change what the document is rather than edit it, and
   version history already covers them. `undoMerge` stays as it is.
 
-**Remote changes** (a pull, a reload from disk, D4). Only the touched cells are
+**Remote changes** (a merge or a reload from disk, D4). Only the touched cells are
 forgotten. Each entry's steps record the `before` of the cells they touch. When a merge
 changes a cell, entries touching that cell are dropped from the stack.
 Entries for untouched cells survive. So Ctrl+Z never reverts someone else's
