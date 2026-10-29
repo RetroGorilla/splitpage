@@ -43,7 +43,7 @@ breakdown for props/locations/cast/VFX/sound.
   time.
 - **Seven edits go through `DocumentSession`** (milestone 3): scene length,
   scene status, typing, split, join, cut and paste are commands in
-  `src/application/commands/`, run through `src/legacy/session-bridge.ts`.
+  `src/application/commands/`, run through `src/bootstrap/wiring/session-owner.ts`.
   Every other writer still assigns into `S.state` and calls `markDirty()`.
   [docs/architecture/session.md](docs/architecture/session.md) describes the
   session, the effect scheduler and the command shape as built.
@@ -1787,7 +1787,7 @@ the code now lives in the owned folders, and
 | `04a-row-motion.js` | FLIP for `#rows`: `withRowMotion` wraps render()'s reconcile, measures before and after in document space, animates what moved (§3.14) |
 | `04b-busy.js` | the one loading indicator: `beginBusy`/`endBusy`/`withBusyBar`, the delayed top bar (§3.15) |
 | `04c-doc-model.js` | the structured document model (#85): a cell as runs with marks, `fromHtml`/`toHtml`/`cellOf`, the readers (`toPlainText`, `toDocxRuns`, `toMarkdown`, …), edits, steps and `mergeCells` |
-| `05b-cell-edit.js` | removed in 4.1 (L3d PR 4): opening, editing, syncing and closing a script cell is the cell-editing owner (`src/application/editing/cell-editing.ts`, the page side in `src/features/editing/cell-page.ts`), reached through `cellEditing()` in `src/legacy/editor-bridge.ts`; `domToPos`/`posToDom` are in `src/features/editing/cell-dom.ts` |
+| `05b-cell-edit.js` | removed in 4.1 (L3d PR 4): opening, editing, syncing and closing a script cell is the cell-editing owner (`src/application/editing/cell-editing.ts`, the page side in `src/features/editing/cell-page.ts`), reached through the editing ports the wiring builds (`src/bootstrap/wiring/ports/editing.ts`); `domToPos`/`posToDom` are in `src/features/editing/cell-dom.ts` |
 | `05c-clipboard.js` | copy, cut, paste and drop in a script cell: the view of `pasteCommand` and `cutCommand` (`src/application/commands/clipboard.ts`, run through the session; an attachments-only paste runs outside `openCellEdit` and `closeCellEdit`, between its own undo-grouping breaks); a cut comment moves with its words (D6); a pasted b-roll key gets an id of its own unless a cut moves it (invariant #54) |
 | `05d-draft-edit.js` | `editDraft` — one edit of a comment or reply draft through the model, its pictures and video cards carried as placeholder characters (`mediaTable`); the draft's own undo history and typing bursts; `pasteIntoDraft`, `appendDraftMedia` |
 | `12a-undo.js` | the one undo/redo stack: every edit recorded by diffing after `markDirty()`; remote merges forget what they touched; `foldIntoEdit` puts something the app finishes later (a pasted link's thumbnail, #141) into the edit's own entry, or nowhere when a later entry touches it |
@@ -1894,7 +1894,7 @@ instead, since it can sit open, unnoticed, during an unrelated test.
 Since #145 the menu is a dropdown (`18b-file-menu.js`), but every item is
 still one `<button data-file-action>` inside `#file-menu`, exactly once. The
 desktop native menu no longer clicks them: `runDesktopMenuCommand` hands the
-command to `nativeMenuRunner()` (`src/legacy/native-menu.ts`), which runs a
+command to `nativeMenuRunner()` (`src/bootstrap/native-menu.ts`), which runs a
 File menu item's action through `handleFileMenuAction(id, "native-menu")`,
 reading no rendered state; only a command it does not know (an export
 format) still clicks its item. What an item's
