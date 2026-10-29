@@ -38,16 +38,16 @@ function started(read) {
   }
 }
 
-const session = await import("../legacy/session-bridge.ts");
-const saves = await import("../legacy/save-bridge.ts");
-const recovery = await import("../legacy/recovery-bridge.ts");
+const session = await import("../bootstrap/wiring/session-owner.ts");
+const saves = await import("../bootstrap/wiring/save-owners.ts");
+const recovery = await import("../bootstrap/wiring/recovery-owners.ts");
 const merge = await import("../bootstrap/wiring/document-merge.ts");
-const transitions = await import("../legacy/transition-bridge.ts");
+const transitions = await import("../bootstrap/wiring/transition-owners.ts");
 const editor = await import("../bootstrap/wiring/editor-owners.ts");
-const productionEditing = await import("../legacy/production-editing-bridge.ts");
-const preferences = await import("../legacy/preferences-bridge.ts");
-const location = await import("../legacy/location-bridge.ts");
-const effects = await import("../legacy/effects-bridge.ts");
+const productionEditing = await import("../bootstrap/wiring/production-editing-owners.ts");
+const preferences = await import("../bootstrap/wiring/preferences-owner.ts");
+const location = await import("../bootstrap/wiring/location-owner.ts");
+const effects = await import("../bootstrap/wiring/effects-owner.ts");
 const actions = await import("../legacy/app-actions.ts");
 const exports = await import("../bootstrap/wiring/export-registry.ts");
 const exportServices = await import("../application/export/services.ts");

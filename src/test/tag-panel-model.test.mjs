@@ -5,14 +5,14 @@ import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { inertBody, sanitizeHtml } from "../legacy/richtext.ts";
-import { cellOf } from "../legacy/richtext.ts";
+import { inertBody, sanitizeHtml } from "../bootstrap/richtext.ts";
+import { cellOf } from "../bootstrap/richtext.ts";
 import { projection, tagNameOf } from "../core/text/runs.ts";
 import { toHtml } from "../core/text/html.ts";
 import { tagFieldOccurrences, tagsInField } from "../features/tags/production-tags.js";
 import { tagOccurrences } from "../core/production/tags.ts";
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
-import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../legacy/session-bridge.ts";
+import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions } from "../application/commands/tag-rewrites.ts";
 
 const retagText = portText;

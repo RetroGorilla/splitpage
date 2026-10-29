@@ -5,7 +5,7 @@ import { hideShotActions as definitions } from "../../features/rows/actions.ts";
 import { createHideShot } from "../../features/rows/hide-shot.ts";
 import type { HideShotControls } from "../../features/rows/hide-shot.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { viewFlags } from "../../legacy/preferences-bridge.ts";
+import { viewFlags } from "./preferences-owner.ts";
 import { shotHiding } from "./shot-hiding.ts";
 
 type HideShotMount = HideShotControls & { readonly dispose: () => void };

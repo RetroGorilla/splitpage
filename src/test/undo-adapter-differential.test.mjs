@@ -1,10 +1,10 @@
 import "./_dom.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { undoOwner, undoSessionPort } from "../bootstrap/wiring/undo.ts";
 import { cellEdit, changeSet } from "../application/session/change-set.ts";
-import { liveSession, currentDocument } from "../legacy/session-bridge.ts";
+import { liveSession, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { loadTestDocument } from "./_document.mjs";
 import { startTestSession } from "./_session.mjs";
 const flushEdits = () => undoOwner().flush();

@@ -59,7 +59,7 @@ node build.mjs --check   # are both in step with src/ and VERSION?
 The source is `src/` — `page.html` (the shell), `app.css` and `styles/`,
 `seed-state.json` (the demo document), the folders that own one job each
 (`core/`, `application/`, `adapters/`, `features/`, `bootstrap/`, and
-`legacy/` for the bridges still standing), with `src/bootstrap/main.js`, the
+`legacy/` for the bridges still standing), with `src/bootstrap/main.ts`, the
 entry point esbuild bundles from — plus `VERSION` and
 `docs/help.md`, which is rendered into the in-app Help page. Nothing else
 feeds the build. Which folder may import which is
@@ -185,7 +185,7 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
 - `src/` — the source. `page.html` (the shell), `app.css` and `styles/`,
   `seed-state.json` (the demo document), `core/`, `application/`,
   `adapters/`, `features/`, `bootstrap/` and `legacy/` (see above).
-  `bootstrap/main.js` is the composition root: esbuild bundles it into the
+  `bootstrap/main.ts` is the composition root: esbuild bundles it into the
   app's one inline script, and it sets the boot order.
 - `tests/` — unit tests for the owned folders; `src/test/` holds the older
   ones and the browser suites' helpers. `tools/` — the gates and runners;

@@ -6,7 +6,7 @@ import type { DocumentPlace } from "../../../src/application/location/document-p
 
 import {
   currentHome, documentLocation, locationStarted, setHome, startLocation
-} from "../../../src/legacy/location-bridge.ts";
+} from "../../../src/bootstrap/wiring/location-owner.ts";
 
 test("document place is built without starting owners and exposes only reads and existing subscriptions", () => {
   const place: DocumentPlace = portPlace;

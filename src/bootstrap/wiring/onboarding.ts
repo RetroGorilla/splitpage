@@ -12,7 +12,7 @@ import { startOnboarding as mountOnboarding } from "../../features/onboarding/on
 import type { OnboardingMount, OnboardingPorts } from "../../features/onboarding/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { localFileMenuControls } from "./local-files.ts";
-import { preferences } from "../../legacy/preferences-bridge.ts";
+import { preferences } from "./preferences-owner.ts";
 
 const onboarding = owned<OnboardingMount>();
 
