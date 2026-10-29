@@ -19,6 +19,7 @@ import { undoOwner } from "./undo.ts";
 import { cellEditing, pickPictureFor } from "./editor-owners.ts";
 import { preferences } from "./preferences-owner.ts";
 import { desktopVideo } from "./desktop-video.ts";
+import { presence } from "./ports/desktop-presence.ts";
 
 const gallery = owned<GalleryMount>();
 
@@ -62,7 +63,8 @@ export function mountGalleryOverlayFeature(): GalleryOverlayMount {
         fetchThumbnail: (href) => video.owner()?.fetchThumbnail(href) ?? Promise.resolve(null),
         hostLabel: videoHostLabel
       },
-      sessionVideos: { has: videoFiles.has, url: videoFiles.url }
+      sessionVideos: { has: videoFiles.has, url: videoFiles.url },
+      desktop: presence.running
     };
     return mountOverlay(ports);
   });

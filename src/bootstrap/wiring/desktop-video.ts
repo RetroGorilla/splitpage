@@ -1,17 +1,17 @@
 import type { DesktopVideo, DesktopVideoResult } from "../../application/media/desktop-video.ts";
-import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { presence } from "./ports/desktop-presence.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 
 export const desktopVideo: DesktopVideo = {
-  present: runningOnDesktop,
+  present: presence.running,
   grant: (file) => {
     const port = desktopPort();
-    if (!runningOnDesktop() || !port || typeof port.grantVideoFile !== "function") return null;
+    if (!presence.running() || !port || typeof port.grantVideoFile !== "function") return null;
     return Promise.resolve(port.grantVideoFile(file));
   },
   opens: () => {
     const port = desktopPort();
-    return runningOnDesktop() && !!port && typeof port.openVideoFile === "function";
+    return presence.running() && !!port && typeof port.openVideoFile === "function";
   },
   open: (token) => {
     const port = desktopPort();
