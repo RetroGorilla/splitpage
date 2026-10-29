@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/application/save/file-saving.ts",
     "src/adapters/files/save-dialogs.ts",

@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/prompter/prompter.js",
     "src/bootstrap/wiring/prompter.ts"
