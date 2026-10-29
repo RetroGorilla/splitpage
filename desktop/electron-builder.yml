@@ -24,6 +24,7 @@ files:
   - file-service.js
   - doc-claims.js
   - recents.js
+  - window-appearance.js
   - package.json
 
 extraResources:
