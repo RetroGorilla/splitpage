@@ -9,7 +9,7 @@ import { COMPOSITION_ROOT } from "./load-manifests.ts";
 const OUTSIDE_BOOTSTRAP = ["../legacy/document-ports.ts", "../adapters/storage/02c-blobs.js", "../adapters/storage/02d-gallery.js"];
 
 const MOUNT_ORDER = [
-  "mountPageEntry", "mountSceneStatusFeature", "mountHideShotFeature", "mountDocumentIdentityOwner", "startBlobs", "startGalleryStore",
+  "mountScreenStateOwner", "mountPageEntry", "mountSceneStatusFeature", "mountHideShotFeature", "mountDocumentIdentityOwner", "startBlobs", "startGalleryStore",
   "mountSessionMergeOwner", "mountHistoryOwner", "mountScriptPlaceFeature", "mountRowsRenderFeature", "mountDraftEditFeature",
   "mountGalleryOverlayFeature", "mountRundownFeature", "mountCopyPasteFeature", "mountReadTimeFeature", "mountScriptZoomFeature",
   "mountTargetFeature", "mountGalleryVideoFeature", "mountGalleryFeature", "mountVideoFilesFeature", "mountScenesFeature",

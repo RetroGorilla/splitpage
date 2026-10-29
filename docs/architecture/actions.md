@@ -162,9 +162,11 @@ imports nothing from `src/js`, so the numbered modules can import it without
 joining their import cycle.
 
 The screen state owner (`src/application/screen-state.ts`) answers
-`screenNow()` from ports the wiring builds in `src/bootstrap/wiring/ports/screen.ts`:
+`screenNow()` from ports built in `src/bootstrap/wiring/screen-state.ts`:
 the document reader, the view flags, the prompter state and the page's dialog
-and launcher backdrops (`src/adapters/page/overlays.ts`).
+and launcher backdrops (`src/adapters/page/overlays.ts`). The composition root
+starts it first and the wiring stops it last; the screen port refuses before
+start and after stop.
 
 ### What is in front
 

@@ -7,6 +7,7 @@ import { brollPanelActions, mountBrollPanelStateFeature, stopBrollPanelStateFeat
 import { commentsPanelActions } from "../../src/bootstrap/wiring/comments.ts";
 import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
+import "../../src/test/_screen-state-started.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createActionRegistry, registerAll } from "../../src/application/actions.ts";
