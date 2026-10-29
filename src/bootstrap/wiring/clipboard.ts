@@ -19,7 +19,7 @@ import { collectTagsFromRows, scheduleProductionRefresh } from "../../features/t
 import { startNewScript } from "./file-menu-controls.ts";
 import { cellEditing, paintGuard, rowDrag } from "./editor-owners.ts";
 import { viewFlags } from "./preferences-owner.ts";
-import { imageRefOf } from "../../legacy/richtext.ts";
+import { imageRefOf } from "../richtext.ts";
 
 const copyPaste = owned<CopyPasteMount>();
 

@@ -7,7 +7,7 @@ import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { LiveDocumentPort } from "../../application/transitions/ports.ts";
 import { syncCommentAnchors } from "../../core/text/anchors.ts";
 import { systemClock } from "../../adapters/identity/ids.ts";
-import { cellOf, scriptCellOf } from "../../legacy/richtext.ts";
+import { cellOf, scriptCellOf } from "../richtext.ts";
 import { documentGuardOn, documentView, unwrapped } from "../../application/identity/document-guard.ts";
 
 export type SessionReplayRunner = (replay: Replay) => CommandOutcome;

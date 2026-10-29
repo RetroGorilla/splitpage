@@ -6,7 +6,7 @@ import { migrateRows } from "../bootstrap/document-ports.ts";
 import { withPageHead } from "../core/document/ids.ts";
 import { plainName, plainText, safeHref, safeImageSrc } from "../core/document/text-policy.ts";
 import { safeId } from "../adapters/identity/safe-id.ts";
-import { sanitizeHtml } from "../legacy/richtext.ts";
+import { sanitizeHtml } from "../bootstrap/richtext.ts";
 import { directionShortcut, importDirections } from "../core/text/directions.ts";
 import { normalizePersonColors } from "../core/document/person-colors.ts";
 import { normalizeSceneLength, normalizeTargetLength } from "../core/document/timing.ts";
