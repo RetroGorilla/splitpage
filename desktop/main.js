@@ -10,6 +10,9 @@ const fsp = require("node:fs/promises");
 const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { createDraftStore, restoreDoneAction, MAX_BODY_BYTES } = require("./drafts");
+const {
+  filesToOpenFrom, pathKey, createFileRegistry, readFileEntry, toBuffer, atomicWrite
+} = require("./file-service");
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
 const { createQuitWatchdog } = require("./quit-watchdog");
@@ -114,21 +117,6 @@ const STATIC_ALLOWLIST = {
 
 const rawArgv = app.isPackaged ? process.argv.slice(1) : process.argv.slice(2);
 
-const OPENABLE_EXTENSIONS = [".splitpage", ".md", ".html", ".htm", ".docx", ".txt", ".csv"];
-function filesToOpenFrom(list, baseDir) {
-  const out = [];
-  for (const item of list) {
-    if (item.startsWith("-")) continue;
-    const ext = path.extname(item).toLowerCase();
-    if (!OPENABLE_EXTENSIONS.includes(ext)) continue;
-    try {
-      const abs = path.resolve(baseDir, item);
-      if (fs.statSync(abs).isFile()) out.push(abs);
-    } catch { }
-  }
-  return out;
-}
-
 const argvFilesToOpen = filesToOpenFrom(rawArgv, process.cwd());
 
 const gotLock = app.requestSingleInstanceLock();
@@ -146,12 +134,7 @@ if (TEST_MODE) {
   });
 }
 
-const fileRegistry = new Map();
-function registerPath(absPath) {
-  const id = crypto.randomBytes(16).toString("hex");
-  fileRegistry.set(id, absPath);
-  return id;
-}
+const fileIds = createFileRegistry();
 
 const TITLEBAR_H = 36;
 
@@ -178,11 +161,6 @@ const windowsById = new Map();
 const webContentsIdToTabId = new Map();
 const pathToTabId = new Map();
 
-function pathKey(absPath) {
-  const resolved = path.resolve(absPath);
-  return process.platform === "win32" ? resolved.toLowerCase() : resolved;
-}
-
 let lastFocusedWindowId = null;
 let quitConfirmed = false;
 let quitKeepingDrafts = false;
@@ -205,7 +183,7 @@ let docClaimSeq = 0;
 const docClaimCleanupRegistered = new WeakSet();
 
 function homeKeyForClaim(tab) {
-  const absPath = tab.fileId ? fileRegistry.get(tab.fileId) : null;
+  const absPath = tab.fileId ? fileIds.pathOf(tab.fileId) : null;
   if (absPath) return "file:" + pathKey(absPath);
   return null;
 }
@@ -379,7 +357,7 @@ function draftFiniteNumber(v) {
 
 function buildDraftHeader(tab, p) {
   const fileId = typeof p.fileId === "string" ? p.fileId : null;
-  const filePath = fileId ? fileRegistry.get(fileId) || null : null;
+  const filePath = fileId ? fileIds.pathOf(fileId) || null : null;
   const w = windowsById.get(tab.windowId);
   const index = w ? w.tabIds.indexOf(tab.id) : -1;
   return {
@@ -441,8 +419,8 @@ const recentFileIdByPath = new Map();
 function fileIdForPath(absPath) {
   const key = pathKey(absPath);
   const existing = recentFileIdByPath.get(key);
-  if (existing && fileRegistry.get(existing) === absPath) return existing;
-  const id = registerPath(absPath);
+  if (existing && fileIds.pathOf(existing) === absPath) return existing;
+  const id = fileIds.register(absPath);
   recentFileIdByPath.set(key, id);
   return id;
 }
@@ -486,7 +464,7 @@ function noteRecentDocumentAndPersist(absPath, title) {
 }
 
 function removeRecentDocumentByFileId(fileId) {
-  const absPath = typeof fileId === "string" ? fileRegistry.get(fileId) : null;
+  const absPath = typeof fileId === "string" ? fileIds.pathOf(fileId) : null;
   if (!absPath) return false;
   const key = pathKey(absPath);
   const before = recentDocuments.length;
@@ -535,37 +513,6 @@ function persistShellState() {
   if (sessionWritesFrozen || sessionRestoreInProgress) return Promise.resolve(false);
   if (!windowsById.size) return Promise.resolve(false);
   return desktopState.write(() => shellStateAsV2());
-}
-
-async function readFileEntry(id, absPath) {
-  const stat = await fsp.stat(absPath);
-  const buf = await fsp.readFile(absPath);
-  return {
-    id,
-    name: path.basename(absPath),
-    lastModified: Math.floor(stat.mtimeMs),
-    size: stat.size,
-    bytes: new Uint8Array(buf)
-  };
-}
-
-function toBuffer(data) {
-  if (typeof data === "string") return Buffer.from(data, "utf8");
-  if (data instanceof Uint8Array) return Buffer.from(data.buffer, data.byteOffset, data.byteLength);
-  if (data instanceof ArrayBuffer) return Buffer.from(data);
-  throw new Error("writeFile: unsupported data type");
-}
-
-async function atomicWrite(absPath, buffer) {
-  const dir = path.dirname(absPath);
-  const tmp = path.join(dir, `.${path.basename(absPath)}.tmp-${crypto.randomBytes(6).toString("hex")}`);
-  await fsp.writeFile(tmp, buffer);
-  try {
-    await fsp.rename(tmp, absPath);
-  } catch (err) {
-    await fsp.unlink(tmp).catch(() => {});
-    throw err;
-  }
 }
 
 const HISTORY_DESKTOP_CAP_BYTES = 500 * 1024 * 1024;
@@ -1693,7 +1640,7 @@ function pushShellState(windowId) {
 }
 
 function deliverOpenFile(tab, absPath) {
-  const id = registerPath(absPath);
+  const id = fileIds.register(absPath);
   readFileEntry(id, absPath).then((entry) => {
     if (tab.view.webContents.isDestroyed()) return;
     tab.fileId = id;
@@ -2427,7 +2374,7 @@ function registerIpc() {
       chosen = result.canceled || !result.filePaths.length ? null : result.filePaths[0];
     }
     if (!chosen) return null;
-    const id = registerPath(chosen);
+    const id = fileIds.register(chosen);
     return await readFileEntry(id, chosen);
   });
 
@@ -2464,18 +2411,18 @@ function registerIpc() {
       } catch { }
       return null;
     }
-    const id = registerPath(chosen);
+    const id = fileIds.register(chosen);
     return { id, name: path.basename(chosen) };
   });
 
   ipcHandle("splitpage:read-file", async (event, id) => {
-    const absPath = fileRegistry.get(id);
+    const absPath = fileIds.pathOf(id);
     if (!absPath) throw new Error("ENOENT: unknown file id");
     return await readFileEntry(id, absPath);
   });
 
   ipcHandle("splitpage:write-file", async (event, id, data) => {
-    const absPath = fileRegistry.get(id);
+    const absPath = fileIds.pathOf(id);
     if (!absPath) throw new Error("ENOENT: unknown file id");
     const buffer = toBuffer(data);
     await atomicWrite(absPath, buffer);
@@ -2484,7 +2431,7 @@ function registerIpc() {
   });
 
   ipcHandle("splitpage:stat-file", async (event, id) => {
-    const absPath = fileRegistry.get(id);
+    const absPath = fileIds.pathOf(id);
     if (!absPath) throw new Error("ENOENT: unknown file id");
     try {
       const stat = await fsp.stat(absPath);
@@ -2628,7 +2575,7 @@ function registerIpc() {
     if ("docId" in s) tab.docId = typeof s.docId === "string" ? s.docId : null;
 
     const hasFileId = "fileId" in s;
-    const absPath = hasFileId && typeof s.fileId === "string" ? fileRegistry.get(s.fileId) || null : null;
+    const absPath = hasFileId && typeof s.fileId === "string" ? fileIds.pathOf(s.fileId) || null : null;
     if (hasFileId) {
       tab.fileId = absPath ? s.fileId : null;
       unindexTabSource(tab);
@@ -2661,7 +2608,7 @@ function registerIpc() {
     if (!tab) throw new Error("unknown tab");
     const p = payload || {};
     if (p.kind === "file") {
-      const absPath = fileRegistry.get(p.fileId);
+      const absPath = fileIds.pathOf(p.fileId);
       if (!absPath) throw new Error("ENOENT: unknown file id");
       const result = routeOpenPath(absPath, { fromWindowId: tab.windowId, fromTabId: tab.id });
       if (!result) throw new Error("ENOENT: file is not readable");
@@ -2714,7 +2661,7 @@ function registerIpc() {
         if (!stat.isFile()) {
           taken.fileProblem = "unreadable";
         } else {
-          const id = registerPath(filePath);
+          const id = fileIds.register(filePath);
           taken.file = await readFileEntry(id, filePath);
           unindexTabSource(tab);
           tab.fileId = id;
