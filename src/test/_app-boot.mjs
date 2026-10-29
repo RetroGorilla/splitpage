@@ -1,5 +1,5 @@
 import "./_dom.mjs";
-import { getEditorName } from "../legacy/preferences-bridge.ts";
+import { getEditorName } from "../bootstrap/wiring/preferences-owner.ts";
 import "fake-indexeddb/auto";
 import { readFileSync } from "node:fs";
 import { checksumText } from "../../shared/text.js";
