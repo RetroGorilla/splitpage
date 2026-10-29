@@ -9,7 +9,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
-const { applyMerge } = await import("../legacy/merge-bridge.ts");
+const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { render, renderAbsorbed, screenIsStale } = await import("../features/rows/render.js");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
