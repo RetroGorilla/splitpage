@@ -1,8 +1,7 @@
 {
   "loadOnly": [
-    "src/adapters/storage/draft-writer-lock.js",
     "src/application/recovery/drafts.ts",
     "src/bootstrap/wiring/drafts.ts"
   ],
-  "expectedLoads": 3
+  "expectedLoads": 2
 }

@@ -4,14 +4,7 @@ import { SCHEMA_VERSION } from "../../core/document/fields.ts";
 import type { Home } from "../location/document-location.ts";
 import type { DocumentView } from "../session/document-session.ts";
 
-export interface DraftServer {
-  readonly base: string;
-  readonly docId: string;
-  readonly rev: number;
-  readonly copy?: boolean;
-}
-
-export type DraftOriginKind = "untitled" | "server" | "file" | "import";
+export type DraftOriginKind = "untitled" | "file" | "import";
 
 export interface DraftOrigin {
   kind: DraftOriginKind;
@@ -20,7 +13,6 @@ export interface DraftOrigin {
   importName: unknown;
   baseLastModified: unknown;
   baseSize: number | null;
-  server: DraftServer | null;
 }
 
 export interface DraftPayload {
@@ -36,7 +28,6 @@ export interface DraftPayload {
   importName: unknown;
   baseLastModified: unknown;
   baseSize: number | null;
-  server: DraftServer | null;
   stateJson: string;
   baseJson: string | null;
 }
@@ -51,7 +42,7 @@ export interface DraftPayloadInput {
   readonly baseJson: string | null;
 }
 
-export type DraftRefusal = "stop" | "browser-off" | "pause" | "retry";
+export type DraftRefusal = "stop" | "pause" | "retry";
 
 function fieldOf(value: unknown, name: string): unknown {
   const field: unknown = Reflect.get(Object(value), name);
@@ -61,17 +52,8 @@ function fieldOf(value: unknown, name: string): unknown {
 function untitledOrigin(): DraftOrigin {
   return {
     kind: "untitled", fileId: null, fileKind: null, importName: null,
-    baseLastModified: null, baseSize: null, server: null
+    baseLastModified: null, baseSize: null
   };
-}
-
-export function browserDraftOrigin(target: (DraftServer & { readonly copy: boolean }) | null): DraftOrigin {
-  const origin = untitledOrigin();
-  if (target) {
-    origin.kind = "server";
-    origin.server = { base: target.base, docId: target.docId, rev: target.rev, copy: target.copy };
-  }
-  return origin;
 }
 
 export function desktopDraftOrigin(file: Home | null, importHome: () => Home | null): DraftOrigin {
@@ -98,7 +80,6 @@ export function desktopDraftOrigin(file: Home | null, importHome: () => Home | n
 export function draftOriginSignature(origin: DraftOrigin, doc: DocumentView | null, writtenOut: boolean): string {
   return [
     origin.kind, origin.fileId || "", origin.fileKind || "", origin.importName || "",
-    origin.server ? (origin.server.docId + "@" + origin.server.rev + "@" + origin.server.base) : "",
     (doc && doc.docId) || "", writtenOut ? "1" : "0"
   ].join("|");
 }
@@ -118,7 +99,6 @@ export function draftPayloadFor(input: DraftPayloadInput): DraftPayload {
     importName: origin.importName,
     baseLastModified: origin.baseLastModified,
     baseSize: origin.baseSize,
-    server: origin.server,
     stateJson: input.stateJson,
     baseJson: input.baseJson
   };
@@ -132,9 +112,8 @@ export function draftRefsFor(doc: DocumentView, base: unknown, sendBase: boolean
   return refs;
 }
 
-export function draftRefusal(code: string, desktop: boolean): DraftRefusal {
+export function draftRefusal(code: string): DraftRefusal {
   if (code === "DISCARDED" || code === "NO_TAB") return "stop";
-  if (code === "UNAVAILABLE" && !desktop) return "browser-off";
   if (code !== "STALE_SEQ") return "pause";
   return "retry";
 }

@@ -189,17 +189,17 @@ expect window.__r7eEqual === true
 expect window.__r7eDifferent === false
 
 # =============================================================================
-# a draft whose home was a server document: an unsaved copy
+# a draft whose home was a server document: an untitled script
 # =============================================================================
 
 # ---- this version opens no server documents, so the draft opens as an
-# unsaved copy with all its content straight away ----
+# untitled script with all its content straight away ----
 eval (async function(){ await H.resetForTest(); window.fakeSrvA = D.makeFakeBackend(); D.setBackend(window.fakeSrvA); var base = F.clone(F.state()); base.docId = mkId('3'); var mine = F.clone(base); mine.rows[0].audioText = 'SRV-UNAVAIL-EDIT'; window.__srvATaken = { header: { writtenAt: Date.now(), docIdWrittenOut: true, origin: { kind: 'server', server: { base: '', docId: 'srv-unavailable-1', rev: 0 } } }, stateJson: JSON.stringify(mine), baseJson: null }; window.__srvAOutcome = await D.drafts.applyForTest(window.__srvATaken); return true; })()
-expect window.__srvAOutcome === 'untitled-copy'
-expect F.docId() !== mkId('3')
+expect window.__srvAOutcome === 'applied'
+expect F.docId() === mkId('3')
 expect F.state().rows[0].audioText === 'SRV-UNAVAIL-EDIT'
 eval (function(){ var toasts = document.querySelectorAll('.toast.warn.is-sticky'); window.__srvAToast = toasts[toasts.length - 1].textContent; return true; })()
-expect window.__srvAToast.indexOf('no longer opens') !== -1
+expect window.__srvAToast.indexOf('Restored your unsaved script') !== -1
 
 # =============================================================================
 # sanitisation of a hostile draft stateJson

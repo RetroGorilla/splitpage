@@ -71,9 +71,7 @@ const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");
 const homeModule = await import("../bootstrap/wiring/location-owner.ts");
 const { setHome } = homeModule;
-const { applyTakenDraft, draftTaker } = await import("../bootstrap/wiring/drafts.ts");
-const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
-const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
+const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { makeDesktopHandle } = await import("../adapters/desktop/desktop-handle.ts");
 const { videoFiles } = await import("../bootstrap/wiring/video-files.ts");
 const { grant: grantVideoFile, has: hasSessionVideo, url: sessionVideoUrl } = videoFiles;
@@ -290,32 +288,6 @@ rightToday("T2b", "an opened file opens its epoch at the transition, not at the 
   const epoch = session.epoch();
   const events = await traced(() => openDocument({ kind: "file", file: splitpageFile(script("Opened", { docId: "d" + "5".repeat(32) })), handle: null, options: { skipSnapshot: true, silent: true } }));
   assertAdoptedAtOnce(events, epoch);
-});
-
-rightToday("T2c-copy", "a left-over browser draft of a server document opens as an unsaved copy whose epoch opens at the transition, not at the next render", async () => {
-  useDocument(script("Before the copy"));
-  const docId = "d" + "c".repeat(32);
-  const base = script("Server draft", { docId: docId });
-  const mine = cloneState(base);
-  mine.rows[0].audioText = "Unsaved in the browser.";
-  const store = openDraftStore({ indexedDB: window.indexedDB });
-  const key = browserDraftKey(draftBaseOf("", location.href), "server-r");
-  assert.deepEqual(await store.put({
-    key: key, base: draftBaseOf("", location.href), docId: "server-r", rev: 2, title: "Server draft", writerId: "another-tab",
-    editSeq: 1, schema: 5, docIdWrittenOut: true, stateJson: JSON.stringify(mine), baseJson: JSON.stringify(base)
-  }), { ok: true, evicted: 0 });
-  try {
-    const taken = await draftTaker()();
-    assert.equal(taken.browserKey, key, "setup: the left-over draft is offered");
-    const epoch = session.epoch();
-    const events = await traced(async () => { assert.equal(await applyTakenDraft(taken), "untitled-copy"); });
-    assert.equal(currentDocument().rows[0].audioText, "Unsaved in the browser.", "the draft's work is open");
-    assert.equal(homeModule.currentHome().kind, "none", "as an unsaved copy");
-    assertAdoptedAtOnce(events, epoch);
-  } finally {
-    await store.remove(key);
-    setHome("none");
-  }
 });
 
 rightToday("T2d", "a restored draft opens its epoch at the transition, not at the next render", async () => {
