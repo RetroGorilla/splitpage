@@ -1,6 +1,6 @@
 {
   "loadOnly": [
-    "src/features/onboarding/onboarding.js",
+    "src/features/onboarding/onboarding.ts",
     "src/features/onboarding/actions.ts",
     "src/bootstrap/wiring/onboarding.ts"
   ],
