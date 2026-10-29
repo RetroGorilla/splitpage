@@ -12,7 +12,7 @@
 
 | Decision | Outcome |
 | --- | --- |
-| Release | 4.0, from `4.0-development` (created from `main`); `main` merged in at least weekly |
+| Release | 4.0, from `4.1-development` (created from `main`); `main` merged in at least weekly |
 | Plugins, SDK, extension runtime | Out of scope |
 | Language for new folders | TypeScript, strict, erasable syntax only (section 3) |
 | Comments | None in authored code, tests, CSS, HTML, scripts or workflow/configuration files, except short reason comments (section 2) |
@@ -47,7 +47,7 @@ No UI framework replacement, editor-engine replacement, persisted document schem
 ### Branches and small changes
 
 1. Read applicable repository instructions, `docs/help.md`, `docs/HANDOFF.md` section 5, build/packaging scripts and tests for the area being changed. Resolve stale prose against executable source and fixtures.
-2. Use the existing `4.0-development` branch, or create it from current `main` if absent. Preserve unrelated working changes; use a clean worktree where necessary.
+2. Use the existing `4.1-development` branch, or create it from current `main` if absent. Preserve unrelated working changes; use a clean worktree where necessary.
 3. Keep PRs focused on one ownership boundary. Separate a demonstrated behavioral repair from a broad extraction. Keep the application runnable after each PR.
 4. No 3.1.x release is planned before 4.0, so `3.1.x-development` takes no more bug fixes, and nothing is forward-merged from it. A bug that also exists on 3.1.x is fixed on `4.1-development` instead, as [review.md](architecture/review.md#2-where-bugs-get-fixed) describes. A bug in code that a pending step is moving is fixed after that move lands, in the module that now owns it, with its regression test; do not restore deleted implementations or maintain two competing paths. The closed 3.1.x fix branches (`fix/274-overlay-commands`, `fix/276-save-during-load`, `fix/278-290-ids-and-nested-links`, `fix/280-282-anchor-tags-and-cue-retitle`, `fix/281-283-md-null-href-and-person-merge`, `test/293-history-toast-race`) are the reference for those ports and their fail-first tests. Every defect that milestone 2 pinned or deferred has a disposition in [pinned-defects.md](architecture/pinned-defects.md), and each one that will be fixed has an issue.
 5. Open enhancement issues wait for 4.x. A feature that touches editor, saving, formats or feature views is built once on the new structure. The integration owner decides per issue and says so on the issue.
@@ -227,9 +227,9 @@ Replace unconditional `desktop/.npmrc` ARM64 installation assumptions with runne
 
 ## 9. Starting instruction
 
-Use the following as the starting instruction for a session on `4.0-development`, with this file attached:
+Use the following as the starting instruction for a session on `4.1-development`, with this file attached:
 
-> Implement `docs/IMPLEMENTATION-PLAN.md` on `4.0-development` in small, reviewable increments. Plugins and SDK work are out of scope. Add no authored code comments or inline suppressions, in workflow and configuration files included. Read section 0 for the decisions already made and do not reopen them. Continue milestone 0 from where the branch is: check which of its eight items have landed, then complete the rest in order: layer/exception baselines, strict TypeScript, lint and test discovery, the section 4 CI policy, the invariant ledger, the performance record. Preserve existing fixes, user data, file/wire/IPC compatibility and distribution behavior. Do not redistribute complex editor events before the command/session boundary exists. Deliver verified tooling and baseline evidence as focused PRs, then proceed in the stated milestone order. Report actual checks, skips, removed coupling and remaining blockers. Do not deploy or publish as part of this work.
+> Implement `docs/IMPLEMENTATION-PLAN.md` on `4.1-development` in small, reviewable increments. Plugins and SDK work are out of scope. Add no authored code comments or inline suppressions, in workflow and configuration files included. Read section 0 for the decisions already made and do not reopen them. Continue milestone 0 from where the branch is: check which of its eight items have landed, then complete the rest in order: layer/exception baselines, strict TypeScript, lint and test discovery, the section 4 CI policy, the invariant ledger, the performance record. Preserve existing fixes, user data, file/wire/IPC compatibility and distribution behavior. Do not redistribute complex editor events before the command/session boundary exists. Deliver verified tooling and baseline evidence as focused PRs, then proceed in the stated milestone order. Report actual checks, skips, removed coupling and remaining blockers. Do not deploy or publish as part of this work.
 
 The first deliverable is working verification and an accurate baseline, not an empty folder scaffold or a renamed `21-events.js`.
 
