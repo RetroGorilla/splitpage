@@ -6,7 +6,7 @@ import type { DocumentMergePorts } from "../../src/application/session/document-
 import type { MergeKind } from "../../src/application/session/apply-merge.ts";
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import type { MergedStates } from "../../src/core/merge-states.ts";
-import { migrateRows } from "../../src/legacy/document-ports.ts";
+import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 
 interface World {
   readonly ports: DocumentMergePorts<number>;

@@ -7,7 +7,7 @@ import { mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts
 await bootApp();
 after(closeApp);
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 import { historyOwner } from "../bootstrap/wiring/history.ts";
 const listDocHistory = (...args) => historyOwner().listDocHistory(...args);
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");

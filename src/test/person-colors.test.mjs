@@ -15,7 +15,7 @@ import {
 } from "../core/document/person-colors.ts";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { STATE_FIELDS } from "../core/merge/state-fields.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { buildSplitpageFile, buildMarkdownProject, parseMarkdownProject } from "../adapters/formats/project-file.ts";
