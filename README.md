@@ -56,10 +56,10 @@ node build.mjs --check   # are both in step with src/ and VERSION?
 ```
 
 The source is `src/` — `page.html` (the shell), `styles/`,
-`seed-state.json` (the demo document), the folders that own one job each
-(`core/`, `application/`, `adapters/`, `features/` and `bootstrap/`), with
-`src/bootstrap/main.ts`, the
-entry point esbuild bundles from — plus `VERSION` and
+`seed-state.json` (the demo document), `starters/` (the starter documents),
+the folders that own one job each (`core/`, `application/`, `adapters/`,
+`features/` and `bootstrap/`), with `src/bootstrap/main.ts`, the entry point
+esbuild bundles from — plus `VERSION` and
 `docs/help.md`, which is rendered into the in-app Help page. Nothing else
 feeds the build. Which folder may import which is
 [docs/architecture/dependencies.md](docs/architecture/dependencies.md).
@@ -177,8 +177,9 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
   stick); the only thing it fetches is the Google Fonts stylesheet, loaded so
   that a slow or unreachable font server cannot stop the app starting.
 - `src/` — the source. `page.html` (the shell), `styles/`,
-  `seed-state.json` (the demo document), `core/`, `application/`,
-  `adapters/`, `features/` and `bootstrap/` (see above).
+  `seed-state.json` (the demo document), `starters/` (the starter documents),
+  `core/`, `application/`, `adapters/`, `features/` and `bootstrap/` (see
+  above).
   `bootstrap/main.ts` is the composition root: esbuild bundles it into the
   app's one inline script, and it sets the boot order.
 - `tests/` — unit tests for the owned folders; `src/test/` holds the older
