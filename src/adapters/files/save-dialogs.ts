@@ -1,6 +1,5 @@
-import { runningOnDesktop } from "../../application/desktop-presence.ts";
 import { makeDesktopHandle } from "../desktop/desktop-handle.ts";
-import { desktopPort } from "../desktop/desktop-port.ts";
+import { desktopPort, runningOnDesktop } from "../desktop/desktop-port.ts";
 import type { DesktopPort } from "../desktop/desktop-port.ts";
 import type { FileHandle, SaveDialogs } from "./file-target.ts";
 
