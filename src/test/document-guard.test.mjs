@@ -55,7 +55,7 @@ function refused(write) {
 }
 
 test("the guard is read once from the page's query: document-guard=1 and nothing else turns it on", () => {
-  assert.equal(documentGuardOn, true);
+  assert.equal(documentGuardOn(), true);
   assert.equal(documentGuardAsked("?document-guard=1"), true);
   assert.equal(documentGuardAsked("?freeze-caches=1&document-guard=1"), true);
   assert.equal(documentGuardAsked(""), false);
