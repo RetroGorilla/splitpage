@@ -1,7 +1,9 @@
 import { normalizeDocId } from "../../../shared/doc-id-policy.js";
 import { documentIdStamp, editStamp } from "../commands/save-stamps.ts";
 import type { ExportDocument } from "../../core/document/export-document.ts";
-import type { Home } from "../location/document-location.ts";
+import type { LocalFileData } from "../files/local-file-access.ts";
+import type { DocumentLocation, Home } from "../location/document-location.ts";
+import type { SaveConfirmation } from "./save-state.ts";
 import type { FileSavingDeferredPorts, FileSavingPorts } from "./file-saving-ports.ts";
 
 export interface LandedWrite {
@@ -54,4 +56,42 @@ export function createSaveCompletion(ports: SaveCompletionPorts): SaveCompletion
   }
 
   return Object.freeze({ confirmWrite, adoptSavedCopyDocId });
+}
+
+export interface ImportCompletionPorts {
+  readonly location: Pick<DocumentLocation, "amendHome">;
+  readonly saving: { readonly unsavedFor: (target: unknown) => boolean };
+}
+
+export interface ImportCompletion {
+  readonly landed: (imported: Home, after: Pick<LocalFileData, "lastModified" | "size">) => void;
+  readonly acknowledged: (imported: Home) => void;
+}
+
+export function createImportCompletion(ports: ImportCompletionPorts): ImportCompletion {
+  return Object.freeze({
+    landed: function (imported: Home, after: Pick<LocalFileData, "lastModified" | "size">): void {
+      ports.location.amendHome(imported, { lastModified: after.lastModified, size: after.size });
+    },
+    acknowledged: function (imported: Home): void {
+      ports.location.amendHome(imported, { dirty: ports.saving.unsavedFor(imported) });
+    }
+  });
+}
+
+export interface AdoptionCompletionPorts {
+  readonly location: Pick<DocumentLocation, "amendHome">;
+  readonly saving: SaveConfirmation;
+}
+
+export interface AdoptionCompletion {
+  readonly projectOpened: () => void;
+  readonly importOpened: (imported: Home) => void;
+}
+
+export function createAdoptionCompletion(ports: AdoptionCompletionPorts): AdoptionCompletion {
+  return Object.freeze({
+    projectOpened: function (): void { ports.saving.confirmSavedNow(); },
+    importOpened: function (imported: Home): void { ports.location.amendHome(imported, { dirty: false }); }
+  });
 }
