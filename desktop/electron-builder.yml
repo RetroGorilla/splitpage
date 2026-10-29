@@ -25,6 +25,7 @@ files:
   - doc-claims.js
   - recents.js
   - window-appearance.js
+  - tab-registry.js
   - package.json
 
 extraResources:
