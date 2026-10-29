@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   GALLERY_FIELDS,
+  NO_UNDO_KEYS,
   ROW_FIELDS,
   SCHEMA_VERSION,
   STATE_FIELDS,
@@ -127,4 +128,10 @@ test("missingStateFields reads the table it is given, core's by default", () => 
   assert.deepEqual(missingStateFields({ probe: undefined }, [probe, plain]), []);
   assert.deepEqual(missingStateFields(null, [probe, plain]), ["probe"]);
   assert.deepEqual(missingStateFields({}, []), []);
+});
+
+test("the undo skip table is frozen and names exactly the fields undo leaves alone", () => {
+  assert.ok(Object.isFrozen(NO_UNDO_KEYS));
+  assert.deepEqual(Object.keys(NO_UNDO_KEYS), STATE_FIELDS.filter((f) => !f.undo).map((f) => f.key));
+  assert.equal(Object.getPrototypeOf(NO_UNDO_KEYS), Object.prototype);
 });
