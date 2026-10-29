@@ -33,7 +33,7 @@ import type { DocumentEntry, ReportPort, TimerPort, UndoPort } from "../applicat
 import type { Operations } from "../application/session/operation.ts";
 import { startPageEffects } from "./effects.ts";
 import { legacyExportServices } from "./export-services.ts";
-import { createAppActions, installAppActions } from "../legacy/app-actions.ts";
+import { createAppActions, installAppActions } from "./wiring/ports/actions.ts";
 import { installExportFormats } from "./wiring/export-registry.ts";
 import { startEditor } from "./wiring/editor-owners.ts";
 import { startLocation } from "./wiring/location-owner.ts";
