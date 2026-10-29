@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/clipboard/cell-clipboard.js",
     "src/features/clipboard/scene-clip.js",

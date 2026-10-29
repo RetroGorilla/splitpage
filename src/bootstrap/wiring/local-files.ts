@@ -1,6 +1,6 @@
 import { createLocalFilesOwner } from "../../application/transitions/local-files.js";
 import type { LocalFilesOwner, LocalFileOpening } from "../../application/transitions/local-files-ports.ts";
-import { createImportSavingOwner } from "../../application/save/import-saving.js";
+import { createImportSavingOwner } from "../../application/save/import-saving.ts";
 import type { ImportSavingOwner, ImportSaveRequest } from "../../application/save/import-saving-ports.ts";
 import type { DocumentSource } from "../../application/transitions/sources.ts";
 import type { SaveDestination } from "../../application/save/destinations.ts";
