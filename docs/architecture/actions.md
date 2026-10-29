@@ -173,7 +173,7 @@ reads it. It reads state, not what the page last painted:
 | `dialog` | Close the open dialog first | any `.modal-backdrop` not `hidden` (`dialogOpen()`, `screen.ts`) |
 | `launcher` | Close the open dialog first | the command menu not `hidden`, unless it is the one asking (`launcherOpen()`, `screen.ts`) |
 | `tour` | Finish or skip the tour first | `tourShowing()`, `20c-help.js` (a tour suspended for Help is not showing) |
-| `prompter` | Close Present first | `prompterIsOpen()` |
+| `prompter` | Close Present first | `prompterState.isOpen()` (the prompter state owner, through `wiring/ports/preferences.ts`) |
 | `writer` | Close the writer first | `writerOpen`, `19-writer.js` |
 | `shotlist` | Close the shot list first | `brollPageOpen()`, `08d-broll-panel.js` |
 

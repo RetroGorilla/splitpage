@@ -29,7 +29,9 @@ test("find uses owner ports to reveal matches", () => {
     shotHiding: () => ({ reveal: (id) => { revealed.push(id); } }),
     undo: { breakCoalescing: () => {} },
     notices: fakeNotices().notices,
-    flags: { setFindOpen: (value) => { open = value; } }
+    flags: { setFindOpen: (value) => { open = value; } },
+    options: { matchesCase: () => false },
+    bulkTag: () => ({ hits: 0, inTags: 0, skipped: 0 })
   };
   const mounted = startFind(ports);
   mounted.openFindBar();

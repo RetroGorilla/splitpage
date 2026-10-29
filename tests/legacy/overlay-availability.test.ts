@@ -20,7 +20,7 @@ import { createActionRegistry, registerAll } from "../../src/application/actions
 import type { ActionRegistry, ActionSource } from "../../src/application/actions.ts";
 import { currentDocument } from "../../src/bootstrap/wiring/session-owner.ts";
 import { loadTestDocument } from "../../src/test/_document.mjs";
-import { prompterIsOpen, setPrompterOpen } from "../../src/application/prompter-state.ts";
+import { prompterState } from "../../src/bootstrap/wiring/ports/preferences.ts";
 import { autosaveActions, fileMenuActions, mountFileMenuDropdownFeature, stopFileMenuDropdownFeature } from "../../src/bootstrap/wiring/file-menu.ts";
 import { settingsActions } from "../../src/bootstrap/wiring/settings.ts";
 import { helpActions, mountHelpFeature, stopHelpFeature } from "../../src/bootstrap/wiring/help.ts";
@@ -102,14 +102,14 @@ function loadedRegistry(): { registry: ActionRegistry; restore: () => void } {
   const file = fileMenuActions();
   const disposers = [stopTagPanelsFeature, stopProductionEditing, stopBrollPanelStateFeature, stopRundownFeature, stopFileMenuExportFeature, stopFileMenuDropdownFeature, stopFindFeature, registerAll(registry, [...file.slice(0, 3), ...fileMenuExportActions().slice(0, 1), ...commandMenuActions(), ...file.slice(3, 4)]), registerAll(registry, [...hideShotActions(), ...rundownMinimizeActions(), ...historyActions(), ...findActions()]), registerAll(registry, [...tagPanelActions(), ...brollPanelActions(), ...commentsPanelActions(), ...writerActions(() => ({ openWriter() {} }), { screen }), ...prompterActions(() => ({ openPrompter() {} }), { screen })]),
     registerAll(registry, [...fileWritebackActions(), ...autosaveActions(), ...file.slice(4, 6), ...importActions(), ...fileMenuExportActions().slice(1), ...targetActions(), ...desktopActions()]), stopDesktopFeature, stopCommandMenuFeature, stopHelpFeature, stopOnboardingFeature, stopLocalFilesFeature];
-  const was = { state: currentDocument() as unknown, prompterOpen: prompterIsOpen() };
+  const was = { state: currentDocument() as unknown, prompterOpen: prompterState.isOpen() };
   loadTestDocument({ rows: [] });
-  setPrompterOpen(false);
+  prompterState.setOpen(false);
   return {
     registry,
     restore: () => {
       loadTestDocument(was.state);
-      setPrompterOpen(was.prompterOpen);
+      prompterState.setOpen(was.prompterOpen);
       document.body.innerHTML = "";
       try {
         for (const dispose of disposers) dispose();
@@ -136,7 +136,7 @@ const PAGE_COMMANDS =["open", "export", "command-menu", "find", "history", "pane
 test("in Present, what would open behind it is refused, and Save, Hide shot scenes and Present itself are not", () => {
   const { registry, restore } = loadedRegistry();
   try {
-    setPrompterOpen(true);
+    prompterState.setOpen(true);
     for (const id of [...PAGE_COMMANDS, "write"]) assert.equal(refusal(registry, id), "Close Present first", id);
     for (const id of ["save", "save-as", "toggle-hide-shot", "present"]) assert.equal(refusal(registry, id), null, id);
   } finally {
@@ -162,7 +162,7 @@ test("on the shot-list page, what would open behind it is refused", () => {
 test("a dialog over Present is named first, and the commands that only acted behind a dialog are refused there too", () => {
   const { registry, restore } = loadedRegistry();
   try {
-    setPrompterOpen(true);
+    prompterState.setOpen(true);
     document.body.innerHTML = '<div class="modal-backdrop"></div>';
     for (const id of [...PAGE_COMMANDS, "write", "present", "save", "save-as", "toggle-hide-shot", ...NO_DIALOG_COMMANDS]) {
       assert.equal(refusal(registry, id), "Close the open dialog first", id);
@@ -183,7 +183,7 @@ test("a command that opens a dialog, Help among them, is refused over a dialog b
     document.body.innerHTML = '<div class="modal-backdrop"></div>';
     for (const id of [...DIALOG_OPENERS, "help"]) assert.equal(refusal(registry, id, "menu"), "Close the open dialog first", id);
     document.body.innerHTML = "";
-    setPrompterOpen(true);
+    prompterState.setOpen(true);
     for (const id of [...DIALOG_OPENERS, "help"]) assert.equal(refusal(registry, id, "menu"), null, id);
   } finally {
     help();
@@ -202,9 +202,9 @@ test("the tour is refused over a dialog and starts over Present and the shot lis
     document.body.innerHTML = '<div class="modal-backdrop" hidden></div>';
     assert.equal(refusal(registry, "tour", "menu"), null);
     document.body.innerHTML = "";
-    setPrompterOpen(true);
+    prompterState.setOpen(true);
     assert.equal(refusal(registry, "tour", "menu"), null);
-    setPrompterOpen(false);
+    prompterState.setOpen(false);
     document.body.innerHTML = '<div id="broll-page"></div>';
     assert.equal(refusal(registry, "tour", "menu"), null);
   } finally {

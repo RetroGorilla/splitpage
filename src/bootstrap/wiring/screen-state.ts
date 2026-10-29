@@ -1,9 +1,8 @@
 import { dialogShown, launcherShown } from "../../adapters/page/overlays.ts";
-import { prompterIsOpen } from "../../application/prompter-state.ts";
 import { createScreenState } from "../../application/screen-state.ts";
 import type { ScreenStateOwner, ScreenStatePorts } from "../../application/screen-state.ts";
 import { documentReader } from "./ports/document.ts";
-import { screenFlags } from "./ports/preferences.ts";
+import { prompterState, screenFlags } from "./ports/preferences.ts";
 
 let started: ScreenStateOwner | null = null;
 
@@ -16,7 +15,7 @@ export function screenStatePorts(): ScreenStatePorts {
   return {
     document: documentReader,
     flags: screenFlags,
-    prompterOpen: prompterIsOpen,
+    prompterOpen: prompterState.isOpen,
     page: { dialogShown, launcherShown }
   };
 }
