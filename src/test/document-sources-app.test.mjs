@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 import { historyOwner } from "../bootstrap/wiring/history.ts";
 const listDocHistory = (...args) => historyOwner().listDocHistory(...args);
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");

@@ -3,7 +3,7 @@ import type { MergeReviewControl, MergeReviewMount, MergeReviewPorts } from "../
 import { owned } from "../../features/routing/owned.ts";
 import { parseProjectFileState } from "../../adapters/formats/project-file.ts";
 import { textMergeContext } from "./session-merge.ts";
-import { migrateRows } from "../../legacy/document-ports.ts";
+import { migrateRows } from "../document-ports.ts";
 import { applyStashedWork } from "./recovery-owners.ts";
 import { mergeBase } from "./session-owner.ts";
 import { documentReader as portDocument } from "./ports/document.ts";

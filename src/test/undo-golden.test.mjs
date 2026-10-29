@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { STATE_FIELDS } from "../core/merge/state-fields.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { changedBetween } from "../application/editing/undo/history.ts";
 import { assertGolden, goldenNames, jsonCopy } from "./golden-helpers.mjs";

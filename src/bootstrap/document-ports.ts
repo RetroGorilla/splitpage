@@ -11,8 +11,8 @@ import type { MigratePorts } from "../core/migrate.ts";
 import { createProductionReaders } from "../core/production/readers.ts";
 import type { ProductionReaders } from "../core/production/ports.ts";
 import { blobStore } from "../adapters/storage/02c-blobs.js";
-import { cacheSeal } from "./cache-freeze.ts";
-import { cellOf } from "./richtext.ts";
+import { cacheSeal } from "../legacy/cache-freeze.ts";
+import { cellOf } from "../legacy/richtext.ts";
 
 export const productionReaders: ProductionReaders = createProductionReaders(cellOf, cacheSeal);
 
