@@ -12,7 +12,7 @@ import { startSceneMedia as mountSceneMedia } from "../../features/rows/scene-me
 import { startSceneRows as mountScenes } from "../../features/rows/scenes.js";
 import { randomIds } from "../../adapters/identity/ids.ts";
 import { cellEditing, rowDrag } from "./editor-owners.ts";
-import { deleteConfirmation } from "../../legacy/production-editing-bridge.ts";
+import { deleteConfirmation } from "./production-editing-owners.ts";
 
 const scenes = owned<Scenes>();
 const media = owned<SceneMedia>();

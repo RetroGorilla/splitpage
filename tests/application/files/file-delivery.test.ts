@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import type { FileDelivery } from "../../../src/application/files/file-delivery.ts";
 import { useDesktopForTest, restoreDesktop } from "../../../src/adapters/desktop/desktop-port.ts";
 
-import { startEffects } from "../../../src/legacy/effects-bridge.ts";
+import { startEffects } from "../../../src/bootstrap/wiring/effects-owner.ts";
 import { fakeNotices } from "../../features/fakes.ts";
 
 test("file delivery forwards to the current desktop adapter and keeps saved, cancelled and failed notices", async () => {

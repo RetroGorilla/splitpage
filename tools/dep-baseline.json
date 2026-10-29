@@ -1,6 +1,6 @@
 {
   "exceptions": [
-    {"rule":"html-cells","source":"src/legacy/document-ports.ts","target":"src/adapters/richtext/richtext.ts","reason":"builds its own RichText over each migration's image ingestion, which the bridge's shared one cannot take; it moves into the bridge or the composition root when documents open through a session (milestone 3)"},
+    {"rule":"html-cells","source":"src/bootstrap/document-ports.ts","target":"src/adapters/richtext/richtext.ts","reason":"builds its own RichText over each migration's image ingestion, which the bridge's shared one cannot take; it moves into the bridge or the composition root when documents open through a session (milestone 3)"},
     {"rule":"platform-global","source":"shared/video-embed.js","target":"global:AbortController"},
     {"rule":"platform-global","source":"shared/video-embed.js","target":"global:TextDecoder"},
     {"rule":"platform-global","source":"shared/video-embed.js","target":"global:URL"},

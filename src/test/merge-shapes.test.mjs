@@ -2,11 +2,11 @@ import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 
-import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";
-import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.ts";
+import { preferences as commentPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 function saveAuthorName(name) { saveAuthorNameWith(commentPreferences(), name); }
 import { freezeClockAndRandom, jsonCopy } from "./golden-helpers.mjs";
 import { mergeCorpus, seededRandom } from "./_merge-corpus.mjs";

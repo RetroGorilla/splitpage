@@ -409,7 +409,7 @@ The 4.1 plan for the places where 4.0 fell short of this plan (the legacy layer'
 
 In this order (Adam, 2026-10-07):
 
-1. The composition root as build entry, replacing `src/js/_entry.js`, as the first 4.x milestone, with the packaged check and an external review of its own. Done: `src/bootstrap/main.js` ([dependencies.md, The composition root](architecture/dependencies.md#the-composition-root)).
+1. The composition root as build entry, replacing `src/js/_entry.js`, as the first 4.x milestone, with the packaged check and an external review of its own. Done: `src/bootstrap/main.ts` ([dependencies.md, The composition root](architecture/dependencies.md#the-composition-root)).
 2. Any bridge still standing after milestone 6, with the legacy modules that keep it. `src/legacy/production-index-bridge.ts` exposes the application production index to `07`, `08`, `08c` and `08d`; retire it when their last numbered consumer becomes a feature. `src/legacy/export-kit-bridge.ts` exposes the application export capture owner to `14`, `18` and `20d`; retire it with their last numbered consumer. The wiring supplies the session reader, clock preference, clock, ids, export services, document entry, asset ports and document-position flag. The owner holds the sealed content memo for comment-anchor order.
 3. Unused `S` fields.
 4. CSS: sorting the remaining rules into base, layout and components (done: `src/styles/base.css`, `layout.css`, `components.css`, and `overrides*.css` for rules that must follow specific feature styles), then spacing tokens (done).
@@ -418,7 +418,7 @@ In this order (Adam, 2026-10-07):
 
 From the external review of milestone 5's plan (Codex, 2026-10-14). Neither is a prerequisite of milestone 5 or 6.
 
-- **One owner for save completion.** Consolidate completion decisions and projection updates behind one application owner, preserving destination-specific acknowledgment. Today `confirmWrite` in `14-export.js` and the coordinator acknowledge the same save in separate steps ([saving.md](architecture/saving.md) section 8). The work crosses file saves, import writeback and adoption, so it is its own 4.x piece; a concrete regression can bring a focused fix forward.
+- **One owner for save completion.** Consolidate completion decisions and projection updates behind one application owner, preserving destination-specific acknowledgment. Today the file writer's `confirmWrite`, whose steps are the save completion owner's (`application/save/save-completion.ts`), and the coordinator acknowledge the same save in separate steps ([saving.md](architecture/saving.md) section 8). The work crosses file saves, import writeback and adoption, so it is its own 4.x piece; a concrete regression can bring a focused fix forward.
 - **Remaining recovery extraction.** Move the remaining orchestration and restore decisions out of `20g-drafts.js`, reusing milestone 4's capture scheduler, draft writer and store adapters. It does not recreate those owners.
 
 ### Server services

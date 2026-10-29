@@ -5,7 +5,7 @@ import type { TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { restoreDesktop, useDesktopForTest } from "../../src/adapters/desktop/desktop-port.ts";
 
-import { startEffects } from "../../src/legacy/effects-bridge.ts";
+import { startEffects } from "../../src/bootstrap/wiring/effects-owner.ts";
 import type { NoticeKind } from "../../src/application/effects/ports.ts";
 import type { DeliverOptions, FileDelivery } from "../../src/application/files/file-delivery.ts";
 

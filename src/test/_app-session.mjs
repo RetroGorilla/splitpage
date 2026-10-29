@@ -1,5 +1,5 @@
 import "./_production-tags-started.mjs";
-import { getEditorName } from "../legacy/preferences-bridge.ts";
+import { getEditorName } from "../bootstrap/wiring/preferences-owner.ts";
 import { wireTagProduction } from "../bootstrap/wiring/production-tags.ts";
 
 import { derivedRecordsPlan } from "../bootstrap/wiring/broll.ts";

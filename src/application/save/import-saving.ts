@@ -1,3 +1,4 @@
+import { createImportCompletion } from "./save-completion.ts";
 import type { LocalFileHandle, LocalFileWritable } from "../files/local-file-access.ts";
 import type { Home } from "../location/document-location.ts";
 import type { SaveJob, WriterResult } from "./coordinator.ts";
@@ -14,7 +15,8 @@ function startImportSaving(ports: ImportSavingPorts): StartedImportSaving {
     }
   }
   const { importHome, amendHome } = ports.location;
-  const { request: requestSave, unsavedFor } = ports.saving;
+  const { request: requestSave } = ports.saving;
+  const completion = createImportCompletion(ports);
   const buildFileData = ports.buildFileData;
   const checkFileConflict = ports.files.checkConflict;
   const deliverFile = ports.delivery.deliver;
@@ -38,7 +40,7 @@ function saveBackToFile(opts?: { force?: boolean }): Promise<void> {
   if (!imported) return Promise.resolve();
   return requestSave({ kind: opts && opts.force ? "writebackForce" : "writeback", target: imported }).then(function (outcome) {
     if (!active) return;
-    if (outcome.kind === "saved" && outcome.acknowledged) amendHome(imported, { dirty: unsavedFor(imported) });
+    if (outcome.kind === "saved" && outcome.acknowledged) completion.acknowledged(imported);
   });
 }
 
@@ -80,7 +82,7 @@ async function writeBackToFile(job: SaveJob<ImportSaveRequest>): Promise<WriterR
       try {
         const after = await ports.files.read(imported.handle);
         if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
-        amendHome(imported, { lastModified: after.lastModified, size: after.size });
+        completion.landed(imported, after);
       } catch (e) { }
       if (!stillWritingBack(job, imported)) return IMPORT_REPLACED;
       showToast("Saved to " + (imported.name as string), "ok");

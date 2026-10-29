@@ -9,7 +9,7 @@ import {
   locationStarted,
   setHome,
   startLocation
-} from "../../src/legacy/location-bridge.ts";
+} from "../../src/bootstrap/wiring/location-owner.ts";
 
 test("before the location is started, reading or changing it throws", () => {
   assert.equal(locationStarted(), false);

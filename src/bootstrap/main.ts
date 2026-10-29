@@ -1,6 +1,6 @@
 import { wireLegacyApp } from "./wiring.ts";
 import { startAppWhenReady } from "./app.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "./document-ports.ts";
 import { startBlobs } from "../adapters/storage/02c-blobs.js";
 import { startGalleryStore } from "../adapters/storage/02d-gallery.js";
 import { mountPageEntry } from "./startup/page-entry.ts";
@@ -45,7 +45,7 @@ import { draftRecoveryPorts, mountDraftsFeature } from "./wiring/drafts.ts";
 import { mountSettingsFeature, mountAppDataFeature } from "./wiring/settings.ts";
 import { mountNewTabFeature } from "./wiring/newtab.ts";
 
-var wiring = null;
+let wiring: ReturnType<typeof wireLegacyApp> | null = null;
 try {
   wiring = wireLegacyApp({
     entry: migrateRows,
@@ -64,7 +64,7 @@ if (wiring) {
   mountDocumentIdentityOwner();
   startBlobs();
   startGalleryStore();
-  var sessionMerge = mountSessionMergeOwner();
+  const sessionMerge = mountSessionMergeOwner();
   mountHistoryOwner();
   mountScriptPlaceFeature();
   mountRowsRenderFeature();

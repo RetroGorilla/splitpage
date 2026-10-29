@@ -5,7 +5,7 @@ import { text as portText } from "./ports/text.ts";
 import { createSceneStatus } from "../../features/rows/scene-status.ts";
 import type { SceneStatus } from "../../features/rows/scene-status.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { viewFlags } from "../../legacy/preferences-bridge.ts";
+import { viewFlags } from "./preferences-owner.ts";
 import { shotHiding } from "./shot-hiding.ts";
 
 type SceneStatusMount = SceneStatus & { readonly dispose: () => void };

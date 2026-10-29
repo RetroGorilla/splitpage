@@ -2,11 +2,11 @@ import "./_dom.mjs";
 import "./_copy-paste-mounted.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { dataUrlForSync, intern } from "../adapters/storage/02c-blobs.js";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { commentIds } from "../core/text/runs.ts";
-import { cellOf, fromHtml } from "../legacy/richtext.ts";
+import { cellOf, fromHtml } from "../bootstrap/richtext.ts";
 import { isBlankScene } from "../application/commands/rows.ts";
 import { createUndoHistory, diffStates } from "../application/editing/undo/history.ts";
 import { cellRuns } from "./_cell-runs.mjs";
@@ -17,7 +17,7 @@ import {
 } from "../features/clipboard/scene-clip.js";
 import { loadTestDocument } from "./_document.mjs";
 import { removeScenesCommand } from "../application/commands/scenes.ts";
-import { currentDocument, runCommand } from "../legacy/session-bridge.ts";
+import { currentDocument, runCommand } from "../bootstrap/wiring/session-owner.ts";
 
 initTags();
 

@@ -3,13 +3,15 @@ import { normalizeDocId } from "../../../shared/doc-id-policy.js";
 import type { ConflictStash, StashedWork } from "./conflict-stash.ts";
 
 export interface StashMerged<D, R> {
-  readonly state: D;
+  readonly state: D | null;
   readonly result?: R | null | undefined;
   readonly snapshot?: unknown;
   readonly replaced?: boolean | undefined;
 }
 
-export type StashMerge<D, R> = (request: Readonly<Record<string, unknown>>) => StashMerged<D, R> | PromiseLike<StashMerged<D, R>>;
+export type StashMergeRequest<D> = Readonly<Record<string, unknown>> & { readonly theirs: D };
+
+export type StashMerge<D, R> = (request: StashMergeRequest<D>) => StashMerged<D, R> | PromiseLike<StashMerged<D, R>>;
 
 export interface StashedWorkPorts<D, R> {
   readonly stash: ConflictStash;
@@ -19,7 +21,7 @@ export interface StashedWorkPorts<D, R> {
 }
 
 export interface StashApplied<D, R> {
-  readonly state: D;
+  readonly state: D | null;
   readonly report: R | null | undefined;
   readonly snapshot: unknown;
   readonly replaced?: boolean;

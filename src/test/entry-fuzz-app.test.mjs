@@ -1,25 +1,25 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import {
   TABLE_304, chance, judge, pick, rawObject, seeded, table304Document, text, upTo
 } from "../../tests/application/raw-inputs.ts";
 import { cloneState } from "../core/document/clone.ts";
-import { confirmSavedNow, unsavedChanges } from "../legacy/save-bridge.ts";
+import { confirmSavedNow, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 await bootApp();
 
-const { liveSession } = await import("../legacy/session-bridge.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
-const { applyMerge } = await import("../legacy/merge-bridge.ts");
+const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
+const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { mergeUndo } = await import("../bootstrap/wiring/editor-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { localFilesOwner } = await import("../bootstrap/wiring/local-files.ts");
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 
