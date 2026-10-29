@@ -17,7 +17,7 @@ import {
 } from "../features/clipboard/scene-clip.js";
 import { loadTestDocument } from "./_document.mjs";
 import { removeScenesCommand } from "../application/commands/scenes.ts";
-import { currentDocument, runCommand } from "../legacy/session-bridge.ts";
+import { currentDocument, runCommand } from "../bootstrap/wiring/session-owner.ts";
 
 initTags();
 

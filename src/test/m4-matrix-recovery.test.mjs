@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { IDBFactory } from "fake-indexeddb";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import {
   createFakeLocks,
   createFaultyIdbFactory,
@@ -25,7 +25,7 @@ await bootApp();
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
-const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
 const { confirmSavedNow, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();

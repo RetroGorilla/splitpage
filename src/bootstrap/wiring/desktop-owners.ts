@@ -6,7 +6,7 @@ import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import type { HistoryOwner } from "../../application/recovery/history-ports.ts";
 import { draftResume, recoveryStarted } from "./recovery-owners.ts";
 import { unsavedChanges } from "../../legacy/save-bridge.ts";
-import { currentDocument } from "../../legacy/session-bridge.ts";
+import { currentDocument } from "./session-owner.ts";
 import { currentHome } from "../../legacy/location-bridge.ts";
 
 let started: DesktopDocumentStateOwner | null = null;

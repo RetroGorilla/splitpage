@@ -4,7 +4,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { cloneState } from "../core/document/clone.ts";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 const atBoot = await bootApp();
 

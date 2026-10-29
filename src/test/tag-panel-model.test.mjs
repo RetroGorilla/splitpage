@@ -12,7 +12,7 @@ import { toHtml } from "../core/text/html.ts";
 import { tagFieldOccurrences, tagsInField } from "../features/tags/production-tags.js";
 import { tagOccurrences } from "../core/production/tags.ts";
 import { removeTag, renameTag } from "../application/commands/production-actions.ts";
-import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../legacy/session-bridge.ts";
+import { runDocumentEdit, sessionStamps, readSession, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { retagRewrites as planRetagRewrites, retagMentions as countRetagMentions } from "../application/commands/tag-rewrites.ts";
 
 const retagText = portText;

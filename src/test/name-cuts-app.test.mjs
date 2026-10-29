@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 await bootApp();
 
@@ -10,7 +10,7 @@ const { migrateRows } = await import("../legacy/document-ports.ts");
 const { render } = await import("../features/rows/render.js");
 const { applyTag, findOrAddPerson, openTagComposer, registerProductionTag } = await import("../features/tags/production-tags.js");
 const { renameTag } = await import("../application/commands/production-actions.ts");
-const { runDocumentEdit, sessionStamps } = await import("../legacy/session-bridge.ts");
+const { runDocumentEdit, sessionStamps } = await import("../bootstrap/wiring/session-owner.ts");
 const { retagRewrites: planRetagRewrites } = await import("../application/commands/tag-rewrites.ts");
 
 const retagText = portText;

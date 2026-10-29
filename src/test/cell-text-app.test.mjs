@@ -18,7 +18,7 @@ const redo = () => undoOwner().redo();
 const undoSizes = () => undoOwner().sizes();
 const lastUndoEntry = () => undoOwner().last();
 const flushEdits = () => undoOwner().flush();
-const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { fromHtml, sanitizeHtml, storedHtmlFromDom } = await import("../legacy/richtext.ts");
 const { toHtml } = await import("../core/text/html.ts");
 const writer = await import("../features/writer/writer.js");

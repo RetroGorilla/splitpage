@@ -19,7 +19,7 @@ import type { DesktopDraftBridge } from "../../adapters/storage/draft-store-desk
 import { createIdbDraftStore } from "../../adapters/storage/draft-store-idb.ts";
 import type { OperationContext } from "../../application/session/operation.ts";
 import { captureOperation, stillOwns } from "./transition-owners.ts";
-import { currentDocument, mergeBase, sessionStamps } from "../../legacy/session-bridge.ts";
+import { currentDocument, mergeBase, sessionStamps } from "./session-owner.ts";
 import { nowIso } from "../../adapters/identity/ids.ts";
 import { dataUrlForSync, isDurableSync } from "../../adapters/storage/02c-blobs.js";
 

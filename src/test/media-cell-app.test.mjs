@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { saveChanges } from "../legacy/save-bridge.ts";
 
 window.Element.prototype.scrollBy = function () {};
@@ -16,7 +16,7 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { sanitizeHtml } = await import("../legacy/richtext.ts");
 const cellText = await import("../application/commands/cell-text.ts");
 const splitJoin = await import("../application/commands/split-join.ts");

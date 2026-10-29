@@ -16,7 +16,7 @@ const redo = () => undoOwner().redo();
 const undoSizes = () => undoOwner().sizes();
 const lastUndoEntry = () => undoOwner().last();
 const flushEdits = () => undoOwner().flush();
-const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { openProductionPanel } = await import("../features/tags/panels.js");

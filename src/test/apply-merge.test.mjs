@@ -10,10 +10,10 @@ import { historyOwner } from "../bootstrap/wiring/history.ts";
 const getHistorySnapshot = (...args) => historyOwner().getHistorySnapshot(...args);
 const listDocHistory = (...args) => historyOwner().listDocHistory(...args);
 import { personById } from "../core/production/records.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { cloneState } from "../core/document/clone.ts";
 import { loadTestDocument } from "./_document.mjs";
-import { holdMergeBase, mergeBase } from "../legacy/session-bridge.ts";
+import { holdMergeBase, mergeBase } from "../bootstrap/wiring/session-owner.ts";
 
 await bootApp();
 await window.__historyTest.forceBackend("memory");

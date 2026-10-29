@@ -5,7 +5,7 @@ import "./_location-started.mjs";
 
 const bridge = await import("../bootstrap/wiring/transition-owners.ts");
 const { NO_DESTINATION } = await import("../application/transitions/ports.ts");
-const { currentDocument, liveDocumentPort, liveSession, requestRefresh } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveDocumentPort, liveSession, requestRefresh } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { startTestSession, unwiredSessionDeps } = await import("./_session.mjs");
 
