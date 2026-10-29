@@ -1,6 +1,6 @@
 # Numbered files: imports, importers and bridges
 
-Generated on `a1615c0` by the script in [feature-ports.md](feature-ports.md#appendix-regenerating-the-inventory). It lists, for each file left in `src/js`, what it imports from numbered files, bridges, adapters and feature folders, and who imports it. Imports from `src/core`, `shared` and `src/application` are left out, since a feature may import those. `_entry.js` calling a file's `__init` is left out too.
+Historical record: every file listed here has moved or was removed, and `src/js/` is deleted. Generated on `a1615c0` by the script in [feature-ports.md](feature-ports.md#appendix-regenerating-the-inventory). It lists, for each file left in `src/js`, what it imports from numbered files, bridges, adapters and feature folders, and who imports it. Imports from `src/core`, `shared` and `src/application` are left out, since a feature may import those. `_entry.js` calling a file's `__init` is left out too.
 
 | File | Lines | In the loop | Numbered files it imports | Bridges it reaches | Adapters and features it imports | Imported by |
 | --- | --- | --- | --- | --- | --- | --- |

@@ -215,7 +215,8 @@ import of it. A write into the document must be a session command
 drafts, saves and displays see it. A write through a read
 (`currentDocument().comments.push(...)`) needs the guard.
 
-- **The switch.** `src/legacy/document-guard.ts` reads the page's query once,
+- **The switch.** The document guard (`src/application/identity/document-guard.ts`,
+  with the query read by `src/adapters/page/document-guard-query.ts`) reads the page's query once,
   when the bundle starts: `document-guard=1`, and nothing else, makes
   `currentDocument()` and `liveDocumentPort.current()` hand out a read-only
   view of the session's document; otherwise they hand out the document itself

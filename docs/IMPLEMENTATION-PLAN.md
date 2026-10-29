@@ -99,7 +99,7 @@ A parser-aware check must distinguish actual comments from URLs, regexes and str
 | `src/adapters/` | HTML decoding, formats, storage, files, HTTP, clipboard and native integration | Port interfaces, contracts and platform APIs |
 | `src/features/<feature>/` | Controller, view, bindings, local state, styles and tests | Public application interfaces and presentation utilities |
 | `src/bootstrap/` | Explicit construction, registration and resource teardown | Implementations needed to compose the app |
-| `src/legacy/` | Temporary, named adapters over unmigrated code | Only explicitly allowed legacy/application interfaces |
+| `src/legacy/` | Temporary, named adapters over unmigrated code. The numbered files are gone; `app-actions.ts` is the last one | Only explicitly allowed legacy/application interfaces |
 | `shared/` | Policies genuinely shared with server/desktop | Environment-independent definitions |
 | `tests/` | Application, adapter, browser, architecture and compatibility tests | Testable public interfaces and fixtures |
 
@@ -410,7 +410,7 @@ The 4.1 plan for the places where 4.0 fell short of this plan (the legacy layer'
 In this order (Adam, 2026-10-07):
 
 1. The composition root as build entry, replacing `src/js/_entry.js`, as the first 4.x milestone, with the packaged check and an external review of its own. Done: `src/bootstrap/main.ts` ([dependencies.md, The composition root](architecture/dependencies.md#the-composition-root)).
-2. Any bridge still standing after milestone 6, with the legacy modules that keep it. `src/legacy/production-index-bridge.ts` exposes the application production index to `07`, `08`, `08c` and `08d`; retire it when their last numbered consumer becomes a feature. `src/legacy/export-kit-bridge.ts` exposes the application export capture owner to `14`, `18` and `20d`; retire it with their last numbered consumer. The wiring supplies the session reader, clock preference, clock, ids, export services, document entry, asset ports and document-position flag. The owner holds the sealed content memo for comment-anchor order.
+2. Any bridge still standing after milestone 6, with the legacy modules that keep it. Done apart from one file: `src/js/` is deleted, and `src/legacy/` holds only `app-actions.ts`, the action registry facade that some wiring modules still import. It retires when they take the registry from the actions port (`src/bootstrap/wiring/ports/actions.ts`). The production index and export capture owners reach their callers through ports built by the wiring.
 3. Unused `S` fields.
 4. CSS: sorting the remaining rules into base, layout and components (done: `src/styles/base.css`, `layout.css`, `components.css`, and `overrides*.css` for rules that must follow specific feature styles), then spacing tokens (done).
 
@@ -419,7 +419,7 @@ In this order (Adam, 2026-10-07):
 From the external review of milestone 5's plan (Codex, 2026-10-14). Neither is a prerequisite of milestone 5 or 6.
 
 - **One owner for save completion.** Consolidate completion decisions and projection updates behind one application owner, preserving destination-specific acknowledgment. Today the file writer's `confirmWrite`, whose steps are the save completion owner's (`application/save/save-completion.ts`), and the coordinator acknowledge the same save in separate steps ([saving.md](architecture/saving.md) section 8). The work crosses file saves, import writeback and adoption, so it is its own 4.x piece; a concrete regression can bring a focused fix forward.
-- **Remaining recovery extraction.** Move the remaining orchestration and restore decisions out of `20g-drafts.js`, reusing milestone 4's capture scheduler, draft writer and store adapters. It does not recreate those owners.
+- **Remaining recovery extraction.** Done: `20g-drafts.js` became `src/application/recovery/drafts.ts`, with the capture plan in `capture-schedule.ts` and the restore decisions in `draft-restore.ts` and `draft-resume.ts`. Server-draft restore and the browser draft store were removed with the server features (#905).
 
 ### Server services
 
@@ -431,7 +431,7 @@ Update both Docker recipes, `deploy.sh`, portable/desktop staging and CI payload
 
 ### Desktop services
 
-Extract tabs/session registry and file service first, then IPC composition, hosting/process lifecycle, voice, Drive/credentials, protocol policies and updates. Keep narrow injected interfaces, opaque file IDs, sender validation, sandboxing, context isolation, separate tab-strip origin and restricted native capabilities.
+Extract tabs/session registry and file service first, then IPC composition, hosting/process lifecycle, voice, Drive/credentials, protocol policies and updates. Started: the state store, file service, document claims, recents, tab registry, window appearance, restore notice, unsaved-changes dialog and update release choice are their own modules beside `desktop/main.js` ([desktop-build.md](architecture/desktop-build.md)); IPC composition, process lifecycle and voice wiring are still in `main.js`. Keep narrow injected interfaces, opaque file IDs, sender validation, sandboxing, context isolation, separate tab-strip origin and restricted native capabilities.
 
 Replace unconditional `desktop/.npmrc` ARM64 installation assumptions with runner-aware settings. Retain a single IPC contract source and verify any emitted CommonJS/preload code and runtime resources. Real Electron security/lifecycle and installed-target checks remain the gate; source-text tests alone do not establish behavior.
 
