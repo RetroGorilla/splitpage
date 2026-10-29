@@ -1395,7 +1395,7 @@ export function run({ repo = REPO, baselinePath = BASELINE_PATH, mode = "check",
   let failed = cycles.length > 0;
   printCycles();
   for (const v of added) { failed = true; printError("  new " + describe(v)); }
-  for (const e of resolved) { failed = true; printError(`  resolved ${e.rule}: ${e.source} -> ${e.target} (remove it from the baseline with --prune)`); }
+  for (const e of resolved) printError(`  warning: resolved ${e.rule}: ${e.source} -> ${e.target} (remove it with \`node tools/dep-report.mjs --prune\`)`);
   if (failed) {
     printError("dep-report: FAILED");
     return 1;
