@@ -25,6 +25,7 @@ Everything listed here goes inside the asar.
 | `desktop-state.js` | `desktop-state.json` in the user-data folder: the windows, tabs and recent documents the next launch restores. It reads, migrates (v1 to v2) and normalizes the file, and writes it through one queue with `writeFileDurableSync` from `./drafts.js`. |
 | `update-release.js` | Which release the update check offers: version order, the installer for this platform and architecture, the hosts a download may come from, and the release's published SHA-256. `main.js` does the fetching and the download. |
 | `file-service.js` | The documents the renderer opens and saves: the opaque file ids that stand for paths (`createFileRegistry`), the case rule for comparing paths (`pathKey`), which launch arguments are files to open, reading a file entry and the atomic write. |
+| `doc-claims.js` | Which tab holds which document id from which file, so that two tabs holding the same document from different files are noticed and the later one is asked to take a new id. The id rules come from `shared/doc-id-policy.js`, which `main.js` passes in, and `main.js` still sends `splitpage:reassign-doc-id` itself, so the IPC table test sees it. |
 
 From `ipc-channels.js` down, `main.js` requires each of these modules at
 startup, so each must ship for the same reason `drafts.js` does. A new
