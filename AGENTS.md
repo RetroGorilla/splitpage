@@ -78,6 +78,6 @@ Typing, editing and undo changes also need a performance comparison (`tools/perf
 ## Documents
 
 - [IMPLEMENTATION-PLAN.md](docs/IMPLEMENTATION-PLAN.md): the plan and its standing rules.
-- [docs/architecture/](docs/architecture/): current design. Start with [feature-ports.md](docs/architecture/feature-ports.md) (moving and wiring features), [dependencies.md](docs/architecture/dependencies.md) (gates and layers), [saving.md](docs/architecture/saving.md), [session.md](docs/architecture/session.md), [testing.md](docs/architecture/testing.md) and the newest `migration-status-*.md`.
+- [docs/architecture/](docs/architecture/): current design. Start with [feature-ports.md](docs/architecture/feature-ports.md) (ports and wiring for features), [dependencies.md](docs/architecture/dependencies.md) (gates and layers), [saving.md](docs/architecture/saving.md), [session.md](docs/architecture/session.md) and [testing.md](docs/architecture/testing.md).
 - [review.md](docs/architecture/review.md): what review checks before a merge.
 - Finished milestone plans and gate records were removed from the tree. Read them in git history if you need the record, and do not treat them as current rules.

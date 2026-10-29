@@ -84,7 +84,7 @@ What that costs, with the current numbers:
   save, pull and three-way merge.
 - Comments spanning rows. A comment stays inside one cell.
 - Changing what anyone types. Delimiters, shortcuts and auto-tagging keep
-  working exactly as they do (HANDOFF §9).
+  working exactly as they do (HANDOFF §8).
 
 ## 3. The model
 
