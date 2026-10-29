@@ -5,7 +5,7 @@ import { stashLocalWork } from "../recovery-owners.ts";
 import { autoSavePolicy, autoSaveTarget, flushAutoSave, saveDoc, toggleAutoSave } from "../../../legacy/save-bridge.ts";
 import { heldDocument } from "../session-owner.ts";
 import { openDocument } from "../transition-owners.ts";
-import { migrateRows } from "../../../legacy/document-ports.ts";
+import { migrateRows } from "../../document-ports.ts";
 import { place } from "./location.ts";
 
 export const projectFileLocation: ProjectFilesPorts["location"] = { writtenOut: place.writtenOut, fileHome: place.fileHome, amendHome };

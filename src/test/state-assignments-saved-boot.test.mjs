@@ -18,7 +18,7 @@ const SAVED = {
 
 const atBoot = await bootApp("\n" + JSON.stringify(SAVED, null, 2) + "\n");
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { seedCheckPasses } = await import("../adapters/page/seed-check.ts");
 
 after(closeApp);

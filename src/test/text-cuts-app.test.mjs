@@ -9,7 +9,7 @@ import { truncateForPreview } from "../core/document/text-policy.ts";
 
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const initDocIdentityChannel = (...args) => documentIdentityOwner().initDocIdentityChannel(...args);
 const reassignDocId = (...args) => documentIdentityOwner().reassignDocId(...args);

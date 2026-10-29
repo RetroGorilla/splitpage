@@ -12,7 +12,7 @@ const { noteAbsorbedDirty, noteSessionEdit, runCommand } = await import("../boot
 const { amendHome, currentHome, setHome } = await import("../legacy/location-bridge.ts");
 const { preferences } = await import("../legacy/preferences-bridge.ts");
 const { autoSavePolicy, confirmSavedNow, saveDoc, unsavedChanges } = await import("../legacy/save-bridge.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { titleCommand } = await import("../application/commands/title.ts");

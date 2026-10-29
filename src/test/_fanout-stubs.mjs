@@ -1,6 +1,6 @@
 import { viewFlags } from "../legacy/preferences-bridge.ts";
 import { currentDocument, readSession, runCommand, sessionStamps } from "../bootstrap/wiring/session-owner.ts";
-import { productionReaders as documentReaders } from "../legacy/document-ports.ts";
+import { productionReaders as documentReaders } from "../bootstrap/document-ports.ts";
 import { hasSetLength as coreHasSetLength } from "../core/document/timing.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { startTestSession } from "./_session.mjs";

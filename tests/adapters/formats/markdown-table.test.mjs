@@ -4,7 +4,7 @@ import "../../../src/test/_export-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../../../src/bootstrap/wiring/session-owner.ts";
-import { migrateRows } from "../../../src/legacy/document-ports.ts";
+import { migrateRows } from "../../../src/bootstrap/document-ports.ts";
 import { mountProductionTagsFeature as initTags } from "../../../src/bootstrap/wiring/production-tags.ts";
 import { detectTwoColumnFormat, parseImportRows } from "../../../src/adapters/formats/import-text.js";
 import { parseMarkdownTable } from "../../../src/adapters/formats/markdown-table.ts";
