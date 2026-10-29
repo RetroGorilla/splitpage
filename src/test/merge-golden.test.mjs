@@ -9,7 +9,7 @@ import { mergeBrollShots, mergePeople, mergeProductionTags } from "../core/merge
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 
-import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";
+import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.ts";
 import { preferences as commentPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 function saveAuthorName(name) { saveAuthorNameWith(commentPreferences(), name); }
 import {
