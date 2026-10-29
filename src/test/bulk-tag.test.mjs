@@ -3,8 +3,8 @@ import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeHtml } from "../legacy/richtext.ts";
-import { cellOf } from "../legacy/richtext.ts";
+import { sanitizeHtml } from "../bootstrap/richtext.ts";
+import { cellOf } from "../bootstrap/richtext.ts";
 import { projection } from "../core/text/runs.ts";
 import { bulkTagCell } from "../features/tags/production-tags.js";
 

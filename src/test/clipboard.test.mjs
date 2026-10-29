@@ -7,7 +7,7 @@ import {
   videoLink, videoLinksInText
 } from "../features/clipboard/cell-clipboard.js";
 import { commentIds, projection } from "../core/text/runs.ts";
-import { fromHtml } from "../legacy/richtext.ts";
+import { fromHtml } from "../bootstrap/richtext.ts";
 import { sliceCell } from "../core/text/edits.ts";
 import { toHtml } from "../core/text/html.ts";
 

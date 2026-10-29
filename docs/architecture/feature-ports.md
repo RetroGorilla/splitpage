@@ -230,6 +230,8 @@ Two existing ports grow:
 
 **Every bridge numbered files reach**, and where each name goes:
 
+Status (2026-10-29): with no numbered files left, each bridge below that still stood moved into the bootstrap wiring that starts it, unchanged: undo and editor (#866, #867), desktop (#868), merge (#872, `bootstrap/wiring/document-merge.ts`), recovery (#873, `recovery-owners.ts`), transition (#874, `transition-owners.ts`), session (#875, `session-owner.ts`), save (#877, `save-owners.ts`), location (#878, `location-owner.ts`), effects (#879, `effects-owner.ts`) and preferences (#880, `preferences-owner.ts`). The table records what each bridge carried when it was planned.
+
 | Bridge | Goes to |
 | --- | --- |
 | `session-bridge` | P1, P9. `heldDocument`, `stampDocument` and `mergeBase` go with the Wave 4 owner moves |
