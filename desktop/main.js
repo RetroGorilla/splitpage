@@ -16,6 +16,7 @@ const {
 const { createDocClaims } = require("./doc-claims");
 const { createRecents } = require("./recents");
 const { createThemeChoice, backgroundColorFor, titleBarOverlayFor, boundsIfVisible } = require("./window-appearance");
+const { createTabRegistry } = require("./tab-registry");
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
 const { createQuitWatchdog } = require("./quit-watchdog");
@@ -27,7 +28,7 @@ const {
 const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES } = require("./history-fs-backend");
 const {
   DESKTOP_STATE_VERSION, TAB_OR_WINDOW_ID_RE, LAST_KNOWN_TITLE_MAX,
-  mintTabOrWindowId, normalizeBounds, normalizeTabSource, createDesktopStateStore
+  normalizeBounds, normalizeTabSource, createDesktopStateStore
 } = require("./desktop-state");
 const {
   DEFAULT_UPDATE_API, compareVersions, isAllowedDownloadHost, pickUpdateAsset, findChecksumsAsset, checksumFor
@@ -157,12 +158,10 @@ const TABSTRIP_ALLOWLIST = {
   "/tabstrip.css": { file: "tabstrip.css", type: "text/css; charset=utf-8" }
 };
 
-const tabs = new Map();
-
-const windowsById = new Map();
-
-const webContentsIdToTabId = new Map();
-const pathToTabId = new Map();
+const {
+  tabs, windowsById, webContentsIdToTabId, pathToTabId,
+  mintUniqueTabId, mintUniqueWindowId, firstWindowRecord, claimRoutingKey, indexTabSource, unindexTabSource
+} = createTabRegistry({ pathKey });
 
 let lastFocusedWindowId = null;
 let quitConfirmed = false;
@@ -1005,20 +1004,6 @@ function titleBarOverlayColors() {
   return titleBarOverlayFor(nativeTheme.shouldUseDarkColors, TITLEBAR_H);
 }
 
-function mintUniqueTabId(preferred) {
-  if (typeof preferred === "string" && TAB_OR_WINDOW_ID_RE.test(preferred) && !tabs.has(preferred)) return preferred;
-  let id = mintTabOrWindowId();
-  while (tabs.has(id)) id = mintTabOrWindowId();
-  return id;
-}
-
-function mintUniqueWindowId(preferred) {
-  if (typeof preferred === "string" && TAB_OR_WINDOW_ID_RE.test(preferred) && !windowsById.has(preferred)) return preferred;
-  let id = mintTabOrWindowId();
-  while (windowsById.has(id)) id = mintTabOrWindowId();
-  return id;
-}
-
 function createTabWindow(restoreSpec) {
   const spec = restoreSpec || {};
   const saved = visibleBounds(normalizeBounds(spec.bounds)) || (windowsById.size ? null : savedBoundsIfVisible());
@@ -1170,28 +1155,8 @@ function createTabWindow(restoreSpec) {
   return rec;
 }
 
-function firstWindowRecord() {
-  const it = windowsById.values().next();
-  return it.done ? null : it.value;
-}
-
 function windowRecordFor(windowId) {
   return windowsById.get(windowId) || (lastFocusedWindowId ? windowsById.get(lastFocusedWindowId) : null) || firstWindowRecord();
-}
-
-function claimRoutingKey(map, key, tabId) {
-  const owner = map.get(key);
-  if (owner && owner !== tabId && tabs.has(owner)) return false;
-  map.set(key, tabId);
-  return true;
-}
-
-function indexTabSource(tab) {
-  if (tab.source.kind === "file") claimRoutingKey(pathToTabId, pathKey(tab.source.absPath), tab.id);
-}
-
-function unindexTabSource(tab) {
-  for (const [key, id] of pathToTabId) if (id === tab.id) pathToTabId.delete(key);
 }
 
 function deliverRestoreNotice(tab) {
