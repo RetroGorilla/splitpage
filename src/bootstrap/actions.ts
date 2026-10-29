@@ -13,7 +13,7 @@ import { registerAll } from "../application/actions.ts";
 import { mountShortcuts } from "../features/shortcuts/mount.ts";
 import { showRefusal } from "./wiring/save-status.ts";
 import { runMenuCommandsWith } from "../application/desktop/menu-commands.ts";
-import { editorOpenActions } from "../legacy/editor-open-actions.ts";
+import { editorOpenActions } from "../features/gallery/actions.ts";
 import { videoFiles } from "./wiring/video-files.ts";
 import { autosaveActions, fileMenuActions } from "./wiring/file-menu.ts";
 import { toggleFileMenu } from "./wiring/file-menu-controls.ts";
