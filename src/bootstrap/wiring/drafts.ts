@@ -11,7 +11,7 @@ import { owned } from "../../features/routing/owned.ts";
 import { migrateRows } from "../../legacy/document-ports.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { notifyDesktopDocumentState } from "./desktop-owners.ts";
-import { documentLocation } from "../../legacy/location-bridge.ts";
+import { documentLocation } from "./location-owner.ts";
 import { applyMerge } from "./document-merge.ts";
 import { resetProductionPanelState } from "../../legacy/production-editing-bridge.ts";
 import { applyStashedWork, browserDrafts, captureRestore, desktopDrafts, draftResume, recoveryStarted, stillRestoring, useBrowserDraftFactory } from "./recovery-owners.ts";

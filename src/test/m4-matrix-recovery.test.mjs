@@ -37,7 +37,7 @@ const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = awai
 const openDraftStore = (ports) => createIdbDraftStore(Object.assign({ limits: DRAFT_LIMITS, now: () => Date.now() }, ports));
 const { bytesForSync, createMemoryBackend, ensureBytes, has, internDataUrl, isDurableSync, persist, setBackend: setBlobBackend } = await import("../adapters/storage/02c-blobs.js");
 const { addGalleryPicture } = await import("../core/document/gallery.ts");
-const homeModule = await import("../legacy/location-bridge.ts");
+const homeModule = await import("../bootstrap/wiring/location-owner.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument, keepSnapshot } = await import("../bootstrap/wiring/transition-owners.ts");
 

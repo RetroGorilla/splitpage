@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { cloneState } from "../core/document/clone.ts";
-import { documentLocation } from "../legacy/location-bridge.ts";
+import { documentLocation } from "../bootstrap/wiring/location-owner.ts";
 
 const SAVED = {
   schema: 2,
