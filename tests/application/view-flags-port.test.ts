@@ -3,7 +3,7 @@ import { flags as portFlags } from "../../src/bootstrap/wiring/ports/preferences
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { startPreferences, viewFlags } from "../../src/legacy/preferences-bridge.ts";
+import { startPreferences, viewFlags } from "../../src/bootstrap/wiring/preferences-owner.ts";
 
 test("the find flags port reads and writes the current legacy view flags across restarts", () => {
   const flags = portFlags;

@@ -10,7 +10,7 @@ export interface LoadManifest {
 }
 
 const FOLDER = "tests/bootstrap/load-order";
-export const COMPOSITION_ROOT = "src/bootstrap/main.js";
+export const COMPOSITION_ROOT = "src/bootstrap/main.ts";
 
 function strings(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((item) => typeof item === "string");

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-const bridge = await import("../legacy/preferences-bridge.ts");
+const bridge = await import("../bootstrap/wiring/preferences-owner.ts");
 
 function memory() {
   const items = new Map();

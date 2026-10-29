@@ -12,7 +12,7 @@ import {
   resetProductionPanelState,
   selectedKeys,
   startProductionEditing
-} from "../../src/legacy/production-editing-bridge.ts";
+} from "../../src/bootstrap/wiring/production-editing-owners.ts";
 import { wireProductionEditing } from "../../src/bootstrap/wiring/production-editing.ts";
 
 function clock() {

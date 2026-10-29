@@ -1,6 +1,6 @@
 # The desktop restore notice (initDesktop's onRestoreNotice, 20f-desktop.js):
 # a launch that could not bring back one or more remembered tabs (a missing
-# file, an unreadable one, a server document whose server never answered)
+# file or an unreadable one)
 # tells the user once, as one sticky warning toast naming each of them,
 # rather than failing silently.
 #
@@ -26,12 +26,12 @@ eval (function(){ window.fakeR._fireRestoreNotice({skipped: []}); window.fakeR._
 expect window.__rn().length === 0
 
 # ---- skipped tabs: one sticky warning naming each, with its reason ------
-# The reason words are the user's, not main's codes ("server-unreachable"
-# reads "server unreachable"); an unknown code is shown as-is and a nameless
+# The known reason words are shown as words; an unknown code (a leftover
+# server-unreachable from before 4.1) is shown as-is and a nameless
 # entry reads "a document". A name is text, never markup.
 eval (function(){ window.fakeR._fireRestoreNotice({skipped: [{name: 'Pilot.splitpage', reason: 'missing'}, {name: 'Notes.md', reason: 'unreadable'}, {name: 'Shared draft', reason: 'server-unreachable'}, {reason: 'weird'}, {name: '<b>x</b>.md', reason: 'missing'}]}); return window.__rn().map(function(t){ return t.textContent; }); })()
 expect window.__rn().length === 1
-expect window.__rn()[0].textContent === 'Could not restore: Pilot.splitpage (missing), Notes.md (unreadable), Shared draft (server unreachable), a document (weird), <b>x</b>.md (missing).'
+expect window.__rn()[0].textContent === 'Could not restore: Pilot.splitpage (missing), Notes.md (unreadable), Shared draft (server-unreachable), a document (weird), <b>x</b>.md (missing).'
 expect window.__rn()[0].classList.contains('warn')
 expect window.__rn()[0].classList.contains('is-sticky')
 expect window.__rn()[0].querySelector('b') === null

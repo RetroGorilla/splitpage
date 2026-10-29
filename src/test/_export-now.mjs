@@ -1,6 +1,6 @@
 import "./_preferences-started.mjs";
 import "./_export-kit-started.mjs";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { brollView } from "../application/preferences/broll-view.ts";
 import { brollShotListForPrint } from "../adapters/formats/export-projections.ts";
 import { exportAssetsNow } from "../adapters/formats/export-assets.ts";

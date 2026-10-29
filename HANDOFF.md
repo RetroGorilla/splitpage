@@ -107,7 +107,7 @@ runs one:
 
 ```bash
 node build.mjs
-node tools/run-suites.mjs ../splitpage-runs/latest '^265-browser-drafts\.txt$'
+node tools/run-suites.mjs ../splitpage-runs/latest '^01-core\.txt$'
 node .claude/skills/run-splitpage-app/driver.mjs --script .claude/skills/run-splitpage-app/tests/01-core.txt
 ```
 
@@ -122,8 +122,8 @@ only exits non-zero for a command that throws, so read its `RESULT:` line.
 **CI** (`.github/workflows/ci.yml`, #58) runs the fast gates on every pull
 request: lint, types, the dependency and comment gates, the build and its
 `sw.js` stamp, every discovered unit, desktop and tool test
-(`npm run test:all`), and the smoke, CSP and persistence browser suites
-(`01-core.txt`, `52-csp.txt`, `265-browser-drafts.txt`).
+(`npm run test:all`), and the smoke and CSP browser suites
+(`01-core.txt`, `52-csp.txt`).
 [docs/architecture/testing.md](docs/architecture/testing.md#ci) lists the
 jobs. A separate job, `desktop-smoke`, runs `desktop/test/smoke.mjs
 --only-target dev` against an Xvfb display (#89) on pushes to `main` — that
@@ -725,20 +725,10 @@ tabs**.
   `splitpage:draft-restore-done` or an explicit user decision — never
   crash/kill/session-end/quit. `buildDraftHeader` (`main.js:807`) is built
   only by main from allowlisted scalar fields, never a PIN/token (#29).
-- **Browser drafts are only left over from server documents** (PR #233
-  added them; the server features are gone). The IndexedDB adapter
-  `src/adapters/storage/draft-store-idb.ts` (`splitpage-drafts` v1: `meta` +
-  `bodies`, keyPath `key`) is kept so a browser draft a former server
-  document left behind is not lost: at startup the newest one whose writer
-  is not live (Web Lock `splitpage-draft-writer-<id>`) is offered once as an
-  unsaved copy, with all its content, and that copy keeps writing the same
-  draft (`browserCopyOf` in `src/application/recovery/drafts.js`) until it
-  is saved somewhere (`browserDraftTarget`). Nothing else writes a browser
-  draft: untitled scripts and local files are desktop-only. The record is
-  the document, its ancestor and scalars (`rev`, `title`, `writerId`, …),
-  never a credential (#29). Bounds: 30 days, 20 drafts, 64 MiB, oldest
-  first, inside each put. No IndexedDB → `UNAVAILABLE`, the writer stops
-  with nothing on screen.
+- **The browser keeps no drafts.** Crash-safe drafts are desktop-only. The
+  browser draft store, its writer and its Web Lock were removed with the
+  last server leftovers; a browser draft a former server document left in
+  IndexedDB is no longer read.
 - **Desktop version history** (#83, `main.js` §8b): one
   `shared/history-store.js` (the store the browser runs too; policy from
   `shared/history-policy.js`) over `desktop/history-fs-backend.js`, both
@@ -2021,8 +2011,8 @@ under us is the same document with newer bytes.
 **Recent documents (issue #15), contract DESKTOP-RECENTS.** Desktop only.
 `recents: [{absPath, title, at}]` sits beside `windows` in
 `desktop-state.json`, most recent first, capped at 20 and de-duplicated by
-path on read. `recentDocuments` in `desktop/main.js` is the authority once
-the process is up (`loadRecentsAtLaunch` at `whenReady`, and
+path on read. The list held by `createRecents` in `desktop/recents.js` is the
+authority once the process is up (`recents.load()` at `whenReady`, and
 `shellStateAsV2()` carries it into every session write, because that object
 REPLACES the file). It is recorded on `deliverOpenFile` and refreshed on
 every `set-document-state` report of a file tab, and only a real change

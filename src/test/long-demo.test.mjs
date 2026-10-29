@@ -8,10 +8,10 @@ import "./_project-file-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { rowSeconds } from "../core/production/timing.ts";
-import { productionReaders } from "../legacy/document-ports.ts";
+import { productionReaders } from "../bootstrap/document-ports.ts";
 import { STATE_FIELDS, missingStateFields } from "../core/merge/state-fields.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
-import { cellOf } from "../legacy/richtext.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
+import { cellOf } from "../bootstrap/richtext.ts";
 import { collectTagsFromRows } from "../features/tags/production-tags.js";
 
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";

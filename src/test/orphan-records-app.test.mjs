@@ -1,14 +1,14 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
-import { saveChanges } from "../legacy/save-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
+import { saveChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { maybeAutoTagShortcut } = await import("../features/tags/production-tags.js");
@@ -19,10 +19,10 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const writer = await import("../features/writer/writer.js");
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

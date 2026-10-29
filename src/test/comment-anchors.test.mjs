@@ -3,12 +3,12 @@ import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { commentRange, joinCells, splitCell } from "../core/text/edits.ts";
-import { fromHtml, cellOf } from "../legacy/richtext.ts";
+import { fromHtml, cellOf } from "../bootstrap/richtext.ts";
 import { toHtml } from "../core/text/html.ts";
 import { syncCommentAnchors } from "../core/text/anchors.ts";
-import { sanitizeHtml } from "../legacy/richtext.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { sanitizeHtml } from "../bootstrap/richtext.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 
 const T = (text, marks) => ({ text, marks: marks || {} });
