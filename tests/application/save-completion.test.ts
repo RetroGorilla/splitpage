@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createSaveCompletion } from "../../src/application/save/save-completion.ts";
+import { createAdoptionCompletion, createImportCompletion, createSaveCompletion } from "../../src/application/save/save-completion.ts";
 import type { SaveCompletionPorts } from "../../src/application/save/save-completion.ts";
 import type { Home } from "../../src/application/location/document-location.ts";
 import { buildExportDocument } from "../../src/core/document/export-document.ts";
@@ -92,4 +92,32 @@ test("a copy that lands after the save lost the document only copies the history
   const g = harness();
   g.completion.adoptSavedCopyDocId(null, OLD_ID, false);
   assert.deepEqual(g.log, []);
+});
+
+test("an import write back records the file's new time and size once it lands, and its dirty flag once acknowledged", () => {
+  const amended: Record<string, unknown>[] = [];
+  const asked: unknown[] = [];
+  const imported = { kind: "import", name: "notes.docx" } as unknown as Home;
+  const completion = createImportCompletion({
+    location: { amendHome: (record, fields) => { assert.equal(record, imported); amended.push({ ...fields }); return record; } },
+    saving: { unsavedFor: (target) => { asked.push(target); return true; } }
+  });
+  completion.landed(imported, { lastModified: 90, size: 1234 });
+  assert.deepEqual(amended, [{ lastModified: 90, size: 1234 }]);
+  assert.deepEqual(asked, []);
+  completion.acknowledged(imported);
+  assert.deepEqual(amended.at(-1), { dirty: true });
+  assert.deepEqual(asked, [imported]);
+});
+
+test("opening a project file confirms it clean, and opening an import clears that import's dirty flag", () => {
+  const log: string[] = [];
+  const imported = { kind: "import", name: "notes.docx" } as unknown as Home;
+  const completion = createAdoptionCompletion({
+    location: { amendHome: (record, fields) => { log.push("amendHome:" + (record === imported) + ":" + JSON.stringify(fields)); return record; } },
+    saving: { confirmSavedNow: () => { log.push("confirmSavedNow"); } }
+  });
+  completion.projectOpened();
+  completion.importOpened(imported);
+  assert.deepEqual(log, ["confirmSavedNow", "amendHome:true:{\"dirty\":false}"]);
 });
