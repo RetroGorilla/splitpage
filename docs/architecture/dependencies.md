@@ -31,12 +31,11 @@ resolved edge (static imports, re-exports, literal `require`, literal dynamic
 | `core/merge` | `src/core/merge/` | itself, `core/document`, `core/text`, `shared` |
 | `core/production` | `src/core/production/` | itself, `core/document`, `core/text`, `shared` |
 | `core` | any other `src/core/` folder | any core layer, `shared` |
-| `contracts` | `src/contracts/` | itself, `shared` |
-| `application` | `src/application/` | itself, core, `contracts`, `shared` |
-| `adapters` | `src/adapters/` | itself, core, `application`, `contracts`, `shared` |
-| `features/<name>` | `src/features/<name>/` | itself, `features/common`, core, `application`, `contracts`, `shared` |
+| `application` | `src/application/` | itself, core, `shared` |
+| `adapters` | `src/adapters/` | itself, core, `application`, `shared` |
+| `features/<name>` | `src/features/<name>/` | itself, `features/common`, core, `application`, `shared` |
 | `features/common` | `src/features/common/` | DOM helpers used by more than one feature; same imports as `features/<name>`, imported by every feature |
-| `legacy` | `src/legacy/` | itself, core, `legacy-js`, `application`, `contracts`, `adapters`, `shared` |
+| `legacy` | `src/legacy/` | itself, core, `legacy-js`, `application`, `adapters`, `shared` |
 | `bootstrap` | `src/bootstrap/` | anything except `src/js/_state.js` |
 | `shared` | `shared/` | itself |
 | `tests` | `src/test/`, `tests/`, `*.test.*` | anything |
@@ -47,13 +46,13 @@ A script under `src/` outside the folders above is an `unknown-layer`
 violation keyed by its top-level folder (`src/util/`, or `src/` for a file
 directly under it): add the folder to the table (`layerOf`) or move the file.
 Until then it counts as production for the `S` rules below, and core,
-`contracts`, `application`, `adapters`, features, `legacy` and `shared` may
+`application`, `adapters`, features, `legacy` and `shared` may
 not import it.
 
 Bootstrap imports of `src/js/_state.js` are `layer` violations, including side-effect imports, re-exports, dynamic imports and type imports. The wiring uses the live-document and save ports, the startup signal (`src/application/startup-signal.ts`) and the desktop port (`adapters/desktop/desktop-port.ts`, through `src/bootstrap/wiring/ports/desktop.ts`). `tools/test-dep-report.mjs` has fail-first cases for this boundary and a positive case for a numbered module supplying a port.
 
-Core, `contracts`, `application`, `shared` and feature layers may not import a
-Node built-in or a package (`platform-import`). Core, `contracts`,
+Core, `application`, `shared` and feature layers may not import a
+Node built-in or a package (`platform-import`). Core,
 `application` and `shared` may not use browser, Node, timer or network globals
 (`platform-global`); CommonJS `require`, `module` and `exports` are allowed in
 CommonJS files. The banned set includes the DOM: `DOMParser`, `XMLSerializer`,
@@ -76,7 +75,7 @@ Function`, `Function.prototype`) are reported as code-from-text globals; the
 use by where the identifier sits.
 
 The list is a second line of defence. The first is the typecheck:
-`tsconfig.core.json` (core, `contracts` and `application`) sets `lib` to
+`tsconfig.core.json` (core and `application`) sets `lib` to
 `ES2023` only and `types` to `[]`, so a DOM name nobody declared (`FormData`,
 `Headers`, `HTMLInputElement`) fails `tsc` as an undefined name.
 `tools/test-dep-report.mjs` checks that the config carries no DOM, WebWorker or
@@ -116,7 +115,7 @@ method names and labels are not references; a shorthand property
 and is not a local binding, so it does not hide a use of the global. A call to
 `require` is a load only where `require` is not a binding in scope.
 
-Core, `contracts`, `application` and `shared` may declare no ambient value at
+Core, `application` and `shared` may declare no ambient value at
 all (`platform-global`, target `ambient:<name>`), whatever its name: core must
 not claim a platform global exists, and an ambient declaration is how a name
 the typecheck would reject gets past it. These forms are reported, even when
@@ -188,7 +187,7 @@ parses a legacy `.html` export to read its `state-data` element, and
 `src/bootstrap/document-ports.ts` builds its own `RichText` over each migration's
 image ingestion.
 
-A cycle containing any file in a migrated layer (`core`, `contracts`,
+A cycle containing any file in a migrated layer (`core`,
 `application`, `adapters`, `features`, `bootstrap`, `legacy`) fails whether it
 is a runtime cycle or only closes through `import type`, and whether or not it
 passes through `src/js`. Such a cycle cannot be baselined.
@@ -247,7 +246,7 @@ literal, a class static, `module.exports`, or an existing legacy helper that
 returns live state is an untracked facade: `adoptRestoredState` in
 `src/js/02b-doc-id.js` replaces `S.state` and returns it, and a module that
 calls it and writes to the result is not reported for that call or that
-write. Features, `application`, `adapters`, `contracts` and core are still
+write. Features, `application`, `adapters` and core are still
 protected, because the layer rules stop them importing `src/js` or
 `src/legacy` at all. `src/js`, `src/legacy` and `src/bootstrap` may import
 legacy modules, so there the only protection against a facade is review. A
@@ -449,7 +448,7 @@ except `node_modules/`, `.claude/handoff/` and the generated `index.html`:
 
 The baseline stores each file's comments as whitespace-normalised text, so a
 comment may move but not change, be duplicated, or appear in a new file.
-`src/core/`, `src/application/`, `src/contracts/`, `src/adapters/`,
+`src/core/`, `src/application/`, `src/adapters/`,
 `src/features/`, `src/bootstrap/`, `src/legacy/`, `tests/`, `.github/`,
 `eslint.config.mjs` and every JSON file can never carry a baselined comment;
 all of them have none. No YAML file

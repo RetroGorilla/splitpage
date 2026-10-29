@@ -50,6 +50,7 @@ eq("a feature folder is named", layerOf("src/features/rows/view.ts"), "features/
 eq("numbered modules are legacy-js", layerOf("src/js/21-events.js"), "legacy-js");
 eq("src/test is tests", layerOf("src/test/undo.test.mjs"), "tests");
 eq("an unknown src folder is src-unknown, not other", layerOf("src/util/helper.js"), "src-unknown");
+eq("the retired contracts folder is an unknown source layer", layerOf("src/contracts/dto.ts"), "src-unknown");
 eq("a file directly under src is src-unknown", layerOf("src/entry.js"), "src-unknown");
 eq("a root script is still other", layerOf("build.mjs"), "other");
 check("core may not import an unknown src folder", !layerAllows("core/document", "src-unknown"));
@@ -68,6 +69,14 @@ check("legacy may import legacy-js", layerAllows("legacy", "legacy-js"));
 check("bootstrap may import anything", layerAllows("bootstrap", "features/rows") && layerAllows("bootstrap", "adapters"));
 check("production code may not import tests", !layerAllows("legacy-js", "tests") && !layerAllows("server", "tests"));
 check("tools may import tests", layerAllows("tools", "tests"));
+
+eq("reintroducing the retired folder fails the unknown-layer and import rules", findViolations(graph({
+  "src/contracts/dto.ts": "export type Dto = { id: string };\n",
+  "src/application/probe.ts": 'import type { Dto } from "../contracts/dto.ts";\nexport type Probe = Dto;\n'
+})).map(({ rule, source, target }) => ({ rule, source, target })), [
+  { rule: "layer", source: "src/application/probe.ts", target: "src/contracts/dto.ts" },
+  { rule: "unknown-layer", source: "src/contracts/dto.ts", target: "src/contracts/" }
+]);
 
 for (const [label, source] of [
   ["named import", 'import { S } from "../../js/_state.js";'],
@@ -464,13 +473,13 @@ for (const [name, lines, expected] of ambientCases) eq(name, ambientsOf("src/cor
     "src/core/text/form.ts": "declare const FormData: new () => unknown;\nexport const f = new FormData();\n",
     "src/core/text/code.ts": 'export const e = (0, eval)("1");\nexport const g = new Function("return 1");\n',
     "src/application/a.ts": "declare const __BUILD__: string;\nexport const b = __BUILD__;\n",
-    "src/contracts/c.ts": "declare global { var leak: number }\nexport {};\n",
+    "src/application/c.ts": "declare global { var leak: number }\nexport {};\n",
     "shared/s.js": '"use strict";\nmodule.exports = { f: () => 1 };\n',
     "src/adapters/dom/p.ts": "declare const FormData: new () => unknown;\nexport const p = [new DOMParser(), new FormData()];\n"
   })).filter((v) => v.rule === "platform-global").map((v) => `${v.source} ${v.target}`);
-  eq("core, contracts and application may use or declare no DOM or ambient value; an adapter may", rules, [
+  eq("core and application may use or declare no DOM or ambient value; an adapter may", rules, [
     "src/application/a.ts ambient:__BUILD__",
-    "src/contracts/c.ts ambient:leak",
+    "src/application/c.ts ambient:leak",
     "src/core/document/text-policy.ts ambient:DOMParser",
     "src/core/document/text-policy.ts global:DOMParser",
     "src/core/text/code.ts global:Function",
@@ -486,15 +495,15 @@ for (const [name, lines, expected] of ambientCases) eq(name, ambientsOf("src/cor
     "src/core/text/r.ts": "export const n = Math.random();\n",
     "shared/h.js": '"use strict";\nmodule.exports = { at: () => new Date().toISOString(), parse: (s) => Date.parse(s) };\n',
     "shared/p.js": '"use strict";\nmodule.exports = { iso: (ms) => new Date(ms).toISOString() };\n',
-    "src/contracts/k.ts": "export const k = Math.random();\n",
+    "src/application/k.ts": "export const k = Math.random();\n",
     "src/application/a.ts": "export const a = Date.now();\n",
     "src/js/legacy.js": "export const t = Date.now() + Math.random();\n",
     "src/adapters/identity/i.ts": "export const i = Date.now() + Math.random();\n"
   })).filter((v) => v.rule === "platform-global").map((v) => `${v.source} ${v.target}`);
-  eq("core, shared, contracts and application may not read the clock or draw random numbers; legacy and adapters may", rules, [
+  eq("core, shared and application may not read the clock or draw random numbers; legacy and adapters may", rules, [
     "shared/h.js global:Date",
     "src/application/a.ts global:Date",
-    "src/contracts/k.ts global:Math.random",
+    "src/application/k.ts global:Math.random",
     "src/core/document/c.ts global:Date",
     "src/core/text/r.ts global:Math.random"
   ]);

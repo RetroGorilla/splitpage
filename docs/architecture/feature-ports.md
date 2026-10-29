@@ -15,7 +15,7 @@ How a feature folder connects to the rest of the app: the rules for its ports, i
 | Numbered file | A file in `src/js/` whose name starts with a number, such as `05-render.js`: the old app code |
 | Bridge | A file in `src/legacy/` that handed numbered files an owner through a function call, such as `currentDocument()` or `showToast()`, and threw before the app started. Each went when its last numbered importer did, and the rest when the wiring took the owners from ports (plan §8). One is left: `app-actions.ts` |
 | Owner | The one module that holds a piece of state and is the only way to change it: the document session, the preferences, the save coordinator, the row drag. Owners live in `src/application/` |
-| Feature | A folder in `src/features/` for one part of the screen. It may import `src/core/`, `shared/`, `src/application/`, `src/contracts/` and `src/features/common/`. It may not import a bridge, a numbered file, an adapter or another feature (`layerAllows` in `tools/dep-report.mjs`) |
+| Feature | A folder in `src/features/` for one part of the screen. It may import `src/core/`, `shared/`, `src/application/` and `src/features/common/`. It may not import a bridge, a numbered file, an adapter or another feature (`layerAllows` in `tools/dep-report.mjs`) |
 | Port | What a feature needs from outside, written as a TypeScript interface the feature declares. The feature says what it needs and doesn't know who provides it |
 | Shared port | A port type several features use, defined once |
 | Wiring | The code in `src/bootstrap/wiring/` that builds a feature's ports from the real owners and starts the feature ("mounts" it). Mounting returns a `dispose` function that removes the feature's listeners |

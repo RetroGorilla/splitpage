@@ -354,7 +354,6 @@ test in one area's folder does not cover another.
 | each `src/core/<folder>` | `tests/core/<folder>` |
 | files directly in `src/core` | directly in `tests/core`, or directly in `src/core` |
 | `src/application` | `tests/application` |
-| `src/contracts` | `tests/contracts` |
 | `src/adapters` | `tests/adapters` |
 | each `src/features/<folder>` | `tests/features/<folder>` |
 | files directly in `src/features` | directly in `tests/features`, or directly in `src/features` |
@@ -454,7 +453,7 @@ Node runs `.ts` files directly by stripping types; it does not read
 
 | Config | Covers | Environment |
 | --- | --- | --- |
-| `tsconfig.core.json` | `src/core`, `src/application`, `src/contracts` | ES2023 only: no DOM, no Node |
+| `tsconfig.core.json` | `src/core`, `src/application` | ES2023 only: no DOM, no Node |
 | `tsconfig.web.json` | `src/adapters`, `src/features`, `src/bootstrap`, `src/legacy` | ES2023 and DOM |
 | `tsconfig.test.json` | `src/**/*.test.ts`, `tests/` | ES2023, DOM and Node |
 

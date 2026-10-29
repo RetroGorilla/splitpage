@@ -7,7 +7,6 @@ const typescriptFiles = ["**/*.ts", "**/*.mts", "**/*.cts"];
 const commentFree = [
   "src/core/**",
   "src/application/**",
-  "src/contracts/**",
   "src/adapters/**",
   "src/features/**",
   "src/bootstrap/**",

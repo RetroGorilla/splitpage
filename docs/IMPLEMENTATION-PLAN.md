@@ -95,8 +95,7 @@ A parser-aware check must distinguish actual comments from URLs, regexes and str
 | `src/core/merge/` | Existing merge algorithms and conflict results | Core document/text policies |
 | `src/core/production/` | Tag/b-roll derivation and reconciliation plans | Core document/text policies |
 | `src/application/` | Sessions, transactions, actions, save/recovery coordination and effect scheduling | Core and declared port interfaces |
-| `src/contracts/` | Validated external DTOs and boundary outcomes | Focused validation and plain types |
-| `src/adapters/` | HTML decoding, formats, storage, files, HTTP, clipboard and native integration | Port interfaces, contracts and platform APIs |
+| `src/adapters/` | HTML decoding, formats, storage, files, HTTP, clipboard and native integration | Port interfaces, boundary types and platform APIs |
 | `src/features/<feature>/` | Controller, view, bindings, local state, styles and tests | Public application interfaces and presentation utilities |
 | `src/bootstrap/` | Explicit construction, registration and resource teardown | Implementations needed to compose the app |
 | `src/legacy/` | Retired: the numbered files and every bridge are gone (the last, `app-actions.ts`, in #906). Do not add files here | Only explicitly allowed legacy/application interfaces |
