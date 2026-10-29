@@ -246,6 +246,7 @@ for (const code of ["EACCES", "ENOSPC"]) {
     assertUnchangedByFailure(before, "after the failed desktop save");
     assert.equal(unsavedChanges(), true, "the document is still dirty");
     assert.equal(state().dirty, true, "the desktop is still told it is dirty, so quitting asks");
+    assert.equal(closeWouldWarn(), true, "closing still warns");
     assert.equal(toasts("error").length, 1, "one error is shown");
     assert.match(toasts("error")[0], /^Could not save — /, "and it says the save failed");
     assert.equal(currentDocument().rows[0].audioText, "Typed before the save.", "the typed text is still in the document");
