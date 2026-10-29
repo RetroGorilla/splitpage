@@ -8,7 +8,7 @@ import { documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits, productionSelection as portSelection, undoControl as portUndo } from "./ports/editing.ts";
 import { text as portText } from "./ports/text.ts";
 import { production as portProduction, deletion as portDeletion, tagPanelState as portView } from "./ports/production.ts";
-import { panelControl as portPanels } from "./ports/panels.ts";
+import { panelControl as portPanels, sidePanels } from "./ports/panels.ts";
 import { personColors as portPersonColors } from "./ports/person-colors.ts";
 import { shotHiding as portShotHiding } from "./ports/shot-hiding.ts";
 import { notices as portNotices } from "./ports/effects.ts";
@@ -18,7 +18,6 @@ import { bulkDeleteArmed, clearProductionSelection, disarmBulkDelete, production
 import type { TagsPorts } from "../../features/tags/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
 import { runFromButton } from "../../legacy/app-actions.ts";
-import { sidePanels } from "../../legacy/panels-bridge.ts";
 import { mountTagEntityContainer, mountTags } from "../../features/tags/mount.ts";
 import { captureOperation, stillOwns } from "../../legacy/transition-bridge.ts";
 import { cssAttr } from "../../features/common/dom.ts";

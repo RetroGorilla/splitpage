@@ -6,7 +6,7 @@ import { helpActions as definitions } from "../../features/help/actions.ts";
 import { startHelp as mountHelp } from "../../features/help/help.js";
 import type { HelpMount, HelpPorts } from "../../features/help/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { sidePanels } from "../../legacy/panels-bridge.ts";
+import { sidePanels } from "./ports/panels.ts";
 import { preferences, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { inDesktopApp } from "../../legacy/screen-state.ts";
 
