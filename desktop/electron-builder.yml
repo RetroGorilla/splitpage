@@ -20,6 +20,7 @@ files:
   - chromium-browsers.js
   - history-fs-backend.js
   - desktop-state.js
+  - update-release.js
   - package.json
 
 extraResources:
