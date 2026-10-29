@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/application/save/project-files.ts",
     "src/bootstrap/wiring/project-files.ts",

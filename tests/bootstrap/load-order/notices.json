@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/notices/busy.js",
     "src/features/notices/phone-bar.ts"

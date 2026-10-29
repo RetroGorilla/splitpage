@@ -99,3 +99,21 @@ test("list entries: theirs first then mine, one entry per item whose summary dif
   assert.deepEqual(mergeListEntries("Crew", null, undefined, (p: Person) => p.id, (p) => p.name, (p) => p.name), []);
   assert.deepEqual(mergeListEntries("Crew", mine, mine, (p) => p.id, (p) => p.name, (p) => p.name), []);
 });
+
+test("word diff: a side with only blanks of its own reads as empty, and the token cap is inclusive", () => {
+  assert.deepEqual(mergeDiffPairHtml(" ", "x"), {
+    mine: '<em class="diff-empty">(empty)</em>',
+    theirs: '<span class="diff-add">x</span>'
+  });
+  const atCap = Array.from({ length: MERGE_DIFF_TOKEN_CAP }, (_, i) => "w" + i);
+  assert.equal(mergeDiffOps(atCap, ["x"])?.length, MERGE_DIFF_TOKEN_CAP + 1);
+  assert.equal(mergeDiffOps(["x"], atCap)?.length, MERGE_DIFF_TOKEN_CAP + 1);
+  assert.equal(mergeDiffOps(atCap.concat("one more"), ["x"]), null);
+});
+
+test("list entries: an item only theirs holds, with an empty summary, makes no entry", () => {
+  type Person = { id: string; name: string; notes?: string };
+  const theirs: Person[] = [{ id: "p9", name: "Zed" }];
+  assert.deepEqual(mergeListEntries("Crew", [], theirs, (p) => p.id, (p) => p.name, (p) => p.notes || ""), []);
+  assert.deepEqual(mergeListEntries("Crew", theirs, [], (p) => p.id, (p) => p.name, (p) => p.notes || ""), []);
+});

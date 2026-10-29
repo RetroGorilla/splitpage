@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/onboarding/onboarding.js",
     "src/features/onboarding/actions.ts",

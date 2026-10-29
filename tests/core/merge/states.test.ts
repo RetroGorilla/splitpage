@@ -4,6 +4,8 @@ import { SCHEMA_VERSION, STATE_FIELDS, STRATEGY_IDS } from "../../../src/core/do
 import type { StateField } from "../../../src/core/document/fields.ts";
 import type { MergeComment, MergeRow } from "../../../src/core/merge/rows.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
+import { LIST_MERGERS } from "../../../src/core/merge/lists.ts";
+import { STATE_FIELDS as MERGE_FIELDS } from "../../../src/core/merge/state-fields.ts";
 import { mergeStateFields } from "../../../src/core/merge/states.ts";
 import type { MergeDoc } from "../../../src/core/merge/states.ts";
 import { migratedThenSet } from "../migrate-ports.ts";
@@ -241,4 +243,32 @@ test("my reassignment survives a merge whose other side changed only something e
   assert.equal(JSON.stringify([base, mine, theirs]), before);
   assert.deepEqual((r.merged.productionTags as { owner: string }[]).map((t) => t.owner), ["pAda"]);
   assert.deepEqual((r.merged.brollShots as { owner: string }[]).map((b) => b.owner), ["pAda"]);
+});
+
+test("a person deleted by the other side cannot be handed an item by a reassignment, in tags and shots", () => {
+  const people = [{ id: "pSam", name: "Sam" }, { id: "pAda", name: "Ada" }];
+  const owned = (owner: string) => ({ productionTags: [Object.assign({}, kettle, { owner: owner })], brollShots: [Object.assign({}, shot, { owner: owner })] });
+  const base = doc(Object.assign({ people: people }, owned("pSam")));
+  const mine = doc(Object.assign({ people: people }, owned("pAda")));
+  const theirs = doc(Object.assign({ people: [people[0]] }, owned("pSam")));
+  const { decode } = fakeDecoder(CELLS);
+  const r = mergeStateFields(base, mine, theirs, fakePorts(decode));
+  assert.deepEqual(r.merged.people, [{ id: "pSam", name: "Sam" }]);
+  assert.deepEqual((r.merged.productionTags as { owner: string }[]).map((t) => t.owner), ["pSam"]);
+  assert.deepEqual((r.merged.brollShots as { owner: string }[]).map((b) => b.owner), ["pSam"]);
+});
+
+test("an id that carries one name on each side moves to the person holding the name from my side", () => {
+  const theirs = doc({ people: [{ id: "pV", name: "Bob" }, { id: "pW", name: "Rob" }, { id: "pZ", name: "Rob" }] });
+  const mine = doc({ people: [{ id: "pZ", name: "Bob" }], productionTags: [Object.assign({}, kettle, { owner: "pZ" })] });
+  const { decode } = fakeDecoder(CELLS);
+  const r = mergeStateFields(doc(), mine, theirs, fakePorts(decode));
+  assert.deepEqual((r.merged.people as { id: string }[]).map((p) => p.id), ["pV", "pW"]);
+  assert.deepEqual((r.merged.productionTags as { owner: string }[]).map((t) => t.owner), ["pV"]);
+});
+
+test("the merge table carries a list merger on the fields merged as lists, and on no other", () => {
+  assert.equal(MERGE_FIELDS.length, STATE_FIELDS.length);
+  assert.deepEqual(MERGE_FIELDS.filter((f) => f.mergeList).map((f) => f.key).sort(), ["brollShots", "people", "productionTags"]);
+  for (const f of MERGE_FIELDS) assert.equal(f.mergeList, f.merge === "list-union-with-base" ? LIST_MERGERS[f.key] : undefined, f.key);
 });

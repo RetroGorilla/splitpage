@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createImportSavingOwner } from "../../src/application/save/import-saving.js";
+import { createImportSavingOwner } from "../../src/application/save/import-saving.ts";
 import type { ImportSavingOwner, ImportSavingPorts, ImportSaveRequest } from "../../src/application/save/import-saving-ports.ts";
 import type { SaveJob } from "../../src/application/save/coordinator.ts";
 import { createDocumentLocation } from "../../src/application/location/document-location.ts";
