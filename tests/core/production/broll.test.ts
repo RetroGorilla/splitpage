@@ -332,6 +332,10 @@ test("INV-56: renaming a prop is planned per shot, by id and by name for a prop 
   assert.deepEqual(brollPropsRenamed(state, null, "old", null, "New"), [
     { at: 3, props: [{ id: "", name: "New" }] }
   ], "with no ids at all a prop is renamed by name and stays untracked");
+  assert.deepEqual(brollPropsRenamed({
+    brollShots: [shot("s5", "five", { props: [{ id: "t_other", name: "Kettle" }] })],
+    productionTags: []
+  }, "t_k", "kettle", "t_k", "Copper kettle"), [], "a prop with an id of its own is not taken for the old name's");
   assert.deepEqual(brollPropsRenamed(null, "t_k", "kettle", "t_k", "x"), []);
   assert.deepEqual(brollPropsRenamed({ productionTags: [] }, "t_k", "kettle", "t_k", "x"), []);
 });
