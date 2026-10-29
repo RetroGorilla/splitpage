@@ -59,14 +59,20 @@ function toBuffer(data) {
   throw new Error("writeFile: unsupported data type");
 }
 
-async function atomicWrite(absPath, buffer) {
+async function atomicWrite(absPath, buffer, io = fsp) {
   const dir = path.dirname(absPath);
   const tmp = path.join(dir, `.${path.basename(absPath)}.tmp-${crypto.randomBytes(6).toString("hex")}`);
-  await fsp.writeFile(tmp, buffer);
+  const fh = await io.open(tmp, "wx");
   try {
-    await fsp.rename(tmp, absPath);
+    try {
+      await fh.writeFile(buffer);
+      await fh.sync();
+    } finally {
+      await fh.close();
+    }
+    await io.rename(tmp, absPath);
   } catch (err) {
-    await fsp.unlink(tmp).catch(() => {});
+    await io.unlink(tmp).catch(() => {});
     throw err;
   }
 }

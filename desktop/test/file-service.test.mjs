@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
@@ -85,6 +86,47 @@ test("an atomic write whose rename fails removes its temp file and throws", asyn
   await assert.rejects(atomicWrite(target, Buffer.from("new")));
   assert.deepEqual(fs.readdirSync(dir), ["taken"]);
 });
+
+function recordingIo(log, fail) {
+  return {
+    open: async (p, flags) => {
+      const fh = await fsp.open(p, flags);
+      log.push("open:" + flags);
+      return {
+        writeFile: async (data) => { log.push("write"); if (fail === "write") throw new Error("disk full"); return fh.writeFile(data); },
+        sync: async () => { log.push("sync"); if (fail === "sync") throw new Error("sync failed"); return fh.sync(); },
+        close: async () => { log.push("close"); return fh.close(); }
+      };
+    },
+    rename: async (from, to) => { log.push("rename"); return fsp.rename(from, to); },
+    unlink: async (p) => { log.push("unlink"); return fsp.unlink(p); }
+  };
+}
+
+test("an atomic write flushes the temp file to disk before it renames it over the document", async () => {
+  const dir = fs.mkdtempSync(path.join(root, "sync-"));
+  const file = path.join(dir, "doc.splitpage");
+  fs.writeFileSync(file, "old");
+  const log = [];
+  await atomicWrite(file, Buffer.from("new"), recordingIo(log));
+  assert.deepEqual(log, ["open:wx", "write", "sync", "close", "rename"]);
+  assert.equal(fs.readFileSync(file, "utf8"), "new");
+  assert.deepEqual(fs.readdirSync(dir), ["doc.splitpage"]);
+});
+
+for (const fail of ["write", "sync"]) {
+  test("an atomic write whose " + fail + " fails closes and removes its temp file, keeps the old document and throws", async () => {
+    const dir = fs.mkdtempSync(path.join(root, "fail-" + fail + "-"));
+    const file = path.join(dir, "doc.splitpage");
+    fs.writeFileSync(file, "old");
+    const log = [];
+    await assert.rejects(atomicWrite(file, Buffer.from("new"), recordingIo(log, fail)));
+    assert.equal(log.includes("rename"), false);
+    assert.deepEqual(log.slice(-2), ["close", "unlink"]);
+    assert.equal(fs.readFileSync(file, "utf8"), "old");
+    assert.deepEqual(fs.readdirSync(dir), ["doc.splitpage"]);
+  });
+}
 
 test("an atomic write into a missing folder throws and creates nothing", async () => {
   const dir = path.join(root, "absent");
