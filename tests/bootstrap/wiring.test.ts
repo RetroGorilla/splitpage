@@ -141,7 +141,7 @@ function mergePorts(): LegacyMergePorts {
     isDocument: (raw) => !!raw && typeof raw === "object",
     snapshot: () => null,
     current: () => null,
-    adopt: (_kind, next) => next,
+    adopt: (_kind, next) => migrateRows(next),
     documentId: () => null,
     noteHistoryFrom: () => {},
     armUndo: () => {},
