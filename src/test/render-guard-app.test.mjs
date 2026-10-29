@@ -15,7 +15,7 @@ await bootApp();
 const { currentDocument, liveSession, mergeBase } = await import("../legacy/session-bridge.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
-const { applyMerge } = await import("../legacy/merge-bridge.ts");
+const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");
 const { renderAbsorbed } = await import("../features/rows/render.js");
 const { cellSelection } = await import("../features/common/cell-selection.ts");
 const { pasteIntoCell } = await import("../features/clipboard/cell-clipboard.js");
