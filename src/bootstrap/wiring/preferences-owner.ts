@@ -1,10 +1,10 @@
-import { getSavedAuthorName } from "../application/comment-author.js";
-import { createPanelWidths } from "../application/preferences/panel-widths.ts";
-import type { PanelWidths } from "../application/preferences/panel-widths.ts";
-import { createPreferences } from "../application/preferences/preferences.ts";
-import type { PreferenceChange, PreferencePorts, Preferences } from "../application/preferences/preferences.ts";
-import { createViewFlags } from "../application/preferences/view-flags.ts";
-import type { ViewFlags } from "../application/preferences/view-flags.ts";
+import { getSavedAuthorName } from "../../application/comment-author.ts";
+import { createPanelWidths } from "../../application/preferences/panel-widths.ts";
+import type { PanelWidths } from "../../application/preferences/panel-widths.ts";
+import { createPreferences } from "../../application/preferences/preferences.ts";
+import type { PreferenceChange, PreferencePorts, Preferences } from "../../application/preferences/preferences.ts";
+import { createViewFlags } from "../../application/preferences/view-flags.ts";
+import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 
 export const PREF_EVENT = "splitpage:pref";
 

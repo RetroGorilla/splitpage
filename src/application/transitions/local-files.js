@@ -1,6 +1,7 @@
 import { SCHEMA_VERSION } from "../../core/document/fields.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { fileKindFromName } from "../../../shared/file-names.js";
+import { createAdoptionCompletion } from "../save/save-completion.ts";
 
 function startLocalFiles(ports) {
   var active = true;
@@ -10,10 +11,10 @@ function startLocalFiles(ports) {
   var { noteAbsorbedDirty, noteReload } = ports.session;
   var documentTransitions = function () { return ports.transitions; };
   var keepSnapshot = ports.history.keep;
-  var confirmSavedNow = ports.saving.confirmSavedNow;
+  var completion = createAdoptionCompletion(ports);
   var unsavedChanges = ports.saves.unsaved;
   var fileConflicts = function () { return ports.conflicts; };
-  var { amendHome, setHome, fileHome, importHome } = ports.location;
+  var { setHome, fileHome, importHome } = ports.location;
   var { load: loadLastFileHandle, remember: rememberLastFileHandle } = ports.lastFile;
   var syncDocIdentity = ports.syncIdentity;
   var stampRow = ports.stamps.stampRow;
@@ -72,7 +73,7 @@ function adoptProjectState(newState, file, handle, kind, opts) {
   });
 
   if (!active) return false;
-  confirmSavedNow();
+  completion.projectOpened();
   if (!active) return false;
   var commentNote = currentDocument().comments.length
     ? ", " + currentDocument().comments.length + " comment" + (currentDocument().comments.length === 1 ? "" : "s") : "";
@@ -188,7 +189,7 @@ async function loadFileIntoEditor(file, handle, opts) {
 
   noteAbsorbedDirty(opts.reload ? "reload" : "adopt");
   if (!active) return;
-  amendHome(imported, { dirty: false });
+  completion.importOpened(imported);
   sidePanels().close("newtab-page");
   if (typeof syncDocIdentity === "function") syncDocIdentity();
   showToast(opts.reload

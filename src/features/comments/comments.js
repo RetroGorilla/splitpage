@@ -26,7 +26,7 @@ import { normalizeTagName } from "../../core/document/tags.ts";
 import { EDITOR_NAME_MAX } from "../../core/document/fields.ts";
 import { codePointPrefix, escapeHtml } from "../../core/document/text-policy.ts";
 import { cleanAuthorName } from "../../core/document/people.ts";
-import { getSavedAuthorName, saveAuthorName } from "../../application/comment-author.js";
+import { getSavedAuthorName, saveAuthorName } from "../../application/comment-author.ts";
 
 var ports = null;
 var commentDisposers = [];

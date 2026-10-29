@@ -1,7 +1,7 @@
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { wordsPerMinuteCommand } from "../../application/commands/document-settings.ts";
 import { DEFAULT_WPM } from "../../core/document/timing.ts";
-import { getSavedAuthorName } from "../../application/comment-author.js";
+import { getSavedAuthorName } from "../../application/comment-author.ts";
 import { cleanAuthorName } from "../../core/document/people.ts";
 import { PERSON_COLORS, PERSON_COLOR_NAMES } from "../../core/document/person-colors.ts";
 import { targetSectionHtml, wireTargetSection } from "./target-section.js";

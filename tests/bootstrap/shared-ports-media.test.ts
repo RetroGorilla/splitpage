@@ -5,7 +5,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { blobImgHtml, has, setBackend } from "../../src/adapters/storage/02c-blobs.js";
 
-import { captureOperation, stillOwns } from "../../src/legacy/transition-bridge.ts";
+import { captureOperation, stillOwns } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { image } from "../../src/test/golden-helpers.mjs";
 import { fakeOwnership, fakePictures } from "../features/fakes.ts";
 

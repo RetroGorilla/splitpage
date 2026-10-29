@@ -40,7 +40,7 @@ Both move a numbered file into a feature folder, give it a `ports.ts`, and mount
 1. The feature imports no bridge and no numbered file. Only the wiring reaches the bridges, and the dependency baseline gains nothing.
 2. The port interface lives in the feature folder, and the wiring fills it in.
 3. The mount returns `dispose`, and the wiring holds it with `owned()` (`src/features/routing/owned.ts`), so mounting again removes the old listeners. The numbered files never removed theirs.
-4. The file's start slot in the composition root (`src/bootstrap/main.js`, formerly `_entry.js`) is replaced at the same position, so the start order the load-order probe checks doesn't change.
+4. The file's start slot in the composition root (`src/bootstrap/main.ts`, formerly `_entry.js`) is replaced at the same position, so the start order the load-order probe checks doesn't change.
 5. `tests/features/<name>/mount.test.ts` builds the feature with fakes and no app.
 
 **Change:**
@@ -128,7 +128,7 @@ A feature imports from `src/application/` only types and pure functions, such as
   | `identity.ts` | IDs and clock |
 
   The split preserves the existing implementations, including `text.ts`'s tag-body rewriting. Moving that logic to its final owner remains a separate audit follow-up. Port contract types remain with their application or core owners. The remaining `06-rows.js` video-file functions are now owned by the gallery feature and supplied through an explicit bootstrap port; see [rows-video-files.md](rows-video-files.md). The retired `sharedPorts()` references in the original wave schedule below describe how those PRs first landed, rather than an API for new work.
-- **Start position.** A moved file's slot in the composition root's start list (`src/bootstrap/main.js`) is replaced, at the same position, by a call to its wiring's mount, imported from that wiring module. `tests/bootstrap/composition-root.test.ts` pins the list. (Until the composition root replaced `_entry.js`, the entry reached each mount through a named re-export in `bootstrap/wiring.ts`; those re-exports are gone.) A move PR doesn't move the mount into `startApp` (`bootstrap/app.ts`): that would change when the feature starts, which is a behaviour change.
+- **Start position.** A moved file's slot in the composition root's start list (`src/bootstrap/main.ts`) is replaced, at the same position, by a call to its wiring's mount, imported from that wiring module. `tests/bootstrap/composition-root.test.ts` pins the list. (Until the composition root replaced `_entry.js`, the entry reached each mount through a named re-export in `bootstrap/wiring.ts`; those re-exports are gone.) A move PR doesn't move the mount into `startApp` (`bootstrap/app.ts`): that would change when the feature starts, which is a behaviour change.
 - **Stopping.** Features mounted from the composition root's list are not stopped by `stopApp`, just as the numbered files they replace were not. The last L5 step turns that list into a wiring step, which stops them in reverse order.
 
 ### Rule 5. Features reach each other four ways
@@ -230,6 +230,8 @@ Two existing ports grow:
 
 **Every bridge numbered files reach**, and where each name goes:
 
+Status (2026-10-29): with no numbered files left, each bridge below that still stood moved into the bootstrap wiring that starts it, unchanged: undo and editor (#866, #867), desktop (#868), merge (#872, `bootstrap/wiring/document-merge.ts`), recovery (#873, `recovery-owners.ts`), transition (#874, `transition-owners.ts`), session (#875, `session-owner.ts`), save (#877, `save-owners.ts`), location (#878, `location-owner.ts`), effects (#879, `effects-owner.ts`) and preferences (#880, `preferences-owner.ts`). The table records what each bridge carried when it was planned.
+
 | Bridge | Goes to |
 | --- | --- |
 | `session-bridge` | P1, P9. `heldDocument`, `stampDocument` and `mergeBase` go with the Wave 4 owner moves |
@@ -243,7 +245,7 @@ Two existing ports grow:
 | `merge-bridge` | `applyMerge`, `mergeStates` and `reportMerge` (`13`, `20g`) go with the Opus moves of `13` and `20g` (Wave 4), as the document-merge owner's interface in `src/application/`. No feature reads it before then |
 | `transition-bridge` | P12 (`captureOperation`, `stillOwns`), P20 (`documentTransitions`, `NO_DESTINATION`) |
 | `app-actions` | P4 |
-| `recovery-bridge` | P18 (`draftResume`). The rest (`captureRestore`, `conflictStash`, `stillRestoring`, `browserDrafts`, `desktopDrafts`, `legacySnapshots`, `recoveryStarted`, `useBrowserDraftFactory`) goes with the Wave 4 owner moves of `03`, `03a`, `13`, `14`, `20f` and `20g`, on Opus |
+| `recovery-bridge` | P18 (`draftResume`). The rest (`captureRestore`, `conflictStash`, `stillRestoring`, `desktopDrafts`, `legacySnapshots`, `recoveryStarted`) goes with the Wave 4 owner moves of `03`, `03a`, `13`, `14`, `20f` and `20g`, on Opus |
 | `file-delivery` | P17 |
 | `review-wording` | P5 |
 | `production-index-bridge` | P21 |

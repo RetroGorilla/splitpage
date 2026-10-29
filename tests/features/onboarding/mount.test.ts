@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startOnboarding } from "../../../src/features/onboarding/onboarding.js";
+import { startOnboarding } from "../../../src/features/onboarding/onboarding.ts";
 import { fakeOnboardingPorts } from "../fakes.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;

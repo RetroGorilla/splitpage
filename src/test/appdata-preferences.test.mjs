@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { preferences } from "../legacy/preferences-bridge.ts";
+import { preferences } from "../bootstrap/wiring/preferences-owner.ts";
 import { commentSortMode } from "../application/comment-sort.ts";
 
 await bootApp();
