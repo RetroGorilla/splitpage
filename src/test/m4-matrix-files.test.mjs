@@ -29,7 +29,7 @@ const flushEdits = () => undoOwner().flush();
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { localFileMenuControls, importSavingOwner } = await import("../bootstrap/wiring/local-files.ts");
 const homeModule = await import("../legacy/location-bridge.ts");
-const { openPrompterInBrowser } = await import("../legacy/desktop-bridge.ts");
+const { openPrompterInBrowser } = await import("../bootstrap/wiring/desktop-owners.ts");
 const { makeDesktopHandle } = await import("../adapters/desktop/desktop-handle.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 const { openDocument } = await import("../legacy/transition-bridge.ts");
