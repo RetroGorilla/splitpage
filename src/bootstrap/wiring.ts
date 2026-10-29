@@ -41,8 +41,8 @@ import { getEditorName, startPreferences } from "../legacy/preferences-bridge.ts
 import { shotHidingPorts, startShotHiding } from "./wiring/shot-hiding.ts";
 import { startMerge } from "../legacy/merge-bridge.ts";
 import type { LegacyMergePorts } from "../legacy/merge-bridge.ts";
-import { startRecovery } from "../legacy/recovery-bridge.ts";
-import type { LegacyDraftPorts, LegacyRecoveryPorts } from "../legacy/recovery-bridge.ts";
+import { startRecovery } from "./wiring/recovery-owners.ts";
+import type { LegacyDraftPorts, LegacyRecoveryPorts } from "./wiring/recovery-owners.ts";
 import { saveDestinations, startSaves } from "../legacy/save-bridge.ts";
 import type { LegacyAutoSavePorts, LegacySaveDestination, LegacySavePorts } from "../legacy/save-bridge.ts";
 import { liveDocumentPort, liveSession, startSessionBridge } from "../legacy/session-bridge.ts";

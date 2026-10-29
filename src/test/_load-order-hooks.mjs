@@ -15,7 +15,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/document-identity.ts": { functions: ["mountDocumentIdentityOwner"] },
   "src/application/identity/document-guard.ts": { functions: ["startDocumentGuard", "createDocumentGuard"] },
   "src/adapters/page/standalone-html.js": { functions: ["startStandaloneHtml"] },
-  "src/legacy/recovery-bridge.ts": { functions: ["startRecovery", "useBrowserDraftFactory"] },
+  "src/bootstrap/wiring/recovery-owners.ts": { functions: ["startRecovery", "useBrowserDraftFactory"] },
   "src/bootstrap/wiring/session-merge.ts": { functions: ["mountSessionMergeOwner"] },
   "src/bootstrap/wiring/history-panel.ts": { functions: ["mountHistoryPanelFeature"] },
   "src/bootstrap/wiring/title-chrome.ts": { functions: ["mountTitleChromeFeature"] },
