@@ -1,5 +1,4 @@
 import type { HistoryDesktopPort } from "../../application/recovery/history-ports.ts";
-import { setRunningOnDesktop } from "../../application/desktop-presence.ts";
 import type { DesktopDocumentState } from "../../application/desktop/document-state.ts";
 
 export type Listener<T> = (value: T) => void;
@@ -126,7 +125,6 @@ let current: DesktopPort | null = null;
 
 function use(port: DesktopPort | null | undefined): void {
   current = port || null;
-  setRunningOnDesktop(current !== null);
 }
 
 export function attachDesktop(bridge: DesktopPort | null | undefined): void {
@@ -136,6 +134,10 @@ export function attachDesktop(bridge: DesktopPort | null | undefined): void {
 
 export function desktopPort(): DesktopPort | null {
   return current;
+}
+
+export function runningOnDesktop(): boolean {
+  return current !== null;
 }
 
 export function canOpenPrompterInBrowser(): boolean {

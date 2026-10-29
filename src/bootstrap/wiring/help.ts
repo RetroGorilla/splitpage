@@ -1,5 +1,5 @@
 import type { ActionDefinition } from "../../application/actions.ts";
-import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { presence } from "./ports/desktop-presence.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { screen as portScreen } from "./ports/screen.ts";
@@ -29,5 +29,5 @@ export function mountHelpFeature(): HelpMount {
 export const stopHelpFeature = help.stop;
 
 export function helpActions(): ActionDefinition[] {
-  return definitions(help.owner, { screen: portScreen, desktop: runningOnDesktop });
+  return definitions(help.owner, { screen: portScreen, desktop: presence.running });
 }

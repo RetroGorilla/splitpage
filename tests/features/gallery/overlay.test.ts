@@ -12,7 +12,7 @@ const MODAL = '<div id="gallery-modal" hidden><h2 id="gallery-title"></h2><p id=
   '<div id="gallery-zoom" hidden><div id="gallery-zoom-stage"></div><p id="gallery-zoom-info"></p><button id="gallery-zoom-close"></button></div></div>' +
   '<div id="rows"></div>';
 
-function setup() {
+function setup(desktop = false) {
   document.body.innerHTML = MODAL;
   const doc = migrateRows({ title: "Gallery", rows: [{ id: "r1", visualText: "", audioText: "", imageLinks: [{ href: "https://example.com/clip", poster: true }] }] }, fakeMigration().ports);
   const changes = fakePreferenceChanges();
@@ -29,7 +29,8 @@ function setup() {
     pickPicture: (rowId) => { picked.push(rowId); },
     render: { slotPictureHtml: () => "", badgeHtml: () => "" },
     video: { embedRefusal: () => "", playerSrc: () => null, thumbnailsAllowed: () => false, fetchThumbnail: () => Promise.resolve(null), hostLabel: () => "Link" },
-    sessionVideos: { has: () => false, url: () => null }
+    sessionVideos: { has: () => false, url: () => null },
+    desktop: () => desktop
   };
   return { owner: mountOverlay(ports), changes, edits, picked };
 }
@@ -49,6 +50,19 @@ test("gallery overlay: opens over a scene's gallery read through the document po
   closeGalleryOverlay();
   assert.equal(document.getElementById("gallery-modal")?.hidden, true);
   owner.dispose();
+});
+
+test("gallery overlay: a link's open button says where it opens, from the desktop port", () => {
+  const title = (desktop: boolean): string | null | undefined => {
+    const { owner } = setup(desktop);
+    openGalleryOverlay("r1", 0, false);
+    const text = document.querySelector('#gallery-modal [data-gact="open"]')?.getAttribute("title");
+    closeGalleryOverlay();
+    owner.dispose();
+    return text;
+  };
+  assert.match(title(false) ?? "", / in a new tab$/);
+  assert.match(title(true) ?? "", / in your web browser$/);
 });
 
 test("gallery overlay: remove edits the gallery through the cells port", () => {
