@@ -137,6 +137,7 @@ export async function rewireApp(overrides) {
   const wiring = wireApp(Object.assign(await appWiringDeps(), overrides));
   const { mountHistoryOwner } = await import("../bootstrap/wiring/history.ts");
   mountHistoryOwner();
+  (await import("../bootstrap/wiring/screen-state.ts")).mountScreenStateOwner();
   (await import("../bootstrap/wiring/session-merge.ts")).mountSessionMergeOwner();
   (await import("../bootstrap/wiring/document-identity.ts")).mountDocumentIdentityOwner();
   (await import("../bootstrap/wiring/local-files.ts")).mountLocalFilesFeature();

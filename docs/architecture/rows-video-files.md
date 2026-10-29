@@ -1,6 +1,6 @@
 # Session video files after the rows extraction
 
-`src/js/06-rows.js` is retired. Its remaining video-file responsibilities live in `src/features/gallery/video-files.js`, with the shared `VideoFiles` contract in `src/application/media/video-files.ts`. The existing scene operations, scene media, row routing and row editing already have their own owners.
+`src/js/06-rows.js` is retired. Its remaining video-file responsibilities live in `src/features/gallery/video-files.ts`, with the shared `VideoFiles` contract in `src/application/media/video-files.ts`. The existing scene operations, scene media, row routing and row editing already have their own owners.
 
 ## Ownership and wiring
 

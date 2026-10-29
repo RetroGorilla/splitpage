@@ -2,8 +2,9 @@ import type { ExportRegistry } from "../../../application/export/registry.ts";
 import type { FileDelivery } from "../../../application/files/file-delivery.ts";
 import type { LastFile } from "../../../application/files/last-file.ts";
 import { loadLastFileHandle } from "../../../adapters/files/last-file.ts";
-import { deliverFile } from "../../../legacy/file-delivery.ts";
+import { deliverBytes } from "../../../adapters/files/deliver.ts";
 import { exportFormats } from "../export-registry.ts";
+import { notices } from "./effects.ts";
 
 export const exports: Pick<ExportRegistry, "card" | "cards" | "exporters" | "byId" | "byAction" | "isAction" | "onChange"> = {
   card: (id) => exportFormats.card(id),
@@ -18,5 +19,10 @@ export const exports: Pick<ExportRegistry, "card" | "cards" | "exporters" | "byI
 export const lastFile: LastFile = { load: loadLastFileHandle };
 
 export const fileDelivery: FileDelivery = {
-  deliver: (filename, data, options) => deliverFile(filename, data, options)
+  deliver: async (filename, data, options) => {
+    const delivered = await deliverBytes(filename, data);
+    if (delivered === "saved") notices.show((options && options.savedMsg) || ("Saved " + filename), "ok");
+    else if (delivered === "failed") notices.show("Could not save the file. Please try again.", "error");
+    return delivered === "saved";
+  }
 };

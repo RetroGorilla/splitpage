@@ -12,6 +12,7 @@ import { onboardingActions, mountOnboardingFeature, stopOnboardingFeature } from
 import { commentsPanelActions, commentsHelpActions } from "../../src/bootstrap/wiring/comments.ts";
 import "../../src/test/_dom.mjs";
 import "../../src/test/_preferences-started.mjs";
+import "../../src/test/_screen-state-started.mjs";
 import "../../src/test/_location-started.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
