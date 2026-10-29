@@ -315,6 +315,35 @@ test("a conflict card takes its id, time and author from the ports, in today's k
   assert.equal(title.imageValue, undefined);
   const audio = conflictComment({ rowId: "r1", field: "audioText", mine: null, theirs: "<b>x</b>" }, ports);
   assert.deepEqual([audio.body, audio.conflictField, audio.emptyValue, audio.field], ["", "Audio", true, "audioText"]);
-  assert.equal(conflictComment({ rowId: "r1", field: "visualText", mine: "<em>v</em>", theirs: "" }, ports).body, "<em>v</em>");
+  const visual = conflictComment({ rowId: "r1", field: "visualText", mine: "<em>v</em>", theirs: "" }, ports);
+  assert.deepEqual([visual.body, visual.conflictField, visual.emptyValue], ["<em>v</em>", "Visual", false]);
   assert.deepEqual(ids.minted, ["c-fake-1", "c-fake-2", "c-fake-3", "c-fake-4"]);
+});
+
+test("rows: with no base, a set length comes from the side that has one, and theirs wins when both do", () => {
+  const length = (mine: number | undefined, theirs: number | undefined) => runRows([ONE], null,
+    { rows: [row("r1", ONE, mine === undefined ? {} : { lengthSeconds: mine })] },
+    { rows: [row("r1", ONE, theirs === undefined ? {} : { lengthSeconds: theirs })] }).rows[0]?.lengthSeconds;
+  assert.equal(length(20, undefined), 20);
+  assert.equal(length(undefined, 15), 15);
+  assert.equal(length(20, 15), 15);
+  assert.equal(length(undefined, undefined), undefined);
+});
+
+test("rows: with no base, a row both sides hold counts as theirs unless it is empty", () => {
+  const stats = (extra: Partial<MergeRow>) => runRows([ONE], null,
+    { rows: [row("r1", extra.audioText ? ONE : "", extra)] }, { rows: [row("r1", extra.audioText ? ONE : "", extra)] }).stats;
+  assert.deepEqual(stats({}), { rowsFromThem: 0, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 });
+  assert.deepEqual(stats({ audioText: toHtml(ONE) }), { rowsFromThem: 1, rowsFromMe: 0, rowsAddedByMe: 0, rowsAddedByThem: 0 });
+});
+
+test("rows: a picture only they changed is counted as theirs, and one only I changed drops their drawing", () => {
+  const ann = { imageRef: pic("a"), marks: [{ kind: "pen" }] };
+  const base = { rows: [row("r1", "", { imageRef: pic("a") }), row("r2", "", { imageRef: pic("a"), imageAnnotation: ann })] };
+  const mine = { rows: [row("r1", "", { imageRef: pic("a") }), row("r2", "", { imageRef: pic("e") })] };
+  const theirs = { rows: [row("r1", "", { imageRef: pic("b") }), row("r2", "", { imageRef: pic("a"), imageAnnotation: ann })] };
+  const r = runRows([], base, mine, theirs);
+  assert.deepEqual(r.rows[0], theirs.rows[0]);
+  assert.equal("imageAnnotation" in (r.rows[1] as MergeRow), false);
+  assert.deepEqual(r.stats, { rowsFromThem: 1, rowsFromMe: 1, rowsAddedByMe: 0, rowsAddedByThem: 0 });
 });

@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/settings/settings.js",
     "src/features/settings/actions.ts",

@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/desktop/desktop.js",
     "src/features/desktop/actions.ts",
