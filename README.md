@@ -16,9 +16,8 @@ everything the app itself can do. That same file is rendered into the app's
 own Help page (File ▸ User guide…) at build time, which is why it lives
 apart from this one: a change to the README no longer rebuilds the app.
 
-Serving the app from a server, and deploying it, is [DEPLOY.md](DEPLOY.md).
 Developer notes — architecture, invariants, how to test — are
-[HANDOFF.md](HANDOFF.md). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md); to
+[HANDOFF.md](docs/HANDOFF.md). To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md); to
 report a security problem, [SECURITY.md](SECURITY.md); what changed in each
 release is in [CHANGELOG.md](CHANGELOG.md).
 
@@ -95,30 +94,25 @@ drives the browser suites.
 
 CI (`.github/workflows/ci.yml`) runs the same fast gate on every pull
 request, plus the smoke, CSP and persistence browser suites, builds the app,
-and uploads the built files as a `splitpage-app` artifact — a ready-built
-copy for building the server image without a checkout (`Dockerfile.prebuilt`;
-[DEPLOY.md](DEPLOY.md) §1). The server image is built from a checkout by
-`Dockerfile`, and `deploy.sh` deploys it. Whenever a file either image
-depends on changes, `.github/workflows/docker.yml` builds and starts both:
-the root `Dockerfile` from the checkout, and `Dockerfile.prebuilt` from the
-artifact's files alone.
+and uploads the built files as a `splitpage-app` artifact
+([RELEASING.md](docs/RELEASING.md) §1).
 
 ## Building a release
 
 ```
-node package.mjs              # dist/splitpage-<version>.zip — portable, ~165 KB
+node tools/package.mjs        # dist/splitpage-<version>.zip — portable, ~165 KB
 ```
 
 **Nothing needs installing to build this.** The zip is written by
-`package.mjs` itself rather than shelled out to `zip` or
+`tools/package.mjs` itself rather than shelled out to `zip` or
 `Compress-Archive`, so the same commit produces the same bytes on Windows and
 on a Linux CI box.
 
 For the desktop installers — x64 and native ARM64 — it's `cd desktop && npm
-run dist:win`; see [Desktop app](docs/help.md#desktop-app) and DEPLOY.md.
+run dist:win`; see [Desktop app](docs/help.md#desktop-app) and docs/RELEASING.md.
 Pushing a `v<version>` tag runs `.github/workflows/release.yml`, which builds
 all of it and opens a draft release on the releases page
-([DEPLOY.md §4](DEPLOY.md#4-publishing-a-release-to-the-mirror)). On a portable copy
+([RELEASING.md §3](docs/RELEASING.md#3-publishing-a-release-to-the-mirror)). On a portable copy
 carrying both architectures' runtimes, `start.bat` picks the right one
 automatically.
 
@@ -216,7 +210,7 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
 
 **Packaging**
 
-- `package.mjs` — runs `build.mjs` and then builds the portable zip, and
+- `tools/package.mjs` — runs `build.mjs` and then builds the portable zip, and
   nothing else; `VERSION` is the single source of the version number.
 - `tools/make-icon.mjs` — rasterises `icon.svg` into the Windows `icon.ico`
   that the shortcuts, the NSIS installer and the packaged app use. Run it
@@ -226,16 +220,12 @@ Chrome, Edge, and other Chromium-based browsers get true in-place saving.
 
 **Serving the app**
 
-- `server/server.js`, `Dockerfile`, `docker-compose.yml` — a dependency-free
-  Node server that serves the built app as static files. See
-  [DEPLOY.md](DEPLOY.md).
-- `deploy.sh`, `.env.example` — the one-command deploy on the owner's server,
-  and a note on the optional `.env` it reads; `Dockerfile.prebuilt` builds the
-  same image from CI's already-built `splitpage-app` artifact.
+- `server/server.js` — a dependency-free Node server that serves the built app
+  as static files; `start.mjs` runs it on your own computer.
 
 **Notes**
 
-- `HANDOFF.md` — developer notes: architecture, the invariants that keep the
+- `docs/HANDOFF.md` — developer notes: architecture, the invariants that keep the
   document from corrupting, how to test, and what is still unverified. Read it
   before changing anything in `src/`.
 - `.github/workflows/ci.yml` — lint, unit tests, server and updater tests and

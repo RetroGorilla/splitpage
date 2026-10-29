@@ -28,7 +28,7 @@
 # Also weaker than it looks: api/ answers 404 here (it needs server.js), and
 # so does update-status.json unless a launcher run left one in the repo root
 # (it is gitignored; see below) — and a 404 was never cached even before #79. The query-string assertions carry the
-# weight instead — those run against a real 200, with release.json fetched
+# weight instead — those run against a real 200, with VERSION fetched
 # WITHOUT a query first, as the control proving an ordinary same-origin 200
 # does land in the cache.
 # ---------------------------------------------------------------------------
@@ -109,20 +109,20 @@ expect window.__docEntries == 0
 
 # ---- the query-string rule, against a real 200 -------------------------
 #
-# release.json is an ordinary same-origin file the shell does not precache.
+# VERSION is an ordinary same-origin file the shell does not precache.
 # Fetched plainly it must land in the cache — that is the control, and
 # without it "nothing appeared" would only prove the fetch 404'd. Fetched
 # with a query string it must not, even though the server answers both the
 # same way.
 
-eval (async function(){ var r = await fetch('release.json'); window.__plainStatus = r.status; return r.status; })()
+eval (async function(){ var r = await fetch('VERSION'); window.__plainStatus = r.status; return r.status; })()
 expect window.__plainStatus == 200
 sleep 800
 
 eval (async function(){ var names = await caches.keys(); var c = await caches.open(names[0]); var k = await c.keys(); window.__swEntries = k.map(function(r){ var u = new URL(r.url); return u.pathname + u.search; }).sort(); return window.__swEntries.join(' | '); })()
-expect window.__swEntries.indexOf('/release.json') !== -1
+expect window.__swEntries.indexOf('/VERSION') !== -1
 
-eval (async function(){ var r = await fetch('release.json?sw-probe=1'); window.__queryStatus = r.status; return r.status; })()
+eval (async function(){ var r = await fetch('VERSION?sw-probe=1'); window.__queryStatus = r.status; return r.status; })()
 expect window.__queryStatus == 200
 sleep 800
 

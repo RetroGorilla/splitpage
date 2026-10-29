@@ -264,7 +264,7 @@ assertion still fails on the behaviour it exists to catch.
 ## 2. Packaged builds
 
 Windows run 1 built and checked all of this for x64. It stays listed because
-every change to `stage.mjs`, `electron-builder.yml` or `package.mjs` needs it
+every change to `stage.mjs`, `electron-builder.yml` or `tools/package.mjs` needs it
 again, and arm64 has not been built at all.
 
 - `npm run dist:win` and `desktop/verify-dist.mjs`, for x64 and arm64.
@@ -278,7 +278,7 @@ again, and arm64 has not been built at all.
   dev mode works. `shared/` deliberately does NOT go in that list — it rides
   on `extraResources` via `stage.mjs`, because `files` is rooted at
   `desktop/` and would land it at a different require path than dev uses.
-- `node package.mjs` (portable zip) runs clean here and produces 14 entries
+- `node tools/package.mjs` (portable zip) runs clean here and produces 14 entries
   including `docs/help.md` — but has never been unzipped and started on
   Windows. `start.bat` was rewritten as a thin wrapper when `start.ps1` was
   deleted (#75): bundled runtime, then per-arch runtime, then Node on PATH,

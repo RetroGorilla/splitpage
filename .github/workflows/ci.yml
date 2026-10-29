@@ -141,7 +141,6 @@ jobs:
             icon.svg
             icon-maskable.svg
             VERSION
-            Dockerfile.prebuilt
             server/
           if-no-files-found: error
           retention-days: 30

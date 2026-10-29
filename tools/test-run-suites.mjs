@@ -10,7 +10,6 @@ import { guardedWrites, withGuardFlag } from "../.claude/skills/run-splitpage-ap
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 const RUNNER = join(REPO, "tools", "run-suites.mjs");
 const DRIVER = join(REPO, ".claude", "skills", "run-splitpage-app", "driver.mjs");
-const WRAPPER = join(REPO, ".claude", "handoff", "direction-b", "run-all-suites.mjs");
 const { classify, STATUS, EXIT, parseArgs, portPlan, driverCommand, ConfigError } = await import(pathToFileURL(RUNNER).href);
 
 const POSIX = process.platform !== "win32";
@@ -795,7 +794,7 @@ async function processChecks() {
     reap(info);
   }
 
-  for (const [signal, code, runner, who] of [["SIGINT", 130, RUNNER, "the runner"], ["SIGTERM", 143, RUNNER, "the runner"], ["SIGTERM", 143, WRAPPER, "the compatibility wrapper"]]) {
+  for (const [signal, code, runner, who] of [["SIGINT", 130, RUNNER, "the runner"], ["SIGTERM", 143, RUNNER, "the runner"]]) {
     const name = `${signal} to ${who}`;
     if (!POSIX) {
       skip(`${name} stops the run and kills its drivers`, "win32 cannot deliver a catchable SIGINT/SIGTERM to a child process, so this runs on the Linux CI");
@@ -833,14 +832,6 @@ async function processChecks() {
   {
     const r = run(["^(pass|fail)\\.txt$", "--lanes", "1"]);
     eq("a single lane runs every suite", r.summary?.length, 2);
-  }
-
-  {
-    const ok = run(["^pass"], { runner: WRAPPER });
-    eq("the compatibility wrapper passes a passing run through", ok.status, EXIT.OK);
-    eq("the compatibility wrapper writes the same summary", ok.summary?.[0], "PASS pass.txt RESULT: 3/3 checks passed");
-    const bad = run(["^pass", "--lanes", "0"], { runner: WRAPPER });
-    eq("the compatibility wrapper passes a config error through", bad.status, EXIT.CONFIG);
   }
 }
 
