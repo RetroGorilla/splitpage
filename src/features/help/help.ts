@@ -1,40 +1,48 @@
-var ports = null;
-var listeners = [];
+import type { HelpPorts, HelpMount } from "./ports.ts";
 
-function listen(target, type, handler, options) {
+interface HelpPortUse extends Omit<HelpPorts, "document"> {
+  readonly document: {
+    readonly [K in keyof HelpPorts["document"]]: (...args: Parameters<HelpPorts["document"][K]>) => unknown;
+  };
+}
+
+let ports: HelpPorts | null = null;
+const listeners: Array<() => void> = [];
+
+function listen(target: EventTarget, type: string, handler: EventListener, options?: boolean | AddEventListenerOptions) {
   target.addEventListener(type, handler, options);
   listeners.push(function () { target.removeEventListener(type, handler, options); });
 }
 
-function scrollHelpTo(id) {
-  var body = document.getElementById("help-body");
-  var target = id && document.getElementById(id);
+function scrollHelpTo(id: string) {
+  const body = document.getElementById("help-body");
+  const target = id && document.getElementById(id);
   if (!body || !target) return;
-  var bodyRect = body.getBoundingClientRect();
-  var targetRect = target.getBoundingClientRect();
+  const bodyRect = body.getBoundingClientRect();
+  const targetRect = target.getBoundingClientRect();
   body.scrollTop += (targetRect.top - bodyRect.top) - 12;
 }
 
-var helpReturnFocus = null;
+let helpReturnFocus: (Element & { focus?: unknown }) | null = null;
 
-export function openHelp(anchor) {
-  var modal = document.getElementById("help-modal");
+export function openHelp(anchor?: string) {
+  const modal = document.getElementById("help-modal");
   if (!modal) return;
   suspendTourForHelp();
-  ports.sidePanels.closeAll();
+  (ports as HelpPortUse).sidePanels.closeAll();
   helpReturnFocus = document.activeElement;
   modal.hidden = false;
   if (anchor) scrollHelpTo(anchor);
   else {
-    var body = document.getElementById("help-body");
+    const body = document.getElementById("help-body");
     if (body) body.scrollTop = 0;
   }
-  var closeBtn = document.getElementById("help-close");
+  const closeBtn = document.getElementById("help-close");
   if (closeBtn) closeBtn.focus();
 }
 
 function closeHelp() {
-  var modal = document.getElementById("help-modal");
+  const modal = document.getElementById("help-modal");
   if (!modal || modal.hidden) return;
   modal.hidden = true;
   if (tourSuspendedAt >= 0) {
@@ -50,34 +58,34 @@ function closeHelp() {
 
 function suspendTourForHelp() {
   if (tourStepIndex < 0) return;
-  var overlay = document.getElementById("tour-overlay");
+  const overlay = document.getElementById("tour-overlay");
   if (!overlay) return;
   tourSuspendedAt = tourStepIndex;
   tourStepIndex = -1;
-  ports.viewFlags.setTourOpen(false);
+  (ports as HelpPortUse).viewFlags.setTourOpen(false);
   overlay.hidden = true;
 }
 
 function resumeTourAfterHelp() {
-  var at = tourSuspendedAt;
+  const at = tourSuspendedAt;
   tourSuspendedAt = -1;
   if (at < 0) return;
-  var overlay = document.getElementById("tour-overlay");
+  const overlay = document.getElementById("tour-overlay");
   if (!overlay) return;
   tourStepIndex = at;
-  ports.viewFlags.setTourOpen(true);
+  (ports as HelpPortUse).viewFlags.setTourOpen(true);
   overlay.hidden = false;
   renderTourStep();
 }
 
 function injectTaggingHelpGuideLink() {
-  var body = document.querySelector("#tagging-help .tagging-help-foot") ||
+  const body = document.querySelector("#tagging-help .tagging-help-foot") ||
     document.querySelector("#tagging-help .tagging-help-body");
   if (!body || document.getElementById("tagging-help-fullguide")) return;
-  var wrap = document.createElement("div");
+  const wrap = document.createElement("div");
   wrap.className = "tagging-help-fullguide";
   wrap.id = "tagging-help-fullguide";
-  var a = document.createElement("a");
+  const a = document.createElement("a");
   a.href = "#";
   a.textContent = "Open the full guide";
   listen(a, "click", function (e) {
@@ -89,7 +97,15 @@ function injectTaggingHelpGuideLink() {
 }
 
 
-var TOUR_STEPS = [
+interface HelpTourStep {
+  selector: string;
+  title: string;
+  body: string;
+  slug: string;
+  showTaggingHelp?: boolean;
+}
+
+const TOUR_STEPS: HelpTourStep[] = [
   {
     selector: "#rows .row:first-child",
     title: "Two columns",
@@ -123,23 +139,23 @@ var TOUR_STEPS = [
   }
 ];
 
-var tourStepIndex = -1;
-var tourResizeHandler = null;
-var tourTaggingHelpWasHidden = true;
-var tourSuspendedAt = -1;
+let tourStepIndex = -1;
+let tourResizeHandler: EventListener | null = null;
+let tourTaggingHelpWasHidden: boolean | "until-found" = true;
+let tourSuspendedAt = -1;
 
 export function tourShowing() {
   return tourStepIndex >= 0;
 }
 
 function markTourDone() {
-  ports.preferences.tourFinished();
+  (ports as HelpPortUse).preferences.tourFinished();
 }
 
-function tourTarget(step) {
-  var el = document.querySelector(step.selector);
+function tourTarget(step: typeof TOUR_STEPS[number]) {
+  const el = document.querySelector(step.selector);
   if (el && el.id && !el.getClientRects().length) {
-    var tab = document.querySelector('#phone-bar [data-for="' + el.id + '"]');
+    const tab = document.querySelector('#phone-bar [data-for="' + el.id + '"]');
     if (tab && tab.getClientRects().length) return tab;
   }
   return el;
@@ -147,29 +163,29 @@ function tourTarget(step) {
 
 function positionTourStep() {
   if (tourStepIndex < 0) return;
-  var step = TOUR_STEPS[tourStepIndex];
-  var target = tourTarget(step);
-  var cutout = document.getElementById("tour-cutout");
-  var card = document.getElementById("tour-card");
-  if (!target || !cutout || !card) { endTour(false); return; }
+  const step = TOUR_STEPS[tourStepIndex] as HelpTourStep;
+  const target = tourTarget(step);
+  const cutout = document.getElementById("tour-cutout");
+  const card = document.getElementById("tour-card");
+  if (!target || !cutout || !card) { (endTour as (value: boolean) => void)(false); return; }
 
-  var r = target.getBoundingClientRect();
-  var pad = 6;
+  const r = target.getBoundingClientRect();
+  const pad = 6;
   cutout.style.left = (r.left - pad) + "px";
   cutout.style.top = (r.top - pad) + "px";
   cutout.style.width = (r.width + pad * 2) + "px";
   cutout.style.height = (r.height + pad * 2) + "px";
 
-  var vw = window.innerWidth, vh = window.innerHeight;
+  const vw = window.innerWidth, vh = window.innerHeight;
   if (vw <= 480) {
     card.style.left = "";
     card.style.top = "";
     return;
   }
 
-  var cardW = card.offsetWidth || 300;
-  var cardH = card.offsetHeight || 180;
-  var left, top;
+  const cardW = card.offsetWidth || 300;
+  const cardH = card.offsetHeight || 180;
+  let left, top;
   if (r.right + 16 + cardW <= vw) {
     left = r.right + 16;
     top = Math.max(16, Math.min(r.top, vh - cardH - 16));
@@ -188,45 +204,45 @@ function positionTourStep() {
 }
 
 function renderTourStep() {
-  var step = TOUR_STEPS[tourStepIndex];
-  document.getElementById("tour-step").textContent = "Step " + (tourStepIndex + 1) + " of " + TOUR_STEPS.length;
-  document.getElementById("tour-title").textContent = step.title;
-  document.getElementById("tour-body").textContent = step.body;
+  const step = TOUR_STEPS[tourStepIndex] as HelpTourStep;
+  (document.getElementById("tour-step") as HTMLElement).textContent = "Step " + (tourStepIndex + 1) + " of " + TOUR_STEPS.length;
+  (document.getElementById("tour-title") as HTMLElement).textContent = step.title;
+  (document.getElementById("tour-body") as HTMLElement).textContent = step.body;
 
-  var link = document.getElementById("tour-readmore");
+  const link = document.getElementById("tour-readmore") as HTMLElement;
   link.onclick = function (e) {
     e.preventDefault();
     openHelp(step.slug);
   };
   tourReadMoreLink = link;
 
-  document.getElementById("tour-back").disabled = tourStepIndex === 0;
-  document.getElementById("tour-next").textContent =
+  (document.getElementById("tour-back") as HTMLButtonElement).disabled = tourStepIndex === 0;
+  (document.getElementById("tour-next") as HTMLElement).textContent =
     tourStepIndex === TOUR_STEPS.length - 1 ? "Finish" : "Next";
 
-  var taggingHelp = document.getElementById("tagging-help");
+  const taggingHelp = document.getElementById("tagging-help");
   if (taggingHelp) taggingHelp.hidden = !step.showTaggingHelp;
 
-  var target = tourTarget(step);
+  const target = tourTarget(step);
   if (target && target.scrollIntoView) target.scrollIntoView({ block: "center" });
   positionTourStep();
 }
 
 export function startTour() {
-  if (!ports.document.current()) {
-    ports.notices.show("Still loading…", "warn");
+  if (!(ports as HelpPortUse).document.current()) {
+    (ports as HelpPortUse).notices.show("Still loading…", "warn");
     return;
   }
-  var overlay = document.getElementById("tour-overlay");
+  const overlay = document.getElementById("tour-overlay");
   if (!overlay) return;
-  ports.sidePanels.closeAll();
+  (ports as HelpPortUse).sidePanels.closeAll();
   tourSuspendedAt = -1;
   closeHelp();
-  var taggingHelp = document.getElementById("tagging-help");
+  const taggingHelp = document.getElementById("tagging-help");
   tourTaggingHelpWasHidden = taggingHelp ? taggingHelp.hidden : true;
 
   tourStepIndex = 0;
-  ports.viewFlags.setTourOpen(true);
+  (ports as HelpPortUse).viewFlags.setTourOpen(true);
   overlay.hidden = false;
   renderTourStep();
 
@@ -239,97 +255,97 @@ export function startTour() {
 
 function endTour() {
   tourSuspendedAt = -1;
-  var overlay = document.getElementById("tour-overlay");
+  const overlay = document.getElementById("tour-overlay");
   if (overlay) overlay.hidden = true;
-  var taggingHelp = document.getElementById("tagging-help");
+  const taggingHelp = document.getElementById("tagging-help");
   if (taggingHelp) taggingHelp.hidden = tourTaggingHelpWasHidden;
   tourStepIndex = -1;
-  ports.viewFlags.setTourOpen(false);
+  (ports as HelpPortUse).viewFlags.setTourOpen(false);
   markTourDone();
 }
 
 function tourNext() {
-  if (tourStepIndex < TOUR_STEPS.length - 1) { tourStepIndex++; ports.viewFlags.setTourOpen(true); renderTourStep(); }
+  if (tourStepIndex < TOUR_STEPS.length - 1) { tourStepIndex++; (ports as HelpPortUse).viewFlags.setTourOpen(true); renderTourStep(); }
   else endTour();
 }
 
 function tourBack() {
-  if (tourStepIndex > 0) { tourStepIndex--; ports.viewFlags.setTourOpen(true); renderTourStep(); }
+  if (tourStepIndex > 0) { tourStepIndex--; (ports as HelpPortUse).viewFlags.setTourOpen(true); renderTourStep(); }
 }
 
-var tourReadMoreLink = null;
+let tourReadMoreLink: HTMLElement | null = null;
 
-export function startHelp(given) {
+export function startHelp(given: HelpPorts): HelpMount {
   ports = given;
-  var guideExisted = document.getElementById("tagging-help-fullguide");
+  const guideExisted = document.getElementById("tagging-help-fullguide");
   injectTaggingHelpGuideLink();
 
   (function wireHelpModal() {
-    var modal = document.getElementById("help-modal");
-    var toc = document.getElementById("help-toc");
+    const modal = document.getElementById("help-modal");
+    const toc = document.getElementById("help-toc");
     if (!modal) return;
 
-    var closeBtn = document.getElementById("help-close");
+    const closeBtn = document.getElementById("help-close");
     if (closeBtn) listen(closeBtn, "click", closeHelp);
 
     listen(modal, "click", function (e) {
-      if (e.target.id === "help-modal") closeHelp();
+      if ((e.target as HTMLElement).id === "help-modal") closeHelp();
     });
 
     if (toc) {
       listen(toc, "click", function (e) {
-        var a = e.target.closest('a[href^="#"]');
+        const a = (e.target as HTMLElement).closest('a[href^="#"]');
         if (!a) return;
         e.preventDefault();
-        scrollHelpTo(a.getAttribute("href").slice(1));
+        scrollHelpTo((a.getAttribute("href") as string).slice(1));
       });
     }
 
     listen(window, "keydown", function (e) {
-      if (e.key === "Escape" && !modal.hidden) { e.preventDefault(); closeHelp(); }
+      if ((e as KeyboardEvent).key === "Escape" && !modal.hidden) { e.preventDefault(); closeHelp(); }
     });
 
     listen(document, "focusin", function (e) {
-      if (modal.hidden || modal.contains(e.target)) return;
+      if (modal.hidden || modal.contains(e.target as Node | null)) return;
       e.stopPropagation();
-      var target = document.getElementById("help-close");
+      const target = document.getElementById("help-close");
       if (target) target.focus();
     });
   })();
 
   (function wireTour() {
-    var overlay = document.getElementById("tour-overlay");
+    const overlay = document.getElementById("tour-overlay");
     if (!overlay) return;
-    listen(document.getElementById("tour-next"), "click", tourNext);
-    listen(document.getElementById("tour-back"), "click", tourBack);
-    listen(document.getElementById("tour-skip"), "click", function () { endTour(); });
+    listen(document.getElementById("tour-next") as HTMLElement, "click", tourNext);
+    listen(document.getElementById("tour-back") as HTMLElement, "click", tourBack);
+    listen(document.getElementById("tour-skip") as HTMLElement, "click", function () { endTour(); });
     listen(window, "keydown", function (e) {
-      if (e.key === "Escape" && !e.defaultPrevented && !overlay.hidden) {
+      if ((e as KeyboardEvent).key === "Escape" && !e.defaultPrevented && !overlay.hidden) {
         e.preventDefault();
         endTour();
       }
     });
   })();
-  var disposed = false;
+  let disposed = false;
   return {
     openHelp, startTour,
     dispose: function () {
       if (disposed) return;
       disposed = true;
-      while (listeners.length) listeners.pop()();
+      while (listeners.length) (listeners.pop() as () => void)();
       if (tourReadMoreLink) tourReadMoreLink.onclick = null;
       tourReadMoreLink = null;
-      var overlay = document.getElementById("tour-overlay");
+      const overlay = document.getElementById("tour-overlay");
       if (overlay) overlay.hidden = true;
-      var modal = document.getElementById("help-modal");
+      const modal = document.getElementById("help-modal");
       if (modal) modal.hidden = true;
-      var taggingHelp = document.getElementById("tagging-help");
+      const taggingHelp = document.getElementById("tagging-help");
       if (taggingHelp && tourStepIndex >= 0) taggingHelp.hidden = tourTaggingHelpWasHidden;
       if (!guideExisted) {
-        var guide = document.getElementById("tagging-help-fullguide");
+        const guide = document.getElementById("tagging-help-fullguide");
         if (guide) guide.remove();
       }
-      ports.viewFlags.setTourOpen(false);
+      (ports as HelpPortUse).viewFlags.setTourOpen(false);
       tourStepIndex = tourSuspendedAt = -1;
       tourResizeHandler = helpReturnFocus = null;
       ports = null;
