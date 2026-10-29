@@ -19,7 +19,7 @@ const chomp = (text) => (text.endsWith("\n") ? text.slice(0, -1) : text);
 
 function appJs() {
   const result = esbuild.buildSync({
-    entryPoints: [join(ROOT, "src", "bootstrap", "main.js")],
+    entryPoints: [join(ROOT, "src", "bootstrap", "main.ts")],
     bundle: true,
     format: "iife",
     minify: true,
