@@ -130,6 +130,7 @@ async function writeDoc(opts: WriteOptions | null | undefined, job: SaveJob<File
     if (reusing && !opts.force) {
       const check = await checkFileConflict(reusing.handle as FileSaveHandle, homeAtSave.lastModified as number | null | undefined);
       if (!check.ok) {
+        if ("denied" in check) throw new Error("permission to change " + (reusing.handle as FileSaveHandle).name + " was withdrawn");
         if (!auto) return { kind: "refused", reason: FILE_CHANGED, conflict: { fileName: (reusing.handle as FileSaveHandle).name, current: check.current, kind: "project" } };
         haltAutoSave("Autosave is paused — " + (reusing.handle as FileSaveHandle).name +
                      " changed on disk since it was opened. Press Save to sort it out.");
