@@ -4,7 +4,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
-import { setHome } from "../legacy/location-bridge.ts";
+import { setHome } from "../bootstrap/wiring/location-owner.ts";
 import { truncateForPreview } from "../core/document/text-policy.ts";
 
 await bootApp();

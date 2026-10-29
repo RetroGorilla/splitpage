@@ -7,7 +7,7 @@ await bootApp();
 after(closeApp);
 
 const { LONG_DEMO } = await import("../starters/index.ts");
-const { setHome } = await import("../legacy/location-bridge.ts");
+const { setHome } = await import("../bootstrap/wiring/location-owner.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { standaloneHtmlFor } = await import("../adapters/page/standalone-html.js");
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");

@@ -26,7 +26,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/editor-owners.ts": { functions: ["startEditor", "installPicturePicker", "installCellEditing"] },
   "src/legacy/preferences-bridge.ts": { functions: ["startPreferences", "onPreferenceChange"] },
   "src/bootstrap/wiring/shot-hiding.ts": { functions: ["startShotHiding"] },
-  "src/legacy/location-bridge.ts": { functions: ["startLocation"] },
+  "src/bootstrap/wiring/location-owner.ts": { functions: ["startLocation"] },
   "src/legacy/effects-bridge.ts": { functions: ["startEffects"] },
   "src/bootstrap/wiring/ports/panels.ts": { functions: ["startSidePanels"] },
   "src/bootstrap/wiring/desktop-owners.ts": { functions: ["startDesktopDocumentState", "handDesktopTo"] },

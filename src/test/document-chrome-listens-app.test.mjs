@@ -7,7 +7,7 @@ window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
 const { adoptReplacement, noteServerUpdate, runCommand } = await import("../bootstrap/wiring/session-owner.ts");
-const { documentLocation, setHome, amendHome, currentHome } = await import("../legacy/location-bridge.ts");
+const { documentLocation, setHome, amendHome, currentHome } = await import("../bootstrap/wiring/location-owner.ts");
 const { preferences, viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { autoSavePolicy, confirmSavedNow, noteSaveChange, onSaveChange } = await import("../bootstrap/wiring/save-owners.ts");
 const { migrateRows } = await import("../legacy/document-ports.ts");

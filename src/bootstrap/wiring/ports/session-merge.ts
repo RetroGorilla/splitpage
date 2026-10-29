@@ -4,7 +4,7 @@ import { migrateRows, withDocumentPorts } from "../../../legacy/document-ports.t
 import { captureRestore, stillRestoring } from "../recovery-owners.ts";
 import { autoSavePolicy, confirmBaseline, saveChanges } from "../save-owners.ts";
 import { mergeUndo } from "../editor-owners.ts";
-import { setHome } from "../../../legacy/location-bridge.ts";
+import { setHome } from "../location-owner.ts";
 import { getEditorName } from "../../../legacy/preferences-bridge.ts";
 import { documentIdentityOwner } from "../document-identity.ts";
 import { adoptRestoredState } from "../../startup/document-entry.js";

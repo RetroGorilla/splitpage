@@ -15,7 +15,7 @@ import { desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../../../application/desktop-presence.ts";
 import { brollView } from "../../../application/preferences/broll-view.ts";
 import { noteAbsorbedDirty, noteReload } from "../session-owner.ts";
-import { amendHome, fileHome, importHome, setHome } from "../../../legacy/location-bridge.ts";
+import { amendHome, fileHome, importHome, setHome } from "../location-owner.ts";
 import { unsavedFor, requestSave } from "../save-owners.ts";
 import { warnImagesLeftOut } from "../../../legacy/effects-bridge.ts";
 import { documentIdentity } from "./document-identity-controls.ts";

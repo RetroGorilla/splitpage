@@ -27,7 +27,7 @@ const flushEdits = () => undoOwner().flush();
 const undo = () => undoOwner().undo();
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
-const homeModule = await import("../legacy/location-bridge.ts");
+const homeModule = await import("../bootstrap/wiring/location-owner.ts");
 const { cellRuns, cellTextCommand } = await import("../application/commands/cell-text.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
 const { scriptCellOf } = await import("../legacy/richtext.ts");

@@ -2,7 +2,7 @@ import "./_identity-started.mjs";
 import { documentIdentityOwner } from "../bootstrap/wiring/document-identity.ts";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { setHome } from "../legacy/location-bridge.ts";
+import { setHome } from "../bootstrap/wiring/location-owner.ts";
 import "./_location-started.mjs";
 
 test("autoSaveTarget answers file or null off the home", async () => {

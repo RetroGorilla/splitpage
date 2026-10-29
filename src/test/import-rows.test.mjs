@@ -16,7 +16,7 @@ const flushEdits = () => undoOwner().flush();
 const redo = () => undoOwner().redo();
 const undo = () => undoOwner().undo();
 const { closeImportModal, openImportModal } = (await import("../bootstrap/wiring/imports.ts")).importControls();
-const homeModule = await import("../legacy/location-bridge.ts");
+const homeModule = await import("../bootstrap/wiring/location-owner.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { loadTestDocument } = await import("./_document.mjs");

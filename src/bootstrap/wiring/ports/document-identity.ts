@@ -1,6 +1,6 @@
 import type { DocumentIdentityPorts } from "../../../application/identity/ports.ts";
 import { currentDocument, stampDocument } from "../session-owner.ts";
-import { currentHome, documentLocation } from "../../../legacy/location-bridge.ts";
+import { currentHome, documentLocation } from "../location-owner.ts";
 import { historyOwner } from "../history.ts";
 import { notices } from "./effects.ts";
 import { runningOnDesktop } from "../../../application/desktop-presence.ts";
