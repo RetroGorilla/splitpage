@@ -9,10 +9,10 @@ import {
   rightToday
 } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
-import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
-import { documentLocation } from "../legacy/location-bridge.ts";
+import { autoSavePolicy, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
+import { documentLocation } from "../bootstrap/wiring/location-owner.ts";
 
-const { currentDocument, liveSession, mergeBase, onDocumentReplaced, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession, mergeBase, onDocumentReplaced, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../bootstrap/wiring/session-owner.ts");
 
 const session = liveSession();
 const probe = { epoch: () => (sessionStarted() ? session.epoch() : null), held: () => (sessionStarted() ? session.read((doc) => doc) : null) };
@@ -48,28 +48,28 @@ await bootApp();
 bootTrace.stop();
 
 const { LONG_DEMO } = await import("../starters/index.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { adoptRestoredState, migrateDocument } = await import("../bootstrap/startup/document-entry.js");
 const { standaloneHtmlFor } = await import("../adapters/page/standalone-html.js");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
-const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
-const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
+const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
+const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { exportMetaLine, toMarkdownDoc } = await import("../adapters/formats/export-text.ts");
 const { captureExportDocument, exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { exportFacts } = await import("../adapters/formats/export-kit.ts");
 const { buildMarkdownProject, buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
-const { preferences } = await import("../legacy/preferences-bridge.ts");
+const { preferences } = await import("../bootstrap/wiring/preferences-owner.ts");
 
 import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";
-import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+import { preferences as commentPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 const flushEdits = () => undoOwner().flush();
 function saveAuthorName(name) { saveAuthorNameWith(commentPreferences(), name); }
 const { sceneStatusCommand } = await import("../application/commands/scene-status.ts");
 const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { parseProjectFileState } = await import("../adapters/formats/project-file.ts");
-const homeModule = await import("../legacy/location-bridge.ts");
+const homeModule = await import("../bootstrap/wiring/location-owner.ts");
 const { setHome } = homeModule;
 const { applyTakenDraft, draftTaker } = await import("../bootstrap/wiring/drafts.ts");
 const { DRAFT_LIMITS, browserDraftKey, createIdbDraftStore, draftBaseOf } = await import("../adapters/storage/draft-store-idb.ts");
@@ -83,7 +83,7 @@ after(closeApp);
 
 const { runIdleRefresh } = await import("../features/tags/production-tags.js");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
+const { openDocument, keepSnapshot } = await import("../bootstrap/wiring/transition-owners.ts");
 const refreshed = { into: null };
 await rewireRunningApp({ refresh: (due) => (refreshed.into ? refreshed.into.push(...due) : runIdleRefresh(due)) });
 

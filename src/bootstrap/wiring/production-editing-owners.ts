@@ -1,8 +1,8 @@
-import { resetTagPanel } from "../application/tag-panel-state.ts";
-import { createDeleteConfirm } from "../application/editing/delete-confirm.ts";
-import type { DeleteConfirm, DeleteTimerPort } from "../application/editing/delete-confirm.ts";
-import { createProductionSelection } from "../application/editing/production-selection.ts";
-import type { ProductionSelection } from "../application/editing/production-selection.ts";
+import { resetTagPanel } from "../../application/tag-panel-state.ts";
+import { createDeleteConfirm } from "../../application/editing/delete-confirm.ts";
+import type { DeleteConfirm, DeleteTimerPort } from "../../application/editing/delete-confirm.ts";
+import { createProductionSelection } from "../../application/editing/production-selection.ts";
+import type { ProductionSelection } from "../../application/editing/production-selection.ts";
 
 interface Started {
   readonly confirmation: DeleteConfirm;

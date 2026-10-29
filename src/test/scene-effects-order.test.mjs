@@ -2,15 +2,15 @@ import "./_dom.mjs";
 import "./_preferences-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 const stubs = await import("./_fanout-stubs.mjs");
 const { createSceneStatus } = await import("../features/rows/scene-status.ts");
 const { cycleRowStatus, onScriptStats, statsFollowChange, updateScriptStats } = createSceneStatus(stubs.sceneStatusPorts());
 const { startReadTime: mountReadTime, setSceneLength } = await import("../features/rows/read-time.js");
 mountReadTime(stubs.readTimePorts());
-const bridge = await import("../legacy/session-bridge.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const bridge = await import("../bootstrap/wiring/session-owner.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 const STATS = ["setRundownExtraSeconds", "renderRundown", "paintTargetOverlay"];

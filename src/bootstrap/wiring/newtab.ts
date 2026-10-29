@@ -17,7 +17,7 @@ import { confirmation } from "./ports/saving.ts";
 import { draftResume, seedCheck, startup } from "./ports/startup.ts";
 import { text } from "./ports/text.ts";
 import { opening, transitions } from "./ports/transitions.ts";
-import { migrateRows } from "../../legacy/document-ports.ts";
+import { migrateRows } from "../document-ports.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { importControls } from "./imports.ts";
 import { localFilesOwner } from "./local-files.ts";

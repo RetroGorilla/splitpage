@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 const GRIN = String.fromCodePoint(0x1F600);
 const NAME_33 = "Maria ".repeat(5) + "Lee";
@@ -13,11 +13,11 @@ const OPENED = "Opened the latest version — last edited by ";
 localStorage.setItem(NAME_KEY, NAME_33);
 await bootApp(JSON.stringify({ schema: 2, title: "Mine", rows: [], rev: 5, lastEditedBy: NAME_33 }));
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { promptForName } = await import("../bootstrap/wiring/title-chrome.ts");
 const { openCommentComposer, postComment, postReply, toggleReplyComposer } = await import("../features/comments/comments.js");
 import { getSavedAuthorName as getSavedAuthorNameWith } from "../application/comment-author.js";
-import { getEditorName, preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+import { getEditorName, preferences as commentPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 function getSavedAuthorName() { return getSavedAuthorNameWith(commentPreferences()); }
 const { openSettings } = await import("../features/settings/settings.js");
 const { render } = await import("../features/rows/render.js");

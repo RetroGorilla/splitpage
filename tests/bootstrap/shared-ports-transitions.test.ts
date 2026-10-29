@@ -5,9 +5,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { NO_DESTINATION } from "../../src/application/transitions/ports.ts";
 
-import { migrateRows } from "../../src/legacy/document-ports.ts";
-import { currentDocument, liveDocumentPort } from "../../src/legacy/session-bridge.ts";
-import { documentSources, startTransitions } from "../../src/legacy/transition-bridge.ts";
+import { migrateRows } from "../../src/bootstrap/document-ports.ts";
+import { currentDocument, liveDocumentPort } from "../../src/bootstrap/wiring/session-owner.ts";
+import { documentSources, startTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { startTestSession, unwiredSessionDeps } from "../../src/test/_session.mjs";
 import { fakeTransitions } from "../features/fakes.ts";
 

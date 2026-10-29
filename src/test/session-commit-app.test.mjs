@@ -1,24 +1,24 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
-import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
+import { saveChanges, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 await bootApp();
 
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { cycleRowStatus } = await import("../bootstrap/wiring/scene-status.ts");
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { render } = await import("../features/rows/render.js");
 const { setSceneLength } = await import("../features/rows/read-time.js");
-const { noteAbsorbedDirty, noteSessionEdit } = await import("../legacy/session-bridge.ts");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { noteAbsorbedDirty, noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
+const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
-const { preferences } = await import("../legacy/preferences-bridge.ts");
+const { preferences } = await import("../bootstrap/wiring/preferences-owner.ts");
 
 import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";
-import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+import { preferences as commentPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 const flushEdits = () => undoOwner().flush();
 const lastUndoEntry = () => undoOwner().last();
 const undo = () => undoOwner().undo();
