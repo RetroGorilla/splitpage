@@ -8,9 +8,10 @@ import type { DocumentView } from "../session/document-session.ts";
 import type { OperationContext } from "../session/operation.ts";
 import type { Notice, NoticeKind } from "../effects/ports.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
-import type { CaptureTiming } from "./capture-schedule.ts";
+import type { CaptureSchedule, CaptureTiming } from "./capture-schedule.ts";
 import type { DraftCapture } from "./draft-writer.ts";
 import type { DraftMeta, StoredDraft } from "./ports.ts";
+import type { StashedWork } from "./conflict-stash.ts";
 import type { DraftFile, DraftFlush, DraftOpening, DraftParsedFile, DraftsMount, DraftsPorts } from "./drafts-ports.ts";
 
 interface DraftServer {
@@ -129,7 +130,7 @@ function draftBaseOf(serverUrl: unknown): string { return live().browserDraft.ba
 function browserWriterIsLive(writerId: string): Promise<boolean> { return live().lock.isLive(writerId); }
 function holdWriterLock(): void { live().lock.hold(); }
 function releaseBrowserWriterLock(): void { live().lock.release(); }
-const applyStashedWork: DraftsPorts["recovery"]["applyStashedWork"] = function (disk, work, options) { return live().recovery.applyStashedWork(disk, work, options); };
+function applyStashedWork(disk: ValidatedDocument, work: StashedWork | null, options?: Readonly<Record<string, unknown>> | null): ReturnType<DraftsPorts["recovery"]["applyStashedWork"]> { return live().recovery.applyStashedWork(disk, work, options); }
 function browserDrafts(): ReturnType<DraftsPorts["recovery"]["browserDrafts"]> { return live().recovery.browserDrafts(); }
 function captureRestore(): OperationContext { return live().recovery.captureRestore(); }
 function desktopDrafts(): ReturnType<DraftsPorts["recovery"]["desktopDrafts"]> { return live().recovery.desktopDrafts(); }
@@ -155,27 +156,34 @@ const draftTiming: DraftTiming = {
   idle: 1500,
   max: 5000,
   slow: 15000,
-  largeBytes: 8 * 1024 * 1024,
+  largeBytes: 8388608,
   slowStringifyMs: 50,
   backoffMin: 5000,
   backoffMax: 60000
 };
 
-const draftSchedule = createCaptureSchedule({
-  timing: function () { return draftTiming; },
-  timers: {
-    set: function (run, ms) { return setTimer(run, ms); },
-    clear: function (handle) { clearTimer(handle); }
-  },
-  capture: function () { captureAndSendDraft(); }
-});
+let draftSchedule: CaptureSchedule | null = null;
+
+function schedule(): CaptureSchedule {
+  if (!draftSchedule) {
+    draftSchedule = createCaptureSchedule({
+      timing: function () { return draftTiming; },
+      timers: {
+        set: function (run, ms) { return setTimer(run, ms); },
+        clear: function (handle) { clearTimer(handle); }
+      },
+      capture: function () { captureAndSendDraft(); }
+    });
+  }
+  return draftSchedule;
+}
 
 let draftSeq = 0;
 let draftInFlight: Promise<DraftFlush | null | undefined> | null = null;
 let draftStopped = false;
 let draftPausedReason = "";
 let draftPausedToast: DraftToast | null = null;
-let draftSentEditSeq = -1;
+let draftSentEditSeq: number | null = null;
 let draftSentBase: unknown = {};
 let draftSentSignature = "";
 const draftStats: { writes: number; failures: number; discards: number; obsolete: number; lastCode: string | null } =
@@ -258,7 +266,7 @@ function holdBrowserWriterLock(): void {
 
 function noteDraftChange(): void {
   if (!draftWriterLive()) return;
-  draftSchedule.noteChange();
+  schedule().noteChange();
 }
 
 function fieldOf(value: unknown, name: string): unknown {
@@ -309,16 +317,16 @@ function draftOriginSignature(origin: DraftOrigin): string {
 }
 
 function captureAndSendDraft(keepClean?: boolean): Promise<DraftFlush | null | undefined> {
-  draftSchedule.cancel();
+  schedule().cancel();
   const doc = draftWriterLive() ? currentDocument() : null;
   if (!doc) return Promise.resolve(null);
-  if (draftResume().restorePending()) { draftSchedule.keepPending(); return Promise.resolve(null); }
-  if (draftInFlight) { draftSchedule.keepPending(); return draftInFlight; }
+  if (draftResume().restorePending()) { schedule().keepPending(); return Promise.resolve(null); }
+  if (draftInFlight) { schedule().keepPending(); return draftInFlight; }
 
   const unsaved = unsavedChanges();
   const keepCleanFile = !unsaved && keepClean === true && runningOnDesktop() && draftOriginOf().kind === "file";
   if (!unsaved && !keepCleanFile) {
-    draftSchedule.dropPending();
+    schedule().dropPending();
     if (!draftOnDisk || !draftBackendCanDiscard()) return Promise.resolve(null);
     const discardSeq = ++draftSeq;
     draftOnDisk = false;
@@ -336,13 +344,13 @@ function captureAndSendDraft(keepClean?: boolean): Promise<DraftFlush | null | u
 
   const origin = draftOriginOf();
   if (!runningOnDesktop() && origin.kind !== "server") {
-    draftSchedule.dropPending();
+    schedule().dropPending();
     return Promise.resolve(null);
   }
   const signature = draftOriginSignature(origin);
   if ((draftOnDisk || !keepCleanFile) &&
       saveChanges() === draftSentEditSeq && draftSentBase === mergeBase() && signature === draftSentSignature) {
-    draftSchedule.dropPending();
+    schedule().dropPending();
     return Promise.resolve(null);
   }
 
@@ -356,7 +364,7 @@ function captureAndSendDraft(keepClean?: boolean): Promise<DraftFlush | null | u
     return Promise.resolve({ ok: false, code: "TOO_LARGE" });
   }
   const elapsed = now() - startedAt;
-  draftSchedule.setSlow(stateJson.length > draftTiming.largeBytes || elapsed > draftTiming.slowStringifyMs);
+  schedule().setSlow(stateJson.length > draftTiming.largeBytes || elapsed > draftTiming.slowStringifyMs);
 
   const editSeqAtCapture = saveChanges();
   const baseAtCapture = mergeBase();
@@ -395,7 +403,7 @@ function captureAndSendDraft(keepClean?: boolean): Promise<DraftFlush | null | u
     refsIn(baseAtCapture).forEach(function (sha: string) { if (draftRefs.indexOf(sha) === -1) draftRefs.push(sha); });
   }
 
-  draftSchedule.dropPending();
+  schedule().dropPending();
   const sent = draftRefs.length
     ? persist(draftRefs).then(function (failed: string[]) {
         if (failed.length) {
@@ -414,14 +422,14 @@ function captureAndSendDraft(keepClean?: boolean): Promise<DraftFlush | null | u
       draftStats.lastCode = null;
       if (r.obsolete) {
         draftStats.obsolete++;
-        draftSchedule.keepPending();
+        schedule().keepPending();
       } else {
         draftOnDisk = true;
         draftSentEditSeq = editSeqAtCapture;
         draftSentBase = baseAtCapture;
         draftSentSignature = signature;
       }
-      draftSchedule.landed();
+      schedule().landed();
       if (draftPausedReason) {
         draftPausedReason = "";
         clearDraftPausedToast();
@@ -430,7 +438,7 @@ function captureAndSendDraft(keepClean?: boolean): Promise<DraftFlush | null | u
     } else {
       noteDraftWriteRefused((r && r.code) || "error");
     }
-    draftSchedule.resume();
+    schedule().resume();
     return r;
   }, function (err) {
     draftInFlight = null;
@@ -507,18 +515,18 @@ function noteDraftWriteRefused(code: string): void {
   if (code !== "HELD") draftStats.failures++;
 
   if (code === "DISCARDED" || code === "NO_TAB") { draftStopped = true; return; }
-  if (code === "UNAVAILABLE" && !runningOnDesktop()) { browserDraftsOff = true; draftSchedule.dropPending(); return; }
+  if (code === "UNAVAILABLE" && !runningOnDesktop()) { browserDraftsOff = true; schedule().dropPending(); return; }
 
   if (code !== "STALE_SEQ") showDraftPaused(code);
 
-  draftSchedule.refused();
+  schedule().refused();
 }
 
 function flushDraftNow(opts?: { readonly keep?: boolean } | null): Promise<DraftFlush> {
   if (!draftWriterLive()) return Promise.resolve({ ok: true });
   const keepClean = !!(opts && opts.keep === true);
-  draftSchedule.cancel();
-  draftSchedule.cancelRetry();
+  schedule().cancel();
+  schedule().cancelRetry();
   return Promise.resolve(draftInFlight).then(function () {
     return captureAndSendDraft(keepClean);
   }).then(function (r) {
@@ -863,10 +871,10 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
           lastCode: draftStats.lastCode,
           paused: !!draftPausedReason,
           pausedReason: draftPausedReason,
-          pending: draftSchedule.pending(),
+          pending: schedule().pending(),
           onDisk: draftOnDisk,
           stopped: draftStopped,
-          slow: draftSchedule.slow(),
+          slow: schedule().slow(),
           restorePending: draftResume().restorePending()
         };
       },
@@ -909,8 +917,8 @@ export function startDrafts(given: DraftsPorts): DraftsMount {
     },
     dispose: function () {
       if (ports !== mounted) return;
-      draftSchedule.cancel();
-      draftSchedule.cancelRetry();
+      schedule().cancel();
+      schedule().cancelRetry();
       ports = null;
     }
   };
