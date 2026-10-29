@@ -1,5 +1,5 @@
 import { startDocumentGuard } from "../../src/application/identity/document-guard.ts";
-import { productionEditingStarted, startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
+import { productionEditingStarted, startProductionEditing } from "../../src/bootstrap/wiring/production-editing-owners.ts";
 import { bootApp, closeApp, rewireApp } from "../../src/test/_app-boot.mjs";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -47,7 +47,7 @@ import {
 import type { SessionReplayRunner, SessionUndoPorts } from "../../src/bootstrap/wiring/session-owner.ts";
 import { captureOperation, documentSources, documentTransitions, openDocument, startTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { sceneLengthCommand } from "../../src/application/commands/scene-length.ts";
-import { migrateRows } from "../../src/legacy/document-ports.ts";
+import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 import { projectFileServices, projectFileServicesStarted } from "../../src/application/formats/project-file-services.ts";
 import type { ProjectFileServices } from "../../src/application/formats/project-file-services.ts";
 

@@ -12,7 +12,7 @@ import type { ApplyStashedWork, StashMerge } from "../../application/recovery/st
 import { cloneState } from "../../core/document/clone.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { MergedStates } from "../../core/merge-states.ts";
-import { migrateRows } from "../../legacy/document-ports.ts";
+import { migrateRows } from "../document-ports.ts";
 import { documentLocation } from "./location-owner.ts";
 import { createDesktopDraftStore } from "../../adapters/storage/draft-store-desktop.ts";
 import type { DesktopDraftBridge } from "../../adapters/storage/draft-store-desktop.ts";

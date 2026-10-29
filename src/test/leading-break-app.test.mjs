@@ -5,7 +5,7 @@ import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { render } = await import("../features/rows/render.js");
 const { registryKey } = await import("../core/document/tags.ts");
 const { openProductionPanel } = await import("../features/tags/panels.js");

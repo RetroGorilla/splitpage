@@ -5,8 +5,8 @@ import { dirname, join } from "node:path";
 import { currentDocument } from "../src/bootstrap/wiring/session-owner.ts";
 import { loadTestDocument } from "../src/test/_document.mjs";
 import { rowSeconds } from "../src/core/production/timing.ts";
-import { productionReaders } from "../src/legacy/document-ports.ts";
-import { migrateRows } from "../src/legacy/document-ports.ts";
+import { productionReaders } from "../src/bootstrap/document-ports.ts";
+import { migrateRows } from "../src/bootstrap/document-ports.ts";
 import { mountProductionTagsFeature as initTags } from "../src/bootstrap/wiring/production-tags.ts";
 
 initTags();

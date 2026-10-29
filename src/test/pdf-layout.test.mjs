@@ -4,7 +4,7 @@ import { liveDoc, liveWithAssets } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { intern } from "../adapters/storage/02c-blobs.js";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { commentEntries } from "../adapters/formats/export-projections.ts";

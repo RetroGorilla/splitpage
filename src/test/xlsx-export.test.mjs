@@ -4,7 +4,7 @@ import { liveDoc } from "./_export-now.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { breakdownTable } from "../adapters/formats/export-projections.ts";
 import { brollTable } from "../adapters/formats/export-projections.ts";

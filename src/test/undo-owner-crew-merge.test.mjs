@@ -4,7 +4,7 @@ import "./_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";

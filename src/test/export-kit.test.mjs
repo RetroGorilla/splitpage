@@ -4,7 +4,7 @@ import "./_export-services-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import {
   breakdownGroups,

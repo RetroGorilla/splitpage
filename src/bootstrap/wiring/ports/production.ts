@@ -1,4 +1,4 @@
-import { deleteConfirmation, resetProductionPanelState } from "../../../legacy/production-editing-bridge.ts";
+import { deleteConfirmation, resetProductionPanelState } from "../production-editing-owners.ts";
 import type { ProductionIndexOwner } from "../../../core/production/index.ts";
 import { productionIndex } from "../../../application/production/index-owner.ts";
 import type { TagPanelState } from "../../../application/tag-panel-state.ts";

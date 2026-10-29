@@ -12,7 +12,7 @@ import { startSceneSelect as mountSceneSelect } from "../../features/clipboard/s
 import { isScriptCell } from "../../features/editing/cell-page.ts";
 import { cellSelection } from "../../features/common/cell-selection.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { migrateRows } from "../../legacy/document-ports.ts";
+import { migrateRows } from "../document-ports.ts";
 import { stampRow } from "./session-merge.ts";
 import { closeRowMenus } from "../../features/rows/row-menu.js";
 import { collectTagsFromRows, scheduleProductionRefresh } from "../../features/tags/production-tags.js";
