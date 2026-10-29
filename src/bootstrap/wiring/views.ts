@@ -44,7 +44,7 @@ import { panelWidths, preferences } from "../../legacy/preferences-bridge.ts";
 import { sidePanels } from "./ports/panels.ts";
 import { SIDE_PANEL_IDS } from "../../application/preferences/panel-widths.ts";
 import { mountPanels } from "../../features/panels/mount.ts";
-import { fileConflicts, saveDoc } from "../../legacy/save-bridge.ts";
+import { fileConflicts, saveDoc } from "./save-owners.ts";
 import { fileDelivery } from "./ports/files.ts";
 import { localFileMenuControls, localFilesOwner, importSavingOwner } from "./local-files.ts";
 import { currentMergeReview } from "./merge-review.ts";

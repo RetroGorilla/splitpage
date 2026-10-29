@@ -21,8 +21,8 @@ import { mountScriptZoomFeature, scriptZoomActions, stopScriptZoomFeature } from
 import { installAppActions } from "../../src/legacy/app-actions.ts";
 import { PREF_EVENT, preferences, startPreferences, viewFlags } from "../../src/legacy/preferences-bridge.ts";
 import type { SaveChange } from "../../src/application/save/save-state.ts";
-import { autoSavePolicy, haltAutoSave, noteSaveChange, saveDestinations, startSaves } from "../../src/legacy/save-bridge.ts";
-import type { LegacySavePorts } from "../../src/legacy/save-bridge.ts";
+import { autoSavePolicy, haltAutoSave, noteSaveChange, saveDestinations, startSaves } from "../../src/bootstrap/wiring/save-owners.ts";
+import type { LegacySavePorts } from "../../src/bootstrap/wiring/save-owners.ts";
 import { cacheSeal } from "../../src/legacy/cache-freeze.ts";
 import { productionReaders } from "../../src/legacy/document-ports.ts";
 import { editorSelection, startEditor } from "../../src/bootstrap/wiring/editor-owners.ts";

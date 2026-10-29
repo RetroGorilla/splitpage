@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { cloneState } from "../core/document/clone.ts";
-import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
+import { saveChanges, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 
 await bootApp();

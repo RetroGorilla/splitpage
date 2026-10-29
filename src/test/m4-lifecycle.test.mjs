@@ -60,7 +60,7 @@ await rewireRunningApp({ refresh: (due) => (refreshed.into ? refreshed.into.push
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");

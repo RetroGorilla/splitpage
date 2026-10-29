@@ -1,7 +1,7 @@
-import type { Operations } from "../application/session/operation.ts";
-import { createAutoSavePolicy } from "../application/save/autosave.ts";
-import type { AutoSaveChange, AutoSavePolicy } from "../application/save/autosave.ts";
-import { createSaveCoordinator } from "../application/save/coordinator.ts";
+import type { Operations } from "../../application/session/operation.ts";
+import { createAutoSavePolicy } from "../../application/save/autosave.ts";
+import type { AutoSaveChange, AutoSavePolicy } from "../../application/save/autosave.ts";
+import { createSaveCoordinator } from "../../application/save/coordinator.ts";
 import type {
   Confirmed,
   DestinationKey,
@@ -9,16 +9,16 @@ import type {
   SaveJob,
   SaveOutcome,
   WriterResult
-} from "../application/save/coordinator.ts";
-import { createSaveDestinations } from "../application/save/destinations.ts";
-import { createFileConflicts } from "../application/save/file-conflict.ts";
-import type { FileConflicts } from "../application/save/file-conflict.ts";
-import type { SaveDestination, SaveDestinations } from "../application/save/destinations.ts";
-import type { SaveChange } from "../application/save/save-state.ts";
-import type { AutoSaveTarget } from "../application/save/status.ts";
-import type { TimerPort } from "../application/session/ports.ts";
-import { showToast } from "./effects-bridge.ts";
-import { preferences } from "./preferences-bridge.ts";
+} from "../../application/save/coordinator.ts";
+import { createSaveDestinations } from "../../application/save/destinations.ts";
+import { createFileConflicts } from "../../application/save/file-conflict.ts";
+import type { FileConflicts } from "../../application/save/file-conflict.ts";
+import type { SaveDestination, SaveDestinations } from "../../application/save/destinations.ts";
+import type { SaveChange } from "../../application/save/save-state.ts";
+import type { AutoSaveTarget } from "../../application/save/status.ts";
+import type { TimerPort } from "../../application/session/ports.ts";
+import { showToast } from "../../legacy/effects-bridge.ts";
+import { preferences } from "../../legacy/preferences-bridge.ts";
 
 export type LegacySaveKind = "save" | "auto" | "autosave" | "force" | "saveAs" | "writeback" | "writebackForce";
 

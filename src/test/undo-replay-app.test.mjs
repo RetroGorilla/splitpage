@@ -3,7 +3,7 @@ import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
-import { unsavedChanges } from "../legacy/save-bridge.ts";
+import { unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
