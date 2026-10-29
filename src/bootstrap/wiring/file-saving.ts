@@ -1,4 +1,4 @@
-import { mountFileSaving } from "../../application/save/file-saving.js";
+import { mountFileSaving } from "../../application/save/file-saving.ts";
 import type { FileSavingDeferredPorts, FileSavingMount, FileSavingPorts } from "../../application/save/file-saving-ports.ts";
 import { checkFileConflict, existingTarget, isAbort, pickTarget, writeToHandle } from "../../adapters/files/file-target.ts";
 import type { FileHandle, SaveDialogs } from "../../adapters/files/file-target.ts";

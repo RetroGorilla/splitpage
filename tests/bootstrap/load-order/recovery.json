@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/adapters/storage/draft-writer-lock.js",
     "src/application/recovery/drafts.js",

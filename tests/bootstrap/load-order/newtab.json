@@ -1,5 +1,4 @@
 {
-  "legacyImports": [],
   "loadOnly": [
     "src/features/newtab/newtab.js",
     "src/bootstrap/wiring/newtab.ts"
