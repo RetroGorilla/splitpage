@@ -1,13 +1,13 @@
-import { createDesktopDocumentState } from "../application/desktop/document-state.ts";
-import type { DesktopDocumentListeners, DesktopDocumentState, DesktopDocumentStateOwner, DesktopDocumentStatePorts } from "../application/desktop/document-state.ts";
-import type { DesktopHandOff, PrompterElsewhere } from "../application/desktop/shell.ts";
-import { runningOnDesktop } from "../application/desktop-presence.ts";
-import { desktopPort } from "../adapters/desktop/desktop-port.ts";
-import type { HistoryOwner } from "../application/recovery/history-ports.ts";
-import { draftResume, recoveryStarted } from "./recovery-bridge.ts";
-import { unsavedChanges } from "./save-bridge.ts";
-import { currentDocument } from "./session-bridge.ts";
-import { currentHome } from "./location-bridge.ts";
+import { createDesktopDocumentState } from "../../application/desktop/document-state.ts";
+import type { DesktopDocumentListeners, DesktopDocumentState, DesktopDocumentStateOwner, DesktopDocumentStatePorts } from "../../application/desktop/document-state.ts";
+import type { DesktopHandOff, PrompterElsewhere } from "../../application/desktop/shell.ts";
+import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
+import type { HistoryOwner } from "../../application/recovery/history-ports.ts";
+import { draftResume, recoveryStarted } from "../../legacy/recovery-bridge.ts";
+import { unsavedChanges } from "../../legacy/save-bridge.ts";
+import { currentDocument } from "../../legacy/session-bridge.ts";
+import { currentHome } from "../../legacy/location-bridge.ts";
 
 let started: DesktopDocumentStateOwner | null = null;
 let handOff: DesktopHandOff | null = null;

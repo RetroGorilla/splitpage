@@ -7,7 +7,7 @@
     "src/adapters/desktop/fake-desktop.js",
     "src/application/desktop/document-state.ts",
     "src/application/desktop/menu-commands.ts",
-    "src/legacy/desktop-bridge.ts",
+    "src/bootstrap/wiring/desktop-owners.ts",
     "src/bootstrap/wiring/desktop.ts"
   ],
   "expectedLoads": 9
