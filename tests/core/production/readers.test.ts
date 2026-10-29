@@ -46,6 +46,22 @@ test("wordCount counts the spoken words: directions are left out", () => {
   assert.equal(readers.wordCount(undefined), 0);
 });
 
+test("wordCount ignores the space around and between the words", () => {
+  assert.equal(readers.wordCount(cells.html([T("  one   two\n\nthree  ")])), 3);
+  assert.equal(readers.wordCount(cells.html([T("   ")])), 0);
+});
+
+test("tagsInField reads two tags that touch as two, and one tag split across runs as one", () => {
+  const touching = cells.html([tag("prop", "Kettle", "kettle"), tag("prop", "Mug", "mug"), T(" "), tag("prop", "Mug", "again")]);
+  assert.deepEqual(readers.tagsInField(touching), [
+    { catId: "prop", name: "Kettle", text: "kettle" },
+    { catId: "prop", name: "Mug", text: "mug" },
+    { catId: "prop", name: "Mug", text: "again" }
+  ]);
+  const split = cells.html([tag("prop", "Kettle", "ket", { b: true }), tag("prop", "Kettle", "tle")]);
+  assert.deepEqual(readers.tagsInField(split), [{ catId: "prop", name: "Kettle", text: "kettle" }]);
+});
+
 test("brollInField and brollPropsInField read the b-roll lines and the props tagged on each", () => {
   assert.deepEqual(readers.brollInField(BROLL), [
     { id: "bs1", name: "the gulls kite", desc: "over the pier" },
