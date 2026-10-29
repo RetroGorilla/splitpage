@@ -20,7 +20,7 @@ const flushEdits = () => undoOwner().flush();
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { rowSlots } = await import("../core/document/gallery.ts");
 const { openGalleryOverlay, closeGalleryOverlay } = await import("../features/gallery/overlay.js");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 const PNG = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 function pngDataUrl(red, green, blue) {

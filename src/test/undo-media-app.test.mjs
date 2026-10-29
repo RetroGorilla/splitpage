@@ -22,7 +22,7 @@ const { rememberCellSelection, placeEditorSelection, cellSelection } = await imp
 const { editorSelection } = await import("../bootstrap/wiring/editor-owners.ts");
 const { liveSession } = await import("../legacy/session-bridge.ts");
 const { sanitizeHtml } = await import("../legacy/richtext.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

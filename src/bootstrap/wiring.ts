@@ -48,8 +48,8 @@ import type { LegacyAutoSavePorts, LegacySaveDestination, LegacySavePorts } from
 import { liveDocumentPort, liveSession, startSessionBridge } from "../legacy/session-bridge.ts";
 import type { SessionBridgePorts, SessionUndoPorts } from "../legacy/session-bridge.ts";
 import type { RecordsReconciler } from "../application/production/broll-records.ts";
-import { captureOperation, documentSources, startTransitions, stillOwns } from "../legacy/transition-bridge.ts";
-import type { LegacyDocumentSource, LegacyTransitionPorts } from "../legacy/transition-bridge.ts";
+import { captureOperation, documentSources, startTransitions, stillOwns } from "./wiring/transition-owners.ts";
+import type { LegacyDocumentSource, LegacyTransitionPorts } from "./wiring/transition-owners.ts";
 import { routeUndoReplays, startUndo, undoOwner, undoPorts, undoSessionPort } from "./wiring/undo.ts";
 
 export interface WiringDeps {

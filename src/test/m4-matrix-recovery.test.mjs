@@ -39,7 +39,7 @@ const { bytesForSync, createMemoryBackend, ensureBytes, has, internDataUrl, isDu
 const { addGalleryPicture } = await import("../core/document/gallery.ts");
 const homeModule = await import("../legacy/location-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument, keepSnapshot } = await import("../legacy/transition-bridge.ts");
+const { openDocument, keepSnapshot } = await import("../bootstrap/wiring/transition-owners.ts");
 
 const require = createRequire(import.meta.url);
 const { createDraftStore } = require("../../desktop/drafts.js");

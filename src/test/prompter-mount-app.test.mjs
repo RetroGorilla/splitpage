@@ -6,7 +6,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 await bootApp();
 const { setPrompterOpen } = await import("../application/prompter-state.ts");
 const { mountPrompterVisibilityFeature } = await import("../bootstrap/wiring/views.ts");
-const { documentTransitions } = await import("../legacy/transition-bridge.ts");
+const { documentTransitions } = await import("../bootstrap/wiring/transition-owners.ts");
 after(closeApp);
 
 function open() {

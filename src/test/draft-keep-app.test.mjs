@@ -14,7 +14,7 @@ const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
 const { buildSplitpageFile } = await import("../adapters/formats/project-file.ts");
 const { flushDraftNow } = await import("../bootstrap/wiring/recovery-owners.ts");
 const { setHome } = await import("../legacy/location-bridge.ts");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
 

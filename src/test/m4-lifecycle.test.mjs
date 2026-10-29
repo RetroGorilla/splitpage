@@ -71,7 +71,7 @@ const { grant: grantVideoFile, has: hasSessionVideo, url: sessionVideoUrl } = vi
 const { normalizeVideoLink } = await import("../core/document/gallery.ts");
 const { requestRefresh } = await import("../legacy/session-bridge.ts");
 const { loadTestDocument } = await import("./_document.mjs");
-const { openDocument } = await import("../legacy/transition-bridge.ts");
+const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 function script(title) {
   return migrateRows({
