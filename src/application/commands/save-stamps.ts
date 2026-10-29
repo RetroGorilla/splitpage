@@ -8,18 +8,24 @@ export interface EditStamp {
   readonly lastEditedAt: unknown;
 }
 
-const EDITED_CHANGE: ChangeSet = changeSet({ docFields: ["lastEditedBy", "lastEditedAt"] });
+function editedChange(): ChangeSet {
+  return changeSet({ docFields: ["lastEditedBy", "lastEditedAt"] });
+}
 
-const SAVED_CHANGE: ChangeSet = changeSet({ docFields: ["rev", "lastEditedBy", "lastEditedAt"] });
+function savedChange(): ChangeSet {
+  return changeSet({ docFields: ["rev", "lastEditedBy", "lastEditedAt"] });
+}
 
-const IDENTITY_CHANGE: ChangeSet = changeSet({ docFields: ["docId"] });
+function identityChange(): ChangeSet {
+  return changeSet({ docFields: ["docId"] });
+}
 
 export function editStamp(stamp: EditStamp): Stamp {
   return {
     name: "stamp-edit",
     plan: function (): Plan {
       return {
-        changes: stamp.rev === undefined ? EDITED_CHANGE : SAVED_CHANGE,
+        changes: stamp.rev === undefined ? editedChange() : savedChange(),
         apply: function (live) {
           if (stamp.rev !== undefined) live.rev = stamp.rev;
           live["lastEditedBy"] = stamp.lastEditedBy;
@@ -36,7 +42,7 @@ export function documentIdStamp(fromId: string | null, toId: string): Stamp {
     plan: function (doc): Plan | null {
       if (!toId || doc.docId === toId || (fromId !== null && doc.docId !== fromId)) return null;
       return {
-        changes: IDENTITY_CHANGE,
+        changes: identityChange(),
         apply: function (live) { live.docId = toId; }
       };
     }

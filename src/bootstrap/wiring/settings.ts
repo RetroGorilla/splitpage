@@ -14,7 +14,7 @@ import { installSettingsControls, openSettings } from "../../application/setting
 import { actions as portActions } from "./ports/actions.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { changes as portChanges } from "./ports/preferences.ts";
-import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { presence } from "./ports/desktop-presence.ts";
 import { startSettings as mountSettings } from "../../features/settings/settings.js";
 import type { SettingsMount, SettingsPorts } from "../../features/settings/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -75,7 +75,7 @@ export function mountSettingsFeature(): SettingsMount {
       editor,
       identity: { name: () => getSavedAuthorName(preferences()), swatchesHtml: personSwatchesHtml },
       prompter: { mirror: (value) => { prompterControls()?.setPrompterMirror(value); }, flip: (value) => { prompterControls()?.setPrompterFlip(value); }, sceneMode: (value) => { prompterControls()?.setPrompterSceneMode(value); } },
-      desktop: { running: runningOnDesktop, renderNotice: () => { updateControls()?.renderDesktopAppNotice(); } }
+      desktop: { running: presence.running, renderNotice: () => { updateControls()?.renderDesktopAppNotice(); } }
     };
     const mounted: SettingsMount = mountSettings(ports);
     const disconnect = connectWriter((control) => {
@@ -110,7 +110,7 @@ export function mountAppDataFeature(): AppDataMount {
       notices: portNotices,
       fileDelivery,
       preferences: appDataPreferences,
-      desktop: runningOnDesktop,
+      desktop: presence.running,
       launchFacts: launch,
       commentSorting: { choose: commentSorting.choose },
       history: { exportAll: () => historyOwner().exportHistoryAll(), importBundle: (bundle) => historyOwner().importHistoryBundle(bundle), normalizeSnapshots: (raw) => historyOwner().normalizeLegacySnapshots(raw) },

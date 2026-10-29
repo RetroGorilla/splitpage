@@ -5,7 +5,6 @@ import { cssAttr } from "../common/dom.ts";
 import { slotPoster } from "../common/gallery.ts";
 import { formatVideoLength } from "../../../shared/text.js";
 import { embeddableVideo } from "../../../shared/video-embed.js";
-import { runningOnDesktop } from "../../application/desktop-presence.ts";
 
 var ports = null;
 var view = null;
@@ -216,7 +215,7 @@ var PEN_ICON = '<svg aria-hidden="true"><use href="#i-pen"/></svg>';
 
 function openButtonHtml(l) {
   var title = l.href
-    ? "Opens " + videoLinkLabel(l) + (runningOnDesktop() ? " in your web browser" : " in a new tab")
+    ? "Opens " + videoLinkLabel(l) + (ports.desktop() ? " in your web browser" : " in a new tab")
     : "Plays " + l.name + " in your computer’s video player (desktop app)";
   return '<button type="button" class="btn-outline" data-gact="open" data-key="' + escapeHtml(videoLinkKey(l)) +
     '" title="' + escapeHtml(title) + '">' + OPEN_ICON + (l.href ? "Open link" : "Open file") + '</button>';

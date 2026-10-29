@@ -3,9 +3,13 @@ import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, Plan } from "../session/document-session.ts";
 
-export const TARGET_CHANGE: ChangeSet = changeSet({ docFields: ["targetSeconds"], saveNow: true });
+function targetChange(): ChangeSet {
+  return changeSet({ docFields: ["targetSeconds"], saveNow: true });
+}
 
-export const PACE_CHANGE: ChangeSet = changeSet({ docFields: ["wordsPerMinute"], saveNow: true });
+function paceChange(): ChangeSet {
+  return changeSet({ docFields: ["wordsPerMinute"], saveNow: true });
+}
 
 export const WPM_MIN = 60;
 
@@ -19,7 +23,7 @@ export function targetLengthCommand(seconds: number | null | undefined): Command
     plan: function (doc): Plan | null {
       if (targetLengthOf({ targetSeconds: doc["targetSeconds"] }) === after) return null;
       return {
-        changes: TARGET_CHANGE,
+        changes: targetChange(),
         apply: function (live) {
           if (after === null) Reflect.deleteProperty(live, "targetSeconds");
           else live["targetSeconds"] = after;
@@ -37,7 +41,7 @@ export function wordsPerMinuteCommand(value: number): Command {
     plan: function (doc): Plan | null {
       if (!isFinite(wpm) || wpm < WPM_MIN || wpm > WPM_MAX || wpm === doc["wordsPerMinute"]) return null;
       return {
-        changes: PACE_CHANGE,
+        changes: paceChange(),
         apply: function (live) { live["wordsPerMinute"] = wpm; }
       };
     }
