@@ -8,14 +8,8 @@ import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { MergedStates } from "../../core/merge-states.ts";
 import type { CaptureTimers } from "./capture-schedule.ts";
 import type { DraftResume } from "./draft-resume.ts";
-import type { DraftWriter } from "./draft-writer.ts";
-import type { DesktopDraftStore, KeyedDraftStore } from "./ports.ts";
+import type { DesktopDraftStore } from "./ports.ts";
 import type { ApplyStashedWork } from "./stashed-work.ts";
-
-export interface BrowserDrafts {
-  readonly store: KeyedDraftStore;
-  readonly writer: DraftWriter;
-}
 
 export interface DraftFlush {
   readonly ok?: boolean;
@@ -44,14 +38,11 @@ export type DraftOpening = {
 };
 
 export interface DraftRecovery {
-  readonly started: () => boolean;
   readonly draftResume: () => DraftResume;
-  readonly browserDrafts: () => BrowserDrafts;
   readonly desktopDrafts: () => DesktopDraftStore;
   readonly captureRestore: () => OperationContext;
   readonly stillRestoring: (ctx: OperationContext) => boolean;
   readonly applyStashedWork: ApplyStashedWork<ValidatedDocument, MergedStates>;
-  readonly useBrowserDraftFactory: (factory: unknown) => BrowserDrafts;
 }
 
 export interface DraftsPorts {
@@ -61,7 +52,7 @@ export interface DraftsPorts {
   readonly report: (error: unknown) => void;
   readonly document: Pick<DocumentReader, "current">;
   readonly session: { readonly mergeBase: () => unknown; readonly noteAbsorbedDirty: (reason: string) => void };
-  readonly place: Pick<DocumentPlace, "home" | "fileHome" | "importHome" | "writtenOut">;
+  readonly place: Pick<DocumentPlace, "fileHome" | "importHome" | "writtenOut">;
   readonly markWrittenOut: (on: boolean) => void;
   readonly saves: { readonly unsaved: () => boolean; readonly editSeq: () => number };
   readonly notices: Pick<NoticePort, "show">;
@@ -79,16 +70,6 @@ export interface DraftsPorts {
     readonly parse: (file: unknown) => Promise<DraftParsedFile | null>;
   };
   readonly recovery: DraftRecovery;
-  readonly browserDraft: {
-    readonly key: (base: string, docId: string) => string;
-    readonly base: (serverUrl: unknown) => string;
-  };
-  readonly lock: {
-    readonly writerId: () => string;
-    readonly hold: () => void;
-    readonly release: () => void;
-    readonly isLive: (writerId: string) => Promise<boolean>;
-  };
   readonly documentState: { readonly notify: () => void };
 }
 
@@ -97,8 +78,6 @@ export interface DraftsMount {
   readonly noteChange: () => void;
   readonly taker: () => (() => Promise<unknown>) | null;
   readonly applyTaken: (taken: unknown) => Promise<string>;
-  readonly holdLock: () => void;
-  readonly releaseLock: () => void;
   readonly testing: Readonly<Record<string, unknown>>;
   readonly dispose: () => void;
 }

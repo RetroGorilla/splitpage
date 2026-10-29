@@ -173,7 +173,6 @@ const APP_LIFETIME_LISTENERS = [
   "window:mouseover",
   "window:mouseup",
   "window:pagehide",
-  "window:pageshow",
   "window:paste",
   "window:pointerdown",
   "window:resize",

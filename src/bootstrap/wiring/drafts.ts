@@ -5,8 +5,6 @@ import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
 import { parseProjectFileState } from "../../adapters/formats/project-file.ts";
 import { inlineStateJson, internDataUrl, persist } from "../../adapters/storage/02c-blobs.js";
-import { DRAFT_LIMITS, browserDraftKey, draftBaseOf } from "../../adapters/storage/draft-store-idb.ts";
-import { browserWriterId, browserWriterIsLive, holdBrowserWriterLock, releaseBrowserWriterLock } from "../../adapters/storage/draft-writer-lock.js";
 import { owned } from "../../features/routing/owned.ts";
 import { migrateRows } from "../document-ports.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
@@ -14,7 +12,7 @@ import { notifyDesktopDocumentState } from "./desktop-owners.ts";
 import { documentLocation } from "./location-owner.ts";
 import { applyMerge } from "./document-merge.ts";
 import { resetProductionPanelState } from "./production-editing-owners.ts";
-import { applyStashedWork, browserDrafts, captureRestore, desktopDrafts, draftResume, recoveryStarted, stillRestoring, useBrowserDraftFactory } from "./recovery-owners.ts";
+import { applyStashedWork, captureRestore, desktopDrafts, draftResume, stillRestoring } from "./recovery-owners.ts";
 import type { LegacyDraftPorts } from "./recovery-owners.ts";
 import { saveChanges, unsavedChanges } from "./save-owners.ts";
 import { mergeBase, noteAbsorbedDirty } from "./session-owner.ts";
@@ -52,24 +50,11 @@ function draftsPorts(): DraftsPorts {
       parse: (file) => parseProjectFileState(file as Parameters<typeof parseProjectFileState>[0])
     },
     recovery: {
-      started: recoveryStarted,
       draftResume: draftResume,
-      browserDrafts: browserDrafts,
       desktopDrafts: desktopDrafts,
       captureRestore: captureRestore,
       stillRestoring: stillRestoring,
-      applyStashedWork: applyStashedWork,
-      useBrowserDraftFactory: (factory) => useBrowserDraftFactory(factory as IDBFactory | null)
-    },
-    browserDraft: {
-      key: (base, docId) => browserDraftKey(base, docId),
-      base: (serverUrl) => draftBaseOf(serverUrl, location.href)
-    },
-    lock: {
-      writerId: () => browserWriterId,
-      hold: () => { holdBrowserWriterLock(); },
-      release: () => { releaseBrowserWriterLock(); },
-      isLive: (writerId) => browserWriterIsLive(writerId)
+      applyStashedWork: applyStashedWork
     },
     documentState: { notify: () => { notifyDesktopDocumentState(); } }
   };
@@ -78,20 +63,14 @@ function draftsPorts(): DraftsPorts {
 function listenToPage(mounted: DraftsMount): () => void {
   const blur = (): void => { void mounted.flush(); };
   const visibility = (): void => { if (document.visibilityState === "hidden") void mounted.flush(); };
-  const pagehide = (): void => {
-    void mounted.flush();
-    mounted.releaseLock();
-  };
-  const pageshow = (e: PageTransitionEvent): void => { if (e && e.persisted) mounted.holdLock(); };
+  const pagehide = (): void => { void mounted.flush(); };
   window.addEventListener("blur", blur);
   document.addEventListener("visibilitychange", visibility);
   window.addEventListener("pagehide", pagehide);
-  window.addEventListener("pageshow", pageshow);
   return () => {
     window.removeEventListener("blur", blur);
     document.removeEventListener("visibilitychange", visibility);
     window.removeEventListener("pagehide", pagehide);
-    window.removeEventListener("pageshow", pageshow);
   };
 }
 
@@ -101,7 +80,6 @@ export function mountDraftsFeature(): DraftsMount {
     let unlisten: () => void;
     try {
       unlisten = listenToPage(mounted);
-      mounted.holdLock();
       const hooks = (window as { __desktopTest?: Record<string, unknown> }).__desktopTest;
       if (hooks) hooks["drafts"] = mounted.testing;
     } catch (error) {
@@ -121,13 +99,7 @@ export function mountDraftsFeature(): DraftsMount {
 export const stopDraftsFeature = drafts.stop;
 
 export function draftRecoveryPorts() {
-  let factory: IDBFactory | null;
-  try { factory = window.indexedDB || null; } catch { factory = null; }
   return {
-    indexedDB: factory,
-    limits: DRAFT_LIMITS,
-    now: function () { return Date.now(); },
-    writerId: browserWriterId,
     desktop: desktopPort,
     sessionStorage: function () { return sessionStorage; },
     localStorage: function () { return localStorage; },

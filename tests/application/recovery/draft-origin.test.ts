@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  browserDraftOrigin, desktopDraftOrigin, draftOriginSignature, draftPayloadFor, draftRefsFor, draftRefusal
+  desktopDraftOrigin, draftOriginSignature, draftPayloadFor, draftRefsFor, draftRefusal
 } from "../../../src/application/recovery/draft-origin.ts";
 import { SCHEMA_VERSION } from "../../../src/core/document/fields.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
@@ -15,13 +15,10 @@ function doc(fields: Record<string, unknown> = {}) {
   return migrateRows({ title: "Pilot", docId: ID, rows: [{ id: "r1", audioText: "hi" }], ...fields }, fakeMigration().ports);
 }
 
-test("draft origin: a browser draft is a server copy only while it has a target", () => {
-  assert.deepEqual(browserDraftOrigin(null), {
-    kind: "untitled", fileId: null, fileKind: null, importName: null, baseLastModified: null, baseSize: null, server: null
+test("draft origin: a draft with no file and no import is untitled, with nothing else set", () => {
+  assert.deepEqual(desktopDraftOrigin(null, () => null), {
+    kind: "untitled", fileId: null, fileKind: null, importName: null, baseLastModified: null, baseSize: null
   });
-  const origin = browserDraftOrigin({ base: "https://s", docId: "doc1", rev: 3, copy: true });
-  assert.equal(origin.kind, "server");
-  assert.deepEqual(origin.server, { base: "https://s", docId: "doc1", rev: 3, copy: true });
 });
 
 test("draft origin: a desktop draft names its file, then its import, then nothing", () => {
@@ -40,10 +37,12 @@ test("draft origin: a desktop draft names its file, then its import, then nothin
 });
 
 test("draft origin: the signature changes with the origin, the document id and whether the id was written out", () => {
-  const untitled = browserDraftOrigin(null);
-  const server = browserDraftOrigin({ base: "b", docId: "x", rev: 2, copy: false });
-  assert.equal(draftOriginSignature(untitled, null, false), "untitled|||||" + "|0");
-  assert.equal(draftOriginSignature(server, doc(), true), "server||||x@2@b|" + ID + "|1");
+  const untitled = desktopDraftOrigin(null, () => null);
+  const file = desktopDraftOrigin({ kind: "file", handle: { _desktopId: "f1" }, format: "splitpage" }, () => null);
+  const imported = desktopDraftOrigin(null, () => ({ kind: "import", name: "notes.docx" }));
+  assert.equal(draftOriginSignature(untitled, null, false), "untitled||||" + "|0");
+  assert.equal(draftOriginSignature(file, doc(), true), "file|f1|splitpage||" + ID + "|1");
+  assert.equal(draftOriginSignature(imported, doc(), false), "import|||notes.docx|" + ID + "|0");
   assert.notEqual(draftOriginSignature(untitled, doc(), false), draftOriginSignature(untitled, doc(), true));
 });
 
@@ -53,10 +52,10 @@ test("draft origin: the payload carries the capture, the origin and the schema",
   assert.deepEqual(payload, {
     seq: 4, editSeq: 9, title: "Pilot", docId: ID, docIdWrittenOut: true, schema: SCHEMA_VERSION,
     originKind: "file", fileId: "f1", fileKind: "splitpage", importName: null, baseLastModified: null, baseSize: null,
-    server: null, stateJson: "{}", baseJson: null
+    stateJson: "{}", baseJson: null
   });
   assert.deepEqual(Object.keys(payload), ["seq", "editSeq", "title", "docId", "docIdWrittenOut", "schema", "originKind", "fileId", "fileKind",
-    "importName", "baseLastModified", "baseSize", "server", "stateJson", "baseJson"]);
+    "importName", "baseLastModified", "baseSize", "stateJson", "baseJson"]);
   const bare = draftPayloadFor({ seq: 1, editSeq: 0, doc: doc({ title: "", docId: "not-an-id" }), writtenOut: false, origin, stateJson: "s", baseJson: "b" });
   assert.equal(bare.title, "");
   assert.equal(bare.baseJson, "b");
@@ -74,11 +73,10 @@ test("draft origin: the base's picture references join only when the base is sen
   assert.deepEqual(both, [SHA_A]);
 });
 
-test("draft origin: refusals stop, turn browser drafts off, pause, or just retry", () => {
-  assert.equal(draftRefusal("DISCARDED", true), "stop");
-  assert.equal(draftRefusal("NO_TAB", false), "stop");
-  assert.equal(draftRefusal("UNAVAILABLE", false), "browser-off");
-  assert.equal(draftRefusal("UNAVAILABLE", true), "pause");
-  assert.equal(draftRefusal("ENOSPC", true), "pause");
-  assert.equal(draftRefusal("STALE_SEQ", true), "retry");
+test("draft origin: refusals stop, pause, or just retry", () => {
+  assert.equal(draftRefusal("DISCARDED"), "stop");
+  assert.equal(draftRefusal("NO_TAB"), "stop");
+  assert.equal(draftRefusal("UNAVAILABLE"), "pause");
+  assert.equal(draftRefusal("ENOSPC"), "pause");
+  assert.equal(draftRefusal("STALE_SEQ"), "retry");
 });

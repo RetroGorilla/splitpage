@@ -11,7 +11,6 @@ import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { createMemoryBackend, dataUrlForSync, intern, internDataUrl, setBackend } from "../adapters/storage/02c-blobs.js";
 import { conflictStash, startRecovery } from "../bootstrap/wiring/recovery-owners.ts";
-import { DRAFT_LIMITS } from "../adapters/storage/draft-store-idb.ts";
 import { changedBetween } from "../application/editing/undo/history.ts";
 import { personIdRemap } from "../core/merge/lists.ts";
 import { cloneState } from "../core/document/clone.ts";
@@ -19,7 +18,7 @@ import { loadTestDocument } from "./_document.mjs";
 import { holdMergeBase, mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 startRecovery({
-  indexedDB: null, limits: DRAFT_LIMITS, now: () => Date.now(), writerId: "w-merge-states", desktop: () => null,
+  desktop: () => null,
   sessionStorage: () => sessionStorage, localStorage: () => localStorage, internImage: internDataUrl
 });
 

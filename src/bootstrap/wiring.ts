@@ -168,7 +168,7 @@ const KEY_TARGET_METHODS: readonly (keyof EventTarget)[] = ["addEventListener", 
 
 const ACTION_REGISTRY_METHODS: readonly (keyof ActionRegistry)[] = ["register", "has", "shortcuts", "view", "list", "invoke", "presentRefusals"];
 
-const RECOVERY_METHODS: readonly (keyof LegacyRecoveryPorts)[] = ["now", "desktop", "sessionStorage", "localStorage", "internImage", "merge"];
+const RECOVERY_METHODS: readonly (keyof LegacyRecoveryPorts)[] = ["desktop", "sessionStorage", "localStorage", "internImage", "merge"];
 
 const DRAFT_METHODS: readonly (keyof LegacyDraftPorts)[] = ["flush", "noteChange"];
 
