@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { legacyMdToHtml } from "../core/document/text-policy.ts";
 import { mediaCommentId } from "../core/document/ids.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { refsIn } from "../../shared/blob-policy.js";
 import { dataUrlForSync } from "../adapters/storage/02c-blobs.js";

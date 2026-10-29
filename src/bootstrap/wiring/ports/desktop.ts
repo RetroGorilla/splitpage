@@ -1,5 +1,5 @@
 import type { PrompterDesktop, PrompterVoice } from "../../../application/prompter-services.ts";
-import { openPrompterInBrowser } from "../../../legacy/desktop-bridge.ts";
+import { openPrompterInBrowser } from "../desktop-owners.ts";
 import { createDesktopRecognition, desktopVoiceAvailable, desktopVoiceKnown, loadDesktopVoice } from "../../../adapters/desktop/desktop-voice.js";
 import { createRelayRecognition, hasVoiceRelay, setVoiceRelay } from "../../../adapters/desktop/voice-relay.js";
 import { SpeechRecognitionCtor } from "../../../adapters/page/speech-recognition.js";

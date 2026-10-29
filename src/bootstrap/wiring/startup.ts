@@ -13,7 +13,7 @@ import { heldDocument } from "../../legacy/session-bridge.ts";
 import { cloneState } from "../../core/document/clone.ts";
 import { LEGACY_SNAPSHOTS_KEY } from "../../application/recovery/legacy-snapshots.ts";
 import { toastLastEditor } from "./history-panel.ts";
-import { reportMerge } from "../../legacy/merge-bridge.ts";
+import { reportMerge } from "./document-merge.ts";
 import { historyOwner } from "./history.ts";
 import { currentRowsRender } from "./render.ts";
 import { updateSaveStatus } from "./save-status.ts";
@@ -23,7 +23,7 @@ import { applyStashedWork } from "../../legacy/recovery-bridge.ts";
 import { localFilesOwner } from "./local-files.ts";
 import { seedCheckPasses } from "../../adapters/page/seed-check.ts";
 import { startDesktopShell } from "./desktop.ts";
-import { notifyDesktopDocumentState } from "../../legacy/desktop-bridge.ts";
+import { notifyDesktopDocumentState } from "./desktop-owners.ts";
 import { runningOnDesktop } from "../../application/desktop-presence.ts";
 import { applyTakenDraft, draftTaker } from "./drafts.ts";
 
