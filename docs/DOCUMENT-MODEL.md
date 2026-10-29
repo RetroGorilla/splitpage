@@ -44,9 +44,8 @@ What that costs, with the current numbers:
   blur.
 - **Every reader re-parses HTML**: render, 5 exporters, the teleprompter,
   find/replace, word count, the production index, b-roll, comments, the
-  on-disk merge review, the server's reviewer anchor check, and the blob
-  reference scan. Readers have to skip tag spans (invariants #2, #3). A
-  match across a formatting boundary is never found.
+  on-disk merge review, and the blob reference scan. Readers have to skip tag
+  spans (invariants #2, #3). A match across a formatting boundary is never found.
 - **Renaming a tag re-parses and rewrites every cell** that has it
   (`eachTagSpan`, 07:1186).
 - **Comment anchors drift.** A user can delete, split or paste an anchor.
@@ -162,8 +161,7 @@ a span to its entry's id through it: `registryTagHooks(registry)` gives
 `fromHtml` its `tagId(cat, name)` and `toHtml` its `tagOf(id)`. Putting
 `data-tag-id` on spans as well was dropped: every existing tagged cell's HTML
 would change on its first load, an older copy of the app would strip the
-attribute again (its sanitiser does not know it), and the server's reviewer
-anchor check compares attributes — all churn in the whole-cell merge that
+attribute again (its sanitiser does not know it) — all churn in the whole-cell merge that
 runs until step 6, for no gain the registry id does not already give.
 
 - **Rename** changes `entry.name` and keeps `entry.id`. Until step 4 the
@@ -183,7 +181,7 @@ runs until step 6, for no gain the registry id does not already give.
 
 A comment's anchor is the set of runs whose `cmt` contains its id. There is
 no span to lose. `comment.rowId` / `comment.field` become derived and are
-kept in step by one function, so the server and old readers still get them.
+kept in step by one function, so older readers still get them.
 Invariant #18 goes away.
 **Built:** that function is `syncCommentAnchors(state)` (`src/core/text/anchors.ts`): every
 comment marked somewhere points at the first cell holding its mark, in
@@ -285,7 +283,7 @@ is special. **It is the only atom.**
     `mediaCommentId(rowId, field, "img:"+sha | "video:"+href)`. Like every
     loaded comment without an `anchorId`, it gets its own id there, which
     no span carries: it is not anchored to any words. Every way a document
-    arrives goes through `migrateRows` (a file, a server copy, a merge, a
+    arrives goes through `migrateRows` (a file, a merge, a
     restore, a crash draft, an import), and nothing in the app puts a
     picture into a cell, so no cell holds one. The cell-editing owner's
     `edit` still declines
@@ -424,9 +422,7 @@ stored format for this release.**
   `data-tag-id` on tag spans. The app converts once on load (`fromHtml`,
   memoised by string) and once on save.
 - **What that keeps working, unchanged:**
-  - older clients (2.x, 3.0) reading and writing the same server document
-    or file
-  - the server's reviewer anchor check (`placeAnchor`)
+  - older clients (2.x, 3.0) reading and writing the same file
   - `shared/blob-policy.js`
   - history snapshots, drafts, the app-data bundle and the `.md` project
     format
@@ -439,7 +435,8 @@ stored format for this release.**
 - **The alternative** is runs as JSON in the stored state (`schema: 3`).
   - It is cleaner, and diffs of `.splitpage` files become readable.
   - Every older client must be locked out:
-    - the server refuses them with 426, as #82 did with `x-splitpage-client`
+    - a forward-version refusal has to lock them out, as #82 did with
+      `x-splitpage-client`
     - an old desktop app opening a new file would see empty cells and could
       save them back empty. `migrateRows` has no forward-version refusal
       today (02-state.js:162), so that has to ship one release **before** the
@@ -478,7 +475,7 @@ One stack per tab, of step lists (§4). What counts as one entry:
   first update joined puts that typing on redo without the composition's
   text (#446, PR #448). Known limitations: an undo or redo of the
   composition's own updates during it, then a cancel, can give back a redo
-  that shows the cancelled text (#459); and if a co-editor's change reaches
+  that shows the cancelled text (#459); and if a merge or reload changes
   the cell during the composition, the cancel keeps its entries as they
   were made, so they can show the cancelled text. Only a browser whose
   composition survives Ctrl+Z can reach the first; Chromium ends it first.
@@ -513,22 +510,13 @@ One stack per tab, of step lists (§4). What counts as one entry:
   someone else. These change what the document is rather than edit it, and
   version history already covers them. `undoMerge` stays as it is.
 
-**Remote changes** (a pull, a 409 merge, a reload from disk, D4). Only the
-touched cells are forgotten. Each
-entry's steps record the `before` of the cells they touch. When a merge
+**Remote changes** (a merge or a reload from disk, D4). Only the touched cells are
+forgotten. Each entry's steps record the `before` of the cells they touch. When a merge
 changes a cell, entries touching that cell are dropped from the stack.
 Entries for untouched cells survive. So Ctrl+Z never reverts someone else's
 words, and never fails half way.
 
-**Comments (D5).** Creating or deleting a comment is undoable, with one
-limit:
-
-- **In a local file**, always.
-- **On a server document**, only until the comment has reached the server.
-  Once the save or the comments-endpoint POST (#71) carrying it has been
-  accepted, its entry leaves the stack, and the comment is deleted the usual
-  way (the ✕ on the card). Undo never deletes something reviewers may
-  already have seen.
+**Comments (D5).** Creating or deleting a comment is undoable, always.
 
 ## 8. Merge
 
@@ -603,10 +591,9 @@ changes are combined"). What building it settled:
   `mergeTextField` turns a count above zero into outcome `conflict` (with
   `marks: true`), so every caller of it reports it the way it reports a
   word conflict: `mergeRow` puts my whole cell on an "Unmerged edit" card
-  (D3), which covers the hosted save's 409, the presence-heartbeat pull and
-  the crash-draft and stash merges, and the on-disk review lists it as a
-  conflict, worded as a link or tag. The difference from a word conflict
-  is what stays live: the merged cell (their link or tag, everything else
+  (D3), which covers the crash-draft and stash merges, and the on-disk review
+  lists it as a conflict, worded as a link or tag. The difference from a word
+  conflict is what stays live: the merged cell (their link or tag, everything else
   from both sides), not theirs whole, and if my other edits are in it the
   row counts in `rowsFromMe`. Formatting (bold and the rest) is on or off
   per character, so it can never conflict; a comment anchor neither. The
@@ -633,7 +620,7 @@ changes are combined"). What building it settled:
 | `14-export.js`, `15-docx.js`, `16-csv.js`, `17-pdf.js`, `20d-formats.js` | `src/adapters/formats/` | read runs via `toPlainText` / `toMarkdown` / `toDocxRuns` (the `.md` project's table stays `htmlToMarkdown`, step 3) |
 | `20-teleprompter.js` | `src/features/prompter/` | word spans from runs |
 | editor wiring | `src/bootstrap/wiring/editor.ts`, `src/features/editing/` | `beforeinput` / keydown routing (§5); paste via `fromHtml` |
-| `server/server.js`, `shared/blob-policy.js` | `shared/blob-policy.js` (the server was removed in 4.1) | unchanged (D2: HTML stays the stored format) |
+| `server/server.js` (now only a static file server), `shared/blob-policy.js` | `shared/blob-policy.js` | unchanged (D2: HTML stays the stored format) |
 
 `execCommand` goes from 17 editing calls to none.
 

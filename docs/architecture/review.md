@@ -80,7 +80,7 @@ Every extra check names the failure it is meant to catch. If it can't name one, 
 | A rewrite: the logic itself changes, not only its location or syntax | A differential test: the base commit's implementation and the new one run on seeded generated inputs, and their results must match |
 | Parsing or transformation (text normalisers, richtext, import/export) | Property-based tests or seeded fuzzing |
 | New core policy, or reviewer doubts the tests | Mutation testing (below) |
-| Persistence, `migrateRows`, `mergeStates`, the merge algorithms in `src/core/merge/`, hosted roles and auth, concurrency, shared contracts | Integration and failure-path tests (save during load, conflicts, reload). The differential test is **mandatory** for `migrateRows`, `mergeStates` and the merge algorithms, even when the code only moves. |
+| Persistence, `migrateRows`, `mergeStates`, the merge algorithms in `src/core/merge/`, concurrency, shared contracts | Integration and failure-path tests (save during load, conflicts, reload). The differential test is **mandatory** for `migrateRows`, `mergeStates` and the merge algorithms, even when the code only moves. |
 
 - **Mutation testing:** plant the bugs only in a scratch copy, never in the lane's worktree. Look into every bug the tests don't catch and close the meaningful gaps. Record caught/total, and why each remaining one was accepted (for example, a change that can't alter behavior).
 - **Fuzzing:** runs are seeded so results reproduce. A failing seed becomes a permanent regression case.
