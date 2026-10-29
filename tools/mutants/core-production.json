@@ -1,0 +1,273 @@
+{
+  "tests": [
+    "tests/core/production/broll.test.ts",
+    "tests/core/production/broll-view.test.ts",
+    "tests/core/production/golden.test.ts",
+    "tests/core/production/looks.test.ts",
+    "tests/core/production/name-cuts.test.ts",
+    "tests/core/production/readers.test.ts",
+    "tests/core/production/records.test.ts",
+    "tests/core/production/tags.test.ts",
+    "tests/core/production/timing.test.ts"
+  ],
+  "mutants": [
+    {
+      "label": "est-wpm-default",
+      "file": "src/core/production/timing.ts",
+      "find": "|| DEFAULT_WPM;",
+      "replace": "|| 100;"
+    },
+    {
+      "label": "est-seconds-factor",
+      "file": "src/core/production/timing.ts",
+      "find": "/ wpm * 60;",
+      "replace": "/ wpm * 30;"
+    },
+    {
+      "label": "row-set-length-flipped",
+      "file": "src/core/production/timing.ts",
+      "find": "return hasSetLength(row) ?",
+      "replace": "return !hasSetLength(row) ?"
+    },
+    {
+      "label": "total-ignores-wpm",
+      "file": "src/core/production/timing.ts",
+      "find": "n + rowSeconds(r, state, readers)",
+      "replace": "n + rowSeconds(r, null, readers)"
+    },
+    {
+      "label": "duration-minutes-unpadded",
+      "file": "src/core/production/timing.ts",
+      "find": "(h + \":\" + pad2(m) + \":\" + pad2(s))",
+      "replace": "(h + \":\" + m + \":\" + pad2(s))"
+    },
+    {
+      "label": "target-over-at-zero",
+      "file": "src/core/production/timing.ts",
+      "find": "over: diff < 0",
+      "replace": "over: diff <= 0"
+    },
+    {
+      "label": "target-total-unclamped",
+      "file": "src/core/production/timing.ts",
+      "find": "Math.round(target) - Math.max(0, Math.round(total))",
+      "replace": "Math.round(target) - Math.round(total)"
+    },
+    {
+      "label": "remove-tag-key-flipped",
+      "file": "src/core/production/records.ts",
+      "find": "|| registryKey(t.cat, t.name) !== key; });",
+      "replace": "|| registryKey(t.cat, t.name) === key; });"
+    },
+    {
+      "label": "add-person-dedupe-dropped",
+      "file": "src/core/production/records.ts",
+      "find": "if (known) return known.id;",
+      "replace": ""
+    },
+    {
+      "label": "person-name-max",
+      "file": "src/core/production/records.ts",
+      "find": "PERSON_NAME_MAX = 60",
+      "replace": "PERSON_NAME_MAX = 61"
+    },
+    {
+      "label": "remove-person-tag-owner",
+      "file": "src/core/production/records.ts",
+      "find": "if (t && t.owner === id) t.owner = \"\";",
+      "replace": ""
+    },
+    {
+      "label": "remove-person-shot-owner",
+      "file": "src/core/production/records.ts",
+      "find": "if (b.owner === id) b.owner = \"\";",
+      "replace": ""
+    },
+    {
+      "label": "rename-props-unchanged-check",
+      "file": "src/core/production/records.ts",
+      "find": "JSON.stringify(shot.props) === JSON.stringify(c.props)",
+      "replace": "JSON.stringify(shot.props) !== JSON.stringify(c.props)"
+    },
+    {
+      "label": "rename-merge-notes",
+      "file": "src/core/production/records.ts",
+      "find": "if (!collision.notes && oldEntry.notes)",
+      "replace": "if (collision.notes && oldEntry.notes)"
+    },
+    {
+      "label": "rename-merge-status-rank",
+      "file": "src/core/production/records.ts",
+      "find": "tagStatusRank(oldEntry.status) > tagStatusRank(collision.status)",
+      "replace": "tagStatusRank(oldEntry.status) < tagStatusRank(collision.status)"
+    },
+    {
+      "label": "rename-merge-prop-names",
+      "file": "src/core/production/records.ts",
+      "find": "cat === \"prop\" ? oldEntry.name : \"\"",
+      "replace": "cat === \"prop\" ? \"\" : oldEntry.name"
+    },
+    {
+      "label": "rename-return-repointed",
+      "file": "src/core/production/records.ts",
+      "find": "return merged || renamed || repointed;",
+      "replace": "return merged || renamed;"
+    },
+    {
+      "label": "add-prop-cap",
+      "file": "src/core/production/records.ts",
+      "find": "props.length >= BROLL_PROPS_MAX) return false;",
+      "replace": "props.length > BROLL_PROPS_MAX) return false;"
+    },
+    {
+      "label": "add-prop-already",
+      "file": "src/core/production/records.ts",
+      "find": "if (already || props.length >= BROLL_PROPS_MAX) return false;",
+      "replace": "if (props.length >= BROLL_PROPS_MAX) return false;"
+    },
+    {
+      "label": "remove-prop-result",
+      "file": "src/core/production/records.ts",
+      "find": "return shot.props.length !== before;",
+      "replace": "return shot.props.length === before;"
+    },
+    {
+      "label": "derive-orphaned",
+      "file": "src/core/production/tags.ts",
+      "find": "orphaned: !liveMatch,",
+      "replace": "orphaned: !!liveMatch,"
+    },
+    {
+      "label": "derive-name-from-live",
+      "file": "src/core/production/tags.ts",
+      "find": "name: liveMatch ? liveMatch.name : t.name,",
+      "replace": "name: t.name,"
+    },
+    {
+      "label": "derive-dedupe",
+      "file": "src/core/production/tags.ts",
+      "find": "if (seen[key]) return;\n    seen[key] = true;\n    const liveMatch",
+      "replace": "seen[key] = true;\n    const liveMatch"
+    },
+    {
+      "label": "refresh-tag-status",
+      "file": "src/core/production/tags.ts",
+      "find": "ts[j + 3] !== t.notes || ts[j + 4] !== t.status || ts[j + 5] !== t.id",
+      "replace": "ts[j + 3] !== t.notes || ts[j + 5] !== t.id"
+    },
+    {
+      "label": "refresh-audio-tags",
+      "file": "src/core/production/tags.ts",
+      "find": "if (!sameFieldTags(was[j + 4] as readonly FieldTag[], aTags)) return null;",
+      "replace": ""
+    },
+    {
+      "label": "heal-count",
+      "file": "src/core/production/tags.ts",
+      "find": "plan.count = plan.retitle.length + plan.register.length;",
+      "replace": "plan.count = plan.register.length;"
+    },
+    {
+      "label": "quickadd-orphan",
+      "file": "src/core/production/tags.ts",
+      "find": "if (!item.orphaned) return;",
+      "replace": ""
+    },
+    {
+      "label": "quickadd-added",
+      "file": "src/core/production/tags.ts",
+      "find": "if (!registryEntry(work, \"gear\", name)) plan.added++;",
+      "replace": "plan.added++;"
+    },
+    {
+      "label": "cue-pairs-rivals",
+      "file": "src/core/production/tags.ts",
+      "find": "if (rivals.length === 1) pairs.push",
+      "replace": "if (rivals.length >= 1) pairs.push"
+    },
+    {
+      "label": "close-cue-names-half",
+      "file": "src/core/production/tags.ts",
+      "find": "(p + s) * 2 >= shorter",
+      "replace": "(p + s) * 2 > shorter"
+    },
+    {
+      "label": "tag-occurrences-comment",
+      "file": "src/core/production/tags.ts",
+      "find": " && sameCmt(m.cmt, (marks[at] as Marks).cmt)",
+      "replace": ""
+    },
+    {
+      "label": "bulk-matchcase",
+      "file": "src/core/production/tags.ts",
+      "find": "return !matchCase || text.slice(m.from, m.to) === needle;",
+      "replace": "return matchCase || text.slice(m.from, m.to) === needle;"
+    },
+    {
+      "label": "readers-word-count-blanks",
+      "file": "src/core/production/readers.ts",
+      "find": "text.split(/\\s+/).filter(Boolean).length",
+      "replace": "text.split(/\\s+/).length"
+    },
+    {
+      "label": "readers-tag-merge-same-id",
+      "file": "src/core/production/readers.ts",
+      "find": "if (id && last && last.id === id) {",
+      "replace": "if (id && last) {"
+    },
+    {
+      "label": "broll-match-claimed",
+      "file": "src/core/production/broll.ts",
+      "find": "if (rec && !claimed[rec.id]) return at as number;",
+      "replace": "if (rec) return at as number;"
+    },
+    {
+      "label": "broll-match-held",
+      "file": "src/core/production/broll.ts",
+      "find": "if (claimed[cand.id] || held[cand.id]) continue;",
+      "replace": "if (claimed[cand.id]) continue;"
+    },
+    {
+      "label": "broll-plan-rename-and",
+      "file": "src/core/production/broll.ts",
+      "find": "if (rec.name !== found.name || rec.desc !== found.desc)",
+      "replace": "if (rec.name !== found.name && rec.desc !== found.desc)"
+    },
+    {
+      "label": "broll-anchor-forward",
+      "file": "src/core/production/broll.ts",
+      "find": "for (let i = todo.length - 1; i >= 0; i--) {",
+      "replace": "for (let i = 0; i < todo.length; i++) {"
+    },
+    {
+      "label": "broll-props-renamed-no-id",
+      "file": "src/core/production/broll.ts",
+      "find": "(oldNorm && !p.id && normalizeTagName(p.name) === oldNorm)",
+      "replace": "(oldNorm && normalizeTagName(p.name) === oldNorm)"
+    },
+    {
+      "label": "view-filter-unshot",
+      "file": "src/core/production/broll-view.ts",
+      "find": "if (filter === \"unshot\") return e.status !== \"shot\";",
+      "replace": "if (filter === \"unshot\") return e.status === \"shot\";"
+    },
+    {
+      "label": "view-start-of-zero",
+      "file": "src/core/production/broll-view.ts",
+      "find": "starts[e.rowId] !== undefined ?",
+      "replace": "starts[e.rowId] ?"
+    },
+    {
+      "label": "view-groups-none-last",
+      "file": "src/core/production/broll-view.ts",
+      "find": "if (a.none !== b.none) return a.none ? 1 : -1;",
+      "replace": "if (a.none !== b.none) return a.none ? -1 : 1;"
+    },
+    {
+      "label": "looks-orphans-last",
+      "file": "src/core/production/looks.ts",
+      "find": "if (!!a.orphaned !== !!b.orphaned) return a.orphaned ? 1 : -1;",
+      "replace": "if (!!a.orphaned !== !!b.orphaned) return a.orphaned ? -1 : 1;"
+    }
+  ]
+}
