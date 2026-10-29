@@ -117,7 +117,7 @@ import {
   openCommentsPanel,
   renderComments
 } from "../../features/comments/comments.js";
-import { showActionToast, showToast } from "../../legacy/effects-bridge.ts";
+import { showActionToast, showToast } from "./effects-owner.ts";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
 import { configureUndo, undoOwner } from "./undo.ts";
 import { localFileMenuControls } from "./local-files.ts";

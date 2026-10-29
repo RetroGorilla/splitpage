@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
-import { startEffects } from "../legacy/effects-bridge.ts";
+import { startEffects } from "../bootstrap/wiring/effects-owner.ts";
 import { videoFiles, mountVideoFilesFeature, stopVideoFilesFeature } from "../bootstrap/wiring/video-files.ts";
 
 mountVideoFilesFeature();
