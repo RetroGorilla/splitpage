@@ -98,6 +98,7 @@ function schedule(): CaptureSchedule {
 let draftSeq = 0;
 let draftInFlight: Promise<DraftFlush | null | undefined> | null = null;
 let draftStopped = false;
+let draftRetryOnChange = false;
 let draftPausedReason = "";
 let draftPausedToast: DraftToast | null = null;
 let draftSentEditSeq: number | null = null;
@@ -124,6 +125,10 @@ function draftWriterLive(): boolean {
 }
 
 function noteDraftChange(): void {
+  if (draftStopped && draftRetryOnChange) {
+    draftStopped = false;
+    draftRetryOnChange = false;
+  }
   if (!draftWriterLive()) return;
   schedule().noteChange();
 }
@@ -172,6 +177,8 @@ function captureAndSendDraft(keepClean?: boolean): Promise<DraftFlush | null | u
     stateJson = JSON.stringify(doc);
   } catch (e) {
     draftStopped = true;
+    draftRetryOnChange = true;
+    schedule().setSlow(true);
     showDraftPaused("TOO_LARGE");
     return Promise.resolve({ ok: false, code: "TOO_LARGE" });
   }

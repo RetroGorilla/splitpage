@@ -319,3 +319,68 @@ test("dispose cancels the pending capture timers", () => {
   drafts.dispose();
   assert.equal(h.timers.some((t) => t.live), false);
 });
+
+test("a document that can't be copied stops the writer until the next change, which resumes it", async () => {
+  const h = harness();
+  const drafts = mount(h.ports);
+  const status = drafts.testing["status"] as () => { stopped: boolean; paused: boolean };
+  const real = JSON.stringify;
+  try {
+    JSON.stringify = function (value: unknown, ...rest: unknown[]) {
+      if (value === h.state.current) throw new RangeError("test: too large");
+      return (real as (...args: unknown[]) => string).call(JSON, value, ...rest);
+    } as typeof JSON.stringify;
+    h.state.editSeq = 21;
+    assert.deepEqual(await drafts.flush(), { ok: false, code: "TOO_LARGE" });
+    JSON.stringify = real;
+    assert.deepEqual(h.toasts.map((t) => [t.message, t.kind, t.sticky]), [["Crash recovery is paused — this document is too large to copy", "warn", true]]);
+    assert.equal(status().stopped, true);
+    assert.deepEqual(await drafts.flush(), { ok: true }, "a stopped writer answers ok without writing");
+    assert.equal(h.written.length, 0);
+
+    h.state.editSeq = 22;
+    drafts.noteChange();
+    assert.equal(status().stopped, false);
+    assert.deepEqual(h.timers.filter((t) => t.live).map((t) => t.ms), [15000, 15000], "the retry waits the slow interval");
+    fireDue(h.timers);
+    await settle();
+    assert.equal(h.written.length, 1);
+    assert.equal(h.written[0]?.["editSeq"], 22);
+    assert.equal(h.toasts[0]?.dismissed, true);
+    assert.equal(h.toasts[1]?.message, "Crash recovery is working again");
+    assert.equal(status().paused, false);
+  } finally {
+    JSON.stringify = real;
+    drafts.dispose();
+  }
+});
+
+test("a change that still can't be copied stops the writer again without a second notice", async () => {
+  const h = harness();
+  const drafts = mount(h.ports);
+  const status = drafts.testing["status"] as () => { stopped: boolean };
+  const real = JSON.stringify;
+  try {
+    JSON.stringify = function (value: unknown, ...rest: unknown[]) {
+      if (value === h.state.current) throw new RangeError("test: too large");
+      return (real as (...args: unknown[]) => string).call(JSON, value, ...rest);
+    } as typeof JSON.stringify;
+    h.state.editSeq = 31;
+    await drafts.flush();
+    drafts.noteChange();
+    fireDue(h.timers);
+    await settle();
+    assert.equal(status().stopped, true);
+    assert.equal(h.toasts.length, 1);
+    assert.equal(h.written.length, 0);
+    JSON.stringify = real;
+    drafts.noteChange();
+    fireDue(h.timers);
+    await settle();
+    assert.equal(h.written.length, 1);
+    assert.equal(h.toasts[1]?.message, "Crash recovery is working again");
+  } finally {
+    JSON.stringify = real;
+    drafts.dispose();
+  }
+});
