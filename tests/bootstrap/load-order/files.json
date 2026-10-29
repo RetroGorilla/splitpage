@@ -1,11 +1,11 @@
 {
   "legacyImports": [],
   "loadOnly": [
-    "src/application/save/file-saving.js",
+    "src/application/save/file-saving.ts",
     "src/adapters/files/save-dialogs.ts",
     "src/bootstrap/wiring/file-saving.ts",
     "src/application/transitions/local-files.js",
-    "src/application/save/import-saving.js",
+    "src/application/save/import-saving.ts",
     "src/features/file-menu/local-files.js",
     "src/adapters/files/local-files.js",
     "src/bootstrap/wiring/local-files.ts"
