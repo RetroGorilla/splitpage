@@ -215,7 +215,7 @@ Historical record: every file listed here has moved or was removed, and `src/js/
 1061 lines.
 
 - Imports from numbered files: `01b-hide-shot` (revealRow); `04-richtext` (cssAttr); `06-rows` (clearDropMarkers)
-- Reaches through bridges: `legacy/session-bridge` (currentDocument, readSession); `legacy/app-actions` (appActions); `legacy/cache-freeze` (cacheSeal); `legacy/richtext` (cellOf); `legacy/editor-bridge` (cellEditing, rowDrag); `legacy/preferences-bridge` (PREF_EVENT, preferences); `legacy/document-ports` (productionReaders); `legacy/location-bridge` (reviewMode)
+- Reaches through bridges and the shared actions port: `legacy/session-bridge` (currentDocument, readSession); `bootstrap/wiring/ports/actions` (appActions); `legacy/cache-freeze` (cacheSeal); `legacy/richtext` (cellOf); `legacy/editor-bridge` (cellEditing, rowDrag); `legacy/preferences-bridge` (PREF_EVENT, preferences); `legacy/document-ports` (productionReaders); `legacy/location-bridge` (reviewMode)
 - Imported by numbered files: `01-scene-status` (setRundownExtraSeconds); `05p-rundown-presence` (goToScene, rundownEdge); `05t-target` (onRundownPaint, rundownLayout)
 - Imported by bridges: `legacy/this-document-actions` (isRundownMinimized, toggleRundownMinimized)
 - Imported by the wiring: `bootstrap/wiring/panels` (renderRundown)
@@ -263,7 +263,7 @@ Historical record: every file listed here has moved or was removed, and `src/js/
 
 218 lines.
 
-- Reaches through bridges: `legacy/session-bridge` (currentDocument); `legacy/app-actions` (appActions); `legacy/preferences-bridge` (PREF_EVENT, preferences, viewFlags)
+- Reaches through bridges and the shared actions port: `legacy/session-bridge` (currentDocument); `bootstrap/wiring/ports/actions` (appActions); `legacy/preferences-bridge` (PREF_EVENT, preferences, viewFlags)
 - Imported by bridges: `legacy/zoom-actions` (resetScriptScale, scriptViewActive, stepScriptScale)
 - Imported by tests: 2 files
 
@@ -365,7 +365,7 @@ Historical record: every file listed here has moved or was removed, and `src/js/
 1360 lines, in the import loop.
 
 - Imports from numbered files: `01b-hide-shot` (revealRow); `03-sync` (openSidePanel, syncPanelClass); `03b-side-panels` (closeAllSidePanels); `04-richtext` (cssAttr, plainText); `06-rows` (focusRowField); `08c-broll` (addBrollProp, brollEntries, renameBrollInScript, updateBrollBadge); `12a-undo` (breakUndoCoalescing); `13a-presence` (personColor); `18-local-files` (exportAs)
-- Reaches through bridges: `legacy/document-ports` (productionReaders); `legacy/production-index-bridge` (productionIndex); `legacy/app-actions` (appActions); `legacy/effects-bridge` (showToast); `legacy/location-bridge` (reviewBlocked, reviewMode); `legacy/session-bridge` (currentDocument, readSession, runDocumentEdit)
+- Reaches through bridges and the shared actions port: `legacy/document-ports` (productionReaders); `legacy/production-index-bridge` (productionIndex); `bootstrap/wiring/ports/actions` (appActions); `legacy/effects-bridge` (showToast); `legacy/location-bridge` (reviewBlocked, reviewMode); `legacy/session-bridge` (currentDocument, readSession, runDocumentEdit)
 - Imports from adapters (a feature may not): `adapters/formats/export-projections` (FILTERS, PAGE_GROUPS, brollGroups, brollShotListForPrint, brollTable, filterCounts, matchesFilter, oneOf, pageSummaryText, sceneLabel, shotRecordForFile, startOf); `adapters/identity/ids` (randomIds)
 - Imports from feature folders (a feature may not import another feature): `features/broll/mount` (mountBroll)
 - Imported by numbered files: `03b-side-panels` (closeBrollPanel); `18-local-files` (brollPrintView)
@@ -459,7 +459,7 @@ Historical record: every file listed here has moved or was removed, and `src/js/
 906 lines, in the import loop.
 
 - Imports from numbered files: `03-sync` (personSwatchesHtml); `10-comments` (getSavedAuthorName); `13-hosted` (apiFetch, applyHealth, applyReviewMode, clearServerToken, finishServerDetect, isLinkGuest, onServerDoc, pointTabAt, publishToServer, rememberTokenForServer, rememberedTokenForServer, serverDocShareUrl, setServerToken, shareAccessNote); `20s-settings` (openSettings)
-- Reaches through bridges: `legacy/session-bridge` (currentDocument); `legacy/location-bridge` (currentConn, currentHome, documentLocation, reviewMode, serverHomeId, serverStatus); `legacy/app-actions` (appActions); `legacy/preferences-bridge` (onPreferenceChange, preferences, preferencesStarted); `legacy/effects-bridge` (copyShareText, setMenuItemReason, showToast)
+- Reaches through bridges and the shared actions port: `legacy/session-bridge` (currentDocument); `legacy/location-bridge` (currentConn, currentHome, documentLocation, reviewMode, serverHomeId, serverStatus); `bootstrap/wiring/ports/actions` (appActions); `legacy/preferences-bridge` (onPreferenceChange, preferences, preferencesStarted); `legacy/effects-bridge` (copyShareText, setMenuItemReason, showToast)
 - Imports from adapters (a feature may not): `adapters/desktop/desktop-port` (desktopPort); `adapters/transport/server-join` (joinServer)
 - Imported by numbered files: `13-hosted` (maybeAskGuestName); `20s-settings` (DEFAULT_COLLAB_SERVER, collabServerView, normalizeCollabServer, readCollabServer, signOutCollab)
 - Imported by bridges: `legacy/share-actions` (collaborateBlockedReason, openCollaborate)
@@ -492,7 +492,7 @@ Historical record: every file listed here has moved or was removed, and `src/js/
 694 lines, in the import loop.
 
 - Imports from numbered files: `12a-undo` (flushEdits); `00-prelude` (SCHEMA_VERSION, loadLastFileHandle, rememberLastFileHandle); `02b-doc-id` (migrateDocument, standaloneHtmlFor, syncDocIdentity); `03-sync` (pushSnapshot, stampRow); `08d-broll-panel` (brollPrintView); `10-comments` (formatTimestamp); `14b-export-kit` (captureExportDocument, loadExportAssets); `11-import` (detectTwoColumnFormat, parseImportRows); `13-hosted` (blobSourceNow, onServerDoc); `18a-local-merge` (offerFileMerge, resetMergeOffer); `18b-file-menu` (toggleFileMenu); `18c-export-dialog` (isExportAction, rememberExport); `20d-formats` (applyMarkdownProject, parseMarkdownProject); `20j-newtab` (closeNewTabPage)
-- Reaches through bridges: `legacy/richtext` (inertBody, sanitizeHtml); `legacy/session-bridge` (currentDocument, noteAbsorbedDirty, noteReload); `legacy/transition-bridge` (documentTransitions); `legacy/save-bridge` (autoSavePolicy, confirmSavedNow, fileConflicts, requestSave, unsavedChanges, unsavedFor); `legacy/file-delivery` (deliverFile); `legacy/location-bridge` (amendHome, currentHome, fileHome, importHome, serverStatus, setHome); `legacy/production-editing-bridge` (resetProductionPanelState); `legacy/app-actions` (appActions); `legacy/export-formats` (exportFormats); `legacy/effects-bridge` (setMenuItemLabel, showToast, warnImagesLeftOut)
+- Reaches through bridges and the shared actions port: `legacy/richtext` (inertBody, sanitizeHtml); `legacy/session-bridge` (currentDocument, noteAbsorbedDirty, noteReload); `legacy/transition-bridge` (documentTransitions); `legacy/save-bridge` (autoSavePolicy, confirmSavedNow, fileConflicts, requestSave, unsavedChanges, unsavedFor); `legacy/file-delivery` (deliverFile); `legacy/location-bridge` (amendHome, currentHome, fileHome, importHome, serverStatus, setHome); `legacy/production-editing-bridge` (resetProductionPanelState); `bootstrap/wiring/ports/actions` (appActions); `legacy/export-formats` (exportFormats); `legacy/effects-bridge` (setMenuItemLabel, showToast, warnImagesLeftOut)
 - Imports from adapters (a feature may not): `adapters/files/file-target` (checkFileConflict); `adapters/formats/export-assets` (exportAssetsRequest); `adapters/formats/docx` (docxToRows); `adapters/formats/csv` (csvToRows); `adapters/formats/import-rows` (normalizeImportedRows); `adapters/desktop/desktop-handle` (makeDesktopHandle); `adapters/formats/splitpage-file` (parseSplitpageFile); `adapters/desktop/desktop-port` (desktopPort)
 - Imports from feature folders (a feature may not import another feature): `features/notices/busy` (beginBusy, endBusy, withBusyBar)
 - Imported by numbered files: `08d-broll-panel` (exportAs); `18a-local-merge` (parseProjectFileState); `18b-file-menu` (openProjectFile); `18c-export-dialog` (exportBaseName, exportFileName, handleFileMenuAction, runExportAction); `18d-command-menu` (runExportAction); `20-teleprompter` (adoptProjectState, parseProjectFileState); `20b-onboarding` (onFileMenuChoice); `20d-formats` (openProjectFile); `20f-desktop` (openProjectFile); `20g-drafts` (adoptProjectState, parseProjectFileState); `20j-newtab` (openLocalFile, openProjectFile)
@@ -541,7 +541,7 @@ Historical record: every file listed here has moved or was removed, and `src/js/
 337 lines.
 
 - Imports from numbered files: `18b-file-menu` (IS_MAC, fileMenuOpen, keyChipWords, keyChipsHtml, refreshFileMenu, toggleFileMenu); `18c-export-dialog` (exportActionName, exportActionReason); `18-local-files` (runExportAction)
-- Reaches through bridges: `legacy/editor-bridge` (editorSelection); `legacy/app-actions` (appActions); `legacy/export-formats` (exportFormats); `legacy/screen` (askingFromLauncher, launcherShown)
+- Reaches through bridges and the shared actions port: `legacy/editor-bridge` (editorSelection); `bootstrap/wiring/ports/actions` (appActions); `legacy/export-formats` (exportFormats); `legacy/screen` (askingFromLauncher, launcherShown)
 - Imports from feature folders (a feature may not import another feature): `features/editing/cell-selection` (placeEditorSelection, rememberCellSelection)
 - Imported by bridges: `legacy/file-actions` (closeCommandMenu, commandMenuOpen, openCommandMenu)
 - Imported by tests: 3 files
@@ -588,7 +588,7 @@ Historical record: every file listed here has moved or was removed, and `src/js/
 337 lines.
 
 - Imports from numbered files: `00-prelude` (loadLastFileHandle); `03b-side-panels` (closeAllSidePanels); `13-hosted` (arrivingOnLink, launcherFetch); `18-local-files` (onFileMenuChoice); `20e-connect` (addServerBookmark)
-- Reaches through bridges: `legacy/location-bridge` (currentHome); `legacy/file-delivery` (deliverFile); `legacy/app-actions` (appActions); `legacy/effects-bridge` (showToast); `legacy/preferences-bridge` (preferences); `legacy/recovery-bridge` (draftResume); `legacy/seed-check` (seedCheckPasses)
+- Reaches through bridges and the shared actions port: `legacy/location-bridge` (currentHome); `legacy/file-delivery` (deliverFile); `bootstrap/wiring/ports/actions` (appActions); `legacy/effects-bridge` (showToast); `legacy/preferences-bridge` (preferences); `legacy/recovery-bridge` (draftResume); `legacy/seed-check` (seedCheckPasses)
 - Imports from adapters (a feature may not): `adapters/desktop/desktop-port` (desktopPort)
 - Imported by bridges: `legacy/help-actions` (openOnboarding)
 - Imported by tests: 1 file
@@ -598,7 +598,7 @@ Historical record: every file listed here has moved or was removed, and `src/js/
 351 lines.
 
 - Imports from numbered files: `03b-side-panels` (closeAllSidePanels)
-- Reaches through bridges: `legacy/session-bridge` (currentDocument); `legacy/app-actions` (appActions); `legacy/tour-pause` (handTourPauseTo); `legacy/effects-bridge` (showActionToast, showToast); `legacy/preferences-bridge` (preferences)
+- Reaches through bridges and the shared actions port: `legacy/session-bridge` (currentDocument); `bootstrap/wiring/ports/actions` (appActions); `legacy/tour-pause` (handTourPauseTo); `legacy/effects-bridge` (showActionToast, showToast); `legacy/preferences-bridge` (preferences)
 - Imported by bridges: `legacy/help-actions` (openHelp, startTour); `legacy/screen-state` (tourShowing)
 - Imported by tests: 1 file
 
@@ -618,7 +618,7 @@ Historical record: every file listed here has moved or was removed, and `src/js/
 511 lines, in the import loop.
 
 - Imports from numbered files: `13-hosted` (applyReviewMode, fetchReviewLink, finishServerDetect, pointTabAt, setServerToken); `20f-desktop` (renderDesktopShareInfo)
-- Reaches through bridges: `legacy/location-bridge` (checkServer, currentConn, currentHome, documentLocation, serverStatus, setHome); `legacy/file-delivery` (deliverFile); `legacy/app-actions` (appActions); `legacy/tour-pause` (interruptTourForDialog, offerTourResumeAfterDialog); `legacy/effects-bridge` (setMenuItemLabel, showToast)
+- Reaches through bridges and the shared actions port: `legacy/location-bridge` (checkServer, currentConn, currentHome, documentLocation, serverStatus, setHome); `legacy/file-delivery` (deliverFile); `bootstrap/wiring/ports/actions` (appActions); `legacy/tour-pause` (interruptTourForDialog, offerTourResumeAfterDialog); `legacy/effects-bridge` (setMenuItemLabel, showToast)
 - Imports from adapters (a feature may not): `adapters/transport/server-join` (joinServer); `adapters/transport/server-address` (shortHost)
 - Imported by numbered files: `13-hosted` (openPinDialog, openServersDialog); `20b-onboarding` (addServerBookmark); `20f-desktop` (openServersDialog); `20h-appdata` (connectPortOr, newBookmarkId, renderConnect, saveBookmarks)
 - Imported by bridges: `legacy/help-actions` (openServersDialog, serversMenuLabel)
@@ -663,7 +663,7 @@ Historical record: every file listed here has moved or was removed, and `src/js/
 
 - Imports from numbered files: `00-prelude` (SCHEMA_VERSION, loadLastFileHandle); `02-state` (escapeHtml, makeId, migrateRows); `02b-doc-id` (syncDocIdentity); `11-import` (openGdocModal, openImportModal); `13-hosted` (arrivingOnLink); `18-local-files` (openLocalFile, openProjectFile); `20a-update` (desktopAppOffered, desktopAppUrl)
 - Imports from other `src/js` files: `_starters` (STARTERS, starterById)
-- Reaches through bridges: `legacy/session-bridge` (currentDocument); `legacy/location-bridge` (currentHome); `legacy/production-editing-bridge` (resetProductionPanelState); `legacy/seed-check` (seedCheckPasses); `legacy/app-actions` (appActions); `legacy/document-ports` (productionReaders); `legacy/transition-bridge` (NO_DESTINATION, documentTransitions); `legacy/effects-bridge` (showToast); `legacy/recovery-bridge` (draftResume); `legacy/save-bridge` (confirmSavedNow); `legacy/startup-bridge` (startupReady); `legacy/preferences-bridge` (preferences)
+- Reaches through bridges and the shared actions port: `legacy/session-bridge` (currentDocument); `legacy/location-bridge` (currentHome); `legacy/production-editing-bridge` (resetProductionPanelState); `legacy/seed-check` (seedCheckPasses); `bootstrap/wiring/ports/actions` (appActions); `legacy/document-ports` (productionReaders); `legacy/transition-bridge` (NO_DESTINATION, documentTransitions); `legacy/effects-bridge` (showToast); `legacy/recovery-bridge` (draftResume); `legacy/save-bridge` (confirmSavedNow); `legacy/startup-bridge` (startupReady); `legacy/preferences-bridge` (preferences)
 - Imports from adapters (a feature may not): `adapters/desktop/desktop-handle` (makeDesktopHandle); `adapters/desktop/desktop-port` (desktopPort)
 - Imported by numbered files: `13-hosted` (closeNewTabPage); `18-local-files` (closeNewTabPage); `18b-file-menu` (closeNewTabPage); `20-teleprompter` (closeNewTabPage)
 
@@ -672,7 +672,7 @@ Historical record: every file listed here has moved or was removed, and `src/js/
 393 lines, in the import loop.
 
 - Imports from numbered files: `01b-hide-shot` (setHideShotScenes); `03-sync` (personSwatchesHtml); `10-comments` (getSavedAuthorName); `13b-collaborate` (DEFAULT_COLLAB_SERVER, collabServerView, normalizeCollabServer, readCollabServer, signOutCollab); `19-writer` (applyWriterSize, readWriterSize); `20-teleprompter` (setPrompterFlip, setPrompterMirror, setPrompterSceneMode); `20a-update` (renderDesktopAppNotice)
-- Reaches through bridges: `legacy/save-bridge` (setAutoSaveEnabled); `legacy/app-actions` (appActions); `legacy/effects-bridge` (showToast); `legacy/preferences-bridge` (PREF_EVENT, preferences)
+- Reaches through bridges and the shared actions port: `legacy/save-bridge` (setAutoSaveEnabled); `bootstrap/wiring/ports/actions` (appActions); `legacy/effects-bridge` (showToast); `legacy/preferences-bridge` (PREF_EVENT, preferences)
 - Imports from feature folders (a feature may not import another feature): `features/settings/appearance` (applyTagIcons, applyTheme)
 - Imported by numbered files: `13b-collaborate` (openSettings)
 - Imported by bridges: `legacy/help-actions` (openSettings)
