@@ -216,7 +216,7 @@ function autoSaveChanged(what: AutoSaveChange): void {
   if (what === "enabled") updateAutoSaveMenu();
 }
 
-const FILE_REQUESTS: readonly string[] = ["saveAs", "save", "auto", "autosave", "force"];
+const FILE_REQUESTS: readonly string[] = Object.freeze(["saveAs", "save", "auto", "autosave", "force"]);
 
 function fileTakes(request: FileSaveRequest): boolean {
   return FILE_REQUESTS.indexOf(request.kind) !== -1;

@@ -1,7 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseChord, chordKey, chordMatches, actionForKey, canBeShortcut } from "../../src/application/shortcuts.ts";
+import { parseChord, chordMatches, canBeShortcut, createChordReader } from "../../src/application/shortcuts.ts";
 import { createActionRegistry } from "../../src/application/actions.ts";
+
+const { chordKey, actionForKey } = createChordReader();
 
 const key = (k: string, mods: { ctrl?: boolean; meta?: boolean; shift?: boolean; alt?: boolean; composing?: boolean } = {}) => ({
   key: k, ctrlKey: !!mods.ctrl, metaKey: !!mods.meta, shiftKey: !!mods.shift, altKey: !!mods.alt, isComposing: !!mods.composing
