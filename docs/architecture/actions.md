@@ -137,8 +137,7 @@ threw, is kept from the browser, as 3.1's handlers did by calling
 ## The registry facade
 
 The wiring modules that register or run actions share one registry through
-the facade `appActions` in `src/legacy/app-actions.ts`, the last file in
-`src/legacy/`. The wiring step (`wireApp` in `src/bootstrap/wiring.ts`, called
+the facade `appActions` in `src/bootstrap/wiring/ports/actions.ts`. The wiring step (`wireApp` in `src/bootstrap/wiring.ts`, called
 by the composition root `src/bootstrap/main.ts`) builds the registry with
 `createAppActions()` and installs it into the facade; before that, and after
 the wiring's `dispose()`, every facade call throws "The action registry is not

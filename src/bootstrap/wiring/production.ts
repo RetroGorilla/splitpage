@@ -17,7 +17,7 @@ import { screen as portScreen } from "./ports/screen.ts";
 import { bulkDeleteArmed, clearProductionSelection, disarmBulkDelete, productionSelection, selectedKeys } from "./production-editing-owners.ts";
 import type { TagsPorts } from "../../features/tags/mount.ts";
 import { owned } from "../../features/routing/owned.ts";
-import { runFromButton } from "../../legacy/app-actions.ts";
+import { runFromButton } from "./ports/actions.ts";
 import { mountTagEntityContainer, mountTags } from "../../features/tags/mount.ts";
 import { captureOperation, stillOwns } from "./transition-owners.ts";
 import { cssAttr } from "../../features/common/dom.ts";

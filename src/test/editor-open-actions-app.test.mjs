@@ -6,7 +6,7 @@ window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
 await bootApp();
 
-const { appActions } = await import("../legacy/app-actions.ts");
+const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
 const { currentDocument } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");

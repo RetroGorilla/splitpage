@@ -1,5 +1,5 @@
 import { createExportRegistry } from "../application/export/registry.ts";
-import { createAppActions, installAppActions } from "../legacy/app-actions.ts";
+import { createAppActions, installAppActions } from "../bootstrap/wiring/ports/actions.ts";
 import { installExportFormats } from "../bootstrap/wiring/export-registry.ts";
 import { startPageEffects } from "../bootstrap/effects.ts";
 import { effectsStarted } from "../bootstrap/wiring/effects-owner.ts";

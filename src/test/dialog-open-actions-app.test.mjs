@@ -7,7 +7,7 @@ window.Element.prototype.scrollIntoView = function () {};
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
 await bootApp();
 
-const { appActions } = await import("../legacy/app-actions.ts");
+const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
