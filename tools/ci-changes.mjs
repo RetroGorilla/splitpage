@@ -20,7 +20,7 @@ const NON_APP = [
   /^tools\/ci-changes\.mjs$/,
   /^\.github\/ISSUE_TEMPLATE\//,
   /^\.github\/dependabot\.yml$/,
-  /^\.github\/workflows\/(windows-local|release|docker)\.yml$/
+  /^\.github\/workflows\/(windows-local|release)\.yml$/
 ];
 
 export function needsChecks(files) {

@@ -304,11 +304,11 @@ robocopy "$env:LOCALAPPDATA\Programs\Splitpage" "$env:USERPROFILE\splitpage-1.0.
 ```
 
 1. Build the 2.0.0 portable zip (no `--installer` — that branch is
-   deprecated, `package.mjs:8-9`):
+   deprecated, `tools/package.mjs:8-9`):
    ```powershell
-   node package.mjs
+   node tools/package.mjs
    ```
-   **Expected:** `dist/splitpage-2.0.0.zip` written (`package.mjs:89`
+   **Expected:** `dist/splitpage-2.0.0.zip` written (`tools/package.mjs:89`
    names it `splitpage-${VERSION}`).
 
 2. Serve a stub releases API. Save this as `stub-releases.mjs` in a
@@ -584,7 +584,7 @@ Checklist:
 | D3.4 `packaged-arm64` | n/a (can't run ARM64 native on x64) | — | |
 | D3.5 no speech helper shipped | | | |
 | D3.6 no leftover processes | | | |
-| D4.1 `node package.mjs` (zip) | | | |
+| D4.1 `node tools/package.mjs` (zip) | | | |
 | D4.2 stub releases API | | | |
 | D4.3 `update.mjs check` / stage / apply | | | |
 | D4.4 export app data | | | |

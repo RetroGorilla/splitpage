@@ -50,7 +50,7 @@ These come from the maintainer. Each one has been broken by an agent before.
 6. **Stay in scope.** No features nobody asked for. Side fixes only for data loss, a crash, or something that blocks the task.
 7. **One name per exported type.** Two modules may not export a type or interface with the same name. Import the existing one when it means the same thing, otherwise pick a name that says the difference. `tools/test-code-map.mjs` enforces this.
 8. **Baselines only shrink.** `tools/dep-baseline.json` and `tools/comment-baseline.json` may lose entries (`--prune`), never gain them.
-9. **Read the invariants before touching saving, merging, history, undo or the document format.** [HANDOFF.md](HANDOFF.md) and [invariants.md](docs/architecture/invariants.md). Several tests exist only to hold them in place.
+9. **Read the invariants before touching saving, merging, history, undo or the document format.** [HANDOFF.md](docs/HANDOFF.md) and [invariants.md](docs/architecture/invariants.md). Several tests exist only to hold them in place.
 10. **PR titles and bodies name no AI model or tool.**
 11. **Convert a JS file to TypeScript before changing it substantially.** Before a substantial change (more than a small fix) to a `.js` file under `src/features/`, `src/application/` or `src/adapters/`, convert it to strict TypeScript in its own PR first: types only, no behaviour change, then the change on top. Files nobody is changing stay JavaScript. Files on the typing, undo or save path need the same review and performance check as any change there.
 
