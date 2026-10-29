@@ -40,7 +40,7 @@ Both move a numbered file into a feature folder, give it a `ports.ts`, and mount
 1. The feature imports no bridge and no numbered file. Only the wiring reaches the bridges, and the dependency baseline gains nothing.
 2. The port interface lives in the feature folder, and the wiring fills it in.
 3. The mount returns `dispose`, and the wiring holds it with `owned()` (`src/features/routing/owned.ts`), so mounting again removes the old listeners. The numbered files never removed theirs.
-4. The file's start slot in the composition root (`src/bootstrap/main.js`, formerly `_entry.js`) is replaced at the same position, so the start order the load-order probe checks doesn't change.
+4. The file's start slot in the composition root (`src/bootstrap/main.ts`, formerly `_entry.js`) is replaced at the same position, so the start order the load-order probe checks doesn't change.
 5. `tests/features/<name>/mount.test.ts` builds the feature with fakes and no app.
 
 **Change:**
@@ -128,7 +128,7 @@ A feature imports from `src/application/` only types and pure functions, such as
   | `identity.ts` | IDs and clock |
 
   The split preserves the existing implementations, including `text.ts`'s tag-body rewriting. Moving that logic to its final owner remains a separate audit follow-up. Port contract types remain with their application or core owners. The remaining `06-rows.js` video-file functions are now owned by the gallery feature and supplied through an explicit bootstrap port; see [rows-video-files.md](rows-video-files.md). The retired `sharedPorts()` references in the original wave schedule below describe how those PRs first landed, rather than an API for new work.
-- **Start position.** A moved file's slot in the composition root's start list (`src/bootstrap/main.js`) is replaced, at the same position, by a call to its wiring's mount, imported from that wiring module. `tests/bootstrap/composition-root.test.ts` pins the list. (Until the composition root replaced `_entry.js`, the entry reached each mount through a named re-export in `bootstrap/wiring.ts`; those re-exports are gone.) A move PR doesn't move the mount into `startApp` (`bootstrap/app.ts`): that would change when the feature starts, which is a behaviour change.
+- **Start position.** A moved file's slot in the composition root's start list (`src/bootstrap/main.ts`) is replaced, at the same position, by a call to its wiring's mount, imported from that wiring module. `tests/bootstrap/composition-root.test.ts` pins the list. (Until the composition root replaced `_entry.js`, the entry reached each mount through a named re-export in `bootstrap/wiring.ts`; those re-exports are gone.) A move PR doesn't move the mount into `startApp` (`bootstrap/app.ts`): that would change when the feature starts, which is a behaviour change.
 - **Stopping.** Features mounted from the composition root's list are not stopped by `stopApp`, just as the numbered files they replace were not. The last L5 step turns that list into a wiring step, which stops them in reverse order.
 
 ### Rule 5. Features reach each other four ways
