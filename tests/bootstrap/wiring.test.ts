@@ -30,9 +30,9 @@ import type { EffectPorts } from "../../src/application/effects/ports.ts";
 import { recoveryStarted } from "../../src/bootstrap/wiring/recovery-owners.ts";
 import { mergeStarted } from "../../src/bootstrap/wiring/document-merge.ts";
 import type { LegacyMergePorts } from "../../src/bootstrap/wiring/document-merge.ts";
-import { requestSave, savesStarted, savesWaiting } from "../../src/legacy/save-bridge.ts";
+import { requestSave, savesStarted, savesWaiting } from "../../src/bootstrap/wiring/save-owners.ts";
 import { startupReady } from "../../src/application/startup-signal.ts";
-import type { LegacySaveJob, LegacySavePorts } from "../../src/legacy/save-bridge.ts";
+import type { LegacySaveJob, LegacySavePorts } from "../../src/bootstrap/wiring/save-owners.ts";
 import type { SaveOutcome, WriterResult } from "../../src/application/save/coordinator.ts";
 import {
   liveDocumentPort,

@@ -3,7 +3,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { createHeldFileHandle, mockClock } from "./_m4-matrix.mjs";
 import { parseSplitpageFile } from "../adapters/formats/splitpage-file.ts";
-import { saveChanges, unsavedChanges } from "../legacy/save-bridge.ts";
+import { saveChanges, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 window.Element.prototype.scrollBy = function () {};
 window.Element.prototype.scrollIntoView = function () {};
@@ -21,7 +21,7 @@ const brollEntries = () => currentBrollRecords().brollEntries();
 const { openBrollPanel, renderBroll, runBrollRefresh } = await import("../features/broll/panel.js");
 const { sidePanels } = await import("../bootstrap/wiring/ports/panels.ts");
 const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
-const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const undo = () => undoOwner().undo();

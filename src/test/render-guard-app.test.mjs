@@ -5,7 +5,7 @@ import { isDeepStrictEqual } from "node:util";
 import { readBuiltCss } from "../../tools/css-colours.mjs";
 import { table304Document } from "../../tests/application/raw-inputs.ts";
 import { cloneState } from "../core/document/clone.ts";
-import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 
 window.Element.prototype.scrollBy = function () {};
@@ -30,7 +30,7 @@ const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");
 const { cellEditing, focusMemory, mergeUndo } = await import("../bootstrap/wiring/editor-owners.ts");
 const find = await import("../features/find/find.js");
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { localFilesOwner, localFileMenuControls } = await import("../bootstrap/wiring/local-files.ts");
 const { openLongDemo } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { applyTakenDraft } = await import("../bootstrap/wiring/drafts.ts");

@@ -16,7 +16,7 @@ import { runningOnDesktop } from "../../../application/desktop-presence.ts";
 import { brollView } from "../../../application/preferences/broll-view.ts";
 import { noteAbsorbedDirty, noteReload } from "../session-owner.ts";
 import { amendHome, fileHome, importHome, setHome } from "../../../legacy/location-bridge.ts";
-import { unsavedFor, requestSave } from "../../../legacy/save-bridge.ts";
+import { unsavedFor, requestSave } from "../save-owners.ts";
 import { warnImagesLeftOut } from "../../../legacy/effects-bridge.ts";
 import { documentIdentity } from "./document-identity-controls.ts";
 import { stampRow } from "../session-merge.ts";

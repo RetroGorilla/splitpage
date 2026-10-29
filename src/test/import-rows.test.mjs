@@ -1,7 +1,7 @@
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { unsavedChanges } from "../legacy/save-bridge.ts";
+import { unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import { mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 await bootApp();
@@ -10,7 +10,7 @@ after(closeApp);
 const { migrateRows } = await import("../legacy/document-ports.ts");
 import { historyOwner } from "../bootstrap/wiring/history.ts";
 const listDocHistory = (...args) => historyOwner().listDocHistory(...args);
-const { confirmSavedNow } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const redo = () => undoOwner().redo();

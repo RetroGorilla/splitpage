@@ -3,7 +3,7 @@ import { locationStarted, startLocation } from "../legacy/location-bridge.ts";
 import { liveSession, sessionStarted } from "../bootstrap/wiring/session-owner.ts";
 import { appSessionDeps } from "./_app-session.mjs";
 import { startTestSession } from "./_session.mjs";
-import { savesStarted, startSaves } from "../legacy/save-bridge.ts";
+import { savesStarted, startSaves } from "../bootstrap/wiring/save-owners.ts";
 
 function asGiven(doc) {
   return doc;

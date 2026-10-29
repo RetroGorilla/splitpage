@@ -4,7 +4,7 @@ import "../../src/test/_location-started.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mountFileSavingFeature, stopFileSavingFeature, updateAutoSaveMenu, wireFileSaving } from "../../src/bootstrap/wiring/file-saving.ts";
-import { autoSaveTarget, saveDestinations, setAutoSaveEnabled, startSaves } from "../../src/legacy/save-bridge.ts";
+import { autoSaveTarget, saveDestinations, setAutoSaveEnabled, startSaves } from "../../src/bootstrap/wiring/save-owners.ts";
 import { setHome } from "../../src/legacy/location-bridge.ts";
 import type { OperationContext } from "../../src/application/session/operation.ts";
 

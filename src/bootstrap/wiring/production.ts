@@ -55,7 +55,7 @@ import {
   setTagOwner,
   setTagNotes
 } from "../../features/tags/panels.js";
-import { queueAutoSave } from "../../legacy/save-bridge.ts";
+import { queueAutoSave } from "./save-owners.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { saves as portSaves } from "./ports/saving.ts";
 import { onRootClick, routeRootClick, routeRootMouseDown } from "./editor.ts";

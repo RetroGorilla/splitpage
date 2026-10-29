@@ -39,7 +39,7 @@ function started(read) {
 }
 
 const session = await import("../bootstrap/wiring/session-owner.ts");
-const saves = await import("../legacy/save-bridge.ts");
+const saves = await import("../bootstrap/wiring/save-owners.ts");
 const recovery = await import("../bootstrap/wiring/recovery-owners.ts");
 const merge = await import("../bootstrap/wiring/document-merge.ts");
 const transitions = await import("../bootstrap/wiring/transition-owners.ts");

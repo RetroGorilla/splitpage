@@ -5,7 +5,7 @@ import type { ValidatedDocument } from "../../core/document/validated.ts";
 import type { MergedStates } from "../../core/merge-states.ts";
 import type { OperationContext } from "../../application/session/operation.ts";
 import { showToast } from "../../legacy/effects-bridge.ts";
-import { autoSavePolicy, haltAutoSave } from "../../legacy/save-bridge.ts";
+import { autoSavePolicy, haltAutoSave } from "./save-owners.ts";
 import { noteAbsorbedDirty } from "./session-owner.ts";
 
 export type LegacyMergePorts = Omit<DocumentMergePorts<OperationContext>, "view">;

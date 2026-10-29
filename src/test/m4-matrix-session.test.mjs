@@ -9,7 +9,7 @@ import {
   rightToday
 } from "./_m4-matrix.mjs";
 import { cloneState } from "../core/document/clone.ts";
-import { autoSavePolicy, unsavedChanges } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import { documentLocation } from "../legacy/location-bridge.ts";
 
 const { currentDocument, liveSession, mergeBase, onDocumentReplaced, requestRefresh, runCommand, sessionStamps, sessionStarted } = await import("../bootstrap/wiring/session-owner.ts");
@@ -53,7 +53,7 @@ const { adoptRestoredState, migrateDocument } = await import("../bootstrap/start
 const { standaloneHtmlFor } = await import("../adapters/page/standalone-html.js");
 const { restoreSnapshotFromCard } = await import("../bootstrap/wiring/history-panel.ts");
 const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
-const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
+const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { exportMetaLine, toMarkdownDoc } = await import("../adapters/formats/export-text.ts");
 const { captureExportDocument, exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
