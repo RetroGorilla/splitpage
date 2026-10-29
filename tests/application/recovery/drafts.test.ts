@@ -384,3 +384,30 @@ test("a change that still can't be copied stops the writer again without a secon
     drafts.dispose();
   }
 });
+
+test("each start owns its own writer state, timing and counts, and an old mount's dispose leaves a newer one running", async () => {
+  const first = harness();
+  const old = mount(first.ports);
+  (old.testing["setTiming"] as (t: Record<string, number>) => void)({ idle: 10 });
+  await (old.testing["flushNow"] as () => Promise<unknown>)();
+  const oldStatus = (old.testing["status"] as () => { seq: number; writes: number })();
+  assert.equal(oldStatus.writes, 1);
+  assert.ok(oldStatus.seq > 0);
+
+  const second = harness();
+  const drafts = mount(second.ports);
+  try {
+    const fresh = (drafts.testing["status"] as () => { seq: number; writes: number; failures: number; onDisk: boolean })();
+    assert.deepEqual({ seq: fresh.seq, writes: fresh.writes, failures: fresh.failures, onDisk: fresh.onDisk }, { seq: 0, writes: 0, failures: 0, onDisk: false });
+    old.dispose();
+    assert.throws(() => old.noteChange(), /Drafts are not started/);
+    drafts.noteChange();
+    assert.deepEqual(second.timers.filter((t) => t.live).map((t) => t.ms).sort((a, b) => a - b), [1500, 5000]);
+    fireDue(second.timers);
+    await settle();
+    assert.equal(second.written.length, 1);
+    assert.equal(first.written.length, 1);
+  } finally {
+    drafts.dispose();
+  }
+});
