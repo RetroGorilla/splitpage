@@ -39,7 +39,7 @@ import { restoreSnapshotFromCard } from "./history-panel.ts";
 import { openGalleryOverlay } from "../../features/gallery/overlay.js";
 import { importControls } from "./imports.ts";
 import { updateSaveStatus } from "./save-status.ts";
-import { showToast } from "../../legacy/effects-bridge.ts";
+import { showToast } from "./effects-owner.ts";
 import { panelWidths, preferences } from "../../legacy/preferences-bridge.ts";
 import { sidePanels } from "./ports/panels.ts";
 import { SIDE_PANEL_IDS } from "../../application/preferences/panel-widths.ts";
