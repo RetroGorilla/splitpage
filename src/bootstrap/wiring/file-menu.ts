@@ -1,5 +1,5 @@
 import type { ActionDefinition } from "../../application/actions.ts";
-import { runningOnDesktop } from "../../application/desktop-presence.ts";
+import { presence } from "./ports/desktop-presence.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
 import { autosaveActions as autosaveDefinitions, fileMenuActions as definitions } from "../../features/file-menu/actions.ts";
 import { startFileMenu as mountFileMenuDropdown } from "../../features/file-menu/file-menu.js";
@@ -28,7 +28,7 @@ export function mountFileMenuDropdownFeature(): FileMenuDropdownMount {
     const ports: FileMenuDropdownPorts = {
       document: documentReader,
       place,
-      desktop: runningOnDesktop,
+      desktop: presence.running,
       recents,
       recentHandle: (entry) => makeDesktopHandle(entry),
       canOpenPrompter: prompterWindows,
@@ -55,7 +55,7 @@ export const stopFileMenuDropdownFeature = fileMenu.stop;
 export function fileMenuActions(): ActionDefinition[] {
   return definitions(fileMenu.owner, {
     screen,
-    desktop: runningOnDesktop,
+    desktop: presence.running,
     saves,
     save: (options) => saveDoc(options),
     openFile: () => localFilesOwner().openLocalFile(),

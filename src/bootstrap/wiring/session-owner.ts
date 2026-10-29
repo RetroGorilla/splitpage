@@ -140,7 +140,7 @@ export function onSessionChange(listener: SessionListener): () => void {
 }
 
 function swept<T>(outcome: T): T {
-  if (documentGuardOn) unwrapped(heldDocument());
+  if (documentGuardOn()) unwrapped(heldDocument());
   return outcome;
 }
 
