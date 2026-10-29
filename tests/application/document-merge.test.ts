@@ -34,7 +34,7 @@ function world(): World {
       current: () => w.held,
       adopt: (kind: MergeKind, next) => {
         seen.push("adopt " + kind);
-        return next;
+        return migrateRows(next);
       },
       documentId: () => "d1",
       noteHistoryFrom: () => {},
