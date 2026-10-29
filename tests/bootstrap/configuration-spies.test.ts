@@ -21,7 +21,7 @@ test("every configuration function the load-order check spies on exists, and eve
     if (spec.facade) assert.match(source, new RegExp("export const " + spec.facade.name + "\\b"), file + " has the " + spec.facade.name + " facade");
   }
   const unlisted: string[] = [];
-  const files = (listRepoFiles(REPO) as readonly string[]).filter((f) => /^src\/(?:legacy|bootstrap)\/.+\.ts$/.test(f));
+  const files = (listRepoFiles(REPO) as readonly string[]).filter((f) => /^src\/bootstrap\/.+\.ts$/.test(f));
   for (const file of files) {
     for (const found of readFileSync(join(REPO, file), "utf8").matchAll(/^export (?:async )?function (\w+)/gm)) {
       const name = found[1] ?? "";

@@ -19,7 +19,6 @@ export const COMMENT_FREE = [
   /^src\/adapters\//,
   /^src\/features\//,
   /^src\/bootstrap\//,
-  /^src\/legacy\//,
   /^tests\//,
   /^\.github\//,
   DOCKERFILE_PATH,
