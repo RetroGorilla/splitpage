@@ -13,7 +13,7 @@ import { cellOf } from "../legacy/richtext.ts";
 import { inertBody } from "../legacy/richtext.ts";
 import { sanitizeHtml } from "../legacy/richtext.ts";
 import { newBrollRecord } from "../application/commands/production-actions.ts";
-import { runDocumentEdit, currentDocument } from "../legacy/session-bridge.ts";
+import { runDocumentEdit, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { WHOLE_DOCUMENT } from "../application/session/change-set.ts";
 import { startTestHistory as initHistory } from "./_history-started.mjs";

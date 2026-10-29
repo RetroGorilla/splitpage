@@ -1,4 +1,4 @@
-import { onSessionChange } from "../../legacy/session-bridge.ts";
+import { onSessionChange } from "./session-owner.ts";
 import { documentLocation } from "../../legacy/location-bridge.ts";
 import { onPreferenceChange, viewFlags } from "../../legacy/preferences-bridge.ts";
 import { onSaveChange } from "../../legacy/save-bridge.ts";

@@ -16,7 +16,7 @@ import { tagOccurrences } from "../core/production/tags.ts";
 import { tagStatusRank } from "../core/document/tags.ts";
 import { bulkTagRows } from "../application/commands/bulk-tags.ts";
 import { productionIndex } from "../application/production/index-owner.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { productionReaders } from "../legacy/document-ports.ts";
 import { BROLL_PROPS_MAX, brollPropKey } from "../core/document/broll.ts";
 import { brollInCell } from "../core/production/broll.ts";

@@ -6,7 +6,7 @@ import { migrateRows } from "../legacy/document-ports.ts";
 import { stampRow } from "../bootstrap/wiring/session-merge.ts";
 import { bulkTagCell } from "../features/tags/production-tags.js";
 
-import { sessionStarted, startSessionBridge } from "../legacy/session-bridge.ts";
+import { sessionStarted, startSessionBridge } from "../bootstrap/wiring/session-owner.ts";
 import { legacySessionPorts } from "../bootstrap/wiring.ts";
 import { startPageEffects } from "../bootstrap/effects.ts";
 import { effectsStarted } from "../legacy/effects-bridge.ts";

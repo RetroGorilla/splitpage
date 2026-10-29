@@ -14,7 +14,7 @@ import { standaloneHtmlFor } from "../../../adapters/page/standalone-html.js";
 import { desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { runningOnDesktop } from "../../../application/desktop-presence.ts";
 import { brollView } from "../../../application/preferences/broll-view.ts";
-import { noteAbsorbedDirty, noteReload } from "../../../legacy/session-bridge.ts";
+import { noteAbsorbedDirty, noteReload } from "../session-owner.ts";
 import { amendHome, fileHome, importHome, setHome } from "../../../legacy/location-bridge.ts";
 import { unsavedFor, requestSave } from "../../../legacy/save-bridge.ts";
 import { warnImagesLeftOut } from "../../../legacy/effects-bridge.ts";

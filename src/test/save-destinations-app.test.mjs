@@ -9,7 +9,7 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();
 const saves = await import("../legacy/save-bridge.ts");
 const { currentHome, setHome } = await import("../legacy/location-bridge.ts");
-const { heldDocument } = await import("../legacy/session-bridge.ts");
+const { heldDocument } = await import("../bootstrap/wiring/session-owner.ts");
 const { loadTestDocument } = await import("./_document.mjs");
 
 after(closeApp);

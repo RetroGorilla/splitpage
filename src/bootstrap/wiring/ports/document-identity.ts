@@ -1,5 +1,5 @@
 import type { DocumentIdentityPorts } from "../../../application/identity/ports.ts";
-import { currentDocument, stampDocument } from "../../../legacy/session-bridge.ts";
+import { currentDocument, stampDocument } from "../session-owner.ts";
 import { currentHome, documentLocation } from "../../../legacy/location-bridge.ts";
 import { historyOwner } from "../history.ts";
 import { notices } from "./effects.ts";

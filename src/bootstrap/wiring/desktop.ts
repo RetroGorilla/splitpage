@@ -16,7 +16,7 @@ import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { awaitHandedDocument, handDesktopTo, handedDocumentSettled, legacyDesktopDocumentPorts, notifyDesktopDocumentState, startDesktopDocumentState } from "./desktop-owners.ts";
 import { flushDraftNow } from "./recovery-owners.ts";
 import { saveDoc } from "../../legacy/save-bridge.ts";
-import { noteSessionEdit } from "../../legacy/session-bridge.ts";
+import { noteSessionEdit } from "./session-owner.ts";
 import { openDocument } from "./transition-owners.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { notices as portNotices } from "./ports/effects.ts";

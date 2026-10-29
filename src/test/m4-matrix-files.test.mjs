@@ -10,7 +10,7 @@ import {
   rightToday
 } from "./_m4-matrix.mjs";
 import { documentLocation } from "../legacy/location-bridge.ts";
-import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
+import { mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
 await bootApp();
@@ -22,7 +22,7 @@ const { buildDocx } = await import("../adapters/formats/docx.ts");
 const { closeImportModal, openImportModal } = (await import("../bootstrap/wiring/imports.ts")).importControls();
 const { zipRead } = await import("../adapters/formats/zip.ts");
 const { setBackend: setBlobBackend } = await import("../adapters/storage/02c-blobs.js");
-const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
 const { confirmSavedNow, fileConflicts, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();

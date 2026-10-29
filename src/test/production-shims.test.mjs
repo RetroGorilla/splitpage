@@ -13,10 +13,10 @@ import { retagRewrites as planRetagRewrites } from "../application/commands/tag-
 
 const retagText = portText;
 const retagRewrites = (tags, toName) => planRetagRewrites(retagText, tags, toName);
-import { sessionStamps } from "../legacy/session-bridge.ts";
+import { sessionStamps } from "../bootstrap/wiring/session-owner.ts";
 import { randomIds } from "../adapters/identity/ids.ts";
 import { productionIndex } from "../application/production/index-owner.ts";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { deriveProductionIndex } from "../core/production/tags.ts";
 import { broll } from "./_broll-mounted.mjs";
 const { brollEntries, updateBrollBadge } = broll;
@@ -26,7 +26,7 @@ import { planBrollRecords } from "../core/production/broll.ts";
 import { seededHealRounds } from "./_heal-rounds.mjs";
 import { loadTestDocument } from "./_document.mjs";
 import { deletePersonCommand } from "../application/commands/production-records.ts";
-import { runDocumentEdit } from "../legacy/session-bridge.ts";
+import { runDocumentEdit } from "../bootstrap/wiring/session-owner.ts";
 
 const tag = (cat, name) =>
   `<span class="tag-anchor" data-tag-cat="${cat}" data-tag-name="${name}" contenteditable="false">${name}</span>`;

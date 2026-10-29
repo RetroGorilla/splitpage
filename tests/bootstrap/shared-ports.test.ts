@@ -28,7 +28,7 @@ import { productionReaders } from "../../src/legacy/document-ports.ts";
 import { editorSelection, startEditor } from "../../src/bootstrap/wiring/editor-owners.ts";
 import { installExportFormats } from "../../src/bootstrap/wiring/export-registry.ts";
 import { productionIndex, startProductionIndex } from "../../src/application/production/index-owner.ts";
-import { liveDocumentPort } from "../../src/legacy/session-bridge.ts";
+import { liveDocumentPort } from "../../src/bootstrap/wiring/session-owner.ts";
 import { deleteConfirmation, productionSelection, startProductionEditing } from "../../src/legacy/production-editing-bridge.ts";
 import { productionGroupBy, setProductionGroupBy, setTagAddingPerson, setTagExpanded, setTagRenaming, tagAddingPersonKey, tagExpandedKey, tagRenamingKey } from "../../src/application/tag-panel-state.ts";
 import { migrateRows } from "../../src/legacy/document-ports.ts";

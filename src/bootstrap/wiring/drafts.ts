@@ -17,7 +17,7 @@ import { resetProductionPanelState } from "../../legacy/production-editing-bridg
 import { applyStashedWork, browserDrafts, captureRestore, desktopDrafts, draftResume, recoveryStarted, stillRestoring, useBrowserDraftFactory } from "./recovery-owners.ts";
 import type { LegacyDraftPorts } from "./recovery-owners.ts";
 import { saveChanges, unsavedChanges } from "../../legacy/save-bridge.ts";
-import { mergeBase, noteAbsorbedDirty } from "../../legacy/session-bridge.ts";
+import { mergeBase, noteAbsorbedDirty } from "./session-owner.ts";
 import { openDocument } from "./transition-owners.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { notices as portNotices } from "./ports/effects.ts";

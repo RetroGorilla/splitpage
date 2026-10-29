@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { createActionRegistry } from "../../src/application/actions.ts";
 import { createExportRegistry } from "../../src/application/export/registry.ts";
 import type { Wiring } from "../../src/bootstrap/wiring.ts";
-import { liveSession } from "../../src/legacy/session-bridge.ts";
+import { liveSession } from "../../src/bootstrap/wiring/session-owner.ts";
 
 test("the app module refuses a second start, and a start waiting for DOM ready is cancelled by stop", async () => {
   const app = await import("../../src/bootstrap/app.ts");

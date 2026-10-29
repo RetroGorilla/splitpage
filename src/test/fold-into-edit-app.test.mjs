@@ -2,7 +2,7 @@ import { getEditorName } from "../legacy/preferences-bridge.ts";
 import { bootApp, closeApp, rewireRunningApp } from "./_app-boot.mjs";
 import test, { after, beforeEach } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../legacy/session-bridge.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { createHeldFetch, createHeldImageDecode } from "./_m4-matrix.mjs";
 import { unsavedChanges } from "../legacy/save-bridge.ts";
 
@@ -21,7 +21,7 @@ const undoSizes = () => undoOwner().sizes();
 const lastUndoEntry = () => undoOwner().last();
 const flushEdits = () => undoOwner().flush();
 const { thumbnailsAfterPaste } = await import("../bootstrap/wiring/gallery.ts");
-const { liveSession } = await import("../legacy/session-bridge.ts");
+const { liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { addGalleryVideo, setVideoThumbnail, videoLinkKey } = await import("../core/document/gallery.ts");
 const writer = await import("../features/writer/writer.js");
 const { viewFlags } = await import("../legacy/preferences-bridge.ts");

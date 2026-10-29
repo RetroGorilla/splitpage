@@ -6,7 +6,7 @@ import type { DocumentEdits } from "../../../application/session/document-edits.
 import { undoOwner } from "../undo.ts";
 import type { CellEditing } from "../../../application/editing/cell-editing.ts";
 import { cellEditing, editorSelection, focusMemory } from "../editor-owners.ts";
-import { editAllowed, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../../../legacy/session-bridge.ts";
+import { editAllowed, runCommand, runDocumentEdit, sessionStamps, sessionTextPorts } from "../session-owner.ts";
 import { paintGuard, undoGuard } from "../editor-owners.ts";
 import { appendDraftMedia, draftModel, editDraft } from "../../../features/editing/draft-edit.js";
 import { isDraftBox, isScriptCell } from "../../../features/editing/cell-page.ts";

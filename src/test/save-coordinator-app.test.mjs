@@ -2,13 +2,13 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { createHeldFileHandle, mockClock } from "./_m4-matrix.mjs";
-import { mergeBase, currentDocument } from "../legacy/session-bridge.ts";
+import { mergeBase, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 await bootApp();
 
 const { migrateRows } = await import("../legacy/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
-const { noteSessionEdit } = await import("../legacy/session-bridge.ts");
+const { noteSessionEdit } = await import("../bootstrap/wiring/session-owner.ts");
 const { confirmSavedNow, saveDoc, setAutoSaveEnabled } = await import("../legacy/save-bridge.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const flushEdits = () => undoOwner().flush();

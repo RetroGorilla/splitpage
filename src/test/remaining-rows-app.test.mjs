@@ -14,7 +14,7 @@ const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const undo = () => undoOwner().undo();
 const undoSizes = () => undoOwner().sizes();
 const flushEdits = () => undoOwner().flush();
-const { currentDocument, liveSession } = await import("../legacy/session-bridge.ts");
+const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { editorSelection } = await import("../bootstrap/wiring/editor-owners.ts");
 const { setHideShotScenes } = await import("../bootstrap/wiring/hide-shot.ts");
 const writer = await import("../features/writer/writer.js");
