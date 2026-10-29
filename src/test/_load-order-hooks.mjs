@@ -20,7 +20,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/history-panel.ts": { functions: ["mountHistoryPanelFeature"] },
   "src/bootstrap/wiring/title-chrome.ts": { functions: ["mountTitleChromeFeature"] },
   "src/bootstrap/wiring/ports/session-merge.ts": { functions: ["sessionMergeOwnerPorts"] },
-  "src/legacy/merge-bridge.ts": { functions: ["startMerge", "installMergeBanner"] },
+  "src/bootstrap/wiring/document-merge.ts": { functions: ["startMerge", "installMergeBanner"] },
   "src/legacy/production-editing-bridge.ts": { functions: ["startProductionEditing"] },
   "src/application/production/index-owner.ts": { functions: ["startProductionIndex"] },
   "src/bootstrap/wiring/editor-owners.ts": { functions: ["startEditor", "installPicturePicker", "installCellEditing"] },

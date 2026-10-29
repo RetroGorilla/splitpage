@@ -9,7 +9,7 @@ import { currentDocument } from "../legacy/session-bridge.ts";
 import { targetClock } from "../core/production/timing.ts";
 import { migrateRows } from "../legacy/document-ports.ts";
 import { mergeTargetLength } from "../core/merge/scalars.ts";
-import { mergeStates } from "../legacy/merge-bridge.ts";
+import { mergeStates } from "../bootstrap/wiring/document-merge.ts";
 import "./_merge-started.mjs";
 import { targetOverlayParts } from "../features/rundown/target.js";
 import { TARGET_PRESETS } from "../features/title/target-section.js";
