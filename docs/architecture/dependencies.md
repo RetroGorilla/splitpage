@@ -9,7 +9,7 @@ comments.
 | Command | What it checks | Baseline |
 | --- | --- | --- |
 | `npm run check:deps` (`tools/dep-report.mjs`) | Layer rules, platform imports and globals, HTML parsed into cells outside the rich text adapter, unresolvable modules, computed dynamic loads, cycles through migrated folders, the deleted `S` module, and the legacy debt: `S` importers, `S` writers and runtime cycle edges | `tools/dep-baseline.json` |
-| `npm run check:comments` (`tools/comment-gate.mjs`) | Comments in authored JS/TS, CSS, HTML, shell, PowerShell and batch files, and in YAML (workflow `run:` scripts included) and JSON; a `// why: <doc>.md#<anchor>` reason comment in a script passes when the heading exists | `tools/comment-baseline.json` |
+| `npm run check:comments` (`tools/comment-gate.mjs`) | Comments in authored JS/TS, CSS, HTML, shell, PowerShell and batch files, and in YAML (workflow `run:` scripts included) and JSON; short reason comments are allowed as described below | `tools/comment-baseline.json` |
 
 Both fail on anything new and on anything the baseline lists that has gone.
 `--prune` removes gone entries and refuses to add new ones. `--init` writes a
@@ -426,6 +426,14 @@ bridge, is explained here.
   copy.
 
 ## Comment gate
+
+A reason comment explains why, not what; review judges the explanation. It has
+one or two consecutive comment lines, each at most 120 characters. The first
+begins `// why: ...` in scripts, `# why: ...` in shell, PowerShell or YAML run
+blocks, or `/* why: ... */` in CSS. A second line is a plain continuation
+directly below. A `docs/<file>.md#<anchor>` link is optional, and the gate
+checks any such heading or `<a id>` exists. Reasons never enter the baseline.
+Narration, commented-out code, TODOs, banners and every other new comment fail.
 
 Scanned: every tracked or untracked-but-not-ignored file of these kinds,
 except `node_modules/`, `.claude/handoff/` and the generated `index.html`:
