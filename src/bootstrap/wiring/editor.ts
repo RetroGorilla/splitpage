@@ -118,7 +118,7 @@ import {
   renderComments
 } from "../../features/comments/comments.js";
 import { showActionToast, showToast } from "./effects-owner.ts";
-import { viewFlags } from "../../legacy/preferences-bridge.ts";
+import { viewFlags } from "./preferences-owner.ts";
 import { configureUndo, undoOwner } from "./undo.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { connectWriter } from "./writer.ts";

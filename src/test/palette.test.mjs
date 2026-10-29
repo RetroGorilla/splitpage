@@ -148,7 +148,7 @@ import { tagIconCss, tagIconSvg } from "../features/tags/production-tags.js";
 
 import "./_preferences-started.mjs";
 import { settingsAppData } from "../application/preferences/preferences.ts";
-import { preferences } from "../legacy/preferences-bridge.ts";
+import { preferences } from "../bootstrap/wiring/preferences-owner.ts";
 
 const TAG_ICONS_KEY = "splitpage-tag-icons";
 

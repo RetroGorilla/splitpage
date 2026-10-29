@@ -18,7 +18,7 @@ import type { SaveChange } from "../../application/save/save-state.ts";
 import type { AutoSaveTarget } from "../../application/save/status.ts";
 import type { TimerPort } from "../../application/session/ports.ts";
 import { showToast } from "./effects-owner.ts";
-import { preferences } from "../../legacy/preferences-bridge.ts";
+import { preferences } from "./preferences-owner.ts";
 
 export type LegacySaveKind = "save" | "auto" | "autosave" | "force" | "saveAs" | "writeback" | "writebackForce";
 

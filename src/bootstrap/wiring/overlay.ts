@@ -8,7 +8,7 @@ import { clearProductionSelection, selectedKeys } from "../../legacy/production-
 import { renderProduction } from "../../features/tags/panels.js";
 import { closeCommentComposer } from "../../features/comments/comments.js";
 import { connectWriter } from "./writer.ts";
-import { viewFlags } from "../../legacy/preferences-bridge.ts";
+import { viewFlags } from "./preferences-owner.ts";
 import { sidePanels } from "./ports/panels.ts";
 
 function inactiveWriterOverlay(): void {}

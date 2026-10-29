@@ -15,10 +15,10 @@ const { noteAbsorbedDirty, noteSessionEdit } = await import("../bootstrap/wiring
 const { confirmSavedNow } = await import("../bootstrap/wiring/save-owners.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { PERSON_COLORS } = await import("../core/document/person-colors.ts");
-const { preferences } = await import("../legacy/preferences-bridge.ts");
+const { preferences } = await import("../bootstrap/wiring/preferences-owner.ts");
 
 import { saveAuthorName as saveAuthorNameWith } from "../application/comment-author.js";
-import { preferences as commentPreferences } from "../legacy/preferences-bridge.ts";
+import { preferences as commentPreferences } from "../bootstrap/wiring/preferences-owner.ts";
 const flushEdits = () => undoOwner().flush();
 const lastUndoEntry = () => undoOwner().last();
 const undo = () => undoOwner().undo();

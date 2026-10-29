@@ -22,7 +22,7 @@ import { appActions } from "../../src/legacy/app-actions.ts";
 import { exportFormats, installExportFormats } from "../../src/bootstrap/wiring/export-registry.ts";
 import { editorStarted, startEditor } from "../../src/bootstrap/wiring/editor-owners.ts";
 import { locationStarted, startLocation } from "../../src/bootstrap/wiring/location-owner.ts";
-import { preferencesStarted, startPreferences } from "../../src/legacy/preferences-bridge.ts";
+import { preferencesStarted, startPreferences } from "../../src/bootstrap/wiring/preferences-owner.ts";
 import { shotHidingPorts, shotHidingStarted, startShotHiding } from "../../src/bootstrap/wiring/shot-hiding.ts";
 import { undoPorts, startUndo, undoStarted, undoSessionPort, routeUndoReplays } from "../../src/bootstrap/wiring/undo.ts";
 import { effectsStarted, startEffects } from "../../src/bootstrap/wiring/effects-owner.ts";

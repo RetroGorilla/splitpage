@@ -20,7 +20,7 @@ const flushEdits = () => undoOwner().flush();
 const { currentDocument, liveSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { setMark } = await import("../core/text/edits.ts");
 const writer = await import("../features/writer/writer.js");
-const { viewFlags } = await import("../legacy/preferences-bridge.ts");
+const { viewFlags } = await import("../bootstrap/wiring/preferences-owner.ts");
 const { openDocument } = await import("../bootstrap/wiring/transition-owners.ts");
 
 after(closeApp);
