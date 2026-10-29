@@ -1,13 +1,9 @@
 import type { OnboardingMount, OnboardingPorts } from "./ports.ts";
+import { addListener } from "../common/listeners.ts";
 
 let ports = null as unknown as OnboardingPorts;
 const listeners: Array<() => void> = [];
 let activeMount: object | null = null;
-
-function listen(target: EventTarget, type: string, listener: EventListener) {
-  target.addEventListener(type, listener);
-  listeners.push(function () { target.removeEventListener(type, listener); });
-}
 
 let onboardStep = 1;
 let onboardReturnFocus: HTMLElement | null = null;
@@ -140,7 +136,7 @@ export function startOnboarding(given: OnboardingPorts): OnboardingMount {
     const modal = onboardModal();
     if (!modal) return;
 
-    listen(modal, "click", function (e) {
+    listeners.push(addListener(modal, "click", function (e) {
       const action = (e.target as Element).closest("[data-onboard-action]");
       if (action) {
         const name = action.getAttribute("data-onboard-action");
@@ -152,13 +148,13 @@ export function startOnboarding(given: OnboardingPorts): OnboardingMount {
         return;
       }
       if (e.target === modal) onboardSkip();
-    });
+    }));
 
-    listen(window, "keydown", function (e) {
+    listeners.push(addListener(window, "keydown", function (e) {
       if ((e as KeyboardEvent).key === "Escape" && !(modal as HTMLElement).hidden) { e.preventDefault(); onboardSkip(); }
-    });
+    }));
 
-    listen(modal, "keydown", function (e) {
+    listeners.push(addListener(modal, "keydown", function (e) {
       if ((e as KeyboardEvent).key !== "Tab") return;
       const focusables = Array.prototype.filter.call(
         (modal as HTMLElement).querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'),
@@ -168,7 +164,7 @@ export function startOnboarding(given: OnboardingPorts): OnboardingMount {
       const first = focusables[0] as HTMLElement, last = focusables[focusables.length - 1] as HTMLElement;
       if ((e as KeyboardEvent).shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
       else if (!(e as KeyboardEvent).shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-    });
+    }));
   })();
 
   listeners.push(ports.onFileMenuChoice(function () { closeOnboarding(); }));

@@ -1,4 +1,5 @@
 import type { UpdateFeaturePorts, UpdateMount, UpdateStatus } from "./ports.ts";
+import { addListener } from "../common/listeners.ts";
 
 type UpdateProbe = { applyStatus: (status: UpdateStatus | null) => void; pushStatus: typeof applyUpdateStatus; bar: () => { hidden: boolean | "until-found"; text: string; buttonHidden: boolean | "until-found"; buttonLabel: string | null }; clickAction: () => boolean; dismiss: () => void; dismissed: () => boolean };
 
@@ -331,12 +332,12 @@ function openAboutDialog(version: string | null, lines: string[], link: string |
   if (!modal) return;
   if (!aboutWired) {
     aboutWired = true;
-    listenAbout(modal, "click", function (e) {
+    aboutListeners.push(addListener(modal, "click", function (e) {
       if (e.target === modal || (e.target as Element).closest("[data-about-close]")) closeAboutDialog();
-    });
-    listenAbout(modal, "keydown", function (e) {
+    }));
+    aboutListeners.push(addListener(modal, "keydown", function (e) {
       if (e.key === "Escape") { e.stopPropagation(); closeAboutDialog(); }
-    });
+    }));
   }
   (document.getElementById("about-version") as HTMLElement).textContent =
     "Version " + (version || "unknown");
@@ -421,9 +422,4 @@ export function mountUpdate(nextPorts: UpdateFeaturePorts): UpdateMount {
   };
   activeMount = mounted;
   return mounted;
-}
-
-function listenAbout<K extends keyof HTMLElementEventMap>(target: HTMLElement, type: K, listener: (event: HTMLElementEventMap[K]) => void) {
-  target.addEventListener(type, listener);
-  aboutListeners.push(function () { target.removeEventListener(type, listener); });
 }
