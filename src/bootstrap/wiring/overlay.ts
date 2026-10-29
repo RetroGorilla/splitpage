@@ -9,7 +9,7 @@ import { renderProduction } from "../../features/tags/panels.js";
 import { closeCommentComposer } from "../../features/comments/comments.js";
 import { connectWriter } from "./writer.ts";
 import { viewFlags } from "../../legacy/preferences-bridge.ts";
-import { sidePanels } from "../../legacy/panels-bridge.ts";
+import { sidePanels } from "./ports/panels.ts";
 
 function inactiveWriterOverlay(): void {}
 
