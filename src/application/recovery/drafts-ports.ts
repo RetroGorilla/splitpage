@@ -18,13 +18,22 @@ export interface BrowserDrafts {
 }
 
 export interface DraftFlush {
-  readonly ok: boolean;
+  readonly ok?: boolean;
   readonly code?: string;
+  readonly obsolete?: boolean;
+}
+
+export interface DraftFile {
+  readonly name: string;
 }
 
 export interface DraftFileHandle {
-  readonly getFile: () => Promise<unknown>;
+  readonly getFile: () => Promise<DraftFile>;
 }
+
+export type DraftParsedFile =
+  | { readonly state: ValidatedDocument; readonly kind: unknown; readonly docIdEmbedded: boolean; readonly error?: undefined }
+  | { readonly error: "unreadable" | "not-splitpage" };
 
 export type DraftOpening = {
   readonly kind: "file";
@@ -67,7 +76,7 @@ export interface DraftsPorts {
   };
   readonly files: {
     readonly handle: (entry: unknown) => DraftFileHandle;
-    readonly parse: (file: unknown) => Promise<unknown>;
+    readonly parse: (file: unknown) => Promise<DraftParsedFile | null>;
   };
   readonly recovery: DraftRecovery;
   readonly browserDraft: {
