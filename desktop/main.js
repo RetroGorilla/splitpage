@@ -15,6 +15,7 @@ const {
 } = require("./file-service");
 const { createDocClaims } = require("./doc-claims");
 const { createRecents } = require("./recents");
+const { createThemeChoice, backgroundColorFor, titleBarOverlayFor, boundsIfVisible } = require("./window-appearance");
 const { createPrompterShare, isShareableName, MAX_SCRIPT_BYTES } = require("./prompter-share");
 const { checkFileGone, copyKept, holdKeep, runCloseCheck, lastWindowClose, FILE_CHECK_TIMEOUT_MS } = require("./close-keep");
 const { createQuitWatchdog } = require("./quit-watchdog");
@@ -986,45 +987,22 @@ function registerProtocol() {
   });
 }
 
-function themeChoicePath() { return path.join(app.getPath("userData"), "theme.json"); }
-
-function readThemeChoice() {
-  try {
-    const mode = JSON.parse(fs.readFileSync(themeChoicePath(), "utf8")).theme;
-    return mode === "light" || mode === "dark" ? mode : "system";
-  } catch { return "system"; }
-}
-
-function writeThemeChoice(mode) {
-  if (readThemeChoice() === mode) return;
-  try {
-    fs.mkdirSync(path.dirname(themeChoicePath()), { recursive: true });
-    fs.writeFileSync(themeChoicePath(), JSON.stringify({ theme: mode }), "utf8");
-  } catch { }
-}
+const themeChoice = createThemeChoice({ filePath: () => path.join(app.getPath("userData"), "theme.json") });
 
 function backgroundColorForTheme() {
-  return nativeTheme.shouldUseDarkColors ? "#0F0E0C" : "#F1F0ED";
+  return backgroundColorFor(nativeTheme.shouldUseDarkColors);
 }
 
-function boundsIfVisible(b) {
-  if (!b || typeof b.x !== "number") return null;
-  const onScreen = screen.getAllDisplays().some((d) => {
-    const wa = d.workArea;
-    return b.x < wa.x + wa.width && b.x + b.width > wa.x &&
-           b.y < wa.y + wa.height && b.y + b.height > wa.y;
-  });
-  return onScreen ? b : null;
+function visibleBounds(b) {
+  return boundsIfVisible(b, screen.getAllDisplays());
 }
 
 function savedBoundsIfVisible() {
-  return boundsIfVisible(primaryDesktopWindow(desktopState.read()).bounds);
+  return visibleBounds(primaryDesktopWindow(desktopState.read()).bounds);
 }
 
 function titleBarOverlayColors() {
-  return nativeTheme.shouldUseDarkColors
-    ? { color: "#0F0E0C", symbolColor: "#ECEBE7", height: TITLEBAR_H }
-    : { color: "#F1F0ED", symbolColor: "#171613", height: TITLEBAR_H };
+  return titleBarOverlayFor(nativeTheme.shouldUseDarkColors, TITLEBAR_H);
 }
 
 function mintUniqueTabId(preferred) {
@@ -1043,7 +1021,7 @@ function mintUniqueWindowId(preferred) {
 
 function createTabWindow(restoreSpec) {
   const spec = restoreSpec || {};
-  const saved = boundsIfVisible(normalizeBounds(spec.bounds)) || (windowsById.size ? null : savedBoundsIfVisible());
+  const saved = visibleBounds(normalizeBounds(spec.bounds)) || (windowsById.size ? null : savedBoundsIfVisible());
   const iconPath = app.isPackaged ? undefined : path.join(APP_ROOT, "installer", "icon.ico");
 
   const win = new BrowserWindow({
@@ -2384,7 +2362,7 @@ function registerIpc() {
   ipcOn("splitpage:set-theme", (event, mode) => {
     if (mode !== "system" && mode !== "light" && mode !== "dark") return;
     if (nativeTheme.themeSource !== mode) nativeTheme.themeSource = mode;
-    writeThemeChoice(mode);
+    themeChoice.write(mode);
   });
 
   ipcHandle("splitpage:video-file-grant", async (event, filePath) => {
@@ -2868,7 +2846,7 @@ app.on("open-file", (event, filePath) => {
 app.setAppUserModelId("com.retrogorilla.splitpage");
 
 app.whenReady().then(() => {
-  nativeTheme.themeSource = readThemeChoice();
+  nativeTheme.themeSource = themeChoice.read();
   desktopState.sweepTempFiles();
   recents.load();
   const draftInit = initDraftStore();
