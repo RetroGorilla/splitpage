@@ -1,11 +1,11 @@
 import "./_production-tags-started.mjs";
-import { productionReaders } from "../legacy/document-ports.ts";
+import { productionReaders } from "../bootstrap/document-ports.ts";
 import { text as portText } from "../bootstrap/wiring/ports/text.ts";
 import { mintTagId } from "../core/document/tags.ts";
 import "./_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { healTagRegistry, productionIndexStats, registerProductionTag } from "../features/tags/production-tags.js";
 
 import { renameTag, newBrollRecord } from "../application/commands/production-actions.ts";

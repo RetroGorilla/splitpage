@@ -2,7 +2,7 @@ import "./_dom.mjs";
 import "./_copy-paste-mounted.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { dataUrlForSync, intern } from "../adapters/storage/02c-blobs.js";
 import { mountProductionTagsFeature as initTags } from "../bootstrap/wiring/production-tags.ts";
 import { commentIds } from "../core/text/runs.ts";

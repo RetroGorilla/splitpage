@@ -8,7 +8,7 @@ import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 
 const atBoot = await bootApp();
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { exportDocumentOf } = await import("../bootstrap/wiring/export-capture.ts");
 const { adoptRestoredState } = await import("../bootstrap/startup/document-entry.js");
 const { applyMerge } = await import("../bootstrap/wiring/document-merge.ts");

@@ -21,7 +21,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/title-chrome.ts": { functions: ["mountTitleChromeFeature"] },
   "src/bootstrap/wiring/ports/session-merge.ts": { functions: ["sessionMergeOwnerPorts"] },
   "src/bootstrap/wiring/document-merge.ts": { functions: ["startMerge", "installMergeBanner"] },
-  "src/legacy/production-editing-bridge.ts": { functions: ["startProductionEditing"] },
+  "src/bootstrap/wiring/production-editing-owners.ts": { functions: ["startProductionEditing"] },
   "src/application/production/index-owner.ts": { functions: ["startProductionIndex"] },
   "src/bootstrap/wiring/editor-owners.ts": { functions: ["startEditor", "installPicturePicker", "installCellEditing"] },
   "src/bootstrap/wiring/preferences-owner.ts": { functions: ["startPreferences", "onPreferenceChange"] },

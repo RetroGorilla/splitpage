@@ -1,6 +1,6 @@
 import { wireLegacyApp } from "./wiring.ts";
 import { startAppWhenReady } from "./app.ts";
-import { migrateRows } from "../legacy/document-ports.ts";
+import { migrateRows } from "./document-ports.ts";
 import { startBlobs } from "../adapters/storage/02c-blobs.js";
 import { startGalleryStore } from "../adapters/storage/02d-gallery.js";
 import { mountPageEntry } from "./startup/page-entry.ts";

@@ -8,7 +8,7 @@ const FULL = "abcdefghij".repeat(3);
 
 await bootApp(JSON.stringify({ schema: 2, title: "Mine", rows: [], rev: 5 }));
 
-const { migrateRows } = await import("../legacy/document-ports.ts");
+const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { promptForName } = await import("../bootstrap/wiring/title-chrome.ts");
 const { toggleReplyComposer } = await import("../features/comments/comments.js");
 const { openSettings } = await import("../features/settings/settings.js");
