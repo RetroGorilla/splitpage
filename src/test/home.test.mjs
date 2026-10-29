@@ -7,7 +7,7 @@ import "./_location-started.mjs";
 
 test("autoSaveTarget answers file or null off the home", async () => {
   await import("./_dom.mjs");
-  const { autoSaveTarget, saveDestinations, startSaves } = await import("../legacy/save-bridge.ts");
+  const { autoSaveTarget, saveDestinations, startSaves } = await import("../bootstrap/wiring/save-owners.ts");
   const { wireFileSaving } = await import("../bootstrap/wiring/file-saving.ts");
   const copyDocHistorySafe = (...args) => documentIdentityOwner().copyDocHistorySafe(...args);
   const syncDocIdentity = (...args) => documentIdentityOwner().syncDocIdentity(...args);

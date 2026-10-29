@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { loadTestDocument } from "./_document.mjs";
 import { currentDocument, runCommand } from "../bootstrap/wiring/session-owner.ts";
 import { changeSet } from "../application/session/change-set.ts";
-import { autoSavePolicy, savesStarted, unsavedChanges } from "../legacy/save-bridge.ts";
+import { autoSavePolicy, savesStarted, unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 
 test("a document-only test session wires its real save effects without save-coordinator errors or automatic writes", (t) => {
   const reported = [];

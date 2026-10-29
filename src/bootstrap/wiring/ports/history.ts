@@ -4,7 +4,7 @@ import { createHistoryBackends } from "../../../adapters/storage/history-backend
 import { inlineStateJson } from "../../../adapters/storage/02c-blobs.js";
 import { historyDesktop } from "./desktop.ts";
 import { getEditorName } from "../../../legacy/preferences-bridge.ts";
-import { saveChanges, unsavedChanges } from "../../../legacy/save-bridge.ts";
+import { saveChanges, unsavedChanges } from "../save-owners.ts";
 import { legacySnapshots } from "../recovery-owners.ts";
 import { documentReader } from "./document.ts";
 import { homes } from "./location.ts";

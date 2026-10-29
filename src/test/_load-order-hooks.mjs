@@ -10,7 +10,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/undo.ts": { functions: ["startUndo", "configureUndo", "routeUndoReplays"] },
   "src/legacy/app-actions.ts": { functions: ["installAppActions"], facade: { name: "appActions", methods: ["register", "presentRefusals"] } },
   "src/bootstrap/wiring/export-registry.ts": { functions: ["installExportFormats"], facade: { name: "exportFormats", methods: ["defineCard", "register", "onChange"] } },
-  "src/legacy/save-bridge.ts": { functions: ["startSaves", "onSaveChange"] },
+  "src/bootstrap/wiring/save-owners.ts": { functions: ["startSaves", "onSaveChange"] },
   "src/bootstrap/wiring/transition-owners.ts": { functions: ["startTransitions"] },
   "src/bootstrap/wiring/document-identity.ts": { functions: ["mountDocumentIdentityOwner"] },
   "src/application/identity/document-guard.ts": { functions: ["startDocumentGuard", "createDocumentGuard"] },
