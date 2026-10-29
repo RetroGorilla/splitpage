@@ -1,6 +1,6 @@
 {
   "loadOnly": [
-    "src/features/newtab/newtab.js",
+    "src/features/newtab/newtab.ts",
     "src/bootstrap/wiring/newtab.ts"
   ],
   "expectedLoads": 2
